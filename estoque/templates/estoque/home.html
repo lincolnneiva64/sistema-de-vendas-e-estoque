@@ -18,6 +18,7 @@
     .btn-pill { border-radius: 999px; }
     .chip { display:inline-block; padding:.25rem .6rem; border-radius:999px; font-size:.85rem; background:#eef1ff; color:#3b4cca; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .table td { vertical-align: middle; }
   </style>
 </head>
 
@@ -32,20 +33,21 @@
       </div>
 
       <!-- Busca (GET) -->
-      <form class="d-flex gap-2" method="get" action="">
+      <form class="d-flex flex-column flex-sm-row align-items-stretch gap-2 w-100 w-md-auto" method="get" action="">
         <input
-          class="form-control"
+          class="form-control flex-grow-1"
           type="search"
           name="q"
           placeholder="Buscar por nome, código, categoria..."
-          value="{{ request.GET.q|default:'' }}"
-          style="min-width: 260px;"
+          value="{{ q|default:'' }}"
         >
-        <button class="btn btn-dark btn-pill px-4" type="submit">Buscar</button>
+        <div class="d-flex gap-2">
+          <button class="btn btn-dark btn-pill px-4 flex-grow-1" type="submit">Buscar</button>
 
-        {% if request.GET.q %}
-          <a class="btn btn-outline-secondary btn-pill px-4" href="?">Limpar</a>
-        {% endif %}
+          {% if q %}
+            <a class="btn btn-outline-secondary btn-pill px-4 flex-grow-1" href="?">Limpar</a>
+          {% endif %}
+        </div>
       </form>
     </div>
 
@@ -85,80 +87,63 @@
         <form method="post" action="" class="row g-3">
           {% csrf_token %}
 
+          {% if form.non_field_errors %}
+            <div class="col-12">
+              <div class="alert alert-danger mb-0">{{ form.non_field_errors }}</div>
+            </div>
+          {% endif %}
+
           <!-- Se estiver editando, enviar o ID -->
           {% if produto_edicao %}
-            <input type="hidden" name="id" value="{{ produto_edicao.id }}">
+            <input type="hidden" name="produto_id" value="{{ produto_edicao.id }}">
           {% endif %}
 
           <div class="col-12 col-md-6">
-            <label class="form-label">Nome do produto</label>
-            <input
-              class="form-control"
-              type="text"
-              name="nome"
-              required
-              placeholder="Ex.: Arroz 5kg"
-              value="{% if produto_edicao %}{{ produto_edicao.nome }}{% endif %}"
-            >
+            <label class="form-label" for="{{ form.nome.id_for_label }}">Nome do produto</label>
+            {{ form.nome }}
+            {% if form.nome.errors %}
+              <div class="invalid-feedback d-block">{{ form.nome.errors }}</div>
+            {% endif %}
           </div>
 
           <div class="col-12 col-md-3">
-            <label class="form-label">Código / SKU</label>
-            <input
-              class="form-control mono"
-              type="text"
-              name="codigo"
-              placeholder="Ex.: 789..."
-              value="{% if produto_edicao %}{{ produto_edicao.codigo }}{% endif %}"
-            >
+            <label class="form-label" for="{{ form.codigo.id_for_label }}">Código / SKU</label>
+            {{ form.codigo }}
+            {% if form.codigo.errors %}
+              <div class="invalid-feedback d-block">{{ form.codigo.errors }}</div>
+            {% endif %}
           </div>
 
           <div class="col-12 col-md-3">
-            <label class="form-label">Categoria</label>
-            <input
-              class="form-control"
-              type="text"
-              name="categoria"
-              placeholder="Ex.: Grãos"
-              value="{% if produto_edicao %}{{ produto_edicao.categoria }}{% endif %}"
-            >
+            <label class="form-label" for="{{ form.categoria.id_for_label }}">Categoria</label>
+            {{ form.categoria }}
+            {% if form.categoria.errors %}
+              <div class="invalid-feedback d-block">{{ form.categoria.errors }}</div>
+            {% endif %}
           </div>
 
           <div class="col-12 col-md-3">
-            <label class="form-label">Preço (R$)</label>
-            <input
-              class="form-control"
-              type="number"
-              step="0.01"
-              min="0"
-              name="preco"
-              placeholder="Ex.: 19.90"
-              value="{% if produto_edicao %}{{ produto_edicao.preco }}{% endif %}"
-            >
+            <label class="form-label" for="{{ form.preco.id_for_label }}">Preço (R$)</label>
+            {{ form.preco }}
+            {% if form.preco.errors %}
+              <div class="invalid-feedback d-block">{{ form.preco.errors }}</div>
+            {% endif %}
           </div>
 
           <div class="col-12 col-md-3">
-            <label class="form-label">Quantidade em estoque</label>
-            <input
-              class="form-control"
-              type="number"
-              step="1"
-              min="0"
-              name="quantidade"
-              placeholder="Ex.: 20"
-              value="{% if produto_edicao %}{{ produto_edicao.quantidade }}{% endif %}"
-            >
+            <label class="form-label" for="{{ form.quantidade.id_for_label }}">Quantidade em estoque</label>
+            {{ form.quantidade }}
+            {% if form.quantidade.errors %}
+              <div class="invalid-feedback d-block">{{ form.quantidade.errors }}</div>
+            {% endif %}
           </div>
 
           <div class="col-12 col-md-6">
-            <label class="form-label">Fornecedor</label>
-            <input
-              class="form-control"
-              type="text"
-              name="fornecedor"
-              placeholder="Ex.: Atacadista X"
-              value="{% if produto_edicao %}{{ produto_edicao.fornecedor }}{% endif %}"
-            >
+            <label class="form-label" for="{{ form.fornecedor.id_for_label }}">Fornecedor</label>
+            {{ form.fornecedor }}
+            {% if form.fornecedor.errors %}
+              <div class="invalid-feedback d-block">{{ form.fornecedor.errors }}</div>
+            {% endif %}
           </div>
 
           <div class="col-12 d-flex flex-wrap gap-2 mt-2">
@@ -192,10 +177,10 @@
               <tr>
                 <th style="width: 80px;">ID</th>
                 <th>Produto</th>
-                <th style="width: 140px;">Código</th>
-                <th style="width: 160px;">Categoria</th>
-                <th style="width: 140px;">Preço</th>
-                <th style="width: 140px;">Qtd</th>
+                <th style="width: 140px;" class="d-none d-md-table-cell">Código</th>
+                <th style="width: 160px;" class="d-none d-lg-table-cell">Categoria</th>
+                <th style="width: 140px;" class="d-none d-md-table-cell">Preço</th>
+                <th style="width: 140px;" class="d-none d-md-table-cell">Qtd</th>
                 <th style="width: 220px;" class="text-end">Ações</th>
               </tr>
             </thead>
@@ -211,43 +196,64 @@
                       {% if p.fornecedor %}
                         <div class="small muted">Fornecedor: {{ p.fornecedor }}</div>
                       {% endif %}
+                      <div class="small muted d-md-none">
+                        <div>
+                          Código:
+                          {% if p.codigo %}{{ p.codigo }}{% else %}—{% endif %}
+                        </div>
+                        <div>
+                          Categoria:
+                          {% if p.categoria %}{{ p.categoria }}{% else %}—{% endif %}
+                        </div>
+                        <div>
+                          Preço:
+                          {% if p.preco %}R$ {{ p.preco }}{% else %}—{% endif %}
+                        </div>
+                        <div>
+                          Qtd:
+                          {% if p.quantidade is not None %}{{ p.quantidade }}{% else %}—{% endif %}
+                        </div>
+                      </div>
                     </td>
 
-                    <td class="mono">
+                    <td class="mono d-none d-md-table-cell">
                       {% if p.codigo %}{{ p.codigo }}{% else %}<span class="muted">—</span>{% endif %}
                     </td>
 
-                    <td>
+                    <td class="d-none d-lg-table-cell">
                       {% if p.categoria %}{{ p.categoria }}{% else %}<span class="muted">—</span>{% endif %}
                     </td>
 
-                    <td>
+                    <td class="d-none d-md-table-cell">
                       {% if p.preco %}R$ {{ p.preco }}{% else %}<span class="muted">—</span>{% endif %}
                     </td>
 
-                    <td>
+                    <td class="d-none d-md-table-cell">
                       {% if p.quantidade is not None %}{{ p.quantidade }}{% else %}<span class="muted">—</span>{% endif %}
                     </td>
 
                     <td class="text-end">
-                      <!-- Editar (GET) -->
-                      <a class="btn btn-outline-primary btn-sm btn-pill"
-                         href="?edit={{ p.id }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}">
-                        Editar
-                      </a>
+                      <div class="d-flex flex-wrap gap-2 justify-content-end">
+                        <!-- Editar (GET) -->
+                        <a class="btn btn-outline-primary btn-sm btn-pill"
+                           href="?edit={{ p.id }}{% if q %}&q={{ q }}{% endif %}">
+                          Editar
+                        </a>
 
-                      <!-- Excluir (POST) -->
-                      <form method="post" action="" class="d-inline">
-                        {% csrf_token %}
-                        <input type="hidden" name="excluir_id" value="{{ p.id }}">
-                        <button
-                          type="submit"
-                          class="btn btn-outline-danger btn-sm btn-pill"
-                          onclick="return confirm('Confirma excluir o produto: {{ p.nome|escapejs }} ?');"
-                        >
-                          Excluir
-                        </button>
-                      </form>
+                        <!-- Excluir (POST) -->
+                        <form method="post" action="" class="d-inline">
+                          {% csrf_token %}
+                          <input type="hidden" name="excluir_id" value="{{ p.id }}">
+                          <input type="hidden" name="acao" value="excluir">
+                          <button
+                            type="submit"
+                            class="btn btn-outline-danger btn-sm btn-pill"
+                            onclick="return confirm('Confirma excluir o produto: {{ p.nome|escapejs }} ?');"
+                          >
+                            Excluir
+                          </button>
+                        </form>
+                      </div>
                     </td>
                   </tr>
                 {% endfor %}
@@ -263,9 +269,7 @@
         </div>
 
         <div class="p-3 p-lg-4 border-top muted small">
-          Se quiser, no próximo passo eu ajusto a sua <b>view</b> para:
-          criar/editar/excluir usando esses campos (<span class="mono">acao</span>, <span class="mono">id</span>, <span class="mono">excluir_id</span>)
-          e também organizar a busca por <span class="mono">q</span>.
+          Dica: use a busca para filtrar por nome, código ou categoria e faça as ações direto na lista.
         </div>
       </div>
     </div>
@@ -275,4 +279,3 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
-
