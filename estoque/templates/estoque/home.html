@@ -1,0 +1,278 @@
+{% load static %}
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Estoque • Produtos</title>
+
+  <!-- Bootstrap (sem precisar instalar nada) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    body { background: #f6f7fb; }
+    .card-soft { border: 0; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.06); }
+    .brand { font-weight: 800; letter-spacing: .2px; }
+    .muted { color: #6c757d; }
+    .table thead th { white-space: nowrap; }
+    .btn-pill { border-radius: 999px; }
+    .chip { display:inline-block; padding:.25rem .6rem; border-radius:999px; font-size:.85rem; background:#eef1ff; color:#3b4cca; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+  </style>
+</head>
+
+<body>
+  <div class="container py-4 py-lg-5">
+
+    <!-- Topo -->
+    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-3">
+      <div>
+        <div class="brand fs-3">Estoque</div>
+        <div class="muted">Cadastro, edição, exclusão e busca de produtos</div>
+      </div>
+
+      <!-- Busca (GET) -->
+      <form class="d-flex gap-2" method="get" action="">
+        <input
+          class="form-control"
+          type="search"
+          name="q"
+          placeholder="Buscar por nome, código, categoria..."
+          value="{{ request.GET.q|default:'' }}"
+          style="min-width: 260px;"
+        >
+        <button class="btn btn-dark btn-pill px-4" type="submit">Buscar</button>
+
+        {% if request.GET.q %}
+          <a class="btn btn-outline-secondary btn-pill px-4" href="?">Limpar</a>
+        {% endif %}
+      </form>
+    </div>
+
+    <!-- Mensagens do Django (opcional) -->
+    {% if messages %}
+      <div class="mb-3">
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags }} mb-2">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <!-- CARD: Formulário -->
+    <div class="card card-soft mb-4">
+      <div class="card-body p-3 p-lg-4">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+          <div class="fs-5 fw-semibold">
+            {% if produto_edicao %}
+              Editar produto <span class="chip">ID {{ produto_edicao.id }}</span>
+            {% else %}
+              Novo produto
+            {% endif %}
+          </div>
+
+          {% if produto_edicao %}
+            <a class="btn btn-outline-secondary btn-pill" href="?">Cancelar edição</a>
+          {% endif %}
+        </div>
+
+        <!--
+          IMPORTANTE:
+          Este template funciona com 1 única rota (a página atual):
+          - Criar/Salvar: POST com campos do produto
+          - Excluir: POST com excluir_id
+          - Editar: GET ?edit=ID (a view carrega produto_edicao)
+        -->
+        <form method="post" action="" class="row g-3">
+          {% csrf_token %}
+
+          <!-- Se estiver editando, enviar o ID -->
+          {% if produto_edicao %}
+            <input type="hidden" name="id" value="{{ produto_edicao.id }}">
+          {% endif %}
+
+          <div class="col-12 col-md-6">
+            <label class="form-label">Nome do produto</label>
+            <input
+              class="form-control"
+              type="text"
+              name="nome"
+              required
+              placeholder="Ex.: Arroz 5kg"
+              value="{% if produto_edicao %}{{ produto_edicao.nome }}{% endif %}"
+            >
+          </div>
+
+          <div class="col-12 col-md-3">
+            <label class="form-label">Código / SKU</label>
+            <input
+              class="form-control mono"
+              type="text"
+              name="codigo"
+              placeholder="Ex.: 789..."
+              value="{% if produto_edicao %}{{ produto_edicao.codigo }}{% endif %}"
+            >
+          </div>
+
+          <div class="col-12 col-md-3">
+            <label class="form-label">Categoria</label>
+            <input
+              class="form-control"
+              type="text"
+              name="categoria"
+              placeholder="Ex.: Grãos"
+              value="{% if produto_edicao %}{{ produto_edicao.categoria }}{% endif %}"
+            >
+          </div>
+
+          <div class="col-12 col-md-3">
+            <label class="form-label">Preço (R$)</label>
+            <input
+              class="form-control"
+              type="number"
+              step="0.01"
+              min="0"
+              name="preco"
+              placeholder="Ex.: 19.90"
+              value="{% if produto_edicao %}{{ produto_edicao.preco }}{% endif %}"
+            >
+          </div>
+
+          <div class="col-12 col-md-3">
+            <label class="form-label">Quantidade em estoque</label>
+            <input
+              class="form-control"
+              type="number"
+              step="1"
+              min="0"
+              name="quantidade"
+              placeholder="Ex.: 20"
+              value="{% if produto_edicao %}{{ produto_edicao.quantidade }}{% endif %}"
+            >
+          </div>
+
+          <div class="col-12 col-md-6">
+            <label class="form-label">Fornecedor</label>
+            <input
+              class="form-control"
+              type="text"
+              name="fornecedor"
+              placeholder="Ex.: Atacadista X"
+              value="{% if produto_edicao %}{{ produto_edicao.fornecedor }}{% endif %}"
+            >
+          </div>
+
+          <div class="col-12 d-flex flex-wrap gap-2 mt-2">
+            <button class="btn btn-primary btn-pill px-4" type="submit" name="acao" value="salvar">
+              {% if produto_edicao %}Salvar alterações{% else %}Salvar produto{% endif %}
+            </button>
+
+            <a class="btn btn-outline-dark btn-pill px-4" href="?">Atualizar lista</a>
+
+            <div class="ms-auto muted small d-flex align-items-center">
+              Dica: para editar, use o botão “Editar” na lista abaixo.
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- CARD: Lista -->
+    <div class="card card-soft">
+      <div class="card-body p-0">
+        <div class="p-3 p-lg-4 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <div class="fs-5 fw-semibold">Produtos cadastrados</div>
+          <div class="muted">
+            Total: <span class="fw-semibold">{{ produtos|length }}</span>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th style="width: 80px;">ID</th>
+                <th>Produto</th>
+                <th style="width: 140px;">Código</th>
+                <th style="width: 160px;">Categoria</th>
+                <th style="width: 140px;">Preço</th>
+                <th style="width: 140px;">Qtd</th>
+                <th style="width: 220px;" class="text-end">Ações</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {% if produtos %}
+                {% for p in produtos %}
+                  <tr>
+                    <td class="mono">{{ p.id }}</td>
+
+                    <td>
+                      <div class="fw-semibold">{{ p.nome }}</div>
+                      {% if p.fornecedor %}
+                        <div class="small muted">Fornecedor: {{ p.fornecedor }}</div>
+                      {% endif %}
+                    </td>
+
+                    <td class="mono">
+                      {% if p.codigo %}{{ p.codigo }}{% else %}<span class="muted">—</span>{% endif %}
+                    </td>
+
+                    <td>
+                      {% if p.categoria %}{{ p.categoria }}{% else %}<span class="muted">—</span>{% endif %}
+                    </td>
+
+                    <td>
+                      {% if p.preco %}R$ {{ p.preco }}{% else %}<span class="muted">—</span>{% endif %}
+                    </td>
+
+                    <td>
+                      {% if p.quantidade is not None %}{{ p.quantidade }}{% else %}<span class="muted">—</span>{% endif %}
+                    </td>
+
+                    <td class="text-end">
+                      <!-- Editar (GET) -->
+                      <a class="btn btn-outline-primary btn-sm btn-pill"
+                         href="?edit={{ p.id }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}">
+                        Editar
+                      </a>
+
+                      <!-- Excluir (POST) -->
+                      <form method="post" action="" class="d-inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="excluir_id" value="{{ p.id }}">
+                        <button
+                          type="submit"
+                          class="btn btn-outline-danger btn-sm btn-pill"
+                          onclick="return confirm('Confirma excluir o produto: {{ p.nome|escapejs }} ?');"
+                        >
+                          Excluir
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="7" class="p-4 text-center muted">
+                    Nenhum produto encontrado.
+                  </td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="p-3 p-lg-4 border-top muted small">
+          Se quiser, no próximo passo eu ajusto a sua <b>view</b> para:
+          criar/editar/excluir usando esses campos (<span class="mono">acao</span>, <span class="mono">id</span>, <span class="mono">excluir_id</span>)
+          e também organizar a busca por <span class="mono">q</span>.
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
