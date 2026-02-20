@@ -1,49 +1,25 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import get_object_or_404, redirect, render
+
+from .forms import ProdutoForm
 from .models import Produto
 
+
 def home(request):
-    # SALVAR ou ATUALIZAR
     if request.method == "POST":
-        produto_id = request.POST.get("produto_id")
+        if request.POST.get("excluir_id"):
+            Produto.objects.filter(id=request.POST.get("excluir_id")).delete()
+            return redirect("home")
 
-        nome = request.POST.get("nome")
-        codigo = request.POST.get("codigo")
-        categoria = request.POST.get("categoria")
-        preco = request.POST.get("preco") or 0
-        quantidade = request.POST.get("quantidade") or 0
-        fornecedor = request.POST.get("fornecedor")
+        form = ProdutoForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return redirect("home")
+    else:
+        form = ProdutoForm()
 
-        if produto_id:
-            produto = Produto.objects.get(id=produto_id)
-        else:
-            produto = Produto()
-
-        produto.nome = nome
-        produto.codigo = codigo
-        produto.categoria = categoria
-        produto.preco = preco
-        produto.quantidade = quantidade
-        produto.fornecedor = fornecedor
-        produto.save()
-
-        return redirect("home")
-
-    # EXCLUIR
-    excluir_id = request.GET.get("del")
-    if excluir_id:
-        Produto.objects.filter(id=excluir_id).delete()
-        return redirect("home")
-
-    # EDITAR
-    editar_id = request.GET.get("edit")
-    produto_edicao = None
-    if editar_id:
-        produto_edicao = Produto.objects.get(id=editar_id)
-
-    # BUSCAR
     q = request.GET.get("q")
     if q:
-        produtos = Produto.objects.filter(nome__icontains=q)
+        produtos = Produto.objects.filter(nome__icontains=q).order_by("-criado_em")
     else:
         produtos = Produto.objects.all().order_by("-criado_em")
 
@@ -52,7 +28,32 @@ def home(request):
         "estoque/home.html",
         {
             "produtos": produtos,
-            "produto_edicao": produto_edicao
-        }
+            "form": form,
+        },
     )
 
+
+def produto_detalhe(request, pk):
+    produto = get_object_or_404(Produto, pk=pk)
+    return render(request, "estoque/produto_detalhe.html", {"produto": produto})
+
+
+def produto_editar(request, pk):
+    produto = get_object_or_404(Produto, pk=pk)
+
+    if request.method == "POST":
+        form = ProdutoForm(request.POST, instance=produto)
+        if form.is_valid():
+            form.save()
+            return redirect("produto_detalhe", pk=produto.pk)
+    else:
+        form = ProdutoForm(instance=produto)
+
+    return render(
+        request,
+        "estoque/produto_form.html",
+        {
+            "form": form,
+            "produto": produto,
+        },
+    )
