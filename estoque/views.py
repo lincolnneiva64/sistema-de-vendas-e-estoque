@@ -3,7 +3,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 
 from .forms import ProdutoForm
 from .models import Produto
-
+from django.contrib import messages
 
 def home(request):
     produto_edicao = None
@@ -19,7 +19,7 @@ def home(request):
                 Produto.objects.filter(id=excluir_id).delete()
             return redirect("estoque:home")
 
-        # CRIAR / EDITAR
+        # CRIAR / EDITARgit
         produto_id = request.POST.get("produto_id")
         if produto_id:
             produto_edicao = get_object_or_404(Produto, id=produto_id)
@@ -48,6 +48,15 @@ def home(request):
             Q(codigo__icontains=q) |
             Q(categoria__icontains=q)
         )
+    # ===== Cards Inteligentes =====
+
+    total_produtos = produtos.count()
+
+    valor_total = sum(p.preco * p.quantidade for p in produtos)
+
+    baixo_estoque = sum(1 for p in produtos if p.quantidade <= p.estoque_minimo)
+
+
 
     return render(
         request,
@@ -57,7 +66,37 @@ def home(request):
             "produto_edicao": produto_edicao,
             "form": form,
             "q": q,
+            "total_produtos": total_produtos,
+            "valor_total": valor_total,
+            "baixo_estoque": baixo_estoque,
         },
     )
+
+
 def cadastrar_produto(request):
-    return redirect("estoque:home")
+    if request.method == "POST":
+        form = ProdutoForm(request.POST)
+        if form.is_valid():
+            produto = form.save()
+            messages.success(request, f'Produto "{produto.nome}" cadastrado com sucesso!')
+            return redirect("estoque:home")
+    else:
+        form = ProdutoForm()
+
+    return render(request, "estoque/cadastrar_produto.html", {"form": form})
+
+def produto_detalhe(request, pk):
+    produto = get_object_or_404(Produto, pk=pk)
+    return render(request, "estoque/produto_detalhe.html", {"produto": produto})
+def produto_editar(request, pk):
+    produto = get_object_or_404(Produto, pk=pk)
+
+    if request.method == "POST":
+        form = ProdutoForm(request.POST, instance=produto)
+        if form.is_valid():
+            form.save()
+            return redirect("estoque:home")
+    else:
+        form = ProdutoForm(instance=produto)
+
+    return render(request, "estoque/cadastrar_produto.html", {"form": form})

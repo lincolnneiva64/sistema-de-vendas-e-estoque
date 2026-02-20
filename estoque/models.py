@@ -6,6 +6,8 @@ class Produto(models.Model):
     categoria = models.CharField(max_length=60, blank=True, null=True)
     preco = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     quantidade = models.IntegerField(default=0)
+    estoque_minimo = models.PositiveIntegerField(default=5)
+
     fornecedor = models.CharField(max_length=120, blank=True, null=True)
 
     criado_em = models.DateTimeField(auto_now_add=True)

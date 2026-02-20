@@ -7,13 +7,15 @@ class ProdutoForm(forms.ModelForm):
     class Meta:
         model = Produto
         fields = [
-            "nome",
-            "codigo",
-            "categoria",
-            "preco",
-            "quantidade",
-            "fornecedor",
-        ]
+    "nome",
+    "codigo",
+    "categoria",
+    "preco",
+    "quantidade",
+    "estoque_minimo",
+    "fornecedor",
+]
+
         widgets = {
             "nome": forms.TextInput(
                 attrs={
