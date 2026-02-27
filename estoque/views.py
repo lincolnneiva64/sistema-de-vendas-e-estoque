@@ -1,6 +1,6 @@
 from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
-
+from django.db.models import Case, When, Value, IntegerField, F
 from .forms import ProdutoForm
 from .models import Produto
 from django.contrib import messages
@@ -41,7 +41,14 @@ def home(request):
 
     # Busca
     q = request.GET.get("q", "").strip()
-    produtos = Produto.objects.all().order_by("-criado_em")
+    produtos = Produto.objects.annotate(
+    prioridade=Case(
+        When(quantidade=0, then=Value(0)),
+        When(quantidade__lte=F("estoque_minimo"), then=Value(1)),
+        default=Value(2),
+        output_field=IntegerField(),
+    )
+).order_by("prioridade", "-criado_em")
     if q:
         produtos = produtos.filter(
             Q(nome__icontains=q) |
@@ -54,7 +61,21 @@ def home(request):
 
     valor_total = sum(p.preco * p.quantidade for p in produtos)
 
-    baixo_estoque = sum(1 for p in produtos if p.quantidade <= p.estoque_minimo)
+    zerado_count = produtos.filter(quantidade=0).count()
+
+    limite_count = produtos.filter(
+        quantidade=F("estoque_minimo"),
+        quantidade__gt=0
+    ).count()
+
+    criticos_count = produtos.filter(
+        quantidade__lt=F("estoque_minimo"),
+        quantidade__gt=0
+    ).count()
+
+    normal_count = produtos.filter(
+        quantidade__gt=F("estoque_minimo")
+    ).count()
 
 
 
@@ -68,9 +89,12 @@ def home(request):
             "q": q,
             "total_produtos": total_produtos,
             "valor_total": valor_total,
-            "baixo_estoque": baixo_estoque,
+            "zerado_count": zerado_count,
+            "limite_count": limite_count,
+            "criticos_count": criticos_count,
+            "normal_count": normal_count,
         },
-    )
+    )   
 
 
 def cadastrar_produto(request):
