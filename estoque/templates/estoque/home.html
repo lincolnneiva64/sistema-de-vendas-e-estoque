@@ -23,7 +23,8 @@
         <th>Produto</th>
         <th>Quantidade</th>
         <th>Estoque Mínimo</th>
-      </tr>
+      <th>Ações</th>
+</tr>
     </thead>
 
     <tbody>
@@ -42,7 +43,12 @@
 {% endif %}
         </td>
         <td>{{ produto.estoque_minimo }}</td>
-      </tr>
+      <td>
+  <a href="{% url 'estoque:produto_editar' produto.id %}" class="btn btn-sm btn-primary">
+    Editar
+  </a>
+</td>
+</tr>
       {% endfor %}
     </tbody>
   </table>

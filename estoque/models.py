@@ -13,6 +13,20 @@ class Produto(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
+
+
     def __str__(self):
         return self.nome
 
+    def save(self, *args, **kwargs):
+        if self.nome:
+            nome_limpo = " ".join(self.nome.strip().split())
+            self.nome = nome_limpo.title()
+
+        if self.categoria:
+            categoria_limpa = " ".join(self.categoria.strip().split())
+            self.categoria = categoria_limpa.title()
+        if self.fornecedor:
+            fornecedor_limpo = " ".join(self.fornecedor.strip().split())
+            self.fornecedor = fornecedor_limpo.title()
+        super().save(*args, **kwargs)
