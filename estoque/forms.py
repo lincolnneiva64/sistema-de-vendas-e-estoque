@@ -36,6 +36,7 @@ class ProdutoForm(forms.ModelForm):
                     "class": "form-control",
                     "placeholder": "Ex.: Grãos",
                 }
+                ),
         "preco_compra": forms.NumberInput(
             attrs={
                 "class": "form-control",

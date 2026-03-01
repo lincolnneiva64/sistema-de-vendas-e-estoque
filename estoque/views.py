@@ -59,7 +59,7 @@ def home(request):
 
     total_produtos = produtos.count()
 
-    valor_total = sum(p.preco * p.quantidade for p in produtos)
+    valor_total = sum(p.preco_venda * p.quantidade for p in produtos)
 
     zerado_count = produtos.filter(quantidade=0).count()
 
