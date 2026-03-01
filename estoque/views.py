@@ -43,11 +43,22 @@ def home(request):
     q = request.GET.get("q", "").strip()
     produtos = Produto.objects.annotate(
     prioridade=Case(
-        When(quantidade=0, then=Value(0)),
-        When(quantidade__lte=F("estoque_minimo"), then=Value(1)),
-        default=Value(2),
-        output_field=IntegerField(),
-    )
+    When(quantidade=0, then=Value(0)),
+
+    # 1) crítico (0 < qtd <= estoque_minimo)
+    When(quantidade__gt=0, quantidade__lte=F("estoque_minimo"), then=Value(1)),
+
+    # 2) no limite (estoque_minimo < qtd <= estoque_minimo + margem)
+    When(
+        quantidade__gt=F("estoque_minimo"),
+        quantidade__lte=F("estoque_minimo") + Value(5),
+        then=Value(2),
+    ),
+
+    # 3) normal
+    default=Value(3),
+    output_field=IntegerField(),
+),
 ).order_by("prioridade", "-criado_em")
     if q:
         produtos = produtos.filter(
@@ -55,27 +66,60 @@ def home(request):
             Q(codigo__icontains=q) |
             Q(categoria__icontains=q)
         )
-    # ===== Cards Inteligentes =====
+        # ===== Cards Inteligentes / Ordenação por prioridade =====
 
+    produtos = Produto.objects.annotate(
+        prioridade=Case(
+            When(quantidade=0, then=Value(0)),
+
+            When(
+                quantidade__gt=0,
+                quantidade__lte=F("estoque_minimo"),
+                then=Value(1)
+            ),
+
+            When(
+                quantidade__gt=F("estoque_minimo"),
+                quantidade__lte=F("estoque_minimo") + Value(5),
+                then=Value(2)
+            ),
+
+            default=Value(3),
+            output_field=IntegerField(),
+        )
+    ).order_by("prioridade", "-criado_em")
+
+    if q:
+        produtos = produtos.filter(
+            Q(nome__icontains=q) |
+            Q(codigo__icontains=q) |
+            Q(categoria__icontains=q)
+        )
+
+    # ===== Contadores =====
     total_produtos = produtos.count()
-
-    valor_total = sum(p.preco_venda * p.quantidade for p in produtos)
 
     zerado_count = produtos.filter(quantidade=0).count()
 
-    limite_count = produtos.filter(
-        quantidade=F("estoque_minimo"),
-        quantidade__gt=0
+    criticos_count = produtos.filter(
+        quantidade__gt=0,
+        quantidade__lte=F("estoque_minimo"),
     ).count()
 
-    criticos_count = produtos.filter(
-        quantidade__lt=F("estoque_minimo"),
-        quantidade__gt=0
+    limite_count = produtos.filter(
+        quantidade__gt=F("estoque_minimo"),
+        quantidade__lte=F("estoque_minimo") + Value(5),
     ).count()
 
     normal_count = produtos.filter(
-        quantidade__gt=F("estoque_minimo")
+        quantidade__gt=F("estoque_minimo") + Value(5),
     ).count()
+
+    # ===== Financeiro =====
+    total_investido = sum((p.preco_compra or 0) * (p.quantidade or 0) for p in produtos)
+    total_faturamento = sum((p.preco_venda or 0) * (p.quantidade or 0) for p in produtos)
+    lucro_bruto = total_faturamento - total_investido
+    margem_percent = (lucro_bruto / total_faturamento * 100) if total_faturamento else 0
 
 
 
@@ -88,11 +132,15 @@ def home(request):
             "form": form,
             "q": q,
             "total_produtos": total_produtos,
-            "valor_total": valor_total,
+            
             "zerado_count": zerado_count,
             "limite_count": limite_count,
             "criticos_count": criticos_count,
             "normal_count": normal_count,
+            "total_investido": total_investido,
+            "total_faturamento": total_faturamento,
+            "lucro_bruto": lucro_bruto,
+            "margem_percent": margem_percent,
         },
     )   
 

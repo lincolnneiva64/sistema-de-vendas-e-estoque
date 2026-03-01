@@ -12,9 +12,10 @@
 <div class="container mt-4">
   <div style="margin: 12px 0;">
     <strong>Resumo:</strong>
-    <span class="badge badge-zero">● Zerado: {{ zerado_count }}</span>
-    <span class="badge badge-limite">▲ No limite: {{ limite_count }}</span>
-    <span class="badge badge-ok">● Normal: {{ normal_count }}</span>
+    <span class="badge badge-zero">• Zerado: {{ zerado_count }}</span>
+<span class="badge badge-critico">• Crítico: {{ criticos_count }}</span>
+<span class="badge badge-limite">▲ No limite: {{ limite_count }}</span>
+<span class="badge badge-ok">• Normal: {{ normal_count }}</span>
   </div>
 
   <table class="table table-hover mx-auto align-middle" style="width: auto;">
@@ -29,7 +30,7 @@
 
     <tbody>
       {% for produto in produtos %}
-      <tr class="{% if produto.quantidade == 0 %}table-danger{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-warning{% endif %}">
+      <tr class="{% if produto.quantidade == 0 %}table-danger{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-warning{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}{% endif %}">
         <td>{{ produto.nome }}</td>
         <td>
           {{ produto.quantidade }}
