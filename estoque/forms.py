@@ -10,7 +10,8 @@ class ProdutoForm(forms.ModelForm):
     "nome",
     "codigo",
     "categoria",
-    "preco",
+            "preco_compra",
+        "preco_venda",
     "quantidade",
     "estoque_minimo",
     "fornecedor",
@@ -35,23 +36,22 @@ class ProdutoForm(forms.ModelForm):
                     "class": "form-control",
                     "placeholder": "Ex.: Grãos",
                 }
-            ),
-            "preco": forms.NumberInput(
-                attrs={
-                    "class": "form-control",
-                    "step": "0.01",
-                    "min": "0",
-                    "placeholder": "Ex.: 19.90",
-                }
-            ),
-            "quantidade": forms.NumberInput(
-                attrs={
-                    "class": "form-control",
-                    "step": "1",
-                    "min": "0",
-                    "placeholder": "Ex.: 20",
-                }
-            ),
+        "preco_compra": forms.NumberInput(
+            attrs={
+                "class": "form-control",
+                "step": "0.01",
+                "min": "0",
+                "placeholder": "Ex.: 10.00",
+            }
+        ),
+        "preco_venda": forms.NumberInput(
+            attrs={
+                "class": "form-control",
+                "step": "0.01",
+                "min": "0",
+                "placeholder": "Ex.: 19.90",
+            }
+        ),
             "fornecedor": forms.TextInput(
                 attrs={
                     "class": "form-control",
