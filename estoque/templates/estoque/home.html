@@ -30,15 +30,20 @@
 
     <tbody>
       {% for produto in produtos %}
-      <tr class="{% if produto.quantidade == 0 %}table-danger{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-warning{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}{% endif %}">
+      <tr class="{% if produto.quantidade == 0 %}table-danger{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-warning{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-info{% endif %}">
         <td>{{ produto.nome }}</td>
         <td>
           {{ produto.quantidade }}
 
           {% if produto.quantidade == 0 %}
     <span class="badge badge-zero">• Zerado</span>
+
 {% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}
-    <span class="badge badge-limite">▲ No limite</span>
+    <span class="badge badge-critico">• Crítico</span>
+
+{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}
+    <span class="badge badge-limite">• No limite</span>
+
 {% else %}
     <span class="badge badge-ok">• Normal</span>
 {% endif %}
