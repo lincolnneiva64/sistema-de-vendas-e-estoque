@@ -12,6 +12,7 @@
 <div class="container mt-4">
   <div style="margin: 12px 0;">
     <strong>Resumo:</strong>
+    <span class="badge bg-secondary resumo-badge" data-filter="">● Todos</span>
     <span class="badge badge-zero resumo-badge" data-filter="zerado">• Zerado: {{ zerado_count }}</span>
 <span class="badge badge-critico resumo-badge" data-filter="critico">• Crítico: {{ criticos_count }}</span>
 <span class="badge badge-limite resumo-badge" data-filter="limite">▲ No limite: {{ limite_count }}</span>
@@ -30,34 +31,130 @@
 
     <tbody>
       {% for produto in produtos %}
-      <tr
+<tr
   data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}"
-  class="{% if produto.quantidade == 0 %}table-danger{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-warning{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-info{% endif %}">
+  class="{% if produto.quantidade == 0 %}table-danger{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-danger{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-warning{% else %}{% endif %}"
+>
   <td>{{ produto.nome }}</td>
 
   <td class="td-quantidade">
     <span class="qtd-num">{{ produto.quantidade }}</span>
 
     {% if produto.quantidade == 0 %}
-      <span class="badge badge-zero">• Zerado</span>
+      <span class="badge badge-zero">Zerado</span>
     {% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}
-      <span class="badge badge-critico">• Crítico</span>
+      <span class="badge badge-critico">Crítico</span>
     {% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}
-      <span class="badge badge-limite">• No limite</span>
+      <span class="badge badge-limite">No limite</span>
     {% else %}
-      <span class="badge badge-ok">• Normal</span>
+      <span class="badge badge-ok">Normal</span>
     {% endif %}
   </td>
-        <td>{{ produto.estoque_minimo }}</td>
-      <td>
-  <a href="{% url 'estoque:produto_editar' produto.id %}" class="btn btn-sm btn-primary">
-    Editar
-  </a>
-</td>
+
+  <td>{{ produto.estoque_minimo }}</td>
+
+  <td>
+    <a href="{% url 'estoque:produto_editar' produto.id %}" class="btn btn-sm btn-primary">
+      Editar
+    </a>
+  </td>
 </tr>
-      {% endfor %}
+{% endfor %}
     </tbody>
   </table>
   </div>
+  <script>
+document.addEventListener("DOMContentLoaded", function () {
+
+  const badges = document.querySelectorAll(".resumo-badge");
+  const linhas = document.querySelectorAll("tbody tr[data-status]");
+  let filtroAtivo = null;
+
+  function aplicarFiltro(status) {
+    // fade rápido
+    linhas.forEach((tr) => tr.style.opacity = "0.2");
+
+    setTimeout(() => {
+      linhas.forEach((tr) => {
+        const ok = (!status || tr.dataset.status === status);
+        tr.style.display = ok ? "" : "none";
+        tr.style.opacity = "1";
+      });
+    }, 60);
+  }
+
+  function atualizarBadges(status) {
+    badges.forEach((b) => {
+      b.classList.remove("ativo");
+      b.classList.remove("apagada");
+    });
+
+    if (!status) return;
+
+    // apaga as outras
+    badges.forEach((b) => {
+      const f = (b.dataset.filter || "").trim();
+      if (f !== status) b.classList.add("apagada");
+    });
+
+    // marca ativa
+    const ativa = document.querySelector(`.resumo-badge[data-filter="${status}"]`);
+    if (ativa) ativa.classList.add("ativo");
+  }
+
+  function setUrlStatus(status) {
+    const url = new URL(window.location.href);
+
+    if (!status) {
+      url.searchParams.delete("status");
+    } else {
+      url.searchParams.set("status", status);
+    }
+
+    history.replaceState(null, "", url.toString());
+  }
+
+  function aplicarTudo(status) {
+    filtroAtivo = status || null;
+    aplicarFiltro(filtroAtivo);
+    atualizarBadges(filtroAtivo);
+    setUrlStatus(filtroAtivo);
+  }
+
+  // ✅ ao abrir: lê o filtro da URL e aplica (persistência)
+  const url = new URL(window.location.href);
+  const statusInicial = (url.searchParams.get("status") || "").trim();
+
+  if (statusInicial) {
+    aplicarTudo(statusInicial);
+  } else {
+    atualizarBadges(null);
+  }
+
+  // ✅ clique nas badges
+  badges.forEach((badge) => {
+    badge.style.cursor = "pointer";
+
+    badge.addEventListener("click", function () {
+      const status = (badge.dataset.filter || "").trim();
+
+      // clicou no mesmo filtro -> limpa
+      if (filtroAtivo === status) {
+        aplicarTudo(null);
+        return;
+      }
+
+      // clicou em "Todos" (status vazio) -> limpa
+      if (!status) {
+        aplicarTudo(null);
+        return;
+      }
+
+      aplicarTudo(status);
+    });
+  });
+
+});
+</script>
 </body>
 </html>
