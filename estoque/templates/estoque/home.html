@@ -12,13 +12,23 @@
 <div class="container mt-4">
   <div style="margin: 12px 0;">
     <strong>Resumo:</strong>
-    <span class="badge bg-secondary resumo-badge" data-filter="">● Todos</span>
-    <span class="badge badge-zero resumo-badge" data-filter="zerado">• Zerado: {{ zerado_count }}</span>
-<span class="badge badge-critico resumo-badge" data-filter="critico">• Crítico: {{ criticos_count }}</span>
-<span class="badge badge-limite resumo-badge" data-filter="limite">▲ No limite: {{ limite_count }}</span>
-<span class="badge badge-ok resumo-badge" data-filter="normal">• Normal: {{ normal_count }}</span>
-  </div>
 
+<a class="badge bg-secondary resumo-badge {% if filtro == 'todos' %}active{% endif %}"
+   href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=todos">Todos</a>
+
+<a class="badge badge-zero resumo-badge {% if filtro == 'zerado' %}active{% endif %}"
+   href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=zerado">Zerado: {{ zerado_count }}</a>
+
+<a class="badge badge-critico resumo-badge {% if filtro == 'critico' %}active{% endif %}"
+   href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=critico">Crítico: {{ criticos_count }}</a>
+
+<a class="badge badge-limite resumo-badge {% if filtro == 'limite' %}active{% endif %}"
+   href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=limite">No limite: {{ limite_count }}</a>
+
+<a class="badge badge-ok resumo-badge {% if filtro == 'normal' %}active{% endif %}"
+   href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=normal">Normal: {{ normal_count }}</a>
+  </div>
+<div class="fade-wrapper" id="fadeWrapper">
   <table class="table table-hover mx-auto align-middle" style="width: auto;">
     <thead>
       <tr>
@@ -69,8 +79,11 @@ document.addEventListener("DOMContentLoaded", function () {
   const badges = document.querySelectorAll(".resumo-badge");
   const linhas = document.querySelectorAll("tbody tr[data-status]");
   let filtroAtivo = null;
-
+const fadeWrapper = document.getElementById("fadeWrapper");
   function aplicarFiltro(status) {
+  if (fadeWrapper) {
+    fadeWrapper.classList.add("is-fading");
+}
     // fade rápido
     linhas.forEach((tr) => tr.style.opacity = "0.2");
 
@@ -80,7 +93,10 @@ document.addEventListener("DOMContentLoaded", function () {
         tr.style.display = ok ? "" : "none";
         tr.style.opacity = "1";
       });
-    }, 60);
+            if (fadeWrapper) {
+            fadeWrapper.classList.remove("is-fading");
+        }
+    }, 160);
   }
 
   function atualizarBadges(status) {
