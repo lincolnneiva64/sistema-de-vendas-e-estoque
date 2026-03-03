@@ -43,7 +43,14 @@
       {% for produto in produtos %}
 <tr
   data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}"
-  class="{% if produto.quantidade == 0 %}table-danger{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-danger{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-warning{% else %}{% endif %}"
+  class="{% if produto.quantidade == 0 %}
+        table-zerado 
+       {% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}
+        table-danger
+       {% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}
+        table-warning
+       {% else %}
+       {% endif %}"
 >
   <td>{{ produto.nome }}</td>
 
@@ -147,26 +154,37 @@ const fadeWrapper = document.getElementById("fadeWrapper");
     atualizarBadges(null);
   }
 
-  // ✅ clique nas badges
-  badges.forEach((badge) => {
-    badge.style.cursor = "pointer";
+  // ✅ clique nas badges (com efeito WOW antes de navegar)
+badges.forEach((badge) => {
+  badge.style.cursor = "pointer";
 
-    badge.addEventListener("click", function () {
-      const status = (badge.dataset.filter || "").trim();
+  badge.addEventListener("click", function (e) {
+    e.preventDefault(); // impede reload imediato
 
-      // clicou no mesmo filtro -> limpa
-      if (filtroAtivo === status) {
-        aplicarTudo(null);
-        return;
-      }
+    const href = badge.getAttribute("href");
+    if (!href) return;
 
-      // clicou em "Todos" (status vazio) -> limpa
-      if (!status) {
-        aplicarTudo(null);
-        return;
-      }
+    if (fadeWrapper) {
+  fadeWrapper.classList.add("is-fading");
 
-      aplicarTudo(status);
+  // força o navegador a recalcular layout
+  void fadeWrapper.offsetWidth;
+
+  // espera um frame para renderizar o fade
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      window.location.href = href;
+    }, 220);
+  });
+
+} else {
+  window.location.href = href;
+}
+  });
+});
+    aplicarTudo(status);
+    fadeWrapper.classList.remove("is-fading");
+}, 160);
     });
   });
 
