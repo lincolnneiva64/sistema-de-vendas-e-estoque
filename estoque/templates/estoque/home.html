@@ -41,16 +41,10 @@
 
     <tbody>
       {% for produto in produtos %}
-<tr
-  data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}"
-  class="{% if produto.quantidade == 0 %}
-        table-zerado 
-       {% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}
-        table-danger
-       {% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}
-        table-warning
-       {% else %}
-       {% endif %}"
+
+  <tr data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}"
+class="{% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}">
+        
 >
   <td>{{ produto.nome }}</td>
 
@@ -85,7 +79,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   const badges = document.querySelectorAll(".resumo-badge");
   const linhas = document.querySelectorAll("tbody tr[data-status]");
-  let filtroAtivo = null;
+  let filtroAtivo = "";
 const fadeWrapper = document.getElementById("fadeWrapper");
   function aplicarFiltro(status) {
   if (fadeWrapper) {
