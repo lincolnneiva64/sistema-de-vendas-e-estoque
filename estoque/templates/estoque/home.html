@@ -92,14 +92,21 @@ const fadeWrapper = document.getElementById("fadeWrapper");
     fadeWrapper.classList.add("is-fading");
 }
     // fade rápido
-    linhas.forEach((tr) => tr.style.opacity = "0.2");
+    linhas.forEach((tr) => {
+  const ok = (!status || tr.dataset.status === status);
 
+  if (ok) {
+    tr.style.display = "";
+    requestAnimationFrame(() => {
+      tr.style.opacity = "1";
+    });
+  } else {
+    tr.style.opacity = "0";
     setTimeout(() => {
-      linhas.forEach((tr) => {
-        const ok = (!status || tr.dataset.status === status);
-        tr.style.display = ok ? "" : "none";
-        tr.style.opacity = "1";
-      });
+      tr.style.display = "none";
+    }, 180);
+  }
+});
             if (fadeWrapper) {
             fadeWrapper.classList.remove("is-fading");
         }
