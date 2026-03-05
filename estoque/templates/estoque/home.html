@@ -13,7 +13,7 @@
   <div style="margin: 12px 0;">
     <strong>Resumo:</strong>
 
-<a class="badge bg-secondary resumo-badge {% if filtro == 'todos' %}active{% endif %}"
+<a class="badge badge-ok resumo-badge {% if filtro == 'todos' %}active{% endif %}"
    href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=todos">Todos</a>
 
 <a class="badge badge-zero resumo-badge {% if filtro == 'zerado' %}active{% endif %}"
@@ -28,7 +28,6 @@
 <a class="badge badge-ok resumo-badge {% if filtro == 'normal' %}active{% endif %}"
    href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=normal">Normal: {{ normal_count }}</a>
   </div>
-<div class="fade-wrapper" id="fadeWrapper">
   <table class="table table-hover mx-auto align-middle" style="width: auto;">
     <thead>
       <tr>
@@ -82,9 +81,7 @@ document.addEventListener("DOMContentLoaded", function () {
   let filtroAtivo = "";
 const fadeWrapper = document.getElementById("fadeWrapper");
   function aplicarFiltro(status) {
-  if (fadeWrapper) {
-    fadeWrapper.classList.add("is-fading");
-}
+  
     // fade rápido
     linhas.forEach((tr) => {
   const ok = (!status || tr.dataset.status === status);
@@ -101,10 +98,11 @@ const fadeWrapper = document.getElementById("fadeWrapper");
     }, 180);
   }
 });
-            if (fadeWrapper) {
-            fadeWrapper.classList.remove("is-fading");
-        }
-    }, 160);
+            setTimeout(() => {
+  if (fadeWrapper) {
+    fadeWrapper.classList.remove("is-fading");
+  }
+}, 160);
   }
 
   function atualizarBadges(status) {
