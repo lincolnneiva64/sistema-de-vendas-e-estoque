@@ -49,7 +49,7 @@
         table-danger
        {% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}
         table-warning
-       {% else %}
+      
        {% endif %}"
 >
   <td>{{ produto.nome }}</td>
