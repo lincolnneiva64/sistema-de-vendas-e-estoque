@@ -28,6 +28,9 @@
 <a class="badge badge-ok resumo-badge {% if filtro == 'normal' %}active{% endif %}"
    href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=normal">Normal: {{ normal_count }}</a>
   </div>
+  <div style="margin: 10px 0;">
+  <a class="btn btn-primary" href="#novo-produto">+ Novo Produto</a>
+</div>
 <div class="fade-wrapper" id="fadeWrapper">
   <table class="table table-hover mx-auto align-middle" style="width: auto;">
     <thead>
@@ -80,6 +83,35 @@
     </tbody>
   </table>
   </div>
-  
+  <div id="novo-produto" style="margin-top:40px;" class="container">
+
+  <h4>Novo Produto</h4>
+
+  <form method="post">
+    {% csrf_token %}
+
+    <div class="row g-2">
+
+      <div class="col-md-5">
+        <input type="text" name="nome" class="form-control" placeholder="Nome do produto" required>
+      </div>
+
+      <div class="col-md-3">
+        <input type="number" name="quantidade" class="form-control" placeholder="Quantidade" required>
+      </div>
+
+      <div class="col-md-3">
+        <input type="number" name="estoque_minimo" class="form-control" placeholder="Estoque mínimo" required>
+      </div>
+
+      <div class="col-md-1">
+        <button type="submit" class="btn btn-success w-100">Salvar</button>
+      </div>
+
+    </div>
+
+  </form>
+
+</div>
 </body>
 </html>
