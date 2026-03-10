@@ -83,6 +83,26 @@
     </div>
 
   </main>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const campos = document.querySelectorAll("input");
 
+  campos.forEach((campo, index) => {
+    campo.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+
+        const proximo = campos[index + 1];
+
+        if (proximo) {
+          proximo.focus();
+        } else {
+          document.querySelector("form").submit();
+        }
+      }
+    });
+  });
+});
+</script>
 </body>
 </html>
