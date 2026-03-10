@@ -29,8 +29,8 @@
    href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=normal">Normal: {{ normal_count }}</a>
   </div>
   <div style="margin: 10px 0;">
-  <a class="btn btn-primary" href="#novo-produto">+ Novo Produto</a>
-</div>
+  <a class="btn btn-primary" href="{% url 'estoque:cadastrar_produto' %}">+ Novo Produto</a>
+  </div>
 <div class="fade-wrapper" id="fadeWrapper">
   <table class="table table-hover mx-auto align-middle" style="width: auto;">
     <thead>
@@ -38,79 +38,46 @@
         <th>Produto</th>
         <th>Quantidade</th>
         <th>Estoque Mínimo</th>
-      <th>Ações</th>
-</tr>
+        <th>Ações</th>
+      </tr>
     </thead>
 
     <tbody>
       {% for produto in produtos %}
-<tr
-  data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}"
-  class="{% if produto.quantidade == 0 %}
-        table-zerado 
-       {% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}
-        table-danger
-       {% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}
-        table-warning
-      
-       {% endif %}"
->
-  <td>{{ produto.nome }}</td>
+      <tr
+        data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}"
+        class="{% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-danger{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-warning{% endif %}"
+      >
+        <td>{{ produto.nome }}</td>
 
-  <td class="td-quantidade">
-    <span class="qtd-num">{{ produto.quantidade }}</span>
+        <td class="td-quantidade">
+          <span class="qtd-num">{{ produto.quantidade }}</span>
 
-    {% if produto.quantidade == 0 %}
-      <span class="badge badge-zero">Zerado</span>
-    {% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}
-      <span class="badge badge-critico">Crítico</span>
-    {% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}
-      <span class="badge badge-limite">No limite</span>
-    {% else %}
-      <span class="badge badge-ok">Normal</span>
-    {% endif %}
-  </td>
+          {% if produto.quantidade == 0 %}
+            <span class="badge badge-zero">Zerado</span>
+          {% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}
+            <span class="badge badge-critico">Crítico</span>
+          {% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}
+            <span class="badge badge-limite">No limite</span>
+          {% else %}
+            <span class="badge badge-ok">Normal</span>
+          {% endif %}
+        </td>
 
-  <td>{{ produto.estoque_minimo }}</td>
+        <td>{{ produto.estoque_minimo }}</td>
 
-  <td>
-    <a href="{% url 'estoque:produto_editar' produto.id %}" class="btn btn-sm btn-primary">
-      Editar
-    </a>
-  </td>
-</tr>
-{% endfor %}
+        <td>
+          <a href="{% url 'estoque:produto_editar' produto.id %}" class="btn btn-sm btn-primary">
+            Editar
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
     </tbody>
   </table>
-  </div>
-  <div id="novo-produto" style="margin-top:40px;" class="container">
+</div>
 
-  <h4>Novo Produto</h4>
 
-  <form method="post">
-    {% csrf_token %}
-
-    <div class="row g-2">
-
-      <div class="col-md-5">
-        <input type="text" name="nome" class="form-control" placeholder="Nome do produto" required>
-      </div>
-
-      <div class="col-md-3">
-        <input type="number" name="quantidade" class="form-control" placeholder="Quantidade" required>
-      </div>
-
-      <div class="col-md-3">
-        <input type="number" name="estoque_minimo" class="form-control" placeholder="Estoque mínimo" required>
-      </div>
-
-      <div class="col-md-1">
-        <button type="submit" class="btn btn-success w-100">Salvar</button>
-      </div>
-
-    </div>
-
-  </form>
 
 </div>
 </body>
