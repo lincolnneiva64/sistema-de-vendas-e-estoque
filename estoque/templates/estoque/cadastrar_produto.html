@@ -27,11 +27,11 @@
 
   <main class="container py-5">
 
-    <div class="bg-white border rounded-3 p-3 p-md-4 shadow-sm mx-auto" style="max-width: 920px;">
+    <div class="bg-white border rounded-3 p-3 p-md-4 shadow-sm mx-auto" style="max-width: 720px;">
       
       <p class="text-muted mb-4">Preencha os dados abaixo.</p>
 
-      <form method="post" class="row g-3">
+      <form method="post" class="row g-2">
   {% csrf_token %}
 
   <div class="col-12 col-md-6">
@@ -39,38 +39,38 @@
     {{ form.nome }}
   </div>
 
-  <div class="col-12 col-md-3">
+  <div class="col-12 col-md-4">
     <label class="form-label">Código</label>
     {{ form.codigo }}
   </div>
 
-  <div class="col-12 col-md-3">
+  <div class="col-12 col-md-4">
     <label class="form-label">Categoria</label>
     {{ form.categoria }}
   </div>
 
-  <div class="col-12 col-md-3">
+  <div class="col-12 col-md-4">
     <label class="form-label">Preço compra</label>
     {{ form.preco_compra }}
   </div>
 
-  <div class="col-12 col-md-3">
+  <div class="col-12 col-md-4">
     <label class="form-label">Preço venda</label>
     {{ form.preco_venda }}
   </div>
 
-  <div class="col-12 col-md-2">
+  <div class="col-12 col-md-6">
     <label class="form-label">Quantidade</label>
     {{ form.quantidade }}
   </div>
 
-  <div class="col-12 col-md-2">
+  <div class="col-12 col-md-6">
     <label class="form-label">Estoque mínimo</label>
     {{ form.estoque_minimo }}
   </div>
 
-  <div class="col-12 col-md-4">
-    <label class="form-label">Fornecedor</label>
+  <div class="col-12">
+        <label class="form-label">Fornecedor</label>
     {{ form.fornecedor }}
   </div>
 
@@ -79,7 +79,7 @@
     <a class="btn btn-outline-secondary px-4" href="{% url 'estoque:home' %}">Cancelar</a>
   </div>
 </form>
-      </form>
+      
     </div>
 
   </main>
