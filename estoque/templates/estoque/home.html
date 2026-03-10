@@ -32,6 +32,14 @@
   <a class="btn btn-primary" href="{% url 'estoque:cadastrar_produto' %}">+ Novo Produto</a>
   </div>
 <div class="fade-wrapper" id="fadeWrapper">
+  <div style="margin:10px 0; max-width:400px;">
+  <input 
+    type="text"
+    id="buscarProduto"
+    class="form-control"
+    placeholder="Buscar produto..."
+  >
+</div>
   <table class="table table-hover mx-auto align-middle" style="width: auto;">
     <thead>
       <tr>
@@ -80,5 +88,31 @@
 
 
 </div>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+
+  const busca = document.getElementById("buscarProduto");
+  const linhas = document.querySelectorAll("tbody tr");
+
+  busca.addEventListener("keyup", function() {
+
+    const termo = busca.value.toLowerCase();
+
+    linhas.forEach(function(linha) {
+
+      const nome = linha.children[0].textContent.toLowerCase();
+
+      if (nome.includes(termo)) {
+        linha.style.display = "";
+      } else {
+        linha.style.display = "none";
+      }
+
+    });
+
+  });
+
+});
+</script>
 </body>
 </html>
