@@ -19,12 +19,14 @@ class ProdutoForm(forms.ModelForm):
 
         widgets = {
             "nome": forms.TextInput(
-                attrs={
-                    "class": "form-control",
-                    "placeholder": "Ex.: Arroz 5kg",
-                    "required": True,
-                }
-            ),
+    attrs={
+        "class": "form-control",
+        "placeholder": "Ex.: Arroz 5kg",
+        "required": True,
+        "autofocus": True,
+    }
+),
+        
             "codigo": forms.TextInput(
                 attrs={
                     "class": "form-control mono",
