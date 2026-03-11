@@ -37,7 +37,12 @@
   <div class="col-12 col-md-6">
     <label class="form-label">Nome</label>
     {{ form.nome }}
-  </div>
+    {% if form.nome.errors %}
+        <div class="text-danger small mt-1">
+            {{ form.nome.errors|join:", " }}
+        </div>
+    {% endif %}
+</div>
 
   <div class="col-12 col-md-4">
     <label class="form-label">Código</label>
