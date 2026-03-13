@@ -4,6 +4,7 @@ from django.db.models import Case, When, Value, IntegerField, F
 from .forms import ProdutoForm
 from .models import Produto
 from django.contrib import messages
+from django.http import JsonResponse
 def home(request):
     produto_edicao = None
 
@@ -150,3 +151,7 @@ def produto_editar(request, pk):
         form = ProdutoForm(instance=produto)
 
     return render(request, "estoque/cadastrar_produto.html", {"form": form})
+def verificar_produto(request):
+    nome = request.GET.get("nome", "").strip()
+    existe = Produto.objects.filter(nome__iexact=nome).exists()
+    return JsonResponse({"existe": existe})

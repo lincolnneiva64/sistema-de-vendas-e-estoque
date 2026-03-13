@@ -90,23 +90,73 @@
   </main>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-  const campos = document.querySelectorAll("input");
+    const campos = document.querySelectorAll('input:not([type="hidden"])');
+    const form = document.querySelector("form");
+    const campoNome = campos[0];
 
-  campos.forEach((campo, index) => {
-    campo.addEventListener("keydown", function (e) {
-      if (e.key === "Enter") {
-        e.preventDefault();
+    let erroNome = document.getElementById("erro-nome");
 
-        const proximo = campos[index + 1];
+    if (!erroNome && campoNome) {
+        erroNome = document.createElement("div");
+        erroNome.id = "erro-nome";
+        erroNome.style.color = "#dc3545";
+        erroNome.style.marginTop = "6px";
+        campoNome.insertAdjacentElement("afterend", erroNome);
+    }
 
-        if (proximo) {
-          proximo.focus();
-        } else {
-          document.querySelector("form").submit();
+    async function verificarNomeDuplicado() {
+        const nome = campoNome.value.trim();
+
+        if (!nome) {
+            erroNome.innerText = "";
+            return false;
         }
-      }
+
+        try {
+            const response = await fetch("{% url 'estoque:verificar_produto' %}?nome=" + encodeURIComponent(nome));
+            const data = await response.json();
+
+            if (data.existe) {
+                erroNome.innerText = "Já existe um produto com esse nome.";
+                campoNome.focus();
+                campoNome.select();
+                return true;
+            } else {
+                erroNome.innerText = "";
+                return false;
+            }
+        } catch (error) {
+            erroNome.innerText = "";
+            return false;
+        }
+    }
+
+    campoNome.addEventListener("input", function () {
+        erroNome.innerText = "";
     });
-  });
+
+    campos.forEach((campo, index) => {
+        campo.addEventListener("keydown", async function (e) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+
+                if (index === 0) {
+                    const duplicado = await verificarNomeDuplicado();
+                    if (duplicado) {
+                        return;
+                    }
+                }
+
+                const proximo = campos[index + 1];
+
+                if (proximo) {
+                    proximo.focus();
+                } else {
+                    form.submit();
+                }
+            }
+        });
+    });
 });
 </script>
 </body>

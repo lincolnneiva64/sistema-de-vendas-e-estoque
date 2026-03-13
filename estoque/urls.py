@@ -6,6 +6,7 @@ app_name = "estoque"
 urlpatterns = [
     path("", views.home, name="home"),
     path("cadastrar/", views.cadastrar_produto, name="cadastrar_produto"),
+    path("verificar-produto/", views.verificar_produto, name="verificar_produto"),
 path("produto/<int:pk>/", views.produto_detalhe, name="produto_detalhe"),
 path("produto/<int:pk>/editar/", views.produto_editar, name="produto_editar"), 
 ]
