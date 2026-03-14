@@ -151,6 +151,10 @@ def produto_editar(request, pk):
         form = ProdutoForm(instance=produto)
 
     return render(request, "estoque/cadastrar_produto.html", {"form": form})
+def produto_excluir(request, pk):
+    produto = get_object_or_404(Produto, pk=pk)
+    produto.delete()
+    return redirect("estoque:home")
 def verificar_produto(request):
     nome = request.GET.get("nome", "").strip()
     produto_id = request.GET.get("produto_id")

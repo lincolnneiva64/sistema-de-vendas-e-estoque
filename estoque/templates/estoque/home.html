@@ -29,8 +29,9 @@
    href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=normal">Normal: {{ normal_count }}</a>
   </div>
   <div style="margin: 10px 0;">
-  <a class="btn btn-primary" href="{% url 'estoque:cadastrar_produto' %}">+ Novo Produto</a>
-  </div>
+    <a class="btn btn-primary" href="{% url 'estoque:cadastrar_produto' %}">+ Novo Produto</a>
+    <a href="#" id="btnExcluirProduto" style="display:inline-block; background:#dc3545; color:#fff; padding:8px 14px; border-radius:6px; text-decoration:none; margin-left:10px;">Excluir Produto</a>
+</div>
 <div class="fade-wrapper" id="fadeWrapper">
   <div style="margin:10px 0; max-width:400px;">
   <input 
@@ -53,9 +54,10 @@
     <tbody>
       {% for produto in produtos %}
       <tr
-        data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}"
-        class="{% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-danger{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-warning{% endif %}"
-      >
+    data-produto-id="{{ produto.id }}"
+    data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}"
+    class="linha-produto {% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}"
+>
         <td>{{ produto.nome }}</td>
 
         <td class="td-quantidade">
@@ -93,7 +95,38 @@ document.addEventListener("DOMContentLoaded", function() {
 
   const busca = document.getElementById("buscarProduto");
   const linhas = document.querySelectorAll("tbody tr");
+let produtoSelecionado = null;
 
+linhas.forEach(function(linha) {
+
+    linha.addEventListener("click", function() {
+
+        // remove seleção anterior
+        linhas.forEach(function(l) {
+            l.classList.remove("linha-selecionada");
+        });
+
+        // marca a linha clicada
+        linha.classList.add("linha-selecionada");
+
+        // guarda o id do produto
+        produtoSelecionado = linha.dataset.produtoId;
+
+        console.log("Produto selecionado:", produtoSelecionado);
+
+    });
+
+});
+const btnExcluirProduto = document.getElementById("btnExcluirProduto");
+
+btnExcluirProduto.addEventListener("click", function() {
+    if (!produtoSelecionado) {
+        alert("Selecione um produto para excluir.");
+        return;
+    }
+
+    window.location.href = "/estoque/excluir/" + produtoSelecionado + "/";
+});
   busca.addEventListener("keyup", function() {
 
     const termo = busca.value.toLowerCase();
