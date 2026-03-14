@@ -119,7 +119,8 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         try {
-            const response = await fetch("{% url 'estoque:verificar_produto' %}?nome=" + encodeURIComponent(nome));
+            const produtoId = "{{ form.instance.pk|default_if_none:'' }}";
+const response = await fetch("{% url 'estoque:verificar_produto' %}?nome=" + encodeURIComponent(nome) + "&produto_id=" + encodeURIComponent(produtoId));
             const data = await response.json();
 
             if (data.existe) {

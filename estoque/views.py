@@ -153,5 +153,12 @@ def produto_editar(request, pk):
     return render(request, "estoque/cadastrar_produto.html", {"form": form})
 def verificar_produto(request):
     nome = request.GET.get("nome", "").strip()
-    existe = Produto.objects.filter(nome__iexact=nome).exists()
+    produto_id = request.GET.get("produto_id")
+
+    query = Produto.objects.filter(nome__iexact=nome)
+
+    if produto_id:
+     query = query.exclude(id=produto_id)
+
+    existe = query.exists()
     return JsonResponse({"existe": existe})
