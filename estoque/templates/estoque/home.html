@@ -30,7 +30,7 @@
   </div>
   <div style="margin: 10px 0;">
     <a class="btn btn-primary" href="{% url 'estoque:cadastrar_produto' %}">+ Novo Produto</a>
-    <a href="#" id="btnExcluirProduto" style="display:inline-block; background:#dc3545; color:#fff; padding:8px 14px; border-radius:6px; text-decoration:none; margin-left:10px;">Excluir Produto</a>
+    <a href="#" id="btnExcluirProduto" onclick="return confirmarExclusao()" style="display:inline-block; background:#dc3545; color:#fff; padding:8px 14px; border-radius:6px; text-decoration:none; margin-left:10px;">Excluir Produto</a>
 </div>
 <div class="fade-wrapper" id="fadeWrapper">
   <div style="margin:10px 0; max-width:400px;">
@@ -125,7 +125,9 @@ btnExcluirProduto.addEventListener("click", function() {
         return;
     }
 
+    if (confirm("Tem certeza que deseja excluir este produto?")) {
     window.location.href = "/estoque/excluir/" + produtoSelecionado + "/";
+}
 });
   busca.addEventListener("keyup", function() {
 
