@@ -24,7 +24,7 @@ class ProdutoForm(forms.ModelForm):
             "nome": forms.TextInput(
                 attrs={
                     "class": "form-control",
-                    "placeholder": "Ex.: Arroz 5kg",
+                    "placeholder": "",
                     "required": True,
                     "autofocus": True,
                 }
@@ -32,13 +32,13 @@ class ProdutoForm(forms.ModelForm):
             "codigo": forms.TextInput(
                 attrs={
                     "class": "form-control mono",
-                    "placeholder": "Ex.: 789...",
+                    "placeholder": "",
                 }
             ),
             "categoria": forms.TextInput(
                 attrs={
                     "class": "form-control",
-                    "placeholder": "Ex.: Grãos",
+                    "placeholder": "",
                 }
             ),
             "preco_compra": forms.NumberInput(
@@ -74,7 +74,7 @@ class ProdutoForm(forms.ModelForm):
             "fornecedor": forms.TextInput(
                 attrs={
                     "class": "form-control",
-                    "placeholder": "Ex.: Atacadista X",
+                    "placeholder": "",
                 }
             ),
         }
@@ -86,6 +86,12 @@ class ProdutoForm(forms.ModelForm):
             self.fields["preco_venda"].initial = None
             self.initial["preco_compra"] = ""
             self.initial["preco_venda"] = ""
+            self.initial["nome"] = ""
+            self.initial["codigo"] = ""
+            self.initial["categoria"] = ""
+            self.initial["quantidade"] = ""
+            self.initial["estoque_minimo"] = ""
+            self.initial["fornecedor"] = ""
     def clean_nome(self):
         nome = normalize_product_name(self.cleaned_data.get("nome", ""))
 
