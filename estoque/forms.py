@@ -19,6 +19,8 @@ class ProdutoForm(forms.ModelForm):
         ]
 
         widgets = {
+            "preco_compra": forms.NumberInput(attrs={"class": "form-control", "placeholder": ""}),
+"preco_venda": forms.NumberInput(attrs={"class": "form-control", "placeholder": ""}),
             "nome": forms.TextInput(
                 attrs={
                     "class": "form-control",
@@ -44,7 +46,7 @@ class ProdutoForm(forms.ModelForm):
                     "class": "form-control",
                     "step": "0.01",
                     "min": "0",
-                    "placeholder": "Ex.: 10.00",
+                    "placeholder": "",
                 }
             ),
             "preco_venda": forms.NumberInput(
@@ -52,7 +54,7 @@ class ProdutoForm(forms.ModelForm):
                     "class": "form-control",
                     "step": "0.01",
                     "min": "0",
-                    "placeholder": "Ex.: 19.90",
+                    "placeholder": "",
                 }
             ),
             "quantidade": forms.NumberInput(
@@ -76,7 +78,14 @@ class ProdutoForm(forms.ModelForm):
                 }
             ),
         }
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
+        if not self.instance or not self.instance.pk:
+            self.fields["preco_compra"].initial = None
+            self.fields["preco_venda"].initial = None
+            self.initial["preco_compra"] = ""
+            self.initial["preco_venda"] = ""
     def clean_nome(self):
         nome = normalize_product_name(self.cleaned_data.get("nome", ""))
 
