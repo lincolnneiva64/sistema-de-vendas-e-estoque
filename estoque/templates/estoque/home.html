@@ -93,6 +93,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const busca = document.getElementById("buscarProduto");
   const linhas = document.querySelectorAll("tbody tr");
 let produtoSelecionado = null;
+let nomeProdutoSelecionado = "";
 
 linhas.forEach(function(linha) {
 
@@ -108,7 +109,7 @@ linhas.forEach(function(linha) {
 
         // guarda o id do produto
         produtoSelecionado = linha.dataset.produtoId;
-
+nomeProdutoSelecionado = linha.children[0].textContent.trim();
         console.log("Produto selecionado:", produtoSelecionado);
 
     });
@@ -122,7 +123,8 @@ btnExcluirProduto.addEventListener("click", function() {
         return;
     }
 
-    document.getElementById("textoModalExclusao").textContent = "Tem certeza que deseja excluir este produto?";
+    document.getElementById("textoModalExclusao").textContent =
+  `Tem certeza que deseja excluir "${nomeProdutoSelecionado}"?`;
 document.getElementById("modalConfirmarExclusao").style.display = "flex";
 
 document.getElementById("btnConfirmarModalExclusao").onclick = function () {
