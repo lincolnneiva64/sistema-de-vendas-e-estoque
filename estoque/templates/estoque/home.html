@@ -8,7 +8,7 @@
   
 </head>
 
-<body class="bg-light">
+<body class="bg-light" style="padding-bottom: 90px;">
 <div class="container mt-4">
   <div style="margin: 12px 0;">
     <strong>Resumo:</strong>
@@ -28,10 +28,7 @@
 <a class="badge badge-ok resumo-badge {% if filtro == 'normal' %}active{% endif %}"
    href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=normal">Normal: {{ normal_count }}</a>
   </div>
-  <div style="margin: 10px 0;">
-    <a class="btn btn-primary" href="{% url 'estoque:cadastrar_produto' %}">+ Novo Produto</a>
-    <a href="#" id="btnExcluirProduto" style="display:inline-block; background:#dc3545; color:#fff; padding:8px 14px; border-radius:6px; text-decoration:none; margin-left:10px;">Excluir Produto</a>
-</div>
+  
 <div class="fade-wrapper" id="fadeWrapper">
   <div style="margin:10px 0; max-width:400px;">
   <input 
@@ -177,5 +174,23 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
         </div>
     </div>
 </div>
+</div>
+
+<!-- TARJA -->
+<div style="position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000; background: #cfd4da; border-top: 1px solid #b8bfc7; box-shadow: 0 -2px 8px rgba(0,0,0,0.08);">
+  <div style="padding: 8px 20px; display: flex; justify-content: flex-start; align-items: center; gap: 12px;">
+    <span style="font-weight: 600; margin-right: 8px;">Ações</span>
+
+    <a class="btn btn-primary" href="{% url 'estoque:cadastrar_produto' %}">
+      + Novo Produto
+    </a>
+
+    <a href="#" id="btnExcluirProduto" style="display:inline-block; background:#dc3545; color:#fff; padding:8px 14px; border-radius:6px; text-decoration:none;">
+      Excluir Produto
+    </a>
+  </div>
+</div>
+
+
 </body>
 </html>
