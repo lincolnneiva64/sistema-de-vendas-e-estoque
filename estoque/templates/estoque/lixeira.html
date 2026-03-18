@@ -8,22 +8,28 @@
     <link rel="stylesheet" href="{% static 'estoque/home.css' %}">
     <style>
         .topo-lixeira{
-            width: fit-content;
-            margin: 24px auto 12px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}btn
 
         .btn-voltar{
-            display: inline-block;
-            background: #0d6efd;
-            color: #fff;
-            padding: 6px 12px;
-            border-radius: 6px;
-            text-decoration: none;
-            font-size: 14px;
-        }
+    display: inline-block;
+    background: #0d6efd;
+    color: #fff;
+    padding: 10px 16px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.btn-voltar:hover{
+    background: #0b5ed7;
+    transform: translateY(-1px);
+}
 
         .btn-restaurar{
             display: inline-block;
@@ -45,9 +51,9 @@
     align-items: center;
 }
 
-.btn-excluir-definitivo {
+.btn-excluir-definitivo{
     display: inline-block;
-    background: #dc3545
+    background: #dc3545;
     color: #fff;
     padding: 6px 12px;
     border-radius: 6px;
@@ -55,6 +61,101 @@
     font-size: 14px;
     border: none;
     cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-excluir-definitivo:hover{
+    background: #bb2d3b;
+    transform: translateY(-1px);
+}
+.modal-overlay{
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.modal-overlay.ativo{
+    display: flex;
+}
+
+.modal-box{
+    width: min(420px, 92%);
+    background: #fff;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.20);
+    animation: aparecerModal 0.18s ease;
+    transform: scale(1);
+}
+
+.modal-titulo{
+    margin: 0 0 12px 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: #212529;
+}
+
+.modal-texto{
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.5;
+    color: #495057;
+}
+
+.modal-texto strong{
+    color: #212529;
+}
+
+.modal-acoes{
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 22px;
+}
+
+.btn-cancelar-modal,
+.btn-confirmar-modal{
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-cancelar-modal{
+    background: #dee2e6;
+    color: #212529;
+}
+
+.btn-cancelar-modal:hover{
+    background: #ced4da;
+}
+
+.btn-confirmar-modal{
+    background: #dc3545;
+    color: #fff;
+}
+
+.btn-confirmar-modal:hover{
+    background: #bb2d3b;
+    transform: translateY(-1px);
+}
+
+@keyframes aparecerModal{
+    from{
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+}
+to{
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
 }
         .sem-itens{
             width: fit-content;
@@ -66,6 +167,39 @@
         .acao-form{
             margin: 0;
         }
+            .container-lixeira{
+    width: min(1200px, 94%);
+    margin: 32px auto;
+    background: #ffffff;
+    border-radius: 18px;
+    padding: 24px;
+    border: 1px solid #dfe3e8;
+    box-shadow: 0 14px 38px rgba(0,0,0,0.10);
+}
+
+    .tabela-lixeira{
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 18px;
+    }
+
+    .tabela-lixeira th,
+    .tabela-lixeira td{
+        padding: 14px 16px;
+        text-align: left;
+        vertical-align: middle;
+        border-bottom: 1px solid #e9ecef;
+    }
+
+    .tabela-lixeira th{
+        background: #f8f9fa;
+        font-weight: 600;
+        color: #343a40;
+    }
+
+    .tabela-lixeira tr:hover{
+        background: #fcfcfd;
+    }
     </style>
 </head>
  <body>
@@ -76,7 +210,7 @@
     </div>
 
     {% if produtos %}
-    <table class="table table-hover mx-auto align-middle" style="width: auto;">
+    <table class="tabela-lixeira">
         <thead>
             <tr>
                 <th>Produto</th>
@@ -102,10 +236,10 @@
             <button type="submit" class="btn-restaurar">Restaurar</button>
         </form>
 
-        <form method="post" action="{% url 'estoque:produto_excluir_definitivo' produto.id %}" class="acao-form" onsubmit="return confirm('Tem certeza que deseja excluir definitivamente este produto?');">
-            {% csrf_token %}
-            <button type="submit" class="btn-excluir-definitivo">Excluir Definitivamente</button>
-        </form>
+        <form method="post" action="{% url 'estoque:produto_excluir_definitivo' produto.id %}" class="acao-form form-excluir-definitivo" data-produto="{{ produto.nome }}">
+    {% csrf_token %}
+    <button type="button" class="btn-excluir-definitivo abrir-modal-exclusao">Excluir Definitivamente</button>
+</form>
     </div>
 </td>
             </tr>
@@ -116,5 +250,63 @@
         <div class="sem-itens">Nenhum produto na lixeira.</div>
     {% endif %}
  </div>
+ <div class="modal-overlay" id="modalExclusao">
+    <div class="modal-box">
+        <h3 class="modal-titulo">Confirmar exclusão</h3>
+        <p class="modal-texto">
+            Tem certeza que deseja excluir definitivamente o produto
+            <strong id="nomeProdutoModal"></strong>?
+        </p>
+
+        <div class="modal-acoes">
+            <button type="button" class="btn-cancelar-modal" id="fecharModalExclusao">Cancelar</button>
+            <button type="button" class="btn-confirmar-modal" id="confirmarExclusaoModal">Excluir definitivamente</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const modalExclusao = document.getElementById('modalExclusao');
+    const nomeProdutoModal = document.getElementById('nomeProdutoModal');
+    const fecharModalExclusao = document.getElementById('fecharModalExclusao');
+    const confirmarExclusaoModal = document.getElementById('confirmarExclusaoModal');
+    const botoesAbrirModal = document.querySelectorAll('.abrir-modal-exclusao');
+
+    let formAtualExclusao = null;
+
+    botoesAbrirModal.forEach(botao => {
+        botao.addEventListener('click', function () {
+            formAtualExclusao = this.closest('.form-excluir-definitivo');
+            const nomeProduto = formAtualExclusao.dataset.produto || 'este produto';
+            nomeProdutoModal.textContent = nomeProduto;
+            modalExclusao.classList.add('ativo');
+        });
+    });
+
+    fecharModalExclusao.addEventListener('click', function () {
+        modalExclusao.classList.remove('ativo');
+        formAtualExclusao = null;
+    });
+
+    confirmarExclusaoModal.addEventListener('click', function () {
+        if (formAtualExclusao) {
+            formAtualExclusao.submit();
+        }
+    });
+
+    modalExclusao.addEventListener('click', function (event) {
+        if (event.target === modalExclusao) {
+            modalExclusao.classList.remove('ativo');
+            formAtualExclusao = null;
+        }
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            modalExclusao.classList.remove('ativo');
+            formAtualExclusao = null;
+        }
+    });
+</script>
  </body>
  </html>
