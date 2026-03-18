@@ -12,23 +12,32 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
-}btn
-
+}
+.titulo-lixeira{
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: #212529;
+}
         .btn-voltar{
-    display: inline-block;
-    background: #0d6efd;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #0d6efd, #0b5ed7);
     color: #fff;
-    padding: 10px 16px;
-    border-radius: 8px;
+    padding: 10px 18px;
+    border-radius: 10px;
     text-decoration: none;
     font-size: 14px;
     font-weight: 600;
+    box-shadow: 0 8px 18px rgba(13,110,253,0.22);
     transition: all 0.2s ease;
 }
 
 .btn-voltar:hover{
-    background: #0b5ed7;
+    background: linear-gradient(135deg, #0b5ed7, #0a58ca);
     transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(13,110,253,0.28);
 }
 
         .btn-restaurar{
@@ -205,7 +214,7 @@ to{
  <body>
  <div class="container-lixeira">
     <div class="topo-lixeira">
-        <h2 style="margin:0;">Lixeira de Produtos</h2>
+        <h2 class="titulo-lixeira">Lixeira de Produtos</h2>
         <a href="{% url 'estoque:home' %}" class="btn-voltar">Voltar ao Estoque</a>
     </div>
 
