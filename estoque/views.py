@@ -169,3 +169,6 @@ def verificar_produto(request):
 
     existe = query.exists()
     return JsonResponse({"existe": existe})
+def lixeira(request):
+    produtos = Produto.objects.filter(excluido=True)
+    return render(request, "estoque/lixeira.html", {"produtos": produtos})
