@@ -35,7 +35,27 @@
             font-size: 14px;
             border: none;
         }
+.data-exclusao {
+     color #888;
+    font-size: 0.85rem;
+}
+.acoes-lixeira {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
 
+.btn-excluir-definitivo {
+    display: inline-block;
+    background: #dc3545
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 14px;
+    border: none;
+    cursor: pointer;
+}
         .sem-itens{
             width: fit-content;
             margin: 30px auto;
@@ -61,6 +81,7 @@
                 <th>Produto</th>
                 <th>Quantidade</th>
                 <th>Estoque Mínimo</th>
+                <th>Excluído em</th>
                 <th>Ações</th>
             </tr>
         </thead>
@@ -70,12 +91,22 @@
                 <td>{{ produto.nome }}</td>
                 <td>{{ produto.quantidade }}</td>
                 <td>{{ produto.estoque_minimo }}</td>
+                <td class="data-exclusao">
+    {{ produto.excluido_em|date:"d/m/Y H:i" }}
+</td>
                 <td>
-                    <form method="post" action="{% url 'estoque:produto_restaurar' produto.id %}" class="acao-form">
-                        {% csrf_token %}
-                        <button type="submit" class="btn-restaurar">Restaurar</button>
-                    </form>
-                </td>
+    <div class="acoes-lixeira">
+        <form method="post" action="{% url 'estoque:produto_restaurar' produto.id %}" class="acao-form">
+            {% csrf_token %}
+            <button type="submit" class="btn-restaurar">Restaurar</button>
+        </form>
+
+        <form method="post" action="{% url 'estoque:produto_excluir_definitivo' produto.id %}" class="acao-form" onsubmit="return confirm('Tem certeza que deseja excluir definitivamente este produto?');">
+            {% csrf_token %}
+            <button type="submit" class="btn-excluir-definitivo">Excluir Definitivamente</button>
+        </form>
+    </div>
+</td>
             </tr>
             {% endfor %}
         </tbody>

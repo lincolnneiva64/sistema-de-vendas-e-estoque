@@ -12,4 +12,5 @@ urlpatterns = [
     path("excluir/<int:pk>/", views.produto_excluir, name="produto_excluir"),
     path("lixeira/", views.lixeira, name="lixeira"),
     path("restaurar/<int:pk>/", views.produto_restaurar, name="produto_restaurar"),
+    path("excluir-definitivo/<int:pk>/", views.produto_excluir_definitivo, name="produto_excluir_definitivo"),
 ]

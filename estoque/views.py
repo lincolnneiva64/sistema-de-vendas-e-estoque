@@ -5,6 +5,7 @@ from .forms import ProdutoForm
 from .models import Produto
 from django.contrib import messages
 from django.http import JsonResponse
+from django.utils import timezone
 def home(request):
     produto_edicao = None
 
@@ -156,6 +157,7 @@ def produto_editar(request, pk):
 def produto_excluir(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
     produto.excluido = True
+    produto.excluido_em = timezone.now()
     produto.save()
     return redirect("estoque:home")
 def verificar_produto(request):
@@ -175,5 +177,13 @@ def lixeira(request):
 def produto_restaurar(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
     produto.excluido = False
+    produto.excluido_em = None
     produto.save()
+    return redirect("estoque:lixeira")
+def produto_excluir_definitivo(request, pk):
+    produto = get_object_or_404(Produto, pk=pk)
+
+    if request.method == "POST":
+        produto.delete()
+
     return redirect("estoque:lixeira")
