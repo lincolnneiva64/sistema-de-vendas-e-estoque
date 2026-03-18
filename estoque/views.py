@@ -16,9 +16,11 @@ def home(request):
         if acao == "excluir":
             excluir_id = request.POST.get("excluir_id")
             if excluir_id:
-                Produto.objects.filter(id=excluir_id).delete()
+                produto = Produto.objects.filter(id=excluir_id).first()
+                if produto:
+                    produto.excluido = True
+                    produto.save()
             return redirect("estoque:home")
-
         # CRIAR / EDITAR
         produto_id = request.POST.get("produto_id")
         if produto_id:
@@ -43,7 +45,7 @@ def home(request):
     q = request.GET.get("q", "").strip()
     filtro = request.GET.get("f", "todos").strip().lower()
 
-    produtos = Produto.objects.annotate(
+    produtos = Produto.objects.filter(excluido=False).annotate(
         prioridade=Case(
             When(quantidade=0, then=Value(0)),
             When(quantidade__gt=0, quantidade__lte=F("estoque_minimo"), then=Value(1)),
@@ -153,7 +155,8 @@ def produto_editar(request, pk):
     return render(request, "estoque/cadastrar_produto.html", {"form": form})
 def produto_excluir(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
-    produto.delete()
+    produto.excluido = True
+    produto.save()
     return redirect("estoque:home")
 def verificar_produto(request):
     nome = request.GET.get("nome", "").strip()
