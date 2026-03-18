@@ -69,7 +69,21 @@
     {{ form.preco_venda }}
 </div>
   </div>
-
+<div class="col-12 col-md-4">
+    <label class="form-label">Percentual</label>
+    <div class="input-group">
+        <input
+            type="number"
+            step="0.01"
+            min="0"
+            class="form-control"
+            id="percentual_lucro"
+            placeholder="0,00"
+        >
+        <span class="input-group-text">%</span>
+    </div>
+    <div class="form-text">Digite o percentual para calcular o preço de venda.</div>
+</div>
   <div class="col-12 col-md-6">
     <label class="form-label">Quantidade</label>
     {{ form.quantidade }}
@@ -99,7 +113,45 @@ document.addEventListener("DOMContentLoaded", function () {
     const campos = document.querySelectorAll('input:not([type="hidden"])');
     const form = document.querySelector("form");
     const campoNome = campos[0];
+    const campoPrecoCompra = document.getElementById("id_preco_compra");
+    const campoPrecoVenda = document.getElementById("id_preco_venda");
+    const campoPercentual = document.getElementById("percentual_lucro");
 
+    function numero(valor) {
+        if (!valor) return 0;
+        return parseFloat(String(valor).replace(",", ".")) || 0;
+    }
+
+    function formatarDuasCasas(valor) {
+        return Number(valor).toFixed(2);
+    }
+
+    function atualizarPercentualPeloPrecoVenda() {
+        const compra = numero(campoPrecoCompra?.value);
+        const venda = numero(campoPrecoVenda?.value);
+
+        if (!campoPercentual) return;
+        if (compra <= 0 || venda <= 0) {
+            campoPercentual.value = "";
+            return;
+        }
+
+        const percentual = ((venda - compra) / compra) * 100;
+        campoPercentual.value = formatarDuasCasas(percentual);
+    }
+
+    function atualizarPrecoVendaPeloPercentual() {
+        const compra = numero(campoPrecoCompra?.value);
+        const percentual = numero(campoPercentual?.value);
+
+        if (!campoPrecoVenda) return;
+        if (compra <= 0 || percentual < 0) {
+            return;
+        }
+
+        const venda = compra * (1 + percentual / 100);
+        campoPrecoVenda.value = formatarDuasCasas(venda);
+    }
     let erroNome = document.getElementById("erro-nome");
 
     if (!erroNome && campoNome) {
@@ -141,7 +193,27 @@ const response = await fetch("{% url 'estoque:verificar_produto' %}?nome=" + enc
     campoNome.addEventListener("input", function () {
         erroNome.innerText = "";
     });
+    if (campoPrecoVenda) {
+        campoPrecoVenda.addEventListener("input", function () {
+            atualizarPercentualPeloPrecoVenda();
+        });
+    }
 
+    if (campoPercentual) {
+        campoPercentual.addEventListener("input", function () {
+            atualizarPrecoVendaPeloPercentual();
+        });
+    }
+
+    if (campoPrecoCompra) {
+        campoPrecoCompra.addEventListener("input", function () {
+            if (campoPercentual && campoPercentual.value.trim() !== "") {
+                atualizarPrecoVendaPeloPercentual();
+            } else if (campoPrecoVenda && campoPrecoVenda.value.trim() !== "") {
+                atualizarPercentualPeloPrecoVenda();
+            }
+        });
+    }
     campos.forEach((campo, index) => {
         campo.addEventListener("keydown", async function (e) {
             if (e.key === "Enter") {
