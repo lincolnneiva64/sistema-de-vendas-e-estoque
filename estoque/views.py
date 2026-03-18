@@ -172,3 +172,8 @@ def verificar_produto(request):
 def lixeira(request):
     produtos = Produto.objects.filter(excluido=True)
     return render(request, "estoque/lixeira.html", {"produtos": produtos})
+def produto_restaurar(request, pk):
+    produto = get_object_or_404(Produto, pk=pk)
+    produto.excluido = False
+    produto.save()
+    return redirect("estoque:lixeira")

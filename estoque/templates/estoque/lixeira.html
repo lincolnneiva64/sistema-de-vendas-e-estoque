@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Lixeira</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'estoque/home.css' %}">
+    <style>
+        .topo-lixeira{
+            width: fit-content;
+            margin: 24px auto 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-voltar{
+            display: inline-block;
+            background: #0d6efd;
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .btn-restaurar{
+            display: inline-block;
+            background: #198754;
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 14px;
+            border: none;
+        }
+
+        .sem-itens{
+            width: fit-content;
+            margin: 30px auto;
+            font-size: 18px;
+            color: #666;
+        }
+
+        .acao-form{
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="topo-lixeira">
+        <h2 style="margin:0;">Lixeira de Produtos</h2>
+        <a href="{% url 'estoque:home' %}" class="btn-voltar">Voltar ao Estoque</a>
+    </div>
+
+    {% if produtos %}
+    <table class="table table-hover mx-auto align-middle" style="width: auto;">
+        <thead>
+            <tr>
+                <th>Produto</th>
+                <th>Quantidade</th>
+                <th>Estoque Mínimo</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for produto in produtos %}
+            <tr>
+                <td>{{ produto.nome }}</td>
+                <td>{{ produto.quantidade }}</td>
+                <td>{{ produto.estoque_minimo }}</td>
+                <td>
+                    <form method="post" action="{% url 'estoque:produto_restaurar' produto.id %}" class="acao-form">
+                        {% csrf_token %}
+                        <button type="submit" class="btn-restaurar">Restaurar</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        <div class="sem-itens">Nenhum produto na lixeira.</div>
+    {% endif %}
+</body>
+</html>
