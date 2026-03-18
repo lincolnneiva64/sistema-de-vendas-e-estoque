@@ -68,7 +68,8 @@
         }
     </style>
 </head>
-<body>
+ <body>
+ <div class="container-lixeira">
     <div class="topo-lixeira">
         <h2 style="margin:0;">Lixeira de Produtos</h2>
         <a href="{% url 'estoque:home' %}" class="btn-voltar">Voltar ao Estoque</a>
@@ -114,5 +115,6 @@
     {% else %}
         <div class="sem-itens">Nenhum produto na lixeira.</div>
     {% endif %}
-</body>
-</html>
+ </div>
+ </body>
+ </html>
