@@ -30,13 +30,14 @@
   </div>
   
 <div class="fade-wrapper" id="fadeWrapper">
-  <div style="margin:10px 0; max-width:400px;">
+  <div class="container" style="margin:10px auto; max-width:720px;">
   <input 
     type="text"
     id="buscarProduto"
     class="form-control"
     placeholder="Buscar produto..."
   >
+</div>
 </div>
   <table class="table table-hover mx-auto align-middle" style="width: auto;">
     <thead>
@@ -57,7 +58,7 @@
 >
         <td>{{ produto.nome }}</td>
 
-        <td class="td-quantidade">
+        <td class="td-quantidade text-center">
           <span class="qtd-num">{{ produto.quantidade }}</span>
 
           {% if produto.quantidade == 0 %}
@@ -71,7 +72,7 @@
           {% endif %}
         </td>
 
-        <td>{{ produto.estoque_minimo }}</td>
+        <td class="text-center">{{ produto.estoque_minimo }}</td>
 
         <td>
           <a href="{% url 'estoque:produto_editar' produto.id %}" class="btn btn-sm btn-primary">
