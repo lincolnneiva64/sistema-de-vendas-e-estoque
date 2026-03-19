@@ -8,15 +8,16 @@ class ProdutoForm(forms.ModelForm):
     class Meta:
         model = Produto
         fields = [
-            "nome",
-            "codigo",
-            "categoria",
-            "preco_compra",
-            "preco_venda",
-            "quantidade",
-            "estoque_minimo",
-            "fornecedor",
-        ]
+    "nome",
+    "codigo",
+    "categoria",
+    "preco_compra",
+    "preco_vista",
+    "preco_prazo",
+    "quantidade",
+    "estoque_minimo",
+    "fornecedor",
+]
 
         widgets = {
             "preco_compra": forms.NumberInput(attrs={"class": "form-control", "placeholder": ""}),
@@ -49,14 +50,22 @@ class ProdutoForm(forms.ModelForm):
                     "placeholder": "",
                 }
             ),
-            "preco_venda": forms.NumberInput(
-                attrs={
-                    "class": "form-control",
-                    "step": "0.01",
-                    "min": "0",
-                    "placeholder": "",
-                }
-            ),
+            "preco_vista": forms.NumberInput(
+    attrs={
+        "class": "form-control",
+        "step": "0.01",
+        "min": "0",
+        "placeholder": "",
+    }
+),
+"preco_prazo": forms.NumberInput(
+    attrs={
+        "class": "form-control",
+        "step": "0.01",
+        "min": "0",
+        "placeholder": "",
+    }
+),
             "quantidade": forms.NumberInput(
                 attrs={
                     "class": "form-control",
@@ -83,9 +92,11 @@ class ProdutoForm(forms.ModelForm):
 
         if not self.instance or not self.instance.pk:
             self.fields["preco_compra"].initial = None
-            self.fields["preco_venda"].initial = None
+            self.fields["preco_vista"].initial = None
+            self.fields["preco_prazo"].initial = None
             self.initial["preco_compra"] = ""
-            self.initial["preco_venda"] = ""
+            self.initial["preco_vista"] = ""
+            self.initial["preco_prazo"] = ""
             self.initial["nome"] = ""
             self.initial["codigo"] = ""
             self.initial["categoria"] = ""

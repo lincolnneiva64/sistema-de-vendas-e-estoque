@@ -8,7 +8,8 @@ class Produto(models.Model):
 
     preco_compra = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     preco_venda = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-
+    preco_vista = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    preco_prazo = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     permitir_prejuizo = models.BooleanField(default=False)
     motivo_prejuizo = models.CharField(max_length=200, blank=True, null=True)
 
@@ -26,15 +27,20 @@ class Produto(models.Model):
 
     def clean(self):
 
-        if self.preco_venda <= 0:
-            raise ValidationError("O preço de venda deve ser maior que zero.")
+        if self.preco_vista <= 0:
+         raise ValidationError("O preço à vista deve ser maior que zero.")
 
-        if not self.permitir_prejuizo and self.preco_venda <= self.preco_compra:
-            raise ValidationError("O preço de venda deve ser MAIOR que o preço de compra.")
+        if self.preco_prazo <= 0:
+         raise ValidationError("O preço a prazo deve ser maior que zero.")
+
+        if not self.permitir_prejuizo and self.preco_vista <= self.preco_compra:
+         raise ValidationError("O preço à vista deve ser MAIOR que o preço de compra.")
+
+        if not self.permitir_prejuizo and self.preco_prazo <= self.preco_compra:
+         raise ValidationError("O preço a prazo deve ser MAIOR que o preço de compra.")
 
         if self.permitir_prejuizo and not self.motivo_prejuizo:
-            raise ValidationError("Informe o motivo ao permitir venda com prejuízo.")
-
+         raise ValidationError("Informe o motivo ao permitir venda com prejuízo.")
     def save(self, *args, **kwargs):
 
         if self.nome:
@@ -48,7 +54,8 @@ class Produto(models.Model):
         if self.fornecedor:
             fornecedor_limpo = " ".join(self.fornecedor.strip().split())
             self.fornecedor = fornecedor_limpo.title()
-
+        if self.preco_vista and self.preco_vista > 0:
+           self.preco_venda = self.preco_vista
         self.full_clean()
         super().save(*args, **kwargs)
 
