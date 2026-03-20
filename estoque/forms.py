@@ -8,16 +8,24 @@ class ProdutoForm(forms.ModelForm):
     class Meta:
         model = Produto
         fields = [
-    "nome",
-    "codigo",
-    "categoria",
-    "preco_compra",
-    "preco_vista",
-    "preco_prazo",
-    "quantidade",
-    "estoque_minimo",
-    "fornecedor",
-]
+            "nome",
+            "codigo",
+            "categoria",
+            "preco_compra",
+            "preco_vista",
+            "preco_prazo",
+            "unidade_compra",
+            "fator_conversao",
+            "unidade_venda_1",
+            "preco_venda_1",
+            "unidade_venda_2",
+            "preco_venda_2",
+            "vende_fracionado",
+            "descricao_conversao",
+            "quantidade",
+            "estoque_minimo",
+            "fornecedor",
+        ]
 
         widgets = {
             "preco_compra": forms.NumberInput(attrs={"class": "form-control", "placeholder": ""}),
@@ -66,6 +74,87 @@ class ProdutoForm(forms.ModelForm):
         "placeholder": "",
     }
 ),
+            "unidade_compra": forms.Select(
+                attrs={
+                    "class": "form-select",
+                },
+                choices=[
+                    ("", "Selecione"),
+                    ("UN", "UN"),
+                    ("KG", "KG"),
+                    ("CX", "CX"),
+                    ("FD", "FD"),
+                    ("PCT", "PCT"),
+                    ("LT", "LT"),
+                ],
+            ),
+            "fator_conversao": forms.NumberInput(
+                attrs={
+                    "class": "form-control",
+                    "step": "0.01",
+                    "min": "0",
+                    "placeholder": "Ex.: 12",
+                }
+            ),
+            "unidade_venda_1": forms.Select(
+                attrs={
+                    "class": "form-select",
+                },
+                choices=[
+                    ("", "Selecione"),
+                    ("UN", "UN"),
+                    ("KG", "KG"),
+                    ("CX", "CX"),
+                    ("FD", "FD"),
+                    ("PCT", "PCT"),
+                    ("LT", "LT"),
+                ],
+            ),
+            "preco_venda_1": forms.NumberInput(
+                attrs={
+                    "class": "form-control",
+                    "step": "0.01",
+                    "min": "0",
+                    "placeholder": "",
+                }
+            ),
+            "unidade_venda_2": forms.Select(
+                attrs={
+                    "class": "form-select",
+                },
+                choices=[
+                    ("", "Selecione"),
+                    ("UN", "UN"),
+                    ("KG", "KG"),
+                    ("CX", "CX"),
+                    ("FD", "FD"),
+                    ("PCT", "PCT"),
+                    ("LT", "LT"),
+                ],
+            ),
+            "preco_venda_2": forms.NumberInput(
+                attrs={
+                    "class": "form-control",
+                    "step": "0.01",
+                    "min": "0",
+                    "placeholder": "",
+                }
+            ),
+            "vende_fracionado": forms.Select(
+                attrs={
+                    "class": "form-select",
+                },
+                choices=[
+                    (False, "Não"),
+                    (True, "Sim"),
+                ],
+            ),
+            "descricao_conversao": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    "placeholder": "Ex.: 1 fardo = 12 unidades",
+                }
+            ),
             "quantidade": forms.NumberInput(
                 attrs={
                     "class": "form-control",
@@ -97,6 +186,15 @@ class ProdutoForm(forms.ModelForm):
             self.initial["preco_compra"] = ""
             self.initial["preco_vista"] = ""
             self.initial["preco_prazo"] = ""
+            self.initial["unidade_compra"] = ""
+            self.initial["fator_conversao"] = ""
+            self.initial["unidade_venda_1"] = ""
+            self.initial["preco_venda_1"] = ""
+            self.initial["unidade_venda_2"] = ""
+            self.initial["preco_venda_2"] = ""
+            self.initial["vende_fracionado"] = False
+            self.initial["descricao_conversao"] = ""
+            
             self.initial["nome"] = ""
             self.initial["codigo"] = ""
             self.initial["categoria"] = ""

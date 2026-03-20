@@ -75,11 +75,14 @@
 </div>
    <div class="bg-white rounded-3 p-2 shadow-sm mx-auto card-destaque" style="max-width: 1120px; margin-top: -2px; border: 2px solid #c3cad4;">
       
-      <p class="text-muted mb-2">Preencha os dados abaixo.</p>
+      
 
       <form method="post" class="row g-1">
   {% csrf_token %}
-
+<div class="col-12">
+    <h6 class="mb-2">Dados básicos</h6>
+    
+</div>
   <div class="col-12 col-md-6">
     <label class="form-label">Nome</label>
     {{ form.nome }}
@@ -103,13 +106,17 @@
   
   
 
-
-  <div class="col-12 col-md-6">
+<div class="col-12">
+    <hr class="my-2">
+    <h6 class="mb-2">Compra e estoque</h6>
+    
+</div>
+  <div class="col-12 col-md-4">
     <label class="form-label">Estoque</label>
     {{ form.quantidade }}
-  </div>
+</div>
 
-  <div class="col-12 col-md-4">
+<div class="col-12 col-md-4">
     <label class="form-label">Estoque mínimo</label>
     {{ form.estoque_minimo }}
 </div>
@@ -119,6 +126,66 @@
     <div class="input-group">
         <span class="input-group-text">R$</span>
         {{ form.preco_compra }}
+    </div>
+</div>
+
+<div class="col-12">
+    <hr class="my-2">
+    <h6 class="mb-1">Unidades e conversão</h6>
+    <p class="text-muted small mb-2">
+        Estrutura inicial para produto comprado e vendido em unidades diferentes.
+    </p>
+</div>
+
+
+<div class="col-12">
+    
+    
+</div>
+<div class="col-12 col-md-4">
+    <label class="form-label">Unidade de compra</label>
+    {{ form.unidade_compra }}
+</div>
+
+<div class="col-12 col-md-4">
+    <label class="form-label">Unidade principal de venda</label>
+    {{ form.unidade_venda_1 }}
+</div>
+
+<div class="col-12 col-md-4">
+    <label class="form-label">Fator de conversão</label>
+    {{ form.fator_conversao }}
+</div>
+
+
+
+<div class="col-12 col-md-4">
+    <label class="form-label">Vende fracionado?</label>
+    {{ form.vende_fracionado }}
+</div>
+
+<div class="col-12 col-md-4" id="bloco-unidade-fracionada">
+    <label class="form-label">Unidade fracionada de venda</label>
+    {{ form.unidade_venda_2 }}
+</div>
+<div class="col-12">
+    
+    <h6 class="mb-2">Preços de venda</h6>
+    
+</div>
+<div class="col-12 col-md-4">
+    <label class="form-label">Preço base unidade principal</label>
+    <div class="input-group">
+        <span class="input-group-text">R$</span>
+        {{ form.preco_venda_1 }}
+    </div>
+</div>
+
+<div class="col-12 col-md-4" id="bloco-preco-fracionado">
+    <label class="form-label">Preço base unidade fracionada</label>
+    <div class="input-group">
+        <span class="input-group-text">R$</span>
+        {{ form.preco_venda_2 }}
     </div>
 </div>
 
@@ -143,7 +210,7 @@
 </div>
 
 <div class="col-12 col-md-4">
-    <label class="form-label">Preço à vista</label>
+    <label class="form-label">Preço final à vista</label>
     <div class="input-group">
         <span class="input-group-text">R$</span>
         {{ form.preco_vista }}
@@ -168,7 +235,7 @@
 </div>
 
 <div class="col-12 col-md-4">
-    <label class="form-label">Preço a prazo</label>
+    <label class="form-label">Preço final a prazo</label>
     <div class="input-group">
         <span class="input-group-text">R$</span>
         {{ form.preco_prazo }}
@@ -189,7 +256,7 @@
 <script>
 document.addEventListener("DOMContentLoaded", function () {
         
-            const campos = document.querySelectorAll('input:not([type="hidden"])');
+            const campos = document.querySelectorAll('input:not([type="hidden"]), select');
     const form = document.querySelector("form");
     const campoNome = campos[0];
     const campoPrecoCompra = document.getElementById("id_preco_compra");
@@ -197,6 +264,9 @@ const campoPrecoVista = document.getElementById("id_preco_vista");
     const campoPrecoPrazo = document.getElementById("id_preco_prazo");
     const campoPercentualVista = document.getElementById("percentual_vista");
     const campoPercentualPrazo = document.getElementById("percentual_prazo");
+    const campoVendeFracionado = document.getElementById("id_vende_fracionado");
+    const blocoUnidadeFracionada = document.getElementById("bloco-unidade-fracionada");
+    const blocoPrecoFracionado = document.getElementById("bloco-preco-fracionado");
     function numero(valor) {
         if (!valor) return 0;
         return parseFloat(String(valor).replace(",", ".")) || 0;
@@ -206,7 +276,21 @@ const campoPrecoVista = document.getElementById("id_preco_vista");
     const arredondado = Math.round(Number(valor) * 20) / 20;
     return arredondado.toFixed(2);
 }
+function atualizarVisibilidadeFracionado() {
+    const valor = String(campoVendeFracionado?.value || "").toLowerCase();
+    const mostrar =
+        valor === "true" ||
+        valor === "sim" ||
+        valor === "1";
 
+    if (blocoUnidadeFracionada) {
+        blocoUnidadeFracionada.style.display = mostrar ? "" : "none";
+    }
+
+    if (blocoPrecoFracionado) {
+        blocoPrecoFracionado.style.display = mostrar ? "" : "none";
+    }
+}
         function atualizarPercentualVistaPeloPrecoVista() {
         const compra = numero(campoPrecoCompra?.value);
         const vista = numero(campoPrecoVista?.value);
@@ -345,29 +429,37 @@ const response = await fetch("{% url 'estoque:verificar_produto' %}?nome=" + enc
             atualizarPercentualPrazoPeloPrecoPrazo();
         }
     }
-            
+    if (campoVendeFracionado) {
+    campoVendeFracionado.addEventListener("change", atualizarVisibilidadeFracionado);
+}
+
+atualizarVisibilidadeFracionado();        
     campos.forEach((campo, index) => {
-        campo.addEventListener("keydown", async function (e) {
-            if (e.key === "Enter") {
-                e.preventDefault();
+    campo.addEventListener("keydown", async function (e) {
+        if (e.key === "Enter") {
+            e.preventDefault();
 
-                if (index === 0) {
-                    const duplicado = await verificarNomeDuplicado();
-                    if (duplicado) {
-                        return;
-                    }
-                }
-
-                const proximo = campos[index + 1];
-
-                if (proximo) {
-                    proximo.focus();
-                } else {
-                    form.submit();
+            if (index === 0) {
+                const duplicado = await verificarNomeDuplicado();
+                if (duplicado) {
+                    return;
                 }
             }
-        });
+
+            const proximo = campos[index + 1];
+
+            if (proximo) {
+                proximo.focus();
+
+                if (proximo.tagName === "SELECT") {
+                    proximo.click();
+                }
+            } else {
+                form.submit();
+            }
+        }
     });
+});
 });
 
 </script>

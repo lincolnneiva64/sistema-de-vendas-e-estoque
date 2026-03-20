@@ -10,6 +10,17 @@ class Produto(models.Model):
     preco_venda = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     preco_vista = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     preco_prazo = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    unidade_compra = models.CharField(max_length=20, blank=True, null=True)
+    fator_conversao = models.DecimalField(max_digits=10, decimal_places=2, default=1)
+
+    unidade_venda_1 = models.CharField(max_length=20, blank=True, null=True)
+    preco_venda_1 = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    unidade_venda_2 = models.CharField(max_length=20, blank=True, null=True)
+    preco_venda_2 = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+    vende_fracionado = models.BooleanField(default=False)
+    descricao_conversao = models.CharField(max_length=120, blank=True, null=True)
     permitir_prejuizo = models.BooleanField(default=False)
     motivo_prejuizo = models.CharField(max_length=200, blank=True, null=True)
 
