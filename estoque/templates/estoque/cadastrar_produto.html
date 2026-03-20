@@ -10,6 +10,50 @@
     rel="stylesheet"
   />
 </head>
+<style>
+    .form-control,
+    .form-select,
+    .input-group-text {
+        border: 2px solid #b6bec8 !important;
+    }
+
+    .form-control:focus,
+    .form-select:focus {
+        border-color: #7aa7ff !important;
+        box-shadow: 0 0 0 0.18rem rgba(13, 110, 253, 0.18) !important;
+    }
+
+    .input-group-text {
+        background-color: #f1f3f5;
+        color: #495057;
+        font-weight: 500;
+    }
+
+    .form-label {
+    font-weight: 600;
+    color: #2f3742;
+    margin-bottom: 3px;
+    font-size: 0.98rem;
+}
+
+    .shadow-sm {
+    box-shadow: 0 0.65rem 1.4rem rgba(15, 23, 42, 0.10) !important;
+}
+.card-destaque {
+    border-top: 5px solid #2f6fed;
+    border-radius: 14px !important;
+    background: #ffffff;
+}
+    .btn-primary {
+    font-weight: 600;
+    padding: 8px 18px;
+}
+
+    .btn-secondary {
+    font-weight: 500;
+    padding: 8px 16px;
+}
+</style>
 
 <body class="bg-light">
 
@@ -21,15 +65,15 @@
     </div>
   </nav>
 
-  <main class="container pt-4 pb-2">
-<div class="d-flex justify-content-between align-items-center mb-1 mt-2">
+  <main class="container pt-3 pb-2">
+<div class="d-flex justify-content-between align-items-center mb-1 mt-1">
     <h5 class="mb-0">Cadastrar Produto</h5>
 
     <a href="{% url 'estoque:home' %}" class="btn btn-outline-secondary">
         ← Voltar
     </a>
 </div>
-    <div class="bg-white border rounded-3 p-2 shadow-sm mx-auto" style="max-width: 1000px;" margin-top: -4px;">
+   <div class="bg-white rounded-3 p-2 shadow-sm mx-auto card-destaque" style="max-width: 1120px; margin-top: -2px; border: 2px solid #c3cad4;">
       
       <p class="text-muted mb-2">Preencha os dados abaixo.</p>
 
@@ -65,15 +109,11 @@
     {{ form.quantidade }}
   </div>
 
-  <div class="col-12 col-md-6">
+  <div class="col-12 col-md-4">
     <label class="form-label">Estoque mínimo</label>
     {{ form.estoque_minimo }}
-  </div>
+</div>
 
-  <div class="col-12">
-        <label class="form-label">Fornecedor</label>
-    {{ form.fornecedor }}
-  </div>
 <div class="col-12 col-md-4">
     <label class="form-label">Preço compra</label>
     <div class="input-group">
@@ -81,7 +121,10 @@
         {{ form.preco_compra }}
     </div>
 </div>
-  <div class="w-100"></div>
+
+<div class="col-12 col-md-4"></div>
+
+
 
 <div class="col-12 col-md-4">
     
@@ -137,7 +180,7 @@
 
 
 
-<div class="col-12 d-flex justify-content-end gap-2 mt-4">
+<div class="col-12 d-flex justify-content-end gap-2 mt-3">
     <a href="{% url 'estoque:home' %}" class="btn btn-secondary">Cancelar</a>
     <button type="submit" class="btn btn-primary">Salvar</button>
 </div>
