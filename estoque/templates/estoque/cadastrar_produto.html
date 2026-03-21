@@ -256,7 +256,20 @@
 <script>
 document.addEventListener("DOMContentLoaded", function () {
         
-            const campos = document.querySelectorAll('input:not([type="hidden"]), select');
+            function getCamposVisiveis() {
+    return Array.from(document.querySelectorAll('input:not([type="hidden"]), select'))
+        .filter((campo) => {
+            const estilo = window.getComputedStyle(campo);
+            return (
+                campo.offsetParent !== null &&
+                estilo.display !== "none" &&
+                estilo.visibility !== "hidden" &&
+                !campo.disabled
+            );
+        });
+}
+
+const campos = getCamposVisiveis();
     const form = document.querySelector("form");
     const campoNome = campos[0];
     const campoPrecoCompra = document.getElementById("id_preco_compra");
@@ -434,19 +447,20 @@ const response = await fetch("{% url 'estoque:verificar_produto' %}?nome=" + enc
 }
 
 atualizarVisibilidadeFracionado();        
-    campos.forEach((campo, index) => {
+    campos.forEach((campo) => {
     campo.addEventListener("keydown", async function (e) {
         if (e.key === "Enter") {
             e.preventDefault();
-
+const camposVisiveis = getCamposVisiveis();
+const index = camposVisiveis.indexOf(campo);
             if (index === 0) {
                 const duplicado = await verificarNomeDuplicado();
                 if (duplicado) {
                     return;
                 }
             }
-
-            const proximo = campos[index + 1];
+const proximo = camposVisiveis[index + 1];
+            
 
             if (proximo) {
                 proximo.focus();
