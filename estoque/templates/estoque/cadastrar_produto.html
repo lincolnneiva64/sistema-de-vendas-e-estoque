@@ -254,7 +254,67 @@ select.campo-obrigatorio-piscando:focus,
     </div>
 </div>
 <div class="w-100"></div>
+<div class="col-12 col-md-4" id="bloco-percentual-vista-fracionado" style="display: none;">
+    <label class="form-label">Percentual à vista fracionado</label>
+    <div class="input-group">
+        <input
+            type="number"
+            step="0.01"
+            min="0"
+            class="form-control"
+            id="percentual_vista_fracionado"
+            placeholder="0,00"
+        >
+        <span class="input-group-text">%</span>
+    </div>
+</div>
 
+<div class="col-12 col-md-4" id="bloco-preco-vista-fracionado" style="display: none;">
+    <label class="form-label">Preço final à vista fracionado</label>
+    <div class="input-group">
+        <span class="input-group-text">R$</span>
+        <input
+            type="number"
+            step="0.01"
+            min="0"
+            class="form-control"
+            id="preco_vista_fracionado"
+            placeholder="0,00"
+        >
+    </div>
+</div>
+
+<div class="w-100" id="quebra-fracionado-1" style="display: none;"></div>
+
+<div class="col-12 col-md-4" id="bloco-percentual-prazo-fracionado" style="display: none;">
+    <label class="form-label">Percentual a prazo fracionado</label>
+    <div class="input-group">
+        <input
+            type="number"
+            step="0.01"
+            min="0"
+            class="form-control"
+            id="percentual_prazo_fracionado"
+            placeholder="0,00"
+        >
+        <span class="input-group-text">%</span>
+    </div>
+</div>
+
+<div class="col-12 col-md-4" id="bloco-preco-prazo-fracionado" style="display: none;">
+    <label class="form-label">Preço final a prazo fracionado</label>
+    <div class="input-group">
+        <span class="input-group-text">R$</span>
+        <input
+            type="number"
+            step="0.01"
+            min="0"
+            class="form-control"
+            id="preco_prazo_fracionado"
+            placeholder="0,00"
+        >
+    </div>
+</div>
 
 
 
@@ -281,7 +341,9 @@ document.addEventListener("DOMContentLoaded", function () {
         });
 }
 
-const campos = getCamposVisiveis();
+const campos = Array.from(
+    document.querySelectorAll("form input, form select, form textarea")
+).filter(campo => campo.type !== "hidden");
     const form = document.querySelector("form");
     const campoNome = campos[0];
     const campoPrecoCompra = document.getElementById("id_preco_compra");
@@ -293,6 +355,15 @@ const campoPrecoVista = document.getElementById("id_preco_vista");
     const blocoUnidadeFracionada = document.getElementById("bloco-unidade-fracionada");
     const blocoPrecoFracionado = document.getElementById("bloco-preco-fracionado");
     const blocoFatorConversao = document.getElementById("bloco-fator-conversao");
+    const blocoPercentualVistaFracionado = document.getElementById("bloco-percentual-vista-fracionado");
+const blocoPrecoVistaFracionado = document.getElementById("bloco-preco-vista-fracionado");
+const quebraFracionado1 = document.getElementById("quebra-fracionado-1");
+const blocoPercentualPrazoFracionado = document.getElementById("bloco-percentual-prazo-fracionado");
+const blocoPrecoPrazoFracionado = document.getElementById("bloco-preco-prazo-fracionado");
+const campoPercentualVistaFracionado = document.getElementById("percentual_vista_fracionado");
+const campoPercentualPrazoFracionado = document.getElementById("percentual_prazo_fracionado");
+const campoPrecoVistaFracionado = document.getElementById("preco_vista_fracionado");
+const campoPrecoPrazoFracionado = document.getElementById("preco_prazo_fracionado");
     function numero(valor) {
         if (!valor) return 0;
         return parseFloat(String(valor).replace(",", ".")) || 0;
@@ -311,14 +382,31 @@ function atualizarVisibilidadeFracionado() {
 
     if (blocoFatorConversao) {
     blocoFatorConversao.style.display = mostrar ? "" : "none";
-}
+
 
 if (blocoUnidadeFracionada) {
     blocoUnidadeFracionada.style.display = mostrar ? "" : "none";
 }
 
-if (blocoPrecoFracionado) {
-    blocoPrecoFracionado.style.display = mostrar ? "" : "none";
+if (blocoPercentualVistaFracionado) {
+    blocoPercentualVistaFracionado.style.display = mostrar ? "" : "none";
+}
+
+if (blocoPrecoVistaFracionado) {
+    blocoPrecoVistaFracionado.style.display = mostrar ? "" : "none";
+}
+
+if (quebraFracionado1) {
+    quebraFracionado1.style.display = mostrar ? "" : "none";
+}
+
+if (blocoPercentualPrazoFracionado) {
+    blocoPercentualPrazoFracionado.style.display = mostrar ? "" : "none";
+}
+
+if (blocoPrecoPrazoFracionado) {
+    blocoPrecoPrazoFracionado.style.display = mostrar ? "" : "none";
+}
 }
 const camposFracionados = [
     document.getElementById("id_fator_conversao"),
@@ -479,6 +567,7 @@ atualizarVisibilidadeFracionado();
         if (e.key === "Enter") {
             e.preventDefault();
 const camposVisiveis = getCamposVisiveis();
+atualizarVisibilidadeFracionado();
 const index = camposVisiveis.indexOf(campo);
 if (campo.tagName === "SELECT") {
     const valorAtual = String(campo.value || "").trim().toLowerCase();
