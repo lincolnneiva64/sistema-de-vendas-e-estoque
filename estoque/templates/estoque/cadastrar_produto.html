@@ -53,6 +53,34 @@
     font-weight: 500;
     padding: 8px 16px;
 }
+.campo-obrigatorio-piscando {
+    border-color: #dc3545 !important;
+    
+    background-color: rgba(220, 53, 69, 0.06) !important;
+    box-shadow: 0 0 0 0.22rem rgba(220, 53, 69, 0.28) !important;
+    animation: piscarCampoObrigatorio 0.45s ease;
+}
+
+@keyframes piscarCampoObrigatorio {
+    0% {
+        transform: translateX(0);
+    }
+    20% {
+        transform: translateX(-2px);
+    }
+    40% {
+        transform: translateX(2px);
+    }
+    60% {
+        transform: translateX(-2px);
+    }
+    80% {
+        transform: translateX(2px);
+    }
+    100% {
+        transform: translateX(0);
+    }
+}
 </style>
 
 <body class="bg-light">
@@ -449,6 +477,24 @@ atualizarVisibilidadeFracionado();
             e.preventDefault();
 const camposVisiveis = getCamposVisiveis();
 const index = camposVisiveis.indexOf(campo);
+if (campo.tagName === "SELECT") {
+    const valorAtual = String(campo.value || "").trim().toLowerCase();
+    const textoAtual = String(campo.options[campo.selectedIndex]?.text || "").trim().toLowerCase();
+
+    const ehSelecione =
+        !valorAtual ||
+        valorAtual === "0" ||
+        valorAtual === "null" ||
+        valorAtual === "none" ||
+        textoAtual === "selecione";
+
+    if (ehSelecione) {
+        campo.focus();
+        campo.classList.add("campo-obrigatorio-piscando");
+        setTimeout(() => campo.classList.remove("campo-obrigatorio-piscando"), 500);
+        return;
+    }
+}
             if (index === 0) {
                 const duplicado = await verificarNomeDuplicado();
                 if (duplicado) {
