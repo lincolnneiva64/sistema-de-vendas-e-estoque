@@ -498,6 +498,32 @@ function atualizarPrecoVistaFracionadoPeloPercentualVistaFracionado() {
     const vista = compra * (1 + percentual / 100);
     campoPrecoVistaFracionado.value = formatarDuasCasas(vista);
 }
+function atualizarPercentualPrazoFracionadoPeloPrecoPrazoFracionado() {
+    const compra = numero(campoPrecoCompra?.value);
+    const prazo = numero(campoPrecoPrazoFracionado?.value);
+
+    if (!campoPercentualPrazoFracionado) return;
+    if (compra <= 0 || prazo <= 0) {
+        campoPercentualPrazoFracionado.value = "";
+        return;
+    }
+
+    const percentual = ((prazo - compra) / compra) * 100;
+    campoPercentualPrazoFracionado.value = formatarDuasCasas(percentual);
+}
+
+function atualizarPrecoPrazoFracionadoPeloPercentualPrazoFracionado() {
+    const compra = numero(campoPrecoCompra?.value);
+    const percentual = numero(campoPercentualPrazoFracionado?.value);
+
+    if (!campoPrecoPrazoFracionado) return;
+    if (compra <= 0 || percentual < 0) {
+        return;
+    }
+
+    const prazo = compra * (1 + percentual / 100);
+    campoPrecoPrazoFracionado.value = formatarDuasCasas(prazo);
+}
     let erroNome = document.getElementById("erro-nome");
 
     if (!erroNome && campoNome) {
