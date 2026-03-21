@@ -55,12 +55,19 @@
 }
 .campo-obrigatorio-piscando {
     border-color: #dc3545 !important;
-    
+    border: 1px solid #dc3545 !important;
+outline: none !important;
     background-color: rgba(220, 53, 69, 0.06) !important;
     box-shadow: 0 0 0 0.22rem rgba(220, 53, 69, 0.28) !important;
     animation: piscarCampoObrigatorio 0.45s ease;
 }
-
+.campo-obrigatorio-piscando:focus,
+select.campo-obrigatorio-piscando:focus,
+.form-select.campo-obrigatorio-piscando:focus {
+    border-color: #dc3545 !important;
+    outline: none !important;
+    box-shadow: 0 0 0 0.22rem rgba(220, 53, 69, 0.28) !important;
+}
 @keyframes piscarCampoObrigatorio {
     0% {
         transform: translateX(0);

@@ -93,7 +93,7 @@ class ProdutoForm(forms.ModelForm):
                     "class": "form-control",
                     "step": "0.01",
                     "min": "0",
-                    "placeholder": "Ex.: 12",
+                    "placeholder": "",
                 }
             ),
             "unidade_venda_1": forms.Select(
