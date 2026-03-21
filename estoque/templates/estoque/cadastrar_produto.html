@@ -472,6 +472,32 @@ camposFracionados.forEach(campo => {
         const prazo = compra * (1 + percentual / 100);
         campoPrecoPrazo.value = formatarDuasCasas(prazo);
     }
+    function atualizarPercentualVistaFracionadoPeloPrecoVistaFracionado() {
+    const compra = numero(campoPrecoCompra?.value);
+    const vista = numero(campoPrecoVistaFracionado?.value);
+
+    if (!campoPercentualVistaFracionado) return;
+    if (compra <= 0 || vista <= 0) {
+        campoPercentualVistaFracionado.value = "";
+        return;
+    }
+
+    const percentual = ((vista - compra) / compra) * 100;
+    campoPercentualVistaFracionado.value = formatarDuasCasas(percentual);
+}
+
+function atualizarPrecoVistaFracionadoPeloPercentualVistaFracionado() {
+    const compra = numero(campoPrecoCompra?.value);
+    const percentual = numero(campoPercentualVistaFracionado?.value);
+
+    if (!campoPrecoVistaFracionado) return;
+    if (compra <= 0 || percentual < 0) {
+        return;
+    }
+
+    const vista = compra * (1 + percentual / 100);
+    campoPrecoVistaFracionado.value = formatarDuasCasas(vista);
+}
     let erroNome = document.getElementById("erro-nome");
 
     if (!erroNome && campoNome) {
@@ -526,7 +552,20 @@ const response = await fetch("{% url 'estoque:verificar_produto' %}?nome=" + enc
     vincularEventos(campoPercentualVista, function () {
         atualizarPrecoVistaPeloPercentualVista();
     });
+vincularEventos(campoPrecoVistaFracionado, function () {
+    atualizarPercentualVistaFracionadoPeloPrecoVistaFracionado();
+});
 
+vincularEventos(campoPercentualVistaFracionado, function () {
+    atualizarPrecoVistaFracionadoPeloPercentualVistaFracionado();
+});
+vincularEventos(campoPrecoPrazoFracionado, function () {
+    atualizarPercentualPrazoFracionadoPeloPrecoPrazoFracionado();
+});
+
+vincularEventos(campoPercentualPrazoFracionado, function () {
+    atualizarPrecoPrazoFracionadoPeloPercentualPrazoFracionado();
+});
     vincularEventos(campoPrecoPrazo, function () {
         atualizarPercentualPrazoPeloPrecoPrazo();
     });
