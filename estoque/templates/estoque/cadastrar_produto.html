@@ -174,7 +174,7 @@ select.campo-obrigatorio-piscando:focus,
 </div>
 
 <div class="col-12 col-md-4">
-    <label class="form-label">Unidade principal de venda</label>
+    <label class="form-label">Unidade de venda</label>
     {{ form.unidade_venda_1 }}
 </div>
 
@@ -191,7 +191,7 @@ select.campo-obrigatorio-piscando:focus,
     {{ form.fator_conversao }}
 </div>
 <div class="col-12 col-md-4" id="bloco-unidade-fracionada">
-    <label class="form-label">Unidade fracionada de venda</label>
+    <label class="form-label">Unidade de venda fracionada</label>
     {{ form.unidade_venda_2 }}
 </div>
 <div class="col-12">
@@ -199,23 +199,9 @@ select.campo-obrigatorio-piscando:focus,
     <h6 class="mb-2">Preços de venda</h6>
     
 </div>
-<div class="col-12 col-md-4">
-    <label class="form-label">Preço base unidade principal</label>
-    <div class="input-group">
-        <span class="input-group-text">R$</span>
-        {{ form.preco_venda_1 }}
-    </div>
-</div>
 
-<div class="col-12 col-md-4" id="bloco-preco-fracionado">
-    <label class="form-label">Preço base unidade fracionada</label>
-    <div class="input-group">
-        <span class="input-group-text">R$</span>
-        {{ form.preco_venda_2 }}
-    </div>
-</div>
 
-<div class="col-12 col-md-4"></div>
+
 
 
 
@@ -334,6 +320,16 @@ if (blocoUnidadeFracionada) {
 if (blocoPrecoFracionado) {
     blocoPrecoFracionado.style.display = mostrar ? "" : "none";
 }
+const camposFracionados = [
+    document.getElementById("id_fator_conversao"),
+    document.getElementById("id_unidade_venda_2"),
+    document.getElementById("id_preco_venda_2")
+];
+
+camposFracionados.forEach(campo => {
+    if (!campo) return;
+    campo.disabled = !mostrar;
+});
 }
         function atualizarPercentualVistaPeloPrecoVista() {
         const compra = numero(campoPrecoCompra?.value);
