@@ -194,6 +194,10 @@ select.campo-obrigatorio-piscando:focus,
     <label class="form-label">Unidade de venda fracionada</label>
     {{ form.unidade_venda_2 }}
 </div>
+<div class="col-12 col-md-4" id="bloco-preco-compra-fracionado">
+    <label class="form-label">Preço de compra fracionado</label>
+    {{ form.preco_compra_fracionado }}
+</div>
 <div class="col-12">
     
     <h6 class="mb-2">Preços de venda</h6>
@@ -347,13 +351,14 @@ const campos = Array.from(
     const form = document.querySelector("form");
     const campoNome = campos[0];
     const campoPrecoCompra = document.getElementById("id_preco_compra");
+    const campoPrecoCompraFracionado = document.getElementById("id_preco_compra_fracionado");
 const campoPrecoVista = document.getElementById("id_preco_vista");
     const campoPrecoPrazo = document.getElementById("id_preco_prazo");
     const campoPercentualVista = document.getElementById("percentual_vista");
     const campoPercentualPrazo = document.getElementById("percentual_prazo");
     const campoVendeFracionado = document.getElementById("id_vende_fracionado");
     const blocoUnidadeFracionada = document.getElementById("bloco-unidade-fracionada");
-    const blocoPrecoFracionado = document.getElementById("bloco-preco-fracionado");
+    const blocoPrecoCompraFracionado = document.getElementById("bloco-preco-compra-fracionado");
     const blocoFatorConversao = document.getElementById("bloco-fator-conversao");
     const blocoPercentualVistaFracionado = document.getElementById("bloco-percentual-vista-fracionado");
 const blocoPrecoVistaFracionado = document.getElementById("bloco-preco-vista-fracionado");
@@ -387,6 +392,9 @@ function atualizarVisibilidadeFracionado() {
 if (blocoUnidadeFracionada) {
     blocoUnidadeFracionada.style.display = mostrar ? "" : "none";
 }
+if (blocoPrecoCompraFracionado) {
+    blocoPrecoCompraFracionado.style.display = mostrar ? "" : "none";
+}
 
 if (blocoPercentualVistaFracionado) {
     blocoPercentualVistaFracionado.style.display = mostrar ? "" : "none";
@@ -410,6 +418,7 @@ if (blocoPrecoPrazoFracionado) {
 }
 const camposFracionados = [
     document.getElementById("id_fator_conversao"),
+    document.getElementById("id_preco_compra_fracionado"),
     document.getElementById("id_unidade_venda_2"),
     document.getElementById("id_preco_venda_2")
 ];
@@ -472,8 +481,22 @@ camposFracionados.forEach(campo => {
         const prazo = compra * (1 + percentual / 100);
         campoPrecoPrazo.value = formatarDuasCasas(prazo);
     }
-    function atualizarPercentualVistaFracionadoPeloPrecoVistaFracionado() {
+    function atualizarPrecoCompraFracionado() {
+    if (!campoPrecoCompraFracionado) return;
+
     const compra = numero(campoPrecoCompra?.value);
+    const fator = numero(document.getElementById("id_fator_conversao")?.value);
+
+    if (compra <= 0 || fator <= 0) {
+        campoPrecoCompraFracionado.value = "";
+        return;
+    }
+
+    const compraFracionada = compra / fator;
+    campoPrecoCompraFracionado.value = formatarDuasCasas(compraFracionada);
+}
+    function atualizarPercentualVistaFracionadoPeloPrecoVistaFracionado() {
+    const compra = numero(campoPrecoCompraFracionado?.value);
     const vista = numero(campoPrecoVistaFracionado?.value);
 
     if (!campoPercentualVistaFracionado) return;
@@ -487,7 +510,7 @@ camposFracionados.forEach(campo => {
 }
 
 function atualizarPrecoVistaFracionadoPeloPercentualVistaFracionado() {
-    const compra = numero(campoPrecoCompra?.value);
+    const compra = numero(campoPrecoCompraFracionado?.value);
     const percentual = numero(campoPercentualVistaFracionado?.value);
 
     if (!campoPrecoVistaFracionado) return;
@@ -499,7 +522,7 @@ function atualizarPrecoVistaFracionadoPeloPercentualVistaFracionado() {
     campoPrecoVistaFracionado.value = formatarDuasCasas(vista);
 }
 function atualizarPercentualPrazoFracionadoPeloPrecoPrazoFracionado() {
-    const compra = numero(campoPrecoCompra?.value);
+    const compra = numero(campoPrecoCompraFracionado?.value);
     const prazo = numero(campoPrecoPrazoFracionado?.value);
 
     if (!campoPercentualPrazoFracionado) return;
@@ -513,7 +536,7 @@ function atualizarPercentualPrazoFracionadoPeloPrecoPrazoFracionado() {
 }
 
 function atualizarPrecoPrazoFracionadoPeloPercentualPrazoFracionado() {
-    const compra = numero(campoPrecoCompra?.value);
+    const compra = numero(campoPrecoCompraFracionado?.value);
     const percentual = numero(campoPercentualPrazoFracionado?.value);
 
     if (!campoPrecoPrazoFracionado) return;
@@ -601,6 +624,7 @@ vincularEventos(campoPercentualPrazoFracionado, function () {
     });
 
     vincularEventos(campoPrecoCompra, function () {
+        atualizarPrecoCompraFracionado();
         if (campoPercentualVista && campoPercentualVista.value.trim() !== "") {
             atualizarPrecoVistaPeloPercentualVista();
         } else if (campoPrecoVista && campoPrecoVista.value.trim() !== "") {
@@ -612,16 +636,52 @@ vincularEventos(campoPercentualPrazoFracionado, function () {
         } else if (campoPrecoPrazo && campoPrecoPrazo.value.trim() !== "") {
             atualizarPercentualPrazoPeloPrecoPrazo();
         }
-    });
+        if (campoPercentualVistaFracionado && campoPercentualVistaFracionado.value.trim() !== "") {
+    atualizarPrecoVistaFracionadoPeloPercentualVistaFracionado();
+} else if (campoPrecoVistaFracionado && campoPrecoVistaFracionado.value.trim() !== "") {
+    atualizarPercentualVistaFracionadoPeloPrecoVistaFracionado();
+}
 
-    if (campoPrecoCompra && campoPrecoCompra.value.trim() !== "") {
-        if (campoPrecoVista && campoPrecoVista.value.trim() !== "") {
-            atualizarPercentualVistaPeloPrecoVista();
-        }
-        if (campoPrecoPrazo && campoPrecoPrazo.value.trim() !== "") {
-            atualizarPercentualPrazoPeloPrecoPrazo();
-        }
+if (campoPercentualPrazoFracionado && campoPercentualPrazoFracionado.value.trim() !== "") {
+    atualizarPrecoPrazoFracionadoPeloPercentualPrazoFracionado();
+} else if (campoPrecoPrazoFracionado && campoPrecoPrazoFracionado.value.trim() !== "") {
+    atualizarPercentualPrazoFracionadoPeloPrecoPrazoFracionado();
+}
+    });
+vincularEventos(document.getElementById("id_fator_conversao"), function () {
+    atualizarPrecoCompraFracionado();
+
+    if (campoPercentualVistaFracionado && campoPercentualVistaFracionado.value.trim() !== "") {
+        atualizarPrecoVistaFracionadoPeloPercentualVistaFracionado();
+    } else if (campoPrecoVistaFracionado && campoPrecoVistaFracionado.value.trim() !== "") {
+        atualizarPercentualVistaFracionadoPeloPrecoVistaFracionado();
     }
+
+    if (campoPercentualPrazoFracionado && campoPercentualPrazoFracionado.value.trim() !== "") {
+        atualizarPrecoPrazoFracionadoPeloPercentualPrazoFracionado();
+    } else if (campoPrecoPrazoFracionado && campoPrecoPrazoFracionado.value.trim() !== "") {
+        atualizarPercentualPrazoFracionadoPeloPrecoPrazoFracionado();
+    }
+});
+    if (campoPrecoCompra && campoPrecoCompra.value.trim() !== "") {
+    atualizarPrecoCompraFracionado();
+
+    if (campoPrecoVista && campoPrecoVista.value.trim() !== "") {
+        atualizarPercentualVistaPeloPrecoVista();
+    }
+
+    if (campoPrecoPrazo && campoPrecoPrazo.value.trim() !== "") {
+        atualizarPercentualPrazoPeloPrecoPrazo();
+    }
+
+    if (campoPrecoVistaFracionado && campoPrecoVistaFracionado.value.trim() !== "") {
+        atualizarPercentualVistaFracionadoPeloPrecoVistaFracionado();
+    }
+
+    if (campoPrecoPrazoFracionado && campoPrecoPrazoFracionado.value.trim() !== "") {
+        atualizarPercentualPrazoFracionadoPeloPrecoPrazoFracionado();
+    }
+}
     if (campoVendeFracionado) {
     campoVendeFracionado.addEventListener("change", atualizarVisibilidadeFracionado);
 }

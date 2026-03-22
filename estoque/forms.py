@@ -16,6 +16,7 @@ class ProdutoForm(forms.ModelForm):
             "preco_prazo",
             "unidade_compra",
             "fator_conversao",
+            "preco_compra_fracionado",
             "unidade_venda_1",
             "preco_venda_1",
             "unidade_venda_2",
@@ -96,6 +97,14 @@ class ProdutoForm(forms.ModelForm):
                     "placeholder": "",
                 }
             ),
+            "preco_compra_fracionado": forms.NumberInput(
+    attrs={
+        "class": "form-control",
+        "step": "0.01",
+        "min": "0",
+        "placeholder": "",
+    }
+),
             "unidade_venda_1": forms.Select(
                 attrs={
                     "class": "form-select",

@@ -58,19 +58,21 @@
 >
         <td>{{ produto.nome }}</td>
 
-        <td class="td-quantidade text-center">
-          <span class="qtd-num">{{ produto.quantidade }}</span>
+        <td class="td-quantidade">
+  <div class="qtd-wrap">
+    <span class="qtd-num">{{ produto.quantidade }}</span>
 
-          {% if produto.quantidade == 0 %}
-            <span class="badge badge-zero">Zerado</span>
-          {% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}
-            <span class="badge badge-critico">Crítico</span>
-          {% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}
-            <span class="badge badge-limite">No limite</span>
-          {% else %}
-            <span class="badge badge-ok">Normal</span>
-          {% endif %}
-        </td>
+    {% if produto.quantidade == 0 %}
+      <span class="badge badge-zero qtd-badge">Zerado</span>
+    {% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}
+      <span class="badge badge-critico qtd-badge">Crítico</span>
+    {% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}
+      <span class="badge badge-limite qtd-badge">No limite</span>
+    {% else %}
+      <span class="badge badge-ok qtd-badge">Normal</span>
+    {% endif %}
+  </div>
+</td>
 
         <td class="text-center">{{ produto.estoque_minimo }}</td>
 

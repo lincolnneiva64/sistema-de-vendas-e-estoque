@@ -12,7 +12,7 @@ class Produto(models.Model):
     preco_prazo = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     unidade_compra = models.CharField(max_length=20, blank=True, null=True)
     fator_conversao = models.DecimalField(max_digits=10, decimal_places=2, default=1)
-
+    preco_compra_fracionado = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     unidade_venda_1 = models.CharField(max_length=20, blank=True, null=True)
     preco_venda_1 = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
