@@ -131,12 +131,14 @@ def cadastrar_produto(request):
     if request.method == "POST":
         form = ProdutoForm(request.POST)
         if form.is_valid():
-            produto = form.save()
-            messages.success(request, f'Produto "{produto.nome}" cadastrado com sucesso!')
-            return redirect("estoque:home")
+         produto = form.save()
+         messages.success(request, f'Produto "{produto.nome}" cadastrado com sucesso!')
+         return redirect("estoque:home")
+        else:
+            print("ERROS DO FORM:", form.errors)
+            print("DADOS RECEBIDOS:", request.POST)
     else:
         form = ProdutoForm()
-
     return render(request, "estoque/cadastrar_produto.html", {"form": form})
 
 def produto_detalhe(request, pk):
