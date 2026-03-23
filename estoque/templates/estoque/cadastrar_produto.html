@@ -48,7 +48,19 @@
     font-weight: 600;
     padding: 8px 18px;
 }
+.btn-salvar-feedback {
+    transition: transform 0.08s ease, box-shadow 0.12s ease;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
+}
 
+.btn-salvar-feedback:hover {
+    box-shadow: 0 5px 14px rgba(0, 0, 0, 0.16);
+}
+
+.btn-salvar-feedback:active {
+    transform: translateY(1px) scale(0.985);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.10);
+}
     .btn-secondary {
     font-weight: 500;
     padding: 8px 16px;
@@ -337,7 +349,7 @@ select.campo-obrigatorio-piscando:focus,
 
 <div class="col-12 d-flex justify-content-end gap-2 mt-3">
     <a href="{% url 'estoque:home' %}" class="btn btn-secondary">Cancelar</a>
-    <button type="submit" class="btn btn-primary" id="btnSalvarProduto">Salvar</button>
+    <button type="submit" class="btn btn-primary btn-salvar-feedback" id="btnSalvarProduto">Salvar</button>
 </div>
 
 </form>

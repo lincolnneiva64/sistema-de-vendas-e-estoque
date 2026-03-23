@@ -230,3 +230,26 @@ class ProdutoForm(forms.ModelForm):
                 raise forms.ValidationError("Já existe um produto com esse nome.")
 
         return nome
+        def clean(self):
+            cleaned_data = super().clean()
+
+        vende_fracionado = cleaned_data.get("vende_fracionado")
+
+        if not vende_fracionado:
+            cleaned_data["fator_conversao"] = None
+            cleaned_data["preco_compra_fracionado"] = None
+            cleaned_data["unidade_venda_2"] = ""
+            cleaned_data["percentual_vista_fracionado"] = None
+            cleaned_data["preco_vista_fracionado"] = None
+            cleaned_data["percentual_prazo_fracionado"] = None
+            cleaned_data["preco_prazo_fracionado"] = None
+
+            self._errors.pop("fator_conversao", None)
+            self._errors.pop("preco_compra_fracionado", None)
+            self._errors.pop("unidade_venda_2", None)
+            self._errors.pop("percentual_vista_fracionado", None)
+            self._errors.pop("preco_vista_fracionado", None)
+            self._errors.pop("percentual_prazo_fracionado", None)
+            self._errors.pop("preco_prazo_fracionado", None)
+
+        return cleaned_data

@@ -14,16 +14,19 @@
   <div style="max-width: 720px; margin: 20px auto 18px auto; position: relative; z-index: 20;">
     {% for message in messages %}
       <div id="alertaSucesso" style="
-  background: linear-gradient(180deg, #f3fff7 0%, #e3f7ea 100%);
-  border: 1px solid #9fd5b3;
-  color: #14532d;
-  padding: 16px 20px;
-  border-radius: 16px;
-  font-weight: 700;
-  font-size: 18px;
-  box-shadow: 0 10px 28px rgba(0,0,0,0.14);
-  transition: opacity 0.5s ease, transform 0.5s ease;
-  transform: translateY(0);
+background: linear-gradient(180deg, #f3fff7 0%, #e3f7ea 100%);
+border: 1px solid #9fd5b3;
+color: #14532d;
+padding: 16px 20px;
+border-radius: 16px;
+font-weight: 700;
+font-size: 18px;
+box-shadow: 0 10px 28px rgba(0,0,0,0.14);
+transition: opacity 0.5s ease, transform 0.5s ease;
+transform: translateY(0);
+display: flex;
+justify-content: center;
+align-items: center;
 ">
 
         ✅ {{ message }}
