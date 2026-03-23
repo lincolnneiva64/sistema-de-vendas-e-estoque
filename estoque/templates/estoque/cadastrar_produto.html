@@ -262,11 +262,14 @@ select.campo-obrigatorio-piscando:focus,
     <label class="form-label">Percentual à vista fracionado</label>
     <div class="input-group">
         <input
-            type="number"
+            type="text"
+            inputmode="decimal"
             step="0.01"
             min="0"
             class="form-control"
             id="percentual_vista_fracionado"
+            name="percentual_vista_fracionado"
+            value="{{ form.percentual_vista_fracionado.value|default_if_none:'' }}"
             placeholder="0,00"
         >
         <span class="input-group-text">%</span>
@@ -278,11 +281,14 @@ select.campo-obrigatorio-piscando:focus,
     <div class="input-group">
         <span class="input-group-text">R$</span>
         <input
-            type="number"
+            type="text"
+            inputmode="decimal"
             step="0.01"
             min="0"
             class="form-control"
             id="preco_vista_fracionado"
+            name="preco_vista_fracionado"
+            value="{{ form.preco_vista_fracionado.value|default_if_none:'' }}"
             placeholder="0,00"
         >
     </div>
@@ -294,11 +300,14 @@ select.campo-obrigatorio-piscando:focus,
     <label class="form-label">Percentual a prazo fracionado</label>
     <div class="input-group">
         <input
-            type="number"
+            type="text"
+            inputmode="decimal"
             step="0.01"
             min="0"
             class="form-control"
             id="percentual_prazo_fracionado"
+            name="percentual_prazo_fracionado"
+            value="{{ form.percentual_prazo_fracionado.value|default_if_none:'' }}"
             placeholder="0,00"
         >
         <span class="input-group-text">%</span>
@@ -310,11 +319,14 @@ select.campo-obrigatorio-piscando:focus,
     <div class="input-group">
         <span class="input-group-text">R$</span>
         <input
-            type="number"
+            type="text"
+            inputmode="decimal"
             step="0.01"
             min="0"
             class="form-control"
             id="preco_prazo_fracionado"
+            name="preco_prazo_fracionado"
+            value="{{ form.preco_prazo_fracionado.value|default_if_none:'' }}"
             placeholder="0,00"
         >
     </div>
@@ -651,17 +663,37 @@ if (campoPercentualPrazoFracionado && campoPercentualPrazoFracionado.value.trim(
 vincularEventos(document.getElementById("id_fator_conversao"), function () {
     atualizarPrecoCompraFracionado();
 
-    if (campoPercentualVistaFracionado && campoPercentualVistaFracionado.value.trim() !== "") {
-        atualizarPrecoVistaFracionadoPeloPercentualVistaFracionado();
-    } else if (campoPrecoVistaFracionado && campoPrecoVistaFracionado.value.trim() !== "") {
-        atualizarPercentualVistaFracionadoPeloPrecoVistaFracionado();
-    }
+    if (
+    campoPercentualVistaFracionado &&
+    campoPrecoVistaFracionado &&
+    campoPercentualVistaFracionado.value.trim() !== "" &&
+    campoPrecoVistaFracionado.value.trim() === ""
+) {
+    atualizarPrecoVistaFracionadoPeloPercentualVistaFracionado();
+} else if (
+    campoPrecoVistaFracionado &&
+    campoPercentualVistaFracionado &&
+    campoPrecoVistaFracionado.value.trim() !== "" &&
+    campoPercentualVistaFracionado.value.trim() === ""
+) {
+    atualizarPercentualVistaFracionadoPeloPrecoVistaFracionado();
+}
 
-    if (campoPercentualPrazoFracionado && campoPercentualPrazoFracionado.value.trim() !== "") {
-        atualizarPrecoPrazoFracionadoPeloPercentualPrazoFracionado();
-    } else if (campoPrecoPrazoFracionado && campoPrecoPrazoFracionado.value.trim() !== "") {
-        atualizarPercentualPrazoFracionadoPeloPrecoPrazoFracionado();
-    }
+    if (
+    campoPercentualPrazoFracionado &&
+    campoPrecoPrazoFracionado &&
+    campoPercentualPrazoFracionado.value.trim() !== "" &&
+    campoPrecoPrazoFracionado.value.trim() === ""
+) {
+    atualizarPrecoPrazoFracionadoPeloPercentualPrazoFracionado();
+} else if (
+    campoPrecoPrazoFracionado &&
+    campoPercentualPrazoFracionado &&
+    campoPrecoPrazoFracionado.value.trim() !== "" &&
+    campoPercentualPrazoFracionado.value.trim() === ""
+) {
+    atualizarPercentualPrazoFracionadoPeloPrecoPrazoFracionado();
+}
 });
     if (campoPrecoCompra && campoPrecoCompra.value.trim() !== "") {
     atualizarPrecoCompraFracionado();

@@ -25,6 +25,11 @@ class ProdutoForm(forms.ModelForm):
             "quantidade",
             "estoque_minimo",
             "fornecedor",
+            "percentual_vista_fracionado",
+            "preco_vista_fracionado",
+            "percentual_prazo_fracionado",
+            "preco_prazo_fracionado",
+            
         ]
 
         widgets = {

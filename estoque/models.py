@@ -18,6 +18,10 @@ class Produto(models.Model):
 
     unidade_venda_2 = models.CharField(max_length=20, blank=True, null=True)
     preco_venda_2 = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    percentual_vista_fracionado = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    preco_vista_fracionado = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    percentual_prazo_fracionado = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    preco_prazo_fracionado = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     vende_fracionado = models.BooleanField(default=False)
     descricao_conversao = models.CharField(max_length=120, blank=True, null=True)
