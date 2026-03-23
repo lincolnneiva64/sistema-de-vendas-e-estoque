@@ -337,7 +337,7 @@ select.campo-obrigatorio-piscando:focus,
 
 <div class="col-12 d-flex justify-content-end gap-2 mt-3">
     <a href="{% url 'estoque:home' %}" class="btn btn-secondary">Cancelar</a>
-    <button type="submit" class="btn btn-primary">Salvar</button>
+    <button type="submit" class="btn btn-primary" id="btnSalvarProduto">Salvar</button>
 </div>
 
 </form>
@@ -766,6 +766,7 @@ const proximo = camposVisiveis[index + 1];
     });
 });
 });
+
 
 </script>
 </body>
