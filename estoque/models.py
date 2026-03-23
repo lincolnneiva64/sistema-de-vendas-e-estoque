@@ -71,6 +71,14 @@ class Produto(models.Model):
             self.fornecedor = fornecedor_limpo.title()
         if self.preco_vista and self.preco_vista > 0:
            self.preco_venda = self.preco_vista
+        if not self.vende_fracionado:
+            self.fator_conversao = self.fator_conversao or 0
+            self.preco_compra_fracionado = self.preco_compra_fracionado or 0
+            self.unidade_venda_2 = self.unidade_venda_2 or ""
+            self.percentual_vista_fracionado = self.percentual_vista_fracionado or 0
+            self.preco_vista_fracionado = self.preco_vista_fracionado or 0
+            self.percentual_prazo_fracionado = self.percentual_prazo_fracionado or 0
+            self.preco_prazo_fracionado = self.preco_prazo_fracionado or 0
         self.full_clean()
         super().save(*args, **kwargs)
 

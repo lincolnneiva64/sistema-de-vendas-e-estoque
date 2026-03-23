@@ -5,6 +5,13 @@ from .utils import normalize_product_name
 
 
 class ProdutoForm(forms.ModelForm):
+    fator_conversao = forms.DecimalField(required=False)
+    preco_compra_fracionado = forms.DecimalField(required=False)
+    unidade_venda_2 = forms.CharField(required=False)
+    percentual_vista_fracionado = forms.DecimalField(required=False)
+    preco_vista_fracionado = forms.DecimalField(required=False)
+    percentual_prazo_fracionado = forms.DecimalField(required=False)
+    preco_prazo_fracionado = forms.DecimalField(required=False)
     class Meta:
         model = Produto
         fields = [
@@ -189,31 +196,41 @@ class ProdutoForm(forms.ModelForm):
                 }
             ),
         }
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    
+def __init__(self, *args, **kwargs):
+    super().__init__(*args, **kwargs)
 
-        if not self.instance or not self.instance.pk:
-            self.fields["preco_compra"].initial = None
-            self.fields["preco_vista"].initial = None
-            self.fields["preco_prazo"].initial = None
-            self.initial["preco_compra"] = ""
-            self.initial["preco_vista"] = ""
-            self.initial["preco_prazo"] = ""
-            self.initial["unidade_compra"] = ""
-            self.initial["fator_conversao"] = ""
-            self.initial["unidade_venda_1"] = ""
-            self.initial["preco_venda_1"] = ""
-            self.initial["unidade_venda_2"] = ""
-            self.initial["preco_venda_2"] = ""
-            self.initial["vende_fracionado"] = False
-            self.initial["descricao_conversao"] = ""
-            
-            self.initial["nome"] = ""
-            self.initial["codigo"] = ""
-            self.initial["categoria"] = ""
-            self.initial["quantidade"] = ""
-            self.initial["estoque_minimo"] = ""
-            self.initial["fornecedor"] = ""
+    self.fields["fator_conversao"].required = False
+    self.fields["preco_compra_fracionado"].required = False
+    self.fields["unidade_venda_2"].required = False
+    self.fields["percentual_vista_fracionado"].required = False
+    self.fields["preco_vista_fracionado"].required = False
+    self.fields["percentual_prazo_fracionado"].required = False
+    self.fields["preco_prazo_fracionado"].required = False
+
+    if not self.instance or not self.instance.pk:
+        self.fields["preco_compra"].initial = None
+        self.fields["preco_vista"].initial = None
+        self.fields["preco_prazo"].initial = None
+        
+        self.initial["preco_compra"] = ""
+        self.initial["preco_vista"] = ""
+        self.initial["preco_prazo"] = ""
+        self.initial["unidade_compra"] = ""
+        self.initial["fator_conversao"] = ""
+        self.initial["unidade_venda_1"] = ""
+        self.initial["preco_venda_1"] = ""
+        self.initial["unidade_venda_2"] = ""
+        self.initial["preco_venda_2"] = ""
+        self.initial["vende_fracionado"] = False
+        self.initial["descricao_conversao"] = ""
+        
+        self.initial["nome"] = ""
+        self.initial["codigo"] = ""
+        self.initial["categoria"] = ""
+        self.initial["quantidade"] = ""
+        self.initial["estoque_minimo"] = ""
+        self.initial["fornecedor"] = ""
     def clean_nome(self):
         nome = normalize_product_name(self.cleaned_data.get("nome", ""))
 
@@ -236,13 +253,13 @@ class ProdutoForm(forms.ModelForm):
         vende_fracionado = cleaned_data.get("vende_fracionado")
 
         if not vende_fracionado:
-            cleaned_data["fator_conversao"] = None
-            cleaned_data["preco_compra_fracionado"] = None
+            cleaned_data["fator_conversao"] = 0
+            cleaned_data["preco_compra_fracionado"] = 0
             cleaned_data["unidade_venda_2"] = ""
-            cleaned_data["percentual_vista_fracionado"] = None
-            cleaned_data["preco_vista_fracionado"] = None
-            cleaned_data["percentual_prazo_fracionado"] = None
-            cleaned_data["preco_prazo_fracionado"] = None
+            cleaned_data["percentual_vista_fracionado"] = 0
+            cleaned_data["preco_vista_fracionado"] = 0
+            cleaned_data["percentual_prazo_fracionado"] = 0
+            cleaned_data["preco_prazo_fracionado"] = 0
 
             self._errors.pop("fator_conversao", None)
             self._errors.pop("preco_compra_fracionado", None)
