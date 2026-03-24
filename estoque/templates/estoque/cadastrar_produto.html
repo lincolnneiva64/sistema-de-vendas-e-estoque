@@ -199,8 +199,15 @@ select.campo-obrigatorio-piscando:focus,
     {{ form.vende_fracionado }}
 </div>
 <div class="col-12 col-md-4" id="bloco-fator-conversao">
-    <label class="form-label">Fator de conversão</label>
-    {{ form.fator_conversao }}
+    <label class="form-label" for="{{ form.fator_conversao.id_for_label }}">Fator de conversão</label>
+    <input
+        type="number"
+        name="{{ form.fator_conversao.html_name }}"
+        id="{{ form.fator_conversao.id_for_label }}"
+        class="form-control"
+        step="0.01"
+        value="{{ form.fator_conversao.value|default_if_none:'' }}"
+    >
 </div>
 <div class="col-12 col-md-4" id="bloco-unidade-fracionada">
     <label class="form-label">Unidade de venda fracionada</label>
