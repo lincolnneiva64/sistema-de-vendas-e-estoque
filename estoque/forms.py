@@ -5,13 +5,39 @@ from .utils import normalize_product_name
 
 
 class ProdutoForm(forms.ModelForm):
-    fator_conversao = forms.DecimalField(required=False)
-    preco_compra_fracionado = forms.DecimalField(required=False)
-    unidade_venda_2 = forms.CharField(required=False)
+    factor_conversao = forms.DecimalField(
+    required=False,
+    widget=forms.NumberInput(attrs={
+        "class": "form-control",
+        "step": "0.01",
+        "min": "0",
+        "placeholder": "",
+    })
+)
+
+    preco_compra_fracionado = forms.DecimalField(
+        required=False,
+        widget=forms.NumberInput(attrs={
+            "class": "form-control",
+            "step": "0.01",
+            "min": "0",
+            "placeholder": "",
+        })
+    )
+
+    unidade_venda_2 = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "placeholder": "",
+        })
+    )
+
     percentual_vista_fracionado = forms.DecimalField(required=False)
     preco_vista_fracionado = forms.DecimalField(required=False)
     percentual_prazo_fracionado = forms.DecimalField(required=False)
     preco_prazo_fracionado = forms.DecimalField(required=False)
+
     class Meta:
         model = Produto
         fields = [
