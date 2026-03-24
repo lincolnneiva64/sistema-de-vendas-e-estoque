@@ -6,7 +6,7 @@ class Produto(models.Model):
     codigo = models.CharField(max_length=50, blank=True, null=True)
     categoria = models.CharField(max_length=60, blank=True, null=True)
 
-    preco_compra = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    preco_compra = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     preco_venda = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     preco_vista = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     preco_prazo = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -28,9 +28,8 @@ class Produto(models.Model):
     permitir_prejuizo = models.BooleanField(default=False)
     motivo_prejuizo = models.CharField(max_length=200, blank=True, null=True)
 
-    quantidade = models.IntegerField(default=0)
-    estoque_minimo = models.PositiveIntegerField(default=5)
-
+    quantidade = models.IntegerField(blank=True, null=True)
+    estoque_minimo = models.PositiveIntegerField(blank=True, null=True)
     fornecedor = models.CharField(max_length=120, blank=True, null=True)
     excluido = models.BooleanField(default=False)
     excluido_em = models.DateTimeField(null=True, blank=True)
