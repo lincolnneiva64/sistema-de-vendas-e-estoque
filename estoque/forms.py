@@ -32,7 +32,7 @@ class ProdutoForm(forms.ModelForm):
             "placeholder": "",
         })
     )
-
+    fator_conversao = forms.DecimalField(required=False)
     percentual_vista_fracionado = forms.DecimalField(required=False)
     preco_vista_fracionado = forms.DecimalField(required=False)
     percentual_prazo_fracionado = forms.DecimalField(required=False)
@@ -276,7 +276,13 @@ def __init__(self, *args, **kwargs):
         def clean(self):
             cleaned_data = super().clean()
 
-        vende_fracionado = cleaned_data.get("vende_fracionado")
+            vende_fracionado_valor = cleaned_data.get("vende_fracionado")
+
+        vende_fracionado = str(vende_fracionado_valor).strip().lower() in (
+            "true",
+            "1",
+            "sim",
+        )
 
         if not vende_fracionado:
             cleaned_data["fator_conversao"] = 0
@@ -287,6 +293,14 @@ def __init__(self, *args, **kwargs):
             cleaned_data["percentual_prazo_fracionado"] = 0
             cleaned_data["preco_prazo_fracionado"] = 0
 
+            self.instance.fator_conversao = 0
+            self.instance.preco_compra_fracionado = 0
+            self.instance.unidade_venda_2 = ""
+            self.instance.percentual_vista_fracionado = 0
+            self.instance.preco_vista_fracionado = 0
+            self.instance.percentual_prazo_fracionado = 0
+            self.instance.preco_prazo_fracionado = 0
+
             self._errors.pop("fator_conversao", None)
             self._errors.pop("preco_compra_fracionado", None)
             self._errors.pop("unidade_venda_2", None)
@@ -294,5 +308,4 @@ def __init__(self, *args, **kwargs):
             self._errors.pop("preco_vista_fracionado", None)
             self._errors.pop("percentual_prazo_fracionado", None)
             self._errors.pop("preco_prazo_fracionado", None)
-
         return cleaned_data

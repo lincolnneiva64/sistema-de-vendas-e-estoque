@@ -152,6 +152,9 @@ def produto_editar(request, pk):
         if form.is_valid():
             form.save()
             return redirect("estoque:home")
+        else:
+            print("ERROS DO FORM EDITAR:", form.errors)
+            print("DADOS RECEBIDOS EDITAR:", request.POST)
     else:
         form = ProdutoForm(instance=produto)
 
