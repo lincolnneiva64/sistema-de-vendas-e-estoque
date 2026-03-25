@@ -42,11 +42,11 @@ def home(request):
     else:
         form = ProdutoForm()
 
-    # Busca + Filtro
+        # Busca + Filtro
     q = request.GET.get("q", "").strip()
     filtro = request.GET.get("f", "todos").strip().lower()
 
-    produtos = Produto.objects.filter(excluido=False).annotate(
+    produtos_base = Produto.objects.filter(excluido=False).annotate(
         prioridade=Case(
             When(quantidade=0, then=Value(0)),
             When(quantidade__gt=0, quantidade__lte=F("estoque_minimo"), then=Value(1)),
@@ -59,6 +59,8 @@ def home(request):
             output_field=IntegerField(),
         )
     ).order_by("prioridade", "-criado_em")
+
+    produtos = produtos_base
 
     if q:
         produtos = produtos.filter(
@@ -85,17 +87,17 @@ def home(request):
         )
 
     # Contadores
-    total_produtos = produtos.count()
-    zerado_count = produtos.filter(quantidade=0).count()
-    criticos_count = produtos.filter(
+    total_produtos = produtos_base.count()
+    zerado_count = produtos_base.filter(quantidade=0).count()
+    criticos_count = produtos_base.filter(
         quantidade__gt=0,
         quantidade__lte=F("estoque_minimo"),
     ).count()
-    limite_count = produtos.filter(
+    limite_count = produtos_base.filter(
         quantidade__gt=F("estoque_minimo"),
         quantidade__lte=F("estoque_minimo") + Value(5),
     ).count()
-    normal_count = produtos.filter(
+    normal_count = produtos_base.filter(
         quantidade__gt=F("estoque_minimo") + Value(5),
     ).count()
 
@@ -116,16 +118,15 @@ def home(request):
             "filtro": filtro,
             "total_produtos": total_produtos,
             "zerado_count": zerado_count,
-            "limite_count": limite_count,
             "criticos_count": criticos_count,
+            "limite_count": limite_count,
             "normal_count": normal_count,
             "total_investido": total_investido,
             "total_faturamento": total_faturamento,
             "lucro_bruto": lucro_bruto,
             "margem_percent": margem_percent,
-        },
+        }
     )
-
 
 def cadastrar_produto(request):
     if request.method == "POST":
