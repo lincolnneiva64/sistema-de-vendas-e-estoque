@@ -106,29 +106,31 @@ select.campo-obrigatorio-piscando:focus,
 
   <nav class="navbar navbar-expand-lg bg-white border-bottom">
     <div class="container">
-      <span class="navbar-brand fw-semibold"></span>
+      <span class="navbar-brand fw-semibold">Meia Meia</span>
 
       
     </div>
   </nav>
 
-  <main class="container pt-1 pb-2">
+  <main class="container pt-3 pb-2">
 <div class="d-flex justify-content-between align-items-center mb-1 mt-1">
-    
+    <h5 class="mb-0">Cadastrar Produto</h5>
 
-    
+    <a href="{% url 'estoque:home' %}" class="btn btn-outline-secondary">
+        ← Voltar
+    </a>
 </div>
    <div class="bg-white rounded-3 p-2 shadow-sm mx-auto card-destaque" style="max-width: 1120px; margin-top: -2px; border: 2px solid #c3cad4;">
       
       
 
-<form method="post" class="row g-1" id="form-produto">
+<form method="post" class="row g-1">     
   {% csrf_token %}
 <div class="col-12">
-    
+    <h6 class="mb-2">Dados básicos</h6>
     
 </div>
-  <div class="col-12 col-md-4">
+  <div class="col-12 col-md-6">
     <label class="form-label">Nome</label>
     {{ form.nome }}
     {% if form.nome.errors %}
@@ -153,7 +155,7 @@ select.campo-obrigatorio-piscando:focus,
 
 <div class="col-12">
     <hr class="my-2">
-    
+    <h6 class="mb-2">Compra e estoque</h6>
     
 </div>
   <div class="col-12 col-md-4">
@@ -192,11 +194,11 @@ select.campo-obrigatorio-piscando:focus,
 
 
 
-<div class="col-12 col-md-3">
+<div class="col-12 col-md-4">
     <label class="form-label">Vende fracionado?</label>
     {{ form.vende_fracionado }}
 </div>
-<div class="col-12 col-md-3" id="bloco-fator-conversao">
+<div class="col-12 col-md-4" id="bloco-fator-conversao">
     <label class="form-label" for="{{ form.fator_conversao.id_for_label }}">Fator de conversão</label>
     <input
         type="number"
@@ -207,11 +209,11 @@ select.campo-obrigatorio-piscando:focus,
         value="{{ form.fator_conversao.value|default_if_none:'' }}"
     >
 </div>
-<div class="col-12 col-md-3" id="bloco-unidade-fracionada">
+<div class="col-12 col-md-4" id="bloco-unidade-fracionada">
     <label class="form-label">Unidade de venda fracionada</label>
     {{ form.unidade_venda_2 }}
 </div>
-<div class="col-12 col-md-3" id="bloco-preco-compra-fracionado">
+<div class="col-12 col-md-4" id="bloco-preco-compra-fracionado">
     <label class="form-label">Preço de compra fracionado</label>
     {{ form.preco_compra_fracionado }}
 </div>
@@ -368,60 +370,12 @@ select.campo-obrigatorio-piscando:focus,
 
 
 
+<div class="col-12 d-flex justify-content-end gap-2 mt-3">
+    <a href="{% url 'estoque:home' %}" class="btn btn-secondary">Cancelar</a>
+    <button type="submit" class="btn btn-primary btn-salvar-feedback" id="btnSalvarProduto">Salvar</button>
 </div>
+
 </form>
-<div style="position: fixed; right: 16px; bottom: 90px; z-index: 1000;">
-    
-    <div style="
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 8px;
-        background: rgba(255,255,255,0.96);
-        border: 1px solid #d9dee7;
-        border-radius: 12px;
-        padding: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    ">
-
-        <button
-            type="button"
-            onclick="history.back()"
-            style="
-                border: none;
-                border-radius: 9px;
-                padding: 9px 16px;
-                font-weight: 600;
-                cursor: pointer;
-                background: #f1f5f9;
-                color: #3b5bdb;
-                width: 100%;
-                transition: all 0.15s ease;
-            "
-        >
-            Cancelar
-        </button>
-
-        <button
-            type="submit"
-            form="form-produto"
-            style="
-                border: none;
-                border-radius: 9px;
-                padding: 9px 16px;
-                font-weight: 600;
-                cursor: pointer;
-                background: #2563eb;
-                color: #fff;
-                width: 100%;
-                transition: all 0.15s ease;
-            "
-        >
-            Salvar
-        </button>
-
-    </div>
-</div>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
         
@@ -848,31 +802,7 @@ const proximo = camposVisiveis[index + 1];
 });
 });
 
+
 </script>
-
-<style>
-button[type="button"]:hover {
-    transform: translateY(-1px);
-    background: #dbeafe !important;
-}
-
-button[type="submit"]:hover {
-    transform: translateY(-1px) scale(1.02);
-    background: #1d4ed8 !important;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
-}
-
-button:active {
-    transform: scale(0.97);
-}
-
-button {
-    transition: all 0.15s ease;
-}
-button[type="submit"] {
-    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
-}</style>
-
-
 </body>
 </html>
