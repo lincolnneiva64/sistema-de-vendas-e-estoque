@@ -25,8 +25,37 @@ align-items: center;
     {% endfor %}
   </div>
 {% endif %}
-  <div style="margin: 12px 0;">
-    <strong>Resumo:</strong>
+<div style="max-width: 720px; margin: 0 auto 16px auto;">
+    
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+
+        <div>
+            <h3 style="margin: 0; font-weight: 700;">Produtos</h3>
+            <small style="color: #6c757d;">
+                Cadastro e controle de itens do estoque
+            </small>
+        </div>
+
+        <a href="{% url 'estoque:cadastrar_produto' %}" 
+           style="
+            background: #0d6efd;
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+           ">
+            + Novo Produto
+        </a>
+
+    </div>
+
+</div>
+  <div style="max-width: 720px; margin: 0 auto 12px auto;">
+    <div style="margin-bottom: 6px; font-weight: 600;">
+    Resumo
+</div>
 
 <a class="badge bg-secondary resumo-badge {% if filtro == 'todos' %}active{% endif %}"
    href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=todos">Todos</a>
@@ -54,22 +83,23 @@ align-items: center;
   >
 </div>
 </div>
+<div style="max-width: 720px; margin: 0 auto 90px auto; background: #fff; border: 1px solid #e9ecef; border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); overflow: hidden;">
   <table class="table table-hover mx-auto align-middle" style="width: auto;">
-    <thead>
-      <tr>
-        <th>Produto</th>
-        <th>Estoque</th>
-        <th>Estoque Mínimo</th>
-        <th>Ações</th>
-      </tr>
-    </thead>
+    
+    <thead style="background: #f8f9fa;">
+    <tr>
+        <th style="font-weight: 600; font-size: 13px;">Produto</th>
+        <th style="font-weight: 600; font-size: 13px;">Estoque</th>
+        <th style="font-weight: 600; font-size: 13px;">Estoque Mínimo</th>
+        <th style="font-weight: 600; font-size: 13px; text-align: right;">Ações</th>
+    </tr>
+</thead>
+      
+  
 
     <tbody>
       {% for produto in produtos %}
-      <tr
-    data-produto-id="{{ produto.id }}"
-    data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}"
-    class="linha-produto {% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}">
+      <tr data-produto-id="{{ produto.id }}" data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}" class="linha-produto {% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}" style="transition: all 0.15s ease;">
     <td>{{ produto.nome }}</td>
         <td class="td-quantidade">
   <div class="qtd-wrap">
