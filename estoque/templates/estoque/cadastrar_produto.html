@@ -28,7 +28,61 @@
         color: #495057;
         font-weight: 500;
     }
+.btn-cancelar {
+    background: linear-gradient(145deg, #dbeafe, #93c5fd);
+box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    color: #334155;
+    border: none;
+    border-radius: 14px;
 
+    padding: 16px 26px;
+    font-size: 15px;
+    font-weight: 600;
+
+    cursor: pointer;
+
+    transition: all 0.2s ease;
+}
+
+.btn-cancelar:hover {
+    background: linear-gradient(145deg, #bfdbfe, #60a5fa);
+transform: translateY(-3px) scale(1.02);
+box-shadow: 0 8px 18px rgba(0,0,0,0.12);
+}
+.btn-cancelar:active {
+    transform: scale(0.96);
+}
+.btn-salvar {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+    color: #fff !important;
+
+    border: none !important;
+    border-radius: 14px;
+
+    padding: 16px 26px;
+    font-size: 15px;
+    font-weight: 700;
+
+    cursor: pointer;
+
+    box-shadow:
+        0 12px 30px rgba(37, 99, 235, 0.40),
+        0 6px 16px rgba(0,0,0,0.15);
+
+    transition: all 0.2s ease;
+}
+
+.btn-salvar:hover {
+    transform: translateY(-4px) scale(1.06);
+
+    box-shadow:
+        0 20px 45px rgba(37, 99, 235, 0.55),
+        0 10px 25px rgba(0,0,0,0.18);
+}
+
+.btn-salvar:active {
+    transform: scale(0.94);
+}
     .form-label {
     font-weight: 600;
     color: #2f3742;
@@ -100,7 +154,41 @@ select.campo-obrigatorio-piscando:focus,
         transform: translateX(0);
     }
 }
+}
+
+/* 👇 COLA AQUI */
+.btn-salvar {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #fff;
+    border: none;
+    border-radius: 14px;
+
+    padding: 16px 26px;
+    font-size: 15px;
+    font-weight: 700;
+
+    box-shadow:
+        0 12px 30px rgba(37, 99, 235, 0.40),
+        0 6px 16px rgba(0, 0, 0, 0.15);
+
+    transition: all 0.2s ease;
+}
+
+.btn-salvar:hover {
+    transform: translateY(-4px) scale(1.06);
+    box-shadow:
+        0 20px 45px rgba(37, 99, 235, 0.55),
+        0 10px 20px rgba(0, 0, 0, 0.18);
+}
+
+.btn-salvar:active {
+    transform: scale(0.94);
+    box-shadow:
+        0 6px 16px rgba(37, 99, 235, 0.30);
+}
+
 </style>
+
 
 <body class="bg-light">
 
@@ -384,42 +472,20 @@ select.campo-obrigatorio-piscando:focus,
         box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     ">
 
-        <button
-            type="button"
-            onclick="history.back()"
-            style="
-                border: none;
-                border-radius: 9px;
-                padding: 9px 16px;
-                font-weight: 600;
-                cursor: pointer;
-                background: #f1f5f9;
-                color: #3b5bdb;
-                width: 100%;
-                transition: all 0.15s ease;
-            "
-        >
-            Cancelar
-        </button>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
 
-        <button
-            type="submit"
-            form="form-produto"
-            style="
-                border: none;
-                border-radius: 9px;
-                padding: 9px 16px;
-                font-weight: 600;
-                cursor: pointer;
-                background: #2563eb;
-                color: #fff;
-                width: 100%;
-                transition: all 0.15s ease;
-            "
-        >
-            Salvar
-        </button>
+    <button type="button" onclick="history.back()" class="btn-cancelar">
+        Cancelar
+    </button>
 
+    <button type="submit" form="form-produto" class="btn-salvar">
+        Salvar
+    </button>
+
+</div>
+
+        
+        
     </div>
 </div>
 <script>
@@ -850,28 +916,8 @@ const proximo = camposVisiveis[index + 1];
 
 </script>
 
-<style>
-button[type="button"]:hover {
-    transform: translateY(-1px);
-    background: #dbeafe !important;
-}
 
-button[type="submit"]:hover {
-    transform: translateY(-1px) scale(1.02);
-    background: #1d4ed8 !important;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
-}
 
-button:active {
-    transform: scale(0.97);
-}
-
-button {
-    transition: all 0.15s ease;
-}
-button[type="submit"] {
-    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
-}</style>
 
 
 </body>
