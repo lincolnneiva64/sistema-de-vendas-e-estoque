@@ -561,6 +561,49 @@ const campoPrecoPrazoFracionado = document.getElementById("preco_prazo_fracionad
     const arredondado = Math.round(Number(valor) * 20) / 20;
     return arredondado.toFixed(2);
 }
+    function configurarEnterInteligente() {
+        const formEnter = document.getElementById("form-produto");
+        if (!formEnter) return;
+
+        const camposEnter = Array.from(
+            formEnter.querySelectorAll("input, select, textarea")
+        ).filter((campo) => {
+            const tipo = (campo.type || "").toLowerCase();
+            const estilo = window.getComputedStyle(campo);
+
+            return (
+                !campo.disabled &&
+                tipo !== "hidden" &&
+                estilo.display !== "none" &&
+                estilo.visibility !== "hidden"
+            );
+        });
+
+        camposEnter.forEach((campo, index) => {
+            campo.addEventListener("keydown", function (event) {
+                if (event.key !== "Enter") return;
+
+                event.preventDefault();
+
+                const proximoCampo = camposEnter[index + 1];
+
+                if (proximoCampo) {
+                    proximoCampo.focus();
+
+                    if (
+                        proximoCampo.tagName === "INPUT" ||
+                        proximoCampo.tagName === "TEXTAREA"
+                    ) {
+                        proximoCampo.select?.();
+                    }
+                } else {
+                    formEnter.requestSubmit();
+                }
+            });
+        });
+    }
+
+    configurarEnterInteligente();
 function atualizarVisibilidadeFracionado() {
     const valor = String(campoVendeFracionado?.value || "").toLowerCase();
     const mostrar =
