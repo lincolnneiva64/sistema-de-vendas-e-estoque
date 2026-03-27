@@ -246,30 +246,56 @@ select.campo-obrigatorio-piscando:focus,
     
 </div>
   <div class="col-12 col-md-4">
+  <div class="form-campo">
+    
     <label class="form-label">Nome</label>
+
     {{ form.nome }}
+
     <datalist id="lista-produtos">
-    {% for produto in produtos %}
+      {% for produto in produtos %}
         <option value="{{ produto.nome }}">
-    {% endfor %}
-</datalist>
+      {% endfor %}
+    </datalist>
+
     {% if form.nome.errors %}
-        <div class="text-danger small mt-1">
-            {{ form.nome.errors|join:", " }}
-        </div>
+      <div class="campo-erro">
+        {{ form.nome.errors|join:", " }}
+      </div>
     {% endif %}
+
+  </div>
 </div>
-
   <div class="col-12 col-md-4">
+  <div class="form-campo">
+
     <label class="form-label">Código</label>
+
     {{ form.codigo }}
-  </div>
 
+    {% if form.codigo.errors %}
+      <div class="campo-erro">
+        {{ form.codigo.errors|join:", " }}
+      </div>
+    {% endif %}
+
+  </div>
+</div>
   <div class="col-12 col-md-4">
-    <label class="form-label">Categoria</label>
-    {{ form.categoria }}
-  </div>
+  <div class="form-campo">
 
+    <label class="form-label">Categoria</label>
+
+    {{ form.categoria }}
+
+    {% if form.categoria.errors %}
+      <div class="campo-erro">
+        {{ form.categoria.errors|join:", " }}
+      </div>
+    {% endif %}
+
+  </div>
+</div>
   
   
 
@@ -279,22 +305,55 @@ select.campo-obrigatorio-piscando:focus,
     
 </div>
   <div class="col-12 col-md-4">
+  <div class="form-campo">
+
     <label class="form-label">Estoque</label>
+
     {{ form.quantidade }}
+
+    {% if form.quantidade.errors %}
+      <div class="campo-erro">
+        {{ form.quantidade.errors|join:", " }}
+      </div>
+    {% endif %}
+
+  </div>
 </div>
 
 <div class="col-12 col-md-4">
+  <div class="form-campo">
+
     <label class="form-label">Estoque mínimo</label>
+
     {{ form.estoque_minimo }}
+
+    {% if form.estoque_minimo.errors %}
+      <div class="campo-erro">
+        {{ form.estoque_minimo.errors|join:", " }}
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+<div class="col-12 col-md-4">
+  <div class="form-campo">
+
+    <label class="form-label">Preço compra</label>
+
+    <div class="input-group">
+      <span class="input-group-text">R$</span>
+      {{ form.preco_compra }}
+    </div>
+
+    {% if form.preco_compra.errors %}
+      <div class="campo-erro">
+        {{ form.preco_compra.errors|join:", " }}
+      </div>
+    {% endif %}
+
+  </div>
 </div>
 
-<div class="col-12 col-md-4">
-    <label class="form-label">Preço compra</label>
-    <div class="input-group">
-        <span class="input-group-text">R$</span>
-        {{ form.preco_compra }}
-    </div>
-</div>
 
 
 
@@ -339,7 +398,7 @@ select.campo-obrigatorio-piscando:focus,
 </div>
 <div class="col-12">
     
-    <h6 class="mb-2">Preços de venda</h6>
+    <div class="secao-titulo">Preços de venda</div>
     
 </div>
 
