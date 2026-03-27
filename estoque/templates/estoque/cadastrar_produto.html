@@ -29,7 +29,61 @@
         color: #495057;
         font-weight: 500;
     }
+.btn-cancelar {
+    background: linear-gradient(145deg, #dbeafe, #93c5fd);
+box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    color: #334155;
+    border: none;
+    border-radius: 14px;
 
+    padding: 16px 26px;
+    font-size: 15px;
+    font-weight: 600;
+
+    cursor: pointer;
+
+    transition: all 0.2s ease;
+}
+
+.btn-cancelar:hover {
+    background: linear-gradient(145deg, #bfdbfe, #60a5fa);
+transform: translateY(-3px) scale(1.02);
+box-shadow: 0 8px 18px rgba(0,0,0,0.12);
+}
+.btn-cancelar:active {
+    transform: scale(0.96);
+}
+.btn-salvar {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+    color: #fff !important;
+
+    border: none !important;
+    border-radius: 14px;
+
+    padding: 16px 26px;
+    font-size: 15px;
+    font-weight: 700;
+
+    cursor: pointer;
+
+    box-shadow:
+        0 12px 30px rgba(37, 99, 235, 0.40),
+        0 6px 16px rgba(0,0,0,0.15);
+
+    transition: all 0.2s ease;
+}
+
+.btn-salvar:hover {
+    transform: translateY(-4px) scale(1.06);
+
+    box-shadow:
+        0 20px 45px rgba(37, 99, 235, 0.55),
+        0 10px 25px rgba(0,0,0,0.18);
+}
+
+.btn-salvar:active {
+    transform: scale(0.94);
+}
     .form-label {
     font-weight: 600;
     color: #2f3742;
@@ -101,7 +155,41 @@ select.campo-obrigatorio-piscando:focus,
         transform: translateX(0);
     }
 }
+}
+
+/* 👇 COLA AQUI */
+.btn-salvar {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #fff;
+    border: none;
+    border-radius: 14px;
+
+    padding: 16px 26px;
+    font-size: 15px;
+    font-weight: 700;
+
+    box-shadow:
+        0 12px 30px rgba(37, 99, 235, 0.40),
+        0 6px 16px rgba(0, 0, 0, 0.15);
+
+    transition: all 0.2s ease;
+}
+
+.btn-salvar:hover {
+    transform: translateY(-4px) scale(1.06);
+    box-shadow:
+        0 20px 45px rgba(37, 99, 235, 0.55),
+        0 10px 20px rgba(0, 0, 0, 0.18);
+}
+
+.btn-salvar:active {
+    transform: scale(0.94);
+    box-shadow:
+        0 6px 16px rgba(37, 99, 235, 0.30);
+}
+
 </style>
+
 
 <body class="bg-light">
 
@@ -123,7 +211,7 @@ select.campo-obrigatorio-piscando:focus,
       
       
 
-<form method="post" class="row g-1">     
+<form method="post" class="row g-1" id="form-produto">
   {% csrf_token %}
 <div class="col-12">
     
@@ -132,6 +220,11 @@ select.campo-obrigatorio-piscando:focus,
   <div class="col-12 col-md-4">
     <label class="form-label">Nome</label>
     {{ form.nome }}
+    <datalist id="lista-produtos">
+    {% for produto in produtos %}
+        <option value="{{ produto.nome }}">
+    {% endfor %}
+</datalist>
     {% if form.nome.errors %}
         <div class="text-danger small mt-1">
             {{ form.nome.errors|join:", " }}
@@ -369,16 +462,65 @@ select.campo-obrigatorio-piscando:focus,
 
 
 
-<div class="col-12" style="margin-top: -10px;">
-    <div class="d-flex justify-content-end gap-2">
-        <a href="{% url 'estoque:home' %}" class="btn btn-secondary">Cancelar</a>
-        <button type="submit" class="btn btn-primary btn-salvar-feedback" id="btnSalvarProduto">Salvar</button>
-    </div>
 </div>
 </form>
-<script>
-document.addEventListener("DOMContentLoaded", function () {
+<div style="position: fixed; right: 16px; bottom: 90px; z-index: 1000;">
+    
+    <div style="
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        background: rgba(255,255,255,0.96);
+        border: 1px solid #d9dee7;
+        border-radius: 12px;
+        padding: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    ">
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+
+    <button type="button" onclick="history.back()" class="btn-cancelar">
+        Cancelar
+    </button>
+<button type="button" onclick="limparFormulario()" class="btn-cancelar btn-limpar">
+    Limpar
+</button>
+
+
+    <button type="submit" form="form-produto" class="btn-salvar">
+        Salvar
+    </button>
+
+</div>
+
         
+        
+    </div>
+</div>
+<script>
+    function limparFormulario() {
+    const form = document.getElementById("form-produto");
+
+    if (!form) return;
+
+    form.reset();
+
+    form.querySelectorAll('input:not([type="hidden"])').forEach(input => {
+        input.value = "";
+    });
+
+    form.querySelectorAll("select").forEach(select => {
+        select.selectedIndex = 0;
+    });
+
+    const primeiroCampo = form.querySelector('input:not([type="hidden"])');
+    if (primeiroCampo) {
+        primeiroCampo.focus();
+    }
+}   
+document.addEventListener("DOMContentLoaded", function () {
+     
             function getCamposVisiveis() {
     return Array.from(document.querySelectorAll('input:not([type="hidden"]), select'))
         .filter((campo) => {
@@ -425,6 +567,61 @@ const campoPrecoPrazoFracionado = document.getElementById("preco_prazo_fracionad
     const arredondado = Math.round(Number(valor) * 20) / 20;
     return arredondado.toFixed(2);
 }
+    function configurarEnterInteligente() {
+        const formEnter = document.getElementById("form-produto");
+        if (!formEnter) return;
+
+        const camposEnter = Array.from(
+            formEnter.querySelectorAll("input, select, textarea")
+        ).filter((campo) => {
+            const tipo = (campo.type || "").toLowerCase();
+            const estilo = window.getComputedStyle(campo);
+
+            return (
+                !campo.disabled &&
+                tipo !== "hidden" &&
+                estilo.display !== "none" &&
+                estilo.visibility !== "hidden"
+            );
+        });
+
+        camposEnter.forEach((campo, index) => {
+            campo.addEventListener("keydown", function (event) {
+                if (event.key !== "Enter") return;
+
+                if (campo.tagName !== "INPUT" || campo.type !== "number") {
+    event.preventDefault();
+}
+            if (campo.id && (campo.id.includes("preco") || campo.id.includes("compra"))) {
+                let valor = String(campo.value || "").replace(",", ".").trim();
+
+                if (valor !== "") {
+                    let numero = parseFloat(valor);
+
+                    if (!isNaN(numero)) {
+                        campo.value = numero.toFixed(2);
+                    }
+                }
+            }
+                const proximoCampo = camposEnter[index + 1];
+
+                if (proximoCampo) {
+                    proximoCampo.focus();
+
+                    if (
+                        proximoCampo.tagName === "INPUT" ||
+                        proximoCampo.tagName === "TEXTAREA"
+                    ) {
+                        proximoCampo.select?.();
+                    }
+                } else {
+                    formEnter.requestSubmit();
+                }
+            });
+        });
+    }
+
+    configurarEnterInteligente();
 function atualizarVisibilidadeFracionado() {
     const valor = String(campoVendeFracionado?.value || "").toLowerCase();
     const mostrar =
@@ -802,7 +999,11 @@ const proximo = camposVisiveis[index + 1];
 });
 });
 
-
 </script>
+
+
+
+
+
 </body>
 </html>

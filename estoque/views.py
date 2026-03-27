@@ -140,7 +140,7 @@ def cadastrar_produto(request):
             print("DADOS RECEBIDOS:", request.POST)
     else:
         form = ProdutoForm()
-    return render(request, "estoque/cadastrar_produto.html", {"form": form})
+    return render(request, "estoque/cadastrar_produto.html", {"form": form, "produtos": Produto.objects.all()})
 
 def produto_detalhe(request, pk):
     produto = get_object_or_404(Produto, pk=pk)

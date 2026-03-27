@@ -225,7 +225,9 @@ class ProdutoForm(forms.ModelForm):
     
 def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
-
+    self.fields['nome'].widget.attrs.update({
+            'list': 'lista-produtos'
+        })
     self.fields["fator_conversao"].required = False
     self.fields["preco_compra_fracionado"].required = False
     self.fields["unidade_venda_2"].required = False
