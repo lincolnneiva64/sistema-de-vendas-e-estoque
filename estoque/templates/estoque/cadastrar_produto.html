@@ -219,6 +219,11 @@ select.campo-obrigatorio-piscando:focus,
   <div class="col-12 col-md-4">
     <label class="form-label">Nome</label>
     {{ form.nome }}
+    <datalist id="lista-produtos">
+    {% for produto in produtos %}
+        <option value="{{ produto.nome }}">
+    {% endfor %}
+</datalist>
     {% if form.nome.errors %}
         <div class="text-danger small mt-1">
             {{ form.nome.errors|join:", " }}
@@ -583,8 +588,20 @@ const campoPrecoPrazoFracionado = document.getElementById("preco_prazo_fracionad
             campo.addEventListener("keydown", function (event) {
                 if (event.key !== "Enter") return;
 
-                event.preventDefault();
+                if (campo.tagName !== "INPUT" || campo.type !== "number") {
+    event.preventDefault();
+}
+            if (campo.id && (campo.id.includes("preco") || campo.id.includes("compra"))) {
+                let valor = String(campo.value || "").replace(",", ".").trim();
 
+                if (valor !== "") {
+                    let numero = parseFloat(valor);
+
+                    if (!isNaN(numero)) {
+                        campo.value = numero.toFixed(2);
+                    }
+                }
+            }
                 const proximoCampo = camposEnter[index + 1];
 
                 if (proximoCampo) {
