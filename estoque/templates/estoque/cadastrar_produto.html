@@ -187,7 +187,35 @@ select.campo-obrigatorio-piscando:focus,
     box-shadow:
         0 6px 16px rgba(37, 99, 235, 0.30);
 }
+.card-form-padrao {
+    max-width: 1120px;
+    margin-top: -2px;
+    border: 2px solid #c3c3c3;
+}
+.acoes-flutuantes {
+    position: fixed;
+    right: 16px;
+    bottom: 90px;
+    z-index: 1000;
+}
 
+.acoes-flutuantes-card {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid #d9dee7;
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.acoes-flutuantes-botoes {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
 </style>
 
 
@@ -207,7 +235,7 @@ select.campo-obrigatorio-piscando:focus,
 
     
 </div>
-   <div class="bg-white rounded-3 p-2 shadow-sm mx-auto card-destaque" style="max-width: 1120px; margin-top: -2px; border: 2px solid #c3cad4;">
+   <div class="bg-white rounded-3 p-2 shadow-sm mx-auto card-destaque card-form-padrao">
       
       
 
@@ -464,21 +492,10 @@ select.campo-obrigatorio-piscando:focus,
 
 </div>
 </form>
-<div style="position: fixed; right: 16px; bottom: 90px; z-index: 1000;">
+<div class="acoes-flutuantes">
     
-    <div style="
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 8px;
-        background: rgba(255,255,255,0.96);
-        border: 1px solid #d9dee7;
-        border-radius: 12px;
-        padding: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    ">
-
-        <div style="display: flex; flex-direction: column; gap: 10px;">
+    <div class="acoes-flutuantes-card">
+        <div class="acoes-flutuantes-botoes">
 
     <button type="button" onclick="history.back()" class="btn-cancelar">
         Cancelar
