@@ -36,19 +36,21 @@ align-items: center;
             </small>
         </div>
 
-        <a href="{% url 'estoque:cadastrar_produto' %}" 
-           style="
-            background: #0d6efd;
-            color: #fff;
-            padding: 6px 12px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-size: 13px;
-            font-weight: 500;
-           ">
-            + Novo Produto
-        </a>
-
+        <a
+  id="btnNovoProduto"
+  href="{% url 'estoque:cadastrar_produto' %}"
+  style="
+    background: #0d6efd;
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+  "
+>
+  + Novo Produto
+</a>
     </div>
 
 </div>
@@ -120,9 +122,13 @@ align-items: center;
         <td class="text-center">{{ produto.estoque_minimo }}</td>
 
         <td>
-          <a href="{% url 'estoque:produto_editar' produto.id %}" class="btn btn-sm btn-primary">
-            Editar
-          </a>
+          <a
+  href="{% url 'estoque:produto_editar' produto.id %}"
+  class="btn btn-sm btn-primary btn-editar-produto"
+  data-produto-id="{{ produto.id }}"
+>
+  Editar
+</a>
         </td>
       </tr>
       {% endfor %}
@@ -134,6 +140,7 @@ align-items: center;
 
 </div>
 <script>
+ 
 document.addEventListener("DOMContentLoaded", function() {
 
   const busca = document.getElementById("buscarProduto");
@@ -161,6 +168,57 @@ nomeProdutoSelecionado = linha.children[0].textContent.trim();
     });
 
 });
+document.addEventListener("keydown", function (e) {
+
+  // Alt + N → Novo Produto
+  if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "n") {
+    e.preventDefault()
+    const btnNovo = document.getElementById("btnNovoProduto")
+    if (btnNovo) {
+      btnNovo.click()
+    }
+  }
+
+  // Ctrl + E → Editar produto selecionado
+  if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "e") {
+    e.preventDefault()
+
+    if (produtoSelecionado) {
+      const btnEditar = document.querySelector('.btn-editar-produto[data-produto-id="' + produtoSelecionado + '"]')
+      if (btnEditar) {
+        btnEditar.click()
+      }
+    } else {
+      alert("Selecione um produto primeiro.")
+    }
+  }
+// Delete → Excluir produto selecionado
+if (e.key === "Delete") {
+
+  if (produtoSelecionado) {
+    const btnExcluir = document.getElementById("btnExcluirProduto")
+    if (btnExcluir) {
+      btnExcluir.click()
+    }
+  } else {
+    alert("Selecione um produto para excluir.")
+  }
+}
+
+// ESC → Limpar seleção
+if (e.key === "Escape") {
+
+  const linhas = document.querySelectorAll("tbody tr")
+
+  linhas.forEach(function(linha) {
+    linha.classList.remove("linha-selecionada")
+  })
+
+  produtoSelecionado = null
+  nomeProdutoSelecionado = ""
+
+}
+})
 const btnExcluirProduto = document.getElementById("btnExcluirProduto");
 
 btnExcluirProduto.addEventListener("click", function() {
@@ -172,7 +230,44 @@ btnExcluirProduto.addEventListener("click", function() {
     document.getElementById("textoModalExclusao").textContent =
   `Tem certeza que deseja excluir "${nomeProdutoSelecionado}"?`;
 document.getElementById("modalConfirmarExclusao").style.display = "flex";
+// foco inicial no botão Excluir
+const btnConfirmar = document.getElementById("btnConfirmarModalExclusao")
+const btnCancelar = document.getElementById("btnCancelarModalExclusao")
 
+btnConfirmar.focus()
+
+// controle de teclado dentro do modal
+document.addEventListener("keydown", function modalHandler(e) {
+
+  const modal = document.getElementById("modalConfirmarExclusao")
+
+  // só funciona se o modal estiver aberto
+  if (modal.style.display !== "flex") return
+
+  // ← vai para Cancelar
+  if (e.key === "ArrowLeft") {
+    e.preventDefault()
+    btnCancelar.focus()
+  }
+
+  // → vai para Excluir
+  if (e.key === "ArrowRight") {
+    e.preventDefault()
+    btnConfirmar.focus()
+  }
+
+  // Enter executa o botão focado
+  if (e.key === "Enter") {
+    e.preventDefault()
+    document.activeElement.click()
+  }
+
+  // ESC fecha modal
+  if (e.key === "Escape") {
+    modal.style.display = "none"
+  }
+
+})
 document.getElementById("btnConfirmarModalExclusao").onclick = function () {
     window.location.href = "/estoque/excluir/" + produtoSelecionado + "/";
 };
