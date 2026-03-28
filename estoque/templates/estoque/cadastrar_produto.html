@@ -9,7 +9,7 @@
   <link
     href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.3/css/bootstrap.min.css"
     rel="stylesheet"
-/>
+</head>
 <style>
     .form-control,
     .form-select,
@@ -28,6 +28,10 @@
         color: #495057;
         font-weight: 500;
     }
+    u {
+    text-decoration-thickness: 3px;
+    text-underline-offset: 3px;
+}
 .btn-cancelar {
     background: linear-gradient(145deg, #dbeafe, #93c5fd);
 box-shadow: 0 4px 10px rgba(0,0,0,0.08);
@@ -556,15 +560,15 @@ select.campo-obrigatorio-piscando:focus,
         <div class="acoes-flutuantes-botoes">
 
     <button type="button" onclick="history.back()" class="btn-cancelar">
-        Cancelar
+        <u>C</u>ancelar
     </button>
 <button type="button" onclick="limparFormulario()" class="btn-cancelar btn-limpar">
-    Limpar
+    <u>L</u>impar
 </button>
 
 
     <button type="submit" form="form-produto" class="btn-salvar">
-        Salvar
+        <u>S</u>alvar
     </button>
 
 </div>
@@ -595,7 +599,31 @@ select.campo-obrigatorio-piscando:focus,
     }
 }   
 document.addEventListener("DOMContentLoaded", function () {
-     
+     document.addEventListener("keydown", function (e) {
+
+    // Ctrl + S → salvar
+    if (e.ctrlKey && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+
+        const form = document.getElementById("form-produto");
+        if (form) form.requestSubmit();
+    }
+
+    // Ctrl + L → limpar
+    if (e.ctrlKey && e.key.toLowerCase() === "l") {
+        e.preventDefault();
+
+        limparFormulario();
+    }
+
+    // Ctrl + C → cancelar
+    if (e.ctrlKey && e.key.toLowerCase() === "c") {
+        e.preventDefault();
+
+        history.back();
+    }
+
+});
             function getCamposVisiveis() {
     return Array.from(document.querySelectorAll('input:not([type="hidden"]), select'))
         .filter((campo) => {
@@ -1028,6 +1056,21 @@ vincularEventos(document.getElementById("id_fator_conversao"), function () {
 atualizarVisibilidadeFracionado();        
     campos.forEach((campo) => {
     campo.addEventListener("keydown", async function (e) {
+    if (e.key === "F2") {
+    e.preventDefault();
+
+    const camposVisiveis = getCamposVisiveis();
+    const index = camposVisiveis.indexOf(campo);
+
+    const anterior = camposVisiveis[index - 1];
+
+    if (anterior) {
+        anterior.focus();
+        anterior.select?.();
+    }
+
+    return;
+}
         if (e.key === "Enter") {
             e.preventDefault();
 const camposVisiveis = getCamposVisiveis();
