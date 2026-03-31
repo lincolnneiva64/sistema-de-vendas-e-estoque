@@ -1,7 +1,35 @@
 {% extends 'estoque/base.html' %}
 
 {% block content %}
+<style>
+.aviso-erro {
+    display: none;
+    background: #fff1f0;
+    color: #cf1322;
+    padding: 10px 14px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    font-weight: 500;
+    border-left: 5px solid #ff4d4f;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    animation: slideDown 0.2s ease;
 
+    width: fit-content;
+    max-width: 500px;
+    margin-left: 2px;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+</style>
 <div style="padding: 10px; height: 100vh; display: flex; flex-direction: column;">
 
     <!-- TOPO -->
@@ -21,7 +49,7 @@
     <div style="margin-bottom: 10px; padding: 8px; border-radius: 6px; background: #e8f5e9;">
         🟢 Venda à vista: será quitada agora
     </div>
-
+<div id="avisoErro" class="aviso-erro"></div>
     <!-- LINHA DE DIGITAÇÃO -->
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <input id="produto" placeholder="Produto" list="lista-produtos" style="flex:2;" autofocus>
@@ -62,7 +90,16 @@ var itensVenda = document.getElementById('itens-venda');
 var totalItens = document.getElementById('total-itens');
 var totalGeral = document.getElementById('total-geral');
 var listaProdutos = document.getElementById('lista-produtos');
+var avisoErro = document.getElementById('avisoErro');
 
+function mostrarErro(msg) {
+    avisoErro.textContent = msg;
+    avisoErro.style.display = 'block';
+
+    setTimeout(function() {
+        avisoErro.style.display = 'none';
+    }, 2000);
+}
 var produtosMock = [
     'Arroz',
     'Feijão',
@@ -92,7 +129,7 @@ produto.addEventListener('keydown', function(e) {
         var nomeProduto = produto.value.trim();
 
         if (!nomeProduto) {
-            alert('Digite um produto.');
+            mostrarErro('Digite um produto.');
             produto.focus();
             return;
         }
@@ -100,7 +137,7 @@ produto.addEventListener('keydown', function(e) {
         var produtoExiste = produtosMock.includes(nomeProduto);
 
         if (!produtoExiste) {
-            alert('Produto não cadastrado.');
+            mostrarErro('Produto não cadastrado.');
             produto.focus();
             produto.select();
             return;
