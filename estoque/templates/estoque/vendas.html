@@ -92,6 +92,7 @@ produto.addEventListener('keydown', function(e) {
         var nomeProduto = produto.value.trim();
 
         if (!nomeProduto) {
+            alert('Digite um produto.');
             produto.focus();
             return;
         }
@@ -99,6 +100,7 @@ produto.addEventListener('keydown', function(e) {
         var produtoExiste = produtosMock.includes(nomeProduto);
 
         if (!produtoExiste) {
+            alert('Produto não cadastrado.');
             produto.focus();
             produto.select();
             return;
@@ -107,6 +109,7 @@ produto.addEventListener('keydown', function(e) {
         qtd.focus();
     }
 });
+
 qtd.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
         e.preventDefault();
