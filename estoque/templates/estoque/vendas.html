@@ -91,39 +91,57 @@ preco.addEventListener('keydown', function(e) {
     }
 });
 
+function adicionarItemVenda() {
+    var nomeProduto = produto.value.trim();
+var quantidade = parseFloat(String(qtd.value).replace(',', '.')) || 0;
+var valorPreco = parseFloat(String(preco.value).replace(',', '.')) || 0;
+
+if (!nomeProduto) {
+    produto.focus();
+    return;
+}
+
+if (quantidade <= 0) {
+    qtd.focus();
+    qtd.select();
+    return;
+}
+
+if (valorPreco <= 0) {
+    preco.focus();
+    preco.select();
+    return;
+}
+    var total = quantidade * valorPreco;
+
+    itensVenda.insertAdjacentHTML('beforeend',
+        '<tr>' +
+            '<td>' + nomeProduto + '</td>' +
+            '<td>' + quantidade + '</td>' +
+            '<td>R$ ' + valorPreco.toFixed(2) + '</td>' +
+            '<td>R$ ' + total.toFixed(2) + '</td>' +
+        '</tr>'
+    );
+
+    quantidadeItens += 1;
+    somaTotal += total;
+
+    totalItens.textContent = 'Total itens: ' + quantidadeItens;
+    totalGeral.textContent = 'R$ ' + somaTotal.toFixed(2);
+
+    produto.value = '';
+    qtd.value = '';
+    preco.value = '';
+
+    requestAnimationFrame(function() {
+        produto.focus();
+    });
+}
+
 preco.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
         e.preventDefault();
-
-        var nomeProduto = produto.value.trim();
-        var quantidade = parseFloat(qtd.value) || 0;
-        var valorPreco = parseFloat(preco.value) || 0;
-
-        if (!nomeProduto || quantidade <= 0 || valorPreco <= 0) {
-            return;
-        }
-
-        var total = quantidade * valorPreco;
-
-        itensVenda.insertAdjacentHTML('beforeend',
-            '<tr>' +
-                '<td>' + nomeProduto + '</td>' +
-                '<td>' + quantidade + '</td>' +
-                '<td>R$ ' + valorPreco.toFixed(2) + '</td>' +
-                '<td>R$ ' + total.toFixed(2) + '</td>' +
-            '</tr>'
-        );
-
-        quantidadeItens += 1;
-        somaTotal += total;
-
-        totalItens.textContent = 'Total itens: ' + quantidadeItens;
-        totalGeral.textContent = 'R$ ' + somaTotal.toFixed(2);
-
-        produto.value = '';
-        qtd.value = '';
-        preco.value = '';
-        produto.focus();
+        adicionarItemVenda();
     }
 });
 </script>
