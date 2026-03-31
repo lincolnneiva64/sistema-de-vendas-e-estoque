@@ -24,7 +24,9 @@
 
     <!-- LINHA DE DIGITAÇÃO -->
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-        <input id="produto" placeholder="Produto" style="flex:2;" autofocus>
+        <input id="produto" placeholder="Produto" list="lista-produtos" style="flex:2;" autofocus>
+<datalist id="lista-produtos">
+</datalist>
         <input placeholder="Qtd" style="width:80px;">
         <input placeholder="Preço" style="width:120px;">
         <div style="flex:1; color: green;">Margem: +30%</div>
@@ -59,6 +61,26 @@ var preco = document.querySelector('input[placeholder="Preço"]');
 var itensVenda = document.getElementById('itens-venda');
 var totalItens = document.getElementById('total-itens');
 var totalGeral = document.getElementById('total-geral');
+var listaProdutos = document.getElementById('lista-produtos');
+
+var produtosMock = [
+    'Arroz',
+    'Feijão',
+    'Macarrão',
+    'Óleo',
+    'Açúcar',
+    'Café',
+    'Skol lata 269',
+    'Skol lata 350',
+    'Skol 600',
+    'Skol litrão'
+];
+
+produtosMock.forEach(function(nome) {
+    var option = document.createElement('option');
+    option.value = nome;
+    listaProdutos.appendChild(option);
+});
 
 var quantidadeItens = 0;
 var somaTotal = 0;
@@ -66,10 +88,25 @@ var somaTotal = 0;
 produto.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
         e.preventDefault();
+
+        var nomeProduto = produto.value.trim();
+
+        if (!nomeProduto) {
+            produto.focus();
+            return;
+        }
+
+        var produtoExiste = produtosMock.includes(nomeProduto);
+
+        if (!produtoExiste) {
+            produto.focus();
+            produto.select();
+            return;
+        }
+
         qtd.focus();
     }
 });
-
 qtd.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
         e.preventDefault();
@@ -93,6 +130,7 @@ preco.addEventListener('keydown', function(e) {
 
 function adicionarItemVenda() {
     var nomeProduto = produto.value.trim();
+    
 var quantidade = parseFloat(String(qtd.value).replace(',', '.')) || 0;
 var valorPreco = parseFloat(String(preco.value).replace(',', '.')) || 0;
 
@@ -100,7 +138,13 @@ if (!nomeProduto) {
     produto.focus();
     return;
 }
+var produtoExiste = produtosMock.includes(nomeProduto);
 
+if (!produtoExiste) {
+    produto.focus();
+    produto.select();
+    return;
+}
 if (quantidade <= 0) {
     qtd.focus();
     qtd.select();
