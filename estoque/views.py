@@ -182,9 +182,10 @@ def lixeira(request):
     return render(request, "estoque/lixeira.html", {"produtos": produtos})
 def produto_restaurar(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
-    produto.excluido = False
-    produto.excluido_em = None
-    produto.save()
+    Produto.objects.filter(pk=produto.pk).update(
+        excluido=False,
+        excluido_em=None,
+    )
     return redirect("estoque:lixeira")
 def produto_excluir_definitivo(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
