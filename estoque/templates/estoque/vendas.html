@@ -1,0 +1,130 @@
+{% extends 'estoque/base.html' %}
+
+{% block content %}
+
+<div style="padding: 10px; height: 100vh; display: flex; flex-direction: column;">
+
+    <!-- TOPO -->
+    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+        <div>Nº: 000001</div>
+        <div>Data: {{ now|date:"d/m/Y" }}</div>
+        <div>Cliente: ____________________</div>
+        <div>Pagamento: 
+            <select>
+                <option>À vista</option>
+                <option>Carteira</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- ALERTA PAGAMENTO -->
+    <div style="margin-bottom: 10px; padding: 8px; border-radius: 6px; background: #e8f5e9;">
+        🟢 Venda à vista: será quitada agora
+    </div>
+
+    <!-- LINHA DE DIGITAÇÃO -->
+    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+        <input id="produto" placeholder="Produto" style="flex:2;" autofocus>
+        <input placeholder="Qtd" style="width:80px;">
+        <input placeholder="Preço" style="width:120px;">
+        <div style="flex:1; color: green;">Margem: +30%</div>
+    </div>
+
+    <!-- TABELA -->
+    <div style="flex:1; overflow:auto; border:1px solid #ccc;">
+        <table style="width:100%;">
+    <thead>
+        <tr style="background:#f5f5f5;">
+            <th>Produto</th>
+            <th>Qtd</th>
+            <th>Preço</th>
+            <th>Total</th>
+        </tr>
+    </thead>
+    <tbody id="itens-venda"></tbody>
+</table>
+    </div>
+
+    <!-- RODAPÉ -->
+    <div style="margin-top: 10px; display: flex; justify-content: space-between;">
+    <div id="total-itens">Total itens: 0</div>
+    <div id="total-geral" style="font-size: 20px; font-weight: bold;">R$ 0,00</div>
+</div>
+
+</div>
+<script>
+var produto = document.getElementById('produto');
+var qtd = document.querySelector('input[placeholder="Qtd"]');
+var preco = document.querySelector('input[placeholder="Preço"]');
+var itensVenda = document.getElementById('itens-venda');
+var totalItens = document.getElementById('total-itens');
+var totalGeral = document.getElementById('total-geral');
+
+var quantidadeItens = 0;
+var somaTotal = 0;
+
+produto.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        qtd.focus();
+    }
+});
+
+qtd.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        preco.focus();
+    }
+});
+
+qtd.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowLeft' && qtd.selectionStart === 0) {
+        e.preventDefault();
+        produto.focus();
+    }
+});
+
+preco.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowLeft' && preco.selectionStart === 0) {
+        e.preventDefault();
+        qtd.focus();
+    }
+});
+
+preco.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+
+        var nomeProduto = produto.value.trim();
+        var quantidade = parseFloat(qtd.value) || 0;
+        var valorPreco = parseFloat(preco.value) || 0;
+
+        if (!nomeProduto || quantidade <= 0 || valorPreco <= 0) {
+            return;
+        }
+
+        var total = quantidade * valorPreco;
+
+        itensVenda.insertAdjacentHTML('beforeend',
+            '<tr>' +
+                '<td>' + nomeProduto + '</td>' +
+                '<td>' + quantidade + '</td>' +
+                '<td>R$ ' + valorPreco.toFixed(2) + '</td>' +
+                '<td>R$ ' + total.toFixed(2) + '</td>' +
+            '</tr>'
+        );
+
+        quantidadeItens += 1;
+        somaTotal += total;
+
+        totalItens.textContent = 'Total itens: ' + quantidadeItens;
+        totalGeral.textContent = 'R$ ' + somaTotal.toFixed(2);
+
+        produto.value = '';
+        qtd.value = '';
+        preco.value = '';
+        produto.focus();
+    }
+});
+</script>
+{% endblock %}

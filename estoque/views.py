@@ -194,3 +194,5 @@ def produto_excluir_definitivo(request, pk):
         produto.delete()
 
     return redirect("estoque:lixeira")
+def vendas(request):
+    return render(request, 'estoque/vendas.html')
