@@ -100,6 +100,11 @@ function mostrarErro(msg) {
         avisoErro.style.display = 'none';
     }, 2000);
 }
+
+function esconderErro() {
+    avisoErro.style.display = 'none';
+}
+
 var produtosMock = [
     'Arroz',
     'Feijão',
@@ -143,7 +148,9 @@ produto.addEventListener('keydown', function(e) {
             return;
         }
 
-        qtd.focus();
+        qtd.value = '1';
+qtd.focus();
+qtd.select();
     }
 });
 
@@ -172,7 +179,12 @@ function adicionarItemVenda() {
     var nomeProduto = produto.value.trim();
     
 var quantidade = parseFloat(String(qtd.value).replace(',', '.')) || 0;
-var valorPreco = parseFloat(String(preco.value).replace(',', '.')) || 0;
+var precoTexto = String(preco.value).trim();
+if (precoTexto && !precoTexto.includes(',')) {
+    precoTexto = precoTexto + ',00';
+}
+var valorPreco = parseFloat(precoTexto.replace(',', '.')) || 0;
+preco.value = precoTexto;
 
 if (!nomeProduto) {
     produto.focus();
@@ -213,13 +225,22 @@ if (valorPreco <= 0) {
     totalItens.textContent = 'Total itens: ' + quantidadeItens;
     totalGeral.textContent = 'R$ ' + somaTotal.toFixed(2);
 
-    produto.value = '';
+    var produtosOrdenados = [...produtosMock].sort(function(a, b) {
+    return a.localeCompare(b, 'pt-BR');
+});
+var indiceAtual = produtosOrdenados.indexOf(nomeProduto);
+var proximoProduto = indiceAtual >= 0 && indiceAtual < produtosOrdenados.length - 1
+    ? produtosOrdenados[indiceAtual + 1]
+    : produtosOrdenados[0];
+
+produto.value = proximoProduto;
     qtd.value = '';
     preco.value = '';
-
+esconderErro();
     requestAnimationFrame(function() {
-        produto.focus();
-    });
+    produto.focus();
+    produto.select();
+});
 }
 
 preco.addEventListener('keydown', function(e) {
