@@ -35,22 +35,81 @@
 /* 👇 COLE AQUI */
 #btnAvisoCancelar,
 #btnAvisoIncluir {
-    padding: 6px 12px;
-    border: 1px solid #999;
-    background: #eee;
-    cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    padding: 5px 12px;
+border-radius: 7px;
+font-weight: 600;
+font-size: 14px;
+cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s ease;
 }
 
-#btnAvisoCancelar:focus,
+/* Cancelar (botão principal) */
+#btnAvisoCancelar {
+    background: #0d6efd;
+    color: #fff;
+    opacity: 0.85;
+}
+#btnAvisoCancelar:hover {
+    background: #0b5ed7;
+}
+
+/* Incluir (botão secundário) */
+#btnAvisoIncluir {
+    background: #ffffff;
+    color: #495057;
+    border: 1px solid #cfd4da;
+    opacity: 0.9;
+}
+#btnAvisoIncluir:hover {
+    background: #f5f5f5;
+}
+
+#btnAvisoCancelar:focus {
+    outline: none;
+    background: #0b5ed7;
+    color: #fff;
+    border-color: #0b5ed7;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+    opacity: 1;
+}
 #btnAvisoIncluir:focus {
     outline: none;
-    background: #007bff;
-    color: white;
-    border-color: #007bff;
+    background: #0d6efd;
+    color: #fff;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+    opacity: 1;
+}.aviso-erro {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 14px 16px;
+    border-left: 5px solid #ff4d4f;
+    border-radius: 10px;
+    background: #fdf0f0;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+    width: 100%;
+    max-width: 640px;
 }
 
-/* 👇 já existia */
+.aviso-erro-mensagem {
+    align-items: stretch;
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.35;
+    color: #d92121;
+}
+
+.aviso-erro-acoes {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+}
+}/* 👇 já existia */
 </style>
 
 <div style="padding: 10px; height: 100vh; display: flex; flex-direction: column;">
@@ -73,13 +132,12 @@
         🟢 Venda à vista: será quitada agora
     </div>
 <div id="avisoErro" class="aviso-erro" style="display:none;">
-    <span id="avisoErroMensagem"></span>
-    <span id="avisoErroAcoes" style="display:none; margin-left:12px;">
+    <div id="avisoErroMensagem" class="aviso-erro-mensagem"></div>
+    <div id="avisoErroAcoes" class="aviso-erro-acoes" style="display:none;">
         <button type="button" id="btnAvisoCancelar">Cancelar</button>
         <button type="button" id="btnAvisoIncluir">Incluir</button>
-    </span>
-</div>
-    <!-- LINHA DE DIGITAÇÃO -->
+    </div>
+</div>    <!-- LINHA DE DIGITAÇÃO -->
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <input id="produto" placeholder="Produto" list="lista-produtos" style="flex:2;" autofocus>
 <datalist id="lista-produtos">
