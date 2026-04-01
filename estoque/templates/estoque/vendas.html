@@ -160,7 +160,9 @@ produtosMock.forEach(function(nome) {
 
 var quantidadeItens = 0;
 var somaTotal = 0;
-
+produto.addEventListener('input', function() {
+    esconderErro();
+});
 produto.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
         e.preventDefault();
