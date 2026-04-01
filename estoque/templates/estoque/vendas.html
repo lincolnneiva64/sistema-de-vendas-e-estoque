@@ -29,7 +29,30 @@
         transform: translateY(0);
     }
 }
+
+
+
+/* 👇 COLE AQUI */
+#btnAvisoCancelar,
+#btnAvisoIncluir {
+    padding: 6px 12px;
+    border: 1px solid #999;
+    background: #eee;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+#btnAvisoCancelar:focus,
+#btnAvisoIncluir:focus {
+    outline: none;
+    background: #007bff;
+    color: white;
+    border-color: #007bff;
+}
+
+/* 👇 já existia */
 </style>
+
 <div style="padding: 10px; height: 100vh; display: flex; flex-direction: column;">
 
     <!-- TOPO -->
@@ -49,7 +72,13 @@
     <div style="margin-bottom: 10px; padding: 8px; border-radius: 6px; background: #e8f5e9;">
         🟢 Venda à vista: será quitada agora
     </div>
-<div id="avisoErro" class="aviso-erro"></div>
+<div id="avisoErro" class="aviso-erro" style="display:none;">
+    <span id="avisoErroMensagem"></span>
+    <span id="avisoErroAcoes" style="display:none; margin-left:12px;">
+        <button type="button" id="btnAvisoCancelar">Cancelar</button>
+        <button type="button" id="btnAvisoIncluir">Incluir</button>
+    </span>
+</div>
     <!-- LINHA DE DIGITAÇÃO -->
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <input id="produto" placeholder="Produto" list="lista-produtos" style="flex:2;" autofocus>
@@ -91,14 +120,19 @@ var totalItens = document.getElementById('total-itens');
 var totalGeral = document.getElementById('total-geral');
 var listaProdutos = document.getElementById('lista-produtos');
 var avisoErro = document.getElementById('avisoErro');
-
-function mostrarErro(msg) {
-    avisoErro.textContent = msg;
+var avisoErroMensagem = document.getElementById('avisoErroMensagem');
+var avisoErroAcoes = document.getElementById('avisoErroAcoes');
+var btnAvisoCancelar = document.getElementById('btnAvisoCancelar');
+var btnAvisoIncluir = document.getElementById('btnAvisoIncluir');
+function mostrarErro(msg, comAcoes = false) {
+    avisoErroMensagem.textContent = msg;
     avisoErro.style.display = 'block';
 
-    setTimeout(function() {
-        avisoErro.style.display = 'none';
-    }, 2000);
+    if (comAcoes) {
+        avisoErroAcoes.style.display = 'inline-block';
+    } else {
+        avisoErroAcoes.style.display = 'none';
+    }
 }
 
 function esconderErro() {
@@ -139,15 +173,78 @@ produto.addEventListener('keydown', function(e) {
             return;
         }
 
-        var produtoExiste = produtosMock.includes(nomeProduto);
+        var nomeProdutoNormalizado = nomeProduto.toLowerCase();
+var nomeProdutoOficial = produtosMock.find(function(item) {
+    return item.toLowerCase() === nomeProdutoNormalizado;
+});
+var produtoExiste = !!nomeProdutoOficial;
 
-        if (!produtoExiste) {
-            mostrarErro('Produto não cadastrado.');
-            produto.focus();
-            produto.select();
-            return;
-        }
+if (!produtoExiste) {
+    mostrarErro('Produto não cadastrado.');
+    produto.focus();
+    produto.select();
+    return;
+}
 
+var produtoJaLancado = Array.from(itensVenda.querySelectorAll('tr td:first-child')).some(function(td) {
+    return td.textContent.trim().toLowerCase() === nomeProdutoOficial.toLowerCase();
+});
+
+if (produtoJaLancado) {
+    mostrarErro('Produto já lançado. Deseja incluir novamente?', true);
+btnAvisoCancelar.focus();
+
+btnAvisoCancelar.onkeydown = function(e) {
+    if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        btnAvisoIncluir.focus();
+    }
+
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        btnAvisoCancelar.click();
+    }
+
+    if (e.key === 'Escape') {
+        e.preventDefault();
+        btnAvisoCancelar.click();
+    }
+};
+
+vbtnAvisoIncluir.onkeydown = function(e) {
+    if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        btnAvisoCancelar.focus();
+    }
+
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        btnAvisoIncluir.click();
+    }
+
+    if (e.key === 'Escape') {
+        e.preventDefault();
+        btnAvisoCancelar.click();
+    }
+};
+btnAvisoCancelar.onclick = function() {
+    esconderErro();
+    produto.focus();
+    produto.select();
+};
+
+btnAvisoIncluir.onclick = function() {
+    esconderErro();
+
+    produto.value = nomeProdutoOficial;
+    qtd.value = '1';
+    qtd.focus();
+    qtd.select();
+};
+
+return;
+}
+produto.value = nomeProdutoOficial;
         qtd.value = '1';
 qtd.focus();
 qtd.select();
@@ -190,7 +287,11 @@ if (!nomeProduto) {
     produto.focus();
     return;
 }
-var produtoExiste = produtosMock.includes(nomeProduto);
+var nomeProdutoNormalizado = nomeProduto.toLowerCase();
+var nomeProdutoOficial = produtosMock.find(function(item) {
+    return item.toLowerCase() === nomeProdutoNormalizado;
+});
+var produtoExiste = !!nomeProdutoOficial;
 
 if (!produtoExiste) {
     produto.focus();
