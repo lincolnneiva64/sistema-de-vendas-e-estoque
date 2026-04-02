@@ -94,7 +94,7 @@ box-shadow: 0 8px 18px rgba(0,0,0,0.12);
 }
 
     .shadow-sm {
-    box-shadow: 0 0.65rem 1.4rem rgba(15, 23, 42, 0.10) !important;
+    box-shadow: 0 0.65rem 1.4rem rgba(15, 23, 42, 0.10)
 }
 .card-destaque {
     border-top: 5px solid #2f6fed;
@@ -558,9 +558,9 @@ select.campo-obrigatorio-piscando:focus,
     <div class="acoes-flutuantes-card">
         <div class="acoes-flutuantes-botoes">
 
-    <button type="button" onclick="history.back()" class="btn-cancelar">
-        <u>C</u>ancelar
-    </button>
+    <a href="{% url 'estoque:home' %}" class="btn-cancelar"><u>C</u>ancelar</a>
+        
+    
 <button type="button" onclick="limparFormulario()" class="btn-cancelar btn-limpar">
     <u>L</u>impar
 </button>
