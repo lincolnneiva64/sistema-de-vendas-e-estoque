@@ -255,7 +255,7 @@ cursor: pointer;
         <input id="produto" placeholder="Produto" list="lista-produtos" style="flex:2;" autofocus>
 <datalist id="lista-produtos">
 </datalist>
-        <input placeholder="Qtd" style="width:80px;">
+        <input id="quantidade" placeholder="Qtd" style="width:80px;">
         <input placeholder="Preço" style="width:120px;">
         <div style="flex:1; color: green;">Margem: +30%</div>
     </div>
@@ -385,9 +385,10 @@ var produtoJaLancado = itensVenda.some(function(item) {
     return item.produto.toLowerCase() === nomeProdutoOficial.toLowerCase();
 });
 if (!produtoJaLancado) {
+    qtd.value = 1;
     qtd.focus();
     qtd.select();
-    return;
+            return;
 }
 
 
