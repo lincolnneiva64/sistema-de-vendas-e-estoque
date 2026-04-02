@@ -170,10 +170,11 @@ cursor: pointer;
 
 </div>
 <script>
+let itensVenda = []
 var produto = document.getElementById('produto');
 var qtd = document.querySelector('input[placeholder="Qtd"]');
 var preco = document.querySelector('input[placeholder="Preço"]');
-var itensVenda = document.getElementById('itens-venda');
+var itensTabela = document.getElementById('itens-venda');
 var totalItens = document.getElementById('total-itens');
 var totalGeral = document.getElementById('total-geral');
 var listaProdutos = document.getElementById('lista-produtos');
@@ -246,9 +247,11 @@ if (!produtoExiste) {
     return;
 }
 
-var produtoJaLancado = Array.from(itensVenda.querySelectorAll('tr td:first-child')).some(function(td) {
-    return td.textContent.trim().toLowerCase() === nomeProdutoOficial.toLowerCase();
+var produtoJaLancado = itensVenda.some(function(item) {
+    return item.produto.toLowerCase() === nomeProdutoOficial.toLowerCase();
 });
+
+
 
 if (produtoJaLancado) {
     mostrarErro('Produto já lançado. Deseja incluir novamente?', true);
@@ -331,7 +334,28 @@ preco.addEventListener('keydown', function(e) {
         qtd.focus();
     }
 });
+function renderizarItensVenda() {
+    itensTabela.innerHTML = '';
 
+    var quantidadeItens = itensVenda.length;
+    var somaTotal = 0;
+
+    itensVenda.forEach(function(item) {
+        somaTotal += item.total;
+
+        itensTabela.insertAdjacentHTML('beforeend',
+            '<tr>' +
+                '<td>' + item.produto + '</td>' +
+                '<td>' + item.quantidade + '</td>' +
+                '<td>R$ ' + item.preco.toFixed(2) + '</td>' +
+                '<td>R$ ' + item.total.toFixed(2) + '</td>' +
+            '</tr>'
+        );
+    });
+
+    totalItens.textContent = 'Total itens: ' + quantidadeItens;
+    totalGeral.textContent = 'R$ ' + somaTotal.toFixed(2);
+}
 function adicionarItemVenda() {
     var nomeProduto = produto.value.trim();
     
@@ -371,21 +395,16 @@ if (valorPreco <= 0) {
 }
     var total = quantidade * valorPreco;
 
-    itensVenda.insertAdjacentHTML('beforeend',
-        '<tr>' +
-            '<td>' + nomeProduto + '</td>' +
-            '<td>' + quantidade + '</td>' +
-            '<td>R$ ' + valorPreco.toFixed(2) + '</td>' +
-            '<td>R$ ' + total.toFixed(2) + '</td>' +
-        '</tr>'
-    );
+var itemVenda = {
+    produto: nomeProdutoOficial,
+    quantidade: quantidade,
+    preco: valorPreco,
+    total: total
+};
 
-    quantidadeItens += 1;
-    somaTotal += total;
+itensVenda.push(itemVenda);
 
-    totalItens.textContent = 'Total itens: ' + quantidadeItens;
-    totalGeral.textContent = 'R$ ' + somaTotal.toFixed(2);
-
+renderizarItensVenda();
     var produtosOrdenados = [...produtosMock].sort(function(a, b) {
     return a.localeCompare(b, 'pt-BR');
 });
