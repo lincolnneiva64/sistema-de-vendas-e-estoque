@@ -28,10 +28,123 @@
         opacity: 1;
         transform: translateY(0);
     }
+    }
+#rodape-venda {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: #fff;
+    border-top: 1px solid #ccc;
+    padding: 10px 20px;
+    display: flex;
+    justify-content: flex-end;
+gap: 20px;
+    align-items: center;
+    z-index: 1000;
 }
 
+#info-venda {
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
+}
 
+#total-geral {
+    font-size: 22px;
+font-weight: bold;
+    
+}
 
+#btn-finalizar-venda {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    font-size: 16px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+#btn-finalizar-venda:hover {
+    background: #218838;
+}
+#rodape-venda {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: #fff;
+    border-top: 1px solid #ccc;
+    padding: 10px 20px;
+    display: flex;
+    justify-content: flex-end;
+gap: 20px;
+    align-items: center;
+    z-index: 1000;
+}
+
+#info-venda {
+    margin-right: 10px;
+text-align: right;
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
+}
+#modal-finalizacao {
+    display: none;
+}
+
+#modal-finalizacao-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 2000;
+}
+
+#modal-finalizacao-box {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(420px, calc(100vw - 32px));
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+    padding: 20px;
+    z-index: 2001;
+}
+
+#modal-finalizacao-titulo {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 12px;
+}
+
+#modal-finalizacao-total {
+    font-size: 18px;
+    margin-bottom: 18px;
+}
+
+#modal-finalizacao-acoes {
+    display: flex;
+    justify-content: flex-end;
+}
+
+#btn-modal-finalizacao-ok {
+    background: #28a745;
+    color: #fff;
+    border: none;
+    padding: 10px 18px;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+#btn-modal-finalizacao-ok:hover {
+    background: #218838;
+}
 /* 👇 COLE AQUI */
 #btnAvisoCancelar,
 #btnAvisoIncluir {
@@ -163,11 +276,27 @@ cursor: pointer;
     </div>
 
     <!-- RODAPÉ -->
-    <div style="margin-top: 10px; display: flex; justify-content: space-between;">
-    <div id="total-itens">Total itens: 0</div>
-    <div id="total-geral" style="font-size: 20px; font-weight: bold;">R$ 0,00</div>
-</div>
+    <div id="rodape-venda">
+    <div id="info-venda">
+        <div id="total-itens">Total itens: 0</div>
+        <div id="total-geral">R$ 0,00</div>
+    </div>
 
+    <button id="btn-finalizar-venda">Finalizar Venda</button>
+</div>
+    
+</div>
+<div id="modal-finalizacao" style="display:none;">
+    <div id="modal-finalizacao-backdrop"></div>
+
+    <div id="modal-finalizacao-box">
+        <div id="modal-finalizacao-titulo">Venda finalizada</div>
+        <div id="modal-finalizacao-total">Total da venda: R$ 0.00</div>
+
+        <div id="modal-finalizacao-acoes">
+            <button id="btn-modal-finalizacao-ok">OK</button>
+        </div>
+    </div>
 </div>
 <script>
 let itensVenda = []
@@ -177,6 +306,10 @@ var preco = document.querySelector('input[placeholder="Preço"]');
 var itensTabela = document.getElementById('itens-venda');
 var totalItens = document.getElementById('total-itens');
 var totalGeral = document.getElementById('total-geral');
+var btnFinalizarVenda = document.getElementById('btn-finalizar-venda');
+var modalFinalizacao = document.getElementById('modal-finalizacao');
+var modalFinalizacaoTotal = document.getElementById('modal-finalizacao-total');
+var btnModalFinalizacaoOk = document.getElementById('btn-modal-finalizacao-ok');
 var listaProdutos = document.getElementById('lista-produtos');
 var avisoErro = document.getElementById('avisoErro');
 var avisoErroMensagem = document.getElementById('avisoErroMensagem');
@@ -429,5 +562,42 @@ preco.addEventListener('keydown', function(e) {
         adicionarItemVenda();
     }
 });
+function abrirModalFinalizacao(totalVenda) {
+    modalFinalizacaoTotal.textContent = 'Total da venda: R$ ' + totalVenda.toFixed(2);
+    modalFinalizacao.style.display = 'block';
+}
+
+function fecharModalFinalizacao() {
+    modalFinalizacao.style.display = 'none';
+}
+btnFinalizarVenda.onclick = function() {
+    var totalVenda = itensVenda.reduce(function(soma, item) {
+        return soma + item.total;
+    }, 0);
+
+    if (itensVenda.length === 0) {
+        produto.focus();
+        return;
+    }
+
+    abrirModalFinalizacao(totalVenda);
+};
+btnModalFinalizacaoOk.onclick = function() {
+    fecharModalFinalizacao();
+
+    itensVenda = [];
+
+    renderizarItensVenda();
+
+    produto.value = '';
+    qtd.value = '';
+    preco.value = '';
+
+    esconderErro();
+
+    requestAnimationFrame(function() {
+        produto.focus();
+    });
+};
 </script>
 {% endblock %}
