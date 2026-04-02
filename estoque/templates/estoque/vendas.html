@@ -294,9 +294,9 @@ cursor: pointer;
         <div id="modal-finalizacao-total">Total da venda: R$ 0.00</div>
 
         <div id="modal-finalizacao-acoes">
-            <button id="btn-modal-finalizacao-ok">OK</button>
-        </div>
-    </div>
+    <button id="btn-modal-finalizacao-continuar" type="button">Voltar e continuar</button>
+    <button id="btn-modal-finalizacao-ok" type="button">Confirmar venda</button>
+</div>
 </div>
 <script>
 let itensVenda = []
@@ -310,6 +310,7 @@ var btnFinalizarVenda = document.getElementById('btn-finalizar-venda');
 var modalFinalizacao = document.getElementById('modal-finalizacao');
 var modalFinalizacaoTotal = document.getElementById('modal-finalizacao-total');
 var btnModalFinalizacaoOk = document.getElementById('btn-modal-finalizacao-ok');
+var btnModalFinalizacaoContinuar = document.getElementById('btn-modal-finalizacao-continuar');
 var listaProdutos = document.getElementById('lista-produtos');
 var avisoErro = document.getElementById('avisoErro');
 var avisoErroMensagem = document.getElementById('avisoErroMensagem');
@@ -383,7 +384,11 @@ if (!produtoExiste) {
 var produtoJaLancado = itensVenda.some(function(item) {
     return item.produto.toLowerCase() === nomeProdutoOficial.toLowerCase();
 });
-
+if (!produtoJaLancado) {
+    qtd.focus();
+    qtd.select();
+    return;
+}
 
 
 if (produtoJaLancado) {
@@ -581,6 +586,13 @@ btnFinalizarVenda.onclick = function() {
     }
 
     abrirModalFinalizacao(totalVenda);
+};
+btnModalFinalizacaoContinuar.onclick = function() {
+    fecharModalFinalizacao();
+
+    requestAnimationFrame(function() {
+        produto.focus();
+    });
 };
 btnModalFinalizacaoOk.onclick = function() {
     fecharModalFinalizacao();
