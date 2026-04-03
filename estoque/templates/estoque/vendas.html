@@ -385,6 +385,27 @@ cursor: pointer;
     // adiciona nova seleção
     tr.classList.add("selecionado");
   });
+  document.addEventListener("keydown", function (e) {
+  const linhas = document.querySelectorAll("#tabela-venda tbody tr");
+  const selecionado = document.querySelector("#tabela-venda tbody tr.selecionado");
+
+  if (!linhas.length) return;
+
+  let index = Array.from(linhas).indexOf(selecionado);
+
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    index = (index + 1) % linhas.length;
+  }
+
+  if (e.key === "ArrowUp") {
+    e.preventDefault();
+    index = (index - 1 + linhas.length) % linhas.length;
+  }
+
+  linhas.forEach(l => l.classList.remove("selecionado"));
+  linhas[index].classList.add("selecionado");
+});
 </script>
     <!-- RODAPÉ -->
     <div id="rodape-venda">
@@ -584,6 +605,7 @@ preco.addEventListener('keydown', function(e) {
         qtd.focus();
     }
 });
+var produtoSelecionado = '';
 function renderizarItensVenda() {
     itensTabela.innerHTML = '';
 
@@ -594,7 +616,7 @@ function renderizarItensVenda() {
         somaTotal += item.total;
 
         itensTabela.insertAdjacentHTML('beforeend',
-            '<tr>' +
+            '<tr data-produto="' + item.produto + '" class="' + (item.produto === produtoSelecionado ? 'selecionado' : '') + '">' +
                 '<td>' + item.produto + '</td>' +
                 '<td>' + item.quantidade + '</td>' +
                 '<td>R$ ' + item.preco.toFixed(2) + '</td>' +
@@ -653,7 +675,7 @@ var itemVenda = {
 };
 
 itensVenda.push(itemVenda);
-
+produtoSelecionado = itemVenda.produto;
 renderizarItensVenda();
     var produtosOrdenados = [...produtosMock].sort(function(a, b) {
     return a.localeCompare(b, 'pt-BR');
