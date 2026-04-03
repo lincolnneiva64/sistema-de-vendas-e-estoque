@@ -101,7 +101,7 @@ align-items: center;
 
     <tbody>
       {% for produto in produtos %}
-      <tr data-produto-id="{{ produto.id }}" data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}" class="linha-produto {% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}" style="transition: all 0.15s ease;">
+      <tr  onclick="selecionarItem(this)" data-produto-id="{{ produto.id }}" data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}" class="linha-produto {% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}" style="transition: all 0.15s ease;">
     <td>{{ produto.nome }}</td>
         <td class="td-quantidade">
   <div class="qtd-wrap">
@@ -142,7 +142,7 @@ align-items: center;
 <script>
  
 document.addEventListener("DOMContentLoaded", function() {
-
+console.log("SCRIPT CARREGOU");
   const busca = document.getElementById("buscarProduto");
   const linhas = document.querySelectorAll("tbody tr");
 let produtoSelecionado = null;
@@ -151,7 +151,7 @@ let nomeProdutoSelecionado = "";
 linhas.forEach(function(linha) {
 
     linha.addEventListener("click", function() {
-
+console.log("CLIQUE FUNCIONOU");
         // remove seleção anterior
         linhas.forEach(function(l) {
             l.classList.remove("linha-selecionada");
@@ -163,6 +163,8 @@ linhas.forEach(function(linha) {
         // guarda o id do produto
         produtoSelecionado = linha.dataset.produtoId;
 nomeProdutoSelecionado = linha.children[0].textContent.trim();
+let quantidadeSelecionada = linha.querySelector(".qtd-num").textContent.trim();
+console.log("Quantidade:", quantidadeSelecionada);
         console.log("Produto selecionado:", produtoSelecionado);
 
     });

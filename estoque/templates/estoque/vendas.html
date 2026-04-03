@@ -373,11 +373,24 @@ cursor: pointer;
     </div>
 <script>
   const tbody = document.getElementById("itens-venda");
-
+let linhaEmEdicao = null;
+let acabouDeEditar = false;
   tbody.addEventListener("click", function (e) {
     const tr = e.target.closest("tr");
     if (!tr) return;
-
+    linhaEmEdicao = tr;
+console.log("CLIQUE FUNCIONOU");
+const produtoSelecionado = tr.children[0].textContent.trim();
+const quantidadeSelecionada = tr.children[1].textContent.trim();
+const precoSelecionado = tr.children[2].textContent.trim();
+console.log("Produto:", produtoSelecionado);
+console.log("Quantidade:", quantidadeSelecionada);
+console.log("Preço:", precoSelecionado);
+document.getElementById("produto").value = produtoSelecionado;
+document.getElementById("quantidade").value = quantidadeSelecionada;
+document.querySelector('input[placeholder="Preço"]').value = precoSelecionado;
+document.getElementById("produto").focus();
+document.getElementById("produto").select();
     // remove seleção anterior
     document.querySelectorAll("#tabela-venda tbody tr")
       .forEach(row => row.classList.remove("selecionado"));
@@ -490,7 +503,29 @@ produto.addEventListener('input', function() {
     esconderErro();
 });
 produto.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') {
+    console.log("linhaEmEdicao:", linhaEmEdicao);
+    if (e.key === "Enter" && linhaEmEdicao) {
+    console.log("ENTROU NO BLOCO DE EDICAO");
+e.preventDefault();
+    linhaEmEdicao.children[0].textContent = produto.value;
+    linhaEmEdicao.children[1].textContent = quantidade.value;
+    linhaEmEdicao.children[2].textContent = preco.value;
+
+    const total = parseFloat(quantidade.value) * parseFloat(preco.value.replace("R$", "").trim());
+    linhaEmEdicao.children[3].textContent = "R$ " + total.toFixed(2);
+
+    linhaEmEdicao = null;
+    acabouDeEditar = true;
+    
+    produto.focus();
+produto.select();
+    return;
+}
+if (acabouDeEditar) {
+    acabouDeEditar = false;
+    return;
+}
+if (e.key === "Enter") {
         e.preventDefault();
 
         var nomeProduto = produto.value.trim();
@@ -514,7 +549,7 @@ if (!produtoExiste) {
     return;
 }
 
-var produtoJaLancado = itensVenda.some(function(item) {
+var produtoJaLancado = !linhaEmEdicao && itensVenda.some(function(item) {
     return item.produto.toLowerCase() === nomeProdutoOficial.toLowerCase();
 });
 if (!produtoJaLancado) {
@@ -774,6 +809,39 @@ if (e.key === 'Escape') {
     btnModalFinalizacaoContinuar.click();
 }
     }
+});
+</script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    console.log("SCRIPT CARREGOU");
+
+    const linhas = document.querySelectorAll("tbody tr");
+
+    let produtoSelecionado = null;
+    let nomeProdutoSelecionado = "";
+
+    linhas.forEach(function(linha) {
+        linha.addEventListener("click", function() {
+            console.log("CLIQUE FUNCIONOU");
+
+            // remove seleção anterior
+            linhas.forEach(function(l) {
+                l.classList.remove("linha-selecionada");
+            });
+
+            // marca a linha clicada
+            linha.classList.add("linha-selecionada");
+
+            // pega dados
+            produtoSelecionado = linha.dataset.produtoId;
+            nomeProdutoSelecionado = linha.children[0].textContent.trim();
+
+            let quantidadeSelecionada = linha.querySelector(".qtd-num").textContent.trim();
+
+            console.log("Produto:", nomeProdutoSelecionado);
+            console.log("Quantidade:", quantidadeSelecionada);
+        });
+    });
 });
 </script>
 {% endblock %}
