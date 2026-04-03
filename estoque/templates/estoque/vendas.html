@@ -383,8 +383,9 @@ cursor: pointer;
       .forEach(row => row.classList.remove("selecionado"));
 
     // adiciona nova seleção
-    tr.classList.add("selecionado");
-  });
+itemSelecionadoId = Number(tr.dataset.id);
+tr.classList.add("selecionado");
+});
   document.addEventListener("keydown", function (e) {
   const linhas = document.querySelectorAll("#tabela-venda tbody tr");
   const selecionado = document.querySelector("#tabela-venda tbody tr.selecionado");
@@ -605,7 +606,7 @@ preco.addEventListener('keydown', function(e) {
         qtd.focus();
     }
 });
-var produtoSelecionado = '';
+var itemSelecionadoId = null;
 function renderizarItensVenda() {
     itensTabela.innerHTML = '';
 
@@ -616,7 +617,7 @@ function renderizarItensVenda() {
         somaTotal += item.total;
 
         itensTabela.insertAdjacentHTML('beforeend',
-            '<tr data-produto="' + item.produto + '" class="' + (item.produto === produtoSelecionado ? 'selecionado' : '') + '">' +
+            '<tr data-id="' + item.id + '" class="' + (item.id === itemSelecionadoId ? 'selecionado' : '') + '">' +
                 '<td>' + item.produto + '</td>' +
                 '<td>' + item.quantidade + '</td>' +
                 '<td>R$ ' + item.preco.toFixed(2) + '</td>' +
@@ -668,14 +669,14 @@ if (valorPreco <= 0) {
     var total = quantidade * valorPreco;
 
 var itemVenda = {
-    produto: nomeProdutoOficial,
-    quantidade: quantidade,
-    preco: valorPreco,
-    total: total
+  id: Date.now() + Math.random(),
+  produto: nomeProdutoOficial,
+  quantidade: quantidade,
+  preco: valorPreco,
+  total: total
 };
-
 itensVenda.push(itemVenda);
-produtoSelecionado = itemVenda.produto;
+itemSelecionadoId = itemVenda.id;
 renderizarItensVenda();
     var produtosOrdenados = [...produtosMock].sort(function(a, b) {
     return a.localeCompare(b, 'pt-BR');
