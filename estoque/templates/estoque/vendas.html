@@ -446,6 +446,7 @@ tr.classList.add("selecionado");
 </div>
 <script>
 let itensVenda = []
+let proximoItemId = 1;
 var produto = document.getElementById('produto');
 var qtd = document.querySelector('input[placeholder="Qtd"]');
 var preco = document.querySelector('input[placeholder="Preço"]');
@@ -507,23 +508,28 @@ produto.addEventListener('keydown', function(e) {
     if (e.key === "Enter" && linhaEmEdicao) {
     console.log("ENTROU NO BLOCO DE EDICAO");
 e.preventDefault();
-    linhaEmEdicao.children[0].textContent = produto.value;
-    linhaEmEdicao.children[1].textContent = quantidade.value;
-    linhaEmEdicao.children[2].textContent = preco.value;
-
-    const total = parseFloat(quantidade.value) * parseFloat(preco.value.replace("R$", "").trim());
-    linhaEmEdicao.children[3].textContent = "R$ " + total.toFixed(2);
-
-    linhaEmEdicao = null;
-    acabouDeEditar = true;
-    
-    produto.focus();
-produto.select();
-    return;
+    const linhas = Array.from(document.querySelectorAll("#tabela-venda tbody tr"));
+const index = linhas.indexOf(linhaEmEdicao);
+console.log("index da linha clicada:", index);
+console.log("produto digitado antes de salvar:", JSON.stringify(produto.value));
+console.log("itensVenda antes de editar:", JSON.stringify(itensVenda));
+if (index !== -1) {
+    itensVenda[index].produto = produto.value;
+    itensVenda[index].quantidade = parseFloat(quantidade.value);
+    itensVenda[index].preco = parseFloat(preco.value.replace("R$", "").trim());
+    itensVenda[index].total = itensVenda[index].quantidade * itensVenda[index].preco;
 }
-if (acabouDeEditar) {
-    acabouDeEditar = false;
-    return;
+console.log("itensVenda depois de editar:", JSON.stringify(itensVenda));
+linhaEmEdicao = null;
+renderizarItensVenda();
+produto.value = "";
+quantidade.value = "1";
+preco.value = "";
+
+esconderErro();
+
+produto.focus();
+return;
 }
 if (e.key === "Enter") {
         e.preventDefault();
@@ -651,14 +657,31 @@ function renderizarItensVenda() {
     itensVenda.forEach(function(item) {
         somaTotal += item.total;
 
-        itensTabela.insertAdjacentHTML('beforeend',
-            '<tr data-id="' + item.id + '" class="' + (item.id === itemSelecionadoId ? 'selecionado' : '') + '">' +
-                '<td>' + item.produto + '</td>' +
-                '<td>' + item.quantidade + '</td>' +
-                '<td>R$ ' + item.preco.toFixed(2) + '</td>' +
-                '<td>R$ ' + item.total.toFixed(2) + '</td>' +
-            '</tr>'
-        );
+        const tr = document.createElement("tr");
+tr.dataset.id = item.id;
+
+if (item.id === itemSelecionadoId) {
+    tr.classList.add("selecionado");
+}
+
+const tdProduto = document.createElement("td");
+tdProduto.textContent = item.produto;
+
+const tdQuantidade = document.createElement("td");
+tdQuantidade.textContent = item.quantidade;
+
+const tdPreco = document.createElement("td");
+tdPreco.textContent = "R$ " + item.preco.toFixed(2);
+
+const tdTotal = document.createElement("td");
+tdTotal.textContent = "R$ " + item.total.toFixed(2);
+
+tr.appendChild(tdProduto);
+tr.appendChild(tdQuantidade);
+tr.appendChild(tdPreco);
+tr.appendChild(tdTotal);
+
+itensTabela.appendChild(tr);
     });
 
     totalItens.textContent = 'Total itens: ' + quantidadeItens;
@@ -704,7 +727,7 @@ if (valorPreco <= 0) {
     var total = quantidade * valorPreco;
 
 var itemVenda = {
-  id: Date.now() + Math.random(),
+  id: proximoItemId++,
   produto: nomeProdutoOficial,
   quantidade: quantidade,
   preco: valorPreco,
