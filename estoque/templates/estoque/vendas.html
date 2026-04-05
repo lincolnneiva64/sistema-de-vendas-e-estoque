@@ -56,7 +56,78 @@ gap: 20px;
 font-weight: bold;
     
 }
+.bloco-venda {
+    background: #ffffff;
+    border-radius: 18px;
+    padding: 24px;
+    margin-bottom: 26px;
+    border: 1px solid #cbd5e1;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.18);
+}
+.titulo-venda {
+    font-size: 30px;
+    font-weight: 800;
+    color: #0f172a;
+    margin-bottom: 18px;
+    letter-spacing: -0.5px;
+}
 
+.bloco-venda h2,
+.bloco-venda h3 {
+    margin: 0 0 16px 0;
+    font-size: 28px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.4px;
+}
+
+.bloco-lancamento h3 {
+    font-size: 22px;
+    color: #1e3a8a;
+    margin-bottom: 18px;
+}
+
+.linha-cabecalho {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 0.85fr 1.5fr;
+    gap: 14px;
+    align-items: center;
+}
+
+.linha-cabecalho input,
+.linha-cabecalho select {
+    width: 100%;
+    height: 58px;
+    border: 2px solid #c7d7ea;
+    border-radius: 14px;
+    background: #ffffff;
+    padding: 0 16px;
+    font-size: 28px;
+    font-weight: 500;
+    color: #111827;
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+    transition: all 0.18s ease;
+}
+
+.linha-cabecalho input::placeholder {
+    color: #6b7280;
+}
+
+.linha-cabecalho input:focus,
+.linha-cabecalho select:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.bloco-lancamento {
+    background: #ffffff;
+    border: 3px solid #2563eb;
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: 0 15px 35px rgba(37, 99, 235, 0.25);
+    transform: scale(1.01);
+}
 #btn-finalizar-venda {
     background: #28a745;
     color: white;
@@ -303,6 +374,7 @@ cursor: pointer;
     box-sizing: border-box;
     
 }
+/* 
 #layout-vendas .bloco-venda {
     background: #ffffff;
     border: 1px solid #e9edf5;
@@ -311,6 +383,7 @@ cursor: pointer;
     margin-bottom: 18px;
     box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
 }
+*/
 
 #layout-vendas h2,
 #layout-vendas h3 {
@@ -441,39 +514,64 @@ cursor: pointer;
     <div style="flex:1; overflow:auto; border:1px solid #cfd6e4; border-radius:14px; background:#fff; box-shadow:0 8px 24px rgba(15,23,42,0.08);">
             <table id="tabela-venda" style="width:100%; border-collapse: collapse; font-size:14px;">
     <thead>
-        <tr style="background:#e9ecef; text-align:left;">
-<th style="padding:8px; border-bottom:2px solid #ccc;">Produto</th>
-<th style="padding:8px; border-bottom:2px solid #ccc;">Qtd</th>
-<th style="padding:8px; border-bottom:2px solid #ccc;">Preço</th>
-<th style="padding:8px; border-bottom:2px solid #ccc;">Total</th>
-        </tr>
-    </thead>
+    <tr>
+        <th>Produto</th>
+        <th>Qtd</th>
+        <th>Un</th>
+        <th>Preço</th>
+    </tr>
+</thead>
     <tbody id="itens-venda"></tbody>
 </table>
 <style>
-  #tabela-venda tbody tr {
-    transition: background 0.15s ease;
-  }
+    body {
+    background: #e2e8f0;
+}
+  #tabela-venda {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-top: 16px;
+    font-size: 15px;
+}
 
-  /* Zebra */
-  #tabela-venda tbody tr:nth-child(even) {
-    background: #f8fafc;
-  }
+#tabela-venda thead th {
+    background: #1e3a8a;
+    color: #ffffff;
+    padding: 14px;
+    text-align: left;
+    font-weight: 600;
+}
 
-  /* Hover */
-  #tabela-venda tbody tr:hover {
-    background: #e6f0ff;
-    cursor: pointer;
-  }
+#tabela-venda thead th:first-child {
+    border-top-left-radius: 10px;
+}
 
-  /* Células */
-  #tabela-venda td {
-    padding: 10px 14px;
-    border-bottom: 1px solid #e5e7eb;
-    color: #111827;
-  }
-  #tabela-venda tbody tr.selecionado {
-  background: #cfe3ff !important;
+#tabela-venda thead th:last-child {
+    border-top-right-radius: 10px;
+}
+
+#tabela-venda tbody tr {
+    background: #ffffff;
+    transition: all 0.15s ease;
+}
+
+#tabela-venda tbody tr:hover {
+    background: #e8f0ff;
+}
+
+#tabela-venda tbody tr.selecionado {
+    background: #c7dbff !important;
+}
+
+#tabela-venda td {
+    padding: 14px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+#tabela-venda tbody tr:last-child td {
+    border-bottom: none;
+}
 }
 </style>
     </div>
@@ -981,7 +1079,7 @@ document.addEventListener("DOMContentLoaded", function() {
   <div class="bloco-venda">
     <h2>🧾 Vendas</h2>
 
-    <div class="linha">
+    <div class="linha-cabecalho">
       <input type="text" placeholder="Cliente" id="cliente-venda-layout">
       <input type="date" id="data-venda-layout">
       <select id="tipo-venda-layout">
@@ -993,10 +1091,10 @@ document.addEventListener("DOMContentLoaded", function() {
   </div>
 
   <!-- LANÇAMENTO -->
-  <div class="bloco-venda">
+  <div class="bloco-venda bloco-lancamento">
     <h3>🔎 Lançamento</h3>
 
-    <div class="linha">
+    <div class="linha-cabecalho">
       <input type="text" placeholder="Produto" id="produto-layout">
       <input type="number" placeholder="Qtd" id="quantidade-layout">
       <input type="text" placeholder="Un" id="unidade-layout">
