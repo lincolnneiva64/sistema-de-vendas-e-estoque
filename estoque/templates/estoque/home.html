@@ -99,7 +99,7 @@ align-items: center;
       
   
 
-    <tbody>
+    <tbody id="tabelaProdutos">
       {% for produto in produtos %}
       <tr  onclick="selecionarItem(this)" data-produto-id="{{ produto.id }}" data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}" class="linha-produto {% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}" style="transition: all 0.15s ease;">
     <td>{{ produto.nome }}</td>
@@ -140,7 +140,7 @@ align-items: center;
 
 </div>
 <script>
- 
+ console.log("SCRIPT BRUTO");
 document.addEventListener("DOMContentLoaded", function() {
 console.log("SCRIPT CARREGOU");
   const busca = document.getElementById("buscarProduto");
@@ -148,27 +148,24 @@ console.log("SCRIPT CARREGOU");
 let produtoSelecionado = null;
 let nomeProdutoSelecionado = "";
 
-linhas.forEach(function(linha) {
+const tabelaProdutos = document.getElementById("tabelaProdutos");
 
-    linha.addEventListener("click", function() {
-console.log("CLIQUE FUNCIONOU");
-        // remove seleção anterior
-        linhas.forEach(function(l) {
-            l.classList.remove("linha-selecionada");
-        });
+tabelaProdutos.addEventListener("click", function(e) {
+  const linha = e.target.closest("tr");
+  if (!linha) return;
 
-        // marca a linha clicada
-        linha.classList.add("linha-selecionada");
+  console.log("CLIQUE FUNCIONOU");
 
-        // guarda o id do produto
-        produtoSelecionado = linha.dataset.produtoId;
-nomeProdutoSelecionado = linha.children[0].textContent.trim();
-let quantidadeSelecionada = linha.querySelector(".qtd-num").textContent.trim();
-console.log("Quantidade:", quantidadeSelecionada);
-        console.log("Produto selecionado:", produtoSelecionado);
+  tabelaProdutos.querySelectorAll("tr").forEach(function(l) {
+    l.classList.remove("linha-selecionada");
+  });
 
-    });
+  linha.classList.add("linha-selecionada");
 
+  produtoSelecionado = linha.dataset.produtoId || null;
+  nomeProdutoSelecionado = linha.children[0] ? linha.children[0].textContent.trim() : "";
+
+  console.log("Produto selecionado:", produtoSelecionado);
 });
 document.addEventListener("keydown", function (e) {
 
@@ -292,7 +289,7 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
         linha.style.display = "none";
       }
 
-    });
+    
 
   });
 
@@ -320,7 +317,8 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
     </div>
 </div>
 </div>
-
+})();
+</script>
 <!-- TARJA -->
 <div style="position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000; background: #cfd4da; border-top: 1px solid #b8bfc7; box-shadow: 0 -2px 8px rgba(0,0,0,0.08);">
   <div style="padding: 2px 10px; display: flex; justify-content: flex-start; align-items: center; gap: 6px;">
