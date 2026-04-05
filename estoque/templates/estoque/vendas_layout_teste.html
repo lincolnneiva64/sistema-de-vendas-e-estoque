@@ -167,9 +167,10 @@ document.addEventListener("DOMContentLoaded", function () {
   const unidade = document.getElementById("unidade");
   const preco = document.getElementById("preco");
   const tabelaBody = document.getElementById("tabelaProdutos");
-
+let linhaSelecionada = null;
 tabelaBody.addEventListener("click", function (e) {
   const linha = e.target.closest("tr");
+  linhaSelecionada = linha;
 if (!linha) return;
 
 // limpa seleção primeiro
@@ -227,16 +228,27 @@ produto.focus();
         return;
       }
 
-      const tbody = document.querySelector("tbody");
+    
 
-      const novaLinha = document.createElement("tr");
-      novaLinha.innerHTML =
+      if (linhaSelecionada) {
+    // EDITAR LINHA EXISTENTE
+    linhaSelecionada.children[0].textContent = nomeProduto;
+    linhaSelecionada.children[1].textContent = qtd;
+    linhaSelecionada.children[2].textContent = un;
+    linhaSelecionada.children[3].textContent = valor;
+
+    linhaSelecionada = null;
+} else {
+    // CRIAR NOVA LINHA
+    const novaLinha = document.createElement("tr");
+    novaLinha.innerHTML =
         "<td>" + nomeProduto + "</td>" +
         "<td>" + qtd + "</td>" +
         "<td>" + un + "</td>" +
         "<td>" + valor + "</td>";
 
-      tbody.appendChild(novaLinha);
+    tabelaBody.appendChild(novaLinha);
+}
 
       produto.value = "";
       quantidade.value = "";
