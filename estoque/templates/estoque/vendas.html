@@ -511,7 +511,7 @@ cursor: pointer;
     </div>
 
     <!-- TABELA -->
-    <div style="flex:1; overflow:auto; border:1px solid #cfd6e4; border-radius:14px; background:#fff; box-shadow:0 8px 24px rgba(15,23,42,0.08);">
+    <div id="container-tabela" style="flex:1; overflow:auto; border:1px solid #cfd6e4; border-radius:14px; background:#fff;">
             <table id="tabela-venda" style="width:100%; border-collapse: collapse; font-size:14px;">
     <thead>
     <tr>
@@ -559,8 +559,10 @@ cursor: pointer;
 #tabela-venda tbody tr:hover {
     background: #e8f0ff;
 }
-
 #tabela-venda tbody tr.selecionado {
+    background: #c7dbff !important;
+}
+#tabela-venda tbody tr.selecionado td {
     background: #c7dbff !important;
 }
 
@@ -940,6 +942,15 @@ var itemVenda = {
 itensVenda.push(itemVenda);
 itemSelecionadoId = itemVenda.id;
 renderizarItensVenda();
+requestAnimationFrame(function () {
+    const ultimaLinha = itensTabela.lastElementChild;
+    if (ultimaLinha) {
+     itensTabela.scrollTop = itensTabela.scrollHeight;
+    }
+
+    produto.focus();
+    produto.select();
+});
     var produtosOrdenados = [...produtosMock].sort(function(a, b) {
     return a.localeCompare(b, 'pt-BR');
 });
