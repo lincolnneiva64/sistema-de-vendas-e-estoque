@@ -170,13 +170,32 @@ document.addEventListener("DOMContentLoaded", function () {
 
 tabelaBody.addEventListener("click", function (e) {
   const linha = e.target.closest("tr");
-  if (!linha) return;
+if (!linha) return;
 
-  tabelaBody.querySelectorAll("tr").forEach(function (tr) {
+// limpa seleção primeiro
+tabelaBody.querySelectorAll("tr").forEach(function (tr) {
     tr.style.background = "";
-  });
+});
 
-  linha.style.background = "#e8f1ff";
+// marca a linha clicada
+linha.style.background = "#e8f1ff";
+
+// pega dados
+const nome = linha.children[0].textContent.trim();
+const qtd = linha.children[1].textContent.trim();
+const un = linha.children[2].textContent.trim();
+const valor = linha.children[3].textContent.trim();
+
+// joga nos inputs
+produto.value = nome;
+quantidade.value = qtd;
+unidade.value = un;
+preco.value = valor;
+setTimeout(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}, 50);
+produto.focus();
+    
 });
   document.addEventListener("keydown", function (e) {
     const ativo = document.activeElement;
