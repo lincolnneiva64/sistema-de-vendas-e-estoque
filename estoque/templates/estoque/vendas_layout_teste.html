@@ -61,8 +61,25 @@
     transition: 0.18s ease;
     box-sizing: border-box;
 }
-
-    input:focus,
+.msg-edicao {
+    display: inline-block;
+    margin: 0 0 12px 12px;
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fcd34d;
+    padding: 7px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    transform: translateY(-4px);
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    pointer-events: none;
+}
+.msg-edicao.show {
+    opacity: 1;
+    transform: translateY(0);
+}    input:focus,
 select:focus {
     border-color: #1d4ed8;
     background: #ffffff;
@@ -126,7 +143,7 @@ select:focus {
         </div>
 
         <h3>Lançamento</h3>
-
+<div id="msgEdicao" class="msg-edicao">Modo edição ativado</div>
         <div class="linha">
             <input type="text" id="produto" placeholder="Produto">
 <input type="number" id="quantidade" placeholder="Qtd">
@@ -162,6 +179,16 @@ select:focus {
 
 </div>
 <script>
+    function mostrarMsgEdicao() {
+    const msg = document.getElementById("msgEdicao");
+    if (!msg) return;
+
+    msg.classList.add("show");
+
+    setTimeout(() => {
+        msg.classList.remove("show");
+    }, 2600);
+}
 document.addEventListener("DOMContentLoaded", function () {
 
   const produto = document.getElementById("produto");
@@ -182,7 +209,7 @@ tabelaBody.querySelectorAll("tr").forEach(function (tr) {
 
 // marca a linha clicada
 linha.style.background = "#e8f1ff";
-
+mostrarMsgEdicao();
 // pega dados
 const nome = linha.children[0].textContent.trim();
 const qtd = linha.children[1].textContent.trim();
