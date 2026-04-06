@@ -191,6 +191,7 @@ setTimeout(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
 }, 50);
 produto.focus();
+produto.select();
     
 });
   document.addEventListener("keydown", function (e) {
@@ -199,16 +200,17 @@ produto.focus();
     if (e.key !== "Enter") return;
 
     if (ativo === produto) {
-      e.preventDefault();
-      quantidade.focus();
-
-    } else if (ativo === quantidade) {
-      e.preventDefault();
-      unidade.focus();
-
-    } else if (ativo === unidade) {
-      e.preventDefault();
-      preco.focus();
+    e.preventDefault();
+    quantidade.focus();
+    quantidade.select();
+} else if (ativo === quantidade) {
+    e.preventDefault();
+    unidade.focus();
+    unidade.select();
+} else if (ativo === unidade) {
+    e.preventDefault();
+    preco.focus();
+    preco.select();
 
         } else if (ativo === preco) {
         e.preventDefault();
@@ -229,7 +231,7 @@ produto.focus();
             linhaSelecionada.children[1].textContent = qtd;
             linhaSelecionada.children[2].textContent = un;
             linhaSelecionada.children[3].textContent = valor;
-
+            linhaSelecionada.scrollIntoView({ behavior: "smooth", block: "center" });
             linhaSelecionada = null;
         } else {
             // CRIAR NOVA LINHA
@@ -253,7 +255,8 @@ produto.focus();
         unidade.value = "";
         preco.value = "";
 
-        produto.focus();
+        produto.focus({ preventScroll: true });
+        produto.select();
     }
 });
 });
