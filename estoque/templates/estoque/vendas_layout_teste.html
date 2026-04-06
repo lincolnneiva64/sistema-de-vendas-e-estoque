@@ -148,12 +148,7 @@ select:focus {
                 </tr>
             </thead>
             <tbody id="tabelaProdutos">
-                <tr>
-                    <td>Exemplo</td>
-                    <td>1</td>
-                    <td>UN</td>
-                    <td>10.00</td>
-                </tr>
+                
             </tbody>
         </table>
     </div>
@@ -215,50 +210,52 @@ produto.focus();
       e.preventDefault();
       preco.focus();
 
-    } else if (ativo === preco) {
-      e.preventDefault();
+        } else if (ativo === preco) {
+        e.preventDefault();
 
-      const nomeProduto = produto.value.trim();
-      const qtd = quantidade.value.trim();
-      const un = unidade.value.trim();
-      const valor = preco.value.trim();
+        const nomeProduto = produto.value.trim();
+        const qtd = quantidade.value.trim();
+        const un = unidade.value.trim();
+        const valor = preco.value.trim();
 
-      if (!nomeProduto || !qtd || !un || !valor) {
-        alert("Preencha Produto, Qtd, Un e Preço.");
-        return;
-      }
+        if (!nomeProduto || !qtd || !un || !valor) {
+            alert("Preencha Produto, Qtd, Un e Preço.");
+            return;
+        }
 
-    
+        if (linhaSelecionada) {
+            // EDITAR LINHA EXISTENTE
+            linhaSelecionada.children[0].textContent = nomeProduto;
+            linhaSelecionada.children[1].textContent = qtd;
+            linhaSelecionada.children[2].textContent = un;
+            linhaSelecionada.children[3].textContent = valor;
 
-      if (linhaSelecionada) {
-    // EDITAR LINHA EXISTENTE
-    linhaSelecionada.children[0].textContent = nomeProduto;
-    linhaSelecionada.children[1].textContent = qtd;
-    linhaSelecionada.children[2].textContent = un;
-    linhaSelecionada.children[3].textContent = valor;
+            linhaSelecionada = null;
+        } else {
+            // CRIAR NOVA LINHA
+            const novaLinha = document.createElement("tr");
+            novaLinha.innerHTML =
+                "<td>" + nomeProduto + "</td>" +
+                "<td>" + qtd + "</td>" +
+                "<td>" + un + "</td>" +
+                "<td>" + valor + "</td>";
 
-    linhaSelecionada = null;
-} else {
-    // CRIAR NOVA LINHA
-    const novaLinha = document.createElement("tr");
-    novaLinha.innerHTML =
-        "<td>" + nomeProduto + "</td>" +
-        "<td>" + qtd + "</td>" +
-        "<td>" + un + "</td>" +
-        "<td>" + valor + "</td>";
+            tabelaBody.appendChild(novaLinha);
+            novaLinha.scrollIntoView({ behavior: "smooth", block: "nearest" });
 
-    tabelaBody.appendChild(novaLinha);
-}
+            // destaque visual no último item
+            tabelaBody.querySelectorAll("tr").forEach(tr => tr.style.background = "");
+            novaLinha.style.background = "#e8f1ff";
+        }
 
-      produto.value = "";
-      quantidade.value = "";
-      unidade.value = "";
-      preco.value = "";
+        produto.value = "";
+        quantidade.value = "";
+        unidade.value = "";
+        preco.value = "";
 
-      produto.focus();
+        produto.focus();
     }
-  });
-
+});
 });
 </script>
 </body>
