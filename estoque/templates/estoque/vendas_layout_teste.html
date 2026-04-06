@@ -140,18 +140,25 @@ select:focus {
 
         <table>
             <thead>
-                <tr>
-                    <th>Produto</th>
-                    <th>Qtd</th>
-                    <th>Un</th>
-                    <th>Preço</th>
-                </tr>
-            </thead>
+    <tr>
+        <th>Produto</th>
+        <th>Qtd</th>
+        <th>Un</th>
+        <th>Preço</th>
+        <th>Total</th>
+    </tr>
+</thead>
             <tbody id="tabelaProdutos">
                 
             </tbody>
         </table>
-    </div>
+        <div style="position: sticky; bottom: 0; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; font-weight:bold; background:#fff; padding:10px 0;">
+    <div></div>
+    <div></div>
+    <div></div>
+    <div style="text-align:right;">Total da venda:</div>
+    <div id="totalGeral" style="text-align:right;">R$ 0,00</div>
+</div>    </div>
 
 </div>
 <script>
@@ -231,18 +238,24 @@ produto.select();
             linhaSelecionada.children[1].textContent = qtd;
             linhaSelecionada.children[2].textContent = un;
             linhaSelecionada.children[3].textContent = valor;
+            const totalEdit = parseFloat(qtd) * parseFloat(valor);
+linhaSelecionada.children[4].textContent = isNaN(totalEdit) ? "" : totalEdit.toFixed(2);
+atualizarTotalGeral();
             linhaSelecionada.scrollIntoView({ behavior: "smooth", block: "center" });
             linhaSelecionada = null;
         } else {
             // CRIAR NOVA LINHA
             const novaLinha = document.createElement("tr");
-            novaLinha.innerHTML =
-                "<td>" + nomeProduto + "</td>" +
-                "<td>" + qtd + "</td>" +
-                "<td>" + un + "</td>" +
-                "<td>" + valor + "</td>";
+            const total = parseFloat(qtd) * parseFloat(valor);
 
+novaLinha.innerHTML =
+    "<td>" + nomeProduto + "</td>" +
+    "<td>" + qtd + "</td>" +
+    "<td>" + un + "</td>" +
+    "<td>" + valor + "</td>" +
+    "<td>" + (isNaN(total) ? "" : total.toFixed(2)) + "</td>";
             tabelaBody.appendChild(novaLinha);
+            atualizarTotalGeral();
             novaLinha.scrollIntoView({ behavior: "smooth", block: "nearest" });
 
             // destaque visual no último item
@@ -257,6 +270,19 @@ produto.select();
 
         produto.focus({ preventScroll: true });
         produto.select();
+        function atualizarTotalGeral() {
+    let total = 0;
+
+    tabelaBody.querySelectorAll("tr").forEach(tr => {
+        const valor = parseFloat(tr.children[4].textContent);
+        if (!isNaN(valor)) {
+            total += valor;
+        }
+    });
+
+    const totalDiv = document.getElementById("totalGeral");
+    totalDiv.textContent = "R$ " + total.toFixed(2);
+}
     }
 });
 });

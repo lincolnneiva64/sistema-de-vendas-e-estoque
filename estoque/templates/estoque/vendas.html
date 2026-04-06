@@ -1137,4 +1137,34 @@ document.addEventListener("DOMContentLoaded", function() {
   </div>
 
 </div>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    console.log("SCRIPT DA VENDAS RODOU");
+const produtoLayout = document.getElementById("produto-layout");
+console.log("produtoLayout =", produtoLayout);
+const quantidadeLayout = document.getElementById("quantidade-layout");
+const unidadeLayout = document.getElementById("unidade-layout");
+console.log("unidadeLayout =", unidadeLayout);
+const precoLayout = document.getElementById("preco-layout");
+
+const produtosCadastrados = {
+    "cenoura": { unidade: "KG" },
+    "abacate": { unidade: "KG" }
+};
+
+produtoLayout.addEventListener("input", function () {
+    const nome = produtoLayout.value.trim().toLowerCase();
+    console.log("nome digitado =", nome);
+    console.log("produto encontrado =", produtosCadastrados[nome]);
+    const produto = produtosCadastrados[nome];
+
+    if (produto) {
+        unidadeLayout.value = produto.unidade;
+    } else {
+        unidadeLayout.value = "";
+    }
+});
+});
+</script>
+
 {% endblock %}
