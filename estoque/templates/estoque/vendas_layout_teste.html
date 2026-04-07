@@ -175,7 +175,18 @@ select:focus {
         <h3>Lançamento</h3>
 <div id="msgEdicao" class="msg-edicao">Modo edição ativado</div>
         <div class="linha">
-            <input type="text" id="produto" placeholder="Produto">
+            <select id="produto">
+    <option value="">Selecione um produto</option>
+    {% for produto in produtos %}
+        <option 
+    value="{{ produto.nome }}"
+    data-unidade="{{ produto.unidade_venda_1|default_if_none:'' }}"
+    data-preco="{{ produto.preco_venda|default_if_none:'' }}"
+>
+    {{ produto.nome }}
+</option>
+    {% endfor %}
+</select>
 <input type="number" id="quantidade" placeholder="Qtd">
 <input type="text" id="unidade" placeholder="Un">
 <input type="text" id="preco" placeholder="Preço">
@@ -227,6 +238,13 @@ document.addEventListener("DOMContentLoaded", function () {
   const unidade = document.getElementById("unidade");
   const preco = document.getElementById("preco");
   const tabelaBody = document.getElementById("tabelaProdutos");
+  produto.addEventListener("change", function () {
+    const optionSelecionada = this.options[this.selectedIndex];
+    if (!optionSelecionada) return;
+
+    unidade.value = optionSelecionada.dataset.unidade || "";
+    preco.value = optionSelecionada.dataset.preco || "";
+});
 let linhaSelecionada = null;
 tabelaBody.addEventListener("click", function (e) {
   const linha = e.target.closest("tr");
