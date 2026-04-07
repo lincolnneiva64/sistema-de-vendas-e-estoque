@@ -26,7 +26,37 @@
         margin-bottom: 22px;
         box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
     }
+    .bloco-itens-scroll {
+    max-height: 320px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
+}
 
+.bloco-itens-scroll table {
+    border-radius: 0;
+    margin-top: 0;
+}
+
+.bloco-itens-scroll thead {
+    display: none;
+}
+
+.tabela-cabecalho-fixa {
+    width: 100%;
+    border-collapse: collapse;
+    background: #dbeafe;
+    border-radius: 14px 14px 0 0;
+    overflow: hidden;
+}
+
+.tabela-cabecalho-fixa th {
+    text-align: left;
+    padding: 16px 14px;
+    font-size: 16px;
+    color: #1e3a8a;
+    font-weight: 700;
+}
     h2 {
         margin: 0 0 22px;
         font-size: 34px;
@@ -121,7 +151,7 @@ select:focus {
     box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
 }
 
-}
+
 </style>
 </head>
 
@@ -153,22 +183,23 @@ select:focus {
     </div>
 
     <div class="bloco-venda">
-        <h3>Itens</h3>
+    <h3>Itens</h3>
 
-        <table>
-            <thead>
-    <tr>
-        <th>Produto</th>
-        <th>Qtd</th>
-        <th>Un</th>
-        <th>Preço</th>
-        <th>Total</th>
-    </tr>
-</thead>
-            <tbody id="tabelaProdutos">
-                
-            </tbody>
-        </table>
+    <div class="bloco-itens-scroll">
+    <table>
+        <thead>
+            <tr>
+                <th>Produto</th>
+                <th>Qtd</th>
+                <th>Un</th>
+                <th>Preço</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody id="tabelaProdutos">
+        </tbody>
+    </table>
+</div>
         <div style="position: sticky; bottom: 0; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; font-weight:bold; background:#fff; padding:10px 0;">
     <div></div>
     <div></div>
@@ -283,7 +314,13 @@ novaLinha.innerHTML =
     "<td>" + (isNaN(total) ? "" : total.toFixed(2)) + "</td>";
             tabelaBody.appendChild(novaLinha);
             atualizarTotalGeral();
-            novaLinha.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            requestAnimationFrame(() => {
+    novaLinha.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest"
+    });
+});
+
 
             // destaque visual no último item
             tabelaBody.querySelectorAll("tr").forEach(tr => tr.style.background = "");
