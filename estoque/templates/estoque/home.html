@@ -99,9 +99,9 @@ align-items: center;
       
   
 
-    <tbody id="tabelaProdutos">
+    <tbody>
       {% for produto in produtos %}
-      <tr  onclick="selecionarItem(this)" data-produto-id="{{ produto.id }}" data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}" class="linha-produto {% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}" style="transition: all 0.15s ease;">
+      <tr data-produto-id="{{ produto.id }}" data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}" class="linha-produto {% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}" style="transition: all 0.15s ease;">
     <td>{{ produto.nome }}</td>
         <td class="td-quantidade">
   <div class="qtd-wrap">
@@ -140,32 +140,33 @@ align-items: center;
 
 </div>
 <script>
- console.log("SCRIPT BRUTO");
+ 
 document.addEventListener("DOMContentLoaded", function() {
-console.log("SCRIPT CARREGOU");
+
   const busca = document.getElementById("buscarProduto");
   const linhas = document.querySelectorAll("tbody tr");
 let produtoSelecionado = null;
 let nomeProdutoSelecionado = "";
 
-const tabelaProdutos = document.getElementById("tabelaProdutos");
+linhas.forEach(function(linha) {
 
-tabelaProdutos.addEventListener("click", function(e) {
-  const linha = e.target.closest("tr");
-  if (!linha) return;
+    linha.addEventListener("click", function() {
 
-  console.log("CLIQUE FUNCIONOU");
+        // remove seleção anterior
+        linhas.forEach(function(l) {
+            l.classList.remove("linha-selecionada");
+        });
 
-  tabelaProdutos.querySelectorAll("tr").forEach(function(l) {
-    l.classList.remove("linha-selecionada");
-  });
+        // marca a linha clicada
+        linha.classList.add("linha-selecionada");
 
-  linha.classList.add("linha-selecionada");
+        // guarda o id do produto
+        produtoSelecionado = linha.dataset.produtoId;
+nomeProdutoSelecionado = linha.children[0].textContent.trim();
+        console.log("Produto selecionado:", produtoSelecionado);
 
-  produtoSelecionado = linha.dataset.produtoId || null;
-  nomeProdutoSelecionado = linha.children[0] ? linha.children[0].textContent.trim() : "";
+    });
 
-  console.log("Produto selecionado:", produtoSelecionado);
 });
 document.addEventListener("keydown", function (e) {
 
@@ -289,7 +290,7 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
         linha.style.display = "none";
       }
 
-    
+    });
 
   });
 
@@ -317,24 +318,17 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
     </div>
 </div>
 </div>
-})();
-</script>
+
 <!-- TARJA -->
 <div style="position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000; background: #cfd4da; border-top: 1px solid #b8bfc7; box-shadow: 0 -2px 8px rgba(0,0,0,0.08);">
   <div style="padding: 2px 10px; display: flex; justify-content: flex-start; align-items: center; gap: 6px;">
     <span style="font-weight: 500; margin-right: 6px; font-size: 13px; color: #6c757d;">Ações</span>
-<a class="btn btn-primary" href="{% url 'estoque:cadastrar_produto' %}" style="margin-left:10px; padding:6px 12px; border-radius:8px; text-decoration:none; font-size:13px; font-weight:500;">
+<a class="btn btn-primary" href="{% url 'estoque:cadastrar_produto' %}" style="margin-left:10px; padding:3px 8px; font-size:13px; line-height:1;">
     + Novo Produto
 </a>
 <a href="{% url 'estoque:lixeira' %}" style="display:inline-block; margin-left:auto; background:#6c757d; color:#fff; padding:3px 8px; border-radius:6px; font-size:13px; line-height:1; text-decoration:none;">
     Ver Lixeira
-    </a>
-    <a href="{% url 'estoque:vendas' %}"
-   style="display:inline-block; margin-left:20px; background:#28a745; color:#fff; padding:3px 12px; border-radius:4px; text-decoration:none;">
-   🛒 Vendas
-
 </a>
-
 <a href="#" id="btnExcluirProduto" style="display:inline-block; margin-left:6px; background:#dc3545; color:#fff; padding:3px 8px; border-radius:6px; font-size:13px; line-height:1; text-decoration:none;">
     Excluir Produto
 </a>
