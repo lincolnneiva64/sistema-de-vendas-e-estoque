@@ -195,7 +195,7 @@ def produto_excluir_definitivo(request, pk):
 
     return redirect("estoque:lixeira")
 def vendas(request):
-    produtos = Produto.objects.filter(excluido=False)
+    produtos = Produto.objects.filter(excluido=False).order_by('nome')
     return render(request, 'estoque/vendas_layout_teste.html', {
         'produtos': produtos
     })

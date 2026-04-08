@@ -426,18 +426,28 @@ let sugestoes = [];
 let indexAtivo = -1;
 
 function filtrarProdutos(texto) {
-    const options = produto.querySelectorAll("option");
-    sugestoes = [];
+  const termo = texto.toLowerCase().trim();
+  const primeiraLetra = termo.charAt(0);
 
-    options.forEach(opt => {
-        if (!opt.value) return;
+  const opcoes = Array.from(produto.querySelectorAll("option")).filter((opt) => {
+    const nome = (opt.value || "").toLowerCase().trim();
+    return nome;
+  });
 
-        if (opt.value.toLowerCase().includes(texto.toLowerCase())) {
-            sugestoes.push(opt);
-        }
-    });
+  const comecaComTermo = opcoes.filter((opt) => {
+    const nome = opt.value.toLowerCase().trim();
+    return nome.startsWith(termo);
+  });
+
+  const segueOrdemAlfabetica = opcoes.filter((opt) => {
+    const nome = opt.value.toLowerCase().trim();
+    const inicial = nome.charAt(0);
+    return inicial >= primeiraLetra && !nome.startsWith(termo);
+  });
+
+  sugestoes = [...comecaComTermo, ...segueOrdemAlfabetica];
+  indexAtivo = sugestoes.length ? 0 : -1;
 }
-
 function renderSugestoes() {
     sugestoesBox.innerHTML = "";
 

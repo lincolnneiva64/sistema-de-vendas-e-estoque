@@ -326,11 +326,16 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
 <a class="btn btn-primary" href="{% url 'estoque:cadastrar_produto' %}" style="margin-left:10px; padding:3px 8px; font-size:13px; line-height:1;">
     + Novo Produto
 </a>
-<a href="{% url 'estoque:lixeira' %}" style="display:inline-block; margin-left:auto; background:#6c757d; color:#fff; padding:3px 8px; border-radius:6px; font-size:13px; line-height:1; text-decoration:none;">
-    Ver Lixeira
+<a href="{% url 'estoque:lixeira' %}" style="display:inline-block; margin-left:auto; background:#6c757d; color:#fff; padding:3px 8px; border:none; border-radius:4px; font-size:13px;">
+  Ver Lixeira
 </a>
-<a href="#" id="btnExcluirProduto" style="display:inline-block; margin-left:6px; background:#dc3545; color:#fff; padding:3px 8px; border-radius:6px; font-size:13px; line-height:1; text-decoration:none;">
-    Excluir Produto
+
+<a href="#" id="btnExcluirProduto" style="display:inline-block; margin-left:6px; background:#dc3545; color:#fff; padding:3px 8px; border:none; border-radius:4px; font-size:13px;">
+  Excluir Produto
+</a>
+
+<a href="{% url 'estoque:vendas' %}" style="display:inline-block; margin-left:6px; background:#28a745; color:#fff; padding:6px 12px; border:none; border-radius:6px; font-size:14px; font-weight:500;">
+  Vendas
 </a>
   </div>
 </div>
