@@ -91,6 +91,52 @@
     transition: 0.18s ease;
     box-sizing: border-box;
 }
+.produto-autocomplete-wrap {
+    position: relative;
+    width: 100%;
+}
+
+#produtoBusca {
+    width: 100%;
+}
+
+.produto-sugestoes {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border: 1px solid #d9e2ec;
+    border-radius: 12px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+    max-height: 260px;
+    overflow-y: auto;
+    display: none;
+    z-index: 30;
+}
+
+.produto-sugestao-item {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 15px;
+    color: #0f172a;
+    border-bottom: 1px solid #eef2f7;
+}
+
+.produto-sugestao-item:last-child {
+    border-bottom: none;
+}
+
+.produto-sugestao-item:hover,
+.produto-sugestao-item.ativo {
+    background: #eef4ff;
+}
+
+.produto-sugestao-vazio {
+    padding: 10px 14px;
+    color: #6b7280;
+    font-size: 14px;
+}
 .msg-edicao {
     display: inline-block;
     margin: 0 0 12px 12px;
@@ -175,18 +221,23 @@ select:focus {
         <h3>Lançamento</h3>
 <div id="msgEdicao" class="msg-edicao">Modo edição ativado</div>
         <div class="linha">
-            <select id="produto">
-    <option value="">Selecione um produto</option>
-    {% for produto in produtos %}
-        <option 
-    value="{{ produto.nome }}"
-    data-unidade="{{ produto.unidade_venda_1|default_if_none:'' }}"
-    data-preco="{{ produto.preco_venda|default_if_none:'' }}"
->
-    {{ produto.nome }}
-</option>
-    {% endfor %}
-</select>
+            <div class="produto-autocomplete-wrap">
+    <input type="text" id="produtoBusca" placeholder="Selecione um produto" autocomplete="off">
+    <div id="produtoSugestoes" class="produto-sugestoes"></div>
+
+    <select id="produto" hidden>
+        <option value="">Selecione um produto</option>
+        {% for produto in produtos %}
+            <option
+                value="{{ produto.nome }}"
+                data-unidade="{{ produto.unidade_venda_1|default_if_none:'' }}"
+                data-preco="{{ produto.preco_venda|default_if_none:'' }}"
+            >
+                {{ produto.nome }}
+            </option>
+        {% endfor %}
+    </select>
+</div>
 <input type="number" id="quantidade" placeholder="Qtd">
 <input type="text" id="unidade" placeholder="Un">
 <input type="text" id="preco" placeholder="Preço">
@@ -234,6 +285,8 @@ select:focus {
 document.addEventListener("DOMContentLoaded", function () {
 
   const produto = document.getElementById("produto");
+  const produtoBusca = document.getElementById("produtoBusca");
+  const sugestoesBox = document.getElementById("produtoSugestoes");
   const quantidade = document.getElementById("quantidade");
   const unidade = document.getElementById("unidade");
   const preco = document.getElementById("preco");
@@ -367,7 +420,103 @@ novaLinha.innerHTML =
 }
     }
 });
+// ================= AUTOCOMPLETE PRODUTO =================
+
+let sugestoes = [];
+let indexAtivo = -1;
+
+function filtrarProdutos(texto) {
+    const options = produto.querySelectorAll("option");
+    sugestoes = [];
+
+    options.forEach(opt => {
+        if (!opt.value) return;
+
+        if (opt.value.toLowerCase().includes(texto.toLowerCase())) {
+            sugestoes.push(opt);
+        }
+    });
+}
+
+function renderSugestoes() {
+    sugestoesBox.innerHTML = "";
+
+    if (!sugestoes.length) {
+        sugestoesBox.style.display = "none";
+        return;
+    }
+
+    sugestoes.forEach((opt, i) => {
+        const div = document.createElement("div");
+        div.className = "produto-sugestao-item" + (i === indexAtivo ? " ativo" : "");
+        div.textContent = opt.value;
+
+        div.addEventListener("mousedown", () => selecionarProduto(opt));
+
+        sugestoesBox.appendChild(div);
+    });
+
+    sugestoesBox.style.display = "block";
+}
+
+function selecionarProduto(opt) {
+    produto.value = opt.value;
+
+    // dispara o MESMO fluxo do select
+    produto.dispatchEvent(new Event("change"));
+
+    produtoBusca.value = opt.value;
+    sugestoesBox.style.display = "none";
+
+    indexAtivo = -1;
+}
+
+produtoBusca.addEventListener("input", () => {
+    const texto = produtoBusca.value.trim();
+
+    if (!texto) {
+        sugestoesBox.style.display = "none";
+        return;
+    }
+
+    filtrarProdutos(texto);
+    renderSugestoes();
 });
+
+produtoBusca.addEventListener("keydown", (e) => {
+    if (!sugestoes.length) return;
+
+    if (e.key === "ArrowDown") {
+        e.preventDefault();
+        indexAtivo = (indexAtivo + 1) % sugestoes.length;
+        renderSugestoes();
+    }
+
+    else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        indexAtivo = (indexAtivo - 1 + sugestoes.length) % sugestoes.length;
+        renderSugestoes();
+    }
+
+    else if (e.key === "Enter") {
+        if (indexAtivo >= 0) {
+            e.preventDefault();
+            selecionarProduto(sugestoes[indexAtivo]);
+        }
+    }
+
+    else if (e.key === "Escape") {
+        sugestoesBox.style.display = "none";
+    }
+});
+
+document.addEventListener("click", (e) => {
+    if (!sugestoesBox.contains(e.target) && e.target !== produtoBusca) {
+        sugestoesBox.style.display = "none";
+    }
+});
+});
+
 </script>
 </body>
 </html>
