@@ -331,6 +331,9 @@ produto.select();
     
 });
   document.addEventListener("keydown", function (e) {
+
+    // 🔒 evita duplicação
+    if (e.repeat) return;
     const ativo = document.activeElement;
 
     if (e.key !== "Enter") return;
@@ -370,42 +373,39 @@ produto.select();
             const totalEdit = parseFloat(qtd) * parseFloat(valor);
 linhaSelecionada.children[4].textContent = isNaN(totalEdit) ? "" : totalEdit.toFixed(2);
 atualizarTotalGeral();
-            linhaSelecionada.scrollIntoView({ behavior: "smooth", block: "center" });
-            linhaSelecionada = null;
-        } else {
-            // CRIAR NOVA LINHA
-            const novaLinha = document.createElement("tr");
-            const total = parseFloat(qtd) * parseFloat(valor);
+linhaSelecionada.scrollIntoView({ behavior: "smooth", block: "center" });
+linhaSelecionada = null;
+limparLinhaLancamento();
+return;
+} else {
+    // CRIAR NOVA LINHA
+    const novaLinha = document.createElement("tr");
+    const total = parseFloat(qtd) * parseFloat(valor);
 
-novaLinha.innerHTML =
-    "<td>" + nomeProduto + "</td>" +
-    "<td>" + qtd + "</td>" +
-    "<td>" + un + "</td>" +
-    "<td>" + valor + "</td>" +
-    "<td>" + (isNaN(total) ? "" : total.toFixed(2)) + "</td>";
-            tabelaBody.appendChild(novaLinha);
-            atualizarTotalGeral();
-            requestAnimationFrame(() => {
-    novaLinha.scrollIntoView({
-        behavior: "smooth",
-        block: "nearest"
+    novaLinha.innerHTML =
+        "<td>" + nomeProduto + "</td>" +
+        "<td>" + qtd + "</td>" +
+        "<td>" + un + "</td>" +
+        "<td>" + valor + "</td>" +
+        "<td>" + (isNaN(total) ? "" : total.toFixed(2)) + "</td>";
+
+    tabelaBody.appendChild(novaLinha);
+    atualizarTotalGeral();
+
+    requestAnimationFrame(() => {
+        tabelaBody.querySelectorAll("tr").forEach(tr => tr.style.background = "");
+        novaLinha.style.background = "#e8f1ff";
+
+        novaLinha.scrollIntoView({
+            behavior: "smooth",
+            block: "nearest"
+        });
     });
-});
 
-
-            // destaque visual no último item
-            tabelaBody.querySelectorAll("tr").forEach(tr => tr.style.background = "");
-            novaLinha.style.background = "#e8f1ff";
-        }
-
-        produto.value = "";
-        quantidade.value = "";
-        unidade.value = "";
-        preco.value = "";
-
-        produto.focus({ preventScroll: true });
-        produto.select();
-        function atualizarTotalGeral() {
+    limparLinhaLancamento();
+    return;
+}
+function atualizarTotalGeral() {
     let total = 0;
 
     tabelaBody.querySelectorAll("tr").forEach(tr => {
@@ -424,6 +424,7 @@ novaLinha.innerHTML =
 
 let sugestoes = [];
 let indexAtivo = -1;
+let autocompleteAberto = false;
 
 function filtrarProdutos(texto) {
   const termo = texto.toLowerCase().trim();
@@ -444,8 +445,15 @@ function filtrarProdutos(texto) {
     const inicial = nome.charAt(0);
     return inicial >= primeiraLetra && !nome.startsWith(termo);
   });
+const contemEmOutraPalavra = opcoes.filter((opt) => {
+    const nome = opt.value.toLowerCase().trim();
 
-  sugestoes = [...comecaComTermo, ...segueOrdemAlfabetica];
+    if (nome.startsWith(termo)) return false;
+
+    const palavras = nome.split(/\s+/);
+    return palavras.some((palavra, index) => index > 0 && palavra.includes(termo));
+});
+  sugestoes = [...comecaComTermo, ...contemEmOutraPalavra, ...segueOrdemAlfabetica];
   indexAtivo = sugestoes.length ? 0 : -1;
 }
 function renderSugestoes() {
@@ -478,10 +486,16 @@ function selecionarProduto(opt) {
     produtoBusca.value = opt.value;
     sugestoesBox.style.display = "none";
 
+    autocompleteAberto = false;
     indexAtivo = -1;
+
+    quantidade.focus();
+    quantidade.select();
 }
 
 produtoBusca.addEventListener("input", () => {
+    if (!autocompleteAberto) return;
+
     const texto = produtoBusca.value.trim();
 
     if (!texto) {
@@ -492,7 +506,19 @@ produtoBusca.addEventListener("input", () => {
     filtrarProdutos(texto);
     renderSugestoes();
 });
+produtoBusca.addEventListener("focus", () => {
+    autocompleteAberto = true;
 
+    const texto = produtoBusca.value.trim();
+    filtrarProdutos(texto);
+    renderSugestoes();
+});
+produtoBusca.addEventListener("blur", () => {
+    setTimeout(() => {
+        autocompleteAberto = false;
+        sugestoesBox.style.display = "none";
+    }, 150);
+});
 produtoBusca.addEventListener("keydown", (e) => {
     if (!sugestoes.length) return;
 
@@ -509,11 +535,17 @@ produtoBusca.addEventListener("keydown", (e) => {
     }
 
     else if (e.key === "Enter") {
-        if (indexAtivo >= 0) {
-            e.preventDefault();
-            selecionarProduto(sugestoes[indexAtivo]);
-        }
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (indexAtivo >= 0) {
+        selecionarProduto(sugestoes[indexAtivo]);
+    } else if (produtoBusca.value.trim()) {
+        quantidade.focus();
+        quantidade.select();
     }
+}
+    
 
     else if (e.key === "Escape") {
         sugestoesBox.style.display = "none";
