@@ -506,7 +506,7 @@ function selecionarProduto(opt) {
 }
 
 produtoBusca.addEventListener("input", () => {
-    if (!autocompleteAberto) return;
+    autocompleteAberto = true;
 
     const texto = produtoBusca.value.trim();
 
@@ -518,13 +518,21 @@ produtoBusca.addEventListener("input", () => {
     filtrarProdutos(texto);
     renderSugestoes();
 });
-produtoBusca.addEventListener("focus", () => {
+produtoBusca.addEventListener("click", () => {
     autocompleteAberto = true;
 
     const texto = produtoBusca.value.trim();
+
     filtrarProdutos(texto);
     renderSugestoes();
 });
+//produtoBusca.addEventListener("focus", () => {
+//    autocompleteAberto = true;
+//
+//    const texto = produtoBusca.value.trim();
+//    filtrarProdutos(texto);
+//    renderSugestoes();
+//});
 produtoBusca.addEventListener("blur", () => {
     setTimeout(() => {
         autocompleteAberto = false;
@@ -532,7 +540,7 @@ produtoBusca.addEventListener("blur", () => {
     }, 150);
 });
 produtoBusca.addEventListener("keydown", (e) => {
-    if (!sugestoes.length) return;
+    
 
     if (e.key === "ArrowDown") {
         e.preventDefault();
