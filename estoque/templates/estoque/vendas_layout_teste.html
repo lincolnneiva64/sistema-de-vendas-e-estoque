@@ -362,6 +362,7 @@ produto.select();
         if (!nomeProduto || !qtd || !un || !valor) {
             alert("Preencha Produto, Qtd, Un e Preço.");
             return;
+            
         }
 
         if (linhaSelecionada) {
@@ -404,6 +405,17 @@ return;
 
     limparLinhaLancamento();
     return;
+}
+function limparLinhaLancamento() {
+    produtoBusca.value = "";
+    produto.value = "";
+    quantidade.value = "";
+    unidade.value = "";
+    preco.value = "";
+
+    setTimeout(() => {
+        produtoBusca.focus();
+    }, 50);
 }
 function atualizarTotalGeral() {
     let total = 0;
