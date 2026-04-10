@@ -320,14 +320,17 @@ const valor = linha.children[3].textContent.trim();
 
 // joga nos inputs
 produto.value = nome;
+produto.dispatchEvent(new Event("change"));
+produtoBusca.value = nome;
+
 quantidade.value = qtd;
 unidade.value = un;
 preco.value = valor;
 setTimeout(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
 }, 50);
-produto.focus();
-produto.select();
+produtoBusca.focus();
+produtoBusca.select();
     
 });
   document.addEventListener("keydown", function (e) {
