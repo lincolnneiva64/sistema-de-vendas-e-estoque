@@ -742,18 +742,35 @@ if (e.key === "Enter") {
 
         var nomeProduto = produto.value.trim();
 
-        if (!nomeProduto) {
-            mostrarErro('Digite um produto.');
-            produto.focus();
-            return;
-        }
+if (!nomeProduto) {
+    mostrarErro('Digite um produto.');
+    produto.focus();
+    return;
+}
 
-        var nomeProdutoNormalizado = nomeProduto.toLowerCase();
+var nomeProdutoNormalizado = nomeProduto.toLowerCase();
+
 var nomeProdutoOficial = produtosMock.find(function(item) {
     return item.toLowerCase() === nomeProdutoNormalizado;
 });
+
+if (!nomeProdutoOficial) {
+    nomeProdutoOficial = produtosMock.find(function(item) {
+        return item.toLowerCase().startsWith(nomeProdutoNormalizado);
+    });
+}
+
+if (!nomeProdutoOficial) {
+    nomeProdutoOficial = produtosMock.find(function(item) {
+        return item.toLowerCase().includes(nomeProdutoNormalizado);
+    });
+}
+
 var produtoExiste = !!nomeProdutoOficial;
 
+if (produtoExiste) {
+    produto.value = nomeProdutoOficial;
+}
 if (!produtoExiste) {
     mostrarErro('Produto não cadastrado.');
     produto.focus();
