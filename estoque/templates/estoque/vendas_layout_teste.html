@@ -121,7 +121,45 @@
     backdrop-filter: blur(6px);
     animation: fadeDrop 0.18s ease;
 }D
+.produto-sugestao-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px;
+}
 
+.nome-item-sugestao {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.estoque-item-sugestao {
+    font-size: 11px;
+    font-weight: 700;
+    color: #8a5a00;
+    background: #fff3cd;
+    border: 1px solid #f4c542;
+    border-radius: 999px;
+    padding: 2px 6px;
+    white-space: nowrap;
+}
+
+.produto-sugestao-item.ativo .estoque-item-sugestao {
+    color: #5f3700;
+    background: #ffe08a;
+    border-color: #e0a800;
+}
+
+.estoque-preview {
+    min-height: 22px;
+    margin-top: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #8a5a00;
+}
 .produto-sugestao-item {
     padding: 12px 16px;
     cursor: pointer;
@@ -249,17 +287,19 @@ select:focus {
             <div class="produto-autocomplete-wrap">
     <input type="text" id="produtoBusca" placeholder="Selecione um produto" autocomplete="off">
     <div id="produtoSugestoes" class="produto-sugestoes"></div>
+<div id="estoquePreview" class="estoque-preview"></div>
 
     <select id="produto" hidden>
         <option value="">Selecione um produto</option>
         {% for produto in produtos %}
             <option
-                value="{{ produto.nome }}"
-                data-unidade="{{ produto.unidade_venda_1|default_if_none:'' }}"
-                data-preco="{{ produto.preco_venda|default_if_none:'' }}"
-            >
-                {{ produto.nome }}
-            </option>
+    value="{{ produto.nome }}"
+    data-unidade="{{ produto.unidade_venda_1|default_if_none:'' }}"
+    data-preco="{{ produto.preco_venda|default_if_none:'' }}"
+    data-estoque="{{ produto.quantidade|default_if_none:0 }}"
+>
+    {{ produto.nome }}
+</option>
         {% endfor %}
     </select>
 </div>
@@ -310,12 +350,13 @@ select:focus {
 document.addEventListener("DOMContentLoaded", function () {
 
   const produto = document.getElementById("produto");
-  const produtoBusca = document.getElementById("produtoBusca");
-  const sugestoesBox = document.getElementById("produtoSugestoes");
-  const quantidade = document.getElementById("quantidade");
-  const unidade = document.getElementById("unidade");
-  const preco = document.getElementById("preco");
-  const tabelaBody = document.getElementById("tabelaProdutos");
+const produtoBusca = document.getElementById("produtoBusca");
+const sugestoesBox = document.getElementById("produtoSugestoes");
+const estoquePreview = document.getElementById("estoquePreview");
+const quantidade = document.getElementById("quantidade");
+const unidade = document.getElementById("unidade");
+const preco = document.getElementById("preco");
+const tabelaBody = document.getElementById("tabelaProdutos");
   produto.addEventListener("change", function () {
     const optionSelecionada = this.options[this.selectedIndex];
     if (!optionSelecionada) return;
@@ -500,32 +541,42 @@ function renderSugestoes() {
     sugestoesBox.innerHTML = "";
 
     if (!sugestoes.length) {
-        sugestoesBox.style.display = "none";
-        return;
-    }
+    sugestoesBox.style.display = "none";
+    estoquePreview.textContent = "";
+    return;
+}
 
     sugestoes.forEach((opt, i) => {
-        const div = document.createElement("div");
-        div.className = "produto-sugestao-item" + (i === indexAtivo ? " ativo" : "");
-        const texto = opt.value;
-const termo = produtoBusca.value.trim();
+    const div = document.createElement("div");
+    div.className = "produto-sugestao-item" + (i === indexAtivo ? " ativo" : "");
 
-const regex = new RegExp(`(${termo})`, "i");
-const textoHighlight = texto.replace(regex, `<strong>$1</strong>`);
+    const texto = opt.value;
+    const termo = produtoBusca.value.trim();
+    const estoque = opt.dataset.estoque || "0";
 
-div.innerHTML = textoHighlight;
+    const regex = termo ? new RegExp(`(${termo})`, "i") : null;
+    const textoHighlight = regex ? texto.replace(regex, `<strong>$1</strong>`) : texto;
 
-        div.addEventListener("mousedown", () => selecionarProduto(opt));
+    div.innerHTML = `
+    <span class="nome-item-sugestao">${textoHighlight}</span>
+    <span class="estoque-item-sugestao">Est: ${estoque}</span>
+`;
 
-        sugestoesBox.appendChild(div);
+    div.addEventListener("mouseenter", () => {
+        estoquePreview.textContent = `Estoque atual: ${estoque}`;
     });
+
+    div.addEventListener("mousedown", () => selecionarProduto(opt));
+
+    sugestoesBox.appendChild(div);
+});
 
     sugestoesBox.style.display = "block";
 }
 
 function selecionarProduto(opt) {
     produto.value = opt.value;
-
+estoquePreview.textContent = `Estoque atual: ${opt.dataset.estoque || "0"}`;
     // dispara o MESMO fluxo do select
     produto.dispatchEvent(new Event("change"));
 
@@ -545,10 +596,10 @@ produtoBusca.addEventListener("input", () => {
     const texto = produtoBusca.value.trim();
 
     if (!texto) {
-        sugestoesBox.style.display = "none";
-        return;
-    }
-
+    sugestoesBox.style.display = "none";
+    estoquePreview.textContent = "";
+    return;
+}
     filtrarProdutos(texto);
     renderSugestoes();
 });
@@ -571,6 +622,7 @@ produtoBusca.addEventListener("blur", () => {
     setTimeout(() => {
         autocompleteAberto = false;
         sugestoesBox.style.display = "none";
+        estoquePreview.textContent = "";
     }, 150);
 });
 produtoBusca.addEventListener("keydown", (e) => {
@@ -603,13 +655,18 @@ produtoBusca.addEventListener("keydown", (e) => {
 
     else if (e.key === "Escape") {
         sugestoesBox.style.display = "none";
+        estoquePreview.textContent = "";
     }
 });
 
 document.addEventListener("click", (e) => {
     if (!sugestoesBox.contains(e.target) && e.target !== produtoBusca) {
-        sugestoesBox.style.display = "none";
+    sugestoesBox.style.display = "none";
+
+    if (!produtoBusca.value.trim()) {
+        estoquePreview.textContent = "";
     }
+}
 });
 });
 
