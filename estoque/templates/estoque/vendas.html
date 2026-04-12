@@ -44,7 +44,11 @@ gap: 20px;
     align-items: center;
     z-index: 1000;
 }
-
+#produto {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+}
 #info-venda {
     display: flex;
     flex-direction: column;
@@ -54,7 +58,12 @@ gap: 20px;
 #total-geral {
     font-size: 22px;
 font-weight: bold;
-    
+   
+}
+#estoque-produto {
+    font-size: 22px !important;
+    font-weight: 700 !important;
+    color: #1e3a8a !important;
 }
 .bloco-venda {
     background: #ffffff;
@@ -75,7 +84,7 @@ font-weight: bold;
 .bloco-venda h2,
 .bloco-venda h3 {
     margin: 0 0 16px 0;
-    font-size: 28px;
+    font-size: 26px;
     font-weight: 800;
     color: #0f172a;
     letter-spacing: -0.4px;
@@ -89,7 +98,7 @@ font-weight: bold;
 
 .linha-cabecalho {
     display: grid;
-    grid-template-columns: 1.5fr 1fr 0.85fr 1.5fr;
+    grid-template-columns: 2fr 0.6fr 1fr 0.85fr 1.5fr;
     gap: 14px;
     align-items: center;
 }
@@ -503,6 +512,8 @@ cursor: pointer;
 </div>    <!-- LINHA DE DIGITAÇÃO -->
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <input id="produto" placeholder="Produto" list="lista-produtos" style="flex:2;" autofocus>
+        <span id="estoque-produto">Estoque: 999</span>
+</span>
 <datalist id="lista-produtos">
 </datalist>
         <input id="quantidade" placeholder="Qtd" style="width:80px;">
@@ -1158,6 +1169,7 @@ document.addEventListener("DOMContentLoaded", function() {
 document.addEventListener("DOMContentLoaded", function () {
     console.log("SCRIPT DA VENDAS RODOU");
 const produtoLayout = document.getElementById("produto-layout");
+const estoqueProduto = document.getElementById("estoque-produto");
 console.log("produtoLayout =", produtoLayout);
 const quantidadeLayout = document.getElementById("quantidade-layout");
 const unidadeLayout = document.getElementById("unidade-layout");
@@ -1165,17 +1177,18 @@ console.log("unidadeLayout =", unidadeLayout);
 const precoLayout = document.getElementById("preco-layout");
 
 const produtosCadastrados = {
-    "cenoura": { unidade: "KG" },
-    "abacate": { unidade: "KG" }
-};
-
-produtoLayout.addEventListener("input", function () {
+    "arroz bco t1 30/1kg": { unidade: "KG", estoque: 10 },
+    "arroz fazenda parb 30/1kg": { unidade: "KG", estoque: 0 },
+    "coxa sobrecoxa 18/1kg": { unidade: "KG", estoque: 44 }
+};produtoLayout.addEventListener("input", function () {
     const nome = produtoLayout.value.trim().toLowerCase();
     console.log("nome digitado =", nome);
     console.log("produto encontrado =", produtosCadastrados[nome]);
-    const produto = produtosCadastrados[nome];
+    const chave = Object.keys(produtosCadastrados).find(p => p.includes(nome));
+const produto = produtosCadastrados[chave];
 
     if (produto) {
+    estoqueProduto.innerHTML = "<span style='font-size:22px; font-weight:700; color:#1e3a8a;'>Estoque: " + (produto.estoque || 0) + "</span>";
         unidadeLayout.value = produto.unidade;
     } else {
         unidadeLayout.value = "";
