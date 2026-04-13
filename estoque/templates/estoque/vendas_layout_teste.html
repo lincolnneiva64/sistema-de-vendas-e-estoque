@@ -406,7 +406,15 @@ const valor = linha.children[3].textContent.trim();
 produto.value = nome;
 produto.dispatchEvent(new Event("change"));
 produtoBusca.value = nome;
+const optionEdicao = Array.from(produto.options).find(opt => opt.text.trim() === nome);
 
+if (optionEdicao) {
+    estoquePreview.innerText = "Estoque atual: " + (optionEdicao.dataset.estoque || "0");
+    estoquePreview.style.display = "inline-block";
+} else {
+    estoquePreview.innerText = "";
+    estoquePreview.style.display = "none";
+}
 quantidade.value = qtd;
 unidade.value = un;
 preco.value = valor;
@@ -463,6 +471,8 @@ linhaSelecionada.children[4].textContent = isNaN(totalEdit) ? "" : totalEdit.toF
 atualizarTotalGeral();
 linhaSelecionada.scrollIntoView({ behavior: "smooth", block: "center" });
 linhaSelecionada = null;
+estoquePreview.innerText = "";
+estoquePreview.style.display = "none";
 limparLinhaLancamento();
 return;
 } else {
@@ -478,6 +488,8 @@ return;
         "<td>" + (isNaN(total) ? "" : total.toFixed(2)) + "</td>";
 
     tabelaBody.appendChild(novaLinha);
+    estoquePreview.innerText = "";
+    estoquePreview.style.display = "none";
     atualizarTotalGeral();
 
     requestAnimationFrame(() => {
