@@ -575,10 +575,10 @@ function renderSugestoes() {
 }
 
 function selecionarProduto(opt) {
-    produto.value = opt.value;
-estoquePreview.textContent = `Estoque atual: ${opt.dataset.estoque || "0"}`;
+    produto.value = opt.value
+    estoquePreview.textContent = `Estoque atual: ${opt.dataset.estoque || "0"}`
     // dispara o MESMO fluxo do select
-    produto.dispatchEvent(new Event("change"));
+    produto.dispatchEvent(new Event("change"))
 
     produtoBusca.value = opt.value;
     sugestoesBox.style.display = "none";
@@ -589,7 +589,6 @@ estoquePreview.textContent = `Estoque atual: ${opt.dataset.estoque || "0"}`;
     quantidade.focus();
     quantidade.select();
 }
-
 produtoBusca.addEventListener("input", () => {
     autocompleteAberto = true;
 
@@ -622,7 +621,10 @@ produtoBusca.addEventListener("blur", () => {
     setTimeout(() => {
         autocompleteAberto = false;
         sugestoesBox.style.display = "none";
-        estoquePreview.textContent = "";
+
+        if (!produto.value) {
+            estoquePreview.textContent = "";
+        }
     }, 150);
 });
 produtoBusca.addEventListener("keydown", (e) => {
