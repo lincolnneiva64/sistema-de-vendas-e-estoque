@@ -58,7 +58,7 @@ def home(request):
             default=Value(3),
             output_field=IntegerField(),
         )
-    ).order_by("prioridade", "-criado_em")
+    ).order_by("nome")
 
     produtos = produtos_base
 

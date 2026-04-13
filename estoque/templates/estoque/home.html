@@ -56,8 +56,14 @@ align-items: center;
 </div>
   <div style="max-width: 720px; margin: 0 auto 12px auto;">
     <div style="margin-bottom: 6px; font-weight: 600;">
-    Resumo
+        Resumo
+    </div>
+
+<p style="margin: 4px 0 8px 0; font-weight: 600; color: color: #444;">
+    Total: {{ total_produtos }} produtos cadastrados
+</p>
 </div>
+<div style="max-width: 720px; margin: 0 auto 10px auto;">
 
 <a class="badge bg-secondary resumo-badge {% if filtro == 'todos' %}active{% endif %}"
    href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=todos">Todos</a>
@@ -73,7 +79,7 @@ align-items: center;
 
 <a class="badge badge-ok resumo-badge {% if filtro == 'normal' %}active{% endif %}"
    href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=normal">Normal: {{ normal_count }}</a>
-  </div>
+</div>
   
 <div class="fade-wrapper" id="fadeWrapper">
   <div class="container" style="margin:10px auto; max-width:720px;">
@@ -135,9 +141,23 @@ align-items: center;
     </tbody>
   </table>
 </div>
+<div style="max-width: 720px; margin: 12px auto 90px auto;">
+    <div style="
+        background: #f8f9fa;
+        border: 1px solid #e0e0e0;
+        border-top: none;
+        border-radius: 0 0 10px 10px;
+        padding: 14px;
+        text-align: center;
+    ">
+        <span style="font-size: 14px; color: #555; letter-spacing: 0.8px; font-weight: 600;">
+            TOTAL DE PRODUTOS
+        </span>
 
-
-
+        <div style="font-size: 26px; font-weight: 700; color: #222; margin-top: 4px;">
+            {{ total_produtos }}
+        </div>
+    </div>
 </div>
 <script>
  
