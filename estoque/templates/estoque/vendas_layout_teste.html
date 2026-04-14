@@ -292,7 +292,7 @@ select:focus {
         <div class="linha">
             <input type="text" placeholder="Cliente">
             <input type="date">
-            <select>
+            <select id="tipoVenda">
                 <option>À vista</option>
                 <option>Fiado</option>
             </select>
@@ -315,6 +315,10 @@ select:focus {
     data-unidade="{{ produto.unidade_venda_1|default_if_none:'' }}"
     data-preco="{{ produto.preco_venda|default_if_none:'' }}"
     data-estoque="{{ produto.quantidade|default_if_none:0 }}"
+    data-fracionado="{{ produto.vende_fracionado|yesno:'true,false' }}"
+    data-unidade2="{{ produto.unidade_venda_2|default_if_none:'' }}"
+    data-fator="{{ produto.fator_conversao|default_if_none:'' }}"
+    data-preco2="{{ produto.preco_compra_fracionado|default_if_none:'' }}"
 >
     {{ produto.nome }}
 </option>
@@ -368,6 +372,7 @@ select:focus {
 document.addEventListener("DOMContentLoaded", function () {
 
   const produto = document.getElementById("produto");
+  const tipoVenda = document.getElementById("tipoVenda");
 const produtoBusca = document.getElementById("produtoBusca");
 const sugestoesBox = document.getElementById("produtoSugestoes");
 const estoquePreview = document.getElementById("estoquePreview");
@@ -439,8 +444,20 @@ produtoBusca.select();
     quantidade.select();
 } else if (ativo === quantidade) {
     e.preventDefault();
-    unidade.focus();
-    unidade.select();
+
+    const optionSelecionada = produto.options[produto.selectedIndex];
+
+    if (!optionSelecionada) return;
+
+    const fracionado = optionSelecionada.dataset.fracionado === "true";
+
+    if (fracionado) {
+        unidade.focus();
+        unidade.select();
+    } else {
+        preco.focus();
+        preco.select();
+    }
 } else if (ativo === unidade) {
     e.preventDefault();
     preco.focus();
