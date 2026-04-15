@@ -416,7 +416,18 @@ produtoBusca.value = nome;
 const optionEdicao = Array.from(produto.options).find(opt => opt.text.trim() === nome);
 
 if (optionEdicao) {
-    estoquePreview.innerText = "Estoque atual: " + (optionEdicao.dataset.estoque || "0");
+    const unidade1Edicao = optionEdicao.dataset.unidade1 || "";
+const unidade2Edicao = optionEdicao.dataset.unidade2 || "";
+const fracionadoEdicao = optionEdicao.dataset.fracionado === "true";
+const fatorEdicao = parseFloat(optionEdicao.dataset.fator || "0");
+const estoqueBaseEdicao = parseFloat(optionEdicao.dataset.estoque || "0");
+const estoqueConvertidoEdicao = fatorEdicao > 0 ? estoqueBaseEdicao * fatorEdicao : estoqueBaseEdicao;
+
+if (fracionadoEdicao && unidade2Edicao) {
+    estoquePreview.innerText = `Estoque: ${estoqueBaseEdicao} ${unidade1Edicao} | ${estoqueConvertidoEdicao} ${unidade2Edicao}`;
+} else {
+    estoquePreview.innerText = `Estoque: ${estoqueBaseEdicao} ${unidade1Edicao}`;
+}
     estoquePreview.style.display = "inline-block";
 } else {
     estoquePreview.innerText = "";
@@ -612,7 +623,18 @@ function renderSugestoes() {
 `;
 
     div.addEventListener("mouseenter", () => {
-        estoquePreview.textContent = `Estoque atual: ${estoque}`;
+        const unidadeBaseSug = opt.dataset.unidade1 || "";
+const unidadeFracSug = opt.dataset.unidade2 || "";
+const fracionadoSug = opt.dataset.fracionado === "true";
+const fatorSug = parseFloat(opt.dataset.fator || "0");
+const estoqueBaseSug = parseFloat(opt.dataset.estoque || "0");
+const estoqueConvertidoSug = fatorSug > 0 ? estoqueBaseSug * fatorSug : estoqueBaseSug;
+
+if (fracionadoSug && unidadeFracSug) {
+    estoquePreview.textContent = `Estoque: ${estoqueBaseSug} ${unidadeBaseSug} | ${estoqueConvertidoSug} ${unidadeFracSug}`;
+} else {
+    estoquePreview.textContent = `Estoque: ${estoqueBaseSug} ${unidadeBaseSug}`;
+}
         estoquePreview.style.display = "inline-block";
     });
 
@@ -642,8 +664,19 @@ if (fracionado && unidade2) {
 }
 
 unidade.value = unidade1;
+const estoqueBaseSelecionado = parseFloat(opt.dataset.estoque || "0");
+const fatorSelecionado = parseFloat(opt.dataset.fator || "0");
+const unidadeBaseSelecionada = opt.dataset.unidade1 || "";
+const unidadeFracSelecionada = opt.dataset.unidade2 || "";
+const fracionadoSelecionado = opt.dataset.fracionado === "true";
+const estoqueConvertidoSelecionado =
+    fatorSelecionado > 0 ? estoqueBaseSelecionado * fatorSelecionado : estoqueBaseSelecionado;
 
-estoquePreview.textContent = `Estoque atual: ${opt.dataset.estoque || "0"}`;
+if (fracionadoSelecionado && unidadeFracSelecionada) {
+    estoquePreview.textContent = `Estoque: ${estoqueBaseSelecionado} ${unidadeBaseSelecionada} | ${estoqueConvertidoSelecionado} ${unidadeFracSelecionada}`;
+} else {
+    estoquePreview.textContent = `Estoque: ${estoqueBaseSelecionado} ${unidadeBaseSelecionada}`;
+}
 estoquePreview.style.display = "inline-block";
 
 preco.value = opt.dataset.preco || "";
@@ -673,7 +706,11 @@ let precoBase = opt.dataset.preco || "";
 let precoFracionado = opt.dataset.preco2 || "";
 
     if (unidade.value === unidade1) {
-        estoquePreview.textContent = `Estoque atual: ${opt.dataset.estoque || "0"}`;
+        if (fracionado && unidade2) {
+    estoquePreview.textContent = `Estoque: ${estoqueBase} ${unidade1} | ${estoqueBase * (fator > 0 ? fator : 1)} ${unidade2}`;
+} else {
+    estoquePreview.textContent = `Estoque: ${estoqueBase} ${unidade1}`;
+}
         preco.value = precoBase;
         return;
     }
@@ -685,7 +722,7 @@ let precoFracionado = opt.dataset.preco2 || "";
             estoqueConvertido = estoqueBase * fator;
         }
 
-        estoquePreview.textContent = `Estoque atual: ${estoqueConvertido}`;
+        estoquePreview.textContent = `Estoque: ${estoqueBase} ${unidade1} | ${estoqueConvertido} ${unidade2}`;
         preco.value = precoFracionado;
     }
 });
