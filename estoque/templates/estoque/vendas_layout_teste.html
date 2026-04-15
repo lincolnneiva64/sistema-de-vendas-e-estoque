@@ -437,9 +437,31 @@ if (fracionadoEdicao && unidade2Edicao) {
     estoquePreview.style.display = "none";
 }
 quantidade.value = qtd;
+
+unidade.innerHTML = "";
+
+if (optionEdicao) {
+    const unidade1Edicao = optionEdicao.dataset.unidade1 || optionEdicao.dataset.unidade || "";
+    const unidade2Edicao = optionEdicao.dataset.unidade2 || "";
+    const fracionadoEdicao = optionEdicao.dataset.fracionado === "true";
+
+    if (unidade1Edicao) {
+        const op1 = document.createElement("option");
+        op1.value = unidade1Edicao;
+        op1.textContent = unidade1Edicao;
+        unidade.appendChild(op1);
+    }
+
+    if (fracionadoEdicao && unidade2Edicao) {
+        const op2 = document.createElement("option");
+        op2.value = unidade2Edicao;
+        op2.textContent = unidade2Edicao;
+        unidade.appendChild(op2);
+    }
+}
+
 unidade.value = un;
-preco.value = valor;
-setTimeout(() => {
+preco.value = valor;setTimeout(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
 }, 50);
 produtoBusca.focus();
