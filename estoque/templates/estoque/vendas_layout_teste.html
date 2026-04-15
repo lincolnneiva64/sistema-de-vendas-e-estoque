@@ -318,7 +318,7 @@ select:focus {
     data-fracionado="{{ produto.vende_fracionado|yesno:'true,false' }}"
     data-unidade2="{{ produto.unidade_venda_2|default_if_none:'' }}"
     data-fator="{{ produto.fator_conversao|default_if_none:'' }}"
-    data-preco2="{{ produto.preco_compra_fracionado|default_if_none:'' }}"
+    data-preco2="{{ produto.preco_vista_fracionado|default_if_none:'' }}"
 >
     {{ produto.nome }}
 </option>
@@ -326,7 +326,9 @@ select:focus {
     </select>
 </div>
 <input type="number" id="quantidade" placeholder="Qtd">
-<input type="text" id="unidade" placeholder="Un">
+<select id="unidade">
+    <option value="">Un</option>
+</select>
 <input type="text" id="preco" placeholder="Preço">
         </div>
     </div>
@@ -621,23 +623,72 @@ function renderSugestoes() {
 
     sugestoesBox.style.display = "block";
 }
-
 function selecionarProduto(opt) {
-    produto.value = opt.value
-    estoquePreview.textContent = `Estoque atual: ${opt.dataset.estoque || "0"}`
-    estoquePreview.style.display = "inline-block";
-    // dispara o MESMO fluxo do select
-    produto.dispatchEvent(new Event("change"))
+produto.value = opt.value;
+produtoBusca.value = opt.value;
 
-    produtoBusca.value = opt.value;
-    sugestoesBox.style.display = "none";
+unidade.innerHTML = "";
 
+const unidade1 = opt.dataset.unidade || "";
+const unidade2 = opt.dataset.unidade2 || "";
+const fracionado = opt.dataset.fracionado === "true";
+
+if (unidade1) {
+    unidade.innerHTML += `<option value="${unidade1}">${unidade1}</option>`;
+}
+
+if (fracionado && unidade2) {
+    unidade.innerHTML += `<option value="${unidade2}">${unidade2}</option>`;
+}
+
+unidade.value = unidade1;
+
+estoquePreview.textContent = `Estoque atual: ${opt.dataset.estoque || "0"}`;
+estoquePreview.style.display = "inline-block";
+
+preco.value = opt.dataset.preco || "";
+
+// dispara o MESMO fluxo do select
+produto.dispatchEvent(new Event("change"));
+
+sugestoesBox.style.display = "none";
     autocompleteAberto = false;
     indexAtivo = -1;
 
     quantidade.focus();
     quantidade.select();
 }
+unidade.addEventListener("change", () => {
+    const nomeProduto = produto.value.trim();
+    const opt = Array.from(produto.options).find(option => option.value.trim() === nomeProduto);
+
+    if (!opt) return;
+
+    const unidade1 = opt.dataset.unidade || "";
+    const unidade2 = opt.dataset.unidade2 || "";
+    const fracionado = opt.dataset.fracionado === "true";
+    const fator = parseFloat(opt.dataset.fator || "0");
+const estoqueBase = parseFloat(opt.dataset.estoque || "0");
+let precoBase = opt.dataset.preco || "";
+let precoFracionado = opt.dataset.preco2 || "";
+
+    if (unidade.value === unidade1) {
+        estoquePreview.textContent = `Estoque atual: ${opt.dataset.estoque || "0"}`;
+        preco.value = precoBase;
+        return;
+    }
+
+    if (fracionado && unidade.value === unidade2) {
+        let estoqueConvertido = estoqueBase;
+
+        if (fator > 0) {
+            estoqueConvertido = estoqueBase * fator;
+        }
+
+        estoquePreview.textContent = `Estoque atual: ${estoqueConvertido}`;
+        preco.value = precoFracionado;
+    }
+});
 produtoBusca.addEventListener("input", () => {
     autocompleteAberto = true;
 
