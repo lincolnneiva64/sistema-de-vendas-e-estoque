@@ -446,6 +446,86 @@ produtoBusca.focus();
 produtoBusca.select();
     
 });
+function mostrarAviso(mensagem, campo = null, selecionar = false) {
+    let aviso = document.getElementById("aviso-validacao");
+
+    if (!aviso) {
+        aviso = document.createElement("div");
+        aviso.id = "aviso-validacao";
+        aviso.style.position = "fixed";
+        aviso.style.top = "32px";
+        aviso.style.left = "50%";
+        aviso.style.transform = "translateX(-50%)";
+        aviso.style.zIndex = "9999";
+        aviso.style.minWidth = "420px";
+        aviso.style.maxWidth = "520px";
+        aviso.style.padding = "18px 20px";
+        aviso.style.borderRadius = "16px";
+        aviso.style.background = "#fff7e6";
+        aviso.style.border = "1px solid #f4d38a";
+        aviso.style.boxShadow = "0 16px 36px rgba(180, 120, 20, 0.18)";
+        aviso.style.color = "#5f3b00";
+        aviso.style.fontSize = "18px";
+        aviso.style.fontWeight = "500";
+        aviso.style.display = "flex";
+        aviso.style.alignItems = "center";
+        aviso.style.justifyContent = "space-between";
+        aviso.style.gap = "12px";
+
+        const texto = document.createElement("span");
+        texto.id = "aviso-validacao-texto";
+
+        const botao = document.createElement("button");
+        botao.type = "button";
+        botao.textContent = "OK";
+        botao.style.border = "none";
+        botao.style.background = "#d97706";
+        botao.style.color = "#ffffff";
+        botao.style.padding = "10px 18px";
+        botao.style.borderRadius = "12px";
+        botao.style.cursor = "pointer";
+        botao.style.fontWeight = "600";
+        botao.style.fontSize = "16px";
+
+        function fecharAviso() {
+            const avisoAtual = document.getElementById("aviso-validacao");
+            if (avisoAtual) {
+                avisoAtual.remove();
+            }
+
+            document.removeEventListener("keydown", enterAvisoHandler);
+
+            if (campo) {
+                campo.focus();
+                if (selecionar && typeof campo.select === "function") {
+                    campo.select();
+                }
+            }
+        }
+
+        function enterAvisoHandler(e) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                fecharAviso();
+            }
+        }
+
+        botao.addEventListener("click", fecharAviso);
+        document.addEventListener("keydown", enterAvisoHandler);
+
+        aviso.appendChild(texto);
+        aviso.appendChild(botao);
+        document.body.appendChild(aviso);
+
+        botao.focus();
+    }
+
+    const textoEl = document.getElementById("aviso-validacao-texto");
+    if (textoEl) {
+        textoEl.textContent = mensagem;
+    }
+}
+        
   document.addEventListener("keydown", function (e) {
 
     // 🔒 evita duplicação
@@ -487,11 +567,25 @@ produtoBusca.select();
         const un = unidade.value.trim();
         const valor = preco.value.trim();
 
-        if (!nomeProduto || !qtd || !un || !valor) {
-            alert("Preencha Produto, Qtd, Un e Preço.");
-            return;
-            
-        }
+        if (!nomeProduto) {
+    mostrarAviso("Informe o produto.", produto);
+    return;
+}
+
+if (!qtd) {
+    mostrarAviso("Informe a quantidade.", quantidade, true);
+    return;
+}
+
+if (!un) {
+    mostrarAviso("Informe a unidade.", unidade);
+    return;
+}
+
+if (!valor) {
+    mostrarAviso("Informe o preço.", preco, true);
+    return;
+}
 
         if (linhaSelecionada) {
             // EDITAR LINHA EXISTENTE
