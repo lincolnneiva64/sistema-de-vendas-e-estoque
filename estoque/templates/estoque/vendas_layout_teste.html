@@ -49,6 +49,9 @@
     overflow-y: auto;
     overflow-x: hidden;
     padding-right: 4px;
+    padding-bottom: 96px;
+    box-sizing: border-box;
+    scrollbar-gutter: stable;
 }
 
 .bloco-itens-scroll table {
@@ -351,7 +354,7 @@ select:focus {
         </tbody>
     </table>
 </div>
-        <div style="position: sticky; bottom: 0; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; font-weight:bold; background:#fff; padding:10px 0;">
+        <div style="position: static; bottom: 0; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; font-weight:bold; background:#fff; padding:10px 0;">
     <div></div>
     <div></div>
     <div></div>
@@ -524,7 +527,7 @@ return;
 
     requestAnimationFrame(() => {
         tabelaBody.querySelectorAll("tr").forEach(tr => tr.style.background = "");
-        novaLinha.style.background = "#e8f1ff";
+        novaLinha.style.background = "#d6e4ff";
 
         novaLinha.scrollIntoView({
             behavior: "smooth",
