@@ -654,16 +654,40 @@ return;
     limparLinhaLancamento();
     return;
 }
+function prepararProdutoParaProximoLancamento() {
+    autocompleteAberto = true;
+    filtrarProdutos("");
+
+    if (ultimoProdutoIndex >= 0 && sugestoes.length) {
+        const opcoesValidas = Array.from(produto.querySelectorAll("option")).filter((opt) => {
+            const nome = (opt.value || "").trim();
+            return nome;
+        });
+
+        const proximoIndexReal = ultimoProdutoIndex + 1;
+
+        if (proximoIndexReal < opcoesValidas.length) {
+            const proximoValor = opcoesValidas[proximoIndexReal].value;
+            const indiceNaSugestao = sugestoes.findIndex(opt => opt.value === proximoValor);
+            indexAtivo = indiceNaSugestao >= 0 ? indiceNaSugestao : 0;
+        } else {
+            indexAtivo = 0;
+        }
+    }
+
+    renderSugestoes();
+}
 function limparLinhaLancamento() {
+    ultimoProdutoIndex = produto.selectedIndex - 1;
     produtoBusca.value = "";
-    produto.value = "";
-    quantidade.value = "";
+    produto.value = "";    quantidade.value = "";
     unidade.value = "";
     preco.value = "";
 
     setTimeout(() => {
-        produtoBusca.focus();
-    }, 50);
+    produtoBusca.focus();
+    prepararProdutoParaProximoLancamento();
+}, 50);
 }
 function atualizarTotalGeral() {
     let total = 0;
@@ -685,6 +709,7 @@ function atualizarTotalGeral() {
 let sugestoes = [];
 let indexAtivo = -1;
 let autocompleteAberto = false;
+let ultimoProdutoIndex = -1;
 
 function filtrarProdutos(texto) {
   const termo = texto.toLowerCase().trim();
