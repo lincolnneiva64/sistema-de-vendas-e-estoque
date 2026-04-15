@@ -622,7 +622,15 @@ linhaSelecionada.scrollIntoView({ behavior: "smooth", block: "center" });
 linhaSelecionada = null;
 estoquePreview.innerText = "";
 estoquePreview.style.display = "none";
-limparLinhaLancamento();
+produtoBusca.value = "";
+produto.value = "";
+quantidade.value = "";
+unidade.value = "";
+preco.value = "";
+
+setTimeout(() => {
+    produtoBusca.focus();
+}, 50);
 return;
 } else {
     // CRIAR NOVA LINHA
