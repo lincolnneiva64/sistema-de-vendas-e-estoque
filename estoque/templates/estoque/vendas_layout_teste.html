@@ -788,6 +788,13 @@ if (fracionadoSug && unidadeFracSug) {
 });
 
     sugestoesBox.style.display = "block";
+    const itemAtivo = sugestoesBox.querySelector(".produto-sugestao-item.ativo");
+if (itemAtivo) {
+    itemAtivo.scrollIntoView({
+        block: "nearest",
+        behavior: "smooth"
+    });
+}
 }
 function selecionarProduto(opt) {
 produto.value = opt.value;
