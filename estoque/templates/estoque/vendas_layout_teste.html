@@ -393,6 +393,7 @@ const tabelaBody = document.getElementById("tabelaProdutos");
     preco.value = optionSelecionada.dataset.preco || "";
 });
 let linhaSelecionada = null;
+let ultimoItemRemovido = null;
 tabelaBody.addEventListener("click", function (e) {
   const linha = e.target.closest("tr");
   linhaSelecionada = linha;
@@ -550,10 +551,16 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
         
   document.addEventListener("keydown", function (e) {
 if (e.key === "Delete") {
+
     if (linhaSelecionada) {
 const confirmar = confirm("Deseja excluir este item da venda?");
 if (!confirmar) return;
 
+// guarda a linha removida
+ultimoItemRemovido = {
+    html: linhaSelecionada.outerHTML,
+    index: Array.from(tabelaBody.children).indexOf(linhaSelecionada)
+};
 linhaSelecionada.remove();
         linhaSelecionada = null;
 
@@ -573,6 +580,35 @@ linhaSelecionada.remove();
     return;
 }
     // 🔒 evita duplicação
+    // Ctrl + Z → desfazer exclusão
+if (e.ctrlKey && e.key.toLowerCase() === "z") {
+    if (ultimoItemRemovido) {
+        const temp = document.createElement("tbody");
+        temp.innerHTML = ultimoItemRemovido.html;
+
+        const linhaRestaurada = temp.firstElementChild;
+        const linhasAtuais = tabelaBody.children;
+        const indexOriginal = ultimoItemRemovido.index;
+
+        if (indexOriginal >= linhasAtuais.length) {
+            tabelaBody.appendChild(linhaRestaurada);
+        } else {
+            tabelaBody.insertBefore(linhaRestaurada, linhasAtuais[indexOriginal]);
+        }
+
+        atualizarTotalGeral();
+
+        ultimoItemRemovido = null;
+
+        linhaRestaurada.style.background = "#d4edda";
+
+        setTimeout(() => {
+            linhaRestaurada.style.background = "";
+        }, 1200);
+    }
+
+    return;
+}
     if (e.repeat) return;
     const ativo = document.activeElement;
 
@@ -657,7 +693,7 @@ unidade.value = "";
 preco.value = "";
 
 setTimeout(() => {
-    produtoBusca.focus();
+
 }, 50);
 return;
 } else {
@@ -729,7 +765,11 @@ function atualizarTotalGeral() {
     let total = 0;
 
     tabelaBody.querySelectorAll("tr").forEach(tr => {
-        const valor = parseFloat(tr.children[4].textContent);
+        const texto = tr.children[4].textContent
+    .replace("R$", "")
+    .replace(",", ".")
+    .trim();
+const valor = parseFloat(texto);
         if (!isNaN(valor)) {
             total += valor;
         }
