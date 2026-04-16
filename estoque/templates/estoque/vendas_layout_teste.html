@@ -549,7 +549,29 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
 }
         
   document.addEventListener("keydown", function (e) {
+if (e.key === "Delete") {
+    if (linhaSelecionada) {
+const confirmar = confirm("Deseja excluir este item da venda?");
+if (!confirmar) return;
 
+linhaSelecionada.remove();
+        linhaSelecionada = null;
+
+        atualizarTotalGeral();
+
+        estoquePreview.innerText = "";
+        estoquePreview.style.display = "none";
+
+        produtoBusca.value = "";
+        produto.value = "";
+        quantidade.value = "";
+        unidade.value = "";
+        preco.value = "";
+
+        produtoBusca.focus();
+    }
+    return;
+}
     // 🔒 evita duplicação
     if (e.repeat) return;
     const ativo = document.activeElement;
@@ -588,7 +610,13 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
         const qtd = quantidade.value.trim();
         const un = unidade.value.trim();
         const valor = preco.value.trim();
+        const jaExiste = Array.from(tabelaBody.querySelectorAll("tr"))
+.some(tr => tr.children[0].textContent.trim() === nomeProduto);
 
+if (jaExiste && !linhaSelecionada) {
+    mostrarAviso("Esse produto já foi lançado.", produtoBusca, true);
+    return;
+}
         if (!nomeProduto) {
     mostrarAviso("Informe o produto.", produto);
     return;
