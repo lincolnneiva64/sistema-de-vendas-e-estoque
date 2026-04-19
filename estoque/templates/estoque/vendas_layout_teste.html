@@ -565,6 +565,7 @@ linhaSelecionada.remove();
         linhaSelecionada = null;
 
         atualizarTotalGeral();
+alert(document.getElementById("totalGeral").textContent);
 
         estoquePreview.innerText = "";
         estoquePreview.style.display = "none";
@@ -597,6 +598,8 @@ if (e.ctrlKey && e.key.toLowerCase() === "z") {
         }
 
         atualizarTotalGeral();
+console.log("TOTAL APÓS DELETE:", document.getElementById("totalGeral").textContent);
+console.log("LINHAS RESTANTES:", tabelaBody.querySelectorAll("tr").length);
 
         ultimoItemRemovido = null;
 
@@ -771,8 +774,7 @@ function atualizarTotalGeral() {
     .trim();
 const valor = parseFloat(texto);
         if (!isNaN(valor)) {
-            total += valor;
-        }
+            total += valor;        }
     });
 
     const totalDiv = document.getElementById("totalGeral");
