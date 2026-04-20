@@ -548,7 +548,24 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
         textoEl.textContent = mensagem;
     }
 }
-        
+  function atualizarTotalGeral() {
+    let total = 0;
+
+    tabelaBody.querySelectorAll("tr").forEach(tr => {
+        const texto = tr.children[4].textContent
+            .replace("R$", "")
+            .replace(",", ".")
+            .trim();
+
+        const valor = parseFloat(texto);
+        if (!isNaN(valor)) {
+            total += valor;
+        }
+    });
+
+    const totalDiv = document.getElementById("totalGeral");
+    totalDiv.textContent = "R$ " + total.toFixed(2);
+}      
   document.addEventListener("keydown", function (e) {
 if (e.key === "Delete") {
 
@@ -565,7 +582,7 @@ linhaSelecionada.remove();
         linhaSelecionada = null;
 
         atualizarTotalGeral();
-alert(document.getElementById("totalGeral").textContent);
+
 
         estoquePreview.innerText = "";
         estoquePreview.style.display = "none";
@@ -764,22 +781,7 @@ function limparLinhaLancamento() {
     prepararProdutoParaProximoLancamento();
 }, 50);
 }
-function atualizarTotalGeral() {
-    let total = 0;
 
-    tabelaBody.querySelectorAll("tr").forEach(tr => {
-        const texto = tr.children[4].textContent
-    .replace("R$", "")
-    .replace(",", ".")
-    .trim();
-const valor = parseFloat(texto);
-        if (!isNaN(valor)) {
-            total += valor;        }
-    });
-
-    const totalDiv = document.getElementById("totalGeral");
-    totalDiv.textContent = "R$ " + total.toFixed(2);
-}
     }
 });
 // ================= AUTOCOMPLETE PRODUTO =================
