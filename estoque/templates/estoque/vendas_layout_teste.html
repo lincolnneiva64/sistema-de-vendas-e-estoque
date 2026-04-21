@@ -566,7 +566,7 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
     const totalDiv = document.getElementById("totalGeral");
     totalDiv.textContent = "R$ " + total.toFixed(2);
 }  
-  function confirmarExclusaoPersonalizada() {
+  function confirmarExclusaoPersonalizada(nomeProduto = "este item") {
     return new Promise((resolve) => {
         const existente = document.getElementById("modal-excluir-venda");
         if (existente) existente.remove();
@@ -625,9 +625,13 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
                 </div>
 
                 <div style="padding:24px 22px 22px 22px;">
-                    <div style="font-size:21px;font-weight:700;color:#111827;line-height:1.4;">
-                        Deseja excluir este item da venda?
-                    </div>
+                    
+
+<div style="font-size:21px;font-weight:700;color:#111827;line-height:1.35;">
+    Confirmar exclusão de<br>
+<span style="color:#7c2d12;">${nomeProduto}</span>?
+</div>
+                    
 
                     <div style="
                         margin-top:12px;
@@ -653,10 +657,10 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
                             border:none;
                             background:#e5e7eb;
                             color:#111827;
-                            height:50px;
+                            height:46px;
                             min-width:140px;
                             border-radius:14px;
-                            font-size:18px;
+                            font-size:17px;
                             font-weight:700;
                             cursor:pointer;
                         ">
@@ -668,7 +672,7 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
                             background:linear-gradient(135deg,#ef4444 0%, #dc2626 100%);
                             color:#ffffff;
                             height:50px;
-                            min-width:160px;
+                            min-width:128px;
                             border-radius:14px;
                             font-size:18px;
                             font-weight:800;
@@ -695,19 +699,25 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
 
         function teclaModal(e) {
             if (e.key === "Escape") {
-                e.preventDefault();
-                fechar(false);
-            } else if (e.key === "Enter") {
-                e.preventDefault();
-                fechar(true);
-            } else if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Tab") {
-                e.preventDefault();
-                if (document.activeElement === btnConfirmar) {
-                    btnCancelar.focus();
-                } else {
-                    btnConfirmar.focus();
-                }
-            }
+    e.preventDefault();
+    fechar(false);
+} else if (e.key === "Enter") {
+    e.preventDefault();
+
+    if (document.activeElement === btnCancelar) {
+        fechar(false);
+    } else {
+        fechar(true);
+    }
+} else if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Tab") {
+    e.preventDefault();
+
+    if (document.activeElement === btnConfirmar) {
+        btnCancelar.focus();
+    } else {
+        btnConfirmar.focus();
+    }
+}
         }
 
         btnCancelar.onclick = () => fechar(false);
@@ -725,7 +735,8 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
 if (e.key === "Delete") {
 
     if (linhaSelecionada) {
-const confirmar = await confirmarExclusaoPersonalizada();
+const nomeProduto = linhaSelecionada.children[0]?.innerText?.trim() || "este item";
+const confirmar = await confirmarExclusaoPersonalizada(nomeProduto);
 if (!confirmar) return;
 
 // guarda a linha removida
