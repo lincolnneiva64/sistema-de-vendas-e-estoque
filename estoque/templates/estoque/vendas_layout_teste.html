@@ -978,9 +978,13 @@ return;
     limparLinhaLancamento();
     return;
 }
-function prepararProdutoParaProximoLancamento() {
-    autocompleteAberto = true;
-    filtrarProdutos("");
+function prepararProdutoParaProximoLancamento(abrirLista = true) {
+    autocompleteAberto = abrirLista;
+filtrarProdutos("");
+
+if (!abrirLista) {
+    sugestoesBox.style.display = "none";
+}
 
     if (ultimoProdutoIndex >= 0 && sugestoes.length) {
         const opcoesValidas = Array.from(produto.querySelectorAll("option")).filter((opt) => {
@@ -999,7 +1003,9 @@ function prepararProdutoParaProximoLancamento() {
         }
     }
 
+    if (abrirLista) {
     renderSugestoes();
+}
 }
 function limparLinhaLancamento() {
     ultimoProdutoIndex = produto.selectedIndex - 1;
@@ -1010,7 +1016,7 @@ function limparLinhaLancamento() {
 
     setTimeout(() => {
     produtoBusca.focus();
-    prepararProdutoParaProximoLancamento();
+    prepararProdutoParaProximoLancamento(false);
 }, 50);
 }
 
