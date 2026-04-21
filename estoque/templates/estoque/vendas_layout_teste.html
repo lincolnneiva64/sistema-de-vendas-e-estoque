@@ -72,7 +72,7 @@
 }
 
 .bloco-itens-scroll thead {
-    display: none;
+    display: table-header-group;
 }
 
 .tabela-cabecalho-fixa {
@@ -267,7 +267,7 @@ select:focus {
     }
 
     th {
-    text-align: left;
+    text-align: center;
     padding: 10px 12px;
     font-size: 14px;
     color: #1e3a8a;
@@ -279,8 +279,12 @@ td {
     padding: 10px 12px;
     font-size: 15px;
     border-bottom: 1px solid #e5e7eb;
+    text-align: center;
 }
-
+th:first-child,
+td:first-child {
+    text-align: left;
+}
     tbody tr:hover {
         background: #f8fbff;
     }
@@ -346,17 +350,16 @@ td {
     </div>
 
     <div class="bloco-venda">
-    <h3>Itens</h3>
-
+    
     <div class="bloco-itens-scroll">
     <table>
         <thead>
             <tr>
                 <th>Produto</th>
-                <th>Qtd</th>
-                <th>Un</th>
-                <th>Preço</th>
-                <th>Total</th>
+<th>Qtde</th>
+<th>Un</th>
+<th>Pr. Unit.</th>
+<th>Valor Total</th>
             </tr>
         </thead>
         <tbody id="tabelaProdutos">
