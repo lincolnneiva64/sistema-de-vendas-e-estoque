@@ -420,16 +420,18 @@ function scrollLinhaDentroDaLista(linha, behavior = "smooth") {
     const bottomVisivel = topVisivel + itensScroll.clientHeight;
 
     if (bottomLinha > bottomVisivel) {
-        itensScroll.scrollTo({
-            top: bottomLinha - itensScroll.clientHeight,
-            behavior
-        });
-    } else if (topLinha < topVisivel) {
-        itensScroll.scrollTo({
-            top: topLinha,
-            behavior
-        });
-    }
+    const folgaInferior = 56;
+
+    itensScroll.scrollTo({
+        top: Math.max(0, bottomLinha - itensScroll.clientHeight + folgaInferior),
+        behavior
+    });
+} else if (topLinha < topVisivel) {
+    itensScroll.scrollTo({
+        top: topLinha,
+        behavior
+    });
+}
 }
 
   const produto = document.getElementById("produto");
