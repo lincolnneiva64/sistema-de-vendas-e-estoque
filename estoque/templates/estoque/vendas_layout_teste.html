@@ -13,45 +13,45 @@
     }
 
     #layout-vendas {
-        max-width: 1400px;
-        margin: 32px auto;
-        padding: 0 20px 40px;
-    }
+    width: min(96vw, 1780px);
+    margin: 16px auto;
+    padding: 0 12px 18px;
+}
 
     .bloco-venda {
-        background: #ffffff;
-        border: 1px solid #d9e2ec;
-        border-radius: 18px;
-        padding: 24px;
-        margin-bottom: 22px;
-        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-    }
+    background: #ffffff;
+    border: 1px solid #d9e2ec;
+    border-radius: 16px;
+    padding: 16px 18px;
+    margin-bottom: 14px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+}
     .estoque-preview {
-    margin-top: 10px;
-    margin-left: 22px;
-
-    font-size: 18px;
-    font-weight: 700;
+    margin-top: 8px;
+    margin-left: 0;
+    font-size: 13px;
+    font-weight: 800;
     line-height: 1.2;
-
-    color: #7a4b00;
-
-    display: inline-block;
-    padding: 6px 12px;
-    border-radius: 8px;
-
-    background: rgba(255, 193, 7, 0.25);
-    border: 1px solid rgba(255, 193, 7, 0.45);
+    color: #8a5a00;
     display: none;
+    width: fit-content;
+    padding: 6px 12px;
+    border-radius: 10px;
+    background: rgba(255, 193, 7, 0.22);
+    border: 1px solid rgba(255, 193, 7, 0.48);
+    min-height: auto;
 }
     .bloco-itens-scroll {
-    max-height: 320px;
+    max-height: 430px;
+    min-height: 430px;
     overflow-y: auto;
     overflow-x: hidden;
-    padding-right: 4px;
-    padding-bottom: 96px;
+    padding-right: 2px;
+    padding-bottom: 0;
     box-sizing: border-box;
     scrollbar-gutter: stable;
+    border-bottom: 1px solid #dbe5f0;
+    margin-bottom: 10px;
 }
 
 .bloco-itens-scroll table {
@@ -79,34 +79,37 @@
     font-weight: 700;
 }
     h2 {
-        margin: 0 0 22px;
-        font-size: 34px;
-        font-weight: 700;
-        color: #0f172a;
-    }
+    margin: 0 0 14px;
+    font-size: 28px;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.1;
+}
 
-    h3 {
-        margin: 0 0 16px;
-        font-size: 24px;
-        font-weight: 700;
-        color: #1e3a8a;
-    }
+h3 {
+    margin: 0 0 10px;
+    font-size: 20px;
+    font-weight: 800;
+    color: #1e3a8a;
+    line-height: 1.1;
+}
 
     .linha {
-        display: grid;
-        grid-template-columns: 2fr 1.4fr 1fr 2fr;
-        gap: 14px;
-        margin-bottom: 18px;
-    }
+    display: grid;
+    grid-template-columns: minmax(0, 2.2fr) 1.2fr 1fr 1.4fr;
+    gap: 12px;
+    margin-bottom: 10px;
+    align-items: start;
+}
 
     input,
-    select {
-    height: 48px;
-    padding: 0 14px;
+select {
+    height: 40px;
+    padding: 0 12px;
     border: 2px solid #94a3b8;
-    border-radius: 12px;
+    border-radius: 10px;
     background: #ffffff;
-    font-size: 17px;
+    font-size: 16px;
     color: #0f172a;
     outline: none;
     transition: 0.18s ease;
@@ -115,8 +118,8 @@
 .produto-autocomplete-wrap {
     position: relative;
     width: 100%;
+    min-width: 0;
 }
-
 #produtoBusca {
     width: 100%;
 }
@@ -174,13 +177,6 @@
     border-color: #e0a800;
 }
 
-.estoque-preview {
-    min-height: 22px;
-    margin-top: 6px;
-    font-size: 13px;
-    font-weight: 700;
-    color: #8a5a00;
-}
 .produto-sugestao-item {
     padding: 12px 16px;
     cursor: pointer;
@@ -259,18 +255,19 @@ select:focus {
     }
 
     th {
-        text-align: left;
-        padding: 16px 14px;
-        font-size: 16px;
-        color: #1e3a8a;
-        border-bottom: 1px solid #cbd5e1;
-    }
+    text-align: left;
+    padding: 10px 12px;
+    font-size: 14px;
+    color: #1e3a8a;
+    border-bottom: 1px solid #cbd5e1;
+    font-weight: 800;
+}
 
-    td {
-        padding: 16px 14px;
-        font-size: 16px;
-        border-bottom: 1px solid #e5e7eb;
-    }
+td {
+    padding: 10px 12px;
+    font-size: 15px;
+    border-bottom: 1px solid #e5e7eb;
+}
 
     tbody tr:hover {
         background: #f8fbff;
@@ -354,13 +351,38 @@ select:focus {
         </tbody>
     </table>
 </div>
-        <div style="position: static; bottom: 0; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; font-weight:bold; background:#fff; padding:10px 0;">
-    <div></div>
-    <div></div>
-    <div></div>
-    <div style="text-align:right;">Total da venda:</div>
-    <div id="totalGeral" style="text-align:right;">R$ 0,00</div>
-</div>    </div>
+        <div id="resumoVenda" style="
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border: 1px solid #bfdbfe;
+    border-radius: 14px;
+">
+    <div id="contadorItens" style="
+        font-size: 16px;
+        font-weight: 800;
+        color: #1e3a8a;
+    ">Itens: 0</div>
+
+    <div style="
+        font-size: 16px;
+        font-weight: 800;
+        color: #334155;
+    ">Total da venda:</div>
+
+    <div id="totalGeral" style="
+        min-width: 170px;
+        text-align: right;
+        font-size: 30px;
+        font-weight: 900;
+        color: #166534;
+        line-height: 1;
+    ">R$ 0,00</div>
+</div>
 
 </div>
 <script>
@@ -550,8 +572,9 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
 }
   function atualizarTotalGeral() {
     let total = 0;
+    const linhas = tabelaBody.querySelectorAll("tr");
 
-    tabelaBody.querySelectorAll("tr").forEach(tr => {
+    linhas.forEach((tr) => {
         const texto = tr.children[4].textContent
             .replace("R$", "")
             .replace(",", ".")
@@ -564,8 +587,15 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
     });
 
     const totalDiv = document.getElementById("totalGeral");
-    totalDiv.textContent = "R$ " + total.toFixed(2);
-}  
+    if (totalDiv) {
+        totalDiv.textContent = "R$ " + total.toFixed(2);
+    }
+
+    const contadorItens = document.getElementById("contadorItens");
+    if (contadorItens) {
+        contadorItens.textContent = "Itens: " + linhas.length;
+    }
+} 
   function confirmarExclusaoPersonalizada(nomeProduto = "este item") {
     return new Promise((resolve) => {
         const existente = document.getElementById("modal-excluir-venda");
@@ -1205,8 +1235,10 @@ document.addEventListener("click", (e) => {
     }
 }
 });
-});
 
+atualizarTotalGeral();
+
+});
 </script>
 </body>
 </html>
