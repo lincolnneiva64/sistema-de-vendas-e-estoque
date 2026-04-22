@@ -83,6 +83,8 @@
     flex: 0 0 auto;
     border-bottom: 1px solid #cbd5e1;
     background: #dbeafe;
+    padding-right: var(--scrollbar-width, 0px);
+    box-sizing: border-box;
 }
 
 .bloco-itens-scroll {
@@ -101,12 +103,12 @@
     width: 100%;
     table-layout: fixed;
     border-collapse: collapse;
-    background: #ffffff;
+    
 }
 
 .grade-itens-head th {
     text-align: center;
-    padding: 10px 12px;
+    padding: 10px 10px;
     font-size: 14px;
     color: #1e3a8a;
     font-weight: 800;
@@ -115,19 +117,29 @@
 }
 
 .grade-itens-body td {
-    padding: 10px 12px;
+    padding: 10px 10px;
     font-size: 16px;
     font-weight: 650;
     color: #0b1220;
-    letter-spacing: 0.15px;
+    letter-spacing: 0;
     border-bottom: 1px solid #e5e7eb;
     text-align: center;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
 }
+
 .grade-itens-head th:first-child,
 .grade-itens-body td:first-child {
     text-align: left;
+    padding-left: 12px;
 }
 
+.grade-itens-head th:not(:first-child),
+.grade-itens-body td:not(:first-child) {
+    text-align: center;
+    padding-left: 0;
+    padding-right: 0;
+}
 .grade-itens-body tbody tr:hover {
     background: #f8fbff;
 }
@@ -318,21 +330,9 @@ select:focus {
         background: #dbeafe;
     }
 
-    th {
-    text-align: center;
-    padding: 10px 12px;
-    font-size: 14px;
-    color: #1e3a8a;
-    border-bottom: 1px solid #cbd5e1;
-    font-weight: 800;
-}
+    
 
-td {
-    padding: 10px 12px;
-    font-size: 15px;
-    border-bottom: 1px solid #e5e7eb;
-    text-align: center;
-}
+
 th:first-child,
 td:first-child {
     text-align: left;
@@ -431,8 +431,7 @@ td:first-child {
                 <col style="width: 12%;">
                 <col style="width: 10%;">
                 <col style="width: 14%;">
-                <col style="width: 20%;">
-            </colgroup>
+                <col style="width: 20%;">            </colgroup>
             <tbody id="tabelaProdutos"></tbody>
         </table>
     </div>
@@ -484,6 +483,8 @@ td:first-child {
 }
 document.addEventListener("DOMContentLoaded", function () {
 const itensScroll = document.querySelector(".bloco-itens-scroll");
+const scrollbarWidth = itensScroll ? (itensScroll.offsetWidth - itensScroll.clientWidth) : 0;
+document.documentElement.style.setProperty("--scrollbar-width", scrollbarWidth + "px");
 
 function scrollLinhaDentroDaLista(linha, behavior = "smooth") {
     if (!itensScroll || !linha) return;
