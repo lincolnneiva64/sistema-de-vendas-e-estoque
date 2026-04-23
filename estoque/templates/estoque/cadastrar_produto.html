@@ -689,7 +689,7 @@ select.campo-obrigatorio-piscando:focus,
 
         <div class="painel-unidade-acoes">
             <button type="button" class="btn-unidade-secundario" id="btnCancelarPainelUnidade">Cancelar</button>
-            <button type="button" class="btn-unidade-primario">Salvar unidade</button>
+            <button type="button" class="btn-unidade-primario" id="btnSalvarNovaUnidade">Salvar unidade</button>
         </div>
     </div>
 </div>
@@ -744,7 +744,9 @@ document.addEventListener("DOMContentLoaded", function () {
     const btnFecharPainelUnidade = document.getElementById("btnFecharPainelUnidade");
     const btnCancelarPainelUnidade = document.getElementById("btnCancelarPainelUnidade");
     const campoNovaUnidadeNome = document.getElementById("novaUnidadeNome");
-
+    const campoNovaUnidadeSigla = document.getElementById("novaUnidadeSigla");
+    const campoNovaUnidadeDescricao = document.getElementById("novaUnidadeDescricao");
+    const btnSalvarNovaUnidade = document.getElementById("btnSalvarNovaUnidade");
     function abrirPainelUnidade() {
         if (!painelUnidadeOverlay) return;
         painelUnidadeOverlay.classList.add("ativo");
@@ -755,7 +757,40 @@ document.addEventListener("DOMContentLoaded", function () {
         if (!painelUnidadeOverlay) return;
         painelUnidadeOverlay.classList.remove("ativo");
     }
+    btnSalvarNovaUnidade?.addEventListener("click", async function () {
+        const nome = campoNovaUnidadeNome?.value.trim();
+        const sigla = campoNovaUnidadeSigla?.value.trim();
+        const descricao = campoNovaUnidadeDescricao?.value.trim();
 
+        if (!nome || !sigla) {
+            alert("Preencha Nome e Sigla da unidade.");
+            return;
+        }
+
+        const csrfToken = document.querySelector("[name=csrfmiddlewaretoken]")?.value;
+
+        try {
+            const response = await fetch("/cadastrar-unidade/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrfToken
+                },
+                body: JSON.stringify({
+                    nome: nome,
+                    sigla: sigla,
+                    descricao: descricao
+                })
+            });
+
+            const data = await response.json();
+            console.log("RESPOSTA CADASTRAR UNIDADE:", data);
+            alert(data.mensagem || "Teste de envio realizado com sucesso.");
+        } catch (error) {
+            console.error("ERRO AO ENVIAR UNIDADE:", error);
+            alert("Erro ao enviar unidade.");
+        }
+    });
     btnAbrirPainelUnidade?.addEventListener("click", abrirPainelUnidade);
     btnFecharPainelUnidade?.addEventListener("click", fecharPainelUnidade);
     btnCancelarPainelUnidade?.addEventListener("click", fecharPainelUnidade);

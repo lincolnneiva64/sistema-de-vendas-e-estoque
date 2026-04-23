@@ -2,7 +2,7 @@ from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Case, When, Value, IntegerField, F
 from .forms import ProdutoForm
-from .models import Produto
+from .models import Produto, Unidade
 from django.contrib import messages
 from django.http import JsonResponse
 from django.utils import timezone
@@ -132,6 +132,7 @@ def cadastrar_produto(request):
     if request.method == "POST":
         form = ProdutoForm(request.POST)
         if form.is_valid():
+         
          produto = form.save()
          messages.success(request, f'Produto "{produto.nome}" cadastrado com sucesso!')
          return redirect("estoque:home")
@@ -140,8 +141,40 @@ def cadastrar_produto(request):
             print("DADOS RECEBIDOS:", request.POST)
     else:
         form = ProdutoForm()
+        
     return render(request, "estoque/cadastrar_produto.html", {"form": form, "produtos": Produto.objects.all()})
+def cadastrar_unidade(request):
+    if request.method == "POST":
+        import json
 
+        dados = json.loads(request.body)
+
+        nome = dados.get("nome", "").strip()
+        sigla = dados.get("sigla", "").strip().upper()
+        descricao = dados.get("descricao", "").strip()
+
+        if not nome or not sigla:
+            return JsonResponse({
+                "sucesso": False,
+                "mensagem": "Nome e Sigla são obrigatórios."
+            })
+
+        Unidade.objects.create(
+            nome=nome,
+            sigla=sigla,
+            descricao=descricao,
+            ativa=True
+        )
+
+        return JsonResponse({
+            "sucesso": True,
+            "mensagem": "Unidade cadastrada com sucesso!"
+        })
+
+    return JsonResponse({
+        "sucesso": False,
+        "mensagem": "Método inválido."
+    })
 def produto_detalhe(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
     return render(request, "estoque/produto_detalhe.html", {"produto": produto})

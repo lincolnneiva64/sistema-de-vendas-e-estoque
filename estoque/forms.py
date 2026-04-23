@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Produto
+from .models import Produto, Unidade
 from .utils import normalize_product_name
 
 
@@ -113,19 +113,10 @@ class ProdutoForm(forms.ModelForm):
     }
 ),
             "unidade_compra": forms.Select(
-                attrs={
-                    "class": "form-select",
-                },
-                choices=[
-                    ("", "Selecione"),
-                    ("UN", "UN"),
-                    ("KG", "KG"),
-                    ("CX", "CX"),
-                    ("FD", "FD"),
-                    ("PCT", "PCT"),
-                    ("LT", "LT"),
-                ],
-            ),
+    attrs={
+        "class": "form-select",
+    },
+),
             "fator_conversao": forms.NumberInput(
                 attrs={
                     "class": "form-control",
@@ -143,19 +134,10 @@ class ProdutoForm(forms.ModelForm):
     }
 ),
             "unidade_venda_1": forms.Select(
-                attrs={
-                    "class": "form-select",
-                },
-                choices=[
-                    ("", "Selecione"),
-                    ("UN", "UN"),
-                    ("KG", "KG"),
-                    ("CX", "CX"),
-                    ("FD", "FD"),
-                    ("PCT", "PCT"),
-                    ("LT", "LT"),
-                ],
-            ),
+    attrs={
+        "class": "form-select",
+    },
+),
             "preco_venda_1": forms.NumberInput(
                 attrs={
                     "class": "form-control",
@@ -165,20 +147,10 @@ class ProdutoForm(forms.ModelForm):
                 }
             ),
             "unidade_venda_2": forms.Select(
-                attrs={
-                    "class": "form-select",
-                },
-                choices=[
-                    ("", "Selecione"),
-                    ("UN", "UN"),
-                    ("KG", "KG"),
-                    ("CX", "CX"),
-                    ("FD", "FD"),
-                    ("PCT", "PCT"),
-                    ("LT", "LT"),
-                ],
-            ),
-            "preco_venda_2": forms.NumberInput(
+    attrs={
+        "class": "form-select",
+    },
+),            "preco_venda_2": forms.NumberInput(
                 attrs={
                     "class": "form-control",
                     "step": "0.01",
@@ -259,6 +231,14 @@ def __init__(self, *args, **kwargs):
         self.initial["quantidade"] = ""
         self.initial["estoque_minimo"] = ""
         self.initial["fornecedor"] = ""
+        opcoes_unidade = [("", "Selecione")] + [
+            (unidade.sigla, unidade.sigla)
+            for unidade in Unidade.objects.filter(ativa=True).order_by("sigla")
+        ]
+
+        self.fields["unidade_compra"].widget.choices = opcoes_unidade
+        self.fields["unidade_venda_1"].widget.choices = opcoes_unidade
+        self.fields["unidade_venda_2"].widget.choices = opcoes_unidade
     def clean_nome(self):
         nome = normalize_product_name(self.cleaned_data.get("nome", ""))
 
