@@ -25,11 +25,10 @@ class ProdutoForm(forms.ModelForm):
         })
     )
 
-    unidade_venda_2 = forms.CharField(
+    unidade_venda_2 = forms.ChoiceField(
         required=False,
-        widget=forms.TextInput(attrs={
-            "class": "form-control",
-            "placeholder": "",
+        widget=forms.Select(attrs={
+            "class": "form-select",
         })
     )
     fator_conversao = forms.DecimalField(required=False)
@@ -194,6 +193,21 @@ class ProdutoForm(forms.ModelForm):
                 }
             ),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        opcoes_unidade = [("", "Selecione")] + [
+            (unidade.sigla, f"{unidade.nome} ({unidade.sigla})")
+            for unidade in Unidade.objects.filter(ativa=True).order_by("nome")
+        ]
+
+        self.fields["unidade_compra"].choices = opcoes_unidade
+        self.fields["unidade_venda_1"].choices = opcoes_unidade
+        self.fields["unidade_venda_2"].choices = opcoes_unidade
+        self.fields["unidade_compra"].widget.choices = opcoes_unidade
+        self.fields["unidade_venda_1"].widget.choices = opcoes_unidade
+        self.fields["unidade_venda_2"].widget.choices = opcoes_unidade
     
 def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
