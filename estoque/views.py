@@ -143,15 +143,11 @@ def cadastrar_produto(request):
         form = ProdutoForm()
         
     return render(request, "estoque/cadastrar_produto.html", {"form": form, "produtos": Produto.objects.all()})
-def cadastrar_unidade(request):
+def cadastrar_unidade_json_antigo(request):
     if request.method == "POST":
-        import json
-
-        dados = json.loads(request.body)
-
-        nome = dados.get("nome", "").strip()
-        sigla = dados.get("sigla", "").strip().upper()
-        descricao = dados.get("descricao", "").strip()
+        nome = request.POST.get("nome", "").strip()
+        sigla = request.POST.get("sigla", "").strip().upper()
+        descricao = request.POST.get("descricao", "").strip()
 
         if not nome or not sigla:
             return JsonResponse({
@@ -175,6 +171,28 @@ def cadastrar_unidade(request):
         "sucesso": False,
         "mensagem": "Método inválido."
     })
+def cadastrar_unidade(request):
+    if request.method == "POST":
+        nome = request.POST.get("nome", "").strip()
+        sigla = request.POST.get("sigla", "").strip().upper()
+        descricao = request.POST.get("descricao", "").strip()
+
+        if nome and sigla:
+            unidade_ja_existe = (
+                Unidade.objects.filter(sigla=sigla).exists()
+                or Unidade.objects.filter(nome__iexact=nome).exists()
+            )
+
+            if not unidade_ja_existe:
+                Unidade.objects.create(
+                    nome=nome,
+                    sigla=sigla,
+                    descricao=descricao,
+                    ativa=True,
+                )
+
+    return redirect("estoque:cadastrar_produto")
+
 def produto_detalhe(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
     return render(request, "estoque/produto_detalhe.html", {"produto": produto})
