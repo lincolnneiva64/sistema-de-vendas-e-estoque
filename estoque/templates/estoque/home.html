@@ -1,5 +1,17 @@
 {% extends 'estoque/base.html' %}
 {% block content %}
+<style>
+.linha-destacada {
+  background-color: #fff3cd !important;
+  border: 2px solid #ffc107 !important;
+  box-shadow: 0 0 10px rgba(255, 193, 7, 0.5) !important;
+  animation: destaque-pulse 1s ease-in-out infinite alternate;
+}
+@keyframes destaque-pulse {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.02); }
+}
+</style>
 <div class="container mt-4">
   {% if messages %}
   <div style="max-width: 720px; margin: 20px auto 18px auto; position: relative; z-index: 20;">
@@ -313,6 +325,30 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
     });
 
   });
+
+  // Destacar produto salvo/editado
+  const urlParams = new URLSearchParams(window.location.search);
+  const produtoDestacado = urlParams.get('produto_destacado');
+  if (produtoDestacado) {
+    const linhaDestacada = document.querySelector(`tr[data-produto-id="${produtoDestacado}"]`);
+    if (linhaDestacada) {
+      // Aplicar classe destaque
+      linhaDestacada.classList.add('linha-destacada');
+      // Scroll para a linha
+      linhaDestacada.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Selecionar a linha
+      linhas.forEach(function(l) {
+        l.classList.remove("linha-selecionada");
+      });
+      linhaDestacada.classList.add("linha-selecionada");
+      produtoSelecionado = produtoDestacado;
+      nomeProdutoSelecionado = linhaDestacada.children[0].textContent.trim();
+      // Remover destaque após 3 segundos
+      setTimeout(function() {
+        linhaDestacada.classList.remove('linha-destacada');
+      }, 3000);
+    }
+  }
 
 });
 </script>

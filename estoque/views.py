@@ -1,5 +1,6 @@
 from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F
 from .forms import ProdutoForm
 from .models import Produto, Unidade
@@ -31,8 +32,8 @@ def home(request):
             form = ProdutoForm(request.POST)
 
         if form.is_valid():
-            form.save()
-            return redirect("estoque:home")
+            produto = form.save()
+            return redirect(f"{reverse('estoque:home')}?produto_destacado={produto.id}")
 
     # GET: carregar formulário de edição
     editar_id = request.GET.get("edit")
@@ -135,7 +136,7 @@ def cadastrar_produto(request):
          
          produto = form.save()
          messages.success(request, f'Produto "{produto.nome}" cadastrado com sucesso!')
-         return redirect("estoque:home")
+         return redirect(f"{reverse('estoque:home')}?produto_destacado={produto.id}")
         else:
             print("ERROS DO FORM:", form.errors)
             print("DADOS RECEBIDOS:", request.POST)
@@ -203,7 +204,7 @@ def produto_editar(request, pk):
         form = ProdutoForm(request.POST, instance=produto)
         if form.is_valid():
             form.save()
-            return redirect("estoque:home")
+            return redirect(f"{reverse('estoque:home')}?produto_destacado={produto.id}")
         else:
             print("ERROS DO FORM EDITAR:", form.errors)
             print("DADOS RECEBIDOS EDITAR:", request.POST)
