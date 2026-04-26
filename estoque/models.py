@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.exceptions import ValidationError
+from .utils import normalize_category_name
 class Produto(models.Model):
 
     nome = models.CharField(max_length=120)
@@ -62,8 +63,7 @@ class Produto(models.Model):
             self.nome = nome_limpo.title()
 
         if self.categoria:
-            categoria_limpa = " ".join(self.categoria.strip().split())
-            self.categoria = categoria_limpa.title()
+            self.categoria = normalize_category_name(self.categoria)
 
         if self.fornecedor:
             fornecedor_limpo = " ".join(self.fornecedor.strip().split())
@@ -89,3 +89,11 @@ class Unidade(models.Model):
 
     def __str__(self):
         return f"{self.nome} ({self.sigla})"
+
+class Categoria(models.Model):
+    nome = models.CharField(max_length=60, unique=True)
+    descricao = models.CharField(max_length=255, blank=True, null=True)
+    ativa = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.nome

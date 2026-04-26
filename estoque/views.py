@@ -3,8 +3,8 @@ from urllib.parse import urlencode
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F
-from .forms import ProdutoForm, UnidadeForm
-from .models import Produto, Unidade
+from .forms import CategoriaForm, ProdutoForm, UnidadeForm
+from .models import Categoria, Produto, Unidade
 from django.contrib import messages
 from django.http import JsonResponse
 from django.utils import timezone
@@ -272,6 +272,78 @@ def unidades_produto(request):
             "termo": termo,
             "unidade_selecionada": unidade_selecionada,
             "total_unidades": len(unidades),
+        },
+    )
+
+def categorias_produto(request):
+    termo = request.GET.get("q", "").strip()
+    categoria_selecionada = None
+
+    categorias = Categoria.objects.all().order_by("-ativa", "nome")
+
+    if termo:
+        categorias = categorias.filter(
+            Q(nome__icontains=termo) |
+            Q(descricao__icontains=termo)
+        )
+
+    if request.method == "POST":
+        acao = request.POST.get("acao")
+        categoria_id = request.POST.get("categoria_id")
+
+        if acao == "alternar_status" and categoria_id:
+            categoria = get_object_or_404(Categoria, pk=categoria_id)
+            categoria.ativa = request.POST.get("ativa") == "1"
+            categoria.save(update_fields=["ativa"])
+            status = "ativada" if categoria.ativa else "desativada"
+            messages.success(request, f'Categoria "{categoria.nome}" {status} com sucesso.')
+            params = {"categoria": categoria.id}
+            if termo:
+                params["q"] = termo
+            destino = f"{reverse('estoque:categorias_produto')}?{urlencode(params)}"
+            return redirect(destino)
+
+        nome_anterior = None
+        if categoria_id:
+            categoria_selecionada = get_object_or_404(Categoria, pk=categoria_id)
+            nome_anterior = categoria_selecionada.nome
+            form = CategoriaForm(request.POST, instance=categoria_selecionada)
+        else:
+            form = CategoriaForm(request.POST)
+
+        if form.is_valid():
+            categoria = form.save()
+            if nome_anterior and nome_anterior.casefold() != categoria.nome.casefold():
+                Produto.objects.filter(categoria__iexact=nome_anterior).update(
+                    categoria=categoria.nome
+                )
+            messages.success(request, f'Categoria "{categoria.nome}" salva com sucesso.')
+            return redirect(f"{reverse('estoque:categorias_produto')}?categoria={categoria.id}")
+        messages.error(request, "Revise os campos destacados para salvar a categoria.")
+    else:
+        categoria_id = request.GET.get("categoria")
+        if categoria_id:
+            categoria_selecionada = get_object_or_404(Categoria, pk=categoria_id)
+            form = CategoriaForm(instance=categoria_selecionada)
+        else:
+            form = CategoriaForm(initial={"ativa": True})
+
+    categorias = list(categorias)
+    for categoria in categorias:
+        categoria.produtos_em_uso = Produto.objects.filter(
+            excluido=False,
+            categoria__iexact=categoria.nome,
+        ).count()
+
+    return render(
+        request,
+        "estoque/categorias_produto.html",
+        {
+            "form": form,
+            "categorias": categorias,
+            "termo": termo,
+            "categoria_selecionada": categoria_selecionada,
+            "total_categorias": len(categorias),
         },
     )
 

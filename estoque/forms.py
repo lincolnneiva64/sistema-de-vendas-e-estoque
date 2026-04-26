@@ -1,7 +1,7 @@
 from django import forms
 
-from .models import Produto, Unidade
-from .utils import normalize_product_name
+from .models import Categoria, Produto, Unidade
+from .utils import normalize_category_name, normalize_product_name
 
 
 class ProdutoForm(forms.ModelForm):
@@ -81,10 +81,9 @@ class ProdutoForm(forms.ModelForm):
                     "placeholder": "",
                 }
             ),
-            "categoria": forms.TextInput(
+            "categoria": forms.Select(
                 attrs={
-                    "class": "form-control",
-                    "placeholder": "",
+                    "class": "form-select",
                 }
             ),
             "preco_compra": forms.NumberInput(
@@ -217,6 +216,21 @@ class ProdutoForm(forms.ModelForm):
             if field_name in self.fields:
                 self.fields[field_name].choices = opcoes_unidade
                 self.fields[field_name].widget.choices = opcoes_unidade
+
+        categorias_ativas = list(Categoria.objects.filter(ativa=True).order_by("nome"))
+        opcoes_categoria = [("", "Selecione")] + [
+            (categoria.nome, categoria.nome)
+            for categoria in categorias_ativas
+        ]
+        categorias_disponiveis = {categoria.nome for categoria in categorias_ativas}
+        categoria_atual = getattr(self.instance, "categoria", None)
+
+        if categoria_atual and categoria_atual not in categorias_disponiveis:
+            opcoes_categoria.append((categoria_atual, categoria_atual))
+
+        self.fields["categoria"].choices = opcoes_categoria
+        self.fields["categoria"].widget.choices = opcoes_categoria
+        self.fields["categoria"].required = False
 
         self.fields["nome"].widget.attrs.update({"list": "lista-produtos"})
         self.fields["fator_conversao"].required = False
@@ -357,6 +371,46 @@ class UnidadeForm(forms.ModelForm):
             raise forms.ValidationError("Já existe uma unidade com essa sigla.")
 
         return sigla
+
+    def clean_descricao(self):
+        descricao = self.cleaned_data.get("descricao") or ""
+        return " ".join(descricao.strip().split()) or None
+
+
+class CategoriaForm(forms.ModelForm):
+    class Meta:
+        model = Categoria
+        fields = ["nome", "descricao", "ativa"]
+        widgets = {
+            "nome": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Ex.: Mercearia",
+                "autocomplete": "off",
+            }),
+            "descricao": forms.Textarea(attrs={
+                "class": "form-control",
+                "placeholder": "Observação opcional sobre a categoria",
+                "rows": 4,
+            }),
+            "ativa": forms.CheckboxInput(attrs={
+                "class": "form-check-input",
+            }),
+        }
+
+    def clean_nome(self):
+        nome = " ".join((self.cleaned_data.get("nome") or "").strip().split())
+        if not nome:
+            raise forms.ValidationError("Informe o nome da categoria.")
+
+        nome_normalizado = normalize_category_name(nome)
+        categoria_existente = Categoria.objects.filter(nome__iexact=nome_normalizado)
+        if self.instance.pk:
+            categoria_existente = categoria_existente.exclude(pk=self.instance.pk)
+
+        if categoria_existente.exists():
+            raise forms.ValidationError("Já existe uma categoria com esse nome.")
+
+        return nome_normalizado
 
     def clean_descricao(self):
         descricao = self.cleaned_data.get("descricao") or ""

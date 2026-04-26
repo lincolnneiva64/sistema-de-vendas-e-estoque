@@ -1,0 +1,607 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Categorias de Produto{% endblock %}
+{% block content %}
+<style>
+  .categorias-page {
+    color: #172033;
+    padding: 18px 0 32px;
+  }
+
+  .categorias-shell {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 18px;
+  }
+
+  .categorias-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .categorias-title {
+    margin: 0;
+    font-size: 1.55rem;
+    font-weight: 800;
+    color: #111827;
+  }
+
+  .categorias-subtitle {
+    margin: 4px 0 0;
+    color: #64748b;
+    font-weight: 500;
+    font-size: 0.92rem;
+  }
+
+  .categorias-header-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .categorias-btn {
+    border: 0;
+    border-radius: 9px;
+    padding: 8px 13px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+
+  .categorias-btn:hover {
+    transform: translateY(-1px);
+  }
+
+  .categorias-btn-primary {
+    background: #2563eb;
+    color: #fff;
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24);
+  }
+
+  .categorias-btn-secondary {
+    background: #fff;
+    color: #334155;
+    border: 1px solid #d8dee8;
+  }
+
+  .categorias-search {
+    background: #ffffff;
+    border: 1px solid #e1e7ef;
+    border-radius: 12px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.055);
+    padding: 10px;
+    margin-bottom: 12px;
+  }
+
+  .categorias-search form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 8px;
+  }
+
+  .categorias-search input,
+  .categorias-form-control {
+    width: 100%;
+    border: 1.5px solid #d3dbe8;
+    border-radius: 9px;
+    padding: 9px 11px;
+    background: #fff;
+    color: #172033;
+    font-weight: 500;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .categorias-search input:focus,
+  .categorias-form-control:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.13);
+  }
+
+  .categorias-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.85fr);
+    gap: 14px;
+    align-items: start;
+  }
+
+  .categorias-panel {
+    background: #ffffff;
+    border: 1px solid #e1e7ef;
+    border-radius: 14px;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+    overflow: hidden;
+  }
+
+  .categorias-panel-head {
+    padding: 13px 16px;
+    border-bottom: 1px solid #edf1f6;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .categorias-panel-title {
+    margin: 0;
+    font-size: 0.98rem;
+    font-weight: 800;
+    color: #111827;
+  }
+
+  .categorias-count {
+    color: #64748b;
+    font-size: 0.84rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .categorias-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .categorias-table th {
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 9px 12px;
+    border-bottom: 1px solid #edf1f6;
+  }
+
+  .categorias-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #f0f3f8;
+    vertical-align: middle;
+  }
+
+  .categorias-row {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .categorias-row:hover td {
+    background: #f8fbff;
+  }
+
+  .categorias-row.selecionada td {
+    background: #eff6ff;
+    border-bottom-color: #dbeafe;
+  }
+
+  .categoria-nome {
+    font-weight: 800;
+    color: #172033;
+    font-size: 0.92rem;
+  }
+
+  .categoria-descricao {
+    color: #64748b;
+    font-size: 0.84rem;
+    max-width: 340px;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 4px 8px;
+    font-size: 0.72rem;
+    font-weight: 800;
+  }
+
+  .status-ativo {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .status-inativo {
+    background: #f1f5f9;
+    color: #64748b;
+  }
+
+  .status-action-form {
+    margin: 0;
+  }
+
+  .status-action-btn {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    color: #334155;
+    padding: 5px 9px;
+    font-size: 0.76rem;
+    font-weight: 800;
+    min-width: 78px;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  }
+
+  .status-action-btn:hover {
+    transform: translateY(-1px);
+  }
+
+  .status-action-btn.ativar {
+    border-color: #86efac;
+    color: #166534;
+    background: #f0fdf4;
+  }
+
+  .status-action-btn.ativar:hover {
+    background: #dcfce7;
+  }
+
+  .status-action-btn.desativar {
+    border-color: #fecaca;
+    color: #991b1b;
+    background: #fff7ed;
+  }
+
+  .status-action-btn.desativar:hover {
+    background: #fee2e2;
+  }
+
+  .uso-info {
+    display: block;
+    margin-top: 3px;
+    color: #94a3b8;
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  .categorias-form {
+    padding: 14px 16px 16px;
+  }
+
+  .categorias-field {
+    margin-bottom: 10px;
+  }
+
+  .categorias-field label {
+    display: block;
+    color: #334155;
+    font-size: 0.84rem;
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+
+  .categorias-field textarea {
+    min-height: 82px;
+    resize: vertical;
+  }
+
+  .categorias-error {
+    color: #dc2626;
+    font-size: 0.84rem;
+    font-weight: 700;
+    margin-top: 6px;
+  }
+
+  .categorias-status-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    border: 1px solid #e1e7ef;
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin: 12px 0;
+    background: #f8fafc;
+  }
+
+  .categorias-status-title {
+    font-weight: 800;
+    color: #172033;
+    font-size: 0.9rem;
+  }
+
+  .categorias-status-text {
+    color: #64748b;
+    font-size: 0.8rem;
+  }
+
+  .status-form-action {
+    flex: 0 0 auto;
+    margin: 0;
+  }
+
+  .status-form-btn {
+    border: 0;
+    border-radius: 10px;
+    padding: 9px 13px;
+    min-width: 146px;
+    font-size: 0.86rem;
+    font-weight: 800;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .status-form-btn:hover {
+    transform: translateY(-1px);
+  }
+
+  .status-form-btn.ativar {
+    color: #fff;
+    background: #16a34a;
+    box-shadow: 0 8px 18px rgba(22, 163, 74, 0.22);
+  }
+
+  .status-form-btn.desativar {
+    color: #fff;
+    background: #dc2626;
+    box-shadow: 0 8px 18px rgba(220, 38, 38, 0.18);
+  }
+
+  .categorias-form-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    padding-top: 4px;
+  }
+
+  .categorias-alert {
+    border-radius: 13px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    font-weight: 750;
+  }
+
+  .categorias-alert.success {
+    background: #ecfdf3;
+    border: 1px solid #b7e4c7;
+    color: #166534;
+  }
+
+  .categorias-alert.error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+  }
+
+  .categorias-empty {
+    padding: 26px 16px;
+    color: #64748b;
+    text-align: center;
+    font-weight: 700;
+  }
+
+  @media (max-width: 900px) {
+    .categorias-header {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .categorias-header-actions {
+      justify-content: flex-start;
+    }
+
+    .categorias-search form,
+    .categorias-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .categorias-panel {
+      overflow-x: auto;
+    }
+  }
+</style>
+
+<div class="categorias-page">
+  <div class="categorias-shell">
+    <header class="categorias-header">
+      <div>
+        <h1 class="categorias-title">Categorias de Produto</h1>
+        <p class="categorias-subtitle">Organize os produtos por grupos de venda e controle.</p>
+      </div>
+
+      <div class="categorias-header-actions">
+        <a href="{% url 'estoque:home' %}" class="categorias-btn categorias-btn-secondary">Voltar ao painel</a>
+        <a href="{% url 'estoque:cadastrar_produto' %}" class="categorias-btn categorias-btn-primary">Cadastrar produto</a>
+      </div>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="categorias-alert {% if message.tags == 'error' %}error{% else %}success{% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <section class="categorias-search" aria-label="Busca de categorias">
+      <form method="get">
+        <input type="text" name="q" id="buscaCategorias" value="{{ termo }}" placeholder="Buscar por nome ou descrição" autocomplete="off">
+        <button type="submit" class="categorias-btn categorias-btn-primary">Buscar</button>
+        <a href="{% url 'estoque:categorias_produto' %}" class="categorias-btn categorias-btn-secondary">Limpar</a>
+      </form>
+    </section>
+
+    <main class="categorias-grid">
+      <section class="categorias-panel">
+        <div class="categorias-panel-head">
+          <h2 class="categorias-panel-title">Categorias cadastradas</h2>
+          <span class="categorias-count"><span id="contadorCategorias">{{ total_categorias }}</span> categoria(s)</span>
+        </div>
+
+        {% if categorias %}
+          <table class="categorias-table">
+            <thead>
+              <tr>
+                <th>Categoria</th>
+                <th>Descrição</th>
+                <th>Status</th>
+                <th>Ação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for categoria in categorias %}
+                <tr class="categorias-row {% if categoria_selecionada and categoria.id == categoria_selecionada.id %}selecionada{% endif %}"
+                    data-categoria-search="{{ categoria.nome|lower }} {{ categoria.descricao|default:''|lower }}"
+                    onclick="window.location.href='{% url 'estoque:categorias_produto' %}?{% if termo %}q={{ termo|urlencode }}&{% endif %}categoria={{ categoria.id }}'">
+                  <td>
+                    <div class="categoria-nome">{{ categoria.nome }}</div>
+                    <span class="uso-info">{{ categoria.produtos_em_uso }} produto{{ categoria.produtos_em_uso|pluralize }} usando</span>
+                  </td>
+                  <td class="categoria-descricao">{{ categoria.descricao|default:"-" }}</td>
+                  <td>
+                    {% if categoria.ativa %}
+                      <span class="status-pill status-ativo">Ativa</span>
+                    {% else %}
+                      <span class="status-pill status-inativo">Inativa</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <form method="post" class="status-action-form" onclick="event.stopPropagation();">
+                      {% csrf_token %}
+                      <input type="hidden" name="acao" value="alternar_status">
+                      <input type="hidden" name="categoria_id" value="{{ categoria.id }}">
+                      <input type="hidden" name="ativa" value="{% if categoria.ativa %}0{% else %}1{% endif %}">
+                      <button type="submit" class="status-action-btn {% if categoria.ativa %}desativar{% else %}ativar{% endif %}">
+                        {% if categoria.ativa %}Desativar{% else %}Ativar{% endif %}
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <div class="categorias-empty" id="semCategoriasFiltradas" style="display: none;">Nenhuma categoria encontrada.</div>
+        {% else %}
+          <div class="categorias-empty">Nenhuma categoria encontrada.</div>
+        {% endif %}
+      </section>
+
+      <section class="categorias-panel">
+        <div class="categorias-panel-head">
+          <div>
+            <h2 class="categorias-panel-title">
+              {% if categoria_selecionada %}Editar categoria{% else %}Nova categoria{% endif %}
+            </h2>
+            <span class="categorias-count">
+              {% if categoria_selecionada %}{{ categoria_selecionada.nome }} selecionada{% else %}Pronta para cadastro{% endif %}
+            </span>
+          </div>
+        </div>
+
+        <form method="post" class="categorias-form" novalidate>
+          {% csrf_token %}
+          {% if categoria_selecionada %}
+            <input type="hidden" name="categoria_id" value="{{ categoria_selecionada.id }}">
+          {% endif %}
+
+          <div class="categorias-field">
+            <label for="{{ form.nome.id_for_label }}">Nome da categoria</label>
+            {{ form.nome }}
+            {% if form.nome.errors %}
+              <div class="categorias-error">{{ form.nome.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+
+          <div class="categorias-field">
+            <label for="{{ form.descricao.id_for_label }}">Descrição</label>
+            {{ form.descricao }}
+            {% if form.descricao.errors %}
+              <div class="categorias-error">{{ form.descricao.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+
+          <div class="categorias-status-card">
+            <span>
+              <span class="categorias-status-title">Status da categoria</span>
+              <span class="categorias-status-text d-block">
+                {% if categoria_selecionada %}
+                  {% if categoria_selecionada.ativa %}
+                    Ativa e visível no cadastro de produto.
+                  {% else %}
+                    Inativa e oculta no cadastro de produto.
+                  {% endif %}
+                {% else %}
+                  Novas categorias são cadastradas como ativas.
+                {% endif %}
+              </span>
+            </span>
+            {% if categoria_selecionada %}
+              <button
+                type="submit"
+                form="formAlternarStatusCategoria"
+                class="status-form-btn {% if categoria_selecionada.ativa %}desativar{% else %}ativar{% endif %}"
+              >
+                {% if categoria_selecionada.ativa %}Desativar categoria{% else %}Ativar categoria{% endif %}
+              </button>
+            {% else %}
+              <span class="status-pill status-ativo">Ativa</span>
+            {% endif %}
+          </div>
+
+          {% if not categoria_selecionada or categoria_selecionada.ativa %}
+            <input type="hidden" name="ativa" value="on">
+          {% endif %}
+
+          <div class="categorias-form-actions">
+            <a href="{% url 'estoque:categorias_produto' %}" class="categorias-btn categorias-btn-secondary">Novo / Limpar</a>
+            <button type="submit" class="categorias-btn categorias-btn-primary">Salvar categoria</button>
+          </div>
+        </form>
+
+        {% if categoria_selecionada %}
+          <form method="post" id="formAlternarStatusCategoria" class="status-form-action">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="alternar_status">
+            <input type="hidden" name="categoria_id" value="{{ categoria_selecionada.id }}">
+            <input type="hidden" name="ativa" value="{% if categoria_selecionada.ativa %}0{% else %}1{% endif %}">
+          </form>
+        {% endif %}
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const busca = document.getElementById("buscaCategorias");
+    const linhas = Array.from(document.querySelectorAll("[data-categoria-search]"));
+    const contador = document.getElementById("contadorCategorias");
+    const semResultado = document.getElementById("semCategoriasFiltradas");
+
+    function normalizarTexto(texto) {
+      return String(texto || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    }
+
+    function filtrarCategorias() {
+      const termo = normalizarTexto(busca?.value.trim());
+      let totalVisivel = 0;
+
+      linhas.forEach(function (linha) {
+        const texto = normalizarTexto(linha.dataset.categoriaSearch);
+        const visivel = termo === "" || texto.includes(termo);
+        linha.style.display = visivel ? "" : "none";
+        if (visivel) totalVisivel += 1;
+      });
+
+      if (contador) {
+        contador.textContent = totalVisivel;
+      }
+
+      if (semResultado) {
+        semResultado.style.display = totalVisivel === 0 ? "block" : "none";
+      }
+    }
+
+    busca?.addEventListener("input", filtrarCategorias);
+    filtrarCategorias();
+  });
+</script>
+{% endblock %}

@@ -299,6 +299,63 @@ select.campo-obrigatorio-piscando:focus,
     color: #1d4ed8;
     transform: translateY(-1px);
 }
+
+.linha-identificacao-produto {
+    align-items: flex-start;
+}
+
+.campo-nome-produto {
+    flex: 0 0 41.666667%;
+    max-width: 41.666667%;
+}
+
+.campo-codigo-produto {
+    flex: 0 0 16.666667%;
+    max-width: 16.666667%;
+}
+
+.campo-categoria-produto {
+    flex: 0 0 41.666667%;
+    max-width: 41.666667%;
+}
+
+.categoria-controle {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.categoria-controle .form-select {
+    min-width: 0;
+}
+
+.categoria-controle .btn-gerenciar-unidades {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 46px;
+    padding-left: 12px;
+    padding-right: 12px;
+}
+
+@media (max-width: 991.98px) {
+    .campo-nome-produto,
+    .campo-codigo-produto,
+    .campo-categoria-produto {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .categoria-controle {
+        flex-direction: column;
+    }
+
+    .categoria-controle .btn-gerenciar-unidades {
+        width: 100%;
+    }
+}
 </style>
 
 
@@ -328,7 +385,9 @@ select.campo-obrigatorio-piscando:focus,
     
     
 </div>
-  <div class="col-12 col-md-4">
+<div class="col-12">
+  <div class="row g-2 linha-identificacao-produto">
+  <div class="col-12 campo-nome-produto">
   <div class="form-campo">
     
     <label class="form-label">Nome</label>
@@ -349,7 +408,7 @@ select.campo-obrigatorio-piscando:focus,
 
   </div>
 </div>
-  <div class="col-12 col-md-4">
+  <div class="col-12 campo-codigo-produto">
   <div class="form-campo">
 
     <label class="form-label">Código</label>
@@ -364,12 +423,17 @@ select.campo-obrigatorio-piscando:focus,
 
   </div>
 </div>
-  <div class="col-12 col-md-4">
+  <div class="col-12 campo-categoria-produto">
   <div class="form-campo">
 
     <label class="form-label">Categoria</label>
 
-    {{ form.categoria }}
+    <div class="categoria-controle">
+        <div class="flex-grow-1">
+            {{ form.categoria }}
+        </div>
+        <a href="{% url 'estoque:categorias_produto' %}" class="btn-gerenciar-unidades">Gerenciar categorias</a>
+    </div>
 
     {% if form.categoria.errors %}
       <div class="campo-erro">
@@ -377,6 +441,8 @@ select.campo-obrigatorio-piscando:focus,
       </div>
     {% endif %}
 
+  </div>
+</div>
   </div>
 </div>
   
