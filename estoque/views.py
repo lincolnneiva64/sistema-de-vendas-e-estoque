@@ -130,20 +130,32 @@ def home(request):
     )
 
 def cadastrar_produto(request):
+    criar_mais_produtos = request.GET.get("criar_mais_produtos") == "1"
+
     if request.method == "POST":
+        criar_mais_produtos = request.POST.get("criar_mais_produtos") == "on"
         form = ProdutoForm(request.POST)
         if form.is_valid():
-         
-         produto = form.save()
-         messages.success(request, f'Produto "{produto.nome}" cadastrado com sucesso!')
-         return redirect(f"{reverse('estoque:home')}?produto_destacado={produto.id}")
+            produto = form.save()
+            if criar_mais_produtos:
+                return redirect(f"{reverse('estoque:cadastrar_produto')}?criar_mais_produtos=1")
+            messages.success(request, f'Produto "{produto.nome}" cadastrado com sucesso!')
+            return redirect(f"{reverse('estoque:home')}?produto_destacado={produto.id}")
         else:
             print("ERROS DO FORM:", form.errors)
             print("DADOS RECEBIDOS:", request.POST)
     else:
         form = ProdutoForm()
         
-    return render(request, "estoque/cadastrar_produto.html", {"form": form, "produtos": Produto.objects.all()})
+    return render(
+        request,
+        "estoque/cadastrar_produto.html",
+        {
+            "form": form,
+            "produtos": Produto.objects.all(),
+            "criar_mais_produtos": criar_mais_produtos,
+        },
+    )
 def cadastrar_unidade_json_antigo(request):
     if request.method == "POST":
         nome = request.POST.get("nome", "").strip()

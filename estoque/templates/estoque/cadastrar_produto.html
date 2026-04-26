@@ -196,7 +196,7 @@ select.campo-obrigatorio-piscando:focus,
 }
 .acoes-flutuantes {
     position: fixed;
-    right: 16px;
+    right: 8px;
     bottom: 90px;
     z-index: 1000;
 }
@@ -224,6 +224,60 @@ select.campo-obrigatorio-piscando:focus,
 .acoes-flutuantes-botoes .btn-salvar {
     width: 100%;
     text-align: center;
+}
+
+.acao-criar-mais {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 4px 2px 6px;
+    color: #334155;
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.acao-toggle-input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.acao-toggle-ui {
+    position: relative;
+    flex: 0 0 auto;
+    width: 2.6rem;
+    height: 1.35rem;
+    border-radius: 999px;
+    background: #cbd5e1;
+    cursor: pointer;
+    transition: background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.acao-toggle-ui::before {
+    content: "";
+    position: absolute;
+    width: 1.05rem;
+    height: 1.05rem;
+    top: 0.15rem;
+    left: 0.15rem;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+    transition: transform 0.18s ease;
+}
+
+.acao-toggle-input:checked + .acao-toggle-ui {
+    background: #2563eb;
+}
+
+.acao-toggle-input:checked + .acao-toggle-ui::before {
+    transform: translateX(1.25rem);
+}
+
+.acao-toggle-input:focus-visible + .acao-toggle-ui {
+    box-shadow: 0 0 0 0.18rem rgba(37, 99, 235, 0.22);
 }
 
 .painel-unidade-overlay{
@@ -711,6 +765,21 @@ select.campo-obrigatorio-piscando:focus,
 <div class="acoes-flutuantes">
     
     <div class="acoes-flutuantes-card">
+{% if not form.instance.pk %}
+<label class="acao-criar-mais" for="id_criar_mais_produtos">
+    <span>Criar mais produtos</span>
+    <input
+        type="checkbox"
+        class="acao-toggle-input"
+        id="id_criar_mais_produtos"
+        name="criar_mais_produtos"
+        form="form-produto"
+        {% if criar_mais_produtos %}checked{% endif %}
+    >
+    <span class="acao-toggle-ui" aria-hidden="true"></span>
+</label>
+{% endif %}
+
         <div class="acoes-flutuantes-botoes">
 
     <a href="{% url 'estoque:home' %}" class="btn-cancelar"><u>C</u>ancelar</a>
@@ -719,7 +788,6 @@ select.campo-obrigatorio-piscando:focus,
 <button type="button" onclick="limparFormulario()" class="btn-cancelar btn-limpar">
     <u>L</u>impar
 </button>
-
 
     <button type="submit" form="form-produto" class="btn-salvar">
         <u>S</u>alvar
@@ -807,22 +875,26 @@ document.addEventListener("DOMContentLoaded", function () {
 
 });
             function getCamposVisiveis() {
-    return Array.from(document.querySelectorAll('input:not([type="hidden"]), select'))
+    const formProduto = document.getElementById("form-produto");
+    if (!formProduto) return [];
+
+    return Array.from(formProduto.querySelectorAll('input:not([type="hidden"]), select'))
         .filter((campo) => {
             const estilo = window.getComputedStyle(campo);
             return (
                 campo.offsetParent !== null &&
                 estilo.display !== "none" &&
                 estilo.visibility !== "hidden" &&
-                !campo.disabled
+                !campo.disabled &&
+                campo.id !== "id_criar_mais_produtos"
             );
         });
 }
 
+const form = document.getElementById("form-produto");
 const campos = Array.from(
-    document.querySelectorAll("form input, form select, form textarea")
-).filter(campo => campo.type !== "hidden");
-    const form = document.querySelector("form");
+    form?.querySelectorAll("input, select, textarea") || []
+).filter(campo => campo.type !== "hidden" && campo.id !== "id_criar_mais_produtos");
     const campoNome = campos[0];
     const campoPrecoCompra = document.getElementById("id_preco_compra");
     const campoPrecoCompraFracionado = document.getElementById("id_preco_compra_fracionado");
@@ -843,6 +915,10 @@ const campoPercentualVistaFracionado = document.getElementById("percentual_vista
 const campoPercentualPrazoFracionado = document.getElementById("percentual_prazo_fracionado");
 const campoPrecoVistaFracionado = document.getElementById("preco_vista_fracionado");
 const campoPrecoPrazoFracionado = document.getElementById("preco_prazo_fracionado");
+const criarMaisProdutos = document.getElementById("id_criar_mais_produtos");
+if (criarMaisProdutos?.checked) {
+    setTimeout(() => campoNome?.focus(), 80);
+}
     function numero(valor) {
         if (!valor) return 0;
         return parseFloat(String(valor).replace(",", ".")) || 0;
@@ -852,61 +928,6 @@ const campoPrecoPrazoFracionado = document.getElementById("preco_prazo_fracionad
     const arredondado = Math.round(Number(valor) * 20) / 20;
     return arredondado.toFixed(2);
 }
-    function configurarEnterInteligente() {
-        const formEnter = document.getElementById("form-produto");
-        if (!formEnter) return;
-
-        const camposEnter = Array.from(
-            formEnter.querySelectorAll("input, select, textarea")
-        ).filter((campo) => {
-            const tipo = (campo.type || "").toLowerCase();
-            const estilo = window.getComputedStyle(campo);
-
-            return (
-                !campo.disabled &&
-                tipo !== "hidden" &&
-                estilo.display !== "none" &&
-                estilo.visibility !== "hidden"
-            );
-        });
-
-        camposEnter.forEach((campo, index) => {
-            campo.addEventListener("keydown", function (event) {
-                if (event.key !== "Enter") return;
-
-                if (campo.tagName !== "INPUT" || campo.type !== "number") {
-    event.preventDefault();
-}
-            if (campo.id && (campo.id.includes("preco") || campo.id.includes("compra"))) {
-                let valor = String(campo.value || "").replace(",", ".").trim();
-
-                if (valor !== "") {
-                    let numero = parseFloat(valor);
-
-                    if (!isNaN(numero)) {
-                        campo.value = numero.toFixed(2);
-                    }
-                }
-            }
-                const proximoCampo = camposEnter[index + 1];
-
-                if (proximoCampo) {
-                    proximoCampo.focus();
-
-                    if (
-                        proximoCampo.tagName === "INPUT" ||
-                        proximoCampo.tagName === "TEXTAREA"
-                    ) {
-                        proximoCampo.select?.();
-                    }
-                } else {
-                    formEnter.requestSubmit();
-                }
-            });
-        });
-    }
-
-    configurarEnterInteligente();
 function atualizarVisibilidadeFracionado() {
     const valor = String(campoVendeFracionado?.value || "").toLowerCase();
     const mostrar =
@@ -1255,9 +1276,23 @@ atualizarVisibilidadeFracionado();
 }
         if (e.key === "Enter") {
             e.preventDefault();
-const camposVisiveis = getCamposVisiveis();
+if (campo.id && (campo.id.includes("preco") || campo.id.includes("compra"))) {
+    const valor = String(campo.value || "").replace(",", ".").trim();
+
+    if (valor !== "") {
+        const numeroCampo = parseFloat(valor);
+
+        if (!isNaN(numeroCampo)) {
+            campo.value = numeroCampo.toFixed(2);
+        }
+    }
+}
 atualizarVisibilidadeFracionado();
+const camposVisiveis = getCamposVisiveis();
 const index = camposVisiveis.indexOf(campo);
+if (index === -1) {
+    return;
+}
 if (campo.tagName === "SELECT") {
     const valorAtual = String(campo.value || "").trim().toLowerCase();
     const textoAtual = String(campo.options[campo.selectedIndex]?.text || "").trim().toLowerCase();
@@ -1292,7 +1327,7 @@ const proximo = camposVisiveis[index + 1];
                     proximo.click();
                 }
             } else {
-                form.submit();
+                form.requestSubmit();
             }
         }
     });
