@@ -308,22 +308,54 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
     document.getElementById("modalConfirmarExclusao").style.display = "none";
 };
 });
-  busca.addEventListener("keyup", function() {
+  // Função para normalizar texto (remove acentos e converte para minúsculas)
+  function normalizarTexto(texto) {
+    return texto
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  }
 
-    const termo = busca.value.toLowerCase();
+  busca.addEventListener("keyup", function() {
+    const termo = normalizarTexto(busca.value.trim());
+    let totalVisivel = 0;
 
     linhas.forEach(function(linha) {
+      const nome = linha.children[0].textContent.trim();
+      const nomNormalizado = normalizarTexto(nome);
 
-      const nome = linha.children[0].textContent.toLowerCase();
-
-      if (nome.includes(termo)) {
+      // Se houver termo de busca, filtrar por qualquer palavra que contenha o termo
+      if (termo === "" || nomNormalizado.includes(termo)) {
         linha.style.display = "";
+        totalVisivel++;
       } else {
         linha.style.display = "none";
       }
-
     });
 
+    // Mostrar/esconder mensagem de nenhum resultado
+    const msgNenhumResultado = document.getElementById('msgNenhumResultado');
+    if (totalVisivel === 0 && termo !== "") {
+      if (!msgNenhumResultado) {
+        const mensagem = document.createElement('div');
+        mensagem.id = 'msgNenhumResultado';
+        mensagem.style.cssText = `
+          text-align: center;
+          padding: 40px 20px;
+          color: #6c757d;
+          font-size: 16px;
+          font-weight: 500;
+        `;
+        mensagem.textContent = 'Nenhum produto encontrado';
+        const tabela = document.querySelector('table');
+        tabela.parentNode.insertBefore(mensagem, tabela.nextSibling);
+      }
+      msgNenhumResultado.style.display = 'block';
+    } else {
+      if (msgNenhumResultado) {
+        msgNenhumResultado.style.display = 'none';
+      }
+    }
   });
 
   // Destacar produto salvo/editado
