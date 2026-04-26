@@ -1,8 +1,9 @@
 from django.db.models import Q
+from urllib.parse import urlencode
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F
-from .forms import ProdutoForm
+from .forms import ProdutoForm, UnidadeForm
 from .models import Produto, Unidade
 from django.contrib import messages
 from django.http import JsonResponse
@@ -205,6 +206,74 @@ def cadastrar_unidade(request):
                 )
 
     return redirect("estoque:cadastrar_produto")
+
+def unidades_produto(request):
+    termo = request.GET.get("q", "").strip()
+    unidade_selecionada = None
+
+    unidades = Unidade.objects.all().order_by("-ativa", "sigla")
+
+    if termo:
+        unidades = unidades.filter(
+            Q(nome__icontains=termo) |
+            Q(sigla__icontains=termo) |
+            Q(descricao__icontains=termo)
+        )
+
+    if request.method == "POST":
+        acao = request.POST.get("acao")
+        unidade_id = request.POST.get("unidade_id")
+
+        if acao == "alternar_status" and unidade_id:
+            unidade = get_object_or_404(Unidade, pk=unidade_id)
+            unidade.ativa = request.POST.get("ativa") == "1"
+            unidade.save(update_fields=["ativa"])
+            status = "ativada" if unidade.ativa else "desativada"
+            messages.success(request, f'Unidade "{unidade.sigla}" {status} com sucesso.')
+            params = {"unidade": unidade.id}
+            if termo:
+                params["q"] = termo
+            destino = f"{reverse('estoque:unidades_produto')}?{urlencode(params)}"
+            return redirect(destino)
+
+        if unidade_id:
+            unidade_selecionada = get_object_or_404(Unidade, pk=unidade_id)
+            form = UnidadeForm(request.POST, instance=unidade_selecionada)
+        else:
+            form = UnidadeForm(request.POST)
+
+        if form.is_valid():
+            unidade = form.save()
+            messages.success(request, f'Unidade "{unidade.sigla}" salva com sucesso.')
+            return redirect(f"{reverse('estoque:unidades_produto')}?unidade={unidade.id}")
+        messages.error(request, "Revise os campos destacados para salvar a unidade.")
+    else:
+        unidade_id = request.GET.get("unidade")
+        if unidade_id:
+            unidade_selecionada = get_object_or_404(Unidade, pk=unidade_id)
+            form = UnidadeForm(instance=unidade_selecionada)
+        else:
+            form = UnidadeForm(initial={"ativa": True})
+
+    unidades = list(unidades)
+    for unidade in unidades:
+        unidade.produtos_em_uso = Produto.objects.filter(excluido=False).filter(
+            Q(unidade_compra=unidade.sigla) |
+            Q(unidade_venda_1=unidade.sigla) |
+            Q(unidade_venda_2=unidade.sigla)
+        ).count()
+
+    return render(
+        request,
+        "estoque/unidades_produto.html",
+        {
+            "form": form,
+            "unidades": unidades,
+            "termo": termo,
+            "unidade_selecionada": unidade_selecionada,
+            "total_unidades": len(unidades),
+        },
+    )
 
 def produto_detalhe(request, pk):
     produto = get_object_or_404(Produto, pk=pk)

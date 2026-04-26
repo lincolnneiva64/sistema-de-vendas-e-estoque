@@ -1,0 +1,636 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Unidades de Produto{% endblock %}
+{% block content %}
+<style>
+  .unidades-page {
+    color: #172033;
+    padding: 18px 0 32px;
+  }
+
+  .unidades-shell {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 18px;
+  }
+
+  .unidades-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .unidades-title {
+    margin: 0;
+    font-size: 1.55rem;
+    font-weight: 800;
+    color: #111827;
+  }
+
+  .unidades-subtitle {
+    margin: 4px 0 0;
+    color: #64748b;
+    font-weight: 500;
+    font-size: 0.92rem;
+  }
+
+  .unidades-header-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .unidades-btn {
+    border: 0;
+    border-radius: 9px;
+    padding: 8px 13px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+
+  .unidades-btn:hover {
+    transform: translateY(-1px);
+  }
+
+  .unidades-btn-primary {
+    background: #2563eb;
+    color: #fff;
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24);
+  }
+
+  .unidades-btn-secondary {
+    background: #fff;
+    color: #334155;
+    border: 1px solid #d8dee8;
+  }
+
+  .unidades-search {
+    background: #ffffff;
+    border: 1px solid #e1e7ef;
+    border-radius: 12px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.055);
+    padding: 10px;
+    margin-bottom: 12px;
+  }
+
+  .unidades-search form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 8px;
+  }
+
+  .unidades-search input,
+  .unidades-form-control {
+    width: 100%;
+    border: 1.5px solid #d3dbe8;
+    border-radius: 9px;
+    padding: 9px 11px;
+    background: #fff;
+    color: #172033;
+    font-weight: 500;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .unidades-search input:focus,
+  .unidades-form-control:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.13);
+  }
+
+  .unidades-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.85fr);
+    gap: 14px;
+    align-items: start;
+  }
+
+  .unidades-panel {
+    background: #ffffff;
+    border: 1px solid #e1e7ef;
+    border-radius: 14px;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+    overflow: hidden;
+  }
+
+  .unidades-panel-head {
+    padding: 13px 16px;
+    border-bottom: 1px solid #edf1f6;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .unidades-panel-title {
+    margin: 0;
+    font-size: 0.98rem;
+    font-weight: 800;
+    color: #111827;
+  }
+
+  .unidades-count {
+    color: #64748b;
+    font-size: 0.84rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .unidades-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .unidades-table th {
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 9px 12px;
+    border-bottom: 1px solid #edf1f6;
+  }
+
+  .unidades-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #f0f3f8;
+    vertical-align: middle;
+  }
+
+  .unidades-row {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .unidades-row:hover td {
+    background: #f8fbff;
+  }
+
+  .unidades-row.selecionada td {
+    background: #eff6ff;
+    border-bottom-color: #dbeafe;
+  }
+
+  .unidade-sigla {
+    display: inline-flex;
+    min-width: 44px;
+    justify-content: center;
+    border-radius: 8px;
+    background: #e0ecff;
+    color: #1d4ed8;
+    padding: 4px 8px;
+    font-weight: 800;
+    font-size: 0.86rem;
+  }
+
+  .unidade-nome {
+    font-weight: 800;
+    color: #172033;
+    font-size: 0.92rem;
+  }
+
+  .unidade-descricao {
+    color: #64748b;
+    font-size: 0.84rem;
+    max-width: 320px;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 4px 8px;
+    font-size: 0.72rem;
+    font-weight: 800;
+  }
+
+  .status-ativo {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .status-inativo {
+    background: #f1f5f9;
+    color: #64748b;
+  }
+
+  .status-action-form {
+    margin: 0;
+  }
+
+  .status-action-btn {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    color: #334155;
+    padding: 5px 9px;
+    font-size: 0.76rem;
+    font-weight: 800;
+    min-width: 78px;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  }
+
+  .status-action-btn:hover {
+    transform: translateY(-1px);
+  }
+
+  .status-action-btn.ativar {
+    border-color: #86efac;
+    color: #166534;
+    background: #f0fdf4;
+  }
+
+  .status-action-btn.ativar:hover {
+    background: #dcfce7;
+  }
+
+  .status-action-btn.desativar {
+    border-color: #fecaca;
+    color: #991b1b;
+    background: #fff7ed;
+  }
+
+  .status-action-btn.desativar:hover {
+    background: #fee2e2;
+  }
+
+  .uso-info {
+    display: block;
+    margin-top: 3px;
+    color: #94a3b8;
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  .unidades-form {
+    padding: 14px 16px 16px;
+  }
+
+  .unidades-field {
+    margin-bottom: 10px;
+  }
+
+  .unidades-field label {
+    display: block;
+    color: #334155;
+    font-size: 0.84rem;
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+
+  .unidades-field textarea {
+    min-height: 82px;
+    resize: vertical;
+  }
+
+  .unidades-error {
+    color: #dc2626;
+    font-size: 0.84rem;
+    font-weight: 700;
+    margin-top: 6px;
+  }
+
+  .unidades-status-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    border: 1px solid #e1e7ef;
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin: 12px 0;
+    background: #f8fafc;
+  }
+
+  .unidades-status-title {
+    font-weight: 800;
+    color: #172033;
+    font-size: 0.9rem;
+  }
+
+  .unidades-status-text {
+    color: #64748b;
+    font-size: 0.8rem;
+  }
+
+  .status-form-action {
+    flex: 0 0 auto;
+    margin: 0;
+  }
+
+  .status-form-btn {
+    border: 0;
+    border-radius: 10px;
+    padding: 9px 13px;
+    min-width: 136px;
+    font-size: 0.86rem;
+    font-weight: 800;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .status-form-btn:hover {
+    transform: translateY(-1px);
+  }
+
+  .status-form-btn.ativar {
+    color: #fff;
+    background: #16a34a;
+    box-shadow: 0 8px 18px rgba(22, 163, 74, 0.22);
+  }
+
+  .status-form-btn.desativar {
+    color: #fff;
+    background: #dc2626;
+    box-shadow: 0 8px 18px rgba(220, 38, 38, 0.18);
+  }
+
+  .unidades-form-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    padding-top: 4px;
+  }
+
+  .unidades-alert {
+    border-radius: 13px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    font-weight: 750;
+  }
+
+  .unidades-alert.success {
+    background: #ecfdf3;
+    border: 1px solid #b7e4c7;
+    color: #166534;
+  }
+
+  .unidades-alert.error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+  }
+
+  .unidades-empty {
+    padding: 26px 16px;
+    color: #64748b;
+    text-align: center;
+    font-weight: 700;
+  }
+
+  @media (max-width: 900px) {
+    .unidades-header {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .unidades-header-actions {
+      justify-content: flex-start;
+    }
+
+    .unidades-search form,
+    .unidades-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .unidades-panel {
+      overflow-x: auto;
+    }
+  }
+</style>
+
+<div class="unidades-page">
+  <div class="unidades-shell">
+    <header class="unidades-header">
+      <div>
+        <h1 class="unidades-title">Unidades de Produto</h1>
+        <p class="unidades-subtitle">Cadastre, consulte e mantenha as unidades usadas nos produtos.</p>
+      </div>
+
+      <div class="unidades-header-actions">
+        <a href="{% url 'estoque:home' %}" class="unidades-btn unidades-btn-secondary">Voltar ao painel</a>
+        <a href="{% url 'estoque:cadastrar_produto' %}" class="unidades-btn unidades-btn-primary">Cadastrar produto</a>
+      </div>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="unidades-alert {% if message.tags == 'error' %}error{% else %}success{% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <section class="unidades-search" aria-label="Busca de unidades">
+      <form method="get">
+        <input type="text" name="q" id="buscaUnidades" value="{{ termo }}" placeholder="Buscar por nome, sigla ou descrição" autocomplete="off">
+        <button type="submit" class="unidades-btn unidades-btn-primary">Buscar</button>
+        <a href="{% url 'estoque:unidades_produto' %}" class="unidades-btn unidades-btn-secondary">Limpar</a>
+      </form>
+    </section>
+
+    <main class="unidades-grid">
+      <section class="unidades-panel">
+        <div class="unidades-panel-head">
+          <h2 class="unidades-panel-title">Unidades cadastradas</h2>
+          <span class="unidades-count"><span id="contadorUnidades">{{ total_unidades }}</span> unidade(s)</span>
+        </div>
+
+        {% if unidades %}
+          <table class="unidades-table">
+            <thead>
+              <tr>
+                <th>Sigla</th>
+                <th>Unidade</th>
+                <th>Descrição</th>
+                <th>Status</th>
+                <th>Ação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for unidade in unidades %}
+                <tr class="unidades-row {% if unidade_selecionada and unidade.id == unidade_selecionada.id %}selecionada{% endif %}"
+                    data-unidade-search="{{ unidade.sigla|lower }} {{ unidade.nome|lower }} {{ unidade.descricao|default:''|lower }}"
+                    onclick="window.location.href='{% url 'estoque:unidades_produto' %}?{% if termo %}q={{ termo|urlencode }}&{% endif %}unidade={{ unidade.id }}'">
+                  <td><span class="unidade-sigla">{{ unidade.sigla }}</span></td>
+                  <td>
+                    <div class="unidade-nome">{{ unidade.nome }}</div>
+                    <span class="uso-info">{{ unidade.produtos_em_uso }} produto{{ unidade.produtos_em_uso|pluralize }} usando</span>
+                  </td>
+                  <td class="unidade-descricao">{{ unidade.descricao|default:"-" }}</td>
+                  <td>
+                    {% if unidade.ativa %}
+                      <span class="status-pill status-ativo">Ativa</span>
+                    {% else %}
+                      <span class="status-pill status-inativo">Inativa</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <form method="post" class="status-action-form" onclick="event.stopPropagation();">
+                      {% csrf_token %}
+                      <input type="hidden" name="acao" value="alternar_status">
+                      <input type="hidden" name="unidade_id" value="{{ unidade.id }}">
+                      <input type="hidden" name="ativa" value="{% if unidade.ativa %}0{% else %}1{% endif %}">
+                      <button type="submit" class="status-action-btn {% if unidade.ativa %}desativar{% else %}ativar{% endif %}">
+                        {% if unidade.ativa %}Desativar{% else %}Ativar{% endif %}
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <div class="unidades-empty" id="semUnidadesFiltradas" style="display: none;">Nenhuma unidade encontrada.</div>
+        {% else %}
+          <div class="unidades-empty">Nenhuma unidade encontrada.</div>
+        {% endif %}
+      </section>
+
+      <section class="unidades-panel">
+        <div class="unidades-panel-head">
+          <div>
+            <h2 class="unidades-panel-title">
+              {% if unidade_selecionada %}Editar unidade{% else %}Nova unidade{% endif %}
+            </h2>
+            <span class="unidades-count">
+              {% if unidade_selecionada %}{{ unidade_selecionada.sigla }} selecionada{% else %}Pronta para cadastro{% endif %}
+            </span>
+          </div>
+        </div>
+
+        <form method="post" class="unidades-form" novalidate>
+          {% csrf_token %}
+          {% if unidade_selecionada %}
+            <input type="hidden" name="unidade_id" value="{{ unidade_selecionada.id }}">
+          {% endif %}
+
+          <div class="unidades-field">
+            <label for="{{ form.nome.id_for_label }}">Nome da unidade</label>
+            {{ form.nome }}
+            {% if form.nome.errors %}
+              <div class="unidades-error">{{ form.nome.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+
+          <div class="unidades-field">
+            <label for="{{ form.sigla.id_for_label }}">Sigla</label>
+            {{ form.sigla }}
+            {% if form.sigla.errors %}
+              <div class="unidades-error">{{ form.sigla.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+
+          <div class="unidades-field">
+            <label for="{{ form.descricao.id_for_label }}">Descrição</label>
+            {{ form.descricao }}
+            {% if form.descricao.errors %}
+              <div class="unidades-error">{{ form.descricao.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+
+          <div class="unidades-status-card">
+            <span>
+              <span class="unidades-status-title">Status da unidade</span>
+              <span class="unidades-status-text d-block">
+                {% if unidade_selecionada %}
+                  {% if unidade_selecionada.ativa %}
+                    Ativa e visível nos selects do cadastro de produto.
+                  {% else %}
+                    Inativa e oculta nos selects do cadastro de produto.
+                  {% endif %}
+                {% else %}
+                  Novas unidades são cadastradas como ativas.
+                {% endif %}
+              </span>
+            </span>
+            {% if unidade_selecionada %}
+              <button
+                type="submit"
+                form="formAlternarStatusUnidade"
+                class="status-form-btn {% if unidade_selecionada.ativa %}desativar{% else %}ativar{% endif %}"
+              >
+                {% if unidade_selecionada.ativa %}Desativar unidade{% else %}Ativar unidade{% endif %}
+              </button>
+            {% else %}
+              <span class="status-pill status-ativo">Ativa</span>
+            {% endif %}
+          </div>
+
+          {% if not unidade_selecionada or unidade_selecionada.ativa %}
+            <input type="hidden" name="ativa" value="on">
+          {% endif %}
+
+          <div class="unidades-form-actions">
+            <a href="{% url 'estoque:unidades_produto' %}" class="unidades-btn unidades-btn-secondary">Novo / Limpar</a>
+            <button type="submit" class="unidades-btn unidades-btn-primary">Salvar unidade</button>
+          </div>
+        </form>
+
+        {% if unidade_selecionada %}
+          <form method="post" id="formAlternarStatusUnidade" class="status-form-action">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="alternar_status">
+            <input type="hidden" name="unidade_id" value="{{ unidade_selecionada.id }}">
+            <input type="hidden" name="ativa" value="{% if unidade_selecionada.ativa %}0{% else %}1{% endif %}">
+          </form>
+        {% endif %}
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const sigla = document.getElementById("id_sigla");
+    if (sigla) {
+      sigla.addEventListener("input", function () {
+        sigla.value = sigla.value.toUpperCase();
+      });
+    }
+
+    const busca = document.getElementById("buscaUnidades");
+    const linhas = Array.from(document.querySelectorAll("[data-unidade-search]"));
+    const contador = document.getElementById("contadorUnidades");
+    const semResultado = document.getElementById("semUnidadesFiltradas");
+
+    function normalizarTexto(texto) {
+      return String(texto || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    }
+
+    function filtrarUnidades() {
+      const termo = normalizarTexto(busca?.value.trim());
+      let totalVisivel = 0;
+
+      linhas.forEach(function (linha) {
+        const texto = normalizarTexto(linha.dataset.unidadeSearch);
+        const visivel = termo === "" || texto.includes(termo);
+        linha.style.display = visivel ? "" : "none";
+        if (visivel) totalVisivel += 1;
+      });
+
+      if (contador) {
+        contador.textContent = totalVisivel;
+      }
+
+      if (semResultado) {
+        semResultado.style.display = totalVisivel === 0 ? "block" : "none";
+      }
+    }
+
+    busca?.addEventListener("input", filtrarUnidades);
+    filtrarUnidades();
+  });
+</script>
+{% endblock %}

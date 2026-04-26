@@ -197,10 +197,21 @@ class ProdutoForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        unidades_ativas = list(Unidade.objects.filter(ativa=True).order_by("sigla"))
         opcoes_unidade = [("", "Selecione")] + [
             (unidade.sigla, unidade.sigla)
-            for unidade in Unidade.objects.filter(ativa=True).order_by("sigla")
+            for unidade in unidades_ativas
         ]
+        siglas_disponiveis = {unidade.sigla for unidade in unidades_ativas}
+
+        for valor_atual in [
+            getattr(self.instance, "unidade_compra", None),
+            getattr(self.instance, "unidade_venda_1", None),
+            getattr(self.instance, "unidade_venda_2", None),
+        ]:
+            if valor_atual and valor_atual not in siglas_disponiveis:
+                opcoes_unidade.append((valor_atual, valor_atual))
+                siglas_disponiveis.add(valor_atual)
 
         for field_name in ["unidade_compra", "unidade_venda_1", "unidade_venda_2"]:
             if field_name in self.fields:
@@ -291,3 +302,62 @@ class ProdutoForm(forms.ModelForm):
             self._errors.pop("preco_prazo_fracionado", None)
 
         return cleaned_data
+
+
+class UnidadeForm(forms.ModelForm):
+    class Meta:
+        model = Unidade
+        fields = ["nome", "sigla", "descricao", "ativa"]
+        widgets = {
+            "nome": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Ex.: Unidade",
+                "autocomplete": "off",
+            }),
+            "sigla": forms.TextInput(attrs={
+                "class": "form-control text-uppercase",
+                "placeholder": "Ex.: UN",
+                "autocomplete": "off",
+                "maxlength": "20",
+            }),
+            "descricao": forms.Textarea(attrs={
+                "class": "form-control",
+                "placeholder": "Observação opcional sobre a unidade",
+                "rows": 4,
+            }),
+            "ativa": forms.CheckboxInput(attrs={
+                "class": "form-check-input",
+            }),
+        }
+
+    def clean_nome(self):
+        nome = " ".join((self.cleaned_data.get("nome") or "").strip().split())
+        if not nome:
+            raise forms.ValidationError("Informe o nome da unidade.")
+
+        unidade_existente = Unidade.objects.filter(nome__iexact=nome)
+        if self.instance.pk:
+            unidade_existente = unidade_existente.exclude(pk=self.instance.pk)
+
+        if unidade_existente.exists():
+            raise forms.ValidationError("Já existe uma unidade com esse nome.")
+
+        return nome.title()
+
+    def clean_sigla(self):
+        sigla = " ".join((self.cleaned_data.get("sigla") or "").strip().upper().split())
+        if not sigla:
+            raise forms.ValidationError("Informe a sigla da unidade.")
+
+        unidade_existente = Unidade.objects.filter(sigla__iexact=sigla)
+        if self.instance.pk:
+            unidade_existente = unidade_existente.exclude(pk=self.instance.pk)
+
+        if unidade_existente.exists():
+            raise forms.ValidationError("Já existe uma unidade com essa sigla.")
+
+        return sigla
+
+    def clean_descricao(self):
+        descricao = self.cleaned_data.get("descricao") or ""
+        return " ".join(descricao.strip().split()) or None

@@ -280,109 +280,24 @@ select.campo-obrigatorio-piscando:focus,
     box-shadow: 0 0 0 0.18rem rgba(37, 99, 235, 0.22);
 }
 
-.painel-unidade-overlay{
-    position: fixed;
-    inset: 0;
-    background: rgba(15, 23, 42, 0.18);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 2000;
-}
-
-.painel-unidade-overlay.ativo{
-    display: flex;
-}
-
-.painel-unidade{
-    width: min(460px, calc(100vw - 32px));
-    background: #ffffff;
-    border: 1px solid #d9dee7;
-    border-radius: 18px;
-    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.20);
-    padding: 20px 20px 18px;
-}
-
-.painel-unidade-topo{
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 14px;
-}
-
-.painel-unidade-titulo{
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: #1e293b;
-    margin: 0;
-}
-
-.painel-unidade-fechar{
-    border: none;
-    background: transparent;
-    font-size: 28px;
-    line-height: 1;
-    color: #64748b;
-    cursor: pointer;
-    padding: 0 4px;
-}
-
-.painel-unidade-fechar:hover{
-    color: #0f172a;
-}
-
-.painel-unidade .form-control{
-    height: 49px;
-}
-
-.painel-unidade textarea.form-control{
-    height: auto;
-    min-height: 96px;
-    resize: vertical;
-}
-
-.painel-unidade-acoes{
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    margin-top: 16px;
-}
-
-.btn-unidade-secundario{
+.btn-gerenciar-unidades{
     border: 1px solid #cbd5e1;
-    background: #fff;
-    color: #334155;
-    border-radius: 12px;
-    padding: 10px 16px;
-    font-weight: 600;
-}
-
-.btn-unidade-secundario:hover{
-    background: #f8fafc;
-}
-
-.btn-unidade-primario{
-    border: none;
-    background: linear-gradient(135deg, #2563eb, #1d4ed8);
-    color: #fff;
-    border-radius: 12px;
-    padding: 10px 18px;
-    font-weight: 700;
-    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.28);
-}
-
-.btn-unidade-primario:hover{
-    transform: translateY(-1px);
-}
-
-.dica-unidade{
-    margin-top: 12px;
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
+    background: #ffffff;
     color: #1d4ed8;
     border-radius: 12px;
-    padding: 10px 12px;
-    font-size: 0.93rem;
+    padding: 10px 14px;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+    transition: all 0.16s ease;
+}
+
+.btn-gerenciar-unidades:hover{
+    background: #eff6ff;
+    border-color: #93c5fd;
+    color: #1d4ed8;
+    transform: translateY(-1px);
 }
 </style>
 
@@ -533,7 +448,7 @@ select.campo-obrigatorio-piscando:focus,
         <div class="flex-grow-1">
             {{ form.unidade_compra }}
         </div>
-        <button type="button" id="btnAbrirPainelUnidade" class="btn btn-outline-primary fw-semibold px-3 text-nowrap btn-unidade">+ Unidade</button>
+        <a href="{% url 'estoque:unidades_produto' %}" class="btn-gerenciar-unidades">Gerenciar unidades</a>
     </div>
 </div>
 
@@ -728,39 +643,6 @@ select.campo-obrigatorio-piscando:focus,
 </div>
 </form>
 
-<div class="painel-unidade-overlay" id="painelUnidadeOverlay">
-    <form method="post" action="{% url 'estoque:cadastrar_unidade' %}" class="painel-unidade">
-        {% csrf_token %}
-        <div class="painel-unidade-topo">
-            <h3 class="painel-unidade-titulo">Nova Unidade</h3>
-            <button type="button" class="painel-unidade-fechar" id="btnFecharPainelUnidade">&times;</button>
-        </div>
-
-        <div class="mb-3">
-            <label class="form-label">Nome da unidade</label>
-            <input type="text" class="form-control" id="novaUnidadeNome" name="nome" placeholder="Ex.: Mililitro" required>
-        </div>
-
-        <div class="mb-3">
-            <label class="form-label">Sigla</label>
-            <input type="text" class="form-control" id="novaUnidadeSigla" name="sigla" placeholder="Ex.: ML" required>
-        </div>
-
-        <div class="mb-2">
-            <label class="form-label">Descrição (opcional)</label>
-            <textarea class="form-control" id="novaUnidadeDescricao" name="descricao" placeholder="Ex.: Unidade usada para líquidos"></textarea>
-        </div>
-
-        <div class="dica-unidade">
-            Por enquanto vamos abrir e fechar o painel primeiro. Na próxima etapa ligamos isso ao banco.
-        </div>
-
-        <div class="painel-unidade-acoes">
-            <button type="button" class="btn-unidade-secundario" id="btnCancelarPainelUnidade">Cancelar</button>
-            <button type="submit" class="btn-unidade-primario">Salvar unidade</button>
-        </div>
-    </form>
-</div>
 
 <div class="acoes-flutuantes">
     
@@ -821,36 +703,7 @@ select.campo-obrigatorio-piscando:focus,
     }
 }   
 document.addEventListener("DOMContentLoaded", function () {
-    const btnAbrirPainelUnidade = document.getElementById("btnAbrirPainelUnidade");
-    const painelUnidadeOverlay = document.getElementById("painelUnidadeOverlay");
-    const btnFecharPainelUnidade = document.getElementById("btnFecharPainelUnidade");
-    const btnCancelarPainelUnidade = document.getElementById("btnCancelarPainelUnidade");
-    const campoNovaUnidadeNome = document.getElementById("novaUnidadeNome");
-    function abrirPainelUnidade() {
-        if (!painelUnidadeOverlay) return;
-        painelUnidadeOverlay.classList.add("ativo");
-        setTimeout(() => campoNovaUnidadeNome?.focus(), 60);
-    }
-
-    function fecharPainelUnidade() {
-        if (!painelUnidadeOverlay) return;
-        painelUnidadeOverlay.classList.remove("ativo");
-    }
-    btnAbrirPainelUnidade?.addEventListener("click", abrirPainelUnidade);
-    btnFecharPainelUnidade?.addEventListener("click", fecharPainelUnidade);
-    btnCancelarPainelUnidade?.addEventListener("click", fecharPainelUnidade);
-
-    painelUnidadeOverlay?.addEventListener("click", function (event) {
-        if (event.target === painelUnidadeOverlay) {
-            fecharPainelUnidade();
-        }
-    });
      document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && painelUnidadeOverlay?.classList.contains("ativo")) {
-        e.preventDefault();
-        fecharPainelUnidade();
-        return;
-    }
     // Ctrl + S → salvar
     if (e.ctrlKey && e.key.toLowerCase() === "s") {
         e.preventDefault();
