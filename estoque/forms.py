@@ -198,61 +198,47 @@ class ProdutoForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         opcoes_unidade = [("", "Selecione")] + [
-            (unidade.sigla, f"{unidade.nome} ({unidade.sigla})")
-            for unidade in Unidade.objects.filter(ativa=True).order_by("nome")
-        ]
-
-        self.fields["unidade_compra"].choices = opcoes_unidade
-        self.fields["unidade_venda_1"].choices = opcoes_unidade
-        self.fields["unidade_venda_2"].choices = opcoes_unidade
-        self.fields["unidade_compra"].widget.choices = opcoes_unidade
-        self.fields["unidade_venda_1"].widget.choices = opcoes_unidade
-        self.fields["unidade_venda_2"].widget.choices = opcoes_unidade
-    
-def __init__(self, *args, **kwargs):
-    super().__init__(*args, **kwargs)
-    self.fields['nome'].widget.attrs.update({
-            'list': 'lista-produtos'
-        })
-    self.fields["fator_conversao"].required = False
-    self.fields["preco_compra_fracionado"].required = False
-    self.fields["unidade_venda_2"].required = False
-    self.fields["percentual_vista_fracionado"].required = False
-    self.fields["preco_vista_fracionado"].required = False
-    self.fields["percentual_prazo_fracionado"].required = False
-    self.fields["preco_prazo_fracionado"].required = False
-
-    if not self.instance or not self.instance.pk:
-        self.fields["preco_compra"].initial = None
-        self.fields["preco_vista"].initial = None
-        self.fields["preco_prazo"].initial = None
-        
-        self.initial["preco_compra"] = ""
-        self.initial["preco_vista"] = ""
-        self.initial["preco_prazo"] = ""
-        self.initial["unidade_compra"] = ""
-        self.initial["fator_conversao"] = ""
-        self.initial["unidade_venda_1"] = ""
-        self.initial["preco_venda_1"] = ""
-        self.initial["unidade_venda_2"] = ""
-        self.initial["preco_venda_2"] = ""
-        self.initial["vende_fracionado"] = False
-        self.initial["descricao_conversao"] = ""
-        
-        self.initial["nome"] = ""
-        self.initial["codigo"] = ""
-        self.initial["categoria"] = ""
-        self.initial["quantidade"] = ""
-        self.initial["estoque_minimo"] = ""
-        self.initial["fornecedor"] = ""
-        opcoes_unidade = [("", "Selecione")] + [
             (unidade.sigla, unidade.sigla)
             for unidade in Unidade.objects.filter(ativa=True).order_by("sigla")
         ]
 
-        self.fields["unidade_compra"].widget.choices = opcoes_unidade
-        self.fields["unidade_venda_1"].widget.choices = opcoes_unidade
-        self.fields["unidade_venda_2"].widget.choices = opcoes_unidade
+        for field_name in ["unidade_compra", "unidade_venda_1", "unidade_venda_2"]:
+            if field_name in self.fields:
+                self.fields[field_name].choices = opcoes_unidade
+                self.fields[field_name].widget.choices = opcoes_unidade
+
+        self.fields["nome"].widget.attrs.update({"list": "lista-produtos"})
+        self.fields["fator_conversao"].required = False
+        self.fields["preco_compra_fracionado"].required = False
+        self.fields["unidade_venda_2"].required = False
+        self.fields["percentual_vista_fracionado"].required = False
+        self.fields["preco_vista_fracionado"].required = False
+        self.fields["percentual_prazo_fracionado"].required = False
+        self.fields["preco_prazo_fracionado"].required = False
+
+        if not self.instance or not self.instance.pk:
+            self.fields["preco_compra"].initial = None
+            self.fields["preco_vista"].initial = None
+            self.fields["preco_prazo"].initial = None
+
+            self.initial["preco_compra"] = ""
+            self.initial["preco_vista"] = ""
+            self.initial["preco_prazo"] = ""
+            self.initial["unidade_compra"] = ""
+            self.initial["fator_conversao"] = ""
+            self.initial["unidade_venda_1"] = ""
+            self.initial["preco_venda_1"] = ""
+            self.initial["unidade_venda_2"] = ""
+            self.initial["preco_venda_2"] = ""
+            self.initial["vende_fracionado"] = False
+            self.initial["descricao_conversao"] = ""
+            self.initial["nome"] = ""
+            self.initial["codigo"] = ""
+            self.initial["categoria"] = ""
+            self.initial["quantidade"] = ""
+            self.initial["estoque_minimo"] = ""
+            self.initial["fornecedor"] = ""
+
     def clean_nome(self):
         nome = normalize_product_name(self.cleaned_data.get("nome", ""))
 
@@ -269,11 +255,10 @@ def __init__(self, *args, **kwargs):
                 raise forms.ValidationError("Já existe um produto com esse nome.")
 
         return nome
-        def clean(self):
-            cleaned_data = super().clean()
 
-            vende_fracionado_valor = cleaned_data.get("vende_fracionado")
-
+    def clean(self):
+        cleaned_data = super().clean()
+        vende_fracionado_valor = cleaned_data.get("vende_fracionado")
         vende_fracionado = str(vende_fracionado_valor).strip().lower() in (
             "true",
             "1",
@@ -304,4 +289,5 @@ def __init__(self, *args, **kwargs):
             self._errors.pop("preco_vista_fracionado", None)
             self._errors.pop("percentual_prazo_fracionado", None)
             self._errors.pop("preco_prazo_fracionado", None)
+
         return cleaned_data
