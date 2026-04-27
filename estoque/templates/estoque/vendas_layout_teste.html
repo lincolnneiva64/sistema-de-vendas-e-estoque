@@ -411,6 +411,164 @@ select {
 .cliente-resumo-valor.contas-resumo {
     font-size: 10px;
 }
+.barra-acoes-venda {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 7px 0 0;
+    padding-top: 7px;
+    border-top: 1px solid #bfdbfe;
+}
+.acoes-venda-grupo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+.acoes-venda-grupo.direita {
+    margin-left: auto;
+    justify-content: flex-end;
+}
+.acao-venda-btn {
+    height: 32px;
+    border: 1px solid #64748b;
+    border-radius: 9px;
+    padding: 0 13px;
+    background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 850;
+    cursor: pointer;
+    transition: 0.16s ease;
+    box-shadow: 0 5px 12px rgba(15, 23, 42, 0.14);
+}
+.acao-venda-btn:hover,
+.acao-venda-btn:focus-visible {
+    transform: translateY(-1px);
+    border-color: #2563eb;
+    color: #1e40af;
+    box-shadow: 0 9px 20px rgba(37, 99, 235, 0.18);
+    outline: none;
+}
+.acao-venda-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 7px rgba(15, 23, 42, 0.12);
+}
+.acao-venda-btn.primaria {
+    background: #2563eb;
+    border-color: #1d4ed8;
+    color: #ffffff;
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.26);
+}
+.acao-venda-btn.cuidado {
+    background: #ffedd5;
+    border-color: #fb923c;
+    color: #7c2d12;
+    box-shadow: 0 5px 14px rgba(234, 88, 12, 0.14);
+}
+.acao-venda-btn.secundaria {
+    background: linear-gradient(180deg, #dbeafe 0%, #93c5fd 100%);
+    border-color: #2563eb;
+    color: #0f2f6b;
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.2);
+}
+.acao-venda-btn.secundaria:hover,
+.acao-venda-btn.secundaria:focus-visible {
+    background: linear-gradient(180deg, #bfdbfe 0%, #60a5fa 100%);
+    border-color: #1d4ed8;
+    color: #082f73;
+    box-shadow: 0 10px 22px rgba(37, 99, 235, 0.28);
+}
+.acao-venda-btn.cuidado:hover,
+.acao-venda-btn.cuidado:focus-visible {
+    background: #fed7aa;
+    border-color: #ea580c;
+    color: #7c2d12;
+}
+@media (max-width: 980px) {
+    .barra-acoes-venda {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+    .acoes-venda-grupo.direita {
+        margin-left: 0;
+        justify-content: flex-start;
+    }
+}
+.venda-toast {
+    position: fixed;
+    top: 18px;
+    right: 18px;
+    z-index: 10000;
+    max-width: 360px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid #bfdbfe;
+    background: #eff6ff;
+    color: #1e3a8a;
+    font-size: 14px;
+    font-weight: 800;
+    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.18);
+    opacity: 0;
+    transform: translateY(-8px);
+    pointer-events: none;
+    transition: 0.22s ease;
+}
+.venda-toast.visivel {
+    opacity: 1;
+    transform: translateY(0);
+}
+.venda-confirmacao-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.22);
+}
+.venda-confirmacao-overlay.visivel {
+    display: flex;
+}
+.venda-confirmacao-card {
+    width: min(420px, calc(100vw - 32px));
+    border-radius: 16px;
+    border: 1px solid #dbe5f0;
+    background: #ffffff;
+    padding: 18px;
+    box-shadow: 0 24px 50px rgba(15, 23, 42, 0.2);
+}
+.venda-confirmacao-texto {
+    margin: 0 0 14px;
+    color: #0f172a;
+    font-size: 17px;
+    font-weight: 850;
+}
+.venda-confirmacao-acoes {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+.venda-confirmacao-acoes button {
+    height: 34px;
+    border-radius: 9px;
+    border: 1px solid #cbd5e1;
+    padding: 0 13px;
+    font-size: 13px;
+    font-weight: 850;
+    cursor: pointer;
+}
+.venda-confirmar-btn {
+    background: #dc2626;
+    border-color: #b91c1c;
+    color: #ffffff;
+}
+.venda-cancelar-btn {
+    background: #f8fafc;
+    color: #334155;
+}
 .cliente-resumo-item.cliente-principal {
     background: #eef6ff;
     border-color: #bfdbfe;
@@ -591,6 +749,19 @@ td:first-child {
 </select>
 <input type="text" id="preco" placeholder="Preço">
         </div>
+
+        <div class="barra-acoes-venda" aria-label="Acoes da venda">
+            <div class="acoes-venda-grupo">
+            <button type="button" id="btnGravarVenda" class="acao-venda-btn primaria">Gravar Venda</button>
+            <button type="button" id="btnVisualizarVenda" class="acao-venda-btn secundaria">Visualizar Venda</button>
+            <button type="button" id="btnLimparCabecalho" class="acao-venda-btn secundaria">Limpar Cabeçalho</button>
+            <button type="button" id="btnLimparItens" class="acao-venda-btn secundaria">Limpar Itens</button>
+            <button type="button" id="btnConsultarVendas" class="acao-venda-btn secundaria">Consultar Vendas</button>
+            </div>
+            <div class="acoes-venda-grupo direita">
+            <button type="button" id="btnNovaVenda" class="acao-venda-btn cuidado">Nova Venda / Limpar Tudo</button>
+            </div>
+        </div>
     </div>
 
     <div class="bloco-venda">
@@ -663,6 +834,17 @@ td:first-child {
 </div>
 
 </div>
+<div id="vendaToast" class="venda-toast" role="status" aria-live="polite"></div>
+<div id="vendaConfirmacaoOverlay" class="venda-confirmacao-overlay" aria-hidden="true">
+    <div class="venda-confirmacao-card" role="dialog" aria-modal="true" aria-labelledby="vendaConfirmacaoTexto">
+        <p id="vendaConfirmacaoTexto" class="venda-confirmacao-texto"></p>
+        <div class="venda-confirmacao-acoes">
+            <button type="button" id="btnCancelarConfirmacaoVenda" class="venda-cancelar-btn">Cancelar</button>
+            <button type="button" id="btnConfirmarConfirmacaoVenda" class="venda-confirmar-btn">Confirmar</button>
+        </div>
+    </div>
+</div>
+
 <script>
     function mostrarMsgEdicao() {
     const msg = document.getElementById("msgEdicao");
@@ -713,6 +895,17 @@ const quantidade = document.getElementById("quantidade");
 const unidade = document.getElementById("unidade");
 const preco = document.getElementById("preco");
 const tabelaBody = document.getElementById("tabelaProdutos");
+const btnGravarVenda = document.getElementById("btnGravarVenda");
+const btnVisualizarVenda = document.getElementById("btnVisualizarVenda");
+const btnNovaVenda = document.getElementById("btnNovaVenda");
+const btnLimparCabecalho = document.getElementById("btnLimparCabecalho");
+const btnLimparItens = document.getElementById("btnLimparItens");
+const btnConsultarVendas = document.getElementById("btnConsultarVendas");
+const vendaToast = document.getElementById("vendaToast");
+const vendaConfirmacaoOverlay = document.getElementById("vendaConfirmacaoOverlay");
+const vendaConfirmacaoTexto = document.getElementById("vendaConfirmacaoTexto");
+const btnCancelarConfirmacaoVenda = document.getElementById("btnCancelarConfirmacaoVenda");
+const btnConfirmarConfirmacaoVenda = document.getElementById("btnConfirmarConfirmacaoVenda");
 const clienteBusca = document.getElementById("clienteBusca");
 const clienteId = document.getElementById("clienteId");
 const clienteSugestoesBox = document.getElementById("clienteSugestoes");
@@ -824,6 +1017,44 @@ configurarEnterCabecalho(dataVenda, clienteBusca);
 configurarEnterCabecalho(vencimentoVenda, tipoVenda);
 configurarEnterCabecalho(tipoVenda, operadorVenda);
 configurarEnterCabecalho(operadorVenda, produtoBusca);
+
+let vendaToastTimer = null;
+let resolverConfirmacaoVenda = null;
+
+function mostrarToastVenda(mensagem) {
+    if (!vendaToast) return;
+
+    vendaToast.textContent = mensagem;
+    vendaToast.classList.add("visivel");
+
+    if (vendaToastTimer) {
+        clearTimeout(vendaToastTimer);
+    }
+
+    vendaToastTimer = setTimeout(() => {
+        vendaToast.classList.remove("visivel");
+    }, 3200);
+}
+
+function confirmarAcaoVenda(mensagem) {
+    return new Promise((resolve) => {
+        resolverConfirmacaoVenda = resolve;
+        vendaConfirmacaoTexto.textContent = mensagem;
+        vendaConfirmacaoOverlay.classList.add("visivel");
+        vendaConfirmacaoOverlay.setAttribute("aria-hidden", "false");
+        btnCancelarConfirmacaoVenda.focus();
+    });
+}
+
+function fecharConfirmacaoVenda(confirmado) {
+    vendaConfirmacaoOverlay.classList.remove("visivel");
+    vendaConfirmacaoOverlay.setAttribute("aria-hidden", "true");
+
+    if (resolverConfirmacaoVenda) {
+        resolverConfirmacaoVenda(confirmado);
+        resolverConfirmacaoVenda = null;
+    }
+}
 
 function preencherResumoCliente(cliente) {
     clienteSelecionado = cliente;
@@ -1157,6 +1388,107 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
         contadorItens.textContent = "Itens: " + linhas.length;
     }
 } 
+
+function limparCamposProdutoVenda() {
+    estoquePreview.innerText = "";
+    estoquePreview.style.display = "none";
+    produtoBusca.value = "";
+    produto.value = "";
+    quantidade.value = "";
+    unidade.value = "";
+    preco.value = "";
+}
+
+function limparCabecalhoVenda(resetarTipo = false) {
+    clienteBusca.value = "";
+    clientesSugestoes = [];
+    clienteSugestoesBox.style.display = "none";
+    limparClienteSelecionado();
+    operadorVenda.value = "";
+    dataVenda.value = dataLocalHojeInput();
+
+    if (resetarTipo) {
+        tipoVenda.selectedIndex = 0;
+    }
+
+    focarProximoCampo(clienteBusca);
+}
+
+function limparItensVenda() {
+    tabelaBody.innerHTML = "";
+    linhaSelecionada = null;
+    ultimoItemRemovido = null;
+    limparCamposProdutoVenda();
+    atualizarTotalGeral();
+}
+
+function quantidadeInformadaValida() {
+    const valor = parseFloat(String(quantidade.value || "").replace(",", "."));
+    return !isNaN(valor) && valor > 0;
+}
+
+function bloquearQuantidadeInvalida() {
+    mostrarAviso("Informe a quantidade.", quantidade, true);
+}
+
+btnGravarVenda.addEventListener("click", () => {
+    mostrarToastVenda("Gravação da venda será implementada na próxima etapa.");
+});
+
+btnVisualizarVenda.addEventListener("click", () => {
+    mostrarToastVenda("Visualização da venda será liberada após a gravação real da venda.");
+});
+
+btnConsultarVendas.addEventListener("click", () => {
+    mostrarToastVenda("Consulta de vendas será implementada em etapa futura.");
+});
+
+btnLimparCabecalho.addEventListener("click", () => {
+    limparCabecalhoVenda(false);
+    mostrarToastVenda("Cabeçalho da venda limpo.");
+});
+
+btnLimparItens.addEventListener("click", async () => {
+    const confirmou = await confirmarAcaoVenda("Deseja limpar todos os itens desta venda?");
+    if (!confirmou) return;
+
+    limparItensVenda();
+    mostrarToastVenda("Itens da venda removidos.");
+    focarProximoCampo(produtoBusca);
+});
+
+btnNovaVenda.addEventListener("click", async () => {
+    const confirmou = await confirmarAcaoVenda("Deseja limpar toda a venda atual?");
+    if (!confirmou) return;
+
+    limparItensVenda();
+    limparCabecalhoVenda(true);
+    mostrarToastVenda("Venda atual limpa.");
+});
+
+btnCancelarConfirmacaoVenda.addEventListener("click", () => fecharConfirmacaoVenda(false));
+btnConfirmarConfirmacaoVenda.addEventListener("click", () => fecharConfirmacaoVenda(true));
+vendaConfirmacaoOverlay.addEventListener("mousedown", (e) => {
+    if (e.target === vendaConfirmacaoOverlay) {
+        fecharConfirmacaoVenda(false);
+    }
+});
+
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && vendaConfirmacaoOverlay.classList.contains("visivel")) {
+        fecharConfirmacaoVenda(false);
+    }
+});
+
+quantidade.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab") return;
+
+    if (produto.value.trim() && !quantidadeInformadaValida()) {
+        e.preventDefault();
+        bloquearQuantidadeInvalida();
+    }
+});
+
   function confirmarExclusaoPersonalizada(nomeProduto = "este item") {
     return new Promise((resolve) => {
         const existente = document.getElementById("modal-excluir-venda");
@@ -1398,6 +1730,11 @@ console.log("LINHAS RESTANTES:", tabelaBody.querySelectorAll("tr").length);
 } else if (ativo === quantidade) {
     e.preventDefault();
 
+    if (produto.value.trim() && !quantidadeInformadaValida()) {
+        bloquearQuantidadeInvalida();
+        return;
+    }
+
     const optionSelecionada = produto.options[produto.selectedIndex];
 
     if (!optionSelecionada) return;
@@ -1435,7 +1772,7 @@ if (jaExiste && !linhaSelecionada) {
     return;
 }
 
-if (!qtd) {
+if (!quantidadeInformadaValida()) {
     mostrarAviso("Informe a quantidade.", quantidade, true);
     return;
 }
@@ -1761,12 +2098,24 @@ produtoBusca.addEventListener("keydown", (e) => {
 
     if (e.key === "ArrowDown") {
         e.preventDefault();
+        if (!sugestoes.length || sugestoesBox.style.display === "none") {
+            autocompleteAberto = true;
+            filtrarProdutos(produtoBusca.value.trim());
+            renderSugestoes();
+            return;
+        }
         indexAtivo = (indexAtivo + 1) % sugestoes.length;
         renderSugestoes();
     }
 
     else if (e.key === "ArrowUp") {
         e.preventDefault();
+        if (!sugestoes.length) {
+            autocompleteAberto = true;
+            filtrarProdutos(produtoBusca.value.trim());
+            renderSugestoes();
+            return;
+        }
         indexAtivo = (indexAtivo - 1 + sugestoes.length) % sugestoes.length;
         renderSugestoes();
     }
@@ -1775,7 +2124,7 @@ produtoBusca.addEventListener("keydown", (e) => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (indexAtivo >= 0) {
+    if (indexAtivo >= 0 && sugestoes[indexAtivo]) {
         selecionarProduto(sugestoes[indexAtivo]);
     } else if (produtoBusca.value.trim()) {
         quantidade.focus();
