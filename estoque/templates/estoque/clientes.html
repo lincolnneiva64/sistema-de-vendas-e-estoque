@@ -1,0 +1,643 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Clientes{% endblock %}
+{% block content %}
+<style>
+  html { scroll-padding-bottom: 140px; }
+  .clientes-page { color: #172033; padding: 18px 0 120px; }
+  .clientes-shell { max-width: 1380px; margin: 0 auto; padding: 0 18px; }
+  .clientes-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 12px; margin-bottom: 12px;
+  }
+  .clientes-title { margin: 0; font-size: 1.55rem; font-weight: 800; color: #111827; }
+  .clientes-subtitle { margin: 4px 0 0; color: #64748b; font-weight: 500; font-size: 0.92rem; }
+  .clientes-header-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+  .clientes-btn {
+    border: 0; border-radius: 9px; padding: 8px 13px; font-weight: 700;
+    font-size: 0.9rem; text-decoration: none; display: inline-flex;
+    align-items: center; justify-content: center; min-height: 38px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+  .clientes-btn:hover { transform: translateY(-1px); }
+  .clientes-btn-primary { background: #2563eb; color: #fff; box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24); }
+  .clientes-btn-secondary {
+    background: #dbeafe; color: #164173; border: 1px solid #7ea6d9;
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.07);
+  }
+  .clientes-panel {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 14px;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06); overflow: hidden;
+  }
+  .clientes-panel-head {
+    padding: 12px 16px; border-bottom: 1px solid #edf1f6;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .clientes-panel-title { margin: 0; font-size: 0.98rem; font-weight: 800; color: #111827; }
+  .clientes-count { color: #64748b; font-size: 0.84rem; font-weight: 700; white-space: nowrap; }
+  .clientes-form { padding: 12px 14px 80px; }
+  .clientes-section { border-top: 1px solid #edf1f6; padding-top: 10px; margin-top: 10px; }
+  .clientes-section:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+  .clientes-section-title { margin: 0 0 8px; color: #111827; font-size: 0.88rem; font-weight: 850; }
+  .clientes-form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .clientes-form-grid.grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .clientes-form-grid .span-2 { grid-column: span 2; }
+  .clientes-form-grid .span-3 { grid-column: span 3; }
+  .clientes-form-grid .span-4 { grid-column: 1 / -1; }
+  .clientes-form-grid .uf-field { max-width: 92px; }
+  .clientes-field label {
+    display: block; color: #334155; font-size: 0.76rem;
+    font-weight: 800; margin-bottom: 3px;
+  }
+  .clientes-field { position: relative; min-width: 0; }
+  .clientes-field input,
+  .clientes-field select,
+  .clientes-field textarea,
+  .clientes-check,
+  .clientes-switch { scroll-margin-bottom: 140px; }
+  .clientes-field input,
+  .clientes-field select,
+  .clientes-field textarea {
+    width: 100%; border: 1.5px solid #d3dbe8; border-radius: 9px;
+    padding: 8px 10px; background: #fff; color: #172033; font-weight: 500;
+    outline: none; position: relative; z-index: 1;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .clientes-field input:focus,
+  .clientes-field select:focus,
+  .clientes-field textarea:focus {
+    border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.13);
+  }
+  .clientes-field textarea { min-height: 58px; resize: vertical; }
+  .clientes-field textarea.compacto { min-height: 42px; }
+  .clientes-check {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    border: 1px solid #e1e7ef; border-radius: 10px; padding: 8px 10px;
+    background: #f8fafc; min-height: 40px;
+  }
+  .clientes-check label { margin: 0; color: #334155; font-size: 0.76rem; font-weight: 800; }
+  .clientes-check input { width: auto; }
+  .clientes-switch {
+    display: inline-flex; align-items: center; gap: 8px; justify-content: flex-start;
+    border: 1px solid #dbe4ef; border-radius: 999px; padding: 7px 10px;
+    background: #fff; min-height: 38px;
+  }
+  .clientes-switch input { width: auto; flex: 0 0 auto; }
+  .clientes-switch label { margin: 0; color: #334155; font-size: 0.76rem; font-weight: 800; }
+  .clientes-help {
+    display: block; color: #94a3b8; font-size: 0.72rem;
+    font-weight: 700; margin-top: 3px;
+  }
+  .clientes-error { color: #dc2626; font-size: 0.8rem; font-weight: 700; margin-top: 6px; }
+  .clientes-alert { border-radius: 13px; padding: 10px 12px; margin-bottom: 10px; font-weight: 750; }
+  .clientes-alert.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
+  .clientes-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+  .clientes-alert.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+  .status-line {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; flex-wrap: wrap;
+  }
+  .status-pill {
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 999px; padding: 4px 8px; font-size: 0.72rem;
+    font-weight: 800; white-space: nowrap;
+  }
+  .status-ativo { background: #dcfce7; color: #166534; }
+  .status-inativo { background: #f1f5f9; color: #64748b; }
+  .status-form-action { margin: 0; }
+  .status-form-btn {
+    border: 0; border-radius: 9px; padding: 7px 11px;
+    font-size: 0.8rem; font-weight: 800;
+  }
+  .status-form-btn.ativar { color: #fff; background: #16a34a; }
+  .status-form-btn.desativar { color: #fff; background: #dc2626; }
+  .clientes-details {
+    border: 1px solid #dbe4ef; border-radius: 12px; padding: 9px 11px;
+    background: #f8fafc;
+  }
+  .clientes-details summary {
+    cursor: pointer; color: #172033; font-weight: 850; font-size: 0.88rem;
+  }
+  .clientes-details.credito-extra {
+    margin-top: 8px; padding: 8px 10px; background: #fbfdff;
+  }
+  .clientes-details.credito-extra summary {
+    color: #475569; font-size: 0.8rem; font-weight: 800;
+  }
+  .clientes-details.credito-extra .clientes-help {
+    margin-top: 6px;
+  }
+  .clientes-details-grid { margin-top: 10px; gap: 7px; }
+  .clientes-form-actions {
+    display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; padding-top: 10px;
+  }
+  @media (max-width: 1180px) {
+    .clientes-form-grid,
+    .clientes-form-grid.grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .clientes-form-grid .span-3,
+    .clientes-form-grid .span-4 { grid-column: 1 / -1; }
+  }
+  @media (max-width: 760px) {
+    .clientes-header { align-items: stretch; flex-direction: column; }
+    .clientes-header-actions { justify-content: flex-start; }
+    .clientes-form-grid,
+    .clientes-form-grid.grid-3 { grid-template-columns: 1fr; }
+    .clientes-form-grid .span-2,
+    .clientes-form-grid .span-3,
+    .clientes-form-grid .span-4 { grid-column: 1 / -1; }
+  }
+</style>
+
+<div class="clientes-page">
+  <div class="clientes-shell">
+    <header class="clientes-header">
+      <div>
+        <h1 class="clientes-title">Clientes</h1>
+        <p class="clientes-subtitle">Cadastro de clientes para vendas, contato e credito.</p>
+      </div>
+      <div class="clientes-header-actions">
+        <a href="/estoque/" class="clientes-btn clientes-btn-secondary">Voltar ao painel</a>
+        <a href="/estoque/clientes/consulta/" class="clientes-btn clientes-btn-primary">Consultar clientes</a>
+      </div>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="clientes-alert {% if message.tags == 'error' %}error{% elif message.tags == 'warning' %}warning{% else %}success{% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <section class="clientes-panel">
+      <div class="clientes-panel-head">
+        <div>
+          <h2 class="clientes-panel-title">{% if cliente_selecionado %}Editar cliente{% else %}Novo cliente{% endif %}</h2>
+          <span class="clientes-count">{% if cliente_selecionado %}{{ cliente_selecionado.nome }} selecionado{% else %}Novos clientes entram como ativos{% endif %}</span>
+        </div>
+        <div class="status-line">
+          {% if cliente_selecionado %}
+            {% if cliente_selecionado.ativo %}
+              <span class="status-pill status-ativo">Ativo</span>
+            {% else %}
+              <span class="status-pill status-inativo">Inativo</span>
+            {% endif %}
+            <button
+              type="submit"
+              form="formAlternarStatusCliente"
+              class="status-form-btn {% if cliente_selecionado.ativo %}desativar{% else %}ativar{% endif %}"
+            >
+              {% if cliente_selecionado.ativo %}Desativar{% else %}Ativar{% endif %}
+            </button>
+          {% else %}
+            <span class="status-pill status-ativo">Ativo</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <form method="post" class="clientes-form" id="formCliente" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="form_token" value="{{ form_token }}">
+        {% if cliente_selecionado %}
+          <input type="hidden" name="cliente_id" value="{{ cliente_selecionado.id }}">
+        {% endif %}
+
+        <section class="clientes-section">
+          <h3 class="clientes-section-title">Dados principais</h3>
+          <div class="clientes-form-grid">
+            <div class="clientes-field span-2">
+              <label for="{{ form.nome.id_for_label }}">Nome</label>
+              {{ form.nome }}
+              {% if form.nome.errors %}<div class="clientes-error">{{ form.nome.errors|join:", " }}</div>{% endif %}
+            </div>
+            <div class="clientes-field">
+              <label for="{{ form.apelido_nome_conhecido.id_for_label }}">Apelido / nome conhecido</label>
+              {{ form.apelido_nome_conhecido }}
+            </div>
+            <div class="clientes-field">
+              <label for="{{ form.cpf_cnpj.id_for_label }}">CPF/CNPJ</label>
+              {{ form.cpf_cnpj }}
+            </div>
+            <div class="clientes-field">
+              <label for="{{ form.whatsapp.id_for_label }}">WhatsApp</label>
+              {{ form.whatsapp }}
+            </div>
+            <div class="clientes-field">
+              <label for="{{ form.telefone_alternativo.id_for_label }}">Telefone alternativo</label>
+              {{ form.telefone_alternativo }}
+            </div>
+            <div class="clientes-field span-2">
+              <label for="{{ form.email.id_for_label }}">Email</label>
+              {{ form.email }}
+              {% if form.email.errors %}<div class="clientes-error">{{ form.email.errors|join:", " }}</div>{% endif %}
+            </div>
+          </div>
+        </section>
+
+        <section class="clientes-section">
+          <h3 class="clientes-section-title">Endereco</h3>
+          <div class="clientes-form-grid">
+            <div class="clientes-field">
+              <label for="{{ form.cep.id_for_label }}">CEP</label>
+              {{ form.cep }}
+            </div>
+            <div class="clientes-field span-2">
+              <label for="{{ form.logradouro.id_for_label }}">Logradouro</label>
+              {{ form.logradouro }}
+            </div>
+            <div class="clientes-field">
+              <label for="{{ form.numero.id_for_label }}">Numero</label>
+              {{ form.numero }}
+            </div>
+            <div class="clientes-field span-2">
+              <label for="{{ form.complemento.id_for_label }}">Complemento</label>
+              {{ form.complemento }}
+            </div>
+            <div class="clientes-field">
+              <label for="{{ form.bairro.id_for_label }}">Bairro</label>
+              {{ form.bairro }}
+            </div>
+            <div class="clientes-field">
+              <label for="{{ form.cidade.id_for_label }}">Cidade</label>
+              {{ form.cidade }}
+            </div>
+            <div class="clientes-field uf-field">
+              <label for="{{ form.uf.id_for_label }}">UF</label>
+              {{ form.uf }}
+            </div>
+          </div>
+        </section>
+
+        <section class="clientes-section">
+          <h3 class="clientes-section-title">Venda a prazo / carteira</h3>
+          <div class="clientes-form-grid">
+            <div class="clientes-field">
+              <label for="{{ form.prazo_padrao_dias.id_for_label }}">Prazo para pagamento em dias</label>
+              {{ form.prazo_padrao_dias }}
+              {% if form.prazo_padrao_dias.errors %}<div class="clientes-error">{{ form.prazo_padrao_dias.errors|join:", " }}</div>{% endif %}
+            </div>
+            <div class="clientes-field">
+              <label for="{{ form.limite_credito.id_for_label }}">Limite de credito</label>
+              {{ form.limite_credito }}
+              {% if form.limite_credito.errors %}<div class="clientes-error">{{ form.limite_credito.errors|join:", " }}</div>{% endif %}
+            </div>
+          </div>
+          <input type="hidden" name="{{ form.vende_a_prazo.name }}" value="on">
+          <input type="hidden" name="{{ form.limite_aberto.name }}" value="">
+          <details class="clientes-details credito-extra">
+            <summary>Mais detalhes de credito</summary>
+            <div class="clientes-form-grid clientes-details-grid">
+              <div class="clientes-field">
+                <label for="{{ form.status_credito.id_for_label }}">Status de credito</label>
+                {{ form.status_credito }}
+                <span class="clientes-help">Esta situacao sera usada futuramente como alerta na tela de vendas.</span>
+              </div>
+            </div>
+          </details>
+        </section>
+
+        <section class="clientes-section">
+          <h3 class="clientes-section-title">Pix</h3>
+          <div class="clientes-form-grid">
+            <div class="clientes-field">
+              <label for="{{ form.tipo_chave_pix.id_for_label }}">Tipo da chave Pix</label>
+              {{ form.tipo_chave_pix }}
+            </div>
+            <div class="clientes-field span-2">
+              <label for="{{ form.chave_pix.id_for_label }}">Chave Pix</label>
+              {{ form.chave_pix }}
+            </div>
+          </div>
+        </section>
+
+        <section class="clientes-section">
+          <details class="clientes-details">
+            <summary>Mais detalhes / WhatsApp e observacoes internas</summary>
+            <div class="clientes-form-grid clientes-details-grid">
+              <div class="clientes-switch">
+                {{ form.permite_contato_whatsapp }}
+                <label for="{{ form.permite_contato_whatsapp.id_for_label }}">Permite contato por WhatsApp?</label>
+              </div>
+              <div class="clientes-field">
+                <label for="{{ form.nome_contato_whatsapp.id_for_label }}">Nome do contato no WhatsApp</label>
+                {{ form.nome_contato_whatsapp }}
+                <span class="clientes-help">Ex.: gerente, esposa, responsavel pelo pedido</span>
+              </div>
+              <div class="clientes-field span-2">
+                <label for="{{ form.observacao_financeira.id_for_label }}">Observacao financeira</label>
+                <textarea name="{{ form.observacao_financeira.name }}" cols="40" rows="2" class="form-control compacto" placeholder="Observacoes financeiras internas" id="{{ form.observacao_financeira.id_for_label }}">{{ form.observacao_financeira.value|default_if_none:'' }}</textarea>
+              </div>
+              <div class="clientes-field span-4">
+                <label for="{{ form.observacao_contato.id_for_label }}">Observacao de contato</label>
+                <textarea name="{{ form.observacao_contato.name }}" cols="40" rows="2" class="form-control compacto" placeholder="Observacoes de contato opcionais" id="{{ form.observacao_contato.id_for_label }}">{{ form.observacao_contato.value|default_if_none:'' }}</textarea>
+              </div>
+              <div class="clientes-field span-2">
+                <label for="{{ form.referencia.id_for_label }}">Referencia do endereco</label>
+                {{ form.referencia }}
+              </div>
+              <div class="clientes-field span-2">
+                <label for="{{ form.observacoes.id_for_label }}">Observacao interna do cliente</label>
+                <textarea name="{{ form.observacoes.name }}" cols="40" rows="2" class="form-control compacto" placeholder="Informacao permanente do cliente" id="{{ form.observacoes.id_for_label }}">{{ form.observacoes.value|default_if_none:'' }}</textarea>
+              </div>
+            </div>
+          </details>
+        </section>
+
+        {% if not cliente_selecionado or cliente_selecionado.ativo %}
+          <input type="hidden" name="ativo" value="on">
+        {% endif %}
+
+        <div class="clientes-form-actions">
+          <a href="/estoque/clientes/" class="clientes-btn clientes-btn-secondary">Novo / Limpar</a>
+          <button type="submit" class="clientes-btn clientes-btn-primary" id="btnSalvarCliente">Salvar cliente</button>
+        </div>
+      </form>
+
+      {% if cliente_selecionado %}
+        <form method="post" id="formAlternarStatusCliente" class="status-form-action">
+          {% csrf_token %}
+          <input type="hidden" name="acao" value="alternar_status">
+          <input type="hidden" name="cliente_id" value="{{ cliente_selecionado.id }}">
+          <input type="hidden" name="ativo" value="{% if cliente_selecionado.ativo %}0{% else %}1{% endif %}">
+        </form>
+      {% endif %}
+    </section>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const formCliente = document.getElementById("formCliente");
+    const btnSalvar = document.getElementById("btnSalvarCliente");
+    const campoNome = document.getElementById("id_nome");
+
+    if (campoNome) {
+      campoNome.removeAttribute("autofocus");
+      {% if not cliente_selecionado %}
+        setTimeout(function () {
+          if (!document.activeElement || document.activeElement === document.body) {
+            campoNome.focus();
+          }
+        }, 80);
+      {% endif %}
+    }
+
+    const uf = document.getElementById("id_uf");
+    if (uf) {
+      uf.addEventListener("input", function () {
+        uf.value = uf.value.toUpperCase();
+      });
+    }
+
+    const cpfCnpj = document.getElementById("id_cpf_cnpj");
+    const cep = document.getElementById("id_cep");
+    const logradouro = document.getElementById("id_logradouro");
+    const bairro = document.getElementById("id_bairro");
+    const cidade = document.getElementById("id_cidade");
+    const whatsapp = document.getElementById("id_whatsapp");
+    const telefoneAlternativo = document.getElementById("id_telefone_alternativo");
+    const tipoChavePix = document.getElementById("id_tipo_chave_pix");
+    const chavePix = document.getElementById("id_chave_pix");
+    let chavePixAlteradaManualmente = Boolean(chavePix?.value.trim());
+
+    if (tipoChavePix) {
+      const primeiraOpcao = tipoChavePix.querySelector('option[value=""]');
+      if (primeiraOpcao) {
+        primeiraOpcao.textContent = "Selecione o tipo da chave Pix";
+      }
+    }
+
+    function somenteNumeros(valor) {
+      return String(valor || "").replace(/\D/g, "");
+    }
+
+    function formatarCpfCnpj(valor) {
+      const numero = somenteNumeros(valor).slice(0, 14);
+
+      if (numero.length <= 11) {
+        return numero
+          .replace(/^(\d{3})(\d)/, "$1.$2")
+          .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+          .replace(/^(\d{3})\.(\d{3})\.(\d{3})(\d)/, "$1.$2.$3-$4");
+      }
+
+      return numero
+        .replace(/^(\d{2})(\d)/, "$1.$2")
+        .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+        .replace(/^(\d{2})\.(\d{3})\.(\d{3})(\d)/, "$1.$2.$3/$4")
+        .replace(/^(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})(\d)/, "$1.$2.$3/$4-$5");
+    }
+
+    function aplicarMascaraCpfCnpj() {
+      if (!cpfCnpj) return;
+      cpfCnpj.value = formatarCpfCnpj(cpfCnpj.value);
+    }
+
+    function formatarCep(valor) {
+      const numero = somenteNumeros(valor).slice(0, 8);
+      if (numero.length <= 5) return numero;
+      return `${numero.slice(0, 5)}-${numero.slice(5)}`;
+    }
+
+    function aplicarMascaraCep() {
+      if (!cep) return;
+      cep.value = formatarCep(cep.value);
+    }
+
+    let ultimoCepConsultado = "";
+
+    function preencherSeVazio(campo, valor) {
+      if (!campo || campo.value.trim() || !valor) return;
+      campo.value = valor;
+    }
+
+    async function buscarCep() {
+      if (!cep) return;
+
+      const numero = somenteNumeros(cep.value);
+      if (numero.length !== 8 || numero === ultimoCepConsultado) return;
+
+      ultimoCepConsultado = numero;
+
+      try {
+        const resposta = await fetch(`https://viacep.com.br/ws/${numero}/json/`, {
+          method: "GET",
+          mode: "cors",
+        });
+
+        if (!resposta.ok) return;
+
+        const dados = await resposta.json();
+        if (!dados || dados.erro) return;
+
+        preencherSeVazio(logradouro, dados.logradouro);
+        preencherSeVazio(bairro, dados.bairro);
+        preencherSeVazio(cidade, dados.localidade);
+        preencherSeVazio(uf, dados.uf);
+      } catch (erro) {
+        return;
+      }
+    }
+
+    function normalizarTelefonePix(valor) {
+      let numero = String(valor || "").replace(/\D/g, "");
+      if (numero.startsWith("55")) {
+        numero = numero.slice(2);
+      }
+      return numero;
+    }
+
+    function formatarTelefone(valor) {
+      const numero = normalizarTelefonePix(valor).slice(0, 11);
+
+      if (numero.length <= 2) {
+        return numero ? `(${numero}` : "";
+      }
+
+      if (numero.length <= 6) {
+        return `(${numero.slice(0, 2)}) ${numero.slice(2)}`;
+      }
+
+      if (numero.length <= 10) {
+        return `(${numero.slice(0, 2)}) ${numero.slice(2, 6)}-${numero.slice(6)}`;
+      }
+
+      return `(${numero.slice(0, 2)}) ${numero.slice(2, 7)}-${numero.slice(7)}`;
+    }
+
+    function aplicarMascaraTelefone(campo) {
+      if (!campo) return;
+      campo.value = formatarTelefone(campo.value);
+    }
+
+    function aplicarMascaraWhatsApp() {
+      aplicarMascaraTelefone(whatsapp);
+    }
+
+    function aplicarMascaraTelefoneAlternativo() {
+      aplicarMascaraTelefone(telefoneAlternativo);
+    }
+
+    function formatarChavePixTelefone() {
+      if (!chavePix || !tipoChavePix || tipoChavePix.value !== "telefone") return;
+      chavePix.value = formatarTelefone(chavePix.value);
+    }
+
+    function sugerirChavePixTelefone() {
+      if (!tipoChavePix || !chavePix || !whatsapp) return;
+      if (tipoChavePix.value !== "telefone") return;
+      if (chavePixAlteradaManualmente || chavePix.value.trim()) return;
+
+      const telefone = normalizarTelefonePix(whatsapp.value);
+      if (!telefone) return;
+
+      chavePix.value = formatarTelefone(telefone);
+      chavePix.focus();
+      chavePix.select();
+    }
+
+    chavePix?.addEventListener("input", function () {
+      chavePixAlteradaManualmente = true;
+      formatarChavePixTelefone();
+    });
+
+    cpfCnpj?.addEventListener("input", aplicarMascaraCpfCnpj);
+    cpfCnpj?.addEventListener("blur", aplicarMascaraCpfCnpj);
+    cep?.addEventListener("input", function () {
+      aplicarMascaraCep();
+      buscarCep();
+    });
+    cep?.addEventListener("blur", function () {
+      aplicarMascaraCep();
+      buscarCep();
+    });
+    whatsapp?.addEventListener("input", aplicarMascaraWhatsApp);
+    telefoneAlternativo?.addEventListener("input", aplicarMascaraTelefoneAlternativo);
+    tipoChavePix?.addEventListener("change", sugerirChavePixTelefone);
+    whatsapp?.addEventListener("blur", function () {
+      aplicarMascaraWhatsApp();
+      sugerirChavePixTelefone();
+    });
+    aplicarMascaraCpfCnpj();
+    aplicarMascaraCep();
+    telefoneAlternativo?.addEventListener("blur", aplicarMascaraTelefoneAlternativo);
+    aplicarMascaraWhatsApp();
+    aplicarMascaraTelefoneAlternativo();
+    formatarChavePixTelefone();
+    sugerirChavePixTelefone();
+
+    function camposNavegaveis() {
+      if (!formCliente) return [];
+
+      return Array.from(formCliente.querySelectorAll("input, select, textarea, button"))
+        .filter(function (campo) {
+          const tipo = String(campo.type || "").toLowerCase();
+          const visivel = campo.offsetParent !== null;
+          return visivel &&
+            !campo.disabled &&
+            tipo !== "hidden" &&
+            tipo !== "submit" &&
+            !campo.closest("details:not([open])");
+        });
+    }
+
+    formCliente?.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+
+      const alvo = event.target;
+      const tag = alvo.tagName.toLowerCase();
+
+      if (tag === "textarea") return;
+
+      if (alvo === btnSalvar) return;
+
+      event.preventDefault();
+
+      const campos = camposNavegaveis();
+      const indiceAtual = campos.indexOf(alvo);
+      const proximoCampo = campos[indiceAtual + 1];
+
+      if (proximoCampo) {
+        proximoCampo.focus();
+      } else if (btnSalvar) {
+        btnSalvar.focus();
+      }
+    });
+
+    formCliente?.addEventListener("submit", function (event) {
+      if (formCliente.dataset.enviando === "1") {
+        event.preventDefault();
+        return;
+      }
+
+      if (whatsapp) {
+        whatsapp.value = normalizarTelefonePix(whatsapp.value);
+      }
+
+      if (telefoneAlternativo) {
+        telefoneAlternativo.value = normalizarTelefonePix(telefoneAlternativo.value);
+      }
+
+      if (chavePix && tipoChavePix?.value === "telefone") {
+        chavePix.value = normalizarTelefonePix(chavePix.value);
+      }
+
+      if (cpfCnpj) {
+        cpfCnpj.value = somenteNumeros(cpfCnpj.value);
+      }
+
+      if (cep) {
+        cep.value = somenteNumeros(cep.value);
+      }
+
+      formCliente.dataset.enviando = "1";
+
+      if (btnSalvar) {
+        setTimeout(function () {
+          btnSalvar.disabled = true;
+          btnSalvar.textContent = "Salvando...";
+        }, 0);
+      }
+    });
+  });
+</script>
+{% endblock %}

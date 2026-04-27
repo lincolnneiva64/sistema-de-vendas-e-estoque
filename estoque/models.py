@@ -97,3 +97,138 @@ class Categoria(models.Model):
 
     def __str__(self):
         return self.nome
+
+
+class Cliente(models.Model):
+    TIPO_CHAVE_PIX_CPF = "cpf"
+    TIPO_CHAVE_PIX_CNPJ = "cnpj"
+    TIPO_CHAVE_PIX_TELEFONE = "telefone"
+    TIPO_CHAVE_PIX_EMAIL = "email"
+    TIPO_CHAVE_PIX_ALEATORIA = "aleatoria"
+    TIPO_CHAVE_PIX_OUTRO = "outro"
+
+    TIPO_CHAVE_PIX_CHOICES = [
+        (TIPO_CHAVE_PIX_CPF, "CPF"),
+        (TIPO_CHAVE_PIX_CNPJ, "CNPJ"),
+        (TIPO_CHAVE_PIX_TELEFONE, "Telefone"),
+        (TIPO_CHAVE_PIX_EMAIL, "Email"),
+        (TIPO_CHAVE_PIX_ALEATORIA, "Chave aleatoria"),
+        (TIPO_CHAVE_PIX_OUTRO, "Outro"),
+    ]
+
+    STATUS_CREDITO_LIBERADO = "liberado"
+    STATUS_CREDITO_ATENCAO = "atencao"
+    STATUS_CREDITO_BLOQUEADO = "bloqueado"
+
+    STATUS_CREDITO_CHOICES = [
+        (STATUS_CREDITO_LIBERADO, "Liberado"),
+        (STATUS_CREDITO_ATENCAO, "Atencao"),
+        (STATUS_CREDITO_BLOQUEADO, "Bloqueado"),
+    ]
+
+    nome = models.CharField(max_length=140)
+    apelido_nome_conhecido = models.CharField(max_length=120, blank=True, null=True)
+    cpf_cnpj = models.CharField(max_length=20, blank=True, null=True)
+    whatsapp = models.CharField(max_length=30, blank=True, null=True)
+    whatsapp_normalizado = models.CharField(max_length=20, blank=True, null=True)
+    telefone_alternativo = models.CharField(max_length=30, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+
+    cep = models.CharField(max_length=12, blank=True, null=True)
+    logradouro = models.CharField(max_length=140, blank=True, null=True)
+    numero = models.CharField(max_length=20, blank=True, null=True)
+    complemento = models.CharField(max_length=80, blank=True, null=True)
+    bairro = models.CharField(max_length=80, blank=True, null=True)
+    cidade = models.CharField(max_length=80, blank=True, null=True)
+    uf = models.CharField(max_length=2, blank=True, null=True)
+    referencia = models.CharField(max_length=180, blank=True, null=True)
+
+    tipo_chave_pix = models.CharField(
+        max_length=20,
+        choices=TIPO_CHAVE_PIX_CHOICES,
+        blank=True,
+        null=True,
+    )
+    chave_pix = models.CharField(max_length=140, blank=True, null=True)
+
+    vende_a_prazo = models.BooleanField(default=False)
+    prazo_padrao_dias = models.PositiveIntegerField(default=0)
+    limite_credito = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        blank=True,
+        null=True,
+    )
+    limite_aberto = models.BooleanField(default=False)
+    status_credito = models.CharField(
+        max_length=20,
+        choices=STATUS_CREDITO_CHOICES,
+        default=STATUS_CREDITO_LIBERADO,
+    )
+    observacao_financeira = models.TextField(blank=True, null=True)
+
+    permite_contato_whatsapp = models.BooleanField(default=True)
+    nome_contato_whatsapp = models.CharField(max_length=120, blank=True, null=True)
+    observacao_contato = models.TextField(blank=True, null=True)
+
+    ativo = models.BooleanField(default=True)
+    observacoes = models.TextField(blank=True, null=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-ativo", "nome"]
+
+    def __str__(self):
+        return self.nome
+
+    @staticmethod
+    def normalizar_whatsapp(valor):
+        return "".join(caractere for caractere in str(valor or "") if caractere.isdigit())
+
+    def clean(self):
+        if self.prazo_padrao_dias is not None and self.prazo_padrao_dias < 0:
+            raise ValidationError("O prazo padrao nao pode ser negativo.")
+
+        if self.limite_credito is not None and self.limite_credito < 0:
+            raise ValidationError("O limite de credito nao pode ser negativo.")
+
+    def save(self, *args, **kwargs):
+        if self.nome:
+            self.nome = " ".join(self.nome.strip().split()).title()
+
+        for campo in [
+            "apelido_nome_conhecido",
+            "cpf_cnpj",
+            "whatsapp",
+            "telefone_alternativo",
+            "email",
+            "cep",
+            "logradouro",
+            "numero",
+            "complemento",
+            "bairro",
+            "cidade",
+            "uf",
+            "referencia",
+            "chave_pix",
+            "nome_contato_whatsapp",
+        ]:
+            valor = getattr(self, campo, None)
+            if isinstance(valor, str):
+                valor_limpo = " ".join(valor.strip().split())
+                setattr(self, campo, valor_limpo or None)
+
+        if self.uf:
+            self.uf = self.uf.upper()
+
+        self.whatsapp_normalizado = self.normalizar_whatsapp(self.whatsapp)
+        if not self.whatsapp_normalizado:
+            self.whatsapp_normalizado = None
+
+        if self.limite_credito is None:
+            self.limite_credito = 0
+
+        self.full_clean()
+        super().save(*args, **kwargs)

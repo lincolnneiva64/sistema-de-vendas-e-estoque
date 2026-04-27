@@ -3,11 +3,12 @@ from urllib.parse import urlencode
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F
-from .forms import CategoriaForm, ProdutoForm, UnidadeForm
-from .models import Categoria, Produto, Unidade
+from .forms import CategoriaForm, ClienteForm, ProdutoForm, UnidadeForm
+from .models import Categoria, Cliente, Produto, Unidade
 from django.contrib import messages
 from django.http import JsonResponse
 from django.utils import timezone
+from uuid import uuid4
 def home(request):
     produto_edicao = None
 
@@ -344,6 +345,163 @@ def categorias_produto(request):
             "termo": termo,
             "categoria_selecionada": categoria_selecionada,
             "total_categorias": len(categorias),
+        },
+    )
+
+def clientes(request):
+    cliente_selecionado = None
+    clientes_url = "/estoque/clientes/"
+    form_token = request.POST.get("form_token") or uuid4().hex
+
+    if request.method == "POST":
+        acao = request.POST.get("acao")
+        cliente_id = request.POST.get("cliente_id")
+
+        if acao == "alternar_status" and cliente_id:
+            cliente = get_object_or_404(Cliente, pk=cliente_id)
+            cliente.ativo = request.POST.get("ativo") == "1"
+            cliente.save(update_fields=["ativo", "atualizado_em"])
+            status = "ativado" if cliente.ativo else "desativado"
+            messages.success(request, f'Cliente "{cliente.nome}" {status} com sucesso.')
+            return redirect(f"{clientes_url}?cliente={cliente.id}")
+
+        if cliente_id:
+            cliente_selecionado = get_object_or_404(Cliente, pk=cliente_id)
+            form = ClienteForm(request.POST, instance=cliente_selecionado)
+        else:
+            form = ClienteForm(request.POST)
+
+        if form.is_valid():
+            tokens_usados = request.session.get("cliente_form_tokens_usados", {})
+            if not cliente_id and form_token and form_token in tokens_usados:
+                cliente_salvo_id = tokens_usados[form_token]
+                messages.warning(
+                    request,
+                    "Este envio ja foi processado. Abrimos o cadastro salvo para evitar duplicidade.",
+                )
+                return redirect(f"{clientes_url}?cliente={cliente_salvo_id}")
+
+            cliente = form.save(commit=False)
+            whatsapp_normalizado = Cliente.normalizar_whatsapp(cliente.whatsapp)
+
+            avisos = []
+            if not cliente_id:
+                cliente_duplicado = None
+                nome_cliente = " ".join((cliente.nome or "").strip().split())
+
+                if nome_cliente and cliente.cpf_cnpj:
+                    cliente_duplicado = Cliente.objects.filter(
+                        nome__iexact=nome_cliente,
+                        cpf_cnpj__iexact=cliente.cpf_cnpj,
+                    ).first()
+
+                if nome_cliente and whatsapp_normalizado and not cliente_duplicado:
+                    cliente_duplicado = Cliente.objects.filter(
+                        nome__iexact=nome_cliente,
+                        whatsapp_normalizado=whatsapp_normalizado,
+                    ).first()
+
+                if cliente_duplicado:
+                    messages.warning(
+                        request,
+                        f'Cliente "{cliente_duplicado.nome}" ja estava cadastrado. Abrimos o cadastro existente para evitar duplicidade.',
+                    )
+                    return redirect(f"{clientes_url}?cliente={cliente_duplicado.id}")
+
+            if cliente.cpf_cnpj:
+                cpf_duplicado = Cliente.objects.exclude(
+                    pk=getattr(cliente, "pk", None)
+                ).filter(cpf_cnpj__iexact=cliente.cpf_cnpj).first()
+                if cpf_duplicado:
+                    avisos.append(f'CPF/CNPJ ja usado em "{cpf_duplicado.nome}".')
+
+            if whatsapp_normalizado:
+                whatsapp_duplicado = Cliente.objects.exclude(
+                    pk=getattr(cliente, "pk", None)
+                ).filter(whatsapp_normalizado=whatsapp_normalizado).first()
+                if whatsapp_duplicado:
+                    avisos.append(f'WhatsApp ja usado em "{whatsapp_duplicado.nome}".')
+
+            cliente.save()
+            if not cliente_id and form_token:
+                tokens_usados[form_token] = cliente.id
+                tokens_itens = list(tokens_usados.items())[-20:]
+                request.session["cliente_form_tokens_usados"] = dict(tokens_itens)
+                request.session.modified = True
+
+            messages.success(request, f'Cliente "{cliente.nome}" salvo com sucesso.')
+            for aviso in avisos:
+                messages.warning(request, aviso)
+            return redirect(f"{clientes_url}?cliente={cliente.id}")
+        messages.error(request, "Revise os campos destacados para salvar o cliente.")
+    else:
+        cliente_id = request.GET.get("cliente")
+        if cliente_id:
+            cliente_selecionado = get_object_or_404(Cliente, pk=cliente_id)
+            form = ClienteForm(instance=cliente_selecionado)
+        else:
+            form = ClienteForm(initial={
+                "ativo": True,
+                "permite_contato_whatsapp": True,
+                "status_credito": Cliente.STATUS_CREDITO_LIBERADO,
+                "prazo_padrao_dias": 0,
+                "limite_credito": 0,
+            })
+
+    return render(
+        request,
+        "estoque/clientes.html",
+        {
+            "form": form,
+            "cliente_selecionado": cliente_selecionado,
+            "form_token": form_token,
+        },
+    )
+
+def clientes_consulta(request):
+    termo = request.GET.get("q", "").strip()
+    clientes_url = "/estoque/clientes/consulta/"
+
+    if request.method == "POST":
+        acao = request.POST.get("acao")
+        cliente_id = request.POST.get("cliente_id")
+
+        if acao == "alternar_status" and cliente_id:
+            cliente = get_object_or_404(Cliente, pk=cliente_id)
+            cliente.ativo = request.POST.get("ativo") == "1"
+            cliente.save(update_fields=["ativo", "atualizado_em"])
+            status = "ativado" if cliente.ativo else "desativado"
+            messages.success(request, f'Cliente "{cliente.nome}" {status} com sucesso.')
+            params = {}
+            if termo:
+                params["q"] = termo
+            destino = clientes_url
+            if params:
+                destino = f"{destino}?{urlencode(params)}"
+            return redirect(destino)
+
+    clientes_qs = Cliente.objects.all().order_by("-ativo", "nome")
+
+    if termo:
+        clientes_qs = clientes_qs.filter(
+            Q(nome__icontains=termo) |
+            Q(apelido_nome_conhecido__icontains=termo) |
+            Q(cpf_cnpj__icontains=termo) |
+            Q(whatsapp__icontains=termo) |
+            Q(whatsapp_normalizado__icontains=termo) |
+            Q(bairro__icontains=termo) |
+            Q(cidade__icontains=termo)
+        )
+
+    clientes_lista = list(clientes_qs)
+
+    return render(
+        request,
+        "estoque/clientes_consulta.html",
+        {
+            "clientes": clientes_lista,
+            "termo": termo,
+            "total_clientes": len(clientes_lista),
         },
     )
 

@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Categoria, Produto, Unidade
+from .models import Categoria, Cliente, Produto, Unidade
 from .utils import normalize_category_name, normalize_product_name
 
 
@@ -415,3 +415,147 @@ class CategoriaForm(forms.ModelForm):
     def clean_descricao(self):
         descricao = self.cleaned_data.get("descricao") or ""
         return " ".join(descricao.strip().split()) or None
+
+
+class ClienteForm(forms.ModelForm):
+    class Meta:
+        model = Cliente
+        fields = [
+            "nome",
+            "apelido_nome_conhecido",
+            "cpf_cnpj",
+            "whatsapp",
+            "telefone_alternativo",
+            "email",
+            "cep",
+            "logradouro",
+            "numero",
+            "complemento",
+            "bairro",
+            "cidade",
+            "uf",
+            "referencia",
+            "vende_a_prazo",
+            "prazo_padrao_dias",
+            "limite_credito",
+            "limite_aberto",
+            "status_credito",
+            "observacao_financeira",
+            "tipo_chave_pix",
+            "chave_pix",
+            "permite_contato_whatsapp",
+            "nome_contato_whatsapp",
+            "observacao_contato",
+            "observacoes",
+            "ativo",
+        ]
+        widgets = {
+            "nome": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Nome do cliente",
+                "autocomplete": "off",
+                "autofocus": True,
+            }),
+            "apelido_nome_conhecido": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Apelido ou nome conhecido",
+                "autocomplete": "off",
+            }),
+            "cpf_cnpj": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "CPF ou CNPJ",
+                "autocomplete": "off",
+            }),
+            "whatsapp": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "(00) 00000-0000",
+                "autocomplete": "off",
+            }),
+            "telefone_alternativo": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Telefone alternativo",
+                "autocomplete": "off",
+            }),
+            "email": forms.EmailInput(attrs={
+                "class": "form-control",
+                "placeholder": "email@exemplo.com",
+                "autocomplete": "off",
+            }),
+            "cep": forms.TextInput(attrs={"class": "form-control", "placeholder": "CEP"}),
+            "logradouro": forms.TextInput(attrs={"class": "form-control", "placeholder": "Rua, avenida, sitio"}),
+            "numero": forms.TextInput(attrs={"class": "form-control", "placeholder": "Numero"}),
+            "complemento": forms.TextInput(attrs={"class": "form-control", "placeholder": "Complemento"}),
+            "bairro": forms.TextInput(attrs={"class": "form-control", "placeholder": "Bairro"}),
+            "cidade": forms.TextInput(attrs={"class": "form-control", "placeholder": "Cidade"}),
+            "uf": forms.TextInput(attrs={
+                "class": "form-control text-uppercase",
+                "placeholder": "UF",
+                "maxlength": "2",
+            }),
+            "referencia": forms.TextInput(attrs={"class": "form-control", "placeholder": "Referencia"}),
+            "vende_a_prazo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "prazo_padrao_dias": forms.NumberInput(attrs={
+                "class": "form-control",
+                "min": "0",
+                "step": "1",
+            }),
+            "limite_credito": forms.NumberInput(attrs={
+                "class": "form-control",
+                "min": "0",
+                "step": "0.01",
+            }),
+            "limite_aberto": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "status_credito": forms.Select(attrs={"class": "form-select"}),
+            "observacao_financeira": forms.Textarea(attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": "Observacoes financeiras",
+            }),
+            "tipo_chave_pix": forms.Select(attrs={"class": "form-select"}),
+            "chave_pix": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Chave Pix",
+                "autocomplete": "off",
+            }),
+            "permite_contato_whatsapp": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "nome_contato_whatsapp": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Nome do contato",
+                "autocomplete": "off",
+            }),
+            "observacao_contato": forms.Textarea(attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": "Observacao de contato",
+            }),
+            "observacoes": forms.Textarea(attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": "Observacoes gerais",
+            }),
+            "ativo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+    def clean_nome(self):
+        nome = " ".join((self.cleaned_data.get("nome") or "").strip().split())
+        if not nome:
+            raise forms.ValidationError("Informe o nome do cliente.")
+        return nome
+
+    def clean_prazo_padrao_dias(self):
+        prazo = self.cleaned_data.get("prazo_padrao_dias") or 0
+        if prazo < 0:
+            raise forms.ValidationError("O prazo padrao nao pode ser negativo.")
+        return prazo
+
+    def clean_limite_credito(self):
+        limite = self.cleaned_data.get("limite_credito")
+        if limite is None:
+            return 0
+        if limite < 0:
+            raise forms.ValidationError("O limite de credito nao pode ser negativo.")
+        return limite
+
+    def clean_uf(self):
+        uf = " ".join((self.cleaned_data.get("uf") or "").strip().upper().split())
+        return uf or None
