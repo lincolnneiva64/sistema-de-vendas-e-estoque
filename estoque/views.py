@@ -505,6 +505,33 @@ def clientes_consulta(request):
         },
     )
 
+def clientes_autocomplete(request):
+    termo = request.GET.get("q", "").strip()
+    clientes_qs = Cliente.objects.filter(ativo=True).order_by("nome")
+
+    if termo:
+        for parte in termo.split():
+            clientes_qs = clientes_qs.filter(
+                Q(nome__icontains=parte) |
+                Q(apelido_nome_conhecido__icontains=parte) |
+                Q(whatsapp__icontains=parte) |
+                Q(whatsapp_normalizado__icontains=parte)
+            )
+
+    clientes = []
+    for cliente in clientes_qs[:12]:
+        clientes.append({
+            "id": cliente.id,
+            "nome": cliente.nome,
+            "prazo": cliente.prazo_padrao_dias or 0,
+            "limite": str(cliente.limite_credito or 0),
+            "status": cliente.status_credito,
+            "status_label": cliente.get_status_credito_display(),
+            "whatsapp": cliente.whatsapp or "",
+        })
+
+    return JsonResponse({"clientes": clientes})
+
 def produto_detalhe(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
     return render(request, "estoque/produto_detalhe.html", {"produto": produto})

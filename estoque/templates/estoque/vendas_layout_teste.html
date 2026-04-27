@@ -153,7 +153,7 @@
     font-weight: 700;
 }
     h2 {
-    margin: 0 0 14px;
+    margin: 0;
     font-size: 28px;
     font-weight: 800;
     color: #0f172a;
@@ -176,6 +176,18 @@ h3 {
     align-items: start;
 }
 
+    .linha-cabecalho-venda {
+    grid-template-columns: 150px minmax(240px, 2fr) 150px 1fr 1.25fr;
+}
+
+.topo-venda {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
     input,
 select {
     height: 36px;
@@ -196,7 +208,15 @@ select {
     width: 100%;
     min-width: 0;
 }
+.cliente-autocomplete-wrap {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+}
 #produtoBusca {
+    width: 100%;
+}
+#clienteBusca {
     width: 100%;
 }
 
@@ -220,7 +240,24 @@ select {
 
     backdrop-filter: blur(6px);
     animation: fadeDrop 0.18s ease;
-}D
+}
+.cliente-sugestoes {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border: 1px solid #d0d7e2;
+    border-radius: 14px;
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
+    max-height: 300px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: none;
+    z-index: 70;
+    backdrop-filter: blur(6px);
+    animation: fadeDrop 0.18s ease;
+}
 .produto-sugestao-item {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -279,6 +316,128 @@ select {
     padding: 10px 14px;
     color: #6b7280;
     font-size: 14px;
+}
+.cliente-sugestao-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 12px 16px;
+    cursor: pointer;
+    font-size: 15px;
+    color: #0f172a;
+    transition: all 0.15s ease;
+    border-bottom: 1px solid #f1f5f9;
+    min-width: 0;
+}
+.cliente-sugestao-item:last-child {
+    border-bottom: none;
+}
+.cliente-sugestao-item:hover,
+.cliente-sugestao-item.ativo {
+    background: linear-gradient(90deg, #2563eb, #1d4ed8);
+    color: #ffffff;
+    transform: translateX(4px) scale(1.01);
+}
+.cliente-sugestao-nome {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 800;
+}
+.cliente-sugestao-meta {
+    font-size: 11px;
+    font-weight: 800;
+    color: #0f766e;
+    background: #ccfbf1;
+    border: 1px solid #5eead4;
+    border-radius: 999px;
+    padding: 2px 7px;
+    white-space: nowrap;
+}
+.cliente-sugestao-item:hover .cliente-sugestao-meta,
+.cliente-sugestao-item.ativo .cliente-sugestao-meta {
+    color: #f0fdfa;
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.36);
+}
+.cliente-sugestao-vazio {
+    padding: 10px 14px;
+    color: #6b7280;
+    font-size: 14px;
+}
+.cliente-resumo {
+    display: none;
+    grid-template-columns: minmax(180px, 1.5fr) repeat(5, minmax(82px, 1fr)) minmax(124px, 1.1fr);
+    gap: 5px;
+    align-items: stretch;
+    margin: 0;
+    padding: 5px;
+    border: 1px solid #d8e4f2;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+}
+.cliente-resumo.visivel {
+    display: grid;
+}
+.cliente-resumo-item {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    padding: 5px 7px;
+    border: 1px solid #e4edf7;
+    border-radius: 9px;
+    background: #ffffff;
+}
+.cliente-resumo-label {
+    color: #64748b;
+    font-size: 8px;
+    font-weight: 850;
+    letter-spacing: 0.35px;
+    text-transform: uppercase;
+}
+.cliente-resumo-valor {
+    color: #0f172a;
+    font-size: 11px;
+    font-weight: 850;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.cliente-resumo-valor.contas-resumo {
+    font-size: 10px;
+}
+.cliente-resumo-item.cliente-principal {
+    background: #eef6ff;
+    border-color: #bfdbfe;
+}
+.cliente-status {
+    width: fit-content;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 12px;
+    line-height: 1;
+}
+.cliente-status.liberado {
+    color: #166534;
+    background: #dcfce7;
+}
+.cliente-status.atencao {
+    color: #92400e;
+    background: #fef3c7;
+}
+.cliente-status.bloqueado {
+    color: #991b1b;
+    background: #fee2e2;
+}
+@media (max-width: 900px) {
+    .cliente-resumo {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 .produto-sugestao-item strong {
     color: #2563eb;
@@ -355,16 +514,50 @@ td:first-child {
 <div id="layout-vendas">
 
     <div class="bloco-venda bloco-lancamento">
+        <div class="topo-venda">
         <h2>Vendas</h2>
 
-        <div class="linha">
-            <input type="text" placeholder="Cliente">
-            <input type="date">
+        <div id="clienteResumo" class="cliente-resumo" aria-live="polite">
+            <div class="cliente-resumo-item cliente-principal">
+                <span class="cliente-resumo-label">Cliente</span>
+                <span class="cliente-resumo-valor" id="clienteResumoNome">-</span>
+            </div>
+            <div class="cliente-resumo-item">
+                <span class="cliente-resumo-label">Prazo</span>
+                <span class="cliente-resumo-valor" id="clienteResumoPrazo">-</span>
+            </div>
+            <div class="cliente-resumo-item">
+                <span class="cliente-resumo-label">Limite</span>
+                <span class="cliente-resumo-valor" id="clienteResumoLimite">-</span>
+            </div>
+            <div class="cliente-resumo-item">
+                <span class="cliente-resumo-label">Status</span>
+                <span class="cliente-resumo-valor cliente-status" id="clienteResumoStatus">-</span>
+            </div>
+            <div class="cliente-resumo-item">
+                <span class="cliente-resumo-label">WhatsApp</span>
+                <span class="cliente-resumo-valor" id="clienteResumoWhatsapp">-</span>
+            </div>
+            <div class="cliente-resumo-item cliente-contas">
+                <span class="cliente-resumo-label">Contas</span>
+                <span class="cliente-resumo-valor contas-resumo">Sem integração ainda</span>
+            </div>
+        </div>
+        </div>
+
+        <div class="linha linha-cabecalho-venda">
+            <input type="date" id="dataVenda" title="Data da venda">
+            <div class="cliente-autocomplete-wrap">
+                <input type="text" id="clienteBusca" placeholder="Cliente" autocomplete="off">
+                <input type="hidden" id="clienteId" name="cliente_id">
+                <div id="clienteSugestoes" class="cliente-sugestoes"></div>
+            </div>
+            <input type="date" id="vencimentoVenda" title="Vencimento">
             <select id="tipoVenda">
                 <option>À vista</option>
-                <option>Fiado</option>
+                <option>A prazo</option>
             </select>
-            <input type="text" placeholder="Operador">
+            <input type="text" id="operadorVenda" placeholder="Operador">
         </div>
 
         <div id="msgEdicao" class="msg-edicao">Modo edição ativado</div>
@@ -511,6 +704,8 @@ function scrollLinhaDentroDaLista(linha, behavior = "smooth") {
 
   const produto = document.getElementById("produto");
   const tipoVenda = document.getElementById("tipoVenda");
+const dataVenda = document.getElementById("dataVenda");
+const operadorVenda = document.getElementById("operadorVenda");
 const produtoBusca = document.getElementById("produtoBusca");
 const sugestoesBox = document.getElementById("produtoSugestoes");
 const estoquePreview = document.getElementById("estoquePreview");
@@ -518,6 +713,261 @@ const quantidade = document.getElementById("quantidade");
 const unidade = document.getElementById("unidade");
 const preco = document.getElementById("preco");
 const tabelaBody = document.getElementById("tabelaProdutos");
+const clienteBusca = document.getElementById("clienteBusca");
+const clienteId = document.getElementById("clienteId");
+const clienteSugestoesBox = document.getElementById("clienteSugestoes");
+const clienteResumo = document.getElementById("clienteResumo");
+const clienteResumoNome = document.getElementById("clienteResumoNome");
+const clienteResumoPrazo = document.getElementById("clienteResumoPrazo");
+const clienteResumoLimite = document.getElementById("clienteResumoLimite");
+const clienteResumoStatus = document.getElementById("clienteResumoStatus");
+const clienteResumoWhatsapp = document.getElementById("clienteResumoWhatsapp");
+const vencimentoVenda = document.getElementById("vencimentoVenda");
+const clientesAutocompleteUrl = "{% url 'estoque:clientes_autocomplete' %}";
+let clientesSugestoes = [];
+let clienteIndexAtivo = -1;
+let clienteSelecionado = null;
+let clienteBuscaAbortController = null;
+
+function dataLocalHojeInput() {
+    const hoje = new Date();
+    const ano = hoje.getFullYear();
+    const mes = String(hoje.getMonth() + 1).padStart(2, "0");
+    const dia = String(hoje.getDate()).padStart(2, "0");
+    return `${ano}-${mes}-${dia}`;
+}
+
+function dataParaInputDate(data) {
+    if (!data) return "";
+    const ano = data.getFullYear();
+    const mes = String(data.getMonth() + 1).padStart(2, "0");
+    const dia = String(data.getDate()).padStart(2, "0");
+    return `${ano}-${mes}-${dia}`;
+}
+
+function formatarLimiteCliente(valor) {
+    const numero = parseFloat(String(valor || "0").replace(",", "."));
+    if (isNaN(numero) || numero <= 0) {
+        return "Sem limite";
+    }
+
+    return new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL"
+    }).format(numero);
+}
+
+function normalizarStatusCliente(status) {
+    if (status === "atencao") return "atenção";
+    return status || "-";
+}
+
+function obterDataVendaLocal() {
+    if (!dataVenda.value) return null;
+    const partes = dataVenda.value.split("-").map(Number);
+    if (partes.length !== 3 || partes.some(isNaN)) return null;
+    return new Date(partes[0], partes[1] - 1, partes[2]);
+}
+
+function calcularVencimentoCliente() {
+    if (!clienteSelecionado) return "";
+
+    const prazo = parseInt(clienteSelecionado.prazo || "0", 10);
+    if (!prazo) return "";
+
+    const dataBase = obterDataVendaLocal();
+    if (!dataBase) return "";
+
+    const vencimento = new Date(dataBase);
+    vencimento.setDate(vencimento.getDate() + prazo);
+    return dataParaInputDate(vencimento);
+}
+
+function atualizarPrazoEVencimentoCliente() {
+    if (!clienteSelecionado) return;
+
+    const prazo = parseInt(clienteSelecionado.prazo || "0", 10);
+    clienteResumoPrazo.textContent = prazo ? prazo + " dias" : "Sem prazo definido";
+    vencimentoVenda.value = calcularVencimentoCliente();
+}
+
+function limparClienteSelecionado() {
+    clienteSelecionado = null;
+    clienteId.value = "";
+    vencimentoVenda.value = "";
+    clienteResumo.classList.remove("visivel");
+}
+
+dataVenda.value = dataLocalHojeInput();
+setTimeout(() => focarProximoCampo(clienteBusca), 0);
+
+dataVenda.addEventListener("change", atualizarPrazoEVencimentoCliente);
+dataVenda.addEventListener("input", atualizarPrazoEVencimentoCliente);
+
+function focarProximoCampo(campo) {
+    if (!campo) return;
+    campo.focus();
+    if (typeof campo.select === "function") {
+        campo.select();
+    }
+}
+
+function configurarEnterCabecalho(campo, proximoCampo) {
+    campo.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        focarProximoCampo(proximoCampo);
+    });
+}
+
+configurarEnterCabecalho(dataVenda, clienteBusca);
+configurarEnterCabecalho(vencimentoVenda, tipoVenda);
+configurarEnterCabecalho(tipoVenda, operadorVenda);
+configurarEnterCabecalho(operadorVenda, produtoBusca);
+
+function preencherResumoCliente(cliente) {
+    clienteSelecionado = cliente;
+    clienteId.value = cliente.id || "";
+    clienteBusca.value = cliente.nome || "";
+    clienteResumoNome.textContent = cliente.nome || "-";
+    clienteResumoLimite.textContent = formatarLimiteCliente(cliente.limite);
+    clienteResumoStatus.textContent = normalizarStatusCliente(cliente.status);
+    clienteResumoStatus.className = "cliente-resumo-valor cliente-status " + (cliente.status || "");
+    clienteResumoWhatsapp.textContent = cliente.whatsapp || "-";
+    atualizarPrazoEVencimentoCliente();
+    clienteResumo.classList.add("visivel");
+    clienteSugestoesBox.style.display = "none";
+    clienteIndexAtivo = -1;
+}
+
+function renderizarSugestoesClientes() {
+    clienteSugestoesBox.innerHTML = "";
+
+    if (!clientesSugestoes.length) {
+        const vazio = document.createElement("div");
+        vazio.className = "cliente-sugestao-vazio";
+        vazio.textContent = "Nenhum cliente encontrado.";
+        clienteSugestoesBox.appendChild(vazio);
+        clienteSugestoesBox.style.display = "block";
+        return;
+    }
+
+    clientesSugestoes.forEach((cliente, index) => {
+        const item = document.createElement("div");
+        item.className = "cliente-sugestao-item" + (index === clienteIndexAtivo ? " ativo" : "");
+
+        const nome = document.createElement("span");
+        nome.className = "cliente-sugestao-nome";
+        nome.textContent = cliente.nome || "";
+
+        const meta = document.createElement("span");
+        meta.className = "cliente-sugestao-meta";
+        meta.textContent = normalizarStatusCliente(cliente.status);
+
+        item.appendChild(nome);
+        item.appendChild(meta);
+        item.addEventListener("mouseenter", () => {
+            clienteIndexAtivo = index;
+            renderizarSugestoesClientes();
+        });
+        item.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            preencherResumoCliente(cliente);
+        });
+
+        clienteSugestoesBox.appendChild(item);
+    });
+
+    clienteSugestoesBox.style.display = "block";
+    const itemAtivoCliente = clienteSugestoesBox.querySelector(".cliente-sugestao-item.ativo");
+    if (itemAtivoCliente) {
+        itemAtivoCliente.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+}
+
+async function buscarClientes(texto) {
+    if (clienteBuscaAbortController) {
+        clienteBuscaAbortController.abort();
+    }
+
+    clienteBuscaAbortController = new AbortController();
+    const params = new URLSearchParams({ q: texto });
+
+    try {
+        const resposta = await fetch(clientesAutocompleteUrl + "?" + params.toString(), {
+            signal: clienteBuscaAbortController.signal,
+            headers: { "X-Requested-With": "XMLHttpRequest" }
+        });
+        const dados = await resposta.json();
+        clientesSugestoes = dados.clientes || [];
+        clienteIndexAtivo = clientesSugestoes.length ? 0 : -1;
+        renderizarSugestoesClientes();
+    } catch (erro) {
+        if (erro.name !== "AbortError") {
+            clientesSugestoes = [];
+            clienteIndexAtivo = -1;
+            renderizarSugestoesClientes();
+        }
+    }
+}
+
+clienteBusca.addEventListener("input", () => {
+    const texto = clienteBusca.value.trim();
+
+    if (!clienteSelecionado || clienteSelecionado.nome !== clienteBusca.value) {
+        limparClienteSelecionado();
+    }
+
+    if (!texto) {
+        clientesSugestoes = [];
+        clienteSugestoesBox.style.display = "none";
+        return;
+    }
+
+    buscarClientes(texto);
+});
+
+clienteBusca.addEventListener("click", () => {
+    const texto = clienteBusca.value.trim();
+    if (texto) {
+        buscarClientes(texto);
+    }
+});
+
+clienteBusca.addEventListener("blur", () => {
+    setTimeout(() => {
+        clienteSugestoesBox.style.display = "none";
+    }, 150);
+});
+
+clienteBusca.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (!clientesSugestoes.length || clienteSugestoesBox.style.display === "none") {
+            buscarClientes(clienteBusca.value.trim());
+            return;
+        }
+        clienteIndexAtivo = (clienteIndexAtivo + 1) % clientesSugestoes.length;
+        renderizarSugestoesClientes();
+    } else if (e.key === "ArrowUp") {
+        if (!clientesSugestoes.length) return;
+        e.preventDefault();
+        clienteIndexAtivo = (clienteIndexAtivo - 1 + clientesSugestoes.length) % clientesSugestoes.length;
+        renderizarSugestoesClientes();
+    } else if (e.key === "Enter") {
+        if (clienteIndexAtivo >= 0 && clientesSugestoes[clienteIndexAtivo]) {
+            e.preventDefault();
+            preencherResumoCliente(clientesSugestoes[clienteIndexAtivo]);
+            focarProximoCampo(tipoVenda);
+        } else if (clienteSelecionado) {
+            e.preventDefault();
+            focarProximoCampo(tipoVenda);
+        }
+    } else if (e.key === "Escape") {
+        clienteSugestoesBox.style.display = "none";
+    }
+});
+
   produto.addEventListener("change", function () {
     const optionSelecionada = this.options[this.selectedIndex];
     if (!optionSelecionada) return;
@@ -1348,6 +1798,9 @@ document.addEventListener("click", (e) => {
         estoquePreview.textContent = "";
     }
 }
+    if (!clienteSugestoesBox.contains(e.target) && e.target !== clienteBusca) {
+        clienteSugestoesBox.style.display = "none";
+    }
 });
 
 atualizarTotalGeral();
