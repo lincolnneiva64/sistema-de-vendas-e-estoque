@@ -1,0 +1,31 @@
+﻿STATUS DO PROJETO - SISTEMA DE VENDAS
+
+Data: 2026-04-28
+Maquina confiavel atual: NOTEBOOK
+Desktop do deposito: NAO USAR COMO BASE AGORA
+
+Estado seguro atual:
+- Commit local bom: e522eb7
+- Branch local atual: codex
+- Branch segura no GitHub: backup-notebook-gravacao-vendas-ok
+- Commit protegido no GitHub: e522eb7
+
+Funcionalidades testadas e funcionando:
+- Gravacao real da venda
+- Visualizacao da nota gravada
+- Venda #2 testada
+- Venda #3 testada
+- Cliente funcionando no cabecalho da venda
+- Enter preservado no cliente e produtos
+- Itens entrando na grade
+- Total calculando corretamente
+- Botao Visualizar Venda abrindo a nota
+
+Atencao:
+- NAO fazer git pull no notebook agora
+- NAO forcar push na branch codex
+- NAO trazer alteracoes do desktop para o notebook
+- O caminho seguro e: Notebook -> GitHub branch segura -> Desktop
+
+Referencia segura para atualizar o desktop depois:
+origin/backup-notebook-gravacao-vendas-ok
