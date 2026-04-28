@@ -521,20 +521,11 @@ select.campo-obrigatorio-piscando:focus,
 </div>
 
 <div class="col-12 col-md-4">
-    <label class="form-label">Unidade de venda</label>
-    <div class="d-flex gap-2">
-        <div class="flex-grow-1">
-            {{ form.unidade_venda_1 }}
-        </div>
-        
-    </div>
-</div>
-
-
-
-<div class="col-12 col-md-3">
     <label class="form-label">Vende fracionado?</label>
     {{ form.vende_fracionado }}
+</div>
+<div class="d-none">
+    {{ form.unidade_venda_1 }}
 </div>
 <div class="col-12 col-md-3" id="bloco-fator-conversao">
     <label class="form-label" for="{{ form.fator_conversao.id_for_label }}">Fator de conversão</label>

@@ -68,6 +68,8 @@ class Produto(models.Model):
         if self.fornecedor:
             fornecedor_limpo = " ".join(self.fornecedor.strip().split())
             self.fornecedor = fornecedor_limpo.title()
+        if self.unidade_compra:
+            self.unidade_venda_1 = self.unidade_compra
         if self.preco_vista and self.preco_vista > 0:
            self.preco_venda = self.preco_vista
         if not self.vende_fracionado:

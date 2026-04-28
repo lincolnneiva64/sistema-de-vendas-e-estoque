@@ -217,6 +217,10 @@ class ProdutoForm(forms.ModelForm):
                 self.fields[field_name].choices = opcoes_unidade
                 self.fields[field_name].widget.choices = opcoes_unidade
 
+        if "unidade_venda_1" in self.fields:
+            self.fields["unidade_venda_1"].required = False
+            self.fields["unidade_venda_1"].widget = forms.HiddenInput()
+
         categorias_ativas = list(Categoria.objects.filter(ativa=True).order_by("nome"))
         opcoes_categoria = [("", "Selecione")] + [
             (categoria.nome, categoria.nome)
@@ -283,6 +287,15 @@ class ProdutoForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
+
+        unidade_compra_valor = cleaned_data.get("unidade_compra") or ""
+        unidade_compra_valor = str(unidade_compra_valor).strip()
+        if unidade_compra_valor:
+            cleaned_data["unidade_venda_1"] = unidade_compra_valor
+            self.instance.unidade_venda_1 = unidade_compra_valor
+        elif self.instance and self.instance.pk:
+            cleaned_data["unidade_venda_1"] = getattr(self.instance, "unidade_venda_1", "")
+
         vende_fracionado_valor = cleaned_data.get("vende_fracionado")
         vende_fracionado = str(vende_fracionado_valor).strip().lower() in (
             "true",
