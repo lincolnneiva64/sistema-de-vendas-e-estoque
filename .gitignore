@@ -28,3 +28,5 @@ static/
 
 # Sensitive/local settings (if applicable)
 local_settings.py
+
+db_backups/
