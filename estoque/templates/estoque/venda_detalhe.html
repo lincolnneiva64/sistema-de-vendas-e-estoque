@@ -30,15 +30,16 @@
             border-bottom: 1px solid #bfdbfe;
         }
 
-        h1 {
+        .cabecalho h1 {
             margin: 0;
             font-size: 28px;
         }
 
         .acoes {
             display: flex;
-            align-items: flex-start;
+            align-items: center;
             gap: 8px;
+            flex-wrap: wrap;
         }
 
         .acoes button,
@@ -65,7 +66,7 @@
             cursor: not-allowed;
         }
 
-        .acoes .whatsapp-acao {
+        .whatsapp-acao {
             background: #dcfce7;
             border-color: #22c55e;
             color: #14532d;
@@ -103,6 +104,7 @@
             border-radius: 10px;
             padding: 10px 12px;
             background: #f8fafc;
+            min-height: 70px;
         }
 
         .label {
@@ -117,6 +119,7 @@
         .valor {
             font-size: 15px;
             font-weight: 800;
+            word-break: break-word;
         }
 
         table {
@@ -125,6 +128,7 @@
             border: 1px solid #dbe5f0;
             border-radius: 12px;
             overflow: hidden;
+            table-layout: fixed;
         }
 
         th,
@@ -132,6 +136,8 @@
             padding: 11px 12px;
             border-bottom: 1px solid #e5e7eb;
             text-align: left;
+            vertical-align: top;
+            word-break: break-word;
         }
 
         th {
@@ -163,7 +169,64 @@
             color: #166534;
         }
 
+        .historico {
+            margin-top: 28px;
+        }
+
+        .historico-lista {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 14px;
+            background: #f8fafc;
+        }
+
+        .historico-item {
+            margin-bottom: 10px;
+        }
+
+        .historico-data {
+            font-size: 13px;
+            color: #475569;
+            font-weight: 700;
+        }
+
+        .historico-descricao {
+            font-size: 14px;
+            color: #0f172a;
+            word-break: break-word;
+        }
+
+        .mensagem {
+            display: none;
+            margin-top: 16px;
+            padding: 12px 14px;
+            border-radius: 10px;
+            background: #dcfce7;
+            color: #14532d;
+            font-weight: 700;
+        }
+
+        .nota-duas-vias {
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 16px;
+            position: relative;
+        }
+
+        .nota-copia {
+            width: 100%;
+        }
+
+        .nota-copia + .nota-copia {
+            display: none;
+        }
+
         @media print {
+            @page {
+                size: A4 portrait;
+                margin: 12mm;
+            }
+
             body {
                 background: #ffffff;
             }
@@ -176,86 +239,463 @@
                 box-shadow: none;
             }
 
-            .acoes {
-                display: none;
+            .acoes,
+            .mensagem,
+            .historico,
+            .aviso-whatsapp {
+                display: none !important;
+            }
+
+            .nota-copia + .nota-copia {
+                display: block;
+            }
+
+            .nota-duas-vias {
+                display: flex;
+                gap: 16px;
+                position: relative;
+            }
+
+            .nota-duas-vias::before {
+                content: "";
+                position: absolute;
+                top: 12mm;
+                bottom: 12mm;
+                left: 50%;
+                width: 1px;
+                border-left: 1px dashed #475569;
+                opacity: 0.35;
+            }
+
+            .nota-copia {
+                width: calc(50% - 8px);
+                border: 1px solid #999;
+                margin: 0;
+                box-shadow: none;
+            }
+
+            .nota-copia .cabecalho,
+            .nota-copia .conteudo {
+                padding: 6px 8px 4px;
+                background: transparent;
+                border: 0;
+            }
+
+            .nota-copia .cabecalho {
+                display: block;
+            }
+
+            .nota-copia h1 {
+                font-size: 13px;
+                margin: 2px 0 3px;
+                line-height: 1;
+            }
+
+            .nota-copia .cabecalho div:first-child {
+                font-size: 8px;
+                margin-bottom: 1px;
+                letter-spacing: 0.03em;
+                line-height: 1;
+            }
+
+            .nota-copia .dados {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 2px 4px;
+                margin-bottom: 6px;
+            }
+
+            .nota-copia .campo {
+                border: 1px solid #999;
+                border-radius: 0;
+                padding: 2px 4px;
+                background: transparent;
+                min-height: auto;
+            }
+
+            .nota-copia .campo:first-child,
+            .nota-copia .campo:last-child {
+                grid-column: span 2;
+            }
+
+            .nota-copia .campo .label {
+                font-size: 8px;
+                margin-bottom: 0;
+                display: inline;
+                font-weight: 700;
+            }
+
+            .nota-copia .campo .valor {
+                font-size: 9px;
+                font-weight: 600;
+                line-height: 1;
+                word-break: normal;
+                overflow-wrap: anywhere;
+                white-space: normal;
+                display: inline;
+                margin-left: 2px;
+            }
+
+            .nota-copia table {
+                font-size: 7px;
+                border: 1px solid #999;
+                border-radius: 0;
+                margin-bottom: 4px;
+                width: 100%;
+                table-layout: fixed;
+            }
+
+            .nota-copia table th,
+            .nota-copia table td {
+                padding: 2px 3px;
+                border-bottom: 1px solid #ccc;
+                border-right: 1px solid #ccc;
+                vertical-align: top;
+            }
+
+            .nota-copia table th:last-child,
+            .nota-copia table td:last-child {
+                border-right: none;
+            }
+
+            .nota-copia th {
+                font-size: 8px;
+                font-weight: 700;
+                color: #111827;
+                background: transparent;
+            }
+
+            .nota-copia td {
+                font-size: 7px;
+                line-height: 1;
+                padding: 2px 3px;
+            }
+
+            .nota-copia td:first-child {
+                white-space: normal;
+                word-break: normal;
+                overflow-wrap: normal;
+            }
+
+            .nota-copia td:nth-child(2) {
+                width: 6%;
+                text-align: right;
+                white-space: nowrap;
+            }
+
+            .nota-copia td:nth-child(3) {
+                width: 5%;
+                text-align: center;
+                white-space: nowrap;
+            }
+
+            .nota-copia td:nth-child(4) {
+                width: 9%;
+                text-align: right;
+                white-space: nowrap;
+            }
+
+            .nota-copia td:nth-child(5) {
+                width: 10%;
+                text-align: right;
+                white-space: nowrap;
+            }
+
+            .nota-copia .total {
+                font-size: 10px;
+                gap: 6px;
+                margin-top: 4px;
+                padding-top: 4px;
+                border-top: 1px dashed #999;
+                justify-content: space-between;
+            }
+
+            .nota-duas-vias {
+                page-break-inside: avoid;
             }
         }
     </style>
 </head>
 <body>
     <main class="pagina">
-        <header class="cabecalho">
-            <div>
-                <h1>Venda #{{ venda.id }}</h1>
-                <div>Nota de venda</div>
-            </div>
-            <div class="acoes">
-                <a href="{% url 'estoque:vendas' %}">Voltar</a>
-                <button type="button" onclick="window.print()">Imprimir</button>
-                {% if whatsapp_url %}
-                    <a class="whatsapp-acao" href="{{ whatsapp_url }}" target="_blank" rel="noopener noreferrer">WhatsApp</a>
-                {% else %}
-                    <button type="button" id="btnWhatsappSemNumero" class="whatsapp-acao">WhatsApp</button>
-                {% endif %}
-            </div>
-        </header>
+        <div class="nota-duas-vias">
+            <article class="nota-copia">
+                <header class="cabecalho">
+                    <div>
+                        <div style="font-size: 13px; font-weight: 700; color: #14532d; letter-spacing: 0.08em; text-transform: uppercase;">LA Neiva</div>
+                        <h1>Nota de Venda</h1>
+                        <div style="margin-top: 6px; color: #334155; font-size: 14px;">Venda #{{ venda.id }}</div>
+                    </div>
+                    <div class="acoes">
+                        <a href="{% url 'estoque:vendas' %}">Voltar</a>
+                        <button type="button" id="btnImprimir">Imprimir</button>
+                        <button type="button" id="btnAbrirWhatsapp" class="whatsapp-acao">WhatsApp</button>
+                        <button type="button" id="btnConfirmarWhatsapp" class="whatsapp-acao">Marcar como enviada pelo WhatsApp</button>
+                    </div>
+                </header>
 
-        <section class="conteudo">
-            <div id="avisoWhatsapp" class="aviso-whatsapp" role="status" aria-live="polite">
-                Este cliente nao possui WhatsApp cadastrado para envio da nota.
-            </div>
+                <section class="conteudo">
+                    <div id="avisoWhatsapp" class="aviso-whatsapp" role="status" aria-live="polite">
+                        Este cliente nao possui WhatsApp cadastrado para envio da nota.
+                    </div>
 
-            <div class="dados">
-                <div class="campo">
-                    <span class="label">Cliente</span>
-                    <span class="valor">{{ venda.cliente.nome|default:"Consumidor" }}</span>
-                </div>
-                <div class="campo">
-                    <span class="label">Data</span>
-                    <span class="valor">{{ venda.data_venda|date:"d/m/Y" }}</span>
-                </div>
-                <div class="campo">
-                    <span class="label">Vencimento</span>
-                    <span class="valor">{{ venda.data_vencimento|date:"d/m/Y"|default:"-" }}</span>
-                </div>
-                <div class="campo">
-                    <span class="label">Tipo</span>
-                    <span class="valor">{{ venda.tipo_pagamento|default:"-" }}</span>
-                </div>
-            </div>
+                    <div class="dados">
+                        <div class="campo">
+                            <span class="label">Cliente</span>
+                            <span class="valor">{{ venda.cliente.nome|default:"Consumidor" }}</span>
+                        </div>
+                        <div class="campo">
+                            <span class="label">Data da venda</span>
+                            <span class="valor">{{ venda.data_venda|date:"d/m/Y" }}</span>
+                        </div>
+                        <div class="campo">
+                            <span class="label">Vencimento</span>
+                            <span class="valor">{{ venda.data_vencimento|date:"d/m/Y"|default:"-" }}</span>
+                        </div>
+                        <div class="campo">
+                            <span class="label">Pagamento</span>
+                            <span class="valor">{{ venda.tipo_pagamento|default:"-" }}</span>
+                        </div>
+                    </div>
 
-            <table>
-                <thead>
-                    <tr>
-                        <th>Produto</th>
-                        <th class="numero">Qtd</th>
-                        <th>Un</th>
-                        <th class="numero">Preco</th>
-                        <th class="numero">Valor total</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in venda.itens.all %}
-                    <tr>
-                        <td>{{ item.produto.nome|default:"Produto nao identificado" }}</td>
-                        <td class="numero">{{ item.quantidade }}</td>
-                        <td>{{ item.unidade }}</td>
-                        <td class="numero">R$ {{ item.preco_unitario|floatformat:2 }}</td>
-                        <td class="numero">R$ {{ item.valor_total|floatformat:2 }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    <table>
+                        <colgroup>
+                            <col style="width: 70%;">
+                            <col style="width: 6%;">
+                            <col style="width: 5%;">
+                            <col style="width: 9%;">
+                            <col style="width: 10%;">
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th>Produto</th>
+                                <th class="numero">Qtd</th>
+                                <th>Un</th>
+                                <th class="numero">Preco</th>
+                                <th class="numero">Valor total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in venda.itens.all %}
+                            <tr>
+                                <td>{{ item.produto.nome|default:"Produto nao identificado" }}</td>
+                                <td class="numero">{{ item.quantidade }}</td>
+                                <td>{{ item.unidade }}</td>
+                                <td class="numero">R$ {{ item.preco_unitario|floatformat:2 }}</td>
+                                <td class="numero">R$ {{ item.valor_total|floatformat:2 }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
 
-            <div class="total">
-                <span>Total</span>
-                <span>R$ {{ venda.total|floatformat:2 }}</span>
-            </div>
-        </section>
+                    <div class="total">
+                        <span>Total da venda</span>
+                        <span>R$ {{ venda.total|floatformat:2 }}</span>
+                    </div>
+
+                    <div class="historico">
+                        <h2 style="margin: 0 0 12px; font-size: 16px; color: #1e3a8a;">Historico da nota</h2>
+                        <div class="historico-lista">
+                            {% if eventos %}
+                                {% for evento in eventos %}
+                                    <div class="historico-item">
+                                        <div class="historico-data">{{ evento.criado_em|date:"d/m/Y H:i" }}</div>
+                                        <div class="historico-descricao">{{ evento.descricao }}</div>
+                                    </div>
+                                {% endfor %}
+                            {% else %}
+                                <div class="historico-item">
+                                    <div class="historico-descricao" style="color: #475569;">Nenhum evento registrado ainda.</div>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div id="mensagem" class="mensagem"></div>
+                </section>
+            </article>
+
+            <article class="nota-copia">
+                <header class="cabecalho">
+                    <div>
+                        <div style="font-size: 13px; font-weight: 700; color: #14532d; letter-spacing: 0.08em; text-transform: uppercase;">LA Neiva</div>
+                        <h1>Nota de Venda</h1>
+                        <div style="margin-top: 6px; color: #334155; font-size: 14px;">Venda #{{ venda.id }}</div>
+                    </div>
+                </header>
+
+                <section class="conteudo">
+                    <div class="dados">
+                        <div class="campo">
+                            <span class="label">Cliente</span>
+                            <span class="valor">{{ venda.cliente.nome|default:"Consumidor" }}</span>
+                        </div>
+                        <div class="campo">
+                            <span class="label">Data da venda</span>
+                            <span class="valor">{{ venda.data_venda|date:"d/m/Y" }}</span>
+                        </div>
+                        <div class="campo">
+                            <span class="label">Vencimento</span>
+                            <span class="valor">{{ venda.data_vencimento|date:"d/m/Y"|default:"-" }}</span>
+                        </div>
+                        <div class="campo">
+                            <span class="label">Pagamento</span>
+                            <span class="valor">{{ venda.tipo_pagamento|default:"-" }}</span>
+                        </div>
+                    </div>
+
+                    <table>
+                        <colgroup>
+                            <col style="width: 70%;">
+                            <col style="width: 6%;">
+                            <col style="width: 5%;">
+                            <col style="width: 9%;">
+                            <col style="width: 10%;">
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th>Produto</th>
+                                <th class="numero">Qtd</th>
+                                <th>Un</th>
+                                <th class="numero">Preco</th>
+                                <th class="numero">Valor total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in venda.itens.all %}
+                            <tr>
+                                <td>{{ item.produto.nome|default:"Produto nao identificado" }}</td>
+                                <td class="numero">{{ item.quantidade }}</td>
+                                <td>{{ item.unidade }}</td>
+                                <td class="numero">R$ {{ item.preco_unitario|floatformat:2 }}</td>
+                                <td class="numero">R$ {{ item.valor_total|floatformat:2 }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+
+                    <div class="total">
+                        <span>Total da venda</span>
+                        <span>R$ {{ venda.total|floatformat:2 }}</span>
+                    </div>
+                </section>
+            </article>
+        </div>
     </main>
+
     <script>
+        function obterCookie(nome) {
+            const cookies = document.cookie ? document.cookie.split(";") : [];
+            for (const cookie of cookies) {
+                const partes = cookie.trim().split("=");
+                if (partes[0] === nome) {
+                    return decodeURIComponent(partes.slice(1).join("="));
+                }
+            }
+            return "";
+        }
+
+        function mostrarMensagem(texto) {
+            const mensagem = document.getElementById("mensagem");
+            if (!mensagem) {
+                alert(texto);
+                return;
+            }
+            mensagem.textContent = texto;
+            mensagem.style.display = "block";
+            setTimeout(() => {
+                mensagem.style.display = "none";
+            }, 5000);
+        }
+
+        function adicionarHistorico(descricao, criadoEm) {
+            const lista = document.querySelector(".historico-lista");
+            if (!lista) {
+                return;
+            }
+            const item = document.createElement("div");
+            item.className = "historico-item";
+            item.innerHTML = `<div class="historico-data">${criadoEm}</div><div class="historico-descricao">${descricao}</div>`;
+            lista.prepend(item);
+        }
+
+        async function enviarEvento(url, descricao) {
+            try {
+                const resposta = await fetch(url, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": obterCookie("csrftoken"),
+                        "X-Requested-With": "XMLHttpRequest",
+                    },
+                });
+                const data = await resposta.json();
+                if (!resposta.ok || !data.sucesso) {
+                    mostrarMensagem(data.mensagem || descricao);
+                    return null;
+                }
+                mostrarMensagem(data.mensagem || descricao);
+                const agora = new Date();
+                const criadoEm = agora.toLocaleString("pt-BR", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                });
+                adicionarHistorico(data.mensagem || descricao, criadoEm);
+                return data;
+            } catch (erro) {
+                mostrarMensagem("Nao foi possivel registrar o evento.");
+                return null;
+            }
+        }
+
+        const btnImprimir = document.getElementById("btnImprimir");
+        const btnAbrirWhatsapp = document.getElementById("btnAbrirWhatsapp");
+        const btnConfirmarWhatsapp = document.getElementById("btnConfirmarWhatsapp");
         const btnWhatsappSemNumero = document.getElementById("btnWhatsappSemNumero");
         const avisoWhatsapp = document.getElementById("avisoWhatsapp");
+        const whatsappUrl = "{{ whatsapp_url|escapejs }}";
+        const registrarImpressaoUrl = "{% url 'estoque:registrar_impressao' venda.id %}";
+        const registrarWhatsappAbertoUrl = "{% url 'estoque:registrar_whatsapp_aberto' venda.id %}";
+        const confirmarWhatsappUrl = "{% url 'estoque:confirmar_whatsapp' venda.id %}";
+
+        if (btnImprimir) {
+            btnImprimir.addEventListener("click", async (event) => {
+                event.preventDefault();
+                btnImprimir.disabled = true;
+                await enviarEvento(registrarImpressaoUrl, "Nota impressa.");
+                window.print();
+                btnImprimir.disabled = false;
+            });
+        }
+
+        if (btnAbrirWhatsapp) {
+            btnAbrirWhatsapp.addEventListener("click", async (event) => {
+                event.preventDefault();
+                if (!whatsappUrl) {
+                    mostrarMensagem("Nao ha WhatsApp disponivel para este cliente.");
+                    return;
+                }
+                btnAbrirWhatsapp.disabled = true;
+                const resultado = await enviarEvento(registrarWhatsappAbertoUrl, "WhatsApp aberto para envio.");
+                btnAbrirWhatsapp.disabled = false;
+                if (resultado) {
+                    mostrarMensagem("WhatsApp aberto para envio. Depois de enviar, clique em Marcar como enviada pelo WhatsApp.");
+                    window.open(whatsappUrl, "_blank", "noopener");
+                }
+            });
+        }
+
+        if (btnConfirmarWhatsapp) {
+            btnConfirmarWhatsapp.addEventListener("click", async (event) => {
+                event.preventDefault();
+                btnConfirmarWhatsapp.disabled = true;
+                await enviarEvento(confirmarWhatsappUrl, "Nota marcada como enviada pelo WhatsApp.");
+                btnConfirmarWhatsapp.disabled = false;
+            });
+        }
 
         if (btnWhatsappSemNumero && avisoWhatsapp) {
             btnWhatsappSemNumero.addEventListener("click", () => {

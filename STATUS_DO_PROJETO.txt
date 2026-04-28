@@ -29,3 +29,21 @@ Atencao:
 
 Referencia segura para atualizar o desktop depois:
 origin/backup-notebook-gravacao-vendas-ok
+
+
+## 2026-04-28 - Gravação real da venda corrigida
+
+- Corrigida falha de comunicação ao gravar venda.
+- Problema identificado: o template vendas_layout_teste.html não gerava o cookie CSRF necessário para requisições POST no Django.
+- Correção aplicada: adicionado {% csrf_token %} no template da tela de vendas.
+- Teste realizado com sucesso: venda gravada no banco e visualizada em /vendas/8/.
+- Modelos Venda e ItemVenda já estavam existentes e funcionando.
+- Rotas vendas/gravar/ e vendas/<id>/ confirmadas.
+- Botões Gravar Venda, Visualizar Venda, Imprimir e WhatsApp aparecem na tela de visualização.
+- Branch segura criada e enviada ao GitHub: backup-gravacao-venda-csrf-2026-04-28.
+
+Próxima etapa:
+- Melhorar o layout da nota de venda para impressão/PDF.
+- Usar provisoriamente o nome da empresa no cabeçalho da nota: LA Neiva.
+- Depois preparar geração de PDF, impressão e envio pelo WhatsApp.
+
