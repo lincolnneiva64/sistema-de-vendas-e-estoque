@@ -8,7 +8,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F
 from .forms import CategoriaForm, ClienteForm, ProdutoForm, UnidadeForm
-from .models import Categoria, Cliente, ItemVenda, Produto, Unidade, Venda
+from .models import Categoria, Cliente, EventoVenda, ItemVenda, Produto, Unidade, Venda
 from django.contrib import messages
 from django.http import JsonResponse
 from django.utils.dateparse import parse_date
@@ -709,6 +709,14 @@ def gravar_venda(request):
             for item in itens_validados
         ])
 
+        _registrar_evento_venda(
+            venda,
+            "venda_gravada",
+            "Venda gravada com sucesso.",
+            canal="sistema",
+            usuario=venda.operador,
+        )
+
     return JsonResponse({
         "sucesso": True,
         "mensagem": f"Venda #{venda.id} gravada com sucesso.",
@@ -717,26 +725,83 @@ def gravar_venda(request):
     })
 
 
+@ensure_csrf_cookie
 def venda_detalhe(request, pk):
     venda = get_object_or_404(
-        Venda.objects.select_related("cliente").prefetch_related("itens__produto"),
+        Venda.objects.select_related("cliente").prefetch_related("itens__produto", "eventos"),
         pk=pk,
     )
     whatsapp_url = montar_link_whatsapp_venda(venda)
+    _registrar_evento_venda(
+        venda,
+        "nota_visualizada",
+        "Nota visualizada.",
+        canal="sistema",
+    )
     return render(
         request,
         "estoque/venda_detalhe.html",
         {
             "venda": venda,
             "whatsapp_url": whatsapp_url,
+            "eventos": venda.eventos.all(),
         },
     )
+
+
+@require_POST
+def registrar_impressao(request, pk):
+    venda = get_object_or_404(Venda, pk=pk)
+    _registrar_evento_venda(
+        venda,
+        "nota_impressa",
+        "Nota impressa.",
+        canal="impressao",
+    )
+    return JsonResponse({"sucesso": True, "mensagem": "Registro de impressão salvo."})
+
+
+@require_POST
+def registrar_whatsapp_aberto(request, pk):
+    venda = get_object_or_404(Venda, pk=pk)
+    _registrar_evento_venda(
+        venda,
+        "whatsapp_aberto",
+        "WhatsApp aberto para envio.",
+        canal="whatsapp",
+    )
+    return JsonResponse({"sucesso": True, "mensagem": "Registro de abertura no WhatsApp salvo."})
+
+
+@require_POST
+def confirmar_whatsapp(request, pk):
+    venda = get_object_or_404(Venda, pk=pk)
+    _registrar_evento_venda(
+        venda,
+        "whatsapp_confirmado",
+        "Nota marcada como enviada pelo WhatsApp.",
+        canal="whatsapp",
+    )
+    return JsonResponse({"sucesso": True, "mensagem": "Confirmacao de envio via WhatsApp salva."})
 
 
 def _formatar_moeda(valor):
     numero = Decimal(valor or 0)
     texto = f"{numero:,.2f}"
     return "R$ " + texto.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _registrar_evento_venda(venda, tipo_evento, descricao, canal="sistema", usuario=None):
+    if not venda:
+        return None
+    usuario_texto = usuario if usuario is not None else (venda.operador or "")
+    return EventoVenda.objects.create(
+        venda=venda,
+        tipo_evento=tipo_evento,
+        descricao=descricao,
+        canal=canal,
+        usuario=usuario_texto,
+    )
 
 
 def montar_link_whatsapp_venda(venda):
@@ -752,29 +817,31 @@ def montar_link_whatsapp_venda(venda):
         numero = "55" + numero
 
     linhas = [
-        f"Ola, {cliente.nome}.",
+        "LA Neiva",
+        "Nota de Venda",
         "",
-        f"Segue o resumo da venda #{venda.id}.",
-        f"Data da venda: {venda.data_venda.strftime('%d/%m/%Y')}",
+        f"Venda nº {venda.id}",
+        f"Cliente: {cliente.nome}",
+        f"Data: {venda.data_venda.strftime('%d/%m/%Y')}",
     ]
 
     if venda.data_vencimento:
         linhas.append(f"Vencimento: {venda.data_vencimento.strftime('%d/%m/%Y')}")
 
+    linhas.append(f"Pagamento: {venda.tipo_pagamento or '-'}")
     linhas.extend(["", "Itens:"])
 
-    for item in venda.itens.all():
+    for index, item in enumerate(venda.itens.all(), start=1):
         nome_produto = item.produto.nome if item.produto else "Produto nao identificado"
+        linhas.append(f"{index}. {nome_produto}")
         linhas.append(
-            f"- {item.quantidade} {item.unidade} - {nome_produto} | "
-            f"Unit.: {_formatar_moeda(item.preco_unitario)} | "
-            f"Total: {_formatar_moeda(item.valor_total)}"
+            f"   {item.quantidade} {item.unidade} x {_formatar_moeda(item.preco_unitario)} = {_formatar_moeda(item.valor_total)}"
         )
+        linhas.append("")
 
     linhas.extend([
-        "",
         f"Total da venda: {_formatar_moeda(venda.total)}",
     ])
 
     mensagem = "\n".join(linhas)
-    return f"https://wa.me/{numero}?text={quote(mensagem)}"
+    return f"https://web.whatsapp.com/send?phone={numero}&text={quote(mensagem)}"

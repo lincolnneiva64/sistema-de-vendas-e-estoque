@@ -259,6 +259,25 @@ class Venda(models.Model):
         return f"Venda #{self.id}"
 
 
+class EventoVenda(models.Model):
+    venda = models.ForeignKey(
+        Venda,
+        on_delete=models.CASCADE,
+        related_name="eventos",
+    )
+    tipo_evento = models.CharField(max_length=60)
+    descricao = models.TextField(blank=True)
+    canal = models.CharField(max_length=40, blank=True)
+    usuario = models.CharField(max_length=120, blank=True, null=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-criado_em", "id"]
+
+    def __str__(self):
+        return f"{self.tipo_evento} - Venda #{self.venda_id}"
+
+
 class ItemVenda(models.Model):
     venda = models.ForeignKey(
         Venda,
