@@ -232,3 +232,52 @@ class Cliente(models.Model):
 
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+class Venda(models.Model):
+    cliente = models.ForeignKey(
+        Cliente,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="vendas",
+    )
+    data_venda = models.DateField()
+    data_vencimento = models.DateField(blank=True, null=True)
+    tipo_pagamento = models.CharField(max_length=40, blank=True)
+    operador = models.CharField(max_length=120, blank=True)
+    total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-id"]
+
+    def __str__(self):
+        return f"Venda #{self.id}"
+
+
+class ItemVenda(models.Model):
+    venda = models.ForeignKey(
+        Venda,
+        on_delete=models.CASCADE,
+        related_name="itens",
+    )
+    produto = models.ForeignKey(
+        Produto,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="itens_venda",
+    )
+    quantidade = models.DecimalField(max_digits=12, decimal_places=3)
+    unidade = models.CharField(max_length=20, blank=True)
+    preco_unitario = models.DecimalField(max_digits=12, decimal_places=2)
+    valor_total = models.DecimalField(max_digits=12, decimal_places=2)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        nome_produto = self.produto.nome if self.produto else "Produto nao identificado"
+        return f"{nome_produto} - Venda #{self.venda_id}"

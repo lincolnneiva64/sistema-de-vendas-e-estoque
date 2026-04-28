@@ -1,13 +1,20 @@
+import json
+from decimal import Decimal, InvalidOperation
+
+from django.db import transaction
 from django.db.models import Q
 from urllib.parse import urlencode
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F
 from .forms import CategoriaForm, ClienteForm, ProdutoForm, UnidadeForm
-from .models import Categoria, Cliente, Produto, Unidade
+from .models import Categoria, Cliente, ItemVenda, Produto, Unidade, Venda
 from django.contrib import messages
 from django.http import JsonResponse
+from django.utils.dateparse import parse_date
 from django.utils import timezone
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.http import require_POST
 from uuid import uuid4
 def home(request):
     produto_edicao = None
@@ -584,8 +591,135 @@ def produto_excluir_definitivo(request, pk):
         produto.delete()
 
     return redirect("estoque:lixeira")
+@ensure_csrf_cookie
 def vendas(request):
     produtos = Produto.objects.filter(excluido=False).order_by('nome')
     return render(request, 'estoque/vendas_layout_teste.html', {
         'produtos': produtos
     })
+
+
+def _decimal_do_front(valor, casas="0.01"):
+    if valor is None:
+        raise ValueError("Valor numerico ausente.")
+
+    texto = str(valor).strip().replace("R$", "").replace(" ", "")
+    if "," in texto and "." in texto:
+        texto = texto.replace(".", "").replace(",", ".")
+    else:
+        texto = texto.replace(",", ".")
+
+    try:
+        return Decimal(texto).quantize(Decimal(casas))
+    except (InvalidOperation, ValueError):
+        raise ValueError("Valor numerico invalido.")
+
+
+@require_POST
+def gravar_venda(request):
+    try:
+        dados = json.loads(request.body.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse(
+            {"sucesso": False, "mensagem": "Nao foi possivel ler os dados da venda."},
+            status=400,
+        )
+
+    itens = dados.get("itens") or []
+    if not itens:
+        return JsonResponse(
+            {"sucesso": False, "mensagem": "Inclua pelo menos 1 item antes de gravar a venda."},
+            status=400,
+        )
+
+    data_venda = parse_date(dados.get("data_venda") or "")
+    if not data_venda:
+        return JsonResponse(
+            {"sucesso": False, "mensagem": "Informe uma data valida para a venda."},
+            status=400,
+        )
+
+    data_vencimento = (
+        parse_date(dados.get("data_vencimento") or "")
+        if dados.get("data_vencimento")
+        else None
+    )
+    cliente = None
+    cliente_id = dados.get("cliente_id")
+
+    if cliente_id:
+        cliente = Cliente.objects.filter(pk=cliente_id, ativo=True).first()
+        if not cliente:
+            return JsonResponse(
+                {"sucesso": False, "mensagem": "Cliente selecionado nao foi encontrado."},
+                status=400,
+            )
+
+    itens_validados = []
+    total_calculado = Decimal("0.00")
+
+    for item in itens:
+        produto_nome = str(item.get("produto_nome") or "").strip()
+        unidade = str(item.get("unidade") or "").strip()
+
+        if not produto_nome:
+            return JsonResponse(
+                {"sucesso": False, "mensagem": "Existe item sem produto informado."},
+                status=400,
+            )
+
+        try:
+            quantidade = _decimal_do_front(item.get("quantidade"), "0.001")
+            preco_unitario = _decimal_do_front(item.get("preco_unitario"), "0.01")
+        except ValueError:
+            return JsonResponse(
+                {"sucesso": False, "mensagem": f"Revise quantidade e preco do item {produto_nome}."},
+                status=400,
+            )
+
+        if quantidade <= 0 or preco_unitario <= 0:
+            return JsonResponse(
+                {"sucesso": False, "mensagem": f"Quantidade e preco precisam ser maiores que zero em {produto_nome}."},
+                status=400,
+            )
+
+        valor_total = (quantidade * preco_unitario).quantize(Decimal("0.01"))
+        produto = Produto.objects.filter(nome__iexact=produto_nome, excluido=False).first()
+        total_calculado += valor_total
+        itens_validados.append({
+            "produto": produto,
+            "quantidade": quantidade,
+            "unidade": unidade,
+            "preco_unitario": preco_unitario,
+            "valor_total": valor_total,
+        })
+
+    with transaction.atomic():
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=data_venda,
+            data_vencimento=data_vencimento,
+            tipo_pagamento=str(dados.get("tipo_pagamento") or "").strip(),
+            operador=str(dados.get("operador") or "").strip(),
+            total=total_calculado.quantize(Decimal("0.01")),
+        )
+
+        ItemVenda.objects.bulk_create([
+            ItemVenda(venda=venda, **item)
+            for item in itens_validados
+        ])
+
+    return JsonResponse({
+        "sucesso": True,
+        "mensagem": f"Venda #{venda.id} gravada com sucesso.",
+        "venda_id": venda.id,
+        "visualizar_url": reverse("estoque:venda_detalhe", args=[venda.id]),
+    })
+
+
+def venda_detalhe(request, pk):
+    venda = get_object_or_404(
+        Venda.objects.select_related("cliente").prefetch_related("itens"),
+        pk=pk,
+    )
+    return render(request, "estoque/venda_detalhe.html", {"venda": venda})

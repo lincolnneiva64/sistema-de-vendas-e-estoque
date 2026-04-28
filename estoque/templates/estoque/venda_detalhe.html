@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Venda #{{ venda.id }}</title>
+    <style>
+        body {
+            margin: 0;
+            background: #eef3f8;
+            color: #0f172a;
+            font-family: "Segoe UI", Arial, sans-serif;
+        }
+
+        .pagina {
+            width: min(980px, calc(100vw - 28px));
+            margin: 22px auto;
+            background: #ffffff;
+            border: 1px solid #dbe5f0;
+            border-radius: 14px;
+            box-shadow: 0 18px 44px rgba(15, 23, 42, 0.12);
+            overflow: hidden;
+        }
+
+        .cabecalho {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            padding: 22px 26px;
+            background: #eff6ff;
+            border-bottom: 1px solid #bfdbfe;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+
+        .acoes {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .acoes button,
+        .acoes a {
+            height: 34px;
+            border: 1px solid #cbd5e1;
+            border-radius: 9px;
+            padding: 0 13px;
+            background: #ffffff;
+            color: #0f172a;
+            font-size: 13px;
+            font-weight: 800;
+            text-decoration: none;
+            line-height: 32px;
+            box-sizing: border-box;
+        }
+
+        .acoes button {
+            cursor: pointer;
+        }
+
+        .acoes button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .conteudo {
+            padding: 24px 26px 28px;
+        }
+
+        .dados {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 22px;
+        }
+
+        .campo {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 10px 12px;
+            background: #f8fafc;
+        }
+
+        .label {
+            display: block;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .valor {
+            font-size: 15px;
+            font-weight: 800;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #dbe5f0;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        th,
+        td {
+            padding: 11px 12px;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: left;
+        }
+
+        th {
+            background: #dbeafe;
+            color: #1e3a8a;
+            font-size: 13px;
+            font-weight: 900;
+        }
+
+        td {
+            font-size: 14px;
+            font-weight: 650;
+        }
+
+        .numero {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .total {
+            display: flex;
+            justify-content: flex-end;
+            gap: 18px;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 2px solid #dbeafe;
+            font-size: 24px;
+            font-weight: 900;
+            color: #166534;
+        }
+
+        @media print {
+            body {
+                background: #ffffff;
+            }
+
+            .pagina {
+                width: 100%;
+                margin: 0;
+                border: 0;
+                border-radius: 0;
+                box-shadow: none;
+            }
+
+            .acoes {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="pagina">
+        <header class="cabecalho">
+            <div>
+                <h1>Venda #{{ venda.id }}</h1>
+                <div>Nota de venda</div>
+            </div>
+            <div class="acoes">
+                <a href="{% url 'estoque:vendas' %}">Voltar</a>
+                <button type="button" onclick="window.print()">Imprimir</button>
+                <button type="button" disabled>WhatsApp</button>
+            </div>
+        </header>
+
+        <section class="conteudo">
+            <div class="dados">
+                <div class="campo">
+                    <span class="label">Cliente</span>
+                    <span class="valor">{{ venda.cliente.nome|default:"Consumidor" }}</span>
+                </div>
+                <div class="campo">
+                    <span class="label">Data</span>
+                    <span class="valor">{{ venda.data_venda|date:"d/m/Y" }}</span>
+                </div>
+                <div class="campo">
+                    <span class="label">Vencimento</span>
+                    <span class="valor">{{ venda.data_vencimento|date:"d/m/Y"|default:"-" }}</span>
+                </div>
+                <div class="campo">
+                    <span class="label">Tipo</span>
+                    <span class="valor">{{ venda.tipo_pagamento|default:"-" }}</span>
+                </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Produto</th>
+                        <th class="numero">Qtd</th>
+                        <th>Un</th>
+                        <th class="numero">Preco</th>
+                        <th class="numero">Valor total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in venda.itens.all %}
+                    <tr>
+                        <td>{{ item.produto.nome|default:"Produto nao identificado" }}</td>
+                        <td class="numero">{{ item.quantidade }}</td>
+                        <td>{{ item.unidade }}</td>
+                        <td class="numero">R$ {{ item.preco_unitario|floatformat:2 }}</td>
+                        <td class="numero">R$ {{ item.valor_total|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="total">
+                <span>Total</span>
+                <span>R$ {{ venda.total|floatformat:2 }}</span>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

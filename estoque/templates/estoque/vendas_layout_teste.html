@@ -917,10 +917,13 @@ const clienteResumoStatus = document.getElementById("clienteResumoStatus");
 const clienteResumoWhatsapp = document.getElementById("clienteResumoWhatsapp");
 const vencimentoVenda = document.getElementById("vencimentoVenda");
 const clientesAutocompleteUrl = "{% url 'estoque:clientes_autocomplete' %}";
+const gravarVendaUrl = "{% url 'estoque:gravar_venda' %}";
 let clientesSugestoes = [];
 let clienteIndexAtivo = -1;
 let clienteSelecionado = null;
 let clienteBuscaAbortController = null;
+let vendaGravadaId = null;
+let vendaGravadaUrl = "";
 
 function dataLocalHojeInput() {
     const hoje = new Date();
@@ -1431,13 +1434,110 @@ function bloquearQuantidadeInvalida() {
     mostrarAviso("Informe a quantidade.", quantidade, true);
 }
 
-btnGravarVenda.addEventListener("click", () => {
-    mostrarToastVenda("Gravação da venda será implementada na próxima etapa.");
-});
+function obterCookie(nome) {
+    const cookies = document.cookie ? document.cookie.split(";") : [];
 
-btnVisualizarVenda.addEventListener("click", () => {
-    mostrarToastVenda("Visualização da venda será liberada após a gravação real da venda.");
-});
+    for (const cookie of cookies) {
+        const partes = cookie.trim().split("=");
+        if (partes[0] === nome) {
+            return decodeURIComponent(partes.slice(1).join("="));
+        }
+    }
+
+    return "";
+}
+
+function normalizarNumeroVenda(valor) {
+    const texto = String(valor || "")
+        .replace("R$", "")
+        .replace(/\s/g, "")
+        .trim();
+
+    if (texto.includes(",") && texto.includes(".")) {
+        return texto.replace(/\./g, "").replace(",", ".");
+    }
+
+    return texto.replace(",", ".");
+}
+
+function coletarItensVenda() {
+    return Array.from(tabelaBody.querySelectorAll("tr")).map((tr) => ({
+        produto_nome: tr.children[0].textContent.trim(),
+        quantidade: normalizarNumeroVenda(tr.children[1].textContent),
+        unidade: tr.children[2].textContent.trim(),
+        preco_unitario: normalizarNumeroVenda(tr.children[3].textContent),
+        subtotal: normalizarNumeroVenda(tr.children[4].textContent),
+    }));
+}
+
+function coletarDadosVenda() {
+    return {
+        cliente_id: clienteId.value || null,
+        data_venda: dataVenda.value,
+        data_vencimento: vencimentoVenda.value || null,
+        tipo_pagamento: tipoVenda.value,
+        operador: operadorVenda.value.trim(),
+        total: normalizarNumeroVenda(document.getElementById("totalGeral").textContent),
+        itens: coletarItensVenda(),
+    };
+}
+
+async function gravarVendaAtual() {
+    const dadosVenda = coletarDadosVenda();
+
+    if (!dadosVenda.itens.length) {
+        mostrarToastVenda("Inclua pelo menos 1 item antes de gravar a venda.");
+        focarProximoCampo(produtoBusca);
+        return;
+    }
+
+    btnGravarVenda.disabled = true;
+    btnGravarVenda.textContent = "Gravando...";
+
+    try {
+        const resposta = await fetch(gravarVendaUrl, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": obterCookie("csrftoken"),
+                "X-Requested-With": "XMLHttpRequest",
+            },
+            body: JSON.stringify(dadosVenda),
+        });
+
+        const retorno = await resposta.json();
+
+        if (!resposta.ok || !retorno.sucesso) {
+            mostrarToastVenda(retorno.mensagem || "Nao foi possivel gravar a venda.");
+            return;
+        }
+
+        vendaGravadaId = retorno.venda_id;
+        vendaGravadaUrl = retorno.visualizar_url || "";
+        mostrarToastVenda(retorno.mensagem || ("Venda #" + vendaGravadaId + " gravada com sucesso."));
+    } catch (erro) {
+        mostrarToastVenda("Falha de comunicacao ao gravar a venda.");
+    } finally {
+        btnGravarVenda.disabled = false;
+        btnGravarVenda.textContent = "Gravar Venda";
+    }
+}
+
+btnGravarVenda.addEventListener("click", (e) => {
+    e.stopImmediatePropagation();
+    gravarVendaAtual();
+}, true);
+
+btnVisualizarVenda.addEventListener("click", (e) => {
+    e.stopImmediatePropagation();
+
+    if (!vendaGravadaId || !vendaGravadaUrl) {
+        mostrarToastVenda("Grave a venda antes de visualizar a nota.");
+        return;
+    }
+
+    window.open(vendaGravadaUrl, "_blank", "noopener");
+}, true);
 
 btnConsultarVendas.addEventListener("click", () => {
     mostrarToastVenda("Consulta de vendas será implementada em etapa futura.");
