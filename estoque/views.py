@@ -3,7 +3,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
 from django.db.models import Q
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F
@@ -719,7 +719,62 @@ def gravar_venda(request):
 
 def venda_detalhe(request, pk):
     venda = get_object_or_404(
-        Venda.objects.select_related("cliente").prefetch_related("itens"),
+        Venda.objects.select_related("cliente").prefetch_related("itens__produto"),
         pk=pk,
     )
-    return render(request, "estoque/venda_detalhe.html", {"venda": venda})
+    whatsapp_url = montar_link_whatsapp_venda(venda)
+    return render(
+        request,
+        "estoque/venda_detalhe.html",
+        {
+            "venda": venda,
+            "whatsapp_url": whatsapp_url,
+        },
+    )
+
+
+def _formatar_moeda(valor):
+    numero = Decimal(valor or 0)
+    texto = f"{numero:,.2f}"
+    return "R$ " + texto.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def montar_link_whatsapp_venda(venda):
+    cliente = venda.cliente
+    if not cliente:
+        return ""
+
+    numero = Cliente.normalizar_whatsapp(cliente.whatsapp_normalizado or cliente.whatsapp)
+    if not numero:
+        return ""
+
+    if len(numero) in (10, 11):
+        numero = "55" + numero
+
+    linhas = [
+        f"Ola, {cliente.nome}.",
+        "",
+        f"Segue o resumo da venda #{venda.id}.",
+        f"Data da venda: {venda.data_venda.strftime('%d/%m/%Y')}",
+    ]
+
+    if venda.data_vencimento:
+        linhas.append(f"Vencimento: {venda.data_vencimento.strftime('%d/%m/%Y')}")
+
+    linhas.extend(["", "Itens:"])
+
+    for item in venda.itens.all():
+        nome_produto = item.produto.nome if item.produto else "Produto nao identificado"
+        linhas.append(
+            f"- {item.quantidade} {item.unidade} - {nome_produto} | "
+            f"Unit.: {_formatar_moeda(item.preco_unitario)} | "
+            f"Total: {_formatar_moeda(item.valor_total)}"
+        )
+
+    linhas.extend([
+        "",
+        f"Total da venda: {_formatar_moeda(venda.total)}",
+    ])
+
+    mensagem = "\n".join(linhas)
+    return f"https://wa.me/{numero}?text={quote(mensagem)}"

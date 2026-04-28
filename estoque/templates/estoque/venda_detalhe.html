@@ -65,6 +65,28 @@
             cursor: not-allowed;
         }
 
+        .acoes .whatsapp-acao {
+            background: #dcfce7;
+            border-color: #22c55e;
+            color: #14532d;
+        }
+
+        .aviso-whatsapp {
+            display: none;
+            margin-bottom: 16px;
+            padding: 11px 13px;
+            border: 1px solid #fed7aa;
+            border-radius: 10px;
+            background: #fff7ed;
+            color: #9a3412;
+            font-size: 14px;
+            font-weight: 800;
+        }
+
+        .aviso-whatsapp.visivel {
+            display: block;
+        }
+
         .conteudo {
             padding: 24px 26px 28px;
         }
@@ -170,11 +192,19 @@
             <div class="acoes">
                 <a href="{% url 'estoque:vendas' %}">Voltar</a>
                 <button type="button" onclick="window.print()">Imprimir</button>
-                <button type="button" disabled>WhatsApp</button>
+                {% if whatsapp_url %}
+                    <a class="whatsapp-acao" href="{{ whatsapp_url }}" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+                {% else %}
+                    <button type="button" id="btnWhatsappSemNumero" class="whatsapp-acao">WhatsApp</button>
+                {% endif %}
             </div>
         </header>
 
         <section class="conteudo">
+            <div id="avisoWhatsapp" class="aviso-whatsapp" role="status" aria-live="polite">
+                Este cliente nao possui WhatsApp cadastrado para envio da nota.
+            </div>
+
             <div class="dados">
                 <div class="campo">
                     <span class="label">Cliente</span>
@@ -223,5 +253,15 @@
             </div>
         </section>
     </main>
+    <script>
+        const btnWhatsappSemNumero = document.getElementById("btnWhatsappSemNumero");
+        const avisoWhatsapp = document.getElementById("avisoWhatsapp");
+
+        if (btnWhatsappSemNumero && avisoWhatsapp) {
+            btnWhatsappSemNumero.addEventListener("click", () => {
+                avisoWhatsapp.classList.add("visivel");
+            });
+        }
+    </script>
 </body>
 </html>
