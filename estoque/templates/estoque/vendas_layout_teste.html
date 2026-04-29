@@ -1192,12 +1192,21 @@ clienteBusca.addEventListener("keydown", (e) => {
         clienteIndexAtivo = (clienteIndexAtivo - 1 + clientesSugestoes.length) % clientesSugestoes.length;
         renderizarSugestoesClientes();
     } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (clienteSugestoesBox.style.display !== "block") {
+            if (clientesSugestoes.length) {
+                clienteIndexAtivo = clienteIndexAtivo >= 0 ? clienteIndexAtivo : 0;
+                renderizarSugestoesClientes();
+            } else {
+                buscarClientes(clienteBusca.value.trim());
+            }
+            return;
+        }
+
         if (clienteIndexAtivo >= 0 && clientesSugestoes[clienteIndexAtivo]) {
-            e.preventDefault();
             preencherResumoCliente(clientesSugestoes[clienteIndexAtivo]);
             focarProximoCampo(tipoVenda);
         } else if (clienteSelecionado) {
-            e.preventDefault();
             focarProximoCampo(tipoVenda);
         }
     } else if (e.key === "Escape") {
@@ -2226,6 +2235,18 @@ produtoBusca.addEventListener("keydown", (e) => {
     else if (e.key === "Enter") {
     e.preventDefault();
     e.stopPropagation();
+
+    if (sugestoesBox.style.display !== "block") {
+        autocompleteAberto = true;
+        const textoProduto = produtoBusca.value.trim();
+        if (textoProduto || !sugestoes.length) {
+            filtrarProdutos(textoProduto);
+        } else if (indexAtivo < 0) {
+            indexAtivo = 0;
+        }
+        renderSugestoes();
+        return;
+    }
 
     if (indexAtivo >= 0 && sugestoes[indexAtivo]) {
         selecionarProduto(sugestoes[indexAtivo]);
