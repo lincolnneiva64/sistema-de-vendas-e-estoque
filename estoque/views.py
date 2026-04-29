@@ -599,6 +599,71 @@ def vendas(request):
     })
 
 
+@ensure_csrf_cookie
+def consultar_vendas(request):
+    hoje = timezone.localdate()
+    primeira_abertura = not request.GET
+
+    data_inicial_texto = request.GET.get("data_inicial", "").strip()
+    data_final_texto = request.GET.get("data_final", "").strip()
+    cliente_texto = request.GET.get("cliente", "").strip()
+    numero_texto = request.GET.get("numero", "").strip()
+
+    if primeira_abertura:
+        data_inicial = hoje
+        data_final = hoje
+        data_inicial_texto = hoje.isoformat()
+        data_final_texto = hoje.isoformat()
+    else:
+        data_inicial = parse_date(data_inicial_texto) if data_inicial_texto else None
+        data_final = parse_date(data_final_texto) if data_final_texto else None
+
+    vendas_qs = Venda.objects.select_related("cliente").prefetch_related("itens__produto").order_by("-data_venda", "-id")
+
+    if data_inicial:
+        vendas_qs = vendas_qs.filter(data_venda__gte=data_inicial)
+    elif data_inicial_texto:
+        messages.warning(request, "Data inicial invalida. O filtro foi ignorado.")
+
+    if data_final:
+        vendas_qs = vendas_qs.filter(data_venda__lte=data_final)
+    elif data_final_texto:
+        messages.warning(request, "Data final invalida. O filtro foi ignorado.")
+
+    if cliente_texto:
+        vendas_qs = vendas_qs.filter(
+            Q(cliente__nome__icontains=cliente_texto) |
+            Q(cliente__apelido_nome_conhecido__icontains=cliente_texto) |
+            Q(cliente__cpf_cnpj__icontains=cliente_texto) |
+            Q(cliente__whatsapp__icontains=cliente_texto)
+        )
+
+    if numero_texto:
+        try:
+            vendas_qs = vendas_qs.filter(pk=int(numero_texto))
+        except ValueError:
+            vendas_qs = vendas_qs.none()
+            messages.warning(request, "Numero da venda invalido. Informe apenas numeros.")
+
+    vendas_lista = list(vendas_qs)
+    for venda in vendas_lista:
+        venda.whatsapp_url_consulta = montar_link_whatsapp_venda(venda)
+
+    return render(
+        request,
+        "estoque/vendas_consulta.html",
+        {
+            "vendas": vendas_lista,
+            "total_vendas": len(vendas_lista),
+            "data_inicial": data_inicial_texto,
+            "data_final": data_final_texto,
+            "cliente": cliente_texto,
+            "numero": numero_texto,
+            "primeira_abertura": primeira_abertura,
+        },
+    )
+
+
 def _decimal_do_front(valor, casas="0.01"):
     if valor is None:
         raise ValueError("Valor numerico ausente.")

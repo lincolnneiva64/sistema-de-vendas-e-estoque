@@ -500,26 +500,28 @@ select {
 }
 .venda-toast {
     position: fixed;
-    top: 18px;
-    right: 18px;
+    top: 76px;
+    left: 50%;
     z-index: 10000;
-    max-width: 360px;
-    padding: 12px 14px;
-    border-radius: 12px;
-    border: 1px solid #bfdbfe;
+    width: min(560px, calc(100vw - 32px));
+    padding: 16px 20px;
+    border-radius: 14px;
+    border: 1px solid #93c5fd;
     background: #eff6ff;
-    color: #1e3a8a;
-    font-size: 14px;
+    color: #172554;
+    font-size: 16px;
     font-weight: 800;
-    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.18);
+    line-height: 1.35;
+    text-align: center;
+    box-shadow: 0 20px 48px rgba(15, 23, 42, 0.22);
     opacity: 0;
-    transform: translateY(-8px);
+    transform: translate(-50%, -12px);
     pointer-events: none;
     transition: 0.22s ease;
 }
 .venda-toast.visivel {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate(-50%, 0);
 }
 .venda-confirmacao-overlay {
     position: fixed;
@@ -1541,7 +1543,7 @@ btnVisualizarVenda.addEventListener("click", (e) => {
 }, true);
 
 btnConsultarVendas.addEventListener("click", () => {
-    mostrarToastVenda("Consulta de vendas será implementada em etapa futura.");
+    window.location.href = "{% url 'estoque:consultar_vendas' %}";
 });
 
 btnLimparCabecalho.addEventListener("click", () => {

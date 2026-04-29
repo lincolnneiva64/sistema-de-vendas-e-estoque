@@ -1,0 +1,319 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Consultar Vendas{% endblock %}
+{% block content %}
+<style>
+  .vendas-consulta-page { color: #172033; padding: 18px 0 32px; }
+  .vendas-consulta-shell { max-width: 1320px; margin: 0 auto; padding: 0 18px; }
+  .vendas-consulta-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 12px; margin-bottom: 12px;
+  }
+  .vendas-consulta-title { margin: 0; font-size: 1.55rem; font-weight: 800; color: #111827; }
+  .vendas-consulta-subtitle { margin: 4px 0 0; color: #64748b; font-weight: 500; font-size: 0.92rem; }
+  .vendas-consulta-header-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+  .vendas-consulta-btn {
+    border: 0; border-radius: 9px; padding: 8px 13px; font-weight: 700;
+    font-size: 0.9rem; text-decoration: none; display: inline-flex;
+    align-items: center; justify-content: center; min-height: 38px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    cursor: pointer; white-space: nowrap;
+  }
+  .vendas-consulta-btn:hover { transform: translateY(-1px); }
+  .vendas-consulta-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+  .vendas-consulta-btn-primary { background: #2563eb; color: #fff; box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24); }
+  .vendas-consulta-btn-secondary {
+    background: #dbeafe; color: #164173; border: 1px solid #7ea6d9;
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.07);
+  }
+  .vendas-consulta-btn-whatsapp { background: #dcfce7; color: #14532d; border: 1px solid #22c55e; }
+  .vendas-consulta-search {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 12px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.055);
+    padding: 12px; margin-bottom: 12px;
+  }
+  .vendas-consulta-search form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(145px, 0.7fr)) minmax(180px, 1.2fr) minmax(120px, 0.65fr) auto auto;
+    gap: 9px;
+    align-items: end;
+  }
+  .vendas-consulta-field label {
+    display: block; margin-bottom: 5px; color: #64748b; font-size: 0.74rem;
+    font-weight: 850; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .vendas-consulta-field input {
+    width: 100%; border: 1.5px solid #d3dbe8; border-radius: 9px;
+    padding: 10px 12px; background: #fff; color: #172033; font-weight: 650;
+    outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .vendas-consulta-field input:focus {
+    border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.13);
+  }
+  .vendas-consulta-panel {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 14px;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06); overflow: hidden;
+  }
+  .vendas-consulta-panel-head {
+    padding: 12px 16px; border-bottom: 1px solid #edf1f6;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .vendas-consulta-panel-title { margin: 0; font-size: 0.98rem; font-weight: 800; color: #111827; }
+  .vendas-consulta-count { color: #64748b; font-size: 0.84rem; font-weight: 700; white-space: nowrap; }
+  .vendas-consulta-table-wrap { overflow-x: auto; }
+  .vendas-consulta-table { width: 100%; border-collapse: collapse; min-width: 1020px; }
+  .vendas-consulta-table th {
+    background: #f8fafc; color: #64748b; font-size: 0.7rem;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    padding: 9px 11px; border-bottom: 1px solid #edf1f6; text-align: left;
+  }
+  .vendas-consulta-table td {
+    padding: 10px 11px; border-bottom: 1px solid #f0f3f8;
+    vertical-align: middle; font-size: 0.84rem;
+  }
+  .vendas-consulta-row:hover td { background: #f8fbff; }
+  .venda-numero { font-weight: 850; color: #172033; font-size: 0.9rem; }
+  .venda-cliente { font-weight: 800; color: #172033; }
+  .venda-muted { color: #64748b; font-size: 0.8rem; font-weight: 650; }
+  .venda-total { color: #166534; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .vendas-consulta-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .vendas-consulta-action-link,
+  .vendas-consulta-action-btn {
+    border: 1px solid #cbd5e1; border-radius: 8px; background: #fff;
+    color: #334155; padding: 5px 9px; font-size: 0.76rem;
+    font-weight: 800; text-decoration: none; display: inline-flex;
+    align-items: center; justify-content: center; min-width: 66px;
+  }
+  .vendas-consulta-action-link.primary { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+  .vendas-consulta-action-btn.edit { border-color: #fde68a; background: #fffbeb; color: #92400e; }
+  .vendas-consulta-action-link.print { border-color: #cbd5e1; background: #f8fafc; color: #334155; }
+  .vendas-consulta-action-btn.whatsapp { border-color: #86efac; background: #f0fdf4; color: #166534; }
+  .vendas-consulta-empty {
+    padding: 22px 16px; color: #64748b; text-align: center;
+    font-weight: 700; font-size: 0.9rem;
+  }
+  .vendas-consulta-alert { border-radius: 13px; padding: 10px 12px; margin-bottom: 10px; font-weight: 750; }
+  .vendas-consulta-alert.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
+  .vendas-consulta-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+  .vendas-consulta-alert.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+  .vendas-consulta-toast {
+    display: none; margin-top: 12px; border-radius: 12px; padding: 10px 12px;
+    background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;
+    font-weight: 750; font-size: 0.88rem;
+  }
+  .vendas-consulta-toast.visivel { display: block; }
+  @media (max-width: 980px) {
+    .vendas-consulta-search form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 760px) {
+    .vendas-consulta-header { align-items: stretch; flex-direction: column; }
+    .vendas-consulta-header-actions { justify-content: flex-start; }
+    .vendas-consulta-search form { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="vendas-consulta-page">
+  <div class="vendas-consulta-shell">
+    <header class="vendas-consulta-header">
+      <div>
+        <h1 class="vendas-consulta-title">Consultar Vendas</h1>
+        <p class="vendas-consulta-subtitle">Localize vendas gravadas por data, cliente ou numero.</p>
+      </div>
+      <div class="vendas-consulta-header-actions">
+        <a href="{% url 'estoque:home' %}" class="vendas-consulta-btn vendas-consulta-btn-secondary">Voltar ao painel</a>
+        <a href="{% url 'estoque:vendas' %}" class="vendas-consulta-btn vendas-consulta-btn-primary">Nova venda</a>
+      </div>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="vendas-consulta-alert {% if message.tags == 'error' %}error{% elif message.tags == 'warning' %}warning{% else %}success{% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <section class="vendas-consulta-search" aria-label="Filtros de vendas">
+      <form method="get" id="formConsultaVendas">
+        <div class="vendas-consulta-field">
+          <label for="dataInicial">Data inicial</label>
+          <input type="date" name="data_inicial" id="dataInicial" value="{{ data_inicial }}">
+        </div>
+        <div class="vendas-consulta-field">
+          <label for="dataFinal">Data final</label>
+          <input type="date" name="data_final" id="dataFinal" value="{{ data_final }}">
+        </div>
+        <div class="vendas-consulta-field">
+          <label for="cliente">Cliente</label>
+          <input type="text" name="cliente" id="cliente" value="{{ cliente }}" placeholder="Nome, apelido, CPF/CNPJ ou WhatsApp" autocomplete="off">
+        </div>
+        <div class="vendas-consulta-field">
+          <label for="numero">Numero</label>
+          <input type="number" name="numero" id="numero" value="{{ numero }}" min="1" step="1" placeholder="Nº da venda">
+        </div>
+        <button type="submit" class="vendas-consulta-btn vendas-consulta-btn-primary">Buscar</button>
+        <a href="{% url 'estoque:consultar_vendas' %}" class="vendas-consulta-btn vendas-consulta-btn-secondary">Limpar</a>
+      </form>
+      <div id="mensagemConsultaVendas" class="vendas-consulta-toast" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="vendas-consulta-panel">
+      <div class="vendas-consulta-panel-head">
+        <h2 class="vendas-consulta-panel-title">Vendas encontradas</h2>
+        <span class="vendas-consulta-count">{{ total_vendas }} venda(s)</span>
+      </div>
+
+      {% if vendas %}
+        <div class="vendas-consulta-table-wrap">
+          <table class="vendas-consulta-table">
+            <thead>
+              <tr>
+                <th>Numero</th>
+                <th>Data da venda</th>
+                <th>Cliente</th>
+                <th>Tipo/Pagamento</th>
+                <th>Vencimento</th>
+                <th>Total da venda</th>
+                <th>Acoes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for venda in vendas %}
+                <tr class="vendas-consulta-row">
+                  <td><span class="venda-numero">#{{ venda.id }}</span></td>
+                  <td class="venda-muted">{{ venda.data_venda|date:"d/m/Y" }}</td>
+                  <td>
+                    <div class="venda-cliente">{{ venda.cliente.nome|default:"Consumidor" }}</div>
+                    {% if venda.cliente.apelido_nome_conhecido %}
+                      <div class="venda-muted">{{ venda.cliente.apelido_nome_conhecido }}</div>
+                    {% endif %}
+                  </td>
+                  <td class="venda-muted">{{ venda.tipo_pagamento|default:"-" }}</td>
+                  <td class="venda-muted">{{ venda.data_vencimento|date:"d/m/Y"|default:"-" }}</td>
+                  <td class="venda-total">R$ {{ venda.total|floatformat:2 }}</td>
+                  <td>
+                    <div class="vendas-consulta-actions">
+                      <a class="vendas-consulta-action-link primary" href="{% url 'estoque:venda_detalhe' venda.id %}">Abrir nota</a>
+                      <button type="button" class="vendas-consulta-action-btn edit js-editar-venda">Editar</button>
+                      <button
+                        type="button"
+                        class="vendas-consulta-action-btn whatsapp js-whatsapp-venda"
+                        data-whatsapp-url="{{ venda.whatsapp_url_consulta|default:'' }}"
+                        data-registro-url="{% url 'estoque:registrar_whatsapp_aberto' venda.id %}"
+                        {% if not venda.whatsapp_url_consulta %}disabled{% endif %}
+                      >
+                        WhatsApp
+                      </button>
+                      <a class="vendas-consulta-action-link print" href="{% url 'estoque:venda_detalhe' venda.id %}" target="_blank" rel="noopener">Imprimir</a>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="vendas-consulta-empty">Nenhuma venda encontrada.</div>
+      {% endif %}
+    </section>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const mensagem = document.getElementById("mensagemConsultaVendas");
+    const formConsulta = document.getElementById("formConsultaVendas");
+    const filtroCliente = document.getElementById("cliente");
+    const filtroNumero = document.getElementById("numero");
+    const filtroDataInicial = document.getElementById("dataInicial");
+    const filtroDataFinal = document.getElementById("dataFinal");
+    let filtroTimer = null;
+
+    function obterCookie(nome) {
+      const cookies = document.cookie ? document.cookie.split(";") : [];
+      for (const cookie of cookies) {
+        const partes = cookie.trim().split("=");
+        if (partes[0] === nome) {
+          return decodeURIComponent(partes.slice(1).join("="));
+        }
+      }
+      return "";
+    }
+
+    function mostrarMensagem(texto) {
+      if (!mensagem) {
+        return;
+      }
+      mensagem.textContent = texto;
+      mensagem.classList.add("visivel");
+      setTimeout(function () {
+        mensagem.classList.remove("visivel");
+      }, 5000);
+    }
+
+    function agendarConsultaAutomatica() {
+      if (!formConsulta) {
+        return;
+      }
+      if (filtroTimer) {
+        clearTimeout(filtroTimer);
+      }
+      filtroTimer = setTimeout(function () {
+        formConsulta.requestSubmit();
+      }, 300);
+    }
+
+    async function registrarAberturaWhatsapp(url) {
+      const resposta = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": obterCookie("csrftoken"),
+          "X-Requested-With": "XMLHttpRequest",
+        },
+      });
+      const data = await resposta.json();
+      if (!resposta.ok || !data.sucesso) {
+        throw new Error(data.mensagem || "Nao foi possivel registrar a abertura do WhatsApp.");
+      }
+      return data;
+    }
+
+    document.querySelectorAll(".js-whatsapp-venda").forEach(function (botao) {
+      botao.addEventListener("click", async function () {
+        const whatsappUrl = botao.dataset.whatsappUrl;
+        const registroUrl = botao.dataset.registroUrl;
+
+        if (!whatsappUrl) {
+          mostrarMensagem("Nao ha WhatsApp disponivel para este cliente.");
+          return;
+        }
+
+        botao.disabled = true;
+        try {
+          await registrarAberturaWhatsapp(registroUrl);
+          window.open(whatsappUrl, "_blank", "noopener");
+          mostrarMensagem("WhatsApp aberto para envio.");
+        } catch (erro) {
+          mostrarMensagem(erro.message);
+        } finally {
+          botao.disabled = false;
+        }
+      });
+    });
+
+    [filtroCliente, filtroNumero].forEach(function (campo) {
+      campo?.addEventListener("input", agendarConsultaAutomatica);
+    });
+
+    [filtroDataInicial, filtroDataFinal].forEach(function (campo) {
+      campo?.addEventListener("change", agendarConsultaAutomatica);
+    });
+
+    document.querySelectorAll(".js-editar-venda").forEach(function (botao) {
+      botao.addEventListener("click", function () {
+        mostrarMensagem("Edicao de venda sera implementada na proxima etapa.");
+      });
+    });
+  });
+</script>
+{% endblock %}
