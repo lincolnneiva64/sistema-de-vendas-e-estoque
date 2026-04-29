@@ -1,5 +1,8 @@
 import json
+import textwrap
+from io import BytesIO
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 
 from django.db import transaction
 from django.db.models import Q
@@ -10,11 +13,12 @@ from django.db.models import Case, When, Value, IntegerField, F
 from .forms import CategoriaForm, ClienteForm, ProdutoForm, UnidadeForm
 from .models import Categoria, Cliente, EventoVenda, ItemVenda, Produto, Unidade, Venda
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils.dateparse import parse_date
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
+from PIL import Image, ImageDraw, ImageFont
 from uuid import uuid4
 def home(request):
     produto_edicao = None
@@ -814,6 +818,33 @@ def venda_detalhe(request, pk):
     )
 
 
+def venda_whatsapp_pdf(request, pk):
+    venda = get_object_or_404(
+        Venda.objects.select_related("cliente").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+    buffer = _gerar_nota_whatsapp_pdf(venda)
+    response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    response["Content-Disposition"] = f'inline; filename="nota-whatsapp-venda-{venda.id}.pdf"'
+    return response
+
+
+def preparar_whatsapp_venda(request, pk):
+    venda = get_object_or_404(
+        Venda.objects.select_related("cliente"),
+        pk=pk,
+    )
+    whatsapp_url = montar_link_whatsapp_venda(venda)
+    return render(
+        request,
+        "estoque/preparar_whatsapp.html",
+        {
+            "venda": venda,
+            "whatsapp_url": whatsapp_url,
+        },
+    )
+
+
 @require_POST
 def registrar_impressao(request, pk):
     venda = get_object_or_404(Venda, pk=pk)
@@ -856,6 +887,207 @@ def _formatar_moeda(valor):
     return "R$ " + texto.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _formatar_quantidade(valor):
+    numero = Decimal(valor or 0).quantize(Decimal("0.001"))
+    return f"{numero:f}".rstrip("0").rstrip(",").rstrip(".")
+
+
+def _fonte_nota_whatsapp(tamanho, negrito=False):
+    nomes = ["segoeuib.ttf", "arialbd.ttf"] if negrito else ["segoeui.ttf", "arial.ttf"]
+    for nome in nomes:
+        caminho = Path("C:/Windows/Fonts") / nome
+        if caminho.exists():
+            return ImageFont.truetype(str(caminho), tamanho)
+    return ImageFont.load_default()
+
+
+def _texto_largura(draw, texto, fonte):
+    caixa = draw.textbbox((0, 0), str(texto), font=fonte)
+    return caixa[2] - caixa[0]
+
+
+def _quebrar_texto(draw, texto, fonte, largura_maxima):
+    texto = str(texto or "-")
+    linhas = []
+    for bloco in texto.splitlines() or [""]:
+        palavras = bloco.split()
+        if not palavras:
+            linhas.append("")
+            continue
+        linha = ""
+        for palavra in palavras:
+            teste = f"{linha} {palavra}".strip()
+            if _texto_largura(draw, teste, fonte) <= largura_maxima:
+                linha = teste
+                continue
+            if linha:
+                linhas.append(linha)
+            if _texto_largura(draw, palavra, fonte) <= largura_maxima:
+                linha = palavra
+            else:
+                partes = textwrap.wrap(palavra, width=18)
+                linhas.extend(partes[:-1])
+                linha = partes[-1] if partes else palavra
+        if linha:
+            linhas.append(linha)
+    return linhas
+
+
+def _gerar_nota_whatsapp_pdf(venda):
+    largura, altura = 1080, 1600
+    margem = 42
+    fundo = "#f6f1e8"
+    texto = "#1f2933"
+    suave = "#64748b"
+    verde = "#14532d"
+    borda = "#ead7b0"
+    card = "#fffdf8"
+
+    fonte_empresa = _fonte_nota_whatsapp(28, True)
+    fonte_titulo = _fonte_nota_whatsapp(40, True)
+    fonte_subtitulo = _fonte_nota_whatsapp(26, True)
+    fonte_label = _fonte_nota_whatsapp(19, True)
+    fonte_intro = _fonte_nota_whatsapp(27)
+    fonte_texto_negrito = _fonte_nota_whatsapp(25, True)
+    fonte_tabela = _fonte_nota_whatsapp(23)
+    fonte_tabela_negrito = _fonte_nota_whatsapp(23, True)
+    fonte_total = _fonte_nota_whatsapp(38, True)
+
+    paginas = []
+    pagina_numero = 0
+
+    def nova_pagina(continua=False):
+        nonlocal pagina_numero
+        pagina_numero += 1
+        imagem = Image.new("RGB", (largura, altura), fundo)
+        draw = ImageDraw.Draw(imagem)
+        draw.rounded_rectangle(
+            (margem, margem, largura - margem, altura - margem),
+            radius=28,
+            fill=card,
+            outline=borda,
+            width=3,
+        )
+        y_atual = margem + 28
+        draw.text((margem + 30, y_atual), "LA Neiva", fill=verde, font=fonte_empresa)
+        y_atual += 36
+        titulo = "Nota de Venda"
+        if continua:
+            titulo += " (contin.)"
+        draw.text((margem + 30, y_atual), titulo, fill=texto, font=fonte_titulo)
+        numero_venda = f"Venda #{venda.id}"
+        numero_largura = _texto_largura(draw, numero_venda, fonte_subtitulo)
+        draw.text((largura - margem - 30 - numero_largura, margem + 40), numero_venda, fill=texto, font=fonte_subtitulo)
+        draw.text((margem + 30, altura - margem - 42), f"Pagina {pagina_numero}", fill=suave, font=fonte_label)
+        y_atual += 58
+        return imagem, draw, y_atual
+
+    imagem, draw, y = nova_pagina()
+
+    def adicionar_pagina_se_precisar(altura_necessaria):
+        nonlocal imagem, draw, y
+        if y + altura_necessaria <= altura - margem - 74:
+            return
+        paginas.append(imagem)
+        imagem, draw, y = nova_pagina(continua=True)
+
+    def desenhar_campo(x, y_campo, largura_campo, label, valor):
+        draw.rounded_rectangle(
+            (x, y_campo, x + largura_campo, y_campo + 78),
+            radius=15,
+            fill="#f8fafc",
+            outline="#e2e8f0",
+            width=2,
+        )
+        draw.text((x + 16, y_campo + 10), label.upper(), fill=suave, font=fonte_label)
+        linhas = _quebrar_texto(draw, valor, fonte_texto_negrito, largura_campo - 40)
+        for indice, linha in enumerate(linhas[:1]):
+            draw.text((x + 16, y_campo + 38 + indice * 28), linha, fill=texto, font=fonte_texto_negrito)
+
+    cliente = venda.cliente.nome if venda.cliente else "Consumidor"
+    data_venda = venda.data_venda.strftime("%d/%m/%Y")
+    vencimento = venda.data_vencimento.strftime("%d/%m/%Y") if venda.data_vencimento else "-"
+    pagamento = venda.tipo_pagamento or "-"
+
+    x1 = margem + 30
+    draw.rounded_rectangle(
+        (x1, y, largura - margem - 30, y + 146),
+        radius=18,
+        fill="#fff8e8",
+        outline="#ead19a",
+        width=2,
+    )
+    draw.text((x1 + 22, y + 18), f"Nota de Venda #{venda.id}", fill=texto, font=fonte_subtitulo)
+    draw.text((x1 + 22, y + 56), f"Cliente: {cliente}", fill=texto, font=fonte_texto_negrito)
+    draw.text((x1 + 22, y + 90), f"Total: {_formatar_moeda(venda.total)}", fill=verde, font=fonte_texto_negrito)
+    draw.text((x1 + 22, y + 118), "Segue a nota referente à venda abaixo.", fill=suave, font=fonte_intro)
+    y += 164
+
+    largura_campo = (largura - margem * 2 - 60 - 22) // 2
+    x2 = x1 + largura_campo + 22
+    desenhar_campo(x1, y, largura_campo, "Cliente", cliente)
+    desenhar_campo(x2, y, largura_campo, "Data", data_venda)
+    y += 92
+    desenhar_campo(x1, y, largura_campo, "Pagamento", pagamento)
+    desenhar_campo(x2, y, largura_campo, "Vencimento", vencimento)
+    y += 106
+
+    draw.text((x1, y), "Itens da venda", fill=texto, font=fonte_subtitulo)
+    y += 42
+
+    def desenhar_item(indice, item):
+        nonlocal y
+        nome = item.produto.nome if item.produto else "Produto nao identificado"
+        quantidade = _formatar_quantidade(item.quantidade)
+        unidade = item.unidade or "-"
+        preco = _formatar_moeda(item.preco_unitario)
+        subtotal = _formatar_moeda(item.valor_total)
+        linhas_nome = _quebrar_texto(draw, f"{indice}. {nome}", fonte_tabela_negrito, 850)
+        altura_item = 56 + len(linhas_nome[:2]) * 28
+        adicionar_pagina_se_precisar(altura_item)
+        topo = y
+        draw.rounded_rectangle(
+            (x1, topo, largura - margem - 30, topo + altura_item - 8),
+            radius=14,
+            fill="#ffffff",
+            outline="#edf1f6",
+            width=2,
+        )
+        texto_y = topo + 13
+        for linha in linhas_nome[:2]:
+            draw.text((x1 + 24, texto_y), linha, fill=texto, font=fonte_tabela_negrito)
+            texto_y += 28
+
+        resumo = f"{quantidade} {unidade} x {preco}"
+        resumo_y = topo + altura_item - 38
+        draw.text((x1 + 24, resumo_y), resumo, fill=suave, font=fonte_tabela)
+        subtotal_largura = _texto_largura(draw, subtotal, fonte_tabela_negrito)
+        draw.text((largura - margem - 52 - subtotal_largura, resumo_y), subtotal, fill=texto, font=fonte_tabela_negrito)
+        y = topo + altura_item + 4
+
+    for indice, item in enumerate(venda.itens.all(), start=1):
+        desenhar_item(indice, item)
+
+    adicionar_pagina_se_precisar(116)
+    draw.rounded_rectangle(
+        (x1, y + 8, largura - margem - 30, y + 92),
+        radius=20,
+        fill="#e8f5e9",
+        outline="#b7e4c7",
+        width=2,
+    )
+    draw.text((x1 + 22, y + 35), "Total da venda", fill=verde, font=fonte_subtitulo)
+    total = _formatar_moeda(venda.total)
+    total_largura = _texto_largura(draw, total, fonte_total)
+    draw.text((largura - margem - 54 - total_largura, y + 27), total, fill=verde, font=fonte_total)
+
+    paginas.append(imagem)
+    pdf = BytesIO()
+    paginas[0].save(pdf, format="PDF", save_all=True, append_images=paginas[1:], resolution=150.0)
+    pdf.seek(0)
+    return pdf
+
+
 def _registrar_evento_venda(venda, tipo_evento, descricao, canal="sistema", usuario=None):
     if not venda:
         return None
@@ -881,32 +1113,7 @@ def montar_link_whatsapp_venda(venda):
     if len(numero) in (10, 11):
         numero = "55" + numero
 
-    linhas = [
-        "LA Neiva",
-        "Nota de Venda",
-        "",
-        f"Venda nº {venda.id}",
-        f"Cliente: {cliente.nome}",
-        f"Data: {venda.data_venda.strftime('%d/%m/%Y')}",
-    ]
-
-    if venda.data_vencimento:
-        linhas.append(f"Vencimento: {venda.data_vencimento.strftime('%d/%m/%Y')}")
-
-    linhas.append(f"Pagamento: {venda.tipo_pagamento or '-'}")
-    linhas.extend(["", "Itens:"])
-
-    for index, item in enumerate(venda.itens.all(), start=1):
-        nome_produto = item.produto.nome if item.produto else "Produto nao identificado"
-        linhas.append(f"{index}. {nome_produto}")
-        linhas.append(
-            f"   {item.quantidade} {item.unidade} x {_formatar_moeda(item.preco_unitario)} = {_formatar_moeda(item.valor_total)}"
-        )
-        linhas.append("")
-
-    linhas.extend([
-        f"Total da venda: {_formatar_moeda(venda.total)}",
-    ])
+    linhas = ["Segue nota em PDF."]
 
     mensagem = "\n".join(linhas)
     return f"https://web.whatsapp.com/send?phone={numero}&text={quote(mensagem)}"

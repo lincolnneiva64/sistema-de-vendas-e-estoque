@@ -488,7 +488,7 @@
                         <a href="{% url 'estoque:vendas' %}">Voltar para Vendas</a>
                         <a href="{% url 'estoque:consultar_vendas' %}">Voltar para Consulta</a>
                         <button type="button" id="btnImprimir">Imprimir</button>
-                        <button type="button" id="btnAbrirWhatsapp" class="whatsapp-acao">WhatsApp</button>
+                        <a href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}" class="whatsapp-acao">PDF para WhatsApp</a>
                         <button type="button" id="btnConfirmarWhatsapp" class="whatsapp-acao">Marcar como enviada pelo WhatsApp</button>
                     </div>
                 </header>
@@ -740,13 +740,10 @@
         }
 
         const btnImprimir = document.getElementById("btnImprimir");
-        const btnAbrirWhatsapp = document.getElementById("btnAbrirWhatsapp");
         const btnConfirmarWhatsapp = document.getElementById("btnConfirmarWhatsapp");
         const btnWhatsappSemNumero = document.getElementById("btnWhatsappSemNumero");
         const avisoWhatsapp = document.getElementById("avisoWhatsapp");
-        const whatsappUrl = "{{ whatsapp_url|escapejs }}";
         const registrarImpressaoUrl = "{% url 'estoque:registrar_impressao' venda.id %}";
-        const registrarWhatsappAbertoUrl = "{% url 'estoque:registrar_whatsapp_aberto' venda.id %}";
         const confirmarWhatsappUrl = "{% url 'estoque:confirmar_whatsapp' venda.id %}";
         const whatsappPendenteKey = "whatsapp_pending_confirm_venda_{{ venda.id }}";
 
@@ -795,24 +792,6 @@
                 await enviarEvento(registrarImpressaoUrl, "Nota impressa.");
                 window.print();
                 btnImprimir.disabled = false;
-            });
-        }
-
-        if (btnAbrirWhatsapp) {
-            btnAbrirWhatsapp.addEventListener("click", async (event) => {
-                event.preventDefault();
-                if (!whatsappUrl) {
-                    mostrarMensagem("Nao ha WhatsApp disponivel para este cliente.");
-                    return;
-                }
-                btnAbrirWhatsapp.disabled = true;
-                const resultado = await enviarEvento(registrarWhatsappAbertoUrl, "WhatsApp aberto para envio.");
-                btnAbrirWhatsapp.disabled = false;
-                if (resultado) {
-                    mostrarMensagem("WhatsApp aberto para envio. Depois de enviar, clique em Marcar como enviada pelo WhatsApp.");
-                    salvarLembreteWhatsapp();
-                    window.open(whatsappUrl, "_blank", "noopener");
-                }
             });
         }
 

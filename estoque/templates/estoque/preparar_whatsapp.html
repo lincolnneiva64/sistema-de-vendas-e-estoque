@@ -1,0 +1,232 @@
+{% extends "estoque/base.html" %}
+
+{% block title %}PDF para WhatsApp{% endblock %}
+
+{% block content %}
+<style>
+  .whatsapp-preparo-page {
+    min-height: calc(100vh - 90px);
+    padding: 28px 16px;
+    background: #eef3f8;
+    color: #172033;
+    font-family: "Segoe UI", Arial, sans-serif;
+  }
+
+  .whatsapp-preparo-shell {
+    width: min(780px, 100%);
+    margin: 0 auto;
+  }
+
+  .whatsapp-preparo-card {
+    background: #ffffff;
+    border: 1px solid #dbe5f0;
+    border-radius: 14px;
+    box-shadow: 0 16px 38px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+  }
+
+  .whatsapp-preparo-header {
+    padding: 22px 24px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .whatsapp-preparo-title {
+    margin: 0;
+    color: #111827;
+    font-size: 1.55rem;
+    font-weight: 900;
+  }
+
+  .whatsapp-preparo-subtitle {
+    margin: 8px 0 0;
+    color: #64748b;
+    font-size: 0.95rem;
+    font-weight: 650;
+  }
+
+  .whatsapp-preparo-body {
+    padding: 22px 24px 24px;
+  }
+
+  .whatsapp-preparo-dados {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .whatsapp-preparo-campo {
+    min-height: 76px;
+    padding: 12px 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 11px;
+    background: #f8fafc;
+  }
+
+  .whatsapp-preparo-label {
+    display: block;
+    margin-bottom: 6px;
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .whatsapp-preparo-valor {
+    color: #172033;
+    font-size: 1rem;
+    font-weight: 850;
+    word-break: break-word;
+  }
+
+  .whatsapp-preparo-total {
+    color: #166534;
+    font-size: 1.12rem;
+    font-weight: 950;
+  }
+
+  .whatsapp-preparo-orientacao,
+  .whatsapp-preparo-aviso {
+    padding: 13px 14px;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    font-weight: 750;
+    line-height: 1.4;
+  }
+
+  .whatsapp-preparo-orientacao {
+    margin-bottom: 16px;
+    border: 1px solid #ead19a;
+    background: #fff8e8;
+    color: #5f3b00;
+  }
+
+  .whatsapp-preparo-aviso {
+    margin-bottom: 16px;
+    border: 1px solid #fed7aa;
+    background: #fff7ed;
+    color: #9a3412;
+  }
+
+  .whatsapp-preparo-acoes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .whatsapp-preparo-btn {
+    min-height: 40px;
+    padding: 10px 14px;
+    border: 1px solid #cbd5e1;
+    border-radius: 9px;
+    background: #ffffff;
+    color: #334155;
+    font-size: 0.9rem;
+    font-weight: 850;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .whatsapp-preparo-btn.pdf {
+    border-color: #ead19a;
+    background: #fff8e8;
+    color: #5f3b00;
+  }
+
+  .whatsapp-preparo-btn.whatsapp {
+    border-color: #22c55e;
+    background: #dcfce7;
+    color: #14532d;
+  }
+
+  .whatsapp-preparo-btn.secundario {
+    background: #f8fafc;
+  }
+
+  .whatsapp-preparo-btn.desabilitado {
+    opacity: 0.55;
+    pointer-events: none;
+  }
+
+  @media (max-width: 640px) {
+    .whatsapp-preparo-dados {
+      grid-template-columns: 1fr;
+    }
+
+    .whatsapp-preparo-acoes {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .whatsapp-preparo-btn {
+      width: 100%;
+    }
+  }
+</style>
+
+<main class="whatsapp-preparo-page">
+  <div class="whatsapp-preparo-shell">
+    <section class="whatsapp-preparo-card">
+      <header class="whatsapp-preparo-header">
+        <h1 class="whatsapp-preparo-title">PDF para WhatsApp</h1>
+        <p class="whatsapp-preparo-subtitle">O PDF da nota ja contem as informacoes da venda.</p>
+      </header>
+
+      <div class="whatsapp-preparo-body">
+        <div class="whatsapp-preparo-dados">
+          <div class="whatsapp-preparo-campo">
+            <span class="whatsapp-preparo-label">Cliente</span>
+            <span class="whatsapp-preparo-valor">{{ venda.cliente.nome|default:"Consumidor" }}</span>
+          </div>
+          <div class="whatsapp-preparo-campo">
+            <span class="whatsapp-preparo-label">Numero da venda</span>
+            <span class="whatsapp-preparo-valor">#{{ venda.id }}</span>
+          </div>
+          <div class="whatsapp-preparo-campo">
+            <span class="whatsapp-preparo-label">Total</span>
+            <span class="whatsapp-preparo-valor whatsapp-preparo-total">R$ {{ venda.total|floatformat:2 }}</span>
+          </div>
+          <div class="whatsapp-preparo-campo">
+            <span class="whatsapp-preparo-label">WhatsApp do cliente</span>
+            <span class="whatsapp-preparo-valor">
+              {% if venda.cliente and venda.cliente.whatsapp %}
+                {{ venda.cliente.whatsapp }}
+              {% elif venda.cliente and venda.cliente.whatsapp_normalizado %}
+                {{ venda.cliente.whatsapp_normalizado }}
+              {% else %}
+                -
+              {% endif %}
+            </span>
+          </div>
+        </div>
+
+        <div class="whatsapp-preparo-orientacao">
+          O PDF da nota ja contem as informacoes da venda. Abra ou baixe o PDF, depois anexe o arquivo na conversa do WhatsApp.
+        </div>
+
+        {% if not whatsapp_url %}
+          <div class="whatsapp-preparo-aviso">
+            Este cliente nao possui WhatsApp cadastrado. Cadastre o WhatsApp do cliente antes de abrir a conversa.
+          </div>
+        {% endif %}
+
+        <div class="whatsapp-preparo-acoes">
+          <a class="whatsapp-preparo-btn pdf" href="{% url 'estoque:venda_whatsapp_pdf' venda.id %}" target="_blank" rel="noopener">Abrir PDF da nota</a>
+          {% if whatsapp_url %}
+            <a class="whatsapp-preparo-btn whatsapp" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Abrir WhatsApp do cliente</a>
+          {% else %}
+            <span class="whatsapp-preparo-btn whatsapp desabilitado">Abrir WhatsApp do cliente</span>
+          {% endif %}
+          <a class="whatsapp-preparo-btn secundario" href="{% url 'estoque:consultar_vendas' %}">Voltar para consulta</a>
+          <a class="whatsapp-preparo-btn secundario" href="{% url 'estoque:venda_detalhe' venda.id %}">Voltar para a nota</a>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+{% endblock %}
