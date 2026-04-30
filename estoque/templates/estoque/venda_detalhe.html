@@ -12,48 +12,49 @@
         }
 
         .pagina {
-            width: min(980px, calc(100vw - 28px));
-            margin: 22px auto;
+            width: min(800px, calc(100vw - 40px));
+            margin: 10px auto;
             background: #ffffff;
             border: 1px solid #dbe5f0;
-            border-radius: 14px;
-            box-shadow: 0 18px 44px rgba(15, 23, 42, 0.12);
+            border-radius: 12px;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.1);
             overflow: hidden;
         }
 
         .cabecalho {
             display: flex;
             justify-content: space-between;
-            gap: 20px;
-            padding: 22px 26px;
+            gap: 10px;
+            padding: 9px 14px;
             background: #eff6ff;
             border-bottom: 1px solid #bfdbfe;
         }
 
         .cabecalho h1 {
             margin: 0;
-            font-size: 28px;
+            font-size: 19px;
+            line-height: 1.1;
         }
 
         .acoes {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 4px;
             flex-wrap: wrap;
         }
 
         .acoes button,
         .acoes a {
-            height: 34px;
+            height: 25px;
             border: 1px solid #cbd5e1;
-            border-radius: 9px;
-            padding: 0 13px;
+            border-radius: 7px;
+            padding: 0 7px;
             background: #ffffff;
             color: #0f172a;
-            font-size: 13px;
+            font-size: 10.5px;
             font-weight: 800;
             text-decoration: none;
-            line-height: 32px;
+            line-height: 23px;
             box-sizing: border-box;
         }
 
@@ -101,13 +102,13 @@
 
         .aviso-whatsapp {
             display: none;
-            margin-bottom: 16px;
-            padding: 11px 13px;
+            margin-bottom: 10px;
+            padding: 8px 10px;
             border: 1px solid #fed7aa;
-            border-radius: 10px;
+            border-radius: 9px;
             background: #fff7ed;
             color: #9a3412;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 800;
         }
 
@@ -116,16 +117,16 @@
         }
 
         .whatsapp-status {
-            margin-bottom: 16px;
-            padding: 12px 14px;
+            margin-bottom: 7px;
+            padding: 5px 8px;
             border: 2px solid #cbd5e1;
-            border-radius: 12px;
+            border-radius: 9px;
             background: #f8fafc;
             color: #334155;
-            font-size: 15px;
+            font-size: 12px;
             font-weight: 950;
-            line-height: 1.25;
-            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+            line-height: 1.2;
+            box-shadow: 0 5px 12px rgba(15, 23, 42, 0.06);
         }
 
         .whatsapp-status.nao-enviado {
@@ -150,35 +151,35 @@
         }
 
         .conteudo {
-            padding: 24px 26px 28px;
+            padding: 10px 14px 14px;
         }
 
         .dados {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 10px;
-            margin-bottom: 22px;
+            gap: 5px;
+            margin-bottom: 8px;
         }
 
         .campo {
             border: 1px solid #e2e8f0;
-            border-radius: 10px;
-            padding: 10px 12px;
+            border-radius: 8px;
+            padding: 4px 6px;
             background: #f8fafc;
-            min-height: 70px;
+            min-height: 36px;
         }
 
         .label {
             display: block;
             color: #64748b;
-            font-size: 11px;
+            font-size: 8.5px;
             font-weight: 800;
             text-transform: uppercase;
-            margin-bottom: 4px;
+            margin-bottom: 1px;
         }
 
         .valor {
-            font-size: 15px;
+            font-size: 12px;
             font-weight: 800;
             word-break: break-word;
         }
@@ -194,7 +195,7 @@
 
         th,
         td {
-            padding: 11px 12px;
+            padding: 4px 6px;
             border-bottom: 1px solid #e5e7eb;
             text-align: left;
             vertical-align: top;
@@ -204,12 +205,12 @@
         th {
             background: #dbeafe;
             color: #1e3a8a;
-            font-size: 13px;
+            font-size: 10.5px;
             font-weight: 900;
         }
 
         td {
-            font-size: 14px;
+            font-size: 11.5px;
             font-weight: 650;
         }
 
@@ -221,21 +222,22 @@
         .total {
             display: flex;
             justify-content: flex-end;
-            gap: 18px;
-            margin-top: 16px;
-            padding-top: 16px;
+            gap: 10px;
+            margin-top: 6px;
+            padding-top: 6px;
             border-top: 2px solid #dbeafe;
-            font-size: 24px;
+            font-size: 17px;
             font-weight: 900;
             color: #166534;
         }
 
         .historico {
-            margin-top: 28px;
+            margin-top: 12px;
         }
 
         .comunicacao {
-            margin-top: 18px;
+            margin-top: 7px;
+            margin-bottom: 8px;
         }
 
         .comunicacao-lista {
@@ -247,12 +249,12 @@
 
         .comunicacao-linha {
             display: grid;
-            grid-template-columns: 118px minmax(0, 1fr);
-            gap: 10px;
-            padding: 9px 12px;
+            grid-template-columns: 102px minmax(0, 1fr);
+            gap: 5px;
+            padding: 4px 7px;
             border-top: 1px solid #e2e8f0;
-            font-size: 14px;
-            line-height: 1.3;
+            font-size: 11.5px;
+            line-height: 1.18;
         }
 
         .comunicacao-linha:first-child {
@@ -277,9 +279,9 @@
         }
 
         .comunicacao-vazio {
-            padding: 12px 14px;
+            padding: 6px 8px;
             color: #475569;
-            font-size: 14px;
+            font-size: 11.5px;
             font-weight: 700;
         }
 
@@ -295,25 +297,25 @@
         }
 
         .historico-grupo-data {
-            padding: 8px 12px;
+            padding: 4px 7px;
             background: #eff6ff;
-            font-size: 13px;
+            font-size: 10.5px;
             color: #1e3a8a;
             font-weight: 900;
         }
 
         .historico-eventos {
-            padding: 6px 12px;
+            padding: 2px 7px;
         }
 
         .historico-linha {
             display: grid;
-            grid-template-columns: 48px minmax(0, 1fr);
-            gap: 8px;
+            grid-template-columns: 40px minmax(0, 1fr);
+            gap: 5px;
             align-items: baseline;
-            padding: 4px 0;
-            font-size: 14px;
-            line-height: 1.25;
+            padding: 2px 0;
+            font-size: 11.5px;
+            line-height: 1.2;
         }
 
         .historico-hora {
@@ -328,9 +330,9 @@
         }
 
         .historico-vazio {
-            padding: 12px 14px;
+            padding: 6px 8px;
             color: #475569;
-            font-size: 14px;
+            font-size: 11.5px;
             font-weight: 700;
         }
 
@@ -379,6 +381,9 @@
 
             .acoes,
             .mensagem,
+            .whatsapp-status,
+            .comunicacao,
+            .comunicacao-lista,
             .historico,
             .historico-lista,
             .aviso-whatsapp {
@@ -415,7 +420,7 @@
 
             .nota-copia .cabecalho,
             .nota-copia .conteudo {
-                padding: 6px 8px 4px;
+                padding: 3px 5px;
                 background: transparent;
                 border: 0;
             }
@@ -425,8 +430,8 @@
             }
 
             .nota-copia h1 {
-                font-size: 15px;
-                margin: 2px 0 3px;
+                font-size: 13px;
+                margin: 1px 0 2px;
                 line-height: 1;
             }
 
@@ -441,13 +446,13 @@
                 display: grid;
                 grid-template-columns: repeat(2, minmax(0, 1fr));
                 gap: 2px 4px;
-                margin-bottom: 6px;
+                margin-bottom: 3px;
             }
 
             .nota-copia .campo {
                 border: 1px solid #999;
                 border-radius: 0;
-                padding: 2px 4px;
+                padding: 1.5px 3px;
                 background: transparent;
                 min-height: auto;
             }
@@ -458,14 +463,14 @@
             }
 
             .nota-copia .campo .label {
-                font-size: 9px;
+                font-size: 8.5px;
                 margin-bottom: 0;
                 display: inline;
                 font-weight: 700;
             }
 
             .nota-copia .campo .valor {
-                font-size: 10.5px;
+                font-size: 9.5px;
                 font-weight: 600;
                 line-height: 1;
                 word-break: normal;
@@ -479,14 +484,14 @@
                 font-size: 7px;
                 border: 1px solid #999;
                 border-radius: 0;
-                margin-bottom: 4px;
+                margin-bottom: 3px;
                 width: 100%;
                 table-layout: fixed;
             }
 
             .nota-copia table th,
             .nota-copia table td {
-                padding: 2px 3px;
+                padding: 1.5px 3px;
                 border-bottom: 1px solid #ccc;
                 border-right: 1px solid #ccc;
                 vertical-align: top;
@@ -498,14 +503,14 @@
             }
 
             .nota-copia th {
-                font-size: 9px;
+                font-size: 8px;
                 font-weight: 700;
                 color: #111827;
                 background: transparent;
             }
 
             .nota-copia td {
-                font-size: 8.5px;
+                font-size: 7.8px;
                 line-height: 1;
                 padding: 2px 3px;
             }
@@ -543,8 +548,8 @@
             .nota-copia .total {
                 font-size: 12px;
                 gap: 6px;
-                margin-top: 4px;
-                padding-top: 4px;
+                margin-top: 3px;
+                padding-top: 3px;
                 border-top: 1px dashed #999;
                 justify-content: space-between;
             }
@@ -561,9 +566,9 @@
             <article class="nota-copia">
                 <header class="cabecalho">
                     <div>
-                        <div style="font-size: 13px; font-weight: 700; color: #14532d; letter-spacing: 0.08em; text-transform: uppercase;">LA Neiva</div>
+                        <div style="font-size: 10.5px; font-weight: 700; color: #14532d; letter-spacing: 0.04em; text-transform: uppercase;">LA Neiva</div>
                         <h1>Nota de Venda</h1>
-                        <div style="margin-top: 6px; color: #334155; font-size: 14px;">Venda #{{ venda.id }}</div>
+                        <div style="margin-top: 1px; color: #334155; font-size: 11.5px;">Venda #{{ venda.id }}</div>
                     </div>
                     <div class="acoes">
                         <a href="{% url 'estoque:vendas' %}">Voltar para Vendas</a>
@@ -586,7 +591,7 @@
                     </div>
 
                     <div class="comunicacao">
-                        <h2 style="margin: 0 0 12px; font-size: 16px; color: #1e3a8a;">Historico de comunicacao</h2>
+                        <h2 style="margin: 0 0 5px; font-size: 13px; color: #1e3a8a;">Historico de comunicacao</h2>
                         <div id="comunicacaoWhatsappLista" class="comunicacao-lista">
                             {% for evento in comunicacoes_whatsapp %}
                                 <div class="comunicacao-linha">
@@ -662,7 +667,7 @@
                     </div>
 
                     <div class="historico">
-                        <h2 style="margin: 0 0 12px; font-size: 16px; color: #1e3a8a;">Historico da nota</h2>
+                        <h2 style="margin: 0 0 5px; font-size: 13px; color: #1e3a8a;">Historico da nota</h2>
                         <div class="historico-lista">
                             {% if eventos %}
                                 {% regroup eventos by criado_em.date as eventos_por_data %}
