@@ -88,6 +88,36 @@
   .vendas-consulta-action-link.print { border-color: #cbd5e1; background: #f8fafc; color: #334155; }
   .vendas-consulta-action-link.whatsapp,
   .vendas-consulta-action-btn.whatsapp { border-color: #86efac; background: #f0fdf4; color: #166534; }
+  .vendas-consulta-action-btn.whatsapp-pendente {
+    display: none;
+    border-color: #d97706;
+    background: linear-gradient(180deg, #fef3c7 0%, #f59e0b 100%);
+    color: #713f12;
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.34), 0 4px 0 #b45309, 0 10px 18px rgba(120, 53, 15, 0.16);
+    min-width: 112px;
+    text-shadow: 0 1px 1px rgba(255, 251, 235, 0.58);
+  }
+  .vendas-consulta-action-btn.whatsapp-pendente.visivel {
+    display: inline-flex;
+    animation: vendas-whatsapp-pendente 1.35s ease-in-out infinite;
+  }
+  @keyframes vendas-whatsapp-pendente {
+    0% {
+      border-color: #d97706;
+      box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.34), 0 4px 0 #b45309, 0 10px 18px rgba(120, 53, 15, 0.16);
+      transform: translateY(0);
+    }
+    50% {
+      border-color: #f59e0b;
+      box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.13), 0 6px 0 #b45309, 0 13px 22px rgba(120, 53, 15, 0.22);
+      transform: translateY(-1px);
+    }
+    100% {
+      border-color: #d97706;
+      box-shadow: 0 0 0 0 rgba(245, 158, 11, 0), 0 4px 0 #b45309, 0 10px 18px rgba(120, 53, 15, 0.16);
+      transform: translateY(0);
+    }
+  }
   .vendas-consulta-empty {
     padding: 22px 16px; color: #64748b; text-align: center;
     font-weight: 700; font-size: 0.9rem;
@@ -196,6 +226,7 @@
                       <a class="vendas-consulta-action-link primary" href="{% url 'estoque:venda_detalhe' venda.id %}">Abrir nota</a>
                       <button type="button" class="vendas-consulta-action-btn edit js-editar-venda">Editar</button>
                       <a class="vendas-consulta-action-link whatsapp" href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}">PDF para WhatsApp</a>
+                      <button type="button" class="vendas-consulta-action-btn whatsapp-pendente js-whatsapp-pendente" data-venda-id="{{ venda.id }}" data-confirmar-url="{% url 'estoque:confirmar_whatsapp' venda.id %}">Confirmar WhatsApp</button>
                       <a class="vendas-consulta-action-link print" href="{% url 'estoque:venda_detalhe' venda.id %}" target="_blank" rel="noopener">Imprimir</a>
                     </div>
                   </td>
@@ -219,6 +250,7 @@
     const filtroNumero = document.getElementById("numero");
     const filtroDataInicial = document.getElementById("dataInicial");
     const filtroDataFinal = document.getElementById("dataFinal");
+    const csrfToken = "{{ csrf_token }}";
     let filtroTimer = null;
 
     function mostrarMensagem(texto) {
@@ -230,6 +262,17 @@
       setTimeout(function () {
         mensagem.classList.remove("visivel");
       }, 5000);
+    }
+
+    function obterCookie(nome) {
+      const cookies = document.cookie ? document.cookie.split(";") : [];
+      for (const cookie of cookies) {
+        const partes = cookie.trim().split("=");
+        if (partes[0] === nome) {
+          return decodeURIComponent(partes.slice(1).join("="));
+        }
+      }
+      return "";
     }
 
     function agendarConsultaAutomatica() {
@@ -255,6 +298,54 @@
     document.querySelectorAll(".js-editar-venda").forEach(function (botao) {
       botao.addEventListener("click", function () {
         mostrarMensagem("Edicao de venda sera implementada na proxima etapa.");
+      });
+    });
+
+    document.querySelectorAll(".js-whatsapp-pendente").forEach(function (botao) {
+      const vendaId = botao.dataset.vendaId;
+      const chave = "whatsapp_pending_confirm_venda_" + vendaId;
+      try {
+        if (localStorage.getItem(chave) === "conversa_aberta") {
+          botao.classList.add("visivel");
+        } else {
+          botao.classList.remove("visivel");
+        }
+      } catch (erro) {
+        botao.classList.remove("visivel");
+      }
+
+      botao.addEventListener("click", async function () {
+        const confirmarUrl = botao.dataset.confirmarUrl;
+        if (!confirmarUrl) {
+          return;
+        }
+        botao.disabled = true;
+        try {
+          const resposta = await fetch(confirmarUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRFToken": obterCookie("csrftoken") || csrfToken,
+              "X-Requested-With": "XMLHttpRequest",
+            },
+          });
+          const data = await resposta.json();
+          if (!resposta.ok || !data.sucesso) {
+            mostrarMensagem(data.mensagem || "Nao foi possivel confirmar o WhatsApp.");
+            botao.disabled = false;
+            return;
+          }
+          try {
+            localStorage.removeItem(chave);
+          } catch (erro) {
+            // Sem acao necessaria.
+          }
+          botao.classList.remove("visivel");
+          mostrarMensagem(data.mensagem || "Nota marcada como enviada pelo WhatsApp.");
+        } catch (erro) {
+          mostrarMensagem("Nao foi possivel confirmar o WhatsApp.");
+          botao.disabled = false;
+        }
       });
     });
   });
