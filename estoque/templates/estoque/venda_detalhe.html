@@ -234,6 +234,55 @@
             margin-top: 28px;
         }
 
+        .comunicacao {
+            margin-top: 18px;
+        }
+
+        .comunicacao-lista {
+            border: 1px solid #dbe5f0;
+            border-radius: 12px;
+            background: #f8fafc;
+            overflow: hidden;
+        }
+
+        .comunicacao-linha {
+            display: grid;
+            grid-template-columns: 118px minmax(0, 1fr);
+            gap: 10px;
+            padding: 9px 12px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 14px;
+            line-height: 1.3;
+        }
+
+        .comunicacao-linha:first-child {
+            border-top: 0;
+        }
+
+        .comunicacao-data {
+            color: #475569;
+            font-weight: 850;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .comunicacao-descricao {
+            color: #0f172a;
+            font-weight: 750;
+            word-break: break-word;
+        }
+
+        .comunicacao-meta {
+            color: #64748b;
+            font-weight: 700;
+        }
+
+        .comunicacao-vazio {
+            padding: 12px 14px;
+            color: #475569;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
         .historico-lista {
             border: 1px solid #e2e8f0;
             border-radius: 12px;
@@ -536,6 +585,28 @@
                         {{ venda.whatsapp_status_texto }}
                     </div>
 
+                    <div class="comunicacao">
+                        <h2 style="margin: 0 0 12px; font-size: 16px; color: #1e3a8a;">Historico de comunicacao</h2>
+                        <div id="comunicacaoWhatsappLista" class="comunicacao-lista">
+                            {% for evento in comunicacoes_whatsapp %}
+                                <div class="comunicacao-linha">
+                                    <span class="comunicacao-data">{{ evento.criado_em|date:"d/m/Y H:i" }}</span>
+                                    <span class="comunicacao-descricao">
+                                        {{ evento.descricao }}
+                                        {% if evento.numero_whatsapp %}
+                                            <span class="comunicacao-meta">- numero {{ evento.numero_whatsapp }}</span>
+                                        {% endif %}
+                                        {% if evento.origem_numero %}
+                                            <span class="comunicacao-meta">({{ evento.get_origem_numero_display }})</span>
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            {% empty %}
+                                <div class="comunicacao-vazio">Nenhuma comunicacao registrada ainda.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
                     <div class="dados">
                         <div class="campo">
                             <span class="label">Cliente</span>
@@ -745,6 +816,46 @@
             eventos.prepend(item);
         }
 
+        function adicionarComunicacaoWhatsapp(descricao, criadoEm, numero, origem) {
+            const lista = document.getElementById("comunicacaoWhatsappLista");
+            if (!lista) {
+                return;
+            }
+            const vazio = lista.querySelector(".comunicacao-vazio");
+            if (vazio) {
+                vazio.remove();
+            }
+
+            const linha = document.createElement("div");
+            linha.className = "comunicacao-linha";
+
+            const data = document.createElement("span");
+            data.className = "comunicacao-data";
+            data.textContent = String(criadoEm || "").replace(",", "");
+
+            const texto = document.createElement("span");
+            texto.className = "comunicacao-descricao";
+            texto.textContent = descricao || "Envio confirmado manualmente.";
+
+            if (numero) {
+                const numeroSpan = document.createElement("span");
+                numeroSpan.className = "comunicacao-meta";
+                numeroSpan.textContent = " - numero " + numero;
+                texto.appendChild(numeroSpan);
+            }
+
+            if (origem) {
+                const origemSpan = document.createElement("span");
+                origemSpan.className = "comunicacao-meta";
+                origemSpan.textContent = " (" + origem + ")";
+                texto.appendChild(origemSpan);
+            }
+
+            linha.appendChild(data);
+            linha.appendChild(texto);
+            lista.prepend(linha);
+        }
+
         async function enviarEvento(url, descricao) {
             try {
                 const resposta = await fetch(url, {
@@ -856,6 +967,18 @@
                 if (resultado) {
                     limparLembreteWhatsapp();
                     atualizarStatusWhatsapp(resultado.whatsapp_status, resultado.whatsapp_status_texto);
+                    adicionarComunicacaoWhatsapp(
+                        resultado.comunicacao_descricao,
+                        new Date().toLocaleString("pt-BR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                        }),
+                        resultado.comunicacao_numero,
+                        resultado.comunicacao_origem
+                    );
                     btnConfirmarWhatsapp.textContent = "Nota ja marcada como enviada";
                     btnConfirmarWhatsapp.disabled = true;
                 }

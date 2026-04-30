@@ -814,6 +814,10 @@ def venda_detalhe(request, pk):
             "venda": venda,
             "whatsapp_url": whatsapp_url,
             "eventos": venda.eventos.all(),
+            "comunicacoes_whatsapp": venda.eventos.filter(
+                canal="whatsapp",
+                tipo_evento__in=["whatsapp_aberto", "whatsapp_confirmado"],
+            ),
         },
     )
 
@@ -879,11 +883,13 @@ def registrar_whatsapp_aberto(request, pk):
     except (json.JSONDecodeError, UnicodeDecodeError):
         numero_usado = ""
 
+    numero_whatsapp, origem_numero = _dados_numero_whatsapp_evento(venda, numero_usado)
+
     if venda.whatsapp_status != Venda.WHATSAPP_ENVIADO_CONFIRMADO:
         venda.whatsapp_status = Venda.WHATSAPP_ABERTO
         venda.whatsapp_aberto_em = timezone.now()
-        if numero_usado:
-            venda.whatsapp_numero_usado = numero_usado
+        if numero_whatsapp:
+            venda.whatsapp_numero_usado = numero_whatsapp
         venda.save(update_fields=[
             "whatsapp_status",
             "whatsapp_aberto_em",
@@ -896,6 +902,8 @@ def registrar_whatsapp_aberto(request, pk):
         "whatsapp_aberto",
         "WhatsApp aberto para envio.",
         canal="whatsapp",
+        numero_whatsapp=numero_whatsapp,
+        origem_numero=origem_numero,
     )
     return JsonResponse({
         "sucesso": True,
@@ -908,6 +916,23 @@ def registrar_whatsapp_aberto(request, pk):
 @require_POST
 def confirmar_whatsapp(request, pk):
     venda = get_object_or_404(Venda, pk=pk)
+    ultimo_whatsapp_aberto = venda.eventos.filter(
+        canal="whatsapp",
+        tipo_evento="whatsapp_aberto",
+    ).first()
+    numero_whatsapp = (
+        (ultimo_whatsapp_aberto.numero_whatsapp if ultimo_whatsapp_aberto else "")
+        or venda.whatsapp_numero_usado
+        or ""
+    )
+    origem_numero = (
+        (ultimo_whatsapp_aberto.origem_numero if ultimo_whatsapp_aberto else "")
+        or ""
+    )
+    if not numero_whatsapp:
+        numero_whatsapp, origem_numero = _dados_numero_whatsapp_evento(venda)
+    if not origem_numero:
+        origem_numero = EventoVenda.ORIGEM_NUMERO_DESCONHECIDO
     venda.whatsapp_status = Venda.WHATSAPP_ENVIADO_CONFIRMADO
     venda.whatsapp_confirmado_em = timezone.now()
     venda.save(update_fields=[
@@ -918,14 +943,19 @@ def confirmar_whatsapp(request, pk):
     _registrar_evento_venda(
         venda,
         "whatsapp_confirmado",
-        "Nota marcada como enviada pelo WhatsApp.",
+        "Envio confirmado manualmente.",
         canal="whatsapp",
+        numero_whatsapp=numero_whatsapp,
+        origem_numero=origem_numero,
     )
     return JsonResponse({
         "sucesso": True,
         "mensagem": "Confirmacao de envio via WhatsApp salva.",
         "whatsapp_status": venda.whatsapp_status,
         "whatsapp_status_texto": venda.whatsapp_status_texto,
+        "comunicacao_descricao": "Envio confirmado manualmente.",
+        "comunicacao_numero": numero_whatsapp,
+        "comunicacao_origem": _rotulo_origem_numero_whatsapp(origem_numero),
     })
 
 
@@ -1161,7 +1191,48 @@ def _gerar_nota_whatsapp_imagem(venda):
     return png
 
 
-def _registrar_evento_venda(venda, tipo_evento, descricao, canal="sistema", usuario=None):
+def _normalizar_numero_whatsapp_evento(numero):
+    digitos = "".join(ch for ch in str(numero or "") if ch.isdigit())
+    if not digitos:
+        return ""
+    if not digitos.startswith("55") and len(digitos) in (10, 11):
+        digitos = "55" + digitos
+    return digitos
+
+
+def _numero_whatsapp_cadastro_venda(venda):
+    cliente = venda.cliente if venda else None
+    if not cliente:
+        return ""
+    numero = Cliente.normalizar_whatsapp(cliente.whatsapp_normalizado or cliente.whatsapp)
+    return _normalizar_numero_whatsapp_evento(numero)
+
+
+def _dados_numero_whatsapp_evento(venda, numero_usado=""):
+    numero_manual = _normalizar_numero_whatsapp_evento(numero_usado)
+    if numero_manual:
+        return numero_manual, EventoVenda.ORIGEM_NUMERO_AVULSO
+
+    numero_cadastro = _numero_whatsapp_cadastro_venda(venda)
+    if numero_cadastro:
+        return numero_cadastro, EventoVenda.ORIGEM_NUMERO_CADASTRO
+
+    return "", EventoVenda.ORIGEM_NUMERO_DESCONHECIDO
+
+
+def _rotulo_origem_numero_whatsapp(origem):
+    return dict(EventoVenda.ORIGEM_NUMERO_CHOICES).get(origem or "", "")
+
+
+def _registrar_evento_venda(
+    venda,
+    tipo_evento,
+    descricao,
+    canal="sistema",
+    usuario=None,
+    numero_whatsapp=None,
+    origem_numero=None,
+):
     if not venda:
         return None
     usuario_texto = usuario if usuario is not None else (venda.operador or "")
@@ -1171,6 +1242,8 @@ def _registrar_evento_venda(venda, tipo_evento, descricao, canal="sistema", usua
         descricao=descricao,
         canal=canal,
         usuario=usuario_texto,
+        numero_whatsapp=numero_whatsapp or None,
+        origem_numero=origem_numero or None,
     )
 
 

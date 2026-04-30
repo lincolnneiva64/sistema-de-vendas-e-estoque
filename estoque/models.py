@@ -284,6 +284,15 @@ class Venda(models.Model):
 
 
 class EventoVenda(models.Model):
+    ORIGEM_NUMERO_CADASTRO = "cadastro"
+    ORIGEM_NUMERO_AVULSO = "avulso"
+    ORIGEM_NUMERO_DESCONHECIDO = "desconhecido"
+    ORIGEM_NUMERO_CHOICES = [
+        (ORIGEM_NUMERO_CADASTRO, "Cadastro"),
+        (ORIGEM_NUMERO_AVULSO, "Avulso/manual"),
+        (ORIGEM_NUMERO_DESCONHECIDO, "Desconhecido"),
+    ]
+
     venda = models.ForeignKey(
         Venda,
         on_delete=models.CASCADE,
@@ -293,6 +302,13 @@ class EventoVenda(models.Model):
     descricao = models.TextField(blank=True)
     canal = models.CharField(max_length=40, blank=True)
     usuario = models.CharField(max_length=120, blank=True, null=True)
+    numero_whatsapp = models.CharField(max_length=20, blank=True, null=True)
+    origem_numero = models.CharField(
+        max_length=20,
+        choices=ORIGEM_NUMERO_CHOICES,
+        blank=True,
+        null=True,
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:
