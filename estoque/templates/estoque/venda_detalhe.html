@@ -74,29 +74,27 @@
 
         .whatsapp-confirmacao-pendente {
             border-color: #d97706 !important;
-            background: #fde68a !important;
-            color: #78350f !important;
-            box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.52), 0 8px 18px rgba(146, 64, 14, 0.18);
-            animation: lembrete-whatsapp 1.25s ease-in-out infinite;
+            background: linear-gradient(180deg, #fef3c7 0%, #f59e0b 100%) !important;
+            color: #713f12 !important;
+            box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.36), 0 5px 0 #b45309, 0 13px 22px rgba(120, 53, 15, 0.18);
+            animation: lembrete-whatsapp 1.35s ease-in-out infinite;
+            text-shadow: 0 1px 1px rgba(255, 251, 235, 0.6);
         }
 
         @keyframes lembrete-whatsapp {
             0% {
                 border-color: #d97706;
-                background: #fde68a;
-                box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.52), 0 8px 18px rgba(146, 64, 14, 0.18);
+                box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.36), 0 5px 0 #b45309, 0 13px 22px rgba(120, 53, 15, 0.18);
                 transform: translateY(0) scale(1);
             }
             50% {
-                border-color: #f97316;
-                background: #fed7aa;
-                box-shadow: 0 0 0 9px rgba(249, 115, 22, 0.18), 0 12px 26px rgba(146, 64, 14, 0.28);
-                transform: translateY(-2px) scale(1.055);
+                border-color: #f59e0b;
+                box-shadow: 0 0 0 7px rgba(245, 158, 11, 0.14), 0 7px 0 #b45309, 0 16px 26px rgba(120, 53, 15, 0.24);
+                transform: translateY(-2px) scale(1.018);
             }
             100% {
                 border-color: #d97706;
-                background: #fde68a;
-                box-shadow: 0 0 0 0 rgba(217, 119, 6, 0), 0 8px 18px rgba(146, 64, 14, 0.18);
+                box-shadow: 0 0 0 0 rgba(245, 158, 11, 0), 0 5px 0 #b45309, 0 13px 22px rgba(120, 53, 15, 0.18);
                 transform: translateY(0) scale(1);
             }
         }
@@ -747,6 +745,7 @@
         const registrarImpressaoUrl = "{% url 'estoque:registrar_impressao' venda.id %}";
         const confirmarWhatsappUrl = "{% url 'estoque:confirmar_whatsapp' venda.id %}";
         const whatsappPendenteKey = "whatsapp_pending_confirm_venda_{{ venda.id }}";
+        const whatsappPendenteValor = "conversa_aberta";
 
         function aplicarLembreteWhatsapp() {
             if (btnConfirmarWhatsapp) {
@@ -760,15 +759,6 @@
             }
         }
 
-        function salvarLembreteWhatsapp() {
-            try {
-                localStorage.setItem(whatsappPendenteKey, "1");
-            } catch (erro) {
-                // O destaque visual ainda funciona mesmo se o navegador bloquear localStorage.
-            }
-            aplicarLembreteWhatsapp();
-        }
-
         function limparLembreteWhatsapp() {
             try {
                 localStorage.removeItem(whatsappPendenteKey);
@@ -779,11 +769,14 @@
         }
 
         try {
-            if (localStorage.getItem(whatsappPendenteKey) === "1") {
+            if (localStorage.getItem(whatsappPendenteKey) === whatsappPendenteValor) {
                 aplicarLembreteWhatsapp();
+            } else {
+                localStorage.removeItem(whatsappPendenteKey);
+                removerLembreteWhatsapp();
             }
         } catch (erro) {
-            // Sem acao necessaria.
+            removerLembreteWhatsapp();
         }
 
         if (btnImprimir) {

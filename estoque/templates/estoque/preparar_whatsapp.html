@@ -295,7 +295,7 @@
         <div class="whatsapp-preparo-acoes whatsapp-preparo-acoes-principais">
           <a class="whatsapp-preparo-btn imagem" href="{% url 'estoque:venda_whatsapp_imagem' venda.id %}" target="_blank" rel="noopener">Abrir imagem da nota</a>
           {% if whatsapp_url %}
-            <a class="whatsapp-preparo-btn whatsapp" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Abrir conversa no WhatsApp</a>
+            <a class="whatsapp-preparo-btn whatsapp" href="{{ whatsapp_url }}" target="_blank" rel="noopener" data-whatsapp-lembrete="true">Abrir conversa no WhatsApp</a>
           {% endif %}
         </div>
 
@@ -311,6 +311,16 @@
 <script>
   const numeroManual = document.getElementById("numeroWhatsappManual");
   const btnAbrirWhatsappManual = document.getElementById("btnAbrirWhatsappManual");
+  const whatsappPendenteKey = "whatsapp_pending_confirm_venda_{{ venda.id }}";
+  const whatsappPendenteValor = "conversa_aberta";
+
+  function salvarLembreteWhatsapp() {
+    try {
+      localStorage.setItem(whatsappPendenteKey, whatsappPendenteValor);
+    } catch (erro) {
+      // O fluxo continua mesmo se o navegador bloquear localStorage.
+    }
+  }
 
   function montarUrlWhatsapp(numero) {
     let digitos = String(numero || "").replace(/\D/g, "");
@@ -330,8 +340,13 @@
         numeroManual.focus();
         return;
       }
+      salvarLembreteWhatsapp();
       window.open(url, "_blank", "noopener");
     });
   }
+
+  document.querySelectorAll("[data-whatsapp-lembrete]").forEach((elemento) => {
+    elemento.addEventListener("click", salvarLembreteWhatsapp);
+  });
 </script>
 {% endblock %}
