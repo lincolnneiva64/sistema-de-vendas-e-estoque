@@ -188,21 +188,104 @@
     pointer-events: none;
   }
 
-  .whatsapp-preparo-numero {
-    display: flex;
-    gap: 8px;
-    margin: 0 0 8px;
+  .whatsapp-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(15, 23, 42, 0.38);
+    backdrop-filter: blur(3px);
   }
 
-  .whatsapp-preparo-numero input {
-    min-width: 0;
-    flex: 1;
+  .whatsapp-modal-overlay.visivel {
+    display: flex;
+  }
+
+  .whatsapp-modal {
+    width: min(440px, 100%);
+    border: 1px solid #dbe5f0;
+    border-radius: 16px;
+    background: #ffffff;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+    overflow: hidden;
+  }
+
+  .whatsapp-modal-header {
+    padding: 16px 18px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+  }
+
+  .whatsapp-modal-title {
+    margin: 0;
+    color: #1e3a8a;
+    font-size: 1.12rem;
+    font-weight: 900;
+  }
+
+  .whatsapp-modal-body {
+    padding: 16px 18px 18px;
+  }
+
+  .whatsapp-modal-texto {
+    margin: 0 0 12px;
+    color: #334155;
+    font-size: 0.94rem;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+
+  .whatsapp-modal-campo label {
+    display: block;
+    margin-bottom: 6px;
+    color: #64748b;
+    font-size: 0.76rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .whatsapp-modal-campo input {
+    width: 100%;
     min-height: 36px;
-    padding: 0 12px;
-    border: 1px solid #cbd5e1;
+    padding: 0 11px;
+    border: 1.5px solid #cbd5e1;
     border-radius: 9px;
     font-size: 0.9rem;
     font-weight: 750;
+    outline: none;
+    box-sizing: border-box;
+  }
+
+  .whatsapp-modal-campo input:focus {
+    border-color: #16a34a;
+    box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.13);
+  }
+
+  .whatsapp-modal-erro {
+    display: none;
+    margin-top: 8px;
+    padding: 8px 10px;
+    border: 1px solid #fed7aa;
+    border-radius: 9px;
+    background: #fff7ed;
+    color: #9a3412;
+    font-size: 0.84rem;
+    font-weight: 800;
+  }
+
+  .whatsapp-modal-erro.visivel {
+    display: block;
+  }
+
+  .whatsapp-modal-acoes {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
   }
 
   @media (max-width: 640px) {
@@ -215,12 +298,13 @@
       flex-direction: column;
     }
 
-    .whatsapp-preparo-numero {
-      flex-direction: column;
-    }
-
     .whatsapp-preparo-btn {
       width: 100%;
+    }
+
+    .whatsapp-modal-acoes {
+      align-items: stretch;
+      flex-direction: column-reverse;
     }
   }
 </style>
@@ -279,23 +363,12 @@
           Se copiar imagem nao funcionar, salve em Downloads e envie pelo + &gt; Fotos e videos.
         </div>
 
-        {% if not whatsapp_url %}
-          <div class="whatsapp-preparo-aviso">
-            Este cliente nao possui WhatsApp cadastrado. Informe o numero abaixo para abrir a conversa sem alterar o cadastro.
-          </div>
-        {% endif %}
-
-        {% if not whatsapp_url %}
-          <div class="whatsapp-preparo-numero">
-            <input type="tel" id="numeroWhatsappManual" placeholder="WhatsApp com DDD">
-            <button type="button" id="btnAbrirWhatsappManual" class="whatsapp-preparo-btn whatsapp">Abrir conversa no WhatsApp</button>
-          </div>
-        {% endif %}
-
         <div class="whatsapp-preparo-acoes whatsapp-preparo-acoes-principais">
           <a class="whatsapp-preparo-btn imagem" href="{% url 'estoque:venda_whatsapp_imagem' venda.id %}" target="_blank" rel="noopener">Abrir imagem da nota</a>
           {% if whatsapp_url %}
             <a class="whatsapp-preparo-btn whatsapp" href="{{ whatsapp_url }}" target="_blank" rel="noopener" data-whatsapp-lembrete="true">Abrir conversa no WhatsApp</a>
+          {% else %}
+            <button type="button" id="btnAbrirModalWhatsapp" class="whatsapp-preparo-btn whatsapp">Abrir conversa no WhatsApp</button>
           {% endif %}
         </div>
 
@@ -308,9 +381,39 @@
     </section>
   </div>
 </main>
+<div id="whatsappManualModal" class="whatsapp-modal-overlay" aria-hidden="true">
+  <div class="whatsapp-modal" role="dialog" aria-modal="true" aria-labelledby="whatsappManualTitulo">
+    <header class="whatsapp-modal-header">
+      <h2 id="whatsappManualTitulo" class="whatsapp-modal-title">Enviar nota por WhatsApp</h2>
+    </header>
+    <div class="whatsapp-modal-body">
+      <p class="whatsapp-modal-texto">
+        {% if venda.cliente %}
+          Este cliente nao possui WhatsApp cadastrado.<br>
+          Informe o WhatsApp para enviar esta nota agora.
+        {% else %}
+          Informe o WhatsApp do cliente para enviar esta nota.
+        {% endif %}
+      </p>
+      <div class="whatsapp-modal-campo">
+        <label for="numeroWhatsappManual">WhatsApp do cliente</label>
+        <input type="tel" id="numeroWhatsappManual" placeholder="(91) 99999-9999" autocomplete="tel">
+      </div>
+      <div id="whatsappManualErro" class="whatsapp-modal-erro" role="status" aria-live="polite"></div>
+      <div class="whatsapp-modal-acoes">
+        <button type="button" id="btnCancelarWhatsappManual" class="whatsapp-preparo-btn secundario">Cancelar</button>
+        <button type="button" id="btnAbrirWhatsappManual" class="whatsapp-preparo-btn whatsapp">Enviar agora</button>
+      </div>
+    </div>
+  </div>
+</div>
 <script>
   const numeroManual = document.getElementById("numeroWhatsappManual");
   const btnAbrirWhatsappManual = document.getElementById("btnAbrirWhatsappManual");
+  const btnAbrirModalWhatsapp = document.getElementById("btnAbrirModalWhatsapp");
+  const btnCancelarWhatsappManual = document.getElementById("btnCancelarWhatsappManual");
+  const whatsappManualModal = document.getElementById("whatsappManualModal");
+  const whatsappManualErro = document.getElementById("whatsappManualErro");
   const whatsappPendenteKey = "whatsapp_pending_confirm_venda_{{ venda.id }}";
   const whatsappPendenteValor = "conversa_aberta";
 
@@ -324,7 +427,7 @@
 
   function montarUrlWhatsapp(numero) {
     let digitos = String(numero || "").replace(/\D/g, "");
-    if (digitos.length === 10 || digitos.length === 11) {
+    if (!digitos.startsWith("55") && (digitos.length === 10 || digitos.length === 11)) {
       digitos = "55" + digitos;
     }
     if (digitos.length < 12) {
@@ -333,17 +436,68 @@
     return "https://web.whatsapp.com/send?phone=" + digitos + "&text=" + encodeURIComponent("Segue nota em imagem.");
   }
 
+  function mostrarErroWhatsappManual(texto) {
+    if (!whatsappManualErro) return;
+    whatsappManualErro.textContent = texto;
+    whatsappManualErro.classList.add("visivel");
+  }
+
+  function limparErroWhatsappManual() {
+    if (!whatsappManualErro) return;
+    whatsappManualErro.textContent = "";
+    whatsappManualErro.classList.remove("visivel");
+  }
+
+  function abrirModalWhatsappManual() {
+    if (!whatsappManualModal || !numeroManual) return;
+    limparErroWhatsappManual();
+    whatsappManualModal.classList.add("visivel");
+    whatsappManualModal.setAttribute("aria-hidden", "false");
+    setTimeout(() => numeroManual.focus(), 0);
+  }
+
+  function fecharModalWhatsappManual() {
+    if (!whatsappManualModal) return;
+    whatsappManualModal.classList.remove("visivel");
+    whatsappManualModal.setAttribute("aria-hidden", "true");
+    limparErroWhatsappManual();
+  }
+
   if (btnAbrirWhatsappManual && numeroManual) {
     btnAbrirWhatsappManual.addEventListener("click", () => {
       const url = montarUrlWhatsapp(numeroManual.value);
       if (!url) {
+        mostrarErroWhatsappManual("Informe um WhatsApp valido com DDD.");
         numeroManual.focus();
         return;
       }
       salvarLembreteWhatsapp();
+      fecharModalWhatsappManual();
+      // Futuro: perguntar se o usuario deseja salvar este telefone no cadastro do cliente.
       window.open(url, "_blank", "noopener");
     });
   }
+
+  btnAbrirModalWhatsapp?.addEventListener("click", abrirModalWhatsappManual);
+  btnCancelarWhatsappManual?.addEventListener("click", fecharModalWhatsappManual);
+  whatsappManualModal?.addEventListener("mousedown", (event) => {
+    if (event.target === whatsappManualModal) {
+      fecharModalWhatsappManual();
+    }
+  });
+  numeroManual?.addEventListener("input", limparErroWhatsappManual);
+
+  document.addEventListener("keydown", (event) => {
+    if (!whatsappManualModal?.classList.contains("visivel")) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      fecharModalWhatsappManual();
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      btnAbrirWhatsappManual?.click();
+    }
+  });
 
   document.querySelectorAll("[data-whatsapp-lembrete]").forEach((elemento) => {
     elemento.addEventListener("click", salvarLembreteWhatsapp);
