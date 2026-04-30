@@ -488,6 +488,45 @@ select {
     border-color: #ea580c;
     color: #7c2d12;
 }
+.venda-gravada-bloco {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px solid #f2c36b;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%);
+    box-shadow: 0 10px 24px rgba(120, 53, 15, 0.12);
+}
+.venda-gravada-bloco.visivel {
+    display: flex;
+}
+.venda-gravada-texto {
+    color: #713f12;
+    font-size: 14px;
+    font-weight: 900;
+    line-height: 1.2;
+}
+.venda-gravada-acoes {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+.venda-gravada-acoes .acao-venda-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    min-height: 32px;
+    line-height: 1;
+    padding: 0 13px;
+    box-sizing: border-box;
+    text-decoration: none;
+}
 @media (max-width: 980px) {
     .barra-acoes-venda {
         align-items: flex-start;
@@ -495,6 +534,13 @@ select {
     }
     .acoes-venda-grupo.direita {
         margin-left: 0;
+        justify-content: flex-start;
+    }
+    .venda-gravada-bloco {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+    .venda-gravada-acoes {
         justify-content: flex-start;
     }
 }
@@ -765,6 +811,13 @@ td:first-child {
             <button type="button" id="btnNovaVenda" class="acao-venda-btn cuidado">Nova Venda / Limpar Tudo</button>
             </div>
         </div>
+        <div id="vendaGravadaBloco" class="venda-gravada-bloco" role="status" aria-live="polite">
+            <div id="vendaGravadaTexto" class="venda-gravada-texto">Venda gravada com sucesso.</div>
+            <div class="venda-gravada-acoes">
+                <a id="btnAbrirNotaVendaGravada" class="acao-venda-btn secundaria" href="#" target="_blank" rel="noopener">Abrir nota</a>
+                <button type="button" id="btnNovaVendaGravada" class="acao-venda-btn secundaria">Nova venda</button>
+            </div>
+        </div>
     </div>
 
     <div class="bloco-venda">
@@ -905,6 +958,10 @@ const btnLimparCabecalho = document.getElementById("btnLimparCabecalho");
 const btnLimparItens = document.getElementById("btnLimparItens");
 const btnConsultarVendas = document.getElementById("btnConsultarVendas");
 const vendaToast = document.getElementById("vendaToast");
+const vendaGravadaBloco = document.getElementById("vendaGravadaBloco");
+const vendaGravadaTexto = document.getElementById("vendaGravadaTexto");
+const btnAbrirNotaVendaGravada = document.getElementById("btnAbrirNotaVendaGravada");
+const btnNovaVendaGravada = document.getElementById("btnNovaVendaGravada");
 const vendaConfirmacaoOverlay = document.getElementById("vendaConfirmacaoOverlay");
 const vendaConfirmacaoTexto = document.getElementById("vendaConfirmacaoTexto");
 const btnCancelarConfirmacaoVenda = document.getElementById("btnCancelarConfirmacaoVenda");
@@ -1040,6 +1097,18 @@ function mostrarToastVenda(mensagem) {
     vendaToastTimer = setTimeout(() => {
         vendaToast.classList.remove("visivel");
     }, 3200);
+}
+
+function mostrarBlocoVendaGravada(vendaId, visualizarUrl, mensagem) {
+    if (!vendaGravadaBloco || !vendaId) return;
+
+    vendaGravadaTexto.textContent = mensagem || ("Venda #" + vendaId + " gravada com sucesso.");
+    btnAbrirNotaVendaGravada.href = visualizarUrl || "#";
+    vendaGravadaBloco.classList.add("visivel");
+}
+
+function ocultarBlocoVendaGravada() {
+    vendaGravadaBloco?.classList.remove("visivel");
 }
 
 function confirmarAcaoVenda(mensagem) {
@@ -1527,6 +1596,7 @@ async function gravarVendaAtual() {
         vendaGravadaId = retorno.venda_id;
         vendaGravadaUrl = retorno.visualizar_url || "";
         mostrarToastVenda(retorno.mensagem || ("Venda #" + vendaGravadaId + " gravada com sucesso."));
+        mostrarBlocoVendaGravada(vendaGravadaId, vendaGravadaUrl, retorno.mensagem);
     } catch (erro) {
         mostrarToastVenda("Falha de comunicacao ao gravar a venda.");
     } finally {
@@ -1575,7 +1645,14 @@ btnNovaVenda.addEventListener("click", async () => {
 
     limparItensVenda();
     limparCabecalhoVenda(true);
+    vendaGravadaId = null;
+    vendaGravadaUrl = "";
+    ocultarBlocoVendaGravada();
     mostrarToastVenda("Venda atual limpa.");
+});
+
+btnNovaVendaGravada?.addEventListener("click", () => {
+    btnNovaVenda.click();
 });
 
 btnCancelarConfirmacaoVenda.addEventListener("click", () => fecharConfirmacaoVenda(false));
