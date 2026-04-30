@@ -488,7 +488,8 @@
                         <a href="{% url 'estoque:vendas' %}">Voltar para Vendas</a>
                         <a href="{% url 'estoque:consultar_vendas' %}">Voltar para Consulta</a>
                         <button type="button" id="btnImprimir">Imprimir</button>
-                        <a href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}" class="whatsapp-acao">PDF para WhatsApp</a>
+                        <a href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}" class="whatsapp-acao">Imagem / WhatsApp</a>
+                        <a href="{% url 'estoque:venda_whatsapp_pdf' venda.id %}" target="_blank" rel="noopener">PDF</a>
                         <button type="button" id="btnConfirmarWhatsapp" class="whatsapp-acao">Marcar como enviada pelo WhatsApp</button>
                     </div>
                 </header>

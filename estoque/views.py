@@ -829,6 +829,17 @@ def venda_whatsapp_pdf(request, pk):
     return response
 
 
+def venda_whatsapp_imagem(request, pk):
+    venda = get_object_or_404(
+        Venda.objects.select_related("cliente").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+    buffer = _gerar_nota_whatsapp_imagem(venda)
+    response = HttpResponse(buffer.getvalue(), content_type="image/png")
+    response["Content-Disposition"] = f'inline; filename="nota-whatsapp-venda-{venda.id}.png"'
+    return response
+
+
 def preparar_whatsapp_venda(request, pk):
     venda = get_object_or_404(
         Venda.objects.select_related("cliente"),
@@ -933,7 +944,7 @@ def _quebrar_texto(draw, texto, fonte, largura_maxima):
     return linhas
 
 
-def _gerar_nota_whatsapp_pdf(venda):
+def _gerar_paginas_nota_whatsapp(venda):
     largura, altura = 1080, 1600
     margem = 42
     fundo = "#f6f1e8"
@@ -1082,10 +1093,35 @@ def _gerar_nota_whatsapp_pdf(venda):
     draw.text((largura - margem - 54 - total_largura, y + 27), total, fill=verde, font=fonte_total)
 
     paginas.append(imagem)
+    return paginas
+
+
+def _gerar_nota_whatsapp_pdf(venda):
+    paginas = _gerar_paginas_nota_whatsapp(venda)
     pdf = BytesIO()
     paginas[0].save(pdf, format="PDF", save_all=True, append_images=paginas[1:], resolution=150.0)
     pdf.seek(0)
     return pdf
+
+
+def _gerar_nota_whatsapp_imagem(venda):
+    paginas = _gerar_paginas_nota_whatsapp(venda)
+    if len(paginas) == 1:
+        imagem_final = paginas[0]
+    else:
+        largura = max(pagina.width for pagina in paginas)
+        espaco = 24
+        altura = sum(pagina.height for pagina in paginas) + espaco * (len(paginas) - 1)
+        imagem_final = Image.new("RGB", (largura, altura), "#f6f1e8")
+        y = 0
+        for pagina in paginas:
+            imagem_final.paste(pagina, ((largura - pagina.width) // 2, y))
+            y += pagina.height + espaco
+
+    png = BytesIO()
+    imagem_final.save(png, format="PNG")
+    png.seek(0)
+    return png
 
 
 def _registrar_evento_venda(venda, tipo_evento, descricao, canal="sistema", usuario=None):
@@ -1113,7 +1149,7 @@ def montar_link_whatsapp_venda(venda):
     if len(numero) in (10, 11):
         numero = "55" + numero
 
-    linhas = ["Segue nota em PDF."]
+    linhas = ["Segue nota em imagem."]
 
     mensagem = "\n".join(linhas)
     return f"https://web.whatsapp.com/send?phone={numero}&text={quote(mensagem)}"

@@ -1,12 +1,12 @@
 {% extends "estoque/base.html" %}
 
-{% block title %}PDF para WhatsApp{% endblock %}
+{% block title %}Imagem para WhatsApp{% endblock %}
 
 {% block content %}
 <style>
   .whatsapp-preparo-page {
     min-height: calc(100vh - 90px);
-    padding: 28px 16px;
+    padding: 16px 14px;
     background: #eef3f8;
     color: #172033;
     font-family: "Segoe UI", Arial, sans-serif;
@@ -26,39 +26,39 @@
   }
 
   .whatsapp-preparo-header {
-    padding: 22px 24px;
+    padding: 16px 20px;
     background: #f8fafc;
     border-bottom: 1px solid #e2e8f0;
   }
 
   .whatsapp-preparo-title {
     margin: 0;
-    color: #111827;
+    color: #1e3a8a;
     font-size: 1.55rem;
     font-weight: 900;
   }
 
   .whatsapp-preparo-subtitle {
-    margin: 8px 0 0;
+    margin: 5px 0 0;
     color: #64748b;
-    font-size: 0.95rem;
+    font-size: 1rem;
     font-weight: 650;
   }
 
   .whatsapp-preparo-body {
-    padding: 22px 24px 24px;
+    padding: 16px 20px 18px;
   }
 
   .whatsapp-preparo-dados {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    margin-bottom: 18px;
+    gap: 8px;
+    margin-bottom: 12px;
   }
 
   .whatsapp-preparo-campo {
-    min-height: 76px;
-    padding: 12px 14px;
+    min-height: 56px;
+    padding: 8px 10px;
     border: 1px solid #e2e8f0;
     border-radius: 11px;
     background: #f8fafc;
@@ -66,7 +66,7 @@
 
   .whatsapp-preparo-label {
     display: block;
-    margin-bottom: 6px;
+    margin-bottom: 3px;
     color: #64748b;
     font-size: 0.72rem;
     font-weight: 900;
@@ -76,35 +76,59 @@
 
   .whatsapp-preparo-valor {
     color: #172033;
-    font-size: 1rem;
+    font-size: 0.94rem;
     font-weight: 850;
     word-break: break-word;
   }
 
   .whatsapp-preparo-total {
     color: #166534;
-    font-size: 1.12rem;
+    font-size: 1.02rem;
     font-weight: 950;
   }
 
   .whatsapp-preparo-orientacao,
   .whatsapp-preparo-aviso {
-    padding: 13px 14px;
-    border-radius: 12px;
-    font-size: 0.95rem;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 0.9rem;
     font-weight: 750;
     line-height: 1.4;
   }
 
   .whatsapp-preparo-orientacao {
-    margin-bottom: 16px;
+    margin-bottom: 10px;
     border: 1px solid #ead19a;
     background: #fff8e8;
     color: #5f3b00;
   }
 
+  .whatsapp-preparo-passos {
+    margin: 0 0 10px;
+    padding: 11px 12px 11px 32px;
+    border: 1px solid #bbf7d0;
+    border-radius: 12px;
+    background: #f0fdf4;
+    color: #14532d;
+    font-size: 0.88rem;
+    font-weight: 750;
+    line-height: 1.32;
+  }
+
+  .whatsapp-preparo-passos li + li {
+    margin-top: 4px;
+  }
+
+  .whatsapp-preparo-observacao {
+    margin: -2px 0 10px;
+    color: #64748b;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
   .whatsapp-preparo-aviso {
-    margin-bottom: 16px;
+    margin-bottom: 10px;
     border: 1px solid #fed7aa;
     background: #fff7ed;
     color: #9a3412;
@@ -113,18 +137,23 @@
   .whatsapp-preparo-acoes {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
+    margin-top: 6px;
+  }
+
+  .whatsapp-preparo-acoes-principais {
+    margin-bottom: 6px;
   }
 
   .whatsapp-preparo-btn {
-    min-height: 40px;
-    padding: 10px 14px;
+    min-height: 36px;
+    padding: 8px 12px;
     border: 1px solid #cbd5e1;
     border-radius: 9px;
     background: #ffffff;
     color: #334155;
-    font-size: 0.9rem;
+    font-size: 0.84rem;
     font-weight: 850;
     text-decoration: none;
     display: inline-flex;
@@ -138,10 +167,16 @@
     color: #5f3b00;
   }
 
+  .whatsapp-preparo-btn.imagem {
+    border-color: #22c55e;
+    background: #16a34a;
+    color: #ffffff;
+  }
+
   .whatsapp-preparo-btn.whatsapp {
     border-color: #22c55e;
-    background: #dcfce7;
-    color: #14532d;
+    background: #16a34a;
+    color: #ffffff;
   }
 
   .whatsapp-preparo-btn.secundario {
@@ -153,6 +188,23 @@
     pointer-events: none;
   }
 
+  .whatsapp-preparo-numero {
+    display: flex;
+    gap: 8px;
+    margin: 0 0 8px;
+  }
+
+  .whatsapp-preparo-numero input {
+    min-width: 0;
+    flex: 1;
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 9px;
+    font-size: 0.9rem;
+    font-weight: 750;
+  }
+
   @media (max-width: 640px) {
     .whatsapp-preparo-dados {
       grid-template-columns: 1fr;
@@ -160,6 +212,10 @@
 
     .whatsapp-preparo-acoes {
       align-items: stretch;
+      flex-direction: column;
+    }
+
+    .whatsapp-preparo-numero {
       flex-direction: column;
     }
 
@@ -173,8 +229,8 @@
   <div class="whatsapp-preparo-shell">
     <section class="whatsapp-preparo-card">
       <header class="whatsapp-preparo-header">
-        <h1 class="whatsapp-preparo-title">PDF para WhatsApp</h1>
-        <p class="whatsapp-preparo-subtitle">O PDF da nota ja contem as informacoes da venda.</p>
+        <h1 class="whatsapp-preparo-title">Imagem para WhatsApp</h1>
+        <p class="whatsapp-preparo-subtitle">A imagem da nota fica pronta para abrir, copiar e enviar no WhatsApp.</p>
       </header>
 
       <div class="whatsapp-preparo-body">
@@ -206,22 +262,45 @@
         </div>
 
         <div class="whatsapp-preparo-orientacao">
-          O PDF da nota ja contem as informacoes da venda. Abra ou baixe o PDF, depois anexe o arquivo na conversa do WhatsApp.
+          O WhatsApp Web abre a conversa, mas nao anexa a imagem automaticamente.<br>
+          O envio da imagem precisa ser feito manualmente.
+        </div>
+
+        <ol class="whatsapp-preparo-passos">
+          <li>Clique em "Abrir imagem da nota".</li>
+          <li>Na imagem aberta, clique com o botao direito e escolha "Copiar imagem".</li>
+          <li>Volte para esta tela e clique em "Abrir conversa no WhatsApp".</li>
+          <li>No WhatsApp, pressione Ctrl + V no campo de mensagem.</li>
+          <li>Envie a imagem.</li>
+          <li>Depois do envio, volte para a nota e marque como enviada, se desejar registrar.</li>
+        </ol>
+
+        <div class="whatsapp-preparo-observacao">
+          Se copiar imagem nao funcionar, salve em Downloads e envie pelo + &gt; Fotos e videos.
         </div>
 
         {% if not whatsapp_url %}
           <div class="whatsapp-preparo-aviso">
-            Este cliente nao possui WhatsApp cadastrado. Cadastre o WhatsApp do cliente antes de abrir a conversa.
+            Este cliente nao possui WhatsApp cadastrado. Informe o numero abaixo para abrir a conversa sem alterar o cadastro.
           </div>
         {% endif %}
 
+        {% if not whatsapp_url %}
+          <div class="whatsapp-preparo-numero">
+            <input type="tel" id="numeroWhatsappManual" placeholder="WhatsApp com DDD">
+            <button type="button" id="btnAbrirWhatsappManual" class="whatsapp-preparo-btn whatsapp">Abrir conversa no WhatsApp</button>
+          </div>
+        {% endif %}
+
+        <div class="whatsapp-preparo-acoes whatsapp-preparo-acoes-principais">
+          <a class="whatsapp-preparo-btn imagem" href="{% url 'estoque:venda_whatsapp_imagem' venda.id %}" target="_blank" rel="noopener">Abrir imagem da nota</a>
+          {% if whatsapp_url %}
+            <a class="whatsapp-preparo-btn whatsapp" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Abrir conversa no WhatsApp</a>
+          {% endif %}
+        </div>
+
         <div class="whatsapp-preparo-acoes">
           <a class="whatsapp-preparo-btn pdf" href="{% url 'estoque:venda_whatsapp_pdf' venda.id %}" target="_blank" rel="noopener">Abrir PDF da nota</a>
-          {% if whatsapp_url %}
-            <a class="whatsapp-preparo-btn whatsapp" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Abrir WhatsApp do cliente</a>
-          {% else %}
-            <span class="whatsapp-preparo-btn whatsapp desabilitado">Abrir WhatsApp do cliente</span>
-          {% endif %}
           <a class="whatsapp-preparo-btn secundario" href="{% url 'estoque:consultar_vendas' %}">Voltar para consulta</a>
           <a class="whatsapp-preparo-btn secundario" href="{% url 'estoque:venda_detalhe' venda.id %}">Voltar para a nota</a>
         </div>
@@ -229,4 +308,30 @@
     </section>
   </div>
 </main>
+<script>
+  const numeroManual = document.getElementById("numeroWhatsappManual");
+  const btnAbrirWhatsappManual = document.getElementById("btnAbrirWhatsappManual");
+
+  function montarUrlWhatsapp(numero) {
+    let digitos = String(numero || "").replace(/\D/g, "");
+    if (digitos.length === 10 || digitos.length === 11) {
+      digitos = "55" + digitos;
+    }
+    if (digitos.length < 12) {
+      return "";
+    }
+    return "https://web.whatsapp.com/send?phone=" + digitos + "&text=" + encodeURIComponent("Segue nota em imagem.");
+  }
+
+  if (btnAbrirWhatsappManual && numeroManual) {
+    btnAbrirWhatsappManual.addEventListener("click", () => {
+      const url = montarUrlWhatsapp(numeroManual.value);
+      if (!url) {
+        numeroManual.focus();
+        return;
+      }
+      window.open(url, "_blank", "noopener");
+    });
+  }
+</script>
 {% endblock %}
