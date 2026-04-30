@@ -188,6 +188,38 @@
     pointer-events: none;
   }
 
+  .whatsapp-preparo-btn.whatsapp-pendente {
+    display: none;
+  }
+
+  .whatsapp-preparo-btn.whatsapp-pendente.visivel {
+    display: inline-flex;
+    border-color: #d97706;
+    background: linear-gradient(180deg, #fef3c7 0%, #f59e0b 100%);
+    color: #713f12;
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.34), 0 4px 0 #b45309, 0 10px 18px rgba(120, 53, 15, 0.16);
+    text-shadow: 0 1px 1px rgba(255, 251, 235, 0.58);
+    animation: whatsapp-pendente 1.35s ease-in-out infinite;
+  }
+
+  @keyframes whatsapp-pendente {
+    0% {
+      border-color: #d97706;
+      box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.34), 0 4px 0 #b45309, 0 10px 18px rgba(120, 53, 15, 0.16);
+      transform: translateY(0);
+    }
+    50% {
+      border-color: #f59e0b;
+      box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.13), 0 6px 0 #b45309, 0 13px 22px rgba(120, 53, 15, 0.22);
+      transform: translateY(-1px);
+    }
+    100% {
+      border-color: #d97706;
+      box-shadow: 0 0 0 0 rgba(245, 158, 11, 0), 0 4px 0 #b45309, 0 10px 18px rgba(120, 53, 15, 0.16);
+      transform: translateY(0);
+    }
+  }
+
   .whatsapp-modal-overlay {
     position: fixed;
     inset: 0;
@@ -370,6 +402,7 @@
           {% else %}
             <button type="button" id="btnAbrirModalWhatsapp" class="whatsapp-preparo-btn whatsapp">Abrir conversa no WhatsApp</button>
           {% endif %}
+          <button type="button" id="btnConfirmarWhatsapp" class="whatsapp-preparo-btn whatsapp whatsapp-pendente" data-confirmar-url="{% url 'estoque:confirmar_whatsapp' venda.id %}">Confirmar WhatsApp</button>
         </div>
 
         <div class="whatsapp-preparo-acoes">
@@ -432,9 +465,33 @@
   function salvarLembreteWhatsapp() {
     try {
       localStorage.setItem(whatsappPendenteKey, whatsappPendenteValor);
+      if (btnConfirmarWhatsapp) {
+        btnConfirmarWhatsapp.classList.add("visivel");
+      }
     } catch (erro) {
       // O fluxo continua mesmo se o navegador bloquear localStorage.
     }
+  }
+
+  function aplicarLembreteWhatsapp() {
+    if (btnConfirmarWhatsapp) {
+      btnConfirmarWhatsapp.classList.add("visivel");
+    }
+  }
+
+  function removerLembreteWhatsapp() {
+    if (btnConfirmarWhatsapp) {
+      btnConfirmarWhatsapp.classList.remove("visivel");
+    }
+  }
+
+  function limparLembreteWhatsapp() {
+    try {
+      localStorage.removeItem(whatsappPendenteKey);
+    } catch (erro) {
+      // Sem acao necessaria.
+    }
+    removerLembreteWhatsapp();
   }
 
   function registrarWhatsappAberto(numeroUsado = "") {
@@ -533,5 +590,56 @@
       registrarWhatsappAberto();
     });
   });
+
+  const btnConfirmarWhatsapp = document.getElementById("btnConfirmarWhatsapp");
+  const confirmarWhatsappUrl = btnConfirmarWhatsapp?.dataset.confirmarUrl || "{% url 'estoque:confirmar_whatsapp' venda.id %}";
+  const whatsappStatusInicial = "{{ venda.whatsapp_status }}";
+
+  try {
+    if (whatsappStatusInicial === "enviado_confirmado") {
+      localStorage.removeItem(whatsappPendenteKey);
+      removerLembreteWhatsapp();
+    } else if (whatsappStatusInicial === "aberto" || localStorage.getItem(whatsappPendenteKey) === whatsappPendenteValor) {
+      aplicarLembreteWhatsapp();
+    } else {
+      localStorage.removeItem(whatsappPendenteKey);
+      removerLembreteWhatsapp();
+    }
+  } catch (erro) {
+    removerLembreteWhatsapp();
+  }
+
+  if (btnConfirmarWhatsapp) {
+    btnConfirmarWhatsapp.addEventListener("click", async () => {
+      btnConfirmarWhatsapp.disabled = true;
+      try {
+        const resposta = await fetch(confirmarWhatsappUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": obterCookie("csrftoken"),
+            "X-Requested-With": "XMLHttpRequest",
+          },
+        });
+        const data = await resposta.json();
+        if (!resposta.ok || !data.sucesso) {
+          mostrarErroWhatsappManual(data.mensagem || "Nao foi possivel confirmar o WhatsApp.");
+          btnConfirmarWhatsapp.disabled = false;
+          return;
+        }
+        try {
+          localStorage.removeItem(whatsappPendenteKey);
+        } catch (erro) {
+          // Sem acao necessaria.
+        }
+        removerLembreteWhatsapp();
+        btnConfirmarWhatsapp.textContent = data.whatsapp_status_texto || "Nota marcada como enviada";
+        btnConfirmarWhatsapp.disabled = true;
+      } catch (erro) {
+        mostrarErroWhatsappManual("Nao foi possivel confirmar o WhatsApp.");
+        btnConfirmarWhatsapp.disabled = false;
+      }
+    });
+  }
 </script>
 {% endblock %}
