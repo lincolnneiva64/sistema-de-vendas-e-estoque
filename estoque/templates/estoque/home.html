@@ -93,6 +93,12 @@ align-items: center;
             Clientes
           </a>
           <a
+            href="{% url 'estoque:entregas_dia' %}"
+            class="btn-acao-principal-painel"
+          >
+            Entregas
+          </a>
+          <a
             id="btnNovoProduto"
             href="{% url 'estoque:cadastrar_produto' %}"
             class="btn-acao-principal-painel"

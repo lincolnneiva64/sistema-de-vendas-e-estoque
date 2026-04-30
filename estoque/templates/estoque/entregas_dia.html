@@ -1,0 +1,282 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Entregas do Dia{% endblock %}
+{% block content %}
+<style>
+  .entregas-page { color: #172033; padding: 18px 0 32px; }
+  .entregas-shell { max-width: 1320px; margin: 0 auto; padding: 0 18px; }
+  .entregas-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 12px; margin-bottom: 12px;
+  }
+  .entregas-title { margin: 0; font-size: 1.55rem; font-weight: 850; color: #111827; }
+  .entregas-subtitle { margin: 4px 0 0; color: #64748b; font-size: 0.92rem; font-weight: 650; }
+  .entregas-header-actions { display: flex; gap: 9px; flex-wrap: wrap; justify-content: flex-end; }
+  .entregas-btn {
+    min-height: 36px; border: 1px solid #cbd5e1; border-radius: 9px; padding: 7px 12px;
+    background: #fff; color: #334155; font-size: 0.84rem; font-weight: 850;
+    text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .entregas-btn.primary { border-color: #2563eb; background: #2563eb; color: #fff; }
+  .entregas-btn.success { border-color: #16a34a; background: #16a34a; color: #fff; }
+  .entregas-btn.soft { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+  .entregas-grid { display: grid; grid-template-columns: minmax(320px, 0.95fr) minmax(460px, 1.45fr); gap: 12px; }
+  .entregas-card {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 13px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06); overflow: hidden;
+  }
+  .entregas-card-head {
+    padding: 11px 14px; border-bottom: 1px solid #edf1f6; background: #f8fafc;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .entregas-card-title { margin: 0; color: #1e3a8a; font-size: 0.98rem; font-weight: 900; }
+  .entregas-card-body { padding: 12px 14px; }
+  .entregas-filtro {
+    display: flex; align-items: end; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 12px; padding: 11px;
+  }
+  .entregas-field { min-width: 160px; }
+  .entregas-field label {
+    display: block; margin-bottom: 5px; color: #64748b; font-size: 0.72rem;
+    font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .entregas-field input,
+  .entregas-field select,
+  .entregas-field textarea {
+    width: 100%; border: 1.5px solid #d3dbe8; border-radius: 9px; background: #fff;
+    color: #172033; font-size: 0.88rem; font-weight: 700; padding: 8px 10px; box-sizing: border-box;
+  }
+  .entregas-field textarea { min-height: 72px; resize: vertical; }
+  .entregas-alert { border-radius: 11px; padding: 9px 11px; margin-bottom: 10px; font-weight: 800; font-size: 0.86rem; }
+  .entregas-alert.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
+  .entregas-alert.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+  .entregas-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+  .entregas-form + .entregas-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid #edf1f6; }
+  .entregas-form-title { margin: 0 0 8px; color: #172033; font-size: 0.92rem; font-weight: 900; }
+  .entregas-table-wrap { overflow-x: auto; }
+  .entregas-table { width: 100%; border-collapse: collapse; min-width: 820px; }
+  .entregas-table th {
+    background: #f8fafc; color: #64748b; font-size: 0.7rem; letter-spacing: 0.04em;
+    text-transform: uppercase; padding: 8px 9px; border-bottom: 1px solid #edf1f6; text-align: left;
+  }
+  .entregas-table td { padding: 8px 9px; border-bottom: 1px solid #f0f3f8; vertical-align: middle; font-size: 0.82rem; }
+  .entregas-numero { font-weight: 900; color: #172033; }
+  .entregas-cliente { font-weight: 850; color: #172033; }
+  .entregas-muted { color: #64748b; font-size: 0.78rem; font-weight: 700; }
+  .entregas-total { color: #166534; font-weight: 900; white-space: nowrap; }
+  .entregas-status {
+    display: inline-flex; width: fit-content; padding: 4px 7px; border-radius: 999px;
+    border: 1px solid #cbd5e1; background: #f8fafc; color: #475569;
+    font-size: 0.72rem; font-weight: 850;
+  }
+  .entregas-check { display: flex; align-items: center; gap: 6px; }
+  .entregas-check input { width: 16px; height: 16px; }
+  .entregas-ordem { width: 64px; }
+  .rotas-lista { display: grid; gap: 10px; }
+  .rota-card { border: 1px solid #dbe5f0; border-radius: 12px; overflow: hidden; background: #fff; }
+  .rota-head {
+    padding: 10px 12px; background: #f8fafc; border-bottom: 1px solid #edf1f6;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .rota-title { margin: 0; color: #172033; font-size: 0.95rem; font-weight: 900; }
+  .rota-status { color: #475569; font-size: 0.78rem; font-weight: 800; }
+  .rota-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  .rota-col { padding: 10px 12px; }
+  .rota-col + .rota-col { border-left: 1px solid #edf1f6; background: #fbfdff; }
+  .rota-col h4 { margin: 0 0 8px; color: #1e3a8a; font-size: 0.82rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.03em; }
+  .rota-lista { margin: 0; padding-left: 22px; }
+  .rota-lista li { margin: 0 0 6px; font-size: 0.84rem; font-weight: 750; }
+  .rota-obs { margin: 0 12px 10px; color: #64748b; font-size: 0.82rem; font-weight: 700; }
+  .entregas-vazio { color: #64748b; font-weight: 800; padding: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .entregas-grid { grid-template-columns: 1fr; }
+    .rota-cols { grid-template-columns: 1fr; }
+    .rota-col + .rota-col { border-left: 0; border-top: 1px solid #edf1f6; }
+  }
+</style>
+
+<div class="entregas-page">
+  <div class="entregas-shell">
+    <header class="entregas-header">
+      <div>
+        <h1 class="entregas-title">Entregas do Dia</h1>
+        <p class="entregas-subtitle">Organize entregas unitarias e rotas simples com ordem de carregamento inversa.</p>
+      </div>
+      <div class="entregas-header-actions">
+        <a class="entregas-btn soft" href="{% url 'estoque:vendas' %}">Nova venda</a>
+        <a class="entregas-btn soft" href="{% url 'estoque:consultar_vendas' %}">Consultar vendas</a>
+      </div>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="entregas-alert {% if message.tags == 'error' %}error{% elif message.tags == 'warning' %}warning{% else %}success{% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <form class="entregas-filtro" method="get">
+      <div class="entregas-field">
+        <label for="data">Data das entregas</label>
+        <input type="date" id="data" name="data" value="{{ data_entrega|date:'Y-m-d' }}">
+      </div>
+      <button type="submit" class="entregas-btn primary">Buscar</button>
+    </form>
+
+    <div class="entregas-grid">
+      <section class="entregas-card">
+        <div class="entregas-card-head">
+          <h2 class="entregas-card-title">Preparar entrega</h2>
+        </div>
+        <div class="entregas-card-body">
+          <form class="entregas-form" method="post">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="unitaria">
+            <input type="hidden" name="data" value="{{ data_entrega|date:'Y-m-d' }}">
+            <h3 class="entregas-form-title">Entrega unitaria</h3>
+            <div class="entregas-field">
+              <label for="vendaUnitaria">Venda</label>
+              <select id="vendaUnitaria" name="venda_unitaria">
+                <option value="">Selecione uma venda</option>
+                {% for venda in vendas %}
+                  <option value="{{ venda.id }}">#{{ venda.id }} - {{ venda.cliente.nome|default:"Consumidor" }} - R$ {{ venda.total|floatformat:2 }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="entregas-field" style="margin-top: 8px;">
+              <label for="obsUnitaria">Observacao</label>
+              <textarea id="obsUnitaria" name="observacao" placeholder="Opcional"></textarea>
+            </div>
+            <button type="submit" class="entregas-btn success" style="margin-top: 8px;">Criar entrega unitaria</button>
+          </form>
+
+          <form class="entregas-form" method="post">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="rota">
+            <input type="hidden" name="data" value="{{ data_entrega|date:'Y-m-d' }}">
+            <h3 class="entregas-form-title">Rota com varias entregas</h3>
+            {% if vendas %}
+              <div class="entregas-table-wrap">
+                <table class="entregas-table" style="min-width: 520px;">
+                  <thead>
+                    <tr>
+                      <th>Venda</th>
+                      <th>Cliente</th>
+                      <th>Ordem</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for venda in vendas %}
+                      <tr>
+                        <td>
+                          <label class="entregas-check">
+                            <input type="checkbox" name="vendas_rota" value="{{ venda.id }}">
+                            <span>#{{ venda.id }}</span>
+                          </label>
+                        </td>
+                        <td>{{ venda.cliente.nome|default:"Consumidor" }}</td>
+                        <td><input class="entregas-ordem" type="number" name="ordem_{{ venda.id }}" value="{{ forloop.counter }}" min="1"></td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <div class="entregas-vazio">Nenhuma venda encontrada para esta data.</div>
+            {% endif %}
+            <div class="entregas-field" style="margin-top: 8px;">
+              <label for="obsRota">Observacao</label>
+              <textarea id="obsRota" name="observacao" placeholder="Opcional"></textarea>
+            </div>
+            <button type="submit" class="entregas-btn success" style="margin-top: 8px;">Criar rota</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="entregas-card">
+        <div class="entregas-card-head">
+          <h2 class="entregas-card-title">Vendas disponiveis</h2>
+          <span class="entregas-muted">{{ total_vendas }} venda(s)</span>
+        </div>
+        {% if vendas %}
+          <div class="entregas-table-wrap">
+            <table class="entregas-table">
+              <thead>
+                <tr>
+                  <th>Numero</th>
+                  <th>Cliente</th>
+                  <th>Data</th>
+                  <th>Total</th>
+                  <th>Status entrega</th>
+                  <th>Acoes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for venda in vendas %}
+                  <tr>
+                    <td><span class="entregas-numero">#{{ venda.id }}</span></td>
+                    <td><span class="entregas-cliente">{{ venda.cliente.nome|default:"Consumidor" }}</span></td>
+                    <td class="entregas-muted">{{ venda.data_venda|date:"d/m/Y" }}</td>
+                    <td class="entregas-total">R$ {{ venda.total|floatformat:2 }}</td>
+                    <td><span class="entregas-status">{{ venda.entrega_status_texto }}</span></td>
+                    <td><a class="entregas-btn soft" href="{% url 'estoque:venda_detalhe' venda.id %}">Abrir nota</a></td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="entregas-vazio">Nenhuma venda encontrada para esta data.</div>
+        {% endif %}
+      </section>
+    </div>
+
+    <section class="entregas-card" style="margin-top: 12px;">
+      <div class="entregas-card-head">
+        <h2 class="entregas-card-title">Entregas e rotas criadas</h2>
+      </div>
+      <div class="entregas-card-body">
+        {% if rotas %}
+          <div class="rotas-lista">
+            {% for rota in rotas %}
+              <article class="rota-card">
+                <div class="rota-head">
+                  <h3 class="rota-title">{{ rota.get_tipo_display }} #{{ rota.id }}</h3>
+                  <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+                    <span class="rota-status">{{ rota.get_status_display }} - {{ rota.data|date:"d/m/Y" }}</span>
+                    <a class="entregas-btn soft" href="{% url 'estoque:entrega_rota_detalhe' rota.id %}">Ver detalhes</a>
+                  </div>
+                </div>
+                {% if rota.observacao %}
+                  <p class="rota-obs">{{ rota.observacao }}</p>
+                {% endif %}
+                <div class="rota-cols">
+                  <div class="rota-col">
+                    <h4>Ordem de entrega</h4>
+                    <ol class="rota-lista">
+                      {% for item in rota.itens_entrega %}
+                        <li>Venda #{{ item.venda.id }} - {{ item.venda.cliente.nome|default:"Consumidor" }}</li>
+                      {% endfor %}
+                    </ol>
+                  </div>
+                  <div class="rota-col">
+                    <h4>Ordem de carregamento</h4>
+                    <ol class="rota-lista">
+                      {% for item in rota.itens_carregamento %}
+                        <li>Venda #{{ item.venda.id }} - {{ item.venda.cliente.nome|default:"Consumidor" }}</li>
+                      {% endfor %}
+                    </ol>
+                  </div>
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="entregas-vazio">Nenhuma entrega ou rota criada para esta data.</div>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

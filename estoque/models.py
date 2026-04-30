@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from .utils import normalize_category_name
 class Produto(models.Model):
 
@@ -342,3 +343,99 @@ class ItemVenda(models.Model):
     def __str__(self):
         nome_produto = self.produto.nome if self.produto else "Produto nao identificado"
         return f"{nome_produto} - Venda #{self.venda_id}"
+
+
+class EntregaRota(models.Model):
+    TIPO_UNITARIA = "unitaria"
+    TIPO_ROTA = "rota"
+    TIPO_CHOICES = [
+        (TIPO_UNITARIA, "Entrega unitaria"),
+        (TIPO_ROTA, "Rota com varias entregas"),
+    ]
+
+    STATUS_ABERTA = "aberta"
+    STATUS_EM_CARREGAMENTO = "em_carregamento"
+    STATUS_SAIU_PARA_ENTREGA = "saiu_para_entrega"
+    STATUS_CONCLUIDA = "concluida"
+    STATUS_CHOICES = [
+        (STATUS_ABERTA, "Aberta"),
+        (STATUS_EM_CARREGAMENTO, "Em carregamento"),
+        (STATUS_SAIU_PARA_ENTREGA, "Saiu para entrega"),
+        (STATUS_CONCLUIDA, "Concluida"),
+    ]
+
+    data = models.DateField(default=timezone.localdate)
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default=STATUS_ABERTA)
+    observacao = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-data", "-id"]
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} #{self.id}"
+
+
+class EntregaRotaItem(models.Model):
+    STATUS_PENDENTE = "pendente"
+    STATUS_CARREGADA = "carregada"
+    STATUS_ENTREGUE = "entregue"
+    STATUS_PARCIAL = "parcial"
+    STATUS_CANCELADA = "cancelada"
+    STATUS_CHOICES = [
+        (STATUS_PENDENTE, "Pendente"),
+        (STATUS_CARREGADA, "Carregada"),
+        (STATUS_ENTREGUE, "Entregue"),
+        (STATUS_PARCIAL, "Parcial"),
+        (STATUS_CANCELADA, "Cancelada"),
+    ]
+
+    rota = models.ForeignKey(
+        EntregaRota,
+        on_delete=models.CASCADE,
+        related_name="itens",
+    )
+    venda = models.ForeignKey(
+        Venda,
+        on_delete=models.CASCADE,
+        related_name="entregas_rota",
+    )
+    ordem_entrega = models.PositiveIntegerField(default=1)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDENTE)
+    conferido_cliente = models.BooleanField(default=False)
+    entrega_concluida = models.BooleanField(default=False)
+    observacao = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["ordem_entrega", "id"]
+        unique_together = [("rota", "venda")]
+
+    def __str__(self):
+        return f"Entrega #{self.rota_id} - Venda #{self.venda_id}"
+
+
+class EntregaChecklistItem(models.Model):
+    rota_item = models.ForeignKey(
+        EntregaRotaItem,
+        on_delete=models.CASCADE,
+        related_name="checklist_itens",
+    )
+    item_venda = models.ForeignKey(
+        ItemVenda,
+        on_delete=models.CASCADE,
+        related_name="checklists_entrega",
+    )
+    carregado = models.BooleanField(default=False)
+    entregue = models.BooleanField(default=False)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["item_venda_id"]
+        unique_together = [("rota_item", "item_venda")]
+
+    def __str__(self):
+        return f"Checklist entrega #{self.rota_item_id} - item #{self.item_venda_id}"

@@ -1,0 +1,221 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Entrega #{{ rota.id }}{% endblock %}
+{% block content %}
+<style>
+  .rota-detalhe-page { color: #172033; padding: 18px 0 32px; }
+  .rota-detalhe-shell { max-width: 1180px; margin: 0 auto; padding: 0 18px; }
+  .rota-detalhe-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 12px; margin-bottom: 12px;
+  }
+  .rota-detalhe-title { margin: 0; color: #111827; font-size: 1.55rem; font-weight: 900; }
+  .rota-detalhe-subtitle { margin: 4px 0 0; color: #64748b; font-size: 0.92rem; font-weight: 700; }
+  .rota-detalhe-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .rota-btn {
+    min-height: 36px; border: 1px solid #cbd5e1; border-radius: 9px; padding: 7px 12px;
+    background: #fff; color: #334155; font-size: 0.84rem; font-weight: 850;
+    text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+  }
+  .rota-btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+  .rota-card {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 13px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06); overflow: hidden;
+  }
+  .rota-card + .rota-card { margin-top: 12px; }
+  .rota-card-head {
+    padding: 11px 14px; border-bottom: 1px solid #edf1f6; background: #f8fafc;
+    display: flex; justify-content: space-between; gap: 10px; align-items: center;
+  }
+  .rota-card-title { margin: 0; color: #1e3a8a; font-size: 0.98rem; font-weight: 900; }
+  .rota-card-body { padding: 12px 14px; }
+  .rota-meta {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;
+  }
+  .rota-meta-item {
+    border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; padding: 9px 10px;
+  }
+  .rota-meta-label {
+    display: block; margin-bottom: 3px; color: #64748b; font-size: 0.72rem;
+    font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .rota-meta-valor { color: #172033; font-size: 0.92rem; font-weight: 850; }
+  .rota-ordens {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  .ordem-box {
+    border: 1px solid #dbe5f0; border-radius: 12px; background: #fff; overflow: hidden;
+  }
+  .ordem-box.carregamento { background: #fffbeb; border-color: #f2c36b; }
+  .ordem-head {
+    padding: 10px 12px; background: #eff6ff; border-bottom: 1px solid #dbeafe;
+  }
+  .ordem-box.carregamento .ordem-head {
+    background: #fef3c7; border-color: #f2c36b;
+  }
+  .ordem-title { margin: 0; color: #1e3a8a; font-size: 0.9rem; font-weight: 900; }
+  .ordem-subtitle { margin: 3px 0 0; color: #64748b; font-size: 0.78rem; font-weight: 750; }
+  .ordem-lista { margin: 0; padding: 10px 12px 10px 34px; }
+  .ordem-lista li { margin-bottom: 8px; font-size: 0.9rem; font-weight: 800; }
+  .ordem-cliente { color: #172033; }
+  .ordem-venda { color: #64748b; font-size: 0.78rem; font-weight: 750; }
+  .venda-detalhe {
+    border: 1px solid #dbe5f0; border-radius: 12px; overflow: hidden; background: #fff;
+  }
+  .venda-detalhe + .venda-detalhe { margin-top: 10px; }
+  .venda-detalhe-head {
+    padding: 10px 12px; background: #f8fafc; border-bottom: 1px solid #edf1f6;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  }
+  .venda-detalhe-title { margin: 0; color: #172033; font-size: 0.95rem; font-weight: 900; }
+  .venda-detalhe-meta { color: #64748b; font-size: 0.8rem; font-weight: 750; }
+  .itens-table { width: 100%; border-collapse: collapse; }
+  .itens-table th {
+    padding: 8px 10px; background: #eff6ff; color: #1e3a8a;
+    font-size: 0.72rem; font-weight: 900; text-transform: uppercase; text-align: left;
+  }
+  .itens-table td {
+    padding: 8px 10px; border-top: 1px solid #edf1f6; font-size: 0.84rem; font-weight: 700;
+  }
+  .numero { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .rota-vazio { padding: 12px; color: #64748b; text-align: center; font-weight: 800; }
+  @media (max-width: 860px) {
+    .rota-detalhe-header { align-items: stretch; flex-direction: column; }
+    .rota-detalhe-actions { justify-content: flex-start; }
+    .rota-meta,
+    .rota-ordens { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="rota-detalhe-page">
+  <div class="rota-detalhe-shell">
+    <header class="rota-detalhe-header">
+      <div>
+        <h1 class="rota-detalhe-title">
+          {% if rota.tipo == "unitaria" %}Entrega{% else %}Rota{% endif %} #{{ rota.id }}
+        </h1>
+        <p class="rota-detalhe-subtitle">Visualizacao da ordem, carregamento e itens das notas.</p>
+      </div>
+      <div class="rota-detalhe-actions">
+        <a class="rota-btn" href="{% url 'estoque:entregas_dia' %}?data={{ rota.data|date:'Y-m-d' }}">Voltar para Entregas do Dia</a>
+        <a class="rota-btn primary" href="{% url 'estoque:entrega_rota_checklist' rota.id %}">Abrir checklist</a>
+      </div>
+    </header>
+
+    <section class="rota-card">
+      <div class="rota-card-head">
+        <h2 class="rota-card-title">Dados da entrega</h2>
+      </div>
+      <div class="rota-card-body">
+        <div class="rota-meta">
+          <div class="rota-meta-item">
+            <span class="rota-meta-label">Data</span>
+            <span class="rota-meta-valor">{{ rota.data|date:"d/m/Y" }}</span>
+          </div>
+          <div class="rota-meta-item">
+            <span class="rota-meta-label">Tipo</span>
+            <span class="rota-meta-valor">{{ rota.get_tipo_display }}</span>
+          </div>
+          <div class="rota-meta-item">
+            <span class="rota-meta-label">Status</span>
+            <span class="rota-meta-valor">{{ rota.get_status_display }}</span>
+          </div>
+          <div class="rota-meta-item">
+            <span class="rota-meta-label">Vendas</span>
+            <span class="rota-meta-valor">{{ itens_entrega|length }}</span>
+          </div>
+        </div>
+        {% if rota.observacao %}
+          <p style="margin: 10px 0 0; color: #475569; font-weight: 750;">{{ rota.observacao }}</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="rota-card">
+      <div class="rota-card-head">
+        <h2 class="rota-card-title">Ordem da rota</h2>
+      </div>
+      <div class="rota-card-body">
+        <div class="rota-ordens">
+          <div class="ordem-box">
+            <div class="ordem-head">
+              <h3 class="ordem-title">Entregar nesta ordem</h3>
+              <p class="ordem-subtitle">Sequencia que o entregador deve seguir.</p>
+            </div>
+            <ol class="ordem-lista">
+              {% for item in itens_entrega %}
+                <li>
+                  <div class="ordem-cliente">{{ item.venda.cliente.nome|default:"Consumidor" }}</div>
+                  <div class="ordem-venda">Venda #{{ item.venda.id }} - R$ {{ item.venda.total|floatformat:2 }}</div>
+                </li>
+              {% empty %}
+                <li>Nenhuma venda nesta entrega.</li>
+              {% endfor %}
+            </ol>
+          </div>
+          <div class="ordem-box carregamento">
+            <div class="ordem-head">
+              <h3 class="ordem-title">Carregar no carro nesta ordem</h3>
+              <p class="ordem-subtitle">Ordem inversa da entrega: ultima entrega entra primeiro.</p>
+            </div>
+            <ol class="ordem-lista">
+              {% for item in itens_carregamento %}
+                <li>
+                  <div class="ordem-cliente">{{ item.venda.cliente.nome|default:"Consumidor" }}</div>
+                  <div class="ordem-venda">Venda #{{ item.venda.id }} - R$ {{ item.venda.total|floatformat:2 }}</div>
+                </li>
+              {% empty %}
+                <li>Nenhuma venda nesta entrega.</li>
+              {% endfor %}
+            </ol>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="rota-card">
+      <div class="rota-card-head">
+        <h2 class="rota-card-title">Vendas e itens</h2>
+      </div>
+      <div class="rota-card-body">
+        {% for item_rota in itens_entrega %}
+          <article class="venda-detalhe">
+            <div class="venda-detalhe-head">
+              <div>
+                <h3 class="venda-detalhe-title">{{ item_rota.venda.cliente.nome|default:"Consumidor" }} - Venda #{{ item_rota.venda.id }}</h3>
+                <div class="venda-detalhe-meta">Ordem {{ item_rota.ordem_entrega }} - Total R$ {{ item_rota.venda.total|floatformat:2 }}</div>
+              </div>
+              <a class="rota-btn primary" href="{% url 'estoque:venda_detalhe' item_rota.venda.id %}?entrega={{ rota.id }}">Abrir nota</a>
+            </div>
+            {% if item_rota.venda.itens.all %}
+              <table class="itens-table">
+                <thead>
+                  <tr>
+                    <th>Produto</th>
+                    <th class="numero">Quantidade</th>
+                    <th>Unidade</th>
+                    <th class="numero">Valor total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for item in item_rota.venda.itens.all %}
+                    <tr>
+                      <td>{{ item.produto.nome|default:"Produto nao identificado" }}</td>
+                      <td class="numero">{{ item.quantidade }}</td>
+                      <td>{{ item.unidade }}</td>
+                      <td class="numero">R$ {{ item.valor_total|floatformat:2 }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% else %}
+              <div class="rota-vazio">Nenhum item encontrado nesta venda.</div>
+            {% endif %}
+          </article>
+        {% empty %}
+          <div class="rota-vazio">Nenhuma venda nesta entrega.</div>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

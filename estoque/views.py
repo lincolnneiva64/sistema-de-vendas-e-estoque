@@ -11,7 +11,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F
 from .forms import CategoriaForm, ClienteForm, ProdutoForm, UnidadeForm
-from .models import Categoria, Cliente, EventoVenda, ItemVenda, Produto, Unidade, Venda
+from .models import Categoria, Cliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, ItemVenda, Produto, Unidade, Venda
 from django.contrib import messages
 from django.http import HttpResponse, JsonResponse
 from django.utils.dateparse import parse_date
@@ -668,6 +668,204 @@ def consultar_vendas(request):
     )
 
 
+@ensure_csrf_cookie
+def entregas_dia(request):
+    hoje = timezone.localdate()
+    data_texto = (request.POST.get("data") if request.method == "POST" else request.GET.get("data", "")).strip()
+    data_entrega = parse_date(data_texto) if data_texto else hoje
+    if not data_entrega:
+        data_entrega = hoje
+        messages.warning(request, "Data invalida. Mostrando entregas de hoje.")
+
+    if request.method == "POST":
+        acao = request.POST.get("acao")
+        observacao = request.POST.get("observacao", "").strip()
+
+        if acao == "unitaria":
+            venda_id = request.POST.get("venda_unitaria")
+            venda = Venda.objects.filter(pk=venda_id).first()
+            if not venda:
+                messages.warning(request, "Selecione uma venda para criar a entrega unitaria.")
+                return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}")
+
+            with transaction.atomic():
+                rota = EntregaRota.objects.create(
+                    data=data_entrega,
+                    tipo=EntregaRota.TIPO_UNITARIA,
+                    observacao=observacao,
+                )
+                EntregaRotaItem.objects.create(
+                    rota=rota,
+                    venda=venda,
+                    ordem_entrega=1,
+                )
+            messages.success(request, f"Entrega unitaria #{rota.id} criada para a venda #{venda.id}.")
+            return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}")
+
+        if acao == "rota":
+            venda_ids = request.POST.getlist("vendas_rota")
+            vendas = list(Venda.objects.filter(pk__in=venda_ids).select_related("cliente"))
+            if not vendas:
+                messages.warning(request, "Selecione pelo menos uma venda para criar a rota.")
+                return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}")
+
+            vendas_por_id = {str(venda.id): venda for venda in vendas}
+            ordenadas = []
+            for venda_id in venda_ids:
+                venda = vendas_por_id.get(str(venda_id))
+                if not venda:
+                    continue
+                try:
+                    ordem = int(request.POST.get(f"ordem_{venda_id}") or "9999")
+                except ValueError:
+                    ordem = 9999
+                ordenadas.append((ordem, venda.id, venda))
+
+            ordenadas.sort(key=lambda item: (item[0], item[1]))
+
+            with transaction.atomic():
+                rota = EntregaRota.objects.create(
+                    data=data_entrega,
+                    tipo=EntregaRota.TIPO_ROTA,
+                    observacao=observacao,
+                )
+                EntregaRotaItem.objects.bulk_create([
+                    EntregaRotaItem(
+                        rota=rota,
+                        venda=venda,
+                        ordem_entrega=indice,
+                    )
+                    for indice, (_, __, venda) in enumerate(ordenadas, start=1)
+                ])
+            messages.success(request, f"Rota #{rota.id} criada com {len(ordenadas)} entrega(s).")
+            return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}")
+
+    vendas_lista = list(
+        Venda.objects.select_related("cliente")
+        .filter(data_venda=data_entrega)
+        .order_by("-id")
+    )
+    vendas_ids = [venda.id for venda in vendas_lista]
+    itens_entrega = EntregaRotaItem.objects.filter(
+        venda_id__in=vendas_ids,
+    ).select_related("rota").order_by("-rota__data", "-rota_id", "-id")
+    status_por_venda = {}
+    for item in itens_entrega:
+        status_por_venda.setdefault(
+            item.venda_id,
+            f"{item.rota.get_tipo_display()} #{item.rota_id} - {item.get_status_display()}",
+        )
+    for venda in vendas_lista:
+        venda.entrega_status_texto = status_por_venda.get(venda.id, "Sem entrega criada")
+
+    rotas = list(
+        EntregaRota.objects.filter(data=data_entrega)
+        .prefetch_related("itens__venda__cliente")
+        .order_by("-id")
+    )
+    for rota in rotas:
+        itens = list(rota.itens.all())
+        rota.itens_entrega = itens
+        rota.itens_carregamento = list(reversed(itens))
+
+    return render(
+        request,
+        "estoque/entregas_dia.html",
+        {
+            "data_entrega": data_entrega,
+            "vendas": vendas_lista,
+            "rotas": rotas,
+            "total_vendas": len(vendas_lista),
+        },
+    )
+
+
+def entrega_rota_detalhe(request, pk):
+    rota = get_object_or_404(
+        EntregaRota.objects.prefetch_related("itens__venda__cliente", "itens__venda__itens__produto"),
+        pk=pk,
+    )
+    itens_entrega = list(rota.itens.all())
+    itens_carregamento = list(reversed(itens_entrega))
+
+    return render(
+        request,
+        "estoque/entrega_rota_detalhe.html",
+        {
+            "rota": rota,
+            "itens_entrega": itens_entrega,
+            "itens_carregamento": itens_carregamento,
+        },
+    )
+
+
+def entrega_rota_checklist(request, pk):
+    rota = get_object_or_404(
+        EntregaRota.objects.prefetch_related("itens__venda__cliente", "itens__venda__itens__produto", "itens__checklist_itens"),
+        pk=pk,
+    )
+    itens_entrega = list(rota.itens.all())
+
+    with transaction.atomic():
+        for item_rota in itens_entrega:
+            itens_venda = list(item_rota.venda.itens.all())
+            existentes = {
+                checklist.item_venda_id: checklist
+                for checklist in item_rota.checklist_itens.all()
+            }
+            novos = [
+                EntregaChecklistItem(rota_item=item_rota, item_venda=item_venda)
+                for item_venda in itens_venda
+                if item_venda.id not in existentes
+            ]
+            if novos:
+                EntregaChecklistItem.objects.bulk_create(novos)
+
+    if request.method == "POST":
+        rota_item_ids = [item_rota.id for item_rota in itens_entrega]
+        checklist_qs = EntregaChecklistItem.objects.filter(rota_item_id__in=rota_item_ids)
+
+        for checklist in checklist_qs:
+            checklist.carregado = f"carregado_{checklist.id}" in request.POST
+            checklist.entregue = f"entregue_{checklist.id}" in request.POST
+            checklist.save(update_fields=["carregado", "entregue", "atualizado_em"])
+
+        for item_rota in itens_entrega:
+            item_rota.conferido_cliente = f"conferido_{item_rota.id}" in request.POST
+            item_rota.entrega_concluida = f"concluida_{item_rota.id}" in request.POST
+            item_rota.save(update_fields=["conferido_cliente", "entrega_concluida"])
+
+        messages.success(request, "Checklist salvo com sucesso.")
+        return redirect("estoque:entrega_rota_checklist", pk=rota.id)
+
+    rota = get_object_or_404(
+        EntregaRota.objects.prefetch_related("itens__venda__cliente", "itens__venda__itens__produto", "itens__checklist_itens__item_venda"),
+        pk=pk,
+    )
+    itens_entrega = list(rota.itens.all())
+    for item_rota in itens_entrega:
+        item_rota.checklists_por_item = {
+            checklist.item_venda_id: checklist
+            for checklist in item_rota.checklist_itens.all()
+        }
+        item_rota.checklists_ordenados = [
+            item_rota.checklists_por_item.get(item_venda.id)
+            for item_venda in item_rota.venda.itens.all()
+            if item_rota.checklists_por_item.get(item_venda.id)
+        ]
+    itens_carregamento = list(reversed(itens_entrega))
+
+    return render(
+        request,
+        "estoque/entrega_checklist.html",
+        {
+            "rota": rota,
+            "itens_entrega": itens_entrega,
+            "itens_carregamento": itens_carregamento,
+        },
+    )
+
+
 def _decimal_do_front(valor, casas="0.01"):
     if valor is None:
         raise ValueError("Valor numerico ausente.")
@@ -801,6 +999,10 @@ def venda_detalhe(request, pk):
         pk=pk,
     )
     whatsapp_url = montar_link_whatsapp_venda(venda)
+    entrega_contexto = None
+    entrega_id = request.GET.get("entrega")
+    if entrega_id:
+        entrega_contexto = EntregaRota.objects.filter(pk=entrega_id).first()
     _registrar_evento_venda(
         venda,
         "nota_visualizada",
@@ -818,6 +1020,7 @@ def venda_detalhe(request, pk):
                 canal="whatsapp",
                 tipo_evento__in=["whatsapp_aberto", "whatsapp_confirmado"],
             ),
+            "entrega_contexto": entrega_contexto,
         },
     )
 

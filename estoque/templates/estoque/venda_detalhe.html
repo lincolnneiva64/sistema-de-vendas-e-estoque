@@ -573,6 +573,9 @@
                     <div class="acoes">
                         <a href="{% url 'estoque:vendas' %}">Voltar para Vendas</a>
                         <a href="{% url 'estoque:consultar_vendas' %}">Voltar para Consulta</a>
+                        {% if entrega_contexto %}
+                            <a href="{% url 'estoque:entrega_rota_detalhe' entrega_contexto.id %}">Voltar para {% if entrega_contexto.tipo == "unitaria" %}Entrega{% else %}Rota{% endif %} #{{ entrega_contexto.id }}</a>
+                        {% endif %}
                         <button type="button" id="btnImprimir">Imprimir</button>
                         <a href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}" class="whatsapp-acao">Imagem / WhatsApp</a>
                         <a href="{% url 'estoque:venda_whatsapp_pdf' venda.id %}" target="_blank" rel="noopener">PDF</a>

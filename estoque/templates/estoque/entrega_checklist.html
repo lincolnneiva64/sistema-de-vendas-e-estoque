@@ -1,0 +1,159 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Checklist Entrega #{{ rota.id }}{% endblock %}
+{% block content %}
+<style>
+  .check-page { min-height: 100vh; background: #eef3f8; color: #172033; padding: 12px 0 28px; }
+  .check-shell { width: min(760px, calc(100vw - 20px)); margin: 0 auto; }
+  .check-header {
+    background: #fff; border: 1px solid #dbe5f0; border-radius: 14px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08); padding: 14px;
+    margin-bottom: 10px;
+  }
+  .check-title { margin: 0; color: #111827; font-size: 1.35rem; font-weight: 900; }
+  .check-subtitle { margin: 4px 0 0; color: #64748b; font-size: 0.92rem; font-weight: 700; }
+  .check-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .check-btn {
+    min-height: 44px; border: 1px solid #cbd5e1; border-radius: 10px;
+    padding: 10px 13px; background: #fff; color: #334155; text-decoration: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 0.95rem; font-weight: 850;
+  }
+  .check-btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+  .check-btn.save { width: 100%; background: #16a34a; border-color: #16a34a; color: #fff; font-size: 1rem; }
+  .check-alert {
+    border: 1px solid #b7e4c7; border-radius: 12px; background: #ecfdf3; color: #166534;
+    padding: 11px 12px; margin-bottom: 10px; font-weight: 850;
+  }
+  .check-section {
+    background: #fff; border: 1px solid #dbe5f0; border-radius: 14px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06); overflow: hidden; margin-top: 10px;
+  }
+  .check-section-head { padding: 13px 14px; border-bottom: 1px solid #edf1f6; background: #f8fafc; }
+  .check-section.carregamento .check-section-head { background: #fef3c7; border-color: #f2c36b; }
+  .check-section-title { margin: 0; color: #1e3a8a; font-size: 1.05rem; font-weight: 950; }
+  .check-section-note { margin: 4px 0 0; color: #64748b; font-size: 0.86rem; font-weight: 750; }
+  .check-stop { padding: 12px 14px; border-top: 1px solid #edf1f6; }
+  .check-stop:first-child { border-top: 0; }
+  .check-stop-title { margin: 0; color: #172033; font-size: 1rem; font-weight: 950; }
+  .check-stop-meta { margin-top: 2px; color: #64748b; font-size: 0.84rem; font-weight: 750; }
+  .check-item-list { display: grid; gap: 8px; margin-top: 10px; }
+  .check-row {
+    display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 8px; align-items: start;
+    border: 1px solid #e2e8f0; border-radius: 11px; padding: 10px; background: #fbfdff;
+  }
+  .check-row input { width: 24px; height: 24px; margin-top: 1px; accent-color: #16a34a; }
+  .check-row-text { color: #172033; font-size: 0.95rem; font-weight: 850; line-height: 1.25; }
+  .check-row-sub { color: #64748b; font-size: 0.82rem; font-weight: 750; margin-top: 2px; }
+  .check-controls { display: grid; gap: 8px; margin-top: 10px; }
+  .check-control {
+    display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 8px; align-items: center;
+    border: 1px solid #bbf7d0; border-radius: 11px; padding: 10px; background: #f0fdf4;
+    color: #14532d; font-size: 0.95rem; font-weight: 900;
+  }
+  .check-control input { width: 24px; height: 24px; accent-color: #16a34a; }
+  .check-empty { padding: 14px; color: #64748b; text-align: center; font-weight: 850; }
+  @media (max-width: 520px) {
+    .check-shell { width: min(100vw - 12px, 760px); }
+    .check-header,
+    .check-stop { padding: 11px; }
+    .check-actions { flex-direction: column; }
+    .check-btn { width: 100%; }
+  }
+</style>
+
+<main class="check-page">
+  <div class="check-shell">
+    <header class="check-header">
+      <h1 class="check-title">Checklist {% if rota.tipo == "unitaria" %}Entrega{% else %}Rota{% endif %} #{{ rota.id }}</h1>
+      <p class="check-subtitle">{{ rota.data|date:"d/m/Y" }} - {{ rota.get_tipo_display }} - {{ rota.get_status_display }}</p>
+      <div class="check-actions">
+        <a class="check-btn" href="{% url 'estoque:entrega_rota_detalhe' rota.id %}">Voltar para detalhes</a>
+        <a class="check-btn" href="{% url 'estoque:entregas_dia' %}?data={{ rota.data|date:'Y-m-d' }}">Entregas do Dia</a>
+      </div>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="check-alert">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+
+    <section class="check-section carregamento">
+      <div class="check-section-head">
+        <h2 class="check-section-title">Carregar no carro nesta ordem</h2>
+        <p class="check-section-note">Ordem inversa da entrega: a ultima entrega entra primeiro.</p>
+      </div>
+      {% for item_rota in itens_carregamento %}
+        <article class="check-stop">
+          <h3 class="check-stop-title">{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</h3>
+          <div class="check-stop-meta">Venda #{{ item_rota.venda.id }} - entrega ordem {{ item_rota.ordem_entrega }}</div>
+          <div class="check-item-list">
+            {% for checklist in item_rota.checklists_ordenados %}
+              <label class="check-row">
+                <input type="checkbox" name="carregado_{{ checklist.id }}" {% if checklist.carregado %}checked{% endif %}>
+                <span>
+                  <span class="check-row-text">{{ checklist.item_venda.produto.nome|default:"Produto nao identificado" }}</span>
+                  <span class="check-row-sub">{{ checklist.item_venda.quantidade }} {{ checklist.item_venda.unidade }}</span>
+                </span>
+              </label>
+            {% empty %}
+              <div class="check-empty">Nenhum item nesta venda.</div>
+            {% endfor %}
+          </div>
+        </article>
+      {% empty %}
+        <div class="check-empty">Nenhuma venda nesta entrega.</div>
+      {% endfor %}
+    </section>
+
+    <section class="check-section">
+      <div class="check-section-head">
+        <h2 class="check-section-title">Entregar nesta ordem</h2>
+        <p class="check-section-note">Sequencia que o entregador deve seguir na rua.</p>
+      </div>
+      {% for item_rota in itens_entrega %}
+        <article class="check-stop">
+          <h3 class="check-stop-title">{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</h3>
+          <div class="check-stop-meta">Venda #{{ item_rota.venda.id }} - R$ {{ item_rota.venda.total|floatformat:2 }}</div>
+          <div class="check-actions">
+            <a class="check-btn primary" href="{% url 'estoque:venda_detalhe' item_rota.venda.id %}?entrega={{ rota.id }}">Abrir nota</a>
+          </div>
+          <div class="check-item-list">
+            {% for checklist in item_rota.checklists_ordenados %}
+              <label class="check-row">
+                <input type="checkbox" name="entregue_{{ checklist.id }}" {% if checklist.entregue %}checked{% endif %}>
+                <span>
+                  <span class="check-row-text">{{ checklist.item_venda.produto.nome|default:"Produto nao identificado" }}</span>
+                  <span class="check-row-sub">{{ checklist.item_venda.quantidade }} {{ checklist.item_venda.unidade }}</span>
+                </span>
+              </label>
+            {% empty %}
+              <div class="check-empty">Nenhum item nesta venda.</div>
+            {% endfor %}
+          </div>
+          <div class="check-controls">
+            <label class="check-control">
+              <input type="checkbox" name="conferido_{{ item_rota.id }}" {% if item_rota.conferido_cliente %}checked{% endif %}>
+              <span>Entrega conferida com cliente</span>
+            </label>
+            <label class="check-control">
+              <input type="checkbox" name="concluida_{{ item_rota.id }}" {% if item_rota.entrega_concluida %}checked{% endif %}>
+              <span>Entrega concluida</span>
+            </label>
+          </div>
+        </article>
+      {% empty %}
+        <div class="check-empty">Nenhuma venda nesta entrega.</div>
+      {% endfor %}
+    </section>
+
+      <div class="check-actions">
+        <button type="submit" class="check-btn save">Salvar checklist</button>
+      </div>
+    </form>
+  </div>
+</main>
+{% endblock %}
