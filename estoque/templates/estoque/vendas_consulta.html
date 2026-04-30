@@ -74,6 +74,32 @@
   .venda-numero { font-weight: 850; color: #172033; font-size: 0.9rem; }
   .venda-cliente { font-weight: 800; color: #172033; }
   .venda-muted { color: #64748b; font-size: 0.8rem; font-weight: 650; }
+  .venda-whatsapp-status {
+    display: inline-flex;
+    width: fit-content;
+    margin-top: 6px;
+    padding: 5px 9px;
+    border: 2px solid #fb7185;
+    border-radius: 999px;
+    background: #ffe4e6;
+    color: #9f1239;
+    font-size: 0.76rem;
+    font-weight: 950;
+    line-height: 1.15;
+    box-shadow: 0 8px 18px rgba(225, 29, 72, 0.12);
+  }
+  .venda-whatsapp-status.aberto {
+    border-color: #f59e0b;
+    background: #fef3c7;
+    color: #78350f;
+    box-shadow: 0 8px 18px rgba(217, 119, 6, 0.13);
+  }
+  .venda-whatsapp-status.enviado-confirmado {
+    border-color: #22c55e;
+    background: #dcfce7;
+    color: #14532d;
+    box-shadow: 0 8px 18px rgba(22, 163, 74, 0.13);
+  }
   .venda-total { color: #166534; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .vendas-consulta-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .vendas-consulta-action-link,
@@ -217,6 +243,9 @@
                     {% if venda.cliente.apelido_nome_conhecido %}
                       <div class="venda-muted">{{ venda.cliente.apelido_nome_conhecido }}</div>
                     {% endif %}
+                    <div class="venda-whatsapp-status {% if venda.whatsapp_status == 'aberto' %}aberto{% elif venda.whatsapp_status == 'enviado_confirmado' %}enviado-confirmado{% endif %}" data-whatsapp-status-venda="{{ venda.id }}">
+                      {{ venda.whatsapp_status_texto }}
+                    </div>
                   </td>
                   <td class="venda-muted">{{ venda.tipo_pagamento|default:"-" }}</td>
                   <td class="venda-muted">{{ venda.data_vencimento|date:"d/m/Y"|default:"-" }}</td>
@@ -226,7 +255,7 @@
                       <a class="vendas-consulta-action-link primary" href="{% url 'estoque:venda_detalhe' venda.id %}">Abrir nota</a>
                       <button type="button" class="vendas-consulta-action-btn edit js-editar-venda">Editar</button>
                       <a class="vendas-consulta-action-link whatsapp" href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}">PDF para WhatsApp</a>
-                      <button type="button" class="vendas-consulta-action-btn whatsapp-pendente js-whatsapp-pendente" data-venda-id="{{ venda.id }}" data-confirmar-url="{% url 'estoque:confirmar_whatsapp' venda.id %}">Confirmar WhatsApp</button>
+                      <button type="button" class="vendas-consulta-action-btn whatsapp-pendente js-whatsapp-pendente {% if venda.whatsapp_status == 'aberto' %}visivel{% endif %}" data-venda-id="{{ venda.id }}" data-whatsapp-status="{{ venda.whatsapp_status }}" data-confirmar-url="{% url 'estoque:confirmar_whatsapp' venda.id %}">Confirmar WhatsApp</button>
                       <a class="vendas-consulta-action-link print" href="{% url 'estoque:venda_detalhe' venda.id %}" target="_blank" rel="noopener">Imprimir</a>
                     </div>
                   </td>
@@ -304,8 +333,14 @@
     document.querySelectorAll(".js-whatsapp-pendente").forEach(function (botao) {
       const vendaId = botao.dataset.vendaId;
       const chave = "whatsapp_pending_confirm_venda_" + vendaId;
+      const statusEl = document.querySelector(`[data-whatsapp-status-venda="${vendaId}"]`);
+      const statusBanco = botao.dataset.whatsappStatus || "";
+      const visivelPeloBanco = botao.classList.contains("visivel");
       try {
-        if (localStorage.getItem(chave) === "conversa_aberta") {
+        if (statusBanco === "enviado_confirmado") {
+          localStorage.removeItem(chave);
+          botao.classList.remove("visivel");
+        } else if (visivelPeloBanco || localStorage.getItem(chave) === "conversa_aberta") {
           botao.classList.add("visivel");
         } else {
           botao.classList.remove("visivel");
@@ -341,6 +376,12 @@
             // Sem acao necessaria.
           }
           botao.classList.remove("visivel");
+          if (statusEl) {
+            statusEl.textContent = data.whatsapp_status_texto || "Nota enviada por WhatsApp";
+            statusEl.classList.remove("aberto");
+            statusEl.classList.add("enviado-confirmado");
+          }
+          botao.dataset.whatsappStatus = data.whatsapp_status || "enviado_confirmado";
           mostrarMensagem(data.mensagem || "Nota marcada como enviada pelo WhatsApp.");
         } catch (erro) {
           mostrarMensagem("Nao foi possivel confirmar o WhatsApp.");

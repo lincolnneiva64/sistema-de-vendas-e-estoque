@@ -115,6 +115,40 @@
             display: block;
         }
 
+        .whatsapp-status {
+            margin-bottom: 16px;
+            padding: 12px 14px;
+            border: 2px solid #cbd5e1;
+            border-radius: 12px;
+            background: #f8fafc;
+            color: #334155;
+            font-size: 15px;
+            font-weight: 950;
+            line-height: 1.25;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        .whatsapp-status.nao-enviado {
+            border-color: #fb7185;
+            background: #ffe4e6;
+            color: #9f1239;
+            box-shadow: 0 12px 26px rgba(225, 29, 72, 0.14);
+        }
+
+        .whatsapp-status.aberto {
+            border-color: #f59e0b;
+            background: #fef3c7;
+            color: #78350f;
+            box-shadow: 0 12px 26px rgba(217, 119, 6, 0.14);
+        }
+
+        .whatsapp-status.enviado-confirmado {
+            border-color: #22c55e;
+            background: #dcfce7;
+            color: #14532d;
+            box-shadow: 0 12px 26px rgba(22, 163, 74, 0.14);
+        }
+
         .conteudo {
             padding: 24px 26px 28px;
         }
@@ -488,13 +522,18 @@
                         <button type="button" id="btnImprimir">Imprimir</button>
                         <a href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}" class="whatsapp-acao">Imagem / WhatsApp</a>
                         <a href="{% url 'estoque:venda_whatsapp_pdf' venda.id %}" target="_blank" rel="noopener">PDF</a>
-                        <button type="button" id="btnConfirmarWhatsapp" class="whatsapp-acao">Marcar como enviada pelo WhatsApp</button>
+                        <button type="button" id="btnConfirmarWhatsapp" class="whatsapp-acao" {% if venda.whatsapp_status == "enviado_confirmado" %}disabled{% endif %}>
+                            {% if venda.whatsapp_status == "enviado_confirmado" %}Nota ja marcada como enviada{% else %}Marcar como enviada pelo WhatsApp{% endif %}
+                        </button>
                     </div>
                 </header>
 
                 <section class="conteudo">
                     <div id="avisoWhatsapp" class="aviso-whatsapp" role="status" aria-live="polite">
                         Este cliente nao possui WhatsApp cadastrado para envio da nota.
+                    </div>
+                    <div id="whatsappStatusNota" class="whatsapp-status {% if venda.whatsapp_status == 'aberto' %}aberto{% elif venda.whatsapp_status == 'enviado_confirmado' %}enviado-confirmado{% else %}nao-enviado{% endif %}">
+                        {{ venda.whatsapp_status_texto }}
                     </div>
 
                     <div class="dados">
@@ -742,10 +781,27 @@
         const btnConfirmarWhatsapp = document.getElementById("btnConfirmarWhatsapp");
         const btnWhatsappSemNumero = document.getElementById("btnWhatsappSemNumero");
         const avisoWhatsapp = document.getElementById("avisoWhatsapp");
+        const whatsappStatusNota = document.getElementById("whatsappStatusNota");
         const registrarImpressaoUrl = "{% url 'estoque:registrar_impressao' venda.id %}";
         const confirmarWhatsappUrl = "{% url 'estoque:confirmar_whatsapp' venda.id %}";
         const whatsappPendenteKey = "whatsapp_pending_confirm_venda_{{ venda.id }}";
         const whatsappPendenteValor = "conversa_aberta";
+        const whatsappStatusInicial = "{{ venda.whatsapp_status }}";
+
+        function atualizarStatusWhatsapp(status, texto) {
+            if (!whatsappStatusNota) {
+                return;
+            }
+            whatsappStatusNota.textContent = texto || "WhatsApp ainda nao enviado";
+            whatsappStatusNota.classList.remove("nao-enviado", "aberto", "enviado-confirmado");
+            if (status === "aberto") {
+                whatsappStatusNota.classList.add("aberto");
+            } else if (status === "enviado_confirmado") {
+                whatsappStatusNota.classList.add("enviado-confirmado");
+            } else {
+                whatsappStatusNota.classList.add("nao-enviado");
+            }
+        }
 
         function aplicarLembreteWhatsapp() {
             if (btnConfirmarWhatsapp) {
@@ -769,7 +825,10 @@
         }
 
         try {
-            if (localStorage.getItem(whatsappPendenteKey) === whatsappPendenteValor) {
+            if (whatsappStatusInicial === "enviado_confirmado") {
+                localStorage.removeItem(whatsappPendenteKey);
+                removerLembreteWhatsapp();
+            } else if (whatsappStatusInicial === "aberto" || localStorage.getItem(whatsappPendenteKey) === whatsappPendenteValor) {
                 aplicarLembreteWhatsapp();
             } else {
                 localStorage.removeItem(whatsappPendenteKey);
@@ -796,8 +855,13 @@
                 const resultado = await enviarEvento(confirmarWhatsappUrl, "Nota marcada como enviada pelo WhatsApp.");
                 if (resultado) {
                     limparLembreteWhatsapp();
+                    atualizarStatusWhatsapp(resultado.whatsapp_status, resultado.whatsapp_status_texto);
+                    btnConfirmarWhatsapp.textContent = "Nota ja marcada como enviada";
+                    btnConfirmarWhatsapp.disabled = true;
                 }
-                btnConfirmarWhatsapp.disabled = false;
+                if (!resultado) {
+                    btnConfirmarWhatsapp.disabled = false;
+                }
             });
         }
 

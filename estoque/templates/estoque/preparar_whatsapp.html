@@ -416,6 +416,18 @@
   const whatsappManualErro = document.getElementById("whatsappManualErro");
   const whatsappPendenteKey = "whatsapp_pending_confirm_venda_{{ venda.id }}";
   const whatsappPendenteValor = "conversa_aberta";
+  const registrarWhatsappAbertoUrl = "{% url 'estoque:registrar_whatsapp_aberto' venda.id %}";
+
+  function obterCookie(nome) {
+    const cookies = document.cookie ? document.cookie.split(";") : [];
+    for (const cookie of cookies) {
+      const partes = cookie.trim().split("=");
+      if (partes[0] === nome) {
+        return decodeURIComponent(partes.slice(1).join("="));
+      }
+    }
+    return "";
+  }
 
   function salvarLembreteWhatsapp() {
     try {
@@ -423,6 +435,21 @@
     } catch (erro) {
       // O fluxo continua mesmo se o navegador bloquear localStorage.
     }
+  }
+
+  function registrarWhatsappAberto(numeroUsado = "") {
+    fetch(registrarWhatsappAbertoUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": obterCookie("csrftoken"),
+        "X-Requested-With": "XMLHttpRequest",
+      },
+      body: JSON.stringify({ numero_usado: String(numeroUsado || "").replace(/\D/g, "") }),
+      keepalive: true,
+    }).catch(() => {
+      // A abertura do WhatsApp nao deve ser bloqueada por falha no registro do status.
+    });
   }
 
   function montarUrlWhatsapp(numero) {
@@ -475,6 +502,7 @@
       fecharModalWhatsappManual();
       // Futuro: perguntar se o usuario deseja salvar este telefone no cadastro do cliente.
       window.open(url, "_blank", "noopener");
+      registrarWhatsappAberto(numeroManual.value);
     });
   }
 
@@ -500,7 +528,10 @@
   });
 
   document.querySelectorAll("[data-whatsapp-lembrete]").forEach((elemento) => {
-    elemento.addEventListener("click", salvarLembreteWhatsapp);
+    elemento.addEventListener("click", () => {
+      salvarLembreteWhatsapp();
+      registrarWhatsappAberto();
+    });
   });
 </script>
 {% endblock %}

@@ -237,6 +237,15 @@ class Cliente(models.Model):
 
 
 class Venda(models.Model):
+    WHATSAPP_NAO_ENVIADO = "nao_enviado"
+    WHATSAPP_ABERTO = "aberto"
+    WHATSAPP_ENVIADO_CONFIRMADO = "enviado_confirmado"
+    WHATSAPP_STATUS_CHOICES = [
+        (WHATSAPP_NAO_ENVIADO, "WhatsApp ainda nao enviado"),
+        (WHATSAPP_ABERTO, "WhatsApp aberto - aguardando confirmacao"),
+        (WHATSAPP_ENVIADO_CONFIRMADO, "Nota enviada por WhatsApp"),
+    ]
+
     cliente = models.ForeignKey(
         Cliente,
         on_delete=models.SET_NULL,
@@ -249,6 +258,14 @@ class Venda(models.Model):
     tipo_pagamento = models.CharField(max_length=40, blank=True)
     operador = models.CharField(max_length=120, blank=True)
     total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    whatsapp_status = models.CharField(
+        max_length=30,
+        choices=WHATSAPP_STATUS_CHOICES,
+        default=WHATSAPP_NAO_ENVIADO,
+    )
+    whatsapp_numero_usado = models.CharField(max_length=20, blank=True, null=True)
+    whatsapp_aberto_em = models.DateTimeField(blank=True, null=True)
+    whatsapp_confirmado_em = models.DateTimeField(blank=True, null=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -257,6 +274,13 @@ class Venda(models.Model):
 
     def __str__(self):
         return f"Venda #{self.id}"
+
+    @property
+    def whatsapp_status_texto(self):
+        return dict(self.WHATSAPP_STATUS_CHOICES).get(
+            self.whatsapp_status,
+            "WhatsApp ainda nao enviado",
+        )
 
 
 class EventoVenda(models.Model):

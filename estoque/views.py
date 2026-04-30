@@ -840,6 +840,7 @@ def venda_whatsapp_imagem(request, pk):
     return response
 
 
+@ensure_csrf_cookie
 def preparar_whatsapp_venda(request, pk):
     venda = get_object_or_404(
         Venda.objects.select_related("cliente"),
@@ -871,25 +872,61 @@ def registrar_impressao(request, pk):
 @require_POST
 def registrar_whatsapp_aberto(request, pk):
     venda = get_object_or_404(Venda, pk=pk)
+    numero_usado = ""
+    try:
+        dados = json.loads(request.body.decode("utf-8") or "{}")
+        numero_usado = "".join(ch for ch in str(dados.get("numero_usado") or "") if ch.isdigit())
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        numero_usado = ""
+
+    if venda.whatsapp_status != Venda.WHATSAPP_ENVIADO_CONFIRMADO:
+        venda.whatsapp_status = Venda.WHATSAPP_ABERTO
+        venda.whatsapp_aberto_em = timezone.now()
+        if numero_usado:
+            venda.whatsapp_numero_usado = numero_usado
+        venda.save(update_fields=[
+            "whatsapp_status",
+            "whatsapp_aberto_em",
+            "whatsapp_numero_usado",
+            "atualizado_em",
+        ])
+
     _registrar_evento_venda(
         venda,
         "whatsapp_aberto",
         "WhatsApp aberto para envio.",
         canal="whatsapp",
     )
-    return JsonResponse({"sucesso": True, "mensagem": "Registro de abertura no WhatsApp salvo."})
+    return JsonResponse({
+        "sucesso": True,
+        "mensagem": "Registro de abertura no WhatsApp salvo.",
+        "whatsapp_status": venda.whatsapp_status,
+        "whatsapp_status_texto": venda.whatsapp_status_texto,
+    })
 
 
 @require_POST
 def confirmar_whatsapp(request, pk):
     venda = get_object_or_404(Venda, pk=pk)
+    venda.whatsapp_status = Venda.WHATSAPP_ENVIADO_CONFIRMADO
+    venda.whatsapp_confirmado_em = timezone.now()
+    venda.save(update_fields=[
+        "whatsapp_status",
+        "whatsapp_confirmado_em",
+        "atualizado_em",
+    ])
     _registrar_evento_venda(
         venda,
         "whatsapp_confirmado",
         "Nota marcada como enviada pelo WhatsApp.",
         canal="whatsapp",
     )
-    return JsonResponse({"sucesso": True, "mensagem": "Confirmacao de envio via WhatsApp salva."})
+    return JsonResponse({
+        "sucesso": True,
+        "mensagem": "Confirmacao de envio via WhatsApp salva.",
+        "whatsapp_status": venda.whatsapp_status,
+        "whatsapp_status_texto": venda.whatsapp_status_texto,
+    })
 
 
 def _formatar_moeda(valor):
