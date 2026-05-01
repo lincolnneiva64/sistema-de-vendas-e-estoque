@@ -884,7 +884,39 @@ def entrega_rota_checklist(request, pk):
             for item_venda in item_rota.venda.itens.all()
             if item_rota.checklists_por_item.get(item_venda.id)
         ]
-    itens_carregamento = list(reversed(itens_entrega))
+        item_rota.carregamento_conferido = item_rota.salvo_carregamento or (
+            bool(item_rota.checklists_ordenados)
+            and all(checklist.carregado for checklist in item_rota.checklists_ordenados)
+        )
+        item_rota.entrega_conferida = (
+            item_rota.salvo_entrega
+            or
+            item_rota.conferido_cliente
+            or item_rota.entrega_concluida
+            or (
+                bool(item_rota.checklists_ordenados)
+                and all(checklist.entregue for checklist in item_rota.checklists_ordenados)
+            )
+        )
+
+    itens_entrega = sorted(
+        itens_entrega,
+        key=lambda item_rota: (item_rota.entrega_conferida, item_rota.ordem_entrega, item_rota.id),
+    )
+    itens_carregamento = sorted(
+        itens_entrega,
+        key=lambda item_rota: (
+            item_rota.carregamento_conferido,
+            -item_rota.ordem_entrega,
+            -item_rota.id,
+        ),
+    )
+    itens_carregamento_pendentes = [
+        item_rota for item_rota in itens_carregamento if not item_rota.carregamento_conferido
+    ]
+    itens_carregamento_conferidos = [
+        item_rota for item_rota in itens_carregamento if item_rota.carregamento_conferido
+    ]
 
     return render(
         request,
@@ -893,6 +925,8 @@ def entrega_rota_checklist(request, pk):
             "rota": rota,
             "itens_entrega": itens_entrega,
             "itens_carregamento": itens_carregamento,
+            "itens_carregamento_pendentes": itens_carregamento_pendentes,
+            "itens_carregamento_conferidos": itens_carregamento_conferidos,
             "salvo_item_id": salvo_item_id,
             "salvo_fase": salvo_fase,
             "checklist_url": request.build_absolute_uri(
