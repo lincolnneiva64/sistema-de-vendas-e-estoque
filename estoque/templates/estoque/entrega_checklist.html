@@ -18,11 +18,21 @@
     padding: 10px 13px; background: #fff; color: #334155; text-decoration: none;
     display: inline-flex; align-items: center; justify-content: center;
     font-size: 0.95rem; font-weight: 850; line-height: 1.15; text-align: center;
+    transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease, opacity 120ms ease;
+    touch-action: manipulation;
   }
+  .check-btn:active { transform: translateY(2px) scale(0.99); }
+  .check-btn:disabled { cursor: wait; opacity: 0.78; }
   .check-btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
   .check-btn.compact { min-height: 38px; padding: 8px 11px; font-size: 0.86rem; }
   .check-btn.save { width: 100%; background: #16a34a; border-color: #16a34a; color: #fff; font-size: 1rem; box-shadow: 0 8px 18px rgba(22, 163, 74, 0.22); }
+  .check-btn.save:active,
+  .check-btn.save.is-saving { transform: translateY(2px); box-shadow: 0 3px 8px rgba(22, 163, 74, 0.18); }
   .check-top-save { margin: 10px 0 0; }
+  .check-save-feedback {
+    min-height: 18px; margin: 8px 0 0; color: #166534;
+    font-size: 0.84rem; font-weight: 850; line-height: 1.25;
+  }
   .mobile-access {
     margin-top: 12px; border: 1px solid #dbe5f0; border-radius: 12px;
     background: #f8fafc; padding: 11px;
@@ -36,12 +46,6 @@
   .mobile-access-feedback {
     min-height: 18px; margin: 7px 0 0; color: #166534;
     font-size: 0.82rem; font-weight: 850; line-height: 1.25;
-  }
-  .check-save-mobile {
-    display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
-    background: rgba(255, 255, 255, 0.94); border-top: 1px solid #dbe5f0;
-    box-shadow: 0 -10px 24px rgba(15, 23, 42, 0.12); backdrop-filter: blur(8px);
   }
   .check-alert {
     border: 1px solid #b7e4c7; border-radius: 12px; background: #ecfdf3; color: #166534;
@@ -85,9 +89,6 @@
   .check-control:has(input:checked) { border-color: #86efac; background: #f0fdf4; color: #14532d; box-shadow: inset 4px 0 0 #16a34a; }
   .check-control input { width: 28px; height: 28px; accent-color: #16a34a; }
   .check-empty { padding: 14px; color: #64748b; text-align: center; font-weight: 850; }
-  @media (max-width: 700px) {
-    .check-save-mobile { display: block; }
-  }
   @media (max-width: 520px) {
     .check-page { padding-top: 8px; }
     .check-shell { width: min(100vw - 10px, 720px); }
@@ -116,7 +117,7 @@
         <a id="checklistLink" class="mobile-access-link" href="{{ checklist_url }}" target="_blank" rel="noopener">{{ checklist_url }}</a>
         <div class="mobile-access-actions">
           <button id="copyChecklistLink" type="button" class="check-btn compact">Copiar link do checklist</button>
-          <a class="check-btn compact primary" href="{{ checklist_url }}" target="_blank" rel="noopener">Abrir checklist</a>
+          <a class="check-btn compact primary" href="{{ checklist_url }}" target="_blank" rel="noopener">Abrir em nova aba</a>
         </div>
         <p id="copyChecklistFeedback" class="mobile-access-feedback" aria-live="polite"></p>
       </section>
@@ -131,7 +132,8 @@
     <form id="checklistForm" method="post">
       {% csrf_token %}
       <div class="check-top-save">
-        <button type="submit" class="check-btn save">Salvar checklist</button>
+        <button type="submit" class="check-btn save" data-save-button>Salvar checklist</button>
+        <p id="saveChecklistFeedback" class="check-save-feedback" aria-live="polite"></p>
       </div>
 
     <section class="check-section carregamento">
@@ -206,19 +208,41 @@
     </section>
 
       <div class="check-actions">
-        <button type="submit" class="check-btn save">Salvar checklist</button>
+        <button type="submit" class="check-btn save" data-save-button>Salvar checklist</button>
       </div>
     </form>
-  </div>
-  <div class="check-save-mobile">
-    <button type="submit" form="checklistForm" class="check-btn save">Salvar checklist</button>
   </div>
 </main>
 <script>
   (function () {
+    var checklistForm = document.getElementById("checklistForm");
+    var saveFeedback = document.getElementById("saveChecklistFeedback");
+    var saveButtons = document.querySelectorAll("[data-save-button]");
     var copyButton = document.getElementById("copyChecklistLink");
     var linkElement = document.getElementById("checklistLink");
     var feedback = document.getElementById("copyChecklistFeedback");
+
+    if (checklistForm) {
+      checklistForm.addEventListener("submit", function (event) {
+        if (checklistForm.dataset.submitting === "true") {
+          event.preventDefault();
+          return;
+        }
+
+        checklistForm.dataset.submitting = "true";
+
+        saveButtons.forEach(function (button) {
+          button.dataset.originalText = button.textContent;
+          button.textContent = "Salvando...";
+          button.disabled = true;
+          button.classList.add("is-saving");
+        });
+
+        if (saveFeedback) {
+          saveFeedback.textContent = "Salvando checklist...";
+        }
+      });
+    }
 
     if (!copyButton || !linkElement || !feedback) {
       return;
