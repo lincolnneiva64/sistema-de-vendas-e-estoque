@@ -20,8 +20,23 @@
     font-size: 0.95rem; font-weight: 850; line-height: 1.15; text-align: center;
   }
   .check-btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+  .check-btn.compact { min-height: 38px; padding: 8px 11px; font-size: 0.86rem; }
   .check-btn.save { width: 100%; background: #16a34a; border-color: #16a34a; color: #fff; font-size: 1rem; box-shadow: 0 8px 18px rgba(22, 163, 74, 0.22); }
   .check-top-save { margin: 10px 0 0; }
+  .mobile-access {
+    margin-top: 12px; border: 1px solid #dbe5f0; border-radius: 12px;
+    background: #f8fafc; padding: 11px;
+  }
+  .mobile-access-title { margin: 0; color: #172033; font-size: 0.95rem; font-weight: 950; line-height: 1.2; }
+  .mobile-access-link {
+    display: block; margin-top: 7px; color: #1d4ed8; font-size: 0.84rem;
+    font-weight: 800; line-height: 1.35; overflow-wrap: anywhere; text-decoration: none;
+  }
+  .mobile-access-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .mobile-access-feedback {
+    min-height: 18px; margin: 7px 0 0; color: #166534;
+    font-size: 0.82rem; font-weight: 850; line-height: 1.25;
+  }
   .check-save-mobile {
     display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
     padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
@@ -80,6 +95,7 @@
     .check-stop,
     .check-section-head { padding: 11px; }
     .check-actions { flex-direction: column; }
+    .mobile-access-actions { flex-direction: column; }
     .check-btn { width: 100%; }
     .check-row,
     .check-control { grid-template-columns: 34px minmax(0, 1fr); padding: 12px 10px; }
@@ -95,6 +111,15 @@
         <a class="check-btn" href="{% url 'estoque:entrega_rota_detalhe' rota.id %}">Voltar para detalhes</a>
         <a class="check-btn" href="{% url 'estoque:entregas_dia' %}?data={{ rota.data|date:'Y-m-d' }}">Entregas do Dia</a>
       </div>
+      <section class="mobile-access" aria-labelledby="mobileAccessTitle">
+        <h2 id="mobileAccessTitle" class="mobile-access-title">Acesso pelo celular</h2>
+        <a id="checklistLink" class="mobile-access-link" href="{{ checklist_url }}" target="_blank" rel="noopener">{{ checklist_url }}</a>
+        <div class="mobile-access-actions">
+          <button id="copyChecklistLink" type="button" class="check-btn compact">Copiar link do checklist</button>
+          <a class="check-btn compact primary" href="{{ checklist_url }}" target="_blank" rel="noopener">Abrir checklist</a>
+        </div>
+        <p id="copyChecklistFeedback" class="mobile-access-feedback" aria-live="polite"></p>
+      </section>
     </header>
 
     {% if messages %}
@@ -189,4 +214,55 @@
     <button type="submit" form="checklistForm" class="check-btn save">Salvar checklist</button>
   </div>
 </main>
+<script>
+  (function () {
+    var copyButton = document.getElementById("copyChecklistLink");
+    var linkElement = document.getElementById("checklistLink");
+    var feedback = document.getElementById("copyChecklistFeedback");
+
+    if (!copyButton || !linkElement || !feedback) {
+      return;
+    }
+
+    function showFeedback(message) {
+      feedback.textContent = message;
+      window.clearTimeout(showFeedback.timeoutId);
+      showFeedback.timeoutId = window.setTimeout(function () {
+        feedback.textContent = "";
+      }, 3000);
+    }
+
+    copyButton.addEventListener("click", function () {
+      var checklistUrl = linkElement.href;
+
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(checklistUrl)
+          .then(function () {
+            showFeedback("Link copiado.");
+          })
+          .catch(function () {
+            showFeedback("Nao foi possivel copiar automaticamente.");
+          });
+        return;
+      }
+
+      var temporaryInput = document.createElement("input");
+      temporaryInput.value = checklistUrl;
+      temporaryInput.setAttribute("readonly", "");
+      temporaryInput.style.position = "fixed";
+      temporaryInput.style.opacity = "0";
+      document.body.appendChild(temporaryInput);
+      temporaryInput.select();
+
+      try {
+        document.execCommand("copy");
+        showFeedback("Link copiado.");
+      } catch (error) {
+        showFeedback("Nao foi possivel copiar automaticamente.");
+      }
+
+      document.body.removeChild(temporaryInput);
+    });
+  }());
+</script>
 {% endblock %}

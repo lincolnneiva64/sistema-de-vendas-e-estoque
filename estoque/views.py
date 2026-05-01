@@ -862,6 +862,9 @@ def entrega_rota_checklist(request, pk):
             "rota": rota,
             "itens_entrega": itens_entrega,
             "itens_carregamento": itens_carregamento,
+            "checklist_url": request.build_absolute_uri(
+                reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota.id})
+            ),
         },
     )
 
