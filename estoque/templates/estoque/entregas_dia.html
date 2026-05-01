@@ -20,6 +20,7 @@
   .entregas-btn.primary { border-color: #2563eb; background: #2563eb; color: #fff; }
   .entregas-btn.success { border-color: #16a34a; background: #16a34a; color: #fff; }
   .entregas-btn.soft { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+  .entregas-btn:disabled { cursor: not-allowed; opacity: 0.72; }
   .entregas-grid { display: grid; grid-template-columns: minmax(320px, 0.95fr) minmax(460px, 1.45fr); gap: 12px; }
   .entregas-card {
     background: #fff; border: 1px solid #e1e7ef; border-radius: 13px;
@@ -51,6 +52,13 @@
   .entregas-alert.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
   .entregas-alert.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
   .entregas-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+  .entregas-form-feedback {
+    display: none; border-radius: 11px; padding: 9px 11px; margin: 8px 0 0;
+    font-size: 0.84rem; font-weight: 850; line-height: 1.25;
+  }
+  .entregas-form-feedback.has-message { display: block; }
+  .entregas-form-feedback.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+  .entregas-form-feedback.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
   .entregas-form + .entregas-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid #edf1f6; }
   .entregas-form-title { margin: 0 0 8px; color: #172033; font-size: 0.92rem; font-weight: 900; }
   .entregas-table-wrap { overflow-x: auto; }
@@ -110,7 +118,7 @@
 
     {% if messages %}
       {% for message in messages %}
-        <div class="entregas-alert {% if message.tags == 'error' %}error{% elif message.tags == 'warning' %}warning{% else %}success{% endif %}">
+        <div class="entregas-alert {% if 'error' in message.tags %}error{% elif 'warning' in message.tags %}warning{% else %}success{% endif %}">
           {{ message }}
         </div>
       {% endfor %}
@@ -130,7 +138,7 @@
           <h2 class="entregas-card-title">Preparar entrega</h2>
         </div>
         <div class="entregas-card-body">
-          <form class="entregas-form" method="post">
+          <form class="entregas-form" method="post" data-create-form="unitaria"{% if messages %}{% for message in messages %}{% if 'entrega-unitaria' in message.tags and 'success' in message.tags %} data-created-success="true"{% endif %}{% endfor %}{% endif %}>
             {% csrf_token %}
             <input type="hidden" name="acao" value="unitaria">
             <input type="hidden" name="data" value="{{ data_entrega|date:'Y-m-d' }}">
@@ -140,18 +148,26 @@
               <select id="vendaUnitaria" name="venda_unitaria">
                 <option value="">Selecione uma venda</option>
                 {% for venda in vendas %}
-                  <option value="{{ venda.id }}">#{{ venda.id }} - {{ venda.cliente.nome|default:"Consumidor" }} - R$ {{ venda.total|floatformat:2 }}</option>
+                  <option value="{{ venda.id }}" data-has-entrega="{% if venda.tem_entrega_criada %}true{% else %}false{% endif %}">#{{ venda.id }} - {{ venda.cliente.nome|default:"Consumidor" }} - R$ {{ venda.total|floatformat:2 }}</option>
                 {% endfor %}
               </select>
             </div>
+            {% if messages %}
+              {% for message in messages %}
+                {% if 'entrega-unitaria' in message.tags %}
+                  <p class="entregas-form-feedback has-message {% if 'warning' in message.tags %}warning{% else %}success{% endif %}" aria-live="polite">{{ message }}</p>
+                {% endif %}
+              {% endfor %}
+            {% endif %}
+            <p class="entregas-form-feedback warning" data-client-feedback aria-live="polite"></p>
             <div class="entregas-field" style="margin-top: 8px;">
               <label for="obsUnitaria">Observacao</label>
               <textarea id="obsUnitaria" name="observacao" placeholder="Opcional"></textarea>
             </div>
-            <button type="submit" class="entregas-btn success" style="margin-top: 8px;">Criar entrega unitaria</button>
+            <button type="submit" class="entregas-btn success" style="margin-top: 8px;" data-loading-text="Criando...">Criar entrega unitaria</button>
           </form>
 
-          <form class="entregas-form" method="post">
+          <form class="entregas-form" method="post" data-create-form="rota">
             {% csrf_token %}
             <input type="hidden" name="acao" value="rota">
             <input type="hidden" name="data" value="{{ data_entrega|date:'Y-m-d' }}">
@@ -185,11 +201,19 @@
             {% else %}
               <div class="entregas-vazio">Nenhuma venda encontrada para esta data.</div>
             {% endif %}
+            {% if messages %}
+              {% for message in messages %}
+                {% if 'rota-entrega' in message.tags %}
+                  <p class="entregas-form-feedback has-message {% if 'warning' in message.tags %}warning{% else %}success{% endif %}" aria-live="polite">{{ message }}</p>
+                {% endif %}
+              {% endfor %}
+            {% endif %}
+            <p class="entregas-form-feedback warning" data-client-feedback aria-live="polite"></p>
             <div class="entregas-field" style="margin-top: 8px;">
               <label for="obsRota">Observacao</label>
               <textarea id="obsRota" name="observacao" placeholder="Opcional"></textarea>
             </div>
-            <button type="submit" class="entregas-btn success" style="margin-top: 8px;">Criar rota</button>
+            <button type="submit" class="entregas-btn success" style="margin-top: 8px;" data-loading-text="Criando rota...">Criar rota</button>
           </form>
         </div>
       </section>
@@ -279,4 +303,89 @@
     </section>
   </div>
 </div>
+<script>
+  (function () {
+    var forms = document.querySelectorAll("[data-create-form]");
+
+    function setButtonState(button, text, disabled) {
+      if (!button) {
+        return;
+      }
+      if (!button.dataset.defaultText) {
+        button.dataset.defaultText = button.textContent;
+      }
+      button.textContent = text || button.dataset.defaultText;
+      button.disabled = !!disabled;
+    }
+
+    forms.forEach(function (form) {
+      var tipo = form.dataset.createForm;
+      var feedback = form.querySelector("[data-client-feedback]");
+      var button = form.querySelector("button[type='submit']");
+      var vendaSelect = form.querySelector("select[name='venda_unitaria']");
+
+      if (tipo === "unitaria" && form.dataset.createdSuccess === "true") {
+        setButtonState(button, "Entrega criada", true);
+      }
+
+      if (tipo === "unitaria" && vendaSelect) {
+        vendaSelect.addEventListener("change", function () {
+          var opcao = vendaSelect.options[vendaSelect.selectedIndex];
+          var temEntrega = opcao && opcao.dataset.hasEntrega === "true";
+
+          if (vendaSelect.value && feedback) {
+            feedback.textContent = "";
+            feedback.classList.remove("has-message");
+          }
+
+          if (temEntrega) {
+            if (feedback) {
+              feedback.textContent = "Essa venda ja possui entrega criada.";
+              feedback.classList.add("has-message", "warning");
+            }
+            setButtonState(button, "Entrega ja criada", true);
+            return;
+          }
+
+          setButtonState(button, "", false);
+        });
+      }
+
+      form.addEventListener("submit", function (event) {
+        var mensagem = "";
+
+        if (tipo === "unitaria") {
+          var opcaoSelecionada = vendaSelect && vendaSelect.options[vendaSelect.selectedIndex];
+          if (!vendaSelect || !vendaSelect.value) {
+            mensagem = "Selecione uma venda para criar a entrega.";
+          } else if (opcaoSelecionada && opcaoSelecionada.dataset.hasEntrega === "true") {
+            mensagem = "Essa venda ja possui entrega criada.";
+          }
+        }
+
+        if (tipo === "rota" && !form.querySelector("input[name='vendas_rota']:checked")) {
+          mensagem = "Selecione pelo menos uma venda para criar a rota.";
+        }
+
+        if (mensagem) {
+          event.preventDefault();
+          if (feedback) {
+            feedback.textContent = mensagem;
+            feedback.classList.add("has-message", "warning");
+          }
+          return;
+        }
+
+        if (feedback) {
+          feedback.textContent = "";
+          feedback.classList.remove("has-message");
+        }
+        if (button) {
+          button.textContent = button.dataset.loadingText || "Criando...";
+          button.disabled = true;
+        }
+      });
+    });
+  }());
+</script>
 {% endblock %}

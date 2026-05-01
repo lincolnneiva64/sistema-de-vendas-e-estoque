@@ -682,10 +682,18 @@ def entregas_dia(request):
         observacao = request.POST.get("observacao", "").strip()
 
         if acao == "unitaria":
-            venda_id = request.POST.get("venda_unitaria")
+            venda_id = request.POST.get("venda_unitaria", "").strip()
+            if not venda_id.isdigit():
+                messages.warning(request, "Selecione uma venda para criar a entrega.", extra_tags="entrega-unitaria")
+                return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}")
+
             venda = Venda.objects.filter(pk=venda_id).first()
             if not venda:
-                messages.warning(request, "Selecione uma venda para criar a entrega unitaria.")
+                messages.warning(request, "Selecione uma venda valida para criar a entrega.", extra_tags="entrega-unitaria")
+                return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}")
+
+            if EntregaRotaItem.objects.filter(venda=venda).exists():
+                messages.warning(request, "Essa venda ja possui entrega criada.", extra_tags="entrega-unitaria")
                 return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}")
 
             with transaction.atomic():
@@ -699,14 +707,18 @@ def entregas_dia(request):
                     venda=venda,
                     ordem_entrega=1,
                 )
-            messages.success(request, f"Entrega unitaria #{rota.id} criada para a venda #{venda.id}.")
+            messages.success(request, f"Entrega unitaria #{rota.id} criada para a venda #{venda.id}.", extra_tags="entrega-unitaria")
             return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}")
 
         if acao == "rota":
-            venda_ids = request.POST.getlist("vendas_rota")
+            venda_ids = [
+                venda_id.strip()
+                for venda_id in request.POST.getlist("vendas_rota")
+                if venda_id.strip().isdigit()
+            ]
             vendas = list(Venda.objects.filter(pk__in=venda_ids).select_related("cliente"))
             if not vendas:
-                messages.warning(request, "Selecione pelo menos uma venda para criar a rota.")
+                messages.warning(request, "Selecione pelo menos uma venda para criar a rota.", extra_tags="rota-entrega")
                 return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}")
 
             vendas_por_id = {str(venda.id): venda for venda in vendas}
@@ -737,7 +749,7 @@ def entregas_dia(request):
                     )
                     for indice, (_, __, venda) in enumerate(ordenadas, start=1)
                 ])
-            messages.success(request, f"Rota #{rota.id} criada com {len(ordenadas)} entrega(s).")
+            messages.success(request, f"Rota #{rota.id} criada com {len(ordenadas)} entrega(s).", extra_tags="rota-entrega")
             return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}")
 
     vendas_lista = list(
@@ -756,6 +768,7 @@ def entregas_dia(request):
             f"{item.rota.get_tipo_display()} #{item.rota_id} - {item.get_status_display()}",
         )
     for venda in vendas_lista:
+        venda.tem_entrega_criada = venda.id in status_por_venda
         venda.entrega_status_texto = status_por_venda.get(venda.id, "Sem entrega criada")
 
     rotas = list(
