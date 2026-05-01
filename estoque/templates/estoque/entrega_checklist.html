@@ -33,6 +33,11 @@
     min-height: 18px; margin: 8px 0 0; color: #166534;
     font-size: 0.84rem; font-weight: 850; line-height: 1.25;
   }
+  .check-save-feedback-inline {
+    min-height: 0; margin: 6px 0 0; padding: 7px 9px;
+    border: 1px solid #86efac; border-radius: 9px; background: #dcfce7;
+    color: #14532d; font-size: 0.9rem; font-weight: 900; line-height: 1.2;
+  }
   .mobile-access {
     margin-top: 12px; border: 1px solid #dbe5f0; border-radius: 12px;
     background: #f8fafc; padding: 11px;
@@ -132,12 +137,15 @@
 
     {% if messages %}
       {% for message in messages %}
-        <div class="check-alert">{{ message }}</div>
+        {% if 'checklist-global' not in message.tags %}
+          <div class="check-alert">{{ message }}</div>
+        {% endif %}
       {% endfor %}
     {% endif %}
 
     <form id="checklistForm" method="post">
       {% csrf_token %}
+      <input type="hidden" id="salvarBlocoAlvo" name="salvar_bloco_alvo" value="">
 
     <section class="check-section carregamento">
       <div class="check-section-head">
@@ -146,9 +154,12 @@
         <p class="check-section-note">Carregar no carro nesta ordem. Ultima entrega entra primeiro. Marque os itens conforme entram no carro.</p>
       </div>
       {% for item_rota in itens_carregamento %}
-        <article class="check-stop">
+        <article id="bloco-{{ item_rota.id }}-carregamento" class="check-stop">
           <h3 class="check-stop-title">{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</h3>
           <div class="check-stop-meta">Venda #{{ item_rota.venda.id }} - R$ {{ item_rota.venda.total|floatformat:2 }} - entrega ordem {{ item_rota.ordem_entrega }}</div>
+          {% if item_rota.salvo_carregamento %}
+            <p class="check-save-feedback check-save-feedback-inline">Checklist salvo com sucesso.</p>
+          {% endif %}
           <div class="check-item-list">
             {% for checklist in item_rota.checklists_ordenados %}
               <label class="check-row">
@@ -163,7 +174,7 @@
             {% endfor %}
           </div>
           <div class="check-stop-save">
-            <button type="submit" class="check-btn save" data-save-button>Salvar checklist</button>
+            <button type="submit" name="salvar_bloco" value="{{ item_rota.id }}:carregamento" class="check-btn save" data-save-button>Salvar checklist</button>
             <p class="check-save-feedback" data-save-feedback aria-live="polite"></p>
           </div>
         </article>
@@ -179,9 +190,12 @@
         <p class="check-section-note">Entregar nesta ordem. Sequencia que o entregador deve seguir na rua. Marque os itens conferidos/entregues na rua.</p>
       </div>
       {% for item_rota in itens_entrega %}
-        <article class="check-stop">
+        <article id="bloco-{{ item_rota.id }}-entrega" class="check-stop">
           <h3 class="check-stop-title">{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</h3>
           <div class="check-stop-meta">Venda #{{ item_rota.venda.id }} - R$ {{ item_rota.venda.total|floatformat:2 }}</div>
+          {% if item_rota.salvo_entrega %}
+            <p class="check-save-feedback check-save-feedback-inline">Checklist salvo com sucesso.</p>
+          {% endif %}
           <div class="check-actions">
             <a class="check-btn primary" href="{% url 'estoque:venda_detalhe' item_rota.venda.id %}?entrega={{ rota.id }}">Abrir nota</a>
           </div>
@@ -209,7 +223,7 @@
             </label>
           </div>
           <div class="check-stop-save">
-            <button type="submit" class="check-btn save" data-save-button>Salvar checklist</button>
+            <button type="submit" name="salvar_bloco" value="{{ item_rota.id }}:entrega" class="check-btn save" data-save-button>Salvar checklist</button>
             <p class="check-save-feedback" data-save-feedback aria-live="polite"></p>
           </div>
         </article>
@@ -223,13 +237,28 @@
 <script>
   (function () {
     var checklistForm = document.getElementById("checklistForm");
-    var saveFeedbacks = document.querySelectorAll("[data-save-feedback]");
-    var saveButtons = document.querySelectorAll("[data-save-button]");
+    var salvarBlocoAlvo = document.getElementById("salvarBlocoAlvo");
     var copyButton = document.getElementById("copyChecklistLink");
     var linkElement = document.getElementById("checklistLink");
     var feedback = document.getElementById("copyChecklistFeedback");
 
+    if (window.history && window.history.replaceState) {
+      var currentUrl = new URL(window.location.href);
+      if (currentUrl.searchParams.has("salvo_item") || currentUrl.searchParams.has("salvo_fase")) {
+        currentUrl.searchParams.delete("salvo_item");
+        currentUrl.searchParams.delete("salvo_fase");
+        window.history.replaceState({}, document.title, currentUrl.toString());
+      }
+    }
+
     if (checklistForm) {
+      checklistForm.addEventListener("click", function (event) {
+        var button = event.target.closest("[data-save-button]");
+        if (button && salvarBlocoAlvo) {
+          salvarBlocoAlvo.value = button.value || "";
+        }
+      });
+
       checklistForm.addEventListener("submit", function (event) {
         if (checklistForm.dataset.submitting === "true") {
           event.preventDefault();
@@ -238,16 +267,22 @@
 
         checklistForm.dataset.submitting = "true";
 
-        saveButtons.forEach(function (button) {
-          button.dataset.originalText = button.textContent;
-          button.textContent = "Salvando...";
-          button.disabled = true;
-          button.classList.add("is-saving");
-        });
+        var clickedButton = event.submitter || document.activeElement;
+        if (clickedButton && clickedButton.matches("[data-save-button]")) {
+          if (salvarBlocoAlvo) {
+            salvarBlocoAlvo.value = clickedButton.value || salvarBlocoAlvo.value;
+          }
+          clickedButton.dataset.originalText = clickedButton.textContent;
+          clickedButton.textContent = "Salvando...";
+          clickedButton.disabled = true;
+          clickedButton.classList.add("is-saving");
 
-        saveFeedbacks.forEach(function (saveFeedback) {
-          saveFeedback.textContent = "Salvando checklist...";
-        });
+          var saveArea = clickedButton.closest(".check-stop-save");
+          var saveFeedback = saveArea ? saveArea.querySelector("[data-save-feedback]") : null;
+          if (saveFeedback) {
+            saveFeedback.textContent = "Salvando checklist...";
+          }
+        }
       });
     }
 

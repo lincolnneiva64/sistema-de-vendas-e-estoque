@@ -835,7 +835,15 @@ def entrega_rota_checklist(request, pk):
                 EntregaChecklistItem.objects.bulk_create(novos)
 
     if request.method == "POST":
+        bloco_salvo = request.POST.get("salvar_bloco") or request.POST.get("salvar_bloco_alvo", "")
+        bloco_partes = bloco_salvo.split(":", 1)
+        bloco_rota_item_id = bloco_partes[0] if bloco_partes else ""
+        bloco_fase = bloco_partes[1] if len(bloco_partes) > 1 else ""
         rota_item_ids = [item_rota.id for item_rota in itens_entrega]
+        bloco_valido = bloco_rota_item_id.isdigit() and int(bloco_rota_item_id) in rota_item_ids
+        if bloco_valido:
+            rota_item_ids = [int(bloco_rota_item_id)]
+
         checklist_qs = EntregaChecklistItem.objects.filter(rota_item_id__in=rota_item_ids)
 
         for checklist in checklist_qs:
@@ -844,19 +852,29 @@ def entrega_rota_checklist(request, pk):
             checklist.save(update_fields=["carregado", "entregue", "atualizado_em"])
 
         for item_rota in itens_entrega:
+            if item_rota.id not in rota_item_ids:
+                continue
             item_rota.conferido_cliente = f"conferido_{item_rota.id}" in request.POST
             item_rota.entrega_concluida = f"concluida_{item_rota.id}" in request.POST
             item_rota.save(update_fields=["conferido_cliente", "entrega_concluida"])
 
-        messages.success(request, "Checklist salvo com sucesso.")
-        return redirect("estoque:entrega_rota_checklist", pk=rota.id)
+        redirect_url = reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota.id})
+        if bloco_valido and bloco_fase in {"carregamento", "entrega"}:
+            redirect_url = f"{redirect_url}?salvo_item={bloco_rota_item_id}&salvo_fase={bloco_fase}#bloco-{bloco_rota_item_id}-{bloco_fase}"
+        else:
+            messages.success(request, "Checklist salvo com sucesso.", extra_tags="checklist-global")
+        return redirect(redirect_url)
 
     rota = get_object_or_404(
         EntregaRota.objects.prefetch_related("itens__venda__cliente", "itens__venda__itens__produto", "itens__checklist_itens__item_venda"),
         pk=pk,
     )
     itens_entrega = list(rota.itens.all())
+    salvo_item_id = request.GET.get("salvo_item", "")
+    salvo_fase = request.GET.get("salvo_fase", "")
     for item_rota in itens_entrega:
+        item_rota.salvo_carregamento = salvo_item_id == str(item_rota.id) and salvo_fase == "carregamento"
+        item_rota.salvo_entrega = salvo_item_id == str(item_rota.id) and salvo_fase == "entrega"
         item_rota.checklists_por_item = {
             checklist.item_venda_id: checklist
             for checklist in item_rota.checklist_itens.all()
@@ -875,6 +893,8 @@ def entrega_rota_checklist(request, pk):
             "rota": rota,
             "itens_entrega": itens_entrega,
             "itens_carregamento": itens_carregamento,
+            "salvo_item_id": salvo_item_id,
+            "salvo_fase": salvo_fase,
             "checklist_url": request.build_absolute_uri(
                 reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota.id})
             ),
