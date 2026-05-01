@@ -14,8 +14,8 @@
   .check-subtitle { margin: 5px 0 0; color: #64748b; font-size: 0.92rem; font-weight: 750; line-height: 1.3; }
   .check-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
   .check-btn {
-    min-height: 46px; border: 1px solid #cbd5e1; border-radius: 11px;
-    padding: 10px 13px; background: #fff; color: #334155; text-decoration: none;
+    min-height: 42px; border: 1px solid #cbd5e1; border-radius: 10px;
+    padding: 8px 12px; background: #fff; color: #334155; text-decoration: none;
     display: inline-flex; align-items: center; justify-content: center;
     font-size: 0.95rem; font-weight: 850; line-height: 1.15; text-align: center;
     transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease, opacity 120ms ease;
@@ -25,10 +25,10 @@
   .check-btn:disabled { cursor: wait; opacity: 0.78; }
   .check-btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
   .check-btn.compact { min-height: 38px; padding: 8px 11px; font-size: 0.86rem; }
-  .check-btn.save { width: 100%; background: #16a34a; border-color: #16a34a; color: #fff; font-size: 1rem; box-shadow: 0 8px 18px rgba(22, 163, 74, 0.22); }
+  .check-btn.save { min-height: 40px; width: 100%; background: #16a34a; border-color: #16a34a; color: #fff; font-size: 0.95rem; box-shadow: 0 8px 18px rgba(22, 163, 74, 0.22); }
   .check-btn.save:active,
   .check-btn.save.is-saving { transform: translateY(2px); box-shadow: 0 3px 8px rgba(22, 163, 74, 0.18); }
-  .check-stop-save { margin-top: 12px; }
+  .check-stop-save { margin-top: 8px; }
   .check-save-feedback {
     min-height: 18px; margin: 8px 0 0; color: #166534;
     font-size: 0.84rem; font-weight: 850; line-height: 1.25;
@@ -65,29 +65,29 @@
   .check-phase.entrega { background: #dbeafe; color: #1e3a8a; }
   .check-section-title { margin: 7px 0 0; color: #1e3a8a; font-size: 1.08rem; font-weight: 950; line-height: 1.15; }
   .check-section-note { margin: 5px 0 0; color: #475569; font-size: 0.88rem; font-weight: 780; line-height: 1.35; }
-  .check-stop { padding: 12px 14px; border-top: 1px solid #edf1f6; }
+  .check-stop { padding: 9px 12px; border-top: 1px solid #edf1f6; }
   .check-stop:first-child { border-top: 0; }
   .check-stop-title { margin: 0; color: #172033; font-size: 1.04rem; font-weight: 950; line-height: 1.2; overflow-wrap: anywhere; }
-  .check-stop-meta { margin-top: 3px; color: #64748b; font-size: 0.86rem; font-weight: 780; line-height: 1.3; }
-  .check-item-list { display: grid; gap: 8px; margin-top: 10px; }
+  .check-stop-meta { margin-top: 2px; color: #64748b; font-size: 0.82rem; font-weight: 780; line-height: 1.2; }
+  .check-item-list { display: grid; gap: 3px; margin-top: 5px; }
   .check-row {
-    display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 9px; align-items: start;
-    border: 1px solid #e2e8f0; border-radius: 12px; padding: 11px; background: #fbfdff;
+    display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 6px; align-items: center;
+    border: 1px solid #e2e8f0; border-radius: 8px; padding: 4px 7px; background: #fbfdff;
     cursor: pointer; transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
   }
-  .check-row:has(input:checked) { border-color: #86efac; background: #f0fdf4; box-shadow: inset 4px 0 0 #16a34a; }
-  .check-row input { width: 28px; height: 28px; margin-top: 0; accent-color: #16a34a; }
-  .check-row-text { display: block; color: #172033; font-size: 0.97rem; font-weight: 880; line-height: 1.28; overflow-wrap: anywhere; }
-  .check-row-sub { display: block; color: #64748b; font-size: 0.84rem; font-weight: 780; margin-top: 3px; line-height: 1.25; }
-  .check-controls { display: grid; gap: 8px; margin-top: 10px; }
+  .check-row:has(input:checked) { border-color: #86efac; background: #f0fdf4; box-shadow: inset 3px 0 0 #16a34a; }
+  .check-row input { width: 20px; height: 20px; margin: 0; accent-color: #16a34a; }
+  .check-row-text { display: block; color: #172033; font-size: 0.91rem; font-weight: 880; line-height: 1.12; overflow-wrap: anywhere; }
+  .check-row-sub { display: block; color: #64748b; font-size: 0.73rem; font-weight: 780; margin-top: 0; line-height: 1.1; }
+  .check-controls { display: grid; gap: 4px; margin-top: 6px; }
   .check-control {
-    display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 9px; align-items: center;
-    border: 1px solid #dbe5f0; border-radius: 12px; padding: 11px; background: #fbfdff;
-    color: #172033; font-size: 0.96rem; font-weight: 900; cursor: pointer;
+    display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 6px; align-items: center;
+    border: 1px solid #dbe5f0; border-radius: 8px; padding: 5px 7px; background: #fbfdff;
+    color: #172033; font-size: 0.86rem; font-weight: 900; cursor: pointer;
     transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
   }
-  .check-control:has(input:checked) { border-color: #86efac; background: #f0fdf4; color: #14532d; box-shadow: inset 4px 0 0 #16a34a; }
-  .check-control input { width: 28px; height: 28px; accent-color: #16a34a; }
+  .check-control:has(input:checked) { border-color: #86efac; background: #f0fdf4; color: #14532d; box-shadow: inset 3px 0 0 #16a34a; }
+  .check-control input { width: 20px; height: 20px; margin: 0; accent-color: #16a34a; }
   .check-empty { padding: 14px; color: #64748b; text-align: center; font-weight: 850; }
   @media (max-width: 520px) {
     .check-page { padding-top: 8px; }
@@ -98,8 +98,15 @@
     .check-actions { flex-direction: column; }
     .mobile-access-actions { flex-direction: column; }
     .check-btn { width: 100%; }
+    .check-btn.save { min-height: 42px; font-size: 0.96rem; }
+    .check-stop-save { margin-top: 9px; }
+    .check-item-list { gap: 4px; margin-top: 6px; }
     .check-row,
-    .check-control { grid-template-columns: 34px minmax(0, 1fr); padding: 12px 10px; }
+    .check-control { grid-template-columns: 28px minmax(0, 1fr); padding: 7px 9px; }
+    .check-row input,
+    .check-control input { width: 23px; height: 23px; }
+    .check-row-text { font-size: 0.92rem; line-height: 1.15; }
+    .check-row-sub { font-size: 0.76rem; }
   }
 </style>
 
