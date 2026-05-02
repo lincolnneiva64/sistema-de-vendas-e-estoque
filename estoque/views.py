@@ -941,16 +941,20 @@ def entrega_rota_checklist(request, pk):
         checklist_qs = EntregaChecklistItem.objects.filter(rota_item_id__in=rota_item_ids)
 
         for checklist in checklist_qs:
-            checklist.carregado = f"carregado_{checklist.id}" in request.POST
-            checklist.entregue = f"entregue_{checklist.id}" in request.POST
-            checklist.save(update_fields=["carregado", "entregue", "atualizado_em"])
+            if bloco_fase == "carregamento":
+                checklist.carregado = f"carregado_{checklist.id}" in request.POST
+                checklist.save(update_fields=["carregado", "atualizado_em"])
+            elif bloco_fase == "entrega":
+                checklist.entregue = f"entregue_{checklist.id}" in request.POST
+                checklist.save(update_fields=["entregue", "atualizado_em"])
 
-        for item_rota in itens_entrega:
-            if item_rota.id not in rota_item_ids:
-                continue
-            item_rota.conferido_cliente = f"conferido_{item_rota.id}" in request.POST
-            item_rota.entrega_concluida = f"concluida_{item_rota.id}" in request.POST
-            item_rota.save(update_fields=["conferido_cliente", "entrega_concluida"])
+        if bloco_fase == "entrega":
+            for item_rota in itens_entrega:
+                if item_rota.id not in rota_item_ids:
+                    continue
+                item_rota.conferido_cliente = f"conferido_{item_rota.id}" in request.POST
+                item_rota.entrega_concluida = f"concluida_{item_rota.id}" in request.POST
+                item_rota.save(update_fields=["conferido_cliente", "entrega_concluida"])
 
         redirect_url = reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota.id})
         if bloco_valido and bloco_fase in {"carregamento", "entrega"}:
