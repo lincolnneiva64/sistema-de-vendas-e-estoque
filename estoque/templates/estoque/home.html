@@ -31,10 +31,73 @@
   transform: translateY(-1px);
   box-shadow: 0 10px 22px rgba(13, 110, 253, 0.28);
 }
-.tarja-acoes .btn-acao-principal-painel {
-  margin-left: 6px;
-  padding: 3px 8px;
-  border-radius: 4px;
+.tarja-acoes {
+  position: fixed;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 1000;
+  width: min(940px, calc(100% - 24px));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(248, 249, 250, 0.97);
+  border: 1px solid #d8dee7;
+  border-radius: 12px;
+  box-shadow: 0 -4px 18px rgba(15, 23, 42, 0.16);
+}
+.tarja-grupo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tarja-label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  margin-right: 2px;
+}
+.tarja-acoes .btn-acao-principal-painel,
+.btn-tarja {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 5px 9px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.btn-tarja-secundario {
+  background: #64748b;
+  color: #fff;
+}
+.btn-tarja-perigo {
+  background: #dc3545;
+  color: #fff;
+}
+.btn-tarja-vendas {
+  background: #28a745;
+  color: #fff;
+}
+.btn-tarja:hover {
+  color: #fff;
+  filter: brightness(0.95);
+}
+@media (max-width: 760px) {
+  .tarja-acoes {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .tarja-grupo {
+    justify-content: center;
+  }
 }
 </style>
 <div class="container mt-4">
@@ -302,6 +365,7 @@ if (e.key === "Escape") {
 })
 const btnExcluirProduto = document.getElementById("btnExcluirProduto");
 
+if (btnExcluirProduto) {
 btnExcluirProduto.addEventListener("click", function() {
     if (!produtoSelecionado) {
         alert("Selecione um produto para excluir.");
@@ -357,6 +421,7 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
     document.getElementById("modalConfirmarExclusao").style.display = "none";
 };
 });
+}
   // Função para normalizar texto (remove acentos e converte para minúsculas)
   function normalizarTexto(texto) {
     return texto
@@ -457,35 +522,35 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
 </div>
 
 <!-- TARJA -->
-<div style="display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000; background: #cfd4da; border-top: 1px solid #b8bfc7; box-shadow: 0 -2px 8px rgba(0,0,0,0.08);">
-  <div class="tarja-acoes" style="padding: 2px 10px; display: flex; justify-content: flex-start; align-items: center; gap: 6px;">
+<div class="tarja-acoes" aria-label="Acoes rapidas de produtos">
+  <div class="tarja-grupo">
     <span style="font-weight: 500; margin-right: 6px; font-size: 13px; color: #6c757d;">Ações</span>
-<a class="btn btn-primary" href="{% url 'estoque:cadastrar_produto' %}" style="margin-left:10px; padding:3px 8px; font-size:13px; line-height:1;">
-    + Novo Produto
-</a>
-<a href="{% url 'estoque:unidades_produto' %}" class="btn-acao-principal-painel">
-  Unidades
-</a>
-<a href="{% url 'estoque:categorias_produto' %}" class="btn-acao-principal-painel">
-  Categorias
-</a>
-<a href="/estoque/clientes/consulta/" class="btn-acao-principal-painel">
-  Clientes
-</a>
-<a href="{% url 'estoque:funcionarios' %}" class="btn-acao-principal-painel">
-  Funcionarios
-</a>
-<a href="{% url 'estoque:lixeira' %}" style="display:inline-block; margin-left:auto; background:#6c757d; color:#fff; padding:3px 8px; border:none; border-radius:4px; font-size:13px;">
-  Ver Lixeira
-</a>
-
-<a href="#" id="btnExcluirProduto" style="display:inline-block; margin-left:6px; background:#dc3545; color:#fff; padding:3px 8px; border:none; border-radius:4px; font-size:13px;">
-  Excluir Produto
-</a>
-
-<a href="{% url 'estoque:vendas' %}" style="display:inline-block; margin-left:6px; background:#28a745; color:#fff; padding:6px 12px; border:none; border-radius:6px; font-size:14px; font-weight:500;">
-  Vendas
-</a>
+    <a class="btn-acao-principal-painel" href="{% url 'estoque:cadastrar_produto' %}">
+      + Novo Produto
+    </a>
+    <a href="{% url 'estoque:unidades_produto' %}" class="btn-acao-principal-painel">
+      Unidades
+    </a>
+    <a href="{% url 'estoque:categorias_produto' %}" class="btn-acao-principal-painel">
+      Categorias
+    </a>
+    <a href="/estoque/clientes/consulta/" class="btn-acao-principal-painel">
+      Clientes
+    </a>
+    <a href="{% url 'estoque:funcionarios' %}" class="btn-acao-principal-painel">
+      Funcionarios
+    </a>
+  </div>
+  <div class="tarja-grupo">
+    <a href="{% url 'estoque:vendas' %}" class="btn-tarja btn-tarja-vendas">
+      Vendas
+    </a>
+    <a href="{% url 'estoque:lixeira' %}" class="btn-tarja btn-tarja-secundario">
+      Ver Lixeira
+    </a>
+    <a href="#" id="btnExcluirProduto" class="btn-tarja btn-tarja-perigo">
+      Excluir Produto
+    </a>
   </div>
 </div>
 
