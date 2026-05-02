@@ -11,66 +11,61 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.SeparateDatabaseAndState(
-            database_operations=[],
-            state_operations=[
-                migrations.CreateModel(
-                    name="Venda",
-                    fields=[
-                        ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
-                        ("data_venda", models.DateField()),
-                        ("data_vencimento", models.DateField(blank=True, null=True)),
-                        ("tipo_pagamento", models.CharField(blank=True, max_length=40)),
-                        ("operador", models.CharField(blank=True, max_length=120)),
-                        ("total", models.DecimalField(decimal_places=2, default=0, max_digits=12)),
-                        ("criado_em", models.DateTimeField(auto_now_add=True)),
-                        ("atualizado_em", models.DateTimeField(auto_now=True)),
-                        (
-                            "cliente",
-                            models.ForeignKey(
-                                blank=True,
-                                null=True,
-                                on_delete=django.db.models.deletion.SET_NULL,
-                                related_name="vendas",
-                                to="estoque.cliente",
-                            ),
-                        ),
-                    ],
-                    options={
-                        "ordering": ["-id"],
-                    },
-                ),
-                migrations.CreateModel(
-                    name="ItemVenda",
-                    fields=[
-                        ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
-                        ("quantidade", models.DecimalField(decimal_places=3, max_digits=12)),
-                        ("unidade", models.CharField(blank=True, max_length=20)),
-                        ("preco_unitario", models.DecimalField(decimal_places=2, max_digits=12)),
-                        ("valor_total", models.DecimalField(decimal_places=2, max_digits=12)),
-                        (
-                            "produto",
-                            models.ForeignKey(
-                                blank=True,
-                                null=True,
-                                on_delete=django.db.models.deletion.SET_NULL,
-                                related_name="itens_venda",
-                                to="estoque.produto",
-                            ),
-                        ),
-                        (
-                            "venda",
-                            models.ForeignKey(
-                                on_delete=django.db.models.deletion.CASCADE,
-                                related_name="itens",
-                                to="estoque.venda",
-                            ),
-                        ),
-                    ],
-                    options={
-                        "ordering": ["id"],
-                    },
+        migrations.CreateModel(
+            name="Venda",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("data_venda", models.DateField()),
+                ("data_vencimento", models.DateField(blank=True, null=True)),
+                ("tipo_pagamento", models.CharField(blank=True, max_length=40)),
+                ("operador", models.CharField(blank=True, max_length=120)),
+                ("total", models.DecimalField(decimal_places=2, default=0, max_digits=12)),
+                ("criado_em", models.DateTimeField(auto_now_add=True)),
+                ("atualizado_em", models.DateTimeField(auto_now=True)),
+                (
+                    "cliente",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="vendas",
+                        to="estoque.cliente",
+                    ),
                 ),
             ],
+            options={
+                "ordering": ["-id"],
+            },
+        ),
+        migrations.CreateModel(
+            name="ItemVenda",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("quantidade", models.DecimalField(decimal_places=3, max_digits=12)),
+                ("unidade", models.CharField(blank=True, max_length=20)),
+                ("preco_unitario", models.DecimalField(decimal_places=2, max_digits=12)),
+                ("valor_total", models.DecimalField(decimal_places=2, max_digits=12)),
+                (
+                    "produto",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="itens_venda",
+                        to="estoque.produto",
+                    ),
+                ),
+                (
+                    "venda",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="itens",
+                        to="estoque.venda",
+                    ),
+                ),
+            ],
+            options={
+                "ordering": ["id"],
+            },
         ),
     ]
