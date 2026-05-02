@@ -18,9 +18,9 @@ venv.bak/
 db.sqlite3
 *.sqlite3
 
-# Media and Static files (if generated locally)
+# Media and generated static files
 media/
-static/
+staticfiles/
 
 # IDE-specific files (Example for VS Code, PyCharm)
 .idea/
