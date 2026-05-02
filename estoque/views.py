@@ -4,6 +4,7 @@ from io import BytesIO
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from urllib.parse import quote, urlencode
@@ -884,6 +885,13 @@ def entrega_rota_detalhe(request, pk):
     )
     itens_entrega = list(rota.itens.all())
     itens_carregamento = list(reversed(itens_entrega))
+    checklist_path = reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota.id})
+    checklist_base_url = getattr(settings, "CHECKLIST_BASE_URL", "").rstrip("/")
+    checklist_url = (
+        f"{checklist_base_url}{checklist_path}"
+        if checklist_base_url
+        else request.build_absolute_uri(checklist_path)
+    )
 
     return render(
         request,
@@ -892,6 +900,8 @@ def entrega_rota_detalhe(request, pk):
             "rota": rota,
             "itens_entrega": itens_entrega,
             "itens_carregamento": itens_carregamento,
+            "checklist_url": checklist_url,
+            "funcionarios_habilitados": Funcionario.habilitados_para_checklist(),
         },
     )
 

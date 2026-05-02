@@ -28,6 +28,66 @@
   }
   .rota-card-title { margin: 0; color: #1e3a8a; font-size: 0.98rem; font-weight: 900; }
   .rota-card-body { padding: 12px 14px; }
+  .funcionario-share {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end;
+  }
+  .funcionario-share-field label {
+    display: block; margin-bottom: 4px; color: #334155; font-size: 0.8rem; font-weight: 900;
+  }
+  .funcionario-share-select {
+    width: 100%; min-height: 38px; border: 1.5px solid #d3dbe8; border-radius: 9px;
+    padding: 8px 10px; background: #fff; color: #172033; font-size: 0.86rem;
+    font-weight: 750; outline: none;
+  }
+  .funcionario-share-select:focus {
+    border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.13);
+  }
+  .funcionario-share-feedback {
+    grid-column: 1 / -1; min-height: 18px; margin: 0; color: #166534;
+    font-size: 0.82rem; font-weight: 850;
+  }
+  .funcionario-share-empty {
+    margin: 0; color: #92400e; background: #fffbeb; border: 1px solid #fde68a;
+    border-radius: 10px; padding: 9px 10px; font-size: 0.84rem; font-weight: 850; line-height: 1.3;
+  }
+  .checklist-link-box {
+    margin-bottom: 12px; border: 1px solid #dbe5f0; border-radius: 11px;
+    background: #f8fafc; padding: 10px;
+  }
+  .checklist-link-label {
+    display: block; margin-bottom: 5px; color: #334155; font-size: 0.8rem; font-weight: 900;
+  }
+  .checklist-link-text {
+    display: block; color: #1d4ed8; font-size: 0.84rem; font-weight: 800;
+    overflow-wrap: anywhere; text-decoration: none;
+  }
+  .checklist-link-actions {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-top: 9px;
+  }
+  .checklist-qr-box {
+    display: none; margin-top: 10px; padding: 12px; border: 1px solid #bfdbfe;
+    border-radius: 12px; background: #eff6ff; text-align: center;
+  }
+  .checklist-qr-box.is-visible { display: block; }
+  .checklist-qr-title {
+    margin: 0 0 10px; color: #1e3a8a; font-size: 0.9rem; font-weight: 900;
+  }
+  .checklist-qr-code {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 10px; background: #fff; border: 1px solid #dbe5f0; border-radius: 10px;
+  }
+  .checklist-qr-code img,
+  .checklist-qr-code canvas {
+    width: min(220px, 68vw) !important; height: min(220px, 68vw) !important;
+  }
+  .checklist-qr-feedback {
+    min-height: 18px; margin: 7px 0 0; color: #166534;
+    font-size: 0.82rem; font-weight: 850;
+  }
+  .checklist-qr-debug {
+    margin: 9px 0 0; color: #475569; font-size: 0.78rem;
+    font-weight: 800; line-height: 1.3; overflow-wrap: anywhere;
+  }
   .rota-meta {
     display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;
   }
@@ -82,6 +142,7 @@
     .rota-detalhe-header { align-items: stretch; flex-direction: column; }
     .rota-detalhe-actions { justify-content: flex-start; }
     .rota-meta,
+    .funcionario-share,
     .rota-ordens { grid-template-columns: 1fr; }
   }
 </style>
@@ -97,9 +158,53 @@
       </div>
       <div class="rota-detalhe-actions">
         <a class="rota-btn" href="{% url 'estoque:entregas_dia' %}?data={{ rota.data|date:'Y-m-d' }}">Voltar para Entregas do Dia</a>
-        <a class="rota-btn primary" href="{% url 'estoque:entrega_rota_checklist' rota.id %}">Abrir checklist</a>
+        <a id="rotaChecklistLink" class="rota-btn primary" href="{{ checklist_url }}">Abrir checklist</a>
       </div>
     </header>
+
+    <section class="rota-card">
+      <div class="rota-card-head">
+        <h2 class="rota-card-title">Enviar checklist para funcionario</h2>
+      </div>
+      <div class="rota-card-body">
+        <div class="checklist-link-box">
+          <span class="checklist-link-label">Link do checklist desta entrega</span>
+          <a id="checklistShareLink" class="checklist-link-text" href="{{ checklist_url }}" target="_blank" rel="noopener">{{ checklist_url }}</a>
+          <div class="checklist-link-actions">
+            <button id="copiarChecklistLink" type="button" class="rota-btn">Copiar link</button>
+            <button id="mostrarChecklistQr" type="button" class="rota-btn">Mostrar QR Code do checklist</button>
+          </div>
+          <div id="checklistQrBox" class="checklist-qr-box" aria-live="polite">
+            <p class="checklist-qr-title">Escaneie para abrir o checklist no celular</p>
+            <div id="checklistQrCode" class="checklist-qr-code"></div>
+            <p class="checklist-qr-debug">Valor usado no QR Code: <span id="checklistQrDebugValue"></span></p>
+            <p id="checklistQrFeedback" class="checklist-qr-feedback"></p>
+          </div>
+        </div>
+        {% if funcionarios_habilitados %}
+          <div class="funcionario-share">
+            <div class="funcionario-share-field">
+              <label for="funcionarioChecklistSelect">Funcionario habilitado</label>
+              <select id="funcionarioChecklistSelect" class="funcionario-share-select">
+                <option value="">Selecione um funcionario</option>
+                {% for funcionario in funcionarios_habilitados %}
+                  <option
+                    value="{{ funcionario.telefone_whatsapp_normalizado|default:funcionario.telefone_whatsapp }}"
+                    data-name="{{ funcionario.nome }}"
+                  >
+                    {{ funcionario.nome }} - {{ funcionario.telefone_whatsapp|default:"sem WhatsApp" }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <button id="abrirWhatsappFuncionario" type="button" class="rota-btn primary">Abrir WhatsApp do funcionario</button>
+            <p id="funcionarioShareFeedback" class="funcionario-share-feedback" aria-live="polite"></p>
+          </div>
+        {% else %}
+          <p class="funcionario-share-empty">Nenhum funcionario habilitado para receber checklist. Cadastre ou habilite um funcionario no Cadastro de Funcionarios.</p>
+        {% endif %}
+      </div>
+    </section>
 
     <section class="rota-card">
       <div class="rota-card-head">
@@ -218,4 +323,143 @@
     </section>
   </div>
 </div>
+{{ checklist_url|json_script:"checklist-url-data" }}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var checklistUrlData = document.getElementById("checklist-url-data");
+    var checklistUrl = checklistUrlData ? JSON.parse(checklistUrlData.textContent) : "";
+    var selectFuncionario = document.getElementById("funcionarioChecklistSelect");
+    var botaoWhatsapp = document.getElementById("abrirWhatsappFuncionario");
+    var checklistLink = document.getElementById("rotaChecklistLink");
+    var checklistShareLink = document.getElementById("checklistShareLink");
+    var botaoCopiarChecklist = document.getElementById("copiarChecklistLink");
+    var botaoMostrarQr = document.getElementById("mostrarChecklistQr");
+    var checklistQrBox = document.getElementById("checklistQrBox");
+    var checklistQrCode = document.getElementById("checklistQrCode");
+    var checklistQrDebugValue = document.getElementById("checklistQrDebugValue");
+    var checklistQrFeedback = document.getElementById("checklistQrFeedback");
+    var feedback = document.getElementById("funcionarioShareFeedback");
+    var qrGerado = false;
+
+    if (checklistQrDebugValue) {
+      checklistQrDebugValue.textContent = checklistUrl;
+    }
+
+    function normalizarWhatsapp(valor) {
+      var digitos = String(valor || "").replace(/\D/g, "");
+      if (!digitos) return "";
+      if (!digitos.startsWith("55") && (digitos.length === 10 || digitos.length === 11)) {
+        digitos = "55" + digitos;
+      }
+      return digitos;
+    }
+
+    function mostrarFeedback(mensagem) {
+      if (!feedback) return;
+      feedback.textContent = mensagem;
+      window.clearTimeout(mostrarFeedback.timeoutId);
+      mostrarFeedback.timeoutId = window.setTimeout(function () {
+        feedback.textContent = "";
+      }, 3500);
+    }
+
+    function mostrarFeedbackQr(mensagem) {
+      if (!checklistQrFeedback) return;
+      checklistQrFeedback.textContent = mensagem;
+      window.clearTimeout(mostrarFeedbackQr.timeoutId);
+      mostrarFeedbackQr.timeoutId = window.setTimeout(function () {
+        checklistQrFeedback.textContent = "";
+      }, 3500);
+    }
+
+    function copiarTexto(texto) {
+      if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(texto);
+      }
+
+      return new Promise(function (resolve, reject) {
+        var inputTemporario = document.createElement("input");
+        inputTemporario.value = texto;
+        inputTemporario.setAttribute("readonly", "");
+        inputTemporario.style.position = "fixed";
+        inputTemporario.style.opacity = "0";
+        document.body.appendChild(inputTemporario);
+        inputTemporario.select();
+
+        try {
+          document.execCommand("copy");
+          resolve();
+        } catch (erro) {
+          reject(erro);
+        } finally {
+          document.body.removeChild(inputTemporario);
+        }
+      });
+    }
+
+    if (botaoCopiarChecklist && checklistShareLink) {
+      botaoCopiarChecklist.addEventListener("click", function () {
+        copiarTexto(checklistUrl)
+          .then(function () {
+            mostrarFeedbackQr("Link copiado.");
+          })
+          .catch(function () {
+            mostrarFeedbackQr("Nao foi possivel copiar automaticamente.");
+          });
+      });
+    }
+
+    if (botaoMostrarQr && checklistQrBox && checklistQrCode && checklistShareLink) {
+      botaoMostrarQr.addEventListener("click", function () {
+        var ficandoVisivel = !checklistQrBox.classList.contains("is-visible");
+        checklistQrBox.classList.toggle("is-visible", ficandoVisivel);
+        botaoMostrarQr.textContent = ficandoVisivel ? "Ocultar QR Code do checklist" : "Mostrar QR Code do checklist";
+
+        if (!ficandoVisivel || qrGerado) {
+          return;
+        }
+
+        if (!window.QRCode) {
+          mostrarFeedbackQr("Nao foi possivel carregar o gerador de QR Code.");
+          return;
+        }
+
+        checklistQrCode.innerHTML = "";
+        new QRCode(checklistQrCode, {
+          text: checklistUrl,
+          width: 220,
+          height: 220,
+          correctLevel: QRCode.CorrectLevel.M
+        });
+        qrGerado = true;
+      });
+    }
+
+    if (selectFuncionario && botaoWhatsapp && checklistLink) {
+      botaoWhatsapp.addEventListener("click", function () {
+        var opcao = selectFuncionario.options[selectFuncionario.selectedIndex];
+        var nomeFuncionario = opcao ? opcao.dataset.name : "";
+        var telefone = normalizarWhatsapp(selectFuncionario.value);
+
+        if (!nomeFuncionario || !telefone) {
+          mostrarFeedback("Selecione um funcionario habilitado com WhatsApp.");
+          selectFuncionario.focus();
+          return;
+        }
+
+        var mensagem = [
+          "Ola, " + nomeFuncionario + ".",
+          "",
+          "Segue o link do checklist/rota de entrega #{{ rota.id }}:",
+          checklistLink.href
+        ].join("\n");
+        var whatsappUrl = "https://web.whatsapp.com/send?phone=" + telefone + "&text=" + encodeURIComponent(mensagem);
+
+        window.open(whatsappUrl, "_blank", "noopener");
+        mostrarFeedback("WhatsApp aberto com a mensagem pronta. Revise e envie manualmente.");
+      });
+    }
+  });
+</script>
 {% endblock %}

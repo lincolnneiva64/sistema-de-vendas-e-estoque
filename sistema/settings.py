@@ -22,6 +22,7 @@ import os
 SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='', cast=Csv())
+CHECKLIST_BASE_URL = config("CHECKLIST_BASE_URL", default=os.getenv("CHECKLIST_BASE_URL", "")).rstrip("/")
 
 # Application definition
 
