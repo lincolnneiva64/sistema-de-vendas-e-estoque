@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Categoria, Cliente, Produto, Unidade
+from .models import Categoria, Cliente, Funcionario, Produto, Unidade
 from .utils import normalize_category_name, normalize_product_name
 
 
@@ -572,3 +572,70 @@ class ClienteForm(forms.ModelForm):
     def clean_uf(self):
         uf = " ".join((self.cleaned_data.get("uf") or "").strip().upper().split())
         return uf or None
+
+
+class FuncionarioForm(forms.ModelForm):
+    class Meta:
+        model = Funcionario
+        fields = [
+            "nome",
+            "telefone_whatsapp",
+            "pode_receber_checklist",
+            "observacoes",
+            "ativo",
+        ]
+        widgets = {
+            "nome": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Nome do funcionario",
+                "autocomplete": "off",
+                "autofocus": True,
+            }),
+            "telefone_whatsapp": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "(00) 00000-0000",
+                "autocomplete": "off",
+            }),
+            "pode_receber_checklist": forms.CheckboxInput(attrs={
+                "class": "form-check-input",
+            }),
+            "observacoes": forms.Textarea(attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": "Observacoes internas",
+            }),
+            "ativo": forms.CheckboxInput(attrs={
+                "class": "form-check-input",
+            }),
+        }
+
+    def clean_nome(self):
+        nome = " ".join((self.cleaned_data.get("nome") or "").strip().split())
+        if not nome:
+            raise forms.ValidationError("Informe o nome do funcionario.")
+        return nome
+
+    def clean_telefone_whatsapp(self):
+        telefone = " ".join((self.cleaned_data.get("telefone_whatsapp") or "").strip().split())
+        return telefone or None
+
+    def clean_observacoes(self):
+        observacoes = self.cleaned_data.get("observacoes") or ""
+        return observacoes.strip() or None
+
+    def clean(self):
+        cleaned_data = super().clean()
+        telefone = Funcionario.normalizar_whatsapp(cleaned_data.get("telefone_whatsapp"))
+        pode_receber_checklist = cleaned_data.get("pode_receber_checklist")
+        ativo = cleaned_data.get("ativo")
+
+        if pode_receber_checklist and not telefone:
+            self.add_error(
+                "telefone_whatsapp",
+                "Informe o WhatsApp para permitir envio de checklist.",
+            )
+
+        if pode_receber_checklist and ativo is False:
+            cleaned_data["pode_receber_checklist"] = False
+
+        return cleaned_data

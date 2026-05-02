@@ -1,0 +1,478 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Funcionarios{% endblock %}
+{% block content %}
+<style>
+  .funcionarios-page { color: #172033; padding: 18px 0 120px; }
+  .funcionarios-shell { max-width: 1320px; margin: 0 auto; padding: 0 18px; }
+  .funcionarios-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 12px; margin-bottom: 12px;
+  }
+  .funcionarios-title { margin: 0; font-size: 1.55rem; font-weight: 800; color: #111827; }
+  .funcionarios-subtitle { margin: 4px 0 0; color: #64748b; font-weight: 500; font-size: 0.92rem; }
+  .funcionarios-header-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+  .funcionarios-btn {
+    border: 0; border-radius: 9px; padding: 8px 13px; font-weight: 700;
+    font-size: 0.9rem; text-decoration: none; display: inline-flex;
+    align-items: center; justify-content: center; min-height: 38px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+  .funcionarios-btn:hover { transform: translateY(-1px); }
+  .funcionarios-btn-primary { background: #2563eb; color: #fff; box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24); }
+  .funcionarios-btn-secondary {
+    background: #dbeafe; color: #164173; border: 1px solid #7ea6d9;
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.07);
+  }
+  .funcionarios-search {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 12px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.055);
+    padding: 10px; margin-bottom: 12px;
+  }
+  .funcionarios-search form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; }
+  .funcionarios-search input {
+    width: 100%; border: 1.5px solid #d3dbe8; border-radius: 9px;
+    padding: 10px 12px; background: #fff; color: #172033; font-weight: 600;
+    outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .funcionarios-search input:focus,
+  .funcionarios-field input:focus,
+  .funcionarios-field textarea:focus {
+    border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.13);
+  }
+  .funcionarios-grid {
+    display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.85fr);
+    gap: 14px; align-items: start;
+  }
+  .funcionarios-panel {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 14px;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06); overflow: hidden;
+  }
+  .funcionarios-panel-head {
+    padding: 12px 16px; border-bottom: 1px solid #edf1f6;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .funcionarios-panel-title { margin: 0; font-size: 0.98rem; font-weight: 800; color: #111827; }
+  .funcionarios-count { color: #64748b; font-size: 0.84rem; font-weight: 700; white-space: nowrap; }
+  .funcionarios-table-wrap { overflow-x: auto; }
+  .funcionarios-table { width: 100%; border-collapse: collapse; min-width: 760px; }
+  .funcionarios-table th {
+    background: #f8fafc; color: #64748b; font-size: 0.7rem;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    padding: 9px 11px; border-bottom: 1px solid #edf1f6; text-align: left;
+  }
+  .funcionarios-table td {
+    padding: 9px 11px; border-bottom: 1px solid #f0f3f8;
+    vertical-align: middle; font-size: 0.84rem;
+  }
+  .funcionarios-row:hover td { background: #f8fbff; }
+  .funcionarios-row.selecionado td { background: #eff6ff; border-bottom-color: #dbeafe; }
+  .funcionario-nome { font-weight: 850; color: #172033; font-size: 0.9rem; }
+  .funcionario-muted { color: #64748b; font-size: 0.8rem; font-weight: 650; }
+  .status-pill {
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 999px; padding: 4px 8px; font-size: 0.72rem;
+    font-weight: 800; white-space: nowrap;
+  }
+  .status-ativo, .status-sim { background: #dcfce7; color: #166534; }
+  .status-inativo, .status-nao { background: #f1f5f9; color: #64748b; }
+  .funcionarios-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .status-action-form { margin: 0; }
+  .status-action-btn,
+  .funcionarios-action-link {
+    border: 1px solid #cbd5e1; border-radius: 8px; background: #fff;
+    color: #334155; padding: 5px 9px; font-size: 0.76rem;
+    font-weight: 800; text-decoration: none; display: inline-flex;
+    align-items: center; justify-content: center; min-width: 62px;
+  }
+  .funcionarios-action-link { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+  .status-action-btn.ativar { border-color: #86efac; color: #166534; background: #f0fdf4; }
+  .status-action-btn.desativar { border-color: #fecaca; color: #991b1b; background: #fff7ed; }
+  .funcionarios-form { padding: 14px 16px 16px; }
+  .funcionarios-field { margin-bottom: 10px; min-width: 0; }
+  .funcionarios-field label {
+    display: block; color: #334155; font-size: 0.8rem;
+    font-weight: 800; margin-bottom: 4px;
+  }
+  .funcionarios-field input,
+  .funcionarios-field textarea {
+    width: 100%; border: 1.5px solid #d3dbe8; border-radius: 9px;
+    padding: 9px 11px; background: #fff; color: #172033; font-weight: 500;
+    outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .funcionarios-field textarea { min-height: 82px; resize: vertical; }
+  .funcionarios-boolean {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+    gap: 12px; border: 1px solid #e1e7ef; border-radius: 10px;
+    padding: 10px 11px; background: #f8fafc; margin-bottom: 10px;
+  }
+  .funcionarios-boolean-title { color: #334155; font-size: 0.8rem; font-weight: 800; }
+  .funcionarios-boolean-text { display: block; color: #94a3b8; font-size: 0.72rem; font-weight: 700; margin-top: 2px; }
+  .funcionarios-boolean-control { display: inline-grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .funcionarios-boolean-control input { position: absolute; opacity: 0; pointer-events: none; }
+  .funcionarios-toggle-btn {
+    border: 1px solid #cbd5e1; border-radius: 8px; background: #fff;
+    color: #64748b; cursor: pointer; font-size: 0.78rem; font-weight: 850;
+    min-width: 56px; padding: 7px 10px; text-align: center;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .funcionarios-toggle-btn.ativo {
+    background: #2563eb; border-color: #2563eb; color: #fff;
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+  }
+  .funcionarios-toggle-btn.nao.ativo {
+    background: #64748b; border-color: #64748b;
+    box-shadow: 0 8px 18px rgba(100, 116, 139, 0.18);
+  }
+  .funcionarios-help { display: block; color: #94a3b8; font-size: 0.72rem; font-weight: 700; margin-top: 3px; }
+  .funcionarios-error { color: #dc2626; font-size: 0.8rem; font-weight: 700; margin-top: 6px; }
+  .funcionarios-alert { border-radius: 13px; padding: 10px 12px; margin-bottom: 10px; font-weight: 750; }
+  .funcionarios-alert.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
+  .funcionarios-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+  .funcionarios-empty { padding: 22px 16px; color: #64748b; text-align: center; font-weight: 700; font-size: 0.9rem; }
+  .funcionarios-form-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; padding-top: 4px; }
+  @media (max-width: 920px) {
+    .funcionarios-header { align-items: stretch; flex-direction: column; }
+    .funcionarios-header-actions { justify-content: flex-start; }
+    .funcionarios-search form,
+    .funcionarios-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 760px) {
+    .funcionarios-search form { grid-template-columns: 1fr; }
+    .funcionarios-boolean { grid-template-columns: 1fr; }
+    .funcionarios-boolean-control { width: 100%; }
+  }
+</style>
+
+<div class="funcionarios-page">
+  <div class="funcionarios-shell">
+    <header class="funcionarios-header">
+      <div>
+        <h1 class="funcionarios-title">Funcionarios</h1>
+        <p class="funcionarios-subtitle">Cadastro de funcionarios e habilitacao para receber checklist de entregas.</p>
+      </div>
+      <div class="funcionarios-header-actions">
+        <a href="{% url 'estoque:home' %}" class="funcionarios-btn funcionarios-btn-secondary">Voltar ao painel</a>
+        <a href="{% url 'estoque:funcionarios' %}" class="funcionarios-btn funcionarios-btn-primary">Novo funcionario</a>
+      </div>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="funcionarios-alert {% if message.tags == 'error' %}error{% else %}success{% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <section class="funcionarios-search" aria-label="Busca de funcionarios">
+      <form method="get">
+        <input type="text" name="q" id="buscaFuncionarios" value="{{ termo }}" placeholder="Buscar por nome, WhatsApp ou observacao" autocomplete="off">
+        <button type="submit" class="funcionarios-btn funcionarios-btn-primary">Buscar</button>
+        <a href="{% url 'estoque:funcionarios' %}" class="funcionarios-btn funcionarios-btn-secondary">Limpar</a>
+      </form>
+    </section>
+
+    <main class="funcionarios-grid">
+      <section class="funcionarios-panel">
+        <div class="funcionarios-panel-head">
+          <h2 class="funcionarios-panel-title">Funcionarios cadastrados</h2>
+          <span class="funcionarios-count">
+            <span id="contadorFuncionarios">{{ total_funcionarios }}</span> funcionario(s)
+          </span>
+        </div>
+
+        {% if funcionarios %}
+          <div class="funcionarios-table-wrap">
+            <table class="funcionarios-table">
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>WhatsApp</th>
+                  <th>Status</th>
+                  <th>Checklist</th>
+                  <th>Acoes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for funcionario in funcionarios %}
+                  <tr
+                    class="funcionarios-row {% if funcionario_selecionado and funcionario.id == funcionario_selecionado.id %}selecionado{% endif %}"
+                    data-funcionario-search="{{ funcionario.nome|lower }} {{ funcionario.telefone_whatsapp|default:''|lower }} {{ funcionario.telefone_whatsapp_normalizado|default:''|lower }} {{ funcionario.observacoes|default:''|lower }}"
+                  >
+                    <td>
+                      <div class="funcionario-nome">{{ funcionario.nome }}</div>
+                      {% if funcionario.observacoes %}
+                        <div class="funcionario-muted">{{ funcionario.observacoes|truncatechars:70 }}</div>
+                      {% endif %}
+                    </td>
+                    <td class="funcionario-muted funcionario-whatsapp">{{ funcionario.telefone_whatsapp|default:"-" }}</td>
+                    <td>
+                      {% if funcionario.ativo %}
+                        <span class="status-pill status-ativo">Ativo</span>
+                      {% else %}
+                        <span class="status-pill status-inativo">Inativo</span>
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if funcionario.ativo and funcionario.pode_receber_checklist %}
+                        <span class="status-pill status-sim">Sim</span>
+                      {% else %}
+                        <span class="status-pill status-nao">Nao</span>
+                      {% endif %}
+                    </td>
+                    <td>
+                      <div class="funcionarios-actions">
+                        <a class="funcionarios-action-link" href="{% url 'estoque:funcionarios' %}?{% if termo %}q={{ termo|urlencode }}&{% endif %}funcionario={{ funcionario.id }}">Editar</a>
+                        <form method="post" class="status-action-form">
+                          {% csrf_token %}
+                          <input type="hidden" name="acao" value="alternar_status">
+                          <input type="hidden" name="funcionario_id" value="{{ funcionario.id }}">
+                          <input type="hidden" name="ativo" value="{% if funcionario.ativo %}0{% else %}1{% endif %}">
+                          <button type="submit" class="status-action-btn {% if funcionario.ativo %}desativar{% else %}ativar{% endif %}">
+                            {% if funcionario.ativo %}Desativar{% else %}Ativar{% endif %}
+                          </button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="funcionarios-empty" id="semFuncionariosFiltrados" style="display: none;">Nenhum funcionario encontrado.</div>
+        {% else %}
+          <div class="funcionarios-empty">Nenhum funcionario encontrado.</div>
+        {% endif %}
+      </section>
+
+      <section class="funcionarios-panel">
+        <div class="funcionarios-panel-head">
+          <div>
+            <h2 class="funcionarios-panel-title">
+              {% if funcionario_selecionado %}Editar funcionario{% else %}Novo funcionario{% endif %}
+            </h2>
+            <span class="funcionarios-count">
+              {% if funcionario_selecionado %}{{ funcionario_selecionado.nome }} selecionado{% else %}{{ funcionarios_habilitados }} habilitado(s) para checklist{% endif %}
+            </span>
+          </div>
+        </div>
+
+        <form method="post" class="funcionarios-form" id="formFuncionario" novalidate>
+          {% csrf_token %}
+          {% if funcionario_selecionado %}
+            <input type="hidden" name="funcionario_id" value="{{ funcionario_selecionado.id }}">
+          {% endif %}
+
+          <div class="funcionarios-field">
+            <label for="{{ form.nome.id_for_label }}">Nome</label>
+            {{ form.nome }}
+            {% if form.nome.errors %}<div class="funcionarios-error">{{ form.nome.errors|join:", " }}</div>{% endif %}
+          </div>
+
+          <div class="funcionarios-field">
+            <label for="{{ form.telefone_whatsapp.id_for_label }}">WhatsApp</label>
+            {{ form.telefone_whatsapp }}
+            <span class="funcionarios-help">Obrigatorio quando o funcionario puder receber checklist.</span>
+            {% if form.telefone_whatsapp.errors %}<div class="funcionarios-error">{{ form.telefone_whatsapp.errors|join:", " }}</div>{% endif %}
+          </div>
+
+          <div class="funcionarios-boolean" data-boolean-field="id_pode_receber_checklist">
+            <div>
+              <div class="funcionarios-boolean-title">Pode receber checklist?</div>
+              <span class="funcionarios-boolean-text">Somente funcionarios ativos e marcados como Sim aparecerao no envio futuro.</span>
+            </div>
+            <div class="funcionarios-boolean-control" role="group" aria-label="Pode receber checklist">
+              {{ form.pode_receber_checklist }}
+              <button type="button" class="funcionarios-toggle-btn sim" data-boolean-value="1">Sim</button>
+              <button type="button" class="funcionarios-toggle-btn nao" data-boolean-value="0">Nao</button>
+            </div>
+          </div>
+
+          <div class="funcionarios-field">
+            <label for="{{ form.observacoes.id_for_label }}">Observacoes</label>
+            {{ form.observacoes }}
+            {% if form.observacoes.errors %}<div class="funcionarios-error">{{ form.observacoes.errors|join:", " }}</div>{% endif %}
+          </div>
+
+          <div class="funcionarios-boolean" data-boolean-field="id_ativo">
+            <div>
+              <div class="funcionarios-boolean-title">Funcionario ativo?</div>
+              <span class="funcionarios-boolean-text">Funcionarios inativos nao ficam habilitados para checklist.</span>
+            </div>
+            <div class="funcionarios-boolean-control" role="group" aria-label="Funcionario ativo">
+              {{ form.ativo }}
+              <button type="button" class="funcionarios-toggle-btn sim" data-boolean-value="1">Sim</button>
+              <button type="button" class="funcionarios-toggle-btn nao" data-boolean-value="0">Nao</button>
+            </div>
+          </div>
+
+          <div class="funcionarios-form-actions">
+            <a href="{% url 'estoque:funcionarios' %}" class="funcionarios-btn funcionarios-btn-secondary">Novo / Limpar</a>
+            <button type="submit" class="funcionarios-btn funcionarios-btn-primary" id="btnSalvarFuncionario">Salvar funcionario</button>
+          </div>
+        </form>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const busca = document.getElementById("buscaFuncionarios");
+    const linhas = Array.from(document.querySelectorAll("[data-funcionario-search]"));
+    const contador = document.getElementById("contadorFuncionarios");
+    const semResultado = document.getElementById("semFuncionariosFiltrados");
+    const formFuncionario = document.getElementById("formFuncionario");
+    const btnSalvar = document.getElementById("btnSalvarFuncionario");
+    const whatsapp = document.getElementById("id_telefone_whatsapp");
+    const ativo = document.getElementById("id_ativo");
+    const podeReceberChecklist = document.getElementById("id_pode_receber_checklist");
+
+    function normalizarTexto(texto) {
+      return String(texto || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    }
+
+    function filtrarFuncionarios() {
+      const termo = normalizarTexto(busca?.value.trim());
+      let totalVisivel = 0;
+
+      linhas.forEach(function (linha) {
+        const texto = normalizarTexto(linha.dataset.funcionarioSearch);
+        const visivel = termo === "" || texto.includes(termo);
+        linha.style.display = visivel ? "" : "none";
+        if (visivel) totalVisivel += 1;
+      });
+
+      if (contador) contador.textContent = totalVisivel;
+      if (semResultado) semResultado.style.display = totalVisivel === 0 ? "block" : "none";
+    }
+
+    function somenteNumeros(valor) {
+      return String(valor || "").replace(/\D/g, "");
+    }
+
+    function formatarTelefone(valor) {
+      let numero = somenteNumeros(valor);
+      if (numero.startsWith("55")) numero = numero.slice(2);
+      numero = numero.slice(0, 11);
+
+      if (numero.length <= 2) return numero ? `(${numero}` : "";
+      if (numero.length <= 6) return `(${numero.slice(0, 2)}) ${numero.slice(2)}`;
+      if (numero.length <= 10) return `(${numero.slice(0, 2)}) ${numero.slice(2, 6)}-${numero.slice(6)}`;
+      return `(${numero.slice(0, 2)}) ${numero.slice(2, 7)}-${numero.slice(7)}`;
+    }
+
+    function aplicarMascaraWhatsApp() {
+      if (!whatsapp) return;
+      whatsapp.value = formatarTelefone(whatsapp.value);
+    }
+
+    function formatarWhatsAppListagem() {
+      document.querySelectorAll(".funcionario-whatsapp").forEach(function (celula) {
+        const valorOriginal = celula.textContent.trim();
+        if (!valorOriginal || valorOriginal === "-") return;
+
+        const telefoneFormatado = formatarTelefone(valorOriginal);
+        celula.textContent = telefoneFormatado || valorOriginal;
+      });
+    }
+
+    function camposNavegaveisFormulario() {
+      if (!formFuncionario) return [];
+
+      return Array.from(formFuncionario.querySelectorAll("input, textarea, button"))
+        .filter(function (campo) {
+          const tipo = String(campo.type || "").toLowerCase();
+          const visivel = campo.offsetParent !== null;
+          return visivel && !campo.disabled && tipo !== "hidden" && tipo !== "submit";
+        });
+    }
+
+    function atualizarBooleano(container) {
+      const checkbox = document.getElementById(container.dataset.booleanField);
+      const botoes = Array.from(container.querySelectorAll("[data-boolean-value]"));
+      if (!checkbox) return;
+
+      botoes.forEach(function (botao) {
+        const ativoBotao = checkbox.checked === (botao.dataset.booleanValue === "1");
+        botao.classList.toggle("ativo", ativoBotao);
+        botao.setAttribute("aria-pressed", ativoBotao ? "true" : "false");
+      });
+    }
+
+    document.querySelectorAll("[data-boolean-field]").forEach(function (container) {
+      const checkbox = document.getElementById(container.dataset.booleanField);
+      if (!checkbox) return;
+
+      container.querySelectorAll("[data-boolean-value]").forEach(function (botao) {
+        botao.addEventListener("click", function () {
+          checkbox.checked = botao.dataset.booleanValue === "1";
+          checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+      });
+
+      checkbox.addEventListener("change", function () {
+        if (checkbox === ativo && !checkbox.checked && podeReceberChecklist) {
+          podeReceberChecklist.checked = false;
+          podeReceberChecklist.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        atualizarBooleano(container);
+      });
+
+      atualizarBooleano(container);
+    });
+
+    busca?.addEventListener("input", filtrarFuncionarios);
+    whatsapp?.addEventListener("input", aplicarMascaraWhatsApp);
+    whatsapp?.addEventListener("blur", aplicarMascaraWhatsApp);
+
+    formFuncionario?.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+
+      const alvo = event.target;
+      const tag = alvo.tagName.toLowerCase();
+      const tipo = String(alvo.type || "").toLowerCase();
+
+      if (tag !== "input" || tipo === "checkbox" || tipo === "hidden" || tipo === "submit") return;
+
+      event.preventDefault();
+
+      const campos = camposNavegaveisFormulario();
+      const indiceAtual = campos.indexOf(alvo);
+      const proximoCampo = campos[indiceAtual + 1];
+
+      if (proximoCampo) {
+        proximoCampo.focus();
+      } else if (btnSalvar) {
+        btnSalvar.focus();
+      }
+    });
+
+    formFuncionario?.addEventListener("submit", function (event) {
+      if (formFuncionario.dataset.enviando === "1") {
+        event.preventDefault();
+        return;
+      }
+
+      if (whatsapp) {
+        whatsapp.value = somenteNumeros(whatsapp.value);
+      }
+
+      formFuncionario.dataset.enviando = "1";
+      if (btnSalvar) {
+        setTimeout(function () {
+          btnSalvar.disabled = true;
+          btnSalvar.textContent = "Salvando...";
+        }, 0);
+      }
+    });
+
+    aplicarMascaraWhatsApp();
+    formatarWhatsAppListagem();
+    filtrarFuncionarios();
+  });
+</script>
+{% endblock %}

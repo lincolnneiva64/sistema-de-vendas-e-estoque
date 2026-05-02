@@ -93,6 +93,12 @@ align-items: center;
             Clientes
           </a>
           <a
+            href="{% url 'estoque:funcionarios' %}"
+            class="btn-acao-principal-painel"
+          >
+            Funcionarios
+          </a>
+          <a
             href="{% url 'estoque:entregas_dia' %}"
             class="btn-acao-principal-painel"
           >
@@ -465,6 +471,9 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
 </a>
 <a href="/estoque/clientes/consulta/" class="btn-acao-principal-painel">
   Clientes
+</a>
+<a href="{% url 'estoque:funcionarios' %}" class="btn-acao-principal-painel">
+  Funcionarios
 </a>
 <a href="{% url 'estoque:lixeira' %}" style="display:inline-block; margin-left:auto; background:#6c757d; color:#fff; padding:3px 8px; border:none; border-radius:4px; font-size:13px;">
   Ver Lixeira

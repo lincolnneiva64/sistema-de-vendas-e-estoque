@@ -10,8 +10,8 @@ from urllib.parse import quote, urlencode
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F
-from .forms import CategoriaForm, ClienteForm, ProdutoForm, UnidadeForm
-from .models import Categoria, Cliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, ItemVenda, Produto, Unidade, Venda
+from .forms import CategoriaForm, ClienteForm, FuncionarioForm, ProdutoForm, UnidadeForm
+from .models import Categoria, Cliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, Produto, Unidade, Venda
 from django.contrib import messages
 from django.http import HttpResponse, JsonResponse
 from django.utils.dateparse import parse_date
@@ -515,6 +515,90 @@ def clientes_consulta(request):
             "total_clientes": len(clientes_lista),
         },
     )
+
+
+def funcionarios(request):
+    termo = request.GET.get("q", "").strip()
+    funcionario_selecionado = None
+    funcionarios_url = reverse("estoque:funcionarios")
+
+    funcionarios_qs = Funcionario.objects.all().order_by(
+        "-ativo",
+        "-pode_receber_checklist",
+        "nome",
+    )
+
+    if termo:
+        funcionarios_qs = funcionarios_qs.filter(
+            Q(nome__icontains=termo) |
+            Q(telefone_whatsapp__icontains=termo) |
+            Q(telefone_whatsapp_normalizado__icontains=termo) |
+            Q(observacoes__icontains=termo)
+        )
+
+    if request.method == "POST":
+        acao = request.POST.get("acao")
+        funcionario_id = request.POST.get("funcionario_id")
+
+        if acao == "alternar_status" and funcionario_id:
+            funcionario = get_object_or_404(Funcionario, pk=funcionario_id)
+            funcionario.ativo = request.POST.get("ativo") == "1"
+            if not funcionario.ativo:
+                funcionario.pode_receber_checklist = False
+            funcionario.save(update_fields=[
+                "ativo",
+                "pode_receber_checklist",
+                "telefone_whatsapp_normalizado",
+                "atualizado_em",
+            ])
+            status = "ativado" if funcionario.ativo else "desativado"
+            messages.success(request, f'Funcionario "{funcionario.nome}" {status} com sucesso.')
+            params = {"funcionario": funcionario.id}
+            if termo:
+                params["q"] = termo
+            return redirect(f"{funcionarios_url}?{urlencode(params)}")
+
+        if funcionario_id:
+            funcionario_selecionado = get_object_or_404(Funcionario, pk=funcionario_id)
+            form = FuncionarioForm(request.POST, instance=funcionario_selecionado)
+        else:
+            form = FuncionarioForm(request.POST)
+
+        if form.is_valid():
+            funcionario = form.save()
+            messages.success(request, f'Funcionario "{funcionario.nome}" salvo com sucesso.')
+            return redirect(f"{funcionarios_url}?funcionario={funcionario.id}")
+        messages.error(request, "Revise os campos destacados para salvar o funcionario.")
+    else:
+        funcionario_id = request.GET.get("funcionario")
+        if funcionario_id:
+            funcionario_selecionado = get_object_or_404(Funcionario, pk=funcionario_id)
+            form = FuncionarioForm(instance=funcionario_selecionado)
+        else:
+            form = FuncionarioForm(initial={
+                "ativo": True,
+                "pode_receber_checklist": False,
+            })
+
+    funcionarios_lista = list(funcionarios_qs)
+    funcionarios_habilitados = sum(
+        1 for funcionario in funcionarios_lista
+        if funcionario.ativo and funcionario.pode_receber_checklist
+    )
+
+    return render(
+        request,
+        "estoque/funcionarios.html",
+        {
+            "form": form,
+            "funcionarios": funcionarios_lista,
+            "funcionario_selecionado": funcionario_selecionado,
+            "termo": termo,
+            "total_funcionarios": len(funcionarios_lista),
+            "funcionarios_habilitados": funcionarios_habilitados,
+        },
+    )
+
 
 def clientes_autocomplete(request):
     termo = request.GET.get("q", "").strip()

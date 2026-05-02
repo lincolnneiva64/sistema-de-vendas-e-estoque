@@ -237,6 +237,60 @@ class Cliente(models.Model):
         super().save(*args, **kwargs)
 
 
+class Funcionario(models.Model):
+    nome = models.CharField(max_length=140)
+    telefone_whatsapp = models.CharField(max_length=30, blank=True, null=True)
+    telefone_whatsapp_normalizado = models.CharField(max_length=20, blank=True, null=True)
+    ativo = models.BooleanField(default=True)
+    pode_receber_checklist = models.BooleanField(default=False)
+    observacoes = models.TextField(blank=True, null=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-ativo", "-pode_receber_checklist", "nome"]
+        verbose_name = "Funcionario"
+        verbose_name_plural = "Funcionarios"
+
+    def __str__(self):
+        return self.nome
+
+    @staticmethod
+    def normalizar_whatsapp(valor):
+        return "".join(caractere for caractere in str(valor or "") if caractere.isdigit())
+
+    @classmethod
+    def habilitados_para_checklist(cls):
+        return cls.objects.filter(ativo=True, pode_receber_checklist=True).order_by("nome")
+
+    def clean(self):
+        telefone_normalizado = self.normalizar_whatsapp(self.telefone_whatsapp)
+        if self.pode_receber_checklist and not telefone_normalizado:
+            raise ValidationError("Informe o WhatsApp para funcionarios que podem receber checklist.")
+
+    def save(self, *args, **kwargs):
+        if self.nome:
+            self.nome = " ".join(self.nome.strip().split()).title()
+
+        if isinstance(self.telefone_whatsapp, str):
+            telefone = " ".join(self.telefone_whatsapp.strip().split())
+            self.telefone_whatsapp = telefone or None
+
+        if isinstance(self.observacoes, str):
+            observacoes = self.observacoes.strip()
+            self.observacoes = observacoes or None
+
+        self.telefone_whatsapp_normalizado = self.normalizar_whatsapp(self.telefone_whatsapp)
+        if not self.telefone_whatsapp_normalizado:
+            self.telefone_whatsapp_normalizado = None
+
+        if not self.ativo:
+            self.pode_receber_checklist = False
+
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+
 class Venda(models.Model):
     WHATSAPP_NAO_ENVIADO = "nao_enviado"
     WHATSAPP_ABERTO = "aberto"
