@@ -33,19 +33,23 @@
 }
 .tarja-acoes {
   position: fixed;
-  left: 50%;
-  bottom: 12px;
-  transform: translateX(-50%);
+  left: 2px;
+  right: 2px;
+  bottom: 0;
+  transform: none;
   z-index: 1000;
-  width: min(940px, calc(100% - 24px));
+  width: auto;
+  min-height: 58px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: 12px;
+  margin: 0;
+  padding: 12px 3px;
   background: rgba(248, 249, 250, 0.97);
   border: 1px solid #d8dee7;
-  border-radius: 12px;
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
   box-shadow: 0 -4px 18px rgba(15, 23, 42, 0.16);
 }
 .tarja-grupo {
@@ -54,10 +58,18 @@
   gap: 6px;
   flex-wrap: wrap;
 }
+.tarja-acoes > .tarja-grupo:first-child {
+  margin-right: auto;
+  justify-content: flex-start;
+}
+.tarja-acoes > .tarja-grupo:last-child {
+  justify-content: flex-end;
+  margin-left: auto;
+}
 .tarja-label {
   color: #64748b;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   margin-right: 2px;
 }
 .tarja-acoes .btn-acao-principal-painel,
@@ -524,7 +536,7 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
 <!-- TARJA -->
 <div class="tarja-acoes" aria-label="Acoes rapidas de produtos">
   <div class="tarja-grupo">
-    <span style="font-weight: 500; margin-right: 6px; font-size: 13px; color: #6c757d;">Ações</span>
+    <span class="tarja-label">Ações</span>
     <a class="btn-acao-principal-painel" href="{% url 'estoque:cadastrar_produto' %}">
       + Novo Produto
     </a>
