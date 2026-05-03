@@ -970,6 +970,14 @@ def entrega_rota_checklist(request, pk):
     itens_entrega = list(rota.itens.all())
     salvo_item_id = request.GET.get("salvo_item", "")
     salvo_fase = request.GET.get("salvo_fase", "")
+    eventos_checklist_enviado = set(
+        EventoVenda.objects.filter(
+            venda_id__in=[item_rota.venda_id for item_rota in itens_entrega],
+            tipo_evento="checklist_cliente_enviado",
+            canal="whatsapp_checklist",
+            descricao__icontains=f"rota/entrega #{rota.id}",
+        ).values_list("descricao", flat=True)
+    )
     for item_rota in itens_entrega:
         item_rota.salvo_carregamento = salvo_item_id == str(item_rota.id) and salvo_fase == "carregamento"
         item_rota.salvo_entrega = salvo_item_id == str(item_rota.id) and salvo_fase == "entrega"
@@ -995,6 +1003,10 @@ def entrega_rota_checklist(request, pk):
                 bool(item_rota.checklists_ordenados)
                 and all(checklist.entregue for checklist in item_rota.checklists_ordenados)
             )
+        )
+        item_rota.checklist_cliente_enviado = any(
+            f"bloco #{item_rota.id}" in descricao
+            for descricao in eventos_checklist_enviado
         )
 
     itens_entrega = sorted(
@@ -1183,10 +1195,16 @@ def venda_detalhe(request, pk):
         {
             "venda": venda,
             "whatsapp_url": whatsapp_url,
-            "eventos": venda.eventos.all(),
-            "comunicacoes_whatsapp": venda.eventos.filter(
-                canal="whatsapp",
-                tipo_evento__in=["whatsapp_aberto", "whatsapp_confirmado"],
+            "eventos": EventoVenda.objects.filter(venda=venda),
+            "comunicacoes_whatsapp": EventoVenda.objects.filter(
+                venda=venda,
+                canal__in=["whatsapp", "whatsapp_checklist"],
+                tipo_evento__in=[
+                    "whatsapp_aberto",
+                    "whatsapp_confirmado",
+                    "checklist_cliente_whatsapp_aberto",
+                    "checklist_cliente_enviado",
+                ],
             ),
             "entrega_contexto": entrega_contexto,
         },
@@ -1315,6 +1333,49 @@ def registrar_checklist_whatsapp_aberto(request, pk):
     return JsonResponse({
         "sucesso": True,
         "mensagem": "Registro de abertura do checklist no WhatsApp salvo.",
+    })
+
+
+@require_POST
+def confirmar_checklist_whatsapp(request, pk):
+    venda = get_object_or_404(Venda, pk=pk)
+    try:
+        dados = json.loads(request.body.decode("utf-8") or "{}")
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        dados = {}
+
+    numero_usado = "".join(ch for ch in str(dados.get("numero_usado") or "") if ch.isdigit())
+    rota_id = str(dados.get("rota_id") or "").strip()
+    rota_item_id = str(dados.get("rota_item_id") or "").strip()
+    numero_whatsapp, origem_numero = _dados_numero_whatsapp_evento(venda, numero_usado)
+
+    detalhes = []
+    if rota_id:
+        detalhes.append(f"rota/entrega #{rota_id}")
+    if rota_item_id:
+        detalhes.append(f"bloco #{rota_item_id}")
+    detalhes_texto = f" ({', '.join(detalhes)})." if detalhes else "."
+    descricao = f"Checklist enviado ao cliente por WhatsApp{detalhes_texto}"
+
+    ja_existe = EventoVenda.objects.filter(
+        venda=venda,
+        tipo_evento="checklist_cliente_enviado",
+        canal="whatsapp_checklist",
+        descricao=descricao,
+    ).exists()
+    if not ja_existe:
+        _registrar_evento_venda(
+            venda,
+            "checklist_cliente_enviado",
+            descricao,
+            canal="whatsapp_checklist",
+            numero_whatsapp=numero_whatsapp,
+            origem_numero=origem_numero,
+        )
+    return JsonResponse({
+        "sucesso": True,
+        "mensagem": "Checklist marcado como enviado ao cliente.",
+        "already_exists": ja_existe,
     })
 
 
