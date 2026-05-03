@@ -21,6 +21,14 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 from PIL import Image, ImageDraw, ImageFont
 from uuid import uuid4
+
+def montar_checklist_url(request, rota_id):
+    checklist_path = reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota_id})
+    checklist_base_url = getattr(settings, "CHECKLIST_BASE_URL", "").rstrip("/")
+    if checklist_base_url:
+        return f"{checklist_base_url}{checklist_path}"
+    return f"{request.scheme}://{request.get_host()}{checklist_path}"
+
 def home(request):
     produto_edicao = None
 
@@ -868,11 +876,7 @@ def entregas_dia(request):
         # Adicionar checklist_url para cada rota
         checklist_path = reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota.id})
         checklist_base_url = getattr(settings, "CHECKLIST_BASE_URL", "").rstrip("/")
-        rota.checklist_url = (
-            f"{checklist_base_url}{checklist_path}"
-            if checklist_base_url
-            else request.build_absolute_uri(checklist_path)
-        )
+        rota.checklist_url = montar_checklist_url(request, rota.id)
 
     return render(
         request,
@@ -894,13 +898,7 @@ def entrega_rota_detalhe(request, pk):
     )
     itens_entrega = list(rota.itens.all())
     itens_carregamento = list(reversed(itens_entrega))
-    checklist_path = reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota.id})
-    checklist_base_url = getattr(settings, "CHECKLIST_BASE_URL", "").rstrip("/")
-    checklist_url = (
-        f"{checklist_base_url}{checklist_path}"
-        if checklist_base_url
-        else request.build_absolute_uri(checklist_path)
-    )
+    checklist_url = montar_checklist_url(request, rota.id)
 
     return render(
         request,
@@ -1048,9 +1046,8 @@ def entrega_rota_checklist(request, pk):
             "itens_carregamento_conferidos": itens_carregamento_conferidos,
             "salvo_item_id": salvo_item_id,
             "salvo_fase": salvo_fase,
-            "checklist_url": request.build_absolute_uri(
-                reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota.id})
-            ),
+            "checklist_url": montar_checklist_url(request, rota.id),
+            "funcionarios_habilitados": Funcionario.habilitados_para_checklist(),
         },
     )
 
@@ -1192,6 +1189,19 @@ def venda_detalhe(request, pk):
     entrega_id = request.GET.get("entrega")
     if entrega_id:
         entrega_contexto = EntregaRota.objects.filter(pk=entrega_id).first()
+
+    # Verificar se venda já tem entrega/rota
+    entrega_existente = EntregaRotaItem.objects.filter(venda=venda).select_related("rota").first()
+    entrega_info = None
+    if entrega_existente:
+        rota = entrega_existente.rota
+        checklist_url = montar_checklist_url(request, rota.id)
+        entrega_info = {
+            "rota": rota,
+            "checklist_url": checklist_url,
+            "status": rota.get_status_display(),
+        }
+
     _registrar_evento_venda(
         venda,
         "nota_visualizada",
@@ -1216,8 +1226,35 @@ def venda_detalhe(request, pk):
                 ],
             ),
             "entrega_contexto": entrega_contexto,
+            "entrega_info": entrega_info,
+            "funcionarios_habilitados": Funcionario.habilitados_para_checklist(),
         },
     )
+
+
+def venda_criar_entrega(request, pk):
+    venda = get_object_or_404(Venda, pk=pk)
+    
+    # Verificar se já existe entrega para esta venda
+    if EntregaRotaItem.objects.filter(venda=venda).exists():
+        messages.warning(request, "Esta venda já possui entrega criada.")
+        return redirect("estoque:venda_detalhe", pk=venda.pk)
+    
+    # Criar entrega unitária
+    with transaction.atomic():
+        rota = EntregaRota.objects.create(
+            data=timezone.localdate(),
+            tipo=EntregaRota.TIPO_UNITARIA,
+            observacao=f"Entrega criada automaticamente da venda #{venda.pk}",
+        )
+        EntregaRotaItem.objects.create(
+            rota=rota,
+            venda=venda,
+            ordem_entrega=1,
+        )
+    
+    messages.success(request, f"Entrega unitária #{rota.pk} criada para a venda #{venda.pk}.")
+    return redirect("estoque:venda_detalhe", pk=venda.pk)
 
 
 def venda_whatsapp_pdf(request, pk):

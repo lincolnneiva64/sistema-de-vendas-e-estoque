@@ -154,6 +154,34 @@
     .check-row-text { font-size: 0.92rem; line-height: 1.15; }
     .check-row-sub { font-size: 0.76rem; }
   }
+
+  .funcionario-send {
+    margin-top: 12px; border: 1px solid #dbe5f0; border-radius: 12px;
+    background: #f8fafc; padding: 11px;
+  }
+  .funcionario-send-title { margin: 0; color: #172033; font-size: 0.95rem; font-weight: 950; line-height: 1.2; }
+  .funcionario-send-fields {
+    display: flex; gap: 8px; align-items: center; margin-top: 8px;
+  }
+  .funcionario-send-select {
+    flex: 1; min-width: 0; border: 1px solid #d3dbe8; border-radius: 6px;
+    background: #fff; color: #172033; font-size: 0.84rem; font-weight: 700;
+    padding: 6px 8px; outline: none;
+  }
+  .funcionario-send-select:focus {
+    border-color: #2563eb;
+  }
+  .funcionario-send-btn {
+    min-height: 32px; padding: 6px 10px; font-size: 0.84rem;
+  }
+  .funcionario-send-empty {
+    margin: 8px 0 0; color: #92400e; font-size: 0.82rem; font-weight: 800;
+  }
+  .funcionario-send-feedback {
+    min-height: 18px; margin: 7px 0 0; color: #166534;
+    font-size: 0.82rem; font-weight: 850; line-height: 1.25;
+  }
+  .funcionario-send-feedback.warning { color: #92400e; }
 </style>
 
 <main class="check-page">
@@ -175,6 +203,25 @@
         </div>
         <p id="copyChecklistFeedback" class="mobile-access-feedback" aria-live="polite"></p>
       </section>
+
+      {% if rota.status != rota.STATUS_CONCLUIDA %}
+      <section class="funcionario-send" aria-labelledby="funcionarioSendTitle">
+        <h2 id="funcionarioSendTitle" class="funcionario-send-title">Enviar checklist para funcionário</h2>
+        <div class="funcionario-send-fields">
+          <select id="funcionarioSelect" class="funcionario-send-select" aria-label="Selecionar funcionário">
+            <option value="">Selecionar funcionário...</option>
+            {% for funcionario in funcionarios_habilitados %}
+            <option value="{{ funcionario.id }}" data-whatsapp="{{ funcionario.telefone_whatsapp|default:funcionario.telefone_whatsapp_normalizado }}">{{ funcionario.nome }}</option>
+            {% endfor %}
+          </select>
+          <button id="sendChecklistBtn" type="button" class="check-btn primary compact funcionario-send-btn" disabled>Abrir WhatsApp do funcionário</button>
+        </div>
+        {% if not funcionarios_habilitados %}
+        <p class="funcionario-send-empty">Nenhum funcionário habilitado para checklist encontrado.</p>
+        {% endif %}
+        <p id="sendChecklistFeedback" class="funcionario-send-feedback" aria-live="polite"></p>
+      </section>
+      {% endif %}
     </header>
 
     {% if messages %}
@@ -652,6 +699,73 @@
 
       document.body.removeChild(temporaryInput);
     });
+
+    var funcionarioSelect = document.getElementById("funcionarioSelect");
+    var sendChecklistBtn = document.getElementById("sendChecklistBtn");
+    var sendChecklistFeedback = document.getElementById("sendChecklistFeedback");
+
+    if (funcionarioSelect && sendChecklistBtn) {
+      function updateSendButton() {
+        var selectedOption = funcionarioSelect.options[funcionarioSelect.selectedIndex];
+        var whatsapp = selectedOption ? selectedOption.getAttribute("data-whatsapp") : "";
+        sendChecklistBtn.disabled = !whatsapp;
+      }
+
+      function showSendFeedback(message, isWarning) {
+        if (!sendChecklistFeedback) {
+          return;
+        }
+        sendChecklistFeedback.textContent = message;
+        sendChecklistFeedback.classList.toggle("warning", isWarning);
+        window.clearTimeout(showSendFeedback.timeoutId);
+        showSendFeedback.timeoutId = window.setTimeout(function () {
+          sendChecklistFeedback.textContent = "";
+          sendChecklistFeedback.classList.remove("warning");
+        }, 5000);
+      }
+
+      function abrirChecklistFuncionario() {
+        var selectedOption = funcionarioSelect.options[funcionarioSelect.selectedIndex];
+        if (!selectedOption || !selectedOption.value) {
+          showSendFeedback("Selecione um funcionário primeiro.", true);
+          return;
+        }
+
+        var whatsapp = selectedOption.getAttribute("data-whatsapp");
+        if (!whatsapp) {
+          showSendFeedback("Funcionário não tem WhatsApp cadastrado.", true);
+          return;
+        }
+
+        var funcionarioNome = selectedOption.textContent.trim();
+        var rotaId = "{{ rota.id }}";
+        var rotaData = "{{ rota.data|date:'d/m/Y' }}";
+        var checklistUrl = "{{ checklist_url }}";
+        var telefone = normalizarWhatsapp(whatsapp);
+
+        var linhas = [
+          "Olá, " + funcionarioNome + ".",
+          "",
+          "Segue o link do checklist da entrega/rota #" + rotaId + " do dia " + rotaData + ".",
+          "",
+          checklistUrl,
+          "",
+          "Acesse e confira os itens conforme necessário."
+        ];
+
+        var url = "https://web.whatsapp.com/send?";
+        if (telefone) {
+          url += "phone=" + telefone + "&";
+        }
+        url += "text=" + encodeURIComponent(linhas.join("\n"));
+        window.open(url, "_blank", "noopener");
+        showSendFeedback("WhatsApp aberto com o link do checklist.");
+      }
+
+      funcionarioSelect.addEventListener("change", updateSendButton);
+      sendChecklistBtn.addEventListener("click", abrirChecklistFuncionario);
+      updateSendButton();
+    }
   }());
 </script>
 {% endblock %}

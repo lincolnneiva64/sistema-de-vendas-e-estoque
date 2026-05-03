@@ -285,6 +285,116 @@
             font-weight: 700;
         }
 
+        .entrega-section {
+            margin-bottom: 12px;
+            border: 1px solid #dbe5f0;
+            border-radius: 10px;
+            background: #f8fafc;
+            overflow: hidden;
+        }
+
+        .entrega-header {
+            padding: 6px 10px;
+            background: #eff6ff;
+            border-bottom: 1px solid #bfdbfe;
+        }
+
+        .entrega-title {
+            margin: 0;
+            font-size: 12px;
+            font-weight: 900;
+            color: #1e3a8a;
+        }
+
+        .entrega-body {
+            padding: 8px 10px;
+        }
+
+        .entrega-status {
+            margin-bottom: 6px;
+            font-size: 11px;
+            font-weight: 800;
+            color: #64748b;
+        }
+
+        .entrega-actions {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .entrega-actions button,
+        .entrega-actions a {
+            height: 24px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 0 6px;
+            background: #ffffff;
+            color: #0f172a;
+            font-size: 10px;
+            font-weight: 800;
+            text-decoration: none;
+            line-height: 22px;
+            box-sizing: border-box;
+        }
+
+        .entrega-actions button {
+            cursor: pointer;
+        }
+
+        .entrega-actions .primary {
+            background: #2563eb;
+            border-color: #2563eb;
+            color: #fff;
+        }
+
+        .entrega-actions .success {
+            background: #16a34a;
+            border-color: #16a34a;
+            color: #fff;
+        }
+
+        .entrega-send {
+            margin-top: 6px;
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+
+        .entrega-send select {
+            flex: 1;
+            min-width: 0;
+            border: 1px solid #d3dbe8;
+            border-radius: 5px;
+            background: #fff;
+            color: #172033;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 4px 6px;
+            outline: none;
+        }
+
+        .entrega-send select:focus {
+            border-color: #2563eb;
+        }
+
+        .entrega-send button {
+            height: 26px;
+            padding: 0 8px;
+            font-size: 10px;
+        }
+
+        .entrega-feedback {
+            margin-top: 4px;
+            font-size: 10px;
+            font-weight: 800;
+            min-height: 14px;
+        }
+
+        .entrega-feedback.success { color: #166534; }
+        .entrega-feedback.warning { color: #92400e; }
+
         .historico-lista {
             border: 1px solid #e2e8f0;
             border-radius: 12px;
@@ -612,6 +722,43 @@
                             {% empty %}
                                 <div class="comunicacao-vazio">Nenhuma comunicacao registrada ainda.</div>
                             {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="entrega-section">
+                        <div class="entrega-header">
+                            <h3 class="entrega-title">Entrega / checklist</h3>
+                        </div>
+                        <div class="entrega-body">
+                            {% if entrega_info %}
+                                <div class="entrega-status">Status: {{ entrega_info.status }}</div>
+                                <div class="entrega-actions">
+                                    <a href="{% url 'estoque:entrega_rota_checklist' entrega_info.rota.id %}" class="primary">Abrir checklist</a>
+                                    <a href="{% url 'estoque:entrega_rota_detalhe' entrega_info.rota.id %}">Ver detalhes da entrega</a>
+                                </div>
+                                {% if entrega_info.rota.status != entrega_info.rota.STATUS_CONCLUIDA %}
+                                    <div class="entrega-send" data-rota-id="{{ entrega_info.rota.id }}" data-checklist-url="{{ entrega_info.checklist_url }}">
+                                        <select class="entrega-send-select">
+                                            <option value="">Enviar para funcionário</option>
+                                            {% for funcionario in funcionarios_habilitados %}
+                                                <option value="{{ funcionario.telefone_whatsapp_normalizado|default:funcionario.telefone_whatsapp }}" data-name="{{ funcionario.nome }}">
+                                                    {{ funcionario.nome }}
+                                                </option>
+                                            {% endfor %}
+                                        </select>
+                                        <button type="button" class="entrega-send-btn primary">WhatsApp</button>
+                                    </div>
+                                    {% if not funcionarios_habilitados %}
+                                        <p class="entrega-feedback warning">Nenhum funcionário habilitado para receber checklist.</p>
+                                    {% endif %}
+                                    <p class="entrega-send-feedback" aria-live="polite"></p>
+                                {% endif %}
+                            {% else %}
+                                <div class="entrega-status">Sem entrega criada</div>
+                                <div class="entrega-actions">
+                                    <a href="{% url 'estoque:venda_criar_entrega' venda.id %}" class="success">Criar entrega/checklist</a>
+                                </div>
+                            {% endif %}
                         </div>
                     </div>
 
@@ -1001,6 +1148,62 @@
                 avisoWhatsapp.classList.add("visivel");
             });
         }
+
+        // Funcionalidade de envio de checklist para funcionário
+        (function () {
+            function normalizarWhatsapp(valor) {
+                var digitos = String(valor || "").replace(/\D/g, "");
+                if (!digitos) return "";
+                if (!digitos.startsWith("55") && (digitos.length === 10 || digitos.length === 11)) {
+                    digitos = "55" + digitos;
+                }
+                return digitos;
+            }
+
+            function mostrarFeedback(mensagem, tipo) {
+                var feedback = document.querySelector('.entrega-send-feedback');
+                if (!feedback) return;
+                feedback.textContent = mensagem;
+                feedback.className = 'entrega-send-feedback ' + (tipo || '');
+                window.clearTimeout(feedback.timeoutId);
+                feedback.timeoutId = window.setTimeout(function () {
+                    feedback.textContent = '';
+                    feedback.className = 'entrega-send-feedback';
+                }, 3500);
+            }
+
+            document.addEventListener('click', function (event) {
+                if (!event.target.classList.contains('entrega-send-btn')) return;
+                var container = event.target.closest('.entrega-send');
+                var select = container.querySelector('.entrega-send-select');
+                if (!container || !select) return;
+
+                var checklistUrl = container.dataset.checklistUrl;
+                var rotaId = container.dataset.rotaId;
+                var opcao = select.options[select.selectedIndex];
+                var nomeFuncionario = opcao ? opcao.dataset.name : '';
+                var telefone = normalizarWhatsapp(select.value);
+
+                if (!nomeFuncionario || !telefone) {
+                    mostrarFeedback('Selecione um funcionário habilitado.', 'warning');
+                    select.focus();
+                    return;
+                }
+
+                var clienteNome = "{{ venda.cliente.nome|default:'Consumidor' }}";
+                var vendaId = "{{ venda.id }}";
+                var mensagem = [
+                    'Olá, ' + nomeFuncionario + '.',
+                    '',
+                    'Segue o link do checklist de entrega da venda #' + vendaId + ' (' + clienteNome + '):',
+                    checklistUrl
+                ].join('\n');
+                var whatsappUrl = 'https://web.whatsapp.com/send?phone=' + telefone + '&text=' + encodeURIComponent(mensagem);
+
+                window.open(whatsappUrl, '_blank', 'noopener');
+                mostrarFeedback('WhatsApp aberto com a mensagem pronta. Revise e envie manualmente.', 'success');
+            });
+        })();
     </script>
 </body>
 </html>
