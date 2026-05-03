@@ -22,6 +22,7 @@
   .entregas-btn.soft { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
   .entregas-btn:disabled { cursor: not-allowed; opacity: 0.72; }
   .entregas-grid { display: grid; grid-template-columns: minmax(320px, 0.95fr) minmax(460px, 1.45fr); gap: 12px; }
+  .entregas-acompanhamento { display: grid; gap: 12px; align-content: start; }
   .entregas-card {
     background: #fff; border: 1px solid #e1e7ef; border-radius: 13px;
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06); overflow: hidden;
@@ -88,6 +89,11 @@
   }
   .rota-title { margin: 0; color: #172033; font-size: 0.95rem; font-weight: 900; }
   .rota-status { color: #475569; font-size: 0.78rem; font-weight: 800; }
+  .rota-meta {
+    display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+    color: #475569; font-size: 0.78rem; font-weight: 800;
+  }
+  .rota-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
   .rota-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
   .rota-col { padding: 10px 12px; }
   .rota-col + .rota-col { border-left: 1px solid #edf1f6; background: #fbfdff; }
@@ -100,6 +106,9 @@
     .entregas-grid { grid-template-columns: 1fr; }
     .rota-cols { grid-template-columns: 1fr; }
     .rota-col + .rota-col { border-left: 0; border-top: 1px solid #edf1f6; }
+    .entregas-header { align-items: stretch; flex-direction: column; }
+    .entregas-header-actions,
+    .rota-actions { justify-content: flex-start; }
   }
 </style>
 
@@ -111,6 +120,7 @@
         <p class="entregas-subtitle">Organize entregas unitarias e rotas simples com ordem de carregamento inversa.</p>
       </div>
       <div class="entregas-header-actions">
+        <a class="entregas-btn primary" href="{% url 'estoque:home' %}">Voltar ao painel</a>
         <a class="entregas-btn soft" href="{% url 'estoque:vendas' %}">Nova venda</a>
         <a class="entregas-btn soft" href="{% url 'estoque:consultar_vendas' %}">Consultar vendas</a>
       </div>
@@ -138,35 +148,6 @@
           <h2 class="entregas-card-title">Preparar entrega</h2>
         </div>
         <div class="entregas-card-body">
-          <form class="entregas-form" method="post" data-create-form="unitaria"{% if messages %}{% for message in messages %}{% if 'entrega-unitaria' in message.tags and 'success' in message.tags %} data-created-success="true"{% endif %}{% endfor %}{% endif %}>
-            {% csrf_token %}
-            <input type="hidden" name="acao" value="unitaria">
-            <input type="hidden" name="data" value="{{ data_entrega|date:'Y-m-d' }}">
-            <h3 class="entregas-form-title">Entrega unitaria</h3>
-            <div class="entregas-field">
-              <label for="vendaUnitaria">Venda</label>
-              <select id="vendaUnitaria" name="venda_unitaria">
-                <option value="">Selecione uma venda</option>
-                {% for venda in vendas %}
-                  <option value="{{ venda.id }}" data-has-entrega="{% if venda.tem_entrega_criada %}true{% else %}false{% endif %}">#{{ venda.id }} - {{ venda.cliente.nome|default:"Consumidor" }} - R$ {{ venda.total|floatformat:2 }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            {% if messages %}
-              {% for message in messages %}
-                {% if 'entrega-unitaria' in message.tags %}
-                  <p class="entregas-form-feedback has-message {% if 'warning' in message.tags %}warning{% else %}success{% endif %}" aria-live="polite">{{ message }}</p>
-                {% endif %}
-              {% endfor %}
-            {% endif %}
-            <p class="entregas-form-feedback warning" data-client-feedback aria-live="polite"></p>
-            <div class="entregas-field" style="margin-top: 8px;">
-              <label for="obsUnitaria">Observacao</label>
-              <textarea id="obsUnitaria" name="observacao" placeholder="Opcional"></textarea>
-            </div>
-            <button type="submit" class="entregas-btn success" style="margin-top: 8px;" data-loading-text="Criando...">Criar entrega unitaria</button>
-          </form>
-
           <form class="entregas-form" method="post" data-create-form="rota">
             {% csrf_token %}
             <input type="hidden" name="acao" value="rota">
@@ -215,92 +196,131 @@
             </div>
             <button type="submit" class="entregas-btn success" style="margin-top: 8px;" data-loading-text="Criando rota...">Criar rota</button>
           </form>
-        </div>
-      </section>
 
-      <section class="entregas-card">
-        <div class="entregas-card-head">
-          <h2 class="entregas-card-title">Vendas disponiveis</h2>
-          <span class="entregas-muted">{{ total_vendas }} venda(s)</span>
-        </div>
-        {% if vendas %}
-          <div class="entregas-table-wrap">
-            <table class="entregas-table">
-              <thead>
-                <tr>
-                  <th>Numero</th>
-                  <th>Cliente</th>
-                  <th>Data</th>
-                  <th>Total</th>
-                  <th>Status entrega</th>
-                  <th>Acoes</th>
-                </tr>
-              </thead>
-              <tbody>
+          <form class="entregas-form" method="post" data-create-form="unitaria"{% if messages %}{% for message in messages %}{% if 'entrega-unitaria' in message.tags and 'success' in message.tags %} data-created-success="true"{% endif %}{% endfor %}{% endif %}>
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="unitaria">
+            <input type="hidden" name="data" value="{{ data_entrega|date:'Y-m-d' }}">
+            <h3 class="entregas-form-title">Entrega unitaria</h3>
+            <div class="entregas-field">
+              <label for="vendaUnitaria">Venda</label>
+              <select id="vendaUnitaria" name="venda_unitaria">
+                <option value="">Selecione uma venda</option>
                 {% for venda in vendas %}
-                  <tr>
-                    <td><span class="entregas-numero">#{{ venda.id }}</span></td>
-                    <td><span class="entregas-cliente">{{ venda.cliente.nome|default:"Consumidor" }}</span></td>
-                    <td class="entregas-muted">{{ venda.data_venda|date:"d/m/Y" }}</td>
-                    <td class="entregas-total">R$ {{ venda.total|floatformat:2 }}</td>
-                    <td><span class="entregas-status">{{ venda.entrega_status_texto }}</span></td>
-                    <td><a class="entregas-btn soft" href="{% url 'estoque:venda_detalhe' venda.id %}">Abrir nota</a></td>
-                  </tr>
+                  <option value="{{ venda.id }}" data-has-entrega="{% if venda.tem_entrega_criada %}true{% else %}false{% endif %}">#{{ venda.id }} - {{ venda.cliente.nome|default:"Consumidor" }} - R$ {{ venda.total|floatformat:2 }}</option>
                 {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        {% else %}
-          <div class="entregas-vazio">Nenhuma venda encontrada para esta data.</div>
-        {% endif %}
-      </section>
-    </div>
-
-    <section class="entregas-card" style="margin-top: 12px;">
-      <div class="entregas-card-head">
-        <h2 class="entregas-card-title">Entregas e rotas criadas</h2>
-      </div>
-      <div class="entregas-card-body">
-        {% if rotas %}
-          <div class="rotas-lista">
-            {% for rota in rotas %}
-              <article class="rota-card">
-                <div class="rota-head">
-                  <h3 class="rota-title">{{ rota.get_tipo_display }} #{{ rota.id }}</h3>
-                  <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
-                    <span class="rota-status">{{ rota.get_status_display }} - {{ rota.data|date:"d/m/Y" }}</span>
-                    <a class="entregas-btn soft" href="{% url 'estoque:entrega_rota_detalhe' rota.id %}">Ver detalhes</a>
-                  </div>
-                </div>
-                {% if rota.observacao %}
-                  <p class="rota-obs">{{ rota.observacao }}</p>
+              </select>
+            </div>
+            {% if messages %}
+              {% for message in messages %}
+                {% if 'entrega-unitaria' in message.tags %}
+                  <p class="entregas-form-feedback has-message {% if 'warning' in message.tags %}warning{% else %}success{% endif %}" aria-live="polite">{{ message }}</p>
                 {% endif %}
-                <div class="rota-cols">
-                  <div class="rota-col">
-                    <h4>Ordem de entrega</h4>
-                    <ol class="rota-lista">
-                      {% for item in rota.itens_entrega %}
-                        <li>Venda #{{ item.venda.id }} - {{ item.venda.cliente.nome|default:"Consumidor" }}</li>
-                      {% endfor %}
-                    </ol>
-                  </div>
-                  <div class="rota-col">
-                    <h4>Ordem de carregamento</h4>
-                    <ol class="rota-lista">
-                      {% for item in rota.itens_carregamento %}
-                        <li>Venda #{{ item.venda.id }} - {{ item.venda.cliente.nome|default:"Consumidor" }}</li>
-                      {% endfor %}
-                    </ol>
-                  </div>
-                </div>
-              </article>
-            {% endfor %}
+              {% endfor %}
+            {% endif %}
+            <p class="entregas-form-feedback warning" data-client-feedback aria-live="polite"></p>
+            <div class="entregas-field" style="margin-top: 8px;">
+              <label for="obsUnitaria">Observacao</label>
+              <textarea id="obsUnitaria" name="observacao" placeholder="Opcional"></textarea>
+            </div>
+            <button type="submit" class="entregas-btn success" style="margin-top: 8px;" data-loading-text="Criando...">Criar entrega unitaria</button>
+          </form>
+        </div>
+      </section>
+
+      <div class="entregas-acompanhamento">
+        <section class="entregas-card">
+          <div class="entregas-card-head">
+            <h2 class="entregas-card-title">Vendas disponiveis</h2>
+            <span class="entregas-muted">{{ total_vendas }} venda(s)</span>
           </div>
-        {% else %}
-          <div class="entregas-vazio">Nenhuma entrega ou rota criada para esta data.</div>
-        {% endif %}
+          {% if vendas %}
+            <div class="entregas-table-wrap">
+              <table class="entregas-table">
+                <thead>
+                  <tr>
+                    <th>Numero</th>
+                    <th>Cliente</th>
+                    <th>Data</th>
+                    <th>Total</th>
+                    <th>Status entrega</th>
+                    <th>Acoes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for venda in vendas %}
+                    <tr>
+                      <td><span class="entregas-numero">#{{ venda.id }}</span></td>
+                      <td><span class="entregas-cliente">{{ venda.cliente.nome|default:"Consumidor" }}</span></td>
+                      <td class="entregas-muted">{{ venda.data_venda|date:"d/m/Y" }}</td>
+                      <td class="entregas-total">R$ {{ venda.total|floatformat:2 }}</td>
+                      <td><span class="entregas-status">{{ venda.entrega_status_texto }}</span></td>
+                      <td><a class="entregas-btn soft" href="{% url 'estoque:venda_detalhe' venda.id %}">Abrir nota</a></td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="entregas-vazio">Nenhuma venda encontrada para esta data.</div>
+          {% endif %}
+        </section>
+
+        <section class="entregas-card">
+          <div class="entregas-card-head">
+            <h2 class="entregas-card-title">Entregas/rotas ja criadas</h2>
+            <span class="entregas-muted">{{ rotas|length }} registro(s)</span>
+          </div>
+          <div class="entregas-card-body">
+            {% if rotas %}
+              <div class="rotas-lista">
+                {% for rota in rotas %}
+                  <article class="rota-card">
+                    <div class="rota-head">
+                      <div>
+                        <h3 class="rota-title">#{{ rota.id }} - {{ rota.get_tipo_display }}</h3>
+                        <div class="rota-meta">
+                          <span>{{ rota.data|date:"d/m/Y" }}</span>
+                          <span class="entregas-status">{{ rota.get_status_display }}</span>
+                          <span>{{ rota.itens_entrega|length }} venda(s)</span>
+                        </div>
+                      </div>
+                      <div class="rota-actions">
+                        <a class="entregas-btn soft" href="{% url 'estoque:entrega_rota_detalhe' rota.id %}">Ver detalhes</a>
+                        <a class="entregas-btn primary" href="{% url 'estoque:entrega_rota_checklist' rota.id %}">Abrir checklist</a>
+                      </div>
+                    </div>
+                    {% if rota.observacao %}
+                      <p class="rota-obs">{{ rota.observacao }}</p>
+                    {% endif %}
+                    <div class="rota-cols">
+                      <div class="rota-col">
+                        <h4>Ordem de entrega</h4>
+                        <ol class="rota-lista">
+                          {% for item in rota.itens_entrega %}
+                            <li>Venda #{{ item.venda.id }} - {{ item.venda.cliente.nome|default:"Consumidor" }}</li>
+                          {% endfor %}
+                        </ol>
+                      </div>
+                      <div class="rota-col">
+                        <h4>Ordem de carregamento</h4>
+                        <ol class="rota-lista">
+                          {% for item in rota.itens_carregamento %}
+                            <li>Venda #{{ item.venda.id }} - {{ item.venda.cliente.nome|default:"Consumidor" }}</li>
+                          {% endfor %}
+                        </ol>
+                      </div>
+                    </div>
+                  </article>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="entregas-vazio">Nenhuma entrega/rota criada para esta data.</div>
+            {% endif %}
+          </div>
+        </section>
       </div>
-    </section>
+    </div>
   </div>
 </div>
 <script>

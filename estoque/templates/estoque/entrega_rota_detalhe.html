@@ -158,7 +158,7 @@
       </div>
       <div class="rota-detalhe-actions">
         <a class="rota-btn" href="{% url 'estoque:entregas_dia' %}?data={{ rota.data|date:'Y-m-d' }}">Voltar para Entregas do Dia</a>
-        <a id="rotaChecklistLink" class="rota-btn primary" href="{{ checklist_url }}">Abrir checklist</a>
+        <a id="rotaChecklistLink" class="rota-btn primary" href="{% url 'estoque:entrega_rota_checklist' rota.id %}">Abrir checklist</a>
       </div>
     </header>
 
@@ -331,7 +331,7 @@
     var checklistUrl = checklistUrlData ? JSON.parse(checklistUrlData.textContent) : "";
     var selectFuncionario = document.getElementById("funcionarioChecklistSelect");
     var botaoWhatsapp = document.getElementById("abrirWhatsappFuncionario");
-    var checklistLink = document.getElementById("rotaChecklistLink");
+    var checklistLink = document.getElementById("checklistShareLink");
     var checklistShareLink = document.getElementById("checklistShareLink");
     var botaoCopiarChecklist = document.getElementById("copiarChecklistLink");
     var botaoMostrarQr = document.getElementById("mostrarChecklistQr");

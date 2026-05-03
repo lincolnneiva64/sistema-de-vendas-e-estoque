@@ -143,6 +143,7 @@
       <p class="check-subtitle">{{ rota.data|date:"d/m/Y" }} - {{ rota.get_tipo_display }} - {{ rota.get_status_display }}</p>
       <div class="check-actions">
         <a class="check-btn" href="{% url 'estoque:entrega_rota_detalhe' rota.id %}">Voltar para detalhes</a>
+        <a class="check-btn primary" href="{% url 'estoque:entregas_dia' %}?data={{ rota.data|date:'Y-m-d' }}">Voltar para rotas criadas</a>
         <a class="check-btn" href="{% url 'estoque:entregas_dia' %}?data={{ rota.data|date:'Y-m-d' }}">Entregas do Dia</a>
       </div>
       <section class="mobile-access" aria-labelledby="mobileAccessTitle">
