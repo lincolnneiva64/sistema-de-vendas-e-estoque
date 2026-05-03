@@ -2,13 +2,6 @@
 {% block title %}Checklist Entrega #{{ rota.id }}{% endblock %}
 {% block content %}
 <style>
-  :root,
-  html,
-  body {
-    color-scheme: light !important;
-    background: #eef3f8 !important;
-    color: #172033 !important;
-  }
   .check-page { min-height: 100vh; background: #eef3f8; color: #172033; padding: 10px 0 96px; overflow-x: hidden; }
   .check-page * { box-sizing: border-box; }
   .check-shell { width: min(720px, calc(100vw - 16px)); margin: 0 auto; }
@@ -122,86 +115,6 @@
   .check-control:has(input:checked) { border-color: #86efac; background: #f0fdf4; color: #14532d; box-shadow: inset 3px 0 0 #16a34a; }
   .check-control input { width: 20px; height: 20px; margin: 0; accent-color: #16a34a; }
   .check-empty { padding: 14px; color: #64748b; text-align: center; font-weight: 850; }
-  .check-page input,
-  .check-page button,
-  .check-page a {
-    color-scheme: light !important;
-  }
-  .check-page input[type="checkbox"] {
-    background-color: #fff !important;
-    border-color: #cbd5e1 !important;
-    accent-color: #16a34a !important;
-  }
-  @media (prefers-color-scheme: dark) {
-    html,
-    body,
-    .check-page {
-      color-scheme: light !important;
-      background: #eef3f8 !important;
-      color: #172033 !important;
-    }
-    .check-header,
-    .check-section,
-    .check-stop,
-    .check-row,
-    .check-control {
-      background: #fff !important;
-      color: #172033 !important;
-    }
-    .mobile-access {
-      background: #f8fafc !important;
-      color: #172033 !important;
-    }
-    .check-section-head {
-      background: #eef6ff !important;
-    }
-    .check-section.carregamento,
-    .check-section.carregamento .check-section-head {
-      background: #fff2c2 !important;
-    }
-    .check-stop.is-conferido,
-    .check-row:has(input:checked),
-    .check-control:has(input:checked),
-    .check-save-feedback-inline {
-      background: #ecfdf3 !important;
-      color: #14532d !important;
-    }
-    .check-title,
-    .check-stop-title,
-    .check-control,
-    .check-row-text {
-      color: #172033 !important;
-    }
-    .check-subtitle,
-    .check-section-note,
-    .check-row-sub {
-      color: #64748b !important;
-    }
-    .check-section-title {
-      color: #1e3a8a !important;
-    }
-    .check-btn {
-      background: #fff !important;
-      color: #334155 !important;
-      border-color: #cbd5e1 !important;
-    }
-    .check-btn.primary,
-    .check-btn.save.entrega {
-      background: #2563eb !important;
-      border-color: #2563eb !important;
-      color: #fff !important;
-    }
-    .check-btn.save {
-      background: #16a34a !important;
-      border-color: #16a34a !important;
-      color: #fff !important;
-    }
-    .check-page input[type="checkbox"] {
-      background-color: #fff !important;
-      border-color: #cbd5e1 !important;
-      accent-color: #16a34a !important;
-    }
-  }
   @media (max-width: 520px) {
     .check-page { padding-top: 8px; }
     .check-shell { width: min(100vw - 10px, 720px); }
