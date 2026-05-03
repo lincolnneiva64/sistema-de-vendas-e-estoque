@@ -1285,6 +1285,40 @@ def registrar_whatsapp_aberto(request, pk):
 
 
 @require_POST
+def registrar_checklist_whatsapp_aberto(request, pk):
+    venda = get_object_or_404(Venda, pk=pk)
+    try:
+        dados = json.loads(request.body.decode("utf-8") or "{}")
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        dados = {}
+
+    numero_usado = "".join(ch for ch in str(dados.get("numero_usado") or "") if ch.isdigit())
+    rota_id = str(dados.get("rota_id") or "").strip()
+    rota_item_id = str(dados.get("rota_item_id") or "").strip()
+    numero_whatsapp, origem_numero = _dados_numero_whatsapp_evento(venda, numero_usado)
+
+    detalhes = []
+    if rota_id:
+        detalhes.append(f"rota/entrega #{rota_id}")
+    if rota_item_id:
+        detalhes.append(f"bloco #{rota_item_id}")
+    detalhes_texto = f" ({', '.join(detalhes)})." if detalhes else "."
+
+    _registrar_evento_venda(
+        venda,
+        "checklist_cliente_whatsapp_aberto",
+        f"WhatsApp aberto para envio do checklist ao cliente{detalhes_texto}",
+        canal="whatsapp_checklist",
+        numero_whatsapp=numero_whatsapp,
+        origem_numero=origem_numero,
+    )
+    return JsonResponse({
+        "sucesso": True,
+        "mensagem": "Registro de abertura do checklist no WhatsApp salvo.",
+    })
+
+
+@require_POST
 def confirmar_whatsapp(request, pk):
     venda = get_object_or_404(Venda, pk=pk)
     ultimo_whatsapp_aberto = venda.eventos.filter(

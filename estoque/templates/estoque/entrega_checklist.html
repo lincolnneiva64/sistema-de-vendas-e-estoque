@@ -239,8 +239,10 @@
           data-cliente-nome="{{ item_rota.venda.cliente.nome|default:'Consumidor' }}"
           data-venda-id="{{ item_rota.venda.id }}"
           data-rota-id="{{ rota.id }}"
+          data-rota-item-id="{{ item_rota.id }}"
           data-rota-data="{{ rota.data|date:'d/m/Y' }}"
           data-whatsapp="{{ item_rota.venda.cliente.whatsapp_normalizado|default:item_rota.venda.cliente.whatsapp|default:'' }}"
+          data-registro-url="{% url 'estoque:registrar_checklist_whatsapp_aberto' item_rota.venda.id %}"
           {% if item_rota.entrega_conferida %}data-locked-block="true"{% endif %}
         >
           <h3 class="check-stop-title">{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</h3>
@@ -387,6 +389,11 @@
       return digitos;
     }
 
+    function getCsrfToken() {
+      var tokenInput = checklistForm ? checklistForm.querySelector("input[name='csrfmiddlewaretoken']") : null;
+      return tokenInput ? tokenInput.value : "";
+    }
+
     function montarResumoCliente(block) {
       var conferidos = [];
       var pendentes = [];
@@ -411,6 +418,30 @@
         conferidos: conferidos,
         pendentes: pendentes
       };
+    }
+
+    function registrarChecklistWhatsappAberto(block, telefone) {
+      var registroUrl = block ? block.dataset.registroUrl : "";
+      if (!registroUrl || !window.fetch) {
+        return;
+      }
+
+      fetch(registroUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({
+          rota_id: block.dataset.rotaId || "",
+          rota_item_id: block.dataset.rotaItemId || "",
+          numero_usado: telefone || ""
+        })
+      }).catch(function (error) {
+        if (window.console) {
+          console.warn("Nao foi possivel registrar abertura do WhatsApp do checklist.", error);
+        }
+      });
     }
 
     function abrirChecklistCliente(block) {
@@ -460,6 +491,7 @@
       }
       url += "text=" + encodeURIComponent(linhas.join("\n"));
       window.open(url, "_blank", "noopener");
+      registrarChecklistWhatsappAberto(block, telefone);
     }
 
     document.querySelectorAll("[data-send-client-checklist]").forEach(function (button) {
