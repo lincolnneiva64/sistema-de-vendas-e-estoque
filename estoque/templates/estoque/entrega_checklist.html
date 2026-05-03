@@ -24,6 +24,7 @@
   .check-btn:active { transform: translateY(2px) scale(0.99); }
   .check-btn:disabled { cursor: wait; opacity: 0.78; }
   .check-btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+  .check-btn.whatsapp { background: #16a34a; border-color: #16a34a; color: #fff; }
   .check-btn.compact { min-height: 38px; padding: 8px 11px; font-size: 0.86rem; }
   .check-btn.save { min-height: 40px; width: 100%; background: #16a34a; border-color: #16a34a; color: #fff; font-size: 0.95rem; box-shadow: 0 8px 18px rgba(22, 163, 74, 0.22); }
   .check-btn.save:active,
@@ -91,6 +92,7 @@
   .check-stop.is-locked [data-save-button] { display: none; }
   .check-stop.is-editing [data-save-button] { display: inline-flex; }
   .check-stop.is-editing [data-edit-block],
+  .check-stop.is-editing [data-send-client-checklist],
   .check-stop.is-editing .check-lock-note { display: none; }
   .check-stop:first-child { border-top: 0; }
   .check-stop.is-conferido:first-child { border-top: 1.25px solid #98e6b0; }
@@ -231,7 +233,16 @@
         <p class="check-section-note">Entregar nesta ordem. Sequencia que o entregador deve seguir na rua. Marque os itens conferidos/entregues na rua.</p>
       </div>
       {% for item_rota in itens_entrega %}
-        <article id="bloco-{{ item_rota.id }}-entrega" class="check-stop{% if item_rota.entrega_conferida %} is-conferido is-locked{% endif %}"{% if item_rota.entrega_conferida %} data-locked-block="true"{% endif %}>
+        <article
+          id="bloco-{{ item_rota.id }}-entrega"
+          class="check-stop{% if item_rota.entrega_conferida %} is-conferido is-locked{% endif %}"
+          data-cliente-nome="{{ item_rota.venda.cliente.nome|default:'Consumidor' }}"
+          data-venda-id="{{ item_rota.venda.id }}"
+          data-rota-id="{{ rota.id }}"
+          data-rota-data="{{ rota.data|date:'d/m/Y' }}"
+          data-whatsapp="{{ item_rota.venda.cliente.whatsapp_normalizado|default:item_rota.venda.cliente.whatsapp|default:'' }}"
+          {% if item_rota.entrega_conferida %}data-locked-block="true"{% endif %}
+        >
           <h3 class="check-stop-title">{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</h3>
           <div class="check-stop-meta">Venda #{{ item_rota.venda.id }} - R$ {{ item_rota.venda.total|floatformat:2 }}</div>
           {% if item_rota.entrega_conferida %}
@@ -270,6 +281,7 @@
           <div class="check-stop-save">
             {% if item_rota.entrega_conferida %}
               <button type="button" class="check-btn" data-edit-block>Editar conferencia</button>
+              <button type="button" class="check-btn whatsapp" data-send-client-checklist>Enviar checklist ao cliente</button>
             {% endif %}
             <button type="submit" name="salvar_bloco" value="{{ item_rota.id }}:entrega" class="check-btn save entrega" data-save-button>Salvar checklist</button>
             <p class="check-save-feedback" data-save-feedback aria-live="polite"></p>
@@ -361,6 +373,98 @@
     document.querySelectorAll("[data-edit-block]").forEach(function (button) {
       button.addEventListener("click", function () {
         setBlockLocked(button.closest(".check-stop"), false);
+      });
+    });
+
+    function normalizarWhatsapp(valor) {
+      var digitos = String(valor || "").replace(/\D/g, "");
+      if (!digitos) {
+        return "";
+      }
+      if (!digitos.startsWith("55") && (digitos.length === 10 || digitos.length === 11)) {
+        digitos = "55" + digitos;
+      }
+      return digitos;
+    }
+
+    function montarResumoCliente(block) {
+      var conferidos = [];
+      var pendentes = [];
+
+      block.querySelectorAll(".check-row").forEach(function (row) {
+        var checkbox = row.querySelector("input[type='checkbox']");
+        var produto = row.querySelector(".check-row-text");
+        var quantidade = row.querySelector(".check-row-sub");
+        var texto = [
+          produto ? produto.textContent.trim() : "Item",
+          quantidade ? quantidade.textContent.trim() : ""
+        ].filter(Boolean).join(" - ");
+
+        if (checkbox && checkbox.checked) {
+          conferidos.push(texto);
+        } else {
+          pendentes.push(texto);
+        }
+      });
+
+      return {
+        conferidos: conferidos,
+        pendentes: pendentes
+      };
+    }
+
+    function abrirChecklistCliente(block) {
+      if (!block) {
+        return;
+      }
+
+      var resumo = montarResumoCliente(block);
+      var clienteNome = block.dataset.clienteNome || "Consumidor";
+      var vendaId = block.dataset.vendaId || "";
+      var rotaId = block.dataset.rotaId || "{{ rota.id }}";
+      var rotaData = block.dataset.rotaData || "{{ rota.data|date:'d/m/Y' }}";
+      var telefone = normalizarWhatsapp(block.dataset.whatsapp);
+      var linhas = [
+        "Ola, " + clienteNome + ".",
+        "",
+        "Segue o checklist conferido da sua entrega.",
+        "Venda #" + vendaId,
+        "Entrega/Rota #" + rotaId,
+        "Data da entrega: " + rotaData,
+        "",
+        "Itens conferidos:"
+      ];
+
+      if (resumo.conferidos.length) {
+        resumo.conferidos.forEach(function (item) {
+          linhas.push("- " + item);
+        });
+      } else {
+        linhas.push("- Nenhum item marcado como conferido.");
+      }
+
+      if (resumo.pendentes.length) {
+        linhas.push("");
+        linhas.push("Itens pendentes/nao marcados:");
+        resumo.pendentes.forEach(function (item) {
+          linhas.push("- " + item);
+        });
+      }
+
+      linhas.push("");
+      linhas.push("Confira por favor.");
+
+      var url = "https://web.whatsapp.com/send?";
+      if (telefone) {
+        url += "phone=" + telefone + "&";
+      }
+      url += "text=" + encodeURIComponent(linhas.join("\n"));
+      window.open(url, "_blank", "noopener");
+    }
+
+    document.querySelectorAll("[data-send-client-checklist]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        abrirChecklistCliente(button.closest(".check-stop"));
       });
     });
 
