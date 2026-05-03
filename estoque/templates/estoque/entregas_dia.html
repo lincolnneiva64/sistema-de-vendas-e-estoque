@@ -100,7 +100,31 @@
   .rota-col h4 { margin: 0 0 8px; color: #1e3a8a; font-size: 0.82rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.03em; }
   .rota-lista { margin: 0; padding-left: 22px; }
   .rota-lista li { margin: 0 0 6px; font-size: 0.84rem; font-weight: 750; }
-  .rota-obs { margin: 0 12px 10px; color: #64748b; font-size: 0.82rem; font-weight: 700; }
+  .rota-send-checklist {
+    padding: 10px 12px; border-top: 1px solid #edf1f6; background: #f8fafc;
+  }
+  .rota-send-fields {
+    display: flex; gap: 8px; align-items: center; margin-bottom: 6px;
+  }
+  .rota-send-select {
+    flex: 1; min-width: 0; border: 1px solid #d3dbe8; border-radius: 6px;
+    background: #fff; color: #172033; font-size: 0.8rem; font-weight: 700;
+    padding: 6px 8px; outline: none;
+  }
+  .rota-send-select:focus {
+    border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  }
+  .rota-send-btn {
+    min-height: 32px; padding: 6px 10px; font-size: 0.8rem;
+  }
+  .rota-send-empty {
+    margin: 0; color: #92400e; font-size: 0.78rem; font-weight: 800;
+  }
+  .rota-send-feedback {
+    margin: 4px 0 0; font-size: 0.78rem; font-weight: 800; min-height: 16px;
+  }
+  .rota-send-feedback.success { color: #166534; }
+  .rota-send-feedback.warning { color: #92400e; }
   .entregas-vazio { color: #64748b; font-weight: 800; padding: 12px; text-align: center; }
   @media (max-width: 980px) {
     .entregas-grid { grid-template-columns: 1fr; }
@@ -290,6 +314,25 @@
                         <a class="entregas-btn primary" href="{% url 'estoque:entrega_rota_checklist' rota.id %}">Abrir checklist</a>
                       </div>
                     </div>
+                    {% if rota.status != rota.STATUS_CONCLUIDA %}
+                      <div class="rota-send-checklist" data-rota-id="{{ rota.id }}" data-checklist-url="{{ rota.checklist_url }}">
+                        <div class="rota-send-fields">
+                          <select class="rota-send-select" data-rota-id="{{ rota.id }}">
+                            <option value="">Enviar para funcionário</option>
+                            {% for funcionario in funcionarios_habilitados %}
+                              <option value="{{ funcionario.telefone_whatsapp_normalizado|default:funcionario.telefone_whatsapp }}" data-name="{{ funcionario.nome }}">
+                                {{ funcionario.nome }}
+                              </option>
+                            {% endfor %}
+                          </select>
+                          <button type="button" class="entregas-btn primary rota-send-btn" data-rota-id="{{ rota.id }}">WhatsApp</button>
+                        </div>
+                        {% if not funcionarios_habilitados %}
+                          <p class="rota-send-empty">Nenhum funcionário habilitado para receber checklist.</p>
+                        {% endif %}
+                        <p class="rota-send-feedback" data-rota-id="{{ rota.id }}" aria-live="polite"></p>
+                      </div>
+                    {% endif %}
                     {% if rota.observacao %}
                       <p class="rota-obs">{{ rota.observacao }}</p>
                     {% endif %}
@@ -405,6 +448,60 @@
           button.disabled = true;
         }
       });
+    });
+  }());
+
+  // Funcionalidade de envio de checklist para funcionário
+  (function () {
+    function normalizarWhatsapp(valor) {
+      var digitos = String(valor || "").replace(/\D/g, "");
+      if (!digitos) return "";
+      if (!digitos.startsWith("55") && (digitos.length === 10 || digitos.length === 11)) {
+        digitos = "55" + digitos;
+      }
+      return digitos;
+    }
+
+    function mostrarFeedback(rotaId, mensagem, tipo) {
+      var feedback = document.querySelector('.rota-send-feedback[data-rota-id="' + rotaId + '"]');
+      if (!feedback) return;
+      feedback.textContent = mensagem;
+      feedback.className = 'rota-send-feedback ' + (tipo || '');
+      window.clearTimeout(feedback.timeoutId);
+      feedback.timeoutId = window.setTimeout(function () {
+        feedback.textContent = '';
+        feedback.className = 'rota-send-feedback';
+      }, 3500);
+    }
+
+    document.addEventListener('click', function (event) {
+      if (!event.target.classList.contains('rota-send-btn')) return;
+      var rotaId = event.target.dataset.rotaId;
+      var container = document.querySelector('.rota-send-checklist[data-rota-id="' + rotaId + '"]');
+      var select = document.querySelector('.rota-send-select[data-rota-id="' + rotaId + '"]');
+      if (!container || !select) return;
+
+      var checklistUrl = container.dataset.checklistUrl;
+      var opcao = select.options[select.selectedIndex];
+      var nomeFuncionario = opcao ? opcao.dataset.name : '';
+      var telefone = normalizarWhatsapp(select.value);
+
+      if (!nomeFuncionario || !telefone) {
+        mostrarFeedback(rotaId, 'Selecione um funcionário habilitado.', 'warning');
+        select.focus();
+        return;
+      }
+
+      var mensagem = [
+        'Olá, ' + nomeFuncionario + '.',
+        '',
+        'Segue o link do checklist/rota de entrega #' + rotaId + ':',
+        checklistUrl
+      ].join('\n');
+      var whatsappUrl = 'https://web.whatsapp.com/send?phone=' + telefone + '&text=' + encodeURIComponent(mensagem);
+
+      window.open(whatsappUrl, '_blank', 'noopener');
+      mostrarFeedback(rotaId, 'WhatsApp aberto com a mensagem pronta. Revise e envie manualmente.', 'success');
     });
   }());
 </script>

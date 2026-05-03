@@ -865,6 +865,14 @@ def entregas_dia(request):
         itens = list(rota.itens.all())
         rota.itens_entrega = itens
         rota.itens_carregamento = list(reversed(itens))
+        # Adicionar checklist_url para cada rota
+        checklist_path = reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota.id})
+        checklist_base_url = getattr(settings, "CHECKLIST_BASE_URL", "").rstrip("/")
+        rota.checklist_url = (
+            f"{checklist_base_url}{checklist_path}"
+            if checklist_base_url
+            else request.build_absolute_uri(checklist_path)
+        )
 
     return render(
         request,
@@ -874,6 +882,7 @@ def entregas_dia(request):
             "vendas": vendas_lista,
             "rotas": rotas,
             "total_vendas": len(vendas_lista),
+            "funcionarios_habilitados": Funcionario.habilitados_para_checklist(),
         },
     )
 

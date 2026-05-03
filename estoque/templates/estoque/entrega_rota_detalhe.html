@@ -162,6 +162,7 @@
       </div>
     </header>
 
+    {% if rota.status != rota.STATUS_CONCLUIDA %}
     <section class="rota-card">
       <div class="rota-card-head">
         <h2 class="rota-card-title">Enviar checklist para funcionario</h2>
@@ -205,6 +206,7 @@
         {% endif %}
       </div>
     </section>
+    {% endif %}
 
     <section class="rota-card">
       <div class="rota-card-head">
