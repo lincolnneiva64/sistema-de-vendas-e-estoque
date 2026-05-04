@@ -741,20 +741,15 @@
           return;
         }
 
-        var funcionarioNome = selectedOption.textContent.trim();
-        var rotaId = "{{ rota.id }}";
-        var rotaData = "{{ rota.data|date:'d/m/Y' }}";
         var checklistUrl = "{{ checklist_url }}";
         var telefone = normalizarWhatsapp(whatsapp);
 
         var linhas = [
-          "Olá, " + funcionarioNome + ".",
+          "📋 Checklist de entrega",
           "",
-          "Segue o link do checklist da entrega/rota #" + rotaId + " do dia " + rotaData + ".",
+          "Para visualizar melhor, abra no navegador do celular (de preferência no Chrome):",
           "",
           checklistUrl,
-          "",
-          "Acesse e confira os itens conforme necessário."
         ];
 
         var url = "https://web.whatsapp.com/send?";
