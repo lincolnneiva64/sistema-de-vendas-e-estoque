@@ -2,42 +2,46 @@
 {% block title %}Checklist Entrega #{{ rota.id }}{% endblock %}
 {% block content %}
 <style>
-  .check-page { min-height: 100vh; background: #eef3f8; color: #172033; padding: 10px 0 96px; overflow-x: hidden; }
+  .check-page { min-height: 100vh; background: #f4f6f9; color: #172033; padding: 12px 0 96px; overflow-x: hidden; }
   .check-page * { box-sizing: border-box; }
   .check-shell { width: min(720px, calc(100vw - 16px)); margin: 0 auto; }
   .check-header {
-    background: #fff; border: 1px solid #dbe5f0; border-radius: 14px;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08); padding: 13px;
-    margin-bottom: 10px;
+    background: #ffffff; border: 1px solid #e0e7ef; border-radius: 14px;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06); padding: 14px;
+    margin-bottom: 12px;
   }
   .check-title { margin: 0; color: #111827; font-size: clamp(1.18rem, 5vw, 1.35rem); font-weight: 900; line-height: 1.15; }
-  .check-subtitle { margin: 5px 0 0; color: #64748b; font-size: 0.92rem; font-weight: 750; line-height: 1.3; }
+  .check-subtitle { margin: 6px 0 0; color: #64748b; font-size: 0.92rem; font-weight: 750; line-height: 1.3; }
   .check-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
   .check-btn {
-    min-height: 42px; border: 1px solid #cbd5e1; border-radius: 10px;
-    padding: 8px 12px; background: #fff; color: #334155; text-decoration: none;
+    min-height: 42px; border: 1px solid #d4deea; border-radius: 9px;
+    padding: 8px 12px; background: #ffffff; color: #334155; text-decoration: none;
     display: inline-flex; align-items: center; justify-content: center;
     font-size: 0.95rem; font-weight: 850; line-height: 1.15; text-align: center;
-    transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease, opacity 120ms ease;
+    box-shadow: 0 3px 8px rgba(15, 23, 42, 0.04);
+    transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease, opacity 120ms ease, border-color 120ms ease;
     touch-action: manipulation;
   }
+  .check-btn:hover { background: #f8fafc; border-color: #b9c7d8; }
   .check-btn:active { transform: translateY(2px) scale(0.99); }
   .check-btn:disabled { cursor: wait; opacity: 0.78; }
-  .check-btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
-  .check-btn.whatsapp { background: #16a34a; border-color: #16a34a; color: #fff; }
+  .check-btn.primary { background: #2f6fda; border-color: #2f6fda; color: #fff; box-shadow: 0 5px 12px rgba(47, 111, 218, 0.18); }
+  .check-btn.primary:hover { background: #255fc4; border-color: #255fc4; }
+  .check-btn.whatsapp { background: #1f9d55; border-color: #1f9d55; color: #fff; box-shadow: 0 5px 12px rgba(31, 157, 85, 0.16); }
+  .check-btn.whatsapp:hover { background: #188a49; border-color: #188a49; }
   .check-btn.compact { min-height: 38px; padding: 8px 11px; font-size: 0.86rem; }
-  .check-btn.save { min-height: 40px; width: 100%; background: #16a34a; border-color: #16a34a; color: #fff; font-size: 0.95rem; box-shadow: 0 8px 18px rgba(22, 163, 74, 0.22); }
+  .check-btn.save { min-height: 42px; width: 100%; background: #16a34a; border-color: #16a34a; color: #fff; font-size: 0.95rem; box-shadow: 0 7px 16px rgba(22, 163, 74, 0.18); }
   .check-btn.save:active,
   .check-btn.save.is-saving { transform: translateY(2px); box-shadow: 0 3px 8px rgba(22, 163, 74, 0.18); }
   .check-btn.save.entrega {
-    background: #2563eb; border-color: #2563eb;
-    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+    background: #2f6fda; border-color: #2f6fda;
+    box-shadow: 0 7px 16px rgba(47, 111, 218, 0.18);
   }
   .check-btn.save.entrega:active,
   .check-btn.save.entrega.is-saving { box-shadow: 0 3px 8px rgba(37, 99, 235, 0.18); }
-  .check-stop-save { margin-top: 8px; }
+  .check-stop-save { margin-top: 10px; }
   .checklist-status-enviado {
-    min-height: 42px; border: 1px solid #93c5fd; border-radius: 10px;
+    min-height: 42px; border: 1px solid #bfdbfe; border-radius: 9px;
     padding: 8px 12px; background: #eff6ff; color: #1e3a8a;
     display: inline-flex; align-items: center; justify-content: center;
     font-size: 0.95rem; font-weight: 850; line-height: 1.15; text-align: center;
@@ -53,8 +57,8 @@
     color: #14532d; font-size: 0.9rem; font-weight: 900; line-height: 1.2;
   }
   .mobile-access {
-    margin-top: 12px; border: 1px solid #dbe5f0; border-radius: 12px;
-    background: #f8fafc; padding: 11px;
+    margin-top: 12px; border: 1px solid #e0e7ef; border-radius: 12px;
+    background: #f8fafc; padding: 12px;
   }
   .mobile-access-title { margin: 0; color: #172033; font-size: 0.95rem; font-weight: 950; line-height: 1.2; }
   .mobile-access-link {
@@ -67,35 +71,35 @@
     font-size: 0.82rem; font-weight: 850; line-height: 1.25;
   }
   .check-alert {
-    border: 1px solid #b7e4c7; border-radius: 12px; background: #ecfdf3; color: #166534;
+    border: 1px solid #bbf7d0; border-radius: 12px; background: #f0fdf4; color: #166534;
     padding: 11px 12px; margin-bottom: 10px; font-weight: 850;
   }
   .check-section {
-    background: #fff; border: 1.25px solid #9fb9dc; border-radius: 16px;
-    box-shadow: 0 12px 26px rgba(37, 99, 235, 0.09); overflow: hidden; margin-top: 14px;
+    background: #ffffff; border: 1px solid #d9e3ef; border-radius: 14px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06); overflow: hidden; margin-top: 14px;
   }
-  .check-section + .check-section { margin-top: 24px; }
-  .check-section-head { padding: 13px 14px; border-bottom: 1.25px solid #bfd3ea; background: #eef6ff; }
+  .check-section + .check-section { margin-top: 22px; }
+  .check-section-head { padding: 14px; border-bottom: 1px solid #d8e4f2; background: #f0f7ff; }
   .check-section.carregamento {
-    border-color: #d8aa3d;
-    box-shadow: 0 12px 26px rgba(180, 83, 9, 0.09);
+    border-color: #ead7a7;
+    box-shadow: 0 10px 24px rgba(180, 83, 9, 0.06);
   }
-  .check-section.carregamento .check-section-head { background: #fff2c2; border-color: #e2bc5e; }
+  .check-section.carregamento .check-section-head { background: #fff8e7; border-color: #f0d995; }
   .check-phase {
     display: inline-flex; align-items: center; min-height: 24px; padding: 4px 9px;
-    border-radius: 999px; background: #f59e0b; color: #451a03;
+    border-radius: 999px; background: #ffe8a3; color: #7c4a03;
     font-size: 0.72rem; font-weight: 950; letter-spacing: 0;
   }
-  .check-phase.entrega { background: #dbeafe; color: #1e3a8a; }
-  .check-section-title { margin: 7px 0 0; color: #1e3a8a; font-size: 1.08rem; font-weight: 950; line-height: 1.15; }
+  .check-phase.entrega { background: #dbeafe; color: #1d4ed8; }
+  .check-section-title { margin: 8px 0 0; color: #172033; font-size: 1.08rem; font-weight: 950; line-height: 1.15; }
   .check-section-note { margin: 5px 0 0; color: #475569; font-size: 0.88rem; font-weight: 780; line-height: 1.35; }
-  .check-stop { padding: 9px 12px; border-top: 1px solid #edf1f6; }
+  .check-stop { padding: 12px; border-top: 1px solid #edf1f6; background: #ffffff; }
   .check-stop.is-conferido {
-    margin: 6px 8px; border: 1.25px solid #98e6b0; border-radius: 10px;
-    background: #ecfdf3; box-shadow: inset 3px 0 0 #22c55e, 0 8px 18px rgba(22, 163, 74, 0.08);
+    margin: 8px; border: 1px solid #bbf7d0; border-radius: 10px;
+    background: #f6fef9; box-shadow: inset 3px 0 0 #22c55e, 0 6px 14px rgba(22, 163, 74, 0.06);
   }
   .check-stop.is-locked .check-row,
-  .check-stop.is-locked .check-control { cursor: default; opacity: 0.74; }
+  .check-stop.is-locked .check-control { cursor: default; opacity: 0.82; }
   .check-stop.is-locked [data-save-button] { display: none; }
   .check-stop.is-editing [data-save-button] { display: inline-flex; }
   .check-stop.is-editing [data-edit-block],
@@ -103,37 +107,37 @@
   .check-stop.is-editing [data-confirm-client-checklist],
   .check-stop.is-editing .check-lock-note { display: none; }
   .check-stop:first-child { border-top: 0; }
-  .check-stop.is-conferido:first-child { border-top: 1.25px solid #98e6b0; }
+  .check-stop.is-conferido:first-child { border-top: 1px solid #bbf7d0; }
   .check-stop-title { margin: 0; color: #172033; font-size: 1.04rem; font-weight: 950; line-height: 1.2; overflow-wrap: anywhere; }
   .check-stop-meta { margin-top: 2px; color: #64748b; font-size: 0.82rem; font-weight: 780; line-height: 1.2; }
   .check-stop-badge {
     display: inline-flex; width: fit-content; margin-top: 5px; padding: 4px 8px;
-    border: 1px solid #74df98; border-radius: 999px; background: #bbf7d0;
+    border: 1px solid #bbf7d0; border-radius: 999px; background: #dcfce7;
     color: #14532d; font-size: 0.74rem; font-weight: 950; line-height: 1.15;
   }
   .check-lock-note {
     margin: 8px 0 0; color: #166534; background: #f0fdf4; border: 1px solid #bbf7d0;
     border-radius: 9px; padding: 7px 9px; font-size: 0.82rem; font-weight: 850; line-height: 1.25;
   }
-  .check-item-list { display: grid; gap: 3px; margin-top: 5px; }
+  .check-item-list { display: grid; gap: 6px; margin-top: 8px; }
   .check-row {
-    display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 6px; align-items: center;
-    border: 1px solid #e2e8f0; border-radius: 8px; padding: 4px 7px; background: #fbfdff;
+    display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 8px; align-items: center;
+    border: 1px solid #e5edf5; border-radius: 9px; padding: 7px 9px; background: #fcfdff;
     cursor: pointer; transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
   }
-  .check-row:has(input:checked) { border-color: #86efac; background: #f0fdf4; box-shadow: inset 3px 0 0 #16a34a; }
-  .check-row input { width: 20px; height: 20px; margin: 0; accent-color: #16a34a; }
-  .check-row-text { display: block; color: #172033; font-size: 0.91rem; font-weight: 880; line-height: 1.12; overflow-wrap: anywhere; }
-  .check-row-sub { display: block; color: #64748b; font-size: 0.73rem; font-weight: 780; margin-top: 0; line-height: 1.1; }
-  .check-controls { display: grid; gap: 4px; margin-top: 6px; }
+  .check-row:has(input:checked) { border-color: #bbf7d0; background: #f0fdf4; box-shadow: inset 3px 0 0 #16a34a; }
+  .check-row input { width: 22px; height: 22px; margin: 0; accent-color: #16a34a; }
+  .check-row-text { display: block; color: #172033; font-size: 0.92rem; font-weight: 850; line-height: 1.2; overflow-wrap: anywhere; }
+  .check-row-sub { display: block; color: #64748b; font-size: 0.76rem; font-weight: 760; margin-top: 1px; line-height: 1.15; }
+  .check-controls { display: grid; gap: 6px; margin-top: 8px; }
   .check-control {
-    display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 6px; align-items: center;
-    border: 1px solid #dbe5f0; border-radius: 8px; padding: 5px 7px; background: #fbfdff;
-    color: #172033; font-size: 0.86rem; font-weight: 900; cursor: pointer;
+    display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 8px; align-items: center;
+    border: 1px solid #e0e7ef; border-radius: 9px; padding: 8px 9px; background: #fcfdff;
+    color: #172033; font-size: 0.88rem; font-weight: 850; cursor: pointer;
     transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
   }
-  .check-control:has(input:checked) { border-color: #86efac; background: #f0fdf4; color: #14532d; box-shadow: inset 3px 0 0 #16a34a; }
-  .check-control input { width: 20px; height: 20px; margin: 0; accent-color: #16a34a; }
+  .check-control:has(input:checked) { border-color: #bbf7d0; background: #f0fdf4; color: #14532d; box-shadow: inset 3px 0 0 #16a34a; }
+  .check-control input { width: 22px; height: 22px; margin: 0; accent-color: #16a34a; }
   .check-empty { padding: 14px; color: #64748b; text-align: center; font-weight: 850; }
   @media (max-width: 520px) {
     .check-page { padding-top: 8px; }
@@ -156,8 +160,8 @@
   }
 
   .funcionario-send {
-    margin-top: 12px; border: 1px solid #dbe5f0; border-radius: 12px;
-    background: #f8fafc; padding: 11px;
+    margin-top: 12px; border: 1px solid #e0e7ef; border-radius: 12px;
+    background: #f8fafc; padding: 12px;
   }
   .funcionario-send-title { margin: 0; color: #172033; font-size: 0.95rem; font-weight: 950; line-height: 1.2; }
   .funcionario-send-fields {
