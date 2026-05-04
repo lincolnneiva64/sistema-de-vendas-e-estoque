@@ -22,6 +22,7 @@ urlpatterns = [
     path("entregas/", views.entregas_dia, name="entregas_dia"),
     path("entregas/<int:pk>/", views.entrega_rota_detalhe, name="entrega_rota_detalhe"),
     path("entregas/<int:pk>/checklist/", views.entrega_rota_checklist, name="entrega_rota_checklist"),
+    path("entregas/<int:rota_id>/checklist/cliente/<int:venda_id>/", views.entrega_rota_checklist_cliente, name="entrega_rota_checklist_cliente"),
     path("vendas/<int:pk>/", views.venda_detalhe, name="venda_detalhe"),
     path("vendas/<int:pk>/criar-entrega/", views.venda_criar_entrega, name="venda_criar_entrega"),
     path("vendas/<int:pk>/whatsapp-imagem/", views.venda_whatsapp_imagem, name="venda_whatsapp_imagem"),

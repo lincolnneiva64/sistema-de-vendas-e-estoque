@@ -1,0 +1,99 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Checklist de entrega #{{ venda.id }}{% endblock %}
+{% block content %}
+<style>
+  .check-page { min-height: 100vh; background: #f4f6f9; color: #172033; padding: 16px 0 56px; }
+  .check-shell { width: min(720px, calc(100vw - 16px)); margin: 0 auto; }
+  .check-header, .check-section { background: #ffffff; border: 1px solid #e0e7ef; border-radius: 14px; box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06); padding: 16px; margin-bottom: 14px; }
+  .check-title { margin: 0 0 8px; color: #111827; font-size: clamp(1.2rem, 5vw, 1.45rem); font-weight: 900; line-height: 1.15; }
+  .check-subtitle { margin: 0 0 10px; color: #475569; font-size: 0.95rem; font-weight: 700; line-height: 1.4; }
+  .check-meta { margin: 8px 0 0; color: #475569; font-size: 0.9rem; line-height: 1.4; }
+  .check-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 10px 14px; border-radius: 10px; border: 1px solid #d4deea; background: #2f6fda; color: #ffffff; text-decoration: none; font-weight: 800; transition: background 120ms ease, border-color 120ms ease; }
+  .check-btn:hover { background: #255fc4; border-color: #255fc4; }
+  .check-section-title { margin: 0; color: #172033; font-size: 1.08rem; font-weight: 950; line-height: 1.15; }
+  .check-item-list { display: grid; gap: 6px; margin-top: 8px; }
+  .check-row {
+    display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 8px; align-items: center;
+    border: 1px solid #e5edf5; border-radius: 9px; padding: 7px 9px; background: #fcfdff;
+    transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+  }
+  .check-row.is-checked { border-color: #bbf7d0; background: #f0fdf4; box-shadow: inset 3px 0 0 #16a34a; }
+  .check-row.is-pending { border-color: #f7d98b; background: #fff7ed; box-shadow: inset 3px 0 0 #f59e0b; }
+  .check-row input { width: 22px; height: 22px; margin: 0; accent-color: #16a34a; pointer-events: none; }
+  .check-row-text { display: block; color: #172033; font-size: 0.92rem; font-weight: 850; line-height: 1.2; overflow-wrap: anywhere; }
+  .check-row-sub { display: block; color: #64748b; font-size: 0.76rem; font-weight: 760; margin-top: 1px; line-height: 1.15; }
+  .check-controls { display: grid; gap: 6px; margin-top: 8px; }
+  .check-control {
+    display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 8px; align-items: center;
+    border: 1px solid #e0e7ef; border-radius: 9px; padding: 8px 9px; background: #fcfdff;
+    color: #172033; font-size: 0.88rem; font-weight: 850;
+    transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+  }
+  .check-control.is-checked { border-color: #bbf7d0; background: #f0fdf4; color: #14532d; box-shadow: inset 3px 0 0 #16a34a; }
+  .check-control input { width: 22px; height: 22px; margin: 0; accent-color: #16a34a; pointer-events: none; }
+  .check-note { margin: 0 0 10px; color: #475569; font-size: 0.9rem; }
+  @media (max-width: 560px) {
+    .check-shell { width: min(100vw - 12px, 720px); }
+    .check-header, .check-section { padding: 14px; }
+    .check-btn { width: 100%; }
+    .check-item-list { gap: 4px; margin-top: 6px; }
+    .check-row,
+    .check-control { grid-template-columns: 28px minmax(0, 1fr); padding: 7px 9px; }
+    .check-row input,
+    .check-control input { width: 23px; height: 23px; }
+    .check-row-text { font-size: 0.92rem; line-height: 1.15; }
+    .check-row-sub { font-size: 0.76rem; }
+  }
+</style>
+<main class="check-page">
+  <div class="check-shell">
+    <header class="check-header">
+      <h1 class="check-title">Checklist de entrega</h1>
+      <p class="check-subtitle">Venda #{{ venda.id }}{% if venda.total and venda.total|floatformat:2 != '0,00' %} · R$ {{ venda.total|floatformat:2 }}{% endif %}</p>
+      <p class="check-meta">Cliente: {{ cliente.nome|default:"Consumidor" }}</p>
+      <p class="check-meta">Data da entrega: {{ rota.data|date:"d/m/Y" }}</p>
+    </header>
+
+    <section class="check-section">
+      <h2 class="check-section-title">Itens da venda</h2>
+      <div class="check-item-list">
+        {% for item in itens %}
+          <div class="check-row{% if item.entregue %} is-checked{% elif item.carregado %} is-checked{% else %} is-pending{% endif %}">
+            <input type="checkbox"{% if item.entregue or item.carregado %} checked{% endif %} readonly>
+            <span>
+              <span class="check-row-text">{{ item.produto_nome }}</span>
+              <span class="check-row-sub">{{ item.quantidade }} {{ item.unidade }}</span>
+            </span>
+          </div>
+        {% empty %}
+          <div class="check-row">
+            <input type="checkbox" readonly>
+            <span>
+              <span class="check-row-text">Nenhum item nesta venda.</span>
+            </span>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    {% if final_statuses %}
+    <section class="check-section">
+      <h2 class="check-section-title">Status final</h2>
+      <div class="check-controls">
+        {% for status in final_statuses %}
+          <div class="check-control is-checked">
+            <input type="checkbox" checked readonly>
+            <span>{{ status }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="check-section">
+      <p class="check-note">Para ver o checklist completo, abra no navegador do celular.</p>
+      <a class="check-btn" href="{{ checklist_url }}" target="_blank" rel="noopener">Abrir checklist completa</a>
+    </section>
+  </div>
+</main>
+{% endblock %}

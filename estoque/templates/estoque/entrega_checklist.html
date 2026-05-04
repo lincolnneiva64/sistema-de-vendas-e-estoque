@@ -325,6 +325,7 @@
           data-rota-item-id="{{ item_rota.id }}"
           data-rota-data="{{ rota.data|date:'d/m/Y' }}"
           data-whatsapp="{{ item_rota.venda.cliente.whatsapp_normalizado|default:item_rota.venda.cliente.whatsapp|default:'' }}"
+          data-checklist-url="{{ item_rota.checklist_url }}"
           data-registro-url="{% url 'estoque:registrar_checklist_whatsapp_aberto' item_rota.venda.id %}"
           data-confirmar-url="{% url 'estoque:confirmar_checklist_whatsapp' item_rota.venda.id %}"
           {% if item_rota.entrega_conferida %}data-locked-block="true"{% endif %}
@@ -399,6 +400,7 @@
           data-rota-item-id="{{ item_rota.id }}"
           data-rota-data="{{ rota.data|date:'d/m/Y' }}"
           data-whatsapp="{{ item_rota.venda.cliente.whatsapp_normalizado|default:item_rota.venda.cliente.whatsapp|default:'' }}"
+          data-checklist-url="{{ item_rota.checklist_url }}"
           data-registro-url="{% url 'estoque:registrar_checklist_whatsapp_aberto' item_rota.venda.id %}"
           data-confirmar-url="{% url 'estoque:confirmar_checklist_whatsapp' item_rota.venda.id %}"
           {% if item_rota.entrega_conferida %}data-locked-block="true"{% endif %}
@@ -623,11 +625,12 @@
       }
 
       var telefone = normalizarWhatsapp(block.dataset.whatsapp);
-      var checklistUrl = linkElement ? linkElement.href : "{{ checklist_url }}";
+      var checklistUrl = block.dataset.checklistUrl || (linkElement ? linkElement.href : "{{ checklist_url }}");
+      var clienteNome = block.dataset.clienteNome || "cliente";
       var linhas = [
-        "📋 Checklist de entrega",
+        "Olá, " + clienteNome + ".",
         "",
-        "Para visualizar melhor, abra no navegador do celular (de preferência no Chrome):",
+        "Segue o checklist conferido da sua entrega:",
         "",
         checklistUrl
       ];

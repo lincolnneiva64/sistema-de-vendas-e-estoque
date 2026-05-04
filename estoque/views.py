@@ -30,6 +30,17 @@ def montar_checklist_url(request, rota_id):
     return f"{request.scheme}://{request.get_host()}{checklist_path}"
 
 
+def montar_checklist_cliente_url(request, rota_id, venda_id):
+    checklist_path = reverse(
+        "estoque:entrega_rota_checklist_cliente",
+        kwargs={"rota_id": rota_id, "venda_id": venda_id},
+    )
+    checklist_base_url = getattr(settings, "CHECKLIST_BASE_URL", "").rstrip("/")
+    if checklist_base_url:
+        return f"{checklist_base_url}{checklist_path}"
+    return f"{request.scheme}://{request.get_host()}{checklist_path}"
+
+
 CHECKLIST_FASE_MARKERS = {
     "carregamento": "[checklist_carregamento_salvo]",
     "entrega": "[checklist_entrega_salva]",
@@ -1089,6 +1100,9 @@ def entrega_rota_checklist(request, pk):
         item_rota for item_rota in itens_carregamento if item_rota.carregamento_conferido
     ]
 
+    for item_rota in itens_entrega:
+        item_rota.checklist_url = montar_checklist_cliente_url(request, rota.id, item_rota.venda_id)
+
     return render(
         request,
         "estoque/entrega_checklist.html",
@@ -1104,6 +1118,75 @@ def entrega_rota_checklist(request, pk):
             "salvo_fase": salvo_fase,
             "checklist_url": montar_checklist_url(request, rota.id),
             "funcionarios_habilitados": Funcionario.habilitados_para_checklist(),
+        },
+    )
+
+
+def entrega_rota_checklist_cliente(request, rota_id, venda_id):
+    item_rota = get_object_or_404(
+        EntregaRotaItem.objects.select_related("rota", "venda", "venda__cliente").prefetch_related(
+            "checklist_itens__item_venda__produto", "venda__itens__produto"
+        ),
+        rota_id=rota_id,
+        venda_id=venda_id,
+    )
+
+    with transaction.atomic():
+        itens_venda = list(item_rota.venda.itens.all())
+        existentes = {
+            checklist.item_venda_id: checklist
+            for checklist in item_rota.checklist_itens.all()
+        }
+        novos = [
+            EntregaChecklistItem(rota_item=item_rota, item_venda=item_venda)
+            for item_venda in itens_venda
+            if item_venda.id not in existentes
+        ]
+        if novos:
+            EntregaChecklistItem.objects.bulk_create(novos)
+
+    checklists = {
+        checklist.item_venda_id: checklist
+        for checklist in item_rota.checklist_itens.select_related("item_venda__produto").all()
+    }
+
+    itens = []
+    for item_venda in itens_venda:
+        checklist = checklists.get(item_venda.id)
+        if not checklist:
+            continue
+        if checklist.entregue:
+            status = "Entregue"
+        elif checklist.carregado:
+            status = "Carregado"
+        else:
+            status = "Pendente"
+        itens.append({
+            "produto_nome": item_venda.produto.nome if item_venda.produto else "Produto nao identificado",
+            "quantidade": item_venda.quantidade,
+            "unidade": item_venda.unidade,
+            "carregado": checklist.carregado,
+            "entregue": checklist.entregue,
+            "status": status,
+        })
+
+    final_statuses = []
+    if item_rota.conferido_cliente:
+        final_statuses.append("Entrega conferida com cliente")
+    if item_rota.entrega_concluida:
+        final_statuses.append("Entrega concluída")
+
+    return render(
+        request,
+        "estoque/entrega_checklist_cliente.html",
+        {
+            "rota": item_rota.rota,
+            "item_rota": item_rota,
+            "venda": item_rota.venda,
+            "cliente": item_rota.venda.cliente,
+            "itens": itens,
+            "final_statuses": final_statuses,
+            "checklist_url": montar_checklist_cliente_url(request, rota_id, venda_id),
         },
     )
 
