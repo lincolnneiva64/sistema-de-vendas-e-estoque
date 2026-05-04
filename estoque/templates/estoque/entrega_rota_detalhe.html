@@ -451,9 +451,10 @@
         }
 
         var mensagem = [
-          "Ola, " + nomeFuncionario + ".",
+          "📋 Checklist de entrega",
           "",
-          "Segue o link do checklist/rota de entrega #{{ rota.id }}:",
+          "Para visualizar melhor, abra no navegador do celular (de preferência no Chrome):",
+          "",
           checklistLink.href
         ].join("\n");
         var whatsappUrl = "https://web.whatsapp.com/send?phone=" + telefone + "&text=" + encodeURIComponent(mensagem);

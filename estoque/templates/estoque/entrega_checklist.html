@@ -622,41 +622,15 @@
         return;
       }
 
-      var resumo = montarResumoCliente(block);
-      var clienteNome = block.dataset.clienteNome || "Consumidor";
-      var vendaId = block.dataset.vendaId || "";
-      var rotaId = block.dataset.rotaId || "{{ rota.id }}";
-      var rotaData = block.dataset.rotaData || "{{ rota.data|date:'d/m/Y' }}";
       var telefone = normalizarWhatsapp(block.dataset.whatsapp);
+      var checklistUrl = linkElement ? linkElement.href : "{{ checklist_url }}";
       var linhas = [
-        "Ola, " + clienteNome + ".",
+        "📋 Checklist de entrega",
         "",
-        "Segue o checklist conferido da sua entrega.",
-        "Venda #" + vendaId,
-        "Entrega/Rota #" + rotaId,
-        "Data da entrega: " + rotaData,
+        "Para visualizar melhor, abra no navegador do celular (de preferência no Chrome):",
         "",
-        "Itens conferidos:"
+        checklistUrl
       ];
-
-      if (resumo.conferidos.length) {
-        resumo.conferidos.forEach(function (item) {
-          linhas.push("- " + item);
-        });
-      } else {
-        linhas.push("- Nenhum item marcado como conferido.");
-      }
-
-      if (resumo.pendentes.length) {
-        linhas.push("");
-        linhas.push("Itens pendentes/nao marcados:");
-        resumo.pendentes.forEach(function (item) {
-          linhas.push("- " + item);
-        });
-      }
-
-      linhas.push("");
-      linhas.push("Confira por favor.");
 
       var url = "https://web.whatsapp.com/send?";
       if (telefone) {

@@ -1190,12 +1190,11 @@
                     return;
                 }
 
-                var clienteNome = "{{ venda.cliente.nome|default:'Consumidor' }}";
-                var vendaId = "{{ venda.id }}";
                 var mensagem = [
-                    'Olá, ' + nomeFuncionario + '.',
+                    '📋 Checklist de entrega',
                     '',
-                    'Segue o link do checklist de entrega da venda #' + vendaId + ' (' + clienteNome + '):',
+                    'Para visualizar melhor, abra no navegador do celular (de preferência no Chrome):',
+                    '',
                     checklistUrl
                 ].join('\n');
                 var whatsappUrl = 'https://web.whatsapp.com/send?phone=' + telefone + '&text=' + encodeURIComponent(mensagem);
