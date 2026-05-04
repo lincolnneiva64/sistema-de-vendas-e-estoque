@@ -93,10 +93,19 @@
   .check-phase.entrega { background: #dbeafe; color: #1d4ed8; }
   .check-section-title { margin: 8px 0 0; color: #172033; font-size: 1.08rem; font-weight: 950; line-height: 1.15; }
   .check-section-note { margin: 5px 0 0; color: #475569; font-size: 0.88rem; font-weight: 780; line-height: 1.35; }
+  .check-saved-divider {
+    padding: 9px 12px; border-top: 1px solid #d8e4f2; border-bottom: 1px solid #edf1f6;
+    background: #f8fafc; color: #475569; font-size: 0.82rem; font-weight: 900;
+  }
   .check-stop { padding: 12px; border-top: 1px solid #edf1f6; background: #ffffff; }
   .check-stop.is-conferido {
     margin: 8px; border: 1px solid #bbf7d0; border-radius: 10px;
     background: #f6fef9; box-shadow: inset 3px 0 0 #22c55e, 0 6px 14px rgba(22, 163, 74, 0.06);
+  }
+  .check-stop.is-pendente-salva {
+    border-color: #f7d98b;
+    background: #fffdf5;
+    box-shadow: inset 3px 0 0 #f59e0b, 0 6px 14px rgba(180, 83, 9, 0.06);
   }
   .check-stop.is-locked .check-row,
   .check-stop.is-locked .check-control { cursor: default; opacity: 0.82; }
@@ -115,9 +124,15 @@
     border: 1px solid #bbf7d0; border-radius: 999px; background: #dcfce7;
     color: #14532d; font-size: 0.74rem; font-weight: 950; line-height: 1.15;
   }
+  .check-stop-badge.warning {
+    border-color: #f7d98b; background: #fef3c7; color: #92400e;
+  }
   .check-lock-note {
     margin: 8px 0 0; color: #166534; background: #f0fdf4; border: 1px solid #bbf7d0;
     border-radius: 9px; padding: 7px 9px; font-size: 0.82rem; font-weight: 850; line-height: 1.25;
+  }
+  .check-lock-note.warning {
+    color: #92400e; background: #fffbeb; border-color: #fde68a;
   }
   .check-item-list { display: grid; gap: 6px; margin-top: 8px; }
   .check-row {
@@ -126,6 +141,9 @@
     cursor: pointer; transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
   }
   .check-row:has(input:checked) { border-color: #bbf7d0; background: #f0fdf4; box-shadow: inset 3px 0 0 #16a34a; }
+  .check-stop.is-pendente-salva .check-row:not(:has(input:checked)) {
+    border-color: #f7d98b; background: #fff7ed; box-shadow: inset 3px 0 0 #f59e0b;
+  }
   .check-row input { width: 22px; height: 22px; margin: 0; accent-color: #16a34a; }
   .check-row-text { display: block; color: #172033; font-size: 0.92rem; font-weight: 850; line-height: 1.2; overflow-wrap: anywhere; }
   .check-row-sub { display: block; color: #64748b; font-size: 0.76rem; font-weight: 760; margin-top: 1px; line-height: 1.15; }
@@ -248,15 +266,20 @@
         <p class="check-section-note">Carregar no carro nesta ordem. Ultima entrega entra primeiro. Marque os itens conforme entram no carro.</p>
       </div>
       {% for item_rota in itens_carregamento_pendentes %}
-        <article id="bloco-{{ item_rota.id }}-carregamento" class="check-stop{% if item_rota.carregamento_conferido %} is-conferido is-locked{% endif %}"{% if item_rota.carregamento_conferido %} data-locked-block="true"{% endif %}>
+        <article id="bloco-{{ item_rota.id }}-carregamento" class="check-stop{% if item_rota.carregamento_conferido %} is-conferido is-locked{% endif %}{% if item_rota.carregamento_pendente_salva %} is-pendente-salva{% endif %}"{% if item_rota.carregamento_conferido %} data-locked-block="true"{% endif %}>
           <h3 class="check-stop-title">{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</h3>
           <div class="check-stop-meta">Venda #{{ item_rota.venda.id }} - R$ {{ item_rota.venda.total|floatformat:2 }} - entrega ordem {{ item_rota.ordem_entrega }}</div>
           {% if item_rota.carregamento_conferido %}
+            {% if item_rota.carregamento_pendente_salva %}
+            <span class="check-stop-badge warning">Checklist salvo com pendência</span>
+            <p class="check-lock-note warning">Checklist salvo com pendência. Existem itens não marcados.</p>
+            {% else %}
             <span class="check-stop-badge">Checklist salvo</span>
             <p class="check-lock-note">Checklist salva. Clique em Editar conferencia para alterar.</p>
+            {% endif %}
           {% endif %}
           {% if item_rota.salvo_carregamento %}
-            <p class="check-save-feedback check-save-feedback-inline">Checklist salvo com sucesso.</p>
+            <p class="check-save-feedback check-save-feedback-inline">{% if item_rota.carregamento_pendente_salva %}Checklist salvo com pendência. Existem itens não marcados.{% else %}Checklist salvo com sucesso.{% endif %}</p>
           {% endif %}
           <div class="check-item-list">
             {% for checklist in item_rota.checklists_ordenados %}
@@ -285,16 +308,17 @@
     </section>
     {% endif %}
 
+    {% if itens_entrega_pendentes or itens_entrega_conferidos %}
     <section class="check-section">
       <div class="check-section-head">
         <span class="check-phase entrega">FASE 2</span>
         <h2 class="check-section-title">Entregar ao cliente</h2>
         <p class="check-section-note">Entregar nesta ordem. Sequencia que o entregador deve seguir na rua. Marque os itens conferidos/entregues na rua.</p>
       </div>
-      {% for item_rota in itens_entrega %}
+      {% for item_rota in itens_entrega_pendentes %}
         <article
           id="bloco-{{ item_rota.id }}-entrega"
-          class="check-stop{% if item_rota.entrega_conferida %} is-conferido is-locked{% endif %}"
+          class="check-stop{% if item_rota.entrega_conferida %} is-conferido is-locked{% endif %}{% if item_rota.entrega_pendente_salva %} is-pendente-salva{% endif %}"
           data-cliente-nome="{{ item_rota.venda.cliente.nome|default:'Consumidor' }}"
           data-venda-id="{{ item_rota.venda.id }}"
           data-rota-id="{{ rota.id }}"
@@ -308,11 +332,16 @@
           <h3 class="check-stop-title">{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</h3>
           <div class="check-stop-meta">Venda #{{ item_rota.venda.id }} - R$ {{ item_rota.venda.total|floatformat:2 }}</div>
           {% if item_rota.entrega_conferida %}
+            {% if item_rota.entrega_pendente_salva %}
+            <span class="check-stop-badge warning">Checklist salvo com pendência</span>
+            <p class="check-lock-note warning">Checklist salvo com pendência. Existem itens não marcados.</p>
+            {% else %}
             <span class="check-stop-badge">Conferido</span>
             <p class="check-lock-note">Checklist salva. Clique em Editar conferencia para alterar.</p>
+            {% endif %}
           {% endif %}
           {% if item_rota.salvo_entrega %}
-            <p class="check-save-feedback check-save-feedback-inline">Checklist salvo com sucesso.</p>
+            <p class="check-save-feedback check-save-feedback-inline">{% if item_rota.entrega_pendente_salva %}Checklist salvo com pendência. Existem itens não marcados.{% else %}Checklist salvo com sucesso.{% endif %}</p>
           {% endif %}
           <div class="check-actions">
             <a class="check-btn primary" href="{% url 'estoque:venda_detalhe' item_rota.venda.id %}?entrega={{ rota.id }}">Abrir nota</a>
@@ -355,9 +384,83 @@
           </div>
         </article>
       {% empty %}
-        <div class="check-empty">Nenhuma venda nesta entrega.</div>
+        <div class="check-empty">{% if itens_entrega_conferidos %}Nenhuma entrega pendente.{% else %}Nenhuma venda nesta entrega.{% endif %}</div>
       {% endfor %}
+
+      {% if itens_entrega_conferidos %}
+      <div class="check-saved-divider">Entregas salvas/conferidas</div>
+      {% for item_rota in itens_entrega_conferidos %}
+        <article
+          id="bloco-{{ item_rota.id }}-entrega"
+          class="check-stop{% if item_rota.entrega_conferida %} is-conferido is-locked{% endif %}{% if item_rota.entrega_pendente_salva %} is-pendente-salva{% endif %}"
+          data-cliente-nome="{{ item_rota.venda.cliente.nome|default:'Consumidor' }}"
+          data-venda-id="{{ item_rota.venda.id }}"
+          data-rota-id="{{ rota.id }}"
+          data-rota-item-id="{{ item_rota.id }}"
+          data-rota-data="{{ rota.data|date:'d/m/Y' }}"
+          data-whatsapp="{{ item_rota.venda.cliente.whatsapp_normalizado|default:item_rota.venda.cliente.whatsapp|default:'' }}"
+          data-registro-url="{% url 'estoque:registrar_checklist_whatsapp_aberto' item_rota.venda.id %}"
+          data-confirmar-url="{% url 'estoque:confirmar_checklist_whatsapp' item_rota.venda.id %}"
+          {% if item_rota.entrega_conferida %}data-locked-block="true"{% endif %}
+        >
+          <h3 class="check-stop-title">{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</h3>
+          <div class="check-stop-meta">Venda #{{ item_rota.venda.id }} - R$ {{ item_rota.venda.total|floatformat:2 }}</div>
+          {% if item_rota.entrega_conferida %}
+            {% if item_rota.entrega_pendente_salva %}
+            <span class="check-stop-badge warning">Checklist salvo com pendÃªncia</span>
+            <p class="check-lock-note warning">Checklist salvo com pendÃªncia. Existem itens nÃ£o marcados.</p>
+            {% else %}
+            <span class="check-stop-badge">Conferido</span>
+            <p class="check-lock-note">Checklist salva. Clique em Editar conferencia para alterar.</p>
+            {% endif %}
+          {% endif %}
+          {% if item_rota.salvo_entrega %}
+            <p class="check-save-feedback check-save-feedback-inline">{% if item_rota.entrega_pendente_salva %}Checklist salvo com pendÃªncia. Existem itens nÃ£o marcados.{% else %}Checklist salvo com sucesso.{% endif %}</p>
+          {% endif %}
+          <div class="check-actions">
+            <a class="check-btn primary" href="{% url 'estoque:venda_detalhe' item_rota.venda.id %}?entrega={{ rota.id }}">Abrir nota</a>
+          </div>
+          <div class="check-item-list">
+            {% for checklist in item_rota.checklists_ordenados %}
+              <label class="check-row">
+                <input type="checkbox" name="entregue_{{ checklist.id }}" {% if checklist.entregue %}checked{% endif %}{% if item_rota.entrega_conferida %} disabled{% endif %}>
+                <span>
+                  <span class="check-row-text">{{ checklist.item_venda.produto.nome|default:"Produto nao identificado" }}</span>
+                  <span class="check-row-sub">{{ checklist.item_venda.quantidade }} {{ checklist.item_venda.unidade }}</span>
+                </span>
+              </label>
+            {% empty %}
+              <div class="check-empty">Nenhum item nesta venda.</div>
+            {% endfor %}
+          </div>
+          <div class="check-controls">
+            <label class="check-control">
+              <input type="checkbox" name="conferido_{{ item_rota.id }}" {% if item_rota.conferido_cliente %}checked{% endif %}{% if item_rota.entrega_conferida %} disabled{% endif %}>
+              <span>Entrega conferida com cliente</span>
+            </label>
+            <label class="check-control">
+              <input type="checkbox" name="concluida_{{ item_rota.id }}" {% if item_rota.entrega_concluida %}checked{% endif %}{% if item_rota.entrega_conferida %} disabled{% endif %}>
+              <span>Entrega concluida</span>
+            </label>
+          </div>
+          <div class="check-stop-save">
+            {% if item_rota.entrega_conferida %}
+              <button type="button" class="check-btn" data-edit-block>Editar conferencia</button>
+              <button type="button" class="check-btn whatsapp" data-send-client-checklist>Enviar checklist ao cliente</button>
+              {% if item_rota.checklist_cliente_enviado %}
+                <span class="checklist-status-enviado">Checklist marcado como enviado</span>
+              {% else %}
+                <button type="button" class="check-btn primary" data-confirm-client-checklist>Marcar checklist como enviado</button>
+              {% endif %}
+            {% endif %}
+            <button type="submit" name="salvar_bloco" value="{{ item_rota.id }}:entrega" class="check-btn save entrega" data-save-button>Salvar checklist</button>
+            <p class="check-save-feedback" data-save-feedback aria-live="polite"></p>
+          </div>
+        </article>
+      {% endfor %}
+      {% endif %}
     </section>
+    {% endif %}
 
     {% if itens_carregamento_conferidos %}
     <section class="check-section carregamento">
@@ -367,15 +470,20 @@
         <p class="check-section-note">Carregamento ja salvo/conferido. Estes blocos ficam no final para manter as entregas pendentes em destaque.</p>
       </div>
       {% for item_rota in itens_carregamento_conferidos %}
-        <article id="bloco-{{ item_rota.id }}-carregamento" class="check-stop{% if item_rota.carregamento_conferido %} is-conferido is-locked{% endif %}"{% if item_rota.carregamento_conferido %} data-locked-block="true"{% endif %}>
+        <article id="bloco-{{ item_rota.id }}-carregamento" class="check-stop{% if item_rota.carregamento_conferido %} is-conferido is-locked{% endif %}{% if item_rota.carregamento_pendente_salva %} is-pendente-salva{% endif %}"{% if item_rota.carregamento_conferido %} data-locked-block="true"{% endif %}>
           <h3 class="check-stop-title">{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</h3>
           <div class="check-stop-meta">Venda #{{ item_rota.venda.id }} - R$ {{ item_rota.venda.total|floatformat:2 }} - entrega ordem {{ item_rota.ordem_entrega }}</div>
           {% if item_rota.carregamento_conferido %}
+            {% if item_rota.carregamento_pendente_salva %}
+            <span class="check-stop-badge warning">Checklist salvo com pendência</span>
+            <p class="check-lock-note warning">Checklist salvo com pendência. Existem itens não marcados.</p>
+            {% else %}
             <span class="check-stop-badge">Checklist salvo</span>
             <p class="check-lock-note">Checklist salva. Clique em Editar conferencia para alterar.</p>
+            {% endif %}
           {% endif %}
           {% if item_rota.salvo_carregamento %}
-            <p class="check-save-feedback check-save-feedback-inline">Checklist salvo com sucesso.</p>
+            <p class="check-save-feedback check-save-feedback-inline">{% if item_rota.carregamento_pendente_salva %}Checklist salvo com pendência. Existem itens não marcados.{% else %}Checklist salvo com sucesso.{% endif %}</p>
           {% endif %}
           <div class="check-item-list">
             {% for checklist in item_rota.checklists_ordenados %}

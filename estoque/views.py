@@ -29,6 +29,28 @@ def montar_checklist_url(request, rota_id):
         return f"{checklist_base_url}{checklist_path}"
     return f"{request.scheme}://{request.get_host()}{checklist_path}"
 
+
+CHECKLIST_FASE_MARKERS = {
+    "carregamento": "[checklist_carregamento_salvo]",
+    "entrega": "[checklist_entrega_salva]",
+}
+
+
+def checklist_fase_salva(item_rota, fase):
+    marker = CHECKLIST_FASE_MARKERS.get(fase)
+    return bool(marker and marker in (item_rota.observacao or ""))
+
+
+def marcar_checklist_fase_salva(item_rota, fase):
+    marker = CHECKLIST_FASE_MARKERS.get(fase)
+    if not marker or checklist_fase_salva(item_rota, fase):
+        return
+
+    observacao = (item_rota.observacao or "").strip()
+    item_rota.observacao = f"{observacao}\n{marker}".strip() if observacao else marker
+    item_rota.save(update_fields=["observacao"])
+
+
 def home(request):
     produto_edicao = None
 
@@ -963,9 +985,17 @@ def entrega_rota_checklist(request, pk):
                 item_rota.entrega_concluida = f"concluida_{item_rota.id}" in request.POST
                 item_rota.save(update_fields=["conferido_cliente", "entrega_concluida"])
 
+        if bloco_valido and bloco_fase in CHECKLIST_FASE_MARKERS:
+            item_rota_salvo = next(
+                (item_rota for item_rota in itens_entrega if item_rota.id == int(bloco_rota_item_id)),
+                None,
+            )
+            if item_rota_salvo:
+                marcar_checklist_fase_salva(item_rota_salvo, bloco_fase)
+
         redirect_url = reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota.id})
         if bloco_valido and bloco_fase in {"carregamento", "entrega"}:
-            redirect_url = f"{redirect_url}?salvo_item={bloco_rota_item_id}&salvo_fase={bloco_fase}#bloco-{bloco_rota_item_id}-{bloco_fase}"
+            redirect_url = f"{redirect_url}?salvo_item={bloco_rota_item_id}&salvo_fase={bloco_fase}"
         else:
             messages.success(request, "Checklist salvo com sucesso.", extra_tags="checklist-global")
         return redirect(redirect_url)
@@ -997,19 +1027,37 @@ def entrega_rota_checklist(request, pk):
             for item_venda in item_rota.venda.itens.all()
             if item_rota.checklists_por_item.get(item_venda.id)
         ]
-        item_rota.carregamento_conferido = item_rota.salvo_carregamento or (
+        item_rota.carregamento_salvo = checklist_fase_salva(item_rota, "carregamento")
+        item_rota.entrega_salva = checklist_fase_salva(item_rota, "entrega")
+        item_rota.carregamento_completo = (
             bool(item_rota.checklists_ordenados)
             and all(checklist.carregado for checklist in item_rota.checklists_ordenados)
         )
+        item_rota.entrega_completa = (
+            bool(item_rota.checklists_ordenados)
+            and all(checklist.entregue for checklist in item_rota.checklists_ordenados)
+        )
+        item_rota.carregamento_conferido = (
+            item_rota.salvo_carregamento
+            or item_rota.carregamento_salvo
+            or item_rota.carregamento_completo
+        )
         item_rota.entrega_conferida = (
             item_rota.salvo_entrega
-            or
-            item_rota.conferido_cliente
+            or item_rota.entrega_salva
+            or item_rota.conferido_cliente
             or item_rota.entrega_concluida
-            or (
-                bool(item_rota.checklists_ordenados)
-                and all(checklist.entregue for checklist in item_rota.checklists_ordenados)
-            )
+            or item_rota.entrega_completa
+        )
+        item_rota.carregamento_pendente_salva = (
+            item_rota.carregamento_conferido
+            and bool(item_rota.checklists_ordenados)
+            and not item_rota.carregamento_completo
+        )
+        item_rota.entrega_pendente_salva = (
+            item_rota.entrega_conferida
+            and bool(item_rota.checklists_ordenados)
+            and not item_rota.entrega_completa
         )
         item_rota.checklist_cliente_enviado = any(
             f"bloco #{item_rota.id}" in descricao
@@ -1020,6 +1068,12 @@ def entrega_rota_checklist(request, pk):
         itens_entrega,
         key=lambda item_rota: (item_rota.entrega_conferida, item_rota.ordem_entrega, item_rota.id),
     )
+    itens_entrega_pendentes = [
+        item_rota for item_rota in itens_entrega if not item_rota.entrega_conferida
+    ]
+    itens_entrega_conferidos = [
+        item_rota for item_rota in itens_entrega if item_rota.entrega_conferida
+    ]
     itens_carregamento = sorted(
         itens_entrega,
         key=lambda item_rota: (
@@ -1041,6 +1095,8 @@ def entrega_rota_checklist(request, pk):
         {
             "rota": rota,
             "itens_entrega": itens_entrega,
+            "itens_entrega_pendentes": itens_entrega_pendentes,
+            "itens_entrega_conferidos": itens_entrega_conferidos,
             "itens_carregamento": itens_carregamento,
             "itens_carregamento_pendentes": itens_carregamento_pendentes,
             "itens_carregamento_conferidos": itens_carregamento_conferidos,
