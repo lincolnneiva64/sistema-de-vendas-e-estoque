@@ -674,13 +674,9 @@
 
       var mensagem = encodeURIComponent(linhas.join("\n"));
       var isMobile = /Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent);
-      var fallbackUrl = "https://api.whatsapp.com/send?phone=" + telefone + "&text=" + mensagem;
 
       if (isMobile) {
-        window.location.href = "whatsapp://send?phone=" + telefone + "&text=" + mensagem;
-        window.setTimeout(function () {
-          window.location.href = fallbackUrl;
-        }, 1500);
+        window.location.href = "https://wa.me/" + telefone + "?text=" + mensagem;
       } else {
         window.open("https://web.whatsapp.com/send?phone=" + telefone + "&text=" + mensagem, "_blank", "noopener");
       }
