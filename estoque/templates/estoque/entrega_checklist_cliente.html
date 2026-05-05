@@ -8,8 +8,6 @@
   .check-title { margin: 0 0 8px; color: #111827; font-size: clamp(1.2rem, 5vw, 1.45rem); font-weight: 900; line-height: 1.15; }
   .check-subtitle { margin: 0 0 10px; color: #475569; font-size: 0.95rem; font-weight: 700; line-height: 1.4; }
   .check-meta { margin: 8px 0 0; color: #475569; font-size: 0.9rem; line-height: 1.4; }
-  .check-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 10px 14px; border-radius: 10px; border: 1px solid #d4deea; background: #2f6fda; color: #ffffff; text-decoration: none; font-weight: 800; transition: background 120ms ease, border-color 120ms ease; }
-  .check-btn:hover { background: #255fc4; border-color: #255fc4; }
   .check-section-title { margin: 0; color: #172033; font-size: 1.08rem; font-weight: 950; line-height: 1.15; }
   .check-item-list { display: grid; gap: 6px; margin-top: 8px; }
   .check-row {
@@ -31,11 +29,9 @@
   }
   .check-control.is-checked { border-color: #bbf7d0; background: #f0fdf4; color: #14532d; box-shadow: inset 3px 0 0 #16a34a; }
   .check-control input { width: 22px; height: 22px; margin: 0; accent-color: #16a34a; pointer-events: none; }
-  .check-note { margin: 0 0 10px; color: #475569; font-size: 0.9rem; }
   @media (max-width: 560px) {
     .check-shell { width: min(100vw - 12px, 720px); }
     .check-header, .check-section { padding: 14px; }
-    .check-btn { width: 100%; }
     .check-item-list { gap: 4px; margin-top: 6px; }
     .check-row,
     .check-control { grid-template-columns: 28px minmax(0, 1fr); padding: 7px 9px; }
@@ -89,11 +85,6 @@
       </div>
     </section>
     {% endif %}
-
-    <section class="check-section">
-      <p class="check-note">Para ver o checklist completo, abra no navegador do celular.</p>
-      <a class="check-btn" href="{{ checklist_url }}" target="_blank" rel="noopener">Abrir checklist completa</a>
-    </section>
   </div>
 </main>
 {% endblock %}
