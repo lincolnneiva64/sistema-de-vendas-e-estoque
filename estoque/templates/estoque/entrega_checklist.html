@@ -564,6 +564,17 @@
       return digitos;
     }
 
+    function normalizarWhatsappCliente(valor) {
+      var digitos = String(valor || "").replace(/\D/g, "");
+      if (!digitos) {
+        return "";
+      }
+      if (!digitos.startsWith("55")) {
+        digitos = "55" + digitos;
+      }
+      return digitos;
+    }
+
     function getCsrfToken() {
       var tokenInput = checklistForm ? checklistForm.querySelector("input[name='csrfmiddlewaretoken']") : null;
       return tokenInput ? tokenInput.value : "";
@@ -624,7 +635,7 @@
         return;
       }
 
-      var telefone = normalizarWhatsapp(block.dataset.whatsapp);
+      var telefone = normalizarWhatsappCliente(block.dataset.whatsapp);
       var checklistUrl = block.dataset.checklistUrl || (linkElement ? linkElement.href : "{{ checklist_url }}");
       var clienteNome = block.dataset.clienteNome || "cliente";
       var linhas = [
@@ -635,12 +646,18 @@
         checklistUrl
       ];
 
-      var url = "https://web.whatsapp.com/send?";
-      if (telefone) {
-        url += "phone=" + telefone + "&";
+      var mensagem = encodeURIComponent(linhas.join("\n"));
+      var isMobile = /Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent);
+      var fallbackUrl = "https://api.whatsapp.com/send?phone=" + telefone + "&text=" + mensagem;
+
+      if (isMobile) {
+        window.location.href = "whatsapp://send?phone=" + telefone + "&text=" + mensagem;
+        window.setTimeout(function () {
+          window.location.href = fallbackUrl;
+        }, 1500);
+      } else {
+        window.open("https://web.whatsapp.com/send?phone=" + telefone + "&text=" + mensagem, "_blank", "noopener");
       }
-      url += "text=" + encodeURIComponent(linhas.join("\n"));
-      window.open(url, "_blank", "noopener");
       registrarChecklistWhatsappAberto(block, telefone);
     }
 
