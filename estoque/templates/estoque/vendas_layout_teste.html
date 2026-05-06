@@ -442,6 +442,11 @@ select {
     font-size: 13px;
     font-weight: 850;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    box-sizing: border-box;
     transition: 0.16s ease;
     box-shadow: 0 5px 12px rgba(15, 23, 42, 0.14);
 }
@@ -806,6 +811,8 @@ td:first-child {
             <button type="button" id="btnLimparCabecalho" class="acao-venda-btn secundaria">Limpar Cabeçalho</button>
             <button type="button" id="btnLimparItens" class="acao-venda-btn secundaria">Limpar Itens</button>
             <button type="button" id="btnConsultarVendas" class="acao-venda-btn secundaria">Consultar Vendas</button>
+            <a href="{% url 'estoque:entregas_dia' %}" class="acao-venda-btn secundaria">Ir para Entregas</a>
+            <a href="{% url 'estoque:home' %}" class="acao-venda-btn secundaria">Voltar para Painel</a>
             </div>
             <div class="acoes-venda-grupo direita">
             <button type="button" id="btnNovaVenda" class="acao-venda-btn cuidado">Nova Venda / Limpar Tudo</button>

@@ -683,6 +683,7 @@
                     <div class="acoes">
                         <a href="{% url 'estoque:vendas' %}">Voltar para Vendas</a>
                         <a href="{% url 'estoque:consultar_vendas' %}">Voltar para Consulta</a>
+                        <a href="{% url 'estoque:entregas_dia' %}?data={{ venda.data_venda|date:'Y-m-d' }}">Entregas do Dia</a>
                         {% if entrega_contexto %}
                             <a href="{% url 'estoque:entrega_rota_detalhe' entrega_contexto.id %}">Voltar para {% if entrega_contexto.tipo == "unitaria" %}Entrega{% else %}Rota{% endif %} #{{ entrega_contexto.id }}</a>
                         {% endif %}
