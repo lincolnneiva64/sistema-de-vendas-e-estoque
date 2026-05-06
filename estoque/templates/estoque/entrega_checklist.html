@@ -231,7 +231,7 @@
     <header class="check-header">
       <h1 class="check-title">Entrega do dia</h1>
       <p class="check-subtitle">{{ rota.data|date:"d/m/Y" }} - Rota #{{ rota.id }} - {{ rota.get_tipo_display }}</p>
-      <a class="btn-voltar-desktop" href="{% url 'estoque:entregas_dia' %}?data={{ rota.data|date:'Y-m-d' }}">Voltar para Entregas do Dia</a>
+      <a class="btn-voltar-desktop" href="{% url 'estoque:entregas_dia' %}?data={{ rota.data|date:'Y-m-d' }}&rota_criada={{ rota.id }}#rota-{{ rota.id }}">Voltar para Entregas do Dia</a>
       <section class="route-summary" aria-labelledby="routeSummaryTitle">
         <h2 id="routeSummaryTitle" class="route-summary-title">Clientes da entrega</h2>
         <ul class="route-client-list">

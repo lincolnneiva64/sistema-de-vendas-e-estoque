@@ -62,6 +62,28 @@
   .entregas-form-feedback.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
   .entregas-form + .entregas-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid #edf1f6; }
   .entregas-form-title { margin: 0 0 8px; color: #172033; font-size: 0.92rem; font-weight: 900; }
+  .entregas-rota-tools {
+    display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-bottom: 10px;
+  }
+  .entregas-field-hint {
+    display: block; margin-top: 5px; color: #64748b; font-size: 0.76rem; font-weight: 750; line-height: 1.25;
+  }
+  .entregas-row-hidden { display: none; }
+  .entregas-filter-empty { display: none; }
+  .entregas-filter-empty.is-visible { display: table-row; }
+  .entregas-filter-empty td {
+    padding: 12px; text-align: center; color: #92400e; background: #fffbeb;
+    font-weight: 850; border-bottom: 1px solid #fde68a;
+  }
+  .entregas-ordem {
+    width: 64px; text-align: center; background: #f8fafc;
+    border: 1px solid #cbd5e1; border-radius: 8px; color: #172033; font-weight: 900;
+  }
+  .entregas-ordem-label {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 58px;
+    padding: 4px 7px; border: 1px solid #bfdbfe; border-radius: 999px;
+    background: #eff6ff; color: #1d4ed8; font-size: 0.72rem; font-weight: 900;
+  }
   .entregas-table-wrap { overflow-x: auto; }
   .entregas-table { width: 100%; border-collapse: collapse; min-width: 820px; }
   .entregas-table th {
@@ -80,9 +102,13 @@
   }
   .entregas-check { display: flex; align-items: center; gap: 6px; }
   .entregas-check input { width: 16px; height: 16px; }
-  .entregas-ordem { width: 64px; }
   .rotas-lista { display: grid; gap: 10px; }
   .rota-card { border: 1px solid #dbe5f0; border-radius: 12px; overflow: hidden; background: #fff; }
+  .rota-card.is-created {
+    border-color: #16a34a;
+    background: #f0fdf4;
+    box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.2), 0 16px 30px rgba(22, 163, 74, 0.18);
+  }
   .rota-head {
     padding: 10px 12px; background: #f8fafc; border-bottom: 1px solid #edf1f6;
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -128,6 +154,7 @@
   .entregas-vazio { color: #64748b; font-weight: 800; padding: 12px; text-align: center; }
   @media (max-width: 980px) {
     .entregas-grid { grid-template-columns: 1fr; }
+    .entregas-rota-tools { grid-template-columns: 1fr; }
     .rota-cols { grid-template-columns: 1fr; }
     .rota-col + .rota-col { border-left: 0; border-top: 1px solid #edf1f6; }
     .entregas-header { align-items: stretch; flex-direction: column; }
@@ -177,6 +204,13 @@
             <input type="hidden" name="acao" value="rota">
             <input type="hidden" name="data" value="{{ data_entrega|date:'Y-m-d' }}">
             <h3 class="entregas-form-title">Rota com varias entregas</h3>
+            <div class="entregas-rota-tools">
+              <div class="entregas-field">
+                <label for="nomeRota">Rota / localidade</label>
+                <input type="text" id="nomeRota" name="nome_rota" data-route-filter placeholder="Ex: Furo da Marinha">
+                <span class="entregas-field-hint">Digite o nome completo da rota. Ex.: Furo da Marinha</span>
+              </div>
+            </div>
             {% if vendas %}
               <div class="entregas-table-wrap">
                 <table class="entregas-table" style="min-width: 520px;">
@@ -184,22 +218,37 @@
                     <tr>
                       <th>Venda</th>
                       <th>Cliente</th>
+                      <th>Localidade</th>
                       <th>Ordem</th>
                     </tr>
                   </thead>
                   <tbody>
                     {% for venda in vendas %}
-                      <tr>
+                      <tr
+                        data-rota-venda-row
+                        data-route-search="{{ venda.cliente.bairro|default:'' }} {{ venda.cliente.cidade|default:'' }}"
+                        data-route-neighborhood="{{ venda.cliente.bairro|default:'' }}"
+                        data-route-city="{{ venda.cliente.cidade|default:'' }}"
+                      >
                         <td>
                           <label class="entregas-check">
-                            <input type="checkbox" name="vendas_rota" value="{{ venda.id }}">
+                            <input type="checkbox" name="vendas_rota" value="{{ venda.id }}" data-route-checkbox>
                             <span>#{{ venda.id }}</span>
                           </label>
                         </td>
                         <td>{{ venda.cliente.nome|default:"Consumidor" }}</td>
-                        <td><input class="entregas-ordem" type="number" name="ordem_{{ venda.id }}" value="{{ forloop.counter }}" min="1"></td>
+                        <td class="entregas-muted">
+                          {{ venda.cliente.bairro|default:"-" }}{% if venda.cliente.cidade %} - {{ venda.cliente.cidade }}{% endif %}
+                        </td>
+                        <td>
+                          <input class="entregas-ordem" type="number" name="ordem_{{ venda.id }}" value="" min="1" readonly data-route-order>
+                          <span class="entregas-ordem-label" data-route-order-label>Sem ordem</span>
+                        </td>
                       </tr>
                     {% endfor %}
+                    <tr class="entregas-filter-empty" data-route-empty-row>
+                      <td colspan="4">Nenhuma venda disponível encontrada para esta rota/localidade.</td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
@@ -299,7 +348,7 @@
             {% if rotas %}
               <div class="rotas-lista">
                 {% for rota in rotas %}
-                  <article class="rota-card">
+                  <article id="rota-{{ rota.id }}" class="rota-card{% if rota_criada_id == rota.id|stringformat:'s' %} is-created{% endif %}"{% if rota_criada_id == rota.id|stringformat:'s' %} data-created-route="true"{% endif %}>
                     <div class="rota-head">
                       <div>
                         <h3 class="rota-title">#{{ rota.id }} - {{ rota.get_tipo_display }}</h3>
@@ -369,6 +418,9 @@
 <script>
   (function () {
     var forms = document.querySelectorAll("[data-create-form]");
+    var routeFilter = document.querySelector("[data-route-filter]");
+    var routeRows = Array.prototype.slice.call(document.querySelectorAll("[data-rota-venda-row]"));
+    var routeEmptyRow = document.querySelector("[data-route-empty-row]");
 
     function setButtonState(button, text, disabled) {
       if (!button) {
@@ -380,6 +432,98 @@
       button.textContent = text || button.dataset.defaultText;
       button.disabled = !!disabled;
     }
+
+    function normalizeText(value) {
+      return String(value || "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    }
+
+    function getRouteCheckedRows() {
+      return routeRows.filter(function (row) {
+        var checkbox = row.querySelector("[data-route-checkbox]");
+        return checkbox && checkbox.checked;
+      });
+    }
+
+    function updateRouteOrder() {
+      var selectedRows = getRouteCheckedRows().sort(function (a, b) {
+        var orderA = parseInt((a.querySelector("[data-route-order]") || {}).value || "9999", 10);
+        var orderB = parseInt((b.querySelector("[data-route-order]") || {}).value || "9999", 10);
+        return orderA - orderB;
+      });
+
+      routeRows.forEach(function (row) {
+        var checkbox = row.querySelector("[data-route-checkbox]");
+        var orderInput = row.querySelector("[data-route-order]");
+        var orderLabel = row.querySelector("[data-route-order-label]");
+        if (!checkbox || !orderInput || !orderLabel || checkbox.checked) {
+          return;
+        }
+        orderInput.value = "";
+        orderLabel.textContent = "Sem ordem";
+      });
+
+      selectedRows.forEach(function (row, index) {
+        var orderInput = row.querySelector("[data-route-order]");
+        var orderLabel = row.querySelector("[data-route-order-label]");
+        var order = index + 1;
+        if (orderInput) {
+          orderInput.value = order;
+        }
+        if (orderLabel) {
+          orderLabel.textContent = "Ordem " + order;
+        }
+      });
+    }
+
+    function applyRouteFilter() {
+      var query = normalizeText(routeFilter ? routeFilter.value : "");
+      var visibleCount = 0;
+      routeRows.forEach(function (row) {
+        var checkbox = row.querySelector("[data-route-checkbox]");
+        var selected = checkbox && checkbox.checked;
+        var searchText = [
+          row.dataset.routeNeighborhood,
+          row.dataset.routeCity,
+          row.dataset.routeSearch
+        ].map(normalizeText).join(" ");
+        var shouldHide = !!query && !selected && searchText.indexOf(query) === -1;
+        row.classList.toggle("entregas-row-hidden", shouldHide);
+        if (!shouldHide) {
+          visibleCount += 1;
+        }
+      });
+      if (routeEmptyRow) {
+        routeEmptyRow.classList.toggle("is-visible", !!query && visibleCount === 0);
+      }
+    }
+
+    routeRows.forEach(function (row) {
+      var checkbox = row.querySelector("[data-route-checkbox]");
+      if (!checkbox) {
+        return;
+      }
+      checkbox.addEventListener("change", function () {
+        if (checkbox.checked) {
+          var orderInput = row.querySelector("[data-route-order]");
+          if (orderInput && !orderInput.value) {
+            orderInput.value = getRouteCheckedRows().length;
+          }
+        }
+        updateRouteOrder();
+        applyRouteFilter();
+      });
+    });
+
+    if (routeFilter) {
+      routeFilter.addEventListener("input", applyRouteFilter);
+      routeFilter.addEventListener("keyup", applyRouteFilter);
+      routeFilter.addEventListener("change", applyRouteFilter);
+    }
+    applyRouteFilter();
 
     forms.forEach(function (form) {
       var tipo = form.dataset.createForm;
@@ -430,6 +574,10 @@
           mensagem = "Selecione pelo menos uma venda para criar a rota.";
         }
 
+        if (tipo === "rota") {
+          updateRouteOrder();
+        }
+
         if (mensagem) {
           event.preventDefault();
           if (feedback) {
@@ -449,6 +597,16 @@
         }
       });
     });
+
+    var createdRoute = document.querySelector("[data-created-route='true']");
+    var hashRoute = window.location.hash ? document.querySelector(window.location.hash) : null;
+    var focusedRoute = createdRoute || (hashRoute && hashRoute.classList.contains("rota-card") ? hashRoute : null);
+    if (focusedRoute) {
+      focusedRoute.classList.add("is-created");
+      window.setTimeout(function () {
+        focusedRoute.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 150);
+    }
   }());
 
   // Funcionalidade de envio de checklist para funcionário

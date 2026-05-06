@@ -837,6 +837,7 @@ def entregas_dia(request):
             return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}")
 
         if acao == "rota":
+            nome_rota = request.POST.get("nome_rota", "").strip()
             venda_ids = [
                 venda_id.strip()
                 for venda_id in request.POST.getlist("vendas_rota")
@@ -846,6 +847,12 @@ def entregas_dia(request):
             if not vendas:
                 messages.warning(request, "Selecione pelo menos uma venda para criar a rota.", extra_tags="rota-entrega")
                 return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}")
+
+            observacao_rota = observacao
+            if nome_rota:
+                observacao_rota = f"Rota: {nome_rota}"
+                if observacao:
+                    observacao_rota = f"{observacao_rota}\n{observacao}"
 
             vendas_por_id = {str(venda.id): venda for venda in vendas}
             ordenadas = []
@@ -865,7 +872,7 @@ def entregas_dia(request):
                 rota = EntregaRota.objects.create(
                     data=data_entrega,
                     tipo=EntregaRota.TIPO_ROTA,
-                    observacao=observacao,
+                    observacao=observacao_rota,
                 )
                 EntregaRotaItem.objects.bulk_create([
                     EntregaRotaItem(
@@ -876,7 +883,7 @@ def entregas_dia(request):
                     for indice, (_, __, venda) in enumerate(ordenadas, start=1)
                 ])
             messages.success(request, f"Rota #{rota.id} criada com {len(ordenadas)} entrega(s).", extra_tags="rota-entrega")
-            return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}")
+            return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}&rota_criada={rota.id}#rota-{rota.id}")
 
     vendas_lista = list(
         Venda.objects.select_related("cliente")
@@ -920,6 +927,7 @@ def entregas_dia(request):
             "rotas": rotas,
             "total_vendas": len(vendas_lista),
             "funcionarios_habilitados": Funcionario.habilitados_para_checklist(),
+            "rota_criada_id": request.GET.get("rota_criada", ""),
         },
     )
 
