@@ -96,6 +96,8 @@
     background: #ffffff; border: 1px solid #d9e3ef; border-radius: 14px;
     box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06); overflow: hidden; margin-top: 14px;
   }
+  #checklistForm > .check-section { order: 1; }
+  #checklistForm > .check-section.carregamento { order: 0; }
   .check-section + .check-section { margin-top: 22px; }
   .check-section-head { padding: 14px; border-bottom: 1px solid #d8e4f2; background: #f0f7ff; }
   .check-section.carregamento {
@@ -231,7 +233,7 @@
     <header class="check-header">
       <h1 class="check-title">Entrega do dia</h1>
       <p class="check-subtitle">{{ rota.data|date:"d/m/Y" }} - Rota #{{ rota.id }} - {{ rota.get_tipo_display }}</p>
-      <a class="btn-voltar-desktop" href="{% url 'estoque:entregas_dia' %}?data={{ rota.data|date:'Y-m-d' }}&rota_criada={{ rota.id }}#rota-{{ rota.id }}">Voltar para Entregas do Dia</a>
+      <a class="btn-voltar-desktop" href="{% url 'estoque:entregas_dia' %}?data={{ rota.data|date:'Y-m-d' }}">Voltar para Entregas do Dia</a>
       <section class="route-summary" aria-labelledby="routeSummaryTitle">
         <h2 id="routeSummaryTitle" class="route-summary-title">Clientes da entrega</h2>
         <ul class="route-client-list">
@@ -326,13 +328,14 @@
             <p class="check-save-feedback" data-save-feedback aria-live="polite"></p>
           </div>
         </article>
+      {% empty %}
+        <div class="check-empty">Nenhuma venda nesta entrega.</div>
       {% endfor %}
-
     </section>
     {% endif %}
 
     {% if itens_entrega_pendentes or itens_entrega_conferidos %}
-    <section class="check-section entrega">
+    <section class="check-section">
       <div class="check-section-head">
         <span class="check-phase entrega">FASE 2</span>
         <h2 class="check-section-title">Entregar ao cliente</h2>
@@ -488,10 +491,11 @@
     {% endif %}
 
     {% if itens_carregamento_conferidos %}
-    <section class="check-section carregamento carregamento-salvo">
+    <section class="check-section carregamento">
       <div class="check-section-head">
-        <h2 class="check-section-title">Carregamentos salvos/conferidos</h2>
-        <p class="check-section-note">Clientes ja carregados no carro. Estes blocos ficam no final da tela.</p>
+        <span class="check-phase">FASE 1</span>
+        <h2 class="check-section-title">Carregar no carro</h2>
+        <p class="check-section-note">Carregamento ja salvo/conferido. Estes blocos ficam no final para manter as entregas pendentes em destaque.</p>
       </div>
       {% for item_rota in itens_carregamento_conferidos %}
         <article id="bloco-{{ item_rota.id }}-carregamento" class="check-stop{% if item_rota.carregamento_conferido %} is-conferido is-locked{% endif %}{% if item_rota.carregamento_pendente_salva %} is-pendente-salva{% endif %}"{% if item_rota.carregamento_conferido %} data-locked-block="true"{% endif %}>
@@ -533,7 +537,6 @@
       {% endfor %}
     </section>
     {% endif %}
-
     </form>
   </div>
 </main>
