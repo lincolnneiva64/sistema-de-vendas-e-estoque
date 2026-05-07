@@ -14,11 +14,12 @@
   .check-subtitle { margin: 6px 0 0; color: #64748b; font-size: 0.92rem; font-weight: 750; line-height: 1.3; }
   .btn-voltar-desktop {
     display: inline-flex; align-items: center; justify-content: center;
-    min-height: 34px; margin-top: 10px; padding: 6px 10px;
-    border: 1px solid #d4deea; border-radius: 8px; background: #ffffff;
-    color: #475569; text-decoration: none; font-size: 0.82rem; font-weight: 850;
+    min-height: 36px; margin-top: 10px; padding: 7px 11px;
+    border: 1px solid #93c5fd; border-radius: 8px; background: #eff6ff;
+    color: #1d4ed8; text-decoration: none; font-size: 0.84rem; font-weight: 900;
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.08);
   }
-  .btn-voltar-desktop:hover { background: #f8fafc; border-color: #b9c7d8; color: #334155; }
+  .btn-voltar-desktop:hover { background: #dbeafe; border-color: #60a5fa; color: #1e40af; }
   .route-summary { margin-top: 12px; border-top: 1px solid #edf1f6; padding-top: 10px; }
   .route-summary-title { margin: 0; color: #172033; font-size: 0.94rem; font-weight: 950; line-height: 1.2; }
   .route-client-list { display: grid; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
@@ -103,6 +104,15 @@
     box-shadow: 0 10px 24px rgba(180, 83, 9, 0.06);
   }
   .check-section.carregamento .check-section-head { background: #fff8e7; border-color: #f0d995; }
+  .check-section.carregamento-salvo {
+    border-color: #d7a43b;
+    background: #fff7d6;
+    box-shadow: 0 12px 26px rgba(180, 83, 9, 0.12);
+  }
+  .check-section.carregamento-salvo .check-section-head {
+    background: #ffe8a3;
+    border-color: #d7a43b;
+  }
   .check-phase {
     display: inline-flex; align-items: center; min-height: 24px; padding: 4px 9px;
     border-radius: 999px; background: #ffe8a3; color: #7c4a03;
@@ -194,7 +204,7 @@
     .check-row-text { font-size: 0.92rem; line-height: 1.15; }
     .check-row-sub { font-size: 0.76rem; }
     .route-client-item { align-items: flex-start; flex-direction: column; gap: 2px; }
-    .btn-voltar-desktop { display: none; }
+    .btn-voltar-desktop { display: inline-flex; width: 100%; }
   }
 
   .funcionario-send {
