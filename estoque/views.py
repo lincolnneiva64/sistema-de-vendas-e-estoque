@@ -86,6 +86,51 @@ def rota_pode_ser_excluida(rota):
     ).exists()
 
 
+def formatar_nome_rota(valor):
+    texto = " ".join(str(valor or "").strip().split())
+    if not texto:
+        return ""
+
+    palavras_minusculas = {"da", "de", "do", "das", "dos", "e"}
+    partes = []
+    for indice, palavra in enumerate(texto.lower().split()):
+        partes.append(palavra if indice > 0 and palavra in palavras_minusculas else palavra.capitalize())
+    return " ".join(partes)
+
+
+def localidade_principal_rota(vendas_ordenadas):
+    contagem = {}
+    nomes = {}
+
+    for _, __, venda in vendas_ordenadas:
+        cliente = venda.cliente
+        localidade = ""
+        if cliente:
+            localidade = (cliente.bairro or "").strip() or (cliente.cidade or "").strip()
+        localidade = formatar_nome_rota(localidade)
+        if not localidade:
+            continue
+
+        chave = localidade.lower()
+        contagem[chave] = contagem.get(chave, 0) + 1
+        nomes.setdefault(chave, localidade)
+
+    if not contagem:
+        return ""
+
+    maior_contagem = max(contagem.values())
+    for _, __, venda in vendas_ordenadas:
+        cliente = venda.cliente
+        localidade = ""
+        if cliente:
+            localidade = (cliente.bairro or "").strip() or (cliente.cidade or "").strip()
+        chave = formatar_nome_rota(localidade).lower()
+        if contagem.get(chave) == maior_contagem:
+            return nomes[chave]
+
+    return ""
+
+
 def home(request):
     produto_edicao = None
 
@@ -872,12 +917,6 @@ def entregas_dia(request):
                 messages.warning(request, "Selecione pelo menos uma venda para criar a rota.", extra_tags="rota-entrega")
                 return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}")
 
-            observacao_rota = observacao
-            if nome_rota:
-                observacao_rota = f"Rota: {nome_rota}"
-                if observacao:
-                    observacao_rota = f"{observacao_rota}\n{observacao}"
-
             vendas_por_id = {str(venda.id): venda for venda in vendas}
             ordenadas = []
             for venda_id in venda_ids:
@@ -891,6 +930,12 @@ def entregas_dia(request):
                 ordenadas.append((ordem, venda.id, venda))
 
             ordenadas.sort(key=lambda item: (item[0], item[1]))
+            nome_rota_final = localidade_principal_rota(ordenadas) or formatar_nome_rota(nome_rota)
+            observacao_rota = observacao
+            if nome_rota_final:
+                observacao_rota = f"Rota: {nome_rota_final}"
+                if observacao:
+                    observacao_rota = f"{observacao_rota}\n{observacao}"
 
             with transaction.atomic():
                 rota = EntregaRota.objects.create(
