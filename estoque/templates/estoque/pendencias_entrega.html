@@ -1,0 +1,104 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Pendencias de Entrega{% endblock %}
+{% block content %}
+<style>
+  .pend-page { color: #172033; padding: 18px 0 32px; }
+  .pend-shell { max-width: 1180px; margin: 0 auto; padding: 0 18px; }
+  .pend-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .pend-title { margin: 0; font-size: 1.45rem; font-weight: 900; color: #111827; }
+  .pend-subtitle { margin: 4px 0 0; color: #64748b; font-size: 0.92rem; font-weight: 750; }
+  .pend-btn {
+    min-height: 36px; border: 1px solid #93c5fd; border-radius: 9px; padding: 7px 12px;
+    background: #eff6ff; color: #1d4ed8; font-size: 0.84rem; font-weight: 850;
+    text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+  }
+  .pend-btn.primary { border-color: #2563eb; background: #2563eb; color: #fff; }
+  .pend-card {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 13px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06); overflow: hidden;
+  }
+  .pend-card-head {
+    padding: 11px 14px; border-bottom: 1px solid #edf1f6; background: #fffbeb;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .pend-card-title { margin: 0; color: #92400e; font-size: 0.98rem; font-weight: 950; }
+  .pend-muted { color: #64748b; font-size: 0.78rem; font-weight: 750; }
+  .pend-table-wrap { overflow-x: auto; }
+  .pend-table { width: 100%; border-collapse: collapse; min-width: 860px; }
+  .pend-table th {
+    background: #f8fafc; color: #64748b; font-size: 0.7rem; letter-spacing: 0.04em;
+    text-transform: uppercase; padding: 8px 9px; border-bottom: 1px solid #edf1f6; text-align: left;
+  }
+  .pend-table td { padding: 8px 9px; border-bottom: 1px solid #f0f3f8; vertical-align: middle; font-size: 0.82rem; }
+  .pend-strong { color: #172033; font-weight: 900; }
+  .pend-status {
+    display: inline-flex; width: fit-content; padding: 4px 7px; border-radius: 999px;
+    border: 1px solid #fde68a; background: #fffbeb; color: #92400e;
+    font-size: 0.72rem; font-weight: 900;
+  }
+  .pend-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+  .pend-empty { padding: 18px; color: #166534; background: #f0fdf4; font-weight: 850; text-align: center; }
+  @media (max-width: 760px) {
+    .pend-header { align-items: stretch; flex-direction: column; }
+    .pend-btn { width: 100%; }
+  }
+</style>
+
+<main class="pend-page">
+  <div class="pend-shell">
+    <header class="pend-header">
+      <div>
+        <h1 class="pend-title">Pendencias de Entrega</h1>
+        <p class="pend-subtitle">Itens e entregas com pendencia registrada no checklist.</p>
+      </div>
+      <a class="pend-btn" href="{% url 'estoque:entregas_dia' %}">Voltar para Entregas</a>
+    </header>
+
+    <section class="pend-card">
+      <div class="pend-card-head">
+        <h2 class="pend-card-title">Pendencias encontradas</h2>
+        <span class="pend-muted">{{ total_pendencias }} registro(s)</span>
+      </div>
+      {% if pendencias %}
+        <div class="pend-table-wrap">
+          <table class="pend-table">
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>Venda/nota</th>
+                <th>Rota</th>
+                <th>Data</th>
+                <th>Produto</th>
+                <th>Quantidade</th>
+                <th>Status</th>
+                <th>Acoes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for pendencia in pendencias %}
+                <tr>
+                  <td><span class="pend-strong">{{ pendencia.cliente }}</span></td>
+                  <td>Venda #{{ pendencia.venda.id }}</td>
+                  <td>Rota #{{ pendencia.rota.id }}</td>
+                  <td>{{ pendencia.data|date:"d/m/Y" }}</td>
+                  <td>{{ pendencia.produto|default:"-" }}</td>
+                  <td>{% if pendencia.quantidade %}{{ pendencia.quantidade }} {{ pendencia.unidade }}{% else %}-{% endif %}</td>
+                  <td><span class="pend-status">{{ pendencia.status }}</span></td>
+                  <td>
+                    <div class="pend-actions">
+                      <a class="pend-btn" href="{% url 'estoque:venda_detalhe' pendencia.venda.id %}?entrega={{ pendencia.rota.id }}&origem=pendencias">Abrir nota</a>
+                      <a class="pend-btn primary" href="{% url 'estoque:entrega_rota_checklist' pendencia.rota.id %}?origem=pendencias">Abrir checklist</a>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="pend-empty">Nenhuma pendencia de entrega encontrada.</div>
+      {% endif %}
+    </section>
+  </div>
+</main>
+{% endblock %}

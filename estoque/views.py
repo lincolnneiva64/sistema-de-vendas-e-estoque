@@ -131,6 +131,68 @@ def localidade_principal_rota(vendas_ordenadas):
     return ""
 
 
+def listar_pendencias_entrega(limite=None):
+    pendencias = []
+    itens_rota = (
+        EntregaRotaItem.objects.select_related("rota", "venda", "venda__cliente")
+        .prefetch_related("checklist_itens__item_venda__produto")
+        .order_by("-rota__data", "-rota_id", "ordem_entrega", "id")
+    )
+
+    for item_rota in itens_rota:
+        entrega_salva = checklist_fase_salva(item_rota, "entrega")
+        entrega_processada = (
+            entrega_salva
+            or item_rota.conferido_cliente
+            or item_rota.entrega_concluida
+            or item_rota.status in {
+                EntregaRotaItem.STATUS_PARCIAL,
+                EntregaRotaItem.STATUS_CANCELADA,
+            }
+        )
+        if not entrega_processada:
+            continue
+
+        checklists = list(item_rota.checklist_itens.all())
+        itens_pendentes = [checklist for checklist in checklists if not checklist.entregue]
+        if not itens_pendentes and item_rota.status not in {
+            EntregaRotaItem.STATUS_PARCIAL,
+            EntregaRotaItem.STATUS_CANCELADA,
+        }:
+            continue
+
+        if itens_pendentes:
+            for checklist in itens_pendentes:
+                item_venda = checklist.item_venda
+                produto = item_venda.produto.nome if item_venda and item_venda.produto else "Produto nao identificado"
+                pendencias.append({
+                    "cliente": item_rota.venda.cliente.nome if item_rota.venda.cliente else "Consumidor",
+                    "venda": item_rota.venda,
+                    "rota": item_rota.rota,
+                    "data": item_rota.rota.data,
+                    "produto": produto,
+                    "quantidade": item_venda.quantidade if item_venda else "",
+                    "unidade": item_venda.unidade if item_venda else "",
+                    "status": "Item nao entregue",
+                })
+        else:
+            pendencias.append({
+                "cliente": item_rota.venda.cliente.nome if item_rota.venda.cliente else "Consumidor",
+                "venda": item_rota.venda,
+                "rota": item_rota.rota,
+                "data": item_rota.rota.data,
+                "produto": "",
+                "quantidade": "",
+                "unidade": "",
+                "status": item_rota.get_status_display(),
+            })
+
+        if limite and len(pendencias) >= limite:
+            return pendencias[:limite]
+
+    return pendencias
+
+
 def home(request):
     produto_edicao = None
 
@@ -998,6 +1060,19 @@ def entregas_dia(request):
             "total_vendas": len(vendas_lista),
             "funcionarios_habilitados": Funcionario.habilitados_para_checklist(),
             "rota_criada_id": request.GET.get("rota_criada", ""),
+            "total_pendencias_entrega": len(listar_pendencias_entrega()),
+        },
+    )
+
+
+def pendencias_entrega(request):
+    pendencias = listar_pendencias_entrega()
+    return render(
+        request,
+        "estoque/pendencias_entrega.html",
+        {
+            "pendencias": pendencias,
+            "total_pendencias": len(pendencias),
         },
     )
 

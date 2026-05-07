@@ -57,6 +57,7 @@
   .entregas-alert.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
   .entregas-alert.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
   .entregas-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+  .entregas-alert.action { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
   .entregas-form-feedback {
     display: none; border-radius: 11px; padding: 9px 11px; margin: 8px 0 0;
     font-size: 0.84rem; font-weight: 850; line-height: 1.25;
@@ -225,6 +226,12 @@
           {{ message }}
         </div>
       {% endfor %}
+    {% endif %}
+    {% if total_pendencias_entrega %}
+      <div class="entregas-alert warning action">
+        <span>Existem {{ total_pendencias_entrega }} pendencia(s) de entrega para verificar.</span>
+        <a class="entregas-btn soft" href="{% url 'estoque:pendencias_entrega' %}">Ver pendencias</a>
+      </div>
     {% endif %}
 
     <form class="entregas-filtro" method="get">

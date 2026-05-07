@@ -681,6 +681,9 @@
                         <div style="margin-top: 1px; color: #334155; font-size: 11.5px;">Venda #{{ venda.id }}</div>
                     </div>
                     <div class="acoes">
+                        {% if request.GET.origem == "pendencias" %}
+                            <a href="{% url 'estoque:pendencias_entrega' %}">Voltar para Pendências</a>
+                        {% endif %}
                         <a href="{% url 'estoque:vendas' %}">Voltar para Vendas</a>
                         <a href="{% url 'estoque:consultar_vendas' %}">Voltar para Consulta</a>
                         <a href="{% url 'estoque:entregas_dia' %}?data={{ venda.data_venda|date:'Y-m-d' }}">Entregas do Dia</a>
