@@ -62,6 +62,30 @@ def marcar_checklist_fase_salva(item_rota, fase):
     item_rota.save(update_fields=["observacao"])
 
 
+def rota_pode_ser_excluida(rota):
+    if rota.status != EntregaRota.STATUS_ABERTA:
+        return False
+
+    for item_rota in rota.itens.all():
+        if (
+            item_rota.status != EntregaRotaItem.STATUS_PENDENTE
+            or item_rota.conferido_cliente
+            or item_rota.entrega_concluida
+            or (item_rota.observacao or "").strip()
+        ):
+            return False
+
+        for checklist in item_rota.checklist_itens.all():
+            if checklist.carregado or checklist.entregue:
+                return False
+
+    return not EventoVenda.objects.filter(
+        venda_id__in=[item_rota.venda_id for item_rota in rota.itens.all()],
+        canal="whatsapp_checklist",
+        descricao__icontains=f"rota/entrega #{rota.id}",
+    ).exists()
+
+
 def home(request):
     produto_edicao = None
 
@@ -906,7 +930,7 @@ def entregas_dia(request):
 
     rotas = list(
         EntregaRota.objects.filter(data=data_entrega)
-        .prefetch_related("itens__venda__cliente")
+        .prefetch_related("itens__venda__cliente", "itens__checklist_itens")
         .order_by("-id")
     )
     for rota in rotas:
@@ -917,6 +941,7 @@ def entregas_dia(request):
         checklist_path = reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota.id})
         checklist_base_url = getattr(settings, "CHECKLIST_BASE_URL", "").rstrip("/")
         rota.checklist_url = montar_checklist_url(request, rota.id)
+        rota.pode_excluir = rota_pode_ser_excluida(rota)
 
     return render(
         request,
@@ -930,6 +955,40 @@ def entregas_dia(request):
             "rota_criada_id": request.GET.get("rota_criada", ""),
         },
     )
+
+
+@require_POST
+def entrega_rota_excluir(request, pk):
+    rota = get_object_or_404(
+        EntregaRota.objects.prefetch_related("itens__checklist_itens"),
+        pk=pk,
+    )
+    data_entrega = rota.data
+
+    if not rota_pode_ser_excluida(rota):
+        messages.warning(
+            request,
+            f"Rota #{rota.id} ja possui conferencia ou uso registrado e nao pode ser excluida.",
+        )
+        return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}#rota-{rota.id}")
+
+    rota_id = rota.id
+    rota_foco = (
+        EntregaRota.objects.filter(data=data_entrega, id__lt=rota_id)
+        .order_by("-id")
+        .first()
+        or EntregaRota.objects.filter(data=data_entrega, id__gt=rota_id)
+        .order_by("id")
+        .first()
+    )
+    with transaction.atomic():
+        rota.delete()
+
+    messages.success(request, f"Rota #{rota_id} excluida com sucesso.")
+    redirect_url = f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}"
+    if rota_foco:
+        redirect_url = f"{redirect_url}&rota_criada={rota_foco.id}#rota-{rota_foco.id}"
+    return redirect(redirect_url)
 
 
 def entrega_rota_detalhe(request, pk):

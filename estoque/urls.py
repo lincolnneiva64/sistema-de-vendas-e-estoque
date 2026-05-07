@@ -21,6 +21,7 @@ urlpatterns = [
     path("vendas/gravar/", views.gravar_venda, name="gravar_venda"),
     path("entregas/", views.entregas_dia, name="entregas_dia"),
     path("entregas/<int:pk>/", views.entrega_rota_detalhe, name="entrega_rota_detalhe"),
+    path("entregas/<int:pk>/excluir/", views.entrega_rota_excluir, name="entrega_rota_excluir"),
     path("entregas/<int:pk>/checklist/", views.entrega_rota_checklist, name="entrega_rota_checklist"),
     path("entregas/<int:rota_id>/checklist/cliente/<int:venda_id>/", views.entrega_rota_checklist_cliente, name="entrega_rota_checklist_cliente"),
     path("vendas/<int:pk>/", views.venda_detalhe, name="venda_detalhe"),

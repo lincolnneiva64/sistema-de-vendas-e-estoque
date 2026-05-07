@@ -20,6 +20,7 @@
   .entregas-btn.primary { border-color: #2563eb; background: #2563eb; color: #fff; }
   .entregas-btn.success { border-color: #16a34a; background: #16a34a; color: #fff; }
   .entregas-btn.soft { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+  .entregas-btn.danger { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
   .entregas-btn:disabled { cursor: not-allowed; opacity: 0.72; }
   .entregas-grid { display: grid; grid-template-columns: minmax(320px, 0.95fr) minmax(460px, 1.45fr); gap: 12px; }
   .entregas-acompanhamento { display: grid; gap: 12px; align-content: start; }
@@ -138,6 +139,7 @@
     color: #475569; font-size: 0.78rem; font-weight: 800;
   }
   .rota-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+  .rota-delete-form { margin: 0; }
   .rota-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
   .rota-col { padding: 10px 12px; }
   .rota-col + .rota-col { border-left: 1px solid #edf1f6; background: #fbfdff; }
@@ -386,6 +388,12 @@
                       <div class="rota-actions">
                         <a class="entregas-btn soft" href="{% url 'estoque:entrega_rota_detalhe' rota.id %}">Ver detalhes</a>
                         <a class="entregas-btn primary" href="{% url 'estoque:entrega_rota_checklist' rota.id %}">Abrir checklist</a>
+                        {% if rota.pode_excluir %}
+                          <form class="rota-delete-form" method="post" action="{% url 'estoque:entrega_rota_excluir' rota.id %}" onsubmit="return confirm('Excluir esta rota? Esta acao nao pode ser desfeita.');">
+                            {% csrf_token %}
+                            <button type="submit" class="entregas-btn danger">Excluir rota</button>
+                          </form>
+                        {% endif %}
                       </div>
                     </div>
                     {% if rota.status != rota.STATUS_CONCLUIDA %}
