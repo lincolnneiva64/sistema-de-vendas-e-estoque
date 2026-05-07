@@ -20,7 +20,10 @@
   .entregas-btn.primary { border-color: #2563eb; background: #2563eb; color: #fff; }
   .entregas-btn.success { border-color: #16a34a; background: #16a34a; color: #fff; }
   .entregas-btn.soft { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
-  .entregas-btn.danger { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+  .entregas-btn.danger {
+    background: #fee2e2; border-color: #f08a8a; color: #8f1d1d;
+  }
+  .entregas-btn.danger:hover { background: #fecaca; border-color: #ef6f6f; color: #7f1d1d; }
   .entregas-btn:disabled { cursor: not-allowed; opacity: 0.72; }
   .entregas-grid { display: grid; grid-template-columns: minmax(320px, 0.95fr) minmax(460px, 1.45fr); gap: 12px; }
   .entregas-acompanhamento { display: grid; gap: 12px; align-content: start; }
@@ -172,6 +175,25 @@
   .rota-send-feedback.success { color: #166534; }
   .rota-send-feedback.warning { color: #92400e; }
   .entregas-vazio { color: #64748b; font-weight: 800; padding: 12px; text-align: center; }
+  .rota-confirm-overlay {
+    position: fixed; inset: 0; z-index: 1000; display: none;
+    align-items: center; justify-content: center; padding: 18px;
+    background: rgba(15, 23, 42, 0.38);
+  }
+  .rota-confirm-overlay.is-visible { display: flex; }
+  .rota-confirm-box {
+    width: min(420px, 100%); border: 1px solid #fca5a5; border-radius: 14px;
+    background: #fff7f7; box-shadow: 0 22px 46px rgba(15, 23, 42, 0.24);
+    padding: 18px;
+  }
+  .rota-confirm-title { margin: 0; color: #7f1d1d; font-size: 1.14rem; font-weight: 950; line-height: 1.2; }
+  .rota-confirm-text { margin: 7px 0 0; color: #374151; font-size: 0.94rem; font-weight: 820; line-height: 1.35; }
+  .rota-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  .rota-confirm-actions .entregas-btn:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, 0.28);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.9);
+  }
   @media (max-width: 980px) {
     .entregas-grid { grid-template-columns: 1fr; }
     .entregas-rota-tools { grid-template-columns: 1fr; }
@@ -375,6 +397,13 @@
             {% if rotas %}
               <div class="rotas-lista">
                 {% for rota in rotas %}
+                  {% if rota_criada_id == rota.id|stringformat:'s' %}
+                    {% for message in messages %}
+                      {% if 'success' in message.tags and 'excluida com sucesso' in message.message %}
+                        <div class="entregas-alert success">{{ message }}</div>
+                      {% endif %}
+                    {% endfor %}
+                  {% endif %}
                   <article id="rota-{{ rota.id }}" class="rota-card{% if rota_criada_id == rota.id|stringformat:'s' %} is-created{% endif %}"{% if rota_criada_id == rota.id|stringformat:'s' %} data-created-route="true"{% endif %}>
                     <div class="rota-head">
                       <div>
@@ -389,8 +418,9 @@
                         <a class="entregas-btn soft" href="{% url 'estoque:entrega_rota_detalhe' rota.id %}">Ver detalhes</a>
                         <a class="entregas-btn primary" href="{% url 'estoque:entrega_rota_checklist' rota.id %}">Abrir checklist</a>
                         {% if rota.pode_excluir %}
-                          <form class="rota-delete-form" method="post" action="{% url 'estoque:entrega_rota_excluir' rota.id %}" onsubmit="return confirm('Excluir esta rota? Esta acao nao pode ser desfeita.');">
+                          <form class="rota-delete-form" method="post" action="{% url 'estoque:entrega_rota_excluir' rota.id %}" data-delete-route-form>
                             {% csrf_token %}
+                            <input type="hidden" name="data" value="{{ data_entrega|date:'Y-m-d' }}">
                             <button type="submit" class="entregas-btn danger">Excluir rota</button>
                           </form>
                         {% endif %}
@@ -445,6 +475,16 @@
           </div>
         </section>
       </div>
+    </div>
+  </div>
+</div>
+<div class="rota-confirm-overlay" data-route-delete-modal aria-hidden="true">
+  <div class="rota-confirm-box" role="dialog" aria-modal="true" aria-labelledby="rotaDeleteTitle" aria-describedby="rotaDeleteText">
+    <h2 id="rotaDeleteTitle" class="rota-confirm-title">Excluir esta rota?</h2>
+    <p id="rotaDeleteText" class="rota-confirm-text">Esta ação não pode ser desfeita.</p>
+    <div class="rota-confirm-actions">
+      <button type="button" class="entregas-btn soft" data-route-delete-cancel>Cancelar</button>
+      <button type="button" class="entregas-btn danger" data-route-delete-confirm>Excluir rota</button>
     </div>
   </div>
 </div>
@@ -726,7 +766,76 @@
     }
   }());
 
-  // Funcionalidade de envio de checklist para funcionário
+  // Confirmacao visual para excluir rota
+  (function () {
+    var pendingDeleteForm = null;
+    var modal = document.querySelector("[data-route-delete-modal]");
+    var cancelButton = document.querySelector("[data-route-delete-cancel]");
+    var confirmButton = document.querySelector("[data-route-delete-confirm]");
+
+    function closeDeleteModal() {
+      pendingDeleteForm = null;
+      if (modal) {
+        modal.classList.remove("is-visible");
+        modal.setAttribute("aria-hidden", "true");
+      }
+    }
+
+    document.querySelectorAll("[data-delete-route-form]").forEach(function (form) {
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        pendingDeleteForm = form;
+        if (modal) {
+          modal.classList.add("is-visible");
+          modal.setAttribute("aria-hidden", "false");
+          if (confirmButton) {
+            confirmButton.focus();
+          }
+        }
+      });
+    });
+
+    if (cancelButton) {
+      cancelButton.addEventListener("click", closeDeleteModal);
+    }
+
+    if (modal) {
+      modal.addEventListener("click", function (event) {
+        if (event.target === modal) {
+          closeDeleteModal();
+        }
+      });
+    }
+
+    if (confirmButton) {
+      confirmButton.addEventListener("click", function () {
+        if (pendingDeleteForm) {
+          pendingDeleteForm.submit();
+        }
+      });
+    }
+
+    document.addEventListener("keydown", function (event) {
+      if (!modal || !modal.classList.contains("is-visible")) {
+        return;
+      }
+
+      if (event.key === "Escape") {
+        closeDeleteModal();
+        return;
+      }
+
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        event.preventDefault();
+        if (event.key === "ArrowLeft" && cancelButton) {
+          cancelButton.focus();
+        } else if (event.key === "ArrowRight" && confirmButton) {
+          confirmButton.focus();
+        }
+      }
+    });
+  }());
+
   (function () {
     function normalizarWhatsapp(valor) {
       var digitos = String(valor || "").replace(/\D/g, "");

@@ -959,10 +959,15 @@ def entregas_dia(request):
 
 @require_POST
 def entrega_rota_excluir(request, pk):
-    rota = get_object_or_404(
-        EntregaRota.objects.prefetch_related("itens__checklist_itens"),
-        pk=pk,
-    )
+    rota = EntregaRota.objects.prefetch_related("itens__checklist_itens").filter(pk=pk).first()
+    if not rota:
+        data_texto = request.POST.get("data", "").strip()
+        data_entrega = parse_date(data_texto) if data_texto else timezone.localdate()
+        if not data_entrega:
+            data_entrega = timezone.localdate()
+        messages.warning(request, "Rota nao encontrada ou ja foi excluida.")
+        return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}")
+
     data_entrega = rota.data
 
     if not rota_pode_ser_excluida(rota):
