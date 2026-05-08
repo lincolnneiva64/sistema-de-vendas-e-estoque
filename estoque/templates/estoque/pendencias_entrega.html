@@ -64,6 +64,12 @@
     min-height: 30px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 9px;
     background: #f1f5f9; color: #64748b; font-size: 0.74rem; font-weight: 850;
   }
+  .pend-future-btn:not(:disabled) { cursor: pointer; border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+  .pend-decision-message {
+    margin: 10px 0 0; padding: 8px 10px; border: 1px solid #bbf7d0; border-radius: 8px;
+    background: #f0fdf4; color: #166534; font-size: 0.78rem; font-weight: 800;
+  }
+  .pend-decision-message[hidden] { display: none; }
   .pend-empty { padding: 18px; color: #166534; background: #f0fdf4; font-weight: 850; text-align: center; }
   @media (max-width: 760px) {
     .pend-header { align-items: stretch; flex-direction: column; }
@@ -139,8 +145,9 @@
                         <button class="pend-future-btn" type="button" disabled>Resolver depois</button>
                         <button class="pend-future-btn" type="button" disabled>Remover da nota</button>
                         <button class="pend-future-btn" type="button" disabled>Entregar em próxima rota</button>
-                        <button class="pend-future-btn" type="button" disabled>Manter pendente</button>
+                        <button class="pend-future-btn btn-pressionavel pend-manter-toggle" type="button" data-target="pend-decision-{{ forloop.counter }}">Manter pendente</button>
                       </div>
+                      <p class="pend-decision-message" id="pend-decision-{{ forloop.counter }}" hidden>Pendência mantida. Nenhuma alteração foi feita na nota ou no checklist. A pendência continua aberta; esta é apenas uma confirmação visual de conferência por enquanto.</p>
                     </div>
                   </td>
                 </tr>
@@ -163,6 +170,13 @@
       var isOpen = !target.hidden;
       target.hidden = isOpen;
       button.setAttribute('aria-expanded', String(!isOpen));
+    });
+  });
+
+  document.querySelectorAll('.pend-manter-toggle').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var target = document.getElementById(button.dataset.target);
+      if (target) target.hidden = false;
     });
   });
 </script>
