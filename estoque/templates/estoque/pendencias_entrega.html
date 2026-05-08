@@ -11,6 +11,7 @@
     min-height: 36px; border: 1px solid #93c5fd; border-radius: 9px; padding: 7px 12px;
     background: #eff6ff; color: #1d4ed8; font-size: 0.84rem; font-weight: 850;
     text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer;
   }
   .pend-btn.primary { border-color: #2563eb; background: #2563eb; color: #fff; }
   .btn-pressionavel {
@@ -45,10 +46,30 @@
     font-size: 0.72rem; font-weight: 900;
   }
   .pend-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+  .pend-detail-row[hidden] { display: none; }
+  .pend-detail-cell {
+    padding: 0 9px 12px !important; background: #fbfdff; border-bottom: 1px solid #e8eef7 !important;
+  }
+  .pend-tratar-panel {
+    margin-left: auto; max-width: 760px; padding: 10px; border: 1px solid #dbeafe; border-radius: 10px;
+    background: #f8fbff; color: #172033; box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+  }
+  .pend-tratar-title { margin: 0 0 8px; font-size: 0.82rem; font-weight: 950; color: #1d4ed8; }
+  .pend-tratar-grid { display: grid; grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: 6px 10px; }
+  .pend-tratar-item { color: #475569; font-size: 0.76rem; font-weight: 750; }
+  .pend-tratar-item strong { display: block; color: #111827; font-size: 0.8rem; font-weight: 900; }
+  .pend-future-title { margin: 10px 0 7px; color: #64748b; font-size: 0.76rem; font-weight: 900; }
+  .pend-future-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pend-future-btn {
+    min-height: 30px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 9px;
+    background: #f1f5f9; color: #64748b; font-size: 0.74rem; font-weight: 850;
+  }
   .pend-empty { padding: 18px; color: #166534; background: #f0fdf4; font-weight: 850; text-align: center; }
   @media (max-width: 760px) {
     .pend-header { align-items: stretch; flex-direction: column; }
     .pend-btn { width: 100%; }
+    .pend-tratar-panel { max-width: none; }
+    .pend-tratar-grid { grid-template-columns: 1fr; }
   }
 </style>
 
@@ -96,6 +117,30 @@
                     <div class="pend-actions">
                       <a class="pend-btn btn-pressionavel" href="{% url 'estoque:venda_detalhe' pendencia.venda.id %}?entrega={{ pendencia.rota.id }}&origem=pendencias">Abrir nota</a>
                       <a class="pend-btn primary btn-pressionavel" href="{% url 'estoque:entrega_rota_checklist' pendencia.rota.id %}?origem=pendencias">Abrir checklist</a>
+                      <button class="pend-btn btn-pressionavel pend-tratar-toggle" type="button" data-target="pend-tratar-{{ forloop.counter }}" aria-expanded="false">Tratar pendência</button>
+                    </div>
+                  </td>
+                </tr>
+                <tr class="pend-detail-row" id="pend-tratar-{{ forloop.counter }}" hidden>
+                  <td class="pend-detail-cell" colspan="8">
+                    <div class="pend-tratar-panel">
+                      <h3 class="pend-tratar-title">Detalhes da pendência</h3>
+                      <div class="pend-tratar-grid">
+                        <div class="pend-tratar-item">Cliente<strong>{{ pendencia.cliente }}</strong></div>
+                        <div class="pend-tratar-item">Nota/Venda<strong>Venda #{{ pendencia.venda.id }}</strong></div>
+                        <div class="pend-tratar-item">Rota<strong>Rota #{{ pendencia.rota.id }}</strong></div>
+                        <div class="pend-tratar-item">Data<strong>{{ pendencia.data|date:"d/m/Y" }}</strong></div>
+                        <div class="pend-tratar-item">Produto<strong>{{ pendencia.produto|default:"-" }}</strong></div>
+                        <div class="pend-tratar-item">Quantidade<strong>{% if pendencia.quantidade %}{{ pendencia.quantidade }} {{ pendencia.unidade }}{% else %}-{% endif %}</strong></div>
+                        <div class="pend-tratar-item">Status atual<strong>{{ pendencia.status }}</strong></div>
+                      </div>
+                      <p class="pend-future-title">Próximas ações</p>
+                      <div class="pend-future-actions">
+                        <button class="pend-future-btn" type="button" disabled>Resolver depois</button>
+                        <button class="pend-future-btn" type="button" disabled>Remover da nota</button>
+                        <button class="pend-future-btn" type="button" disabled>Entregar em próxima rota</button>
+                        <button class="pend-future-btn" type="button" disabled>Manter pendente</button>
+                      </div>
                     </div>
                   </td>
                 </tr>
@@ -109,4 +154,16 @@
     </section>
   </div>
 </main>
+<script>
+  document.querySelectorAll('.pend-tratar-toggle').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var target = document.getElementById(button.dataset.target);
+      if (!target) return;
+
+      var isOpen = !target.hidden;
+      target.hidden = isOpen;
+      button.setAttribute('aria-expanded', String(!isOpen));
+    });
+  });
+</script>
 {% endblock %}
