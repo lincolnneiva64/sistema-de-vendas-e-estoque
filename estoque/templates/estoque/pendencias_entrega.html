@@ -13,6 +13,14 @@
     text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
   }
   .pend-btn.primary { border-color: #2563eb; background: #2563eb; color: #fff; }
+  .btn-pressionavel {
+    transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.08s ease;
+  }
+  .btn-pressionavel:active {
+    transform: translateY(1px) scale(0.98);
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.18);
+    filter: brightness(0.96);
+  }
   .pend-card {
     background: #fff; border: 1px solid #e1e7ef; border-radius: 13px;
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06); overflow: hidden;
@@ -51,7 +59,7 @@
         <h1 class="pend-title">Pendencias de Entrega</h1>
         <p class="pend-subtitle">Itens e entregas com pendencia registrada no checklist.</p>
       </div>
-      <a class="pend-btn" href="{% url 'estoque:entregas_dia' %}">Voltar para Entregas</a>
+      <a class="pend-btn btn-pressionavel" href="{% url 'estoque:entregas_dia' %}">Voltar para Entregas</a>
     </header>
 
     <section class="pend-card">
@@ -86,8 +94,8 @@
                   <td><span class="pend-status">{{ pendencia.status }}</span></td>
                   <td>
                     <div class="pend-actions">
-                      <a class="pend-btn" href="{% url 'estoque:venda_detalhe' pendencia.venda.id %}?entrega={{ pendencia.rota.id }}&origem=pendencias">Abrir nota</a>
-                      <a class="pend-btn primary" href="{% url 'estoque:entrega_rota_checklist' pendencia.rota.id %}?origem=pendencias">Abrir checklist</a>
+                      <a class="pend-btn btn-pressionavel" href="{% url 'estoque:venda_detalhe' pendencia.venda.id %}?entrega={{ pendencia.rota.id }}&origem=pendencias">Abrir nota</a>
+                      <a class="pend-btn primary btn-pressionavel" href="{% url 'estoque:entrega_rota_checklist' pendencia.rota.id %}?origem=pendencias">Abrir checklist</a>
                     </div>
                   </td>
                 </tr>
