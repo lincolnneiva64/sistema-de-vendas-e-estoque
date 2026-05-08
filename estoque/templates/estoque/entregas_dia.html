@@ -376,8 +376,8 @@
               <span class="entregas-muted">{{ total_pendencias_entrega }} pendencia(s)</span>
             </div>
             <div class="entregas-card-body">
-              <p class="entregas-pendencias-text">Existem pendencias de entrega abertas. Antes de montar uma nova rota, verifique se alguma pendencia deve entrar na entrega.</p>
-              <a class="entregas-btn soft btn-pressionavel" href="{% url 'estoque:pendencias_entrega' %}">Ver pendências</a>
+              <p class="entregas-pendencias-text">Existem pendencias de entrega abertas. Ao montar uma nova rota, o sistema podera sugerir pendencias relacionadas a rota/localidade.</p>
+              <a class="entregas-btn soft btn-pressionavel" href="{% url 'estoque:pendencias_entrega' %}">Ver todas as pendências</a>
             </div>
           </section>
         {% endif %}
