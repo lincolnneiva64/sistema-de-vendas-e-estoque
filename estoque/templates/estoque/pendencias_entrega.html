@@ -142,10 +142,10 @@
                       </div>
                       <p class="pend-future-title">Próximas ações</p>
                       <div class="pend-future-actions">
-                        <button class="pend-future-btn" type="button" disabled>Resolver depois</button>
+                        <button class="pend-future-btn btn-pressionavel pend-decision-toggle" type="button" data-target="pend-decision-{{ forloop.counter }}" data-message="Pendência separada para resolver depois. Nenhuma alteração foi feita na nota, no checklist ou no estoque. A pendência continua aberta, nada foi alterado no banco, a nota não foi recalculada e esta é apenas uma marcação visual temporária para preparar a futura rotina real.">Resolver depois</button>
                         <button class="pend-future-btn" type="button" disabled>Remover da nota</button>
                         <button class="pend-future-btn" type="button" disabled>Entregar em próxima rota</button>
-                        <button class="pend-future-btn btn-pressionavel pend-manter-toggle" type="button" data-target="pend-decision-{{ forloop.counter }}">Manter pendente</button>
+                        <button class="pend-future-btn btn-pressionavel pend-decision-toggle" type="button" data-target="pend-decision-{{ forloop.counter }}" data-message="Pendência mantida. Nenhuma alteração foi feita na nota ou no checklist. A pendência continua aberta; esta é apenas uma confirmação visual de conferência por enquanto.">Manter pendente</button>
                       </div>
                       <p class="pend-decision-message" id="pend-decision-{{ forloop.counter }}" hidden>Pendência mantida. Nenhuma alteração foi feita na nota ou no checklist. A pendência continua aberta; esta é apenas uma confirmação visual de conferência por enquanto.</p>
                     </div>
@@ -173,10 +173,13 @@
     });
   });
 
-  document.querySelectorAll('.pend-manter-toggle').forEach(function (button) {
+  document.querySelectorAll('.pend-decision-toggle').forEach(function (button) {
     button.addEventListener('click', function () {
       var target = document.getElementById(button.dataset.target);
-      if (target) target.hidden = false;
+      if (!target) return;
+
+      target.textContent = button.dataset.message;
+      target.hidden = false;
     });
   });
 </script>
