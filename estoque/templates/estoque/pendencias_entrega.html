@@ -59,7 +59,13 @@
   .pend-tratar-item { color: #475569; font-size: 0.76rem; font-weight: 750; }
   .pend-tratar-item strong { display: block; color: #111827; font-size: 0.8rem; font-weight: 900; }
   .pend-future-title { margin: 10px 0 7px; color: #64748b; font-size: 0.76rem; font-weight: 900; }
+  .pend-action-group { margin-top: 8px; }
+  .pend-action-group-title { margin: 0 0 6px; color: #475569; font-size: 0.73rem; font-weight: 900; }
   .pend-future-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pend-danger-group {
+    margin-top: 10px; padding-top: 9px; border-top: 1px dashed #cbd5e1;
+  }
+  .pend-danger-note { margin: 6px 0 0; color: #64748b; font-size: 0.72rem; font-weight: 750; }
   .pend-future-btn {
     min-height: 30px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 9px;
     background: #f1f5f9; color: #64748b; font-size: 0.74rem; font-weight: 850;
@@ -141,11 +147,20 @@
                         <div class="pend-tratar-item">Status atual<strong>{{ pendencia.status }}</strong></div>
                       </div>
                       <p class="pend-future-title">Próximas ações</p>
-                      <div class="pend-future-actions">
-                        <button class="pend-future-btn btn-pressionavel pend-decision-toggle" type="button" data-target="pend-decision-{{ forloop.counter }}" data-message="Pendência separada para resolver depois. Nenhuma alteração foi feita na nota, no checklist ou no estoque. A pendência continua aberta, nada foi alterado no banco, a nota não foi recalculada e esta é apenas uma marcação visual temporária para preparar a futura rotina real.">Resolver depois</button>
-                        <button class="pend-future-btn" type="button" disabled>Remover da nota</button>
-                        <button class="pend-future-btn btn-pressionavel pend-decision-toggle" type="button" data-target="pend-decision-{{ forloop.counter }}" data-message="Pendência marcada visualmente para entrar em uma próxima rota. Nenhuma rota foi criada ainda e nada foi alterado no banco. A pendência continua aberta, a nota não foi alterada e o checklist não foi alterado; isso é apenas preparação visual para a futura rotina real.">Entregar em próxima rota</button>
-                        <button class="pend-future-btn btn-pressionavel pend-decision-toggle" type="button" data-target="pend-decision-{{ forloop.counter }}" data-message="Pendência mantida. Nenhuma alteração foi feita na nota ou no checklist. A pendência continua aberta; esta é apenas uma confirmação visual de conferência por enquanto.">Manter pendente</button>
+                      <div class="pend-action-group">
+                        <p class="pend-action-group-title">Ações de acompanhamento</p>
+                        <div class="pend-future-actions">
+                          <button class="pend-future-btn btn-pressionavel pend-decision-toggle" type="button" data-target="pend-decision-{{ forloop.counter }}" data-message="Pendência separada para resolver depois. Nenhuma alteração foi feita na nota, no checklist ou no estoque. A pendência continua aberta, nada foi alterado no banco, a nota não foi recalculada e esta é apenas uma marcação visual temporária para preparar a futura rotina real.">Resolver depois</button>
+                          <button class="pend-future-btn btn-pressionavel pend-decision-toggle" type="button" data-target="pend-decision-{{ forloop.counter }}" data-message="Pendência marcada visualmente para entrar em uma próxima rota. Nenhuma rota foi criada ainda e nada foi alterado no banco. A pendência continua aberta, a nota não foi alterada e o checklist não foi alterado; isso é apenas preparação visual para a futura rotina real.">Entregar em próxima rota</button>
+                          <button class="pend-future-btn btn-pressionavel pend-decision-toggle" type="button" data-target="pend-decision-{{ forloop.counter }}" data-message="Pendência mantida. Nenhuma alteração foi feita na nota ou no checklist. A pendência continua aberta; esta é apenas uma confirmação visual de conferência por enquanto.">Manter pendente</button>
+                        </div>
+                      </div>
+                      <div class="pend-action-group pend-danger-group">
+                        <p class="pend-action-group-title">Ação delicada/futura</p>
+                        <div class="pend-future-actions">
+                          <button class="pend-future-btn" type="button" disabled>Remover da nota</button>
+                        </div>
+                        <p class="pend-danger-note">Remover da nota exige recalcular a venda e será tratado em etapa futura.</p>
                       </div>
                       <p class="pend-decision-message" id="pend-decision-{{ forloop.counter }}" hidden>Pendência mantida. Nenhuma alteração foi feita na nota ou no checklist. A pendência continua aberta; esta é apenas uma confirmação visual de conferência por enquanto.</p>
                     </div>
