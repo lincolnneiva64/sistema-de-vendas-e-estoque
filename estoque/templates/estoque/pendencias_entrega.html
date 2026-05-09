@@ -69,8 +69,15 @@
   .pend-future-btn {
     min-height: 30px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 9px;
     background: #f1f5f9; color: #64748b; font-size: 0.74rem; font-weight: 850;
+    text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+    transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.08s ease;
   }
   .pend-future-btn:not(:disabled) { cursor: pointer; border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+  .pend-future-btn:not(:disabled):active {
+    transform: translateY(1px);
+    box-shadow: inset 0 2px 5px rgba(15, 23, 42, 0.16);
+    filter: brightness(0.96);
+  }
   .pend-decision-message {
     margin: 10px 0 0; padding: 8px 10px; border: 1px solid #bbf7d0; border-radius: 8px;
     background: #f0fdf4; color: #166534; font-size: 0.78rem; font-weight: 800;
@@ -156,11 +163,11 @@
                         </div>
                       </div>
                       <div class="pend-action-group pend-danger-group">
-                        <p class="pend-action-group-title">Ação delicada/futura</p>
+                        <p class="pend-action-group-title">Acao delicada</p>
                         <div class="pend-future-actions">
-                          <button class="pend-future-btn" type="button" disabled>Remover da nota</button>
+                          <a class="pend-future-btn btn-pressionavel" href="{% url 'estoque:revisar_remocao_pendencia_da_nota' pendencia.id %}">Remover da nota</a>
                         </div>
-                        <p class="pend-danger-note">Remover da nota exige recalcular a venda e será tratado em etapa futura.</p>
+                        <p class="pend-danger-note">Abre uma revisao antes de alterar a venda original.</p>
                       </div>
                       <p class="pend-decision-message" id="pend-decision-{{ forloop.counter }}" hidden>Pendência mantida. Nenhuma alteração foi feita na nota ou no checklist. A pendência continua aberta; esta é apenas uma confirmação visual de conferência por enquanto.</p>
                     </div>

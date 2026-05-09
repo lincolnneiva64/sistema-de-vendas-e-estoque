@@ -56,10 +56,20 @@
             text-decoration: none;
             line-height: 23px;
             box-sizing: border-box;
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+            transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.08s ease;
         }
 
-        .acoes button {
+        .acoes button,
+        .acoes a {
             cursor: pointer;
+        }
+
+        .acoes button:not(:disabled):active,
+        .acoes a:active {
+            transform: translateY(1px);
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+            filter: brightness(0.96);
         }
 
         .acoes button:disabled {
@@ -682,7 +692,7 @@
                     </div>
                     <div class="acoes">
                         {% if request.GET.origem == "pendencias" %}
-                            <a href="{% url 'estoque:pendencias_entrega' %}">Voltar para Pendências</a>
+                            <a href="{% url 'estoque:pendencias_entrega' %}">Voltar para pendências de entrega</a>
                         {% endif %}
                         <a href="{% url 'estoque:vendas' %}">Voltar para Vendas</a>
                         <a href="{% url 'estoque:consultar_vendas' %}">Voltar para Consulta</a>

@@ -1,0 +1,111 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Revisar remocao da nota{% endblock %}
+{% block content %}
+<style>
+  .review-page { color: #172033; padding: 18px 0 36px; }
+  .review-shell { max-width: 860px; margin: 0 auto; padding: 0 18px; }
+  .review-card {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 13px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06); overflow: hidden;
+  }
+  .review-head { padding: 14px 16px; border-bottom: 1px solid #edf1f6; background: #fffbeb; }
+  .review-title { margin: 0; color: #92400e; font-size: 1.18rem; font-weight: 950; line-height: 1.2; }
+  .review-subtitle { margin: 6px 0 0; color: #64748b; font-size: 0.88rem; font-weight: 760; line-height: 1.35; }
+  .review-body { padding: 14px 16px; display: grid; gap: 14px; }
+  .review-warning {
+    border: 1px solid #f7d98b; border-radius: 10px; background: #fff7ed;
+    color: #92400e; padding: 10px 12px; font-size: 0.86rem; font-weight: 850; line-height: 1.35;
+  }
+  .review-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .review-field { border: 1px solid #edf1f6; border-radius: 10px; background: #fbfdff; padding: 10px; }
+  .review-label { display: block; color: #64748b; font-size: 0.72rem; font-weight: 900; text-transform: uppercase; }
+  .review-value { display: block; margin-top: 3px; color: #111827; font-size: 0.92rem; font-weight: 900; overflow-wrap: anywhere; }
+  .review-total-row {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+    border-top: 1px solid #edf1f6; padding-top: 12px;
+  }
+  .review-total { border: 1px solid #dbeafe; border-radius: 10px; background: #eff6ff; padding: 10px; }
+  .review-total.final { border-color: #bbf7d0; background: #f0fdf4; }
+  .review-total .review-value { font-size: 1.08rem; }
+  .review-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+  .review-btn {
+    min-height: 38px; border: 1px solid #cbd5e1; border-radius: 9px; padding: 8px 13px;
+    background: #f8fafc; color: #475569; font-size: 0.84rem; font-weight: 900;
+    text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
+    transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.08s ease;
+  }
+  .review-btn:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+    filter: brightness(0.96);
+  }
+  .review-btn.danger { border-color: #dc2626; background: #dc2626; color: #fff; }
+  @media (max-width: 680px) {
+    .review-grid, .review-total-row { grid-template-columns: 1fr; }
+    .review-actions { justify-content: stretch; }
+    .review-btn { width: 100%; }
+  }
+</style>
+
+<main class="review-page">
+  <div class="review-shell">
+    <section class="review-card">
+      <header class="review-head">
+        <h1 class="review-title">Revisar remocao da nota</h1>
+        <p class="review-subtitle">Confira os dados antes de alterar a venda original.</p>
+      </header>
+      <div class="review-body">
+        <div class="review-warning">
+          Esta acao altera a nota/venda original. O item abaixo sera removido somente depois da confirmacao.
+        </div>
+
+        <div class="review-grid">
+          <div class="review-field">
+            <span class="review-label">Cliente</span>
+            <span class="review-value">{{ cliente.nome|default:"Consumidor" }}</span>
+          </div>
+          <div class="review-field">
+            <span class="review-label">Venda/nota</span>
+            <span class="review-value">Venda #{{ venda.id }}</span>
+          </div>
+          <div class="review-field">
+            <span class="review-label">Rota de origem</span>
+            <span class="review-value">Rota #{{ rota.id }} - {{ rota.data|date:"d/m/Y" }}</span>
+          </div>
+          <div class="review-field">
+            <span class="review-label">Produto pendente</span>
+            <span class="review-value">{{ produto_nome }}</span>
+          </div>
+          <div class="review-field">
+            <span class="review-label">Quantidade</span>
+            <span class="review-value">{{ item_venda.quantidade }} {{ item_venda.unidade }}</span>
+          </div>
+          <div class="review-field">
+            <span class="review-label">Valor do item</span>
+            <span class="review-value">R$ {{ item_venda.valor_total|floatformat:2 }}</span>
+          </div>
+        </div>
+
+        <div class="review-total-row">
+          <div class="review-total">
+            <span class="review-label">Total atual da venda</span>
+            <span class="review-value">R$ {{ total_atual|floatformat:2 }}</span>
+          </div>
+          <div class="review-total final">
+            <span class="review-label">Novo total previsto</span>
+            <span class="review-value">R$ {{ novo_total|floatformat:2 }}</span>
+          </div>
+        </div>
+
+        <form method="post" class="review-actions">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ voltar_url }}">
+          <a class="review-btn" href="{{ voltar_url }}">Cancelar / Voltar</a>
+          <button class="review-btn danger" type="submit">Confirmar remocao da nota</button>
+        </form>
+      </div>
+    </section>
+  </div>
+</main>
+{% endblock %}

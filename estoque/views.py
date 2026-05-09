@@ -332,6 +332,21 @@ def checklists_validos_rota_item(item_rota):
     ]
 
 
+def calcular_total_itens_venda(venda, excluir_item_id=None):
+    total = sum(
+        (item.valor_total or Decimal("0.00"))
+        for item in venda.itens.all()
+        if excluir_item_id is None or item.id != excluir_item_id
+    )
+    return Decimal(total).quantize(Decimal("0.01"))
+
+
+def recalcular_total_venda(venda):
+    venda.total = calcular_total_itens_venda(venda)
+    venda.save(update_fields=["total", "atualizado_em"])
+    return venda.total
+
+
 def chave_cliente_entrega(venda):
     if venda and venda.cliente_id:
         return f"cliente:{venda.cliente_id}"
@@ -1344,6 +1359,108 @@ def pendencias_entrega(request):
         {
             "pendencias": pendencias,
             "total_pendencias": len(pendencias),
+        },
+    )
+
+
+def revisar_remocao_pendencia_da_nota(request, checklist_id):
+    checklist = (
+        EntregaChecklistItem.objects.select_related(
+            "item_venda",
+            "item_venda__produto",
+            "rota_item",
+            "rota_item__rota",
+            "rota_item__venda",
+            "rota_item__venda__cliente",
+            "rota_item__origem_pendencia",
+        )
+        .prefetch_related("rota_item__checklist_itens", "rota_item__venda__itens")
+        .filter(pk=checklist_id)
+        .first()
+    )
+    if not checklist:
+        messages.warning(request, "Pendencia nao encontrada ou ja resolvida.")
+        return redirect("estoque:pendencias_entrega")
+
+    item_rota = checklist.rota_item
+    venda = item_rota.venda
+    item_venda = checklist.item_venda
+    if checklist.entregue or checklist not in checklists_validos_rota_item(item_rota):
+        messages.warning(request, "Essa pendencia nao esta mais disponivel para remocao da nota.")
+        return redirect("estoque:pendencias_entrega")
+
+    total_atual = venda.total or Decimal("0.00")
+    novo_total = calcular_total_itens_venda(venda, excluir_item_id=item_venda.id)
+    voltar_url = request.GET.get("next") or reverse("estoque:pendencias_entrega")
+
+    if request.method == "POST":
+        with transaction.atomic():
+            checklist_confirmacao = (
+                EntregaChecklistItem.objects.filter(pk=checklist_id)
+                .first()
+            )
+            if not checklist_confirmacao:
+                messages.warning(request, "Pendencia nao encontrada ou ja resolvida.")
+                return redirect("estoque:pendencias_entrega")
+
+            item_rota = (
+                EntregaRotaItem.objects.select_related("origem_pendencia")
+                .prefetch_related("checklist_itens")
+                .get(pk=checklist_confirmacao.rota_item_id)
+            )
+            venda = Venda.objects.get(pk=item_rota.venda_id)
+            item_venda = ItemVenda.objects.filter(
+                pk=checklist_confirmacao.item_venda_id,
+                venda=venda,
+            ).select_related("produto").first()
+            if not item_venda:
+                messages.warning(request, "O item da nota ja nao existe mais. Nenhuma alteracao foi feita.")
+                return redirect("estoque:pendencias_entrega")
+
+            if checklist_confirmacao.entregue or checklist_confirmacao not in checklists_validos_rota_item(item_rota):
+                messages.warning(request, "Essa pendencia nao esta mais disponivel para remocao da nota.")
+                return redirect("estoque:pendencias_entrega")
+
+            produto_nome = item_venda.produto.nome if item_venda.produto else "Produto nao identificado"
+            quantidade = item_venda.quantidade
+            unidade = item_venda.unidade
+            valor_total = item_venda.valor_total or Decimal("0.00")
+            venda_id = venda.id
+            rota_id = item_rota.rota_id
+            item_venda.delete()
+            novo_total = recalcular_total_venda(venda)
+
+            _registrar_evento_venda(
+                venda,
+                "pendencia_removida_da_nota",
+                (
+                    f"Pendencia da rota #{rota_id} resolvida por remocao da nota. "
+                    f"Item removido: {produto_nome} - {quantidade} {unidade} "
+                    f"(R$ {valor_total:.2f}). Novo total: R$ {novo_total:.2f}."
+                ),
+                canal="sistema",
+            )
+
+        messages.success(
+            request,
+            f"Item removido da venda #{venda_id} e pendencia resolvida com sucesso.",
+        )
+        return redirect(f"{reverse('estoque:venda_detalhe', kwargs={'pk': venda_id})}?origem=pendencias")
+
+    return render(
+        request,
+        "estoque/revisar_remocao_pendencia_da_nota.html",
+        {
+            "checklist": checklist,
+            "item_rota": item_rota,
+            "rota": item_rota.rota,
+            "venda": venda,
+            "cliente": venda.cliente,
+            "item_venda": item_venda,
+            "produto_nome": item_venda.produto.nome if item_venda.produto else "Produto nao identificado",
+            "total_atual": total_atual,
+            "novo_total": novo_total,
+            "voltar_url": voltar_url,
         },
     )
 
