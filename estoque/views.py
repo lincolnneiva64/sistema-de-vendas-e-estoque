@@ -14,7 +14,7 @@ from django.db.models import Case, When, Value, IntegerField, F
 from .forms import CategoriaForm, ClienteForm, FuncionarioForm, ProdutoForm, UnidadeForm
 from .models import Categoria, Cliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, Produto, Unidade, Venda
 from django.contrib import messages
-from django.http import HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.utils.dateparse import parse_date
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -30,11 +30,17 @@ def montar_checklist_url(request, rota_id):
     return f"{request.scheme}://{request.get_host()}{checklist_path}"
 
 
-def montar_checklist_cliente_url(request, rota_id, venda_id):
-    checklist_path = reverse(
-        "estoque:entrega_rota_checklist_cliente",
-        kwargs={"rota_id": rota_id, "venda_id": venda_id},
-    )
+def montar_checklist_cliente_url(request, rota_id, venda_id, rota_item_id=None):
+    if rota_item_id:
+        checklist_path = reverse(
+            "estoque:entrega_rota_checklist_item",
+            kwargs={"rota_id": rota_id, "rota_item_id": rota_item_id},
+        )
+    else:
+        checklist_path = reverse(
+            "estoque:entrega_rota_checklist_cliente",
+            kwargs={"rota_id": rota_id, "venda_id": venda_id},
+        )
     checklist_base_url = getattr(settings, "CHECKLIST_BASE_URL", "").rstrip("/")
     if checklist_base_url:
         return f"{checklist_base_url}{checklist_path}"
@@ -62,6 +68,32 @@ def marcar_checklist_fase_salva(item_rota, fase):
     item_rota.save(update_fields=["observacao"])
 
 
+def observacao_bloqueia_exclusao(item_rota):
+    observacao = (item_rota.observacao or "").strip()
+    if not observacao:
+        return False
+    if any(marker in observacao for marker in CHECKLIST_FASE_MARKERS.values()):
+        return True
+    if item_rota.is_pendencia and observacao.startswith("Pendencia incluida da rota #"):
+        return False
+    return True
+
+
+def checklist_item_processado(checklist):
+    return checklist.carregado or checklist.entregue
+
+
+def rota_tem_evento_checklist_processado(rota):
+    venda_ids = [item_rota.venda_id for item_rota in rota.itens.all()]
+    if not venda_ids:
+        return False
+    return EventoVenda.objects.filter(
+        venda_id__in=venda_ids,
+        canal="whatsapp_checklist",
+        descricao__icontains=f"rota/entrega #{rota.id}",
+    ).exists()
+
+
 def rota_pode_ser_excluida(rota):
     if rota.status != EntregaRota.STATUS_ABERTA:
         return False
@@ -71,19 +103,15 @@ def rota_pode_ser_excluida(rota):
             item_rota.status != EntregaRotaItem.STATUS_PENDENTE
             or item_rota.conferido_cliente
             or item_rota.entrega_concluida
-            or (item_rota.observacao or "").strip()
+            or observacao_bloqueia_exclusao(item_rota)
         ):
             return False
 
         for checklist in item_rota.checklist_itens.all():
-            if checklist.carregado or checklist.entregue:
+            if checklist_item_processado(checklist):
                 return False
 
-    return not EventoVenda.objects.filter(
-        venda_id__in=[item_rota.venda_id for item_rota in rota.itens.all()],
-        canal="whatsapp_checklist",
-        descricao__icontains=f"rota/entrega #{rota.id}",
-    ).exists()
+    return not rota_tem_evento_checklist_processado(rota)
 
 
 def formatar_nome_rota(valor):
@@ -133,13 +161,21 @@ def localidade_principal_rota(vendas_ordenadas):
 
 def listar_pendencias_entrega(limite=None):
     pendencias = []
+    pendencias_reprogramadas = set(
+        EntregaChecklistItem.objects.filter(
+            rota_item__is_pendencia=True,
+            rota_item__origem_pendencia_id__isnull=False,
+        ).values_list("rota_item__origem_pendencia_id", "item_venda_id")
+    )
     itens_rota = (
-        EntregaRotaItem.objects.select_related("rota", "venda", "venda__cliente")
+        EntregaRotaItem.objects.select_related("rota", "venda", "venda__cliente", "origem_pendencia")
         .prefetch_related("checklist_itens__item_venda__produto")
         .order_by("-rota__data", "-rota_id", "ordem_entrega", "id")
     )
 
     for item_rota in itens_rota:
+        checklists = checklists_validos_rota_item(item_rota)
+        itens_pendentes = [checklist for checklist in checklists if not checklist.entregue]
         entrega_salva = checklist_fase_salva(item_rota, "entrega")
         entrega_processada = (
             entrega_salva
@@ -150,11 +186,9 @@ def listar_pendencias_entrega(limite=None):
                 EntregaRotaItem.STATUS_CANCELADA,
             }
         )
-        if not entrega_processada:
+        if not entrega_processada and not (item_rota.is_pendencia and itens_pendentes):
             continue
 
-        checklists = list(item_rota.checklist_itens.all())
-        itens_pendentes = [checklist for checklist in checklists if not checklist.entregue]
         if not itens_pendentes and item_rota.status not in {
             EntregaRotaItem.STATUS_PARCIAL,
             EntregaRotaItem.STATUS_CANCELADA,
@@ -164,26 +198,51 @@ def listar_pendencias_entrega(limite=None):
         if itens_pendentes:
             for checklist in itens_pendentes:
                 item_venda = checklist.item_venda
+                if (
+                    not item_rota.is_pendencia
+                    and (item_rota.id, item_venda.id if item_venda else None) in pendencias_reprogramadas
+                ):
+                    continue
+                cliente = item_rota.venda.cliente
                 produto = item_venda.produto.nome if item_venda and item_venda.produto else "Produto nao identificado"
                 pendencias.append({
-                    "cliente": item_rota.venda.cliente.nome if item_rota.venda.cliente else "Consumidor",
+                    "id": checklist.id,
+                    "item_rota_id": item_rota.id,
+                    "item_venda_id": item_venda.id if item_venda else "",
+                    "cliente": cliente.nome if cliente else "Consumidor",
                     "venda": item_rota.venda,
                     "rota": item_rota.rota,
                     "data": item_rota.rota.data,
                     "produto": produto,
                     "quantidade": item_venda.quantidade if item_venda else "",
                     "unidade": item_venda.unidade if item_venda else "",
+                    "localidade": (
+                        f"{cliente.bairro or ''} {cliente.cidade or ''}".strip()
+                        if cliente
+                        else ""
+                    ),
+                    "origem": f"Venda #{item_rota.venda_id} - Rota #{item_rota.rota_id}",
                     "status": "Item nao entregue",
                 })
         else:
+            cliente = item_rota.venda.cliente
             pendencias.append({
-                "cliente": item_rota.venda.cliente.nome if item_rota.venda.cliente else "Consumidor",
+                "id": "",
+                "item_rota_id": item_rota.id,
+                "item_venda_id": "",
+                "cliente": cliente.nome if cliente else "Consumidor",
                 "venda": item_rota.venda,
                 "rota": item_rota.rota,
                 "data": item_rota.rota.data,
                 "produto": "",
                 "quantidade": "",
                 "unidade": "",
+                "localidade": (
+                    f"{cliente.bairro or ''} {cliente.cidade or ''}".strip()
+                    if cliente
+                    else ""
+                ),
+                "origem": f"Venda #{item_rota.venda_id} - Rota #{item_rota.rota_id}",
                 "status": item_rota.get_status_display(),
             })
 
@@ -191,6 +250,118 @@ def listar_pendencias_entrega(limite=None):
             return pendencias[:limite]
 
     return pendencias
+
+
+def pendencias_sugeriveis_entrega():
+    return [pendencia for pendencia in listar_pendencias_entrega() if pendencia.get("id")]
+
+
+def pendencias_checklist_validas(checklist_ids):
+    ids = [int(checklist_id) for checklist_id in checklist_ids if str(checklist_id).isdigit()]
+    if not ids:
+        return []
+    ids_selecionados = set(ids)
+
+    checklists = (
+        EntregaChecklistItem.objects.filter(pk__in=ids, entregue=False)
+        .select_related(
+            "item_venda",
+            "item_venda__produto",
+            "rota_item",
+            "rota_item__rota",
+            "rota_item__venda",
+            "rota_item__venda__cliente",
+        )
+        .order_by("rota_item__rota__data", "rota_item_id", "item_venda_id")
+    )
+    pendencias_disponiveis = {
+        pendencia["id"]
+        for pendencia in pendencias_sugeriveis_entrega()
+    }
+    return [
+        checklist
+        for checklist in checklists
+        if checklist.id in ids_selecionados and checklist.id in pendencias_disponiveis
+    ]
+
+
+def resumo_pendencia_rota_item(item_rota):
+    if not item_rota.is_pendencia:
+        return ""
+
+    partes = []
+    checklists = getattr(item_rota, "checklists_ordenados", None)
+    if checklists is None:
+        checklists = checklists_validos_rota_item(item_rota)
+
+    for checklist in checklists:
+        item_venda = checklist.item_venda
+        produto = item_venda.produto.nome if item_venda and item_venda.produto else "Produto nao identificado"
+        quantidade = item_venda.quantidade if item_venda else ""
+        unidade = item_venda.unidade if item_venda else ""
+        partes.append(f"{produto} / {quantidade} {unidade}".strip())
+
+    return "; ".join(partes)
+
+
+def item_venda_ids_pendencia_origem(item_rota):
+    if not item_rota.is_pendencia or not item_rota.origem_pendencia_id:
+        return None
+
+    origem = item_rota.origem_pendencia
+    if not origem.is_pendencia:
+        return None
+
+    ids_origem = item_venda_ids_pendencia_origem(origem)
+    if ids_origem is not None:
+        return ids_origem
+
+    return set(origem.checklist_itens.values_list("item_venda_id", flat=True))
+
+
+def checklists_validos_rota_item(item_rota):
+    checklists = list(item_rota.checklist_itens.all())
+    item_venda_ids_validos = item_venda_ids_pendencia_origem(item_rota)
+    if item_venda_ids_validos is None:
+        return checklists
+
+    return [
+        checklist
+        for checklist in checklists
+        if checklist.item_venda_id in item_venda_ids_validos
+    ]
+
+
+def chave_cliente_entrega(venda):
+    if venda and venda.cliente_id:
+        return f"cliente:{venda.cliente_id}"
+    return f"venda:{venda.id if venda else ''}"
+
+
+def checklists_pendencia_unicos(checklists):
+    checklists_unicos = []
+    item_venda_ids = set()
+    for checklist in checklists:
+        if checklist.item_venda_id in item_venda_ids:
+            continue
+        checklists_unicos.append(checklist)
+        item_venda_ids.add(checklist.item_venda_id)
+    return checklists_unicos
+
+
+def checklists_pendencia_selecionados(checklists, ids_selecionados):
+    return [
+        checklist
+        for checklist in checklists_pendencia_unicos(checklists)
+        if checklist.id in ids_selecionados and not checklist.entregue
+    ]
+
+
+def ordem_postada(valor, padrao=9999):
+    try:
+        return int(valor or padrao)
+    except (TypeError, ValueError):
+        return padrao
 
 
 def home(request):
@@ -974,8 +1145,15 @@ def entregas_dia(request):
                 for venda_id in request.POST.getlist("vendas_rota")
                 if venda_id.strip().isdigit()
             ]
+            pendencia_ids = [
+                pendencia_id.strip()
+                for pendencia_id in request.POST.getlist("pendencias_rota")
+                if pendencia_id.strip().isdigit()
+            ]
+            pendencia_ids_selecionados = {int(pendencia_id) for pendencia_id in pendencia_ids}
+            pendencias_selecionadas = pendencias_checklist_validas(pendencia_ids)
             vendas = list(Venda.objects.filter(pk__in=venda_ids).select_related("cliente"))
-            if not vendas:
+            if not vendas and not pendencias_selecionadas:
                 messages.warning(request, "Selecione pelo menos uma venda para criar a rota.", extra_tags="rota-entrega")
                 return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}")
 
@@ -985,10 +1163,7 @@ def entregas_dia(request):
                 venda = vendas_por_id.get(str(venda_id))
                 if not venda:
                     continue
-                try:
-                    ordem = int(request.POST.get(f"ordem_{venda_id}") or "9999")
-                except ValueError:
-                    ordem = 9999
+                ordem = ordem_postada(request.POST.get(f"ordem_{venda_id}"))
                 ordenadas.append((ordem, venda.id, venda))
 
             ordenadas.sort(key=lambda item: (item[0], item[1]))
@@ -999,21 +1174,116 @@ def entregas_dia(request):
                 if observacao:
                     observacao_rota = f"{observacao_rota}\n{observacao}"
 
+            ordem_por_pendencia = {}
+            for pendencia_id in pendencia_ids:
+                ordem_por_pendencia[int(pendencia_id)] = ordem_postada(
+                    request.POST.get(f"ordem_pendencia_{pendencia_id}")
+                )
+
+            pendencias_por_venda = {}
+            for checklist in pendencias_selecionadas:
+                if checklist.id not in pendencia_ids_selecionados:
+                    continue
+                pendencias_por_venda.setdefault(checklist.rota_item.venda_id, {
+                    "ordem": ordem_por_pendencia.get(checklist.id, 9999),
+                    "checklists": [],
+                })
+                grupo = pendencias_por_venda[checklist.rota_item.venda_id]
+                grupo["ordem"] = min(grupo["ordem"], ordem_por_pendencia.get(checklist.id, 9999))
+                grupo["checklists"].append(checklist)
+
+            pendencias_por_cliente = {}
+            for venda_id_pendencia, dados_pendencia in pendencias_por_venda.items():
+                checklists = dados_pendencia["checklists"]
+                origem = checklists[0].rota_item
+                chave_cliente = chave_cliente_entrega(origem.venda)
+                pendencias_por_cliente.setdefault(chave_cliente, []).append((
+                    dados_pendencia["ordem"],
+                    venda_id_pendencia,
+                    checklists,
+                ))
+            for pendencias_cliente in pendencias_por_cliente.values():
+                pendencias_cliente.sort(key=lambda item: (item[0], item[1]))
+
+            clientes_com_venda_normal = {
+                chave_cliente_entrega(venda)
+                for _, __, venda in ordenadas
+            }
+            itens_ordenaveis = [
+                (ordem, venda_id, "normal", venda, None)
+                for ordem, venda_id, venda in ordenadas
+            ]
+            for venda_id_pendencia, dados_pendencia in pendencias_por_venda.items():
+                checklists = dados_pendencia["checklists"]
+                venda_pendencia = checklists[0].rota_item.venda
+                if chave_cliente_entrega(venda_pendencia) in clientes_com_venda_normal:
+                    continue
+                itens_ordenaveis.append((
+                    dados_pendencia["ordem"],
+                    venda_id_pendencia,
+                    "pendencia",
+                    venda_pendencia,
+                    checklists,
+                ))
+
+            itens_ordenaveis.sort(key=lambda item: (item[0], item[1]))
+            sequencia_rota = []
+            for indice_item, (_, __, tipo_item, venda, checklists) in enumerate(itens_ordenaveis):
+                sequencia_rota.append((tipo_item, venda, checklists))
+                if tipo_item != "normal":
+                    continue
+
+                chave_cliente = chave_cliente_entrega(venda)
+                tem_outra_venda_cliente = any(
+                    tipo_futuro == "normal"
+                    and chave_cliente_entrega(venda_futura) == chave_cliente
+                    for _, __, tipo_futuro, venda_futura, ___ in itens_ordenaveis[indice_item + 1:]
+                )
+                if tem_outra_venda_cliente:
+                    continue
+                for _, ___, checklists_pendencia in pendencias_por_cliente.get(chave_cliente, []):
+                    sequencia_rota.append(("pendencia", checklists_pendencia[0].rota_item.venda, checklists_pendencia))
+
             with transaction.atomic():
                 rota = EntregaRota.objects.create(
                     data=data_entrega,
                     tipo=EntregaRota.TIPO_ROTA,
                     observacao=observacao_rota,
                 )
-                EntregaRotaItem.objects.bulk_create([
-                    EntregaRotaItem(
+                for ordem_entrega, (tipo_item, venda, checklists_origem) in enumerate(sequencia_rota, start=1):
+                    if tipo_item == "normal":
+                        EntregaRotaItem.objects.create(
+                            rota=rota,
+                            venda=venda,
+                            ordem_entrega=ordem_entrega,
+                        )
+                        continue
+
+                    checklists_para_criar = checklists_pendencia_selecionados(
+                        checklists_origem,
+                        pendencia_ids_selecionados,
+                    )
+                    if not checklists_para_criar:
+                        continue
+
+                    origem = checklists_origem[0].rota_item
+                    item_pendencia = EntregaRotaItem.objects.create(
                         rota=rota,
                         venda=venda,
-                        ordem_entrega=indice,
+                        ordem_entrega=ordem_entrega,
+                        is_pendencia=True,
+                        origem_pendencia=origem,
+                        observacao=(
+                            f"Pendencia incluida da rota #{origem.rota_id} "
+                            f"em {origem.rota.data:%d/%m/%Y}."
+                        ),
                     )
-                    for indice, (_, __, venda) in enumerate(ordenadas, start=1)
-                ])
-            messages.success(request, f"Rota #{rota.id} criada com {len(ordenadas)} entrega(s).", extra_tags="rota-entrega")
+                    EntregaChecklistItem.objects.bulk_create([
+                        EntregaChecklistItem(rota_item=item_pendencia, item_venda=checklist.item_venda)
+                        for checklist in checklists_para_criar
+                    ])
+            total_entregas = len(sequencia_rota)
+            messages.success(request, f"Rota #{rota.id} criada com {total_entregas} entrega(s).", extra_tags="rota-entrega")
             return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}&rota_criada={rota.id}#rota-{rota.id}")
 
     vendas_lista = list(
@@ -1037,16 +1307,16 @@ def entregas_dia(request):
 
     rotas = list(
         EntregaRota.objects.filter(data=data_entrega)
-        .prefetch_related("itens__venda__cliente", "itens__checklist_itens")
+        .prefetch_related("itens__venda__cliente", "itens__checklist_itens__item_venda__produto")
         .order_by("-id")
     )
     for rota in rotas:
         itens = list(rota.itens.all())
+        for item in itens:
+            item.resumo_pendencia = resumo_pendencia_rota_item(item)
         rota.itens_entrega = itens
         rota.itens_carregamento = list(reversed(itens))
-        # Adicionar checklist_url para cada rota
-        checklist_path = reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota.id})
-        checklist_base_url = getattr(settings, "CHECKLIST_BASE_URL", "").rstrip("/")
+        rota.checklist_path = reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota.id})
         rota.checklist_url = montar_checklist_url(request, rota.id)
         rota.pode_excluir = rota_pode_ser_excluida(rota)
 
@@ -1061,6 +1331,7 @@ def entregas_dia(request):
             "funcionarios_habilitados": Funcionario.habilitados_para_checklist(),
             "rota_criada_id": request.GET.get("rota_criada", ""),
             "total_pendencias_entrega": len(listar_pendencias_entrega()),
+            "pendencias_sugeridas": pendencias_sugeriveis_entrega(),
         },
     )
 
@@ -1118,10 +1389,17 @@ def entrega_rota_excluir(request, pk):
 
 def entrega_rota_detalhe(request, pk):
     rota = get_object_or_404(
-        EntregaRota.objects.prefetch_related("itens__venda__cliente", "itens__venda__itens__produto"),
+        EntregaRota.objects.prefetch_related(
+            "itens__venda__cliente",
+            "itens__venda__itens__produto",
+            "itens__checklist_itens__item_venda__produto",
+        ),
         pk=pk,
     )
     itens_entrega = list(rota.itens.all())
+    for item_rota in itens_entrega:
+        item_rota.checklists_ordenados = checklists_validos_rota_item(item_rota)
+        item_rota.resumo_pendencia = resumo_pendencia_rota_item(item_rota)
     itens_carregamento = list(reversed(itens_entrega))
     checklist_url = montar_checklist_url(request, rota.id)
 
@@ -1140,7 +1418,11 @@ def entrega_rota_detalhe(request, pk):
 
 def entrega_rota_checklist(request, pk):
     rota = get_object_or_404(
-        EntregaRota.objects.prefetch_related("itens__venda__cliente", "itens__venda__itens__produto", "itens__checklist_itens"),
+        EntregaRota.objects.prefetch_related(
+            "itens__venda__cliente",
+            "itens__venda__itens__produto",
+            "itens__checklist_itens",
+        ),
         pk=pk,
     )
     itens_entrega = list(rota.itens.all())
@@ -1155,10 +1437,20 @@ def entrega_rota_checklist(request, pk):
             novos = [
                 EntregaChecklistItem(rota_item=item_rota, item_venda=item_venda)
                 for item_venda in itens_venda
-                if item_venda.id not in existentes
+                if item_venda.id not in existentes and not item_rota.is_pendencia
             ]
             if novos:
                 EntregaChecklistItem.objects.bulk_create(novos)
+
+    rota = get_object_or_404(
+        EntregaRota.objects.prefetch_related(
+            "itens__venda__cliente",
+            "itens__venda__itens__produto",
+            "itens__checklist_itens__item_venda__produto",
+        ),
+        pk=pk,
+    )
+    itens_entrega = list(rota.itens.all())
 
     if request.method == "POST":
         bloco_salvo = request.POST.get("salvar_bloco") or request.POST.get("salvar_bloco_alvo", "")
@@ -1170,7 +1462,13 @@ def entrega_rota_checklist(request, pk):
         if bloco_valido:
             rota_item_ids = [int(bloco_rota_item_id)]
 
-        checklist_qs = EntregaChecklistItem.objects.filter(rota_item_id__in=rota_item_ids)
+        checklists_validos_ids = set()
+        for item_rota in itens_entrega:
+            if item_rota.id in rota_item_ids:
+                checklists_validos_ids.update(
+                    checklist.id for checklist in checklists_validos_rota_item(item_rota)
+                )
+        checklist_qs = EntregaChecklistItem.objects.filter(pk__in=checklists_validos_ids)
 
         for checklist in checklist_qs:
             if bloco_fase == "carregamento":
@@ -1204,7 +1502,11 @@ def entrega_rota_checklist(request, pk):
         return redirect(redirect_url)
 
     rota = get_object_or_404(
-        EntregaRota.objects.prefetch_related("itens__venda__cliente", "itens__venda__itens__produto", "itens__checklist_itens__item_venda"),
+        EntregaRota.objects.prefetch_related(
+            "itens__venda__cliente",
+            "itens__venda__itens__produto",
+            "itens__checklist_itens__item_venda__produto",
+        ),
         pk=pk,
     )
     itens_entrega = list(rota.itens.all())
@@ -1221,15 +1523,17 @@ def entrega_rota_checklist(request, pk):
     for item_rota in itens_entrega:
         item_rota.salvo_carregamento = salvo_item_id == str(item_rota.id) and salvo_fase == "carregamento"
         item_rota.salvo_entrega = salvo_item_id == str(item_rota.id) and salvo_fase == "entrega"
+        checklists_validos = checklists_validos_rota_item(item_rota)
         item_rota.checklists_por_item = {
             checklist.item_venda_id: checklist
-            for checklist in item_rota.checklist_itens.all()
+            for checklist in checklists_validos
         }
         item_rota.checklists_ordenados = [
             item_rota.checklists_por_item.get(item_venda.id)
             for item_venda in item_rota.venda.itens.all()
             if item_rota.checklists_por_item.get(item_venda.id)
         ]
+        item_rota.resumo_pendencia = resumo_pendencia_rota_item(item_rota)
         item_rota.carregamento_salvo = checklist_fase_salva(item_rota, "carregamento")
         item_rota.entrega_salva = checklist_fase_salva(item_rota, "entrega")
         item_rota.carregamento_completo = (
@@ -1269,7 +1573,7 @@ def entrega_rota_checklist(request, pk):
 
     itens_entrega = sorted(
         itens_entrega,
-        key=lambda item_rota: (item_rota.entrega_conferida, item_rota.ordem_entrega, item_rota.id),
+        key=lambda item_rota: (item_rota.ordem_entrega, item_rota.id),
     )
     itens_entrega_pendentes = [
         item_rota for item_rota in itens_entrega if not item_rota.entrega_conferida
@@ -1279,11 +1583,7 @@ def entrega_rota_checklist(request, pk):
     ]
     itens_carregamento = sorted(
         itens_entrega,
-        key=lambda item_rota: (
-            item_rota.carregamento_conferido,
-            -item_rota.ordem_entrega,
-            -item_rota.id,
-        ),
+        key=lambda item_rota: (-item_rota.ordem_entrega, -item_rota.id),
     )
     itens_carregamento_pendentes = [
         item_rota for item_rota in itens_carregamento if not item_rota.carregamento_conferido
@@ -1293,7 +1593,7 @@ def entrega_rota_checklist(request, pk):
     ]
 
     for item_rota in itens_entrega:
-        item_rota.checklist_url = montar_checklist_cliente_url(request, rota.id, item_rota.venda_id)
+        item_rota.checklist_url = montar_checklist_cliente_url(request, rota.id, item_rota.venda_id, item_rota.id)
 
     return render(
         request,
@@ -1314,14 +1614,16 @@ def entrega_rota_checklist(request, pk):
     )
 
 
-def entrega_rota_checklist_cliente(request, rota_id, venda_id):
-    item_rota = get_object_or_404(
-        EntregaRotaItem.objects.select_related("rota", "venda", "venda__cliente").prefetch_related(
-            "checklist_itens__item_venda__produto", "venda__itens__produto"
-        ),
-        rota_id=rota_id,
-        venda_id=venda_id,
+def entrega_rota_checklist_cliente(request, rota_id, venda_id=None, rota_item_id=None):
+    item_rota_qs = EntregaRotaItem.objects.select_related("rota", "venda", "venda__cliente").prefetch_related(
+        "checklist_itens__item_venda__produto", "venda__itens__produto"
     )
+    if rota_item_id:
+        item_rota = get_object_or_404(item_rota_qs, rota_id=rota_id, pk=rota_item_id)
+    else:
+        item_rota = item_rota_qs.filter(rota_id=rota_id, venda_id=venda_id).order_by("is_pendencia", "id").first()
+        if not item_rota:
+            raise Http404("Checklist do cliente nao encontrado.")
 
     with transaction.atomic():
         itens_venda = list(item_rota.venda.itens.all())
@@ -1332,14 +1634,15 @@ def entrega_rota_checklist_cliente(request, rota_id, venda_id):
         novos = [
             EntregaChecklistItem(rota_item=item_rota, item_venda=item_venda)
             for item_venda in itens_venda
-            if item_venda.id not in existentes
+            if item_venda.id not in existentes and not item_rota.is_pendencia
         ]
         if novos:
             EntregaChecklistItem.objects.bulk_create(novos)
 
+    checklists_validos = checklists_validos_rota_item(item_rota)
     checklists = {
         checklist.item_venda_id: checklist
-        for checklist in item_rota.checklist_itens.select_related("item_venda__produto").all()
+        for checklist in checklists_validos
     }
 
     itens = []
@@ -1378,7 +1681,7 @@ def entrega_rota_checklist_cliente(request, rota_id, venda_id):
             "cliente": item_rota.venda.cliente,
             "itens": itens,
             "final_statuses": final_statuses,
-            "checklist_url": montar_checklist_cliente_url(request, rota_id, venda_id),
+            "checklist_url": montar_checklist_cliente_url(request, rota_id, item_rota.venda_id, item_rota.id),
         },
     )
 

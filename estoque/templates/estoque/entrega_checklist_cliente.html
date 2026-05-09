@@ -5,6 +5,7 @@
   .check-page { min-height: 100vh; background: #f4f6f9; color: #172033; padding: 16px 0 56px; }
   .check-shell { width: min(720px, calc(100vw - 16px)); margin: 0 auto; }
   .check-header, .check-section { background: #ffffff; border: 1px solid #e0e7ef; border-radius: 14px; box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06); padding: 16px; margin-bottom: 14px; }
+  .check-header.is-pendencia, .check-section.is-pendencia { border-color: #f1d48a; background: #fffaf0; }
   .check-title { margin: 0 0 8px; color: #111827; font-size: clamp(1.2rem, 5vw, 1.45rem); font-weight: 900; line-height: 1.15; }
   .check-subtitle { margin: 0 0 10px; color: #475569; font-size: 0.95rem; font-weight: 700; line-height: 1.4; }
   .check-meta { margin: 8px 0 0; color: #475569; font-size: 0.9rem; line-height: 1.4; }
@@ -43,14 +44,14 @@
 </style>
 <main class="check-page">
   <div class="check-shell">
-    <header class="check-header">
+    <header class="check-header{% if item_rota.is_pendencia %} is-pendencia{% endif %}">
       <h1 class="check-title">Checklist de entrega</h1>
-      <p class="check-subtitle">Venda #{{ venda.id }}{% if venda.total and venda.total|floatformat:2 != '0,00' %} · R$ {{ venda.total|floatformat:2 }}{% endif %}</p>
+      <p class="check-subtitle">{% if item_rota.is_pendencia %}Pendência - {% endif %}Venda #{{ venda.id }}{% if venda.total and venda.total|floatformat:2 != '0,00' %} · R$ {{ venda.total|floatformat:2 }}{% endif %}</p>
       <p class="check-meta">Cliente: {{ cliente.nome|default:"Consumidor" }}</p>
       <p class="check-meta">Data da entrega: {{ rota.data|date:"d/m/Y" }}</p>
     </header>
 
-    <section class="check-section">
+    <section class="check-section{% if item_rota.is_pendencia %} is-pendencia{% endif %}">
       <h2 class="check-section-title">Itens da venda</h2>
       <div class="check-item-list">
         {% for item in itens %}

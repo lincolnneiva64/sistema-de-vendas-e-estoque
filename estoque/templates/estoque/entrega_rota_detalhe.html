@@ -116,10 +116,17 @@
   .ordem-subtitle { margin: 3px 0 0; color: #64748b; font-size: 0.78rem; font-weight: 750; }
   .ordem-lista { margin: 0; padding: 10px 12px 10px 34px; }
   .ordem-lista li { margin-bottom: 8px; font-size: 0.9rem; font-weight: 800; }
+  .ordem-lista li.is-pendencia {
+    margin-left: -8px; padding: 7px 9px; border: 1px solid #f1d48a; border-radius: 9px;
+    background: #fffaf0;
+  }
   .ordem-cliente { color: #172033; }
   .ordem-venda { color: #64748b; font-size: 0.78rem; font-weight: 750; }
   .venda-detalhe {
     border: 1px solid #dbe5f0; border-radius: 12px; overflow: hidden; background: #fff;
+  }
+  .venda-detalhe.is-pendencia {
+    border-color: #f1d48a; background: #fffaf0; box-shadow: inset 3px 0 0 #d69e2e;
   }
   .venda-detalhe + .venda-detalhe { margin-top: 10px; }
   .venda-detalhe-head {
@@ -250,9 +257,9 @@
             </div>
             <ol class="ordem-lista">
               {% for item in itens_entrega %}
-                <li>
-                  <div class="ordem-cliente">{{ item.venda.cliente.nome|default:"Consumidor" }}</div>
-                  <div class="ordem-venda">Venda #{{ item.venda.id }} - R$ {{ item.venda.total|floatformat:2 }}</div>
+                <li{% if item.is_pendencia %} class="is-pendencia"{% endif %}>
+                  <div class="ordem-cliente">{% if item.is_pendencia %}Pendência - {% endif %}{{ item.venda.cliente.nome|default:"Consumidor" }}</div>
+                  <div class="ordem-venda">{% if item.is_pendencia and item.resumo_pendencia %}{{ item.resumo_pendencia }}{% else %}Venda #{{ item.venda.id }} - R$ {{ item.venda.total|floatformat:2 }}{% endif %}</div>
                 </li>
               {% empty %}
                 <li>Nenhuma venda nesta entrega.</li>
@@ -266,9 +273,9 @@
             </div>
             <ol class="ordem-lista">
               {% for item in itens_carregamento %}
-                <li>
-                  <div class="ordem-cliente">{{ item.venda.cliente.nome|default:"Consumidor" }}</div>
-                  <div class="ordem-venda">Venda #{{ item.venda.id }} - R$ {{ item.venda.total|floatformat:2 }}</div>
+                <li{% if item.is_pendencia %} class="is-pendencia"{% endif %}>
+                  <div class="ordem-cliente">{% if item.is_pendencia %}Pendência - {% endif %}{{ item.venda.cliente.nome|default:"Consumidor" }}</div>
+                  <div class="ordem-venda">{% if item.is_pendencia and item.resumo_pendencia %}{{ item.resumo_pendencia }}{% else %}Venda #{{ item.venda.id }} - R$ {{ item.venda.total|floatformat:2 }}{% endif %}</div>
                 </li>
               {% empty %}
                 <li>Nenhuma venda nesta entrega.</li>
@@ -285,15 +292,36 @@
       </div>
       <div class="rota-card-body">
         {% for item_rota in itens_entrega %}
-          <article class="venda-detalhe">
+          <article class="venda-detalhe{% if item_rota.is_pendencia %} is-pendencia{% endif %}">
             <div class="venda-detalhe-head">
               <div>
-                <h3 class="venda-detalhe-title">{{ item_rota.venda.cliente.nome|default:"Consumidor" }} - Venda #{{ item_rota.venda.id }}</h3>
-                <div class="venda-detalhe-meta">Ordem {{ item_rota.ordem_entrega }} - Total R$ {{ item_rota.venda.total|floatformat:2 }}</div>
+                <h3 class="venda-detalhe-title">{% if item_rota.is_pendencia %}Pendência - {% endif %}{{ item_rota.venda.cliente.nome|default:"Consumidor" }} - Venda #{{ item_rota.venda.id }}</h3>
+                <div class="venda-detalhe-meta">Ordem {{ item_rota.ordem_entrega }}{% if item_rota.is_pendencia and item_rota.resumo_pendencia %} - {{ item_rota.resumo_pendencia }}{% else %} - Total R$ {{ item_rota.venda.total|floatformat:2 }}{% endif %}</div>
               </div>
               <a class="rota-btn primary" href="{% url 'estoque:venda_detalhe' item_rota.venda.id %}?entrega={{ rota.id }}">Abrir nota</a>
             </div>
-            {% if item_rota.venda.itens.all %}
+            {% if item_rota.is_pendencia and item_rota.checklists_ordenados %}
+              <table class="itens-table">
+                <thead>
+                  <tr>
+                    <th>Produto pendente</th>
+                    <th class="numero">Quantidade</th>
+                    <th>Unidade</th>
+                    <th class="numero">Valor total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for checklist in item_rota.checklists_ordenados %}
+                    <tr>
+                      <td>{{ checklist.item_venda.produto.nome|default:"Produto nao identificado" }}</td>
+                      <td class="numero">{{ checklist.item_venda.quantidade }}</td>
+                      <td>{{ checklist.item_venda.unidade }}</td>
+                      <td class="numero">R$ {{ checklist.item_venda.valor_total|floatformat:2 }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% elif item_rota.venda.itens.all %}
               <table class="itens-table">
                 <thead>
                   <tr>

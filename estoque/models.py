@@ -460,12 +460,20 @@ class EntregaRotaItem(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDENTE)
     conferido_cliente = models.BooleanField(default=False)
     entrega_concluida = models.BooleanField(default=False)
+    is_pendencia = models.BooleanField(default=False)
+    origem_pendencia = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="reentregas_pendencia",
+    )
     observacao = models.TextField(blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["ordem_entrega", "id"]
-        unique_together = [("rota", "venda")]
+        unique_together = [("rota", "venda", "is_pendencia")]
 
     def __str__(self):
         return f"Entrega #{self.rota_id} - Venda #{self.venda_id}"

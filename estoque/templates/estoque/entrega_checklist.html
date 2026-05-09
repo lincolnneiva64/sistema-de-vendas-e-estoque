@@ -28,6 +28,9 @@
     border: 1px solid #e5edf5; border-radius: 9px; background: #fcfdff;
     padding: 7px 9px; color: #172033; font-size: 0.88rem; font-weight: 850; line-height: 1.2;
   }
+  .route-client-item.is-pendencia {
+    border-color: #f1d48a; background: #fffaf0; color: #6f4e00;
+  }
   .route-client-meta { flex: 0 0 auto; color: #64748b; font-size: 0.76rem; font-weight: 800; }
   .check-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
   .check-btn {
@@ -135,6 +138,11 @@
     background: #fffdf5;
     box-shadow: inset 3px 0 0 #f59e0b, 0 6px 14px rgba(180, 83, 9, 0.06);
   }
+  .check-stop.is-pendencia {
+    border-color: #f1d48a;
+    background: #fffaf0;
+    box-shadow: inset 3px 0 0 #d69e2e, 0 6px 14px rgba(146, 64, 14, 0.05);
+  }
   .check-stop.is-locked .check-row,
   .check-stop.is-locked .check-control { cursor: default; opacity: 0.82; }
   .check-stop.is-locked [data-save-button] { display: none; }
@@ -154,6 +162,9 @@
   }
   .check-stop-badge.warning {
     border-color: #f7d98b; background: #fef3c7; color: #92400e;
+  }
+  .check-stop-badge.pendencia {
+    border-color: #f1d48a; background: #fef3c7; color: #7c4a03;
   }
   .check-lock-note {
     margin: 8px 0 0; color: #166534; background: #f0fdf4; border: 1px solid #bbf7d0;
@@ -249,14 +260,14 @@
         <h2 id="routeSummaryTitle" class="route-summary-title">Clientes da entrega</h2>
         <ul class="route-client-list">
           {% for item_rota in itens_entrega_pendentes %}
-            <li class="route-client-item">
-              <span>{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</span>
+            <li class="route-client-item{% if item_rota.is_pendencia %} is-pendencia{% endif %}">
+              <span>{% if item_rota.is_pendencia %}Pendência - {% endif %}{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</span>
               <span class="route-client-meta">Venda #{{ item_rota.venda.id }} - ordem {{ item_rota.ordem_entrega }}</span>
             </li>
           {% endfor %}
           {% for item_rota in itens_entrega_conferidos %}
-            <li class="route-client-item">
-              <span>{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</span>
+            <li class="route-client-item{% if item_rota.is_pendencia %} is-pendencia{% endif %}">
+              <span>{% if item_rota.is_pendencia %}Pendência - {% endif %}{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</span>
               <span class="route-client-meta">Venda #{{ item_rota.venda.id }} - conferida</span>
             </li>
           {% endfor %}
@@ -303,9 +314,11 @@
         <p class="check-section-note">Carregar no carro nesta ordem. Ultima entrega entra primeiro. Marque os itens conforme entram no carro.</p>
       </div>
       {% for item_rota in itens_carregamento_pendentes %}
-        <article id="bloco-{{ item_rota.id }}-carregamento" class="check-stop{% if item_rota.carregamento_conferido %} is-conferido is-locked{% endif %}{% if item_rota.carregamento_pendente_salva %} is-pendente-salva{% endif %}"{% if item_rota.carregamento_conferido %} data-locked-block="true"{% endif %}>
-          <h3 class="check-stop-title">{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</h3>
+        <article id="bloco-{{ item_rota.id }}-carregamento" class="check-stop{% if item_rota.is_pendencia %} is-pendencia{% endif %}{% if item_rota.carregamento_conferido %} is-conferido is-locked{% endif %}{% if item_rota.carregamento_pendente_salva %} is-pendente-salva{% endif %}"{% if item_rota.carregamento_conferido %} data-locked-block="true"{% endif %}>
+          <h3 class="check-stop-title">{% if item_rota.is_pendencia %}Pendência - {% endif %}{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</h3>
+          {% if item_rota.is_pendencia %}<span class="check-stop-badge pendencia">Pendência</span>{% endif %}
           <div class="check-stop-meta">Venda #{{ item_rota.venda.id }} - R$ {{ item_rota.venda.total|floatformat:2 }} - entrega ordem {{ item_rota.ordem_entrega }}</div>
+          {% if item_rota.is_pendencia and item_rota.resumo_pendencia %}<div class="check-stop-meta">{{ item_rota.resumo_pendencia }}</div>{% endif %}
           {% if item_rota.carregamento_conferido %}
             {% if item_rota.carregamento_pendente_salva %}
             <span class="check-stop-badge warning">Checklist salvo com pendência</span>
@@ -354,7 +367,7 @@
       {% for item_rota in itens_entrega_pendentes %}
         <article
           id="bloco-{{ item_rota.id }}-entrega"
-          class="check-stop{% if item_rota.entrega_conferida %} is-conferido is-locked{% endif %}{% if item_rota.entrega_pendente_salva %} is-pendente-salva{% endif %}"
+          class="check-stop{% if item_rota.is_pendencia %} is-pendencia{% endif %}{% if item_rota.entrega_conferida %} is-conferido is-locked{% endif %}{% if item_rota.entrega_pendente_salva %} is-pendente-salva{% endif %}"
           data-cliente-nome="{{ item_rota.venda.cliente.nome|default:'Consumidor' }}"
           data-venda-id="{{ item_rota.venda.id }}"
           data-rota-id="{{ rota.id }}"
@@ -366,8 +379,10 @@
           data-confirmar-url="{% url 'estoque:confirmar_checklist_whatsapp' item_rota.venda.id %}"
           {% if item_rota.entrega_conferida %}data-locked-block="true"{% endif %}
         >
-          <h3 class="check-stop-title">{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</h3>
+          <h3 class="check-stop-title">{% if item_rota.is_pendencia %}Pendência - {% endif %}{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</h3>
+          {% if item_rota.is_pendencia %}<span class="check-stop-badge pendencia">Pendência</span>{% endif %}
           <div class="check-stop-meta">Venda #{{ item_rota.venda.id }} - R$ {{ item_rota.venda.total|floatformat:2 }}</div>
+          {% if item_rota.is_pendencia and item_rota.resumo_pendencia %}<div class="check-stop-meta">{{ item_rota.resumo_pendencia }}</div>{% endif %}
           {% if item_rota.entrega_conferida %}
             {% if item_rota.entrega_pendente_salva %}
             <span class="check-stop-badge warning">Checklist salvo com pendência</span>
@@ -429,7 +444,7 @@
       {% for item_rota in itens_entrega_conferidos %}
         <article
           id="bloco-{{ item_rota.id }}-entrega"
-          class="check-stop{% if item_rota.entrega_conferida %} is-conferido is-locked{% endif %}{% if item_rota.entrega_pendente_salva %} is-pendente-salva{% endif %}"
+          class="check-stop{% if item_rota.is_pendencia %} is-pendencia{% endif %}{% if item_rota.entrega_conferida %} is-conferido is-locked{% endif %}{% if item_rota.entrega_pendente_salva %} is-pendente-salva{% endif %}"
           data-cliente-nome="{{ item_rota.venda.cliente.nome|default:'Consumidor' }}"
           data-venda-id="{{ item_rota.venda.id }}"
           data-rota-id="{{ rota.id }}"
@@ -441,8 +456,10 @@
           data-confirmar-url="{% url 'estoque:confirmar_checklist_whatsapp' item_rota.venda.id %}"
           {% if item_rota.entrega_conferida %}data-locked-block="true"{% endif %}
         >
-          <h3 class="check-stop-title">{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</h3>
+          <h3 class="check-stop-title">{% if item_rota.is_pendencia %}Pendência - {% endif %}{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</h3>
+          {% if item_rota.is_pendencia %}<span class="check-stop-badge pendencia">Pendência</span>{% endif %}
           <div class="check-stop-meta">Venda #{{ item_rota.venda.id }} - R$ {{ item_rota.venda.total|floatformat:2 }}</div>
+          {% if item_rota.is_pendencia and item_rota.resumo_pendencia %}<div class="check-stop-meta">{{ item_rota.resumo_pendencia }}</div>{% endif %}
           {% if item_rota.entrega_conferida %}
             {% if item_rota.entrega_pendente_salva %}
             <span class="check-stop-badge warning">Checklist salvo com pendÃªncia</span>
@@ -507,9 +524,11 @@
         <p class="check-section-note">Clientes ja carregados no carro. Estes blocos ficam no final da tela.</p>
       </div>
       {% for item_rota in itens_carregamento_conferidos %}
-        <article id="bloco-{{ item_rota.id }}-carregamento" class="check-stop{% if item_rota.carregamento_conferido %} is-conferido is-locked{% endif %}{% if item_rota.carregamento_pendente_salva %} is-pendente-salva{% endif %}"{% if item_rota.carregamento_conferido %} data-locked-block="true"{% endif %}>
-          <h3 class="check-stop-title">{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</h3>
+        <article id="bloco-{{ item_rota.id }}-carregamento" class="check-stop{% if item_rota.is_pendencia %} is-pendencia{% endif %}{% if item_rota.carregamento_conferido %} is-conferido is-locked{% endif %}{% if item_rota.carregamento_pendente_salva %} is-pendente-salva{% endif %}"{% if item_rota.carregamento_conferido %} data-locked-block="true"{% endif %}>
+          <h3 class="check-stop-title">{% if item_rota.is_pendencia %}Pendência - {% endif %}{{ item_rota.venda.cliente.nome|default:"Consumidor" }}</h3>
+          {% if item_rota.is_pendencia %}<span class="check-stop-badge pendencia">Pendência</span>{% endif %}
           <div class="check-stop-meta">Venda #{{ item_rota.venda.id }} - R$ {{ item_rota.venda.total|floatformat:2 }} - entrega ordem {{ item_rota.ordem_entrega }}</div>
+          {% if item_rota.is_pendencia and item_rota.resumo_pendencia %}<div class="check-stop-meta">{{ item_rota.resumo_pendencia }}</div>{% endif %}
           {% if item_rota.carregamento_conferido %}
             {% if item_rota.carregamento_pendente_salva %}
             <span class="check-stop-badge warning">Checklist salvo com pendência</span>

@@ -85,6 +85,7 @@
   .entregas-form-feedback.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
   .entregas-form + .entregas-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid #edf1f6; }
   .entregas-form-title { margin: 0 0 8px; color: #172033; font-size: 0.92rem; font-weight: 900; }
+  .rota-form-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
   .entregas-rota-tools {
     display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-bottom: 10px;
   }
@@ -143,6 +144,28 @@
     font-size: 0.72rem; font-weight: 900; padding: 5px 7px; cursor: pointer;
   }
   .rota-preview-empty { margin: 0; color: #64748b; font-size: 0.8rem; font-weight: 800; }
+  .rota-pendencias {
+    display: none; margin: 10px 0; border: 1px solid #fde68a; border-radius: 11px;
+    background: #fffbeb; padding: 10px;
+  }
+  .rota-pendencias.is-visible { display: block; }
+  .rota-pendencias-title { margin: 0 0 8px; color: #92400e; font-size: 0.86rem; font-weight: 950; }
+  .rota-pendencias-list { display: grid; gap: 7px; }
+  .rota-pendencia-item {
+    display: none; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center;
+    border: 1px solid #f7d98b; border-radius: 9px; background: #fff; padding: 8px;
+  }
+  .rota-pendencia-item.is-visible { display: grid; }
+  .rota-pendencia-item.is-selected { border-color: #86efac; background: #f0fdf4; }
+  .rota-pendencia-main { color: #172033; font-size: 0.82rem; font-weight: 850; line-height: 1.25; }
+  .rota-pendencia-meta { display: block; margin-top: 2px; color: #64748b; font-size: 0.75rem; font-weight: 760; }
+  .rota-pendencia-actions { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+  .rota-pendencia-btn {
+    border: 1px solid #bfdbfe; border-radius: 8px; background: #eff6ff; color: #1d4ed8;
+    font-size: 0.72rem; font-weight: 900; padding: 5px 7px; cursor: pointer;
+  }
+  .rota-pendencia-btn.secondary { border-color: #e2e8f0; background: #f8fafc; color: #475569; }
+  .rota-pendencia-btn.is-selected { border-color: #16a34a; background: #16a34a; color: #fff; }
   .rotas-lista { display: grid; gap: 10px; }
   .rota-card { border: 1px solid #dbe5f0; border-radius: 12px; overflow: hidden; background: #fff; }
   .rota-card.is-created {
@@ -168,6 +191,15 @@
   .rota-col h4 { margin: 0 0 8px; color: #1e3a8a; font-size: 0.82rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.03em; }
   .rota-lista { margin: 0; padding-left: 22px; }
   .rota-lista li { margin: 0 0 6px; font-size: 0.84rem; font-weight: 750; }
+  .rota-lista li.is-pendencia {
+    margin-left: -4px; padding: 6px 8px; border: 1px solid #f1d48a; border-radius: 8px;
+    background: #fffaf0; color: #6f4e00;
+  }
+  .rota-pendencia-label {
+    display: inline-flex; margin-right: 4px; padding: 2px 6px; border-radius: 999px;
+    border: 1px solid #f1d48a; background: #fef3c7; color: #7c4a03;
+    font-size: 0.7rem; font-weight: 950;
+  }
   .rota-send-checklist {
     padding: 10px 12px; border-top: 1px solid #edf1f6; background: #f8fafc;
   }
@@ -259,7 +291,7 @@
           <h2 class="entregas-card-title">Preparar entrega</h2>
         </div>
         <div class="entregas-card-body">
-          <form class="entregas-form" method="post" data-create-form="rota">
+          <form class="entregas-form" method="post" data-create-form="rota" autocomplete="off">
             {% csrf_token %}
             <input type="hidden" name="acao" value="rota">
             <input type="hidden" name="data" value="{{ data_entrega|date:'Y-m-d' }}">
@@ -271,6 +303,31 @@
                 <span class="entregas-field-hint">Digite o nome completo da rota. Ex.: Furo da Marinha</span>
               </div>
             </div>
+            {% if pendencias_sugeridas %}
+              <div class="rota-pendencias" data-route-pendencias>
+                <h4 class="rota-pendencias-title">Pendencias sugeridas para esta rota/localidade</h4>
+                <div class="rota-pendencias-list">
+                  {% for pendencia in pendencias_sugeridas %}
+                    <div
+                      class="rota-pendencia-item"
+                      data-pendencia-row
+                      data-pendencia-search="{{ pendencia.localidade }} {{ pendencia.cliente }} {{ pendencia.produto }} {{ pendencia.origem }}"
+                    >
+                      <input type="checkbox" name="pendencias_rota" value="{{ pendencia.id }}" hidden autocomplete="off" data-pendencia-checkbox>
+                      <input type="hidden" name="ordem_pendencia_{{ pendencia.id }}" value="" data-pendencia-order>
+                      <div class="rota-pendencia-main">
+                        {{ pendencia.cliente }} - {{ pendencia.produto }} - {{ pendencia.quantidade }} {{ pendencia.unidade }}
+                        <span class="rota-pendencia-meta">Origem: {{ pendencia.origem }} - {{ pendencia.data|date:"d/m/Y" }}</span>
+                      </div>
+                      <div class="rota-pendencia-actions">
+                        <button type="button" class="rota-pendencia-btn btn-pressionavel" data-pendencia-toggle>Incluir na rota</button>
+                        <button type="button" class="rota-pendencia-btn secondary btn-pressionavel" data-pendencia-ignore>Nao incluir agora</button>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
             {% if vendas %}
               <div class="entregas-table-wrap">
                 <table class="entregas-table" style="min-width: 520px;">
@@ -294,7 +351,7 @@
                       >
                         <td>
                           <label class="entregas-check">
-                            <input type="checkbox" name="vendas_rota" value="{{ venda.id }}" data-route-checkbox>
+                            <input type="checkbox" name="vendas_rota" value="{{ venda.id }}" autocomplete="off" data-route-checkbox>
                             <span>#{{ venda.id }}</span>
                           </label>
                         </td>
@@ -334,7 +391,10 @@
               <label for="obsRota">Observacao</label>
               <textarea id="obsRota" name="observacao" placeholder="Opcional"></textarea>
             </div>
-            <button type="submit" class="entregas-btn success" style="margin-top: 8px;" data-loading-text="Criando rota...">Criar rota</button>
+            <div class="rota-form-actions">
+              <button type="submit" class="entregas-btn success" data-loading-text="Criando rota...">Criar rota</button>
+              <button type="button" class="entregas-btn soft btn-pressionavel" data-route-clear>Limpar rota</button>
+            </div>
           </form>
 
           <form class="entregas-form" method="post" data-create-form="unitaria"{% if messages %}{% for message in messages %}{% if 'entrega-unitaria' in message.tags and 'success' in message.tags %} data-created-success="true"{% endif %}{% endfor %}{% endif %}>
@@ -447,7 +507,7 @@
                       </div>
                       <div class="rota-actions">
                         <a class="entregas-btn soft" href="{% url 'estoque:entrega_rota_detalhe' rota.id %}">Ver detalhes</a>
-                        <a class="entregas-btn primary" href="{% url 'estoque:entrega_rota_checklist' rota.id %}">Abrir checklist</a>
+                        <a class="entregas-btn primary" href="{{ rota.checklist_path }}" data-route-checklist-link data-rota-id="{{ rota.id }}">Abrir checklist</a>
                         {% if rota.pode_excluir %}
                           <form class="rota-delete-form" method="post" action="{% url 'estoque:entrega_rota_excluir' rota.id %}" data-delete-route-form>
                             {% csrf_token %}
@@ -484,7 +544,7 @@
                         <h4>Ordem de entrega</h4>
                         <ol class="rota-lista">
                           {% for item in rota.itens_entrega %}
-                            <li>Venda #{{ item.venda.id }} - {{ item.venda.cliente.nome|default:"Consumidor" }}</li>
+                            <li{% if item.is_pendencia %} class="is-pendencia"{% endif %}>{% if item.is_pendencia %}<span class="rota-pendencia-label">Pendência</span> Pendência - {{ item.venda.cliente.nome|default:"Consumidor" }}{% if item.resumo_pendencia %} - {{ item.resumo_pendencia }}{% endif %}{% else %}Venda #{{ item.venda.id }} - {{ item.venda.cliente.nome|default:"Consumidor" }}{% endif %}</li>
                           {% endfor %}
                         </ol>
                       </div>
@@ -492,7 +552,7 @@
                         <h4>Ordem de carregamento</h4>
                         <ol class="rota-lista">
                           {% for item in rota.itens_carregamento %}
-                            <li>Venda #{{ item.venda.id }} - {{ item.venda.cliente.nome|default:"Consumidor" }}</li>
+                            <li{% if item.is_pendencia %} class="is-pendencia"{% endif %}>{% if item.is_pendencia %}<span class="rota-pendencia-label">Pendência</span> Pendência - {{ item.venda.cliente.nome|default:"Consumidor" }}{% if item.resumo_pendencia %} - {{ item.resumo_pendencia }}{% endif %}{% else %}Venda #{{ item.venda.id }} - {{ item.venda.cliente.nome|default:"Consumidor" }}{% endif %}</li>
                           {% endfor %}
                         </ol>
                       </div>
@@ -528,6 +588,11 @@
     var routePreview = document.querySelector("[data-route-preview]");
     var routePreviewList = document.querySelector("[data-route-preview-list]");
     var routePreviewEmpty = document.querySelector("[data-route-preview-empty]");
+    var routePendencias = document.querySelector("[data-route-pendencias]");
+    var pendenciaRows = Array.prototype.slice.call(document.querySelectorAll("[data-pendencia-row]"));
+    var routeForm = document.querySelector("[data-create-form='rota']");
+    var routeClearButton = document.querySelector("[data-route-clear]");
+    var routeDraftItems = [];
 
     function setButtonState(button, text, disabled) {
       if (!button) {
@@ -563,37 +628,72 @@
       });
     }
 
-    function applyRouteOrderToRows(orderedRows) {
-      orderedRows.forEach(function (row, index) {
-        var orderInput = row.querySelector("[data-route-order]");
-        var orderLabel = row.querySelector("[data-route-order-label]");
+    function getSelectedPendenciaRows() {
+      return pendenciaRows.filter(function (row) {
+        var checkbox = row.querySelector("[data-pendencia-checkbox]");
+        return checkbox && checkbox.checked;
+      });
+    }
+
+    function getSelectedRouteItems() {
+      var items = [];
+      getRouteCheckedRows().forEach(function (row) {
+        items.push({
+          type: "venda",
+          id: row.dataset.routeSaleId,
+          orderInput: row.querySelector("[data-route-order]"),
+          orderLabel: row.querySelector("[data-route-order-label]"),
+          name: row.dataset.routeClientName || "Venda #" + row.dataset.routeSaleId
+        });
+      });
+      getSelectedPendenciaRows().forEach(function (row) {
+        var checkbox = row.querySelector("[data-pendencia-checkbox]");
+        var main = row.querySelector(".rota-pendencia-main");
+        items.push({
+          type: "pendencia",
+          id: checkbox ? checkbox.value : "",
+          orderInput: row.querySelector("[data-pendencia-order]"),
+          orderLabel: null,
+          name: "Pendência - " + (main ? main.textContent.trim() : "pendência")
+        });
+      });
+      routeDraftItems = items.sort(function (a, b) {
+        var orderA = parseInt((a.orderInput || {}).value || "9999", 10);
+        var orderB = parseInt((b.orderInput || {}).value || "9999", 10);
+        return orderA - orderB;
+      });
+      return routeDraftItems.slice();
+    }
+
+    function applyRouteOrderToItems(orderedItems) {
+      orderedItems.forEach(function (item, index) {
         var order = index + 1;
-        if (orderInput) {
-          orderInput.value = order;
+        if (item.orderInput) {
+          item.orderInput.value = order;
         }
-        if (orderLabel) {
-          orderLabel.textContent = "Ordem " + order;
+        if (item.orderLabel) {
+          item.orderLabel.textContent = "Ordem " + order;
         }
       });
     }
 
-    function renderRoutePreview() {
+    function renderRoutePreview(itemsOverride) {
       if (!routePreview || !routePreviewList || !routePreviewEmpty) {
         return;
       }
-      var selectedRows = getRouteCheckedRowsByOrder();
-      routePreview.classList.toggle("is-visible", selectedRows.length > 0);
-      routePreviewEmpty.style.display = selectedRows.length ? "none" : "block";
+      var selectedItems = itemsOverride || getSelectedRouteItems();
+      routePreview.classList.toggle("is-visible", selectedItems.length > 0);
+      routePreviewEmpty.style.display = selectedItems.length ? "none" : "block";
       routePreviewList.innerHTML = "";
 
-      selectedRows.forEach(function (row, index) {
+      selectedItems.forEach(function (selectedItem, index) {
         var item = document.createElement("li");
         var name = document.createElement("span");
         var actions = document.createElement("span");
 
         item.className = "rota-preview-item";
         name.className = "rota-preview-name";
-        name.textContent = (index + 1) + ". " + (row.dataset.routeClientName || "Venda #" + row.dataset.routeSaleId);
+        name.textContent = (index + 1) + ". " + selectedItem.name;
         actions.className = "rota-preview-actions";
 
         if (index > 0) {
@@ -601,17 +701,19 @@
           upButton.type = "button";
           upButton.className = "rota-preview-btn";
           upButton.dataset.routeMove = "up";
-          upButton.dataset.routeSaleId = row.dataset.routeSaleId;
+          upButton.dataset.routeItemType = selectedItem.type;
+          upButton.dataset.routeItemId = selectedItem.id;
           upButton.textContent = "Subir";
           actions.appendChild(upButton);
         }
 
-        if (index < selectedRows.length - 1) {
+        if (index < selectedItems.length - 1) {
           var downButton = document.createElement("button");
           downButton.type = "button";
           downButton.className = "rota-preview-btn";
           downButton.dataset.routeMove = "down";
-          downButton.dataset.routeSaleId = row.dataset.routeSaleId;
+          downButton.dataset.routeItemType = selectedItem.type;
+          downButton.dataset.routeItemId = selectedItem.id;
           downButton.textContent = "Descer";
           actions.appendChild(downButton);
         }
@@ -623,7 +725,7 @@
     }
 
     function updateRouteOrder() {
-      var selectedRows = getRouteCheckedRowsByOrder();
+      var selectedItems = getSelectedRouteItems();
 
       routeRows.forEach(function (row) {
         var checkbox = row.querySelector("[data-route-checkbox]");
@@ -635,32 +737,40 @@
         orderInput.value = "";
         orderLabel.textContent = "Sem ordem";
       });
+      pendenciaRows.forEach(function (row) {
+        var checkbox = row.querySelector("[data-pendencia-checkbox]");
+        var orderInput = row.querySelector("[data-pendencia-order]");
+        if (checkbox && !checkbox.checked && orderInput) {
+          orderInput.value = "";
+        }
+      });
 
-      applyRouteOrderToRows(selectedRows);
+      applyRouteOrderToItems(selectedItems);
       renderRoutePreview();
     }
 
-    function moveRoutePreviewItem(saleId, direction) {
-      var selectedRows = getRouteCheckedRowsByOrder();
-      var currentIndex = selectedRows.findIndex(function (row) {
-        return row.dataset.routeSaleId === saleId;
+    function moveRoutePreviewItem(type, id, direction) {
+      var selectedItems = getSelectedRouteItems();
+      var currentIndex = selectedItems.findIndex(function (item) {
+        return item.type === type && item.id === id;
       });
       var nextIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
 
-      if (currentIndex < 0 || nextIndex < 0 || nextIndex >= selectedRows.length) {
+      if (currentIndex < 0 || nextIndex < 0 || nextIndex >= selectedItems.length) {
         return;
       }
 
-      var movedRow = selectedRows[currentIndex];
-      selectedRows[currentIndex] = selectedRows[nextIndex];
-      selectedRows[nextIndex] = movedRow;
-      applyRouteOrderToRows(selectedRows);
+      var movedItem = selectedItems[currentIndex];
+      selectedItems[currentIndex] = selectedItems[nextIndex];
+      selectedItems[nextIndex] = movedItem;
+      applyRouteOrderToItems(selectedItems);
       renderRoutePreview();
     }
 
     function applyRouteFilter() {
       var query = normalizeText(routeFilter ? routeFilter.value : "");
       var visibleCount = 0;
+      var visiblePendencias = 0;
       routeRows.forEach(function (row) {
         var checkbox = row.querySelector("[data-route-checkbox]");
         var selected = checkbox && checkbox.checked;
@@ -678,6 +788,103 @@
       if (routeEmptyRow) {
         routeEmptyRow.classList.toggle("is-visible", !!query && visibleCount === 0);
       }
+      pendenciaRows.forEach(function (row) {
+        var selected = (row.querySelector("[data-pendencia-checkbox]") || {}).checked;
+        var searchText = normalizeText(row.dataset.pendenciaSearch || "");
+        var shouldShow = !!query && (selected || searchText.indexOf(query) !== -1);
+        row.classList.toggle("is-visible", shouldShow);
+        if (shouldShow) {
+          visiblePendencias += 1;
+        }
+      });
+      if (routePendencias) {
+        routePendencias.classList.toggle("is-visible", visiblePendencias > 0);
+      }
+    }
+
+    function resetRouteDraftSelection(options) {
+      options = options || {};
+      if (routeFilter && !options.keepRouteFilter) {
+        routeFilter.value = "";
+      }
+      if (routeForm) {
+        var routeObservation = routeForm.querySelector("textarea[name='observacao']");
+        if (routeObservation) {
+          routeObservation.value = "";
+        }
+        routeForm.querySelectorAll("input[name='vendas_rota'], input[name='pendencias_rota']").forEach(function (checkbox) {
+          checkbox.checked = false;
+          checkbox.defaultChecked = false;
+          checkbox.removeAttribute("checked");
+        });
+        routeForm.querySelectorAll("[data-route-order], [data-pendencia-order]").forEach(function (orderInput) {
+          orderInput.value = "";
+          orderInput.defaultValue = "";
+        });
+        routeForm.querySelectorAll("[data-route-order-label]").forEach(function (orderLabel) {
+          orderLabel.textContent = "Sem ordem";
+        });
+        routeForm.querySelectorAll("[data-pendencia-toggle]").forEach(function (toggle) {
+          toggle.classList.remove("is-selected");
+          toggle.textContent = "Incluir na rota";
+        });
+        routeForm.querySelectorAll("[data-rota-venda-row], [data-pendencia-row]").forEach(function (row) {
+          row.classList.remove("is-selected");
+        });
+      }
+
+      routeRows.forEach(function (row) {
+        var checkbox = row.querySelector("[data-route-checkbox]");
+        var orderInput = row.querySelector("[data-route-order]");
+        var orderLabel = row.querySelector("[data-route-order-label]");
+        if (checkbox) {
+          checkbox.checked = false;
+          checkbox.defaultChecked = false;
+          checkbox.removeAttribute("checked");
+        }
+        if (orderInput) {
+          orderInput.value = "";
+        }
+        if (orderLabel) {
+          orderLabel.textContent = "Sem ordem";
+        }
+        row.classList.remove("is-selected");
+      });
+
+      pendenciaRows.forEach(function (row) {
+        var checkbox = row.querySelector("[data-pendencia-checkbox]");
+        var orderInput = row.querySelector("[data-pendencia-order]");
+        var toggle = row.querySelector("[data-pendencia-toggle]");
+        if (checkbox) {
+          checkbox.checked = false;
+          checkbox.defaultChecked = false;
+          checkbox.removeAttribute("checked");
+        }
+        if (orderInput) {
+          orderInput.value = "";
+        }
+        row.classList.remove("is-selected", "is-visible");
+        if (toggle) {
+          toggle.classList.remove("is-selected");
+          toggle.textContent = "Incluir na rota";
+        }
+      });
+
+      routeDraftItems = [];
+      renderRoutePreview(routeDraftItems);
+      applyRouteFilter();
+    }
+
+    resetRouteDraftSelection();
+    window.addEventListener("pageshow", function (event) {
+      if (event.persisted) {
+        resetRouteDraftSelection();
+      }
+    });
+    if (routeClearButton) {
+      routeClearButton.addEventListener("click", function () {
+        resetRouteDraftSelection({ keepRouteFilter: true });
+      });
     }
 
     routeRows.forEach(function (row) {
@@ -689,12 +896,44 @@
         if (checkbox.checked) {
           var orderInput = row.querySelector("[data-route-order]");
           if (orderInput && !orderInput.value) {
-            orderInput.value = getRouteCheckedRows().length;
+            orderInput.value = getSelectedRouteItems().length + 1;
           }
         }
         updateRouteOrder();
         applyRouteFilter();
       });
+    });
+
+    pendenciaRows.forEach(function (row) {
+      var checkbox = row.querySelector("[data-pendencia-checkbox]");
+      var toggle = row.querySelector("[data-pendencia-toggle]");
+      var ignore = row.querySelector("[data-pendencia-ignore]");
+      if (toggle && checkbox) {
+        toggle.addEventListener("click", function () {
+          checkbox.checked = !checkbox.checked;
+          var orderInput = row.querySelector("[data-pendencia-order]");
+          if (checkbox.checked && orderInput && !orderInput.value) {
+            orderInput.value = getSelectedRouteItems().length + 1;
+          }
+          row.classList.toggle("is-selected", checkbox.checked);
+          toggle.classList.toggle("is-selected", checkbox.checked);
+          toggle.textContent = checkbox.checked ? "Incluida" : "Incluir na rota";
+          updateRouteOrder();
+          applyRouteFilter();
+        });
+      }
+      if (ignore && checkbox) {
+        ignore.addEventListener("click", function () {
+          checkbox.checked = false;
+          row.classList.remove("is-selected", "is-visible");
+          if (toggle) {
+            toggle.classList.remove("is-selected");
+            toggle.textContent = "Incluir na rota";
+          }
+          updateRouteOrder();
+          applyRouteFilter();
+        });
+      }
     });
 
     if (routeFilter) {
@@ -708,7 +947,7 @@
         if (!button) {
           return;
         }
-        moveRoutePreviewItem(button.dataset.routeSaleId, button.dataset.routeMove);
+        moveRoutePreviewItem(button.dataset.routeItemType, button.dataset.routeItemId, button.dataset.routeMove);
       });
     }
     applyRouteFilter();
@@ -758,7 +997,11 @@
           }
         }
 
-        if (tipo === "rota" && !form.querySelector("input[name='vendas_rota']:checked")) {
+        if (
+          tipo === "rota"
+          && !form.querySelector("input[name='vendas_rota']:checked")
+          && !form.querySelector("input[name='pendencias_rota']:checked")
+        ) {
           mensagem = "Selecione pelo menos uma venda para criar a rota.";
         }
 
