@@ -51,19 +51,25 @@
     padding: 0 9px 12px !important; background: #fbfdff; border-bottom: 1px solid #e8eef7 !important;
   }
   .pend-tratar-panel {
-    margin-left: auto; max-width: 760px; padding: 10px; border: 1px solid #dbeafe; border-radius: 10px;
+    margin-left: auto; width: min(100%, 1060px); padding: 10px; border: 1px solid #dbeafe; border-radius: 10px;
     background: #f8fbff; color: #172033; box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
   }
   .pend-tratar-title { margin: 0 0 8px; font-size: 0.82rem; font-weight: 950; color: #1d4ed8; }
-  .pend-tratar-grid { display: grid; grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: 6px 10px; }
+  .pend-tratar-layout { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 10px; align-items: start; }
+  .pend-tratar-section {
+    border: 1px solid #e2e8f0; border-radius: 9px; background: rgba(255, 255, 255, 0.72); padding: 9px;
+  }
+  .pend-tratar-section-title { margin: 0 0 7px; color: #1e3a8a; font-size: 0.74rem; font-weight: 950; }
+  .pend-tratar-grid { display: grid; grid-template-columns: repeat(3, minmax(120px, 1fr)); gap: 6px 10px; }
   .pend-tratar-item { color: #475569; font-size: 0.76rem; font-weight: 750; }
   .pend-tratar-item strong { display: block; color: #111827; font-size: 0.8rem; font-weight: 900; }
-  .pend-future-title { margin: 10px 0 7px; color: #64748b; font-size: 0.76rem; font-weight: 900; }
-  .pend-action-group { margin-top: 8px; }
+  .pend-future-title { margin: 0 0 7px; color: #64748b; font-size: 0.76rem; font-weight: 900; }
+  .pend-action-group { margin-top: 0; }
+  .pend-action-group + .pend-action-group { margin-top: 9px; }
   .pend-action-group-title { margin: 0 0 6px; color: #475569; font-size: 0.73rem; font-weight: 900; }
   .pend-future-actions { display: flex; flex-wrap: wrap; gap: 6px; }
   .pend-danger-group {
-    margin-top: 10px; padding-top: 9px; border-top: 1px dashed #cbd5e1;
+    padding-top: 9px; border-top: 1px dashed #cbd5e1;
   }
   .pend-danger-note { margin: 6px 0 0; color: #64748b; font-size: 0.72rem; font-weight: 750; }
   .pend-future-btn {
@@ -78,16 +84,12 @@
     box-shadow: inset 0 2px 5px rgba(15, 23, 42, 0.16);
     filter: brightness(0.96);
   }
-  .pend-decision-message {
-    margin: 10px 0 0; padding: 8px 10px; border: 1px solid #bbf7d0; border-radius: 8px;
-    background: #f0fdf4; color: #166534; font-size: 0.78rem; font-weight: 800;
-  }
-  .pend-decision-message[hidden] { display: none; }
   .pend-empty { padding: 18px; color: #166534; background: #f0fdf4; font-weight: 850; text-align: center; }
   @media (max-width: 760px) {
     .pend-header { align-items: stretch; flex-direction: column; }
     .pend-btn { width: 100%; }
-    .pend-tratar-panel { max-width: none; }
+    .pend-tratar-panel { width: auto; }
+    .pend-tratar-layout { grid-template-columns: 1fr; }
     .pend-tratar-grid { grid-template-columns: 1fr; }
   }
 </style>
@@ -144,32 +146,31 @@
                   <td class="pend-detail-cell" colspan="8">
                     <div class="pend-tratar-panel">
                       <h3 class="pend-tratar-title">Detalhes da pendência</h3>
-                      <div class="pend-tratar-grid">
-                        <div class="pend-tratar-item">Cliente<strong>{{ pendencia.cliente }}</strong></div>
-                        <div class="pend-tratar-item">Nota/Venda<strong>Venda #{{ pendencia.venda.id }}</strong></div>
-                        <div class="pend-tratar-item">Rota<strong>Rota #{{ pendencia.rota.id }}</strong></div>
-                        <div class="pend-tratar-item">Data<strong>{{ pendencia.data|date:"d/m/Y" }}</strong></div>
-                        <div class="pend-tratar-item">Produto<strong>{{ pendencia.produto|default:"-" }}</strong></div>
-                        <div class="pend-tratar-item">Quantidade<strong>{% if pendencia.quantidade %}{{ pendencia.quantidade }} {{ pendencia.unidade }}{% else %}-{% endif %}</strong></div>
-                        <div class="pend-tratar-item">Status atual<strong>{{ pendencia.status }}</strong></div>
-                      </div>
-                      <p class="pend-future-title">Próximas ações</p>
-                      <div class="pend-action-group">
-                        <p class="pend-action-group-title">Ações de acompanhamento</p>
-                        <div class="pend-future-actions">
-                          <button class="pend-future-btn btn-pressionavel pend-decision-toggle" type="button" data-target="pend-decision-{{ forloop.counter }}" data-message="Pendência separada para resolver depois. Nenhuma alteração foi feita na nota, no checklist ou no estoque. A pendência continua aberta, nada foi alterado no banco, a nota não foi recalculada e esta é apenas uma marcação visual temporária para preparar a futura rotina real.">Resolver depois</button>
-                          <button class="pend-future-btn btn-pressionavel pend-decision-toggle" type="button" data-target="pend-decision-{{ forloop.counter }}" data-message="Pendência marcada visualmente para entrar em uma próxima rota. Nenhuma rota foi criada ainda e nada foi alterado no banco. A pendência continua aberta, a nota não foi alterada e o checklist não foi alterado; isso é apenas preparação visual para a futura rotina real.">Entregar em próxima rota</button>
-                          <button class="pend-future-btn btn-pressionavel pend-decision-toggle" type="button" data-target="pend-decision-{{ forloop.counter }}" data-message="Pendência mantida. Nenhuma alteração foi feita na nota ou no checklist. A pendência continua aberta; esta é apenas uma confirmação visual de conferência por enquanto.">Manter pendente</button>
+                      <div class="pend-tratar-layout">
+                        <div class="pend-tratar-section">
+                          <h4 class="pend-tratar-section-title">Dados da pendência</h4>
+                          <div class="pend-tratar-grid">
+                            <div class="pend-tratar-item">Cliente<strong>{{ pendencia.cliente }}</strong></div>
+                            <div class="pend-tratar-item">Nota/Venda<strong>Venda #{{ pendencia.venda.id }}</strong></div>
+                            <div class="pend-tratar-item">Rota<strong>Rota #{{ pendencia.rota.id }}</strong></div>
+                            <div class="pend-tratar-item">Data<strong>{{ pendencia.data|date:"d/m/Y" }}</strong></div>
+                            <div class="pend-tratar-item">Produto<strong>{{ pendencia.produto|default:"-" }}</strong></div>
+                            <div class="pend-tratar-item">Quantidade<strong>{% if pendencia.quantidade %}{{ pendencia.quantidade }} {{ pendencia.unidade }}{% else %}-{% endif %}</strong></div>
+                            <div class="pend-tratar-item">Status atual<strong>{{ pendencia.status }}</strong></div>
+                          </div>
+                        </div>
+                        <div class="pend-tratar-section">
+                          <p class="pend-future-title">Acoes</p>
+                          <p class="pend-danger-note">Esta pendencia continua aberta e aparecera automaticamente na proxima criacao de rota relacionada, enquanto nao for removida da nota ou resolvida.</p>
+                          <div class="pend-action-group pend-danger-group">
+                            <p class="pend-action-group-title">Acao delicada</p>
+                            <div class="pend-future-actions">
+                              <a class="pend-future-btn btn-pressionavel" href="{% url 'estoque:revisar_remocao_pendencia_da_nota' pendencia.id %}">Remover da nota</a>
+                            </div>
+                            <p class="pend-danger-note">Abre uma revisao antes de alterar a venda original.</p>
+                          </div>
                         </div>
                       </div>
-                      <div class="pend-action-group pend-danger-group">
-                        <p class="pend-action-group-title">Acao delicada</p>
-                        <div class="pend-future-actions">
-                          <a class="pend-future-btn btn-pressionavel" href="{% url 'estoque:revisar_remocao_pendencia_da_nota' pendencia.id %}">Remover da nota</a>
-                        </div>
-                        <p class="pend-danger-note">Abre uma revisao antes de alterar a venda original.</p>
-                      </div>
-                      <p class="pend-decision-message" id="pend-decision-{{ forloop.counter }}" hidden>Pendência mantida. Nenhuma alteração foi feita na nota ou no checklist. A pendência continua aberta; esta é apenas uma confirmação visual de conferência por enquanto.</p>
                     </div>
                   </td>
                 </tr>
@@ -192,16 +193,11 @@
       var isOpen = !target.hidden;
       target.hidden = isOpen;
       button.setAttribute('aria-expanded', String(!isOpen));
-    });
-  });
+      if (isOpen) return;
 
-  document.querySelectorAll('.pend-decision-toggle').forEach(function (button) {
-    button.addEventListener('click', function () {
-      var target = document.getElementById(button.dataset.target);
-      if (!target) return;
-
-      target.textContent = button.dataset.message;
-      target.hidden = false;
+      window.setTimeout(function () {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 80);
     });
   });
 </script>
