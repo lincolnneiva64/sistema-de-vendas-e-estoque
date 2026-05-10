@@ -1,0 +1,226 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Remover item da nota{% endblock %}
+{% block content %}
+<style>
+  .qty-page { color: #172033; padding: 10px 0 24px; }
+  .qty-shell { max-width: 1040px; margin: 0 auto; padding: 0 14px; }
+  .qty-card {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 13px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06); overflow: hidden;
+  }
+  .qty-head {
+    padding: 10px 12px; border-bottom: 1px solid #edf1f6; background: #eff6ff;
+    display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; flex-wrap: wrap;
+  }
+  .qty-title { margin: 0; color: #1e3a8a; font-size: 1.08rem; font-weight: 950; line-height: 1.15; }
+  .qty-subtitle { margin: 3px 0 0; color: #64748b; font-size: 0.8rem; font-weight: 760; line-height: 1.25; }
+  .qty-body { padding: 10px 12px; display: grid; gap: 8px; }
+  .qty-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .qty-btn {
+    min-height: 32px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 10px;
+    background: #fff; color: #0f172a; font-size: 0.8rem; font-weight: 900;
+    text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
+    transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.08s ease;
+  }
+  .qty-btn:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+    filter: brightness(0.96);
+  }
+  .qty-btn.danger { border-color: #dc2626; background: #dc2626; color: #fff; }
+  .qty-btn:focus-visible {
+    outline: 2px solid #facc15;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.3), 0 4px 10px rgba(15, 23, 42, 0.12);
+  }
+  .qty-confirm .qty-btn:focus-visible {
+    outline-width: 3px;
+    box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.28), 0 4px 10px rgba(15, 23, 42, 0.16);
+  }
+  .qty-btn:focus:not(:focus-visible) { outline: none; }
+  .qty-warning {
+    border: 1px solid #f7d98b; border-radius: 10px; background: #fff7ed;
+    color: #92400e; padding: 7px 9px; font-size: 0.8rem; font-weight: 850; line-height: 1.25;
+  }
+  .qty-info {
+    border: 1px solid #bfdbfe; border-radius: 10px; background: #eff6ff;
+    color: #1e3a8a; padding: 7px 9px; font-size: 0.8rem; font-weight: 850; line-height: 1.25;
+  }
+  .qty-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .qty-workspace { display: grid; gap: 8px; }
+  .qty-panel { display: grid; gap: 7px; }
+  .qty-field { border: 1px solid #edf1f6; border-radius: 8px; background: #fbfdff; padding: 6px 8px; }
+  .qty-label { display: block; color: #64748b; font-size: 0.66rem; font-weight: 900; text-transform: uppercase; }
+  .qty-value { display: block; margin-top: 2px; color: #111827; font-size: 0.84rem; font-weight: 900; overflow-wrap: anywhere; }
+  .qty-table-wrap { border: 1px solid #edf1f6; border-radius: 9px; overflow-x: auto; }
+  .qty-table { width: 100%; min-width: 820px; border-collapse: collapse; font-size: 0.8rem; }
+  .qty-table th, .qty-table td { padding: 6px 8px; border-bottom: 1px solid #edf1f6; text-align: left; vertical-align: middle; }
+  .qty-table th { background: #fbfdff; color: #64748b; font-size: 0.66rem; font-weight: 950; text-transform: uppercase; }
+  .qty-table tr:last-child td { border-bottom: 0; }
+  .qty-table tr.qty-removing td { background: #fff7ed; }
+  .qty-table tr.qty-removing td:first-child { box-shadow: inset 3px 0 0 #f97316; }
+  .qty-product { color: #111827; font-weight: 900; }
+  .qty-muted { color: #64748b; font-weight: 850; }
+  .qty-danger-text { color: #991b1b; font-weight: 950; }
+  .qty-number { text-align: right; white-space: nowrap; }
+  .qty-new-total { color: #14532d; font-weight: 950; }
+  .qty-totals {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px;
+  }
+  .qty-total-box { border: 1px solid #edf1f6; border-radius: 8px; background: #fbfdff; padding: 7px 9px; }
+  .qty-total-box.discount { border-color: #fed7aa; background: #fff7ed; color: #9a3412; }
+  .qty-total-box.preview { border-color: #bbf7d0; background: #f0fdf4; color: #14532d; }
+  .qty-total-box .qty-value { font-size: 0.96rem; }
+  .qty-confirm { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  @media (max-width: 680px) {
+    .qty-grid, .qty-workspace, .qty-totals { grid-template-columns: 1fr; }
+    .qty-head { display: grid; }
+    .qty-actions, .qty-confirm { justify-content: stretch; }
+    .qty-btn { width: 100%; }
+  }
+</style>
+
+<main class="qty-page">
+  <div class="qty-shell">
+    <section class="qty-card">
+      <header class="qty-head">
+        <div>
+          <h1 class="qty-title">Remover item da nota - Venda #{{ venda.id }}</h1>
+          <p class="qty-subtitle">Nota em edicao segura: revise a linha selecionada e o novo total antes de confirmar.</p>
+        </div>
+        <div class="qty-actions">
+          <a class="qty-btn" href="{% url 'estoque:venda_editar_revisao' venda.id %}">Cancelar / Voltar</a>
+        </div>
+      </header>
+
+      <div class="qty-body">
+        <div class="qty-info">
+          Somente o item destacado sera removido nesta etapa. A venda sera mantida e o total sera recalculado.
+        </div>
+
+        {% if nota_ficara_zerada %}
+          <div class="qty-warning">
+            Esta nota possui apenas 1 item. Ao confirmar, a nota ficara sem itens e com total R$ 0,00.
+          </div>
+        {% endif %}
+
+        {% if possui_alerta_operacional %}
+          <div class="qty-warning">
+            Esta venda ja possui vinculo com entrega/checklist. Revise com cuidado antes de confirmar.
+            {% if total_checklists_item %} Este item aparece em {{ total_checklists_item }} checklist(s) de entrega.{% endif %}
+          </div>
+        {% endif %}
+
+        <section class="qty-workspace">
+          <div class="qty-panel">
+            <div class="qty-grid" aria-label="Dados da venda">
+              <div class="qty-field">
+                <span class="qty-label">Cliente</span>
+                <span class="qty-value">{{ venda.cliente.nome|default:"Consumidor" }}</span>
+              </div>
+              <div class="qty-field">
+                <span class="qty-label">Venda/nota</span>
+                <span class="qty-value">Venda #{{ venda.id }}</span>
+              </div>
+              <div class="qty-field">
+                <span class="qty-label">Data da venda</span>
+                <span class="qty-value">{{ venda.data_venda|date:"d/m/Y" }}</span>
+              </div>
+              <div class="qty-field">
+                <span class="qty-label">Pagamento</span>
+                <span class="qty-value">{{ venda.tipo_pagamento|default:"-" }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="qty-panel">
+            <div class="qty-table-wrap">
+              <table class="qty-table">
+                <thead>
+                  <tr>
+                    <th>Produto</th>
+                    <th class="qty-number">Qtd atual</th>
+                    <th>Un</th>
+                    <th class="qty-number">Preco unitario</th>
+                    <th class="qty-number">Total atual</th>
+                    <th>Acao prevista</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for item in venda.itens.all %}
+                    <tr class="{% if item.id == item_venda.id %}qty-removing{% endif %}">
+                      <td><span class="qty-product">{{ item.produto.nome|default:"Produto nao identificado" }}</span></td>
+                      <td class="qty-number">{{ item.quantidade }}</td>
+                      <td>{{ item.unidade|default:"-" }}</td>
+                      <td class="qty-number">R$ {{ item.preco_unitario|floatformat:2 }}</td>
+                      <td class="qty-number">R$ {{ item.valor_total|floatformat:2 }}</td>
+                      <td>
+                        {% if item.id == item_venda.id %}
+                          <span class="qty-danger-text">Item selecionado para remocao</span>
+                        {% else %}
+                          <span class="qty-muted">Permanece na nota</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% empty %}
+                    <tr>
+                      <td colspan="6">Nenhum item encontrado nesta venda.</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            <div class="qty-totals">
+              <div class="qty-total-box">
+                <span class="qty-label">Total atual da nota</span>
+                <span class="qty-value">R$ {{ total_atual_venda|floatformat:2 }}</span>
+              </div>
+              <div class="qty-total-box discount">
+                <span class="qty-label">Valor abatido</span>
+                <span class="qty-value">R$ {{ valor_abatido|floatformat:2 }}</span>
+              </div>
+              <div class="qty-total-box preview">
+                <span class="qty-label">Novo total previsto da nota</span>
+                <span class="qty-value">R$ {{ novo_total_venda|floatformat:2 }}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <form method="post" class="qty-confirm">
+          {% csrf_token %}
+          <button class="qty-btn" id="btnCancelarRemocao" type="button" data-cancel-url="{% url 'estoque:venda_editar_revisao' venda.id %}">Cancelar / Voltar</button>
+          <button class="qty-btn danger" id="btnConfirmarRemocao" type="submit">Confirmar remocao</button>
+        </form>
+      </div>
+    </section>
+  </div>
+</main>
+<script>
+  (function () {
+    const actions = document.querySelector(".qty-confirm");
+    const cancelButton = document.getElementById("btnCancelarRemocao");
+    const confirmButton = document.getElementById("btnConfirmarRemocao");
+    if (!actions || !cancelButton || !confirmButton) return;
+
+    confirmButton.focus();
+
+    cancelButton.addEventListener("click", function () {
+      window.location.href = cancelButton.dataset.cancelUrl;
+    });
+
+    actions.addEventListener("keydown", function (event) {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+
+      event.preventDefault();
+      if (event.key === "ArrowLeft") {
+        cancelButton.focus();
+      } else {
+        confirmButton.focus();
+      }
+    });
+  })();
+</script>
+{% endblock %}

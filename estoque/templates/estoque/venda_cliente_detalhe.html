@@ -1,0 +1,121 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Nota de venda{% endblock %}
+{% block content %}
+<style>
+  .cliente-nota-page { background: #f6f8fb; color: #172033; min-height: 100vh; padding: 14px; }
+  .cliente-nota {
+    max-width: 760px; margin: 0 auto; background: #fff; border: 1px solid #e1e7ef;
+    border-radius: 12px; box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08); overflow: hidden;
+  }
+  .cliente-nota-head {
+    padding: 14px 16px; border-bottom: 1px solid #edf1f6; background: #f0fdf4;
+    display: flex; justify-content: space-between; gap: 12px; align-items: flex-start;
+  }
+  .cliente-nota-brand {
+    color: #14532d; font-size: 0.8rem; font-weight: 950; letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .cliente-nota-title { margin: 4px 0 0; color: #111827; font-size: 1.35rem; font-weight: 950; }
+  .cliente-nota-numero { color: #334155; font-size: 0.88rem; font-weight: 850; white-space: nowrap; }
+  .cliente-nota-body { padding: 14px 16px; display: grid; gap: 12px; }
+  .cliente-nota-dados { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .cliente-nota-campo { border: 1px solid #edf1f6; border-radius: 9px; background: #fbfdff; padding: 9px 10px; }
+  .cliente-nota-label {
+    display: block; color: #64748b; font-size: 0.68rem; font-weight: 900; text-transform: uppercase;
+  }
+  .cliente-nota-valor {
+    display: block; margin-top: 3px; color: #111827; font-size: 0.88rem; font-weight: 850;
+    overflow-wrap: anywhere;
+  }
+  .cliente-nota-itens { border: 1px solid #edf1f6; border-radius: 10px; overflow-x: auto; }
+  .cliente-nota-table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 0.84rem; }
+  .cliente-nota-table th,
+  .cliente-nota-table td { padding: 8px 9px; border-bottom: 1px solid #edf1f6; text-align: left; }
+  .cliente-nota-table th {
+    background: #fbfdff; color: #64748b; font-size: 0.68rem; font-weight: 950; text-transform: uppercase;
+  }
+  .cliente-nota-table tr:last-child td { border-bottom: 0; }
+  .cliente-nota-produto { color: #111827; font-weight: 900; }
+  .cliente-nota-num { text-align: right; white-space: nowrap; }
+  .cliente-nota-total {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    border: 1px solid #bbf7d0; border-radius: 10px; background: #f0fdf4;
+    color: #14532d; padding: 12px; font-weight: 950;
+  }
+  .cliente-nota-total span:last-child { font-size: 1.16rem; }
+  @media (max-width: 640px) {
+    .cliente-nota-page { padding: 8px; }
+    .cliente-nota-head { display: grid; padding: 12px; }
+    .cliente-nota-body { padding: 12px; }
+    .cliente-nota-dados { grid-template-columns: 1fr; }
+    .cliente-nota-title { font-size: 1.2rem; }
+  }
+</style>
+
+<main class="cliente-nota-page">
+  <article class="cliente-nota">
+    <header class="cliente-nota-head">
+      <div>
+        <div class="cliente-nota-brand">LA NEIVA</div>
+        <h1 class="cliente-nota-title">Nota de venda</h1>
+      </div>
+      <div class="cliente-nota-numero">Venda #{{ venda.id }}</div>
+    </header>
+
+    <section class="cliente-nota-body">
+      <div class="cliente-nota-dados" aria-label="Dados da nota">
+        <div class="cliente-nota-campo">
+          <span class="cliente-nota-label">Cliente</span>
+          <span class="cliente-nota-valor">{{ venda.cliente.nome|default:"Consumidor" }}</span>
+        </div>
+        <div class="cliente-nota-campo">
+          <span class="cliente-nota-label">Data da venda</span>
+          <span class="cliente-nota-valor">{{ venda.data_venda|date:"d/m/Y" }}</span>
+        </div>
+        <div class="cliente-nota-campo">
+          <span class="cliente-nota-label">Vencimento</span>
+          <span class="cliente-nota-valor">{{ venda.data_vencimento|date:"d/m/Y"|default:"-" }}</span>
+        </div>
+        <div class="cliente-nota-campo">
+          <span class="cliente-nota-label">Pagamento</span>
+          <span class="cliente-nota-valor">{{ venda.tipo_pagamento|default:"-" }}</span>
+        </div>
+      </div>
+
+      <div class="cliente-nota-itens">
+        <table class="cliente-nota-table">
+          <thead>
+            <tr>
+              <th>Produto</th>
+              <th class="cliente-nota-num">Qtd</th>
+              <th>Un</th>
+              <th class="cliente-nota-num">Preco</th>
+              <th class="cliente-nota-num">Valor total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in venda.itens.all %}
+              <tr>
+                <td><span class="cliente-nota-produto">{{ item.produto.nome|default:"Produto nao identificado" }}</span></td>
+                <td class="cliente-nota-num">{{ item.quantidade }}</td>
+                <td>{{ item.unidade|default:"-" }}</td>
+                <td class="cliente-nota-num">R$ {{ item.preco_unitario|floatformat:2 }}</td>
+                <td class="cliente-nota-num">R$ {{ item.valor_total|floatformat:2 }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="5">Nenhum item encontrado nesta nota.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="cliente-nota-total">
+        <span>Total da venda</span>
+        <span>R$ {{ venda.total|floatformat:2 }}</span>
+      </div>
+    </section>
+  </article>
+</main>
+{% endblock %}

@@ -2,23 +2,23 @@
 {% block title %}Alterar quantidade da nota{% endblock %}
 {% block content %}
 <style>
-  .qty-page { color: #172033; padding: 18px 0 36px; }
-  .qty-shell { max-width: 1040px; margin: 0 auto; padding: 0 18px; }
+  .qty-page { color: #172033; padding: 10px 0 24px; }
+  .qty-shell { max-width: 1040px; margin: 0 auto; padding: 0 14px; }
   .qty-card {
     background: #fff; border: 1px solid #e1e7ef; border-radius: 13px;
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06); overflow: hidden;
   }
   .qty-head {
-    padding: 15px 16px; border-bottom: 1px solid #edf1f6; background: #eff6ff;
-    display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap;
+    padding: 10px 12px; border-bottom: 1px solid #edf1f6; background: #eff6ff;
+    display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; flex-wrap: wrap;
   }
-  .qty-title { margin: 0; color: #1e3a8a; font-size: 1.18rem; font-weight: 950; line-height: 1.2; }
-  .qty-subtitle { margin: 6px 0 0; color: #64748b; font-size: 0.88rem; font-weight: 760; line-height: 1.35; }
-  .qty-body { padding: 15px 16px; display: grid; gap: 14px; }
-  .qty-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .qty-title { margin: 0; color: #1e3a8a; font-size: 1.08rem; font-weight: 950; line-height: 1.15; }
+  .qty-subtitle { margin: 3px 0 0; color: #64748b; font-size: 0.8rem; font-weight: 760; line-height: 1.25; }
+  .qty-body { padding: 10px 12px; display: grid; gap: 8px; }
+  .qty-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
   .qty-btn {
-    min-height: 38px; border: 1px solid #cbd5e1; border-radius: 9px; padding: 8px 13px;
-    background: #fff; color: #0f172a; font-size: 0.84rem; font-weight: 900;
+    min-height: 32px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 10px;
+    background: #fff; color: #0f172a; font-size: 0.8rem; font-weight: 900;
     text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
     cursor: pointer; box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
     transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.08s ease;
@@ -45,26 +45,26 @@
   }
   .qty-warning {
     border: 1px solid #f7d98b; border-radius: 10px; background: #fff7ed;
-    color: #92400e; padding: 10px 12px; font-size: 0.88rem; font-weight: 850; line-height: 1.35;
+    color: #92400e; padding: 7px 9px; font-size: 0.8rem; font-weight: 850; line-height: 1.25;
   }
   .qty-info {
     border: 1px solid #bfdbfe; border-radius: 10px; background: #eff6ff;
-    color: #1e3a8a; padding: 10px 12px; font-size: 0.88rem; font-weight: 850; line-height: 1.35;
+    color: #1e3a8a; padding: 7px 9px; font-size: 0.8rem; font-weight: 850; line-height: 1.25;
   }
   .qty-error {
     border: 1px solid #fecaca; border-radius: 10px; background: #fef2f2;
-    color: #991b1b; padding: 10px 12px; font-size: 0.88rem; font-weight: 850;
+    color: #991b1b; padding: 7px 9px; font-size: 0.8rem; font-weight: 850;
   }
-  .qty-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-  .qty-workspace { display: grid; gap: 12px; }
-  .qty-panel { display: grid; gap: 10px; }
-  .qty-field { border: 1px solid #edf1f6; border-radius: 10px; background: #fbfdff; padding: 10px; }
-  .qty-label { display: block; color: #64748b; font-size: 0.72rem; font-weight: 900; text-transform: uppercase; }
-  .qty-value { display: block; margin-top: 3px; color: #111827; font-size: 0.92rem; font-weight: 900; overflow-wrap: anywhere; }
-  .qty-table-wrap { border: 1px solid #edf1f6; border-radius: 10px; overflow-x: auto; }
-  .qty-table { width: 100%; min-width: 820px; border-collapse: collapse; font-size: 0.88rem; }
-  .qty-table th, .qty-table td { padding: 9px 10px; border-bottom: 1px solid #edf1f6; text-align: left; vertical-align: middle; }
-  .qty-table th { background: #fbfdff; color: #64748b; font-size: 0.72rem; font-weight: 950; text-transform: uppercase; }
+  .qty-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .qty-workspace { display: grid; gap: 8px; }
+  .qty-panel { display: grid; gap: 7px; }
+  .qty-field { border: 1px solid #edf1f6; border-radius: 8px; background: #fbfdff; padding: 6px 8px; }
+  .qty-label { display: block; color: #64748b; font-size: 0.66rem; font-weight: 900; text-transform: uppercase; }
+  .qty-value { display: block; margin-top: 2px; color: #111827; font-size: 0.84rem; font-weight: 900; overflow-wrap: anywhere; }
+  .qty-table-wrap { border: 1px solid #edf1f6; border-radius: 9px; overflow-x: auto; }
+  .qty-table { width: 100%; min-width: 820px; border-collapse: collapse; font-size: 0.8rem; }
+  .qty-table th, .qty-table td { padding: 6px 8px; border-bottom: 1px solid #edf1f6; text-align: left; vertical-align: middle; }
+  .qty-table th { background: #fbfdff; color: #64748b; font-size: 0.66rem; font-weight: 950; text-transform: uppercase; }
   .qty-table tr:last-child td { border-bottom: 0; }
   .qty-table tr.qty-editing td { background: #f0fdf4; }
   .qty-table tr.qty-editing td:first-child { box-shadow: inset 3px 0 0 #22c55e; }
@@ -72,26 +72,26 @@
   .qty-muted { color: #64748b; font-weight: 850; }
   .qty-number { text-align: right; white-space: nowrap; }
   .qty-new-total { color: #14532d; font-weight: 950; }
-  .qty-review-form { display: grid; gap: 10px; }
+  .qty-review-form { display: grid; gap: 7px; }
   .qty-input-line {
-    display: grid; grid-template-columns: minmax(110px, 1fr) auto; gap: 8px; align-items: center;
+    display: grid; grid-template-columns: minmax(110px, 1fr) auto; gap: 6px; align-items: center;
   }
   .qty-input {
-    width: 100%; min-width: 0; min-height: 36px; border: 1px solid #86efac; border-radius: 8px; padding: 7px 10px;
-    font-size: 0.95rem; font-weight: 850; color: #0f172a;
+    width: 100%; min-width: 0; min-height: 32px; border: 1px solid #86efac; border-radius: 8px; padding: 6px 8px;
+    font-size: 0.9rem; font-weight: 850; color: #0f172a;
     background: #fff;
   }
   .qty-btn.inline {
-    min-height: 34px; padding: 7px 10px; border-radius: 8px; font-size: 0.78rem;
+    min-height: 30px; padding: 6px 9px; border-radius: 8px; font-size: 0.74rem;
     box-shadow: 0 2px 5px rgba(15, 23, 42, 0.07);
   }
   .qty-totals {
-    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px;
   }
-  .qty-total-box { border: 1px solid #edf1f6; border-radius: 10px; background: #fbfdff; padding: 10px; }
+  .qty-total-box { border: 1px solid #edf1f6; border-radius: 8px; background: #fbfdff; padding: 7px 9px; }
   .qty-total-box.preview { border-color: #bbf7d0; background: #f0fdf4; color: #14532d; }
-  .qty-total-box .qty-value { font-size: 1.05rem; }
-  .qty-confirm { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+  .qty-total-box .qty-value { font-size: 0.96rem; }
+  .qty-confirm { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
   @media (max-width: 680px) {
     .qty-grid, .qty-workspace, .qty-totals { grid-template-columns: 1fr; }
     .qty-input-line { grid-template-columns: 1fr; }

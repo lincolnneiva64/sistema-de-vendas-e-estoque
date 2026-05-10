@@ -136,6 +136,13 @@ def montar_checklist_cliente_url(request, rota_id, venda_id, rota_item_id=None):
     return f"{request.scheme}://{request.get_host()}{checklist_path}"
 
 
+def montar_url_publica(request, path):
+    base_url = getattr(settings, "CHECKLIST_BASE_URL", "").rstrip("/")
+    if base_url:
+        return f"{base_url}{path}"
+    return request.build_absolute_uri(path)
+
+
 CHECKLIST_FASE_MARKERS = {
     "carregamento": "[checklist_carregamento_salvo]",
     "entrega": "[checklist_entrega_salva]",
@@ -2087,12 +2094,26 @@ def venda_detalhe(request, pk):
     )
 
 
+def venda_cliente_detalhe(request, pk):
+    venda = get_object_or_404(
+        Venda.objects.select_related("cliente").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+    return render(
+        request,
+        "estoque/venda_cliente_detalhe.html",
+        {"venda": venda},
+    )
+
+
 def venda_editar_revisao(request, pk):
     venda = get_object_or_404(
         Venda.objects.select_related("cliente").prefetch_related("itens__produto", "eventos"),
         pk=pk,
     )
     alteracao_quantidade = request.session.pop(f"venda_quantidade_alterada_{venda.pk}", None)
+    item_removido = request.session.pop(f"venda_item_removido_{venda.pk}", None)
+    ultima_alteracao_whatsapp = item_removido or alteracao_quantidade
 
     entregas = (
         EntregaRotaItem.objects.filter(venda=venda)
@@ -2104,6 +2125,49 @@ def venda_editar_revisao(request, pk):
     existe_checklist = EntregaChecklistItem.objects.filter(rota_item__venda=venda).exists()
     total_checklists = EntregaChecklistItem.objects.filter(rota_item__venda=venda).count()
     existe_pendencia = EntregaRotaItem.objects.filter(venda=venda, is_pendencia=True).exists()
+    whatsapp_atualizacao = None
+
+    if ultima_alteracao_whatsapp:
+        numero_whatsapp = _numero_whatsapp_cadastro_venda(venda)
+        cliente_nome = venda.cliente.nome if venda.cliente else "Cliente"
+        produto_nome = ultima_alteracao_whatsapp.get("produto_nome") or "Produto atualizado"
+        total_atualizado = _formatar_moeda(ultima_alteracao_whatsapp.get("novo_total_venda") or venda.total or Decimal("0.00"))
+        nota_path = reverse("estoque:venda_cliente_detalhe", kwargs={"pk": venda.pk})
+        nota_url = montar_url_publica(request, nota_path)
+        linhas_mensagem = [
+            f"Ola, {cliente_nome}.",
+            "",
+            "Sua nota foi atualizada.",
+            "",
+        ]
+
+        if item_removido:
+            linhas_mensagem.append(f'O item "{produto_nome}" foi removido da nota.')
+        else:
+            unidade = alteracao_quantidade.get("unidade") or ""
+            linhas_mensagem.extend([
+                f'O item "{produto_nome}" teve a quantidade alterada:',
+                f"Quantidade anterior: {alteracao_quantidade.get('quantidade_anterior')} {unidade}".rstrip(),
+                f"Nova quantidade: {alteracao_quantidade.get('nova_quantidade')} {unidade}".rstrip(),
+            ])
+
+        linhas_mensagem.extend([
+            "",
+            f"Novo total da nota: {total_atualizado}",
+            "",
+            "Segue a nota atualizada para conferencia:",
+            nota_url,
+        ])
+        mensagem_whatsapp = "\n".join(linhas_mensagem)
+        whatsapp_atualizacao = {
+            "produto_nome": produto_nome,
+            "tem_whatsapp": bool(numero_whatsapp),
+            "url": (
+                f"https://web.whatsapp.com/send?phone={numero_whatsapp}&text={quote(mensagem_whatsapp)}"
+                if numero_whatsapp
+                else ""
+            ),
+        }
 
     return render(
         request,
@@ -2118,6 +2182,7 @@ def venda_editar_revisao(request, pk):
             "existe_pendencia": existe_pendencia,
             "possui_alerta_operacional": total_entregas or existe_checklist or existe_pendencia,
             "alteracao_quantidade": alteracao_quantidade,
+            "whatsapp_atualizacao": whatsapp_atualizacao,
         },
     )
 
@@ -2192,7 +2257,7 @@ def venda_editar_quantidade_item(request, pk, item_id):
             "total_anterior_venda": str(total_anterior),
             "novo_total_venda": str(novo_total_confirmado),
         }
-        return redirect(f"{reverse('estoque:venda_detalhe', kwargs={'pk': venda.pk})}?nota_atualizada=1")
+        return redirect("estoque:venda_editar_revisao", pk=venda.pk)
 
     quantidade_informada = request.GET.get("nova_quantidade", "").strip()
     if quantidade_informada:
@@ -2222,6 +2287,87 @@ def venda_editar_quantidade_item(request, pk, item_id):
             "novo_total_venda": novo_total_venda,
             "erro_quantidade": erro_quantidade,
             "possui_alerta_operacional": possui_alerta_operacional,
+        },
+    )
+
+
+def venda_revisar_remocao_item(request, pk, item_id):
+    venda = get_object_or_404(
+        Venda.objects.select_related("cliente").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+    item_venda = get_object_or_404(
+        ItemVenda.objects.select_related("produto", "venda"),
+        pk=item_id,
+        venda=venda,
+    )
+
+    total_atual_venda = venda.total or Decimal("0.00")
+    valor_atual_item = item_venda.valor_total or Decimal("0.00")
+    novo_total_venda = max(
+        (total_atual_venda - valor_atual_item).quantize(Decimal("0.01")),
+        Decimal("0.00"),
+    )
+    total_itens_venda = ItemVenda.objects.filter(venda=venda).count()
+    produto_nome = item_venda.produto.nome if item_venda.produto else "Produto nao identificado"
+    possui_alerta_operacional = (
+        EntregaRotaItem.objects.filter(venda=venda).exists()
+        or EntregaChecklistItem.objects.filter(rota_item__venda=venda).exists()
+        or EntregaRotaItem.objects.filter(venda=venda, is_pendencia=True).exists()
+    )
+    total_checklists_item = EntregaChecklistItem.objects.filter(item_venda=item_venda).count()
+
+    if request.method == "POST":
+        quantidade_removida = item_venda.quantidade
+        unidade_removida = item_venda.unidade
+        valor_abatido = valor_atual_item
+        total_anterior = total_atual_venda
+
+        with transaction.atomic():
+            item_venda.delete()
+            total_recalculado = sum(
+                (
+                    valor or Decimal("0.00")
+                    for valor in ItemVenda.objects.filter(venda=venda).values_list("valor_total", flat=True)
+                ),
+                Decimal("0.00"),
+            )
+            total_recalculado = total_recalculado.quantize(Decimal("0.01"))
+            venda.total = total_recalculado
+            venda.save(update_fields=["total", "atualizado_em"])
+            _registrar_evento_venda(
+                venda,
+                "item_removido_da_nota",
+                (
+                    f"Item removido da nota: {produto_nome}, quantidade {quantidade_removida} {unidade_removida or ''}, "
+                    f"valor abatido R$ {valor_abatido}. Total da venda: R$ {total_anterior} -> R$ {total_recalculado}."
+                ),
+                canal="sistema",
+                usuario=venda.operador,
+            )
+
+        messages.success(request, f'Item "{produto_nome}" removido da nota com sucesso.')
+        request.session[f"venda_item_removido_{venda.pk}"] = {
+            "produto_nome": produto_nome,
+            "novo_total_venda": str(total_recalculado),
+        }
+        return redirect("estoque:venda_editar_revisao", pk=venda.pk)
+
+    return render(
+        request,
+        "estoque/venda_revisar_remocao_item.html",
+        {
+            "venda": venda,
+            "item_venda": item_venda,
+            "produto_nome": produto_nome,
+            "total_atual_venda": total_atual_venda,
+            "valor_atual_item": valor_atual_item,
+            "novo_total_venda": novo_total_venda,
+            "valor_abatido": valor_atual_item,
+            "total_itens_venda": total_itens_venda,
+            "nota_ficara_zerada": total_itens_venda == 1,
+            "possui_alerta_operacional": possui_alerta_operacional,
+            "total_checklists_item": total_checklists_item,
         },
     )
 

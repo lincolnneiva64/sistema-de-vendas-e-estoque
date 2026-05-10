@@ -2,23 +2,23 @@
 {% block title %}Editar nota - revisao{% endblock %}
 {% block content %}
 <style>
-  .edit-review-page { color: #172033; padding: 18px 0 36px; }
-  .edit-review-shell { max-width: 980px; margin: 0 auto; padding: 0 18px; }
+  .edit-review-page { color: #172033; padding: 10px 0 24px; }
+  .edit-review-shell { max-width: 1040px; margin: 0 auto; padding: 0 14px; }
   .edit-review-card {
     background: #fff; border: 1px solid #e1e7ef; border-radius: 13px;
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06); overflow: hidden;
   }
   .edit-review-head {
-    padding: 15px 16px; border-bottom: 1px solid #edf1f6; background: #eff6ff;
-    display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap;
+    padding: 10px 12px; border-bottom: 1px solid #edf1f6; background: #eff6ff;
+    display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; flex-wrap: wrap;
   }
-  .edit-review-title { margin: 0; color: #1e3a8a; font-size: 1.22rem; font-weight: 950; line-height: 1.2; }
-  .edit-review-subtitle { margin: 6px 0 0; color: #64748b; font-size: 0.88rem; font-weight: 760; line-height: 1.35; }
-  .edit-review-body { padding: 15px 16px; display: grid; gap: 14px; }
-  .edit-review-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .edit-review-title { margin: 0; color: #1e3a8a; font-size: 1.08rem; font-weight: 950; line-height: 1.15; }
+  .edit-review-subtitle { margin: 3px 0 0; color: #64748b; font-size: 0.8rem; font-weight: 760; line-height: 1.25; }
+  .edit-review-body { padding: 10px 12px; display: grid; gap: 8px; }
+  .edit-review-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
   .edit-review-btn {
-    min-height: 36px; border: 1px solid #cbd5e1; border-radius: 9px; padding: 8px 13px;
-    background: #fff; color: #0f172a; font-size: 0.84rem; font-weight: 900;
+    min-height: 32px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 10px;
+    background: #fff; color: #0f172a; font-size: 0.8rem; font-weight: 900;
     text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
     cursor: pointer; box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
     transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.08s ease;
@@ -29,72 +29,84 @@
     filter: brightness(0.96);
   }
   .edit-review-btn.primary { border-color: #1d4ed8; background: #2563eb; color: #fff; }
+  .edit-review-btn.danger { border-color: #fecaca; background: #fff7ed; color: #991b1b; }
   .edit-review-btn.compact {
-    min-height: 28px; padding: 5px 8px; border-radius: 7px;
-    font-size: 0.72rem; box-shadow: 0 2px 5px rgba(15, 23, 42, 0.07);
+    min-height: 24px; padding: 4px 7px; border-radius: 6px;
+    font-size: 0.68rem; box-shadow: 0 2px 5px rgba(15, 23, 42, 0.07);
     white-space: nowrap;
   }
   .edit-review-notice {
     border: 1px solid #bfdbfe; border-radius: 10px; background: #eff6ff;
-    color: #1e3a8a; padding: 10px 12px; font-size: 0.88rem; font-weight: 850; line-height: 1.35;
+    color: #1e3a8a; padding: 7px 9px; font-size: 0.8rem; font-weight: 850; line-height: 1.25;
   }
   .edit-review-warning {
     border: 1px solid #f7d98b; border-radius: 10px; background: #fff7ed;
-    color: #92400e; padding: 10px 12px; font-size: 0.88rem; font-weight: 850; line-height: 1.35;
+    color: #92400e; padding: 7px 9px; font-size: 0.8rem; font-weight: 850; line-height: 1.25;
   }
-  .edit-review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-  .edit-review-field { border: 1px solid #edf1f6; border-radius: 10px; background: #fbfdff; padding: 10px; }
-  .edit-review-label { display: block; color: #64748b; font-size: 0.72rem; font-weight: 900; text-transform: uppercase; }
-  .edit-review-value { display: block; margin-top: 3px; color: #111827; font-size: 0.92rem; font-weight: 900; overflow-wrap: anywhere; }
-  .edit-review-section { border: 1px solid #edf1f6; border-radius: 10px; overflow: hidden; }
+  .edit-review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .edit-review-field { border: 1px solid #edf1f6; border-radius: 8px; background: #fbfdff; padding: 6px 8px; }
+  .edit-review-label { display: block; color: #64748b; font-size: 0.66rem; font-weight: 900; text-transform: uppercase; }
+  .edit-review-value { display: block; margin-top: 2px; color: #111827; font-size: 0.84rem; font-weight: 900; overflow-wrap: anywhere; }
+  .edit-review-section { border: 1px solid #edf1f6; border-radius: 9px; overflow: hidden; }
   .edit-review-section[id] { scroll-margin-top: 18px; }
   .edit-review-anchor { scroll-margin-top: 18px; }
   .edit-review-section h2 {
-    margin: 0; padding: 10px 12px; background: #f8fafc; border-bottom: 1px solid #edf1f6;
-    color: #334155; font-size: 0.94rem; font-weight: 950;
+    margin: 0; padding: 7px 10px; background: #f8fafc; border-bottom: 1px solid #edf1f6;
+    color: #334155; font-size: 0.84rem; font-weight: 950;
   }
-  .edit-review-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-  .edit-review-table th, .edit-review-table td { padding: 9px 10px; border-bottom: 1px solid #edf1f6; text-align: left; }
-  .edit-review-table th { background: #fbfdff; color: #64748b; font-size: 0.74rem; text-transform: uppercase; }
+  .edit-review-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  .edit-review-table th, .edit-review-table td { padding: 6px 8px; border-bottom: 1px solid #edf1f6; text-align: left; }
+  .edit-review-table th { background: #fbfdff; color: #64748b; font-size: 0.66rem; text-transform: uppercase; }
   .edit-review-table tr:last-child td { border-bottom: 0; }
   .numero { text-align: right; white-space: nowrap; }
   .edit-review-total {
-    display: flex; justify-content: flex-end; gap: 16px; align-items: center;
-    padding: 12px; background: #f0fdf4; color: #14532d; font-weight: 950;
+    display: flex; justify-content: flex-end; gap: 14px; align-items: center;
+    padding: 8px 10px; background: #f0fdf4; color: #14532d; font-weight: 950;
   }
-  .edit-review-list { display: grid; gap: 8px; padding: 10px 12px; }
+  .edit-review-list { display: grid; gap: 6px; padding: 7px 9px; }
   .edit-review-list-item {
-    border: 1px solid #edf1f6; border-radius: 9px; background: #fff; padding: 9px 10px;
-    display: grid; gap: 3px;
+    border: 1px solid #edf1f6; border-radius: 8px; background: #fff; padding: 6px 8px;
+    display: grid; gap: 2px;
   }
-  .edit-review-list-title { color: #111827; font-weight: 900; font-size: 0.88rem; }
-  .edit-review-list-meta { color: #64748b; font-size: 0.78rem; font-weight: 760; }
-  .edit-review-empty { padding: 10px 12px; color: #64748b; font-size: 0.86rem; font-weight: 760; }
+  .edit-review-list-title { color: #111827; font-weight: 900; font-size: 0.8rem; }
+  .edit-review-list-meta { color: #64748b; font-size: 0.72rem; font-weight: 760; }
+  .edit-review-empty { padding: 7px 9px; color: #64748b; font-size: 0.78rem; font-weight: 760; }
   .edit-review-history summary {
-    list-style: none; cursor: pointer; margin: 0; padding: 10px 12px; background: #f8fafc;
-    border-bottom: 1px solid #edf1f6; color: #334155; font-size: 0.94rem; font-weight: 950;
+    list-style: none; cursor: pointer; margin: 0; padding: 7px 10px; background: #f8fafc;
+    border-bottom: 1px solid #edf1f6; color: #334155; font-size: 0.84rem; font-weight: 950;
   }
   .edit-review-history summary::-webkit-details-marker { display: none; }
   .edit-review-history summary::after { content: "Mostrar"; float: right; color: #64748b; font-size: 0.76rem; font-weight: 900; }
   .edit-review-history[open] summary::after { content: "Ocultar"; }
   .edit-review-history:not([open]) summary { border-bottom: 0; }
-  .edit-review-messages { display: grid; gap: 8px; }
+  .edit-review-messages { display: grid; gap: 6px; }
   .edit-review-message {
     border: 1px solid #bbf7d0; border-radius: 10px; background: #f0fdf4;
-    color: #166534; padding: 10px 12px; font-size: 0.88rem; font-weight: 850;
+    color: #166534; padding: 7px 9px; font-size: 0.8rem; font-weight: 850;
   }
   .edit-review-message.warning, .edit-review-message.error {
+    border-color: #f7d98b; background: #fff7ed; color: #92400e;
+  }
+  .edit-review-whatsapp {
+    border: 1px solid #bbf7d0; border-radius: 10px; background: #f0fdf4;
+    color: #166534; padding: 7px 9px; display: flex; align-items: center;
+    justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  }
+  .edit-review-whatsapp-text { font-size: 0.8rem; font-weight: 850; line-height: 1.25; }
+  .edit-review-whatsapp.warning {
     border-color: #f7d98b; background: #fff7ed; color: #92400e;
   }
   .edit-review-table tr.item-highlight td {
     background: #f0fdf4; box-shadow: inset 0 1px 0 #bbf7d0, inset 0 -1px 0 #bbf7d0;
   }
   .edit-review-table tr.item-highlight td:first-child { box-shadow: inset 3px 0 0 #22c55e, inset 0 1px 0 #bbf7d0, inset 0 -1px 0 #bbf7d0; }
+  .edit-review-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
   @media (max-width: 780px) {
     .edit-review-grid { grid-template-columns: 1fr; }
     .edit-review-head { display: grid; }
     .edit-review-actions { justify-content: stretch; }
     .edit-review-btn { width: 100%; }
+    .edit-review-whatsapp { align-items: stretch; }
     .edit-review-table { min-width: 660px; }
     .edit-review-table-wrap { overflow-x: auto; }
   }
@@ -122,8 +134,27 @@
           </div>
         {% endif %}
 
+        {% if whatsapp_atualizacao %}
+          {% if whatsapp_atualizacao.tem_whatsapp %}
+            <div class="edit-review-whatsapp" role="status" aria-live="polite">
+              <span class="edit-review-whatsapp-text">
+                Nota atualizada apos alterar "{{ whatsapp_atualizacao.produto_nome }}".
+              </span>
+              <a class="edit-review-btn primary" href="{{ whatsapp_atualizacao.url }}" target="_blank" rel="noopener">
+                Enviar nota atualizada pelo WhatsApp
+              </a>
+            </div>
+          {% else %}
+            <div class="edit-review-whatsapp warning" role="status" aria-live="polite">
+              <span class="edit-review-whatsapp-text">
+                Nota atualizada, mas este cliente nao possui WhatsApp cadastrado.
+              </span>
+            </div>
+          {% endif %}
+        {% endif %}
+
         <div class="edit-review-notice">
-          Modo de edicao segura. Nesta etapa, apenas a quantidade de item existente pode ser alterada com confirmacao.
+          Modo de edicao segura. Nesta etapa, quantidade de item existente pode ser alterada e item pode ser removido com confirmacao.
         </div>
 
         {% if possui_alerta_operacional %}
@@ -186,7 +217,10 @@
                     <td class="numero">R$ {{ item.preco_unitario|floatformat:2 }}</td>
                     <td class="numero">R$ {{ item.valor_total|floatformat:2 }}</td>
                     <td>
-                      <a class="edit-review-btn primary compact" href="{% url 'estoque:venda_editar_quantidade_item' venda.id item.id %}">Alterar quantidade</a>
+                      <div class="edit-review-row-actions">
+                        <a class="edit-review-btn primary compact" href="{% url 'estoque:venda_editar_quantidade_item' venda.id item.id %}">Alterar quantidade</a>
+                        <a class="edit-review-btn danger compact" href="{% url 'estoque:venda_revisar_remocao_item' venda.id item.id %}">Remover item</a>
+                      </div>
                     </td>
                   </tr>
                 {% empty %}
