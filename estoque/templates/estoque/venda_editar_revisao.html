@@ -48,6 +48,7 @@
   .edit-review-value { display: block; margin-top: 3px; color: #111827; font-size: 0.92rem; font-weight: 900; overflow-wrap: anywhere; }
   .edit-review-section { border: 1px solid #edf1f6; border-radius: 10px; overflow: hidden; }
   .edit-review-section[id] { scroll-margin-top: 18px; }
+  .edit-review-anchor { scroll-margin-top: 18px; }
   .edit-review-section h2 {
     margin: 0; padding: 10px 12px; background: #f8fafc; border-bottom: 1px solid #edf1f6;
     color: #334155; font-size: 0.94rem; font-weight: 950;
@@ -69,6 +70,14 @@
   .edit-review-list-title { color: #111827; font-weight: 900; font-size: 0.88rem; }
   .edit-review-list-meta { color: #64748b; font-size: 0.78rem; font-weight: 760; }
   .edit-review-empty { padding: 10px 12px; color: #64748b; font-size: 0.86rem; font-weight: 760; }
+  .edit-review-history summary {
+    list-style: none; cursor: pointer; margin: 0; padding: 10px 12px; background: #f8fafc;
+    border-bottom: 1px solid #edf1f6; color: #334155; font-size: 0.94rem; font-weight: 950;
+  }
+  .edit-review-history summary::-webkit-details-marker { display: none; }
+  .edit-review-history summary::after { content: "Mostrar"; float: right; color: #64748b; font-size: 0.76rem; font-weight: 900; }
+  .edit-review-history[open] summary::after { content: "Ocultar"; }
+  .edit-review-history:not([open]) summary { border-bottom: 0; }
   .edit-review-messages { display: grid; gap: 8px; }
   .edit-review-message {
     border: 1px solid #bbf7d0; border-radius: 10px; background: #f0fdf4;
@@ -77,6 +86,10 @@
   .edit-review-message.warning, .edit-review-message.error {
     border-color: #f7d98b; background: #fff7ed; color: #92400e;
   }
+  .edit-review-table tr.item-highlight td {
+    background: #f0fdf4; box-shadow: inset 0 1px 0 #bbf7d0, inset 0 -1px 0 #bbf7d0;
+  }
+  .edit-review-table tr.item-highlight td:first-child { box-shadow: inset 3px 0 0 #22c55e, inset 0 1px 0 #bbf7d0, inset 0 -1px 0 #bbf7d0; }
   @media (max-width: 780px) {
     .edit-review-grid { grid-template-columns: 1fr; }
     .edit-review-head { display: grid; }
@@ -149,7 +162,8 @@
           </div>
         </section>
 
-        <section class="edit-review-section" id="itens-venda">
+        <div id="itens-venda" class="edit-review-anchor" aria-hidden="true"></div>
+        <section class="edit-review-section">
           <h2>Itens da venda</h2>
           <div class="edit-review-table-wrap">
             <table class="edit-review-table">
@@ -165,7 +179,7 @@
               </thead>
               <tbody>
                 {% for item in venda.itens.all %}
-                  <tr id="item-venda-{{ item.id }}">
+                  <tr id="item-venda-{{ item.id }}" class="{% if alteracao_quantidade and alteracao_quantidade.item_id == item.id %}item-highlight{% endif %}">
                     <td>{{ item.produto.nome|default:"Produto nao identificado" }}</td>
                     <td class="numero">{{ item.quantidade }}</td>
                     <td>{{ item.unidade|default:"-" }}</td>
@@ -211,8 +225,8 @@
           {% endif %}
         </section>
 
-        <section class="edit-review-section">
-          <h2>Historico da nota</h2>
+        <details class="edit-review-section edit-review-history" {% if not alteracao_quantidade %}open{% endif %}>
+          <summary>Historico da nota</summary>
           {% if eventos %}
             <div class="edit-review-list">
               {% for evento in eventos %}
@@ -225,7 +239,7 @@
           {% else %}
             <div class="edit-review-empty">Nenhum evento registrado para esta venda.</div>
           {% endif %}
-        </section>
+        </details>
       </div>
     </section>
   </div>

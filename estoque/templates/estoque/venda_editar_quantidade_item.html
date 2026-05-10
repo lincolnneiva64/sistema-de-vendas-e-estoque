@@ -3,7 +3,7 @@
 {% block content %}
 <style>
   .qty-page { color: #172033; padding: 18px 0 36px; }
-  .qty-shell { max-width: 880px; margin: 0 auto; padding: 0 18px; }
+  .qty-shell { max-width: 1040px; margin: 0 auto; padding: 0 18px; }
   .qty-card {
     background: #fff; border: 1px solid #e1e7ef; border-radius: 13px;
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06); overflow: hidden;
@@ -29,6 +29,20 @@
     filter: brightness(0.96);
   }
   .qty-btn.primary { border-color: #1d4ed8; background: #2563eb; color: #fff; }
+  .qty-btn:focus-visible,
+  .qty-input:focus-visible {
+    outline: 2px solid #facc15;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.3), 0 4px 10px rgba(15, 23, 42, 0.12);
+  }
+  .qty-confirm-button:focus-visible {
+    border-color: #facc15;
+    box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.34), 0 5px 12px rgba(37, 99, 235, 0.18);
+  }
+  .qty-btn:focus:not(:focus-visible),
+  .qty-input:focus:not(:focus-visible) {
+    outline: none;
+  }
   .qty-warning {
     border: 1px solid #f7d98b; border-radius: 10px; background: #fff7ed;
     color: #92400e; padding: 10px 12px; font-size: 0.88rem; font-weight: 850; line-height: 1.35;
@@ -41,31 +55,46 @@
     border: 1px solid #fecaca; border-radius: 10px; background: #fef2f2;
     color: #991b1b; padding: 10px 12px; font-size: 0.88rem; font-weight: 850;
   }
-  .qty-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-  .qty-workspace { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(300px, 0.9fr); gap: 12px; align-items: start; }
+  .qty-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .qty-workspace { display: grid; gap: 12px; }
   .qty-panel { display: grid; gap: 10px; }
   .qty-field { border: 1px solid #edf1f6; border-radius: 10px; background: #fbfdff; padding: 10px; }
   .qty-label { display: block; color: #64748b; font-size: 0.72rem; font-weight: 900; text-transform: uppercase; }
   .qty-value { display: block; margin-top: 3px; color: #111827; font-size: 0.92rem; font-weight: 900; overflow-wrap: anywhere; }
-  .qty-form {
-    display: grid; grid-template-columns: minmax(180px, 1fr) auto; gap: 8px; align-items: end;
-    border: 1px solid #edf1f6; border-radius: 10px; background: #fbfdff; padding: 12px;
+  .qty-table-wrap { border: 1px solid #edf1f6; border-radius: 10px; overflow-x: auto; }
+  .qty-table { width: 100%; min-width: 820px; border-collapse: collapse; font-size: 0.88rem; }
+  .qty-table th, .qty-table td { padding: 9px 10px; border-bottom: 1px solid #edf1f6; text-align: left; vertical-align: middle; }
+  .qty-table th { background: #fbfdff; color: #64748b; font-size: 0.72rem; font-weight: 950; text-transform: uppercase; }
+  .qty-table tr:last-child td { border-bottom: 0; }
+  .qty-table tr.qty-editing td { background: #f0fdf4; }
+  .qty-table tr.qty-editing td:first-child { box-shadow: inset 3px 0 0 #22c55e; }
+  .qty-product { color: #111827; font-weight: 900; }
+  .qty-muted { color: #64748b; font-weight: 850; }
+  .qty-number { text-align: right; white-space: nowrap; }
+  .qty-new-total { color: #14532d; font-weight: 950; }
+  .qty-review-form { display: grid; gap: 10px; }
+  .qty-input-line {
+    display: grid; grid-template-columns: minmax(110px, 1fr) auto; gap: 8px; align-items: center;
   }
-  .qty-input-wrap { display: grid; gap: 5px; }
-  .qty-input-wrap label { color: #334155; font-size: 0.82rem; font-weight: 900; }
   .qty-input {
-    min-height: 38px; border: 1px solid #cbd5e1; border-radius: 9px; padding: 7px 10px;
+    width: 100%; min-width: 0; min-height: 36px; border: 1px solid #86efac; border-radius: 8px; padding: 7px 10px;
     font-size: 0.95rem; font-weight: 850; color: #0f172a;
+    background: #fff;
   }
-  .qty-total-row {
-    display: grid; grid-template-columns: 1fr; gap: 10px;
+  .qty-btn.inline {
+    min-height: 34px; padding: 7px 10px; border-radius: 8px; font-size: 0.78rem;
+    box-shadow: 0 2px 5px rgba(15, 23, 42, 0.07);
   }
-  .qty-total { border: 1px solid #dbeafe; border-radius: 10px; background: #eff6ff; padding: 10px; }
-  .qty-total.final { border-color: #bbf7d0; background: #f0fdf4; }
-  .qty-total .qty-value { font-size: 1.08rem; }
+  .qty-totals {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+  }
+  .qty-total-box { border: 1px solid #edf1f6; border-radius: 10px; background: #fbfdff; padding: 10px; }
+  .qty-total-box.preview { border-color: #bbf7d0; background: #f0fdf4; color: #14532d; }
+  .qty-total-box .qty-value { font-size: 1.05rem; }
   .qty-confirm { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
   @media (max-width: 680px) {
-    .qty-grid, .qty-workspace, .qty-total-row, .qty-form { grid-template-columns: 1fr; }
+    .qty-grid, .qty-workspace, .qty-totals { grid-template-columns: 1fr; }
+    .qty-input-line { grid-template-columns: 1fr; }
     .qty-head { display: grid; }
     .qty-actions, .qty-confirm { justify-content: stretch; }
     .qty-btn { width: 100%; }
@@ -77,11 +106,11 @@
     <section class="qty-card">
       <header class="qty-head">
         <div>
-          <h1 class="qty-title">Alterar quantidade - Venda #{{ venda.id }}</h1>
-          <p class="qty-subtitle">Revise o novo valor antes de confirmar a alteracao da nota gravada.</p>
+          <h1 class="qty-title">Editar quantidade na nota - Venda #{{ venda.id }}</h1>
+          <p class="qty-subtitle">Nota em edicao segura: revise a linha alterada e o novo total antes de confirmar.</p>
         </div>
         <div class="qty-actions">
-          <a class="qty-btn" href="{% url 'estoque:venda_editar_revisao' venda.id %}">Cancelar / Voltar</a>
+          <a class="qty-btn" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1">Cancelar / Voltar</a>
         </div>
       </header>
 
@@ -102,71 +131,96 @@
 
         <section class="qty-workspace">
           <div class="qty-panel">
-            <div class="qty-grid" aria-label="Dados atuais do item">
+            <div class="qty-grid" aria-label="Dados da venda">
               <div class="qty-field">
                 <span class="qty-label">Cliente</span>
                 <span class="qty-value">{{ venda.cliente.nome|default:"Consumidor" }}</span>
               </div>
               <div class="qty-field">
-                <span class="qty-label">Produto</span>
-                <span class="qty-value">{{ produto_nome }}</span>
+                <span class="qty-label">Venda/nota</span>
+                <span class="qty-value">Venda #{{ venda.id }}</span>
               </div>
               <div class="qty-field">
-                <span class="qty-label">Quantidade atual</span>
-                <span class="qty-value">{{ item_venda.quantidade }} {{ item_venda.unidade }}</span>
+                <span class="qty-label">Data da venda</span>
+                <span class="qty-value">{{ venda.data_venda|date:"d/m/Y" }}</span>
               </div>
               <div class="qty-field">
-                <span class="qty-label">Preco unitario</span>
-                <span class="qty-value">R$ {{ item_venda.preco_unitario|floatformat:2 }}</span>
-              </div>
-              <div class="qty-field">
-                <span class="qty-label">Valor atual do item</span>
-                <span class="qty-value">R$ {{ valor_atual_item|floatformat:2 }}</span>
-              </div>
-              <div class="qty-field">
-                <span class="qty-label">Total atual da venda</span>
-                <span class="qty-value">R$ {{ total_atual_venda|floatformat:2 }}</span>
+                <span class="qty-label">Pagamento</span>
+                <span class="qty-value">{{ venda.tipo_pagamento|default:"-" }}</span>
               </div>
             </div>
           </div>
 
           <div class="qty-panel">
-            <form method="get" class="qty-form">
-              <div class="qty-input-wrap">
-                <label for="id_nova_quantidade">Nova quantidade</label>
-                <input class="qty-input" id="id_nova_quantidade" name="nova_quantidade" type="number" step="0.001" min="0.001" value="{{ quantidade_informada }}" required>
+            <form method="get" class="qty-review-form">
+              <div class="qty-table-wrap">
+                <table class="qty-table">
+                  <thead>
+                    <tr>
+                      <th>Produto</th>
+                      <th class="qty-number">Qtd atual</th>
+                      <th>Nova qtd</th>
+                      <th>Un</th>
+                      <th class="qty-number">Preco unitario</th>
+                      <th class="qty-number">Total atual</th>
+                      <th class="qty-number">Novo total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for item in venda.itens.all %}
+                      <tr class="{% if item.id == item_venda.id %}qty-editing{% endif %}">
+                        <td><span class="qty-product">{{ item.produto.nome|default:"Produto nao identificado" }}</span></td>
+                        <td class="qty-number">{{ item.quantidade }}</td>
+                        <td>
+                          {% if item.id == item_venda.id %}
+                            <div class="qty-input-line">
+                              <input class="qty-input" id="id_nova_quantidade" name="nova_quantidade" type="number" step="0.001" min="0.001" value="{{ quantidade_informada }}" aria-label="Nova quantidade" required {% if not quantidade_preview %}autofocus{% endif %}>
+                              <button class="qty-btn primary inline" type="submit">Revisar</button>
+                            </div>
+                          {% else %}
+                            <span class="qty-muted">-</span>
+                          {% endif %}
+                        </td>
+                        <td>{{ item.unidade|default:"-" }}</td>
+                        <td class="qty-number">R$ {{ item.preco_unitario|floatformat:2 }}</td>
+                        <td class="qty-number">R$ {{ item.valor_total|floatformat:2 }}</td>
+                        <td class="qty-number {% if item.id == item_venda.id and quantidade_preview %}qty-new-total{% endif %}">
+                          {% if item.id == item_venda.id and quantidade_preview %}
+                            R$ {{ novo_valor_item|floatformat:2 }}
+                          {% else %}
+                            R$ {{ item.valor_total|floatformat:2 }}
+                          {% endif %}
+                        </td>
+                      </tr>
+                    {% empty %}
+                      <tr>
+                        <td colspan="7">Nenhum item encontrado nesta venda.</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
               </div>
-              <button class="qty-btn primary" type="submit">Revisar alteracao</button>
+
+              <div class="qty-totals">
+                <div class="qty-total-box">
+                  <span class="qty-label">Total atual da nota</span>
+                  <span class="qty-value">R$ {{ total_atual_venda|floatformat:2 }}</span>
+                </div>
+                <div class="qty-total-box preview">
+                  <span class="qty-label">Novo total previsto da nota</span>
+                  <span class="qty-value">
+                    {% if quantidade_preview %}R$ {{ novo_total_venda|floatformat:2 }}{% else %}Aguardando revisao{% endif %}
+                  </span>
+                </div>
+              </div>
             </form>
 
             {% if quantidade_preview %}
-              <div class="qty-grid" aria-label="Previsao da alteracao">
-                <div class="qty-field">
-                  <span class="qty-label">Nova quantidade</span>
-                  <span class="qty-value">{{ quantidade_preview }} {{ item_venda.unidade }}</span>
-                </div>
-                <div class="qty-field">
-                  <span class="qty-label">Novo valor previsto do item</span>
-                  <span class="qty-value">R$ {{ novo_valor_item|floatformat:2 }}</span>
-                </div>
-              </div>
-
-              <div class="qty-total-row">
-                <div class="qty-total">
-                  <span class="qty-label">Total atual da venda</span>
-                  <span class="qty-value">R$ {{ total_atual_venda|floatformat:2 }}</span>
-                </div>
-                <div class="qty-total final">
-                  <span class="qty-label">Novo total previsto da venda</span>
-                  <span class="qty-value">R$ {{ novo_total_venda|floatformat:2 }}</span>
-                </div>
-              </div>
-
-              <form method="post" class="qty-confirm">
+              <form method="post" class="qty-confirm" data-qty-confirm-actions>
                 {% csrf_token %}
                 <input type="hidden" name="nova_quantidade" value="{{ quantidade_preview }}">
-                <a class="qty-btn" href="{% url 'estoque:venda_editar_revisao' venda.id %}">Cancelar / Voltar</a>
-                <button class="qty-btn primary" type="submit">Confirmar alteracao da quantidade</button>
+                <a class="qty-btn" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1" data-qty-action="cancelar">Cancelar / Voltar</a>
+                <button class="qty-btn primary qty-confirm-button" type="submit" autofocus data-qty-action="confirmar">Confirmar alteracao da quantidade</button>
               </form>
             {% endif %}
           </div>
@@ -175,4 +229,32 @@
     </section>
   </div>
 </main>
+<script>
+  (function () {
+    const actions = document.querySelector("[data-qty-confirm-actions]");
+    if (!actions) return;
+
+    const cancelButton = actions.querySelector("[data-qty-action='cancelar']");
+    const confirmButton = actions.querySelector("[data-qty-action='confirmar']");
+    if (!cancelButton || !confirmButton) return;
+
+    actions.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" && document.activeElement === cancelButton) {
+        event.preventDefault();
+        window.location.href = cancelButton.href;
+        return;
+      }
+
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (!actions.contains(document.activeElement)) return;
+
+      event.preventDefault();
+      if (event.key === "ArrowLeft") {
+        cancelButton.focus();
+      } else {
+        confirmButton.focus();
+      }
+    });
+  })();
+</script>
 {% endblock %}

@@ -1988,6 +1988,7 @@ def venda_editar_revisao(request, pk):
         Venda.objects.select_related("cliente").prefetch_related("itens__produto", "eventos"),
         pk=pk,
     )
+    alteracao_quantidade = request.session.pop(f"venda_quantidade_alterada_{venda.pk}", None)
 
     entregas = (
         EntregaRotaItem.objects.filter(venda=venda)
@@ -2012,13 +2013,14 @@ def venda_editar_revisao(request, pk):
             "total_checklists": total_checklists,
             "existe_pendencia": existe_pendencia,
             "possui_alerta_operacional": total_entregas or existe_checklist or existe_pendencia,
+            "alteracao_quantidade": alteracao_quantidade,
         },
     )
 
 
 def venda_editar_quantidade_item(request, pk, item_id):
     venda = get_object_or_404(
-        Venda.objects.select_related("cliente"),
+        Venda.objects.select_related("cliente").prefetch_related("itens__produto"),
         pk=pk,
     )
     item_venda = get_object_or_404(
@@ -2039,8 +2041,7 @@ def venda_editar_quantidade_item(request, pk, item_id):
             raise ValueError("Informe uma quantidade maior que zero.")
 
         novo_total_item = (nova_quantidade * item_venda.preco_unitario).quantize(Decimal("0.01"))
-        total_sem_item = calcular_total_itens_venda(venda, excluir_item_id=item_venda.id)
-        total_previsto = (total_sem_item + novo_total_item).quantize(Decimal("0.01"))
+        total_previsto = (total_atual_venda - valor_atual_item + novo_total_item).quantize(Decimal("0.01"))
         return nova_quantidade, novo_total_item, total_previsto
 
     if request.method == "POST":
@@ -2052,6 +2053,7 @@ def venda_editar_quantidade_item(request, pk, item_id):
             return redirect("estoque:venda_editar_quantidade_item", pk=venda.pk, item_id=item_venda.pk)
 
         quantidade_anterior = item_venda.quantidade
+        valor_anterior_item = valor_atual_item
         total_anterior = total_atual_venda
         produto_nome = item_venda.produto.nome if item_venda.produto else "Produto nao identificado"
 
@@ -2059,7 +2061,9 @@ def venda_editar_quantidade_item(request, pk, item_id):
             item_venda.quantidade = nova_quantidade
             item_venda.valor_total = novo_total_item
             item_venda.save(update_fields=["quantidade", "valor_total"])
-            novo_total_confirmado = recalcular_total_venda(venda)
+            venda.total = total_previsto
+            venda.save(update_fields=["total", "atualizado_em"])
+            novo_total_confirmado = total_previsto
             _registrar_evento_venda(
                 venda,
                 "quantidade_item_alterada",
@@ -2073,7 +2077,18 @@ def venda_editar_quantidade_item(request, pk, item_id):
             )
 
         messages.success(request, f"Quantidade de {produto_nome} atualizada com sucesso.")
-        return redirect(f"{reverse('estoque:venda_editar_revisao', kwargs={'pk': venda.pk})}#itens-venda")
+        request.session[f"venda_quantidade_alterada_{venda.pk}"] = {
+            "item_id": item_venda.pk,
+            "produto_nome": produto_nome,
+            "unidade": item_venda.unidade,
+            "quantidade_anterior": str(quantidade_anterior),
+            "nova_quantidade": str(nova_quantidade),
+            "valor_anterior_item": str(valor_anterior_item),
+            "novo_valor_item": str(novo_total_item),
+            "total_anterior_venda": str(total_anterior),
+            "novo_total_venda": str(novo_total_confirmado),
+        }
+        return redirect(f"{reverse('estoque:venda_detalhe', kwargs={'pk': venda.pk})}?nota_atualizada=1")
 
     quantidade_informada = request.GET.get("nova_quantidade", "").strip()
     if quantidade_informada:

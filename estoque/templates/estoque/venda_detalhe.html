@@ -478,6 +478,17 @@
             font-weight: 700;
         }
 
+        .nota-feedback {
+            margin-bottom: 8px;
+            padding: 7px 9px;
+            border: 1px solid #bbf7d0;
+            border-radius: 9px;
+            background: #f0fdf4;
+            color: #166534;
+            font-size: 12px;
+            font-weight: 850;
+        }
+
         .nota-duas-vias {
             display: flex;
             flex-wrap: nowrap;
@@ -730,6 +741,13 @@
                         {{ venda.whatsapp_status_texto }}
                     </div>
 
+                    {% if request.GET.nota_atualizada == "1" %}
+                        {% for message in messages %}
+                            <div class="nota-feedback {{ message.tags }}">{{ message }}</div>
+                        {% endfor %}
+                    {% endif %}
+
+                    {% if request.GET.nota_atualizada != "1" %}
                     <div class="comunicacao">
                         <h2 style="margin: 0 0 5px; font-size: 13px; color: #1e3a8a;">Historico de comunicacao</h2>
                         <div id="comunicacaoWhatsappLista" class="comunicacao-lista">
@@ -789,6 +807,8 @@
                         </div>
                     </div>
 
+                    {% endif %}
+
                     <div class="dados">
                         <div class="campo">
                             <span class="label">Cliente</span>
@@ -843,6 +863,7 @@
                         <span>R$ {{ venda.total|floatformat:2 }}</span>
                     </div>
 
+                    {% if request.GET.nota_atualizada != "1" %}
                     <div class="historico">
                         <h2 style="margin: 0 0 5px; font-size: 13px; color: #1e3a8a;">Historico da nota</h2>
                         <div class="historico-lista">
@@ -866,6 +887,8 @@
                             {% endif %}
                         </div>
                     </div>
+
+                    {% endif %}
 
                     <div id="mensagem" class="mensagem"></div>
                 </section>
