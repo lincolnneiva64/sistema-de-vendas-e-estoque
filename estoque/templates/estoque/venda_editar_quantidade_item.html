@@ -1,0 +1,178 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Alterar quantidade da nota{% endblock %}
+{% block content %}
+<style>
+  .qty-page { color: #172033; padding: 18px 0 36px; }
+  .qty-shell { max-width: 880px; margin: 0 auto; padding: 0 18px; }
+  .qty-card {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 13px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06); overflow: hidden;
+  }
+  .qty-head {
+    padding: 15px 16px; border-bottom: 1px solid #edf1f6; background: #eff6ff;
+    display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap;
+  }
+  .qty-title { margin: 0; color: #1e3a8a; font-size: 1.18rem; font-weight: 950; line-height: 1.2; }
+  .qty-subtitle { margin: 6px 0 0; color: #64748b; font-size: 0.88rem; font-weight: 760; line-height: 1.35; }
+  .qty-body { padding: 15px 16px; display: grid; gap: 14px; }
+  .qty-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .qty-btn {
+    min-height: 38px; border: 1px solid #cbd5e1; border-radius: 9px; padding: 8px 13px;
+    background: #fff; color: #0f172a; font-size: 0.84rem; font-weight: 900;
+    text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
+    transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.08s ease;
+  }
+  .qty-btn:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+    filter: brightness(0.96);
+  }
+  .qty-btn.primary { border-color: #1d4ed8; background: #2563eb; color: #fff; }
+  .qty-warning {
+    border: 1px solid #f7d98b; border-radius: 10px; background: #fff7ed;
+    color: #92400e; padding: 10px 12px; font-size: 0.88rem; font-weight: 850; line-height: 1.35;
+  }
+  .qty-info {
+    border: 1px solid #bfdbfe; border-radius: 10px; background: #eff6ff;
+    color: #1e3a8a; padding: 10px 12px; font-size: 0.88rem; font-weight: 850; line-height: 1.35;
+  }
+  .qty-error {
+    border: 1px solid #fecaca; border-radius: 10px; background: #fef2f2;
+    color: #991b1b; padding: 10px 12px; font-size: 0.88rem; font-weight: 850;
+  }
+  .qty-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .qty-workspace { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(300px, 0.9fr); gap: 12px; align-items: start; }
+  .qty-panel { display: grid; gap: 10px; }
+  .qty-field { border: 1px solid #edf1f6; border-radius: 10px; background: #fbfdff; padding: 10px; }
+  .qty-label { display: block; color: #64748b; font-size: 0.72rem; font-weight: 900; text-transform: uppercase; }
+  .qty-value { display: block; margin-top: 3px; color: #111827; font-size: 0.92rem; font-weight: 900; overflow-wrap: anywhere; }
+  .qty-form {
+    display: grid; grid-template-columns: minmax(180px, 1fr) auto; gap: 8px; align-items: end;
+    border: 1px solid #edf1f6; border-radius: 10px; background: #fbfdff; padding: 12px;
+  }
+  .qty-input-wrap { display: grid; gap: 5px; }
+  .qty-input-wrap label { color: #334155; font-size: 0.82rem; font-weight: 900; }
+  .qty-input {
+    min-height: 38px; border: 1px solid #cbd5e1; border-radius: 9px; padding: 7px 10px;
+    font-size: 0.95rem; font-weight: 850; color: #0f172a;
+  }
+  .qty-total-row {
+    display: grid; grid-template-columns: 1fr; gap: 10px;
+  }
+  .qty-total { border: 1px solid #dbeafe; border-radius: 10px; background: #eff6ff; padding: 10px; }
+  .qty-total.final { border-color: #bbf7d0; background: #f0fdf4; }
+  .qty-total .qty-value { font-size: 1.08rem; }
+  .qty-confirm { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+  @media (max-width: 680px) {
+    .qty-grid, .qty-workspace, .qty-total-row, .qty-form { grid-template-columns: 1fr; }
+    .qty-head { display: grid; }
+    .qty-actions, .qty-confirm { justify-content: stretch; }
+    .qty-btn { width: 100%; }
+  }
+</style>
+
+<main class="qty-page">
+  <div class="qty-shell">
+    <section class="qty-card">
+      <header class="qty-head">
+        <div>
+          <h1 class="qty-title">Alterar quantidade - Venda #{{ venda.id }}</h1>
+          <p class="qty-subtitle">Revise o novo valor antes de confirmar a alteracao da nota gravada.</p>
+        </div>
+        <div class="qty-actions">
+          <a class="qty-btn" href="{% url 'estoque:venda_editar_revisao' venda.id %}">Cancelar / Voltar</a>
+        </div>
+      </header>
+
+      <div class="qty-body">
+        <div class="qty-info">
+          Somente a quantidade deste item pode ser alterada nesta etapa. Produto, unidade e preco unitario permanecem iguais.
+        </div>
+
+        {% if possui_alerta_operacional %}
+          <div class="qty-warning">
+            Esta venda ja possui vinculo com entrega/checklist. Edicoes futuras precisam ser feitas com cuidado.
+          </div>
+        {% endif %}
+
+        {% if erro_quantidade %}
+          <div class="qty-error">{{ erro_quantidade }}</div>
+        {% endif %}
+
+        <section class="qty-workspace">
+          <div class="qty-panel">
+            <div class="qty-grid" aria-label="Dados atuais do item">
+              <div class="qty-field">
+                <span class="qty-label">Cliente</span>
+                <span class="qty-value">{{ venda.cliente.nome|default:"Consumidor" }}</span>
+              </div>
+              <div class="qty-field">
+                <span class="qty-label">Produto</span>
+                <span class="qty-value">{{ produto_nome }}</span>
+              </div>
+              <div class="qty-field">
+                <span class="qty-label">Quantidade atual</span>
+                <span class="qty-value">{{ item_venda.quantidade }} {{ item_venda.unidade }}</span>
+              </div>
+              <div class="qty-field">
+                <span class="qty-label">Preco unitario</span>
+                <span class="qty-value">R$ {{ item_venda.preco_unitario|floatformat:2 }}</span>
+              </div>
+              <div class="qty-field">
+                <span class="qty-label">Valor atual do item</span>
+                <span class="qty-value">R$ {{ valor_atual_item|floatformat:2 }}</span>
+              </div>
+              <div class="qty-field">
+                <span class="qty-label">Total atual da venda</span>
+                <span class="qty-value">R$ {{ total_atual_venda|floatformat:2 }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="qty-panel">
+            <form method="get" class="qty-form">
+              <div class="qty-input-wrap">
+                <label for="id_nova_quantidade">Nova quantidade</label>
+                <input class="qty-input" id="id_nova_quantidade" name="nova_quantidade" type="number" step="0.001" min="0.001" value="{{ quantidade_informada }}" required>
+              </div>
+              <button class="qty-btn primary" type="submit">Revisar alteracao</button>
+            </form>
+
+            {% if quantidade_preview %}
+              <div class="qty-grid" aria-label="Previsao da alteracao">
+                <div class="qty-field">
+                  <span class="qty-label">Nova quantidade</span>
+                  <span class="qty-value">{{ quantidade_preview }} {{ item_venda.unidade }}</span>
+                </div>
+                <div class="qty-field">
+                  <span class="qty-label">Novo valor previsto do item</span>
+                  <span class="qty-value">R$ {{ novo_valor_item|floatformat:2 }}</span>
+                </div>
+              </div>
+
+              <div class="qty-total-row">
+                <div class="qty-total">
+                  <span class="qty-label">Total atual da venda</span>
+                  <span class="qty-value">R$ {{ total_atual_venda|floatformat:2 }}</span>
+                </div>
+                <div class="qty-total final">
+                  <span class="qty-label">Novo total previsto da venda</span>
+                  <span class="qty-value">R$ {{ novo_total_venda|floatformat:2 }}</span>
+                </div>
+              </div>
+
+              <form method="post" class="qty-confirm">
+                {% csrf_token %}
+                <input type="hidden" name="nova_quantidade" value="{{ quantidade_preview }}">
+                <a class="qty-btn" href="{% url 'estoque:venda_editar_revisao' venda.id %}">Cancelar / Voltar</a>
+                <button class="qty-btn primary" type="submit">Confirmar alteracao da quantidade</button>
+              </form>
+            {% endif %}
+          </div>
+        </section>
+      </div>
+    </section>
+  </div>
+</main>
+{% endblock %}

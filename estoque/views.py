@@ -2016,6 +2016,97 @@ def venda_editar_revisao(request, pk):
     )
 
 
+def venda_editar_quantidade_item(request, pk, item_id):
+    venda = get_object_or_404(
+        Venda.objects.select_related("cliente"),
+        pk=pk,
+    )
+    item_venda = get_object_or_404(
+        ItemVenda.objects.select_related("produto", "venda"),
+        pk=item_id,
+        venda=venda,
+    )
+    total_atual_venda = venda.total or Decimal("0.00")
+    valor_atual_item = item_venda.valor_total or Decimal("0.00")
+    quantidade_preview = None
+    novo_valor_item = None
+    novo_total_venda = None
+    erro_quantidade = ""
+
+    def calcular_previsao(valor_quantidade):
+        nova_quantidade = _decimal_do_front(valor_quantidade, "0.001")
+        if nova_quantidade <= 0:
+            raise ValueError("Informe uma quantidade maior que zero.")
+
+        novo_total_item = (nova_quantidade * item_venda.preco_unitario).quantize(Decimal("0.01"))
+        total_sem_item = calcular_total_itens_venda(venda, excluir_item_id=item_venda.id)
+        total_previsto = (total_sem_item + novo_total_item).quantize(Decimal("0.01"))
+        return nova_quantidade, novo_total_item, total_previsto
+
+    if request.method == "POST":
+        quantidade_postada = request.POST.get("nova_quantidade")
+        try:
+            nova_quantidade, novo_total_item, total_previsto = calcular_previsao(quantidade_postada)
+        except ValueError as exc:
+            messages.warning(request, str(exc))
+            return redirect("estoque:venda_editar_quantidade_item", pk=venda.pk, item_id=item_venda.pk)
+
+        quantidade_anterior = item_venda.quantidade
+        total_anterior = total_atual_venda
+        produto_nome = item_venda.produto.nome if item_venda.produto else "Produto nao identificado"
+
+        with transaction.atomic():
+            item_venda.quantidade = nova_quantidade
+            item_venda.valor_total = novo_total_item
+            item_venda.save(update_fields=["quantidade", "valor_total"])
+            novo_total_confirmado = recalcular_total_venda(venda)
+            _registrar_evento_venda(
+                venda,
+                "quantidade_item_alterada",
+                (
+                    f"Quantidade alterada na nota: {produto_nome}. "
+                    f"De {quantidade_anterior} {item_venda.unidade} para {nova_quantidade} {item_venda.unidade}. "
+                    f"Total da venda: R$ {total_anterior} -> R$ {novo_total_confirmado}."
+                ),
+                canal="sistema",
+                usuario=venda.operador,
+            )
+
+        messages.success(request, f"Quantidade de {produto_nome} atualizada com sucesso.")
+        return redirect(f"{reverse('estoque:venda_editar_revisao', kwargs={'pk': venda.pk})}#itens-venda")
+
+    quantidade_informada = request.GET.get("nova_quantidade", "").strip()
+    if quantidade_informada:
+        try:
+            quantidade_preview, novo_valor_item, novo_total_venda = calcular_previsao(quantidade_informada)
+        except ValueError as exc:
+            erro_quantidade = str(exc)
+
+    possui_alerta_operacional = (
+        EntregaRotaItem.objects.filter(venda=venda).exists()
+        or EntregaChecklistItem.objects.filter(rota_item__venda=venda).exists()
+        or EntregaRotaItem.objects.filter(venda=venda, is_pendencia=True).exists()
+    )
+
+    return render(
+        request,
+        "estoque/venda_editar_quantidade_item.html",
+        {
+            "venda": venda,
+            "item_venda": item_venda,
+            "produto_nome": item_venda.produto.nome if item_venda.produto else "Produto nao identificado",
+            "total_atual_venda": total_atual_venda,
+            "valor_atual_item": valor_atual_item,
+            "quantidade_informada": quantidade_informada,
+            "quantidade_preview": quantidade_preview,
+            "novo_valor_item": novo_valor_item,
+            "novo_total_venda": novo_total_venda,
+            "erro_quantidade": erro_quantidade,
+            "possui_alerta_operacional": possui_alerta_operacional,
+        },
+    )
+
+
 def venda_criar_entrega(request, pk):
     venda = get_object_or_404(Venda, pk=pk)
     
