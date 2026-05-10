@@ -1153,6 +1153,46 @@ function preencherResumoCliente(cliente) {
     clienteIndexAtivo = -1;
 }
 
+function normalizarTextoCliente(valor) {
+    return String(valor || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+}
+
+function iniciaisCliente(nome) {
+    return normalizarTextoCliente(nome)
+        .split(/\s+/)
+        .filter(Boolean)
+        .map(parte => parte.charAt(0))
+        .join("");
+}
+
+function prioridadeClienteAutocomplete(cliente, termo) {
+    const nome = normalizarTextoCliente(cliente.nome);
+    const busca = normalizarTextoCliente(termo);
+    const palavras = nome.split(/\s+/).filter(Boolean);
+
+    if (!busca) return 4;
+    if (nome.startsWith(busca)) return 0;
+    if (palavras.some(palavra => palavra.startsWith(busca))) return 1;
+    if (nome.includes(busca)) return 2;
+    if (iniciaisCliente(cliente.nome).startsWith(busca)) return 3;
+    return 4;
+}
+
+function ordenarClientesAutocomplete(clientes, termo) {
+    return (clientes || []).slice().sort((a, b) => {
+        const prioridadeA = prioridadeClienteAutocomplete(a, termo);
+        const prioridadeB = prioridadeClienteAutocomplete(b, termo);
+        if (prioridadeA !== prioridadeB) {
+            return prioridadeA - prioridadeB;
+        }
+        return normalizarTextoCliente(a.nome).localeCompare(normalizarTextoCliente(b.nome));
+    });
+}
+
 function renderizarSugestoesClientes() {
     clienteSugestoesBox.innerHTML = "";
 
@@ -1199,12 +1239,13 @@ function renderizarSugestoesClientes() {
 }
 
 async function buscarClientes(texto) {
+    const termoSolicitado = texto.trim();
     if (clienteBuscaAbortController) {
         clienteBuscaAbortController.abort();
     }
 
     clienteBuscaAbortController = new AbortController();
-    const params = new URLSearchParams({ q: texto });
+    const params = new URLSearchParams({ q: termoSolicitado });
 
     try {
         const resposta = await fetch(clientesAutocompleteUrl + "?" + params.toString(), {
@@ -1212,7 +1253,10 @@ async function buscarClientes(texto) {
             headers: { "X-Requested-With": "XMLHttpRequest" }
         });
         const dados = await resposta.json();
-        clientesSugestoes = dados.clientes || [];
+        if (normalizarTextoCliente(clienteBusca.value) !== normalizarTextoCliente(termoSolicitado)) {
+            return;
+        }
+        clientesSugestoes = ordenarClientesAutocomplete(dados.clientes || [], termoSolicitado);
         clienteIndexAtivo = clientesSugestoes.length ? 0 : -1;
         renderizarSugestoesClientes();
     } catch (erro) {
@@ -1231,9 +1275,12 @@ clienteBusca.addEventListener("input", () => {
         limparClienteSelecionado();
     }
 
+    clientesSugestoes = [];
+    clienteIndexAtivo = -1;
+    clienteSugestoesBox.innerHTML = "";
+    clienteSugestoesBox.style.display = "none";
+
     if (!texto) {
-        clientesSugestoes = [];
-        clienteSugestoesBox.style.display = "none";
         return;
     }
 
