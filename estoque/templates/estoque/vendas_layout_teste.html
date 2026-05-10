@@ -1488,6 +1488,7 @@ function limparCamposProdutoVenda() {
     quantidade.value = "";
     unidade.value = "";
     preco.value = "";
+    resetarAutocompleteProduto();
 }
 
 function limparCabecalhoVenda(resetarTipo = false) {
@@ -2083,6 +2084,19 @@ let sugestoes = [];
 let indexAtivo = -1;
 let autocompleteAberto = false;
 let ultimoProdutoIndex = -1;
+
+function resetarAutocompleteProduto() {
+    sugestoes = [];
+    indexAtivo = -1;
+    autocompleteAberto = false;
+    ultimoProdutoIndex = -1;
+    produtoBusca.value = "";
+    produto.value = "";
+    produto.selectedIndex = 0;
+    sugestoesBox.innerHTML = "";
+    sugestoesBox.scrollTop = 0;
+    sugestoesBox.style.display = "none";
+}
 
 function filtrarProdutos(texto) {
   const termo = texto.toLowerCase().trim();
