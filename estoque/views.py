@@ -1,5 +1,7 @@
 import json
 import textwrap
+import unicodedata
+from difflib import SequenceMatcher
 from io import BytesIO
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -10,7 +12,7 @@ from django.db.models import Q
 from urllib.parse import quote, urlencode
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
-from django.db.models import Case, When, Value, IntegerField, F
+from django.db.models import Case, When, Value, IntegerField, F, Count
 from .forms import CategoriaForm, ClienteForm, FuncionarioForm, ProdutoForm, UnidadeForm
 from .models import Categoria, Cliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, Produto, Unidade, Venda
 from django.contrib import messages
@@ -21,6 +23,93 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 from PIL import Image, ImageDraw, ImageFont
 from uuid import uuid4
+
+MENSAGEM_CLIENTE_DUPLICADO = (
+    "Ja existe um cliente parecido cadastrado. Verifique antes de cadastrar novamente."
+)
+
+
+def normalizar_texto_cliente(valor):
+    texto = " ".join(str(valor or "").strip().lower().split())
+    texto = unicodedata.normalize("NFD", texto)
+    return "".join(caractere for caractere in texto if unicodedata.category(caractere) != "Mn")
+
+
+def normalizar_documento_cliente(valor):
+    return "".join(caractere for caractere in str(valor or "") if caractere.isdigit())
+
+
+def textos_parecidos_cliente(valor_a, valor_b, minimo=0.88):
+    texto_a = normalizar_texto_cliente(valor_a)
+    texto_b = normalizar_texto_cliente(valor_b)
+    if not texto_a or not texto_b:
+        return False
+    return SequenceMatcher(None, texto_a, texto_b).ratio() >= minimo
+
+
+def detectar_cliente_duplicado(cliente):
+    candidatos = Cliente.objects.all()
+    if cliente.pk:
+        candidatos = candidatos.exclude(pk=cliente.pk)
+
+    documento = normalizar_documento_cliente(cliente.cpf_cnpj)
+    if documento:
+        duplicado = None
+        for candidato in candidatos.only("id", "nome", "cpf_cnpj"):
+            if normalizar_documento_cliente(candidato.cpf_cnpj) == documento:
+                duplicado = candidato
+                break
+        if duplicado:
+            return duplicado, "cpf_cnpj"
+
+    whatsapp_normalizado = Cliente.normalizar_whatsapp(cliente.whatsapp)
+    if whatsapp_normalizado:
+        duplicado = candidatos.filter(whatsapp_normalizado=whatsapp_normalizado).first()
+        if not duplicado:
+            for candidato in candidatos.only("id", "nome", "whatsapp"):
+                if Cliente.normalizar_whatsapp(candidato.whatsapp) == whatsapp_normalizado:
+                    duplicado = candidato
+                    break
+        if duplicado:
+            return duplicado, "whatsapp"
+
+    if documento or whatsapp_normalizado:
+        return None, ""
+
+    nome = normalizar_texto_cliente(cliente.nome)
+    apelido = normalizar_texto_cliente(cliente.apelido_nome_conhecido)
+    localidade = normalizar_texto_cliente(cliente.bairro or cliente.cidade)
+    if not nome:
+        return None
+
+    for candidato in candidatos.only("id", "nome", "apelido_nome_conhecido", "bairro", "cidade"):
+        candidato_nome = normalizar_texto_cliente(candidato.nome)
+        if candidato_nome == nome:
+            return candidato, "nome"
+
+        if not localidade:
+            continue
+
+        candidato_localidade = candidato.bairro or candidato.cidade
+        if not textos_parecidos_cliente(localidade, candidato_localidade, minimo=0.84):
+            continue
+
+        nome_parecido = textos_parecidos_cliente(nome, candidato_nome, minimo=0.88)
+        apelido_parecido = bool(apelido) and textos_parecidos_cliente(
+            apelido,
+            candidato.apelido_nome_conhecido,
+            minimo=0.86,
+        )
+        if nome_parecido and (not apelido or apelido_parecido):
+            return candidato, "nome"
+
+    return None, ""
+
+
+def encontrar_cliente_duplicado(cliente):
+    duplicado, _campo = detectar_cliente_duplicado(cliente)
+    return duplicado
+
 
 def montar_checklist_url(request, rota_id):
     checklist_path = reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota_id})
@@ -744,53 +833,26 @@ def clientes(request):
         if form.is_valid():
             tokens_usados = request.session.get("cliente_form_tokens_usados", {})
             if not cliente_id and form_token and form_token in tokens_usados:
-                cliente_salvo_id = tokens_usados[form_token]
                 messages.warning(
                     request,
-                    "Este envio ja foi processado. Abrimos o cadastro salvo para evitar duplicidade.",
+                    "Este envio ja foi processado. O formulario foi limpo para evitar duplicidade.",
                 )
-                return redirect(f"{clientes_url}?cliente={cliente_salvo_id}")
+                return redirect(clientes_url)
 
             cliente = form.save(commit=False)
-            whatsapp_normalizado = Cliente.normalizar_whatsapp(cliente.whatsapp)
 
-            avisos = []
-            if not cliente_id:
-                cliente_duplicado = None
-                nome_cliente = " ".join((cliente.nome or "").strip().split())
-
-                if nome_cliente and cliente.cpf_cnpj:
-                    cliente_duplicado = Cliente.objects.filter(
-                        nome__iexact=nome_cliente,
-                        cpf_cnpj__iexact=cliente.cpf_cnpj,
-                    ).first()
-
-                if nome_cliente and whatsapp_normalizado and not cliente_duplicado:
-                    cliente_duplicado = Cliente.objects.filter(
-                        nome__iexact=nome_cliente,
-                        whatsapp_normalizado=whatsapp_normalizado,
-                    ).first()
-
-                if cliente_duplicado:
-                    messages.warning(
-                        request,
-                        f'Cliente "{cliente_duplicado.nome}" ja estava cadastrado. Abrimos o cadastro existente para evitar duplicidade.',
-                    )
-                    return redirect(f"{clientes_url}?cliente={cliente_duplicado.id}")
-
-            if cliente.cpf_cnpj:
-                cpf_duplicado = Cliente.objects.exclude(
-                    pk=getattr(cliente, "pk", None)
-                ).filter(cpf_cnpj__iexact=cliente.cpf_cnpj).first()
-                if cpf_duplicado:
-                    avisos.append(f'CPF/CNPJ ja usado em "{cpf_duplicado.nome}".')
-
-            if whatsapp_normalizado:
-                whatsapp_duplicado = Cliente.objects.exclude(
-                    pk=getattr(cliente, "pk", None)
-                ).filter(whatsapp_normalizado=whatsapp_normalizado).first()
-                if whatsapp_duplicado:
-                    avisos.append(f'WhatsApp ja usado em "{whatsapp_duplicado.nome}".')
+            cliente_duplicado = encontrar_cliente_duplicado(cliente)
+            if cliente_duplicado:
+                form.add_error(None, MENSAGEM_CLIENTE_DUPLICADO)
+                return render(
+                    request,
+                    "estoque/clientes.html",
+                    {
+                        "form": form,
+                        "cliente_selecionado": cliente_selecionado,
+                        "form_token": form_token,
+                    },
+                )
 
             cliente.save()
             if not cliente_id and form_token:
@@ -800,9 +862,9 @@ def clientes(request):
                 request.session.modified = True
 
             messages.success(request, f'Cliente "{cliente.nome}" salvo com sucesso.')
-            for aviso in avisos:
-                messages.warning(request, aviso)
-            return redirect(f"{clientes_url}?cliente={cliente.id}")
+            if cliente_id:
+                return redirect(f"{clientes_url}?cliente={cliente.id}")
+            return redirect(clientes_url)
         messages.error(request, "Revise os campos destacados para salvar o cliente.")
     else:
         cliente_id = request.GET.get("cliente")
@@ -814,8 +876,6 @@ def clientes(request):
                 "ativo": True,
                 "permite_contato_whatsapp": True,
                 "status_credito": Cliente.STATUS_CREDITO_LIBERADO,
-                "prazo_padrao_dias": 0,
-                "limite_credito": 0,
             })
 
     return render(
@@ -835,6 +895,12 @@ def clientes_consulta(request):
     if request.method == "POST":
         acao = request.POST.get("acao")
         cliente_id = request.POST.get("cliente_id")
+        params = {}
+        if termo:
+            params["q"] = termo
+        destino = clientes_url
+        if params:
+            destino = f"{destino}?{urlencode(params)}"
 
         if acao == "alternar_status" and cliente_id:
             cliente = get_object_or_404(Cliente, pk=cliente_id)
@@ -842,15 +908,22 @@ def clientes_consulta(request):
             cliente.save(update_fields=["ativo", "atualizado_em"])
             status = "ativado" if cliente.ativo else "desativado"
             messages.success(request, f'Cliente "{cliente.nome}" {status} com sucesso.')
-            params = {}
-            if termo:
-                params["q"] = termo
-            destino = clientes_url
-            if params:
-                destino = f"{destino}?{urlencode(params)}"
             return redirect(destino)
 
-    clientes_qs = Cliente.objects.all().order_by("-ativo", "nome")
+        if acao == "excluir" and cliente_id:
+            cliente = get_object_or_404(Cliente, pk=cliente_id)
+            if cliente.vendas.exists():
+                messages.warning(
+                    request,
+                    f'Cliente "{cliente.nome}" possui venda vinculada e nao pode ser excluido. Use Desativar.',
+                )
+            else:
+                nome_cliente = cliente.nome
+                cliente.delete()
+                messages.success(request, f'Cliente "{nome_cliente}" excluido com sucesso.')
+            return redirect(destino)
+
+    clientes_qs = Cliente.objects.annotate(total_vendas=Count("vendas")).order_by("-ativo", "nome")
 
     if termo:
         clientes_qs = clientes_qs.filter(
@@ -864,6 +937,8 @@ def clientes_consulta(request):
         )
 
     clientes_lista = list(clientes_qs)
+    for cliente in clientes_lista:
+        cliente.pode_excluir = cliente.total_vendas == 0
 
     return render(
         request,
@@ -874,6 +949,35 @@ def clientes_consulta(request):
             "total_clientes": len(clientes_lista),
         },
     )
+
+
+def verificar_cliente_duplicado(request):
+    cliente = Cliente(
+        nome=request.GET.get("nome", ""),
+        apelido_nome_conhecido=request.GET.get("apelido_nome_conhecido", ""),
+        cpf_cnpj=request.GET.get("cpf_cnpj", ""),
+        whatsapp=request.GET.get("whatsapp", ""),
+        bairro=request.GET.get("bairro", ""),
+        cidade=request.GET.get("cidade", ""),
+    )
+
+    cliente_id = request.GET.get("cliente_id")
+    if cliente_id:
+        try:
+            cliente.pk = int(cliente_id)
+        except (TypeError, ValueError):
+            cliente.pk = None
+
+    duplicado, campo = detectar_cliente_duplicado(cliente)
+    if not duplicado:
+        return JsonResponse({"duplicado": False, "mensagem": "", "campo": ""})
+
+    return JsonResponse({
+        "duplicado": True,
+        "campo": campo or "nome",
+        "cliente": duplicado.nome,
+        "mensagem": f'Ja existe um cliente parecido cadastrado: "{duplicado.nome}". Verifique antes de cadastrar novamente.',
+    })
 
 
 def funcionarios(request):

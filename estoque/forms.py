@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 from django import forms
 
 from .models import Categoria, Cliente, Funcionario, Produto, Unidade
@@ -431,6 +433,16 @@ class CategoriaForm(forms.ModelForm):
 
 
 class ClienteForm(forms.ModelForm):
+    limite_credito = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={
+            "class": "form-control clientes-input-moeda",
+            "inputmode": "decimal",
+            "autocomplete": "off",
+            "placeholder": "",
+        }),
+    )
+
     class Meta:
         model = Cliente
         fields = [
@@ -511,11 +523,7 @@ class ClienteForm(forms.ModelForm):
                 "class": "form-control",
                 "min": "0",
                 "step": "1",
-            }),
-            "limite_credito": forms.NumberInput(attrs={
-                "class": "form-control",
-                "min": "0",
-                "step": "0.01",
+                "placeholder": "",
             }),
             "limite_aberto": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "status_credito": forms.Select(attrs={"class": "form-select"}),
@@ -549,6 +557,17 @@ class ClienteForm(forms.ModelForm):
             "ativo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["prazo_padrao_dias"].required = False
+        self.fields["limite_credito"].required = False
+
+        if not self.is_bound and not self.instance.pk:
+            self.fields["prazo_padrao_dias"].initial = None
+            self.fields["limite_credito"].initial = None
+            self.initial.pop("prazo_padrao_dias", None)
+            self.initial.pop("limite_credito", None)
+
     def clean_nome(self):
         nome = " ".join((self.cleaned_data.get("nome") or "").strip().split())
         if not nome:
@@ -563,8 +582,18 @@ class ClienteForm(forms.ModelForm):
 
     def clean_limite_credito(self):
         limite = self.cleaned_data.get("limite_credito")
-        if limite is None:
+        if limite in (None, ""):
             return 0
+        if isinstance(limite, str):
+            limite = limite.strip().replace("R$", "").replace(" ", "")
+            if "," in limite:
+                limite = limite.replace(".", "").replace(",", ".")
+            elif "." in limite and len(limite.rsplit(".", 1)[-1]) == 3:
+                limite = limite.replace(".", "")
+            try:
+                limite = Decimal(limite)
+            except (InvalidOperation, ValueError):
+                raise forms.ValidationError("Informe um limite de credito valido.")
         if limite < 0:
             raise forms.ValidationError("O limite de credito nao pode ser negativo.")
         return limite

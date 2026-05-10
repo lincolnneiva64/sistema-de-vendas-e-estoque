@@ -19,6 +19,10 @@
     transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
   }
   .clientes-btn:hover { transform: translateY(-1px); }
+  .clientes-btn:active { transform: translateY(1px); box-shadow: none; }
+  .clientes-btn:disabled {
+    cursor: not-allowed; opacity: 0.58; transform: none; box-shadow: none;
+  }
   .clientes-btn-primary { background: #2563eb; color: #fff; box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24); }
   .clientes-btn-secondary {
     background: #dbeafe; color: #164173; border: 1px solid #7ea6d9;
@@ -87,7 +91,25 @@
     display: block; color: #94a3b8; font-size: 0.72rem;
     font-weight: 700; margin-top: 3px;
   }
+  .clientes-money-wrap { position: relative; display: block; width: 100%; }
+  .clientes-money-prefix {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    z-index: 2; color: #475569; font-weight: 850; font-size: 0.84rem;
+    width: 28px; text-align: left;
+    pointer-events: none;
+  }
+  .clientes-field .clientes-input-moeda { padding-left: 52px !important; }
   .clientes-error { color: #dc2626; font-size: 0.8rem; font-weight: 700; margin-top: 6px; }
+  .clientes-duplicado-aviso {
+    display: none; margin-top: 6px; border: 1px solid #fecaca; border-radius: 9px;
+    background: #fef2f2; color: #991b1b; padding: 7px 9px;
+    font-size: 0.78rem; font-weight: 800;
+  }
+  .clientes-duplicado-aviso.visivel { display: block; }
+  .clientes-field input.cliente-duplicado-campo {
+    border-color: #dc2626;
+    box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.13);
+  }
   .clientes-alert { border-radius: 13px; padding: 10px 12px; margin-bottom: 10px; font-weight: 750; }
   .clientes-alert.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
   .clientes-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
@@ -107,7 +129,9 @@
   .status-form-btn {
     border: 0; border-radius: 9px; padding: 7px 11px;
     font-size: 0.8rem; font-weight: 800;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
   }
+  .status-form-btn:active { transform: translateY(1px); box-shadow: none; }
   .status-form-btn.ativar { color: #fff; background: #16a34a; }
   .status-form-btn.desativar { color: #fff; background: #dc2626; }
   .clientes-details {
@@ -200,6 +224,9 @@
         {% if cliente_selecionado %}
           <input type="hidden" name="cliente_id" value="{{ cliente_selecionado.id }}">
         {% endif %}
+        {% if form.non_field_errors %}
+          <div class="clientes-alert error">{{ form.non_field_errors|join:", " }}</div>
+        {% endif %}
 
         <section class="clientes-section">
           <h3 class="clientes-section-title">Dados principais</h3>
@@ -277,7 +304,10 @@
             </div>
             <div class="clientes-field">
               <label for="{{ form.limite_credito.id_for_label }}">Limite de credito</label>
-              {{ form.limite_credito }}
+              <div class="clientes-money-wrap">
+                <span class="clientes-money-prefix">R$</span>
+                {{ form.limite_credito }}
+              </div>
               {% if form.limite_credito.errors %}<div class="clientes-error">{{ form.limite_credito.errors|join:", " }}</div>{% endif %}
             </div>
           </div>
@@ -369,6 +399,8 @@
     const formCliente = document.getElementById("formCliente");
     const btnSalvar = document.getElementById("btnSalvarCliente");
     const campoNome = document.getElementById("id_nome");
+    const verificarDuplicadoUrl = "{% url 'estoque:verificar_cliente_duplicado' %}";
+    const clienteIdAtual = "{% if cliente_selecionado %}{{ cliente_selecionado.id }}{% endif %}";
 
     if (campoNome) {
       campoNome.removeAttribute("autofocus");
@@ -395,9 +427,15 @@
     const cidade = document.getElementById("id_cidade");
     const whatsapp = document.getElementById("id_whatsapp");
     const telefoneAlternativo = document.getElementById("id_telefone_alternativo");
+    const apelido = document.getElementById("id_apelido_nome_conhecido");
+    const limiteCredito = document.getElementById("id_limite_credito");
     const tipoChavePix = document.getElementById("id_tipo_chave_pix");
     const chavePix = document.getElementById("id_chave_pix");
     let chavePixAlteradaManualmente = Boolean(chavePix?.value.trim());
+    let ultimaConsultaDuplicidade = "";
+    let clienteDuplicadoAtual = false;
+    let campoDuplicadoAtual = null;
+    let reforcandoFocoDuplicado = false;
 
     if (tipoChavePix) {
       const primeiraOpcao = tipoChavePix.querySelector('option[value=""]');
@@ -408,6 +446,142 @@
 
     function somenteNumeros(valor) {
       return String(valor || "").replace(/\D/g, "");
+    }
+
+    function parseMoeda(valor) {
+      let texto = String(valor || "").replace("R$", "").replace(/\s/g, "").trim();
+      if (!texto) return null;
+      if (texto.includes(",")) {
+        texto = texto.replace(/\./g, "").replace(",", ".");
+      } else if (texto.includes(".") && texto.split(".").pop().length === 3) {
+        texto = texto.replace(/\./g, "");
+      }
+      const numero = Number(texto);
+      return Number.isFinite(numero) ? numero : null;
+    }
+
+    function formatarMoedaVisual(valor) {
+      const numero = parseMoeda(valor);
+      if (numero === null) return "";
+      return numero.toLocaleString("pt-BR", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    }
+
+    function normalizarMoedaParaEnvio(valor) {
+      const numero = parseMoeda(valor);
+      return numero === null ? "" : numero.toFixed(2);
+    }
+
+    function aplicarMascaraLimiteCredito() {
+      if (!limiteCredito || !limiteCredito.value.trim()) return;
+      limiteCredito.value = formatarMoedaVisual(limiteCredito.value);
+    }
+
+    function obterAvisoDuplicado(campo) {
+      if (!campo) return null;
+      const container = campo.closest(".clientes-field");
+      if (!container) return null;
+      let aviso = container.querySelector(".clientes-duplicado-aviso");
+      if (!aviso) {
+        aviso = document.createElement("div");
+        aviso.className = "clientes-duplicado-aviso";
+        aviso.setAttribute("aria-live", "polite");
+        container.appendChild(aviso);
+      }
+      return aviso;
+    }
+
+    function limparAvisosDuplicado() {
+      document.querySelectorAll(".clientes-duplicado-aviso").forEach(function (aviso) {
+        aviso.textContent = "";
+        aviso.classList.remove("visivel");
+      });
+      document.querySelectorAll(".cliente-duplicado-campo").forEach(function (campo) {
+        campo.classList.remove("cliente-duplicado-campo");
+      });
+    }
+
+    function atualizarBloqueioDuplicado(ativo, campo) {
+      clienteDuplicadoAtual = ativo;
+      campoDuplicadoAtual = ativo ? campo : null;
+      if (btnSalvar) {
+        btnSalvar.disabled = ativo;
+        btnSalvar.title = ativo ? "Corrija o cliente duplicado antes de salvar." : "";
+      }
+    }
+
+    function limparBloqueioDuplicado() {
+      limparAvisosDuplicado();
+      atualizarBloqueioDuplicado(false, null);
+      ultimaConsultaDuplicidade = "";
+    }
+
+    function focarCampoDuplicado() {
+      if (!campoDuplicadoAtual || reforcandoFocoDuplicado) return;
+      reforcandoFocoDuplicado = true;
+      setTimeout(function () {
+        campoDuplicadoAtual.focus();
+        if (typeof campoDuplicadoAtual.select === "function") {
+          campoDuplicadoAtual.select();
+        }
+        reforcandoFocoDuplicado = false;
+      }, 80);
+    }
+
+    function campoAvisoDuplicado(nomeCampo, campoOrigem) {
+      if (nomeCampo === "cpf_cnpj") return cpfCnpj;
+      if (nomeCampo === "whatsapp") return whatsapp;
+      return campoOrigem || campoNome;
+    }
+
+    async function verificarDuplicidadeVisual(campoOrigem) {
+      if (!formCliente) return;
+      const params = new URLSearchParams({
+        nome: campoNome?.value || "",
+        apelido_nome_conhecido: apelido?.value || "",
+        cpf_cnpj: somenteNumeros(cpfCnpj?.value || ""),
+        whatsapp: normalizarTelefonePix(whatsapp?.value || ""),
+        bairro: bairro?.value || "",
+        cidade: cidade?.value || "",
+      });
+      if (clienteIdAtual) params.set("cliente_id", clienteIdAtual);
+
+      const chaveConsulta = params.toString();
+      if (chaveConsulta === ultimaConsultaDuplicidade) {
+        if (clienteDuplicadoAtual) focarCampoDuplicado();
+        return;
+      }
+      ultimaConsultaDuplicidade = chaveConsulta;
+
+      if (!params.get("cpf_cnpj") && !params.get("whatsapp") && !params.get("nome").trim()) {
+        limparBloqueioDuplicado();
+        return;
+      }
+
+      try {
+        const resposta = await fetch(`${verificarDuplicadoUrl}?${chaveConsulta}`, {
+          headers: { "X-Requested-With": "XMLHttpRequest" },
+        });
+        if (!resposta.ok) return;
+        const dados = await resposta.json();
+        limparAvisosDuplicado();
+        if (!dados.duplicado) {
+          atualizarBloqueioDuplicado(false, null);
+          return;
+        }
+        const campoAviso = campoAvisoDuplicado(dados.campo, campoOrigem);
+        const aviso = obterAvisoDuplicado(campoAviso);
+        if (!aviso) return;
+        aviso.textContent = dados.mensagem || "Ja existe um cliente parecido cadastrado. Verifique antes de cadastrar novamente.";
+        aviso.classList.add("visivel");
+        campoAviso?.classList.add("cliente-duplicado-campo");
+        atualizarBloqueioDuplicado(true, campoAviso);
+        focarCampoDuplicado();
+      } catch (erro) {
+        return;
+      }
     }
 
     function formatarCpfCnpj(valor) {
@@ -540,8 +714,21 @@
       formatarChavePixTelefone();
     });
 
+    function limparDuplicidadeAoEditarCampo(campo) {
+      if (!campo) return;
+      campo.addEventListener("input", function () {
+        if (!clienteDuplicadoAtual) return;
+        limparBloqueioDuplicado();
+      });
+    }
+
+    [campoNome, cpfCnpj, whatsapp, apelido, bairro, cidade].forEach(limparDuplicidadeAoEditarCampo);
+
     cpfCnpj?.addEventListener("input", aplicarMascaraCpfCnpj);
-    cpfCnpj?.addEventListener("blur", aplicarMascaraCpfCnpj);
+    cpfCnpj?.addEventListener("blur", function () {
+      aplicarMascaraCpfCnpj();
+      verificarDuplicidadeVisual(cpfCnpj);
+    });
     cep?.addEventListener("input", function () {
       aplicarMascaraCep();
       buscarCep();
@@ -556,7 +743,22 @@
     whatsapp?.addEventListener("blur", function () {
       aplicarMascaraWhatsApp();
       sugerirChavePixTelefone();
+      verificarDuplicidadeVisual(whatsapp);
     });
+    campoNome?.addEventListener("blur", function () {
+      verificarDuplicidadeVisual(campoNome);
+    });
+    apelido?.addEventListener("blur", function () {
+      verificarDuplicidadeVisual(apelido);
+    });
+    bairro?.addEventListener("blur", function () {
+      verificarDuplicidadeVisual(bairro);
+    });
+    cidade?.addEventListener("blur", function () {
+      verificarDuplicidadeVisual(cidade);
+    });
+    limiteCredito?.addEventListener("blur", aplicarMascaraLimiteCredito);
+    limiteCredito?.addEventListener("change", aplicarMascaraLimiteCredito);
     aplicarMascaraCpfCnpj();
     aplicarMascaraCep();
     telefoneAlternativo?.addEventListener("blur", aplicarMascaraTelefoneAlternativo);
@@ -564,6 +766,7 @@
     aplicarMascaraTelefoneAlternativo();
     formatarChavePixTelefone();
     sugerirChavePixTelefone();
+    aplicarMascaraLimiteCredito();
 
     function camposNavegaveis() {
       if (!formCliente) return [];
@@ -582,6 +785,12 @@
 
     formCliente?.addEventListener("keydown", function (event) {
       if (event.key !== "Enter") return;
+
+      if (clienteDuplicadoAtual) {
+        event.preventDefault();
+        focarCampoDuplicado();
+        return;
+      }
 
       const alvo = event.target;
       const tag = alvo.tagName.toLowerCase();
@@ -604,6 +813,12 @@
     });
 
     formCliente?.addEventListener("submit", function (event) {
+      if (clienteDuplicadoAtual) {
+        event.preventDefault();
+        focarCampoDuplicado();
+        return;
+      }
+
       if (formCliente.dataset.enviando === "1") {
         event.preventDefault();
         return;
@@ -627,6 +842,10 @@
 
       if (cep) {
         cep.value = somenteNumeros(cep.value);
+      }
+
+      if (limiteCredito) {
+        limiteCredito.value = normalizarMoedaParaEnvio(limiteCredito.value);
       }
 
       formCliente.dataset.enviando = "1";

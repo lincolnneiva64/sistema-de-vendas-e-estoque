@@ -11,6 +11,7 @@ urlpatterns = [
     path("categorias/", views.categorias_produto, name="categorias_produto"),
     path("clientes/", views.clientes, name="clientes"),
     path("clientes/consulta/", views.clientes_consulta, name="clientes_consulta"),
+    path("clientes/verificar-duplicado/", views.verificar_cliente_duplicado, name="verificar_cliente_duplicado"),
     path("clientes/autocomplete/", views.clientes_autocomplete, name="clientes_autocomplete"),
     path("funcionarios/", views.funcionarios, name="funcionarios"),
     path("verificar-produto/", views.verificar_produto, name="verificar_produto"),

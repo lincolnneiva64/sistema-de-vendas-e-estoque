@@ -10,6 +10,12 @@
   }
   .clientes-title { margin: 0; font-size: 1.55rem; font-weight: 800; color: #111827; }
   .clientes-subtitle { margin: 4px 0 0; color: #64748b; font-weight: 500; font-size: 0.92rem; }
+  .clientes-header-summary {
+    display: inline-flex; align-items: center; gap: 5px; margin-top: 8px;
+    color: #1d4ed8; background: #eff6ff; border: 1px solid #bfdbfe;
+    border-radius: 999px; padding: 5px 10px; font-size: 0.84rem;
+    font-weight: 850; white-space: nowrap;
+  }
   .clientes-header-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
   .clientes-btn {
     border: 0; border-radius: 9px; padding: 8px 13px; font-weight: 700;
@@ -18,6 +24,7 @@
     transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
   }
   .clientes-btn:hover { transform: translateY(-1px); }
+  .clientes-btn:active { transform: translateY(1px); box-shadow: none; }
   .clientes-btn-primary { background: #2563eb; color: #fff; box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24); }
   .clientes-btn-secondary {
     background: #dbeafe; color: #164173; border: 1px solid #7ea6d9;
@@ -80,10 +87,41 @@
     color: #334155; padding: 5px 9px; font-size: 0.76rem;
     font-weight: 800; text-decoration: none; display: inline-flex;
     align-items: center; justify-content: center; min-width: 62px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
   }
+  .status-action-btn:active,
+  .clientes-action-link:active { transform: translateY(1px); box-shadow: none; }
   .clientes-action-link { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
   .status-action-btn.ativar { border-color: #86efac; color: #166534; background: #f0fdf4; }
   .status-action-btn.desativar { border-color: #fecaca; color: #991b1b; background: #fff7ed; }
+  .status-action-btn.excluir { border-color: #ef4444; color: #fff; background: #dc2626; }
+  .clientes-modal-backdrop {
+    position: fixed; inset: 0; z-index: 50; display: none;
+    align-items: center; justify-content: center; padding: 18px;
+    background: rgba(15, 23, 42, 0.48);
+  }
+  .clientes-modal-backdrop.aberto { display: flex; }
+  .clientes-modal {
+    width: min(380px, 100%); background: #fff; border-radius: 12px;
+    border: 1px solid #e2e8f0; box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+    padding: 14px;
+  }
+  .clientes-modal-title { margin: 0 0 6px; color: #111827; font-size: 1rem; font-weight: 850; }
+  .clientes-modal-text { margin: 0; color: #475569; font-size: 0.84rem; font-weight: 650; line-height: 1.4; }
+  .clientes-modal-nome {
+    margin-top: 9px; border: 1px solid #e2e8f0; border-radius: 9px;
+    background: #f8fafc; color: #172033; font-weight: 850; padding: 7px 9px;
+    font-size: 0.86rem;
+  }
+  .clientes-modal-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 12px; flex-wrap: wrap; }
+  .clientes-modal-btn {
+    border: 1px solid #cbd5e1; border-radius: 8px; padding: 7px 10px;
+    font-size: 0.78rem; font-weight: 850; cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+  .clientes-modal-btn:active { transform: translateY(1px); box-shadow: none; }
+  .clientes-modal-btn.cancelar { background: #eff6ff; color: #1d4ed8; border-color: #93c5fd; }
+  .clientes-modal-btn.confirmar { background: #dc2626; color: #fff; border-color: #ef4444; }
   .clientes-empty {
     padding: 22px 16px; color: #64748b; text-align: center;
     font-weight: 700; font-size: 0.9rem;
@@ -95,7 +133,11 @@
   @media (max-width: 760px) {
     .clientes-header { align-items: stretch; flex-direction: column; }
     .clientes-header-actions { justify-content: flex-start; }
+    .clientes-header-summary { width: fit-content; }
     .clientes-search form { grid-template-columns: 1fr; }
+    .clientes-modal { padding: 14px; }
+    .clientes-modal-actions { justify-content: stretch; }
+    .clientes-modal-btn { flex: 1 1 auto; }
   }
 </style>
 
@@ -105,6 +147,9 @@
       <div>
         <h1 class="clientes-title">Consulta de Clientes</h1>
         <p class="clientes-subtitle">Busque, consulte e gerencie clientes cadastrados.</p>
+        <div class="clientes-header-summary">
+          Exibindo <span id="contadorClientes">{{ total_clientes }}</span> cliente(s)
+        </div>
       </div>
       <div class="clientes-header-actions">
         <a href="/estoque/" class="clientes-btn clientes-btn-secondary">Voltar ao painel</a>
@@ -131,7 +176,6 @@
     <section class="clientes-panel">
       <div class="clientes-panel-head">
         <h2 class="clientes-panel-title">Clientes cadastrados</h2>
-        <span class="clientes-count"><span id="contadorClientes">{{ total_clientes }}</span> cliente(s)</span>
       </div>
 
       {% if clientes %}
@@ -164,7 +208,17 @@
                   </td>
                   <td class="cliente-muted">{{ cliente.cpf_cnpj|default:"-" }}</td>
                   <td class="cliente-muted">{{ cliente.whatsapp|default:"-" }}</td>
-                  <td class="cliente-muted">{{ cliente.bairro|default:"-" }}/{{ cliente.cidade|default:"-" }}</td>
+                  <td class="cliente-muted">
+                    {% if cliente.bairro and cliente.cidade %}
+                      {{ cliente.bairro }}/{{ cliente.cidade }}
+                    {% elif cliente.bairro %}
+                      {{ cliente.bairro }}
+                    {% elif cliente.cidade %}
+                      {{ cliente.cidade }}
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
                   <td class="cliente-muted">{{ cliente.prazo_padrao_dias }} dia{{ cliente.prazo_padrao_dias|pluralize }}</td>
                   <td class="cliente-muted">
                     {% if cliente.limite_aberto %}
@@ -184,15 +238,33 @@
                   <td>
                     <div class="clientes-actions">
                       <a class="clientes-action-link" href="/estoque/clientes/?cliente={{ cliente.id }}">Editar</a>
-                      <form method="post" class="status-action-form">
-                        {% csrf_token %}
-                        <input type="hidden" name="acao" value="alternar_status">
-                        <input type="hidden" name="cliente_id" value="{{ cliente.id }}">
-                        <input type="hidden" name="ativo" value="{% if cliente.ativo %}0{% else %}1{% endif %}">
-                        <button type="submit" class="status-action-btn {% if cliente.ativo %}desativar{% else %}ativar{% endif %}">
-                          {% if cliente.ativo %}Desativar{% else %}Ativar{% endif %}
-                        </button>
-                      </form>
+                      {% if cliente.pode_excluir %}
+                        <form method="post" class="status-action-form form-excluir-cliente">
+                          {% csrf_token %}
+                          <input type="hidden" name="acao" value="excluir">
+                          <input type="hidden" name="cliente_id" value="{{ cliente.id }}">
+                          <button type="button" class="status-action-btn excluir btn-abrir-modal-excluir" data-cliente-nome="{{ cliente.nome|escape }}">Excluir</button>
+                        </form>
+                        {% if not cliente.ativo %}
+                          <form method="post" class="status-action-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="acao" value="alternar_status">
+                            <input type="hidden" name="cliente_id" value="{{ cliente.id }}">
+                            <input type="hidden" name="ativo" value="1">
+                            <button type="submit" class="status-action-btn ativar">Ativar</button>
+                          </form>
+                        {% endif %}
+                      {% else %}
+                        <form method="post" class="status-action-form">
+                          {% csrf_token %}
+                          <input type="hidden" name="acao" value="alternar_status">
+                          <input type="hidden" name="cliente_id" value="{{ cliente.id }}">
+                          <input type="hidden" name="ativo" value="{% if cliente.ativo %}0{% else %}1{% endif %}">
+                          <button type="submit" class="status-action-btn {% if cliente.ativo %}desativar{% else %}ativar{% endif %}">
+                            {% if cliente.ativo %}Desativar{% else %}Ativar{% endif %}
+                          </button>
+                        </form>
+                      {% endif %}
                     </div>
                   </td>
                 </tr>
@@ -208,12 +280,38 @@
   </div>
 </div>
 
+<div class="clientes-modal-backdrop" id="modalExcluirCliente" aria-hidden="true">
+  <div class="clientes-modal" role="dialog" aria-modal="true" aria-labelledby="modalExcluirClienteTitulo">
+    <h2 class="clientes-modal-title" id="modalExcluirClienteTitulo">Excluir cliente?</h2>
+    <p class="clientes-modal-text">Este cliente nao possui vendas vinculadas. A exclusao sera definitiva.</p>
+    <div class="clientes-modal-nome" id="modalExcluirClienteNome"></div>
+    <div class="clientes-modal-actions">
+      <button type="button" class="clientes-modal-btn cancelar" id="btnCancelarExclusaoCliente">Cancelar</button>
+      <button type="button" class="clientes-modal-btn confirmar" id="btnConfirmarExclusaoCliente">Excluir definitivamente</button>
+    </div>
+  </div>
+</div>
+
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     const busca = document.getElementById("buscaClientes");
     const linhas = Array.from(document.querySelectorAll("[data-cliente-search]"));
     const contador = document.getElementById("contadorClientes");
     const semResultado = document.getElementById("semClientesFiltrados");
+    const modalExcluir = document.getElementById("modalExcluirCliente");
+    const modalNome = document.getElementById("modalExcluirClienteNome");
+    const btnCancelarExclusao = document.getElementById("btnCancelarExclusaoCliente");
+    const btnConfirmarExclusao = document.getElementById("btnConfirmarExclusaoCliente");
+    let formExclusaoSelecionado = null;
+    const chaveScrollExclusao = "clientesConsultaScrollY";
+
+    const scrollSalvo = sessionStorage.getItem(chaveScrollExclusao);
+    if (scrollSalvo !== null) {
+      sessionStorage.removeItem(chaveScrollExclusao);
+      setTimeout(function () {
+        window.scrollTo({ top: Number(scrollSalvo) || 0, behavior: "auto" });
+      }, 0);
+    }
 
     function normalizarTexto(texto) {
       return String(texto || "")
@@ -239,6 +337,38 @@
 
     busca?.addEventListener("input", filtrarClientes);
     filtrarClientes();
+
+    function fecharModalExclusao() {
+      if (!modalExcluir) return;
+      modalExcluir.classList.remove("aberto");
+      modalExcluir.setAttribute("aria-hidden", "true");
+      formExclusaoSelecionado = null;
+    }
+
+    document.querySelectorAll(".btn-abrir-modal-excluir").forEach(function (botao) {
+      botao.addEventListener("click", function () {
+        formExclusaoSelecionado = botao.closest("form");
+        if (modalNome) modalNome.textContent = botao.dataset.clienteNome || "Cliente selecionado";
+        if (modalExcluir) {
+          modalExcluir.classList.add("aberto");
+          modalExcluir.setAttribute("aria-hidden", "false");
+        }
+        btnCancelarExclusao?.focus();
+      });
+    });
+
+    btnCancelarExclusao?.addEventListener("click", fecharModalExclusao);
+    modalExcluir?.addEventListener("click", function (evento) {
+      if (evento.target === modalExcluir) fecharModalExclusao();
+    });
+    document.addEventListener("keydown", function (evento) {
+      if (evento.key === "Escape") fecharModalExclusao();
+    });
+    btnConfirmarExclusao?.addEventListener("click", function () {
+      if (!formExclusaoSelecionado) return;
+      sessionStorage.setItem(chaveScrollExclusao, String(window.scrollY || 0));
+      formExclusaoSelecionado.submit();
+    });
   });
 </script>
 {% endblock %}
