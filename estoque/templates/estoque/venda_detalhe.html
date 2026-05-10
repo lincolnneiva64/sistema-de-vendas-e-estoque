@@ -83,6 +83,18 @@
             color: #14532d;
         }
 
+        .editar-nota-acao {
+            background: #2563eb !important;
+            border-color: #1d4ed8 !important;
+            color: #ffffff !important;
+            box-shadow: 0 4px 10px rgba(37, 99, 235, 0.24) !important;
+        }
+
+        .editar-nota-acao:active {
+            box-shadow: 0 1px 4px rgba(37, 99, 235, 0.2) !important;
+            filter: brightness(0.94);
+        }
+
         .whatsapp-confirmacao-pendente {
             border-color: #d97706 !important;
             background: linear-gradient(180deg, #fef3c7 0%, #f59e0b 100%) !important;
@@ -700,6 +712,7 @@
                         {% if entrega_contexto %}
                             <a href="{% url 'estoque:entrega_rota_detalhe' entrega_contexto.id %}">Voltar para {% if entrega_contexto.tipo == "unitaria" %}Entrega{% else %}Rota{% endif %} #{{ entrega_contexto.id }}</a>
                         {% endif %}
+                        <a href="{% url 'estoque:venda_editar_revisao' venda.id %}" class="editar-nota-acao">Editar nota</a>
                         <button type="button" id="btnImprimir">Imprimir</button>
                         <a href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}" class="whatsapp-acao">Imagem / WhatsApp</a>
                         <a href="{% url 'estoque:venda_whatsapp_pdf' venda.id %}" target="_blank" rel="noopener">PDF</a>

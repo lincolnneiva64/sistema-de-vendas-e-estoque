@@ -1983,6 +1983,39 @@ def venda_detalhe(request, pk):
     )
 
 
+def venda_editar_revisao(request, pk):
+    venda = get_object_or_404(
+        Venda.objects.select_related("cliente").prefetch_related("itens__produto", "eventos"),
+        pk=pk,
+    )
+
+    entregas = (
+        EntregaRotaItem.objects.filter(venda=venda)
+        .select_related("rota")
+        .prefetch_related("checklist_itens")
+        .order_by("-rota__data", "-rota_id", "ordem_entrega", "id")
+    )
+    total_entregas = entregas.count()
+    existe_checklist = EntregaChecklistItem.objects.filter(rota_item__venda=venda).exists()
+    total_checklists = EntregaChecklistItem.objects.filter(rota_item__venda=venda).count()
+    existe_pendencia = EntregaRotaItem.objects.filter(venda=venda, is_pendencia=True).exists()
+
+    return render(
+        request,
+        "estoque/venda_editar_revisao.html",
+        {
+            "venda": venda,
+            "eventos": EventoVenda.objects.filter(venda=venda),
+            "entregas": entregas,
+            "total_entregas": total_entregas,
+            "existe_checklist": existe_checklist,
+            "total_checklists": total_checklists,
+            "existe_pendencia": existe_pendencia,
+            "possui_alerta_operacional": total_entregas or existe_checklist or existe_pendencia,
+        },
+    )
+
+
 def venda_criar_entrega(request, pk):
     venda = get_object_or_404(Venda, pk=pk)
     
