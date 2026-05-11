@@ -2772,8 +2772,13 @@ def _gerar_paginas_nota_whatsapp(venda):
         unidade = item.unidade or "-"
         preco = _formatar_moeda(item.preco_unitario)
         subtotal = _formatar_moeda(item.valor_total)
-        linhas_nome = _quebrar_texto(draw, f"{indice}. {nome}", fonte_tabela_negrito, 850)
-        altura_item = 56 + len(linhas_nome[:2]) * 28
+        resumo = f"{quantidade} {unidade} × {preco}"
+        subtotal_largura = _texto_largura(draw, subtotal, fonte_tabela_negrito)
+        x_subtotal = largura - margem - 52 - subtotal_largura
+        largura_nome = 850
+        linhas_nome = _quebrar_texto(draw, f"{indice}. {nome}", fonte_tabela_negrito, largura_nome)
+        linhas_nome = linhas_nome[:2]
+        altura_item = 74 if len(linhas_nome) == 1 else 98
         adicionar_pagina_se_precisar(altura_item)
         topo = y
         draw.rounded_rectangle(
@@ -2784,15 +2789,13 @@ def _gerar_paginas_nota_whatsapp(venda):
             width=2,
         )
         texto_y = topo + 13
-        for linha in linhas_nome[:2]:
+        for linha in linhas_nome:
             draw.text((x1 + 24, texto_y), linha, fill=texto, font=fonte_tabela_negrito)
             texto_y += 28
 
-        resumo = f"{quantidade} {unidade} x {preco}"
-        resumo_y = topo + altura_item - 38
-        draw.text((x1 + 24, resumo_y), resumo, fill=suave, font=fonte_tabela)
-        subtotal_largura = _texto_largura(draw, subtotal, fonte_tabela_negrito)
-        draw.text((largura - margem - 52 - subtotal_largura, resumo_y), subtotal, fill=texto, font=fonte_tabela_negrito)
+        resumo_y = topo + 41 + (len(linhas_nome) - 1) * 24
+        draw.text((x1 + 24, resumo_y), resumo, fill="#42526a", font=fonte_tabela)
+        draw.text((x_subtotal, resumo_y), subtotal, fill=texto, font=fonte_tabela_negrito)
         y = topo + altura_item + 4
 
     for indice, item in enumerate(venda.itens.all(), start=1):

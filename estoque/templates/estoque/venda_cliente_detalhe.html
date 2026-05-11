@@ -28,15 +28,17 @@
     overflow-wrap: anywhere;
   }
   .cliente-nota-itens { border: 1px solid #edf1f6; border-radius: 10px; overflow-x: auto; }
-  .cliente-nota-table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 0.84rem; }
+  .cliente-nota-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
   .cliente-nota-table th,
   .cliente-nota-table td { padding: 8px 9px; border-bottom: 1px solid #edf1f6; text-align: left; }
   .cliente-nota-table th {
     background: #fbfdff; color: #64748b; font-size: 0.68rem; font-weight: 950; text-transform: uppercase;
   }
   .cliente-nota-table tr:last-child td { border-bottom: 0; }
-  .cliente-nota-produto { color: #111827; font-weight: 900; }
-  .cliente-nota-num { text-align: right; white-space: nowrap; }
+  .cliente-nota-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: end; }
+  .cliente-nota-produto { grid-column: 1 / -1; color: #111827; font-weight: 900; }
+  .cliente-nota-resumo { color: #42526a; font-weight: 800; white-space: nowrap; }
+  .cliente-nota-num { color: #111827; font-weight: 900; text-align: right; white-space: nowrap; }
   .cliente-nota-total {
     display: flex; justify-content: space-between; align-items: center; gap: 12px;
     border: 1px solid #bbf7d0; border-radius: 10px; background: #f0fdf4;
@@ -49,6 +51,7 @@
     .cliente-nota-body { padding: 12px; }
     .cliente-nota-dados { grid-template-columns: 1fr; }
     .cliente-nota-title { font-size: 1.2rem; }
+    .cliente-nota-item { gap: 3px 8px; }
   }
 </style>
 
@@ -86,25 +89,23 @@
         <table class="cliente-nota-table">
           <thead>
             <tr>
-              <th>Produto</th>
-              <th class="cliente-nota-num">Qtd</th>
-              <th>Un</th>
-              <th class="cliente-nota-num">Preco</th>
-              <th class="cliente-nota-num">Valor total</th>
+              <th>Itens</th>
             </tr>
           </thead>
           <tbody>
             {% for item in venda.itens.all %}
               <tr>
-                <td><span class="cliente-nota-produto">{{ item.produto.nome|default:"Produto nao identificado" }}</span></td>
-                <td class="cliente-nota-num">{{ item.quantidade }}</td>
-                <td>{{ item.unidade|default:"-" }}</td>
-                <td class="cliente-nota-num">R$ {{ item.preco_unitario|floatformat:2 }}</td>
-                <td class="cliente-nota-num">R$ {{ item.valor_total|floatformat:2 }}</td>
+                <td>
+                  <div class="cliente-nota-item">
+                    <span class="cliente-nota-produto">{{ item.produto.nome|default:"Produto nao identificado" }}</span>
+                    <span class="cliente-nota-resumo">{{ item.quantidade }} {{ item.unidade|default:"-" }} × R$ {{ item.preco_unitario|floatformat:2 }}</span>
+                    <span class="cliente-nota-num">R$ {{ item.valor_total|floatformat:2 }}</span>
+                  </div>
+                </td>
               </tr>
             {% empty %}
               <tr>
-                <td colspan="5">Nenhum item encontrado nesta nota.</td>
+                <td>Nenhum item encontrado nesta nota.</td>
               </tr>
             {% endfor %}
           </tbody>
