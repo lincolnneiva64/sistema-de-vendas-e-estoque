@@ -701,6 +701,25 @@
                 page-break-inside: avoid;
             }
         }
+    
+        .entrega-send-btn.primary {
+            background: #2563eb;
+            border: 1px solid #1d4ed8;
+            color: #ffffff;
+            font-weight: 850;
+            box-shadow: 0 3px 0 #1e40af, 0 8px 16px rgba(37, 99, 235, 0.18);
+            transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.08s ease;
+        }
+
+        .entrega-send-btn.primary:hover {
+            background: #1d4ed8;
+        }
+
+        .entrega-send-btn.primary:active {
+            transform: translateY(2px);
+            box-shadow: 0 1px 0 #1e40af, 0 4px 9px rgba(37, 99, 235, 0.16);
+            filter: brightness(0.96);
+        }
     </style>
 </head>
 <body>
@@ -791,7 +810,7 @@
                                                 </option>
                                             {% endfor %}
                                         </select>
-                                        <button type="button" class="entrega-send-btn primary">WhatsApp</button>
+                                        <button type="button" class="entrega-send-btn primary">Enviar checklist pelo WhatsApp</button>
                                     </div>
                                     {% if not funcionarios_habilitados %}
                                         <p class="entrega-feedback warning">Nenhum funcionário habilitado para receber checklist.</p>
@@ -1241,9 +1260,9 @@
                 }
 
                 var mensagem = [
-                    '📋 Checklist de entrega',
+                    '\uD83D\uDCCB Checklist de entrega',
                     '',
-                    'Para visualizar melhor, abra no navegador do celular (de preferência no Chrome):',
+                    'Para visualizar melhor, abra no navegador do celular (de preferencia no Chrome):',
                     '',
                     checklistUrl
                 ].join('\n');
