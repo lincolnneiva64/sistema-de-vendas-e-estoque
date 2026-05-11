@@ -28,7 +28,38 @@
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
     filter: brightness(0.96);
   }
+  .edit-review-btn:disabled {
+    opacity: 0.62;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
   .edit-review-btn.primary { border-color: #1d4ed8; background: #2563eb; color: #fff; }
+  .edit-review-btn.whatsapp-pulse {
+    border-color: #d97706;
+    background: linear-gradient(180deg, #fef3c7 0%, #f59e0b 100%);
+    color: #713f12;
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.34), 0 4px 0 #b45309, 0 10px 18px rgba(120, 53, 15, 0.16);
+    text-shadow: 0 1px 1px rgba(255, 251, 235, 0.58);
+    animation: edit-review-whatsapp-pulse 1.35s ease-in-out infinite;
+  }
+  @keyframes edit-review-whatsapp-pulse {
+    0% {
+      border-color: #d97706;
+      box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.34), 0 4px 0 #b45309, 0 10px 18px rgba(120, 53, 15, 0.16);
+      transform: translateY(0);
+    }
+    50% {
+      border-color: #f59e0b;
+      box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.13), 0 6px 0 #b45309, 0 13px 22px rgba(120, 53, 15, 0.22);
+      transform: translateY(-1px);
+    }
+    100% {
+      border-color: #d97706;
+      box-shadow: 0 0 0 0 rgba(245, 158, 11, 0), 0 4px 0 #b45309, 0 10px 18px rgba(120, 53, 15, 0.16);
+      transform: translateY(0);
+    }
+  }
   .edit-review-btn.danger { border-color: #fecaca; background: #fff7ed; color: #991b1b; }
   .edit-review-btn.compact {
     min-height: 24px; padding: 4px 7px; border-radius: 6px;
@@ -96,6 +127,24 @@
   .edit-review-whatsapp.warning {
     border-color: #f7d98b; background: #fff7ed; color: #92400e;
   }
+  .edit-review-whatsapp-flow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .edit-review-whatsapp-step {
+    display: none;
+    font-size: 0.8rem;
+    font-weight: 850;
+    line-height: 1.25;
+  }
+  .edit-review-whatsapp-step.visivel { display: inline-flex; }
+  .edit-review-whatsapp.confirmed {
+    border-color: #86efac;
+    background: #ecfdf3;
+    color: #14532d;
+  }
   .edit-review-table tr.item-highlight td {
     background: #f0fdf4; box-shadow: inset 0 1px 0 #bbf7d0, inset 0 -1px 0 #bbf7d0;
   }
@@ -136,13 +185,30 @@
 
         {% if whatsapp_atualizacao %}
           {% if whatsapp_atualizacao.tem_whatsapp %}
-            <div class="edit-review-whatsapp" role="status" aria-live="polite">
+            <div class="edit-review-whatsapp" id="whatsappAtualizacaoBox" role="status" aria-live="polite" data-whatsapp-controle="{{ whatsapp_atualizacao.controle_id }}" data-whatsapp-pendente="true">
               <span class="edit-review-whatsapp-text">
-                Nota atualizada apos alterar "{{ whatsapp_atualizacao.produto_nome }}".
+                {{ whatsapp_atualizacao.texto_resumo }}
               </span>
-              <a class="edit-review-btn primary" href="{{ whatsapp_atualizacao.url }}" target="_blank" rel="noopener">
-                Enviar nota atualizada pelo WhatsApp
-              </a>
+              <div class="edit-review-whatsapp-flow">
+                <a id="abrirWhatsappAtualizacao" class="edit-review-btn primary whatsapp-pulse" href="{{ whatsapp_atualizacao.url }}" target="_blank" rel="noopener">
+                  Enviar nota atualizada pelo WhatsApp
+                </a>
+                <span id="whatsappAtualizacaoAberto" class="edit-review-whatsapp-step">
+                  WhatsApp aberto para envio da nota atualizada. Depois de enviar ao cliente, confirme abaixo.
+                </span>
+                <button
+                  id="confirmarWhatsappAtualizacao"
+                  type="button"
+                  class="edit-review-btn primary whatsapp-pulse"
+                  data-confirmar-url="{% url 'estoque:confirmar_whatsapp' venda.id %}"
+                  hidden
+                >
+                  Confirmar reenvio pelo WhatsApp
+                </button>
+                <span id="whatsappAtualizacaoConfirmado" class="edit-review-whatsapp-step">
+                  Nota atualizada reenviada por WhatsApp.
+                </span>
+              </div>
             </div>
           {% else %}
             <div class="edit-review-whatsapp warning" role="status" aria-live="polite">
@@ -278,4 +344,98 @@
     </section>
   </div>
 </main>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const box = document.getElementById("whatsappAtualizacaoBox");
+    if (!box) {
+      return;
+    }
+
+    const abrirBtn = document.getElementById("abrirWhatsappAtualizacao");
+    const confirmarBtn = document.getElementById("confirmarWhatsappAtualizacao");
+    const avisoAberto = document.getElementById("whatsappAtualizacaoAberto");
+    const avisoConfirmado = document.getElementById("whatsappAtualizacaoConfirmado");
+    const controle = box.dataset.whatsappControle || "{{ venda.id }}";
+    const chaveAberto = `venda_${controle}_whatsapp_atualizacao_aberto`;
+    const csrfToken = "{{ csrf_token }}";
+
+    function obterCookie(nome) {
+      const cookies = document.cookie ? document.cookie.split(";") : [];
+      for (const cookie of cookies) {
+        const partes = cookie.trim().split("=");
+        if (partes[0] === nome) {
+          return decodeURIComponent(partes.slice(1).join("="));
+        }
+      }
+      return "";
+    }
+
+    function mostrarConfirmacaoPendente() {
+      box.classList.remove("confirmed");
+      abrirBtn?.setAttribute("hidden", "hidden");
+      avisoAberto?.classList.add("visivel");
+      avisoConfirmado?.classList.remove("visivel");
+      confirmarBtn?.removeAttribute("hidden");
+      confirmarBtn.disabled = false;
+    }
+
+    function mostrarEnvioPendente() {
+      box.classList.remove("confirmed");
+      abrirBtn?.removeAttribute("hidden");
+      avisoAberto?.classList.remove("visivel");
+      confirmarBtn?.setAttribute("hidden", "hidden");
+      avisoConfirmado?.classList.remove("visivel");
+      confirmarBtn.disabled = false;
+    }
+
+    function mostrarConfirmado() {
+      box.classList.add("confirmed");
+      abrirBtn?.setAttribute("hidden", "hidden");
+      avisoAberto?.classList.remove("visivel");
+      confirmarBtn?.setAttribute("hidden", "hidden");
+      avisoConfirmado?.classList.add("visivel");
+    }
+
+    const existePendenciaBackend = box.dataset.whatsappPendente === "true";
+
+    if (existePendenciaBackend && sessionStorage.getItem(chaveAberto) === "sim") {
+      mostrarConfirmacaoPendente();
+    } else if (existePendenciaBackend) {
+      mostrarEnvioPendente();
+    }
+
+    abrirBtn?.addEventListener("click", function () {
+      sessionStorage.setItem(chaveAberto, "sim");
+      mostrarConfirmacaoPendente();
+    });
+
+    confirmarBtn?.addEventListener("click", async function () {
+      const confirmarUrl = confirmarBtn.dataset.confirmarUrl;
+      if (!confirmarUrl) {
+        return;
+      }
+
+      confirmarBtn.disabled = true;
+      try {
+        const resposta = await fetch(confirmarUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": obterCookie("csrftoken") || csrfToken,
+            "X-Requested-With": "XMLHttpRequest",
+          },
+        });
+        const data = await resposta.json();
+        if (!resposta.ok || !data.sucesso) {
+          confirmarBtn.disabled = false;
+          return;
+        }
+        sessionStorage.removeItem(chaveAberto);
+        mostrarConfirmado();
+      } catch (erro) {
+        confirmarBtn.disabled = false;
+      }
+    });
+  });
+</script>
 {% endblock %}

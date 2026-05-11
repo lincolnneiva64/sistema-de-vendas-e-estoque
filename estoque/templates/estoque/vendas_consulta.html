@@ -74,10 +74,16 @@
   .venda-numero { font-weight: 850; color: #172033; font-size: 0.9rem; }
   .venda-cliente { font-weight: 800; color: #172033; }
   .venda-muted { color: #64748b; font-size: 0.8rem; font-weight: 650; }
+  .venda-whatsapp-status-list {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    margin-top: 6px;
+  }
   .venda-whatsapp-status {
     display: inline-flex;
     width: fit-content;
-    margin-top: 6px;
     padding: 5px 9px;
     border: 2px solid #fb7185;
     border-radius: 999px;
@@ -99,6 +105,18 @@
     background: #dcfce7;
     color: #14532d;
     box-shadow: 0 8px 18px rgba(22, 163, 74, 0.13);
+  }
+  .venda-whatsapp-status.editada-reenviada {
+    border-color: #38bdf8;
+    background: #e0f2fe;
+    color: #075985;
+    box-shadow: 0 8px 18px rgba(14, 165, 233, 0.12);
+  }
+  .venda-whatsapp-status.editada-pendente {
+    border-color: #f59e0b;
+    background: #fffbeb;
+    color: #92400e;
+    box-shadow: 0 8px 18px rgba(217, 119, 6, 0.13);
   }
   .venda-total { color: #166534; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .vendas-consulta-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
@@ -244,8 +262,10 @@
                     {% if venda.cliente.apelido_nome_conhecido %}
                       <div class="venda-muted">{{ venda.cliente.apelido_nome_conhecido }}</div>
                     {% endif %}
-                    <div class="venda-whatsapp-status {% if venda.whatsapp_status == 'aberto' %}aberto{% elif venda.whatsapp_status == 'enviado_confirmado' %}enviado-confirmado{% endif %}" data-whatsapp-status-venda="{{ venda.id }}">
-                      {{ venda.whatsapp_status_texto }}
+                    <div class="venda-whatsapp-status-list" data-whatsapp-status-venda="{{ venda.id }}">
+                      {% for selo in venda.whatsapp_status_selos %}
+                        <span class="venda-whatsapp-status {{ selo.classe }}">{{ selo.texto }}</span>
+                      {% endfor %}
                     </div>
                   </td>
                   <td class="venda-muted">{{ venda.tipo_pagamento|default:"-" }}</td>
@@ -292,6 +312,22 @@
       setTimeout(function () {
         mensagem.classList.remove("visivel");
       }, 5000);
+    }
+
+    function renderizarSelosWhatsapp(container, selos) {
+      if (!container) {
+        return;
+      }
+      const lista = Array.isArray(selos) && selos.length
+        ? selos
+        : [{ texto: "Nota enviada por WhatsApp", classe: "enviado-confirmado" }];
+      container.innerHTML = "";
+      lista.forEach(function (selo) {
+        const item = document.createElement("span");
+        item.className = `venda-whatsapp-status ${selo.classe || ""}`.trim();
+        item.textContent = selo.texto || "Nota enviada por WhatsApp";
+        container.appendChild(item);
+      });
     }
 
     function obterCookie(nome) {
@@ -378,9 +414,7 @@
           }
           botao.classList.remove("visivel");
           if (statusEl) {
-            statusEl.textContent = data.whatsapp_status_texto || "Nota enviada por WhatsApp";
-            statusEl.classList.remove("aberto");
-            statusEl.classList.add("enviado-confirmado");
+            renderizarSelosWhatsapp(statusEl, data.whatsapp_status_selos);
           }
           botao.dataset.whatsappStatus = data.whatsapp_status || "enviado_confirmado";
           mostrarMensagem(data.mensagem || "Nota marcada como enviada pelo WhatsApp.");

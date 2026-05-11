@@ -1176,7 +1176,7 @@ def consultar_vendas(request):
         data_inicial = parse_date(data_inicial_texto) if data_inicial_texto else None
         data_final = parse_date(data_final_texto) if data_final_texto else None
 
-    vendas_qs = Venda.objects.select_related("cliente").prefetch_related("itens__produto").order_by("-data_venda", "-id")
+    vendas_qs = Venda.objects.select_related("cliente").prefetch_related("itens__produto", "eventos").order_by("-data_venda", "-id")
 
     if data_inicial:
         vendas_qs = vendas_qs.filter(data_venda__gte=data_inicial)
@@ -1206,6 +1206,7 @@ def consultar_vendas(request):
     vendas_lista = list(vendas_qs)
     for venda in vendas_lista:
         venda.whatsapp_url_consulta = montar_link_whatsapp_venda(venda)
+        venda.whatsapp_status_selos = _status_whatsapp_consulta_venda(venda)
 
     return render(
         request,
@@ -2106,6 +2107,175 @@ def venda_cliente_detalhe(request, pk):
     )
 
 
+TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP = (
+    "quantidade_item_alterada",
+    "item_removido_da_nota",
+    "produto_adicionado_na_nota",
+    "item_adicionado_na_nota",
+)
+
+TIPOS_EVENTO_CORTE_WHATSAPP_NOTA = (
+    "whatsapp_aberto",
+    "whatsapp_confirmado",
+)
+
+
+def _status_whatsapp_consulta_venda(venda, eventos=None):
+    eventos_lista = list(eventos if eventos is not None else venda.eventos.all())
+    eventos_lista.sort(key=lambda evento: (evento.criado_em, evento.id))
+    confirmacoes = [
+        evento
+        for evento in eventos_lista
+        if evento.canal == "whatsapp" and evento.tipo_evento == "whatsapp_confirmado"
+    ]
+
+    if not confirmacoes:
+        classe = "aberto" if venda.whatsapp_status == Venda.WHATSAPP_ABERTO else ""
+        return [{
+            "texto": venda.whatsapp_status_texto,
+            "classe": classe,
+        }]
+
+    selos = [{
+        "texto": "Nota enviada por WhatsApp",
+        "classe": "enviado-confirmado",
+    }]
+
+    primeira_confirmacao = confirmacoes[0]
+    reenvios_apos_edicao = 0
+    edicao_pendente = False
+    for evento in eventos_lista:
+        if (evento.criado_em, evento.id) <= (primeira_confirmacao.criado_em, primeira_confirmacao.id):
+            continue
+        if evento.tipo_evento in TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP:
+            edicao_pendente = True
+            continue
+        if evento.canal == "whatsapp" and evento.tipo_evento == "whatsapp_confirmado" and edicao_pendente:
+            reenvios_apos_edicao += 1
+            edicao_pendente = False
+
+    if reenvios_apos_edicao == 1:
+        selos.append({
+            "texto": "Editada e reenviada por WhatsApp",
+            "classe": "editada-reenviada",
+        })
+    elif reenvios_apos_edicao > 1:
+        selos.append({
+            "texto": f"Editada e reenviada {reenvios_apos_edicao} vezes",
+            "classe": "editada-reenviada",
+        })
+
+    if edicao_pendente:
+        selos.append({
+            "texto": (
+                "Nova edicao ainda nao reenviada"
+                if reenvios_apos_edicao
+                else "Editada, mas ainda nao reenviada"
+            ),
+            "classe": "editada-pendente",
+        })
+
+    return selos
+
+
+def _eventos_edicao_nota_para_whatsapp(venda):
+    ultimo_whatsapp = (
+        EventoVenda.objects.filter(
+            venda=venda,
+            canal="whatsapp",
+            tipo_evento__in=TIPOS_EVENTO_CORTE_WHATSAPP_NOTA,
+        )
+        .order_by("-criado_em", "-id")
+        .first()
+    )
+    eventos = EventoVenda.objects.filter(
+        venda=venda,
+        tipo_evento__in=TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP,
+    )
+    if ultimo_whatsapp:
+        eventos = eventos.filter(criado_em__gt=ultimo_whatsapp.criado_em)
+    return eventos.order_by("criado_em", "id")
+
+
+def _linhas_evento_edicao_nota(evento):
+    descricao = (evento.descricao or "").strip()
+    if evento.tipo_evento == "quantidade_item_alterada":
+        prefixo = "Quantidade alterada na nota: "
+        if descricao.startswith(prefixo) and ". De " in descricao and ". Total" in descricao:
+            produto, resto = descricao[len(prefixo):].split(". De ", 1)
+            quantidades = resto.split(". Total", 1)[0]
+            if " para " in quantidades:
+                quantidade_anterior, nova_quantidade = quantidades.split(" para ", 1)
+                return [
+                    f'O item "{produto.strip()}" teve a quantidade alterada:',
+                    f"Quantidade anterior: {quantidade_anterior.strip()}",
+                    f"Nova quantidade: {nova_quantidade.strip()}",
+                ]
+        return [descricao or "Quantidade de item alterada na nota."]
+
+    if evento.tipo_evento == "item_removido_da_nota":
+        prefixo = "Item removido da nota: "
+        if descricao.startswith(prefixo):
+            detalhe = descricao[len(prefixo):]
+            produto = detalhe.split(", quantidade ", 1)[0].strip()
+            if produto:
+                return [f'O item "{produto}" foi removido da nota.']
+        return [descricao or "Item removido da nota."]
+
+    if evento.tipo_evento in ("produto_adicionado_na_nota", "item_adicionado_na_nota"):
+        return [descricao or "Item adicionado na nota."]
+
+    return [descricao] if descricao else []
+
+
+def _montar_whatsapp_atualizacao_nota(request, venda):
+    eventos = list(_eventos_edicao_nota_para_whatsapp(venda))
+    if not eventos:
+        return None
+
+    numero_whatsapp = _numero_whatsapp_cadastro_venda(venda)
+    cliente_nome = venda.cliente.nome if venda.cliente else "Cliente"
+    nota_path = reverse("estoque:venda_cliente_detalhe", kwargs={"pk": venda.pk})
+    nota_url = montar_url_publica(request, nota_path)
+
+    linhas_mensagem = [
+        f"Ola, {cliente_nome}.",
+        "",
+        "Sua nota foi atualizada.",
+        "",
+    ]
+    for indice, evento in enumerate(eventos):
+        if indice:
+            linhas_mensagem.append("")
+        linhas_mensagem.extend(_linhas_evento_edicao_nota(evento))
+
+    linhas_mensagem.extend([
+        "",
+        f"Novo total da nota: {_formatar_moeda(venda.total or Decimal('0.00'))}",
+        "",
+        "Segue a nota atualizada para conferencia:",
+        nota_url,
+    ])
+    mensagem_whatsapp = "\n".join(linhas_mensagem)
+    quantidade_eventos = len(eventos)
+    texto_resumo = (
+        "Nota atualizada com 1 alteracao desde o ultimo WhatsApp."
+        if quantidade_eventos == 1
+        else f"Nota atualizada com {quantidade_eventos} alteracoes desde o ultimo WhatsApp."
+    )
+
+    return {
+        "tem_whatsapp": bool(numero_whatsapp),
+        "url": (
+            f"https://web.whatsapp.com/send?phone={numero_whatsapp}&text={quote(mensagem_whatsapp)}"
+            if numero_whatsapp
+            else ""
+        ),
+        "texto_resumo": texto_resumo,
+        "controle_id": f"{venda.pk}-{'-'.join(str(evento.id) for evento in eventos)}",
+    }
+
+
 def venda_editar_revisao(request, pk):
     venda = get_object_or_404(
         Venda.objects.select_related("cliente").prefetch_related("itens__produto", "eventos"),
@@ -2113,7 +2283,6 @@ def venda_editar_revisao(request, pk):
     )
     alteracao_quantidade = request.session.pop(f"venda_quantidade_alterada_{venda.pk}", None)
     item_removido = request.session.pop(f"venda_item_removido_{venda.pk}", None)
-    ultima_alteracao_whatsapp = item_removido or alteracao_quantidade
 
     entregas = (
         EntregaRotaItem.objects.filter(venda=venda)
@@ -2125,49 +2294,7 @@ def venda_editar_revisao(request, pk):
     existe_checklist = EntregaChecklistItem.objects.filter(rota_item__venda=venda).exists()
     total_checklists = EntregaChecklistItem.objects.filter(rota_item__venda=venda).count()
     existe_pendencia = EntregaRotaItem.objects.filter(venda=venda, is_pendencia=True).exists()
-    whatsapp_atualizacao = None
-
-    if ultima_alteracao_whatsapp:
-        numero_whatsapp = _numero_whatsapp_cadastro_venda(venda)
-        cliente_nome = venda.cliente.nome if venda.cliente else "Cliente"
-        produto_nome = ultima_alteracao_whatsapp.get("produto_nome") or "Produto atualizado"
-        total_atualizado = _formatar_moeda(ultima_alteracao_whatsapp.get("novo_total_venda") or venda.total or Decimal("0.00"))
-        nota_path = reverse("estoque:venda_cliente_detalhe", kwargs={"pk": venda.pk})
-        nota_url = montar_url_publica(request, nota_path)
-        linhas_mensagem = [
-            f"Ola, {cliente_nome}.",
-            "",
-            "Sua nota foi atualizada.",
-            "",
-        ]
-
-        if item_removido:
-            linhas_mensagem.append(f'O item "{produto_nome}" foi removido da nota.')
-        else:
-            unidade = alteracao_quantidade.get("unidade") or ""
-            linhas_mensagem.extend([
-                f'O item "{produto_nome}" teve a quantidade alterada:',
-                f"Quantidade anterior: {alteracao_quantidade.get('quantidade_anterior')} {unidade}".rstrip(),
-                f"Nova quantidade: {alteracao_quantidade.get('nova_quantidade')} {unidade}".rstrip(),
-            ])
-
-        linhas_mensagem.extend([
-            "",
-            f"Novo total da nota: {total_atualizado}",
-            "",
-            "Segue a nota atualizada para conferencia:",
-            nota_url,
-        ])
-        mensagem_whatsapp = "\n".join(linhas_mensagem)
-        whatsapp_atualizacao = {
-            "produto_nome": produto_nome,
-            "tem_whatsapp": bool(numero_whatsapp),
-            "url": (
-                f"https://web.whatsapp.com/send?phone={numero_whatsapp}&text={quote(mensagem_whatsapp)}"
-                if numero_whatsapp
-                else ""
-            ),
-        }
+    whatsapp_atualizacao = _montar_whatsapp_atualizacao_nota(request, venda)
 
     return render(
         request,
@@ -2605,6 +2732,7 @@ def confirmar_whatsapp(request, pk):
         "mensagem": "Confirmacao de envio via WhatsApp salva.",
         "whatsapp_status": venda.whatsapp_status,
         "whatsapp_status_texto": venda.whatsapp_status_texto,
+        "whatsapp_status_selos": _status_whatsapp_consulta_venda(venda),
         "comunicacao_descricao": "Envio confirmado manualmente.",
         "comunicacao_numero": numero_whatsapp,
         "comunicacao_origem": _rotulo_origem_numero_whatsapp(origem_numero),
