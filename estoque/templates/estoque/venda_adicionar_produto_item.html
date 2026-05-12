@@ -20,14 +20,15 @@
     min-height: 32px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 10px;
     background: #fff; color: #0f172a; font-size: 0.8rem; font-weight: 900;
     text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
-    font-family: inherit; line-height: 1.15; appearance: none;
+    box-sizing: border-box; font-family: inherit; line-height: 1.15; appearance: none;
     cursor: pointer; box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
     transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.08s ease;
   }
+  .edit-review-btn:not(:disabled):hover { filter: brightness(0.98); }
   .edit-review-btn:active {
     transform: translateY(1px);
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
-    filter: brightness(0.96);
+    filter: brightness(0.94);
   }
   .edit-review-btn.primary { border-color: #1d4ed8; background: #2563eb; color: #fff; }
   .edit-review-btn.danger { border-color: #fecaca; background: #fff7ed; color: #991b1b; }
@@ -76,7 +77,34 @@
     display: flex; justify-content: flex-end; gap: 14px; align-items: center;
     padding: 8px 10px; background: #f0fdf4; color: #14532d; font-weight: 950;
   }
-  .edit-review-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .edit-review-row-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .edit-review-row-actions .edit-review-btn { flex: 0 0 auto; }
+  .add-product-new-actions { gap: 8px; }
+  .add-product-new-actions .btn-novo-item-primario,
+  .add-product-new-actions .btn-novo-item-cancelar {
+    min-height: 34px;
+    padding: 7px 12px;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-weight: 900;
+    line-height: 1.15;
+    box-shadow: 0 3px 8px rgba(15, 23, 42, 0.10);
+  }
+  .add-product-new-actions .btn-novo-item-primario {
+    border-color: #1d4ed8;
+    background: #2563eb;
+    color: #fff;
+  }
+  .add-product-new-actions .btn-novo-item-cancelar {
+    border-color: #fecaca;
+    background: #fff7ed;
+    color: #991b1b;
+  }
+  .add-product-new-actions .btn-novo-item-primario:active,
+  .add-product-new-actions .btn-novo-item-cancelar:active {
+    transform: translateY(1px) scale(0.98);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.14);
+  }
   .add-product-input,
   .add-product-search {
     width: 100%; min-width: 0; height: 30px; border: 1px solid #86efac; border-radius: 7px; padding: 5px 7px;
@@ -137,6 +165,7 @@
     .edit-review-head { display: grid; }
     .edit-review-actions, .add-product-confirm { justify-content: stretch; }
     .edit-review-btn { width: 100%; }
+    .edit-review-row-actions .edit-review-btn { width: auto; }
     .edit-review-table { min-width: 860px; }
     .edit-review-table-wrap { overflow-x: auto; }
   }
@@ -268,14 +297,14 @@
                   </td>
                   <td>
                     
-  <div class="edit-review-row-actions">
+  <div class="edit-review-row-actions add-product-new-actions">
     {% if quantidade_preview %}
-      <button class="edit-review-btn primary compact" type="submit" form="addProductConfirmForm" autofocus>Acrescentar</button>
+      <button class="edit-review-btn primary compact btn-novo-item-primario" type="submit" form="addProductConfirmForm" autofocus>Acrescentar</button>
     {% else %}
       <input type="hidden" name="itens_adicionados" value="{{ itens_adicionados_param }}" form="addProductReviewForm">
-      <button class="edit-review-btn primary compact" id="addProductReviewButton" type="submit" form="addProductReviewForm">Conferir</button>
+      <button class="edit-review-btn primary compact btn-novo-item-primario" id="addProductReviewButton" type="submit" form="addProductReviewForm">Conferir</button>
     {% endif %}
-    <a class="edit-review-btn danger compact" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1{% if itens_adicionados_param %}&itens_adicionados={{ itens_adicionados_param }}{% endif %}">Cancelar</a>
+    <a class="edit-review-btn danger compact btn-novo-item-cancelar" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1{% if itens_adicionados_param %}&itens_adicionados={{ itens_adicionados_param }}{% endif %}">Cancelar</a>
   </div>
 </td>                 
                 </tr>
