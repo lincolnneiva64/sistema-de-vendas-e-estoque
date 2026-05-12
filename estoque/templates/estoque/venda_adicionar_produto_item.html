@@ -267,16 +267,17 @@
                     {% if valor_novo_item %}R$ {{ valor_novo_item|floatformat:2 }}{% else %}<span class="add-product-muted">Aguardando revisao</span>{% endif %}
                   </td>
                   <td>
-                    <div class="add-product-inline-actions" {% if quantidade_preview %}data-add-product-confirm-actions{% endif %}>
-                      {% if quantidade_preview %}
-                        <button class="edit-review-btn primary compact confirm add-product-primary-action" type="submit" form="addProductConfirmForm" autofocus data-add-product-action="confirmar">Confirmar acrescimo</button>
-                      {% else %}
-                        <input type="hidden" name="itens_adicionados" value="{{ itens_adicionados_param }}" form="addProductReviewForm">
-                        <button class="edit-review-btn primary compact add-product-primary-action" id="addProductReviewButton" type="submit" form="addProductReviewForm">Conferir</button>
-                      {% endif %}
-                      <a class="edit-review-btn danger compact" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1{% if itens_adicionados_param %}&itens_adicionados={{ itens_adicionados_param }}{% endif %}" data-add-product-action="cancelar">Cancelar</a>
-                    </div>
-                  </td>
+                    
+  <div class="edit-review-row-actions">
+    {% if quantidade_preview %}
+      <button class="edit-review-btn primary compact" type="submit" form="addProductConfirmForm" autofocus>Acrescentar</button>
+    {% else %}
+      <input type="hidden" name="itens_adicionados" value="{{ itens_adicionados_param }}" form="addProductReviewForm">
+      <button class="edit-review-btn primary compact" id="addProductReviewButton" type="submit" form="addProductReviewForm">Conferir</button>
+    {% endif %}
+    <a class="edit-review-btn danger compact" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1{% if itens_adicionados_param %}&itens_adicionados={{ itens_adicionados_param }}{% endif %}">Cancelar</a>
+  </div>
+</td>                 
                 </tr>
                 {% for item in itens_venda_ordenados %}
                   <tr>
