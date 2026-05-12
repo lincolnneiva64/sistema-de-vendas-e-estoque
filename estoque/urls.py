@@ -21,6 +21,7 @@ urlpatterns = [
     path("vendas/consultar/", views.consultar_vendas, name="consultar_vendas"),
     path("vendas/consultar/canceladas/", views.consultar_vendas_canceladas, name="consultar_vendas_canceladas"),
     path("vendas/gravar/", views.gravar_venda, name="gravar_venda"),
+    path("contas-a-receber/", views.contas_receber, name="contas_receber"),
     path("entregas/", views.entregas_dia, name="entregas_dia"),
     path("entregas/pendencias/", views.pendencias_entrega, name="pendencias_entrega"),
     path("entregas/pendencias/<int:checklist_id>/remover-da-nota/", views.revisar_remocao_pendencia_da_nota, name="revisar_remocao_pendencia_da_nota"),

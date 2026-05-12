@@ -14,7 +14,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count
 from .forms import CategoriaForm, ClienteForm, FuncionarioForm, ProdutoForm, UnidadeForm
-from .models import Categoria, Cliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, Produto, Unidade, Venda
+from .models import Categoria, Cliente, ContaReceber, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, Produto, Unidade, Venda
 from django.contrib import messages
 from django.http import Http404, HttpResponse, JsonResponse
 from django.utils.dateparse import parse_date
@@ -1239,6 +1239,73 @@ def consultar_vendas_canceladas(request):
 
 
 @ensure_csrf_cookie
+def contas_receber(request):
+    cliente_texto = request.GET.get("cliente", "").strip()
+    data_inicial_texto = request.GET.get("data_inicial", "").strip()
+    data_final_texto = request.GET.get("data_final", "").strip()
+    status_filtro = request.GET.get("status", ContaReceber.STATUS_ABERTA).strip() or ContaReceber.STATUS_ABERTA
+
+    data_inicial = parse_date(data_inicial_texto) if data_inicial_texto else None
+    data_final = parse_date(data_final_texto) if data_final_texto else None
+    status_validos = {
+        ContaReceber.STATUS_ABERTA,
+        ContaReceber.STATUS_PAGA,
+        ContaReceber.STATUS_CANCELADA,
+        "todas",
+    }
+
+    if status_filtro not in status_validos:
+        status_filtro = ContaReceber.STATUS_ABERTA
+        messages.warning(request, "Status invalido. Mostrando contas abertas.")
+
+    contas_qs = (
+        ContaReceber.objects.select_related("cliente", "venda")
+        .order_by("data_vencimento", "data_emissao", "id")
+    )
+
+    if status_filtro != "todas":
+        contas_qs = contas_qs.filter(status=status_filtro)
+
+    if data_inicial:
+        contas_qs = contas_qs.filter(data_vencimento__gte=data_inicial)
+    elif data_inicial_texto:
+        messages.warning(request, "Data inicial invalida. O filtro foi ignorado.")
+
+    if data_final:
+        contas_qs = contas_qs.filter(data_vencimento__lte=data_final)
+    elif data_final_texto:
+        messages.warning(request, "Data final invalida. O filtro foi ignorado.")
+
+    if cliente_texto:
+        contas_qs = contas_qs.filter(
+            Q(cliente__nome__icontains=cliente_texto)
+            | Q(cliente__apelido_nome_conhecido__icontains=cliente_texto)
+            | Q(cliente__cpf_cnpj__icontains=cliente_texto)
+            | Q(cliente__whatsapp__icontains=cliente_texto)
+        )
+
+    contas = list(contas_qs)
+    return render(
+        request,
+        "estoque/contas_receber.html",
+        {
+            "contas": contas,
+            "total_contas": len(contas),
+            "cliente": cliente_texto,
+            "data_inicial": data_inicial_texto,
+            "data_final": data_final_texto,
+            "status_filtro": status_filtro,
+            "status_opcoes": (
+                (ContaReceber.STATUS_ABERTA, "Abertas"),
+                (ContaReceber.STATUS_PAGA, "Pagas"),
+                (ContaReceber.STATUS_CANCELADA, "Canceladas"),
+                ("todas", "Todas"),
+            ),
+        },
+    )
+
+
+@ensure_csrf_cookie
 def entregas_dia(request):
     hoje = timezone.localdate()
     data_texto = (request.POST.get("data") if request.method == "POST" else request.GET.get("data", "")).strip()
@@ -2073,6 +2140,7 @@ def gravar_venda(request):
             canal="sistema",
             usuario=venda.operador,
         )
+        _sincronizar_conta_receber(venda, "venda gravada")
 
     return JsonResponse({
         "sucesso": True,
@@ -2100,7 +2168,12 @@ def venda_detalhe(request, pk):
         key=lambda item: ((item.produto.nome if item.produto else "Produto nao identificado").casefold(), item.id),
     )
     whatsapp_atualizacao = None if venda.cancelada else _montar_whatsapp_atualizacao_nota(request, venda)
-    alteracoes_pendentes_whatsapp = _resumo_alteracoes_pendentes_whatsapp(venda, itens_nota)
+    conta_receber = _conta_receber_da_venda(venda)
+    alteracoes_pendentes_whatsapp = _resumo_alteracoes_pendentes_whatsapp(
+        venda,
+        itens_nota,
+        incluir_edicoes_registradas=request.GET.get("nota_atualizada") == "1",
+    )
     itens_adicionados_destacar_ids = set(itens_adicionados_ids) | alteracoes_pendentes_whatsapp["itens_adicionados_ids"]
 
     # Verificar se venda já tem entrega/rota
@@ -2147,6 +2220,8 @@ def venda_detalhe(request, pk):
             "itens_nota": itens_nota,
             "whatsapp_atualizacao": whatsapp_atualizacao,
             "alteracoes_pendentes_whatsapp": alteracoes_pendentes_whatsapp,
+            "conta_receber": conta_receber,
+            "venda_a_prazo": _venda_a_prazo(venda),
         },
     )
 
@@ -2168,6 +2243,74 @@ def _bloquear_venda_cancelada(request, venda, destino="estoque:venda_detalhe"):
         return None
     messages.warning(request, "Venda cancelada / venda nao realizada. Esta acao esta bloqueada.")
     return redirect(destino, pk=venda.pk)
+
+
+def _venda_a_prazo(venda):
+    return normalizar_texto_cliente(venda.tipo_pagamento) in {"a prazo", "carteira"}
+
+
+def _conta_receber_da_venda(venda):
+    try:
+        return venda.conta_receber
+    except ContaReceber.DoesNotExist:
+        return None
+
+
+def _sincronizar_conta_receber(venda, observacao_origem="", permitir_reabrir_cancelada=False):
+    conta = _conta_receber_da_venda(venda)
+    origem = f" Origem: {observacao_origem}." if observacao_origem else ""
+
+    if venda.cancelada:
+        if conta and conta.status == ContaReceber.STATUS_ABERTA:
+            conta.status = ContaReceber.STATUS_CANCELADA
+            conta.valor_em_aberto = Decimal("0.00")
+            conta.observacao = f"Cancelada por venda nao realizada.{origem}".strip()
+            conta.save(update_fields=["status", "valor_em_aberto", "observacao", "atualizado_em"])
+        return conta
+
+    if not _venda_a_prazo(venda):
+        if conta and conta.status == ContaReceber.STATUS_ABERTA:
+            conta.status = ContaReceber.STATUS_CANCELADA
+            conta.valor_em_aberto = Decimal("0.00")
+            conta.observacao = f"Cancelada porque a venda esta marcada como a vista.{origem}".strip()
+            conta.save(update_fields=["status", "valor_em_aberto", "observacao", "atualizado_em"])
+        return conta
+
+    valor = (venda.total or Decimal("0.00")).quantize(Decimal("0.01"))
+    if conta is None:
+        return ContaReceber.objects.create(
+            venda=venda,
+            cliente=venda.cliente,
+            data_emissao=venda.data_venda,
+            data_vencimento=venda.data_vencimento,
+            valor_original=valor,
+            valor_em_aberto=valor,
+            status=ContaReceber.STATUS_ABERTA,
+            observacao=f"Criada automaticamente para venda a prazo.{origem}".strip(),
+        )
+
+    if conta.status == ContaReceber.STATUS_ABERTA or (
+        permitir_reabrir_cancelada and conta.status == ContaReceber.STATUS_CANCELADA
+    ):
+        conta.cliente = venda.cliente
+        conta.data_emissao = venda.data_venda
+        conta.data_vencimento = venda.data_vencimento
+        conta.valor_original = valor
+        conta.valor_em_aberto = valor
+        conta.status = ContaReceber.STATUS_ABERTA
+        conta.observacao = f"Sincronizada automaticamente com venda a prazo.{origem}".strip()
+        conta.save(update_fields=[
+            "cliente",
+            "data_emissao",
+            "data_vencimento",
+            "valor_original",
+            "valor_em_aberto",
+            "status",
+            "observacao",
+            "atualizado_em",
+        ])
+
+    return conta
 
 
 TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP = (
@@ -2278,18 +2421,55 @@ def _produto_evento_por_nome(itens_nota, nome_produto):
     return None
 
 
-def _resumo_alteracoes_pendentes_whatsapp(venda, itens_nota):
+def _linha_resumo_visual_alteracao_item(evento):
+    descricao = (evento.descricao or "").strip()
+
+    if evento.tipo_evento == "quantidade_item_alterada":
+        return ""
+
+    if evento.tipo_evento == "item_removido_da_nota":
+        prefixo = "Item removido da nota: "
+        produto = ""
+        if descricao.startswith(prefixo):
+            produto = descricao[len(prefixo):].split(", quantidade ", 1)[0].strip()
+        return f"Item removido: {produto or descricao or 'Item removido'}"
+
+    if evento.tipo_evento in ("produto_adicionado_na_nota", "item_adicionado_na_nota"):
+        prefixo = "Item adicionado na nota: "
+        produto = descricao[len(prefixo):].split(", quantidade ", 1)[0].strip() if descricao.startswith(prefixo) else ""
+        return f"Produto acrescentado: {produto or descricao or 'Produto acrescentado'}"
+
+    return ""
+
+
+def _resumo_alteracoes_pendentes_whatsapp(venda, itens_nota, incluir_edicoes_registradas=False):
     eventos = list(_eventos_edicao_nota_para_whatsapp(venda))
+    if incluir_edicoes_registradas and not eventos:
+        eventos = list(
+            EventoVenda.objects.filter(
+                venda=venda,
+                tipo_evento__in=TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP,
+            ).order_by("criado_em", "id")
+        )
     resumo = {
         "itens_adicionados_ids": set(),
         "itens_quantidade_ids": set(),
         "quantidades": {},
         "removidos": [],
         "eventos": eventos,
+        "linhas": [],
     }
 
     for evento in eventos:
         descricao = (evento.descricao or "").strip()
+        linha_visual = _linha_resumo_visual_alteracao_item(evento)
+        if linha_visual:
+            resumo["linhas"].append({
+                "evento_id": evento.id,
+                "tipo_evento": evento.tipo_evento,
+                "linhas": [linha_visual],
+            })
+
         if evento.tipo_evento in ("produto_adicionado_na_nota", "item_adicionado_na_nota"):
             prefixo = "Item adicionado na nota: "
             produto_nome = descricao[len(prefixo):].split(", quantidade ", 1)[0].strip() if descricao.startswith(prefixo) else ""
@@ -2518,6 +2698,11 @@ def venda_editar_cabecalho(request, pk):
                         canal="sistema",
                         usuario=venda.operador,
                     )
+                    _sincronizar_conta_receber(
+                        venda,
+                        "cabecalho da nota alterado",
+                        permitir_reabrir_cancelada=True,
+                    )
 
                 messages.success(
                     request,
@@ -2598,6 +2783,7 @@ def venda_editar_quantidade_item(request, pk, item_id):
                 canal="sistema",
                 usuario=venda.operador,
             )
+            _sincronizar_conta_receber(venda, "quantidade de item alterada")
 
         messages.success(request, f"Quantidade de {produto_nome} atualizada com sucesso.")
         request.session[f"venda_quantidade_alterada_{venda.pk}"] = {
@@ -2745,6 +2931,7 @@ def venda_adicionar_produto_item(request, pk):
                         canal="sistema",
                         usuario=venda.operador,
                     )
+                    _sincronizar_conta_receber(venda, "item adicionado na nota")
             except ValueError as exc:
                 erro_adicao = str(exc)
                 quantidade_preview = None
@@ -2883,6 +3070,7 @@ def venda_revisar_remocao_item(request, pk, item_id):
                 canal="sistema",
                 usuario=venda.operador,
             )
+            _sincronizar_conta_receber(venda, "item removido da nota")
 
         messages.success(request, f'Item "{produto_nome}" removido da nota com sucesso.')
         request.session[f"venda_item_removido_{venda.pk}"] = {
@@ -2956,11 +3144,12 @@ def venda_cancelar(request, pk):
                     (
                         "Venda cancelada / venda nao realizada. "
                         f"Motivo: {motivo}. "
-                        "Itens preservados para historico. Estoque, contas a receber e caixa nao foram alterados nesta fase."
+                        "Itens preservados para historico. Conta a receber vinculada cancelada quando existente. Estoque e caixa nao foram alterados nesta fase."
                     ),
                     canal="sistema",
                     usuario=venda.operador,
                 )
+                _sincronizar_conta_receber(venda, "venda cancelada")
 
             messages.success(request, "Venda marcada como CANCELADA / VENDA NAO REALIZADA.")
             return redirect("estoque:venda_detalhe", pk=venda.pk)

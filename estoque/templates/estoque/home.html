@@ -180,6 +180,12 @@ align-items: center;
             Entregas
           </a>
           <a
+            href="{% url 'estoque:contas_receber' %}"
+            class="btn-acao-principal-painel"
+          >
+            Contas a Receber
+          </a>
+          <a
             id="btnNovoProduto"
             href="{% url 'estoque:cadastrar_produto' %}"
             class="btn-acao-principal-painel"

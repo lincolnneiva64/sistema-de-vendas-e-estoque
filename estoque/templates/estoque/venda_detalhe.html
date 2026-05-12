@@ -283,6 +283,24 @@
             min-height: 36px;
         }
 
+        .conta-receber-info {
+            margin-bottom: 8px;
+            padding: 7px 9px;
+            border: 1px solid #dbe5f0;
+            border-radius: 9px;
+            background: #f8fafc;
+            color: #475569;
+            font-size: 12px;
+            font-weight: 850;
+            line-height: 1.3;
+        }
+
+        .conta-receber-info.aberta {
+            border-color: #86efac;
+            background: #f0fdf4;
+            color: #14532d;
+        }
+
         .label {
             display: block;
             color: #64748b;
@@ -959,7 +977,7 @@
                             </div>
                         </div>
                     {% elif venda.whatsapp_status != "enviado_confirmado" %}
-                        <div class="edit-review-whatsapp" id="whatsappBlocoPrincipal">
+                        <div class="edit-review-whatsapp" id="whatsappBlocoPrincipal" data-whatsapp-envio-pendente>
                             <span class="edit-review-whatsapp-text">{{ venda.whatsapp_status_texto }}. Abra o envio pelo WhatsApp ou marque a nota como enviada quando concluir.</span>
                             <div class="edit-review-whatsapp-flow">
                                 <a href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}" class="whatsapp-acao whatsapp-confirmacao-pendente">Imagem / WhatsApp</a>
@@ -969,12 +987,16 @@
                         </div>
                     {% endif %}
                     {% endif %}
-                    {% if not venda.cancelada and alteracoes_pendentes_whatsapp.removidos %}
+                    {% if not venda.cancelada and alteracoes_pendentes_whatsapp.linhas %}
                         <div class="alteracoes-pendentes" data-whatsapp-atualizacao-pendente>
                             <strong>Alteracoes pendentes na nota</strong>
                             <ul>
-                                {% for produto_removido in alteracoes_pendentes_whatsapp.removidos %}
-                                    <li>Item removido: {{ produto_removido }}</li>
+                                {% for evento_alteracao in alteracoes_pendentes_whatsapp.linhas %}
+                                    <li>
+                                        {% for linha in evento_alteracao.linhas %}
+                                            {% if not forloop.first %}<br>{% endif %}{{ linha }}
+                                        {% endfor %}
+                                    </li>
                                 {% endfor %}
                             </ul>
                         </div>
@@ -1044,6 +1066,18 @@
                             <span class="valor">{{ venda.tipo_pagamento|default:"-" }}</span>
                         </div>
                     </div>
+
+                    {% if not venda.cancelada %}
+                        {% if venda_a_prazo and conta_receber and conta_receber.status == "aberta" %}
+                            <div class="conta-receber-info aberta">
+                                Conta a receber aberta - Valor em aberto: R$ {{ conta_receber.valor_em_aberto|floatformat:2 }} - Vencimento: {{ conta_receber.data_vencimento|date:"d/m/Y"|default:"-" }}
+                            </div>
+                        {% elif not venda_a_prazo %}
+                            <div class="conta-receber-info">
+                                Venda a vista: nao gera conta a receber.
+                            </div>
+                        {% endif %}
+                    {% endif %}
 
                     <table>
                         <colgroup>
@@ -1405,6 +1439,12 @@
             });
         }
 
+        function removerBlocoEnvioWhatsappPendente() {
+            document.querySelectorAll("[data-whatsapp-envio-pendente]").forEach((elemento) => {
+                elemento.remove();
+            });
+        }
+
         try {
             if (whatsappAtualizacaoPendente) {
                 aplicarLembreteWhatsapp();
@@ -1465,6 +1505,7 @@
                 if (resultado) {
                     limparLembreteWhatsapp();
                     limparPendenciaAtualizacaoWhatsapp();
+                    removerBlocoEnvioWhatsappPendente();
                     atualizarStatusWhatsapp(resultado.whatsapp_status, resultado.whatsapp_status_texto);
                     adicionarComunicacaoWhatsapp(
                         resultado.comunicacao_descricao,

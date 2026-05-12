@@ -1,0 +1,196 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Contas a Receber{% endblock %}
+{% block content %}
+<style>
+  .contas-page { color: #172033; padding: 18px 0 32px; }
+  .contas-shell { max-width: 1180px; margin: 0 auto; padding: 0 18px; }
+  .contas-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 12px; margin-bottom: 12px;
+  }
+  .contas-title { margin: 0; font-size: 1.55rem; font-weight: 800; color: #111827; }
+  .contas-subtitle { margin: 4px 0 0; color: #64748b; font-weight: 500; font-size: 0.92rem; }
+  .contas-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+  .contas-btn {
+    border: 0; border-radius: 9px; padding: 8px 13px; font-weight: 700;
+    font-size: 0.9rem; text-decoration: none; display: inline-flex;
+    align-items: center; justify-content: center; min-height: 38px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    cursor: pointer; white-space: nowrap;
+  }
+  .contas-btn:hover { transform: translateY(-1px); }
+  .contas-btn-primary { background: #2563eb; color: #fff; box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24); }
+  .contas-btn-secondary {
+    background: #dbeafe; color: #164173; border: 1px solid #7ea6d9;
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.07);
+  }
+  .contas-search {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 12px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.055);
+    padding: 12px; margin-bottom: 12px;
+  }
+  .contas-search form {
+    display: grid;
+    grid-template-columns: minmax(180px, 1.2fr) repeat(2, minmax(130px, 0.7fr)) minmax(130px, 0.7fr) auto auto;
+    gap: 9px;
+    align-items: end;
+  }
+  .contas-field label {
+    display: block; margin-bottom: 5px; color: #64748b; font-size: 0.74rem;
+    font-weight: 850; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .contas-field input,
+  .contas-field select {
+    width: 100%; border: 1.5px solid #d3dbe8; border-radius: 9px;
+    padding: 10px 12px; background: #fff; color: #172033; font-weight: 650;
+    outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .contas-field input:focus,
+  .contas-field select:focus {
+    border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.13);
+  }
+  .contas-panel {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 14px;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06); overflow: hidden;
+  }
+  .contas-panel-head {
+    padding: 12px 16px; border-bottom: 1px solid #edf1f6;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .contas-panel-title { margin: 0; font-size: 0.98rem; font-weight: 800; color: #111827; }
+  .contas-count { color: #64748b; font-size: 0.84rem; font-weight: 700; white-space: nowrap; }
+  .contas-table-wrap { overflow-x: auto; }
+  .contas-table { width: 100%; border-collapse: collapse; min-width: 960px; }
+  .contas-table th {
+    background: #f8fafc; color: #64748b; font-size: 0.7rem;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    padding: 9px 11px; border-bottom: 1px solid #edf1f6; text-align: left;
+  }
+  .contas-table td {
+    padding: 10px 11px; border-bottom: 1px solid #f0f3f8;
+    vertical-align: middle; font-size: 0.84rem;
+  }
+  .contas-row:hover td { background: #f8fbff; }
+  .contas-cliente { font-weight: 800; color: #172033; }
+  .contas-venda { font-weight: 850; color: #172033; }
+  .contas-valor { color: #166534; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .contas-status {
+    display: inline-flex; border-radius: 999px; padding: 5px 9px;
+    font-size: 0.76rem; font-weight: 950; line-height: 1.15;
+    border: 2px solid #86efac; background: #f0fdf4; color: #166534;
+  }
+  .contas-status.paga { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+  .contas-status.cancelada { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+  .contas-action-link {
+    border: 1px solid #93c5fd; border-radius: 8px; background: #eff6ff;
+    color: #1d4ed8; padding: 5px 9px; font-size: 0.76rem;
+    font-weight: 800; text-decoration: none; display: inline-flex;
+    align-items: center; justify-content: center; min-width: 72px;
+  }
+  .contas-empty {
+    padding: 22px 16px; color: #64748b; text-align: center;
+    font-weight: 700; font-size: 0.9rem;
+  }
+  .contas-alert { border-radius: 13px; padding: 10px 12px; margin-bottom: 10px; font-weight: 750; }
+  .contas-alert.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+  @media (max-width: 980px) {
+    .contas-search form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 760px) {
+    .contas-header { align-items: stretch; flex-direction: column; }
+    .contas-actions { justify-content: flex-start; }
+    .contas-search form { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="contas-page">
+  <div class="contas-shell">
+    <header class="contas-header">
+      <div>
+        <h1 class="contas-title">Contas a Receber</h1>
+        <p class="contas-subtitle">Consulte contas em aberto da carteira dos clientes.</p>
+      </div>
+      <div class="contas-actions">
+        <a href="{% url 'estoque:home' %}" class="contas-btn contas-btn-secondary">Voltar ao painel</a>
+        <a href="{% url 'estoque:consultar_vendas' %}" class="contas-btn contas-btn-primary">Consultar vendas</a>
+      </div>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="contas-alert {{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <section class="contas-search">
+      <form method="get">
+        <div class="contas-field">
+          <label for="cliente">Cliente</label>
+          <input id="cliente" name="cliente" type="text" value="{{ cliente }}" placeholder="Nome, apelido, CPF/CNPJ ou WhatsApp">
+        </div>
+        <div class="contas-field">
+          <label for="data_inicial">Data inicial</label>
+          <input id="data_inicial" name="data_inicial" type="date" value="{{ data_inicial }}">
+        </div>
+        <div class="contas-field">
+          <label for="data_final">Data final</label>
+          <input id="data_final" name="data_final" type="date" value="{{ data_final }}">
+        </div>
+        <div class="contas-field">
+          <label for="status">Status</label>
+          <select id="status" name="status">
+            {% for valor, texto in status_opcoes %}
+              <option value="{{ valor }}" {% if status_filtro == valor %}selected{% endif %}>{{ texto }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="contas-btn contas-btn-primary">Filtrar</button>
+        <a href="{% url 'estoque:contas_receber' %}" class="contas-btn contas-btn-secondary">Limpar</a>
+      </form>
+    </section>
+
+    <section class="contas-panel">
+      <div class="contas-panel-head">
+        <h2 class="contas-panel-title">Carteira de clientes</h2>
+        <span class="contas-count">{{ total_contas }} conta{{ total_contas|pluralize }}</span>
+      </div>
+      <div class="contas-table-wrap">
+        <table class="contas-table">
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Nº da venda</th>
+              <th>Data da venda / emissao</th>
+              <th>Vencimento</th>
+              <th>Valor original</th>
+              <th>Valor em aberto</th>
+              <th>Status</th>
+              <th>Acoes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for conta in contas %}
+              <tr class="contas-row">
+                <td class="contas-cliente">{{ conta.cliente.nome|default:"Consumidor" }}</td>
+                <td class="contas-venda">#{{ conta.venda_id }}</td>
+                <td>{{ conta.data_emissao|date:"d/m/Y" }}</td>
+                <td>{{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</td>
+                <td class="contas-valor">R$ {{ conta.valor_original|floatformat:2 }}</td>
+                <td class="contas-valor">R$ {{ conta.valor_em_aberto|floatformat:2 }}</td>
+                <td><span class="contas-status {{ conta.status }}">{{ conta.get_status_display }}</span></td>
+                <td>
+                  <a href="{% url 'estoque:venda_detalhe' conta.venda_id %}" class="contas-action-link">Abrir nota</a>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="8" class="contas-empty">Nenhuma conta encontrada para os filtros informados.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
