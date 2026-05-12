@@ -854,28 +854,6 @@
                     {% endif %}
 
                     {% if request.GET.nota_atualizada != "1" %}
-                    <div class="comunicacao">
-                        <h2 style="margin: 0 0 5px; font-size: 13px; color: #1e3a8a;">Historico de comunicacao</h2>
-                        <div id="comunicacaoWhatsappLista" class="comunicacao-lista">
-                            {% for evento in comunicacoes_whatsapp %}
-                                <div class="comunicacao-linha">
-                                    <span class="comunicacao-data">{{ evento.criado_em|date:"d/m/Y H:i" }}</span>
-                                    <span class="comunicacao-descricao">
-                                        {{ evento.descricao }}
-                                        {% if evento.numero_whatsapp %}
-                                            <span class="comunicacao-meta">- numero {{ evento.numero_whatsapp }}</span>
-                                        {% endif %}
-                                        {% if evento.origem_numero %}
-                                            <span class="comunicacao-meta">({{ evento.get_origem_numero_display }})</span>
-                                        {% endif %}
-                                    </span>
-                                </div>
-                            {% empty %}
-                                <div class="comunicacao-vazio">Nenhuma comunicacao registrada ainda.</div>
-                            {% endfor %}
-                        </div>
-                    </div>
-
                     <div class="entrega-section">
                         <div class="entrega-header">
                             <h3 class="entrega-title">Entrega / checklist</h3>
@@ -999,6 +977,28 @@
                             {% else %}
                                 <div class="historico-vazio">Nenhum evento registrado ainda.</div>
                             {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="comunicacao">
+                        <h2 style="margin: 0 0 5px; font-size: 13px; color: #1e3a8a;">Historico de comunicacao</h2>
+                        <div id="comunicacaoWhatsappLista" class="comunicacao-lista">
+                            {% for evento in comunicacoes_whatsapp %}
+                                <div class="comunicacao-linha">
+                                    <span class="comunicacao-data">{{ evento.criado_em|date:"d/m/Y H:i" }}</span>
+                                    <span class="comunicacao-descricao">
+                                        {{ evento.descricao }}
+                                        {% if evento.numero_whatsapp %}
+                                            <span class="comunicacao-meta">- numero {{ evento.numero_whatsapp }}</span>
+                                        {% endif %}
+                                        {% if evento.origem_numero %}
+                                            <span class="comunicacao-meta">({{ evento.get_origem_numero_display }})</span>
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            {% empty %}
+                                <div class="comunicacao-vazio">Nenhuma comunicacao registrada ainda.</div>
+                            {% endfor %}
                         </div>
                     </div>
 
