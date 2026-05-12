@@ -170,7 +170,8 @@
           <p class="edit-review-subtitle">Tela de revisao segura antes de liberar alteracoes na venda gravada.</p>
         </div>
         <div class="edit-review-actions">
-          <a class="edit-review-btn" href="{% url 'estoque:venda_detalhe' venda.id %}">Voltar para a nota</a>
+          <a class="edit-review-btn primary" href="{% url 'estoque:venda_adicionar_produto_item' venda.id %}">Adicionar produto</a>
+          <a class="edit-review-btn" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1">Voltar para a nota</a>
         </div>
       </header>
 
@@ -183,44 +184,8 @@
           </div>
         {% endif %}
 
-        {% if whatsapp_atualizacao %}
-          {% if whatsapp_atualizacao.tem_whatsapp %}
-            <div class="edit-review-whatsapp" id="whatsappAtualizacaoBox" role="status" aria-live="polite" data-whatsapp-controle="{{ whatsapp_atualizacao.controle_id }}" data-whatsapp-pendente="true">
-              <span class="edit-review-whatsapp-text">
-                {{ whatsapp_atualizacao.texto_resumo }}
-              </span>
-              <div class="edit-review-whatsapp-flow">
-                <a id="abrirWhatsappAtualizacao" class="edit-review-btn primary whatsapp-pulse" href="{{ whatsapp_atualizacao.url }}" target="_blank" rel="noopener">
-                  Enviar nota atualizada pelo WhatsApp
-                </a>
-                <span id="whatsappAtualizacaoAberto" class="edit-review-whatsapp-step">
-                  WhatsApp aberto para envio da nota atualizada. Depois de enviar ao cliente, confirme abaixo.
-                </span>
-                <button
-                  id="confirmarWhatsappAtualizacao"
-                  type="button"
-                  class="edit-review-btn primary whatsapp-pulse"
-                  data-confirmar-url="{% url 'estoque:confirmar_whatsapp' venda.id %}"
-                  hidden
-                >
-                  Confirmar reenvio pelo WhatsApp
-                </button>
-                <span id="whatsappAtualizacaoConfirmado" class="edit-review-whatsapp-step">
-                  Nota atualizada reenviada por WhatsApp.
-                </span>
-              </div>
-            </div>
-          {% else %}
-            <div class="edit-review-whatsapp warning" role="status" aria-live="polite">
-              <span class="edit-review-whatsapp-text">
-                Nota atualizada, mas este cliente nao possui WhatsApp cadastrado.
-              </span>
-            </div>
-          {% endif %}
-        {% endif %}
-
         <div class="edit-review-notice">
-          Modo de edicao segura. Nesta etapa, quantidade de item existente pode ser alterada e item pode ser removido com confirmacao.
+          Modo de edicao segura. Nesta etapa, produto pode ser acrescentado, quantidade de item existente pode ser alterada e item pode ser removido com confirmacao.
         </div>
 
         {% if possui_alerta_operacional %}

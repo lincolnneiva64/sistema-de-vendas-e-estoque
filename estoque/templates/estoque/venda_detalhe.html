@@ -236,6 +236,69 @@
             font-weight: 650;
         }
 
+        tr.item-adicionado-destaque td {
+            background: #dcfce7;
+            box-shadow: inset 0 1px 0 #86efac, inset 0 -1px 0 #86efac;
+        }
+
+        tr.item-adicionado-destaque td:first-child {
+            box-shadow: inset 4px 0 0 #22c55e, inset 0 1px 0 #86efac, inset 0 -1px 0 #86efac;
+        }
+
+        tr.item-quantidade-destaque td {
+            background: #eff6ff;
+            box-shadow: inset 0 1px 0 #bfdbfe, inset 0 -1px 0 #bfdbfe;
+        }
+
+        tr.item-quantidade-destaque td:first-child {
+            box-shadow: inset 4px 0 0 #2563eb, inset 0 1px 0 #bfdbfe, inset 0 -1px 0 #bfdbfe;
+        }
+
+        .item-adicionado-etiqueta,
+        .item-quantidade-etiqueta {
+            display: inline-flex;
+            align-items: center;
+            margin-left: 5px;
+            padding: 1px 5px;
+            border: 1px solid #86efac;
+            border-radius: 999px;
+            background: #f0fdf4;
+            color: #14532d;
+            font-size: 8.5px;
+            font-weight: 950;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
+        .item-quantidade-etiqueta {
+            border-color: #93c5fd;
+            background: #dbeafe;
+            color: #1e3a8a;
+        }
+
+        .alteracoes-pendentes {
+            margin-bottom: 8px;
+            padding: 7px 9px;
+            border: 1px solid #f7d98b;
+            border-radius: 9px;
+            background: #fff7ed;
+            color: #92400e;
+            font-size: 12px;
+            font-weight: 850;
+            line-height: 1.35;
+        }
+
+        .alteracoes-pendentes strong {
+            display: block;
+            margin-bottom: 3px;
+            color: #78350f;
+        }
+
+        .alteracoes-pendentes ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+
         .numero {
             text-align: right;
             font-variant-numeric: tabular-nums;
@@ -743,12 +806,21 @@
                             <a href="{% url 'estoque:entrega_rota_detalhe' entrega_contexto.id %}">Voltar para {% if entrega_contexto.tipo == "unitaria" %}Entrega{% else %}Rota{% endif %} #{{ entrega_contexto.id }}</a>
                         {% endif %}
                         <a href="{% url 'estoque:venda_editar_revisao' venda.id %}" class="editar-nota-acao">Editar nota</a>
+                        <a href="{% url 'estoque:venda_adicionar_produto_item' venda.id %}{% if itens_adicionados_param %}?itens_adicionados={{ itens_adicionados_param }}{% endif %}" class="editar-nota-acao">Adicionar produto</a>
                         <button type="button" id="btnImprimir">Imprimir</button>
-                        <a href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}" class="whatsapp-acao">Imagem / WhatsApp</a>
+                        {% if whatsapp_atualizacao and whatsapp_atualizacao.tem_whatsapp %}
+                            <a href="{{ whatsapp_atualizacao.url }}" target="_blank" rel="noopener" class="whatsapp-acao whatsapp-confirmacao-pendente" data-whatsapp-atualizacao-pendente id="btnEnviarWhatsappAtualizado" data-registrar-url="{% url 'estoque:registrar_whatsapp_aberto' venda.id %}">Enviar nota atualizada pelo WhatsApp</a>
+                        {% else %}
+                            <a href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}" class="whatsapp-acao">Imagem / WhatsApp</a>
+                        {% endif %}
                         <a href="{% url 'estoque:venda_whatsapp_pdf' venda.id %}" target="_blank" rel="noopener">PDF</a>
-                        <button type="button" id="btnConfirmarWhatsapp" class="whatsapp-acao" {% if venda.whatsapp_status == "enviado_confirmado" %}disabled{% endif %}>
-                            {% if venda.whatsapp_status == "enviado_confirmado" %}Nota ja marcada como enviada{% else %}Marcar como enviada pelo WhatsApp{% endif %}
-                        </button>
+                        {% if whatsapp_atualizacao %}
+                            <button type="button" id="btnConfirmarWhatsapp" class="whatsapp-acao whatsapp-confirmacao-pendente" {% if not whatsapp_atualizacao.whatsapp_aberto %}hidden{% endif %}>Confirmar reenvio pelo WhatsApp</button>
+                        {% else %}
+                            <button type="button" id="btnConfirmarWhatsapp" class="whatsapp-acao" {% if venda.whatsapp_status == "enviado_confirmado" %}disabled{% endif %}>
+                                {% if venda.whatsapp_status == "enviado_confirmado" %}Nota ja marcada como enviada{% else %}Marcar como enviada pelo WhatsApp{% endif %}
+                            </button>
+                        {% endif %}
                     </div>
                 </header>
 
@@ -759,6 +831,21 @@
                     <div id="whatsappStatusNota" class="whatsapp-status {% if venda.whatsapp_status == 'aberto' %}aberto{% elif venda.whatsapp_status == 'enviado_confirmado' %}enviado-confirmado{% else %}nao-enviado{% endif %}">
                         {{ venda.whatsapp_status_texto }}
                     </div>
+                    {% if whatsapp_atualizacao %}
+                        <div class="aviso-whatsapp visivel" role="status" aria-live="polite" data-whatsapp-atualizacao-pendente>
+                            {{ whatsapp_atualizacao.texto_resumo }} Envie a nota atualizada pelo WhatsApp e confirme o reenvio.
+                        </div>
+                    {% endif %}
+                    {% if alteracoes_pendentes_whatsapp.removidos %}
+                        <div class="alteracoes-pendentes" data-whatsapp-atualizacao-pendente>
+                            <strong>Alteracoes pendentes na nota</strong>
+                            <ul>
+                                {% for produto_removido in alteracoes_pendentes_whatsapp.removidos %}
+                                    <li>Item removido: {{ produto_removido }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
 
                     {% if request.GET.nota_atualizada == "1" %}
                         {% for message in messages %}
@@ -865,9 +952,17 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for item in venda.itens.all %}
-                            <tr>
-                                <td>{{ item.produto.nome|default:"Produto nao identificado" }}</td>
+                            {% for item in itens_nota %}
+                            <tr class="{% if item.id in itens_adicionados_destacar_ids %}item-adicionado-destaque{% elif item.id in alteracoes_pendentes_whatsapp.itens_quantidade_ids %}item-quantidade-destaque{% endif %}">
+                                <td>
+                                    {{ item.produto.nome|default:"Produto nao identificado" }}
+                                    {% if item.id in itens_adicionados_destacar_ids %}
+                                        <span class="item-adicionado-etiqueta">Novo item acrescentado</span>
+                                    {% endif %}
+                                    {% if item.id in alteracoes_pendentes_whatsapp.itens_quantidade_ids %}
+                                        <span class="item-quantidade-etiqueta">Quantidade alterada</span>
+                                    {% endif %}
+                                </td>
                                 <td class="numero">{{ item.quantidade }}</td>
                                 <td>{{ item.unidade }}</td>
                                 <td class="numero">R$ {{ item.preco_unitario|floatformat:2 }}</td>
@@ -960,9 +1055,17 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for item in venda.itens.all %}
-                            <tr>
-                                <td>{{ item.produto.nome|default:"Produto nao identificado" }}</td>
+                            {% for item in itens_nota %}
+                            <tr class="{% if item.id in itens_adicionados_destacar_ids %}item-adicionado-destaque{% elif item.id in alteracoes_pendentes_whatsapp.itens_quantidade_ids %}item-quantidade-destaque{% endif %}">
+                                <td>
+                                    {{ item.produto.nome|default:"Produto nao identificado" }}
+                                    {% if item.id in itens_adicionados_destacar_ids %}
+                                        <span class="item-adicionado-etiqueta">Novo item acrescentado</span>
+                                    {% endif %}
+                                    {% if item.id in alteracoes_pendentes_whatsapp.itens_quantidade_ids %}
+                                        <span class="item-quantidade-etiqueta">Quantidade alterada</span>
+                                    {% endif %}
+                                </td>
                                 <td class="numero">{{ item.quantidade }}</td>
                                 <td>{{ item.unidade }}</td>
                                 <td class="numero">R$ {{ item.preco_unitario|floatformat:2 }}</td>
@@ -1114,6 +1217,7 @@
 
         const btnImprimir = document.getElementById("btnImprimir");
         const btnConfirmarWhatsapp = document.getElementById("btnConfirmarWhatsapp");
+        const btnEnviarWhatsappAtualizado = document.getElementById("btnEnviarWhatsappAtualizado");
         const btnWhatsappSemNumero = document.getElementById("btnWhatsappSemNumero");
         const avisoWhatsapp = document.getElementById("avisoWhatsapp");
         const whatsappStatusNota = document.getElementById("whatsappStatusNota");
@@ -1122,6 +1226,7 @@
         const whatsappPendenteKey = "whatsapp_pending_confirm_venda_{{ venda.id }}";
         const whatsappPendenteValor = "conversa_aberta";
         const whatsappStatusInicial = "{{ venda.whatsapp_status }}";
+        const whatsappAtualizacaoPendente = {% if whatsapp_atualizacao %}true{% else %}false{% endif %};
 
         function atualizarStatusWhatsapp(status, texto) {
             if (!whatsappStatusNota) {
@@ -1159,8 +1264,22 @@
             removerLembreteWhatsapp();
         }
 
+        function limparPendenciaAtualizacaoWhatsapp() {
+            document.querySelectorAll("[data-whatsapp-atualizacao-pendente]").forEach((elemento) => {
+                elemento.remove();
+            });
+            document.querySelectorAll(".item-adicionado-destaque, .item-quantidade-destaque").forEach((linha) => {
+                linha.classList.remove("item-adicionado-destaque", "item-quantidade-destaque");
+            });
+            document.querySelectorAll(".item-adicionado-etiqueta, .item-quantidade-etiqueta").forEach((etiqueta) => {
+                etiqueta.remove();
+            });
+        }
+
         try {
-            if (whatsappStatusInicial === "enviado_confirmado") {
+            if (whatsappAtualizacaoPendente) {
+                aplicarLembreteWhatsapp();
+            } else if (whatsappStatusInicial === "enviado_confirmado") {
                 localStorage.removeItem(whatsappPendenteKey);
                 removerLembreteWhatsapp();
             } else if (whatsappStatusInicial === "aberto" || localStorage.getItem(whatsappPendenteKey) === whatsappPendenteValor) {
@@ -1183,6 +1302,30 @@
             });
         }
 
+        if (btnEnviarWhatsappAtualizado) {
+            btnEnviarWhatsappAtualizado.addEventListener("click", async (event) => {
+                event.preventDefault();
+                const janelaWhatsapp = window.open("", "_blank");
+                const resultado = await enviarEvento(btnEnviarWhatsappAtualizado.dataset.registrarUrl, "WhatsApp aberto para envio da nota atualizada.");
+                if (!resultado) {
+                    if (janelaWhatsapp) {
+                        janelaWhatsapp.close();
+                    }
+                    return;
+                }
+                if (btnConfirmarWhatsapp) {
+                    btnConfirmarWhatsapp.hidden = false;
+                    btnConfirmarWhatsapp.disabled = false;
+                    aplicarLembreteWhatsapp();
+                }
+                if (janelaWhatsapp) {
+                    janelaWhatsapp.location.href = btnEnviarWhatsappAtualizado.href;
+                } else {
+                    window.open(btnEnviarWhatsappAtualizado.href, "_blank", "noopener");
+                }
+            });
+        }
+
         if (btnConfirmarWhatsapp) {
             btnConfirmarWhatsapp.addEventListener("click", async (event) => {
                 event.preventDefault();
@@ -1190,6 +1333,7 @@
                 const resultado = await enviarEvento(confirmarWhatsappUrl, "Nota marcada como enviada pelo WhatsApp.");
                 if (resultado) {
                     limparLembreteWhatsapp();
+                    limparPendenciaAtualizacaoWhatsapp();
                     atualizarStatusWhatsapp(resultado.whatsapp_status, resultado.whatsapp_status_texto);
                     adicionarComunicacaoWhatsapp(
                         resultado.comunicacao_descricao,

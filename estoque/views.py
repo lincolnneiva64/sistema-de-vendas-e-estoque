@@ -1931,6 +1931,32 @@ def _decimal_do_front(valor, casas="0.01"):
         raise ValueError("Valor numerico invalido.")
 
 
+def _recalcular_total_venda_pelos_itens(venda):
+    total_recalculado = sum(
+        (
+            valor or Decimal("0.00")
+            for valor in ItemVenda.objects.filter(venda=venda).values_list("valor_total", flat=True)
+        ),
+        Decimal("0.00"),
+    )
+    return total_recalculado.quantize(Decimal("0.01"))
+
+
+def _ids_itens_adicionados_param(request):
+    ids = []
+    texto_ids = request.GET.get("itens_adicionados") or request.POST.get("itens_adicionados") or ""
+    for parte in str(texto_ids).split(","):
+        parte = parte.strip()
+        if parte.isdigit():
+            ids.append(int(parte))
+
+    item_unico = request.GET.get("item_adicionado") or request.POST.get("item_adicionado") or ""
+    if str(item_unico).isdigit():
+        ids.append(int(item_unico))
+
+    return list(dict.fromkeys(ids))
+
+
 @require_POST
 def gravar_venda(request):
     try:
@@ -2052,6 +2078,15 @@ def venda_detalhe(request, pk):
     entrega_id = request.GET.get("entrega")
     if entrega_id:
         entrega_contexto = EntregaRota.objects.filter(pk=entrega_id).first()
+    itens_adicionados_ids = _ids_itens_adicionados_param(request)
+    itens_adicionados_param = ",".join(str(item_id) for item_id in itens_adicionados_ids)
+    itens_nota = sorted(
+        list(venda.itens.all()),
+        key=lambda item: ((item.produto.nome if item.produto else "Produto nao identificado").casefold(), item.id),
+    )
+    whatsapp_atualizacao = _montar_whatsapp_atualizacao_nota(request, venda)
+    alteracoes_pendentes_whatsapp = _resumo_alteracoes_pendentes_whatsapp(venda, itens_nota)
+    itens_adicionados_destacar_ids = set(itens_adicionados_ids) | alteracoes_pendentes_whatsapp["itens_adicionados_ids"]
 
     # Verificar se venda já tem entrega/rota
     entrega_existente = EntregaRotaItem.objects.filter(venda=venda).select_related("rota").first()
@@ -2091,6 +2126,12 @@ def venda_detalhe(request, pk):
             "entrega_contexto": entrega_contexto,
             "entrega_info": entrega_info,
             "funcionarios_habilitados": Funcionario.habilitados_para_checklist(),
+            "itens_adicionados_ids": itens_adicionados_ids,
+            "itens_adicionados_destacar_ids": itens_adicionados_destacar_ids,
+            "itens_adicionados_param": itens_adicionados_param,
+            "itens_nota": itens_nota,
+            "whatsapp_atualizacao": whatsapp_atualizacao,
+            "alteracoes_pendentes_whatsapp": alteracoes_pendentes_whatsapp,
         },
     )
 
@@ -2179,22 +2220,81 @@ def _status_whatsapp_consulta_venda(venda, eventos=None):
 
 
 def _eventos_edicao_nota_para_whatsapp(venda):
-    ultimo_whatsapp = (
+    eventos = list(
         EventoVenda.objects.filter(
             venda=venda,
-            canal="whatsapp",
-            tipo_evento__in=TIPOS_EVENTO_CORTE_WHATSAPP_NOTA,
         )
-        .order_by("-criado_em", "-id")
-        .first()
+        .filter(Q(tipo_evento__in=TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP) | Q(canal="whatsapp", tipo_evento="whatsapp_confirmado"))
+        .order_by("criado_em", "id")
     )
-    eventos = EventoVenda.objects.filter(
-        venda=venda,
-        tipo_evento__in=TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP,
-    )
-    if ultimo_whatsapp:
-        eventos = eventos.filter(criado_em__gt=ultimo_whatsapp.criado_em)
-    return eventos.order_by("criado_em", "id")
+    if not any(evento.canal == "whatsapp" and evento.tipo_evento == "whatsapp_confirmado" for evento in eventos):
+        return EventoVenda.objects.none()
+
+    pendentes_ids = []
+    for evento in eventos:
+        if evento.canal == "whatsapp" and evento.tipo_evento == "whatsapp_confirmado":
+            pendentes_ids = []
+            continue
+        if evento.tipo_evento in TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP:
+            pendentes_ids.append(evento.id)
+
+    if not pendentes_ids:
+        return EventoVenda.objects.none()
+
+    return EventoVenda.objects.filter(pk__in=pendentes_ids).order_by("criado_em", "id")
+
+
+def _produto_evento_por_nome(itens_nota, nome_produto):
+    nome_normalizado = (nome_produto or "").strip().casefold()
+    if not nome_normalizado:
+        return None
+    for item in itens_nota:
+        nome_item = item.produto.nome if item.produto else "Produto nao identificado"
+        if nome_item.strip().casefold() == nome_normalizado:
+            return item
+    return None
+
+
+def _resumo_alteracoes_pendentes_whatsapp(venda, itens_nota):
+    eventos = list(_eventos_edicao_nota_para_whatsapp(venda))
+    resumo = {
+        "itens_adicionados_ids": set(),
+        "itens_quantidade_ids": set(),
+        "quantidades": {},
+        "removidos": [],
+        "eventos": eventos,
+    }
+
+    for evento in eventos:
+        descricao = (evento.descricao or "").strip()
+        if evento.tipo_evento in ("produto_adicionado_na_nota", "item_adicionado_na_nota"):
+            prefixo = "Item adicionado na nota: "
+            produto_nome = descricao[len(prefixo):].split(", quantidade ", 1)[0].strip() if descricao.startswith(prefixo) else ""
+            item = _produto_evento_por_nome(itens_nota, produto_nome)
+            if item:
+                resumo["itens_adicionados_ids"].add(item.id)
+            continue
+
+        if evento.tipo_evento == "quantidade_item_alterada":
+            prefixo = "Quantidade alterada na nota: "
+            produto_nome = ""
+            texto_quantidade = ""
+            if descricao.startswith(prefixo) and ". De " in descricao:
+                produto_nome, resto = descricao[len(prefixo):].split(". De ", 1)
+                texto_quantidade = resto.split(". Total", 1)[0].strip()
+            item = _produto_evento_por_nome(itens_nota, produto_nome)
+            if item:
+                resumo["itens_quantidade_ids"].add(item.id)
+                if texto_quantidade:
+                    resumo["quantidades"][item.id] = texto_quantidade
+            continue
+
+        if evento.tipo_evento == "item_removido_da_nota":
+            prefixo = "Item removido da nota: "
+            produto_nome = descricao[len(prefixo):].split(", quantidade ", 1)[0].strip() if descricao.startswith(prefixo) else ""
+            resumo["removidos"].append(produto_nome or descricao or "Item removido")
+
+    return resumo
 
 
 def _linhas_evento_edicao_nota(evento):
@@ -2233,6 +2333,13 @@ def _montar_whatsapp_atualizacao_nota(request, venda):
     if not eventos:
         return None
 
+    ultimo_evento = eventos[-1]
+    whatsapp_aberto = EventoVenda.objects.filter(
+        Q(criado_em__gt=ultimo_evento.criado_em) | Q(criado_em=ultimo_evento.criado_em, id__gt=ultimo_evento.id),
+        venda=venda,
+        canal="whatsapp",
+        tipo_evento="whatsapp_aberto",
+    ).exists()
     numero_whatsapp = _numero_whatsapp_cadastro_venda(venda)
     cliente_nome = venda.cliente.nome if venda.cliente else "Cliente"
     nota_path = reverse("estoque:venda_cliente_detalhe", kwargs={"pk": venda.pk})
@@ -2273,6 +2380,7 @@ def _montar_whatsapp_atualizacao_nota(request, venda):
         ),
         "texto_resumo": texto_resumo,
         "controle_id": f"{venda.pk}-{'-'.join(str(evento.id) for evento in eventos)}",
+        "whatsapp_aberto": whatsapp_aberto,
     }
 
 
@@ -2414,6 +2522,184 @@ def venda_editar_quantidade_item(request, pk, item_id):
             "novo_total_venda": novo_total_venda,
             "erro_quantidade": erro_quantidade,
             "possui_alerta_operacional": possui_alerta_operacional,
+        },
+    )
+
+
+def venda_adicionar_produto_item(request, pk):
+    venda = get_object_or_404(
+        Venda.objects.select_related("cliente").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+    produtos = Produto.objects.filter(excluido=False).order_by("nome")
+    total_atual_venda = venda.total or Decimal("0.00")
+    produto_selecionado = None
+    quantidade_preview = None
+    preco_unitario = None
+    unidade = ""
+    valor_novo_item = None
+    novo_total_venda = None
+    erro_adicao = ""
+    mensagem_produto_duplicado = "Este produto já existe na nota. Use Alterar quantidade no item existente."
+    itens_adicionados_ids = _ids_itens_adicionados_param(request)
+    itens_adicionados_param = ",".join(str(item_id) for item_id in itens_adicionados_ids)
+
+    def obter_produto(produto_id):
+        try:
+            return produtos.get(pk=produto_id)
+        except (Produto.DoesNotExist, ValueError, TypeError):
+            raise ValueError("Selecione um produto cadastrado.")
+
+    def preco_produto(produto):
+        preco = produto.preco_venda or produto.preco_vista or Decimal("0.00")
+        return Decimal(preco).quantize(Decimal("0.01"))
+
+    def unidade_produto(produto):
+        return produto.unidade_venda_1 or produto.unidade_compra or ""
+
+    def validar_produto_novo_na_venda(produto):
+        if ItemVenda.objects.filter(venda=venda, produto_id=produto.pk).exists():
+            raise ValueError(mensagem_produto_duplicado)
+
+    def calcular_previsao(produto_id, valor_quantidade, valor_preco=None):
+        produto = obter_produto(produto_id)
+        validar_produto_novo_na_venda(produto)
+        quantidade = _decimal_do_front(valor_quantidade, "0.001")
+        if quantidade <= 0:
+            raise ValueError("Informe uma quantidade maior que zero.")
+
+        preco = _decimal_do_front(valor_preco, "0.01") if str(valor_preco or "").strip() else preco_produto(produto)
+        if preco <= 0:
+            raise ValueError("Informe um preco unitario maior que zero.")
+
+        total_item = (quantidade * preco).quantize(Decimal("0.01"))
+        total_previsto = (total_atual_venda + total_item).quantize(Decimal("0.01"))
+        return produto, quantidade, preco, unidade_produto(produto), total_item, total_previsto
+
+    if request.method == "POST":
+        produto_id = request.POST.get("produto_id")
+        quantidade_informada = request.POST.get("quantidade", "").strip()
+        preco_informado = request.POST.get("preco_unitario", "").strip()
+        try:
+            produto_selecionado, quantidade_preview, preco_unitario, unidade, valor_novo_item, total_previsto = calcular_previsao(
+                produto_id,
+                quantidade_informada,
+                preco_informado,
+            )
+        except ValueError as exc:
+            erro_adicao = str(exc)
+            try:
+                produto_selecionado = obter_produto(produto_id)
+                preco_unitario = _decimal_do_front(preco_informado, "0.01") if preco_informado else preco_produto(produto_selecionado)
+                unidade = unidade_produto(produto_selecionado)
+            except ValueError:
+                pass
+        else:
+            total_anterior = total_atual_venda
+            produto_nome = produto_selecionado.nome
+
+            try:
+                with transaction.atomic():
+                    validar_produto_novo_na_venda(produto_selecionado)
+                    item_criado = ItemVenda.objects.create(
+                        venda=venda,
+                        produto=produto_selecionado,
+                        quantidade=quantidade_preview,
+                        unidade=unidade,
+                        preco_unitario=preco_unitario,
+                        valor_total=valor_novo_item,
+                    )
+                    total_recalculado = _recalcular_total_venda_pelos_itens(venda)
+                    venda.total = total_recalculado
+                    venda.save(update_fields=["total", "atualizado_em"])
+                    _registrar_evento_venda(
+                        venda,
+                        "item_adicionado_na_nota",
+                        (
+                            f"Item adicionado na nota: {produto_nome}, quantidade {quantidade_preview} {unidade or ''}, "
+                            f"preco unitario R$ {preco_unitario}, valor acrescentado R$ {valor_novo_item}. "
+                            f"Total da venda: R$ {total_anterior} -> R$ {total_recalculado}."
+                        ),
+                        canal="sistema",
+                        usuario=venda.operador,
+                    )
+            except ValueError as exc:
+                erro_adicao = str(exc)
+                quantidade_preview = None
+                valor_novo_item = None
+                novo_total_venda = None
+            else:
+                messages.success(request, f'Produto "{produto_nome}" acrescentado a nota com sucesso.')
+                ids_destacados = list(dict.fromkeys([*itens_adicionados_ids, item_criado.pk]))
+                return redirect(
+                    f"{reverse('estoque:venda_detalhe', kwargs={'pk': venda.pk})}"
+                    f"?nota_atualizada=1&itens_adicionados={','.join(str(item_id) for item_id in ids_destacados)}"
+                )
+    else:
+        produto_id = request.GET.get("produto_id", "").strip()
+        quantidade_informada = request.GET.get("quantidade", "").strip()
+        preco_informado = request.GET.get("preco_unitario", "").strip()
+
+    if request.method != "POST" and produto_id:
+        try:
+            produto_selecionado = obter_produto(produto_id)
+            preco_unitario = _decimal_do_front(preco_informado, "0.01") if preco_informado else preco_produto(produto_selecionado)
+            unidade = unidade_produto(produto_selecionado)
+            if quantidade_informada:
+                produto_selecionado, quantidade_preview, preco_unitario, unidade, valor_novo_item, novo_total_venda = calcular_previsao(
+                    produto_id,
+                    quantidade_informada,
+                    preco_informado,
+                )
+        except ValueError as exc:
+            erro_adicao = str(exc)
+
+    possui_alerta_operacional = (
+        EntregaRotaItem.objects.filter(venda=venda).exists()
+        or EntregaChecklistItem.objects.filter(rota_item__venda=venda).exists()
+        or EntregaRotaItem.objects.filter(venda=venda, is_pendencia=True).exists()
+    )
+    itens_venda_ordenados = sorted(
+        list(venda.itens.all()),
+        key=lambda item: ((item.produto.nome if item.produto else "Produto nao identificado").casefold(), item.id),
+    )
+    produtos_existentes_ids = [
+        item.produto_id
+        for item in itens_venda_ordenados
+        if item.produto_id
+    ]
+    produto_opcoes = [
+        {
+            "id": produto.id,
+            "nome": produto.nome,
+            "preco": str(preco_produto(produto)),
+            "unidade": unidade_produto(produto),
+        }
+        for produto in produtos
+    ]
+
+    return render(
+        request,
+        "estoque/venda_adicionar_produto_item.html",
+        {
+            "venda": venda,
+            "produtos": produtos,
+            "produto_opcoes": produto_opcoes,
+            "produto_id": produto_id,
+            "produto_selecionado": produto_selecionado,
+            "quantidade_informada": quantidade_informada,
+            "preco_informado": preco_informado or (str(preco_unitario) if preco_unitario is not None else ""),
+            "quantidade_preview": quantidade_preview,
+            "preco_unitario": preco_unitario,
+            "unidade": unidade,
+            "valor_novo_item": valor_novo_item,
+            "total_atual_venda": total_atual_venda,
+            "novo_total_venda": novo_total_venda,
+            "erro_adicao": erro_adicao,
+            "possui_alerta_operacional": possui_alerta_operacional,
+            "itens_adicionados_param": itens_adicionados_param,
+            "itens_venda_ordenados": itens_venda_ordenados,
+            "produtos_existentes_ids": produtos_existentes_ids,
         },
     )
 

@@ -1,0 +1,538 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Adicionar produto a nota{% endblock %}
+{% block content %}
+<style>
+  .edit-review-page { color: #172033; padding: 10px 0 24px; }
+  .edit-review-shell { max-width: 1040px; margin: 0 auto; padding: 0 14px; }
+  .edit-review-card {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 13px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06); overflow: hidden;
+  }
+  .edit-review-head {
+    padding: 10px 12px; border-bottom: 1px solid #edf1f6; background: #eff6ff;
+    display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; flex-wrap: wrap;
+  }
+  .edit-review-title { margin: 0; color: #1e3a8a; font-size: 1.08rem; font-weight: 950; line-height: 1.15; }
+  .edit-review-subtitle { margin: 3px 0 0; color: #64748b; font-size: 0.8rem; font-weight: 760; line-height: 1.25; }
+  .edit-review-body { padding: 10px 12px; display: grid; gap: 8px; }
+  .edit-review-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .edit-review-btn {
+    min-height: 32px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 10px;
+    background: #fff; color: #0f172a; font-size: 0.8rem; font-weight: 900;
+    text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+    font-family: inherit; line-height: 1.15; appearance: none;
+    cursor: pointer; box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
+    transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.08s ease;
+  }
+  .edit-review-btn:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+    filter: brightness(0.96);
+  }
+  .edit-review-btn.primary { border-color: #1d4ed8; background: #2563eb; color: #fff; }
+  .edit-review-btn.danger { border-color: #fecaca; background: #fff7ed; color: #991b1b; }
+  .edit-review-btn.compact {
+    min-height: 24px; padding: 4px 7px; border-radius: 6px;
+    font-size: 0.68rem; box-shadow: 0 2px 5px rgba(15, 23, 42, 0.07);
+    white-space: nowrap;
+  }
+  .edit-review-btn:focus-visible,
+  .add-product-input:focus-visible,
+  .add-product-search:focus-visible {
+    outline: 2px solid #facc15;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.3), 0 4px 10px rgba(15, 23, 42, 0.12);
+  }
+  .edit-review-btn:focus:not(:focus-visible),
+  .add-product-input:focus:not(:focus-visible),
+  .add-product-search:focus:not(:focus-visible) { outline: none; }
+  .edit-review-notice {
+    border: 1px solid #bfdbfe; border-radius: 10px; background: #eff6ff;
+    color: #1e3a8a; padding: 7px 9px; font-size: 0.8rem; font-weight: 850; line-height: 1.25;
+  }
+  .edit-review-warning {
+    border: 1px solid #f7d98b; border-radius: 10px; background: #fff7ed;
+    color: #92400e; padding: 7px 9px; font-size: 0.8rem; font-weight: 850; line-height: 1.25;
+  }
+  .edit-review-error {
+    border: 1px solid #fecaca; border-radius: 10px; background: #fef2f2;
+    color: #991b1b; padding: 7px 9px; font-size: 0.8rem; font-weight: 850;
+  }
+  .edit-review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .edit-review-field { border: 1px solid #edf1f6; border-radius: 8px; background: #fbfdff; padding: 6px 8px; }
+  .edit-review-label { display: block; color: #64748b; font-size: 0.66rem; font-weight: 900; text-transform: uppercase; }
+  .edit-review-value { display: block; margin-top: 2px; color: #111827; font-size: 0.84rem; font-weight: 900; overflow-wrap: anywhere; }
+  .edit-review-section { border: 1px solid #edf1f6; border-radius: 9px; overflow: hidden; }
+  .edit-review-section h2 {
+    margin: 0; padding: 7px 10px; background: #f8fafc; border-bottom: 1px solid #edf1f6;
+    color: #334155; font-size: 0.84rem; font-weight: 950;
+  }
+  .edit-review-table { width: 100%; min-width: 930px; border-collapse: collapse; font-size: 0.8rem; table-layout: fixed; }
+  .edit-review-table th, .edit-review-table td { padding: 6px 8px; border-bottom: 1px solid #edf1f6; text-align: left; vertical-align: middle; }
+  .edit-review-table th { background: #fbfdff; color: #64748b; font-size: 0.66rem; text-transform: uppercase; }
+  .edit-review-table tr:last-child td { border-bottom: 0; }
+  .numero { text-align: right; white-space: nowrap; }
+  .edit-review-total {
+    display: flex; justify-content: flex-end; gap: 14px; align-items: center;
+    padding: 8px 10px; background: #f0fdf4; color: #14532d; font-weight: 950;
+  }
+  .edit-review-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .add-product-input,
+  .add-product-search {
+    width: 100%; min-width: 0; height: 30px; border: 1px solid #86efac; border-radius: 7px; padding: 5px 7px;
+    font-size: 0.78rem; font-weight: 850; color: #0f172a; background: #fff;
+  }
+  .add-product-autocomplete { position: relative; min-width: 0; }
+  .add-product-suggestions {
+    display: none; position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 3px);
+    max-height: 190px; overflow-y: auto; border: 1px solid #bfdbfe; border-radius: 8px;
+    background: #fff; box-shadow: 0 12px 24px rgba(15, 23, 42, 0.14);
+  }
+  .add-product-suggestions.visible { display: block; }
+  .add-product-suggestion {
+    padding: 6px 8px; cursor: pointer; border-bottom: 1px solid #edf1f6;
+    color: #111827; font-size: 0.78rem; font-weight: 850;
+  }
+  .add-product-suggestion:last-child { border-bottom: 0; }
+  .add-product-suggestion.active,
+  .add-product-suggestion:hover { background: #eff6ff; color: #1e3a8a; }
+  .add-product-duplicate-warning { display: none; margin-top: 4px; }
+  .add-product-duplicate-warning.visible { display: block; }
+  .add-product-input { text-align: right; }
+  .edit-review-table tr.adding-row td { background: #fbfdff; }
+  .edit-review-table tr.adding-row td:first-child { box-shadow: inset 3px 0 0 #93c5fd; }
+  .edit-review-table tr.adding-row:not(.reviewed) td:not(:first-child) { padding-top: 27px; }
+  .edit-review-table tr.adding-row.reviewed td { background: #f0fdf4; }
+  .edit-review-table tr.adding-row.reviewed td:not(:first-child) { padding-top: 27px; }
+  .edit-review-table tr.adding-row.reviewed td:first-child { box-shadow: inset 3px 0 0 #22c55e; }
+  .add-product-product { color: #111827; font-weight: 900; }
+  .add-product-muted { color: #64748b; font-weight: 850; }
+  .add-product-strong { color: #14532d; font-weight: 950; }
+  .add-product-line-title {
+    display: inline-flex; align-items: center; min-height: 16px; margin-bottom: 3px; padding: 1px 5px;
+    border-radius: 999px; border: 1px solid #bfdbfe; background: #eff6ff;
+    color: #1e3a8a; font-size: 0.62rem; font-weight: 950; text-transform: uppercase;
+  }
+  .add-product-cell-stack { display: grid; gap: 3px; min-width: 0; }
+  .add-product-cell-value {
+    display: block; min-height: 30px; padding: 6px 0; font-size: 0.82rem; font-weight: 900;
+    color: #111827; overflow-wrap: anywhere;
+  }
+  .add-product-value-box {
+    display: inline-flex; align-items: center; justify-content: flex-end; min-height: 30px;
+    font-size: 0.82rem; font-weight: 900;
+  }
+  .add-product-inline-actions { display: inline-flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .add-product-inline-actions .add-product-primary-action { min-width: 118px; }
+  .add-product-totals {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px;
+  }
+  .add-product-total-box { border: 1px solid #edf1f6; border-radius: 8px; background: #fbfdff; padding: 7px 9px; }
+  .add-product-total-box.addition { border-color: #bfdbfe; background: #eff6ff; color: #1e3a8a; }
+  .add-product-total-box.preview { border-color: #bbf7d0; background: #f0fdf4; color: #14532d; }
+  .add-product-total-box .edit-review-value { font-size: 0.96rem; }
+  .add-product-confirm { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  @media (max-width: 780px) {
+    .edit-review-grid, .add-product-totals { grid-template-columns: 1fr; }
+    .edit-review-head { display: grid; }
+    .edit-review-actions, .add-product-confirm { justify-content: stretch; }
+    .edit-review-btn { width: 100%; }
+    .edit-review-table { min-width: 860px; }
+    .edit-review-table-wrap { overflow-x: auto; }
+  }
+</style>
+
+<main class="edit-review-page">
+  <div class="edit-review-shell">
+    <section class="edit-review-card">
+      <header class="edit-review-head">
+        <div>
+          <h1 class="edit-review-title">Adicionar produto - Venda #{{ venda.id }}</h1>
+          <p class="edit-review-subtitle">Tela de revisao segura: confira a nota inteira antes de acrescentar uma nova linha.</p>
+        </div>
+        <div class="edit-review-actions">
+          <a class="edit-review-btn" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1{% if itens_adicionados_param %}&itens_adicionados={{ itens_adicionados_param }}{% endif %}">Cancelar / Voltar</a>
+        </div>
+      </header>
+
+      <div class="edit-review-body">
+        <div class="edit-review-notice">
+          O produto sera acrescentado como uma nova linha da nota. Preco e unidade sao lidos do cadastro do produto no momento da confirmacao.
+        </div>
+
+        {% if possui_alerta_operacional %}
+          <div class="edit-review-warning">
+            Esta venda ja possui vinculo com entrega/checklist. Revise com cuidado antes de confirmar o acrescimo.
+          </div>
+        {% endif %}
+
+        {% if erro_adicao %}
+          <div class="edit-review-error">{{ erro_adicao }}</div>
+        {% endif %}
+
+        <section class="edit-review-grid" aria-label="Dados da venda">
+          <div class="edit-review-field">
+            <span class="edit-review-label">Cliente</span>
+            <span class="edit-review-value">{{ venda.cliente.nome|default:"Consumidor" }}</span>
+          </div>
+          <div class="edit-review-field">
+            <span class="edit-review-label">Venda/nota</span>
+            <span class="edit-review-value">Venda #{{ venda.id }}</span>
+          </div>
+          <div class="edit-review-field">
+            <span class="edit-review-label">Data da venda</span>
+            <span class="edit-review-value">{{ venda.data_venda|date:"d/m/Y" }}</span>
+          </div>
+          <div class="edit-review-field">
+            <span class="edit-review-label">Vencimento</span>
+            <span class="edit-review-value">{{ venda.data_vencimento|date:"d/m/Y"|default:"-" }}</span>
+          </div>
+          <div class="edit-review-field">
+            <span class="edit-review-label">Pagamento</span>
+            <span class="edit-review-value">{{ venda.tipo_pagamento|default:"-" }}</span>
+          </div>
+          <div class="edit-review-field">
+            <span class="edit-review-label">Operador</span>
+            <span class="edit-review-value">{{ venda.operador|default:"-" }}</span>
+          </div>
+        </section>
+
+        <section class="edit-review-section">
+          <h2>Itens atuais da venda</h2>
+          <form method="get" id="addProductReviewForm"></form>
+          {% if quantidade_preview %}
+            <form method="post" id="addProductConfirmForm">
+              {% csrf_token %}
+              <input type="hidden" name="itens_adicionados" value="{{ itens_adicionados_param }}">
+              <input type="hidden" name="produto_id" value="{{ produto_selecionado.id }}">
+              <input type="hidden" name="quantidade" value="{{ quantidade_preview }}">
+              <input type="hidden" name="preco_unitario" value="{{ preco_unitario }}">
+            </form>
+          {% endif %}
+          <div class="edit-review-table-wrap">
+            <table class="edit-review-table">
+              <colgroup>
+                <col style="width: 37%;">
+                <col style="width: 9%;">
+                <col style="width: 8%;">
+                <col style="width: 14%;">
+                <col style="width: 14%;">
+                <col style="width: 18%;">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th class="numero">Qtd</th>
+                  <th>Un</th>
+                  <th class="numero">Preco unitario</th>
+                  <th class="numero">Valor total</th>
+                  <th>Acao</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="adding-row {% if quantidade_preview %}reviewed{% endif %}">
+                  <td>
+                    <div class="add-product-cell-stack">
+                      <span class="add-product-line-title">Novo item</span>
+                      {% if quantidade_preview %}
+                        <span class="add-product-cell-value">{{ produto_selecionado.nome }}</span>
+                      {% else %}
+                        <div class="add-product-autocomplete">
+                          <input class="add-product-search" id="addProductSearch" type="text" value="{% if produto_selecionado %}{{ produto_selecionado.nome }}{% endif %}" autocomplete="off" placeholder="Digite o produto" autofocus>
+                          <input type="hidden" id="addProductId" name="produto_id" value="{{ produto_id }}" form="addProductReviewForm" required>
+                          <div class="add-product-suggestions" id="addProductSuggestions"></div>
+                          <div class="edit-review-error add-product-duplicate-warning" id="addProductDuplicateWarning"></div>
+                        </div>
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td class="numero">
+                    {% if quantidade_preview %}
+                      <span class="add-product-value-box">{{ quantidade_preview }}</span>
+                    {% else %}
+                      <input class="add-product-input" id="addProductQuantity" name="quantidade" form="addProductReviewForm" type="number" step="0.001" min="0.001" value="{{ quantidade_informada }}" required>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if produto_selecionado %}{{ unidade|default:"-" }}{% else %}<span class="add-product-muted" id="addProductUnitPreview">-</span>{% endif %}
+                  </td>
+                  <td class="numero">
+                    {% if quantidade_preview %}
+                      {% if preco_unitario %}R$ {{ preco_unitario|floatformat:2 }}{% else %}<span class="add-product-muted">-</span>{% endif %}
+                    {% else %}
+                      <input class="add-product-input" id="addProductPrice" name="preco_unitario" form="addProductReviewForm" type="number" step="0.01" min="0.01" value="{{ preco_informado }}" required>
+                    {% endif %}
+                  </td>
+                  <td class="numero {% if valor_novo_item %}add-product-strong{% endif %}">
+                    {% if valor_novo_item %}R$ {{ valor_novo_item|floatformat:2 }}{% else %}<span class="add-product-muted">Aguardando revisao</span>{% endif %}
+                  </td>
+                  <td>
+                    <div class="add-product-inline-actions" {% if quantidade_preview %}data-add-product-confirm-actions{% endif %}>
+                      {% if quantidade_preview %}
+                        <button class="edit-review-btn primary compact confirm add-product-primary-action" type="submit" form="addProductConfirmForm" autofocus data-add-product-action="confirmar">Confirmar acrescimo</button>
+                      {% else %}
+                        <input type="hidden" name="itens_adicionados" value="{{ itens_adicionados_param }}" form="addProductReviewForm">
+                        <button class="edit-review-btn primary compact add-product-primary-action" id="addProductReviewButton" type="submit" form="addProductReviewForm">Conferir</button>
+                      {% endif %}
+                      <a class="edit-review-btn danger compact" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1{% if itens_adicionados_param %}&itens_adicionados={{ itens_adicionados_param }}{% endif %}" data-add-product-action="cancelar">Cancelar</a>
+                    </div>
+                  </td>
+                </tr>
+                {% for item in itens_venda_ordenados %}
+                  <tr>
+                    <td>{{ item.produto.nome|default:"Produto nao identificado" }}</td>
+                    <td class="numero">{{ item.quantidade }}</td>
+                    <td>{{ item.unidade|default:"-" }}</td>
+                    <td class="numero">R$ {{ item.preco_unitario|floatformat:2 }}</td>
+                    <td class="numero">R$ {{ item.valor_total|floatformat:2 }}</td>
+                    <td>
+                      <div class="edit-review-row-actions">
+                        <a class="edit-review-btn primary compact" href="{% url 'estoque:venda_editar_quantidade_item' venda.id item.id %}">Alterar quantidade</a>
+                        <a class="edit-review-btn danger compact" href="{% url 'estoque:venda_revisar_remocao_item' venda.id item.id %}">Remover item</a>
+                      </div>
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr>
+                    <td colspan="6">Nenhum item encontrado nesta venda.</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="add-product-totals">
+            <div class="add-product-total-box">
+              <span class="edit-review-label">Total atual da nota</span>
+              <span class="edit-review-value">R$ {{ total_atual_venda|floatformat:2 }}</span>
+            </div>
+            <div class="add-product-total-box addition">
+              <span class="edit-review-label">Impacto do acrescimo</span>
+              <span class="edit-review-value">
+                {% if valor_novo_item %}+ R$ {{ valor_novo_item|floatformat:2 }}{% else %}Aguardando revisao{% endif %}
+              </span>
+            </div>
+            <div class="add-product-total-box preview">
+              <span class="edit-review-label">Novo total previsto da nota</span>
+              <span class="edit-review-value">
+                {% if novo_total_venda %}R$ {{ novo_total_venda|floatformat:2 }}{% else %}Aguardando revisao{% endif %}
+              </span>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </div>
+</main>
+{{ produto_opcoes|json_script:"addProductData" }}
+{{ produtos_existentes_ids|json_script:"addProductExistingIds" }}
+<script>
+  (function () {
+    const addRow = document.querySelector("tr.adding-row");
+    const form = document.getElementById("addProductReviewForm");
+    const productSearch = addRow ? addRow.querySelector("#addProductSearch") : null;
+    const productIdInput = addRow ? addRow.querySelector("#addProductId") : null;
+    const suggestionsBox = addRow ? addRow.querySelector("#addProductSuggestions") : null;
+    const unitPreview = addRow ? addRow.querySelector("#addProductUnitPreview") : null;
+    const quantityInput = addRow ? addRow.querySelector("#addProductQuantity") : null;
+    const priceInput = addRow ? addRow.querySelector("#addProductPrice") : null;
+    const reviewButton = addRow ? addRow.querySelector("#addProductReviewButton") : null;
+    const duplicateWarning = addRow ? addRow.querySelector("#addProductDuplicateWarning") : null;
+    const productDataElement = document.getElementById("addProductData");
+    const existingIdsElement = document.getElementById("addProductExistingIds");
+    const produtos = productDataElement ? JSON.parse(productDataElement.textContent) : [];
+    const produtosExistentes = new Set((existingIdsElement ? JSON.parse(existingIdsElement.textContent) : []).map(String));
+    const mensagemProdutoDuplicado = "Este produto já existe na nota. Use Alterar quantidade no item existente.";
+    let sugestoes = [];
+    let sugestaoAtiva = 0;
+
+    function normalizarTexto(valor) {
+      return String(valor || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+    }
+
+    function produtoCorresponde(produto, termo) {
+      const nome = normalizarTexto(produto.nome);
+      const partes = normalizarTexto(termo).split(/\s+/).filter(Boolean);
+      return partes.every((parte) => nome.includes(parte));
+    }
+
+    function fecharSugestoes() {
+      if (!suggestionsBox) return;
+      suggestionsBox.classList.remove("visible");
+      suggestionsBox.innerHTML = "";
+    }
+
+    function produtoJaExiste(produto) {
+      return produto && produtosExistentes.has(String(produto.id));
+    }
+
+    function mostrarAvisoDuplicado() {
+      if (!duplicateWarning) return;
+      duplicateWarning.textContent = mensagemProdutoDuplicado;
+      duplicateWarning.classList.add("visible");
+    }
+
+    function limparAvisoDuplicado() {
+      if (!duplicateWarning) return;
+      duplicateWarning.textContent = "";
+      duplicateWarning.classList.remove("visible");
+    }
+
+    function selecionarProduto(produto) {
+      if (!produto || !productSearch || !productIdInput) return;
+      productSearch.value = produto.nome;
+      if (produtoJaExiste(produto)) {
+        productIdInput.value = "";
+        if (priceInput) priceInput.value = "";
+        if (unitPreview) unitPreview.textContent = "-";
+        fecharSugestoes();
+        mostrarAvisoDuplicado();
+        productSearch.focus();
+        productSearch.select();
+        return;
+      }
+
+      limparAvisoDuplicado();
+      productIdInput.value = produto.id;
+      if (priceInput) priceInput.value = produto.preco || "";
+      if (unitPreview) unitPreview.textContent = produto.unidade || "-";
+      fecharSugestoes();
+      if (quantityInput) {
+        quantityInput.focus();
+        quantityInput.select();
+      }
+    }
+
+    function renderizarSugestoes() {
+      if (!suggestionsBox) return;
+      suggestionsBox.innerHTML = "";
+
+      sugestoes.forEach((produto, index) => {
+        const item = document.createElement("div");
+        item.className = "add-product-suggestion" + (index === sugestaoAtiva ? " active" : "");
+        item.textContent = produto.nome;
+        item.addEventListener("mouseenter", function () {
+          sugestaoAtiva = index;
+          renderizarSugestoes();
+        });
+        item.addEventListener("mousedown", function (event) {
+          event.preventDefault();
+          selecionarProduto(produto);
+        });
+        suggestionsBox.appendChild(item);
+      });
+
+      suggestionsBox.classList.toggle("visible", sugestoes.length > 0);
+    }
+
+    function atualizarSugestoes() {
+      if (!productSearch) return;
+      const termo = productSearch.value;
+      productIdInput.value = "";
+      limparAvisoDuplicado();
+      sugestoes = produtos
+        .filter((produto) => produtoCorresponde(produto, termo))
+        .slice(0, 8);
+      sugestaoAtiva = 0;
+      renderizarSugestoes();
+    }
+
+    if (productSearch && productIdInput && suggestionsBox) {
+      productSearch.addEventListener("input", atualizarSugestoes);
+      productSearch.addEventListener("focus", function () {
+        if (productSearch.value.trim()) atualizarSugestoes();
+      });
+      productSearch.addEventListener("keydown", function (event) {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          if (!sugestoes.length) atualizarSugestoes();
+          sugestaoAtiva = Math.min(sugestaoAtiva + 1, Math.max(sugestoes.length - 1, 0));
+          renderizarSugestoes();
+          return;
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          sugestaoAtiva = Math.max(sugestaoAtiva - 1, 0);
+          renderizarSugestoes();
+          return;
+        }
+        if (event.key === "Enter") {
+          event.preventDefault();
+          if (!sugestoes.length) atualizarSugestoes();
+          if (sugestoes[sugestaoAtiva]) selecionarProduto(sugestoes[sugestaoAtiva]);
+          return;
+        }
+        if (event.key === "Escape") {
+          fecharSugestoes();
+        }
+      });
+      productSearch.addEventListener("blur", function () {
+        setTimeout(fecharSugestoes, 120);
+      });
+    }
+
+    if (form && productIdInput) {
+      form.addEventListener("submit", function (event) {
+        if (!produtosExistentes.has(String(productIdInput.value))) return;
+        event.preventDefault();
+        productIdInput.value = "";
+        if (priceInput) priceInput.value = "";
+        if (unitPreview) unitPreview.textContent = "-";
+        mostrarAvisoDuplicado();
+        if (productSearch) productSearch.focus();
+      });
+    }
+
+    if (form && quantityInput && reviewButton) {
+      quantityInput.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        if (priceInput) {
+          priceInput.focus();
+          priceInput.select();
+        }
+      });
+    }
+
+    if (form && priceInput && reviewButton) {
+      priceInput.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        if (form.requestSubmit) {
+          form.requestSubmit(reviewButton);
+        } else {
+          reviewButton.click();
+        }
+      });
+    }
+
+    const actions = document.querySelector("[data-add-product-confirm-actions]");
+    if (!actions) return;
+
+    const cancelButton = actions.querySelector("[data-add-product-action='cancelar']");
+    const confirmButton = actions.querySelector("[data-add-product-action='confirmar']");
+    if (!cancelButton || !confirmButton) return;
+
+    actions.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" && document.activeElement === cancelButton) {
+        event.preventDefault();
+        window.location.href = cancelButton.href;
+        return;
+      }
+
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (!actions.contains(document.activeElement)) return;
+
+      event.preventDefault();
+      if (event.key === "ArrowLeft") {
+        cancelButton.focus();
+      } else {
+        confirmButton.focus();
+      }
+    });
+  })();
+</script>
+{% endblock %}
