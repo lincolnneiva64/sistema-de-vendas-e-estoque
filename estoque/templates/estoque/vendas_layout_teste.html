@@ -767,7 +767,7 @@ td:first-child {
             <input type="date" id="vencimentoVenda" title="Vencimento">
             <select id="tipoVenda">
                 <option>À vista</option>
-                <option>A prazo</option>
+                <option selected>A prazo</option>
             </select>
             <input type="text" id="operadorVenda" placeholder="Operador">
         </div>
@@ -949,6 +949,7 @@ function scrollLinhaDentroDaLista(linha, behavior = "smooth") {
 
   const produto = document.getElementById("produto");
   const tipoVenda = document.getElementById("tipoVenda");
+const pagamentoPadraoVenda = "A prazo";
 const dataVenda = document.getElementById("dataVenda");
 const operadorVenda = document.getElementById("operadorVenda");
 const produtoBusca = document.getElementById("produtoBusca");
@@ -1546,9 +1547,7 @@ function limparCabecalhoVenda(resetarTipo = false) {
     operadorVenda.value = "";
     dataVenda.value = dataLocalHojeInput();
 
-    if (resetarTipo) {
-        tipoVenda.selectedIndex = 0;
-    }
+    tipoVenda.value = pagamentoPadraoVenda;
 
     focarProximoCampo(clienteBusca);
 }
