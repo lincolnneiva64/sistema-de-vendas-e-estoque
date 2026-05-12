@@ -402,6 +402,44 @@ class ItemVenda(models.Model):
         return f"{nome_produto} - Venda #{self.venda_id}"
 
 
+class ContaReceber(models.Model):
+    STATUS_ABERTA = "aberta"
+    STATUS_PAGA = "paga"
+    STATUS_CANCELADA = "cancelada"
+    STATUS_CHOICES = [
+        (STATUS_ABERTA, "Aberta"),
+        (STATUS_PAGA, "Paga"),
+        (STATUS_CANCELADA, "Cancelada"),
+    ]
+
+    venda = models.OneToOneField(
+        Venda,
+        on_delete=models.CASCADE,
+        related_name="conta_receber",
+    )
+    cliente = models.ForeignKey(
+        Cliente,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="contas_receber",
+    )
+    data_emissao = models.DateField()
+    data_vencimento = models.DateField(blank=True, null=True)
+    valor_original = models.DecimalField(max_digits=12, decimal_places=2)
+    valor_em_aberto = models.DecimalField(max_digits=12, decimal_places=2)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ABERTA)
+    observacao = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["data_vencimento", "id"]
+
+    def __str__(self):
+        return f"Conta a receber - Venda #{self.venda_id}"
+
+
 class EntregaRota(models.Model):
     TIPO_UNITARIA = "unitaria"
     TIPO_ROTA = "rota"
