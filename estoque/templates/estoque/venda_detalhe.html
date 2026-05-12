@@ -172,6 +172,26 @@
             box-shadow: 0 12px 26px rgba(22, 163, 74, 0.14);
         }
 
+        .venda-cancelada-banner {
+            margin-bottom: 10px;
+            padding: 10px 12px;
+            border: 2px solid #dc2626;
+            border-radius: 10px;
+            background: #fef2f2;
+            color: #991b1b;
+            font-size: 13px;
+            font-weight: 950;
+            line-height: 1.35;
+            box-shadow: 0 12px 26px rgba(220, 38, 38, 0.13);
+        }
+
+        .cancelar-venda-acao {
+            background: #dc2626 !important;
+            border-color: #b91c1c !important;
+            color: #ffffff !important;
+            box-shadow: 0 4px 10px rgba(220, 38, 38, 0.22) !important;
+        }
+
         .edit-review-whatsapp {
             border: 1px solid #fed7aa;
             border-radius: 10px;
@@ -877,10 +897,14 @@
                         {% if entrega_contexto %}
                             <a href="{% url 'estoque:entrega_rota_detalhe' entrega_contexto.id %}">Voltar para {% if entrega_contexto.tipo == "unitaria" %}Entrega{% else %}Rota{% endif %} #{{ entrega_contexto.id }}</a>
                         {% endif %}
+                        {% if not venda.cancelada %}
                         <a href="{% url 'estoque:venda_editar_revisao' venda.id %}" class="editar-nota-acao">Editar nota</a>
                         <a href="{% url 'estoque:venda_editar_cabecalho' venda.id %}" class="editar-nota-acao">Editar cabeçalho</a>
                         <a href="{% url 'estoque:venda_adicionar_produto_item' venda.id %}{% if itens_adicionados_param %}?itens_adicionados={{ itens_adicionados_param }}{% endif %}" class="editar-nota-acao">Adicionar produto</a>
+                        <a href="{% url 'estoque:venda_cancelar' venda.id %}" class="cancelar-venda-acao">Cancelar venda</a>
+                        {% endif %}
                         <button type="button" id="btnImprimir">Imprimir</button>
+                        {% if not venda.cancelada %}
                         {% if whatsapp_atualizacao and whatsapp_atualizacao.tem_whatsapp %}
                             <a href="{{ whatsapp_atualizacao.url }}" target="_blank" rel="noopener" class="whatsapp-acao whatsapp-confirmacao-pendente" data-whatsapp-atualizacao-pendente data-whatsapp-atualizado-link id="btnEnviarWhatsappAtualizado" data-registrar-url="{% url 'estoque:registrar_whatsapp_aberto' venda.id %}">Enviar nota atualizada pelo WhatsApp</a>
                         {% else %}
@@ -894,13 +918,23 @@
                                 {% if venda.whatsapp_status == "enviado_confirmado" %}Nota ja marcada como enviada{% else %}Marcar como enviada pelo WhatsApp{% endif %}
                             </button>
                         {% endif %}
+                        {% endif %}
                     </div>
                 </header>
 
                 <section class="conteudo">
+                    {% if venda.cancelada %}
+                        <div class="venda-cancelada-banner">
+                            CANCELADA / VENDA NAO REALIZADA.
+                            {% if venda.cancelada_em %} Cancelada em {{ venda.cancelada_em|date:"d/m/Y H:i" }}.{% endif %}
+                            {% if venda.motivo_cancelamento %} Motivo: {{ venda.motivo_cancelamento }}{% endif %}
+                            Itens preservados somente para historico.
+                        </div>
+                    {% endif %}
                     <div id="avisoWhatsapp" class="aviso-whatsapp" role="status" aria-live="polite">
                         Este cliente nao possui WhatsApp cadastrado para envio da nota.
                     </div>
+                    {% if not venda.cancelada %}
                     <div id="whatsappStatusNota" class="whatsapp-status {% if venda.whatsapp_status == 'aberto' %}aberto{% elif venda.whatsapp_status == 'enviado_confirmado' %}enviado-confirmado{% else %}nao-enviado{% endif %}">
                         {{ venda.whatsapp_status_texto }}
                     </div>
@@ -909,6 +943,8 @@
                             {{ whatsapp_atualizacao.texto_resumo }} Envie a nota atualizada pelo WhatsApp e confirme o reenvio.
                         </div>
                     {% endif %}
+                    {% endif %}
+                    {% if not venda.cancelada %}
                     {% if whatsapp_atualizacao %}
                         <div class="edit-review-whatsapp" data-whatsapp-atualizacao-pendente id="whatsappBlocoPrincipal">
                             <span class="edit-review-whatsapp-text">{{ whatsapp_atualizacao.texto_resumo }} Envie a nota atualizada pelo WhatsApp e confirme o reenvio.</span>
@@ -932,7 +968,8 @@
                             </div>
                         </div>
                     {% endif %}
-                    {% if alteracoes_pendentes_whatsapp.removidos %}
+                    {% endif %}
+                    {% if not venda.cancelada and alteracoes_pendentes_whatsapp.removidos %}
                         <div class="alteracoes-pendentes" data-whatsapp-atualizacao-pendente>
                             <strong>Alteracoes pendentes na nota</strong>
                             <ul>
@@ -949,7 +986,7 @@
                         {% endfor %}
                     {% endif %}
 
-                    {% if request.GET.nota_atualizada != "1" %}
+                    {% if request.GET.nota_atualizada != "1" and not venda.cancelada %}
                     <div class="entrega-section">
                         <div class="entrega-header">
                             <h3 class="entrega-title">Entrega / checklist</h3>

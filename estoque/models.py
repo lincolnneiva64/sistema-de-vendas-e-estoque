@@ -321,6 +321,9 @@ class Venda(models.Model):
     whatsapp_numero_usado = models.CharField(max_length=20, blank=True, null=True)
     whatsapp_aberto_em = models.DateTimeField(blank=True, null=True)
     whatsapp_confirmado_em = models.DateTimeField(blank=True, null=True)
+    cancelada = models.BooleanField(default=False)
+    cancelada_em = models.DateTimeField(blank=True, null=True)
+    motivo_cancelamento = models.TextField(blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 

@@ -118,7 +118,15 @@
     color: #92400e;
     box-shadow: 0 8px 18px rgba(217, 119, 6, 0.13);
   }
+  .venda-whatsapp-status.cancelada {
+    border-color: #dc2626;
+    background: #fef2f2;
+    color: #991b1b;
+    box-shadow: 0 8px 18px rgba(220, 38, 38, 0.13);
+  }
+  .vendas-consulta-row.cancelada td { background: #fff7f7; }
   .venda-total { color: #166534; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .vendas-consulta-row.cancelada .venda-total { color: #991b1b; }
   .vendas-consulta-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .vendas-consulta-action-link,
   .vendas-consulta-action-btn {
@@ -190,13 +198,24 @@
   <div class="vendas-consulta-shell">
     <header class="vendas-consulta-header">
       <div>
-        <h1 class="vendas-consulta-title">Consultar Vendas</h1>
-        <p class="vendas-consulta-subtitle">Localize vendas gravadas por data, cliente ou numero.</p>
+        <h1 class="vendas-consulta-title">{% if mostrar_canceladas %}Vendas canceladas{% else %}Consultar Vendas{% endif %}</h1>
+        <p class="vendas-consulta-subtitle">
+          {% if mostrar_canceladas %}
+            Historico/auditoria de vendas canceladas ou nao realizadas.
+          {% else %}
+            Localize vendas ativas gravadas por data, cliente ou numero.
+          {% endif %}
+        </p>
       </div>
       <div class="vendas-consulta-header-actions">
         <a href="{% url 'estoque:home' %}" class="vendas-consulta-btn vendas-consulta-btn-secondary">Voltar ao painel</a>
         <a href="{% url 'estoque:vendas' %}" class="vendas-consulta-btn vendas-consulta-btn-primary">Nova venda</a>
         <a href="{% url 'estoque:entregas_dia' %}" class="vendas-consulta-btn vendas-consulta-btn-secondary">Ir para Entregas</a>
+        {% if mostrar_canceladas %}
+          <a href="{% url 'estoque:consultar_vendas' %}" class="vendas-consulta-btn vendas-consulta-btn-secondary">Voltar para vendas ativas</a>
+        {% else %}
+          <a href="{% url 'estoque:consultar_vendas_canceladas' %}" class="vendas-consulta-btn vendas-consulta-btn-secondary">Vendas canceladas</a>
+        {% endif %}
       </div>
     </header>
 
@@ -227,14 +246,14 @@
           <input type="number" name="numero" id="numero" value="{{ numero }}" min="1" step="1" placeholder="Nº da venda">
         </div>
         <button type="submit" class="vendas-consulta-btn vendas-consulta-btn-primary">Buscar</button>
-        <a href="{% url 'estoque:consultar_vendas' %}" class="vendas-consulta-btn vendas-consulta-btn-secondary">Limpar</a>
+        <a href="{% if mostrar_canceladas %}{% url 'estoque:consultar_vendas_canceladas' %}{% else %}{% url 'estoque:consultar_vendas' %}{% endif %}" class="vendas-consulta-btn vendas-consulta-btn-secondary">Limpar</a>
       </form>
       <div id="mensagemConsultaVendas" class="vendas-consulta-toast" role="status" aria-live="polite"></div>
     </section>
 
     <section class="vendas-consulta-panel">
       <div class="vendas-consulta-panel-head">
-        <h2 class="vendas-consulta-panel-title">Vendas encontradas</h2>
+        <h2 class="vendas-consulta-panel-title">{% if mostrar_canceladas %}Vendas canceladas encontradas{% else %}Vendas ativas encontradas{% endif %}</h2>
         <span class="vendas-consulta-count">{{ total_vendas }} venda(s)</span>
       </div>
 
@@ -254,7 +273,7 @@
             </thead>
             <tbody>
               {% for venda in vendas %}
-                <tr class="vendas-consulta-row">
+                <tr class="vendas-consulta-row {% if venda.cancelada %}cancelada{% endif %}">
                   <td><span class="venda-numero">#{{ venda.id }}</span></td>
                   <td class="venda-muted">{{ venda.data_venda|date:"d/m/Y" }}</td>
                   <td>
@@ -274,9 +293,11 @@
                   <td>
                     <div class="vendas-consulta-actions">
                       <a class="vendas-consulta-action-link primary" href="{% url 'estoque:venda_detalhe' venda.id %}">Abrir nota</a>
+                      {% if not venda.cancelada %}
                       <button type="button" class="vendas-consulta-action-btn edit js-editar-venda">Editar</button>
                       <a class="vendas-consulta-action-link whatsapp" href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}">PDF para WhatsApp</a>
                       <button type="button" class="vendas-consulta-action-btn whatsapp-pendente js-whatsapp-pendente {% if venda.whatsapp_status == 'aberto' %}visivel{% endif %}" data-venda-id="{{ venda.id }}" data-whatsapp-status="{{ venda.whatsapp_status }}" data-confirmar-url="{% url 'estoque:confirmar_whatsapp' venda.id %}">Confirmar WhatsApp</button>
+                      {% endif %}
                       <a class="vendas-consulta-action-link print" href="{% url 'estoque:venda_detalhe' venda.id %}" target="_blank" rel="noopener">Imprimir</a>
                     </div>
                   </td>

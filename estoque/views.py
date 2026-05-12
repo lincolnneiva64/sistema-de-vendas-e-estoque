@@ -1158,7 +1158,7 @@ def vendas(request):
 
 
 @ensure_csrf_cookie
-def consultar_vendas(request):
+def consultar_vendas(request, mostrar_canceladas=False):
     hoje = timezone.localdate()
     primeira_abertura = not request.GET
 
@@ -1176,7 +1176,12 @@ def consultar_vendas(request):
         data_inicial = parse_date(data_inicial_texto) if data_inicial_texto else None
         data_final = parse_date(data_final_texto) if data_final_texto else None
 
-    vendas_qs = Venda.objects.select_related("cliente").prefetch_related("itens__produto", "eventos").order_by("-data_venda", "-id")
+    vendas_qs = (
+        Venda.objects.select_related("cliente")
+        .prefetch_related("itens__produto", "eventos")
+        .filter(cancelada=mostrar_canceladas)
+        .order_by("-data_venda", "-id")
+    )
 
     if data_inicial:
         vendas_qs = vendas_qs.filter(data_venda__gte=data_inicial)
@@ -1205,8 +1210,12 @@ def consultar_vendas(request):
 
     vendas_lista = list(vendas_qs)
     for venda in vendas_lista:
-        venda.whatsapp_url_consulta = montar_link_whatsapp_venda(venda)
-        venda.whatsapp_status_selos = _status_whatsapp_consulta_venda(venda)
+        venda.whatsapp_url_consulta = "" if venda.cancelada else montar_link_whatsapp_venda(venda)
+        venda.whatsapp_status_selos = (
+            [{"texto": "Cancelada / venda nao realizada", "classe": "cancelada"}]
+            if venda.cancelada
+            else _status_whatsapp_consulta_venda(venda)
+        )
 
     return render(
         request,
@@ -1219,8 +1228,14 @@ def consultar_vendas(request):
             "cliente": cliente_texto,
             "numero": numero_texto,
             "primeira_abertura": primeira_abertura,
+            "mostrar_canceladas": mostrar_canceladas,
         },
     )
+
+
+@ensure_csrf_cookie
+def consultar_vendas_canceladas(request):
+    return consultar_vendas(request, mostrar_canceladas=True)
 
 
 @ensure_csrf_cookie
@@ -2084,7 +2099,7 @@ def venda_detalhe(request, pk):
         list(venda.itens.all()),
         key=lambda item: ((item.produto.nome if item.produto else "Produto nao identificado").casefold(), item.id),
     )
-    whatsapp_atualizacao = _montar_whatsapp_atualizacao_nota(request, venda)
+    whatsapp_atualizacao = None if venda.cancelada else _montar_whatsapp_atualizacao_nota(request, venda)
     alteracoes_pendentes_whatsapp = _resumo_alteracoes_pendentes_whatsapp(venda, itens_nota)
     itens_adicionados_destacar_ids = set(itens_adicionados_ids) | alteracoes_pendentes_whatsapp["itens_adicionados_ids"]
 
@@ -2146,6 +2161,13 @@ def venda_cliente_detalhe(request, pk):
         "estoque/venda_cliente_detalhe.html",
         {"venda": venda},
     )
+
+
+def _bloquear_venda_cancelada(request, venda, destino="estoque:venda_detalhe"):
+    if not getattr(venda, "cancelada", False):
+        return None
+    messages.warning(request, "Venda cancelada / venda nao realizada. Esta acao esta bloqueada.")
+    return redirect(destino, pk=venda.pk)
 
 
 TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP = (
@@ -2393,6 +2415,9 @@ def venda_editar_revisao(request, pk):
         Venda.objects.select_related("cliente").prefetch_related("itens__produto", "eventos"),
         pk=pk,
     )
+    bloqueio = _bloquear_venda_cancelada(request, venda)
+    if bloqueio:
+        return bloqueio
     alteracao_quantidade = request.session.pop(f"venda_quantidade_alterada_{venda.pk}", None)
     item_removido = request.session.pop(f"venda_item_removido_{venda.pk}", None)
 
@@ -2431,6 +2456,9 @@ def venda_editar_cabecalho(request, pk):
         Venda.objects.select_related("cliente").prefetch_related("itens__produto"),
         pk=pk,
     )
+    bloqueio = _bloquear_venda_cancelada(request, venda)
+    if bloqueio:
+        return bloqueio
     opcoes_pagamento = ("A prazo", "À vista")
     possui_alerta_operacional = (
         EntregaRotaItem.objects.filter(venda=venda).exists()
@@ -2515,6 +2543,9 @@ def venda_editar_quantidade_item(request, pk, item_id):
         Venda.objects.select_related("cliente").prefetch_related("itens__produto"),
         pk=pk,
     )
+    bloqueio = _bloquear_venda_cancelada(request, venda)
+    if bloqueio:
+        return bloqueio
     item_venda = get_object_or_404(
         ItemVenda.objects.select_related("produto", "venda"),
         pk=item_id,
@@ -2619,6 +2650,9 @@ def venda_adicionar_produto_item(request, pk):
         Venda.objects.select_related("cliente").prefetch_related("itens__produto"),
         pk=pk,
     )
+    bloqueio = _bloquear_venda_cancelada(request, venda)
+    if bloqueio:
+        return bloqueio
     produtos = Produto.objects.filter(excluido=False).order_by("nome")
     total_atual_venda = venda.total or Decimal("0.00")
     produto_selecionado = None
@@ -2797,6 +2831,9 @@ def venda_revisar_remocao_item(request, pk, item_id):
         Venda.objects.select_related("cliente").prefetch_related("itens__produto"),
         pk=pk,
     )
+    bloqueio = _bloquear_venda_cancelada(request, venda)
+    if bloqueio:
+        return bloqueio
     item_venda = get_object_or_404(
         ItemVenda.objects.select_related("produto", "venda"),
         pk=item_id,
@@ -2873,8 +2910,80 @@ def venda_revisar_remocao_item(request, pk, item_id):
     )
 
 
+def venda_cancelar(request, pk):
+    venda = get_object_or_404(
+        Venda.objects.select_related("cliente").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+    if venda.cancelada:
+        messages.warning(request, "Esta venda ja esta cancelada.")
+        return redirect("estoque:venda_detalhe", pk=venda.pk)
+
+    itens_nota = sorted(
+        list(venda.itens.all()),
+        key=lambda item: ((item.produto.nome if item.produto else "Produto nao identificado").casefold(), item.id),
+    )
+    motivos_cancelamento = (
+        "Cliente não estava / comércio fechado",
+        "Cliente desistiu da compra",
+        "Pedido duplicado",
+        "Venda lançada e não realizada",
+        "Outro motivo",
+    )
+    motivo = ""
+    motivo_padrao = ""
+    observacao_cancelamento = ""
+
+    if request.method == "POST":
+        motivo_padrao = request.POST.get("motivo_padrao", "").strip()
+        observacao_cancelamento = request.POST.get("observacao_cancelamento", "").strip()
+        if motivo_padrao not in motivos_cancelamento:
+            messages.warning(request, "Informe o motivo do cancelamento.")
+        elif motivo_padrao == "Outro motivo" and not observacao_cancelamento:
+            messages.warning(request, "Informe a observacao adicional para outro motivo.")
+        else:
+            motivo = motivo_padrao
+            if observacao_cancelamento:
+                motivo = f"{motivo_padrao} - Observação: {observacao_cancelamento}"
+            with transaction.atomic():
+                venda.cancelada = True
+                venda.cancelada_em = timezone.now()
+                venda.motivo_cancelamento = motivo
+                venda.save(update_fields=["cancelada", "cancelada_em", "motivo_cancelamento", "atualizado_em"])
+                _registrar_evento_venda(
+                    venda,
+                    "venda_cancelada",
+                    (
+                        "Venda cancelada / venda nao realizada. "
+                        f"Motivo: {motivo}. "
+                        "Itens preservados para historico. Estoque, contas a receber e caixa nao foram alterados nesta fase."
+                    ),
+                    canal="sistema",
+                    usuario=venda.operador,
+                )
+
+            messages.success(request, "Venda marcada como CANCELADA / VENDA NAO REALIZADA.")
+            return redirect("estoque:venda_detalhe", pk=venda.pk)
+
+    return render(
+        request,
+        "estoque/venda_cancelar.html",
+        {
+            "venda": venda,
+            "itens_nota": itens_nota,
+            "motivo": motivo,
+            "motivo_padrao": motivo_padrao,
+            "observacao_cancelamento": observacao_cancelamento,
+            "motivos_cancelamento": motivos_cancelamento,
+        },
+    )
+
+
 def venda_criar_entrega(request, pk):
     venda = get_object_or_404(Venda, pk=pk)
+    bloqueio = _bloquear_venda_cancelada(request, venda)
+    if bloqueio:
+        return bloqueio
     
     # Verificar se já existe entrega para esta venda
     if EntregaRotaItem.objects.filter(venda=venda).exists():
@@ -2926,6 +3035,9 @@ def preparar_whatsapp_venda(request, pk):
         Venda.objects.select_related("cliente"),
         pk=pk,
     )
+    bloqueio = _bloquear_venda_cancelada(request, venda)
+    if bloqueio:
+        return bloqueio
     whatsapp_url = montar_link_whatsapp_venda(venda)
     return render(
         request,
@@ -2952,6 +3064,8 @@ def registrar_impressao(request, pk):
 @require_POST
 def registrar_whatsapp_aberto(request, pk):
     venda = get_object_or_404(Venda, pk=pk)
+    if venda.cancelada:
+        return JsonResponse({"sucesso": False, "mensagem": "Venda cancelada. WhatsApp bloqueado."}, status=400)
     numero_usado = ""
     try:
         dados = json.loads(request.body.decode("utf-8") or "{}")
@@ -2992,6 +3106,8 @@ def registrar_whatsapp_aberto(request, pk):
 @require_POST
 def registrar_checklist_whatsapp_aberto(request, pk):
     venda = get_object_or_404(Venda, pk=pk)
+    if venda.cancelada:
+        return JsonResponse({"sucesso": False, "mensagem": "Venda cancelada. Checklist bloqueado."}, status=400)
     try:
         dados = json.loads(request.body.decode("utf-8") or "{}")
     except (json.JSONDecodeError, UnicodeDecodeError):
@@ -3026,6 +3142,8 @@ def registrar_checklist_whatsapp_aberto(request, pk):
 @require_POST
 def confirmar_checklist_whatsapp(request, pk):
     venda = get_object_or_404(Venda, pk=pk)
+    if venda.cancelada:
+        return JsonResponse({"sucesso": False, "mensagem": "Venda cancelada. Checklist bloqueado."}, status=400)
     try:
         dados = json.loads(request.body.decode("utf-8") or "{}")
     except (json.JSONDecodeError, UnicodeDecodeError):
@@ -3069,6 +3187,8 @@ def confirmar_checklist_whatsapp(request, pk):
 @require_POST
 def confirmar_whatsapp(request, pk):
     venda = get_object_or_404(Venda, pk=pk)
+    if venda.cancelada:
+        return JsonResponse({"sucesso": False, "mensagem": "Venda cancelada. WhatsApp bloqueado."}, status=400)
     ultimo_whatsapp_aberto = venda.eventos.filter(
         canal="whatsapp",
         tipo_evento="whatsapp_aberto",
