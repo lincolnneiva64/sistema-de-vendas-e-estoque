@@ -1,0 +1,322 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Receber Conta{% endblock %}
+{% block content %}
+<style>
+  .receber-page { color: #172033; padding: 10px 0 18px; }
+  .receber-shell { max-width: 760px; margin: 0 auto; padding: 0 18px; }
+  .receber-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 10px; margin-bottom: 8px;
+  }
+  .receber-title { margin: 0; font-size: 1.28rem; font-weight: 850; color: #111827; }
+  .receber-subtitle { margin: 2px 0 0; color: #64748b; font-weight: 600; font-size: 0.86rem; }
+  .receber-card {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 14px;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06); overflow: hidden;
+  }
+  .receber-dados {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px; padding: 10px; border-bottom: 1px solid #edf1f6;
+    background: #f8fafc;
+  }
+  .receber-dado {
+    border: 1px solid #e1e7ef; border-radius: 10px;
+    background: #fff; padding: 6px 8px;
+  }
+  .receber-label {
+    display: block; color: #64748b; font-size: 0.66rem;
+    font-weight: 850; letter-spacing: 0.04em; text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .receber-valor { color: #172033; font-weight: 850; font-size: 0.86rem; }
+  .receber-valor.destaque { color: #166534; font-size: 0.96rem; }
+  .receber-form { padding: 10px; display: grid; gap: 9px; }
+  .receber-field label {
+    display: block; margin-bottom: 4px; color: #64748b; font-size: 0.7rem;
+    font-weight: 850; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .receber-field input,
+  .receber-field textarea,
+  .receber-field select {
+    width: 100%; border: 1.5px solid #d3dbe8; border-radius: 9px;
+    padding: 8px 10px; background: #fff; color: #172033; font-weight: 650;
+    outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    box-sizing: border-box;
+  }
+  .receber-field textarea { min-height: 44px; resize: vertical; }
+  .receber-field input:focus,
+  .receber-field textarea:focus,
+  .receber-field select:focus {
+    border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.13);
+  }
+  .receber-field.erro input {
+    border-color: #dc2626;
+    box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.1);
+  }
+  .receber-field-msg {
+    display: none;
+    margin-top: 4px;
+    color: #991b1b;
+    font-size: 0.78rem;
+    font-weight: 800;
+  }
+  .receber-field-msg.visivel { display: block; }
+  .receber-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .receber-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+  .receber-btn {
+    border: 0; border-radius: 9px; padding: 8px 13px; font-weight: 800;
+    font-size: 0.86rem; text-decoration: none; display: inline-flex;
+    align-items: center; justify-content: center; min-height: 34px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    cursor: pointer; white-space: nowrap;
+  }
+  .receber-btn:hover { transform: translateY(-1px); }
+  .receber-btn:active { transform: translateY(1px); box-shadow: 0 2px 7px rgba(15, 23, 42, 0.14); }
+  .receber-btn-primary { background: #16a34a; color: #fff; box-shadow: 0 10px 24px rgba(22, 163, 74, 0.22); }
+  .receber-btn-secondary {
+    background: #dbeafe; color: #164173; border: 1px solid #7ea6d9;
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.07);
+  }
+  .receber-alert { border-radius: 13px; padding: 10px 12px; margin-bottom: 10px; font-weight: 750; }
+  .receber-alert.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
+  .receber-alert.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+  .receber-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+  .receber-form-msg {
+    display: none;
+    padding: 7px 9px;
+    border: 1px solid #fde68a;
+    border-radius: 9px;
+    background: #fffbeb;
+    color: #92400e;
+    font-size: 0.82rem;
+    font-weight: 850;
+  }
+  .receber-form-msg.visivel { display: block; }
+  @media (max-width: 680px) {
+    .receber-header { align-items: stretch; flex-direction: column; }
+    .receber-dados, .receber-grid { grid-template-columns: 1fr; }
+    .receber-actions { justify-content: flex-start; }
+  }
+</style>
+
+<div class="receber-page">
+  <div class="receber-shell">
+    <header class="receber-header">
+      <div>
+        <h1 class="receber-title">Receber Conta</h1>
+        <p class="receber-subtitle">Registre um pagamento da carteira do cliente.</p>
+      </div>
+      <a href="{% url 'estoque:contas_receber' %}" class="receber-btn receber-btn-secondary">Voltar</a>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="receber-alert {{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <section class="receber-card">
+      <div class="receber-dados">
+        <div class="receber-dado">
+          <span class="receber-label">Cliente</span>
+          <span class="receber-valor">{{ conta.cliente.nome|default:"Consumidor" }}</span>
+        </div>
+        <div class="receber-dado">
+          <span class="receber-label">Venda</span>
+          <span class="receber-valor">#{{ conta.venda_id }}</span>
+        </div>
+        <div class="receber-dado">
+          <span class="receber-label">Vencimento</span>
+          <span class="receber-valor">{{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</span>
+        </div>
+        <div class="receber-dado">
+          <span class="receber-label">Valor original</span>
+          <span class="receber-valor">R$ {{ conta.valor_original|floatformat:2 }}</span>
+        </div>
+        <div class="receber-dado">
+          <span class="receber-label">Valor em aberto</span>
+          <span class="receber-valor destaque">R$ {{ conta.valor_em_aberto|floatformat:2 }}</span>
+        </div>
+        <div class="receber-dado">
+          <span class="receber-label">Status</span>
+          <span class="receber-valor">{{ conta.get_status_display }}</span>
+        </div>
+      </div>
+
+      <form method="post" class="receber-form" id="formReceberConta">
+        {% csrf_token %}
+        <div class="receber-grid">
+          <div class="receber-field" id="valorField">
+            <label for="valor">Valor recebido</label>
+            <input id="valor" name="valor" type="text" inputmode="decimal" value="{{ valores.valor }}" required autocomplete="off">
+            <div id="valorErro" class="receber-field-msg" role="alert" aria-live="polite"></div>
+          </div>
+          <div class="receber-field">
+            <label for="data_recebimento">Data do recebimento</label>
+            <input id="data_recebimento" name="data_recebimento" type="date" value="{{ valores.data_recebimento }}" required>
+          </div>
+        </div>
+        <div class="receber-field">
+          <label for="forma_pagamento">Forma de pagamento</label>
+          <select id="forma_pagamento" name="forma_pagamento" required>
+            <option value="">Selecione...</option>
+            {% for forma in formas_pagamento %}
+              <option value="{{ forma }}" {% if valores.forma_pagamento == forma %}selected{% endif %}>{{ forma }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div id="formErroRecebimento" class="receber-form-msg" role="alert" aria-live="polite"></div>
+        <div class="receber-field">
+          <label for="observacao">Observacao</label>
+          <textarea id="observacao" name="observacao" placeholder="Opcional" rows="2">{{ valores.observacao }}</textarea>
+        </div>
+        <div class="receber-actions">
+          <a href="{% url 'estoque:contas_receber' %}" class="receber-btn receber-btn-secondary" id="btnCancelarRecebimento">Cancelar</a>
+          <button type="submit" class="receber-btn receber-btn-primary" id="btnConfirmarRecebimento">Confirmar recebimento</button>
+        </div>
+      </form>
+    </section>
+  </div>
+</div>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const form = document.getElementById("formReceberConta");
+    const valor = document.getElementById("valor");
+    const forma = document.getElementById("forma_pagamento");
+    const observacao = document.getElementById("observacao");
+    const confirmar = document.getElementById("btnConfirmarRecebimento");
+    const cancelar = document.getElementById("btnCancelarRecebimento");
+    const valorField = document.getElementById("valorField");
+    const valorErro = document.getElementById("valorErro");
+    const formErro = document.getElementById("formErroRecebimento");
+    const valorEmAberto = Number("{{ conta.valor_em_aberto|floatformat:2 }}".replace(",", "."));
+
+    function numeroDigitado(campo) {
+      let texto = String(campo?.value || "").trim().replace("R$", "").replace(/\s/g, "");
+      if (texto.includes(",") && texto.includes(".")) {
+        texto = texto.replace(/\./g, "").replace(",", ".");
+      } else {
+        texto = texto.replace(",", ".");
+      }
+      return Number(texto);
+    }
+
+    function mostrarErroValor(mensagem) {
+      valorField?.classList.add("erro");
+      if (valorErro) {
+        valorErro.textContent = mensagem;
+        valorErro.classList.add("visivel");
+      }
+    }
+
+    function limparErroValor() {
+      valorField?.classList.remove("erro");
+      if (valorErro) {
+        valorErro.textContent = "";
+        valorErro.classList.remove("visivel");
+      }
+    }
+
+    function focarValorParaCorrecao() {
+      valor?.focus();
+      valor?.select();
+    }
+
+    function validarValorRecebido() {
+      const recebido = numeroDigitado(valor);
+      if (!Number.isFinite(recebido) || recebido <= 0) {
+        mostrarErroValor("Informe um valor recebido maior que zero.");
+        focarValorParaCorrecao();
+        return false;
+      }
+      if (recebido > valorEmAberto) {
+        mostrarErroValor("O valor recebido nao pode ser maior que o valor em aberto.");
+        focarValorParaCorrecao();
+        return false;
+      }
+      limparErroValor();
+      return true;
+    }
+
+    function mostrarErroFormulario(mensagem) {
+      if (!formErro) return;
+      formErro.textContent = mensagem;
+      formErro.classList.add("visivel");
+    }
+
+    function limparErroFormulario() {
+      if (!formErro) return;
+      formErro.textContent = "";
+      formErro.classList.remove("visivel");
+    }
+
+    if (valor) {
+      valor.focus();
+      valor.select();
+    }
+
+    valor?.addEventListener("blur", function () {
+      validarValorRecebido();
+    });
+
+    forma?.addEventListener("change", limparErroFormulario);
+
+    if (form) {
+      form.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter") return;
+
+        if (event.target === confirmar || event.target === cancelar) {
+          return;
+        }
+
+        if (event.target === valor) {
+          event.preventDefault();
+          if (validarValorRecebido()) {
+            forma?.focus();
+          }
+          return;
+        }
+
+        if (event.target === forma) {
+          event.preventDefault();
+          confirmar?.focus();
+          return;
+        }
+
+        if (event.target !== observacao) {
+          event.preventDefault();
+        }
+      });
+
+      form.addEventListener("submit", function (event) {
+        if (document.activeElement !== confirmar) {
+          event.preventDefault();
+          return;
+        }
+        if (!validarValorRecebido()) {
+          event.preventDefault();
+          return;
+        }
+        if (!forma?.value) {
+          event.preventDefault();
+          mostrarErroFormulario("Selecione uma forma de pagamento.");
+          forma?.focus();
+        }
+      });
+    }
+
+    [cancelar, confirmar].forEach(function (botao) {
+      botao?.addEventListener("keydown", function (event) {
+        if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          cancelar?.focus();
+        }
+        if (event.key === "ArrowRight") {
+          event.preventDefault();
+          confirmar?.focus();
+        }
+      });
+    });
+  });
+</script>
+{% endblock %}

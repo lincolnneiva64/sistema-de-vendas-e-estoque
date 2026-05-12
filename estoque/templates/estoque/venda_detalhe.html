@@ -301,6 +301,18 @@
             color: #14532d;
         }
 
+        .conta-receber-info.parcial {
+            border-color: #fbbf24;
+            background: #fffbeb;
+            color: #92400e;
+        }
+
+        .conta-receber-info.paga {
+            border-color: #93c5fd;
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+
         .label {
             display: block;
             color: #64748b;
@@ -1071,6 +1083,14 @@
                         {% if venda_a_prazo and conta_receber and conta_receber.status == "aberta" %}
                             <div class="conta-receber-info aberta">
                                 Conta a receber aberta - Valor em aberto: R$ {{ conta_receber.valor_em_aberto|floatformat:2 }} - Vencimento: {{ conta_receber.data_vencimento|date:"d/m/Y"|default:"-" }}
+                            </div>
+                        {% elif venda_a_prazo and conta_receber and conta_receber.status == "parcial" %}
+                            <div class="conta-receber-info parcial">
+                                Conta a receber parcial - Valor em aberto: R$ {{ conta_receber.valor_em_aberto|floatformat:2 }} - Vencimento: {{ conta_receber.data_vencimento|date:"d/m/Y"|default:"-" }}
+                            </div>
+                        {% elif venda_a_prazo and conta_receber and conta_receber.status == "paga" %}
+                            <div class="conta-receber-info paga">
+                                Conta paga.
                             </div>
                         {% elif not venda_a_prazo %}
                             <div class="conta-receber-info">

@@ -79,20 +79,27 @@
     font-size: 0.76rem; font-weight: 950; line-height: 1.15;
     border: 2px solid #86efac; background: #f0fdf4; color: #166534;
   }
+  .contas-status.parcial { border-color: #fbbf24; background: #fffbeb; color: #92400e; }
   .contas-status.paga { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
   .contas-status.cancelada { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+  .contas-actions-cell { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .contas-action-link {
     border: 1px solid #93c5fd; border-radius: 8px; background: #eff6ff;
     color: #1d4ed8; padding: 5px 9px; font-size: 0.76rem;
     font-weight: 800; text-decoration: none; display: inline-flex;
     align-items: center; justify-content: center; min-width: 72px;
   }
+  .contas-action-link.receber {
+    border-color: #86efac; background: #f0fdf4; color: #166534;
+  }
   .contas-empty {
     padding: 22px 16px; color: #64748b; text-align: center;
     font-weight: 700; font-size: 0.9rem;
   }
   .contas-alert { border-radius: 13px; padding: 10px 12px; margin-bottom: 10px; font-weight: 750; }
+  .contas-alert.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
   .contas-alert.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+  .contas-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
   @media (max-width: 980px) {
     .contas-search form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
@@ -179,7 +186,12 @@
                 <td class="contas-valor">R$ {{ conta.valor_em_aberto|floatformat:2 }}</td>
                 <td><span class="contas-status {{ conta.status }}">{{ conta.get_status_display }}</span></td>
                 <td>
-                  <a href="{% url 'estoque:venda_detalhe' conta.venda_id %}" class="contas-action-link">Abrir nota</a>
+                  <div class="contas-actions-cell">
+                    <a href="{% url 'estoque:venda_detalhe' conta.venda_id %}" class="contas-action-link">Abrir nota</a>
+                    {% if conta.status == "aberta" or conta.status == "parcial" %}
+                      <a href="{% url 'estoque:conta_receber_receber' conta.id %}" class="contas-action-link receber">Receber</a>
+                    {% endif %}
+                  </div>
                 </td>
               </tr>
             {% empty %}

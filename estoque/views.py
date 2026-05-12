@@ -14,7 +14,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count
 from .forms import CategoriaForm, ClienteForm, FuncionarioForm, ProdutoForm, UnidadeForm
-from .models import Categoria, Cliente, ContaReceber, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, Produto, Unidade, Venda
+from .models import Categoria, Cliente, ContaReceber, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, Produto, RecebimentoContaReceber, Unidade, Venda
 from django.contrib import messages
 from django.http import Http404, HttpResponse, JsonResponse
 from django.utils.dateparse import parse_date
@@ -1243,27 +1243,31 @@ def contas_receber(request):
     cliente_texto = request.GET.get("cliente", "").strip()
     data_inicial_texto = request.GET.get("data_inicial", "").strip()
     data_final_texto = request.GET.get("data_final", "").strip()
-    status_filtro = request.GET.get("status", ContaReceber.STATUS_ABERTA).strip() or ContaReceber.STATUS_ABERTA
+    status_filtro = request.GET.get("status", "em_aberto").strip() or "em_aberto"
 
     data_inicial = parse_date(data_inicial_texto) if data_inicial_texto else None
     data_final = parse_date(data_final_texto) if data_final_texto else None
     status_validos = {
         ContaReceber.STATUS_ABERTA,
+        ContaReceber.STATUS_PARCIAL,
         ContaReceber.STATUS_PAGA,
         ContaReceber.STATUS_CANCELADA,
+        "em_aberto",
         "todas",
     }
 
     if status_filtro not in status_validos:
-        status_filtro = ContaReceber.STATUS_ABERTA
-        messages.warning(request, "Status invalido. Mostrando contas abertas.")
+        status_filtro = "em_aberto"
+        messages.warning(request, "Status invalido. Mostrando contas em aberto.")
 
     contas_qs = (
         ContaReceber.objects.select_related("cliente", "venda")
         .order_by("data_vencimento", "data_emissao", "id")
     )
 
-    if status_filtro != "todas":
+    if status_filtro == "em_aberto":
+        contas_qs = contas_qs.filter(status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL])
+    elif status_filtro != "todas":
         contas_qs = contas_qs.filter(status=status_filtro)
 
     if data_inicial:
@@ -1296,11 +1300,106 @@ def contas_receber(request):
             "data_final": data_final_texto,
             "status_filtro": status_filtro,
             "status_opcoes": (
+                ("em_aberto", "Em aberto"),
                 (ContaReceber.STATUS_ABERTA, "Abertas"),
+                (ContaReceber.STATUS_PARCIAL, "Parciais"),
                 (ContaReceber.STATUS_PAGA, "Pagas"),
                 (ContaReceber.STATUS_CANCELADA, "Canceladas"),
                 ("todas", "Todas"),
             ),
+        },
+    )
+
+
+@ensure_csrf_cookie
+def conta_receber_receber(request, pk):
+    conta = get_object_or_404(
+        ContaReceber.objects.select_related("cliente", "venda"),
+        pk=pk,
+    )
+    if conta.status == ContaReceber.STATUS_CANCELADA:
+        messages.warning(request, "Conta cancelada nao pode receber pagamento.")
+        return redirect("estoque:contas_receber")
+    if conta.status == ContaReceber.STATUS_PAGA:
+        messages.warning(request, "Conta ja esta paga.")
+        return redirect("estoque:contas_receber")
+
+    formas_pagamento = (
+        "Dinheiro",
+        "PIX",
+        "Cartao de debito",
+        "Cartao de credito",
+        "Transferencia",
+        "Outro",
+    )
+    valores = {
+        "data_recebimento": timezone.localdate().isoformat(),
+        "valor": str(conta.valor_em_aberto or Decimal("0.00")),
+        "forma_pagamento": "Dinheiro",
+        "observacao": "",
+    }
+
+    if request.method == "POST":
+        valores = {
+            "data_recebimento": request.POST.get("data_recebimento", "").strip(),
+            "valor": request.POST.get("valor", "").strip(),
+            "forma_pagamento": request.POST.get("forma_pagamento", "").strip(),
+            "observacao": request.POST.get("observacao", "").strip(),
+        }
+        data_recebimento = parse_date(valores["data_recebimento"])
+        if not data_recebimento:
+            messages.warning(request, "Informe uma data de recebimento valida.")
+        elif valores["forma_pagamento"] not in formas_pagamento:
+            messages.warning(request, "Selecione uma forma de pagamento.")
+        else:
+            try:
+                valor_recebido = _decimal_do_front(valores["valor"], "0.01")
+            except ValueError as exc:
+                messages.warning(request, str(exc))
+            else:
+                if valor_recebido <= Decimal("0.00"):
+                    messages.warning(request, "Informe um valor recebido maior que zero.")
+                elif valor_recebido > (conta.valor_em_aberto or Decimal("0.00")):
+                    messages.warning(request, "O valor recebido nao pode ser maior que o valor em aberto.")
+                else:
+                    with transaction.atomic():
+                        conta_atual = ContaReceber.objects.select_for_update().get(pk=conta.pk)
+                        if conta_atual.status == ContaReceber.STATUS_CANCELADA:
+                            messages.warning(request, "Conta cancelada nao pode receber pagamento.")
+                            return redirect("estoque:contas_receber")
+                        if conta_atual.status == ContaReceber.STATUS_PAGA:
+                            messages.warning(request, "Conta ja esta paga.")
+                            return redirect("estoque:contas_receber")
+                        if valor_recebido > (conta_atual.valor_em_aberto or Decimal("0.00")):
+                            messages.warning(request, "O valor recebido nao pode ser maior que o valor em aberto.")
+                            return redirect("estoque:conta_receber_receber", pk=conta.pk)
+
+                        RecebimentoContaReceber.objects.create(
+                            conta=conta_atual,
+                            data_recebimento=data_recebimento,
+                            valor=valor_recebido,
+                            forma_pagamento=valores["forma_pagamento"],
+                            observacao=valores["observacao"],
+                        )
+                        novo_valor_aberto = ((conta_atual.valor_em_aberto or Decimal("0.00")) - valor_recebido).quantize(Decimal("0.01"))
+                        conta_atual.valor_em_aberto = novo_valor_aberto
+                        conta_atual.status = (
+                            ContaReceber.STATUS_PAGA
+                            if novo_valor_aberto == Decimal("0.00")
+                            else ContaReceber.STATUS_PARCIAL
+                        )
+                        conta_atual.save(update_fields=["valor_em_aberto", "status", "atualizado_em"])
+
+                    messages.success(request, "Recebimento registrado com sucesso.")
+                    return redirect("estoque:contas_receber")
+
+    return render(
+        request,
+        "estoque/conta_receber_receber.html",
+        {
+            "conta": conta,
+            "valores": valores,
+            "formas_pagamento": formas_pagamento,
         },
     )
 

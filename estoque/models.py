@@ -404,10 +404,12 @@ class ItemVenda(models.Model):
 
 class ContaReceber(models.Model):
     STATUS_ABERTA = "aberta"
+    STATUS_PARCIAL = "parcial"
     STATUS_PAGA = "paga"
     STATUS_CANCELADA = "cancelada"
     STATUS_CHOICES = [
         (STATUS_ABERTA, "Aberta"),
+        (STATUS_PARCIAL, "Parcial"),
         (STATUS_PAGA, "Paga"),
         (STATUS_CANCELADA, "Cancelada"),
     ]
@@ -438,6 +440,25 @@ class ContaReceber(models.Model):
 
     def __str__(self):
         return f"Conta a receber - Venda #{self.venda_id}"
+
+
+class RecebimentoContaReceber(models.Model):
+    conta = models.ForeignKey(
+        ContaReceber,
+        on_delete=models.CASCADE,
+        related_name="recebimentos",
+    )
+    data_recebimento = models.DateField()
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+    forma_pagamento = models.CharField(max_length=80, blank=True)
+    observacao = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-data_recebimento", "-id"]
+
+    def __str__(self):
+        return f"Recebimento R$ {self.valor} - Conta #{self.conta_id}"
 
 
 class EntregaRota(models.Model):
