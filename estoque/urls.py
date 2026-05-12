@@ -29,6 +29,7 @@ urlpatterns = [
     path("entregas/<int:rota_id>/checklist/item/<int:rota_item_id>/", views.entrega_rota_checklist_cliente, name="entrega_rota_checklist_item"),
     path("entregas/<int:rota_id>/checklist/cliente/<int:venda_id>/", views.entrega_rota_checklist_cliente, name="entrega_rota_checklist_cliente"),
     path("vendas/<int:pk>/editar/", views.venda_editar_revisao, name="venda_editar_revisao"),
+    path("vendas/<int:pk>/editar/cabecalho/", views.venda_editar_cabecalho, name="venda_editar_cabecalho"),
     path("vendas/<int:pk>/editar/adicionar-produto/", views.venda_adicionar_produto_item, name="venda_adicionar_produto_item"),
     path("vendas/<int:pk>/editar/item/<int:item_id>/quantidade/", views.venda_editar_quantidade_item, name="venda_editar_quantidade_item"),
     path("vendas/<int:pk>/editar/item/<int:item_id>/remover/", views.venda_revisar_remocao_item, name="venda_revisar_remocao_item"),

@@ -1,0 +1,371 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Editar cabecalho da nota{% endblock %}
+{% block content %}
+<style>
+  .edit-review-page { color: #172033; padding: 10px 0 24px; }
+  .edit-review-shell { max-width: 1040px; margin: 0 auto; padding: 0 14px; }
+  .edit-review-card {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 13px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06); overflow: hidden;
+  }
+  .edit-review-head {
+    padding: 10px 12px; border-bottom: 1px solid #edf1f6; background: #eff6ff;
+    display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; flex-wrap: wrap;
+  }
+  .edit-review-title { margin: 0; color: #1e3a8a; font-size: 1.08rem; font-weight: 950; line-height: 1.15; }
+  .edit-review-subtitle { margin: 3px 0 0; color: #64748b; font-size: 0.8rem; font-weight: 760; line-height: 1.25; }
+  .edit-review-body { padding: 10px 12px; display: grid; gap: 8px; }
+  .edit-review-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .edit-review-btn {
+    min-height: 32px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 10px;
+    background: #fff; color: #0f172a; font-size: 0.8rem; font-weight: 900;
+    text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
+    transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.08s ease;
+    font-family: inherit;
+  }
+  .edit-review-btn:active { transform: translateY(1px); box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12); filter: brightness(0.96); }
+  .edit-review-btn.primary { border-color: #1d4ed8; background: #2563eb; color: #fff; }
+  .edit-review-btn.whatsapp-pulse {
+    border-color: #d97706;
+    background: linear-gradient(180deg, #fef3c7 0%, #f59e0b 100%);
+    color: #713f12;
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.34), 0 4px 0 #b45309, 0 10px 18px rgba(120, 53, 15, 0.16);
+    text-shadow: 0 1px 1px rgba(255, 251, 235, 0.58);
+    animation: edit-review-whatsapp-pulse 1.35s ease-in-out infinite;
+  }
+  @keyframes edit-review-whatsapp-pulse {
+    0% {
+      border-color: #d97706;
+      box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.34), 0 4px 0 #b45309, 0 10px 18px rgba(120, 53, 15, 0.16);
+      transform: translateY(0);
+    }
+    50% {
+      border-color: #f59e0b;
+      box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.13), 0 6px 0 #b45309, 0 13px 22px rgba(120, 53, 15, 0.22);
+      transform: translateY(-1px);
+    }
+    100% {
+      border-color: #d97706;
+      box-shadow: 0 0 0 0 rgba(245, 158, 11, 0), 0 4px 0 #b45309, 0 10px 18px rgba(120, 53, 15, 0.16);
+      transform: translateY(0);
+    }
+  }
+  .edit-review-notice {
+    border: 1px solid #bfdbfe; border-radius: 10px; background: #eff6ff;
+    color: #1e3a8a; padding: 7px 9px; font-size: 0.8rem; font-weight: 850; line-height: 1.25;
+  }
+  .edit-review-warning {
+    border: 1px solid #f7d98b; border-radius: 10px; background: #fff7ed;
+    color: #92400e; padding: 7px 9px; font-size: 0.8rem; font-weight: 850; line-height: 1.25;
+  }
+  .edit-review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .edit-review-field { border: 1px solid #edf1f6; border-radius: 8px; background: #fbfdff; padding: 6px 8px; }
+  .edit-review-label { display: block; color: #64748b; font-size: 0.66rem; font-weight: 900; text-transform: uppercase; }
+  .edit-review-value { display: block; margin-top: 2px; color: #111827; font-size: 0.84rem; font-weight: 900; overflow-wrap: anywhere; }
+  .edit-review-section { border: 1px solid #edf1f6; border-radius: 9px; overflow: hidden; }
+  .edit-review-section h2 {
+    margin: 0; padding: 7px 10px; background: #f8fafc; border-bottom: 1px solid #edf1f6;
+    color: #334155; font-size: 0.84rem; font-weight: 950;
+  }
+  .header-edit-form { display: grid; gap: 8px; padding: 10px; }
+  .header-edit-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .header-edit-field { display: grid; gap: 4px; }
+  .header-edit-field label { color: #334155; font-size: 0.76rem; font-weight: 900; }
+  .header-edit-field input,
+  .header-edit-field select {
+    width: 100%; min-height: 34px; border: 1px solid #cbd5e1; border-radius: 8px;
+    padding: 6px 8px; color: #0f172a; background: #fff; font-size: 0.84rem; font-weight: 850;
+  }
+  .header-edit-field input:focus-visible,
+  .header-edit-field select:focus-visible {
+    outline: 2px solid #facc15; outline-offset: 2px;
+    box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.3);
+  }
+  .header-edit-submit { display: flex; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+  .edit-review-total {
+    display: flex; justify-content: flex-end; gap: 14px; align-items: center;
+    padding: 8px 10px; background: #f0fdf4; color: #14532d; font-weight: 950;
+  }
+  .edit-review-messages { display: grid; gap: 6px; }
+  .edit-review-message {
+    border: 1px solid #bbf7d0; border-radius: 10px; background: #f0fdf4;
+    color: #166534; padding: 7px 9px; font-size: 0.8rem; font-weight: 850;
+  }
+  .edit-review-message.warning, .edit-review-message.error {
+    border-color: #f7d98b; background: #fff7ed; color: #92400e;
+  }
+  .edit-review-whatsapp {
+    border: 1px solid #bbf7d0; border-radius: 10px; background: #f0fdf4;
+    color: #166534; padding: 7px 9px; display: flex; align-items: center;
+    justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  }
+  .edit-review-whatsapp.warning {
+    border-color: #f7d98b; background: #fff7ed; color: #92400e;
+  }
+  .edit-review-whatsapp-text { font-size: 0.8rem; font-weight: 850; line-height: 1.25; }
+  .edit-review-whatsapp-flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .edit-review-whatsapp-step {
+    display: none; font-size: 0.8rem; font-weight: 850; line-height: 1.25;
+  }
+  .edit-review-whatsapp-step.visivel { display: inline-flex; }
+  .edit-review-whatsapp.confirmed {
+    border-color: #86efac; background: #ecfdf3; color: #14532d;
+  }
+  @media (max-width: 780px) {
+    .edit-review-grid, .header-edit-fields { grid-template-columns: 1fr; }
+    .edit-review-head { display: grid; }
+    .edit-review-actions, .header-edit-submit { justify-content: stretch; }
+    .edit-review-btn { width: 100%; }
+    .edit-review-whatsapp { align-items: stretch; }
+  }
+</style>
+
+<main class="edit-review-page">
+  <div class="edit-review-shell">
+    <section class="edit-review-card">
+      <header class="edit-review-head">
+        <div>
+          <h1 class="edit-review-title">Editar cabecalho - Venda #{{ venda.id }}</h1>
+          <p class="edit-review-subtitle">Fase 1: somente data, vencimento e forma de pagamento.</p>
+        </div>
+        <div class="edit-review-actions">
+          <a class="edit-review-btn" href="{% url 'estoque:venda_editar_revisao' venda.id %}">Voltar para revisao</a>
+        </div>
+      </header>
+
+      <div class="edit-review-body">
+        {% if messages %}
+          <div class="edit-review-messages" role="status" aria-live="polite">
+            {% for message in messages %}
+              <div class="edit-review-message {{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <div class="edit-review-notice">
+          O cliente da nota nao sera alterado. Itens, calculo, contas a receber, caixa, entregas e checklist permanecem como estao nesta fase.
+        </div>
+
+        <div class="edit-review-warning">
+          Alterar de "A prazo" para "À vista", ou o inverso, atualiza apenas o campo da venda agora. O impacto financeiro real sera tratado em etapa futura, se necessario.
+        </div>
+
+        {% if possui_alerta_operacional %}
+          <div class="edit-review-warning">
+            Esta venda possui vinculo com entrega/checklist. Confira com cuidado antes de salvar o cabecalho.
+          </div>
+        {% endif %}
+
+        {% if whatsapp_atualizacao %}
+          <div
+            class="edit-review-whatsapp warning"
+            id="whatsappAtualizacaoBox"
+            data-whatsapp-pendente="true"
+            data-whatsapp-controle="{{ whatsapp_atualizacao.controle_id }}"
+          >
+            <span class="edit-review-whatsapp-text">{{ whatsapp_atualizacao.texto_resumo }} Envie a nota atualizada pelo WhatsApp e confirme o reenvio.</span>
+            <div class="edit-review-whatsapp-flow">
+              {% if whatsapp_atualizacao.tem_whatsapp %}
+                <a class="edit-review-btn whatsapp-pulse" id="abrirWhatsappAtualizacao" href="{{ whatsapp_atualizacao.url }}" target="_blank" rel="noopener">Enviar nota atualizada pelo WhatsApp</a>
+              {% else %}
+                <span class="edit-review-whatsapp-text">Cliente sem WhatsApp cadastrado para envio automatico.</span>
+              {% endif %}
+              <span class="edit-review-whatsapp-step" id="whatsappAtualizacaoAberto">WhatsApp aberto. Confirme o reenvio quando terminar.</span>
+              <button class="edit-review-btn whatsapp-pulse" id="confirmarWhatsappAtualizacao" type="button" hidden data-confirmar-url="{% url 'estoque:confirmar_whatsapp' venda.id %}">Confirmar reenvio pelo WhatsApp</button>
+              <span class="edit-review-whatsapp-step" id="whatsappAtualizacaoConfirmado">Reenvio confirmado.</span>
+            </div>
+          </div>
+        {% elif venda.whatsapp_status != "enviado_confirmado" %}
+          <div class="edit-review-whatsapp warning">
+            <span class="edit-review-whatsapp-text">{{ venda.whatsapp_status_texto }}. Se esta nota precisar ser enviada ao cliente, use o envio pelo WhatsApp.</span>
+            <a class="edit-review-btn whatsapp-pulse" href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}">Imagem / WhatsApp</a>
+          </div>
+        {% else %}
+          <div class="edit-review-whatsapp">
+            <span class="edit-review-whatsapp-text">{{ venda.whatsapp_status_texto }}.</span>
+          </div>
+        {% endif %}
+
+        <section class="edit-review-grid" aria-label="Dados atuais da venda">
+          <div class="edit-review-field">
+            <span class="edit-review-label">Cliente</span>
+            <span class="edit-review-value">{{ venda.cliente.nome|default:"Consumidor" }}</span>
+          </div>
+          <div class="edit-review-field">
+            <span class="edit-review-label">Venda/nota</span>
+            <span class="edit-review-value">Venda #{{ venda.id }}</span>
+          </div>
+          <div class="edit-review-field">
+            <span class="edit-review-label">Data atual</span>
+            <span class="edit-review-value">{{ venda.data_venda|date:"d/m/Y" }}</span>
+          </div>
+          <div class="edit-review-field">
+            <span class="edit-review-label">Vencimento atual</span>
+            <span class="edit-review-value">{{ venda.data_vencimento|date:"d/m/Y"|default:"-" }}</span>
+          </div>
+          <div class="edit-review-field">
+            <span class="edit-review-label">Pagamento atual</span>
+            <span class="edit-review-value">{{ venda.tipo_pagamento|default:"-" }}</span>
+          </div>
+          <div class="edit-review-field">
+            <span class="edit-review-label">Total da nota</span>
+            <span class="edit-review-value">R$ {{ venda.total|floatformat:2 }}</span>
+          </div>
+        </section>
+
+        <section class="edit-review-section">
+          <h2>Novos dados do cabecalho</h2>
+          <form class="header-edit-form" method="post" id="headerEditForm">
+            {% csrf_token %}
+            <div class="header-edit-fields">
+              <div class="header-edit-field">
+                <label for="id_data_venda">Data da venda</label>
+                <input id="id_data_venda" name="data_venda" type="date" value="{{ valores.data_venda }}" required autofocus>
+              </div>
+              <div class="header-edit-field">
+                <label for="id_data_vencimento">Vencimento</label>
+                <input id="id_data_vencimento" name="data_vencimento" type="date" value="{{ valores.data_vencimento }}">
+              </div>
+              <div class="header-edit-field">
+                <label for="id_tipo_pagamento">Forma de pagamento</label>
+                <select id="id_tipo_pagamento" name="tipo_pagamento" required>
+                  {% for opcao in opcoes_pagamento %}
+                    <option value="{{ opcao }}" {% if valores.tipo_pagamento == opcao %}selected{% endif %}>{{ opcao }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+            <div class="header-edit-submit">
+              <a class="edit-review-btn" href="{% url 'estoque:venda_editar_revisao' venda.id %}">Cancelar</a>
+              <button class="edit-review-btn primary" id="btnSalvarCabecalho" type="submit">Salvar cabecalho</button>
+            </div>
+          </form>
+          <div class="edit-review-total">
+            <span>Total preservado</span>
+            <span>R$ {{ venda.total|floatformat:2 }}</span>
+          </div>
+        </section>
+      </div>
+    </section>
+  </div>
+</main>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const dataVenda = document.getElementById("id_data_venda");
+    const vencimento = document.getElementById("id_data_vencimento");
+    const pagamento = document.getElementById("id_tipo_pagamento");
+    const salvar = document.getElementById("btnSalvarCabecalho");
+    const form = document.getElementById("headerEditForm");
+
+    dataVenda?.focus();
+    dataVenda?.select?.();
+
+    function avancarComEnter(campo, proximo, submeter = false) {
+      campo?.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        if (submeter && form?.requestSubmit) {
+          form.requestSubmit(salvar);
+          return;
+        }
+        if (submeter) {
+          salvar?.click();
+          return;
+        }
+        proximo?.focus();
+        proximo?.select?.();
+      });
+    }
+
+    avancarComEnter(dataVenda, vencimento);
+    avancarComEnter(vencimento, pagamento);
+    avancarComEnter(pagamento, salvar);
+
+    const box = document.getElementById("whatsappAtualizacaoBox");
+    if (!box) return;
+
+    const abrirBtn = document.getElementById("abrirWhatsappAtualizacao");
+    const confirmarBtn = document.getElementById("confirmarWhatsappAtualizacao");
+    const avisoAberto = document.getElementById("whatsappAtualizacaoAberto");
+    const avisoConfirmado = document.getElementById("whatsappAtualizacaoConfirmado");
+    const controle = box.dataset.whatsappControle || "{{ venda.id }}";
+    const chaveAberto = `venda_${controle}_whatsapp_atualizacao_aberto`;
+    const csrfToken = "{{ csrf_token }}";
+
+    function obterCookie(nome) {
+      const cookies = document.cookie ? document.cookie.split(";") : [];
+      for (const cookie of cookies) {
+        const partes = cookie.trim().split("=");
+        if (partes[0] === nome) {
+          return decodeURIComponent(partes.slice(1).join("="));
+        }
+      }
+      return "";
+    }
+
+    function mostrarConfirmacaoPendente() {
+      box.classList.remove("confirmed");
+      abrirBtn?.setAttribute("hidden", "hidden");
+      avisoAberto?.classList.add("visivel");
+      avisoConfirmado?.classList.remove("visivel");
+      confirmarBtn?.removeAttribute("hidden");
+      confirmarBtn.disabled = false;
+    }
+
+    function mostrarEnvioPendente() {
+      box.classList.remove("confirmed");
+      abrirBtn?.removeAttribute("hidden");
+      avisoAberto?.classList.remove("visivel");
+      confirmarBtn?.setAttribute("hidden", "hidden");
+      avisoConfirmado?.classList.remove("visivel");
+      confirmarBtn.disabled = false;
+    }
+
+    function mostrarConfirmado() {
+      box.classList.add("confirmed");
+      abrirBtn?.setAttribute("hidden", "hidden");
+      avisoAberto?.classList.remove("visivel");
+      confirmarBtn?.setAttribute("hidden", "hidden");
+      avisoConfirmado?.classList.add("visivel");
+    }
+
+    if (box.dataset.whatsappPendente === "true" && sessionStorage.getItem(chaveAberto) === "sim") {
+      mostrarConfirmacaoPendente();
+    } else if (box.dataset.whatsappPendente === "true") {
+      mostrarEnvioPendente();
+    }
+
+    abrirBtn?.addEventListener("click", function () {
+      sessionStorage.setItem(chaveAberto, "sim");
+      mostrarConfirmacaoPendente();
+    });
+
+    confirmarBtn?.addEventListener("click", async function () {
+      const confirmarUrl = confirmarBtn.dataset.confirmarUrl;
+      if (!confirmarUrl) return;
+
+      confirmarBtn.disabled = true;
+      try {
+        const resposta = await fetch(confirmarUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": obterCookie("csrftoken") || csrfToken,
+            "X-Requested-With": "XMLHttpRequest",
+          },
+        });
+        const data = await resposta.json();
+        if (!resposta.ok || !data.sucesso) {
+          confirmarBtn.disabled = false;
+          return;
+        }
+        sessionStorage.removeItem(chaveAberto);
+        mostrarConfirmado();
+      } catch (erro) {
+        confirmarBtn.disabled = false;
+      }
+    });
+  });
+</script>
+{% endblock %}

@@ -172,6 +172,78 @@
             box-shadow: 0 12px 26px rgba(22, 163, 74, 0.14);
         }
 
+        .edit-review-whatsapp {
+            border: 1px solid #fed7aa;
+            border-radius: 10px;
+            background: #fff7ed;
+            color: #92400e;
+            padding: 8px 10px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            flex-wrap: wrap;
+            box-shadow: 0 12px 26px rgba(217, 119, 6, 0.12);
+        }
+
+        .edit-review-whatsapp.confirmed {
+            border-color: #86efac;
+            background: #ecfdf3;
+            color: #14532d;
+        }
+
+        .edit-review-whatsapp-text {
+            font-size: 12.5px;
+            font-weight: 900;
+            line-height: 1.25;
+        }
+
+        .edit-review-whatsapp-flow {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .edit-review-whatsapp .whatsapp-acao {
+            min-height: 32px;
+            border: 1px solid #d97706;
+            border-radius: 8px;
+            padding: 6px 10px;
+            background: linear-gradient(180deg, #fef3c7 0%, #f59e0b 100%);
+            color: #713f12;
+            font-size: 0.8rem;
+            font-weight: 900;
+            text-decoration: none;
+            line-height: 1.15;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.34), 0 4px 0 #b45309, 0 10px 18px rgba(120, 53, 15, 0.16);
+            text-shadow: 0 1px 1px rgba(255, 251, 235, 0.58);
+            animation: lembrete-whatsapp 1.35s ease-in-out infinite;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        .edit-review-whatsapp .whatsapp-acao:active {
+            transform: translateY(1px);
+            box-shadow: 0 1px 3px rgba(120, 53, 15, 0.18);
+            filter: brightness(0.96);
+        }
+
+        .edit-review-whatsapp-step {
+            display: none;
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        .edit-review-whatsapp-step.visivel {
+            display: inline-flex;
+        }
+
         .conteudo {
             padding: 10px 14px 14px;
         }
@@ -806,18 +878,19 @@
                             <a href="{% url 'estoque:entrega_rota_detalhe' entrega_contexto.id %}">Voltar para {% if entrega_contexto.tipo == "unitaria" %}Entrega{% else %}Rota{% endif %} #{{ entrega_contexto.id }}</a>
                         {% endif %}
                         <a href="{% url 'estoque:venda_editar_revisao' venda.id %}" class="editar-nota-acao">Editar nota</a>
+                        <a href="{% url 'estoque:venda_editar_cabecalho' venda.id %}" class="editar-nota-acao">Editar cabeçalho</a>
                         <a href="{% url 'estoque:venda_adicionar_produto_item' venda.id %}{% if itens_adicionados_param %}?itens_adicionados={{ itens_adicionados_param }}{% endif %}" class="editar-nota-acao">Adicionar produto</a>
                         <button type="button" id="btnImprimir">Imprimir</button>
                         {% if whatsapp_atualizacao and whatsapp_atualizacao.tem_whatsapp %}
-                            <a href="{{ whatsapp_atualizacao.url }}" target="_blank" rel="noopener" class="whatsapp-acao whatsapp-confirmacao-pendente" data-whatsapp-atualizacao-pendente id="btnEnviarWhatsappAtualizado" data-registrar-url="{% url 'estoque:registrar_whatsapp_aberto' venda.id %}">Enviar nota atualizada pelo WhatsApp</a>
+                            <a href="{{ whatsapp_atualizacao.url }}" target="_blank" rel="noopener" class="whatsapp-acao whatsapp-confirmacao-pendente" data-whatsapp-atualizacao-pendente data-whatsapp-atualizado-link id="btnEnviarWhatsappAtualizado" data-registrar-url="{% url 'estoque:registrar_whatsapp_aberto' venda.id %}">Enviar nota atualizada pelo WhatsApp</a>
                         {% else %}
                             <a href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}" class="whatsapp-acao">Imagem / WhatsApp</a>
                         {% endif %}
                         <a href="{% url 'estoque:venda_whatsapp_pdf' venda.id %}" target="_blank" rel="noopener">PDF</a>
                         {% if whatsapp_atualizacao %}
-                            <button type="button" id="btnConfirmarWhatsapp" class="whatsapp-acao whatsapp-confirmacao-pendente" {% if not whatsapp_atualizacao.whatsapp_aberto %}hidden{% endif %}>Confirmar reenvio pelo WhatsApp</button>
+                            <button type="button" id="btnConfirmarWhatsapp" class="whatsapp-acao whatsapp-confirmacao-pendente" data-whatsapp-confirmar-envio {% if not whatsapp_atualizacao.whatsapp_aberto %}hidden{% endif %}>Confirmar reenvio pelo WhatsApp</button>
                         {% else %}
-                            <button type="button" id="btnConfirmarWhatsapp" class="whatsapp-acao" {% if venda.whatsapp_status == "enviado_confirmado" %}disabled{% endif %}>
+                            <button type="button" id="btnConfirmarWhatsapp" class="whatsapp-acao" data-whatsapp-confirmar-envio {% if venda.whatsapp_status == "enviado_confirmado" %}disabled{% endif %}>
                                 {% if venda.whatsapp_status == "enviado_confirmado" %}Nota ja marcada como enviada{% else %}Marcar como enviada pelo WhatsApp{% endif %}
                             </button>
                         {% endif %}
@@ -834,6 +907,29 @@
                     {% if whatsapp_atualizacao %}
                         <div class="aviso-whatsapp visivel" role="status" aria-live="polite" data-whatsapp-atualizacao-pendente>
                             {{ whatsapp_atualizacao.texto_resumo }} Envie a nota atualizada pelo WhatsApp e confirme o reenvio.
+                        </div>
+                    {% endif %}
+                    {% if whatsapp_atualizacao %}
+                        <div class="edit-review-whatsapp" data-whatsapp-atualizacao-pendente id="whatsappBlocoPrincipal">
+                            <span class="edit-review-whatsapp-text">{{ whatsapp_atualizacao.texto_resumo }} Envie a nota atualizada pelo WhatsApp e confirme o reenvio.</span>
+                            <div class="edit-review-whatsapp-flow">
+                                {% if whatsapp_atualizacao.tem_whatsapp %}
+                                    <a href="{{ whatsapp_atualizacao.url }}" target="_blank" rel="noopener" class="whatsapp-acao whatsapp-confirmacao-pendente" data-whatsapp-atualizado-link data-registrar-url="{% url 'estoque:registrar_whatsapp_aberto' venda.id %}">Enviar nota atualizada pelo WhatsApp</a>
+                                {% else %}
+                                    <span class="edit-review-whatsapp-text">Cliente sem WhatsApp cadastrado para envio automatico.</span>
+                                {% endif %}
+                                <button type="button" class="whatsapp-acao whatsapp-confirmacao-pendente" data-whatsapp-confirmar-envio {% if not whatsapp_atualizacao.whatsapp_aberto %}hidden{% endif %}>Confirmar reenvio pelo WhatsApp</button>
+                                <span class="edit-review-whatsapp-step" data-whatsapp-confirmado-feedback>Reenvio confirmado.</span>
+                            </div>
+                        </div>
+                    {% elif venda.whatsapp_status != "enviado_confirmado" %}
+                        <div class="edit-review-whatsapp" id="whatsappBlocoPrincipal">
+                            <span class="edit-review-whatsapp-text">{{ venda.whatsapp_status_texto }}. Abra o envio pelo WhatsApp ou marque a nota como enviada quando concluir.</span>
+                            <div class="edit-review-whatsapp-flow">
+                                <a href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}" class="whatsapp-acao whatsapp-confirmacao-pendente">Imagem / WhatsApp</a>
+                                <button type="button" class="whatsapp-acao whatsapp-confirmacao-pendente" data-whatsapp-confirmar-envio>Marcar como enviada pelo WhatsApp</button>
+                                <span class="edit-review-whatsapp-step" data-whatsapp-confirmado-feedback>Envio confirmado.</span>
+                            </div>
                         </div>
                     {% endif %}
                     {% if alteracoes_pendentes_whatsapp.removidos %}
@@ -1216,8 +1312,8 @@
         }
 
         const btnImprimir = document.getElementById("btnImprimir");
-        const btnConfirmarWhatsapp = document.getElementById("btnConfirmarWhatsapp");
-        const btnEnviarWhatsappAtualizado = document.getElementById("btnEnviarWhatsappAtualizado");
+        const botoesConfirmarWhatsapp = Array.from(document.querySelectorAll("[data-whatsapp-confirmar-envio]"));
+        const botoesEnviarWhatsappAtualizado = Array.from(document.querySelectorAll("[data-whatsapp-atualizado-link]"));
         const btnWhatsappSemNumero = document.getElementById("btnWhatsappSemNumero");
         const avisoWhatsapp = document.getElementById("avisoWhatsapp");
         const whatsappStatusNota = document.getElementById("whatsappStatusNota");
@@ -1244,15 +1340,11 @@
         }
 
         function aplicarLembreteWhatsapp() {
-            if (btnConfirmarWhatsapp) {
-                btnConfirmarWhatsapp.classList.add("whatsapp-confirmacao-pendente");
-            }
+            botoesConfirmarWhatsapp.forEach((botao) => botao.classList.add("whatsapp-confirmacao-pendente"));
         }
 
         function removerLembreteWhatsapp() {
-            if (btnConfirmarWhatsapp) {
-                btnConfirmarWhatsapp.classList.remove("whatsapp-confirmacao-pendente");
-            }
+            botoesConfirmarWhatsapp.forEach((botao) => botao.classList.remove("whatsapp-confirmacao-pendente"));
         }
 
         function limparLembreteWhatsapp() {
@@ -1302,34 +1394,36 @@
             });
         }
 
-        if (btnEnviarWhatsappAtualizado) {
-            btnEnviarWhatsappAtualizado.addEventListener("click", async (event) => {
+        botoesEnviarWhatsappAtualizado.forEach((botaoEnviar) => {
+            botaoEnviar.addEventListener("click", async (event) => {
                 event.preventDefault();
                 const janelaWhatsapp = window.open("", "_blank");
-                const resultado = await enviarEvento(btnEnviarWhatsappAtualizado.dataset.registrarUrl, "WhatsApp aberto para envio da nota atualizada.");
+                const resultado = await enviarEvento(botaoEnviar.dataset.registrarUrl, "WhatsApp aberto para envio da nota atualizada.");
                 if (!resultado) {
                     if (janelaWhatsapp) {
                         janelaWhatsapp.close();
                     }
                     return;
                 }
-                if (btnConfirmarWhatsapp) {
-                    btnConfirmarWhatsapp.hidden = false;
-                    btnConfirmarWhatsapp.disabled = false;
-                    aplicarLembreteWhatsapp();
-                }
+                botoesConfirmarWhatsapp.forEach((botao) => {
+                    botao.hidden = false;
+                    botao.disabled = false;
+                });
+                aplicarLembreteWhatsapp();
                 if (janelaWhatsapp) {
-                    janelaWhatsapp.location.href = btnEnviarWhatsappAtualizado.href;
+                    janelaWhatsapp.location.href = botaoEnviar.href;
                 } else {
-                    window.open(btnEnviarWhatsappAtualizado.href, "_blank", "noopener");
+                    window.open(botaoEnviar.href, "_blank", "noopener");
                 }
             });
-        }
+        });
 
-        if (btnConfirmarWhatsapp) {
-            btnConfirmarWhatsapp.addEventListener("click", async (event) => {
+        botoesConfirmarWhatsapp.forEach((botaoConfirmar) => {
+            botaoConfirmar.addEventListener("click", async (event) => {
                 event.preventDefault();
-                btnConfirmarWhatsapp.disabled = true;
+                botoesConfirmarWhatsapp.forEach((botao) => {
+                    botao.disabled = true;
+                });
                 const resultado = await enviarEvento(confirmarWhatsappUrl, "Nota marcada como enviada pelo WhatsApp.");
                 if (resultado) {
                     limparLembreteWhatsapp();
@@ -1347,14 +1441,24 @@
                         resultado.comunicacao_numero,
                         resultado.comunicacao_origem
                     );
-                    btnConfirmarWhatsapp.textContent = "Nota ja marcada como enviada";
-                    btnConfirmarWhatsapp.disabled = true;
+                    botoesConfirmarWhatsapp.forEach((botao) => {
+                        botao.textContent = "Nota ja marcada como enviada";
+                        botao.disabled = true;
+                    });
+                    document.querySelectorAll("[data-whatsapp-confirmado-feedback]").forEach((elemento) => {
+                        elemento.classList.add("visivel");
+                    });
+                    document.querySelectorAll(".edit-review-whatsapp").forEach((elemento) => {
+                        elemento.classList.add("confirmed");
+                    });
                 }
                 if (!resultado) {
-                    btnConfirmarWhatsapp.disabled = false;
+                    botoesConfirmarWhatsapp.forEach((botao) => {
+                        botao.disabled = false;
+                    });
                 }
             });
-        }
+        });
 
         if (btnWhatsappSemNumero && avisoWhatsapp) {
             btnWhatsappSemNumero.addEventListener("click", () => {

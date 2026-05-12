@@ -2149,6 +2149,7 @@ def venda_cliente_detalhe(request, pk):
 
 
 TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP = (
+    "cabecalho_nota_alterado",
     "quantidade_item_alterada",
     "item_removido_da_nota",
     "produto_adicionado_na_nota",
@@ -2325,6 +2326,9 @@ def _linhas_evento_edicao_nota(evento):
     if evento.tipo_evento in ("produto_adicionado_na_nota", "item_adicionado_na_nota"):
         return [descricao or "Item adicionado na nota."]
 
+    if evento.tipo_evento == "cabecalho_nota_alterado":
+        return [descricao or "Cabecalho da nota alterado."]
+
     return [descricao] if descricao else []
 
 
@@ -2417,6 +2421,90 @@ def venda_editar_revisao(request, pk):
             "existe_pendencia": existe_pendencia,
             "possui_alerta_operacional": total_entregas or existe_checklist or existe_pendencia,
             "alteracao_quantidade": alteracao_quantidade,
+            "whatsapp_atualizacao": whatsapp_atualizacao,
+        },
+    )
+
+
+def venda_editar_cabecalho(request, pk):
+    venda = get_object_or_404(
+        Venda.objects.select_related("cliente").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+    opcoes_pagamento = ("A prazo", "À vista")
+    possui_alerta_operacional = (
+        EntregaRotaItem.objects.filter(venda=venda).exists()
+        or EntregaChecklistItem.objects.filter(rota_item__venda=venda).exists()
+        or EntregaRotaItem.objects.filter(venda=venda, is_pendencia=True).exists()
+    )
+    whatsapp_atualizacao = _montar_whatsapp_atualizacao_nota(request, venda)
+
+    valores = {
+        "data_venda": venda.data_venda.isoformat() if venda.data_venda else "",
+        "data_vencimento": venda.data_vencimento.isoformat() if venda.data_vencimento else "",
+        "tipo_pagamento": venda.tipo_pagamento if venda.tipo_pagamento in opcoes_pagamento else "A prazo",
+    }
+
+    if request.method == "POST":
+        valores = {
+            "data_venda": request.POST.get("data_venda", "").strip(),
+            "data_vencimento": request.POST.get("data_vencimento", "").strip(),
+            "tipo_pagamento": request.POST.get("tipo_pagamento", "").strip(),
+        }
+        nova_data_venda = parse_date(valores["data_venda"])
+        novo_vencimento = parse_date(valores["data_vencimento"]) if valores["data_vencimento"] else None
+        novo_pagamento = valores["tipo_pagamento"]
+
+        if not nova_data_venda:
+            messages.warning(request, "Informe uma data da venda valida.")
+        elif novo_pagamento not in opcoes_pagamento:
+            messages.warning(request, "Selecione uma forma de pagamento valida.")
+        else:
+            data_anterior = venda.data_venda
+            vencimento_anterior = venda.data_vencimento
+            pagamento_anterior = venda.tipo_pagamento or "-"
+            houve_alteracao = (
+                data_anterior != nova_data_venda
+                or vencimento_anterior != novo_vencimento
+                or pagamento_anterior != novo_pagamento
+            )
+
+            if not houve_alteracao:
+                messages.warning(request, "Nenhuma alteracao de cabecalho foi informada.")
+            else:
+                with transaction.atomic():
+                    venda.data_venda = nova_data_venda
+                    venda.data_vencimento = novo_vencimento
+                    venda.tipo_pagamento = novo_pagamento
+                    venda.save(update_fields=["data_venda", "data_vencimento", "tipo_pagamento", "atualizado_em"])
+                    _registrar_evento_venda(
+                        venda,
+                        "cabecalho_nota_alterado",
+                        (
+                            "Cabecalho da nota alterado. "
+                            f"Data: {data_anterior.strftime('%d/%m/%Y') if data_anterior else '-'} -> {nova_data_venda.strftime('%d/%m/%Y')}. "
+                            f"Vencimento: {vencimento_anterior.strftime('%d/%m/%Y') if vencimento_anterior else '-'} -> {novo_vencimento.strftime('%d/%m/%Y') if novo_vencimento else '-'}. "
+                            f"Pagamento: {pagamento_anterior} -> {novo_pagamento}. "
+                            "Cliente, itens, financeiro, caixa, entregas e checklist nao foram alterados."
+                        ),
+                        canal="sistema",
+                        usuario=venda.operador,
+                    )
+
+                messages.success(
+                    request,
+                    "Cabecalho da nota atualizado. O impacto financeiro real sera tratado em etapa futura, se necessario.",
+                )
+                return redirect("estoque:venda_editar_revisao", pk=venda.pk)
+
+    return render(
+        request,
+        "estoque/venda_editar_cabecalho.html",
+        {
+            "venda": venda,
+            "valores": valores,
+            "opcoes_pagamento": opcoes_pagamento,
+            "possui_alerta_operacional": possui_alerta_operacional,
             "whatsapp_atualizacao": whatsapp_atualizacao,
         },
     )

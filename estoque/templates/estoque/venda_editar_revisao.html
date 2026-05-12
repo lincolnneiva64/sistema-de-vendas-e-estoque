@@ -170,6 +170,7 @@
           <p class="edit-review-subtitle">Tela de revisao segura antes de liberar alteracoes na venda gravada.</p>
         </div>
         <div class="edit-review-actions">
+          <a class="edit-review-btn primary" href="{% url 'estoque:venda_editar_cabecalho' venda.id %}">Editar cabecalho</a>
           <a class="edit-review-btn primary" href="{% url 'estoque:venda_adicionar_produto_item' venda.id %}">Adicionar produto</a>
           <a class="edit-review-btn" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1">Voltar para a nota</a>
         </div>
@@ -185,7 +186,7 @@
         {% endif %}
 
         <div class="edit-review-notice">
-          Modo de edicao segura. Nesta etapa, produto pode ser acrescentado, quantidade de item existente pode ser alterada e item pode ser removido com confirmacao.
+          Modo de edicao segura. Nesta etapa, cabecalho pode ter data, vencimento e pagamento alterados; produto pode ser acrescentado, quantidade de item existente pode ser alterada e item pode ser removido com confirmacao.
         </div>
 
         {% if possui_alerta_operacional %}
@@ -194,6 +195,36 @@
             {% if total_entregas %} Entregas/rotas vinculadas: {{ total_entregas }}.{% endif %}
             {% if existe_checklist %} Itens de checklist encontrados: {{ total_checklists }}.{% endif %}
             {% if existe_pendencia %} Existe pendencia relacionada.{% endif %}
+          </div>
+        {% endif %}
+
+        {% if whatsapp_atualizacao %}
+          <div
+            class="edit-review-whatsapp warning"
+            id="whatsappAtualizacaoBox"
+            data-whatsapp-pendente="true"
+            data-whatsapp-controle="{{ whatsapp_atualizacao.controle_id }}"
+          >
+            <span class="edit-review-whatsapp-text">{{ whatsapp_atualizacao.texto_resumo }} Envie a nota atualizada pelo WhatsApp e confirme o reenvio.</span>
+            <div class="edit-review-whatsapp-flow">
+              {% if whatsapp_atualizacao.tem_whatsapp %}
+                <a class="edit-review-btn whatsapp-pulse" id="abrirWhatsappAtualizacao" href="{{ whatsapp_atualizacao.url }}" target="_blank" rel="noopener">Enviar nota atualizada pelo WhatsApp</a>
+              {% else %}
+                <span class="edit-review-whatsapp-text">Cliente sem WhatsApp cadastrado para envio automatico.</span>
+              {% endif %}
+              <span class="edit-review-whatsapp-step" id="whatsappAtualizacaoAberto">WhatsApp aberto. Confirme o reenvio quando terminar.</span>
+              <button class="edit-review-btn whatsapp-pulse" id="confirmarWhatsappAtualizacao" type="button" hidden data-confirmar-url="{% url 'estoque:confirmar_whatsapp' venda.id %}">Confirmar reenvio pelo WhatsApp</button>
+              <span class="edit-review-whatsapp-step" id="whatsappAtualizacaoConfirmado">Reenvio confirmado.</span>
+            </div>
+          </div>
+        {% elif venda.whatsapp_status != "enviado_confirmado" %}
+          <div class="edit-review-whatsapp warning" id="whatsappEnvioBox">
+            <span class="edit-review-whatsapp-text">{{ venda.whatsapp_status_texto }}. Se esta nota ja foi enviada ao cliente, confirme o envio; se ainda nao foi, abra o envio pelo WhatsApp.</span>
+            <div class="edit-review-whatsapp-flow">
+              <a class="edit-review-btn whatsapp-pulse" href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}">Imagem / WhatsApp</a>
+              <button class="edit-review-btn whatsapp-pulse" id="confirmarWhatsappEnvio" type="button" data-confirmar-url="{% url 'estoque:confirmar_whatsapp' venda.id %}">Marcar como enviada pelo WhatsApp</button>
+              <span class="edit-review-whatsapp-step" id="whatsappEnvioConfirmado">Envio confirmado.</span>
+            </div>
           </div>
         {% endif %}
 
@@ -311,17 +342,8 @@
 </main>
 <script>
   document.addEventListener("DOMContentLoaded", function () {
-    const box = document.getElementById("whatsappAtualizacaoBox");
-    if (!box) {
-      return;
-    }
-
-    const abrirBtn = document.getElementById("abrirWhatsappAtualizacao");
-    const confirmarBtn = document.getElementById("confirmarWhatsappAtualizacao");
-    const avisoAberto = document.getElementById("whatsappAtualizacaoAberto");
-    const avisoConfirmado = document.getElementById("whatsappAtualizacaoConfirmado");
-    const controle = box.dataset.whatsappControle || "{{ venda.id }}";
-    const chaveAberto = `venda_${controle}_whatsapp_atualizacao_aberto`;
+    const confirmarEnvioBtn = document.getElementById("confirmarWhatsappEnvio");
+    const avisoEnvioConfirmado = document.getElementById("whatsappEnvioConfirmado");
     const csrfToken = "{{ csrf_token }}";
 
     function obterCookie(nome) {
@@ -334,6 +356,61 @@
       }
       return "";
     }
+
+    async function confirmarWhatsappPelaUrl(url, botao) {
+      if (!url) {
+        return false;
+      }
+
+      if (botao) {
+        botao.disabled = true;
+      }
+
+      try {
+        const resposta = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": obterCookie("csrftoken") || csrfToken,
+            "X-Requested-With": "XMLHttpRequest",
+          },
+        });
+        const data = await resposta.json();
+        if (!resposta.ok || !data.sucesso) {
+          if (botao) {
+            botao.disabled = false;
+          }
+          return false;
+        }
+        return true;
+      } catch (erro) {
+        if (botao) {
+          botao.disabled = false;
+        }
+        return false;
+      }
+    }
+
+    confirmarEnvioBtn?.addEventListener("click", async function () {
+      const sucesso = await confirmarWhatsappPelaUrl(confirmarEnvioBtn.dataset.confirmarUrl, confirmarEnvioBtn);
+      if (!sucesso) {
+        return;
+      }
+      confirmarEnvioBtn.textContent = "Nota ja marcada como enviada";
+      avisoEnvioConfirmado?.classList.add("visivel");
+    });
+
+    const box = document.getElementById("whatsappAtualizacaoBox");
+    if (!box) {
+      return;
+    }
+
+    const abrirBtn = document.getElementById("abrirWhatsappAtualizacao");
+    const confirmarBtn = document.getElementById("confirmarWhatsappAtualizacao");
+    const avisoAberto = document.getElementById("whatsappAtualizacaoAberto");
+    const avisoConfirmado = document.getElementById("whatsappAtualizacaoConfirmado");
+    const controle = box.dataset.whatsappControle || "{{ venda.id }}";
+    const chaveAberto = `venda_${controle}_whatsapp_atualizacao_aberto`;
 
     function mostrarConfirmacaoPendente() {
       box.classList.remove("confirmed");
@@ -375,30 +452,10 @@
     });
 
     confirmarBtn?.addEventListener("click", async function () {
-      const confirmarUrl = confirmarBtn.dataset.confirmarUrl;
-      if (!confirmarUrl) {
-        return;
-      }
-
-      confirmarBtn.disabled = true;
-      try {
-        const resposta = await fetch(confirmarUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRFToken": obterCookie("csrftoken") || csrfToken,
-            "X-Requested-With": "XMLHttpRequest",
-          },
-        });
-        const data = await resposta.json();
-        if (!resposta.ok || !data.sucesso) {
-          confirmarBtn.disabled = false;
-          return;
-        }
+      const sucesso = await confirmarWhatsappPelaUrl(confirmarBtn.dataset.confirmarUrl, confirmarBtn);
+      if (sucesso) {
         sessionStorage.removeItem(chaveAberto);
         mostrarConfirmado();
-      } catch (erro) {
-        confirmarBtn.disabled = false;
       }
     });
   });
