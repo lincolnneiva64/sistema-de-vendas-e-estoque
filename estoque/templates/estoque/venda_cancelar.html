@@ -86,6 +86,27 @@
   }
   .cancel-btn.danger { border-color: #dc2626; background: #dc2626; color: #fff; }
   .cancel-btn.danger.is-ready { box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.16), 0 3px 8px rgba(15, 23, 42, 0.08); }
+  .cancel-modal-overlay {
+    position: fixed; inset: 0; z-index: 10000; background: rgba(15, 23, 42, 0.52);
+    display: none; align-items: center; justify-content: center; padding: 18px;
+  }
+  .cancel-modal-overlay.visivel { display: flex; }
+  .cancel-modal {
+    width: min(420px, calc(100vw - 32px)); border-radius: 12px; background: #fff;
+    border: 1px solid #e5e7eb; box-shadow: 0 18px 44px rgba(15, 23, 42, 0.22);
+    padding: 16px 18px; color: #172033;
+  }
+  .cancel-modal-title { margin: 0 0 7px; color: #111827; font-size: 0.98rem; font-weight: 950; }
+  .cancel-modal-text { margin: 0; color: #475569; font-size: 0.86rem; font-weight: 750; line-height: 1.35; }
+  .cancel-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .cancel-modal-btn {
+    min-height: 34px; border: 1px solid #bfdbfe; border-radius: 8px; padding: 7px 11px;
+    background: #eff6ff; color: #1e3a8a; font: inherit; font-size: 0.84rem; font-weight: 900;
+    cursor: pointer; transition: transform 0.08s ease, filter 0.08s ease;
+  }
+  .cancel-modal-btn:focus { outline: 3px solid rgba(37, 99, 235, 0.28); outline-offset: 2px; }
+  .cancel-modal-btn:active { transform: translateY(1px); filter: brightness(0.96); }
+  .cancel-modal-btn.danger { border-color: #dc2626; background: #dc2626; color: #fff; }
   .cancel-message {
     border: 1px solid #f7d98b; border-radius: 10px; background: #fff7ed;
     color: #92400e; padding: 7px 9px; font-size: 0.82rem; font-weight: 850;
@@ -97,6 +118,8 @@
     .cancel-table-wrap { overflow-x: auto; }
     .cancel-actions { justify-content: stretch; }
     .cancel-btn { width: 100%; }
+    .cancel-modal-actions { flex-direction: column-reverse; }
+    .cancel-modal-btn { width: 100%; }
   }
 </style>
 
@@ -246,6 +269,16 @@
     </section>
   </div>
 </main>
+<div id="cancelModalOverlay" class="cancel-modal-overlay" aria-hidden="true">
+  <div class="cancel-modal" role="dialog" aria-modal="true" aria-labelledby="cancelModalTitle" aria-describedby="cancelModalText">
+    <h2 id="cancelModalTitle" class="cancel-modal-title"></h2>
+    <p id="cancelModalText" class="cancel-modal-text"></p>
+    <div class="cancel-modal-actions">
+      <button type="button" id="cancelModalSecondary" class="cancel-modal-btn">Nao cancelar</button>
+      <button type="button" id="cancelModalPrimary" class="cancel-modal-btn danger">Cancelar venda</button>
+    </div>
+  </div>
+</div>
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     const radios = Array.from(document.querySelectorAll("input[name='motivo_padrao']"));
@@ -253,6 +286,67 @@
     const confirmacao = document.getElementById("id_confirmacao_cancelamento");
     const botaoConfirmar = document.getElementById("btnConfirmarCancelamentoVenda");
     const form = document.getElementById("formCancelarVenda");
+    const modalOverlay = document.getElementById("cancelModalOverlay");
+    const modalTitle = document.getElementById("cancelModalTitle");
+    const modalText = document.getElementById("cancelModalText");
+    const modalPrimary = document.getElementById("cancelModalPrimary");
+    const modalSecondary = document.getElementById("cancelModalSecondary");
+    let resolverModalCancelamento = null;
+    let focoAnteriorCancelamento = null;
+
+    function fecharModalCancelamento(resultado) {
+      modalOverlay?.classList.remove("visivel");
+      modalOverlay?.setAttribute("aria-hidden", "true");
+      document.removeEventListener("keydown", tratarTeclaModalCancelamento);
+      if (resolverModalCancelamento) {
+        resolverModalCancelamento(resultado);
+        resolverModalCancelamento = null;
+      }
+      if (!resultado && focoAnteriorCancelamento) {
+        focoAnteriorCancelamento.focus();
+      }
+    }
+
+    function tratarTeclaModalCancelamento(event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        fecharModalCancelamento(false);
+        return;
+      }
+      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") {
+        return;
+      }
+      event.preventDefault();
+      const botoes = [modalSecondary, modalPrimary].filter(function (botao) {
+        return botao && botao.style.display !== "none";
+      });
+      if (!botoes.length) return;
+      const atual = botoes.indexOf(document.activeElement);
+      const delta = event.key === "ArrowRight" ? 1 : -1;
+      const proximo = atual >= 0 ? (atual + delta + botoes.length) % botoes.length : 0;
+      botoes[proximo].focus();
+    }
+
+    function abrirModalCancelamento(opcoes) {
+      if (!modalOverlay) return Promise.resolve(false);
+      focoAnteriorCancelamento = document.activeElement;
+      modalTitle.textContent = opcoes.titulo;
+      modalText.textContent = opcoes.texto;
+      modalPrimary.textContent = opcoes.confirmar || "Entendi";
+      modalSecondary.textContent = opcoes.cancelar || "Nao cancelar";
+      modalPrimary.classList.toggle("danger", opcoes.perigo !== false);
+      modalSecondary.style.display = opcoes.aviso ? "none" : "";
+      modalOverlay.classList.add("visivel");
+      modalOverlay.setAttribute("aria-hidden", "false");
+      document.addEventListener("keydown", tratarTeclaModalCancelamento);
+      return new Promise((resolve) => {
+        resolverModalCancelamento = resolve;
+        window.setTimeout(() => (opcoes.aviso ? modalPrimary : modalSecondary).focus(), 0);
+      });
+    }
+
+    modalPrimary?.addEventListener("click", () => fecharModalCancelamento(true));
+    modalSecondary?.addEventListener("click", () => fecharModalCancelamento(false));
 
     function atualizarObrigatoriedade() {
       const selecionado = radios.find((radio) => radio.checked);
@@ -337,11 +431,19 @@
     atualizarConfirmacao();
 
     if (form) {
-      form.addEventListener("submit", function (event) {
+      form.addEventListener("submit", async function (event) {
+        if (form.dataset.confirmado === "1") return;
+
+        event.preventDefault();
         if (!textoConfirmacaoValido()) {
-          event.preventDefault();
           atualizarConfirmacao();
-          window.alert("Para cancelar a venda, digite CANCELAR no campo de confirmação.");
+          await abrirModalCancelamento({
+            aviso: true,
+            perigo: false,
+            titulo: "Confirmacao obrigatoria",
+            texto: "Digite CANCELAR para liberar o cancelamento.",
+            confirmar: "Entendi"
+          });
           if (confirmacao) {
             confirmacao.focus();
             if (confirmacao.select) {
@@ -351,10 +453,16 @@
           return;
         }
 
-        const confirmado = window.confirm("Deseja realmente cancelar a venda #{{ venda.id }}? Esta ação marcará a venda como cancelada.");
-        if (!confirmado) {
-          event.preventDefault();
-        }
+        const confirmado = await abrirModalCancelamento({
+          titulo: "Confirmar cancelamento",
+          texto: "Deseja cancelar a venda #{{ venda.id }}? A venda sera marcada como cancelada.",
+          cancelar: "Nao cancelar",
+          confirmar: "Cancelar venda"
+        });
+        if (!confirmado) return;
+
+        form.dataset.confirmado = "1";
+        form.requestSubmit();
       });
     }
   });

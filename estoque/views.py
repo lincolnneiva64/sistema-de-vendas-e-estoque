@@ -1424,7 +1424,18 @@ def receber_cliente(request, cliente_id):
     retorno_url = _url_retorno_segura(request)
     contas_url = reverse("estoque:contas_receber")
     destino_retorno = retorno_url or f"{contas_url}?{urlencode({'cliente': cliente.nome, 'status': 'em_aberto'})}"
+    destino_pos_recebimento = reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id})
+    if retorno_url:
+        destino_pos_recebimento = f"{destino_pos_recebimento}?{urlencode({'next': retorno_url})}"
     hoje = timezone.localdate()
+    formas_pagamento = (
+        "Dinheiro",
+        "PIX",
+        "Cartao de debito",
+        "Cartao de credito",
+        "Transferencia",
+        "Outro",
+    )
 
     contas = list(
         ContaReceber.objects.select_related("venda")
@@ -1444,6 +1455,12 @@ def receber_cliente(request, cliente_id):
     )
 
     total_em_aberto = sum((conta.valor_em_aberto or Decimal("0.00") for conta in contas), Decimal("0.00"))
+    valores = {
+        "data_recebimento": hoje.isoformat(),
+        "valor": f"{total_em_aberto:.2f}".replace(".", ","),
+        "forma_pagamento": "Dinheiro",
+        "destino_diferenca": "troco",
+    }
     credito_disponivel = (
         CreditoCliente.objects.filter(cliente=cliente)
         .aggregate(total=Sum("valor"))
@@ -1451,14 +1468,106 @@ def receber_cliente(request, cliente_id):
         or Decimal("0.00")
     ).quantize(Decimal("0.01"))
     credito_disponivel = max(credito_disponivel, Decimal("0.00"))
-    formas_pagamento = (
-        "Dinheiro",
-        "PIX",
-        "Cartao de debito",
-        "Cartao de credito",
-        "Transferencia",
-        "Outro",
-    )
+    pagamentos_hoje_preview = [
+        float(valor or Decimal("0.00"))
+        for valor in RecebimentoContaReceber.objects.filter(
+            conta__cliente=cliente,
+            criado_em__date=hoje,
+        ).values_list("valor", flat=True)
+    ]
+
+    if request.method == "POST":
+        valores = {
+            "data_recebimento": request.POST.get("data_recebimento", "").strip(),
+            "valor": request.POST.get("valor", "").strip(),
+            "forma_pagamento": request.POST.get("forma_pagamento", "").strip(),
+            "destino_diferenca": request.POST.get("destino_diferenca", "troco").strip(),
+        }
+        data_recebimento = parse_date(valores["data_recebimento"])
+        if not data_recebimento:
+            messages.warning(request, "Informe uma data de recebimento valida.")
+        elif valores["forma_pagamento"] not in formas_pagamento:
+            messages.warning(request, "Selecione uma forma de pagamento.")
+        elif valores["destino_diferenca"] not in {"troco", "credito"}:
+            messages.warning(request, "Selecione como tratar a sobra do pagamento.")
+        else:
+            try:
+                valor_recebido = _decimal_do_front(valores["valor"] or "0", "0.01")
+            except ValueError as exc:
+                messages.warning(request, str(exc))
+            else:
+                if valor_recebido <= Decimal("0.00"):
+                    messages.warning(request, "Informe um valor recebido maior que zero.")
+                elif not contas:
+                    messages.warning(request, "Nao ha contas abertas para receber deste cliente.")
+                else:
+                    try:
+                        with transaction.atomic():
+                            contas_atualizadas = list(
+                                ContaReceber.objects.select_for_update()
+                                .select_related("venda")
+                                .filter(
+                                    cliente=cliente,
+                                    status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+                                    valor_em_aberto__gt=Decimal("0.00"),
+                                )
+                            )
+                            contas_atualizadas.sort(
+                                key=lambda conta: (
+                                    0 if conta.data_vencimento and conta.data_vencimento < hoje else 1,
+                                    conta.data_vencimento or date.max,
+                                    conta.data_emissao or date.max,
+                                    conta.id,
+                                )
+                            )
+                            if not contas_atualizadas:
+                                raise RecebimentoContaErro("Nao ha contas abertas para receber deste cliente.")
+
+                            restante = valor_recebido
+                            distribuicao = []
+                            for conta_atual in contas_atualizadas:
+                                if restante <= Decimal("0.00"):
+                                    break
+                                saldo_conta = (conta_atual.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
+                                valor_aplicar = min(restante, saldo_conta).quantize(Decimal("0.01"))
+                                if valor_aplicar <= Decimal("0.00"):
+                                    continue
+                                distribuicao.append([conta_atual, valor_aplicar, Decimal("0.00")])
+                                restante = (restante - valor_aplicar).quantize(Decimal("0.01"))
+
+                            if not distribuicao:
+                                raise RecebimentoContaErro("Informe um valor recebido maior que zero.")
+
+                            sobra = max(restante, Decimal("0.00")).quantize(Decimal("0.01"))
+                            if sobra > Decimal("0.00"):
+                                distribuicao[-1][2] = sobra
+
+                            valor_aplicado_total = Decimal("0.00")
+                            for conta_atual, valor_aplicar, sobra_conta in distribuicao:
+                                valor_entregue_conta = (valor_aplicar + sobra_conta).quantize(Decimal("0.01"))
+                                observacao = (
+                                    "Recebimento geral do cliente. "
+                                    f"Total recebido: {_formatar_moeda(valor_recebido)}. "
+                                    f"Aplicado nesta conta: {_formatar_moeda(valor_aplicar)}."
+                                )
+                                _aplicar_recebimento_conta(
+                                    conta_atual,
+                                    data_recebimento,
+                                    valor_entregue_conta,
+                                    valores["forma_pagamento"],
+                                    observacao,
+                                    valores["destino_diferenca"],
+                                )
+                                valor_aplicado_total = (valor_aplicado_total + valor_aplicar).quantize(Decimal("0.01"))
+                    except RecebimentoContaErro as exc:
+                        messages.warning(request, str(exc))
+                    else:
+                        messages.success(
+                            request,
+                            f"Recebimento do cliente registrado com sucesso. Valor aplicado: {_formatar_moeda(valor_aplicado_total)}.",
+                        )
+                        return redirect(destino_pos_recebimento)
+
     contas_preview = [
         {
             "id": conta.id,
@@ -1479,6 +1588,8 @@ def receber_cliente(request, cliente_id):
             "total_em_aberto": total_em_aberto,
             "credito_disponivel": credito_disponivel,
             "formas_pagamento": formas_pagamento,
+            "valores": valores,
+            "pagamentos_hoje_preview": pagamentos_hoje_preview,
             "hoje_iso": hoje.isoformat(),
             "retorno_url": destino_retorno,
         },

@@ -19,6 +19,33 @@
   .rc-btn-primary { border-color: #86efac; background: #16a34a; color: #fff; }
   .rc-btn-info-disabled { border-color: #bfdbfe; background: #eff6ff; color: #1e3a8a; }
   .rc-btn.is-informativo { opacity: 0.72; cursor: default; }
+  .rc-modal-overlay {
+    position: fixed; inset: 0; z-index: 10000; background: rgba(15, 23, 42, 0.52);
+    display: none; align-items: center; justify-content: center; padding: 18px;
+  }
+  .rc-modal-overlay.visivel { display: flex; }
+  .rc-modal {
+    width: min(420px, calc(100vw - 32px)); border-radius: 12px; background: #fff;
+    border: 1px solid #e5e7eb; box-shadow: 0 18px 44px rgba(15, 23, 42, 0.22);
+    padding: 16px 18px; color: #172033;
+  }
+  .rc-modal-title { margin: 0 0 7px; color: #111827; font-size: 0.98rem; font-weight: 950; }
+  .rc-modal-text { margin: 0; color: #475569; font-size: 0.86rem; font-weight: 750; line-height: 1.35; white-space: pre-line; }
+  .rc-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .rc-modal-btn {
+    min-height: 34px; border: 1px solid #bfdbfe; border-radius: 8px; padding: 7px 11px;
+    background: #eff6ff; color: #1e3a8a; font: inherit; font-size: 0.84rem; font-weight: 900;
+    cursor: pointer; transition: transform 0.08s ease, filter 0.08s ease;
+  }
+  .rc-modal-btn:focus { outline: 3px solid rgba(37, 99, 235, 0.28); outline-offset: 2px; }
+  .rc-modal-btn:active { transform: translateY(1px); filter: brightness(0.96); }
+  .rc-modal-btn.success { border-color: #16a34a; background: #16a34a; color: #fff; }
+  .rc-message {
+    border: 1px solid #fde68a; border-radius: 9px; background: #fffbeb; color: #92400e;
+    padding: 8px 10px; margin-bottom: 8px; font-size: 0.84rem; font-weight: 850;
+  }
+  .rc-message.success { background: #ecfdf3; border-color: #bbf7d0; color: #166534; }
+  .rc-message.error { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
   .rc-summary {
     display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 7px; margin-bottom: 8px;
@@ -79,6 +106,14 @@
     font-size: 0.82rem; font-weight: 850;
   }
   .rc-alert.success { background: #ecfdf3; border-color: #bbf7d0; color: #166534; }
+  .rc-sobra-opcoes {
+    margin: 0 10px 9px; display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .rc-sobra-opcao {
+    border: 1px solid #bfdbfe; border-radius: 9px; background: #eff6ff; color: #1e3a8a;
+    padding: 7px 9px; font-size: 0.82rem; font-weight: 850; display: inline-flex; gap: 6px; align-items: center;
+  }
+  .rc-sobra-opcao input { accent-color: #2563eb; }
   .rc-table-wrap { overflow-x: auto; }
   .rc-table { width: 100%; min-width: 980px; border-collapse: collapse; }
   .rc-table th {
@@ -109,6 +144,8 @@
     .rc-summary { grid-template-columns: 1fr; }
     .rc-distribuicao { grid-template-columns: 1fr; }
     .rc-actions .rc-btn { width: 100%; }
+    .rc-modal-actions { flex-direction: column-reverse; }
+    .rc-modal-btn { width: 100%; }
   }
 </style>
 
@@ -121,6 +158,12 @@
       </div>
       <a href="{{ retorno_url }}" class="rc-btn">Voltar</a>
     </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="rc-message {{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
 
     <section class="rc-summary" aria-label="Resumo do cliente">
       <div class="rc-card">
@@ -141,56 +184,69 @@
       </div>
     </section>
 
-    <section class="rc-panel">
-      <div class="rc-panel-head">
-        <h2 class="rc-panel-title">Dados para previa</h2>
-        <span>Esta etapa nao grava baixa real.</span>
-      </div>
-      <div class="rc-form">
-        <div class="rc-field">
-          <label for="valorRecebidoCliente">Valor recebido</label>
-          <input id="valorRecebidoCliente" type="text" inputmode="decimal" autocomplete="off" value="{{ total_em_aberto|floatformat:2 }}">
+    <form method="post" id="formReceberCliente">
+      {% csrf_token %}
+      <section class="rc-panel">
+        <div class="rc-panel-head">
+          <h2 class="rc-panel-title">Dados para recebimento</h2>
+          <span>O servidor recalcula a distribuicao antes de gravar.</span>
         </div>
-        <div class="rc-field">
-          <label for="dataRecebimentoCliente">Data do recebimento</label>
-          <input id="dataRecebimentoCliente" type="date" value="{{ hoje_iso }}">
-        </div>
-        <div class="rc-field">
-          <label for="formaPagamentoCliente">Forma de pagamento</label>
-          <select id="formaPagamentoCliente">
-            {% for forma in formas_pagamento %}
-              <option value="{{ forma }}">{{ forma }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <button type="button" class="rc-btn rc-btn-info-disabled is-informativo" id="btnConfirmacaoFuturaCliente" aria-disabled="true" title="A baixa real sera implementada na proxima etapa.">Confirmacao real sera ativada depois</button>
-        {% if credito_disponivel > 0 %}
-          <div class="rc-credito-futuro">
-            Uso de credito disponivel sera ligado na etapa de confirmacao real. Nesta tela ele aparece apenas como informacao.
+        <div class="rc-form">
+          <div class="rc-field">
+            <label for="valorRecebidoCliente">Valor recebido</label>
+            <input id="valorRecebidoCliente" name="valor" type="text" inputmode="decimal" autocomplete="off" value="{{ valores.valor }}">
           </div>
-        {% endif %}
-      </div>
-      <div id="sobraRecebimentoCliente" class="rc-alert success" hidden></div>
-      <div class="rc-distribuicao" aria-label="Resumo da distribuicao">
-        <div class="rc-distribuicao-item">
-          <span class="rc-distribuicao-label">Total recebido</span>
-          <strong id="totalRecebidoPreview">R$ 0,00</strong>
+          <div class="rc-field">
+            <label for="dataRecebimentoCliente">Data do recebimento</label>
+            <input id="dataRecebimentoCliente" name="data_recebimento" type="date" value="{{ valores.data_recebimento }}">
+          </div>
+          <div class="rc-field">
+            <label for="formaPagamentoCliente">Forma de pagamento</label>
+            <select id="formaPagamentoCliente" name="forma_pagamento">
+              {% for forma in formas_pagamento %}
+                <option value="{{ forma }}" {% if valores.forma_pagamento == forma %}selected{% endif %}>{{ forma }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="rc-btn rc-btn-primary" id="btnConfirmarRecebimentoCliente">Confirmar recebimento do cliente</button>
+          {% if credito_disponivel > 0 %}
+            <div class="rc-credito-futuro">
+              Credito disponivel aparece apenas como informacao nesta versao; ele nao sera consumido neste recebimento.
+            </div>
+          {% endif %}
         </div>
-        <div class="rc-distribuicao-item">
-          <span class="rc-distribuicao-label">Aplicado nas contas</span>
-          <strong id="totalAplicadoPreview">R$ 0,00</strong>
+        <div id="sobraRecebimentoCliente" class="rc-alert success" hidden></div>
+        <div id="destinoSobraCliente" class="rc-sobra-opcoes" hidden>
+          <label class="rc-sobra-opcao">
+            <input type="radio" name="destino_diferenca" value="troco" {% if valores.destino_diferenca != "credito" %}checked{% endif %}>
+            Registrar sobra como troco devolvido
+          </label>
+          <label class="rc-sobra-opcao">
+            <input type="radio" name="destino_diferenca" value="credito" {% if valores.destino_diferenca == "credito" %}checked{% endif %}>
+            Deixar sobra como credito do cliente
+          </label>
         </div>
-        <div class="rc-distribuicao-item sobra">
-          <span class="rc-distribuicao-label">Sobra</span>
-          <strong id="sobraPreview">R$ 0,00</strong>
+        <div class="rc-distribuicao" aria-label="Resumo da distribuicao">
+          <div class="rc-distribuicao-item">
+            <span class="rc-distribuicao-label">Total recebido</span>
+            <strong id="totalRecebidoPreview">R$ 0,00</strong>
+          </div>
+          <div class="rc-distribuicao-item">
+            <span class="rc-distribuicao-label">Aplicado nas contas</span>
+            <strong id="totalAplicadoPreview">R$ 0,00</strong>
+          </div>
+          <div class="rc-distribuicao-item sobra">
+            <span class="rc-distribuicao-label">Sobra</span>
+            <strong id="sobraPreview">R$ 0,00</strong>
+          </div>
+          <div class="rc-distribuicao-item saldo">
+            <span class="rc-distribuicao-label">Saldo em aberto</span>
+            <strong id="saldoAbertoPreview">R$ {{ total_em_aberto|floatformat:2 }}</strong>
+          </div>
         </div>
-        <div class="rc-distribuicao-item saldo">
-          <span class="rc-distribuicao-label">Saldo em aberto</span>
-          <strong id="saldoAbertoPreview">R$ {{ total_em_aberto|floatformat:2 }}</strong>
-        </div>
-      </div>
-      <div class="rc-note">Previa somente para conferencia: nenhuma conta, credito ou recebimento sera alterado aqui.</div>
-    </section>
+        <div class="rc-note">Confira a previa antes de confirmar. A baixa real sera gravada somente apos a confirmacao final.</div>
+      </section>
+    </form>
 
     <section class="rc-panel">
       <div class="rc-panel-head">
@@ -240,22 +296,97 @@
     </section>
   </div>
 </div>
+<div id="receberClienteModalOverlay" class="rc-modal-overlay" aria-hidden="true">
+  <div class="rc-modal" role="dialog" aria-modal="true" aria-labelledby="receberClienteModalTitle" aria-describedby="receberClienteModalText">
+    <h2 id="receberClienteModalTitle" class="rc-modal-title"></h2>
+    <p id="receberClienteModalText" class="rc-modal-text"></p>
+    <div class="rc-modal-actions">
+      <button type="button" id="receberClienteModalSecondary" class="rc-modal-btn">Voltar</button>
+      <button type="button" id="receberClienteModalPrimary" class="rc-modal-btn success">Confirmar</button>
+    </div>
+  </div>
+</div>
 {{ contas_preview|json_script:"contasPreviewCliente" }}
+{{ pagamentos_hoje_preview|json_script:"pagamentosHojeCliente" }}
 <script>
   document.addEventListener("DOMContentLoaded", function () {
+    const form = document.getElementById("formReceberCliente");
     const valor = document.getElementById("valorRecebidoCliente");
     const forma = document.getElementById("formaPagamentoCliente");
-    const confirmarFuturo = document.getElementById("btnConfirmacaoFuturaCliente");
+    const confirmar = document.getElementById("btnConfirmarRecebimentoCliente");
     const resumo = document.getElementById("resumoPreviaCliente");
     const sobraBox = document.getElementById("sobraRecebimentoCliente");
+    const destinoSobra = document.getElementById("destinoSobraCliente");
     const totalRecebidoPreview = document.getElementById("totalRecebidoPreview");
     const totalAplicadoPreview = document.getElementById("totalAplicadoPreview");
     const sobraPreview = document.getElementById("sobraPreview");
     const saldoAbertoPreview = document.getElementById("saldoAbertoPreview");
+    const modalOverlay = document.getElementById("receberClienteModalOverlay");
+    const modalTitle = document.getElementById("receberClienteModalTitle");
+    const modalText = document.getElementById("receberClienteModalText");
+    const modalPrimary = document.getElementById("receberClienteModalPrimary");
+    const modalSecondary = document.getElementById("receberClienteModalSecondary");
     const contas = JSON.parse(document.getElementById("contasPreviewCliente")?.textContent || "[]");
+    const pagamentosHoje = JSON.parse(document.getElementById("pagamentosHojeCliente")?.textContent || "[]");
     const totalAberto = contas.reduce(function (total, conta) {
       return total + Number(conta.valor_em_aberto || 0);
     }, 0);
+    let resolverModalReceber = null;
+    let focoAnteriorReceber = null;
+
+    function fecharModalReceber(resultado) {
+      modalOverlay?.classList.remove("visivel");
+      modalOverlay?.setAttribute("aria-hidden", "true");
+      document.removeEventListener("keydown", tratarTeclaModalReceber);
+      if (resolverModalReceber) {
+        resolverModalReceber(resultado);
+        resolverModalReceber = null;
+      }
+      if (!resultado && focoAnteriorReceber) {
+        focoAnteriorReceber.focus();
+      }
+    }
+
+    function tratarTeclaModalReceber(event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        fecharModalReceber(false);
+        return;
+      }
+      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") {
+        return;
+      }
+      event.preventDefault();
+      const botoes = [modalSecondary, modalPrimary].filter(function (botao) {
+        return botao && botao.style.display !== "none";
+      });
+      if (!botoes.length) return;
+      const atual = botoes.indexOf(document.activeElement);
+      const delta = event.key === "ArrowRight" ? 1 : -1;
+      const proximo = atual >= 0 ? (atual + delta + botoes.length) % botoes.length : 0;
+      botoes[proximo].focus();
+    }
+
+    function abrirModalReceber(opcoes) {
+      if (!modalOverlay) return Promise.resolve(false);
+      focoAnteriorReceber = document.activeElement;
+      modalTitle.textContent = opcoes.titulo;
+      modalText.textContent = opcoes.texto;
+      modalPrimary.textContent = opcoes.confirmar || "Entendi";
+      modalSecondary.textContent = opcoes.cancelar || "Voltar";
+      modalPrimary.classList.toggle("success", opcoes.sucesso !== false);
+      modalSecondary.style.display = opcoes.aviso ? "none" : "";
+      modalOverlay.classList.add("visivel");
+      modalOverlay.setAttribute("aria-hidden", "false");
+      document.addEventListener("keydown", tratarTeclaModalReceber);
+      return new Promise((resolve) => {
+        resolverModalReceber = resolve;
+        window.setTimeout(() => modalPrimary.focus(), 0);
+      });
+    }
+
+    modalPrimary?.addEventListener("click", () => fecharModalReceber(true));
+    modalSecondary?.addEventListener("click", () => fecharModalReceber(false));
 
     function numeroDigitado(texto) {
       let valorTexto = String(texto || "").trim().replace("R$", "").replace(/\s/g, "");
@@ -341,11 +472,14 @@
       if (sobraBox) {
         if (sobra > 0.009) {
           sobraBox.hidden = false;
-          sobraBox.textContent = "Sobra de " + moeda(sobra) + ". Na proxima etapa sera possivel registrar como troco devolvido ou deixar como credito do cliente.";
+          sobraBox.textContent = "Sobra de " + moeda(sobra) + ". Escolha abaixo se a sobra sera troco devolvido ou credito do cliente.";
         } else {
           sobraBox.hidden = true;
           sobraBox.textContent = "";
         }
+      }
+      if (destinoSobra) {
+        destinoSobra.hidden = sobra <= 0.009;
       }
     }
 
@@ -357,27 +491,66 @@
       if (forma) {
         forma.focus();
       } else {
-        confirmarFuturo?.focus();
+        confirmar?.focus();
       }
     });
     forma?.addEventListener("keydown", function (event) {
       if (event.key !== "Enter") return;
       event.preventDefault();
       calcularPrevia();
-      if (confirmarFuturo) {
-        confirmarFuturo.focus();
+      if (confirmar) {
+        confirmar.focus();
       } else {
         document.querySelector(".rc-actions .rc-btn")?.focus();
       }
     });
-    confirmarFuturo?.addEventListener("click", function (event) {
+    form?.addEventListener("submit", async function (event) {
+      if (form.dataset.confirmado === "1") return;
+
       event.preventDefault();
-      window.alert("A confirmação real será implementada na próxima etapa.");
-    });
-    confirmarFuturo?.addEventListener("keydown", function (event) {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      window.alert("A confirmação real será implementada na próxima etapa.");
+      calcularPrevia();
+      const recebido = numeroDigitado(valor?.value);
+      if (!Number.isFinite(recebido) || recebido <= 0) {
+        await abrirModalReceber({
+          aviso: true,
+          sucesso: false,
+          titulo: "Valor recebido obrigatorio",
+          texto: "Informe um valor recebido maior que zero.",
+          confirmar: "Entendi"
+        });
+        valor?.focus();
+        valor?.select();
+        return;
+      }
+      if (!contas.length) {
+        await abrirModalReceber({
+          aviso: true,
+          sucesso: false,
+          titulo: "Sem contas abertas",
+          texto: "Nao ha contas abertas para receber deste cliente.",
+          confirmar: "Entendi"
+        });
+        return;
+      }
+      const mensagem = "Confirmar recebimento de " + moeda(recebido)
+        + " para {{ cliente.nome|escapejs }}? O valor sera aplicado nas contas conforme a previa.";
+      const possivelDuplicidade = pagamentosHoje.some(function (valorPago) {
+        const numeroPago = Number(valorPago);
+        return Number.isFinite(numeroPago) && Math.abs(numeroPago - recebido) <= 0.01;
+      });
+      const mensagemFinal = possivelDuplicidade
+        ? "Atencao: ja existe um recebimento deste valor para este cliente hoje.\n\n" + mensagem
+        : mensagem;
+      const confirmado = await abrirModalReceber({
+        titulo: "Confirmar recebimento",
+        texto: mensagemFinal,
+        cancelar: "Voltar",
+        confirmar: "Confirmar"
+      });
+      if (!confirmado) return;
+
+      form.dataset.confirmado = "1";
+      form.requestSubmit();
     });
     calcularPrevia();
     window.setTimeout(function () {
