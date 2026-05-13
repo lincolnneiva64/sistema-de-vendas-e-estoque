@@ -85,15 +85,7 @@
     filter: brightness(0.96);
   }
   .cancel-btn.danger { border-color: #dc2626; background: #dc2626; color: #fff; }
-  .cancel-btn.danger:not(:disabled):not(.is-disabled) { cursor: pointer; pointer-events: auto; opacity: 1; }
-  .cancel-btn.danger:disabled,
-  .cancel-btn.danger.is-disabled {
-    opacity: 0.5; cursor: not-allowed; box-shadow: none; pointer-events: none;
-  }
-  .cancel-btn.danger:disabled:active,
-  .cancel-btn.danger.is-disabled:active {
-    transform: none; filter: none;
-  }
+  .cancel-btn.danger.is-ready { box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.16), 0 3px 8px rgba(15, 23, 42, 0.08); }
   .cancel-message {
     border: 1px solid #f7d98b; border-radius: 10px; background: #fff7ed;
     color: #92400e; padding: 7px 9px; font-size: 0.82rem; font-weight: 850;
@@ -240,13 +232,13 @@
             <div class="cancel-confirm-box">
               <label for="id_confirmacao_cancelamento">
                 <strong>Confirmacao obrigatoria</strong>
-                <span class="cancel-confirm-hint">Digite CANCELAR exatamente para liberar o cancelamento definitivo da venda #{{ venda.id }}.</span>
+                <span class="cancel-confirm-hint">Digite CANCELAR para confirmar o cancelamento definitivo da venda #{{ venda.id }}.</span>
               </label>
-              <input id="id_confirmacao_cancelamento" name="confirmacao_cancelamento" type="text" value="{{ confirmacao_cancelamento }}" autocomplete="off" required>
+              <input id="id_confirmacao_cancelamento" name="confirmacao_cancelamento" type="text" value="{{ confirmacao_cancelamento }}" autocomplete="off">
             </div>
             <div class="cancel-actions">
               <a class="cancel-btn" href="{% url 'estoque:venda_detalhe' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}">Voltar sem cancelar</a>
-              <button class="cancel-btn danger is-disabled" id="btnConfirmarCancelamentoVenda" type="submit" disabled aria-disabled="true">Confirmar cancelamento definitivo</button>
+              <button class="cancel-btn danger" id="btnConfirmarCancelamentoVenda" type="submit" aria-disabled="false">Confirmar cancelamento definitivo</button>
             </div>
           </form>
         </section>
@@ -273,8 +265,12 @@
     radios.forEach((radio) => radio.addEventListener("change", atualizarObrigatoriedade));
     atualizarObrigatoriedade();
 
+    function valorConfirmacao() {
+      return confirmacao ? confirmacao.value.trim().toUpperCase() : "";
+    }
+
     function textoConfirmacaoValido() {
-      return Boolean(confirmacao) && confirmacao.value.trim() === "CANCELAR";
+      return valorConfirmacao() === "CANCELAR";
     }
 
     function atualizarConfirmacao() {
@@ -283,21 +279,11 @@
       }
 
       if (textoConfirmacaoValido()) {
-        botaoConfirmar.disabled = false;
-        botaoConfirmar.removeAttribute("disabled");
-        botaoConfirmar.setAttribute("aria-disabled", "false");
-        botaoConfirmar.classList.remove("is-disabled");
-        botaoConfirmar.style.pointerEvents = "auto";
-        botaoConfirmar.style.cursor = "pointer";
+        botaoConfirmar.classList.add("is-ready");
         return;
       }
 
-      botaoConfirmar.disabled = true;
-      botaoConfirmar.setAttribute("disabled", "disabled");
-      botaoConfirmar.setAttribute("aria-disabled", "true");
-      botaoConfirmar.classList.add("is-disabled");
-      botaoConfirmar.style.pointerEvents = "none";
-      botaoConfirmar.style.cursor = "not-allowed";
+      botaoConfirmar.classList.remove("is-ready");
     }
 
     radios.forEach((radio) => {
@@ -329,16 +315,21 @@
     }
 
     if (confirmacao) {
-      ["input", "keyup", "change", "paste"].forEach((evento) => {
-        confirmacao.addEventListener(evento, function () {
-          window.setTimeout(atualizarConfirmacao, 0);
-        });
+      confirmacao.addEventListener("input", function () {
+        const inicio = confirmacao.selectionStart;
+        const fim = confirmacao.selectionEnd;
+        confirmacao.value = confirmacao.value.toUpperCase();
+        if (confirmacao.setSelectionRange && inicio !== null && fim !== null) {
+          confirmacao.setSelectionRange(inicio, fim);
+        }
+        atualizarConfirmacao();
       });
+      confirmacao.addEventListener("change", atualizarConfirmacao);
       confirmacao.addEventListener("keydown", function (event) {
         if (event.key !== "Enter") return;
         event.preventDefault();
         atualizarConfirmacao();
-        if (textoConfirmacaoValido() && botaoConfirmar) {
+        if (botaoConfirmar) {
           botaoConfirmar.focus();
         }
       });
@@ -350,13 +341,17 @@
         if (!textoConfirmacaoValido()) {
           event.preventDefault();
           atualizarConfirmacao();
+          window.alert("Para cancelar a venda, digite CANCELAR no campo de confirmação.");
           if (confirmacao) {
             confirmacao.focus();
+            if (confirmacao.select) {
+              confirmacao.select();
+            }
           }
           return;
         }
 
-        const confirmado = window.confirm("Deseja realmente cancelar a venda #{{ venda.id }}? Esta acao marcara a venda como cancelada.");
+        const confirmado = window.confirm("Deseja realmente cancelar a venda #{{ venda.id }}? Esta ação marcará a venda como cancelada.");
         if (!confirmado) {
           event.preventDefault();
         }
