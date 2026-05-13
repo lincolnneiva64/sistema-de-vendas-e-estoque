@@ -18,7 +18,7 @@
   }
   .rc-btn-primary { border-color: #86efac; background: #16a34a; color: #fff; }
   .rc-btn-info-disabled { border-color: #bfdbfe; background: #eff6ff; color: #1e3a8a; }
-  .rc-btn[disabled] { opacity: 0.62; cursor: not-allowed; }
+  .rc-btn.is-informativo { opacity: 0.72; cursor: default; }
   .rc-summary {
     display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 7px; margin-bottom: 8px;
@@ -149,7 +149,7 @@
       <div class="rc-form">
         <div class="rc-field">
           <label for="valorRecebidoCliente">Valor recebido</label>
-          <input id="valorRecebidoCliente" type="text" inputmode="decimal" autocomplete="off" value="0,00">
+          <input id="valorRecebidoCliente" type="text" inputmode="decimal" autocomplete="off" value="{{ total_em_aberto|floatformat:2 }}">
         </div>
         <div class="rc-field">
           <label for="dataRecebimentoCliente">Data do recebimento</label>
@@ -163,7 +163,7 @@
             {% endfor %}
           </select>
         </div>
-        <button type="button" class="rc-btn rc-btn-info-disabled" disabled title="A baixa real sera implementada na proxima etapa.">Confirmacao real sera ativada depois</button>
+        <button type="button" class="rc-btn rc-btn-info-disabled is-informativo" id="btnConfirmacaoFuturaCliente" aria-disabled="true" title="A baixa real sera implementada na proxima etapa.">Confirmacao real sera ativada depois</button>
         {% if credito_disponivel > 0 %}
           <div class="rc-credito-futuro">
             Uso de credito disponivel sera ligado na etapa de confirmacao real. Nesta tela ele aparece apenas como informacao.
@@ -244,6 +244,8 @@
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     const valor = document.getElementById("valorRecebidoCliente");
+    const forma = document.getElementById("formaPagamentoCliente");
+    const confirmarFuturo = document.getElementById("btnConfirmacaoFuturaCliente");
     const resumo = document.getElementById("resumoPreviaCliente");
     const sobraBox = document.getElementById("sobraRecebimentoCliente");
     const totalRecebidoPreview = document.getElementById("totalRecebidoPreview");
@@ -348,6 +350,35 @@
     }
 
     valor?.addEventListener("input", calcularPrevia);
+    valor?.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      calcularPrevia();
+      if (forma) {
+        forma.focus();
+      } else {
+        confirmarFuturo?.focus();
+      }
+    });
+    forma?.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      calcularPrevia();
+      if (confirmarFuturo) {
+        confirmarFuturo.focus();
+      } else {
+        document.querySelector(".rc-actions .rc-btn")?.focus();
+      }
+    });
+    confirmarFuturo?.addEventListener("click", function (event) {
+      event.preventDefault();
+      window.alert("A confirmação real será implementada na próxima etapa.");
+    });
+    confirmarFuturo?.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      window.alert("A confirmação real será implementada na próxima etapa.");
+    });
     calcularPrevia();
     window.setTimeout(function () {
       valor?.focus();
