@@ -100,6 +100,49 @@
   .contas-alert.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
   .contas-alert.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
   .contas-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+  .contas-creditos {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 14px;
+    box-shadow: 0 12px 26px rgba(22, 101, 52, 0.07);
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+  .contas-creditos-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 9px;
+  }
+  .contas-creditos-title { margin: 0; color: #166534; font-size: 0.98rem; font-weight: 900; }
+  .contas-creditos-subtitle { color: #166534; font-size: 0.78rem; font-weight: 750; }
+  .contas-creditos-lista {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 8px;
+  }
+  .contas-credito-item {
+    background: #ffffff;
+    border: 1px solid #dcfce7;
+    border-radius: 11px;
+    padding: 9px 10px;
+  }
+  .contas-credito-topo {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .contas-credito-cliente { color: #172033; font-weight: 900; font-size: 0.86rem; }
+  .contas-credito-valor { color: #166534; font-weight: 950; white-space: nowrap; }
+  .contas-credito-meta {
+    margin-top: 4px;
+    color: #64748b;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.35;
+  }
   @media (max-width: 980px) {
     .contas-search form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
@@ -155,6 +198,31 @@
         <a href="{% url 'estoque:contas_receber' %}" class="contas-btn contas-btn-secondary">Limpar</a>
       </form>
     </section>
+
+    {% if clientes_com_credito %}
+      <section class="contas-creditos" aria-labelledby="clientesCreditoTitulo">
+        <div class="contas-creditos-head">
+          <h2 class="contas-creditos-title" id="clientesCreditoTitulo">Clientes com crédito</h2>
+          <span class="contas-creditos-subtitle">Saldo a favor do cliente</span>
+        </div>
+        <div class="contas-creditos-lista">
+          {% for credito in clientes_com_credito %}
+            <div class="contas-credito-item">
+              <div class="contas-credito-topo">
+                <span class="contas-credito-cliente">{{ credito.cliente_nome }}</span>
+                <span class="contas-credito-valor">R$ {{ credito.total_credito|floatformat:2 }}</span>
+              </div>
+              <div class="contas-credito-meta">
+                Crédito mais recente: {{ credito.credito_mais_recente|date:"d/m/Y H:i"|default:"-" }}
+                {% if credito.observacao %}
+                  <br>{{ credito.observacao|truncatechars:120 }}
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
 
     <section class="contas-panel">
       <div class="contas-panel-head">

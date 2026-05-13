@@ -190,6 +190,62 @@
     box-shadow: 0 10px 22px rgba(30, 58, 138, 0.08);
   }
   .receber-troco-alerta.visivel { display: block; }
+  .receber-diferenca-texto {
+    display: grid;
+    gap: 2px;
+  }
+  .receber-diferenca-opcoes {
+    display: grid;
+    gap: 7px;
+    margin-top: 9px;
+  }
+  .receber-diferenca-opcao {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    background: #ffffff;
+    padding: 8px 9px;
+    color: #172033;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  }
+  .receber-diferenca-opcao:active {
+    transform: translateY(1px);
+    box-shadow: 0 2px 7px rgba(15, 23, 42, 0.12);
+  }
+  .receber-diferenca-opcao input {
+    margin: 0;
+    accent-color: #2563eb;
+  }
+  .receber-diferenca-opcao:has(input:checked) {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  }
+  .receber-diferenca-opcao:focus-within {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.16);
+  }
+  .receber-diferenca-opcao:has(input:disabled) {
+    cursor: not-allowed;
+    opacity: 0.62;
+  }
+  .receber-credito-resumo {
+    border: 1px solid #bbf7d0;
+    border-radius: 13px;
+    background: #f0fdf4;
+    color: #166534;
+    padding: 10px 12px;
+    font-size: 0.86rem;
+    font-weight: 850;
+    box-shadow: 0 10px 22px rgba(22, 101, 52, 0.06);
+  }
+  .receber-credito-resumo span {
+    color: #15803d;
+    font-size: 0.78rem;
+    font-weight: 750;
+  }
   @media (max-width: 820px) {
     .receber-header { align-items: stretch; flex-direction: column; }
     .receber-layout { grid-template-columns: 1fr; }
@@ -256,6 +312,28 @@
             <input id="data_recebimento" name="data_recebimento" type="date" value="{{ valores.data_recebimento }}" required>
           </div>
         </div>
+        {% if credito_disponivel > 0 %}
+          <div class="receber-credito-resumo">
+            Credito disponivel do cliente: R$ {{ credito_disponivel|floatformat:2 }}<br>
+            <span>Saldo a favor do cliente.</span>
+          </div>
+        {% endif %}
+        <div id="alertaTrocoRecebimento" class="receber-troco-alerta" role="status" aria-live="polite">
+          <div class="receber-diferenca-texto">
+            <span>O valor recebido e maior que o saldo em aberto.</span>
+            <strong>Diferenca: <span id="valorDiferencaRecebimento">R$ 0,00</span>.</strong>
+          </div>
+          <div class="receber-diferenca-opcoes">
+            <label class="receber-diferenca-opcao">
+              <input type="radio" name="destino_diferenca" value="troco" {% if valores.destino_diferenca != "credito" %}checked{% endif %}>
+              <span>Registrar diferenca como troco devolvido</span>
+            </label>
+            <label class="receber-diferenca-opcao">
+              <input type="radio" name="destino_diferenca" value="credito" {% if valores.destino_diferenca == "credito" %}checked{% endif %} {% if not conta.cliente_id %}disabled{% endif %}>
+              <span>Deixar diferenca como credito do cliente</span>
+            </label>
+          </div>
+        </div>
         <div class="receber-field">
           <label for="forma_pagamento">Forma de pagamento</label>
           <select id="forma_pagamento" name="forma_pagamento" required>
@@ -279,7 +357,6 @@
 
       <aside class="receber-side">
         <div id="alertaDuplicidadeRecebimento" class="receber-duplicidade-alerta" role="alert" aria-live="polite"></div>
-        <div id="alertaTrocoRecebimento" class="receber-troco-alerta" role="status" aria-live="polite"></div>
         <section class="receber-historico">
           <h2 class="receber-historico-title">Histórico recente do cliente</h2>
           <p class="receber-historico-subtitle">Recebimentos lançados nas últimas 72 horas.</p>
@@ -321,6 +398,10 @@
     const formErro = document.getElementById("formErroRecebimento");
     const alertaDuplicidade = document.getElementById("alertaDuplicidadeRecebimento");
     const alertaTroco = document.getElementById("alertaTrocoRecebimento");
+    const valorDiferenca = document.getElementById("valorDiferencaRecebimento");
+    const opcoesDiferenca = Array.from(document.querySelectorAll("input[name='destino_diferenca']"));
+    const opcaoTroco = opcoesDiferenca.find((opcao) => opcao.value === "troco");
+    const opcaoCredito = opcoesDiferenca.find((opcao) => opcao.value === "credito");
     const valorEmAberto = Number("{{ conta.valor_em_aberto|floatformat:2 }}".replace(",", "."));
     const hojeIso = "{{ hoje_iso }}";
     const pagamentosRecentes = JSON.parse(document.getElementById("pagamentosRecentesRecebimento")?.textContent || "[]");
@@ -398,18 +479,31 @@
 
     function atualizarAlertaTroco() {
       if (!alertaTroco) return false;
-      alertaTroco.textContent = "";
       alertaTroco.classList.remove("visivel");
+      if (valorDiferenca) {
+        valorDiferenca.textContent = "R$ 0,00";
+      }
 
       const recebido = numeroDigitado(valor);
       if (!Number.isFinite(recebido) || recebido <= valorEmAberto) return false;
 
       const troco = recebido - valorEmAberto;
-      alertaTroco.textContent = "O valor recebido e maior que o saldo em aberto. Diferenca/troco: "
-        + formatarMoeda(troco)
-        + ". Nesta etapa, a diferenca sera considerada troco devolvido, nao credito do cliente.";
+      if (valorDiferenca) {
+        valorDiferenca.textContent = formatarMoeda(troco);
+      }
       alertaTroco.classList.add("visivel");
       return true;
+    }
+
+    function pagamentoComDiferenca() {
+      const recebido = numeroDigitado(valor);
+      return Number.isFinite(recebido) && recebido > valorEmAberto;
+    }
+
+    function focarOpcaoDiferenca(opcao) {
+      if (!opcao || opcao.disabled) return;
+      opcao.checked = true;
+      opcao.focus();
     }
 
     function mostrarErroFormulario(mensagem) {
@@ -452,8 +546,20 @@
         if (event.target === valor) {
           event.preventDefault();
           if (validarValorRecebido()) {
-            forma?.focus();
+            atualizarAlertaTroco();
+            if (pagamentoComDiferenca() && opcaoTroco) {
+              focarOpcaoDiferenca(opcaoTroco);
+            } else {
+              forma?.focus();
+            }
           }
+          return;
+        }
+
+        if (opcoesDiferenca.includes(event.target)) {
+          event.preventDefault();
+          event.target.checked = true;
+          confirmar?.focus();
           return;
         }
 
@@ -495,6 +601,24 @@
         }
         if (event.key === "ArrowRight") {
           event.preventDefault();
+          confirmar?.focus();
+        }
+      });
+    });
+
+    opcoesDiferenca.forEach(function (opcao) {
+      opcao.addEventListener("keydown", function (event) {
+        if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+          event.preventDefault();
+          focarOpcaoDiferenca(opcaoCredito && !opcaoCredito.disabled ? opcaoCredito : opcaoTroco);
+        }
+        if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+          event.preventDefault();
+          focarOpcaoDiferenca(opcaoTroco);
+        }
+        if (event.key === "Enter") {
+          event.preventDefault();
+          opcao.checked = true;
           confirmar?.focus();
         }
       });

@@ -461,6 +461,43 @@ class RecebimentoContaReceber(models.Model):
         return f"Recebimento R$ {self.valor} - Conta #{self.conta_id}"
 
 
+class CreditoCliente(models.Model):
+    TIPO_CREDITO_GERADO = "credito_gerado"
+    TIPO_CHOICES = [
+        (TIPO_CREDITO_GERADO, "Credito gerado"),
+    ]
+
+    cliente = models.ForeignKey(
+        Cliente,
+        on_delete=models.CASCADE,
+        related_name="creditos",
+    )
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+    tipo = models.CharField(max_length=30, choices=TIPO_CHOICES, default=TIPO_CREDITO_GERADO)
+    origem_conta_receber = models.ForeignKey(
+        ContaReceber,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="creditos_gerados",
+    )
+    origem_recebimento = models.ForeignKey(
+        RecebimentoContaReceber,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="creditos_gerados",
+    )
+    observacao = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-criado_em", "-id"]
+
+    def __str__(self):
+        return f"Credito R$ {self.valor} - {self.cliente}"
+
+
 class EntregaRota(models.Model):
     TIPO_UNITARIA = "unitaria"
     TIPO_ROTA = "rota"

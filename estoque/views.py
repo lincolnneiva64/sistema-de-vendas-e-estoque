@@ -9,13 +9,13 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Sum, Max
 from urllib.parse import quote, urlencode
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count
 from .forms import CategoriaForm, ClienteForm, FuncionarioForm, ProdutoForm, UnidadeForm
-from .models import Categoria, Cliente, ContaReceber, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, Produto, RecebimentoContaReceber, Unidade, Venda
+from .models import Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, Produto, RecebimentoContaReceber, Unidade, Venda
 from django.contrib import messages
 from django.http import Http404, HttpResponse, JsonResponse
 from django.utils.dateparse import parse_date
@@ -1289,6 +1289,38 @@ def contas_receber(request):
             | Q(cliente__whatsapp__icontains=cliente_texto)
         )
 
+    creditos_qs = CreditoCliente.objects.select_related("cliente").filter(valor__gt=Decimal("0.00"))
+    if cliente_texto:
+        creditos_qs = creditos_qs.filter(
+            Q(cliente__nome__icontains=cliente_texto)
+            | Q(cliente__apelido_nome_conhecido__icontains=cliente_texto)
+            | Q(cliente__cpf_cnpj__icontains=cliente_texto)
+            | Q(cliente__whatsapp__icontains=cliente_texto)
+        )
+
+    clientes_com_credito = []
+    creditos_agrupados = (
+        creditos_qs.values("cliente_id", "cliente__nome")
+        .annotate(total_credito=Sum("valor"), credito_mais_recente=Max("criado_em"))
+        .filter(total_credito__gt=Decimal("0.00"))
+        .order_by("cliente__nome")
+    )
+    for credito in creditos_agrupados:
+        ultimo_credito = (
+            creditos_qs.filter(cliente_id=credito["cliente_id"])
+            .order_by("-criado_em", "-id")
+            .first()
+        )
+        clientes_com_credito.append(
+            {
+                "cliente_id": credito["cliente_id"],
+                "cliente_nome": credito["cliente__nome"],
+                "total_credito": credito["total_credito"] or Decimal("0.00"),
+                "credito_mais_recente": credito["credito_mais_recente"],
+                "observacao": (ultimo_credito.observacao if ultimo_credito else ""),
+            }
+        )
+
     contas = list(contas_qs)
     return render(
         request,
@@ -1296,6 +1328,7 @@ def contas_receber(request):
         {
             "contas": contas,
             "total_contas": len(contas),
+            "clientes_com_credito": clientes_com_credito,
             "cliente": cliente_texto,
             "data_inicial": data_inicial_texto,
             "data_final": data_final_texto,
@@ -1338,9 +1371,17 @@ def conta_receber_receber(request, pk):
         "valor": str(conta.valor_em_aberto or Decimal("0.00")),
         "forma_pagamento": "Dinheiro",
         "observacao": "",
+        "destino_diferenca": "troco",
     }
     pagamentos_recentes = []
+    credito_disponivel = Decimal("0.00")
     if conta.cliente_id:
+        credito_disponivel = (
+            CreditoCliente.objects.filter(cliente_id=conta.cliente_id)
+            .aggregate(total=Sum("valor"))
+            .get("total")
+            or Decimal("0.00")
+        )
         limite_recente = timezone.now() - timedelta(hours=72)
         recebimentos_recentes = (
             RecebimentoContaReceber.objects.select_related("conta", "conta__venda")
@@ -1368,12 +1409,15 @@ def conta_receber_receber(request, pk):
             "valor": request.POST.get("valor", "").strip(),
             "forma_pagamento": request.POST.get("forma_pagamento", "").strip(),
             "observacao": request.POST.get("observacao", "").strip(),
+            "destino_diferenca": request.POST.get("destino_diferenca", "troco").strip(),
         }
         data_recebimento = parse_date(valores["data_recebimento"])
         if not data_recebimento:
             messages.warning(request, "Informe uma data de recebimento valida.")
         elif valores["forma_pagamento"] not in formas_pagamento:
             messages.warning(request, "Selecione uma forma de pagamento.")
+        elif valores["destino_diferenca"] not in {"troco", "credito"}:
+            messages.warning(request, "Selecione como tratar a diferenca do pagamento.")
         else:
             try:
                 valor_recebido = _decimal_do_front(valores["valor"], "0.01")
@@ -1400,27 +1444,46 @@ def conta_receber_receber(request, pk):
 
                         valor_aplicado = min(valor_recebido, saldo_atual).quantize(Decimal("0.01"))
                         troco_devolvido = (valor_recebido - valor_aplicado).quantize(Decimal("0.01"))
+                        destino_diferenca = valores["destino_diferenca"]
+                        if troco_devolvido > Decimal("0.00") and destino_diferenca == "credito" and not conta_atual.cliente_id:
+                            messages.warning(request, "Para deixar diferenca como credito, a conta precisa ter cliente vinculado.")
+                            return redirect("estoque:conta_receber_receber", pk=conta.pk)
+
                         observacao_recebimento = valores["observacao"]
 
                         if troco_devolvido > Decimal("0.00"):
-                            observacao_troco = (
+                            descricao_diferenca = (
+                                f"Credito gerado para o cliente: {_formatar_moeda(troco_devolvido)}."
+                                if destino_diferenca == "credito"
+                                else f"Troco devolvido: {_formatar_moeda(troco_devolvido)}."
+                            )
+                            observacao_automatica = (
                                 f"Valor entregue pelo cliente: {_formatar_moeda(valor_recebido)}. "
                                 f"Valor aplicado na conta: {_formatar_moeda(valor_aplicado)}. "
-                                f"Troco devolvido: {_formatar_moeda(troco_devolvido)}."
+                                f"{descricao_diferenca}"
                             )
                             observacao_recebimento = (
-                                f"{observacao_recebimento}\n{observacao_troco}"
+                                f"{observacao_recebimento}\n{observacao_automatica}"
                                 if observacao_recebimento
-                                else observacao_troco
+                                else observacao_automatica
                             )
 
-                        RecebimentoContaReceber.objects.create(
+                        recebimento = RecebimentoContaReceber.objects.create(
                             conta=conta_atual,
                             data_recebimento=data_recebimento,
                             valor=valor_aplicado,
                             forma_pagamento=valores["forma_pagamento"],
                             observacao=observacao_recebimento,
                         )
+                        if troco_devolvido > Decimal("0.00") and destino_diferenca == "credito":
+                            CreditoCliente.objects.create(
+                                cliente=conta_atual.cliente,
+                                valor=troco_devolvido,
+                                tipo=CreditoCliente.TIPO_CREDITO_GERADO,
+                                origem_conta_receber=conta_atual,
+                                origem_recebimento=recebimento,
+                                observacao=observacao_recebimento,
+                            )
                         novo_valor_aberto = (saldo_atual - valor_aplicado).quantize(Decimal("0.01"))
                         conta_atual.valor_em_aberto = novo_valor_aberto
                         conta_atual.status = (
@@ -1441,6 +1504,7 @@ def conta_receber_receber(request, pk):
             "valores": valores,
             "formas_pagamento": formas_pagamento,
             "pagamentos_recentes": pagamentos_recentes,
+            "credito_disponivel": credito_disponivel,
             "hoje_iso": timezone.localdate().isoformat(),
         },
     )
