@@ -1289,7 +1289,7 @@ def contas_receber(request):
             | Q(cliente__whatsapp__icontains=cliente_texto)
         )
 
-    creditos_qs = CreditoCliente.objects.select_related("cliente").filter(valor__gt=Decimal("0.00"))
+    creditos_qs = CreditoCliente.objects.select_related("cliente")
     if cliente_texto:
         creditos_qs = creditos_qs.filter(
             Q(cliente__nome__icontains=cliente_texto)
@@ -1348,19 +1348,32 @@ def contas_receber(request):
 @ensure_csrf_cookie
 def cliente_credito_detalhe(request, cliente_id):
     cliente = get_object_or_404(Cliente, pk=cliente_id)
+    movimentos_qs = CreditoCliente.objects.filter(cliente=cliente)
     creditos_qs = (
         CreditoCliente.objects.select_related(
             "origem_conta_receber",
             "origem_conta_receber__venda",
             "origem_recebimento",
         )
-        .filter(cliente=cliente, valor__gt=Decimal("0.00"))
+        .filter(cliente=cliente)
+        .exclude(valor=Decimal("0.00"))
         .order_by("-criado_em", "-id")
     )
     credito_atual = (
-        creditos_qs.aggregate(total=Sum("valor")).get("total")
+        movimentos_qs.aggregate(total=Sum("valor")).get("total")
         or Decimal("0.00")
-    )
+    ).quantize(Decimal("0.01"))
+    credito_atual = max(credito_atual, Decimal("0.00"))
+    saldos_por_movimento = {}
+    saldo_credito = Decimal("0.00")
+    for movimento in creditos_qs.order_by("criado_em", "id"):
+        saldo_antes = saldo_credito.quantize(Decimal("0.01"))
+        saldo_credito = (saldo_credito + (movimento.valor or Decimal("0.00"))).quantize(Decimal("0.01"))
+        saldos_por_movimento[movimento.id] = {
+            "credito_antes": saldo_antes,
+            "credito_depois": saldo_credito,
+        }
+
     creditos = []
     for credito in creditos_qs:
         recebimento = credito.origem_recebimento
@@ -1370,8 +1383,15 @@ def cliente_credito_detalhe(request, cliente_id):
             else Decimal("0.00")
         )
         valor_credito = credito.valor or Decimal("0.00")
+        credito_utilizado = valor_credito < Decimal("0.00")
+        valor_movimento = abs(valor_credito).quantize(Decimal("0.01"))
+        saldos_movimento = saldos_por_movimento.get(
+            credito.id,
+            {"credito_antes": Decimal("0.00"), "credito_depois": Decimal("0.00")},
+        )
         creditos.append(
             {
+                "utilizado": credito_utilizado,
                 "criado_em": credito.criado_em,
                 "conta_id": credito.origem_conta_receber_id,
                 "venda_id": (
@@ -1382,6 +1402,9 @@ def cliente_credito_detalhe(request, cliente_id):
                 "valor_entregue": (valor_aplicado + valor_credito).quantize(Decimal("0.01")),
                 "valor_aplicado": valor_aplicado,
                 "valor_credito": valor_credito,
+                "valor_movimento": valor_movimento,
+                "credito_antes": saldos_movimento["credito_antes"],
+                "credito_depois": saldos_movimento["credito_depois"],
                 "forma_pagamento": recebimento.forma_pagamento if recebimento else "",
                 "observacao": credito.observacao,
             }
@@ -1394,6 +1417,7 @@ def cliente_credito_detalhe(request, cliente_id):
             "cliente": cliente,
             "credito_atual": credito_atual,
             "creditos": creditos,
+            "ultimo_movimento": creditos[0] if creditos else None,
         },
     )
 
@@ -1425,16 +1449,25 @@ def conta_receber_receber(request, pk):
         "forma_pagamento": "Dinheiro",
         "observacao": "",
         "destino_diferenca": "troco",
+        "usar_credito": "",
+        "credito_utilizado": "0,00",
     }
     pagamentos_recentes = []
     credito_disponivel = Decimal("0.00")
+    credito_sugerido = Decimal("0.00")
     if conta.cliente_id:
         credito_disponivel = (
             CreditoCliente.objects.filter(cliente_id=conta.cliente_id)
             .aggregate(total=Sum("valor"))
             .get("total")
             or Decimal("0.00")
-        )
+        ).quantize(Decimal("0.01"))
+        credito_disponivel = max(credito_disponivel, Decimal("0.00"))
+        credito_sugerido = min(
+            credito_disponivel,
+            conta.valor_em_aberto or Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+        valores["credito_utilizado"] = str(credito_sugerido)
         limite_recente = timezone.now() - timedelta(hours=72)
         recebimentos_recentes = (
             RecebimentoContaReceber.objects.select_related("conta", "conta__venda")
@@ -1463,6 +1496,8 @@ def conta_receber_receber(request, pk):
             "forma_pagamento": request.POST.get("forma_pagamento", "").strip(),
             "observacao": request.POST.get("observacao", "").strip(),
             "destino_diferenca": request.POST.get("destino_diferenca", "troco").strip(),
+            "usar_credito": request.POST.get("usar_credito", "").strip(),
+            "credito_utilizado": request.POST.get("credito_utilizado", "").strip(),
         }
         data_recebimento = parse_date(valores["data_recebimento"])
         if not data_recebimento:
@@ -1473,12 +1508,21 @@ def conta_receber_receber(request, pk):
             messages.warning(request, "Selecione como tratar a diferenca do pagamento.")
         else:
             try:
-                valor_recebido = _decimal_do_front(valores["valor"], "0.01")
+                valor_recebido = _decimal_do_front(valores["valor"] or "0", "0.01")
+                credito_utilizado = (
+                    _decimal_do_front(valores["credito_utilizado"] or "0", "0.01")
+                    if valores["usar_credito"] == "1"
+                    else Decimal("0.00")
+                )
             except ValueError as exc:
                 messages.warning(request, str(exc))
             else:
-                if valor_recebido <= Decimal("0.00"):
-                    messages.warning(request, "Informe um valor recebido maior que zero.")
+                if valor_recebido < Decimal("0.00"):
+                    messages.warning(request, "Informe um valor recebido valido.")
+                elif valores["usar_credito"] == "1" and credito_utilizado <= Decimal("0.00"):
+                    messages.warning(request, "Informe um credito utilizado maior que zero.")
+                elif valor_recebido <= Decimal("0.00") and credito_utilizado <= Decimal("0.00"):
+                    messages.warning(request, "Informe um valor recebido ou use credito do cliente.")
                 else:
                     with transaction.atomic():
                         conta_atual = ContaReceber.objects.select_for_update().get(pk=conta.pk)
@@ -1495,8 +1539,29 @@ def conta_receber_receber(request, pk):
                             messages.warning(request, "Conta ja esta paga.")
                             return redirect("estoque:contas_receber")
 
-                        valor_aplicado = min(valor_recebido, saldo_atual).quantize(Decimal("0.01"))
-                        troco_devolvido = (valor_recebido - valor_aplicado).quantize(Decimal("0.01"))
+                        credito_atual = Decimal("0.00")
+                        if credito_utilizado > Decimal("0.00"):
+                            if not conta_atual.cliente_id:
+                                messages.warning(request, "Para usar credito, a conta precisa ter cliente vinculado.")
+                                return redirect("estoque:conta_receber_receber", pk=conta.pk)
+                            credito_atual = (
+                                CreditoCliente.objects.select_for_update()
+                                .filter(cliente_id=conta_atual.cliente_id)
+                                .aggregate(total=Sum("valor"))
+                                .get("total")
+                                or Decimal("0.00")
+                            ).quantize(Decimal("0.01"))
+                            credito_atual = max(credito_atual, Decimal("0.00"))
+                            if credito_utilizado > credito_atual:
+                                messages.warning(request, "Credito utilizado maior que o saldo disponivel do cliente.")
+                                return redirect("estoque:conta_receber_receber", pk=conta.pk)
+                            if credito_utilizado > saldo_atual:
+                                messages.warning(request, "Credito utilizado maior que o saldo em aberto da conta.")
+                                return redirect("estoque:conta_receber_receber", pk=conta.pk)
+
+                        total_para_baixa = (valor_recebido + credito_utilizado).quantize(Decimal("0.01"))
+                        valor_aplicado = min(total_para_baixa, saldo_atual).quantize(Decimal("0.01"))
+                        troco_devolvido = (total_para_baixa - valor_aplicado).quantize(Decimal("0.01"))
                         destino_diferenca = valores["destino_diferenca"]
                         if troco_devolvido > Decimal("0.00") and destino_diferenca == "credito" and not conta_atual.cliente_id:
                             messages.warning(request, "Para deixar diferenca como credito, a conta precisa ter cliente vinculado.")
@@ -1521,13 +1586,37 @@ def conta_receber_receber(request, pk):
                                 else observacao_automatica
                             )
 
+                        if credito_utilizado > Decimal("0.00"):
+                            observacao_credito = (
+                                f"Valor recebido: {_formatar_moeda(valor_recebido)}. "
+                                f"Credito utilizado: {_formatar_moeda(credito_utilizado)}."
+                            )
+                            observacao_recebimento = (
+                                f"{observacao_recebimento}\n{observacao_credito}"
+                                if observacao_recebimento
+                                else observacao_credito
+                            )
+
                         recebimento = RecebimentoContaReceber.objects.create(
                             conta=conta_atual,
                             data_recebimento=data_recebimento,
                             valor=valor_aplicado,
-                            forma_pagamento=valores["forma_pagamento"],
+                            forma_pagamento=(
+                                "Credito do cliente"
+                                if credito_utilizado > Decimal("0.00") and valor_recebido == Decimal("0.00")
+                                else valores["forma_pagamento"]
+                            ),
                             observacao=observacao_recebimento,
                         )
+                        if credito_utilizado > Decimal("0.00"):
+                            CreditoCliente.objects.create(
+                                cliente=conta_atual.cliente,
+                                valor=-credito_utilizado,
+                                tipo=CreditoCliente.TIPO_CREDITO_GERADO,
+                                origem_conta_receber=conta_atual,
+                                origem_recebimento=recebimento,
+                                observacao=observacao_credito,
+                            )
                         if troco_devolvido > Decimal("0.00") and destino_diferenca == "credito":
                             CreditoCliente.objects.create(
                                 cliente=conta_atual.cliente,
@@ -1558,6 +1647,7 @@ def conta_receber_receber(request, pk):
             "formas_pagamento": formas_pagamento,
             "pagamentos_recentes": pagamentos_recentes,
             "credito_disponivel": credito_disponivel,
+            "credito_sugerido": credito_sugerido,
             "hoje_iso": timezone.localdate().isoformat(),
         },
     )

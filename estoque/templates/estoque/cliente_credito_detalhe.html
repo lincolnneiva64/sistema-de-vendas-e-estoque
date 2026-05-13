@@ -20,12 +20,38 @@
     background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 14px;
     box-shadow: 0 12px 26px rgba(22, 101, 52, 0.07);
     padding: 10px 12px; margin-bottom: 10px;
+    display: grid; grid-template-columns: minmax(190px, 0.35fr) minmax(0, 1fr);
+    gap: 12px; align-items: center;
   }
   .credito-resumo-label {
     display: block; color: #166534; font-size: 0.76rem; font-weight: 900;
     letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 3px;
   }
   .credito-resumo-valor { color: #166534; font-size: 1.18rem; font-weight: 950; }
+  .credito-ultimo {
+    border-left: 1px solid #bbf7d0;
+    padding-left: 12px;
+    color: #166534;
+    font-size: 0.78rem;
+    font-weight: 800;
+    line-height: 1.4;
+  }
+  .credito-ultimo-title {
+    display: block;
+    color: #166534;
+    font-size: 0.7rem;
+    font-weight: 950;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+  .credito-ultimo-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px 8px;
+  }
+  .credito-ultimo-grid span { white-space: nowrap; }
+  .credito-ultimo-ref { margin-top: 3px; color: #15803d; font-weight: 850; }
   .credito-lista {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -35,6 +61,10 @@
     background: #fff; border: 1px solid #e1e7ef; border-radius: 14px;
     box-shadow: 0 12px 26px rgba(15, 23, 42, 0.055);
     padding: 10px;
+  }
+  .credito-card.utilizado {
+    border-color: #bfdbfe;
+    background: #f8fbff;
   }
   .credito-card-head {
     display: flex; align-items: baseline; justify-content: space-between;
@@ -58,6 +88,14 @@
   .credito-dado.credito-dado-destaque .credito-dado-valor {
     color: #166534;
   }
+  .credito-dado.credito-dado-utilizado {
+    border-color: #bfdbfe;
+    background: #eff6ff;
+  }
+  .credito-dado.credito-dado-utilizado .credito-dado-label,
+  .credito-dado.credito-dado-utilizado .credito-dado-valor {
+    color: #1d4ed8;
+  }
   .credito-dado-label {
     display: block; color: #64748b; font-size: 0.62rem; font-weight: 900;
     letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 2px;
@@ -76,11 +114,14 @@
   }
   @media (max-width: 860px) {
     .credito-header { align-items: stretch; flex-direction: column; }
+    .credito-resumo { grid-template-columns: 1fr; }
+    .credito-ultimo { border-left: 0; border-top: 1px solid #bbf7d0; padding-left: 0; padding-top: 8px; }
     .credito-lista { grid-template-columns: 1fr; }
     .credito-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width: 560px) {
     .credito-grid { grid-template-columns: 1fr; }
+    .credito-ultimo-grid { grid-template-columns: 1fr; }
     .credito-card-head { align-items: flex-start; flex-direction: column; }
   }
 </style>
@@ -96,16 +137,38 @@
     </header>
 
     <section class="credito-resumo" aria-label="Credito atual disponivel">
-      <span class="credito-resumo-label">Credito atual disponivel</span>
-      <span class="credito-resumo-valor">R$ {{ credito_atual|floatformat:2 }}</span>
+      <div>
+        <span class="credito-resumo-label">Credito atual disponivel</span>
+        <span class="credito-resumo-valor">R$ {{ credito_atual|floatformat:2 }}</span>
+      </div>
+      {% if ultimo_movimento %}
+        <div class="credito-ultimo">
+          <span class="credito-ultimo-title">{% if ultimo_movimento.utilizado %}Ultimo uso do credito{% else %}Ultimo movimento do credito{% endif %}</span>
+          {% if ultimo_movimento.utilizado %}
+            <div class="credito-ultimo-grid">
+              <span>Credito antes do pagamento: R$ {{ ultimo_movimento.credito_antes|floatformat:2 }}</span>
+              <span>Credito usado nesta conta: R$ {{ ultimo_movimento.valor_movimento|floatformat:2 }}</span>
+              <span>Credito apos o pagamento: R$ {{ ultimo_movimento.credito_depois|floatformat:2 }}</span>
+            </div>
+          {% else %}
+            <div class="credito-ultimo-grid">
+              <span>Data: {{ ultimo_movimento.criado_em|date:"d/m/Y H:i" }}</span>
+              <span>Pago: R$ {{ ultimo_movimento.valor_entregue|floatformat:2 }}</span>
+              <span>Conta: R$ {{ ultimo_movimento.valor_aplicado|floatformat:2 }}</span>
+              <span>Credito: R$ {{ ultimo_movimento.valor_credito|floatformat:2 }}</span>
+            </div>
+          {% endif %}
+          <div class="credito-ultimo-ref">Conta #{{ ultimo_movimento.conta_id|default:"-" }} / Venda #{{ ultimo_movimento.venda_id|default:"-" }} - {{ ultimo_movimento.criado_em|date:"d/m/Y H:i" }}</div>
+        </div>
+      {% endif %}
     </section>
 
     {% if creditos %}
       <section class="credito-lista" aria-label="Creditos gerados">
         {% for credito in creditos %}
-          <article class="credito-card">
+          <article class="credito-card {% if credito.utilizado %}utilizado{% endif %}">
             <div class="credito-card-head">
-              <h2 class="credito-card-title">Credito gerado</h2>
+              <h2 class="credito-card-title">{% if credito.utilizado %}Credito utilizado{% else %}Credito gerado{% endif %}</h2>
               <span class="credito-card-data">{{ credito.criado_em|date:"d/m/Y H:i" }}</span>
             </div>
             <div class="credito-grid">
@@ -121,6 +184,20 @@
                 <span class="credito-dado-label">Forma</span>
                 <span class="credito-dado-valor">{{ credito.forma_pagamento|default:"Nao informada" }}</span>
               </div>
+              {% if credito.utilizado %}
+                <div class="credito-dado">
+                  <span class="credito-dado-label">Antes do pagamento</span>
+                  <span class="credito-dado-valor">R$ {{ credito.credito_antes|floatformat:2 }}</span>
+                </div>
+                <div class="credito-dado credito-dado-utilizado">
+                  <span class="credito-dado-label">Usado nesta conta</span>
+                  <span class="credito-dado-valor destaque">R$ {{ credito.valor_movimento|floatformat:2 }}</span>
+                </div>
+                <div class="credito-dado">
+                  <span class="credito-dado-label">Apos o pagamento</span>
+                  <span class="credito-dado-valor">R$ {{ credito.credito_depois|floatformat:2 }}</span>
+                </div>
+              {% else %}
               <div class="credito-dado">
                 <span class="credito-dado-label">Valor pago</span>
                 <span class="credito-dado-valor">R$ {{ credito.valor_entregue|floatformat:2 }}</span>
@@ -133,11 +210,17 @@
                 <span class="credito-dado-label">Virou credito</span>
                 <span class="credito-dado-valor destaque">R$ {{ credito.valor_credito|floatformat:2 }}</span>
               </div>
+              {% endif %}
             </div>
             <div class="credito-observacao">
+              {% if credito.utilizado %}
+              Em {{ credito.criado_em|date:"d/m/Y H:i" }}, foram usados R$ {{ credito.valor_movimento|floatformat:2 }} do credito do cliente para pagar a conta #{{ credito.conta_id|default:"-" }} / venda #{{ credito.venda_id|default:"-" }}.
+              O credito era R$ {{ credito.credito_antes|floatformat:2 }} antes do pagamento e ficou R$ {{ credito.credito_depois|floatformat:2 }} depois.
+              {% else %}
               Valor pago: R$ {{ credito.valor_entregue|floatformat:2 }}.
               Valor da conta: R$ {{ credito.valor_aplicado|floatformat:2 }}.
               Virou credito: R$ {{ credito.valor_credito|floatformat:2 }}.
+              {% endif %}
             </div>
           </article>
         {% endfor %}
