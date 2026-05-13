@@ -1132,8 +1132,31 @@ function criarLinhaFinanceira(classe, texto, link) {
     if (link) {
         elemento.href = link;
         elemento.classList.add("cliente-financeiro-link");
+        elemento.addEventListener("pointerdown", navegarResumoFinanceiroCliente);
     }
     return elemento;
+}
+
+function obterClienteResumoFinanceiro(clientePreview) {
+    if (clienteSelecionado) return clienteSelecionado;
+    if (clienteIndexAtivo >= 0 && clientesSugestoes[clienteIndexAtivo]) {
+        return clientesSugestoes[clienteIndexAtivo];
+    }
+    return clientePreview;
+}
+
+function montarLinkContasReceberCliente(cliente) {
+    return contasReceberUrl
+        + "?cliente=" + encodeURIComponent(cliente?.nome || "")
+        + "&next=" + encodeURIComponent(vendasUrl);
+}
+
+function navegarResumoFinanceiroCliente(e) {
+    const cliente = obterClienteResumoFinanceiro(e.currentTarget.clientePreview);
+    const link = montarLinkContasReceberCliente(cliente);
+    e.preventDefault();
+    e.stopPropagation();
+    window.location.href = link;
 }
 
 function atualizarResumoFinanceiroCliente(cliente) {
@@ -1146,18 +1169,20 @@ function atualizarResumoFinanceiroCliente(cliente) {
     const abertasTotal = numeroCliente(financeiro.contas_abertas_total);
     const vencidasQtd = parseInt(financeiro.contas_vencidas_qtd || "0", 10) || 0;
     const vencidasTotal = numeroCliente(financeiro.contas_vencidas_total);
-    const linkContas = contasReceberUrl
-        + "?cliente=" + encodeURIComponent(cliente.nome || "")
-        + "&next=" + encodeURIComponent(vendasUrl);
+    const linkContas = montarLinkContasReceberCliente(cliente);
 
     if (credito > 0) {
         clienteResumoFinanceiro.appendChild(criarLinhaFinanceira("credito", "Credito disponivel: " + formatarMoedaCliente(credito)));
     }
     if (abertasQtd > 0) {
-        clienteResumoFinanceiro.appendChild(criarLinhaFinanceira("aberto", "Contas em aberto: " + abertasQtd + " / " + formatarMoedaCliente(abertasTotal), linkContas));
+        const linhaAbertas = criarLinhaFinanceira("aberto", "Contas em aberto: " + abertasQtd + " / " + formatarMoedaCliente(abertasTotal), linkContas);
+        linhaAbertas.clientePreview = cliente;
+        clienteResumoFinanceiro.appendChild(linhaAbertas);
     }
     if (vencidasQtd > 0) {
-        clienteResumoFinanceiro.appendChild(criarLinhaFinanceira("vencido", "Atencao: vencidas " + vencidasQtd + " / " + formatarMoedaCliente(vencidasTotal), linkContas));
+        const linhaVencidas = criarLinhaFinanceira("vencido", "Atencao: vencidas " + vencidasQtd + " / " + formatarMoedaCliente(vencidasTotal), linkContas);
+        linhaVencidas.clientePreview = cliente;
+        clienteResumoFinanceiro.appendChild(linhaVencidas);
     }
     if (credito <= 0 && abertasQtd <= 0 && vencidasQtd <= 0) {
         clienteResumoFinanceiro.appendChild(criarLinhaFinanceira("", "Sem pendencias financeiras."));
