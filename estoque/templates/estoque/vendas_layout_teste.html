@@ -614,6 +614,11 @@ select {
     font-weight: 850;
     cursor: pointer;
 }
+.venda-confirmacao-acoes button:focus {
+    outline: 3px solid #2563eb;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.18);
+}
 .venda-confirmar-btn {
     background: #dc2626;
     border-color: #b91c1c;
@@ -1120,13 +1125,16 @@ function ocultarBlocoVendaGravada() {
     vendaGravadaBloco?.classList.remove("visivel");
 }
 
-function confirmarAcaoVenda(mensagem) {
+function confirmarAcaoVenda(mensagem, opcoes = {}) {
     return new Promise((resolve) => {
         resolverConfirmacaoVenda = resolve;
         vendaConfirmacaoTexto.textContent = mensagem;
         vendaConfirmacaoOverlay.classList.add("visivel");
         vendaConfirmacaoOverlay.setAttribute("aria-hidden", "false");
-        btnCancelarConfirmacaoVenda.focus();
+        const botaoInicial = opcoes.focoInicial === "confirmar"
+            ? btnConfirmarConfirmacaoVenda
+            : btnCancelarConfirmacaoVenda;
+        requestAnimationFrame(() => botaoInicial.focus());
     });
 }
 
@@ -1695,7 +1703,7 @@ btnLimparItens.addEventListener("click", async () => {
 });
 
 btnNovaVenda.addEventListener("click", async () => {
-    const confirmou = await confirmarAcaoVenda("Deseja limpar toda a venda atual?");
+    const confirmou = await confirmarAcaoVenda("Deseja limpar toda a venda atual?", { focoInicial: "confirmar" });
     if (!confirmou) return;
 
     limparItensVenda();
@@ -1719,8 +1727,29 @@ vendaConfirmacaoOverlay.addEventListener("mousedown", (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && vendaConfirmacaoOverlay.classList.contains("visivel")) {
+    if (!vendaConfirmacaoOverlay.classList.contains("visivel")) return;
+
+    if (e.key === "Escape") {
+        e.preventDefault();
         fecharConfirmacaoVenda(false);
+        return;
+    }
+
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        const botoes = [btnCancelarConfirmacaoVenda, btnConfirmarConfirmacaoVenda];
+        const indiceAtual = botoes.indexOf(document.activeElement);
+        const proximoIndice = indiceAtual === 0 ? 1 : 0;
+        botoes[proximoIndice].focus();
+        return;
+    }
+
+    if (e.key === "Enter") {
+        const botaoFocado = document.activeElement;
+        if (botaoFocado === btnCancelarConfirmacaoVenda || botaoFocado === btnConfirmarConfirmacaoVenda) {
+            e.preventDefault();
+            botaoFocado.click();
+        }
     }
 });
 
