@@ -102,6 +102,15 @@
     font-weight: 650;
     line-height: 1.35;
   }
+  .receber-historico-item.duplicidade {
+    border-color: #fbbf24;
+    background: #fffbeb;
+    box-shadow: 0 10px 22px rgba(146, 64, 14, 0.08);
+  }
+  .receber-historico-item.duplicidade .receber-historico-valor {
+    background: #fef3c7;
+    color: #92400e;
+  }
   .receber-historico-meta {
     display: flex;
     flex-wrap: wrap;
@@ -312,6 +321,7 @@
             <input id="data_recebimento" name="data_recebimento" type="date" value="{{ valores.data_recebimento }}" required>
           </div>
         </div>
+        <div id="alertaDuplicidadeRecebimento" class="receber-duplicidade-alerta" role="alert" aria-live="polite"></div>
         {% if credito_disponivel > 0 %}
           <div class="receber-credito-resumo">
             Credito disponivel do cliente: R$ {{ credito_disponivel|floatformat:2 }}<br>
@@ -356,14 +366,13 @@
       </section>
 
       <aside class="receber-side">
-        <div id="alertaDuplicidadeRecebimento" class="receber-duplicidade-alerta" role="alert" aria-live="polite"></div>
         <section class="receber-historico">
           <h2 class="receber-historico-title">Histórico recente do cliente</h2>
           <p class="receber-historico-subtitle">Recebimentos lançados nas últimas 72 horas.</p>
           {% if pagamentos_recentes %}
             <div class="receber-historico-lista">
               {% for pagamento in pagamentos_recentes %}
-                <div class="receber-historico-item">
+                <div class="receber-historico-item" data-pagamento-recente-index="{{ forloop.counter0 }}">
                   <div class="receber-historico-meta">
                     <span class="receber-historico-data">{{ pagamento.criado_em|date:"d/m/Y H:i" }}</span>
                     <span class="receber-historico-valor">R$ {{ pagamento.valor|floatformat:2 }}</span>
@@ -405,6 +414,7 @@
     const valorEmAberto = Number("{{ conta.valor_em_aberto|floatformat:2 }}".replace(",", "."));
     const hojeIso = "{{ hoje_iso }}";
     const pagamentosRecentes = JSON.parse(document.getElementById("pagamentosRecentesRecebimento")?.textContent || "[]");
+    const itensHistorico = Array.from(document.querySelectorAll("[data-pagamento-recente-index]"));
 
     function numeroDigitado(campo) {
       let texto = String(campo?.value || "").trim().replace("R$", "").replace(/\s/g, "");
@@ -452,20 +462,31 @@
       return valorNumero.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     }
 
+    function limparDestaqueDuplicidade() {
+      itensHistorico.forEach(function (item) {
+        item.classList.remove("duplicidade");
+      });
+    }
+
     function atualizarAlertaDuplicidade() {
       if (!alertaDuplicidade) return false;
       alertaDuplicidade.textContent = "";
       alertaDuplicidade.classList.remove("visivel");
+      limparDestaqueDuplicidade();
 
       const recebido = numeroDigitado(valor);
       if (!Number.isFinite(recebido) || recebido <= 0) return false;
       const valorComparacao = Math.min(recebido, valorEmAberto);
 
-      const duplicado = pagamentosRecentes.find(function (pagamento) {
+      const duplicado = pagamentosRecentes.find(function (pagamento, indice) {
         const valorPagamento = Number(pagamento.valor_numero);
-        return pagamento.criado_em_data === hojeIso
+        const pagamentoDuplicado = pagamento.criado_em_data === hojeIso
           && Number.isFinite(valorPagamento)
           && (Math.abs(valorPagamento - recebido) <= 0.01 || Math.abs(valorPagamento - valorComparacao) <= 0.01);
+        if (pagamentoDuplicado) {
+          document.querySelector("[data-pagamento-recente-index='" + indice + "']")?.classList.add("duplicidade");
+        }
+        return pagamentoDuplicado;
       });
 
       if (!duplicado) return false;
