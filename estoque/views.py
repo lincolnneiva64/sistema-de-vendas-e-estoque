@@ -1564,6 +1564,138 @@ def cliente_credito_detalhe(request, cliente_id):
     )
 
 
+class RecebimentoContaErro(ValueError):
+    def __init__(self, mensagem, destino="form"):
+        super().__init__(mensagem)
+        self.destino = destino
+
+
+def _aplicar_recebimento_conta(
+    conta,
+    data_recebimento,
+    valor_recebido,
+    forma_pagamento,
+    observacao,
+    destino_diferenca,
+    credito_utilizado=Decimal("0.00"),
+):
+    # Deve ser chamado dentro de transaction.atomic(); a conta deve estar bloqueada com select_for_update().
+    if conta.status == ContaReceber.STATUS_CANCELADA:
+        raise RecebimentoContaErro("Conta cancelada nao pode receber pagamento.", destino="retorno")
+    if conta.status == ContaReceber.STATUS_PAGA:
+        raise RecebimentoContaErro("Conta ja esta paga.", destino="retorno")
+
+    saldo_atual = (conta.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
+    if saldo_atual <= Decimal("0.00"):
+        conta.status = ContaReceber.STATUS_PAGA
+        conta.save(update_fields=["status", "atualizado_em"])
+        raise RecebimentoContaErro("Conta ja esta paga.", destino="retorno")
+
+    if credito_utilizado > Decimal("0.00"):
+        if not conta.cliente_id:
+            raise RecebimentoContaErro("Para usar credito, a conta precisa ter cliente vinculado.")
+        credito_atual = (
+            CreditoCliente.objects.select_for_update()
+            .filter(cliente_id=conta.cliente_id)
+            .aggregate(total=Sum("valor"))
+            .get("total")
+            or Decimal("0.00")
+        ).quantize(Decimal("0.01"))
+        credito_atual = max(credito_atual, Decimal("0.00"))
+        if credito_utilizado > credito_atual:
+            raise RecebimentoContaErro("Credito utilizado maior que o saldo disponivel do cliente.")
+        if credito_utilizado > saldo_atual:
+            raise RecebimentoContaErro("Credito utilizado maior que o saldo em aberto da conta.")
+
+    total_para_baixa = (valor_recebido + credito_utilizado).quantize(Decimal("0.01"))
+    valor_aplicado = min(total_para_baixa, saldo_atual).quantize(Decimal("0.01"))
+    troco_devolvido = (total_para_baixa - valor_aplicado).quantize(Decimal("0.01"))
+    if troco_devolvido > Decimal("0.00") and destino_diferenca == "credito" and not conta.cliente_id:
+        raise RecebimentoContaErro("Para deixar diferenca como credito, a conta precisa ter cliente vinculado.")
+
+    observacao_recebimento = observacao
+
+    if troco_devolvido > Decimal("0.00"):
+        descricao_diferenca = (
+            f"Credito gerado para o cliente: {_formatar_moeda(troco_devolvido)}."
+            if destino_diferenca == "credito"
+            else f"Troco devolvido: {_formatar_moeda(troco_devolvido)}."
+        )
+        observacao_automatica = (
+            f"Valor entregue pelo cliente: {_formatar_moeda(valor_recebido)}. "
+            f"Valor aplicado na conta: {_formatar_moeda(valor_aplicado)}. "
+            f"{descricao_diferenca}"
+        )
+        observacao_recebimento = (
+            f"{observacao_recebimento}\n{observacao_automatica}"
+            if observacao_recebimento
+            else observacao_automatica
+        )
+
+    observacao_credito = ""
+    if credito_utilizado > Decimal("0.00"):
+        observacao_credito = (
+            f"Valor recebido: {_formatar_moeda(valor_recebido)}. "
+            f"Credito utilizado: {_formatar_moeda(credito_utilizado)}."
+        )
+        observacao_recebimento = (
+            f"{observacao_recebimento}\n{observacao_credito}"
+            if observacao_recebimento
+            else observacao_credito
+        )
+
+    recebimento = RecebimentoContaReceber.objects.create(
+        conta=conta,
+        data_recebimento=data_recebimento,
+        valor=valor_aplicado,
+        forma_pagamento=(
+            "Credito do cliente"
+            if credito_utilizado > Decimal("0.00") and valor_recebido == Decimal("0.00")
+            else forma_pagamento
+        ),
+        observacao=observacao_recebimento,
+    )
+    credito_gerado = Decimal("0.00")
+    if credito_utilizado > Decimal("0.00"):
+        CreditoCliente.objects.create(
+            cliente=conta.cliente,
+            valor=-credito_utilizado,
+            tipo=CreditoCliente.TIPO_CREDITO_GERADO,
+            origem_conta_receber=conta,
+            origem_recebimento=recebimento,
+            observacao=observacao_credito,
+        )
+    if troco_devolvido > Decimal("0.00") and destino_diferenca == "credito":
+        CreditoCliente.objects.create(
+            cliente=conta.cliente,
+            valor=troco_devolvido,
+            tipo=CreditoCliente.TIPO_CREDITO_GERADO,
+            origem_conta_receber=conta,
+            origem_recebimento=recebimento,
+            observacao=observacao_recebimento,
+        )
+        credito_gerado = troco_devolvido
+
+    novo_valor_aberto = (saldo_atual - valor_aplicado).quantize(Decimal("0.01"))
+    conta.valor_em_aberto = novo_valor_aberto
+    conta.status = (
+        ContaReceber.STATUS_PAGA
+        if novo_valor_aberto == Decimal("0.00")
+        else ContaReceber.STATUS_PARCIAL
+    )
+    conta.save(update_fields=["valor_em_aberto", "status", "atualizado_em"])
+
+    return {
+        "conta": conta,
+        "recebimento": recebimento,
+        "valor_aplicado": valor_aplicado,
+        "troco_devolvido": troco_devolvido,
+        "credito_gerado": credito_gerado,
+        "credito_utilizado": credito_utilizado,
+        "saldo_restante": novo_valor_aberto,
+    }
+
+
 @ensure_csrf_cookie
 def conta_receber_receber(request, pk):
     conta = get_object_or_404(
@@ -1674,114 +1806,23 @@ def conta_receber_receber(request, pk):
                 else:
                     with transaction.atomic():
                         conta_atual = ContaReceber.objects.select_for_update().get(pk=conta.pk)
-                        if conta_atual.status == ContaReceber.STATUS_CANCELADA:
-                            messages.warning(request, "Conta cancelada nao pode receber pagamento.")
-                            return redirect(destino_retorno)
-                        if conta_atual.status == ContaReceber.STATUS_PAGA:
-                            messages.warning(request, "Conta ja esta paga.")
-                            return redirect(destino_retorno)
-                        saldo_atual = (conta_atual.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
-                        if saldo_atual <= Decimal("0.00"):
-                            conta_atual.status = ContaReceber.STATUS_PAGA
-                            conta_atual.save(update_fields=["status", "atualizado_em"])
-                            messages.warning(request, "Conta ja esta paga.")
-                            return redirect(destino_retorno)
-
-                        credito_atual = Decimal("0.00")
-                        if credito_utilizado > Decimal("0.00"):
-                            if not conta_atual.cliente_id:
-                                messages.warning(request, "Para usar credito, a conta precisa ter cliente vinculado.")
-                                return redirect(url_receber)
-                            credito_atual = (
-                                CreditoCliente.objects.select_for_update()
-                                .filter(cliente_id=conta_atual.cliente_id)
-                                .aggregate(total=Sum("valor"))
-                                .get("total")
-                                or Decimal("0.00")
-                            ).quantize(Decimal("0.01"))
-                            credito_atual = max(credito_atual, Decimal("0.00"))
-                            if credito_utilizado > credito_atual:
-                                messages.warning(request, "Credito utilizado maior que o saldo disponivel do cliente.")
-                                return redirect(url_receber)
-                            if credito_utilizado > saldo_atual:
-                                messages.warning(request, "Credito utilizado maior que o saldo em aberto da conta.")
-                                return redirect(url_receber)
-
-                        total_para_baixa = (valor_recebido + credito_utilizado).quantize(Decimal("0.01"))
-                        valor_aplicado = min(total_para_baixa, saldo_atual).quantize(Decimal("0.01"))
-                        troco_devolvido = (total_para_baixa - valor_aplicado).quantize(Decimal("0.01"))
-                        destino_diferenca = valores["destino_diferenca"]
-                        if troco_devolvido > Decimal("0.00") and destino_diferenca == "credito" and not conta_atual.cliente_id:
-                            messages.warning(request, "Para deixar diferenca como credito, a conta precisa ter cliente vinculado.")
-                            return redirect(url_receber)
-
-                        observacao_recebimento = valores["observacao"]
-
-                        if troco_devolvido > Decimal("0.00"):
-                            descricao_diferenca = (
-                                f"Credito gerado para o cliente: {_formatar_moeda(troco_devolvido)}."
-                                if destino_diferenca == "credito"
-                                else f"Troco devolvido: {_formatar_moeda(troco_devolvido)}."
+                        try:
+                            _aplicar_recebimento_conta(
+                                conta_atual,
+                                data_recebimento,
+                                valor_recebido,
+                                valores["forma_pagamento"],
+                                valores["observacao"],
+                                valores["destino_diferenca"],
+                                credito_utilizado,
                             )
-                            observacao_automatica = (
-                                f"Valor entregue pelo cliente: {_formatar_moeda(valor_recebido)}. "
-                                f"Valor aplicado na conta: {_formatar_moeda(valor_aplicado)}. "
-                                f"{descricao_diferenca}"
+                        except RecebimentoContaErro as exc:
+                            messages.warning(request, str(exc))
+                            return redirect(
+                                destino_retorno
+                                if exc.destino == "retorno"
+                                else url_receber
                             )
-                            observacao_recebimento = (
-                                f"{observacao_recebimento}\n{observacao_automatica}"
-                                if observacao_recebimento
-                                else observacao_automatica
-                            )
-
-                        if credito_utilizado > Decimal("0.00"):
-                            observacao_credito = (
-                                f"Valor recebido: {_formatar_moeda(valor_recebido)}. "
-                                f"Credito utilizado: {_formatar_moeda(credito_utilizado)}."
-                            )
-                            observacao_recebimento = (
-                                f"{observacao_recebimento}\n{observacao_credito}"
-                                if observacao_recebimento
-                                else observacao_credito
-                            )
-
-                        recebimento = RecebimentoContaReceber.objects.create(
-                            conta=conta_atual,
-                            data_recebimento=data_recebimento,
-                            valor=valor_aplicado,
-                            forma_pagamento=(
-                                "Credito do cliente"
-                                if credito_utilizado > Decimal("0.00") and valor_recebido == Decimal("0.00")
-                                else valores["forma_pagamento"]
-                            ),
-                            observacao=observacao_recebimento,
-                        )
-                        if credito_utilizado > Decimal("0.00"):
-                            CreditoCliente.objects.create(
-                                cliente=conta_atual.cliente,
-                                valor=-credito_utilizado,
-                                tipo=CreditoCliente.TIPO_CREDITO_GERADO,
-                                origem_conta_receber=conta_atual,
-                                origem_recebimento=recebimento,
-                                observacao=observacao_credito,
-                            )
-                        if troco_devolvido > Decimal("0.00") and destino_diferenca == "credito":
-                            CreditoCliente.objects.create(
-                                cliente=conta_atual.cliente,
-                                valor=troco_devolvido,
-                                tipo=CreditoCliente.TIPO_CREDITO_GERADO,
-                                origem_conta_receber=conta_atual,
-                                origem_recebimento=recebimento,
-                                observacao=observacao_recebimento,
-                            )
-                        novo_valor_aberto = (saldo_atual - valor_aplicado).quantize(Decimal("0.01"))
-                        conta_atual.valor_em_aberto = novo_valor_aberto
-                        conta_atual.status = (
-                            ContaReceber.STATUS_PAGA
-                            if novo_valor_aberto == Decimal("0.00")
-                            else ContaReceber.STATUS_PARCIAL
-                        )
-                        conta_atual.save(update_fields=["valor_em_aberto", "status", "atualizado_em"])
 
                     messages.success(request, "Recebimento registrado com sucesso.")
                     return redirect(destino_retorno)
