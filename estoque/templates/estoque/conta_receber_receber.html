@@ -436,10 +436,7 @@
           </select>
         </div>
         <div id="formErroRecebimento" class="receber-form-msg" role="alert" aria-live="polite"></div>
-        <div class="receber-field">
-          <label for="observacao">Observacao</label>
-          <textarea id="observacao" name="observacao" placeholder="Opcional" rows="2">{{ valores.observacao }}</textarea>
-        </div>
+        <input id="observacao" name="observacao" type="hidden" value="">
         <div class="receber-actions">
           <a href="{% if retorno_url %}{{ retorno_url }}{% else %}{% url 'estoque:contas_receber' %}{% endif %}" class="receber-btn receber-btn-secondary" id="btnCancelarRecebimento">Cancelar</a>
           <button type="submit" class="receber-btn receber-btn-primary" id="btnConfirmarRecebimento">Confirmar recebimento</button>
