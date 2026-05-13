@@ -130,7 +130,7 @@
           <p class="edit-review-subtitle">Fase 1: somente data, vencimento e forma de pagamento.</p>
         </div>
         <div class="edit-review-actions">
-          <a class="edit-review-btn" href="{% url 'estoque:venda_editar_revisao' venda.id %}">Voltar para revisao</a>
+          <a class="edit-review-btn" href="{% url 'estoque:venda_editar_revisao' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}">Voltar para revisao</a>
         </div>
       </header>
 
@@ -237,7 +237,7 @@
               </div>
             </div>
             <div class="header-edit-submit">
-              <a class="edit-review-btn" href="{% url 'estoque:venda_editar_revisao' venda.id %}">Cancelar</a>
+              <a class="edit-review-btn" href="{% url 'estoque:venda_editar_revisao' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}">Cancelar</a>
               <button class="edit-review-btn primary" id="btnSalvarCabecalho" type="submit">Salvar cabecalho</button>
             </div>
           </form>

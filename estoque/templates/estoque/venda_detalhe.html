@@ -921,6 +921,9 @@
                         {% if request.GET.origem == "pendencias" %}
                             <a href="{% url 'estoque:pendencias_entrega' %}">Voltar para pendências de entrega</a>
                         {% endif %}
+                        {% if retorno_url %}
+                            <a href="{{ retorno_url }}">Voltar para Contas a Receber</a>
+                        {% endif %}
                         <a href="{% url 'estoque:vendas' %}">Voltar para Vendas</a>
                         <a href="{% url 'estoque:consultar_vendas' %}">Voltar para Consulta</a>
                         <a href="{% url 'estoque:entregas_dia' %}?data={{ venda.data_venda|date:'Y-m-d' }}">Entregas do Dia</a>
@@ -928,10 +931,10 @@
                             <a href="{% url 'estoque:entrega_rota_detalhe' entrega_contexto.id %}">Voltar para {% if entrega_contexto.tipo == "unitaria" %}Entrega{% else %}Rota{% endif %} #{{ entrega_contexto.id }}</a>
                         {% endif %}
                         {% if not venda.cancelada %}
-                        <a href="{% url 'estoque:venda_editar_revisao' venda.id %}" class="editar-nota-acao">Editar nota</a>
-                        <a href="{% url 'estoque:venda_editar_cabecalho' venda.id %}" class="editar-nota-acao">Editar cabeçalho</a>
-                        <a href="{% url 'estoque:venda_adicionar_produto_item' venda.id %}{% if itens_adicionados_param %}?itens_adicionados={{ itens_adicionados_param }}{% endif %}" class="editar-nota-acao">Adicionar produto</a>
-                        <a href="{% url 'estoque:venda_cancelar' venda.id %}" class="cancelar-venda-acao">Cancelar venda</a>
+                        <a href="{% url 'estoque:venda_editar_revisao' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}" class="editar-nota-acao">Editar nota</a>
+                        <a href="{% url 'estoque:venda_editar_cabecalho' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}" class="editar-nota-acao">Editar cabeçalho</a>
+                        <a href="{% url 'estoque:venda_adicionar_produto_item' venda.id %}{% if itens_adicionados_param or retorno_querystring %}?{% if itens_adicionados_param %}itens_adicionados={{ itens_adicionados_param }}{% if retorno_querystring %}&{% endif %}{% endif %}{% if retorno_querystring %}{{ retorno_querystring }}{% endif %}{% endif %}" class="editar-nota-acao">Adicionar produto</a>
+                        <a href="{% url 'estoque:venda_cancelar' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}" class="cancelar-venda-acao">Cancelar venda</a>
                         {% endif %}
                         <button type="button" id="btnImprimir">Imprimir</button>
                         {% if not venda.cancelada %}

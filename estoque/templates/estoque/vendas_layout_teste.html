@@ -370,7 +370,7 @@ select {
 }
 .cliente-resumo {
     display: none;
-    grid-template-columns: minmax(180px, 1.5fr) repeat(5, minmax(82px, 1fr)) minmax(124px, 1.1fr);
+    grid-template-columns: minmax(190px, 1.2fr) minmax(360px, 2.4fr) minmax(120px, 0.8fr) minmax(130px, 0.9fr);
     gap: 5px;
     align-items: stretch;
     margin: 0;
@@ -394,6 +394,9 @@ select {
     border-radius: 9px;
     background: #ffffff;
 }
+.cliente-resumo-item.oculto {
+    display: none;
+}
 .cliente-resumo-label {
     color: #64748b;
     font-size: 8px;
@@ -409,8 +412,46 @@ select {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+.cliente-contas {
+    border-color: #bbf7d0;
+    background: #f7fef9;
+}
 .cliente-resumo-valor.contas-resumo {
     font-size: 10px;
+}
+.cliente-financeiro {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+}
+.cliente-financeiro-linha {
+    border-radius: 7px;
+    padding: 4px 6px;
+    background: #f1f5f9;
+    color: #334155;
+    font-size: 11px;
+    font-weight: 850;
+    white-space: nowrap;
+}
+.cliente-financeiro-linha.credito {
+    background: #ecfdf3;
+    color: #166534;
+}
+.cliente-financeiro-linha.aberto {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+.cliente-financeiro-linha.vencido {
+    background: #fef2f2;
+    color: #991b1b;
+}
+.cliente-financeiro-link {
+    color: inherit;
+    font-weight: 950;
+    text-decoration: none;
+}
+.cliente-financeiro-link:hover {
+    text-decoration: underline;
 }
 .barra-acoes-venda {
     display: flex;
@@ -655,6 +696,9 @@ select {
     .cliente-resumo {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+    .cliente-financeiro {
+        grid-template-columns: 1fr;
+    }
 }
 .produto-sugestao-item strong {
     color: #2563eb;
@@ -739,25 +783,27 @@ td:first-child {
                 <span class="cliente-resumo-label">Cliente</span>
                 <span class="cliente-resumo-valor" id="clienteResumoNome">-</span>
             </div>
-            <div class="cliente-resumo-item">
+            <div class="cliente-resumo-item oculto">
                 <span class="cliente-resumo-label">Prazo</span>
                 <span class="cliente-resumo-valor" id="clienteResumoPrazo">-</span>
             </div>
-            <div class="cliente-resumo-item">
+            <div class="cliente-resumo-item oculto">
                 <span class="cliente-resumo-label">Limite</span>
                 <span class="cliente-resumo-valor" id="clienteResumoLimite">-</span>
             </div>
-            <div class="cliente-resumo-item">
+            <div class="cliente-resumo-item oculto" id="clienteResumoStatusCard">
                 <span class="cliente-resumo-label">Status</span>
                 <span class="cliente-resumo-valor cliente-status" id="clienteResumoStatus">-</span>
+            </div>
+            <div class="cliente-resumo-item cliente-contas">
+                <span class="cliente-resumo-label">Financeiro</span>
+                <div class="cliente-financeiro" id="clienteResumoFinanceiro">
+                    <span class="cliente-financeiro-linha">Sem pendencias financeiras.</span>
+                </div>
             </div>
             <div class="cliente-resumo-item">
                 <span class="cliente-resumo-label">WhatsApp</span>
                 <span class="cliente-resumo-valor" id="clienteResumoWhatsapp">-</span>
-            </div>
-            <div class="cliente-resumo-item cliente-contas">
-                <span class="cliente-resumo-label">Contas</span>
-                <span class="cliente-resumo-valor contas-resumo">Sem integração ainda</span>
             </div>
         </div>
         </div>
@@ -988,9 +1034,13 @@ const clienteResumoNome = document.getElementById("clienteResumoNome");
 const clienteResumoPrazo = document.getElementById("clienteResumoPrazo");
 const clienteResumoLimite = document.getElementById("clienteResumoLimite");
 const clienteResumoStatus = document.getElementById("clienteResumoStatus");
+const clienteResumoStatusCard = document.getElementById("clienteResumoStatusCard");
 const clienteResumoWhatsapp = document.getElementById("clienteResumoWhatsapp");
+const clienteResumoFinanceiro = document.getElementById("clienteResumoFinanceiro");
 const vencimentoVenda = document.getElementById("vencimentoVenda");
 const clientesAutocompleteUrl = "{% url 'estoque:clientes_autocomplete' %}";
+const contasReceberUrl = "{% url 'estoque:contas_receber' %}";
+const vendasUrl = "{% url 'estoque:vendas' %}";
 const gravarVendaUrl = "{% url 'estoque:gravar_venda' %}";
 let clientesSugestoes = [];
 let clienteIndexAtivo = -1;
@@ -1021,10 +1071,24 @@ function formatarLimiteCliente(valor) {
         return "Sem limite";
     }
 
+    return formatarMoedaCliente(numero);
+}
+
+function formatarMoedaCliente(valor) {
+    const numero = parseFloat(String(valor || "0").replace(",", "."));
+    if (isNaN(numero)) {
+        return "R$ 0,00";
+    }
+
     return new Intl.NumberFormat("pt-BR", {
         style: "currency",
         currency: "BRL"
     }).format(numero);
+}
+
+function numeroCliente(valor) {
+    const numero = parseFloat(String(valor || "0").replace(",", "."));
+    return isNaN(numero) ? 0 : numero;
 }
 
 function normalizarStatusCliente(status) {
@@ -1059,6 +1123,45 @@ function atualizarPrazoEVencimentoCliente() {
     const prazo = parseInt(clienteSelecionado.prazo || "0", 10);
     clienteResumoPrazo.textContent = prazo ? prazo + " dias" : "Sem prazo definido";
     vencimentoVenda.value = calcularVencimentoCliente();
+}
+
+function criarLinhaFinanceira(classe, texto, link) {
+    const elemento = link ? document.createElement("a") : document.createElement("span");
+    elemento.className = "cliente-financeiro-linha " + (classe || "");
+    elemento.textContent = texto;
+    if (link) {
+        elemento.href = link;
+        elemento.classList.add("cliente-financeiro-link");
+    }
+    return elemento;
+}
+
+function atualizarResumoFinanceiroCliente(cliente) {
+    if (!clienteResumoFinanceiro) return;
+    clienteResumoFinanceiro.innerHTML = "";
+
+    const financeiro = cliente.financeiro || {};
+    const credito = numeroCliente(financeiro.credito_disponivel);
+    const abertasQtd = parseInt(financeiro.contas_abertas_qtd || "0", 10) || 0;
+    const abertasTotal = numeroCliente(financeiro.contas_abertas_total);
+    const vencidasQtd = parseInt(financeiro.contas_vencidas_qtd || "0", 10) || 0;
+    const vencidasTotal = numeroCliente(financeiro.contas_vencidas_total);
+    const linkContas = contasReceberUrl
+        + "?cliente=" + encodeURIComponent(cliente.nome || "")
+        + "&next=" + encodeURIComponent(vendasUrl);
+
+    if (credito > 0) {
+        clienteResumoFinanceiro.appendChild(criarLinhaFinanceira("credito", "Credito disponivel: " + formatarMoedaCliente(credito)));
+    }
+    if (abertasQtd > 0) {
+        clienteResumoFinanceiro.appendChild(criarLinhaFinanceira("aberto", "Contas em aberto: " + abertasQtd + " / " + formatarMoedaCliente(abertasTotal), linkContas));
+    }
+    if (vencidasQtd > 0) {
+        clienteResumoFinanceiro.appendChild(criarLinhaFinanceira("vencido", "Atencao: vencidas " + vencidasQtd + " / " + formatarMoedaCliente(vencidasTotal), linkContas));
+    }
+    if (credito <= 0 && abertasQtd <= 0 && vencidasQtd <= 0) {
+        clienteResumoFinanceiro.appendChild(criarLinhaFinanceira("", "Sem pendencias financeiras."));
+    }
 }
 
 function limparClienteSelecionado() {
@@ -1152,15 +1255,21 @@ function preencherResumoCliente(cliente) {
     clienteSelecionado = cliente;
     clienteId.value = cliente.id || "";
     clienteBusca.value = cliente.nome || "";
+    atualizarCabecalhoCliente(cliente);
+    atualizarPrazoEVencimentoCliente();
+    clienteSugestoesBox.style.display = "none";
+    clienteIndexAtivo = -1;
+}
+
+function atualizarCabecalhoCliente(cliente) {
     clienteResumoNome.textContent = cliente.nome || "-";
     clienteResumoLimite.textContent = formatarLimiteCliente(cliente.limite);
     clienteResumoStatus.textContent = normalizarStatusCliente(cliente.status);
     clienteResumoStatus.className = "cliente-resumo-valor cliente-status " + (cliente.status || "");
+    clienteResumoStatusCard?.classList.toggle("oculto", cliente.status === "liberado");
     clienteResumoWhatsapp.textContent = cliente.whatsapp || "-";
-    atualizarPrazoEVencimentoCliente();
+    atualizarResumoFinanceiroCliente(cliente);
     clienteResumo.classList.add("visivel");
-    clienteSugestoesBox.style.display = "none";
-    clienteIndexAtivo = -1;
 }
 
 function normalizarTextoCliente(valor) {
@@ -1246,6 +1355,9 @@ function renderizarSugestoesClientes() {
     if (itemAtivoCliente) {
         itemAtivoCliente.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
+    if (clienteIndexAtivo >= 0 && clientesSugestoes[clienteIndexAtivo]) {
+        atualizarCabecalhoCliente(clientesSugestoes[clienteIndexAtivo]);
+    }
 }
 
 async function buscarClientes(texto) {
@@ -1307,6 +1419,9 @@ clienteBusca.addEventListener("click", () => {
 clienteBusca.addEventListener("blur", () => {
     setTimeout(() => {
         clienteSugestoesBox.style.display = "none";
+        if (!clienteSelecionado) {
+            clienteResumo.classList.remove("visivel");
+        }
     }, 150);
 });
 

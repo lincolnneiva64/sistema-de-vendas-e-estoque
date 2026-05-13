@@ -175,7 +175,11 @@
         <p class="contas-subtitle">Consulte contas em aberto da carteira dos clientes.</p>
       </div>
       <div class="contas-actions">
-        <a href="{% url 'estoque:home' %}" class="contas-btn contas-btn-secondary">Voltar ao painel</a>
+        {% if retorno_url %}
+          <a href="{{ retorno_url }}" class="contas-btn contas-btn-secondary">Voltar para Vendas</a>
+        {% else %}
+          <a href="{% url 'estoque:home' %}" class="contas-btn contas-btn-secondary">Voltar ao painel</a>
+        {% endif %}
         <a href="{% url 'estoque:consultar_vendas' %}" class="contas-btn contas-btn-primary">Consultar vendas</a>
       </div>
     </header>
@@ -232,7 +236,7 @@
                   <br>{{ credito.observacao|truncatechars:120 }}
                 {% endif %}
               </div>
-              <a href="{% url 'estoque:cliente_credito_detalhe' credito.cliente_id %}" class="contas-credito-link">Ver detalhes</a>
+              <a href="{% url 'estoque:cliente_credito_detalhe' credito.cliente_id %}?next={{ detalhe_credito_retorno_url|urlencode }}" class="contas-credito-link">Ver detalhes</a>
             </div>
           {% endfor %}
         </div>
@@ -270,9 +274,9 @@
                 <td><span class="contas-status {{ conta.status }}">{{ conta.get_status_display }}</span></td>
                 <td>
                   <div class="contas-actions-cell">
-                    <a href="{% url 'estoque:venda_detalhe' conta.venda_id %}" class="contas-action-link">Abrir nota</a>
+                    <a href="{% url 'estoque:venda_detalhe' conta.venda_id %}?next={{ detalhe_credito_retorno_url|urlencode }}" class="contas-action-link">Abrir nota</a>
                     {% if conta.status == "aberta" or conta.status == "parcial" %}
-                      <a href="{% url 'estoque:conta_receber_receber' conta.id %}" class="contas-action-link receber">Receber</a>
+                      <a href="{% url 'estoque:conta_receber_receber' conta.id %}?next={{ detalhe_credito_retorno_url|urlencode }}" class="contas-action-link receber">Receber</a>
                     {% endif %}
                   </div>
                 </td>

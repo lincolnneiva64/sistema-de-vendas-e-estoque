@@ -133,7 +133,7 @@
         <h1 class="credito-title">Historico do credito</h1>
         <p class="credito-subtitle">{{ cliente.nome }}</p>
       </div>
-      <a href="{% url 'estoque:contas_receber' %}" class="credito-btn">Voltar</a>
+      <a href="{% if retorno_url %}{{ retorno_url }}{% else %}{% url 'estoque:contas_receber' %}{% endif %}" class="credito-btn">Voltar</a>
     </header>
 
     <section class="credito-resumo" aria-label="Credito atual disponivel">

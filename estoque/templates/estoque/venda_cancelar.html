@@ -19,10 +19,21 @@
     border: 1px solid #fca5a5; border-radius: 10px; background: #fef2f2;
     color: #991b1b; padding: 9px 10px; font-size: 0.84rem; font-weight: 900; line-height: 1.3;
   }
+  .cancel-alert.strong {
+    border-color: #dc2626; background: #fff1f2; color: #7f1d1d;
+    box-shadow: inset 4px 0 0 #dc2626;
+  }
+  .cancel-alert-title { display: block; font-size: 0.94rem; margin-bottom: 5px; }
+  .cancel-alert ul { margin: 7px 0 0 18px; padding: 0; }
+  .cancel-alert li { margin: 2px 0; }
   .cancel-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
   .cancel-field { border: 1px solid #edf1f6; border-radius: 8px; background: #fbfdff; padding: 7px 9px; }
+  .cancel-field.warning { border-color: #fed7aa; background: #fff7ed; }
+  .cancel-field.danger { border-color: #fecaca; background: #fef2f2; }
   .cancel-label { display: block; color: #64748b; font-size: 0.66rem; font-weight: 900; text-transform: uppercase; }
   .cancel-value { display: block; margin-top: 2px; color: #111827; font-size: 0.84rem; font-weight: 900; overflow-wrap: anywhere; }
+  .cancel-field.warning .cancel-value { color: #9a3412; }
+  .cancel-field.danger .cancel-value { color: #991b1b; }
   .cancel-section { border: 1px solid #edf1f6; border-radius: 9px; overflow: hidden; }
   .cancel-section h2 {
     margin: 0; padding: 8px 10px; background: #f8fafc; border-bottom: 1px solid #edf1f6;
@@ -48,14 +59,41 @@
     min-height: 96px; resize: vertical; border: 1px solid #cbd5e1; border-radius: 9px;
     padding: 8px 9px; color: #0f172a; font: inherit; font-weight: 750;
   }
+  .cancel-confirm-box {
+    border: 1px solid #fecaca; border-radius: 10px; background: #fff7f7;
+    padding: 9px 10px; display: grid; gap: 5px;
+  }
+  .cancel-confirm-box strong { color: #991b1b; font-size: 0.88rem; }
+  .cancel-confirm-box input {
+    min-height: 34px; border: 1px solid #dc2626; border-radius: 8px;
+    padding: 7px 9px; color: #0f172a; font: inherit; font-weight: 900;
+    text-transform: uppercase;
+  }
+  .cancel-confirm-hint { color: #7f1d1d; font-size: 0.76rem; font-weight: 850; }
   .cancel-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
   .cancel-btn {
     min-height: 34px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 7px 12px;
     background: #fff; color: #0f172a; font-size: 0.82rem; font-weight: 900;
     text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
     cursor: pointer; box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08); font-family: inherit;
+    transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.08s ease;
+    pointer-events: auto;
+  }
+  .cancel-btn:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+    filter: brightness(0.96);
   }
   .cancel-btn.danger { border-color: #dc2626; background: #dc2626; color: #fff; }
+  .cancel-btn.danger:not(:disabled):not(.is-disabled) { cursor: pointer; pointer-events: auto; opacity: 1; }
+  .cancel-btn.danger:disabled,
+  .cancel-btn.danger.is-disabled {
+    opacity: 0.5; cursor: not-allowed; box-shadow: none; pointer-events: none;
+  }
+  .cancel-btn.danger:disabled:active,
+  .cancel-btn.danger.is-disabled:active {
+    transform: none; filter: none;
+  }
   .cancel-message {
     border: 1px solid #f7d98b; border-radius: 10px; background: #fff7ed;
     color: #92400e; padding: 7px 9px; font-size: 0.82rem; font-weight: 850;
@@ -78,7 +116,7 @@
           <h1 class="cancel-title">Cancelar venda #{{ venda.id }}</h1>
           <p class="cancel-subtitle">Marcar como CANCELADA / VENDA NAO REALIZADA.</p>
         </div>
-        <a class="cancel-btn" href="{% url 'estoque:venda_detalhe' venda.id %}">Voltar para a nota</a>
+        <a class="cancel-btn" href="{% url 'estoque:venda_detalhe' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}">Voltar para a nota</a>
       </header>
 
       <div class="cancel-body">
@@ -91,6 +129,18 @@
         <div class="cancel-alert">
           Esta acao preserva a nota e seus itens para historico/auditoria, mas a venda deixa de ser tratada como ativa. Nesta fase, estoque, contas a receber e caixa nao serao alterados.
         </div>
+
+        {% if tem_sinais_consolidacao %}
+          <div class="cancel-alert strong">
+            <strong class="cancel-alert-title">Atencao: esta venda ja possui movimentacao financeira, historico ou e uma venda antiga.</strong>
+            Cancelar pode afetar contas a receber, saldo do cliente e historico operacional. Confira antes de continuar.
+            <ul>
+              {% for sinal in sinais_consolidacao %}
+                <li>{{ sinal }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
 
         <section class="cancel-grid" aria-label="Dados da venda">
           <div class="cancel-field">
@@ -116,6 +166,27 @@
           <div class="cancel-field">
             <span class="cancel-label">Total</span>
             <span class="cancel-value">R$ {{ venda.total|floatformat:2 }}</span>
+          </div>
+          <div class="cancel-field {% if conta_receber %}warning{% endif %}">
+            <span class="cancel-label">Conta a receber</span>
+            <span class="cancel-value">
+              {% if conta_receber %}
+                #{{ conta_receber.id }} - {{ conta_receber.get_status_display }} - aberto R$ {{ conta_receber.valor_em_aberto|floatformat:2 }}
+              {% else %}
+                Sem conta vinculada
+              {% endif %}
+            </span>
+          </div>
+          <div class="cancel-field {% if recebimentos_count %}danger{% endif %}">
+            <span class="cancel-label">Recebimentos</span>
+            <span class="cancel-value">{{ recebimentos_count }} baixa(s) registrada(s)</span>
+          </div>
+          <div class="cancel-field {% if venda_antiga %}warning{% endif %}">
+            <span class="cancel-label">Seguranca</span>
+            <span class="cancel-value">
+              {% if venda_antiga %}Venda antiga{% else %}Venda do dia{% endif %}
+              {% if creditos_count %} - {{ creditos_count }} movimento(s) de credito{% endif %}
+            </span>
           </div>
         </section>
 
@@ -153,7 +224,7 @@
 
         <section class="cancel-section">
           <h2>Motivo do cancelamento</h2>
-          <form class="cancel-form" method="post">
+          <form class="cancel-form" method="post" id="formCancelarVenda">
             {% csrf_token %}
             <label>Escolha o motivo principal</label>
             <div class="cancel-options">
@@ -166,9 +237,16 @@
             </div>
             <label for="id_observacao_cancelamento">Observação adicional <span id="observacaoObrigatoriaAviso">(obrigatória se escolher Outro motivo)</span></label>
             <textarea id="id_observacao_cancelamento" name="observacao_cancelamento">{{ observacao_cancelamento }}</textarea>
+            <div class="cancel-confirm-box">
+              <label for="id_confirmacao_cancelamento">
+                <strong>Confirmacao obrigatoria</strong>
+                <span class="cancel-confirm-hint">Digite CANCELAR exatamente para liberar o cancelamento definitivo da venda #{{ venda.id }}.</span>
+              </label>
+              <input id="id_confirmacao_cancelamento" name="confirmacao_cancelamento" type="text" value="{{ confirmacao_cancelamento }}" autocomplete="off" required>
+            </div>
             <div class="cancel-actions">
-              <a class="cancel-btn" href="{% url 'estoque:venda_detalhe' venda.id %}">Voltar sem cancelar</a>
-              <button class="cancel-btn danger" type="submit">Confirmar cancelamento</button>
+              <a class="cancel-btn" href="{% url 'estoque:venda_detalhe' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}">Voltar sem cancelar</a>
+              <button class="cancel-btn danger is-disabled" id="btnConfirmarCancelamentoVenda" type="submit" disabled aria-disabled="true">Confirmar cancelamento definitivo</button>
             </div>
           </form>
         </section>
@@ -180,6 +258,9 @@
   document.addEventListener("DOMContentLoaded", function () {
     const radios = Array.from(document.querySelectorAll("input[name='motivo_padrao']"));
     const observacao = document.getElementById("id_observacao_cancelamento");
+    const confirmacao = document.getElementById("id_confirmacao_cancelamento");
+    const botaoConfirmar = document.getElementById("btnConfirmarCancelamentoVenda");
+    const form = document.getElementById("formCancelarVenda");
 
     function atualizarObrigatoriedade() {
       const selecionado = radios.find((radio) => radio.checked);
@@ -191,6 +272,96 @@
 
     radios.forEach((radio) => radio.addEventListener("change", atualizarObrigatoriedade));
     atualizarObrigatoriedade();
+
+    function textoConfirmacaoValido() {
+      return Boolean(confirmacao) && confirmacao.value.trim() === "CANCELAR";
+    }
+
+    function atualizarConfirmacao() {
+      if (!botaoConfirmar) {
+        return;
+      }
+
+      if (textoConfirmacaoValido()) {
+        botaoConfirmar.disabled = false;
+        botaoConfirmar.removeAttribute("disabled");
+        botaoConfirmar.setAttribute("aria-disabled", "false");
+        botaoConfirmar.classList.remove("is-disabled");
+        botaoConfirmar.style.pointerEvents = "auto";
+        botaoConfirmar.style.cursor = "pointer";
+        return;
+      }
+
+      botaoConfirmar.disabled = true;
+      botaoConfirmar.setAttribute("disabled", "disabled");
+      botaoConfirmar.setAttribute("aria-disabled", "true");
+      botaoConfirmar.classList.add("is-disabled");
+      botaoConfirmar.style.pointerEvents = "none";
+      botaoConfirmar.style.cursor = "not-allowed";
+    }
+
+    radios.forEach((radio) => {
+      radio.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        if (radio.checked) {
+          if (confirmacao) {
+            confirmacao.focus();
+            if (confirmacao.select) {
+              confirmacao.select();
+            }
+          }
+        }
+      });
+    });
+
+    if (observacao) {
+      observacao.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter" || event.shiftKey) return;
+        event.preventDefault();
+        if (confirmacao) {
+          confirmacao.focus();
+          if (confirmacao.select) {
+            confirmacao.select();
+          }
+        }
+      });
+    }
+
+    if (confirmacao) {
+      ["input", "keyup", "change", "paste"].forEach((evento) => {
+        confirmacao.addEventListener(evento, function () {
+          window.setTimeout(atualizarConfirmacao, 0);
+        });
+      });
+      confirmacao.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        atualizarConfirmacao();
+        if (textoConfirmacaoValido() && botaoConfirmar) {
+          botaoConfirmar.focus();
+        }
+      });
+    }
+    atualizarConfirmacao();
+
+    if (form) {
+      form.addEventListener("submit", function (event) {
+        if (!textoConfirmacaoValido()) {
+          event.preventDefault();
+          atualizarConfirmacao();
+          if (confirmacao) {
+            confirmacao.focus();
+          }
+          return;
+        }
+
+        const confirmado = window.confirm("Deseja realmente cancelar a venda #{{ venda.id }}? Esta acao marcara a venda como cancelada.");
+        if (!confirmado) {
+          event.preventDefault();
+        }
+      });
+    }
   });
 </script>
 {% endblock %}

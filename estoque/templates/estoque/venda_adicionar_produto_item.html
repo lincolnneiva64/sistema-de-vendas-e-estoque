@@ -180,7 +180,7 @@
           <p class="edit-review-subtitle">Tela de revisao segura: confira a nota inteira antes de acrescentar uma nova linha.</p>
         </div>
         <div class="edit-review-actions">
-          <a class="edit-review-btn" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1{% if itens_adicionados_param %}&itens_adicionados={{ itens_adicionados_param }}{% endif %}">Cancelar / Voltar</a>
+          <a class="edit-review-btn" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1{% if itens_adicionados_param %}&itens_adicionados={{ itens_adicionados_param }}{% endif %}{% if retorno_querystring %}&{{ retorno_querystring }}{% endif %}">Cancelar / Voltar</a>
         </div>
       </header>
 
@@ -228,7 +228,11 @@
 
         <section class="edit-review-section">
           <h2>Itens atuais da venda</h2>
-          <form method="get" id="addProductReviewForm"></form>
+          <form method="get" id="addProductReviewForm">
+            {% if retorno_url %}
+              <input type="hidden" name="next" value="{{ retorno_url }}">
+            {% endif %}
+          </form>
           {% if quantidade_preview %}
             <form method="post" id="addProductConfirmForm">
               {% csrf_token %}
@@ -304,7 +308,7 @@
       <input type="hidden" name="itens_adicionados" value="{{ itens_adicionados_param }}" form="addProductReviewForm">
       <button class="edit-review-btn primary compact btn-novo-item-primario" id="addProductReviewButton" type="submit" form="addProductReviewForm">Conferir</button>
     {% endif %}
-    <a class="edit-review-btn danger compact btn-novo-item-cancelar" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1{% if itens_adicionados_param %}&itens_adicionados={{ itens_adicionados_param }}{% endif %}">Cancelar</a>
+    <a class="edit-review-btn danger compact btn-novo-item-cancelar" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1{% if itens_adicionados_param %}&itens_adicionados={{ itens_adicionados_param }}{% endif %}{% if retorno_querystring %}&{{ retorno_querystring }}{% endif %}">Cancelar</a>
   </div>
 </td>                 
                 </tr>
@@ -317,8 +321,8 @@
                     <td class="numero">R$ {{ item.valor_total|floatformat:2 }}</td>
                     <td>
                       <div class="edit-review-row-actions">
-                        <a class="edit-review-btn primary compact" href="{% url 'estoque:venda_editar_quantidade_item' venda.id item.id %}">Alterar quantidade</a>
-                        <a class="edit-review-btn danger compact" href="{% url 'estoque:venda_revisar_remocao_item' venda.id item.id %}">Remover item</a>
+                        <a class="edit-review-btn primary compact" href="{% url 'estoque:venda_editar_quantidade_item' venda.id item.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}">Alterar quantidade</a>
+                        <a class="edit-review-btn danger compact" href="{% url 'estoque:venda_revisar_remocao_item' venda.id item.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}">Remover item</a>
                       </div>
                     </td>
                   </tr>

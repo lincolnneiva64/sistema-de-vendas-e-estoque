@@ -110,7 +110,7 @@
           <p class="qty-subtitle">Nota em edicao segura: revise a linha alterada e o novo total antes de confirmar.</p>
         </div>
         <div class="qty-actions">
-          <a class="qty-btn" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1">Cancelar / Voltar</a>
+          <a class="qty-btn" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1{% if retorno_querystring %}&{{ retorno_querystring }}{% endif %}">Cancelar / Voltar</a>
         </div>
       </header>
 
@@ -153,6 +153,9 @@
 
           <div class="qty-panel">
             <form method="get" class="qty-review-form">
+              {% if retorno_url %}
+                <input type="hidden" name="next" value="{{ retorno_url }}">
+              {% endif %}
               <div class="qty-table-wrap">
                 <table class="qty-table">
                   <thead>
@@ -219,7 +222,7 @@
               <form method="post" class="qty-confirm" data-qty-confirm-actions>
                 {% csrf_token %}
                 <input type="hidden" name="nova_quantidade" value="{{ quantidade_preview }}">
-                <a class="qty-btn" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1" data-qty-action="cancelar">Cancelar / Voltar</a>
+                <a class="qty-btn" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1{% if retorno_querystring %}&{{ retorno_querystring }}{% endif %}" data-qty-action="cancelar">Cancelar / Voltar</a>
                 <button class="qty-btn primary qty-confirm-button" type="submit" autofocus data-qty-action="confirmar">Confirmar alteracao da quantidade</button>
               </form>
             {% endif %}

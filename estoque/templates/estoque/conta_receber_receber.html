@@ -329,7 +329,7 @@
         <h1 class="receber-title">Receber Conta</h1>
         <p class="receber-subtitle">Registre um pagamento da carteira do cliente.</p>
       </div>
-      <a href="{% url 'estoque:contas_receber' %}" class="receber-btn receber-btn-secondary">Voltar</a>
+      <a href="{% if retorno_url %}{{ retorno_url }}{% else %}{% url 'estoque:contas_receber' %}{% endif %}" class="receber-btn receber-btn-secondary">Voltar</a>
     </header>
 
     {% if messages %}
@@ -441,7 +441,7 @@
           <textarea id="observacao" name="observacao" placeholder="Opcional" rows="2">{{ valores.observacao }}</textarea>
         </div>
         <div class="receber-actions">
-          <a href="{% url 'estoque:contas_receber' %}" class="receber-btn receber-btn-secondary" id="btnCancelarRecebimento">Cancelar</a>
+          <a href="{% if retorno_url %}{{ retorno_url }}{% else %}{% url 'estoque:contas_receber' %}{% endif %}" class="receber-btn receber-btn-secondary" id="btnCancelarRecebimento">Cancelar</a>
           <button type="submit" class="receber-btn receber-btn-primary" id="btnConfirmarRecebimento">Confirmar recebimento</button>
         </div>
         </form>

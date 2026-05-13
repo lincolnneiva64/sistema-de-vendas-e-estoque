@@ -20,6 +20,7 @@ from django.contrib import messages
 from django.http import Http404, HttpResponse, JsonResponse
 from django.utils.dateparse import parse_date
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 from PIL import Image, ImageDraw, ImageFont
@@ -1074,6 +1075,7 @@ def funcionarios(request):
 def clientes_autocomplete(request):
     termo = request.GET.get("q", "").strip()
     clientes_qs = Cliente.objects.filter(ativo=True).order_by("nome")
+    hoje = timezone.localdate()
 
     if termo:
         for parte in termo.split():
@@ -1086,6 +1088,26 @@ def clientes_autocomplete(request):
 
     clientes = []
     for cliente in clientes_qs[:12]:
+        credito_disponivel = (
+            CreditoCliente.objects.filter(cliente=cliente)
+            .aggregate(total=Sum("valor"))
+            .get("total")
+            or Decimal("0.00")
+        ).quantize(Decimal("0.01"))
+        credito_disponivel = max(credito_disponivel, Decimal("0.00"))
+
+        contas_abertas_qs = ContaReceber.objects.filter(
+            cliente=cliente,
+            status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+        )
+        contas_abertas = contas_abertas_qs.aggregate(
+            quantidade=Count("id"),
+            total=Sum("valor_em_aberto"),
+        )
+        contas_vencidas = contas_abertas_qs.filter(data_vencimento__lt=hoje).aggregate(
+            quantidade=Count("id"),
+            total=Sum("valor_em_aberto"),
+        )
         clientes.append({
             "id": cliente.id,
             "nome": cliente.nome,
@@ -1094,9 +1116,39 @@ def clientes_autocomplete(request):
             "status": cliente.status_credito,
             "status_label": cliente.get_status_credito_display(),
             "whatsapp": cliente.whatsapp or "",
+            "financeiro": {
+                "credito_disponivel": str(credito_disponivel),
+                "contas_abertas_qtd": contas_abertas.get("quantidade") or 0,
+                "contas_abertas_total": str(contas_abertas.get("total") or Decimal("0.00")),
+                "contas_vencidas_qtd": contas_vencidas.get("quantidade") or 0,
+                "contas_vencidas_total": str(contas_vencidas.get("total") or Decimal("0.00")),
+            },
         })
 
     return JsonResponse({"clientes": clientes})
+
+
+def _url_retorno_segura(request):
+    proxima_url = request.GET.get("next", "").strip()
+    if proxima_url and url_has_allowed_host_and_scheme(
+        url=proxima_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return proxima_url
+    return ""
+
+
+def _querystring_retorno(retorno_url):
+    return urlencode({"next": retorno_url}) if retorno_url else ""
+
+
+def _url_com_retorno(url, retorno_url):
+    if not retorno_url:
+        return url
+    separador = "&" if "?" in url else "?"
+    return f"{url}{separador}{_querystring_retorno(retorno_url)}"
+
 
 def produto_detalhe(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
@@ -1245,6 +1297,7 @@ def contas_receber(request):
     data_inicial_texto = request.GET.get("data_inicial", "").strip()
     data_final_texto = request.GET.get("data_final", "").strip()
     status_filtro = request.GET.get("status", "em_aberto").strip() or "em_aberto"
+    retorno_url = _url_retorno_segura(request)
 
     data_inicial = parse_date(data_inicial_texto) if data_inicial_texto else None
     data_final = parse_date(data_final_texto) if data_final_texto else None
@@ -1332,6 +1385,8 @@ def contas_receber(request):
             "cliente": cliente_texto,
             "data_inicial": data_inicial_texto,
             "data_final": data_final_texto,
+            "retorno_url": retorno_url,
+            "detalhe_credito_retorno_url": request.get_full_path(),
             "status_filtro": status_filtro,
             "status_opcoes": (
                 ("em_aberto", "Em aberto"),
@@ -1348,6 +1403,7 @@ def contas_receber(request):
 @ensure_csrf_cookie
 def cliente_credito_detalhe(request, cliente_id):
     cliente = get_object_or_404(Cliente, pk=cliente_id)
+    retorno_url = _url_retorno_segura(request)
     movimentos_qs = CreditoCliente.objects.filter(cliente=cliente)
     creditos_qs = (
         CreditoCliente.objects.select_related(
@@ -1418,6 +1474,7 @@ def cliente_credito_detalhe(request, cliente_id):
             "credito_atual": credito_atual,
             "creditos": creditos,
             "ultimo_movimento": creditos[0] if creditos else None,
+            "retorno_url": retorno_url,
         },
     )
 
@@ -1428,12 +1485,18 @@ def conta_receber_receber(request, pk):
         ContaReceber.objects.select_related("cliente", "venda"),
         pk=pk,
     )
+    retorno_url = _url_retorno_segura(request)
+    destino_retorno = retorno_url or reverse("estoque:contas_receber")
+    url_receber = reverse("estoque:conta_receber_receber", kwargs={"pk": conta.pk})
+    if retorno_url:
+        url_receber = f"{url_receber}?{urlencode({'next': retorno_url})}"
+
     if conta.status == ContaReceber.STATUS_CANCELADA:
         messages.warning(request, "Conta cancelada nao pode receber pagamento.")
-        return redirect("estoque:contas_receber")
+        return redirect(destino_retorno)
     if conta.status == ContaReceber.STATUS_PAGA:
         messages.warning(request, "Conta ja esta paga.")
-        return redirect("estoque:contas_receber")
+        return redirect(destino_retorno)
 
     formas_pagamento = (
         "Dinheiro",
@@ -1528,22 +1591,22 @@ def conta_receber_receber(request, pk):
                         conta_atual = ContaReceber.objects.select_for_update().get(pk=conta.pk)
                         if conta_atual.status == ContaReceber.STATUS_CANCELADA:
                             messages.warning(request, "Conta cancelada nao pode receber pagamento.")
-                            return redirect("estoque:contas_receber")
+                            return redirect(destino_retorno)
                         if conta_atual.status == ContaReceber.STATUS_PAGA:
                             messages.warning(request, "Conta ja esta paga.")
-                            return redirect("estoque:contas_receber")
+                            return redirect(destino_retorno)
                         saldo_atual = (conta_atual.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
                         if saldo_atual <= Decimal("0.00"):
                             conta_atual.status = ContaReceber.STATUS_PAGA
                             conta_atual.save(update_fields=["status", "atualizado_em"])
                             messages.warning(request, "Conta ja esta paga.")
-                            return redirect("estoque:contas_receber")
+                            return redirect(destino_retorno)
 
                         credito_atual = Decimal("0.00")
                         if credito_utilizado > Decimal("0.00"):
                             if not conta_atual.cliente_id:
                                 messages.warning(request, "Para usar credito, a conta precisa ter cliente vinculado.")
-                                return redirect("estoque:conta_receber_receber", pk=conta.pk)
+                                return redirect(url_receber)
                             credito_atual = (
                                 CreditoCliente.objects.select_for_update()
                                 .filter(cliente_id=conta_atual.cliente_id)
@@ -1554,10 +1617,10 @@ def conta_receber_receber(request, pk):
                             credito_atual = max(credito_atual, Decimal("0.00"))
                             if credito_utilizado > credito_atual:
                                 messages.warning(request, "Credito utilizado maior que o saldo disponivel do cliente.")
-                                return redirect("estoque:conta_receber_receber", pk=conta.pk)
+                                return redirect(url_receber)
                             if credito_utilizado > saldo_atual:
                                 messages.warning(request, "Credito utilizado maior que o saldo em aberto da conta.")
-                                return redirect("estoque:conta_receber_receber", pk=conta.pk)
+                                return redirect(url_receber)
 
                         total_para_baixa = (valor_recebido + credito_utilizado).quantize(Decimal("0.01"))
                         valor_aplicado = min(total_para_baixa, saldo_atual).quantize(Decimal("0.01"))
@@ -1565,7 +1628,7 @@ def conta_receber_receber(request, pk):
                         destino_diferenca = valores["destino_diferenca"]
                         if troco_devolvido > Decimal("0.00") and destino_diferenca == "credito" and not conta_atual.cliente_id:
                             messages.warning(request, "Para deixar diferenca como credito, a conta precisa ter cliente vinculado.")
-                            return redirect("estoque:conta_receber_receber", pk=conta.pk)
+                            return redirect(url_receber)
 
                         observacao_recebimento = valores["observacao"]
 
@@ -1636,7 +1699,7 @@ def conta_receber_receber(request, pk):
                         conta_atual.save(update_fields=["valor_em_aberto", "status", "atualizado_em"])
 
                     messages.success(request, "Recebimento registrado com sucesso.")
-                    return redirect("estoque:contas_receber")
+                    return redirect(destino_retorno)
 
     return render(
         request,
@@ -1649,6 +1712,7 @@ def conta_receber_receber(request, pk):
             "credito_disponivel": credito_disponivel,
             "credito_sugerido": credito_sugerido,
             "hoje_iso": timezone.localdate().isoformat(),
+            "retorno_url": retorno_url,
         },
     )
 
@@ -2504,6 +2568,7 @@ def venda_detalhe(request, pk):
         Venda.objects.select_related("cliente").prefetch_related("itens__produto", "eventos"),
         pk=pk,
     )
+    retorno_url = _url_retorno_segura(request)
     whatsapp_url = montar_link_whatsapp_venda(venda)
     entrega_contexto = None
     entrega_id = request.GET.get("entrega")
@@ -2570,6 +2635,8 @@ def venda_detalhe(request, pk):
             "alteracoes_pendentes_whatsapp": alteracoes_pendentes_whatsapp,
             "conta_receber": conta_receber,
             "venda_a_prazo": _venda_a_prazo(venda),
+            "retorno_url": retorno_url,
+            "retorno_querystring": _querystring_retorno(retorno_url),
         },
     )
 
@@ -2946,6 +3013,7 @@ def venda_editar_revisao(request, pk):
     bloqueio = _bloquear_venda_cancelada(request, venda)
     if bloqueio:
         return bloqueio
+    retorno_url = _url_retorno_segura(request)
     alteracao_quantidade = request.session.pop(f"venda_quantidade_alterada_{venda.pk}", None)
     item_removido = request.session.pop(f"venda_item_removido_{venda.pk}", None)
 
@@ -2975,6 +3043,8 @@ def venda_editar_revisao(request, pk):
             "possui_alerta_operacional": total_entregas or existe_checklist or existe_pendencia,
             "alteracao_quantidade": alteracao_quantidade,
             "whatsapp_atualizacao": whatsapp_atualizacao,
+            "retorno_url": retorno_url,
+            "retorno_querystring": _querystring_retorno(retorno_url),
         },
     )
 
@@ -2987,6 +3057,7 @@ def venda_editar_cabecalho(request, pk):
     bloqueio = _bloquear_venda_cancelada(request, venda)
     if bloqueio:
         return bloqueio
+    retorno_url = _url_retorno_segura(request)
     opcoes_pagamento = ("A prazo", "À vista")
     possui_alerta_operacional = (
         EntregaRotaItem.objects.filter(venda=venda).exists()
@@ -3056,7 +3127,8 @@ def venda_editar_cabecalho(request, pk):
                     request,
                     "Cabecalho da nota atualizado. O impacto financeiro real sera tratado em etapa futura, se necessario.",
                 )
-                return redirect("estoque:venda_editar_revisao", pk=venda.pk)
+                revisao_url = reverse("estoque:venda_editar_revisao", kwargs={"pk": venda.pk})
+                return redirect(_url_com_retorno(revisao_url, retorno_url))
 
     return render(
         request,
@@ -3067,6 +3139,8 @@ def venda_editar_cabecalho(request, pk):
             "opcoes_pagamento": opcoes_pagamento,
             "possui_alerta_operacional": possui_alerta_operacional,
             "whatsapp_atualizacao": whatsapp_atualizacao,
+            "retorno_url": retorno_url,
+            "retorno_querystring": _querystring_retorno(retorno_url),
         },
     )
 
@@ -3079,6 +3153,7 @@ def venda_editar_quantidade_item(request, pk, item_id):
     bloqueio = _bloquear_venda_cancelada(request, venda)
     if bloqueio:
         return bloqueio
+    retorno_url = _url_retorno_segura(request)
     item_venda = get_object_or_404(
         ItemVenda.objects.select_related("produto", "venda"),
         pk=item_id,
@@ -3106,7 +3181,11 @@ def venda_editar_quantidade_item(request, pk, item_id):
             nova_quantidade, novo_total_item, total_previsto = calcular_previsao(quantidade_postada)
         except ValueError as exc:
             messages.warning(request, str(exc))
-            return redirect("estoque:venda_editar_quantidade_item", pk=venda.pk, item_id=item_venda.pk)
+            quantidade_url = reverse(
+                "estoque:venda_editar_quantidade_item",
+                kwargs={"pk": venda.pk, "item_id": item_venda.pk},
+            )
+            return redirect(_url_com_retorno(quantidade_url, retorno_url))
 
         quantidade_anterior = item_venda.quantidade
         valor_anterior_item = valor_atual_item
@@ -3145,7 +3224,8 @@ def venda_editar_quantidade_item(request, pk, item_id):
             "total_anterior_venda": str(total_anterior),
             "novo_total_venda": str(novo_total_confirmado),
         }
-        return redirect("estoque:venda_editar_revisao", pk=venda.pk)
+        revisao_url = reverse("estoque:venda_editar_revisao", kwargs={"pk": venda.pk})
+        return redirect(_url_com_retorno(revisao_url, retorno_url))
 
     quantidade_informada = request.GET.get("nova_quantidade", "").strip()
     if quantidade_informada:
@@ -3175,6 +3255,8 @@ def venda_editar_quantidade_item(request, pk, item_id):
             "novo_total_venda": novo_total_venda,
             "erro_quantidade": erro_quantidade,
             "possui_alerta_operacional": possui_alerta_operacional,
+            "retorno_url": retorno_url,
+            "retorno_querystring": _querystring_retorno(retorno_url),
         },
     )
 
@@ -3187,6 +3269,7 @@ def venda_adicionar_produto_item(request, pk):
     bloqueio = _bloquear_venda_cancelada(request, venda)
     if bloqueio:
         return bloqueio
+    retorno_url = _url_retorno_segura(request)
     produtos = Produto.objects.filter(excluido=False).order_by("nome")
     total_atual_venda = venda.total or Decimal("0.00")
     produto_selecionado = None
@@ -3288,10 +3371,11 @@ def venda_adicionar_produto_item(request, pk):
             else:
                 messages.success(request, f'Produto "{produto_nome}" acrescentado a nota com sucesso.')
                 ids_destacados = list(dict.fromkeys([*itens_adicionados_ids, item_criado.pk]))
-                return redirect(
+                detalhe_url = (
                     f"{reverse('estoque:venda_detalhe', kwargs={'pk': venda.pk})}"
                     f"?nota_atualizada=1&itens_adicionados={','.join(str(item_id) for item_id in ids_destacados)}"
                 )
+                return redirect(_url_com_retorno(detalhe_url, retorno_url))
     else:
         produto_id = request.GET.get("produto_id", "").strip()
         quantidade_informada = request.GET.get("quantidade", "").strip()
@@ -3357,6 +3441,8 @@ def venda_adicionar_produto_item(request, pk):
             "itens_adicionados_param": itens_adicionados_param,
             "itens_venda_ordenados": itens_venda_ordenados,
             "produtos_existentes_ids": produtos_existentes_ids,
+            "retorno_url": retorno_url,
+            "retorno_querystring": _querystring_retorno(retorno_url),
         },
     )
 
@@ -3369,6 +3455,7 @@ def venda_revisar_remocao_item(request, pk, item_id):
     bloqueio = _bloquear_venda_cancelada(request, venda)
     if bloqueio:
         return bloqueio
+    retorno_url = _url_retorno_segura(request)
     item_venda = get_object_or_404(
         ItemVenda.objects.select_related("produto", "venda"),
         pk=item_id,
@@ -3425,7 +3512,8 @@ def venda_revisar_remocao_item(request, pk, item_id):
             "produto_nome": produto_nome,
             "novo_total_venda": str(total_recalculado),
         }
-        return redirect("estoque:venda_editar_revisao", pk=venda.pk)
+        revisao_url = reverse("estoque:venda_editar_revisao", kwargs={"pk": venda.pk})
+        return redirect(_url_com_retorno(revisao_url, retorno_url))
 
     return render(
         request,
@@ -3442,6 +3530,8 @@ def venda_revisar_remocao_item(request, pk, item_id):
             "nota_ficara_zerada": total_itens_venda == 1,
             "possui_alerta_operacional": possui_alerta_operacional,
             "total_checklists_item": total_checklists_item,
+            "retorno_url": retorno_url,
+            "retorno_querystring": _querystring_retorno(retorno_url),
         },
     )
 
@@ -3451,9 +3541,37 @@ def venda_cancelar(request, pk):
         Venda.objects.select_related("cliente").prefetch_related("itens__produto"),
         pk=pk,
     )
+    retorno_url = _url_retorno_segura(request)
+    detalhe_url = reverse("estoque:venda_detalhe", kwargs={"pk": venda.pk})
     if venda.cancelada:
         messages.warning(request, "Esta venda ja esta cancelada.")
-        return redirect("estoque:venda_detalhe", pk=venda.pk)
+        return redirect(_url_com_retorno(detalhe_url, retorno_url))
+
+    conta_receber = _conta_receber_da_venda(venda)
+    recebimentos_count = conta_receber.recebimentos.count() if conta_receber else 0
+    creditos_count = (
+        CreditoCliente.objects.filter(origem_conta_receber=conta_receber).count()
+        if conta_receber
+        else 0
+    )
+    entregas_count = EntregaRotaItem.objects.filter(venda=venda).count()
+    eventos_count = EventoVenda.objects.filter(venda=venda).count()
+    venda_antiga = bool(venda.data_venda and venda.data_venda != timezone.localdate())
+    sinais_consolidacao = []
+    if conta_receber:
+        sinais_consolidacao.append(
+            f"Conta a receber #{conta_receber.id} vinculada ({conta_receber.get_status_display()})."
+        )
+    if recebimentos_count:
+        sinais_consolidacao.append(f"{recebimentos_count} recebimento(s)/baixa(s) registrado(s).")
+    if creditos_count:
+        sinais_consolidacao.append(f"{creditos_count} movimento(s) de credito vinculado(s).")
+    if venda_antiga:
+        sinais_consolidacao.append("Venda de data anterior ao dia de hoje.")
+    if entregas_count:
+        sinais_consolidacao.append(f"{entregas_count} vinculo(s) de entrega/checklist encontrado(s).")
+    if eventos_count:
+        sinais_consolidacao.append(f"{eventos_count} registro(s) no historico da venda.")
 
     itens_nota = sorted(
         list(venda.itens.all()),
@@ -3469,14 +3587,18 @@ def venda_cancelar(request, pk):
     motivo = ""
     motivo_padrao = ""
     observacao_cancelamento = ""
+    confirmacao_cancelamento = ""
 
     if request.method == "POST":
         motivo_padrao = request.POST.get("motivo_padrao", "").strip()
         observacao_cancelamento = request.POST.get("observacao_cancelamento", "").strip()
+        confirmacao_cancelamento = request.POST.get("confirmacao_cancelamento", "")
         if motivo_padrao not in motivos_cancelamento:
             messages.warning(request, "Informe o motivo do cancelamento.")
         elif motivo_padrao == "Outro motivo" and not observacao_cancelamento:
             messages.warning(request, "Informe a observacao adicional para outro motivo.")
+        elif confirmacao_cancelamento != "CANCELAR":
+            messages.warning(request, "Digite CANCELAR exatamente para confirmar o cancelamento da venda.")
         else:
             motivo = motivo_padrao
             if observacao_cancelamento:
@@ -3500,7 +3622,7 @@ def venda_cancelar(request, pk):
                 _sincronizar_conta_receber(venda, "venda cancelada")
 
             messages.success(request, "Venda marcada como CANCELADA / VENDA NAO REALIZADA.")
-            return redirect("estoque:venda_detalhe", pk=venda.pk)
+            return redirect(_url_com_retorno(detalhe_url, retorno_url))
 
     return render(
         request,
@@ -3512,6 +3634,17 @@ def venda_cancelar(request, pk):
             "motivo_padrao": motivo_padrao,
             "observacao_cancelamento": observacao_cancelamento,
             "motivos_cancelamento": motivos_cancelamento,
+            "confirmacao_cancelamento": confirmacao_cancelamento,
+            "conta_receber": conta_receber,
+            "recebimentos_count": recebimentos_count,
+            "creditos_count": creditos_count,
+            "entregas_count": entregas_count,
+            "eventos_count": eventos_count,
+            "venda_antiga": venda_antiga,
+            "sinais_consolidacao": sinais_consolidacao,
+            "tem_sinais_consolidacao": bool(sinais_consolidacao),
+            "retorno_url": retorno_url,
+            "retorno_querystring": _querystring_retorno(retorno_url),
         },
     )
 

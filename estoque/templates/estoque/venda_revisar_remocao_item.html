@@ -90,7 +90,7 @@
           <p class="qty-subtitle">Nota em edicao segura: revise a linha selecionada e o novo total antes de confirmar.</p>
         </div>
         <div class="qty-actions">
-          <a class="qty-btn" href="{% url 'estoque:venda_editar_revisao' venda.id %}">Cancelar / Voltar</a>
+          <a class="qty-btn" href="{% url 'estoque:venda_editar_revisao' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}">Cancelar / Voltar</a>
         </div>
       </header>
 
@@ -191,7 +191,7 @@
 
         <form method="post" class="qty-confirm">
           {% csrf_token %}
-          <button class="qty-btn" id="btnCancelarRemocao" type="button" data-cancel-url="{% url 'estoque:venda_editar_revisao' venda.id %}">Cancelar / Voltar</button>
+          <button class="qty-btn" id="btnCancelarRemocao" type="button" data-cancel-url="{% url 'estoque:venda_editar_revisao' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}">Cancelar / Voltar</button>
           <button class="qty-btn danger" id="btnConfirmarRemocao" type="submit">Confirmar remocao</button>
         </form>
       </div>
