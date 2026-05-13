@@ -1,0 +1,305 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Receber do cliente{% endblock %}
+{% block content %}
+<style>
+  .receber-cliente-page { color: #172033; padding: 16px 0 30px; }
+  .receber-cliente-shell { max-width: 1180px; margin: 0 auto; padding: 0 18px; }
+  .rc-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 12px; margin-bottom: 12px;
+  }
+  .rc-title { margin: 0; color: #111827; font-size: 1.45rem; font-weight: 900; }
+  .rc-subtitle { margin: 4px 0 0; color: #64748b; font-size: 0.9rem; font-weight: 650; }
+  .rc-btn {
+    border: 1px solid #cbd5e1; border-radius: 9px; padding: 8px 13px;
+    background: #fff; color: #0f172a; font-size: 0.88rem; font-weight: 850;
+    text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+    min-height: 38px; cursor: pointer;
+  }
+  .rc-btn-primary { border-color: #86efac; background: #16a34a; color: #fff; }
+  .rc-btn[disabled] { opacity: 0.62; cursor: not-allowed; }
+  .rc-summary {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 9px; margin-bottom: 12px;
+  }
+  .rc-card {
+    border: 1px solid #e1e7ef; border-radius: 10px; background: #fff;
+    padding: 10px 12px; box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+  }
+  .rc-label { display: block; color: #64748b; font-size: 0.72rem; font-weight: 900; text-transform: uppercase; }
+  .rc-value { display: block; margin-top: 3px; color: #111827; font-size: 1rem; font-weight: 950; }
+  .rc-value.green { color: #166534; }
+  .rc-panel {
+    border: 1px solid #e1e7ef; border-radius: 13px; background: #fff;
+    box-shadow: 0 12px 26px rgba(15, 23, 42, 0.055); margin-bottom: 12px; overflow: hidden;
+  }
+  .rc-panel-head {
+    padding: 11px 13px; border-bottom: 1px solid #edf1f6; background: #f8fafc;
+    display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  }
+  .rc-panel-title { margin: 0; color: #111827; font-size: 0.98rem; font-weight: 900; }
+  .rc-form {
+    padding: 12px; display: grid;
+    grid-template-columns: minmax(150px, 0.8fr) minmax(140px, 0.7fr) minmax(170px, 0.8fr) auto;
+    gap: 10px; align-items: end;
+  }
+  .rc-field label {
+    display: block; margin-bottom: 5px; color: #64748b; font-size: 0.72rem;
+    font-weight: 900; text-transform: uppercase;
+  }
+  .rc-field input,
+  .rc-field select {
+    width: 100%; border: 1.5px solid #d3dbe8; border-radius: 9px;
+    padding: 10px 11px; color: #172033; font: inherit; font-weight: 750;
+  }
+  .rc-credito-futuro {
+    grid-column: 1 / -1; border: 1px dashed #bbf7d0; border-radius: 10px;
+    background: #f0fdf4; color: #166534; padding: 9px 10px; font-size: 0.84rem; font-weight: 800;
+  }
+  .rc-alert {
+    margin: 0 12px 12px; border-radius: 10px; padding: 9px 10px;
+    background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a;
+    font-size: 0.86rem; font-weight: 850;
+  }
+  .rc-alert.success { background: #ecfdf3; border-color: #bbf7d0; color: #166534; }
+  .rc-table-wrap { overflow-x: auto; }
+  .rc-table { width: 100%; min-width: 980px; border-collapse: collapse; }
+  .rc-table th {
+    background: #f8fafc; color: #64748b; font-size: 0.7rem; text-transform: uppercase;
+    padding: 9px 10px; border-bottom: 1px solid #edf1f6; text-align: left;
+  }
+  .rc-table td { padding: 10px; border-bottom: 1px solid #f0f3f8; font-size: 0.84rem; vertical-align: top; }
+  .rc-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .rc-preview-cell { font-weight: 850; }
+  .rc-row-prevista-quitada td { background: #f0fdf4; }
+  .rc-row-prevista-parcial td { background: #fffbeb; }
+  .rc-row-prevista-neutra td { background: #f8fafc; }
+  .rc-pill {
+    display: inline-flex; border-radius: 999px; padding: 4px 8px;
+    background: #e2e8f0; color: #334155; font-size: 0.75rem; font-weight: 950;
+  }
+  .rc-pill.quitara { background: #dcfce7; color: #166534; }
+  .rc-pill.parcial { background: #fef3c7; color: #92400e; }
+  .rc-empty { padding: 20px 12px; color: #64748b; text-align: center; font-weight: 800; }
+  .rc-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px; border-top: 1px solid #edf1f6; flex-wrap: wrap; }
+  @media (max-width: 880px) {
+    .rc-header { align-items: stretch; flex-direction: column; }
+    .rc-summary { grid-template-columns: 1fr 1fr; }
+    .rc-form { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 560px) {
+    .rc-summary { grid-template-columns: 1fr; }
+    .rc-actions .rc-btn { width: 100%; }
+  }
+</style>
+
+<div class="receber-cliente-page">
+  <div class="receber-cliente-shell">
+    <header class="rc-header">
+      <div>
+        <h1 class="rc-title">Receber do cliente</h1>
+        <p class="rc-subtitle">Previa de distribuicao automatica nas contas abertas.</p>
+      </div>
+      <a href="{{ retorno_url }}" class="rc-btn">Voltar</a>
+    </header>
+
+    <section class="rc-summary" aria-label="Resumo do cliente">
+      <div class="rc-card">
+        <span class="rc-label">Cliente</span>
+        <span class="rc-value">{{ cliente.nome }}</span>
+      </div>
+      <div class="rc-card">
+        <span class="rc-label">Credito disponivel</span>
+        <span class="rc-value green">R$ {{ credito_disponivel|floatformat:2 }}</span>
+      </div>
+      <div class="rc-card">
+        <span class="rc-label">Contas abertas</span>
+        <span class="rc-value">{{ total_contas }}</span>
+      </div>
+      <div class="rc-card">
+        <span class="rc-label">Total em aberto</span>
+        <span class="rc-value green">R$ {{ total_em_aberto|floatformat:2 }}</span>
+      </div>
+    </section>
+
+    <section class="rc-panel">
+      <div class="rc-panel-head">
+        <h2 class="rc-panel-title">Dados para previa</h2>
+        <span>Esta etapa nao grava baixa real.</span>
+      </div>
+      <div class="rc-form">
+        <div class="rc-field">
+          <label for="valorRecebidoCliente">Valor recebido</label>
+          <input id="valorRecebidoCliente" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00">
+        </div>
+        <div class="rc-field">
+          <label for="dataRecebimentoCliente">Data do recebimento</label>
+          <input id="dataRecebimentoCliente" type="date" value="{{ hoje_iso }}">
+        </div>
+        <div class="rc-field">
+          <label for="formaPagamentoCliente">Forma de pagamento</label>
+          <select id="formaPagamentoCliente">
+            {% for forma in formas_pagamento %}
+              <option value="{{ forma }}">{{ forma }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="button" class="rc-btn rc-btn-primary" disabled title="A baixa real sera implementada na proxima etapa.">Confirmar na proxima etapa</button>
+        {% if credito_disponivel > 0 %}
+          <div class="rc-credito-futuro">
+            Uso de credito disponivel sera ligado na etapa de confirmacao real. Nesta tela ele aparece apenas como informacao.
+          </div>
+        {% endif %}
+      </div>
+      <div id="sobraRecebimentoCliente" class="rc-alert success" hidden></div>
+      <div class="rc-alert">Previa somente para conferencia: nenhuma conta, credito ou recebimento sera alterado aqui.</div>
+    </section>
+
+    <section class="rc-panel">
+      <div class="rc-panel-head">
+        <h2 class="rc-panel-title">Contas abertas do cliente</h2>
+        <span id="resumoPreviaCliente">Informe um valor para calcular a previa.</span>
+      </div>
+      {% if contas %}
+        <div class="rc-table-wrap">
+          <table class="rc-table">
+            <thead>
+              <tr>
+                <th>Conta</th>
+                <th>Venda</th>
+                <th>Data da venda</th>
+                <th>Vencimento</th>
+                <th class="rc-num">Valor original</th>
+                <th class="rc-num">Valor em aberto</th>
+                <th>Status</th>
+                <th>Previa</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for conta in contas %}
+                <tr id="contaPreview{{ conta.id }}" class="rc-row-prevista-neutra">
+                  <td>#{{ conta.id }}</td>
+                  <td>#{{ conta.venda_id }}</td>
+                  <td>{{ conta.data_emissao|date:"d/m/Y" }}</td>
+                  <td>{{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</td>
+                  <td class="rc-num">R$ {{ conta.valor_original|floatformat:2 }}</td>
+                  <td class="rc-num">R$ {{ conta.valor_em_aberto|floatformat:2 }}</td>
+                  <td>{{ conta.get_status_display }}</td>
+                  <td class="rc-preview-cell" id="previewConta{{ conta.id }}">
+                    <span class="rc-pill">Nao atingida</span><br>
+                    Saldo continua R$ {{ conta.valor_em_aberto|floatformat:2 }}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="rc-empty">Nenhuma conta aberta para este cliente.</div>
+      {% endif %}
+      <div class="rc-actions">
+        <a href="{{ retorno_url }}" class="rc-btn">Voltar</a>
+      </div>
+    </section>
+  </div>
+</div>
+{{ contas_preview|json_script:"contasPreviewCliente" }}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const valor = document.getElementById("valorRecebidoCliente");
+    const resumo = document.getElementById("resumoPreviaCliente");
+    const sobraBox = document.getElementById("sobraRecebimentoCliente");
+    const contas = JSON.parse(document.getElementById("contasPreviewCliente")?.textContent || "[]");
+
+    function numeroDigitado(texto) {
+      let valorTexto = String(texto || "").trim().replace("R$", "").replace(/\s/g, "");
+      if (valorTexto.includes(",") && valorTexto.includes(".")) {
+        valorTexto = valorTexto.replace(/\./g, "").replace(",", ".");
+      } else {
+        valorTexto = valorTexto.replace(",", ".");
+      }
+      const numero = Number(valorTexto);
+      return Number.isFinite(numero) ? Math.max(numero, 0) : 0;
+    }
+
+    function moeda(numero) {
+      return new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL"
+      }).format(Number(numero || 0));
+    }
+
+    function atualizarLinha(conta, classe, html) {
+      const linha = document.getElementById("contaPreview" + conta.id);
+      const celula = document.getElementById("previewConta" + conta.id);
+      if (linha) {
+        linha.classList.remove("rc-row-prevista-quitada", "rc-row-prevista-parcial", "rc-row-prevista-neutra");
+        linha.classList.add(classe);
+      }
+      if (celula) {
+        celula.innerHTML = html;
+      }
+    }
+
+    function calcularPrevia() {
+      let restante = numeroDigitado(valor?.value);
+      const valorInformado = restante;
+      let aplicado = 0;
+      let contasAtingidas = 0;
+
+      contas.forEach(function (conta) {
+        const aberto = Number(conta.valor_em_aberto || 0);
+        const receber = Math.min(restante, aberto);
+        restante = Math.max(restante - receber, 0);
+        aplicado += receber;
+
+        if (valorInformado <= 0 || receber <= 0) {
+          atualizarLinha(
+            conta,
+            "rc-row-prevista-neutra",
+            '<span class="rc-pill">Nao atingida</span><br>Saldo continua ' + moeda(aberto)
+          );
+          return;
+        }
+
+        contasAtingidas += 1;
+        const saldoApos = Math.max(aberto - receber, 0);
+        if (saldoApos <= 0.009) {
+          atualizarLinha(
+            conta,
+            "rc-row-prevista-quitada",
+            '<span class="rc-pill quitara">Sera quitada</span><br>Recebera ' + moeda(receber) + '; saldo apos ' + moeda(0)
+          );
+          return;
+        }
+
+        atualizarLinha(
+          conta,
+          "rc-row-prevista-parcial",
+          '<span class="rc-pill parcial">Ficara parcial</span><br>Recebera ' + moeda(receber) + '; saldo apos ' + moeda(saldoApos)
+        );
+      });
+
+      if (resumo) {
+        resumo.textContent = valorInformado > 0
+          ? ("Aplicacao prevista: " + moeda(aplicado) + " em " + contasAtingidas + " conta(s).")
+          : "Informe um valor para calcular a previa.";
+      }
+
+      const sobra = Math.max(restante, 0);
+      if (sobraBox) {
+        if (sobra > 0.009) {
+          sobraBox.hidden = false;
+          sobraBox.textContent = "Sobra de " + moeda(sobra) + ". Na proxima etapa sera possivel registrar como troco devolvido ou deixar como credito do cliente.";
+        } else {
+          sobraBox.hidden = true;
+          sobraBox.textContent = "";
+        }
+      }
+    }
+
+    valor?.addEventListener("input", calcularPrevia);
+    calcularPrevia();
+  });
+</script>
+{% endblock %}

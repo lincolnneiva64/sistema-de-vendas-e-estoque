@@ -453,6 +453,16 @@ select {
 .cliente-financeiro-link:hover {
     text-decoration: underline;
 }
+.cliente-financeiro-acao {
+    display: inline-flex;
+    margin-left: 6px;
+    padding: 2px 5px;
+    border-radius: 999px;
+    background: rgba(29, 78, 216, 0.10);
+    color: #1d4ed8;
+    font-size: 10px;
+    font-weight: 950;
+}
 .barra-acoes-venda {
     display: flex;
     align-items: center;
@@ -1040,6 +1050,7 @@ const clienteResumoFinanceiro = document.getElementById("clienteResumoFinanceiro
 const vencimentoVenda = document.getElementById("vencimentoVenda");
 const clientesAutocompleteUrl = "{% url 'estoque:clientes_autocomplete' %}";
 const contasReceberUrl = "{% url 'estoque:contas_receber' %}";
+const receberClienteUrlBase = "{% url 'estoque:receber_cliente' 0 %}";
 const vendasUrl = "{% url 'estoque:vendas' %}";
 const gravarVendaUrl = "{% url 'estoque:gravar_venda' %}";
 let clientesSugestoes = [];
@@ -1125,7 +1136,7 @@ function atualizarPrazoEVencimentoCliente() {
     vencimentoVenda.value = calcularVencimentoCliente();
 }
 
-function criarLinhaFinanceira(classe, texto, link) {
+function criarLinhaFinanceira(classe, texto, link, acao) {
     const elemento = link ? document.createElement("a") : document.createElement("span");
     elemento.className = "cliente-financeiro-linha " + (classe || "");
     elemento.textContent = texto;
@@ -1133,6 +1144,12 @@ function criarLinhaFinanceira(classe, texto, link) {
         elemento.href = link;
         elemento.classList.add("cliente-financeiro-link");
         elemento.addEventListener("pointerdown", navegarResumoFinanceiroCliente);
+        if (acao) {
+            const acaoElemento = document.createElement("span");
+            acaoElemento.className = "cliente-financeiro-acao";
+            acaoElemento.textContent = acao;
+            elemento.appendChild(acaoElemento);
+        }
     }
     return elemento;
 }
@@ -1151,9 +1168,17 @@ function montarLinkContasReceberCliente(cliente) {
         + "&next=" + encodeURIComponent(vendasUrl);
 }
 
+function montarLinkReceberCliente(cliente) {
+    if (!cliente?.id) {
+        return montarLinkContasReceberCliente(cliente);
+    }
+    return receberClienteUrlBase.replace("/cliente/0/", "/cliente/" + encodeURIComponent(cliente.id) + "/")
+        + "?next=" + encodeURIComponent(vendasUrl);
+}
+
 function navegarResumoFinanceiroCliente(e) {
     const cliente = obterClienteResumoFinanceiro(e.currentTarget.clientePreview);
-    const link = montarLinkContasReceberCliente(cliente);
+    const link = montarLinkReceberCliente(cliente);
     e.preventDefault();
     e.stopPropagation();
     window.location.href = link;
@@ -1169,18 +1194,18 @@ function atualizarResumoFinanceiroCliente(cliente) {
     const abertasTotal = numeroCliente(financeiro.contas_abertas_total);
     const vencidasQtd = parseInt(financeiro.contas_vencidas_qtd || "0", 10) || 0;
     const vencidasTotal = numeroCliente(financeiro.contas_vencidas_total);
-    const linkContas = montarLinkContasReceberCliente(cliente);
+    const linkReceberCliente = montarLinkReceberCliente(cliente);
 
     if (credito > 0) {
         clienteResumoFinanceiro.appendChild(criarLinhaFinanceira("credito", "Credito disponivel: " + formatarMoedaCliente(credito)));
     }
     if (abertasQtd > 0) {
-        const linhaAbertas = criarLinhaFinanceira("aberto", "Contas em aberto: " + abertasQtd + " / " + formatarMoedaCliente(abertasTotal), linkContas);
+        const linhaAbertas = criarLinhaFinanceira("aberto", "Contas em aberto: " + abertasQtd + " / " + formatarMoedaCliente(abertasTotal), linkReceberCliente, "Receber do cliente");
         linhaAbertas.clientePreview = cliente;
         clienteResumoFinanceiro.appendChild(linhaAbertas);
     }
     if (vencidasQtd > 0) {
-        const linhaVencidas = criarLinhaFinanceira("vencido", "Atencao: vencidas " + vencidasQtd + " / " + formatarMoedaCliente(vencidasTotal), linkContas);
+        const linhaVencidas = criarLinhaFinanceira("vencido", "Atencao: vencidas " + vencidasQtd + " / " + formatarMoedaCliente(vencidasTotal), linkReceberCliente);
         linhaVencidas.clientePreview = cliente;
         clienteResumoFinanceiro.appendChild(linhaVencidas);
     }

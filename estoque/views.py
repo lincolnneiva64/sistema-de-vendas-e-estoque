@@ -5,7 +5,7 @@ from difflib import SequenceMatcher
 from io import BytesIO
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.conf import settings
 from django.db import transaction
@@ -1342,6 +1342,21 @@ def contas_receber(request):
             | Q(cliente__whatsapp__icontains=cliente_texto)
         )
 
+    contas_recebimento_cliente = None
+    contas_recebimento_cliente_total = Decimal("0.00")
+    contas_recebimento_cliente_qtd = 0
+    if cliente_texto and status_filtro == "em_aberto":
+        clientes_abertos = list(
+            contas_qs.exclude(cliente__isnull=True)
+            .values("cliente_id", "cliente__nome")
+            .annotate(qtd=Count("id"), total=Sum("valor_em_aberto"))
+            .order_by("cliente__nome")[:2]
+        )
+        if len(clientes_abertos) == 1:
+            contas_recebimento_cliente = clientes_abertos[0]
+            contas_recebimento_cliente_qtd = contas_recebimento_cliente["qtd"] or 0
+            contas_recebimento_cliente_total = contas_recebimento_cliente["total"] or Decimal("0.00")
+
     creditos_qs = CreditoCliente.objects.select_related("cliente")
     if cliente_texto:
         creditos_qs = creditos_qs.filter(
@@ -1387,6 +1402,9 @@ def contas_receber(request):
             "data_final": data_final_texto,
             "retorno_url": retorno_url,
             "detalhe_credito_retorno_url": request.get_full_path(),
+            "contas_recebimento_cliente": contas_recebimento_cliente,
+            "contas_recebimento_cliente_qtd": contas_recebimento_cliente_qtd,
+            "contas_recebimento_cliente_total": contas_recebimento_cliente_total,
             "status_filtro": status_filtro,
             "status_opcoes": (
                 ("em_aberto", "Em aberto"),
@@ -1396,6 +1414,73 @@ def contas_receber(request):
                 (ContaReceber.STATUS_CANCELADA, "Canceladas"),
                 ("todas", "Todas"),
             ),
+        },
+    )
+
+
+@ensure_csrf_cookie
+def receber_cliente(request, cliente_id):
+    cliente = get_object_or_404(Cliente, pk=cliente_id)
+    retorno_url = _url_retorno_segura(request)
+    contas_url = reverse("estoque:contas_receber")
+    destino_retorno = retorno_url or f"{contas_url}?{urlencode({'cliente': cliente.nome, 'status': 'em_aberto'})}"
+    hoje = timezone.localdate()
+
+    contas = list(
+        ContaReceber.objects.select_related("venda")
+        .filter(
+            cliente=cliente,
+            status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+            valor_em_aberto__gt=Decimal("0.00"),
+        )
+    )
+    contas.sort(
+        key=lambda conta: (
+            0 if conta.data_vencimento and conta.data_vencimento < hoje else 1,
+            conta.data_vencimento or date.max,
+            conta.data_emissao or date.max,
+            conta.id,
+        )
+    )
+
+    total_em_aberto = sum((conta.valor_em_aberto or Decimal("0.00") for conta in contas), Decimal("0.00"))
+    credito_disponivel = (
+        CreditoCliente.objects.filter(cliente=cliente)
+        .aggregate(total=Sum("valor"))
+        .get("total")
+        or Decimal("0.00")
+    ).quantize(Decimal("0.01"))
+    credito_disponivel = max(credito_disponivel, Decimal("0.00"))
+    formas_pagamento = (
+        "Dinheiro",
+        "PIX",
+        "Cartao de debito",
+        "Cartao de credito",
+        "Transferencia",
+        "Outro",
+    )
+    contas_preview = [
+        {
+            "id": conta.id,
+            "venda_id": conta.venda_id,
+            "valor_em_aberto": float(conta.valor_em_aberto or Decimal("0.00")),
+        }
+        for conta in contas
+    ]
+
+    return render(
+        request,
+        "estoque/receber_cliente.html",
+        {
+            "cliente": cliente,
+            "contas": contas,
+            "contas_preview": contas_preview,
+            "total_contas": len(contas),
+            "total_em_aberto": total_em_aberto,
+            "credito_disponivel": credito_disponivel,
+            "formas_pagamento": formas_pagamento,
+            "hoje_iso": hoje.isoformat(),
+            "retorno_url": destino_retorno,
         },
     )
 
