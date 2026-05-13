@@ -1651,6 +1651,7 @@ def cliente_credito_detalhe(request, cliente_id):
                     if credito.origem_conta_receber_id
                     else None
                 ),
+                "data_recebimento": recebimento.data_recebimento if recebimento else None,
                 "valor_entregue": (valor_aplicado + valor_credito).quantize(Decimal("0.01")),
                 "valor_aplicado": valor_aplicado,
                 "valor_credito": valor_credito,

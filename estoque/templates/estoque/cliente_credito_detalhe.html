@@ -2,65 +2,65 @@
 {% block title %}Detalhes do Credito{% endblock %}
 {% block content %}
 <style>
-  .credito-page { color: #172033; padding: 14px 0 24px; }
-  .credito-shell { max-width: 1120px; margin: 0 auto; padding: 0 18px; }
+  .credito-page { color: #172033; padding: 7px 0 14px; }
+  .credito-shell { max-width: 1320px; margin: 0 auto; padding: 0 26px; }
   .credito-header {
     display: flex; align-items: flex-end; justify-content: space-between;
-    gap: 12px; margin-bottom: 12px;
+    gap: 9px; margin-bottom: 6px;
   }
-  .credito-title { margin: 0; font-size: 1.34rem; font-weight: 850; color: #111827; }
-  .credito-subtitle { margin: 3px 0 0; color: #64748b; font-weight: 650; font-size: 0.88rem; }
+  .credito-title { margin: 0; font-size: 1.12rem; font-weight: 850; color: #111827; line-height: 1.12; }
+  .credito-subtitle { margin: 2px 0 0; color: #64748b; font-weight: 650; font-size: 0.8rem; line-height: 1.15; }
   .credito-btn {
-    border: 1px solid #7ea6d9; border-radius: 9px; padding: 8px 13px;
-    background: #dbeafe; color: #164173; font-weight: 800; font-size: 0.88rem;
+    border: 1px solid #7ea6d9; border-radius: 7px; padding: 5px 10px;
+    background: #dbeafe; color: #164173; font-weight: 800; font-size: 0.8rem;
     text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
-    min-height: 36px; white-space: nowrap;
+    min-height: 30px; white-space: nowrap;
   }
   .credito-resumo {
-    background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 14px;
-    box-shadow: 0 12px 26px rgba(22, 101, 52, 0.07);
-    padding: 10px 12px; margin-bottom: 10px;
-    display: grid; grid-template-columns: minmax(190px, 0.35fr) minmax(0, 1fr);
+    background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(22, 101, 52, 0.04);
+    padding: 7px 10px; margin-bottom: 7px;
+    display: grid; grid-template-columns: minmax(155px, 0.25fr) minmax(0, 1fr);
     gap: 12px; align-items: center;
   }
   .credito-resumo-label {
-    display: block; color: #166534; font-size: 0.76rem; font-weight: 900;
-    letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 3px;
+    display: block; color: #166534; font-size: 0.62rem; font-weight: 900;
+    letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 0;
   }
-  .credito-resumo-valor { color: #166534; font-size: 1.18rem; font-weight: 950; }
+  .credito-resumo-valor { color: #166534; font-size: 1rem; font-weight: 950; line-height: 1.08; }
   .credito-ultimo {
     border-left: 1px solid #bbf7d0;
-    padding-left: 12px;
+    padding-left: 11px;
     color: #166534;
-    font-size: 0.78rem;
+    font-size: 0.7rem;
     font-weight: 800;
-    line-height: 1.4;
+    line-height: 1.24;
   }
   .credito-ultimo-title {
     display: block;
     color: #166534;
-    font-size: 0.7rem;
+    font-size: 0.6rem;
     font-weight: 950;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    margin-bottom: 3px;
+    margin-bottom: 1px;
   }
   .credito-ultimo-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 4px 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2px 14px;
   }
-  .credito-ultimo-grid span { white-space: nowrap; }
-  .credito-ultimo-ref { margin-top: 3px; color: #15803d; font-weight: 850; }
+  .credito-ultimo-grid span { min-width: 0; }
+  .credito-ultimo-ref { margin-top: 2px; color: #15803d; font-weight: 850; }
   .credito-lista {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: 9px;
   }
   .credito-card {
-    background: #fff; border: 1px solid #e1e7ef; border-radius: 14px;
-    box-shadow: 0 12px 26px rgba(15, 23, 42, 0.055);
-    padding: 10px;
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 7px;
+    box-shadow: 0 3px 9px rgba(15, 23, 42, 0.035);
+    padding: 11px 9px;
   }
   .credito-card.utilizado {
     border-color: #bfdbfe;
@@ -68,21 +68,21 @@
   }
   .credito-card-head {
     display: flex; align-items: baseline; justify-content: space-between;
-    gap: 8px; margin-bottom: 8px;
+    gap: 7px; margin-bottom: 9px;
   }
-  .credito-card-title { margin: 0; color: #172033; font-size: 0.9rem; font-weight: 900; }
-  .credito-card-data { color: #64748b; font-size: 0.76rem; font-weight: 800; white-space: nowrap; }
+  .credito-card-title { margin: 0; color: #172033; font-size: 0.9rem; font-weight: 900; line-height: 1.15; }
+  .credito-card-data { color: #64748b; font-size: 0.74rem; font-weight: 800; white-space: nowrap; }
   .credito-grid {
-    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px 10px;
   }
   .credito-dado {
-    border: 1px solid #edf1f6; border-radius: 8px;
-    background: #fbfdff; padding: 6px 7px;
+    border: 0; border-left: 2px solid #edf1f6; border-radius: 0;
+    background: transparent; padding: 4px 0 4px 7px; min-width: 0;
   }
   .credito-dado.credito-dado-destaque {
     border-color: #bbf7d0;
-    background: #f0fdf4;
+    background: transparent;
   }
   .credito-dado.credito-dado-destaque .credito-dado-label,
   .credito-dado.credito-dado-destaque .credito-dado-valor {
@@ -90,7 +90,7 @@
   }
   .credito-dado.credito-dado-utilizado {
     border-color: #bfdbfe;
-    background: #eff6ff;
+    background: transparent;
   }
   .credito-dado.credito-dado-utilizado .credito-dado-label,
   .credito-dado.credito-dado-utilizado .credito-dado-valor {
@@ -98,28 +98,31 @@
   }
   .credito-dado-label {
     display: block; color: #64748b; font-size: 0.62rem; font-weight: 900;
-    letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 2px;
+    letter-spacing: 0.03em; text-transform: uppercase; margin-bottom: 1px; line-height: 1.08;
   }
-  .credito-dado-valor { color: #172033; font-size: 0.8rem; font-weight: 850; }
+  .credito-dado-valor { color: #172033; font-size: 0.78rem; font-weight: 850; line-height: 1.17; overflow-wrap: anywhere; }
   .credito-dado-valor.destaque { color: #166534; font-weight: 950; }
   .credito-observacao {
-    margin-top: 7px; border: 1px solid #fde68a; border-radius: 8px;
-    background: #fffbeb; color: #92400e; padding: 7px 8px;
-    font-size: 0.76rem; font-weight: 800; line-height: 1.35;
+    margin-top: 10px; border: 1px solid #fde68a; border-radius: 5px;
+    background: #fffbeb; color: #92400e; padding: 6px 7px;
+    font-size: 0.74rem; font-weight: 800; line-height: 1.28;
   }
   .credito-empty {
-    background: #fff; border: 1px solid #e1e7ef; border-radius: 14px;
-    padding: 22px 16px; color: #64748b; text-align: center;
-    font-weight: 800; box-shadow: 0 12px 26px rgba(15, 23, 42, 0.055);
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 10px;
+    padding: 14px 12px; color: #64748b; text-align: center;
+    font-weight: 800; box-shadow: 0 6px 14px rgba(15, 23, 42, 0.04);
   }
-  @media (max-width: 860px) {
+  @media (max-width: 980px) {
     .credito-header { align-items: stretch; flex-direction: column; }
+    .credito-shell { padding: 0 14px; }
     .credito-resumo { grid-template-columns: 1fr; }
-    .credito-ultimo { border-left: 0; border-top: 1px solid #bbf7d0; padding-left: 0; padding-top: 8px; }
+    .credito-ultimo { border-left: 0; border-top: 1px solid #bbf7d0; padding-left: 0; padding-top: 6px; }
     .credito-lista { grid-template-columns: 1fr; }
-    .credito-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .credito-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .credito-ultimo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width: 560px) {
+    .credito-lista { grid-template-columns: 1fr; }
     .credito-grid { grid-template-columns: 1fr; }
     .credito-ultimo-grid { grid-template-columns: 1fr; }
     .credito-card-head { align-items: flex-start; flex-direction: column; }
@@ -152,7 +155,7 @@
             </div>
           {% else %}
             <div class="credito-ultimo-grid">
-              <span>Data: {{ ultimo_movimento.criado_em|date:"d/m/Y H:i" }}</span>
+              <span>Recebimento: {{ ultimo_movimento.data_recebimento|date:"d/m/Y"|default:"-" }}</span>
               <span>Pago: R$ {{ ultimo_movimento.valor_entregue|floatformat:2 }}</span>
               <span>Conta: R$ {{ ultimo_movimento.valor_aplicado|floatformat:2 }}</span>
               <span>Credito: R$ {{ ultimo_movimento.valor_credito|floatformat:2 }}</span>
@@ -172,6 +175,10 @@
               <span class="credito-card-data">{{ credito.criado_em|date:"d/m/Y H:i" }}</span>
             </div>
             <div class="credito-grid">
+              <div class="credito-dado">
+                <span class="credito-dado-label">Recebimento</span>
+                <span class="credito-dado-valor">{{ credito.data_recebimento|date:"d/m/Y"|default:"-" }}</span>
+              </div>
               <div class="credito-dado">
                 <span class="credito-dado-label">Conta</span>
                 <span class="credito-dado-valor">#{{ credito.conta_id|default:"-" }}</span>
@@ -214,12 +221,14 @@
             </div>
             <div class="credito-observacao">
               {% if credito.utilizado %}
-              Em {{ credito.criado_em|date:"d/m/Y H:i" }}, foram usados R$ {{ credito.valor_movimento|floatformat:2 }} do credito do cliente para pagar a conta #{{ credito.conta_id|default:"-" }} / venda #{{ credito.venda_id|default:"-" }}.
-              O credito era R$ {{ credito.credito_antes|floatformat:2 }} antes do pagamento e ficou R$ {{ credito.credito_depois|floatformat:2 }} depois.
+              Uso: R$ {{ credito.valor_movimento|floatformat:2 }} na conta #{{ credito.conta_id|default:"-" }} / venda #{{ credito.venda_id|default:"-" }}. Saldo: R$ {{ credito.credito_antes|floatformat:2 }} -> R$ {{ credito.credito_depois|floatformat:2 }}.
               {% else %}
               Valor pago: R$ {{ credito.valor_entregue|floatformat:2 }}.
               Valor da conta: R$ {{ credito.valor_aplicado|floatformat:2 }}.
               Virou credito: R$ {{ credito.valor_credito|floatformat:2 }}.
+              {% endif %}
+              {% if credito.observacao %}
+                <br>{{ credito.observacao }}
               {% endif %}
             </div>
           </article>
