@@ -5,6 +5,7 @@ from difflib import SequenceMatcher
 from io import BytesIO
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
@@ -1338,6 +1339,28 @@ def conta_receber_receber(request, pk):
         "forma_pagamento": "Dinheiro",
         "observacao": "",
     }
+    pagamentos_recentes = []
+    if conta.cliente_id:
+        limite_recente = timezone.now() - timedelta(hours=72)
+        recebimentos_recentes = (
+            RecebimentoContaReceber.objects.select_related("conta", "conta__venda")
+            .filter(conta__cliente_id=conta.cliente_id, criado_em__gte=limite_recente)
+            .order_by("-criado_em", "-id")[:8]
+        )
+        pagamentos_recentes = [
+            {
+                "criado_em": recebimento.criado_em,
+                "criado_em_data": timezone.localtime(recebimento.criado_em).date().isoformat(),
+                "data_recebimento": recebimento.data_recebimento.isoformat() if recebimento.data_recebimento else "",
+                "valor": recebimento.valor,
+                "valor_numero": float(recebimento.valor or Decimal("0.00")),
+                "forma_pagamento": recebimento.forma_pagamento,
+                "conta_id": recebimento.conta_id,
+                "venda_id": recebimento.conta.venda_id if recebimento.conta_id else "",
+                "observacao": recebimento.observacao,
+            }
+            for recebimento in recebimentos_recentes
+        ]
 
     if request.method == "POST":
         valores = {
@@ -1359,8 +1382,6 @@ def conta_receber_receber(request, pk):
             else:
                 if valor_recebido <= Decimal("0.00"):
                     messages.warning(request, "Informe um valor recebido maior que zero.")
-                elif valor_recebido > (conta.valor_em_aberto or Decimal("0.00")):
-                    messages.warning(request, "O valor recebido nao pode ser maior que o valor em aberto.")
                 else:
                     with transaction.atomic():
                         conta_atual = ContaReceber.objects.select_for_update().get(pk=conta.pk)
@@ -1370,18 +1391,37 @@ def conta_receber_receber(request, pk):
                         if conta_atual.status == ContaReceber.STATUS_PAGA:
                             messages.warning(request, "Conta ja esta paga.")
                             return redirect("estoque:contas_receber")
-                        if valor_recebido > (conta_atual.valor_em_aberto or Decimal("0.00")):
-                            messages.warning(request, "O valor recebido nao pode ser maior que o valor em aberto.")
-                            return redirect("estoque:conta_receber_receber", pk=conta.pk)
+                        saldo_atual = (conta_atual.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
+                        if saldo_atual <= Decimal("0.00"):
+                            conta_atual.status = ContaReceber.STATUS_PAGA
+                            conta_atual.save(update_fields=["status", "atualizado_em"])
+                            messages.warning(request, "Conta ja esta paga.")
+                            return redirect("estoque:contas_receber")
+
+                        valor_aplicado = min(valor_recebido, saldo_atual).quantize(Decimal("0.01"))
+                        troco_devolvido = (valor_recebido - valor_aplicado).quantize(Decimal("0.01"))
+                        observacao_recebimento = valores["observacao"]
+
+                        if troco_devolvido > Decimal("0.00"):
+                            observacao_troco = (
+                                f"Valor entregue pelo cliente: {_formatar_moeda(valor_recebido)}. "
+                                f"Valor aplicado na conta: {_formatar_moeda(valor_aplicado)}. "
+                                f"Troco devolvido: {_formatar_moeda(troco_devolvido)}."
+                            )
+                            observacao_recebimento = (
+                                f"{observacao_recebimento}\n{observacao_troco}"
+                                if observacao_recebimento
+                                else observacao_troco
+                            )
 
                         RecebimentoContaReceber.objects.create(
                             conta=conta_atual,
                             data_recebimento=data_recebimento,
-                            valor=valor_recebido,
+                            valor=valor_aplicado,
                             forma_pagamento=valores["forma_pagamento"],
-                            observacao=valores["observacao"],
+                            observacao=observacao_recebimento,
                         )
-                        novo_valor_aberto = ((conta_atual.valor_em_aberto or Decimal("0.00")) - valor_recebido).quantize(Decimal("0.01"))
+                        novo_valor_aberto = (saldo_atual - valor_aplicado).quantize(Decimal("0.01"))
                         conta_atual.valor_em_aberto = novo_valor_aberto
                         conta_atual.status = (
                             ContaReceber.STATUS_PAGA
@@ -1400,6 +1440,8 @@ def conta_receber_receber(request, pk):
             "conta": conta,
             "valores": valores,
             "formas_pagamento": formas_pagamento,
+            "pagamentos_recentes": pagamentos_recentes,
+            "hoje_iso": timezone.localdate().isoformat(),
         },
     )
 
