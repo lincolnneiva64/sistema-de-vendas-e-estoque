@@ -1,0 +1,150 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Detalhes do Credito{% endblock %}
+{% block content %}
+<style>
+  .credito-page { color: #172033; padding: 14px 0 24px; }
+  .credito-shell { max-width: 1120px; margin: 0 auto; padding: 0 18px; }
+  .credito-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 12px; margin-bottom: 12px;
+  }
+  .credito-title { margin: 0; font-size: 1.34rem; font-weight: 850; color: #111827; }
+  .credito-subtitle { margin: 3px 0 0; color: #64748b; font-weight: 650; font-size: 0.88rem; }
+  .credito-btn {
+    border: 1px solid #7ea6d9; border-radius: 9px; padding: 8px 13px;
+    background: #dbeafe; color: #164173; font-weight: 800; font-size: 0.88rem;
+    text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+    min-height: 36px; white-space: nowrap;
+  }
+  .credito-resumo {
+    background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 14px;
+    box-shadow: 0 12px 26px rgba(22, 101, 52, 0.07);
+    padding: 10px 12px; margin-bottom: 10px;
+  }
+  .credito-resumo-label {
+    display: block; color: #166534; font-size: 0.76rem; font-weight: 900;
+    letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 3px;
+  }
+  .credito-resumo-valor { color: #166534; font-size: 1.18rem; font-weight: 950; }
+  .credito-lista {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .credito-card {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 14px;
+    box-shadow: 0 12px 26px rgba(15, 23, 42, 0.055);
+    padding: 10px;
+  }
+  .credito-card-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 8px; margin-bottom: 8px;
+  }
+  .credito-card-title { margin: 0; color: #172033; font-size: 0.9rem; font-weight: 900; }
+  .credito-card-data { color: #64748b; font-size: 0.76rem; font-weight: 800; white-space: nowrap; }
+  .credito-grid {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .credito-dado {
+    border: 1px solid #edf1f6; border-radius: 8px;
+    background: #fbfdff; padding: 6px 7px;
+  }
+  .credito-dado.credito-dado-destaque {
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+  }
+  .credito-dado.credito-dado-destaque .credito-dado-label,
+  .credito-dado.credito-dado-destaque .credito-dado-valor {
+    color: #166534;
+  }
+  .credito-dado-label {
+    display: block; color: #64748b; font-size: 0.62rem; font-weight: 900;
+    letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 2px;
+  }
+  .credito-dado-valor { color: #172033; font-size: 0.8rem; font-weight: 850; }
+  .credito-dado-valor.destaque { color: #166534; font-weight: 950; }
+  .credito-observacao {
+    margin-top: 7px; border: 1px solid #fde68a; border-radius: 8px;
+    background: #fffbeb; color: #92400e; padding: 7px 8px;
+    font-size: 0.76rem; font-weight: 800; line-height: 1.35;
+  }
+  .credito-empty {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 14px;
+    padding: 22px 16px; color: #64748b; text-align: center;
+    font-weight: 800; box-shadow: 0 12px 26px rgba(15, 23, 42, 0.055);
+  }
+  @media (max-width: 860px) {
+    .credito-header { align-items: stretch; flex-direction: column; }
+    .credito-lista { grid-template-columns: 1fr; }
+    .credito-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 560px) {
+    .credito-grid { grid-template-columns: 1fr; }
+    .credito-card-head { align-items: flex-start; flex-direction: column; }
+  }
+</style>
+
+<div class="credito-page">
+  <div class="credito-shell">
+    <header class="credito-header">
+      <div>
+        <h1 class="credito-title">Historico do credito</h1>
+        <p class="credito-subtitle">{{ cliente.nome }}</p>
+      </div>
+      <a href="{% url 'estoque:contas_receber' %}" class="credito-btn">Voltar</a>
+    </header>
+
+    <section class="credito-resumo" aria-label="Credito atual disponivel">
+      <span class="credito-resumo-label">Credito atual disponivel</span>
+      <span class="credito-resumo-valor">R$ {{ credito_atual|floatformat:2 }}</span>
+    </section>
+
+    {% if creditos %}
+      <section class="credito-lista" aria-label="Creditos gerados">
+        {% for credito in creditos %}
+          <article class="credito-card">
+            <div class="credito-card-head">
+              <h2 class="credito-card-title">Credito gerado</h2>
+              <span class="credito-card-data">{{ credito.criado_em|date:"d/m/Y H:i" }}</span>
+            </div>
+            <div class="credito-grid">
+              <div class="credito-dado">
+                <span class="credito-dado-label">Conta</span>
+                <span class="credito-dado-valor">#{{ credito.conta_id|default:"-" }}</span>
+              </div>
+              <div class="credito-dado">
+                <span class="credito-dado-label">Venda</span>
+                <span class="credito-dado-valor">#{{ credito.venda_id|default:"-" }}</span>
+              </div>
+              <div class="credito-dado">
+                <span class="credito-dado-label">Forma</span>
+                <span class="credito-dado-valor">{{ credito.forma_pagamento|default:"Nao informada" }}</span>
+              </div>
+              <div class="credito-dado">
+                <span class="credito-dado-label">Valor pago</span>
+                <span class="credito-dado-valor">R$ {{ credito.valor_entregue|floatformat:2 }}</span>
+              </div>
+              <div class="credito-dado">
+                <span class="credito-dado-label">Valor da conta</span>
+                <span class="credito-dado-valor">R$ {{ credito.valor_aplicado|floatformat:2 }}</span>
+              </div>
+              <div class="credito-dado credito-dado-destaque">
+                <span class="credito-dado-label">Virou credito</span>
+                <span class="credito-dado-valor destaque">R$ {{ credito.valor_credito|floatformat:2 }}</span>
+              </div>
+            </div>
+            <div class="credito-observacao">
+              Valor pago: R$ {{ credito.valor_entregue|floatformat:2 }}.
+              Valor da conta: R$ {{ credito.valor_aplicado|floatformat:2 }}.
+              Virou credito: R$ {{ credito.valor_credito|floatformat:2 }}.
+            </div>
+          </article>
+        {% endfor %}
+      </section>
+    {% else %}
+      <div class="credito-empty">Nenhum credito encontrado para este cliente.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

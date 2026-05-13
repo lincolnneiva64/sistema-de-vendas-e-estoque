@@ -1346,6 +1346,59 @@ def contas_receber(request):
 
 
 @ensure_csrf_cookie
+def cliente_credito_detalhe(request, cliente_id):
+    cliente = get_object_or_404(Cliente, pk=cliente_id)
+    creditos_qs = (
+        CreditoCliente.objects.select_related(
+            "origem_conta_receber",
+            "origem_conta_receber__venda",
+            "origem_recebimento",
+        )
+        .filter(cliente=cliente, valor__gt=Decimal("0.00"))
+        .order_by("-criado_em", "-id")
+    )
+    credito_atual = (
+        creditos_qs.aggregate(total=Sum("valor")).get("total")
+        or Decimal("0.00")
+    )
+    creditos = []
+    for credito in creditos_qs:
+        recebimento = credito.origem_recebimento
+        valor_aplicado = (
+            recebimento.valor
+            if recebimento
+            else Decimal("0.00")
+        )
+        valor_credito = credito.valor or Decimal("0.00")
+        creditos.append(
+            {
+                "criado_em": credito.criado_em,
+                "conta_id": credito.origem_conta_receber_id,
+                "venda_id": (
+                    credito.origem_conta_receber.venda_id
+                    if credito.origem_conta_receber_id
+                    else None
+                ),
+                "valor_entregue": (valor_aplicado + valor_credito).quantize(Decimal("0.01")),
+                "valor_aplicado": valor_aplicado,
+                "valor_credito": valor_credito,
+                "forma_pagamento": recebimento.forma_pagamento if recebimento else "",
+                "observacao": credito.observacao,
+            }
+        )
+
+    return render(
+        request,
+        "estoque/cliente_credito_detalhe.html",
+        {
+            "cliente": cliente,
+            "credito_atual": credito_atual,
+            "creditos": creditos,
+        },
+    )
+
+
+@ensure_csrf_cookie
 def conta_receber_receber(request, pk):
     conta = get_object_or_404(
         ContaReceber.objects.select_related("cliente", "venda"),

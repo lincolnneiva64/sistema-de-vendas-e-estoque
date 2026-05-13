@@ -143,6 +143,20 @@
     font-weight: 700;
     line-height: 1.35;
   }
+  .contas-credito-link {
+    margin-top: 8px;
+    border: 1px solid #86efac;
+    border-radius: 8px;
+    background: #f0fdf4;
+    color: #166534;
+    padding: 5px 9px;
+    font-size: 0.76rem;
+    font-weight: 850;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
   @media (max-width: 980px) {
     .contas-search form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
@@ -218,6 +232,7 @@
                   <br>{{ credito.observacao|truncatechars:120 }}
                 {% endif %}
               </div>
+              <a href="{% url 'estoque:cliente_credito_detalhe' credito.cliente_id %}" class="contas-credito-link">Ver detalhes</a>
             </div>
           {% endfor %}
         </div>
