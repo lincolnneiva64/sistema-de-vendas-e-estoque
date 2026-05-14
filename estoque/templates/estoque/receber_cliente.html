@@ -86,7 +86,7 @@
   .rc-panel-title { margin: 0; color: #111827; font-size: 0.9rem; font-weight: 900; }
   .rc-form {
     padding: 9px 10px; display: grid;
-    grid-template-columns: minmax(150px, 0.8fr) minmax(140px, 0.7fr) minmax(170px, 0.8fr) auto;
+    grid-template-columns: minmax(150px, 0.8fr) minmax(140px, 0.7fr) minmax(170px, 0.8fr);
     gap: 8px; align-items: end;
   }
   .rc-field label {
@@ -135,7 +135,16 @@
     border: 1px solid #bfdbfe; border-radius: 9px; background: #eff6ff; color: #1e3a8a;
     padding: 7px 9px; font-size: 0.82rem; font-weight: 850; display: inline-flex; gap: 6px; align-items: center;
   }
+  .rc-sobra-opcao:focus,
+  .rc-sobra-opcao:focus-within {
+    border-color: #2563eb; background: #dbeafe;
+    outline: 3px solid rgba(37, 99, 235, 0.34); outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+  }
   .rc-sobra-opcao input { accent-color: #2563eb; }
+  .rc-confirmar-cliente-acoes {
+    margin: 0 10px 9px; display: flex; justify-content: flex-end;
+  }
   .rc-table-wrap { overflow-x: auto; }
   .rc-table { width: 100%; min-width: 980px; border-collapse: collapse; }
   .rc-table th {
@@ -263,24 +272,23 @@
             <div class="rc-form">
               <div class="rc-field">
                 <label for="valorRecebidoCliente">Valor recebido</label>
-                <input id="valorRecebidoCliente" name="valor" type="text" inputmode="decimal" autocomplete="off" value="{{ valores.valor }}">
+                <input id="valorRecebidoCliente" name="valor" type="text" inputmode="decimal" autocomplete="off" value="{{ valores.valor }}" tabindex="1">
                 {% if feedback_recebimento %}
                   <p class="rc-feedback-campo">A tela foi atualizada apos o recebimento. O campo Valor recebido agora mostra o saldo restante sugerido.</p>
                 {% endif %}
               </div>
               <div class="rc-field">
                 <label for="dataRecebimentoCliente">Data do recebimento</label>
-                <input id="dataRecebimentoCliente" name="data_recebimento" type="date" value="{{ valores.data_recebimento }}">
+                <input id="dataRecebimentoCliente" name="data_recebimento" type="date" value="{{ valores.data_recebimento }}" tabindex="2">
               </div>
               <div class="rc-field">
                 <label for="formaPagamentoCliente">Forma de pagamento</label>
-                <select id="formaPagamentoCliente" name="forma_pagamento">
+                <select id="formaPagamentoCliente" name="forma_pagamento" tabindex="3">
                   {% for forma in formas_pagamento %}
                     <option value="{{ forma }}" {% if valores.forma_pagamento == forma %}selected{% endif %}>{{ forma }}</option>
                   {% endfor %}
                 </select>
               </div>
-              <button type="submit" class="rc-btn rc-btn-primary" id="btnConfirmarRecebimentoCliente">Confirmar recebimento do cliente</button>
               {% if credito_disponivel > 0 %}
                 <div class="rc-credito-futuro">
                   Credito disponivel aparece apenas como informacao nesta versao; ele nao sera consumido neste recebimento.
@@ -289,14 +297,17 @@
             </div>
             <div id="sobraRecebimentoCliente" class="rc-alert success" hidden></div>
             <div id="destinoSobraCliente" class="rc-sobra-opcoes" hidden>
-              <label class="rc-sobra-opcao">
-                <input type="radio" name="destino_diferenca" value="troco" {% if valores.destino_diferenca != "credito" %}checked{% endif %}>
+              <label class="rc-sobra-opcao" tabindex="-1">
+                <input id="destinoSobraTrocoCliente" type="radio" name="destino_diferenca" value="troco" {% if valores.destino_diferenca != "credito" %}checked{% endif %} tabindex="-1">
                 Registrar sobra como troco devolvido
               </label>
-              <label class="rc-sobra-opcao">
-                <input type="radio" name="destino_diferenca" value="credito" {% if valores.destino_diferenca == "credito" %}checked{% endif %}>
+              <label class="rc-sobra-opcao" tabindex="-1">
+                <input id="destinoSobraCreditoCliente" type="radio" name="destino_diferenca" value="credito" {% if valores.destino_diferenca == "credito" %}checked{% endif %} tabindex="-1">
                 Deixar sobra como credito do cliente
               </label>
+            </div>
+            <div class="rc-confirmar-cliente-acoes">
+              <button type="submit" class="rc-btn rc-btn-primary" id="btnConfirmarRecebimentoCliente" tabindex="4">Confirmar recebimento do cliente</button>
             </div>
             <div class="rc-distribuicao" aria-label="Resumo da distribuicao">
               <div class="rc-distribuicao-item">
@@ -417,11 +428,14 @@
   document.addEventListener("DOMContentLoaded", function () {
     const form = document.getElementById("formReceberCliente");
     const valor = document.getElementById("valorRecebidoCliente");
+    const dataRecebimento = document.getElementById("dataRecebimentoCliente");
     const forma = document.getElementById("formaPagamentoCliente");
     const confirmar = document.getElementById("btnConfirmarRecebimentoCliente");
     const resumo = document.getElementById("resumoPreviaCliente");
     const sobraBox = document.getElementById("sobraRecebimentoCliente");
     const destinoSobra = document.getElementById("destinoSobraCliente");
+    const opcoesSobra = Array.from(document.querySelectorAll("input[name='destino_diferenca']"));
+    const labelsSobra = Array.from(document.querySelectorAll(".rc-sobra-opcao"));
     const totalRecebidoPreview = document.getElementById("totalRecebidoPreview");
     const totalAplicadoPreview = document.getElementById("totalAplicadoPreview");
     const sobraPreview = document.getElementById("sobraPreview");
@@ -597,6 +611,49 @@
       if (destinoSobra) {
         destinoSobra.hidden = sobra <= 0.009;
       }
+      atualizarOrdemFocoSobra(sobra > 0.009);
+    }
+
+    function atualizarOrdemFocoSobra(temSobra) {
+      opcoesSobra.forEach(function (opcao, indice) {
+        opcao.tabIndex = -1;
+        if (labelsSobra[indice]) {
+          labelsSobra[indice].tabIndex = temSobra ? 4 + indice : -1;
+        }
+      });
+      if (confirmar) {
+        confirmar.tabIndex = temSobra ? 6 : 4;
+      }
+    }
+
+    function temSobraVisivel() {
+      return Boolean(destinoSobra && !destinoSobra.hidden);
+    }
+
+    function primeiraOpcaoSobraDisponivel() {
+      if (!destinoSobra || destinoSobra.hidden) return null;
+      const indice = opcoesSobra.findIndex(function (opcao) {
+        return !opcao.disabled;
+      });
+      return indice >= 0 ? labelsSobra[indice] : null;
+    }
+
+    function focarOpcaoSobra(indiceAtual, direcao) {
+      if (!opcoesSobra.length) return;
+      const disponiveis = opcoesSobra
+        .map(function (opcao, indice) {
+          return { opcao: opcao, label: labelsSobra[indice], indice: indice };
+        })
+        .filter(function (item) {
+          return item.label && !item.opcao.disabled;
+        });
+      if (!disponiveis.length) return;
+      const atual = disponiveis.findIndex(function (item) {
+        return item.indice === indiceAtual;
+      });
+      const proximo = atual >= 0 ? (atual + direcao + disponiveis.length) % disponiveis.length : 0;
+      disponiveis[proximo].opcao.checked = true;
+      disponiveis[proximo].label.focus();
     }
 
     valor?.addEventListener("input", calcularPrevia);
@@ -604,20 +661,65 @@
       if (event.key !== "Enter") return;
       event.preventDefault();
       calcularPrevia();
-      if (forma) {
-        forma.focus();
+      if (dataRecebimento) {
+        dataRecebimento.focus();
       } else {
-        confirmar?.focus();
+        forma?.focus();
       }
+    });
+    dataRecebimento?.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      forma?.focus();
     });
     forma?.addEventListener("keydown", function (event) {
       if (event.key !== "Enter") return;
       event.preventDefault();
       calcularPrevia();
-      if (confirmar) {
-        confirmar.focus();
-      } else {
-        document.querySelector(".rc-actions .rc-btn")?.focus();
+      window.setTimeout(function () {
+        const primeira = primeiraOpcaoSobraDisponivel();
+        if (primeira) {
+          primeira.focus();
+        } else {
+          confirmar?.focus();
+        }
+      }, 0);
+    });
+    labelsSobra.forEach(function (label, indice) {
+      if (!label) return;
+      label.addEventListener("keydown", function (event) {
+        if (["ArrowRight", "ArrowDown"].includes(event.key)) {
+          event.preventDefault();
+          focarOpcaoSobra(indice, 1);
+          return;
+        }
+        if (["ArrowLeft", "ArrowUp"].includes(event.key)) {
+          event.preventDefault();
+          focarOpcaoSobra(indice, -1);
+          return;
+        }
+        if (event.key === "Enter") {
+          event.preventDefault();
+          if (opcoesSobra[indice]) opcoesSobra[indice].checked = true;
+          confirmar?.focus();
+          return;
+        }
+        if (event.key === "Tab" && !event.shiftKey && indice === 0 && labelsSobra[1]) {
+          event.preventDefault();
+          labelsSobra[1].focus();
+          return;
+        }
+        if (event.key === "Tab" && event.shiftKey && indice === 1 && labelsSobra[0]) {
+          event.preventDefault();
+          labelsSobra[0].focus();
+        }
+      });
+    });
+    form?.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+      if (event.target === confirmar || modalOverlay?.classList.contains("visivel")) return;
+      if (["INPUT", "SELECT", "LABEL"].includes(event.target?.tagName || "")) {
+        event.preventDefault();
       }
     });
     form?.addEventListener("submit", async function (event) {
@@ -625,6 +727,14 @@
 
       event.preventDefault();
       calcularPrevia();
+      if (document.activeElement !== confirmar) {
+        if (temSobraVisivel()) {
+          primeiraOpcaoSobraDisponivel()?.focus();
+        } else {
+          confirmar?.focus();
+        }
+        return;
+      }
       const recebido = numeroDigitado(valor?.value);
       if (!Number.isFinite(recebido) || recebido <= 0) {
         await abrirModalReceber({
