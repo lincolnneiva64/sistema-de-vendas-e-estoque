@@ -296,11 +296,11 @@
             <div id="destinoSobraCliente" class="rc-sobra-opcoes" hidden>
               <label class="rc-sobra-opcao" tabindex="-1">
                 <input id="destinoSobraTrocoCliente" type="radio" name="destino_diferenca" value="troco" {% if valores.destino_diferenca != "credito" %}checked{% endif %} tabindex="-1">
-                Registrar sobra como troco devolvido
+                Registrar como troco
               </label>
               <label class="rc-sobra-opcao" tabindex="-1">
                 <input id="destinoSobraCreditoCliente" type="radio" name="destino_diferenca" value="credito" {% if valores.destino_diferenca == "credito" %}checked{% endif %} tabindex="-1">
-                Deixar sobra como credito do cliente
+                Registrar como crédito do cliente
               </label>
             </div>
             <div class="rc-confirmar-cliente-acoes">
@@ -599,7 +599,7 @@
       if (sobraBox) {
         if (sobra > 0.009) {
           sobraBox.hidden = false;
-          sobraBox.textContent = "Sobra de " + moeda(sobra) + ". Escolha abaixo se a sobra sera troco devolvido ou credito do cliente.";
+          sobraBox.textContent = "Sobra de " + moeda(sobra) + ". Escolha se será devolvida como troco ou guardada como crédito.";
         } else {
           sobraBox.hidden = true;
           sobraBox.textContent = "";
