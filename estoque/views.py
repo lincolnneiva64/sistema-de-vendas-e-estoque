@@ -1475,6 +1475,8 @@ def receber_cliente(request, cliente_id):
         "forma_pagamento": "Dinheiro",
         "destino_diferenca": "troco",
     }
+    if feedback_recebimento and total_em_aberto <= Decimal("0.00"):
+        valores["valor"] = ""
     credito_disponivel = (
         CreditoCliente.objects.filter(cliente=cliente)
         .aggregate(total=Sum("valor"))
