@@ -41,6 +41,19 @@ def normalizar_documento_cliente(valor):
     return "".join(caractere for caractere in str(valor or "") if caractere.isdigit())
 
 
+def _valor_total_recebimento_cliente(recebimento):
+    observacao = recebimento.observacao or ""
+    if "Total recebido:" not in observacao:
+        return (recebimento.valor or Decimal("0.00")).quantize(Decimal("0.01"))
+
+    trecho_total = observacao.split("Total recebido:", 1)[1]
+    trecho_total = trecho_total.split("Aplicado nesta conta:", 1)[0].strip().rstrip(".")
+    try:
+        return _decimal_do_front(trecho_total or recebimento.valor, "0.01")
+    except ValueError:
+        return (recebimento.valor or Decimal("0.00")).quantize(Decimal("0.01"))
+
+
 def textos_parecidos_cliente(valor_a, valor_b, minimo=0.88):
     texto_a = normalizar_texto_cliente(valor_a)
     texto_b = normalizar_texto_cliente(valor_b)
@@ -1476,6 +1489,29 @@ def receber_cliente(request, cliente_id):
             criado_em__date=hoje,
         ).values_list("valor", flat=True)
     ]
+    limite_recente = timezone.now() - timedelta(hours=72)
+    recebimentos_recentes = (
+        RecebimentoContaReceber.objects.select_related("conta", "conta__venda")
+        .filter(conta__cliente=cliente, criado_em__gte=limite_recente)
+        .order_by("-criado_em", "-id")[:8]
+    )
+    pagamentos_recentes = []
+    for recebimento in recebimentos_recentes:
+        valor_total_recebido = _valor_total_recebimento_cliente(recebimento)
+        pagamentos_recentes.append(
+            {
+                "criado_em": recebimento.criado_em,
+                "criado_em_data": timezone.localtime(recebimento.criado_em).date().isoformat(),
+                "data_recebimento": recebimento.data_recebimento.isoformat() if recebimento.data_recebimento else "",
+                "valor": valor_total_recebido,
+                "valor_numero": float(valor_total_recebido or Decimal("0.00")),
+                "valor_aplicado": recebimento.valor,
+                "forma_pagamento": recebimento.forma_pagamento,
+                "conta_id": recebimento.conta_id,
+                "venda_id": recebimento.conta.venda_id if recebimento.conta_id else "",
+                "observacao": recebimento.observacao,
+            }
+        )
 
     if request.method == "POST":
         valores = {
@@ -1605,6 +1641,7 @@ def receber_cliente(request, cliente_id):
             "formas_pagamento": formas_pagamento,
             "valores": valores,
             "pagamentos_hoje_preview": pagamentos_hoje_preview,
+            "pagamentos_recentes": pagamentos_recentes,
             "feedback_recebimento": feedback_recebimento,
             "contas_atualizadas_ids": (
                 feedback_recebimento.get("contas_atualizadas_ids", [])

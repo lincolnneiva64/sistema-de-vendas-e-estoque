@@ -85,7 +85,7 @@
   .rc-panel-title { margin: 0; color: #111827; font-size: 0.9rem; font-weight: 900; }
   .rc-form {
     padding: 9px 10px; display: grid;
-    grid-template-columns: minmax(150px, 0.8fr) minmax(140px, 0.7fr) minmax(170px, 0.8fr);
+    grid-template-columns: minmax(170px, 0.8fr) minmax(300px, 1.5fr);
     gap: 8px; align-items: end;
   }
   .rc-field label {
@@ -101,6 +101,12 @@
     margin: 6px 0 0; border: 1px solid #86efac; border-radius: 8px; background: #f0fdf4;
     color: #166534; padding: 6px 8px; font-size: 0.78rem; font-weight: 880; line-height: 1.28;
   }
+  .rc-duplicidade-alerta {
+    display: none; border: 1px solid #fbbf24; border-radius: 9px;
+    background: #fffbeb; color: #92400e; padding: 7px 9px;
+    font-size: 0.8rem; font-weight: 850; line-height: 1.32;
+  }
+  .rc-duplicidade-alerta.visivel { display: flex; align-items: center; min-height: 38px; }
   .rc-credito-futuro {
     grid-column: 1 / -1; border: 1px dashed #bbf7d0; border-radius: 9px;
     background: #f0fdf4; color: #166534; padding: 7px 9px; font-size: 0.8rem; font-weight: 800;
@@ -168,12 +174,40 @@
   .rc-atualizada-detalhe { color: #166534; font-size: 0.78rem; font-weight: 900; line-height: 1.35; }
   .rc-empty { padding: 20px 12px; color: #64748b; text-align: center; font-weight: 800; }
   .rc-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px; border-top: 1px solid #edf1f6; flex-wrap: wrap; }
+  .rc-historico {
+    border: 1px solid #e1e7ef; border-radius: 11px; background: #fff;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05); padding: 11px; margin-top: 9px;
+  }
+  .rc-historico-title { margin: 0 0 3px; color: #111827; font-size: 0.9rem; font-weight: 900; }
+  .rc-historico-subtitle { margin: 0 0 9px; color: #64748b; font-size: 0.76rem; font-weight: 750; }
+  .rc-historico-lista { display: grid; gap: 8px; max-height: 360px; overflow-y: auto; padding-right: 2px; }
+  .rc-historico-item {
+    border: 1px solid #e1e7ef; border-radius: 9px; background: #fbfdff;
+    padding: 8px; color: #334155; font-size: 0.79rem; font-weight: 650; line-height: 1.35;
+  }
+  .rc-historico-item.duplicidade {
+    border-color: #fbbf24; background: #fffbeb; box-shadow: 0 10px 22px rgba(146, 64, 14, 0.08);
+  }
+  .rc-historico-item.duplicidade .rc-historico-valor { background: #fef3c7; color: #92400e; }
+  .rc-historico-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .rc-historico-data { color: #334155; font-weight: 850; }
+  .rc-historico-valor {
+    margin-left: auto; border-radius: 999px; background: #ecfdf3; color: #166534;
+    padding: 3px 8px; font-weight: 900; white-space: nowrap;
+  }
+  .rc-historico-pill {
+    border-radius: 999px; background: #eef6ff; color: #1e3a8a;
+    padding: 3px 8px; font-weight: 800;
+  }
+  .rc-historico-obs { margin-top: 6px; color: #64748b; }
+  .rc-historico-vazio { margin: 0; color: #64748b; font-size: 0.8rem; font-weight: 750; }
   @media (max-width: 880px) {
     .rc-header { align-items: stretch; flex-direction: column; }
     .rc-summary { grid-template-columns: 1fr 1fr; }
     .rc-distribuicao { grid-template-columns: 1fr 1fr; }
     .rc-confirmacao-grid { grid-template-columns: 1fr 1fr; }
     .rc-form { grid-template-columns: 1fr; }
+    .rc-duplicidade-alerta { margin-top: 0; }
   }
   @media (min-width: 981px) {
     .receber-cliente-page .rc-pos-confirmacao-layout {
@@ -274,6 +308,7 @@
                   <p class="rc-feedback-campo">A tela foi atualizada apos o recebimento. O campo Valor recebido agora mostra o saldo restante sugerido.</p>
                 {% endif %}
               </div>
+              <div id="alertaDuplicidadeRecebimentoCliente" class="rc-duplicidade-alerta" role="alert" aria-live="polite"></div>
               <div class="rc-field">
                 <label for="dataRecebimentoCliente">Data do recebimento</label>
                 <input id="dataRecebimentoCliente" name="data_recebimento" type="date" value="{{ valores.data_recebimento }}" tabindex="2">
@@ -403,6 +438,31 @@
             <a href="{{ retorno_url }}" class="rc-btn">Voltar</a>
           </div>
         </section>
+        <section class="rc-historico">
+          <h2 class="rc-historico-title">Histórico recente do cliente</h2>
+          <p class="rc-historico-subtitle">Recebimentos lançados nas últimas 72 horas.</p>
+          {% if pagamentos_recentes %}
+            <div class="rc-historico-lista" id="historicoRecenteCliente">
+              {% for pagamento in pagamentos_recentes %}
+                <div class="rc-historico-item" data-pagamento-recente-cliente-index="{{ forloop.counter0 }}">
+                  <div class="rc-historico-meta">
+                    <span class="rc-historico-data">{{ pagamento.criado_em|date:"d/m/Y H:i" }}</span>
+                    <span class="rc-historico-pill">{{ pagamento.forma_pagamento|default:"Forma nao informada" }}</span>
+                    {% if pagamento.conta_id %}
+                      <span class="rc-historico-pill">Conta #{{ pagamento.conta_id }}{% if pagamento.venda_id %} / Venda #{{ pagamento.venda_id }}{% endif %}</span>
+                    {% endif %}
+                    <span class="rc-historico-valor">R$ {{ pagamento.valor|floatformat:2 }}</span>
+                  </div>
+                  {% if pagamento.observacao %}
+                    <div class="rc-historico-obs">{{ pagamento.observacao }}</div>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="rc-historico-vazio">Nenhum pagamento recente para este cliente.</p>
+          {% endif %}
+        </section>
       </div>
     </div>
   </div>
@@ -419,6 +479,7 @@
 </div>
 {{ contas_preview|json_script:"contasPreviewCliente" }}
 {{ pagamentos_hoje_preview|json_script:"pagamentosHojeCliente" }}
+{{ pagamentos_recentes|json_script:"pagamentosRecentesCliente" }}
 {{ contas_atualizadas_ids|json_script:"contasAtualizadasCliente" }}
 {{ contas_atualizadas_feedback|json_script:"contasAtualizadasFeedbackCliente" }}
 <script>
@@ -437,6 +498,7 @@
     const totalAplicadoPreview = document.getElementById("totalAplicadoPreview");
     const sobraPreview = document.getElementById("sobraPreview");
     const saldoAbertoPreview = document.getElementById("saldoAbertoPreview");
+    const alertaDuplicidade = document.getElementById("alertaDuplicidadeRecebimentoCliente");
     const modalOverlay = document.getElementById("receberClienteModalOverlay");
     const modalTitle = document.getElementById("receberClienteModalTitle");
     const modalText = document.getElementById("receberClienteModalText");
@@ -444,6 +506,10 @@
     const modalSecondary = document.getElementById("receberClienteModalSecondary");
     const contas = JSON.parse(document.getElementById("contasPreviewCliente")?.textContent || "[]");
     const pagamentosHoje = JSON.parse(document.getElementById("pagamentosHojeCliente")?.textContent || "[]");
+    const pagamentosRecentes = JSON.parse(document.getElementById("pagamentosRecentesCliente")?.textContent || "[]");
+    const listaHistorico = document.getElementById("historicoRecenteCliente");
+    const itensHistorico = Array.from(document.querySelectorAll("[data-pagamento-recente-cliente-index]"));
+    const ordemOriginalHistorico = itensHistorico.slice();
     const contasAtualizadas = JSON.parse(document.getElementById("contasAtualizadasCliente")?.textContent || "[]");
     const contasAtualizadasFeedback = JSON.parse(document.getElementById("contasAtualizadasFeedbackCliente")?.textContent || "{}");
     const totalAberto = contas.reduce(function (total, conta) {
@@ -522,6 +588,57 @@
         style: "currency",
         currency: "BRL"
       }).format(Number(numero || 0));
+    }
+
+    function limparDestaqueDuplicidade() {
+      itensHistorico.forEach(function (item) {
+        item.classList.remove("duplicidade");
+      });
+    }
+
+    function ordenarHistoricoPorDuplicidade(itemDuplicado) {
+      if (!listaHistorico) return;
+      if (itemDuplicado) {
+        listaHistorico.prepend(itemDuplicado);
+        listaHistorico.scrollTop = 0;
+        return;
+      }
+      ordemOriginalHistorico.forEach(function (item) {
+        listaHistorico.appendChild(item);
+      });
+    }
+
+    function atualizarAlertaDuplicidade() {
+      if (!alertaDuplicidade) return false;
+      alertaDuplicidade.textContent = "";
+      alertaDuplicidade.classList.remove("visivel");
+      limparDestaqueDuplicidade();
+      ordenarHistoricoPorDuplicidade(null);
+
+      const recebido = numeroDigitado(valor?.value);
+      if (!Number.isFinite(recebido) || recebido <= 0) return false;
+      let itemDuplicado = null;
+
+      const duplicado = pagamentosRecentes.find(function (pagamento, indice) {
+        const valorPagamento = Number(pagamento.valor_numero);
+        const pagamentoDuplicado = pagamento.criado_em_data === "{{ hoje_iso }}"
+          && Number.isFinite(valorPagamento)
+          && Math.abs(valorPagamento - recebido) <= 0.01;
+        if (pagamentoDuplicado) {
+          itemDuplicado = document.querySelector("[data-pagamento-recente-cliente-index='" + indice + "']");
+          itemDuplicado?.classList.add("duplicidade");
+        }
+        return pagamentoDuplicado;
+      });
+
+      if (!duplicado) return false;
+      ordenarHistoricoPorDuplicidade(itemDuplicado);
+
+      alertaDuplicidade.textContent = "Atenção: já existe um pagamento de "
+        + moeda(Number(duplicado.valor_numero))
+        + " para este cliente hoje. Confira se este pagamento já foi lançado.";
+      alertaDuplicidade.classList.add("visivel");
+      return true;
     }
 
     function detalheContaAtualizada(conta) {
@@ -608,6 +725,7 @@
       if (destinoSobra) {
         destinoSobra.hidden = sobra <= 0.009;
       }
+      atualizarAlertaDuplicidade();
       atualizarOrdemFocoSobra(sobra > 0.009);
     }
 
