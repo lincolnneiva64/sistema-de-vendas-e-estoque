@@ -1421,6 +1421,7 @@ def contas_receber(request):
 @ensure_csrf_cookie
 def receber_cliente(request, cliente_id):
     cliente = get_object_or_404(Cliente, pk=cliente_id)
+    feedback_recebimento = request.session.pop("receber_cliente_feedback", None)
     retorno_url = _url_retorno_segura(request)
     contas_url = reverse("estoque:contas_receber")
     destino_retorno = retorno_url or f"{contas_url}?{urlencode({'cliente': cliente.nome, 'status': 'em_aberto'})}"
@@ -1543,6 +1544,9 @@ def receber_cliente(request, cliente_id):
                                 distribuicao[-1][2] = sobra
 
                             valor_aplicado_total = Decimal("0.00")
+                            contas_afetadas = 0
+                            contas_atualizadas_ids = []
+                            contas_atualizadas_feedback = {}
                             for conta_atual, valor_aplicar, sobra_conta in distribuicao:
                                 valor_entregue_conta = (valor_aplicar + sobra_conta).quantize(Decimal("0.01"))
                                 observacao = (
@@ -1550,7 +1554,7 @@ def receber_cliente(request, cliente_id):
                                     f"Total recebido: {_formatar_moeda(valor_recebido)}. "
                                     f"Aplicado nesta conta: {_formatar_moeda(valor_aplicar)}."
                                 )
-                                _aplicar_recebimento_conta(
+                                resultado_recebimento = _aplicar_recebimento_conta(
                                     conta_atual,
                                     data_recebimento,
                                     valor_entregue_conta,
@@ -1559,13 +1563,24 @@ def receber_cliente(request, cliente_id):
                                     valores["destino_diferenca"],
                                 )
                                 valor_aplicado_total = (valor_aplicado_total + valor_aplicar).quantize(Decimal("0.01"))
+                                contas_afetadas += 1
+                                contas_atualizadas_ids.append(conta_atual.id)
+                                contas_atualizadas_feedback[str(conta_atual.id)] = {
+                                    "valor_aplicado": _formatar_moeda(valor_aplicar),
+                                    "saldo_restante": _formatar_moeda(resultado_recebimento["saldo_restante"]),
+                                    "quitada": resultado_recebimento["saldo_restante"] <= Decimal("0.00"),
+                                }
                     except RecebimentoContaErro as exc:
                         messages.warning(request, str(exc))
                     else:
-                        messages.success(
-                            request,
-                            f"Recebimento do cliente registrado com sucesso. Valor aplicado: {_formatar_moeda(valor_aplicado_total)}.",
-                        )
+                        request.session["receber_cliente_feedback"] = {
+                            "cliente": cliente.nome,
+                            "valor_aplicado": _formatar_moeda(valor_aplicado_total),
+                            "forma_pagamento": valores["forma_pagamento"],
+                            "contas_afetadas": contas_afetadas,
+                            "contas_atualizadas_ids": contas_atualizadas_ids,
+                            "contas_atualizadas": contas_atualizadas_feedback,
+                        }
                         return redirect(destino_pos_recebimento)
 
     contas_preview = [
@@ -1590,6 +1605,17 @@ def receber_cliente(request, cliente_id):
             "formas_pagamento": formas_pagamento,
             "valores": valores,
             "pagamentos_hoje_preview": pagamentos_hoje_preview,
+            "feedback_recebimento": feedback_recebimento,
+            "contas_atualizadas_ids": (
+                feedback_recebimento.get("contas_atualizadas_ids", [])
+                if feedback_recebimento
+                else []
+            ),
+            "contas_atualizadas_feedback": (
+                feedback_recebimento.get("contas_atualizadas", {})
+                if feedback_recebimento
+                else {}
+            ),
             "hoje_iso": hoje.isoformat(),
             "retorno_url": destino_retorno,
         },
