@@ -2,8 +2,7 @@
 {% block title %}Receber do cliente{% endblock %}
 {% block content %}
 <style>
-  .receber-cliente-page { color: #172033; padding: 10px 0 24px; }
-  .receber-cliente-page.recebimento-confirmado { background: #fff7d6; }
+  .receber-cliente-page { color: #172033; padding: 10px 0 24px; background: #fff7d6; }
   .receber-cliente-shell { max-width: 1180px; margin: 0 auto; padding: 0 18px; }
   .rc-header {
     display: flex; align-items: flex-end; justify-content: space-between;
@@ -177,39 +176,37 @@
     .rc-form { grid-template-columns: 1fr; }
   }
   @media (min-width: 981px) {
-    .receber-cliente-page.recebimento-confirmado .rc-pos-confirmacao-layout {
+    .receber-cliente-page .rc-pos-confirmacao-layout {
       display: grid; grid-template-columns: minmax(320px, 0.82fr) minmax(560px, 1.18fr);
       gap: 10px; align-items: start;
     }
-    .receber-cliente-page.recebimento-confirmado .rc-summary {
+    .receber-cliente-page .rc-summary {
       grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 7px;
     }
-    .receber-cliente-page.recebimento-confirmado .rc-confirmacao-grid {
+    .receber-cliente-page .rc-confirmacao-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-    .receber-cliente-page.recebimento-confirmado .rc-card { padding: 6px 8px; }
-    .receber-cliente-page.recebimento-confirmado .rc-form {
-      grid-template-columns: 1fr; padding: 8px 9px; gap: 7px;
-    }
-    .receber-cliente-page.recebimento-confirmado .rc-panel-head { padding: 7px 10px; }
-    .receber-cliente-page.recebimento-confirmado .rc-distribuicao {
+    .receber-cliente-page .rc-card { padding: 6px 8px; }
+    .receber-cliente-page .rc-form { padding: 8px 9px; gap: 7px; }
+    .receber-cliente-page .rc-panel-head { padding: 7px 10px; }
+    .receber-cliente-page .rc-distribuicao {
       grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 7px;
     }
-    .receber-cliente-page.recebimento-confirmado .rc-note { display: none; }
-    .receber-cliente-page.recebimento-confirmado .rc-pos-confirmacao-direita .rc-panel { margin-bottom: 0; }
-    .receber-cliente-page.recebimento-confirmado .rc-pos-confirmacao-direita .rc-table {
+    .receber-cliente-page .rc-note { display: none; }
+    .receber-cliente-page .rc-pos-confirmacao-direita .rc-panel { margin-bottom: 0; }
+    .receber-cliente-page .rc-pos-confirmacao-direita .rc-table {
       min-width: 640px;
     }
-    .receber-cliente-page.recebimento-confirmado .rc-pos-confirmacao-direita .rc-table th:nth-child(3),
-    .receber-cliente-page.recebimento-confirmado .rc-pos-confirmacao-direita .rc-table td:nth-child(3),
-    .receber-cliente-page.recebimento-confirmado .rc-pos-confirmacao-direita .rc-table th:nth-child(4),
-    .receber-cliente-page.recebimento-confirmado .rc-pos-confirmacao-direita .rc-table td:nth-child(4),
-    .receber-cliente-page.recebimento-confirmado .rc-pos-confirmacao-direita .rc-table th:nth-child(5),
-    .receber-cliente-page.recebimento-confirmado .rc-pos-confirmacao-direita .rc-table td:nth-child(5) {
+    .receber-cliente-page .rc-pos-confirmacao-direita .rc-table th:nth-child(3),
+    .receber-cliente-page .rc-pos-confirmacao-direita .rc-table td:nth-child(3),
+    .receber-cliente-page .rc-pos-confirmacao-direita .rc-table th:nth-child(4),
+    .receber-cliente-page .rc-pos-confirmacao-direita .rc-table td:nth-child(4),
+    .receber-cliente-page .rc-pos-confirmacao-direita .rc-table th:nth-child(5),
+    .receber-cliente-page .rc-pos-confirmacao-direita .rc-table td:nth-child(5) {
       display: none;
     }
-    .receber-cliente-page.recebimento-confirmado .rc-pos-confirmacao-direita .rc-table th,
-    .receber-cliente-page.recebimento-confirmado .rc-pos-confirmacao-direita .rc-table td {
+    .receber-cliente-page .rc-pos-confirmacao-direita .rc-table th,
+    .receber-cliente-page .rc-pos-confirmacao-direita .rc-table td {
       padding: 7px 8px;
     }
   }
