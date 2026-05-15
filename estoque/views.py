@@ -1107,6 +1107,7 @@ def _resumo_cliente_venda(cliente, hoje=None):
         quantidade=Count("id"),
         total=Sum("valor_em_aberto"),
     )
+    whatsapp_cobranca = _montar_whatsapp_cobranca_cliente(cliente, contas_abertas, contas_vencidas)
     return {
         "id": cliente.id,
         "nome": cliente.nome,
@@ -1122,6 +1123,7 @@ def _resumo_cliente_venda(cliente, hoje=None):
             "contas_vencidas_qtd": contas_vencidas.get("quantidade") or 0,
             "contas_vencidas_total": str(contas_vencidas.get("total") or Decimal("0.00")),
         },
+        "whatsapp_cobranca": whatsapp_cobranca,
     }
 
 
@@ -1159,6 +1161,37 @@ def _url_retorno_segura(request):
 
 def _querystring_retorno(retorno_url):
     return urlencode({"next": retorno_url}) if retorno_url else ""
+
+
+def _montar_whatsapp_cobranca_cliente(cliente, contas_abertas, contas_vencidas):
+    numero = Cliente.normalizar_whatsapp(cliente.whatsapp_normalizado or cliente.whatsapp)
+    if numero and len(numero) in (10, 11):
+        numero = "55" + numero
+
+    abertas_qtd = contas_abertas.get("quantidade") or 0
+    abertas_total = contas_abertas.get("total") or Decimal("0.00")
+    vencidas_qtd = contas_vencidas.get("quantidade") or 0
+    vencidas_total = contas_vencidas.get("total") or Decimal("0.00")
+    mensagem = "\n".join([
+        f"Olá, {cliente.nome}.",
+        "",
+        "Segue atualização das suas contas em aberto:",
+        "",
+        f"Contas em aberto: {abertas_qtd}",
+        f"Total em aberto: {_formatar_moeda(abertas_total)}",
+        "",
+        f"Contas vencidas: {vencidas_qtd}",
+        f"Total vencido: {_formatar_moeda(vencidas_total)}",
+        "",
+        "Pedimos, por gentileza, a atualização do pagamento.",
+        "",
+        "Obrigado.",
+        "LA Neiva",
+    ])
+    return {
+        "tem_whatsapp": bool(numero),
+        "url": f"https://web.whatsapp.com/send?phone={numero}&text={quote(mensagem)}" if numero else "",
+    }
 
 
 def _url_com_retorno(url, retorno_url):

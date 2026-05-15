@@ -370,7 +370,7 @@ select {
 }
 .cliente-resumo {
     display: none;
-    grid-template-columns: minmax(190px, 1.2fr) minmax(360px, 2.4fr) minmax(120px, 0.8fr) minmax(130px, 0.9fr);
+    grid-template-columns: minmax(145px, 0.8fr) minmax(430px, 2.8fr) minmax(130px, 0.8fr);
     gap: 5px;
     align-items: stretch;
     margin: 0;
@@ -420,16 +420,17 @@ select {
     font-size: 10px;
 }
 .cliente-financeiro {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 4px;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 3px;
 }
 .cliente-financeiro-linha {
     border-radius: 7px;
-    padding: 4px 6px;
+    padding: 3px 5px;
     background: #f1f5f9;
     color: #334155;
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 850;
     white-space: nowrap;
 }
@@ -444,6 +445,10 @@ select {
 .cliente-financeiro-linha.vencido {
     background: #fef2f2;
     color: #991b1b;
+}
+.cliente-financeiro-linha.whatsapp-cobranca {
+    background: #1d4ed8;
+    color: #fff;
 }
 .cliente-financeiro-link {
     color: inherit;
@@ -707,7 +712,7 @@ select {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .cliente-financeiro {
-        grid-template-columns: 1fr;
+        flex-wrap: wrap;
     }
 }
 .produto-sugestao-item strong {
@@ -1156,6 +1161,16 @@ function criarLinhaFinanceira(classe, texto, link, acao) {
     return elemento;
 }
 
+function criarLinkWhatsappCobranca(url) {
+    const elemento = document.createElement("a");
+    elemento.className = "cliente-financeiro-linha whatsapp-cobranca cliente-financeiro-link";
+    elemento.href = url;
+    elemento.target = "_blank";
+    elemento.rel = "noopener";
+    elemento.textContent = "Enviar cobrança";
+    return elemento;
+}
+
 function obterClienteResumoFinanceiro(clientePreview) {
     if (clienteSelecionado) return clienteSelecionado;
     if (clienteIndexAtivo >= 0 && clientesSugestoes[clienteIndexAtivo]) {
@@ -1201,6 +1216,7 @@ function atualizarResumoFinanceiroCliente(cliente) {
     const vencidasQtd = parseInt(financeiro.contas_vencidas_qtd || "0", 10) || 0;
     const vencidasTotal = numeroCliente(financeiro.contas_vencidas_total);
     const linkReceberCliente = montarLinkReceberCliente(cliente);
+    const whatsappCobrancaUrl = cliente.whatsapp_cobranca?.url || "";
 
     if (credito > 0) {
         clienteResumoFinanceiro.appendChild(criarLinhaFinanceira("credito", "Credito disponivel: " + formatarMoedaCliente(credito)));
@@ -1211,9 +1227,12 @@ function atualizarResumoFinanceiroCliente(cliente) {
         clienteResumoFinanceiro.appendChild(linhaAbertas);
     }
     if (vencidasQtd > 0) {
-        const linhaVencidas = criarLinhaFinanceira("vencido", "Atencao: vencidas " + vencidasQtd + " / " + formatarMoedaCliente(vencidasTotal), linkReceberCliente);
+        const linhaVencidas = criarLinhaFinanceira("vencido", "Atenção: vencidas " + vencidasQtd + " / " + formatarMoedaCliente(vencidasTotal), linkReceberCliente);
         linhaVencidas.clientePreview = cliente;
         clienteResumoFinanceiro.appendChild(linhaVencidas);
+    }
+    if (abertasQtd > 0 && whatsappCobrancaUrl) {
+        clienteResumoFinanceiro.appendChild(criarLinkWhatsappCobranca(whatsappCobrancaUrl));
     }
     if (credito <= 0 && abertasQtd <= 0 && vencidasQtd <= 0) {
         clienteResumoFinanceiro.appendChild(criarLinhaFinanceira("", "Sem pendencias financeiras."));
