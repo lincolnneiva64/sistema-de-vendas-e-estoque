@@ -1168,6 +1168,66 @@ def _url_com_retorno(url, retorno_url):
     return f"{url}{separador}{_querystring_retorno(retorno_url)}"
 
 
+def _numero_whatsapp_cliente(cliente):
+    if not cliente:
+        return ""
+    numero = Cliente.normalizar_whatsapp(cliente.whatsapp_normalizado or cliente.whatsapp)
+    return _normalizar_numero_whatsapp_evento(numero)
+
+
+def _montar_mensagem_confirmacao_recebimento(dados):
+    saldo_atual = dados["saldo_atual"]
+    credito_gerado = dados["credito_gerado"]
+    contas = dados.get("contas", [])
+    todas_quitadas = saldo_atual <= Decimal("0.00")
+    titulo_contas = "Contas quitadas:" if todas_quitadas else "Contas abatidas:"
+
+    linhas = [
+        f"Olá, {dados['cliente_nome']}.",
+        "",
+        f"Recebemos seu pagamento em {dados['data_recebimento']}.",
+        "",
+        "Resumo do pagamento:",
+        f"Valor que estava em aberto: {_formatar_moeda(dados['saldo_anterior'])}",
+        f"Valor pago: {_formatar_moeda(dados['valor_pago'])}",
+        f"Forma de pagamento: {dados['forma_pagamento']}",
+        "",
+        titulo_contas,
+    ]
+
+    for conta in contas:
+        venda = conta["venda_id"] or conta["conta_id"]
+        linha = f"- Venda/Nota #{venda} - {_formatar_moeda(conta['valor_aplicado'])}"
+        if not todas_quitadas:
+            linha += " - quitada" if conta["quitada"] else " - abatimento parcial"
+        linhas.append(linha)
+
+    linhas.extend([
+        "",
+        f"Saldo anterior: {_formatar_moeda(dados['saldo_anterior'])}",
+        f"Saldo após o pagamento: {_formatar_moeda(saldo_atual)}",
+    ])
+
+    if credito_gerado > Decimal("0.00"):
+        linhas.append(f"Crédito gerado para próximas compras: {_formatar_moeda(credito_gerado)}")
+    elif saldo_atual <= Decimal("0.00"):
+        linhas.extend(["", "Pagamento registrado. Não há saldo em aberto no momento."])
+
+    linhas.extend(["", "Obrigado.", "Meia Meia"])
+    return "\n".join(linhas)
+
+
+def _montar_whatsapp_confirmacao_recebimento(cliente, dados):
+    numero = _numero_whatsapp_cliente(cliente)
+    mensagem = _montar_mensagem_confirmacao_recebimento(dados)
+    return {
+        "tem_whatsapp": bool(numero),
+        "numero": numero,
+        "url": f"https://web.whatsapp.com/send?phone={numero}&text={quote(mensagem)}" if numero else "",
+        "mensagem": mensagem,
+    }
+
+
 def produto_detalhe(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
     return render(request, "estoque/produto_detalhe.html", {"produto": produto})
@@ -1594,9 +1654,11 @@ def receber_cliente(request, cliente_id):
                                 distribuicao[-1][2] = sobra
 
                             valor_aplicado_total = Decimal("0.00")
+                            credito_gerado_total = Decimal("0.00")
                             contas_afetadas = 0
                             contas_atualizadas_ids = []
                             contas_atualizadas_feedback = {}
+                            contas_confirmacao_whatsapp = []
                             for conta_atual, valor_aplicar, sobra_conta in distribuicao:
                                 valor_entregue_conta = (valor_aplicar + sobra_conta).quantize(Decimal("0.01"))
                                 observacao = (
@@ -1613,6 +1675,9 @@ def receber_cliente(request, cliente_id):
                                     valores["destino_diferenca"],
                                 )
                                 valor_aplicado_total = (valor_aplicado_total + valor_aplicar).quantize(Decimal("0.01"))
+                                credito_gerado_total = (
+                                    credito_gerado_total + resultado_recebimento["credito_gerado"]
+                                ).quantize(Decimal("0.01"))
                                 contas_afetadas += 1
                                 contas_atualizadas_ids.append(conta_atual.id)
                                 contas_atualizadas_feedback[str(conta_atual.id)] = {
@@ -1620,16 +1685,46 @@ def receber_cliente(request, cliente_id):
                                     "saldo_restante": _formatar_moeda(resultado_recebimento["saldo_restante"]),
                                     "quitada": resultado_recebimento["saldo_restante"] <= Decimal("0.00"),
                                 }
+                                contas_confirmacao_whatsapp.append({
+                                    "conta_id": conta_atual.id,
+                                    "venda_id": conta_atual.venda_id,
+                                    "valor_aplicado": valor_aplicar,
+                                    "quitada": resultado_recebimento["saldo_restante"] <= Decimal("0.00"),
+                                })
                     except RecebimentoContaErro as exc:
                         messages.warning(request, str(exc))
                     else:
+                        saldo_atual_confirmacao = max(
+                            (total_em_aberto - valor_aplicado_total).quantize(Decimal("0.01")),
+                            Decimal("0.00"),
+                        )
+                        dados_confirmacao_whatsapp = {
+                            "cliente_nome": cliente.nome,
+                            "data_recebimento": data_recebimento.strftime("%d/%m/%Y"),
+                            "saldo_anterior": total_em_aberto,
+                            "valor_pago": valor_recebido,
+                            "forma_pagamento": valores["forma_pagamento"],
+                            "contas": contas_confirmacao_whatsapp,
+                            "saldo_atual": saldo_atual_confirmacao,
+                            "credito_gerado": credito_gerado_total,
+                        }
                         request.session["receber_cliente_feedback"] = {
                             "cliente": cliente.nome,
                             "valor_aplicado": _formatar_moeda(valor_aplicado_total),
+                            "valor_pago": _formatar_moeda(valor_recebido),
+                            "saldo_anterior": _formatar_moeda(total_em_aberto),
+                            "saldo_atual": _formatar_moeda(saldo_atual_confirmacao),
+                            "credito_gerado": _formatar_moeda(credito_gerado_total),
+                            "tem_credito_gerado": credito_gerado_total > Decimal("0.00"),
                             "forma_pagamento": valores["forma_pagamento"],
+                            "data_recebimento": data_recebimento.strftime("%d/%m/%Y"),
                             "contas_afetadas": contas_afetadas,
                             "contas_atualizadas_ids": contas_atualizadas_ids,
                             "contas_atualizadas": contas_atualizadas_feedback,
+                            "whatsapp_confirmacao": _montar_whatsapp_confirmacao_recebimento(
+                                cliente,
+                                dados_confirmacao_whatsapp,
+                            ),
                         }
                         return redirect(destino_pos_recebimento)
 

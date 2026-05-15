@@ -16,6 +16,7 @@
     text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
     min-height: 34px; cursor: pointer;
   }
+  .rc-btn:active { transform: translateY(1px); }
   .rc-btn-primary { border-color: #86efac; background: #16a34a; color: #fff; }
   .rc-btn-info-disabled { border-color: #bfdbfe; background: #eff6ff; color: #1e3a8a; }
   .rc-btn.is-informativo { opacity: 0.72; cursor: default; }
@@ -62,6 +63,30 @@
   }
   .rc-confirmacao-valor { display: block; margin-top: 2px; color: #14532d; font-size: 0.9rem; font-weight: 900; }
   .rc-confirmacao-valor.destaque { font-size: 1.08rem; font-weight: 950; }
+  .rc-whatsapp-confirmacao {
+    margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .rc-whatsapp-confirmacao-btn {
+    border-color: #16a34a; background: #15803d; color: #fff;
+    box-shadow: 0 8px 16px rgba(21, 128, 61, 0.18);
+    transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.08s ease;
+  }
+  .rc-whatsapp-confirmacao-btn:active {
+    transform: translateY(1px);
+    box-shadow: 0 3px 8px rgba(21, 128, 61, 0.16);
+    filter: brightness(0.97);
+  }
+  .rc-whatsapp-confirmacao-aviso {
+    margin: 0; color: #92400e; background: #fffbeb; border: 1px solid #fde68a;
+    border-radius: 8px; padding: 7px 9px; font-size: 0.8rem; font-weight: 850;
+  }
+  .rc-voltar-cliente-btn {
+    background: #f8fafc; color: #14532d; border-color: #86efac;
+    box-shadow: 0 6px 14px rgba(22, 101, 52, 0.08);
+  }
+  .rc-voltar-cliente-btn:active {
+    box-shadow: 0 2px 7px rgba(22, 101, 52, 0.08);
+  }
   .rc-pos-confirmacao-layout { display: block; }
   .rc-summary {
     display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -262,7 +287,7 @@
 
 <div class="receber-cliente-page {% if feedback_recebimento %}recebimento-confirmado{% endif %}">
   <div class="receber-cliente-shell">
-    <header class="rc-header">
+    <header class="rc-header" id="topo-recebimento-cliente">
       <div>
         <h1 class="rc-title">Receber do cliente</h1>
         <p class="rc-subtitle">Previa de distribuicao automatica nas contas abertas.</p>
@@ -365,7 +390,7 @@
         </form>
 
         {% if feedback_recebimento %}
-          <section class="rc-confirmacao-sucesso" role="status" aria-live="polite">
+          <section id="recebimento-confirmado" class="rc-confirmacao-sucesso" role="status" aria-live="polite">
             <p class="rc-confirmacao-titulo">Recebimento confirmado com sucesso.</p>
             <div class="rc-confirmacao-grid">
               <div class="rc-confirmacao-item">
@@ -385,12 +410,30 @@
                 <span class="rc-confirmacao-valor">{{ feedback_recebimento.forma_pagamento|default:"-" }}</span>
               </div>
             </div>
+            <div class="rc-whatsapp-confirmacao">
+              {% if feedback_recebimento.whatsapp_confirmacao.tem_whatsapp %}
+                <a
+                  href="{{ feedback_recebimento.whatsapp_confirmacao.url }}"
+                  target="_blank"
+                  rel="noopener"
+                  class="rc-btn rc-whatsapp-confirmacao-btn"
+                  id="btnWhatsappConfirmacaoRecebimento"
+                >
+                  Enviar confirmação pelo WhatsApp
+                </a>
+              {% else %}
+                <p class="rc-whatsapp-confirmacao-aviso">
+                  Cliente sem WhatsApp cadastrado. Cadastre o WhatsApp do cliente para enviar a confirmação.
+                </p>
+              {% endif %}
+              <a href="#contas-do-cliente" class="rc-btn rc-voltar-cliente-btn">Voltar para contas do cliente</a>
+            </div>
           </section>
         {% endif %}
       </div>
 
       <div class="rc-pos-confirmacao-direita">
-        <section class="rc-panel">
+        <section class="rc-panel" id="contas-do-cliente">
           <div class="rc-panel-head">
             <h2 class="rc-panel-title">Contas abertas do cliente</h2>
             <span id="resumoPreviaCliente">Informe um valor para calcular a previa.</span>
@@ -510,6 +553,10 @@
     const modalText = document.getElementById("receberClienteModalText");
     const modalPrimary = document.getElementById("receberClienteModalPrimary");
     const modalSecondary = document.getElementById("receberClienteModalSecondary");
+    const recebimentoConfirmado = document.getElementById("recebimento-confirmado");
+    const contasDoCliente = document.getElementById("contas-do-cliente");
+    const topoRecebimentoCliente = document.getElementById("topo-recebimento-cliente");
+    const btnWhatsappConfirmacao = document.getElementById("btnWhatsappConfirmacaoRecebimento");
     const contas = JSON.parse(document.getElementById("contasPreviewCliente")?.textContent || "[]");
     const pagamentosHoje = JSON.parse(document.getElementById("pagamentosHojeCliente")?.textContent || "[]");
     const pagamentosRecentes = JSON.parse(document.getElementById("pagamentosRecentesCliente")?.textContent || "[]");
@@ -523,6 +570,16 @@
     }, 0);
     let resolverModalReceber = null;
     let focoAnteriorReceber = null;
+
+    function rolarParaAreaRecebimento(elemento, comportamento = "smooth") {
+      elemento?.scrollIntoView({ behavior: comportamento, block: "start" });
+    }
+
+    btnWhatsappConfirmacao?.addEventListener("click", function () {
+      window.setTimeout(function () {
+        rolarParaAreaRecebimento(topoRecebimentoCliente || contasDoCliente);
+      }, 700);
+    });
 
     function fecharModalReceber(resultado) {
       modalOverlay?.classList.remove("visivel");
@@ -902,6 +959,10 @@
     });
     calcularPrevia();
     window.setTimeout(function () {
+      if (recebimentoConfirmado) {
+        rolarParaAreaRecebimento(recebimentoConfirmado);
+        return;
+      }
       valor?.focus();
       valor?.select();
     }, 0);
