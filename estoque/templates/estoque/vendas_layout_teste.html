@@ -970,6 +970,7 @@ td:first-child {
     </div>
 </div>
 
+{{ cliente_inicial|json_script:"clienteInicialVenda" }}
 <script>
     function mostrarMsgEdicao() {
     const msg = document.getElementById("msgEdicao");
@@ -1053,6 +1054,7 @@ const contasReceberUrl = "{% url 'estoque:contas_receber' %}";
 const receberClienteUrlBase = "{% url 'estoque:receber_cliente' 0 %}";
 const vendasUrl = "{% url 'estoque:vendas' %}";
 const gravarVendaUrl = "{% url 'estoque:gravar_venda' %}";
+const clienteInicialVenda = JSON.parse(document.getElementById("clienteInicialVenda").textContent || "null");
 let clientesSugestoes = [];
 let clienteIndexAtivo = -1;
 let clienteSelecionado = null;
@@ -1163,17 +1165,21 @@ function obterClienteResumoFinanceiro(clientePreview) {
 }
 
 function montarLinkContasReceberCliente(cliente) {
+    const retornoVenda = cliente?.id
+        ? vendasUrl + "?cliente_id=" + encodeURIComponent(cliente.id)
+        : vendasUrl;
     return contasReceberUrl
         + "?cliente=" + encodeURIComponent(cliente?.nome || "")
-        + "&next=" + encodeURIComponent(vendasUrl);
+        + "&next=" + encodeURIComponent(retornoVenda);
 }
 
 function montarLinkReceberCliente(cliente) {
     if (!cliente?.id) {
         return montarLinkContasReceberCliente(cliente);
     }
+    const retornoVenda = vendasUrl + "?cliente_id=" + encodeURIComponent(cliente.id);
     return receberClienteUrlBase.replace("/cliente/0/", "/cliente/" + encodeURIComponent(cliente.id) + "/")
-        + "?next=" + encodeURIComponent(vendasUrl);
+        + "?next=" + encodeURIComponent(retornoVenda);
 }
 
 function navegarResumoFinanceiroCliente(e) {
@@ -1309,6 +1315,19 @@ function preencherResumoCliente(cliente) {
     atualizarPrazoEVencimentoCliente();
     clienteSugestoesBox.style.display = "none";
     clienteIndexAtivo = -1;
+}
+
+function clienteSelecionadoValido() {
+    return Boolean(
+        clienteSelecionado?.id
+        && clienteId.value
+        && String(clienteSelecionado.id) === String(clienteId.value)
+        && clienteBusca.value === (clienteSelecionado.nome || "")
+    );
+}
+
+if (clienteInicialVenda && clienteInicialVenda.id) {
+    preencherResumoCliente(clienteInicialVenda);
 }
 
 function atualizarCabecalhoCliente(cliente) {
@@ -1491,21 +1510,23 @@ clienteBusca.addEventListener("keydown", (e) => {
         renderizarSugestoesClientes();
     } else if (e.key === "Enter") {
         e.preventDefault();
-        if (clienteSugestoesBox.style.display !== "block") {
-            if (clientesSugestoes.length) {
-                clienteIndexAtivo = clienteIndexAtivo >= 0 ? clienteIndexAtivo : 0;
-                renderizarSugestoesClientes();
-            } else {
-                buscarClientes(clienteBusca.value.trim());
-            }
+        const listaAberta = clienteSugestoesBox.style.display === "block";
+        if (listaAberta && clienteIndexAtivo >= 0 && clientesSugestoes[clienteIndexAtivo]) {
+            preencherResumoCliente(clientesSugestoes[clienteIndexAtivo]);
+            focarProximoCampo(tipoVenda);
             return;
         }
 
-        if (clienteIndexAtivo >= 0 && clientesSugestoes[clienteIndexAtivo]) {
-            preencherResumoCliente(clientesSugestoes[clienteIndexAtivo]);
+        if (!listaAberta && clienteSelecionadoValido()) {
             focarProximoCampo(tipoVenda);
-        } else if (clienteSelecionado) {
-            focarProximoCampo(tipoVenda);
+            return;
+        }
+
+        if (!listaAberta && clientesSugestoes.length) {
+            clienteIndexAtivo = clienteIndexAtivo >= 0 ? clienteIndexAtivo : 0;
+            renderizarSugestoesClientes();
+        } else if (!clienteSelecionadoValido()) {
+            buscarClientes(clienteBusca.value.trim());
         }
     } else if (e.key === "Escape") {
         clienteSugestoesBox.style.display = "none";

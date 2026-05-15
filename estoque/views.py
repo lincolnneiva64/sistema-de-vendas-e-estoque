@@ -1085,6 +1085,46 @@ def funcionarios(request):
     )
 
 
+def _resumo_cliente_venda(cliente, hoje=None):
+    hoje = hoje or timezone.localdate()
+    credito_disponivel = (
+        CreditoCliente.objects.filter(cliente=cliente)
+        .aggregate(total=Sum("valor"))
+        .get("total")
+        or Decimal("0.00")
+    ).quantize(Decimal("0.01"))
+    credito_disponivel = max(credito_disponivel, Decimal("0.00"))
+
+    contas_abertas_qs = ContaReceber.objects.filter(
+        cliente=cliente,
+        status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+    )
+    contas_abertas = contas_abertas_qs.aggregate(
+        quantidade=Count("id"),
+        total=Sum("valor_em_aberto"),
+    )
+    contas_vencidas = contas_abertas_qs.filter(data_vencimento__lt=hoje).aggregate(
+        quantidade=Count("id"),
+        total=Sum("valor_em_aberto"),
+    )
+    return {
+        "id": cliente.id,
+        "nome": cliente.nome,
+        "prazo": cliente.prazo_padrao_dias or 0,
+        "limite": str(cliente.limite_credito or 0),
+        "status": cliente.status_credito,
+        "status_label": cliente.get_status_credito_display(),
+        "whatsapp": cliente.whatsapp or "",
+        "financeiro": {
+            "credito_disponivel": str(credito_disponivel),
+            "contas_abertas_qtd": contas_abertas.get("quantidade") or 0,
+            "contas_abertas_total": str(contas_abertas.get("total") or Decimal("0.00")),
+            "contas_vencidas_qtd": contas_vencidas.get("quantidade") or 0,
+            "contas_vencidas_total": str(contas_vencidas.get("total") or Decimal("0.00")),
+        },
+    }
+
+
 def clientes_autocomplete(request):
     termo = request.GET.get("q", "").strip()
     clientes_qs = Cliente.objects.filter(ativo=True).order_by("nome")
@@ -1101,42 +1141,7 @@ def clientes_autocomplete(request):
 
     clientes = []
     for cliente in clientes_qs[:12]:
-        credito_disponivel = (
-            CreditoCliente.objects.filter(cliente=cliente)
-            .aggregate(total=Sum("valor"))
-            .get("total")
-            or Decimal("0.00")
-        ).quantize(Decimal("0.01"))
-        credito_disponivel = max(credito_disponivel, Decimal("0.00"))
-
-        contas_abertas_qs = ContaReceber.objects.filter(
-            cliente=cliente,
-            status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
-        )
-        contas_abertas = contas_abertas_qs.aggregate(
-            quantidade=Count("id"),
-            total=Sum("valor_em_aberto"),
-        )
-        contas_vencidas = contas_abertas_qs.filter(data_vencimento__lt=hoje).aggregate(
-            quantidade=Count("id"),
-            total=Sum("valor_em_aberto"),
-        )
-        clientes.append({
-            "id": cliente.id,
-            "nome": cliente.nome,
-            "prazo": cliente.prazo_padrao_dias or 0,
-            "limite": str(cliente.limite_credito or 0),
-            "status": cliente.status_credito,
-            "status_label": cliente.get_status_credito_display(),
-            "whatsapp": cliente.whatsapp or "",
-            "financeiro": {
-                "credito_disponivel": str(credito_disponivel),
-                "contas_abertas_qtd": contas_abertas.get("quantidade") or 0,
-                "contas_abertas_total": str(contas_abertas.get("total") or Decimal("0.00")),
-                "contas_vencidas_qtd": contas_vencidas.get("quantidade") or 0,
-                "contas_vencidas_total": str(contas_vencidas.get("total") or Decimal("0.00")),
-            },
-        })
+        clientes.append(_resumo_cliente_venda(cliente, hoje))
 
     return JsonResponse({"clientes": clientes})
 
@@ -1218,8 +1223,15 @@ def produto_excluir_definitivo(request, pk):
 @ensure_csrf_cookie
 def vendas(request):
     produtos = Produto.objects.filter(excluido=False).order_by('nome')
+    cliente_inicial = None
+    cliente_id = request.GET.get("cliente_id")
+    if cliente_id:
+        cliente = Cliente.objects.filter(pk=cliente_id, ativo=True).first()
+        if cliente:
+            cliente_inicial = _resumo_cliente_venda(cliente)
     return render(request, 'estoque/vendas_layout_teste.html', {
-        'produtos': produtos
+        'produtos': produtos,
+        'cliente_inicial': cliente_inicial,
     })
 
 
