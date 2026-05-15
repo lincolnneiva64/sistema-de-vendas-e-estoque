@@ -1213,7 +1213,7 @@ def _montar_mensagem_confirmacao_recebimento(dados):
     elif saldo_atual <= Decimal("0.00"):
         linhas.extend(["", "Pagamento registrado. Não há saldo em aberto no momento."])
 
-    linhas.extend(["", "Obrigado.", "Meia Meia", "L A Neiva"])
+    linhas.extend(["", "Obrigado.", "L A Neiva"])
     return "\n".join(linhas)
 
 
