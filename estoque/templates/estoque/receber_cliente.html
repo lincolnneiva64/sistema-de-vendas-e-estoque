@@ -421,6 +421,20 @@
               </div>
             </div>
             <div class="rc-whatsapp-confirmacao">
+              {% if feedback_recebimento.comprovante_imagem_url %}
+                <a
+                  href="{{ feedback_recebimento.comprovante_imagem_url }}"
+                  target="_blank"
+                  rel="noopener"
+                  class="rc-btn rc-comprovante-visual-btn"
+                  id="btn-ver-comprovante-visual"
+                >
+                  Ver comprovante visual
+                </a>
+                <p class="rc-comprovante-orientacao">
+                  Para enviar a imagem: abra o comprovante, copie a imagem e cole no WhatsApp.
+                </p>
+              {% endif %}
               {% if feedback_recebimento.whatsapp_confirmacao.tem_whatsapp %}
                 <a
                   href="{{ feedback_recebimento.whatsapp_confirmacao.url }}"
@@ -434,20 +448,6 @@
               {% else %}
                 <p class="rc-whatsapp-confirmacao-aviso">
                   Cliente sem WhatsApp cadastrado. Cadastre o WhatsApp do cliente para enviar a confirmação.
-                </p>
-              {% endif %}
-              {% if feedback_recebimento.comprovante_imagem_url %}
-                <a
-                  href="{{ feedback_recebimento.comprovante_imagem_url }}"
-                  target="_blank"
-                  rel="noopener"
-                  class="rc-btn rc-comprovante-visual-btn"
-                  id="btn-ver-comprovante-visual"
-                >
-                  Ver comprovante visual
-                </a>
-                <p class="rc-comprovante-orientacao">
-                  Para enviar a imagem: abra o comprovante, copie a imagem e cole no WhatsApp.
                 </p>
               {% endif %}
               <a href="{% url 'estoque:vendas' %}?cliente_id={{ cliente.id }}" class="rc-btn rc-voltar-cliente-btn" id="btn-voltar-tela-venda">Voltar para tela de venda</a>
@@ -599,7 +599,7 @@
       elemento?.scrollIntoView({ behavior: comportamento, block: "start" });
     }
 
-    const botoesConfirmacao = [btnWhatsappConfirmacao, btnVerComprovanteVisual, btnVoltarTelaVenda].filter(Boolean);
+    const botoesConfirmacao = [btnVerComprovanteVisual, btnWhatsappConfirmacao, btnVoltarTelaVenda].filter(Boolean);
     botoesConfirmacao.forEach(function (botao, indice, botoes) {
       botao?.addEventListener("keydown", function (event) {
         if (event.key === "ArrowRight" || event.key === "ArrowDown") {
@@ -995,7 +995,7 @@
       if (recebimentoConfirmado) {
         rolarParaAreaRecebimento(recebimentoConfirmado);
         window.setTimeout(function () {
-          (btnWhatsappConfirmacao || btnVerComprovanteVisual || btnVoltarTelaVenda)?.focus();
+          (btnVerComprovanteVisual || btnWhatsappConfirmacao || btnVoltarTelaVenda)?.focus();
         }, 250);
         return;
       }
