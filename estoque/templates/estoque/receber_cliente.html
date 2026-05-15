@@ -417,7 +417,7 @@
                   target="_blank"
                   rel="noopener"
                   class="rc-btn rc-whatsapp-confirmacao-btn"
-                  id="btnWhatsappConfirmacaoRecebimento"
+                  id="btn-enviar-confirmacao-whatsapp"
                 >
                   Enviar confirmação pelo WhatsApp
                 </a>
@@ -426,7 +426,7 @@
                   Cliente sem WhatsApp cadastrado. Cadastre o WhatsApp do cliente para enviar a confirmação.
                 </p>
               {% endif %}
-              <a href="#contas-do-cliente" class="rc-btn rc-voltar-cliente-btn">Voltar para contas do cliente</a>
+              <a href="{% url 'estoque:vendas' %}?cliente_id={{ cliente.id }}" class="rc-btn rc-voltar-cliente-btn" id="btn-voltar-tela-venda">Voltar para tela de venda</a>
             </div>
           </section>
         {% endif %}
@@ -554,9 +554,8 @@
     const modalPrimary = document.getElementById("receberClienteModalPrimary");
     const modalSecondary = document.getElementById("receberClienteModalSecondary");
     const recebimentoConfirmado = document.getElementById("recebimento-confirmado");
-    const contasDoCliente = document.getElementById("contas-do-cliente");
-    const topoRecebimentoCliente = document.getElementById("topo-recebimento-cliente");
-    const btnWhatsappConfirmacao = document.getElementById("btnWhatsappConfirmacaoRecebimento");
+    const btnWhatsappConfirmacao = document.getElementById("btn-enviar-confirmacao-whatsapp");
+    const btnVoltarTelaVenda = document.getElementById("btn-voltar-tela-venda");
     const contas = JSON.parse(document.getElementById("contasPreviewCliente")?.textContent || "[]");
     const pagamentosHoje = JSON.parse(document.getElementById("pagamentosHojeCliente")?.textContent || "[]");
     const pagamentosRecentes = JSON.parse(document.getElementById("pagamentosRecentesCliente")?.textContent || "[]");
@@ -575,10 +574,18 @@
       elemento?.scrollIntoView({ behavior: comportamento, block: "start" });
     }
 
-    btnWhatsappConfirmacao?.addEventListener("click", function () {
-      window.setTimeout(function () {
-        rolarParaAreaRecebimento(topoRecebimentoCliente || contasDoCliente);
-      }, 700);
+    [btnWhatsappConfirmacao, btnVoltarTelaVenda].forEach(function (botao, indice, botoes) {
+      botao?.addEventListener("keydown", function (event) {
+        if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+          event.preventDefault();
+          (botoes[1] || botoes[0])?.focus();
+          return;
+        }
+        if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+          event.preventDefault();
+          (botoes[0] || botoes[1])?.focus();
+        }
+      });
     });
 
     function fecharModalReceber(resultado) {
@@ -961,6 +968,9 @@
     window.setTimeout(function () {
       if (recebimentoConfirmado) {
         rolarParaAreaRecebimento(recebimentoConfirmado);
+        window.setTimeout(function () {
+          btnWhatsappConfirmacao?.focus();
+        }, 250);
         return;
       }
       valor?.focus();
