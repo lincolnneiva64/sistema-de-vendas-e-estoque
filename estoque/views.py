@@ -1176,44 +1176,14 @@ def _numero_whatsapp_cliente(cliente):
 
 
 def _montar_mensagem_confirmacao_recebimento(dados):
-    saldo_atual = dados["saldo_atual"]
-    credito_gerado = dados["credito_gerado"]
-    contas = dados.get("contas", [])
-    todas_quitadas = saldo_atual <= Decimal("0.00")
-    titulo_contas = "Contas quitadas:" if todas_quitadas else "Contas abatidas:"
-
     linhas = [
         f"Olá, {dados['cliente_nome']}.",
         "",
-        f"Recebemos seu pagamento em {dados['data_recebimento']}.",
+        "Segue comprovante de pagamento.",
         "",
-        "Resumo do pagamento:",
-        f"Valor que estava em aberto: {_formatar_moeda(dados['saldo_anterior'])}",
-        f"Valor pago: {_formatar_moeda(dados['valor_pago'])}",
-        f"Forma de pagamento: {dados['forma_pagamento']}",
-        "",
-        titulo_contas,
+        "Obrigado.",
+        "L A Neiva",
     ]
-
-    for conta in contas:
-        venda = conta["venda_id"] or conta["conta_id"]
-        linha = f"- Venda/Nota #{venda} - {_formatar_moeda(conta['valor_aplicado'])}"
-        if not todas_quitadas:
-            linha += " - quitada" if conta["quitada"] else " - abatimento parcial"
-        linhas.append(linha)
-
-    linhas.extend([
-        "",
-        f"Saldo anterior: {_formatar_moeda(dados['saldo_anterior'])}",
-        f"Saldo após o pagamento: {_formatar_moeda(saldo_atual)}",
-    ])
-
-    if credito_gerado > Decimal("0.00"):
-        linhas.append(f"Crédito gerado para próximas compras: {_formatar_moeda(credito_gerado)}")
-    elif saldo_atual <= Decimal("0.00"):
-        linhas.extend(["", "Pagamento registrado. Não há saldo em aberto no momento."])
-
-    linhas.extend(["", "Obrigado.", "L A Neiva"])
     return "\n".join(linhas)
 
 
@@ -1225,6 +1195,43 @@ def _montar_whatsapp_confirmacao_recebimento(cliente, dados):
         "numero": numero,
         "url": f"https://web.whatsapp.com/send?phone={numero}&text={quote(mensagem)}" if numero else "",
         "mensagem": mensagem,
+    }
+
+
+def _serializar_dados_comprovante_recebimento(cliente, dados):
+    return {
+        "cliente_id": cliente.id,
+        "cliente_nome": dados["cliente_nome"],
+        "data_recebimento": dados["data_recebimento"],
+        "saldo_anterior": str(dados["saldo_anterior"]),
+        "valor_pago": str(dados["valor_pago"]),
+        "forma_pagamento": dados["forma_pagamento"],
+        "saldo_atual": str(dados["saldo_atual"]),
+        "credito_gerado": str(dados["credito_gerado"]),
+        "contas": [
+            {
+                "conta_id": conta["conta_id"],
+                "venda_id": conta["venda_id"],
+                "data_nota": conta.get("data_nota") or "",
+                "saldo_antes": str(conta.get("saldo_antes") or "0.00"),
+                "nota_inteira_antes": bool(conta.get("nota_inteira_antes")),
+                "valor_aplicado": str(conta["valor_aplicado"]),
+                "saldo_restante": str(conta.get("saldo_restante") or "0.00"),
+                "quitada": bool(conta["quitada"]),
+            }
+            for conta in dados.get("contas", [])
+        ],
+        "contas_abertas": [
+            {
+                "conta_id": conta["conta_id"],
+                "venda_id": conta["venda_id"],
+                "data_nota": conta.get("data_nota") or "",
+                "saldo_atual": str(conta["saldo_atual"]),
+                "dias_aberto": int(conta.get("dias_aberto") or 0),
+                "em_atraso": bool(conta.get("em_atraso")),
+            }
+            for conta in dados.get("contas_abertas", [])
+        ],
     }
 
 
@@ -1688,7 +1695,16 @@ def receber_cliente(request, cliente_id):
                                 contas_confirmacao_whatsapp.append({
                                     "conta_id": conta_atual.id,
                                     "venda_id": conta_atual.venda_id,
+                                    "data_nota": conta_atual.data_emissao.strftime("%d/%m/%Y") if conta_atual.data_emissao else "",
+                                    "saldo_antes": (valor_aplicar + resultado_recebimento["saldo_restante"]).quantize(Decimal("0.01")),
+                                    "nota_inteira_antes": abs(
+                                        (
+                                            (valor_aplicar + resultado_recebimento["saldo_restante"])
+                                            - (conta_atual.valor_original or Decimal("0.00"))
+                                        ).quantize(Decimal("0.01"))
+                                    ) <= Decimal("0.01"),
                                     "valor_aplicado": valor_aplicar,
+                                    "saldo_restante": resultado_recebimento["saldo_restante"],
                                     "quitada": resultado_recebimento["saldo_restante"] <= Decimal("0.00"),
                                 })
                     except RecebimentoContaErro as exc:
@@ -1698,6 +1714,27 @@ def receber_cliente(request, cliente_id):
                             (total_em_aberto - valor_aplicado_total).quantize(Decimal("0.01")),
                             Decimal("0.00"),
                         )
+                        prazo_cliente = cliente.prazo_padrao_dias or 0
+                        contas_abertas_confirmacao = []
+                        contas_abertas_atuais = (
+                            ContaReceber.objects.filter(
+                                cliente=cliente,
+                                status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+                                valor_em_aberto__gt=Decimal("0.00"),
+                            )
+                            .order_by("data_emissao", "id")
+                        )
+                        for conta_aberta in contas_abertas_atuais:
+                            data_nota = conta_aberta.data_emissao
+                            dias_aberto = max((hoje - data_nota).days, 0) if data_nota else 0
+                            contas_abertas_confirmacao.append({
+                                "conta_id": conta_aberta.id,
+                                "venda_id": conta_aberta.venda_id,
+                                "data_nota": data_nota.strftime("%d/%m/%Y") if data_nota else "",
+                                "saldo_atual": (conta_aberta.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01")),
+                                "dias_aberto": dias_aberto,
+                                "em_atraso": bool(prazo_cliente and dias_aberto > prazo_cliente),
+                            })
                         dados_confirmacao_whatsapp = {
                             "cliente_nome": cliente.nome,
                             "data_recebimento": data_recebimento.strftime("%d/%m/%Y"),
@@ -1705,9 +1742,24 @@ def receber_cliente(request, cliente_id):
                             "valor_pago": valor_recebido,
                             "forma_pagamento": valores["forma_pagamento"],
                             "contas": contas_confirmacao_whatsapp,
+                            "contas_abertas": contas_abertas_confirmacao,
                             "saldo_atual": saldo_atual_confirmacao,
                             "credito_gerado": credito_gerado_total,
                         }
+                        comprovante_token = uuid4().hex
+                        comprovante_dados = _serializar_dados_comprovante_recebimento(
+                            cliente,
+                            dados_confirmacao_whatsapp,
+                        )
+                        comprovantes_sessao = request.session.get("receber_cliente_comprovantes", {})
+                        comprovantes_sessao[comprovante_token] = comprovante_dados
+                        if len(comprovantes_sessao) > 8:
+                            comprovantes_sessao = dict(list(comprovantes_sessao.items())[-8:])
+                        request.session["receber_cliente_comprovantes"] = comprovantes_sessao
+                        comprovante_url = reverse(
+                            "estoque:receber_cliente_comprovante_imagem",
+                            kwargs={"cliente_id": cliente.id, "token": comprovante_token},
+                        )
                         request.session["receber_cliente_feedback"] = {
                             "cliente": cliente.nome,
                             "valor_aplicado": _formatar_moeda(valor_aplicado_total),
@@ -1725,6 +1777,7 @@ def receber_cliente(request, cliente_id):
                                 cliente,
                                 dados_confirmacao_whatsapp,
                             ),
+                            "comprovante_imagem_url": comprovante_url,
                         }
                         return redirect(destino_pos_recebimento)
 
@@ -1766,6 +1819,18 @@ def receber_cliente(request, cliente_id):
             "retorno_url": destino_retorno,
         },
     )
+
+
+def receber_cliente_comprovante_imagem(request, cliente_id, token):
+    comprovantes = request.session.get("receber_cliente_comprovantes", {})
+    dados = comprovantes.get(token)
+    if not dados or int(dados.get("cliente_id") or 0) != cliente_id:
+        raise Http404("Comprovante nao encontrado.")
+
+    buffer = _gerar_comprovante_recebimento_imagem(dados)
+    response = HttpResponse(buffer.getvalue(), content_type="image/png")
+    response["Content-Disposition"] = f'inline; filename="comprovante-pagamento-cliente-{cliente_id}.png"'
+    return response
 
 
 @ensure_csrf_cookie
@@ -4545,6 +4610,176 @@ def _gerar_nota_whatsapp_imagem(venda):
 
     png = BytesIO()
     imagem_final.save(png, format="PNG")
+    png.seek(0)
+    return png
+
+
+def _decimal_comprovante(valor):
+    try:
+        return Decimal(str(valor or "0")).quantize(Decimal("0.01"))
+    except (InvalidOperation, ValueError):
+        return Decimal("0.00")
+
+
+def _gerar_comprovante_recebimento_imagem(dados):
+    largura = 1080
+    margem = 42
+    fundo = "#f6f1e8"
+    texto = "#1f2933"
+    suave = "#64748b"
+    verde = "#14532d"
+    borda = "#ead7b0"
+    card = "#fffdf8"
+
+    fonte_empresa = _fonte_nota_whatsapp(30, True)
+    fonte_titulo = _fonte_nota_whatsapp(42, True)
+    fonte_subtitulo = _fonte_nota_whatsapp(27, True)
+    fonte_label = _fonte_nota_whatsapp(20, True)
+    fonte_texto = _fonte_nota_whatsapp(25)
+    fonte_texto_negrito = _fonte_nota_whatsapp(26, True)
+    fonte_total = _fonte_nota_whatsapp(36, True)
+    fonte_rodape = _fonte_nota_whatsapp(24, True)
+
+    contas = dados.get("contas", [])
+    contas_abertas = dados.get("contas_abertas", [])
+    altura_contas = max(len(contas), 1) * 142
+    altura_contas_abertas = max(len(contas_abertas), 1) * 104
+    altura = max(1500, 1030 + altura_contas + altura_contas_abertas)
+    imagem = Image.new("RGB", (largura, altura), fundo)
+    draw = ImageDraw.Draw(imagem)
+
+    draw.rounded_rectangle(
+        (margem, margem, largura - margem, altura - margem),
+        radius=28,
+        fill=card,
+        outline=borda,
+        width=3,
+    )
+
+    x = margem + 30
+    direita = largura - margem - 30
+    y = margem + 28
+
+    draw.text((x, y), "L A Neiva", fill=verde, font=fonte_empresa)
+    y += 40
+    draw.text((x, y), "Comprovante de Pagamento", fill=texto, font=fonte_titulo)
+    y += 62
+
+    cliente = dados.get("cliente_nome") or "Cliente"
+    draw.rounded_rectangle((x, y, direita, y + 142), radius=18, fill="#fff8e8", outline="#ead19a", width=2)
+    draw.text((x + 22, y + 18), f"Cliente: {cliente}", fill=texto, font=fonte_texto_negrito)
+    draw.text((x + 22, y + 56), f"Data: {dados.get('data_recebimento') or '-'}", fill=texto, font=fonte_texto)
+    draw.text((x + 22, y + 92), f"Forma de pagamento: {dados.get('forma_pagamento') or '-'}", fill=suave, font=fonte_texto)
+    y += 164
+
+    def desenhar_campo(x_campo, y_campo, largura_campo, label, valor, destaque=False):
+        draw.rounded_rectangle(
+            (x_campo, y_campo, x_campo + largura_campo, y_campo + 86),
+            radius=15,
+            fill="#f8fafc" if not destaque else "#e8f5e9",
+            outline="#e2e8f0" if not destaque else "#b7e4c7",
+            width=2,
+        )
+        draw.text((x_campo + 16, y_campo + 12), label.upper(), fill=suave, font=fonte_label)
+        draw.text((x_campo + 16, y_campo + 43), valor, fill=verde if destaque else texto, font=fonte_texto_negrito)
+
+    largura_campo = (direita - x - 22) // 2
+    x2 = x + largura_campo + 22
+    saldo_anterior = _decimal_comprovante(dados.get("saldo_anterior"))
+    valor_pago = _decimal_comprovante(dados.get("valor_pago"))
+    saldo_atual = _decimal_comprovante(dados.get("saldo_atual"))
+    credito_gerado = _decimal_comprovante(dados.get("credito_gerado"))
+
+    desenhar_campo(x, y, largura_campo, "Saldo anterior", _formatar_moeda(saldo_anterior))
+    desenhar_campo(x2, y, largura_campo, "Valor pago", _formatar_moeda(valor_pago), destaque=True)
+    y += 104
+    desenhar_campo(x, y, largura_campo, "Saldo apos pagamento", _formatar_moeda(saldo_atual), destaque=saldo_atual <= Decimal("0.00"))
+    if credito_gerado > Decimal("0.00"):
+        desenhar_campo(x2, y, largura_campo, "Credito gerado", _formatar_moeda(credito_gerado), destaque=True)
+    else:
+        desenhar_campo(x2, y, largura_campo, "Credito gerado", "-", destaque=False)
+    y += 124
+
+    draw.text((x, y), "Aplicacao do pagamento", fill=texto, font=fonte_subtitulo)
+    y += 42
+
+    if not contas:
+        draw.rounded_rectangle((x, y, direita, y + 74), radius=14, fill="#ffffff", outline="#edf1f6", width=2)
+        draw.text((x + 24, y + 23), "Nenhuma conta identificada com seguranca.", fill=suave, font=fonte_texto)
+        y += 92
+    else:
+        for conta in contas:
+            venda = conta.get("venda_id") or conta.get("conta_id") or "-"
+            saldo_antes = _formatar_moeda(_decimal_comprovante(conta.get("saldo_antes")))
+            valor = _formatar_moeda(_decimal_comprovante(conta.get("valor_aplicado")))
+            saldo_restante_conta = _decimal_comprovante(conta.get("saldo_restante"))
+            status = "quitada" if conta.get("quitada") else "parcial"
+            fill_status = "#166534" if conta.get("quitada") else "#92400e"
+            data_nota = conta.get("data_nota") or "-"
+            rotulo_saldo_antes = "Valor da nota" if conta.get("nota_inteira_antes") else "Saldo da nota antes do pagamento"
+
+            draw.rounded_rectangle((x, y, direita, y + 130), radius=14, fill="#ffffff", outline="#edf1f6", width=2)
+            titulo_conta = f"Venda/Nota #{venda} - {data_nota}"
+            linhas_nota = _quebrar_texto(draw, titulo_conta, fonte_texto_negrito, 610)
+            draw.text((x + 24, y + 14), linhas_nota[0], fill=texto, font=fonte_texto_negrito)
+            draw.text((x + 24, y + 50), f"{rotulo_saldo_antes}: {saldo_antes}", fill=texto, font=fonte_texto)
+            draw.text((x + 24, y + 80), f"Valor abatido agora: {valor}", fill=texto, font=fonte_texto)
+            if not conta.get("quitada"):
+                draw.text((x + 24, y + 110), f"Restante desta nota: {_formatar_moeda(saldo_restante_conta)}", fill=suave, font=fonte_label)
+            else:
+                draw.text((x + 24, y + 110), "Status: quitada", fill=suave, font=fonte_label)
+            draw.rounded_rectangle((direita - 170, y + 15, direita - 24, y + 49), radius=16, fill="#ecfdf3" if conta.get("quitada") else "#fef3c7")
+            status_largura = _texto_largura(draw, status, fonte_label)
+            draw.text((direita - 97 - status_largura // 2, y + 21), status, fill=fill_status, font=fonte_label)
+            y += 142
+
+    y += 12
+    draw.text((x, y), "Contas em aberto apos pagamento", fill=texto, font=fonte_subtitulo)
+    y += 42
+
+    if not contas_abertas:
+        draw.rounded_rectangle((x, y, direita, y + 74), radius=14, fill="#ffffff", outline="#edf1f6", width=2)
+        draw.text((x + 24, y + 23), "Nenhuma conta em aberto apos este pagamento.", fill=verde, font=fonte_texto)
+        y += 92
+    else:
+        for conta in contas_abertas:
+            venda = conta.get("venda_id") or conta.get("conta_id") or "-"
+            data_nota = conta.get("data_nota") or "-"
+            saldo_conta = _formatar_moeda(_decimal_comprovante(conta.get("saldo_atual")))
+            dias_aberto = int(conta.get("dias_aberto") or 0)
+            em_atraso = bool(conta.get("em_atraso"))
+            cor_dias = "#b91c1c" if em_atraso else "#1e3a8a"
+            fundo_dias = "#fee2e2" if em_atraso else "#eff6ff"
+            texto_dias = f"{dias_aberto} dia{'s' if dias_aberto != 1 else ''} em aberto"
+
+            draw.rounded_rectangle((x, y, direita, y + 92), radius=14, fill="#ffffff", outline="#edf1f6", width=2)
+            titulo_conta = f"Venda/Nota #{venda} - {data_nota}"
+            linhas_nota = _quebrar_texto(draw, titulo_conta, fonte_texto_negrito, 590)
+            draw.text((x + 24, y + 13), linhas_nota[0], fill=texto, font=fonte_texto_negrito)
+            draw.text((x + 24, y + 49), f"Saldo atual: {saldo_conta}", fill=texto, font=fonte_texto)
+            draw.rounded_rectangle((direita - 260, y + 28, direita - 24, y + 62), radius=17, fill=fundo_dias)
+            dias_largura = _texto_largura(draw, texto_dias, fonte_label)
+            draw.text((direita - 142 - dias_largura // 2, y + 34), texto_dias, fill=cor_dias, font=fonte_label)
+            y += 104
+
+    y += 12
+    draw.rounded_rectangle((x, y, direita, y + 132), radius=20, fill="#e8f5e9", outline="#b7e4c7", width=2)
+    draw.text((x + 22, y + 26), "Total pago", fill=verde, font=fonte_subtitulo)
+    total_pago = _formatar_moeda(valor_pago)
+    total_pago_largura = _texto_largura(draw, total_pago, fonte_total)
+    draw.text((direita - 22 - total_pago_largura, y + 18), total_pago, fill=verde, font=fonte_total)
+    draw.text((x + 22, y + 82), "Saldo total da divida apos pagamento", fill=verde, font=fonte_label)
+    total = _formatar_moeda(saldo_atual)
+    total_largura = _texto_largura(draw, total, fonte_texto_negrito)
+    draw.text((direita - 22 - total_largura, y + 78), total, fill=verde, font=fonte_texto_negrito)
+    y += 166
+
+    draw.text((x, y), "Obrigado.", fill=texto, font=fonte_texto)
+    y += 34
+    draw.text((x, y), "L A Neiva", fill=verde, font=fonte_rodape)
+
+    png = BytesIO()
+    imagem.save(png, format="PNG")
     png.seek(0)
     return png
 

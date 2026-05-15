@@ -87,6 +87,16 @@
   .rc-voltar-cliente-btn:active {
     box-shadow: 0 2px 7px rgba(22, 101, 52, 0.08);
   }
+  .rc-comprovante-visual-btn {
+    border-color: #bfdbfe; background: #eff6ff; color: #1e3a8a;
+    box-shadow: 0 6px 14px rgba(30, 64, 175, 0.08);
+  }
+  .rc-comprovante-visual-btn:active {
+    box-shadow: 0 2px 7px rgba(30, 64, 175, 0.08);
+  }
+  .rc-comprovante-orientacao {
+    flex-basis: 100%; margin: 0; color: #166534; font-size: 0.78rem; font-weight: 800;
+  }
   .rc-pos-confirmacao-layout { display: block; }
   .rc-summary {
     display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -426,6 +436,20 @@
                   Cliente sem WhatsApp cadastrado. Cadastre o WhatsApp do cliente para enviar a confirmação.
                 </p>
               {% endif %}
+              {% if feedback_recebimento.comprovante_imagem_url %}
+                <a
+                  href="{{ feedback_recebimento.comprovante_imagem_url }}"
+                  target="_blank"
+                  rel="noopener"
+                  class="rc-btn rc-comprovante-visual-btn"
+                  id="btn-ver-comprovante-visual"
+                >
+                  Ver comprovante visual
+                </a>
+                <p class="rc-comprovante-orientacao">
+                  Para enviar a imagem: abra o comprovante, copie a imagem e cole no WhatsApp.
+                </p>
+              {% endif %}
               <a href="{% url 'estoque:vendas' %}?cliente_id={{ cliente.id }}" class="rc-btn rc-voltar-cliente-btn" id="btn-voltar-tela-venda">Voltar para tela de venda</a>
             </div>
           </section>
@@ -555,6 +579,7 @@
     const modalSecondary = document.getElementById("receberClienteModalSecondary");
     const recebimentoConfirmado = document.getElementById("recebimento-confirmado");
     const btnWhatsappConfirmacao = document.getElementById("btn-enviar-confirmacao-whatsapp");
+    const btnVerComprovanteVisual = document.getElementById("btn-ver-comprovante-visual");
     const btnVoltarTelaVenda = document.getElementById("btn-voltar-tela-venda");
     const contas = JSON.parse(document.getElementById("contasPreviewCliente")?.textContent || "[]");
     const pagamentosHoje = JSON.parse(document.getElementById("pagamentosHojeCliente")?.textContent || "[]");
@@ -574,16 +599,17 @@
       elemento?.scrollIntoView({ behavior: comportamento, block: "start" });
     }
 
-    [btnWhatsappConfirmacao, btnVoltarTelaVenda].forEach(function (botao, indice, botoes) {
+    const botoesConfirmacao = [btnWhatsappConfirmacao, btnVerComprovanteVisual, btnVoltarTelaVenda].filter(Boolean);
+    botoesConfirmacao.forEach(function (botao, indice, botoes) {
       botao?.addEventListener("keydown", function (event) {
         if (event.key === "ArrowRight" || event.key === "ArrowDown") {
           event.preventDefault();
-          (botoes[1] || botoes[0])?.focus();
+          botoes[(indice + 1) % botoes.length]?.focus();
           return;
         }
         if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
           event.preventDefault();
-          (botoes[0] || botoes[1])?.focus();
+          botoes[(indice - 1 + botoes.length) % botoes.length]?.focus();
         }
       });
     });
@@ -969,7 +995,7 @@
       if (recebimentoConfirmado) {
         rolarParaAreaRecebimento(recebimentoConfirmado);
         window.setTimeout(function () {
-          btnWhatsappConfirmacao?.focus();
+          (btnWhatsappConfirmacao || btnVerComprovanteVisual || btnVoltarTelaVenda)?.focus();
         }, 250);
         return;
       }
