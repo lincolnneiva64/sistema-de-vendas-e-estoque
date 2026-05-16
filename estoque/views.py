@@ -41,6 +41,26 @@ def _tem_pix_em_atencao():
     ).exists()
 
 
+def _pix_duplicado_pendente(dados):
+    nome_pagador = normalizar_texto_cliente(dados.get("nome_pagador"))
+    valor = dados.get("valor")
+    data_pagamento = dados.get("data_pagamento")
+    if not (nome_pagador and valor and data_pagamento):
+        return None
+
+    inicio = data_pagamento - timedelta(minutes=5)
+    fim = data_pagamento + timedelta(minutes=5)
+    candidatos = PixRecebido.objects.filter(
+        status=PixRecebido.STATUS_PENDENTE,
+        valor=valor,
+        data_pagamento__range=(inicio, fim),
+    ).only("id", "nome_pagador", "valor", "data_pagamento")
+    for pix in candidatos:
+        if normalizar_texto_cliente(pix.nome_pagador) == nome_pagador:
+            return pix
+    return None
+
+
 def normalizar_texto_cliente(valor):
     texto = " ".join(str(valor or "").strip().lower().split())
     texto = unicodedata.normalize("NFD", texto)
@@ -1623,12 +1643,21 @@ def central_pix(request):
     if request.method == "POST":
         form = PixRecebidoForm(request.POST, request.FILES)
         if form.is_valid():
-            form.save()
-            messages.success(request, "Pix recebido registrado com sucesso.")
-            if retorno_url:
-                return redirect(f"{central_pix_url}?{urlencode({'next': retorno_url})}")
-            return redirect("estoque:central_pix")
-        messages.warning(request, "Confira os campos do Pix antes de salvar.")
+            pix_duplicado = _pix_duplicado_pendente(form.cleaned_data)
+            if pix_duplicado:
+                form.add_error(
+                    None,
+                    "Ja existe um Pix pendente com mesmo pagador, valor e horario muito proximo. Confira antes de cadastrar novamente.",
+                )
+                messages.warning(request, "Pix duplicado nao foi salvo. Confira o registro pendente existente.")
+            else:
+                form.save()
+                messages.success(request, "Pix recebido registrado com sucesso.")
+                if retorno_url:
+                    return redirect(f"{central_pix_url}?{urlencode({'next': retorno_url})}")
+                return redirect("estoque:central_pix")
+        else:
+            messages.warning(request, "Confira os campos do Pix antes de salvar.")
     else:
         form = PixRecebidoForm()
 

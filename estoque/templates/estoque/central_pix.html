@@ -178,7 +178,7 @@
               {% elif field.name == "status" %}
                 <div class="pix-help">Nesta fase o status e apenas informativo. Nao baixa contas automaticamente.</div>
               {% elif field.name == "comprovante" %}
-                <div class="pix-help">Ao anexar uma imagem, o sistema tenta ler os dados. Confira tudo antes de salvar.</div>
+                <div class="pix-help">Ao anexar um comprovante, o sistema tenta ler se houver OCR disponivel. Confira tudo antes de salvar.</div>
               {% endif %}
               {% for error in field.errors %}
                 <div class="pix-error">{{ error }}</div>

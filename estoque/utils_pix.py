@@ -9,6 +9,10 @@ def _normalizar_espacos(valor):
     return " ".join(str(valor or "").strip().split())
 
 
+def _normalizar_linha(valor):
+    return _normalizar_espacos(valor).lower()
+
+
 def _extrair_texto_comprovante(arquivo):
     nome = (getattr(arquivo, "name", "") or "").lower()
     content_type = (getattr(arquivo, "content_type", "") or "").lower()
@@ -21,6 +25,7 @@ def _extrair_texto_comprovante(arquivo):
     try:
         import pytesseract
     except ImportError:
+        # Sem um motor de OCR real no ambiente, imagens PNG/JPG nao geram texto.
         return ""
 
     try:
@@ -53,9 +58,36 @@ def _extrair_data_pagamento(texto):
         r"\b([0-3]?\d)/([01]?\d)/(\d{4})\D{0,12}([0-2]?\d):([0-5]\d)\b",
         texto,
     )
+    if encontrado:
+        dia, mes, ano, hora, minuto = encontrado.groups()
+        return f"{ano}-{int(mes):02d}-{int(dia):02d}T{int(hora):02d}:{int(minuto):02d}"
+
+    meses = {
+        "jan": 1,
+        "fev": 2,
+        "mar": 3,
+        "abr": 4,
+        "mai": 5,
+        "jun": 6,
+        "jul": 7,
+        "ago": 8,
+        "set": 9,
+        "out": 10,
+        "nov": 11,
+        "dez": 12,
+    }
+    encontrado = re.search(
+        r"\b([0-3]?\d)\s+([A-ZÇ]{3})\s+(\d{4})\D{0,12}([0-2]?\d):([0-5]\d)",
+        texto,
+        flags=re.IGNORECASE,
+    )
     if not encontrado:
         return ""
-    dia, mes, ano, hora, minuto = encontrado.groups()
+
+    dia, mes_texto, ano, hora, minuto = encontrado.groups()
+    mes = meses.get(mes_texto.lower()[:3])
+    if not mes:
+        return ""
     return f"{ano}-{int(mes):02d}-{int(dia):02d}T{int(hora):02d}:{int(minuto):02d}"
 
 
@@ -79,13 +111,24 @@ def _linha_apos_rotulo(texto, rotulos):
 
 
 def _extrair_pagador(texto):
-    trecho_origem = re.search(
-        r"(?:origem|pagador|quem pagou)(.*?)(?:destino|recebedor|favorecido|$)",
-        texto,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-    if trecho_origem:
-        nome = _linha_apos_rotulo(trecho_origem.group(1), ["nome"])
+    linhas = [_normalizar_espacos(linha) for linha in texto.splitlines()]
+    for indice, linha in enumerate(linhas):
+        linha_normalizada = _normalizar_linha(linha)
+        if "origem" not in linha_normalizada and "pagador" not in linha_normalizada and "quem pagou" not in linha_normalizada:
+            continue
+
+        nome_mesma_linha = _linha_apos_rotulo(linha, ["nome"])
+        if nome_mesma_linha:
+            return nome_mesma_linha[:160]
+
+        bloco = []
+        for proxima in linhas[indice + 1:indice + 10]:
+            proxima_normalizada = _normalizar_linha(proxima)
+            if re.search(r"\b(destino|recebedor|favorecido)\b", proxima_normalizada):
+                break
+            bloco.append(proxima)
+
+        nome = _linha_apos_rotulo("\n".join(bloco), ["nome"])
         if nome:
             return nome[:160]
 
@@ -102,7 +145,7 @@ def analisar_comprovante_pix(arquivo):
             "valor": "",
             "data_pagamento": "",
             "texto_extraido": "",
-            "mensagem": "Nao foi possivel ler automaticamente o comprovante. Preencha manualmente.",
+            "mensagem": "Nao foi possivel ler automaticamente o comprovante. OCR de imagem nao esta disponivel neste ambiente; preencha manualmente.",
         }
 
     pagador = _extrair_pagador(texto)

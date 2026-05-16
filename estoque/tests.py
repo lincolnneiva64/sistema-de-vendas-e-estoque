@@ -229,6 +229,33 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(ContaReceber.objects.count(), 0)
         self.assertEqual(CreditoCliente.objects.count(), 0)
 
+    def test_analisar_comprovante_pix_nubank_usa_nome_da_origem(self):
+        conteudo = (
+            "Comprovante Pix\n"
+            "Destino\n"
+            "Nome: Lincoln Albuquerque Neiva\n"
+            "Origem\n"
+            "Nome: Joelson Ferreira dos Santos\n"
+            "Valor R$ 156,50\n"
+            "16 MAI 2026 - 17:51:46\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante.txt", conteudo, content_type="text/plain")
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_analisar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "Joelson Ferreira dos Santos")
+        self.assertEqual(dados["valor"], "156.50")
+        self.assertEqual(dados["data_pagamento"], "2026-05-16T17:51")
+        self.assertIsNone(dados["cliente_sugerido_id"])
+        self.assertEqual(PixRecebido.objects.count(), 0)
+
     def test_analisar_comprovante_pix_falha_sem_bloquear_preenchimento_manual(self):
         arquivo = SimpleUploadedFile("comprovante.txt", b"texto sem dados de pix", content_type="text/plain")
 
@@ -243,3 +270,25 @@ class PixRecebidoTests(TestCase):
         self.assertFalse(dados["ok"])
         self.assertIn("Preencha manualmente", dados["mensagem"])
         self.assertIsNone(dados["cliente_sugerido_id"])
+
+    def test_central_pix_bloqueia_duplicado_pendente_evidente(self):
+        data_pagamento = timezone.make_aware(timezone.datetime(2026, 5, 16, 17, 51))
+        PixRecebido.objects.create(
+            nome_pagador="Joelson Ferreira dos Santos",
+            valor="156.50",
+            data_pagamento=data_pagamento,
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+
+        resposta = self.client.post(reverse("estoque:central_pix"), data={
+            "cliente": "",
+            "nome_pagador": "  joelson ferreira dos santos ",
+            "valor": "156.50",
+            "data_pagamento": "2026-05-16T17:52",
+            "observacao": "Tentativa duplicada",
+            "status": PixRecebido.STATUS_PENDENTE,
+        }, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Pix duplicado nao foi salvo")
+        self.assertEqual(PixRecebido.objects.count(), 1)
