@@ -59,6 +59,37 @@
   }
   .pix-help { margin-top: 2px; color: #64748b; font-size: 0.68rem; font-weight: 700; line-height: 1.2; }
   .pix-error { margin-top: 3px; color: #991b1b; font-size: 0.74rem; font-weight: 750; }
+  .pix-feedback {
+    grid-column: 1 / -1; border: 1px solid #bfdbfe; border-radius: 8px;
+    background: #eff6ff; color: #1e3a8a; padding: 7px 9px;
+    font-size: 0.76rem; font-weight: 800; line-height: 1.3; display: none;
+  }
+  .pix-feedback.visivel { display: block; }
+  .pix-feedback.success { border-color: #bbf7d0; background: #ecfdf3; color: #166534; }
+  .pix-feedback.warning { border-color: #fde68a; background: #fffbeb; color: #92400e; }
+  .pix-cliente-busca {
+    margin-top: 6px; border: 1px dashed #bbf7d0; border-radius: 8px;
+    background: #f0fdf4; padding: 7px; display: grid; gap: 5px;
+  }
+  .pix-cliente-busca input {
+    width: 100%; border: 1.5px solid #bbf7d0; border-radius: 8px;
+    padding: 5px 8px; min-height: 30px; color: #172033; font-weight: 700;
+  }
+  .pix-cliente-sugestoes { display: grid; gap: 4px; }
+  .pix-cliente-sugestao {
+    border: 1px solid #dcfce7; border-radius: 7px; background: #fff;
+    color: #14532d; padding: 5px 7px; text-align: left; font: inherit;
+    font-size: 0.76rem; font-weight: 850; cursor: pointer;
+  }
+  .pix-cliente-sugestao small { display: block; color: #64748b; font-weight: 700; margin-top: 1px; }
+  .pix-cliente-sugerido { display: none; gap: 5px; align-items: center; flex-wrap: wrap; }
+  .pix-cliente-sugerido.visivel { display: flex; }
+  .pix-cliente-sugerido span { color: #166534; font-size: 0.76rem; font-weight: 850; }
+  .pix-mini-btn {
+    border: 1px solid #86efac; border-radius: 7px; background: #fff;
+    color: #166534; padding: 4px 7px; font: inherit; font-size: 0.74rem;
+    font-weight: 900; cursor: pointer;
+  }
   .pix-alert { border-radius: 9px; padding: 7px 9px; margin-bottom: 7px; font-size: 0.84rem; font-weight: 850; }
   .pix-alert.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
   .pix-alert.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
@@ -135,15 +166,26 @@
               <label for="{{ field.id_for_label }}">{{ field.label }}</label>
               {{ field }}
               {% if field.name == "cliente" %}
-                <div class="pix-help">Deixe em branco quando ainda nao souber de qual cliente e o pagamento.</div>
+                <div class="pix-help">O pagador do Pix pode ser diferente do cliente da conta. Confirme o cliente manualmente antes de vincular.</div>
+                <div class="pix-cliente-busca">
+                  <input type="text" id="pixClienteBusca" placeholder="Buscar cliente cadastrado" autocomplete="off">
+                  <div class="pix-cliente-sugerido" id="pixClienteSugerido">
+                    <span id="pixClienteSugeridoTexto"></span>
+                    <button type="button" class="pix-mini-btn" id="pixConfirmarClienteSugerido">Confirmar cliente</button>
+                  </div>
+                  <div class="pix-cliente-sugestoes" id="pixClienteSugestoes"></div>
+                </div>
               {% elif field.name == "status" %}
                 <div class="pix-help">Nesta fase o status e apenas informativo. Nao baixa contas automaticamente.</div>
+              {% elif field.name == "comprovante" %}
+                <div class="pix-help">Ao anexar uma imagem, o sistema tenta ler os dados. Confira tudo antes de salvar.</div>
               {% endif %}
               {% for error in field.errors %}
                 <div class="pix-error">{{ error }}</div>
               {% endfor %}
             </div>
           {% endfor %}
+          <div class="pix-feedback" id="pixLeituraFeedback"></div>
           {% if form.non_field_errors %}
             {% for error in form.non_field_errors %}
               <div class="pix-error">{{ error }}</div>
@@ -212,4 +254,128 @@
     </div>
   </div>
 </div>
+<script>
+  (function () {
+    const analisarUrl = "{% url 'estoque:central_pix_analisar_comprovante' %}";
+    const clientesUrl = "{% url 'estoque:clientes_autocomplete' %}";
+    const csrfToken = document.querySelector("[name=csrfmiddlewaretoken]")?.value || "";
+    const clienteSelect = document.getElementById("id_cliente");
+    const clienteBusca = document.getElementById("pixClienteBusca");
+    const clienteSugestoes = document.getElementById("pixClienteSugestoes");
+    const clienteSugerido = document.getElementById("pixClienteSugerido");
+    const clienteSugeridoTexto = document.getElementById("pixClienteSugeridoTexto");
+    const confirmarClienteSugerido = document.getElementById("pixConfirmarClienteSugerido");
+    const comprovante = document.getElementById("id_comprovante");
+    const pagador = document.getElementById("id_nome_pagador");
+    const valor = document.getElementById("id_valor");
+    const dataPagamento = document.getElementById("id_data_pagamento");
+    const observacao = document.getElementById("id_observacao");
+    const feedback = document.getElementById("pixLeituraFeedback");
+    let clienteSugeridoId = "";
+    let buscaTimer = null;
+
+    function mostrarFeedback(texto, tipo) {
+      if (!feedback) return;
+      feedback.textContent = texto || "";
+      feedback.className = "pix-feedback visivel" + (tipo ? " " + tipo : "");
+    }
+
+    function preencherCliente(id, nome) {
+      if (!clienteSelect) return;
+      clienteSelect.value = id || "";
+      if (clienteBusca) clienteBusca.value = nome || "";
+      if (clienteSugestoes) clienteSugestoes.innerHTML = "";
+    }
+
+    function renderizarSugestoes(clientes) {
+      if (!clienteSugestoes) return;
+      clienteSugestoes.innerHTML = "";
+      (clientes || []).slice(0, 10).forEach(function (cliente) {
+        const botao = document.createElement("button");
+        botao.type = "button";
+        botao.className = "pix-cliente-sugestao";
+        botao.textContent = cliente.nome || "Cliente sem nome";
+        const metaTexto = [cliente.documento, cliente.telefone || cliente.whatsapp].filter(Boolean).join(" | ");
+        if (metaTexto) {
+          const meta = document.createElement("small");
+          meta.textContent = metaTexto;
+          botao.appendChild(meta);
+        }
+        botao.addEventListener("click", function () {
+          preencherCliente(cliente.id, cliente.nome);
+        });
+        clienteSugestoes.appendChild(botao);
+      });
+    }
+
+    async function buscarClientes(termo) {
+      if (!termo || termo.trim().length < 2) {
+        renderizarSugestoes([]);
+        return;
+      }
+      const resposta = await fetch(clientesUrl + "?q=" + encodeURIComponent(termo.trim()), {
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      });
+      if (!resposta.ok) return;
+      const dados = await resposta.json();
+      renderizarSugestoes(dados.clientes || []);
+    }
+
+    clienteBusca?.addEventListener("input", function () {
+      window.clearTimeout(buscaTimer);
+      buscaTimer = window.setTimeout(function () {
+        buscarClientes(clienteBusca.value);
+      }, 220);
+    });
+
+    clienteSelect?.addEventListener("change", function () {
+      const opcao = clienteSelect.options[clienteSelect.selectedIndex];
+      if (clienteBusca) clienteBusca.value = clienteSelect.value ? (opcao?.textContent || "") : "";
+    });
+
+    confirmarClienteSugerido?.addEventListener("click", function () {
+      if (clienteSugeridoId) preencherCliente(clienteSugeridoId, clienteSugeridoTexto?.dataset.nome || "");
+    });
+
+    comprovante?.addEventListener("change", async function () {
+      const arquivo = comprovante.files && comprovante.files[0];
+      if (!arquivo) return;
+      mostrarFeedback("Lendo comprovante...", "");
+      clienteSugeridoId = "";
+      clienteSugerido?.classList.remove("visivel");
+
+      const formData = new FormData();
+      formData.append("comprovante", arquivo);
+      try {
+        const resposta = await fetch(analisarUrl, {
+          method: "POST",
+          headers: { "X-CSRFToken": csrfToken, "X-Requested-With": "XMLHttpRequest" },
+          body: formData,
+        });
+        const dados = await resposta.json();
+        if (!dados.ok) {
+          mostrarFeedback(dados.mensagem || "Nao foi possivel ler automaticamente. Preencha manualmente.", "warning");
+          return;
+        }
+
+        if (dados.pagador) pagador.value = dados.pagador;
+        if (dados.valor) valor.value = String(dados.valor).replace(",", ".");
+        if (dados.data_pagamento) dataPagamento.value = dados.data_pagamento;
+        if (dados.observacao && !observacao.value.trim()) observacao.value = dados.observacao;
+        mostrarFeedback(dados.mensagem || "Dados encontrados. Confira antes de salvar.", "success");
+
+        if (dados.cliente_sugerido_id && dados.confianca_cliente === "alta") {
+          clienteSugeridoId = String(dados.cliente_sugerido_id);
+          if (clienteSugeridoTexto) {
+            clienteSugeridoTexto.dataset.nome = dados.cliente_sugerido_nome || "";
+            clienteSugeridoTexto.textContent = "Cliente sugerido: " + (dados.cliente_sugerido_nome || "-") + ". Confirme se for a conta correta.";
+          }
+          clienteSugerido?.classList.add("visivel");
+        }
+      } catch (erro) {
+        mostrarFeedback("Nao foi possivel ler automaticamente o comprovante. Preencha manualmente.", "warning");
+      }
+    });
+  })();
+</script>
 {% endblock %}

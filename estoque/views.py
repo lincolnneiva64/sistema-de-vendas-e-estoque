@@ -16,6 +16,7 @@ from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count
 from .forms import CategoriaForm, ClienteForm, FuncionarioForm, PixRecebidoForm, ProdutoForm, UnidadeForm
 from .models import Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
+from .utils_pix import analisar_comprovante_pix
 from django.contrib import messages
 from django.http import Http404, HttpResponse, JsonResponse
 from django.utils.dateparse import parse_date
@@ -1168,7 +1169,10 @@ def clientes_autocomplete(request):
 
     clientes = []
     for cliente in clientes_qs[:12]:
-        clientes.append(_resumo_cliente_venda(cliente, hoje))
+        dados_cliente = _resumo_cliente_venda(cliente, hoje)
+        dados_cliente["documento"] = cliente.cpf_cnpj or ""
+        dados_cliente["telefone"] = cliente.whatsapp or cliente.telefone_alternativo or ""
+        clientes.append(dados_cliente)
 
     return JsonResponse({"clientes": clientes})
 
@@ -1639,6 +1643,49 @@ def central_pix(request):
             "voltar_url": retorno_url or reverse("estoque:contas_receber"),
         },
     )
+
+
+@require_POST
+def central_pix_analisar_comprovante(request):
+    arquivo = request.FILES.get("comprovante")
+    if not arquivo:
+        return JsonResponse({
+            "ok": False,
+            "mensagem": "Envie um comprovante para leitura automatica.",
+        }, status=400)
+
+    dados = analisar_comprovante_pix(arquivo)
+    cliente_sugerido = None
+    confianca_cliente = "baixa"
+    pagador_normalizado = normalizar_texto_cliente(dados.get("pagador"))
+    if pagador_normalizado:
+        for cliente in Cliente.objects.filter(ativo=True).only("id", "nome", "apelido_nome_conhecido").order_by("nome"):
+            nome_parecido = textos_parecidos_cliente(pagador_normalizado, cliente.nome, minimo=0.96)
+            apelido_parecido = bool(cliente.apelido_nome_conhecido) and textos_parecidos_cliente(
+                pagador_normalizado,
+                cliente.apelido_nome_conhecido,
+                minimo=0.96,
+            )
+            if nome_parecido or apelido_parecido:
+                cliente_sugerido = cliente
+                confianca_cliente = "alta"
+                break
+
+    return JsonResponse({
+        "ok": bool(dados.get("ok")),
+        "pagador": dados.get("pagador", ""),
+        "valor": dados.get("valor", ""),
+        "data_pagamento": dados.get("data_pagamento", ""),
+        "cliente_sugerido_id": cliente_sugerido.id if cliente_sugerido else None,
+        "cliente_sugerido_nome": cliente_sugerido.nome if cliente_sugerido else "",
+        "confianca_cliente": confianca_cliente,
+        "mensagem": dados.get("mensagem", ""),
+        "observacao": (
+            "Dados lidos automaticamente do comprovante. Conferir antes de confirmar."
+            if dados.get("ok")
+            else ""
+        ),
+    })
 
 
 @ensure_csrf_cookie

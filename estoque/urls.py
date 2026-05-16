@@ -24,6 +24,7 @@ urlpatterns = [
     path("vendas/gravar/", views.gravar_venda, name="gravar_venda"),
     path("contas-a-receber/", views.contas_receber, name="contas_receber"),
     path("central-pix/", views.central_pix, name="central_pix"),
+    path("central-pix/analisar-comprovante/", views.central_pix_analisar_comprovante, name="central_pix_analisar_comprovante"),
     path("contas-a-receber/cliente/<int:cliente_id>/receber/", views.receber_cliente, name="receber_cliente"),
     path("contas-a-receber/cliente/<int:cliente_id>/comprovante/<str:token>/imagem/", views.receber_cliente_comprovante_imagem, name="receber_cliente_comprovante_imagem"),
     path("contas-a-receber/creditos/cliente/<int:cliente_id>/", views.cliente_credito_detalhe, name="cliente_credito_detalhe"),

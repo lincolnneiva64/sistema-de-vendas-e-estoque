@@ -1,4 +1,5 @@
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -196,3 +197,49 @@ class PixRecebidoTests(TestCase):
         )
         self.assertContains(resposta_receber, "Central de Pix (pendente)")
         self.assertContains(resposta_receber, "rc-btn-pix-alerta")
+
+    def test_analisar_comprovante_pix_preenche_dados_sem_confirmar_cliente(self):
+        cliente = Cliente.objects.create(nome="Cicero Cristiano Silva Souza", ativo=True)
+        conteudo = (
+            "Comprovante Pix\n"
+            "Origem\n"
+            "Nome: Cicero Cristiano Silva Souza\n"
+            "Valor R$ 20,00\n"
+            "Data 16/05/2026 17:30\n"
+            "Destino\n"
+            "Nome: Loja Exemplo\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante.txt", conteudo, content_type="text/plain")
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_analisar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "Cicero Cristiano Silva Souza")
+        self.assertEqual(dados["valor"], "20.00")
+        self.assertEqual(dados["data_pagamento"], "2026-05-16T17:30")
+        self.assertEqual(dados["cliente_sugerido_id"], cliente.id)
+        self.assertEqual(dados["confianca_cliente"], "alta")
+        self.assertEqual(PixRecebido.objects.count(), 0)
+        self.assertEqual(ContaReceber.objects.count(), 0)
+        self.assertEqual(CreditoCliente.objects.count(), 0)
+
+    def test_analisar_comprovante_pix_falha_sem_bloquear_preenchimento_manual(self):
+        arquivo = SimpleUploadedFile("comprovante.txt", b"texto sem dados de pix", content_type="text/plain")
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_analisar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertFalse(dados["ok"])
+        self.assertIn("Preencha manualmente", dados["mensagem"])
+        self.assertIsNone(dados["cliente_sugerido_id"])
