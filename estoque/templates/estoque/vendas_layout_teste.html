@@ -675,6 +675,118 @@ select {
     outline-offset: 2px;
     box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.18);
 }
+.cobranca-preview-card {
+    width: min(620px, calc(100vw - 32px));
+    max-height: calc(100vh - 40px);
+    overflow: auto;
+    padding: 14px;
+}
+.cobranca-preview-titulo {
+    margin: 0 0 8px;
+    color: #0f172a;
+    font-size: 17px;
+    font-weight: 900;
+}
+.cobranca-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 8px;
+}
+.cobranca-preview-item {
+    border-radius: 10px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 6px 8px;
+}
+.cobranca-preview-item.alerta {
+    background: #fef2f2;
+    border-color: #fecaca;
+}
+.cobranca-preview-item.alerta .cobranca-preview-label,
+.cobranca-preview-item.alerta .cobranca-preview-valor {
+    color: #991b1b;
+}
+.cobranca-preview-label {
+    display: block;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 850;
+    text-transform: uppercase;
+}
+.cobranca-preview-valor {
+    display: block;
+    margin-top: 2px;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 850;
+}
+.cobranca-preview-qtd {
+    display: block;
+    margin-top: 2px;
+    font-size: 12px;
+    font-weight: 900;
+}
+.cobranca-preview-total {
+    display: block;
+    margin-top: 1px;
+    padding-bottom: 4px;
+    font-size: 15px;
+    font-weight: 950;
+}
+.cobranca-preview-lista {
+    margin: 0 0 8px;
+}
+.cobranca-preview-lista-titulo {
+    margin: 0 0 5px;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 900;
+}
+.cobranca-preview-contas {
+    display: grid;
+    gap: 5px;
+}
+.cobranca-preview-conta {
+    border: 1px solid #dbeafe;
+    border-radius: 9px;
+    background: #eff6ff;
+    padding: 5px 7px;
+}
+.cobranca-preview-conta.vencida {
+    border-color: #fecaca;
+    background: #fef2f2;
+}
+.cobranca-preview-conta-topo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: #0f172a;
+    font-size: 11px;
+    font-weight: 900;
+}
+.cobranca-preview-conta.vencida .cobranca-preview-conta-status {
+    color: #991b1b;
+}
+.cobranca-preview-conta-meta {
+    margin-top: 3px;
+    color: #475569;
+    font-size: 10px;
+    font-weight: 750;
+}
+.cobranca-preview-card .venda-confirmacao-acoes {
+    position: sticky;
+    bottom: -14px;
+    margin: 0 -14px -14px;
+    padding: 10px 14px;
+    background: #ffffff;
+    border-top: 1px solid #e2e8f0;
+}
+.cobranca-preview-card .venda-confirmar-btn {
+    background: #1d4ed8;
+    border-color: #1e40af;
+}
 .venda-confirmar-btn {
     background: #dc2626;
     border-color: #b91c1c;
@@ -713,6 +825,24 @@ select {
     }
     .cliente-financeiro {
         flex-wrap: wrap;
+    }
+}
+@media (max-width: 700px) {
+    .cobranca-preview-card {
+        width: calc(100vw - 18px);
+        max-height: calc(100vh - 18px);
+        padding: 12px;
+    }
+    .cobranca-preview-grid {
+        grid-template-columns: 1fr;
+    }
+    .cobranca-preview-conta-meta {
+        line-height: 1.35;
+    }
+    .cobranca-preview-card .venda-confirmacao-acoes {
+        bottom: -12px;
+        margin: 0 -12px -12px;
+        padding: 9px 12px;
     }
 }
 .produto-sugestao-item strong {
@@ -974,6 +1104,41 @@ td:first-child {
         </div>
     </div>
 </div>
+<div id="cobrancaPreviewOverlay" class="venda-confirmacao-overlay" aria-hidden="true">
+    <div class="venda-confirmacao-card cobranca-preview-card" role="dialog" aria-modal="true" aria-labelledby="cobrancaPreviewTitulo">
+        <h3 id="cobrancaPreviewTitulo" class="cobranca-preview-titulo">Cobrança do cliente</h3>
+        <div class="cobranca-preview-grid">
+            <div class="cobranca-preview-item">
+                <span class="cobranca-preview-label">Cliente</span>
+                <span class="cobranca-preview-valor" id="cobrancaPreviewCliente">-</span>
+            </div>
+            <div class="cobranca-preview-item">
+                <span class="cobranca-preview-label">WhatsApp</span>
+                <span class="cobranca-preview-valor" id="cobrancaPreviewWhatsapp">-</span>
+            </div>
+            <div class="cobranca-preview-item">
+                <span class="cobranca-preview-label">Contas em aberto</span>
+                <span class="cobranca-preview-valor" id="cobrancaPreviewAbertas">-</span>
+            </div>
+            <div class="cobranca-preview-item" id="cobrancaPreviewVencidasItem">
+                <span class="cobranca-preview-label">Contas vencidas</span>
+                <span class="cobranca-preview-valor" id="cobrancaPreviewVencidas">
+                    <span class="cobranca-preview-qtd" id="cobrancaPreviewVencidasQtd">-</span>
+                    <span class="cobranca-preview-total" id="cobrancaPreviewVencidasTotal">-</span>
+                </span>
+            </div>
+        </div>
+        <div class="cobranca-preview-lista">
+            <p class="cobranca-preview-lista-titulo">Contas em aberto</p>
+            <div class="cobranca-preview-contas" id="cobrancaPreviewContas"></div>
+        </div>
+        <div class="venda-confirmacao-acoes">
+            <button type="button" id="btnCancelarCobrancaPreview" class="venda-cancelar-btn">Cancelar</button>
+            <button type="button" id="btnAbrirWhatsappCobranca" class="venda-cancelar-btn">Abrir WhatsApp</button>
+            <button type="button" id="btnAbrirCobrancaVisual" class="venda-confirmar-btn">Abrir imagem da cobrança</button>
+        </div>
+    </div>
+</div>
 
 {{ cliente_inicial|json_script:"clienteInicialVenda" }}
 <script>
@@ -1042,6 +1207,17 @@ const vendaConfirmacaoOverlay = document.getElementById("vendaConfirmacaoOverlay
 const vendaConfirmacaoTexto = document.getElementById("vendaConfirmacaoTexto");
 const btnCancelarConfirmacaoVenda = document.getElementById("btnCancelarConfirmacaoVenda");
 const btnConfirmarConfirmacaoVenda = document.getElementById("btnConfirmarConfirmacaoVenda");
+const cobrancaPreviewOverlay = document.getElementById("cobrancaPreviewOverlay");
+const cobrancaPreviewCliente = document.getElementById("cobrancaPreviewCliente");
+const cobrancaPreviewWhatsapp = document.getElementById("cobrancaPreviewWhatsapp");
+const cobrancaPreviewAbertas = document.getElementById("cobrancaPreviewAbertas");
+const cobrancaPreviewVencidasItem = document.getElementById("cobrancaPreviewVencidasItem");
+const cobrancaPreviewVencidasQtd = document.getElementById("cobrancaPreviewVencidasQtd");
+const cobrancaPreviewVencidasTotal = document.getElementById("cobrancaPreviewVencidasTotal");
+const cobrancaPreviewContas = document.getElementById("cobrancaPreviewContas");
+const btnCancelarCobrancaPreview = document.getElementById("btnCancelarCobrancaPreview");
+const btnAbrirWhatsappCobranca = document.getElementById("btnAbrirWhatsappCobranca");
+const btnAbrirCobrancaVisual = document.getElementById("btnAbrirCobrancaVisual");
 const clienteBusca = document.getElementById("clienteBusca");
 const clienteId = document.getElementById("clienteId");
 const clienteSugestoesBox = document.getElementById("clienteSugestoes");
@@ -1161,13 +1337,17 @@ function criarLinhaFinanceira(classe, texto, link, acao) {
     return elemento;
 }
 
-function criarLinkWhatsappCobranca(url) {
+function criarLinkWhatsappCobranca(url, cliente) {
     const elemento = document.createElement("a");
     elemento.className = "cliente-financeiro-linha whatsapp-cobranca cliente-financeiro-link";
     elemento.href = url;
     elemento.target = "_blank";
     elemento.rel = "noopener";
     elemento.textContent = "Enviar cobrança";
+    elemento.addEventListener("click", function (event) {
+        event.preventDefault();
+        abrirPreviewCobranca(cliente);
+    });
     return elemento;
 }
 
@@ -1232,7 +1412,7 @@ function atualizarResumoFinanceiroCliente(cliente) {
         clienteResumoFinanceiro.appendChild(linhaVencidas);
     }
     if (abertasQtd > 0 && whatsappCobrancaUrl) {
-        clienteResumoFinanceiro.appendChild(criarLinkWhatsappCobranca(whatsappCobrancaUrl));
+        clienteResumoFinanceiro.appendChild(criarLinkWhatsappCobranca(whatsappCobrancaUrl, cliente));
     }
     if (credito <= 0 && abertasQtd <= 0 && vencidasQtd <= 0) {
         clienteResumoFinanceiro.appendChild(criarLinhaFinanceira("", "Sem pendencias financeiras."));
@@ -1275,6 +1455,8 @@ configurarEnterCabecalho(operadorVenda, produtoBusca);
 
 let vendaToastTimer = null;
 let resolverConfirmacaoVenda = null;
+let cobrancaPreviewUrl = "";
+let cobrancaVisualUrl = "";
 
 function mostrarToastVenda(mensagem) {
     if (!vendaToast) return;
@@ -1324,6 +1506,63 @@ function fecharConfirmacaoVenda(confirmado) {
         resolverConfirmacaoVenda(confirmado);
         resolverConfirmacaoVenda = null;
     }
+}
+
+function montarItemContaPreviewCobranca(conta) {
+    const item = document.createElement("div");
+    item.className = "cobranca-preview-conta" + (conta.vencida ? " vencida" : "");
+    const topo = document.createElement("div");
+    topo.className = "cobranca-preview-conta-topo";
+    const titulo = document.createElement("span");
+    titulo.textContent = conta.titulo || "Conta";
+    const status = document.createElement("span");
+    status.className = "cobranca-preview-conta-status";
+    status.textContent = conta.status || "Em dia";
+    topo.appendChild(titulo);
+    topo.appendChild(status);
+
+    const meta = document.createElement("div");
+    meta.className = "cobranca-preview-conta-meta";
+    meta.textContent = "Data: " + (conta.data || "Data não informada")
+        + " | Vencimento: " + (conta.vencimento || "Vencimento não informado")
+        + " | Valor: " + (conta.valor || "R$ 0,00");
+
+    item.appendChild(topo);
+    item.appendChild(meta);
+    return item;
+}
+
+function abrirPreviewCobranca(cliente) {
+    const financeiro = cliente.financeiro || {};
+    const whatsappCobranca = cliente.whatsapp_cobranca || {};
+    const abertasQtd = parseInt(financeiro.contas_abertas_qtd || "0", 10) || 0;
+    const abertasTotal = numeroCliente(financeiro.contas_abertas_total);
+    const vencidasQtd = parseInt(financeiro.contas_vencidas_qtd || "0", 10) || 0;
+    const vencidasTotal = numeroCliente(financeiro.contas_vencidas_total);
+    const maiorAtrasoDias = parseInt(whatsappCobranca.maior_atraso_dias || "0", 10) || 0;
+
+    cobrancaPreviewUrl = whatsappCobranca.url || "";
+    cobrancaVisualUrl = whatsappCobranca.visual_url || "";
+    cobrancaPreviewCliente.textContent = cliente.nome || "-";
+    cobrancaPreviewWhatsapp.textContent = cliente.whatsapp || whatsappCobranca.numero || "-";
+    cobrancaPreviewAbertas.textContent = abertasQtd + " / " + formatarMoedaCliente(abertasTotal);
+    cobrancaPreviewVencidasQtd.textContent = vencidasQtd + (vencidasQtd === 1 ? " conta" : " contas");
+    cobrancaPreviewVencidasTotal.textContent = formatarMoedaCliente(vencidasTotal);
+    cobrancaPreviewVencidasItem.classList.toggle("alerta", vencidasQtd > 0);
+    cobrancaPreviewContas.innerHTML = "";
+    (whatsappCobranca.contas || []).forEach(function (conta) {
+        cobrancaPreviewContas.appendChild(montarItemContaPreviewCobranca(conta));
+    });
+    cobrancaPreviewOverlay.classList.add("visivel");
+    cobrancaPreviewOverlay.setAttribute("aria-hidden", "false");
+    requestAnimationFrame(() => btnAbrirCobrancaVisual.focus());
+}
+
+function fecharPreviewCobranca() {
+    cobrancaPreviewOverlay.classList.remove("visivel");
+    cobrancaPreviewOverlay.setAttribute("aria-hidden", "true");
+    cobrancaPreviewUrl = "";
+    cobrancaVisualUrl = "";
 }
 
 function preencherResumoCliente(cliente) {
@@ -1930,6 +2169,23 @@ vendaConfirmacaoOverlay.addEventListener("mousedown", (e) => {
         fecharConfirmacaoVenda(false);
     }
 });
+btnCancelarCobrancaPreview.addEventListener("click", fecharPreviewCobranca);
+btnAbrirWhatsappCobranca.addEventListener("click", () => {
+    if (cobrancaPreviewUrl) {
+        window.open(cobrancaPreviewUrl, "_blank", "noopener");
+    }
+    fecharPreviewCobranca();
+});
+btnAbrirCobrancaVisual.addEventListener("click", () => {
+    if (cobrancaVisualUrl) {
+        window.open(cobrancaVisualUrl, "_blank", "noopener");
+    }
+});
+cobrancaPreviewOverlay.addEventListener("mousedown", (e) => {
+    if (e.target === cobrancaPreviewOverlay) {
+        fecharPreviewCobranca();
+    }
+});
 
 document.addEventListener("keydown", (e) => {
     if (!vendaConfirmacaoOverlay.classList.contains("visivel")) return;
@@ -1955,6 +2211,24 @@ document.addEventListener("keydown", (e) => {
             e.preventDefault();
             botaoFocado.click();
         }
+    }
+});
+
+document.addEventListener("keydown", (e) => {
+    if (!cobrancaPreviewOverlay.classList.contains("visivel")) return;
+
+    if (e.key === "Escape") {
+        e.preventDefault();
+        fecharPreviewCobranca();
+        return;
+    }
+
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        const botoes = [btnCancelarCobrancaPreview, btnAbrirWhatsappCobranca, btnAbrirCobrancaVisual];
+        const indiceAtual = botoes.indexOf(document.activeElement);
+        const proximoIndice = indiceAtual >= 0 ? (indiceAtual + 1) % botoes.length : 0;
+        botoes[proximoIndice].focus();
     }
 });
 

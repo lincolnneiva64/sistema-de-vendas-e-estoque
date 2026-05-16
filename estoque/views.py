@@ -1107,7 +1107,23 @@ def _resumo_cliente_venda(cliente, hoje=None):
         quantidade=Count("id"),
         total=Sum("valor_em_aberto"),
     )
-    whatsapp_cobranca = _montar_whatsapp_cobranca_cliente(cliente, contas_abertas, contas_vencidas)
+    vencimento_mais_antigo = (
+        contas_abertas_qs
+        .filter(data_vencimento__lt=hoje)
+        .order_by("data_vencimento")
+        .values_list("data_vencimento", flat=True)
+        .first()
+    )
+    maior_atraso_dias = (hoje - vencimento_mais_antigo).days if vencimento_mais_antigo else 0
+    contas_preview = _montar_contas_preview_cobranca(contas_abertas_qs, hoje)
+    whatsapp_cobranca = _montar_whatsapp_cobranca_cliente(
+        cliente,
+        contas_abertas,
+        contas_vencidas,
+        maior_atraso_dias,
+        contas_preview,
+    )
+    whatsapp_cobranca["visual_url"] = reverse("estoque:cliente_cobranca_imagem", kwargs={"cliente_id": cliente.id})
     return {
         "id": cliente.id,
         "nome": cliente.nome,
@@ -1148,6 +1164,17 @@ def clientes_autocomplete(request):
     return JsonResponse({"clientes": clientes})
 
 
+def cliente_cobranca_imagem(request, cliente_id):
+    cliente = get_object_or_404(Cliente, pk=cliente_id)
+    resumo = _resumo_cliente_venda(cliente)
+    financeiro = resumo["financeiro"]
+    cobranca = resumo["whatsapp_cobranca"]
+    buffer = _gerar_cobranca_cliente_imagem(cliente, financeiro, cobranca)
+    response = HttpResponse(buffer.getvalue(), content_type="image/png")
+    response["Content-Disposition"] = f'inline; filename="cobranca-cliente-{cliente.id}.png"'
+    return response
+
+
 def _url_retorno_segura(request):
     proxima_url = request.GET.get("next", "").strip()
     if proxima_url and url_has_allowed_host_and_scheme(
@@ -1163,34 +1190,54 @@ def _querystring_retorno(retorno_url):
     return urlencode({"next": retorno_url}) if retorno_url else ""
 
 
-def _montar_whatsapp_cobranca_cliente(cliente, contas_abertas, contas_vencidas):
+def _formatar_data_cobranca(valor):
+    return valor.strftime("%d/%m/%Y") if valor else ""
+
+
+def _montar_contas_preview_cobranca(contas_qs, hoje):
+    contas = []
+    for conta in contas_qs.select_related("venda").order_by("data_vencimento", "id"):
+        vencimento = conta.data_vencimento
+        atraso_dias = (hoje - vencimento).days if vencimento and vencimento < hoje else 0
+        if atraso_dias == 1:
+            status_texto = "Vencida há 1 dia"
+        elif atraso_dias > 1:
+            status_texto = f"Vencida há {atraso_dias} dias"
+        else:
+            status_texto = "Em dia"
+        venda = conta.venda
+        contas.append({
+            "titulo": f"Venda #{venda.id}" if venda else f"Conta #{conta.id}",
+            "data": _formatar_data_cobranca((venda.data_venda if venda else None) or conta.data_emissao),
+            "vencimento": _formatar_data_cobranca(vencimento),
+            "valor": _formatar_moeda(conta.valor_em_aberto or Decimal("0.00")),
+            "status": status_texto,
+            "vencida": atraso_dias > 0,
+        })
+    return contas
+
+
+def _montar_whatsapp_cobranca_cliente(cliente, contas_abertas, contas_vencidas, maior_atraso_dias=0, contas_preview=None):
     numero = Cliente.normalizar_whatsapp(cliente.whatsapp_normalizado or cliente.whatsapp)
     if numero and len(numero) in (10, 11):
         numero = "55" + numero
 
-    abertas_qtd = contas_abertas.get("quantidade") or 0
-    abertas_total = contas_abertas.get("total") or Decimal("0.00")
-    vencidas_qtd = contas_vencidas.get("quantidade") or 0
-    vencidas_total = contas_vencidas.get("total") or Decimal("0.00")
-    mensagem = "\n".join([
+    linhas_mensagem = [
         f"Olá, {cliente.nome}.",
         "",
-        "Segue atualização das suas contas em aberto:",
-        "",
-        f"Contas em aberto: {abertas_qtd}",
-        f"Total em aberto: {_formatar_moeda(abertas_total)}",
-        "",
-        f"Contas vencidas: {vencidas_qtd}",
-        f"Total vencido: {_formatar_moeda(vencidas_total)}",
-        "",
-        "Pedimos, por gentileza, a atualização do pagamento.",
+        "Segue atualização das contas em aberto.",
         "",
         "Obrigado.",
         "LA Neiva",
-    ])
+    ]
+    mensagem = "\n".join(linhas_mensagem)
     return {
         "tem_whatsapp": bool(numero),
         "url": f"https://web.whatsapp.com/send?phone={numero}&text={quote(mensagem)}" if numero else "",
+        "numero": numero,
+        "mensagem": mensagem,
+        "maior_atraso_dias": maior_atraso_dias,
+        "contas": contas_preview or [],
     }
 
 
@@ -4643,6 +4690,136 @@ def _gerar_nota_whatsapp_imagem(venda):
 
     png = BytesIO()
     imagem_final.save(png, format="PNG")
+    png.seek(0)
+    return png
+
+
+def _gerar_cobranca_cliente_imagem(cliente, financeiro, cobranca):
+    largura = 1080
+    margem = 42
+    contas = cobranca.get("contas", [])
+    altura = max(980, 540 + max(len(contas), 1) * 146)
+
+    fundo = "#f6f1e8"
+    card = "#fffdf8"
+    texto = "#172033"
+    suave = "#64748b"
+    azul = "#1e3a8a"
+    vermelho = "#991b1b"
+    borda = "#dbe5f0"
+
+    fonte_empresa = _fonte_nota_whatsapp(30, True)
+    fonte_titulo = _fonte_nota_whatsapp(44, True)
+    fonte_subtitulo = _fonte_nota_whatsapp(28, True)
+    fonte_label = _fonte_nota_whatsapp(20, True)
+    fonte_texto = _fonte_nota_whatsapp(25)
+    fonte_texto_negrito = _fonte_nota_whatsapp(25, True)
+    fonte_rodape = _fonte_nota_whatsapp(26, True)
+
+    imagem = Image.new("RGB", (largura, altura), fundo)
+    draw = ImageDraw.Draw(imagem)
+
+    draw.rounded_rectangle(
+        (margem, margem, largura - margem, altura - margem),
+        radius=28,
+        fill=card,
+        outline="#ead7b0",
+        width=3,
+    )
+
+    x = margem + 30
+    direita = largura - margem - 30
+    y = margem + 28
+
+    draw.text((x, y), "L A Neiva", fill=azul, font=fonte_empresa)
+    y += 42
+    draw.text((x, y), "Cobrança do cliente", fill=texto, font=fonte_titulo)
+    y += 66
+
+    draw.rounded_rectangle((x, y, direita, y + 116), radius=18, fill="#eff6ff", outline="#bfdbfe", width=2)
+    draw.text((x + 22, y + 18), f"Cliente: {cliente.nome}", fill=texto, font=fonte_texto_negrito)
+    draw.text((x + 22, y + 58), f"WhatsApp: {cliente.whatsapp or '-'}", fill=suave, font=fonte_texto)
+    y += 138
+
+    abertas_total = _formatar_moeda(Decimal(financeiro["contas_abertas_total"]))
+    vencidas_total = _formatar_moeda(Decimal(financeiro["contas_vencidas_total"]))
+
+    def desenhar_resumo(x_campo, y_campo, largura_campo, label, valor, alerta=False):
+        draw.rounded_rectangle(
+            (x_campo, y_campo, x_campo + largura_campo, y_campo + 82),
+            radius=15,
+            fill="#fef2f2" if alerta else "#f8fafc",
+            outline="#fecaca" if alerta else "#e2e8f0",
+            width=2,
+        )
+        draw.text((x_campo + 15, y_campo + 11), label.upper(), fill=vermelho if alerta else suave, font=fonte_label)
+        draw.text((x_campo + 15, y_campo + 42), valor, fill=vermelho if alerta else texto, font=fonte_texto_negrito)
+
+    def desenhar_resumo_vencidas(x_campo, y_campo, largura_campo, quantidade, valor):
+        draw.rounded_rectangle(
+            (x_campo, y_campo, x_campo + largura_campo, y_campo + 106),
+            radius=15,
+            fill="#fef2f2",
+            outline="#fecaca",
+            width=2,
+        )
+        quantidade_texto = f"{quantidade} conta" if quantidade == 1 else f"{quantidade} contas"
+        draw.text((x_campo + 15, y_campo + 10), "CONTAS VENCIDAS", fill=vermelho, font=fonte_label)
+        draw.text((x_campo + 15, y_campo + 39), quantidade_texto, fill=vermelho, font=fonte_texto_negrito)
+        draw.text((x_campo + 15, y_campo + 65), valor, fill=vermelho, font=fonte_subtitulo)
+
+    largura_campo = (direita - x - 20) // 2
+    x2 = x + largura_campo + 20
+    desenhar_resumo(
+        x,
+        y,
+        largura_campo,
+        "Contas em aberto",
+        f"{financeiro['contas_abertas_qtd']} / {abertas_total}",
+    )
+    desenhar_resumo_vencidas(x2, y, largura_campo, financeiro["contas_vencidas_qtd"], vencidas_total)
+    y += 124
+    if cobranca.get("maior_atraso_dias"):
+        desenhar_resumo(x, y, largura_campo, "Maior atraso", f"{cobranca['maior_atraso_dias']} dias", True)
+        y += 100
+
+    draw.text((x, y), "Contas em aberto", fill=texto, font=fonte_subtitulo)
+    y += 44
+
+    if not contas:
+        draw.rounded_rectangle((x, y, direita, y + 82), radius=14, fill="#ffffff", outline=borda, width=2)
+        draw.text((x + 22, y + 25), "Nenhuma conta em aberto.", fill=suave, font=fonte_texto)
+        y += 100
+    else:
+        for conta in contas:
+            vencida = bool(conta.get("vencida"))
+            fill = "#fef2f2" if vencida else "#eff6ff"
+            outline = "#fecaca" if vencida else "#bfdbfe"
+            status_cor = vermelho if vencida else azul
+            titulo = conta.get("titulo") or "Conta"
+            status = conta.get("status") or "Em dia"
+            meta = (
+                f"Data: {conta.get('data') or 'Data não informada'} | "
+                f"Vencimento: {conta.get('vencimento') or 'Vencimento não informado'} | "
+                f"Valor em aberto: {conta.get('valor') or 'R$ 0,00'}"
+            )
+            linhas_meta = _quebrar_texto(draw, meta, fonte_texto, direita - x - 44)[:2]
+            altura_card = 82 + len(linhas_meta) * 30
+            draw.rounded_rectangle((x, y, direita, y + altura_card), radius=14, fill=fill, outline=outline, width=2)
+            draw.text((x + 20, y + 13), titulo, fill=texto, font=fonte_texto_negrito)
+            status_largura = _texto_largura(draw, status, fonte_label)
+            draw.rounded_rectangle((direita - status_largura - 46, y + 12, direita - 20, y + 45), radius=16, fill="#fee2e2" if vencida else "#dbeafe")
+            draw.text((direita - status_largura - 33, y + 18), status, fill=status_cor, font=fonte_label)
+            y_linha = y + 55
+            for linha in linhas_meta:
+                draw.text((x + 20, y_linha), linha, fill=suave, font=fonte_texto)
+                y_linha += 30
+            y += altura_card + 14
+
+    draw.text((direita - _texto_largura(draw, "LA Neiva", fonte_rodape), altura - margem - 62), "LA Neiva", fill=azul, font=fonte_rodape)
+
+    png = BytesIO()
+    imagem.save(png, format="PNG")
     png.seek(0)
     return png
 
