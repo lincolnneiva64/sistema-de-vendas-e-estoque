@@ -461,6 +461,44 @@ class RecebimentoContaReceber(models.Model):
         return f"Recebimento R$ {self.valor} - Conta #{self.conta_id}"
 
 
+class PixRecebido(models.Model):
+    STATUS_PENDENTE = "pendente"
+    STATUS_IDENTIFICADO = "identificado"
+    STATUS_BAIXADO = "baixado"
+    STATUS_NAO_IDENTIFICADO = "nao_identificado"
+    STATUS_CHOICES = [
+        (STATUS_PENDENTE, "Pendente"),
+        (STATUS_IDENTIFICADO, "Identificado"),
+        (STATUS_BAIXADO, "Baixado"),
+        (STATUS_NAO_IDENTIFICADO, "Nao identificado"),
+    ]
+
+    cliente = models.ForeignKey(
+        Cliente,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="pix_recebidos",
+    )
+    nome_pagador = models.CharField(max_length=160, blank=True)
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+    data_pagamento = models.DateTimeField(default=timezone.now)
+    observacao = models.TextField(blank=True)
+    comprovante = models.FileField(upload_to="pix/comprovantes/", blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDENTE)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-data_pagamento", "-id"]
+        verbose_name = "Pix recebido"
+        verbose_name_plural = "Pix recebidos"
+
+    def __str__(self):
+        pagador = self.nome_pagador or (self.cliente.nome if self.cliente else "Pagador nao informado")
+        return f"Pix R$ {self.valor} - {pagador}"
+
+
 class CreditoCliente(models.Model):
     TIPO_CREDITO_GERADO = "credito_gerado"
     TIPO_CHOICES = [

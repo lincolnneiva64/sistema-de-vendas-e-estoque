@@ -8,6 +8,7 @@
     display: flex; align-items: flex-end; justify-content: space-between;
     gap: 10px; margin-bottom: 8px;
   }
+  .rc-header-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
   .rc-title { margin: 0; color: #111827; font-size: 1.28rem; font-weight: 900; }
   .rc-subtitle { margin: 2px 0 0; color: #64748b; font-size: 0.84rem; font-weight: 650; }
   .rc-btn {
@@ -20,6 +21,15 @@
   .rc-btn-primary { border-color: #86efac; background: #16a34a; color: #fff; }
   .rc-btn-info-disabled { border-color: #bfdbfe; background: #eff6ff; color: #1e3a8a; }
   .rc-btn.is-informativo { opacity: 0.72; cursor: default; }
+  .rc-btn-pix-alerta {
+    border-color: #ef4444; background: #fee2e2; color: #991b1b;
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.34), 0 8px 18px rgba(185, 28, 28, 0.14);
+    animation: pix-alerta-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes pix-alerta-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3), 0 8px 18px rgba(185, 28, 28, 0.14); }
+    50% { box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.08), 0 8px 18px rgba(185, 28, 28, 0.19); }
+  }
   .rc-modal-overlay {
     position: fixed; inset: 0; z-index: 10000; background: rgba(15, 23, 42, 0.52);
     display: none; align-items: center; justify-content: center; padding: 18px;
@@ -302,7 +312,10 @@
         <h1 class="rc-title">Receber do cliente</h1>
         <p class="rc-subtitle">Previa de distribuicao automatica nas contas abertas.</p>
       </div>
-      <a href="{{ retorno_url }}" class="rc-btn">Voltar</a>
+      <div class="rc-header-actions">
+        <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="rc-btn {% if tem_pix_em_atencao %}rc-btn-pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
+        <a href="{{ retorno_url }}" class="rc-btn">Voltar</a>
+      </div>
     </header>
 
     {% if messages %}

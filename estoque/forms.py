@@ -2,7 +2,9 @@ from decimal import Decimal, InvalidOperation
 
 from django import forms
 
-from .models import Categoria, Cliente, Funcionario, Produto, Unidade
+from django.utils import timezone
+
+from .models import Categoria, Cliente, Funcionario, PixRecebido, Produto, Unidade
 from .utils import normalize_category_name, normalize_product_name
 
 
@@ -668,3 +670,84 @@ class FuncionarioForm(forms.ModelForm):
             cleaned_data["pode_receber_checklist"] = False
 
         return cleaned_data
+
+
+class PixRecebidoForm(forms.ModelForm):
+    data_pagamento = forms.DateTimeField(
+        input_formats=["%Y-%m-%dT%H:%M"],
+        widget=forms.DateTimeInput(
+            attrs={
+                "class": "form-control",
+                "type": "datetime-local",
+            },
+            format="%Y-%m-%dT%H:%M",
+        ),
+    )
+
+    class Meta:
+        model = PixRecebido
+        fields = [
+            "cliente",
+            "nome_pagador",
+            "valor",
+            "data_pagamento",
+            "observacao",
+            "comprovante",
+            "status",
+        ]
+        widgets = {
+            "cliente": forms.Select(attrs={"class": "form-select"}),
+            "nome_pagador": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Nome de quem fez o Pix",
+                "autocomplete": "off",
+            }),
+            "valor": forms.NumberInput(attrs={
+                "class": "form-control",
+                "step": "0.01",
+                "min": "0.01",
+                "placeholder": "0,00",
+            }),
+            "observacao": forms.Textarea(attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": "Observacao interna opcional",
+            }),
+            "comprovante": forms.ClearableFileInput(attrs={"class": "form-control"}),
+            "status": forms.Select(attrs={"class": "form-select"}),
+        }
+        labels = {
+            "cliente": "Cliente",
+            "nome_pagador": "Nome do pagador",
+            "valor": "Valor do Pix",
+            "data_pagamento": "Data/hora do pagamento",
+            "observacao": "Observacao",
+            "comprovante": "Comprovante/anexo",
+            "status": "Status",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["cliente"].required = False
+        self.fields["cliente"].queryset = Cliente.objects.filter(ativo=True).order_by("nome")
+        self.fields["cliente"].empty_label = "Sem cliente identificado"
+        self.fields["nome_pagador"].required = False
+        self.fields["comprovante"].required = False
+        self.fields["observacao"].required = False
+        if not self.is_bound and not self.instance.pk:
+            self.initial["data_pagamento"] = timezone.localtime(timezone.now()).strftime("%Y-%m-%dT%H:%M")
+            self.initial["status"] = PixRecebido.STATUS_PENDENTE
+
+    def clean_nome_pagador(self):
+        nome = self.cleaned_data.get("nome_pagador") or ""
+        return " ".join(nome.strip().split())
+
+    def clean_valor(self):
+        valor = self.cleaned_data.get("valor")
+        if valor is None or valor <= 0:
+            raise forms.ValidationError("Informe um valor de Pix maior que zero.")
+        return valor
+
+    def clean_observacao(self):
+        observacao = self.cleaned_data.get("observacao") or ""
+        return observacao.strip()

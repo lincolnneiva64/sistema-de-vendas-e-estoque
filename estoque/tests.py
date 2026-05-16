@@ -1,9 +1,10 @@
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
-from .forms import FuncionarioForm
-from .models import Funcionario
+from .forms import FuncionarioForm, PixRecebidoForm
+from .models import Cliente, ContaReceber, CreditoCliente, Funcionario, PixRecebido, RecebimentoContaReceber, Venda
 
 
 class FuncionarioTests(TestCase):
@@ -88,3 +89,110 @@ class FuncionarioTests(TestCase):
         funcionario.refresh_from_db()
         self.assertFalse(funcionario.ativo)
         self.assertFalse(funcionario.pode_receber_checklist)
+
+
+class PixRecebidoTests(TestCase):
+    def test_form_permite_cliente_opcional_e_status_pendente(self):
+        form = PixRecebidoForm(data={
+            "cliente": "",
+            "nome_pagador": "Maria Silva",
+            "valor": "50.00",
+            "data_pagamento": timezone.localtime(timezone.now()).strftime("%Y-%m-%dT%H:%M"),
+            "observacao": "Pix recebido no caixa",
+            "status": PixRecebido.STATUS_PENDENTE,
+        })
+
+        self.assertTrue(form.is_valid(), form.errors)
+        pix = form.save()
+        self.assertIsNone(pix.cliente)
+        self.assertEqual(pix.status, PixRecebido.STATUS_PENDENTE)
+
+    def test_central_pix_registra_lista_e_nao_altera_fluxo_financeiro(self):
+        cliente = Cliente.objects.create(nome="Cliente Pix", ativo=True)
+        url = reverse("estoque:central_pix")
+        contagens_antes = {
+            "contas": ContaReceber.objects.count(),
+            "recebimentos": RecebimentoContaReceber.objects.count(),
+            "creditos": CreditoCliente.objects.count(),
+            "vendas": Venda.objects.count(),
+        }
+
+        resposta_get = self.client.get(url, secure=True)
+        self.assertEqual(resposta_get.status_code, 200)
+        self.assertContains(resposta_get, "Central de Pix")
+
+        resposta_post = self.client.post(url, data={
+            "cliente": cliente.id,
+            "nome_pagador": "Filho do cliente",
+            "valor": "123.45",
+            "data_pagamento": timezone.localtime(timezone.now()).strftime("%Y-%m-%dT%H:%M"),
+            "observacao": "Conferir manualmente depois",
+            "status": PixRecebido.STATUS_PENDENTE,
+        }, secure=True, follow=True)
+
+        self.assertEqual(resposta_post.status_code, 200)
+        self.assertContains(resposta_post, "Filho do cliente")
+        pix = PixRecebido.objects.get(nome_pagador="Filho do cliente")
+        self.assertEqual(pix.cliente, cliente)
+        self.assertEqual(pix.status, PixRecebido.STATUS_PENDENTE)
+
+        contagens_depois = {
+            "contas": ContaReceber.objects.count(),
+            "recebimentos": RecebimentoContaReceber.objects.count(),
+            "creditos": CreditoCliente.objects.count(),
+            "vendas": Venda.objects.count(),
+        }
+        self.assertEqual(contagens_depois, contagens_antes)
+
+    def test_central_pix_usa_next_interno_e_ignora_next_externo(self):
+        url = reverse("estoque:central_pix")
+
+        resposta_interna = self.client.get(f"{url}?next=/vendas/", secure=True)
+        self.assertContains(resposta_interna, 'href="/vendas/"')
+
+        resposta_externa = self.client.get(f"{url}?next=https://example.com/", secure=True)
+        self.assertContains(resposta_externa, f'href="{reverse("estoque:contas_receber")}"')
+        self.assertNotContains(resposta_externa, "example.com")
+
+    def test_botoes_central_pix_alertam_somente_pix_em_atencao(self):
+        cliente = Cliente.objects.create(nome="Cliente Alerta Pix", ativo=True)
+
+        resposta_sem_pix = self.client.get(reverse("estoque:contas_receber"), secure=True)
+        self.assertNotContains(resposta_sem_pix, "(pendente)")
+
+        PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="Pix baixado",
+            valor="10.00",
+            status=PixRecebido.STATUS_BAIXADO,
+        )
+        resposta_baixado = self.client.get(reverse("estoque:vendas"), secure=True)
+        self.assertNotContains(resposta_baixado, "(pendente)")
+
+        PixRecebido.objects.create(
+            nome_pagador="Pix pendente",
+            valor="20.00",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+        resposta_contas = self.client.get(reverse("estoque:contas_receber"), secure=True)
+        self.assertContains(resposta_contas, "Central de Pix (pendente)")
+        self.assertContains(resposta_contas, "contas-btn-pix-alerta")
+
+        resposta_vendas = self.client.get(reverse("estoque:vendas"), secure=True)
+        self.assertContains(resposta_vendas, "Central de Pix (pendente)")
+        self.assertContains(resposta_vendas, "pix-alerta")
+
+        PixRecebido.objects.filter(status=PixRecebido.STATUS_PENDENTE).update(
+            status=PixRecebido.STATUS_BAIXADO
+        )
+        PixRecebido.objects.create(
+            nome_pagador="Pix nao identificado",
+            valor="30.00",
+            status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+        )
+        resposta_receber = self.client.get(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            secure=True,
+        )
+        self.assertContains(resposta_receber, "Central de Pix (pendente)")
+        self.assertContains(resposta_receber, "rc-btn-pix-alerta")

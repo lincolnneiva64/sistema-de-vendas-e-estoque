@@ -24,6 +24,15 @@
     background: #dbeafe; color: #164173; border: 1px solid #7ea6d9;
     box-shadow: 0 3px 10px rgba(15, 23, 42, 0.07);
   }
+  .contas-btn-pix-alerta {
+    background: #fee2e2; color: #991b1b; border-color: #ef4444;
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.34), 0 8px 18px rgba(185, 28, 28, 0.16);
+    animation: pix-alerta-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes pix-alerta-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3), 0 8px 18px rgba(185, 28, 28, 0.16); }
+    50% { box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.08), 0 8px 18px rgba(185, 28, 28, 0.2); }
+  }
   .contas-search {
     background: #fff; border: 1px solid #e1e7ef; border-radius: 12px;
     box-shadow: 0 10px 24px rgba(15, 23, 42, 0.055);
@@ -188,6 +197,7 @@
         {% else %}
           <a href="{% url 'estoque:home' %}" class="contas-btn contas-btn-secondary">Voltar ao painel</a>
         {% endif %}
+        <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="contas-btn contas-btn-secondary {% if tem_pix_em_atencao %}contas-btn-pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
         <a href="{% url 'estoque:consultar_vendas' %}" class="contas-btn contas-btn-primary">Consultar vendas</a>
       </div>
     </header>

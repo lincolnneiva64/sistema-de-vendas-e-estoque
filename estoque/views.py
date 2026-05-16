@@ -14,8 +14,8 @@ from urllib.parse import quote, urlencode
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count
-from .forms import CategoriaForm, ClienteForm, FuncionarioForm, ProdutoForm, UnidadeForm
-from .models import Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, Produto, RecebimentoContaReceber, Unidade, Venda
+from .forms import CategoriaForm, ClienteForm, FuncionarioForm, PixRecebidoForm, ProdutoForm, UnidadeForm
+from .models import Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
 from django.contrib import messages
 from django.http import Http404, HttpResponse, JsonResponse
 from django.utils.dateparse import parse_date
@@ -29,6 +29,15 @@ from uuid import uuid4
 MENSAGEM_CLIENTE_DUPLICADO = (
     "Ja existe um cliente parecido cadastrado. Verifique antes de cadastrar novamente."
 )
+
+
+def _tem_pix_em_atencao():
+    return PixRecebido.objects.filter(
+        status__in=[
+            PixRecebido.STATUS_PENDENTE,
+            PixRecebido.STATUS_NAO_IDENTIFICADO,
+        ]
+    ).exists()
 
 
 def normalizar_texto_cliente(valor):
@@ -1379,6 +1388,7 @@ def vendas(request):
     return render(request, 'estoque/vendas_layout_teste.html', {
         'produtos': produtos,
         'cliente_inicial': cliente_inicial,
+        'tem_pix_em_atencao': _tem_pix_em_atencao(),
     })
 
 
@@ -1586,6 +1596,47 @@ def contas_receber(request):
                 (ContaReceber.STATUS_CANCELADA, "Canceladas"),
                 ("todas", "Todas"),
             ),
+            "tem_pix_em_atencao": _tem_pix_em_atencao(),
+        },
+    )
+
+
+@ensure_csrf_cookie
+def central_pix(request):
+    retorno_url = request.GET.get("next", "").strip()
+    if not (
+        retorno_url.startswith("/")
+        and not retorno_url.startswith("//")
+        and url_has_allowed_host_and_scheme(
+            url=retorno_url,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        )
+    ):
+        retorno_url = ""
+    central_pix_url = reverse("estoque:central_pix")
+
+    if request.method == "POST":
+        form = PixRecebidoForm(request.POST, request.FILES)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Pix recebido registrado com sucesso.")
+            if retorno_url:
+                return redirect(f"{central_pix_url}?{urlencode({'next': retorno_url})}")
+            return redirect("estoque:central_pix")
+        messages.warning(request, "Confira os campos do Pix antes de salvar.")
+    else:
+        form = PixRecebidoForm()
+
+    pix_recebidos = PixRecebido.objects.select_related("cliente").order_by("-data_pagamento", "-id")
+    return render(
+        request,
+        "estoque/central_pix.html",
+        {
+            "form": form,
+            "pix_recebidos": pix_recebidos,
+            "total_pix": pix_recebidos.count(),
+            "voltar_url": retorno_url or reverse("estoque:contas_receber"),
         },
     )
 
@@ -1897,6 +1948,7 @@ def receber_cliente(request, cliente_id):
             ),
             "hoje_iso": hoje.isoformat(),
             "retorno_url": destino_retorno,
+            "tem_pix_em_atencao": _tem_pix_em_atencao(),
         },
     )
 

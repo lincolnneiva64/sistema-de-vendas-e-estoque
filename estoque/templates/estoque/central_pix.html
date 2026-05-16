@@ -1,0 +1,215 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Central de Pix{% endblock %}
+{% block content %}
+<style>
+  .pix-page { color: #172033; padding: 9px 0 22px; background: #fff7d6; min-height: 100vh; }
+  .pix-shell { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+  .pix-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 9px; margin-bottom: 8px;
+  }
+  .pix-title { margin: 0; color: #111827; font-size: 1.32rem; font-weight: 900; }
+  .pix-subtitle { margin: 1px 0 0; color: #64748b; font-weight: 650; font-size: 0.82rem; }
+  .pix-actions { display: flex; gap: 7px; flex-wrap: wrap; justify-content: flex-end; }
+  .pix-btn {
+    border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 10px; font-weight: 850;
+    font-size: 0.82rem; text-decoration: none; display: inline-flex;
+    align-items: center; justify-content: center; min-height: 32px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    cursor: pointer; white-space: nowrap;
+  }
+  .pix-btn:hover { transform: translateY(-1px); }
+  .pix-btn-primary { background: #16a34a; border-color: #16a34a; color: #fff; box-shadow: 0 8px 18px rgba(22, 163, 74, 0.2); }
+  .pix-btn-secondary { background: #fff; color: #0f172a; }
+  .pix-grid { display: grid; grid-template-columns: minmax(350px, 410px) minmax(0, 1fr); gap: 10px; align-items: start; }
+  .pix-panel {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 11px;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05); overflow: hidden;
+  }
+  .pix-panel-head {
+    padding: 7px 10px; border-bottom: 1px solid #edf1f6; background: #f8fafc;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .pix-panel-title { margin: 0; color: #111827; font-size: 0.9rem; font-weight: 900; }
+  .pix-count { color: #64748b; font-size: 0.8rem; font-weight: 800; white-space: nowrap; }
+  .pix-form {
+    padding: 8px 10px 10px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 8px;
+  }
+  .pix-field-full { grid-column: 1 / -1; }
+  .pix-field label {
+    display: block; margin-bottom: 2px; color: #64748b; font-size: 0.66rem;
+    font-weight: 900; letter-spacing: 0; text-transform: uppercase;
+  }
+  .pix-field input,
+  .pix-field select,
+  .pix-field textarea {
+    width: 100%; border: 1.5px solid #d3dbe8; border-radius: 8px;
+    padding: 5px 8px; background: #fff; color: #172033; font-weight: 700;
+    min-height: 30px; font-size: 0.84rem;
+    outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .pix-field textarea { min-height: 42px; resize: vertical; }
+  .pix-field input:focus,
+  .pix-field select:focus,
+  .pix-field textarea:focus {
+    border-color: #0f766e; box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
+  }
+  .pix-help { margin-top: 2px; color: #64748b; font-size: 0.68rem; font-weight: 700; line-height: 1.2; }
+  .pix-error { margin-top: 3px; color: #991b1b; font-size: 0.74rem; font-weight: 750; }
+  .pix-alert { border-radius: 9px; padding: 7px 9px; margin-bottom: 7px; font-size: 0.84rem; font-weight: 850; }
+  .pix-alert.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
+  .pix-alert.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+  .pix-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+  .pix-table-wrap { overflow-x: auto; }
+  .pix-table { width: 100%; border-collapse: collapse; min-width: 850px; }
+  .pix-table th {
+    background: #f8fafc; color: #64748b; font-size: 0.7rem;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    padding: 7px 9px; border-bottom: 1px solid #edf1f6; text-align: left;
+  }
+  .pix-table td {
+    padding: 8px 9px; border-bottom: 1px solid #f0f3f8;
+    vertical-align: middle; font-size: 0.82rem;
+  }
+  .pix-row:hover td { background: #f8fbff; }
+  .pix-valor { color: #166534; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pix-cliente, .pix-pagador { font-weight: 800; color: #172033; }
+  .pix-muted { color: #94a3b8; font-weight: 700; }
+  .pix-status {
+    display: inline-flex; border-radius: 999px; padding: 5px 9px;
+    font-size: 0.76rem; font-weight: 900; line-height: 1.15;
+    border: 2px solid #fde68a; background: #fffbeb; color: #92400e;
+    white-space: nowrap;
+  }
+  .pix-status.identificado { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+  .pix-status.baixado { border-color: #86efac; background: #f0fdf4; color: #166534; }
+  .pix-status.nao_identificado { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+  .pix-file-link {
+    border: 1px solid #99f6e4; border-radius: 8px; background: #f0fdfa;
+    color: #0f766e; padding: 5px 9px; font-size: 0.76rem;
+    font-weight: 850; text-decoration: none; display: inline-flex;
+    align-items: center; justify-content: center;
+  }
+  .pix-empty { padding: 22px 16px; color: #64748b; text-align: center; font-weight: 750; }
+  .pix-form .pix-btn-primary { grid-column: 1 / -1; width: 100%; margin-top: 1px; }
+  @media (max-width: 920px) {
+    .pix-grid { grid-template-columns: 1fr; }
+    .pix-header { align-items: stretch; flex-direction: column; }
+    .pix-actions { justify-content: flex-start; }
+  }
+  @media (max-width: 520px) {
+    .pix-form { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="pix-page">
+  <div class="pix-shell">
+    <header class="pix-header">
+      <div>
+        <h1 class="pix-title">Central de Pix</h1>
+        <p class="pix-subtitle">Registro manual de Pix recebidos para conferencia interna.</p>
+      </div>
+      <div class="pix-actions">
+        <a href="{{ voltar_url }}" class="pix-btn pix-btn-secondary">Voltar</a>
+      </div>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="pix-alert {{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <div class="pix-grid">
+      <section class="pix-panel" aria-labelledby="registrarPixTitulo">
+        <div class="pix-panel-head">
+          <h2 class="pix-panel-title" id="registrarPixTitulo">Registrar Pix recebido</h2>
+        </div>
+        <form method="post" enctype="multipart/form-data" class="pix-form">
+          {% csrf_token %}
+          {% for field in form %}
+            <div class="pix-field {% if field.name == 'cliente' or field.name == 'nome_pagador' or field.name == 'observacao' %}pix-field-full{% endif %}">
+              <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% if field.name == "cliente" %}
+                <div class="pix-help">Deixe em branco quando ainda nao souber de qual cliente e o pagamento.</div>
+              {% elif field.name == "status" %}
+                <div class="pix-help">Nesta fase o status e apenas informativo. Nao baixa contas automaticamente.</div>
+              {% endif %}
+              {% for error in field.errors %}
+                <div class="pix-error">{{ error }}</div>
+              {% endfor %}
+            </div>
+          {% endfor %}
+          {% if form.non_field_errors %}
+            {% for error in form.non_field_errors %}
+              <div class="pix-error">{{ error }}</div>
+            {% endfor %}
+          {% endif %}
+          <button type="submit" class="pix-btn pix-btn-primary">Salvar Pix</button>
+        </form>
+      </section>
+
+      <section class="pix-panel" aria-labelledby="listaPixTitulo">
+        <div class="pix-panel-head">
+          <h2 class="pix-panel-title" id="listaPixTitulo">Pix registrados</h2>
+          <span class="pix-count">{{ total_pix }} registro{{ total_pix|pluralize }}</span>
+        </div>
+        <div class="pix-table-wrap">
+          <table class="pix-table">
+            <thead>
+              <tr>
+                <th>Data/hora</th>
+                <th>Cliente</th>
+                <th>Pagador</th>
+                <th>Valor</th>
+                <th>Status</th>
+                <th>Observacao</th>
+                <th>Comprovante</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for pix in pix_recebidos %}
+                <tr class="pix-row">
+                  <td>{{ pix.data_pagamento|date:"d/m/Y H:i" }}</td>
+                  <td>
+                    {% if pix.cliente %}
+                      <span class="pix-cliente">{{ pix.cliente.nome }}</span>
+                    {% else %}
+                      <span class="pix-muted">Sem cliente</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if pix.nome_pagador %}
+                      <span class="pix-pagador">{{ pix.nome_pagador }}</span>
+                    {% else %}
+                      <span class="pix-muted">Nao informado</span>
+                    {% endif %}
+                  </td>
+                  <td class="pix-valor">R$ {{ pix.valor|floatformat:2 }}</td>
+                  <td><span class="pix-status {{ pix.status }}">{{ pix.get_status_display }}</span></td>
+                  <td>{{ pix.observacao|default:"-"|truncatechars:70 }}</td>
+                  <td>
+                    {% if pix.comprovante %}
+                      <a href="{{ pix.comprovante.url }}" target="_blank" rel="noopener" class="pix-file-link">Abrir</a>
+                    {% else %}
+                      <span class="pix-muted">Sem anexo</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="7" class="pix-empty">Nenhum Pix registrado ainda.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+{% endblock %}
