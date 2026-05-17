@@ -256,6 +256,31 @@ class PixRecebidoTests(TestCase):
         self.assertIsNone(dados["cliente_sugerido_id"])
         self.assertEqual(PixRecebido.objects.count(), 0)
 
+    def test_analisar_comprovante_pix_nao_usa_instituicao_como_pagador(self):
+        conteudo = (
+            "Comprovante Pix\n"
+            "Origem\n"
+            "Nome\n"
+            "Instituição\n"
+            "NU PAGAMENTOS - IP\n"
+            "Valor R$ 156,50\n"
+            "16/05/2026 17:51:46\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante.txt", conteudo, content_type="text/plain")
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_analisar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "")
+        self.assertEqual(dados["valor"], "156.50")
+        self.assertEqual(dados["data_pagamento"], "2026-05-16T17:51")
+
     def test_analisar_comprovante_pix_falha_sem_bloquear_preenchimento_manual(self):
         arquivo = SimpleUploadedFile("comprovante.txt", b"texto sem dados de pix", content_type="text/plain")
 

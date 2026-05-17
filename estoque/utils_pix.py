@@ -17,6 +17,17 @@ def _normalizar_linha(valor):
     return _normalizar_espacos(valor).lower()
 
 
+def _eh_linha_bloqueada_para_nome(linha):
+    linha_normalizada = _normalizar_linha(linha)
+    if not linha_normalizada:
+        return True
+    if re.search(r"^(cpf|cnpj|instituicao|instituição|banco|agencia|agência|conta)\b", linha_normalizada):
+        return True
+    if "nu pagamentos" in linha_normalizada:
+        return True
+    return False
+
+
 def _resolver_tesseract_cmd():
     tesseract_path = shutil.which("tesseract")
     if tesseract_path:
@@ -124,12 +135,39 @@ def _linha_apos_rotulo(texto, rotulos):
         partes = re.split(r":|-", linha, maxsplit=1)
         if len(partes) > 1:
             candidato = _normalizar_espacos(partes[1])
-            if candidato:
+            if candidato and not _eh_linha_bloqueada_para_nome(candidato):
                 return candidato
 
         for proxima in linhas[indice + 1:indice + 4]:
-            if proxima and not re.search(r"^(cpf|cnpj|instituicao|banco|agencia|conta)\b", proxima, re.IGNORECASE):
-                return proxima
+            if not proxima:
+                continue
+            if _eh_linha_bloqueada_para_nome(proxima):
+                break
+            return proxima
+    return ""
+
+
+def _extrair_nome_no_bloco(linhas):
+    for indice, linha in enumerate(linhas):
+        if not re.search(r"\bnome\b", _normalizar_linha(linha)):
+            continue
+
+        partes = re.split(r":|-", linha, maxsplit=1)
+        if len(partes) > 1:
+            candidato = _normalizar_espacos(partes[1])
+            if candidato and not _eh_linha_bloqueada_para_nome(candidato):
+                return candidato
+
+        candidato_inline = re.sub(r"^.*?\bnome\b", "", linha, flags=re.IGNORECASE).strip(" :-")
+        if candidato_inline and not _eh_linha_bloqueada_para_nome(candidato_inline):
+            return _normalizar_espacos(candidato_inline)
+
+        for proxima in linhas[indice + 1:]:
+            if not proxima:
+                continue
+            if _eh_linha_bloqueada_para_nome(proxima):
+                return ""
+            return proxima
     return ""
 
 
@@ -151,7 +189,7 @@ def _extrair_pagador(texto):
                 break
             bloco.append(proxima)
 
-        nome = _linha_apos_rotulo("\n".join(bloco), ["nome"])
+        nome = _extrair_nome_no_bloco(bloco)
         if nome:
             return nome[:160]
 
