@@ -425,7 +425,7 @@
           body: formData,
         });
         const dados = await resposta.json();
-        mostrarDebugOcr(!dados.pagador ? (dados.debug_texto_ocr || dados.texto_ocr_bruto || "") : "");
+        mostrarDebugOcr(dados.debug_texto_ocr || dados.texto_ocr_bruto || "");
         if (!dados.ok) {
           mostrarFeedback(dados.mensagem || "Nao foi possivel ler automaticamente. Preencha manualmente.", "warning");
           return;

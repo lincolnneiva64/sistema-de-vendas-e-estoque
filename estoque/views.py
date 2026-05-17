@@ -1745,9 +1745,7 @@ def central_pix_analisar_comprovante(request):
 
     dados = analisar_comprovante_pix(arquivo)
     cliente_sugerido, confianca_cliente, mensagem_cliente = _sugerir_cliente_por_pagador(dados.get("pagador"))
-    debug_texto_ocr = ""
-    if not dados.get("pagador") and dados.get("texto_ocr_bruto"):
-        debug_texto_ocr = dados.get("texto_ocr_bruto", "")
+    debug_texto_ocr = dados.get("texto_ocr_bruto", "")
 
     return JsonResponse({
         "ok": bool(dados.get("ok")),
