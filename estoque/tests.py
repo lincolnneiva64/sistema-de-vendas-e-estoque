@@ -1,3 +1,6 @@
+import io
+from contextlib import redirect_stdout
+
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
@@ -257,6 +260,52 @@ class PixRecebidoTests(TestCase):
         self.assertIsNone(dados["cliente_sugerido_id"])
         self.assertEqual(PixRecebido.objects.count(), 0)
 
+    def test_analisar_comprovante_pix_nubank_com_destino_banco_inter_nao_usa_regra_inter(self):
+        conteudo = (
+            "nu,\n"
+            "\n"
+            "Comprovante de transferencia\n"
+            "16 MAI 2026 - 23:43:13\n"
+            "\n"
+            "Valor R$ 5,00\n"
+            "Tipo de transferencia Pix\n"
+            "\n"
+            "Destino\n"
+            "Ronise do Socorro dos\n"
+            "Nome\n"
+            "Santos Ferreira\n"
+            "CPF ***.000.000-**\n"
+            "Instituigdo BANCO INTER\n"
+            "\n"
+            "Origem\n"
+            "Lincoln Albuquerque\n"
+            "Nome\n"
+            "Neiva\n"
+            "\n"
+            "NU PAGAMENTOS - IP\n"
+            "Nu Pagamentos S.A.\n"
+            "nubank.com.br\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante.txt", conteudo, content_type="text/plain")
+        saida = io.StringIO()
+
+        with redirect_stdout(saida):
+            resposta = self.client.post(
+                reverse("estoque:central_pix_analisar_comprovante"),
+                {"comprovante": arquivo},
+                secure=True,
+            )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["valor"], "5.00")
+        self.assertEqual(dados["data_pagamento"], "2026-05-16T23:43")
+        self.assertEqual(dados["pagador"], "Ronise do Socorro dos Santos Ferreira")
+        self.assertNotEqual(dados["pagador"], "Neiva")
+        self.assertNotIn("[PIX OCR][Banco Inter][BRUTO]", saida.getvalue())
+        self.assertEqual(PixRecebido.objects.count(), 0)
+
     def test_analisar_comprovante_pix_mercado_pago_usa_de_como_pagador(self):
         conteudo = (
             "Comprovante de Pix\n"
@@ -286,6 +335,153 @@ class PixRecebidoTests(TestCase):
         self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque Neiva")
         self.assertEqual(dados["valor"], "600.00")
         self.assertEqual(dados["data_pagamento"], "2026-05-16T16:33")
+
+    def test_analisar_comprovante_pix_banco_inter_prioriza_pagador(self):
+        conteudo = (
+            "Banco Inter\n"
+            "Comprovante Pix\n"
+            "Dados do recebedor\n"
+            "Nome: Lincoln Albuquerque Neiva\n"
+            "Dados do pagador\n"
+            "Nome: Ronise Ferreira\n"
+            "CPF: ***.000.000-**\n"
+            "Valor R$ 75,00\n"
+            "Data 16/05/2026 17:30\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante.txt", conteudo, content_type="text/plain")
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_analisar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "Ronise Ferreira")
+        self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque Neiva")
+        self.assertEqual(dados["valor"], "75.00")
+        self.assertEqual(dados["data_pagamento"], "2026-05-16T17:30")
+        self.assertEqual(PixRecebido.objects.count(), 0)
+
+    def test_analisar_comprovante_pix_banco_inter_nao_usa_recebedor_como_pagador(self):
+        conteudo = (
+            "Banco Inter\n"
+            "Comprovante Pix\n"
+            "Dados do recebedor\n"
+            "Nome: Lincoln Albuquerque Neiva\n"
+            "Valor R$ 75,00\n"
+            "Data 16/05/2026 17:30\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante.txt", conteudo, content_type="text/plain")
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_analisar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "")
+        self.assertEqual(dados["valor"], "75.00")
+        self.assertEqual(dados["data_pagamento"], "2026-05-16T17:30")
+        self.assertEqual(PixRecebido.objects.count(), 0)
+
+    def test_analisar_comprovante_pix_banco_inter_caso_real_recebido(self):
+        conteudo = (
+            "Inter\n"
+            "Comprovante de Pix recebido\n"
+            "Valor R$ 5,00\n"
+            "16/05/2026 23:43\n"
+            "Beneficiario\n"
+            "Lincoln Albuquerque Neiva\n"
+            "Chave Pix do recebedor\n"
+            "Instituicao do recebedor\n"
+            "Banco Inter\n"
+            "De\n"
+            "Ronise Ferreira\n"
+            "CPF: ***.000.000-**\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante.txt", conteudo, content_type="text/plain")
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_analisar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "Ronise Ferreira")
+        self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque")
+        self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque Neiva")
+        self.assertEqual(dados["valor"], "5.00")
+        self.assertEqual(dados["data_pagamento"], "2026-05-16T23:43")
+        self.assertEqual(PixRecebido.objects.count(), 0)
+
+    def test_analisar_comprovante_pix_banco_inter_bloqueia_nome_recebedor_conhecido(self):
+        conteudo = (
+            "Banco Inter\n"
+            "Comprovante Pix\n"
+            "Valor R$ 5,00\n"
+            "16/05/2026 23:43\n"
+            "De\n"
+            "Lincoln Albuquerque\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante.txt", conteudo, content_type="text/plain")
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_analisar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "")
+        self.assertEqual(dados["valor"], "5.00")
+        self.assertEqual(dados["data_pagamento"], "2026-05-16T23:43")
+
+    def test_analisar_comprovante_pix_banco_inter_reconstroi_destino_nome_quebrado(self):
+        conteudo = (
+            "Comprovante de transferencia\n"
+            "16 MAI 2026 - 23:43:13\n"
+            "Valor R$ 5,00\n"
+            "Tipo de transferencia Pix\n"
+            "Destino\n"
+            "Ronise do Socorro dos\n"
+            "Nome\n"
+            "Santos Ferreira\n"
+            "CPF ***.000.000-**\n"
+            "Instituicao BANCO INTER\n"
+            "Origem\n"
+            "Lincoln Albuquerque\n"
+            "Nome\n"
+            "Neiva\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante.txt", conteudo, content_type="text/plain")
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_analisar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "Ronise do Socorro dos Santos Ferreira")
+        self.assertNotEqual(dados["pagador"], "Neiva")
+        self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque")
+        self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque Neiva")
+        self.assertEqual(dados["valor"], "5.00")
+        self.assertEqual(dados["data_pagamento"], "2026-05-16T23:43")
+        self.assertEqual(PixRecebido.objects.count(), 0)
 
     def test_analisar_comprovante_pix_sugere_cliente_com_jr_e_nome_intermediario(self):
         cliente = Cliente.objects.create(nome="Ivanildo Patricio Jr", ativo=True)

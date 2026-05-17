@@ -236,8 +236,218 @@ def _extrair_nome_secao_de(linha_rotulo, bloco):
     return ""
 
 
+def _eh_comprovante_banco_inter(texto):
+    texto_normalizado = _normalizar_linha(_sem_acentos(texto))
+    if re.search(r"\b(nu pagamentos|nubank\.com\.br)\b", texto_normalizado):
+        return False
+
+    for linha in texto.splitlines():
+        linha_normalizada = _normalizar_rotulo_ocr(linha)
+        if not re.search(r"\b(banco\s+inter|intermedium|inter\s*(?:pix|pag|bank|s\.?a\.?))\b", linha_normalizada):
+            continue
+        if re.search(r"\b(instituicao|destino|recebedor|beneficiario|favorecido|para|chave pix)\b", linha_normalizada):
+            continue
+        return True
+    if "instituicao banco inter" in texto_normalizado and "destino" in texto_normalizado and "origem" in texto_normalizado:
+        return True
+    return any(_normalizar_rotulo_ocr(linha) == "inter" for linha in texto.splitlines())
+
+
+def _eh_rotulo_recebedor_inter(linha):
+    linha_normalizada = _normalizar_rotulo_ocr(linha)
+    return bool(re.search(
+        r"\b(beneficiario|recebedor|favorecido|destino|para|dados do recebedor|chave pix do recebedor|instituicao do recebedor)\b",
+        linha_normalizada,
+    ))
+
+
+def _eh_rotulo_pagador_inter(linha):
+    linha_normalizada = _normalizar_rotulo_ocr(linha)
+    if _eh_rotulo_recebedor_inter(linha_normalizada):
+        return False
+    if re.search(r"\b(pagador|remetente|origem|quem pagou|dados do pagador)\b", linha_normalizada):
+        return True
+    return bool(re.fullmatch(r"@?\s*de\b:?.*", linha_normalizada))
+
+
+def _extrair_nome_mesma_linha_inter(linha):
+    linha_limpa = _normalizar_espacos(linha)
+    partes = re.split(r":|-", linha_limpa, maxsplit=1)
+    if len(partes) > 1:
+        candidato = _normalizar_espacos(partes[1])
+        if _parece_nome_pessoa(candidato):
+            return candidato
+
+    candidato = re.sub(
+        r"^.*?\b(?:nome do pagador|dados do pagador|pagador|remetente|origem|quem pagou|de)\b",
+        "",
+        linha_limpa,
+        flags=re.IGNORECASE,
+    ).strip(" :-")
+    if candidato != linha_limpa and _parece_nome_pessoa(candidato):
+        return _normalizar_espacos(candidato)
+    return ""
+
+
+def _normalizar_nome_inter(nome):
+    nome_normalizado = _normalizar_linha(_sem_acentos(nome))
+    return re.sub(r"[^a-z0-9 ]+", "", nome_normalizado).strip()
+
+
+def _nomes_parecidos_inter(nome, outro_nome):
+    nome_normalizado = _normalizar_nome_inter(nome)
+    outro_normalizado = _normalizar_nome_inter(outro_nome)
+    if not nome_normalizado or not outro_normalizado:
+        return False
+    if nome_normalizado == outro_normalizado:
+        return True
+    if nome_normalizado in outro_normalizado or outro_normalizado in nome_normalizado:
+        return True
+
+    tokens_nome = nome_normalizado.split()
+    tokens_outro = outro_normalizado.split()
+    if not tokens_nome or not tokens_outro or tokens_nome[0] != tokens_outro[0]:
+        return False
+    return len(set(tokens_nome[1:]) & set(tokens_outro[1:])) > 0
+
+
+def _nome_seguro_pagador_inter(nome, nomes_recebedor):
+    if not _parece_nome_pessoa(nome):
+        return False
+    return not any(_nomes_parecidos_inter(nome, nome_recebedor) for nome_recebedor in nomes_recebedor)
+
+
+def _nome_bloqueado_temporario_inter(nome):
+    nome_normalizado = _normalizar_nome_inter(nome)
+    nomes_bloqueados = {
+        "lincoln albuquerque",
+        "lincoln albuquerque neiva",
+        "neiva",
+    }
+    return nome_normalizado in nomes_bloqueados
+
+
+def _extrair_nomes_recebedor_banco_inter(linhas):
+    nomes = []
+    for indice, linha in enumerate(linhas):
+        if not _eh_rotulo_recebedor_inter(linha):
+            continue
+
+        nome_mesma_linha = _extrair_nome_mesma_linha_inter(linha)
+        if nome_mesma_linha:
+            nomes.append(nome_mesma_linha)
+
+        bloco = []
+        for proxima in linhas[indice + 1:indice + 8]:
+            if _eh_rotulo_pagador_inter(proxima):
+                break
+            bloco.append(proxima)
+
+        nome = _extrair_nome_no_bloco(bloco)
+        if nome and not _eh_rotulo_recebedor_inter(nome) and not _eh_rotulo_pagador_inter(nome) and _parece_nome_pessoa(nome):
+            nomes.append(nome)
+
+        for candidato in bloco:
+            if _eh_rotulo_recebedor_inter(candidato) or _eh_rotulo_pagador_inter(candidato):
+                continue
+            if _parece_nome_pessoa(candidato):
+                nomes.append(candidato)
+
+    nomes_unicos = []
+    for nome in nomes:
+        if not any(_nomes_parecidos_inter(nome, existente) for existente in nomes_unicos):
+            nomes_unicos.append(nome)
+    return nomes_unicos
+
+
+def _extrair_pagador_destino_nome_quebrado_inter(linhas):
+    for indice, linha in enumerate(linhas):
+        if _normalizar_rotulo_ocr(linha) != "destino":
+            continue
+
+        primeira_parte = ""
+        segunda_parte = ""
+        encontrou_nome = False
+        for proxima in linhas[indice + 1:indice + 8]:
+            proxima_normalizada = _normalizar_rotulo_ocr(proxima)
+            if re.search(r"\b(cpf|cnpj|instituicao|origem|data|valor)\b", proxima_normalizada):
+                break
+            if proxima_normalizada == "nome":
+                encontrou_nome = True
+                continue
+            if not _parece_nome_pessoa(proxima):
+                continue
+            if not encontrou_nome and not primeira_parte:
+                primeira_parte = proxima
+                continue
+            if encontrou_nome and not segunda_parte:
+                segunda_parte = proxima
+                break
+
+        if primeira_parte and segunda_parte:
+            nome = _normalizar_espacos(f"{primeira_parte} {segunda_parte}")
+            if _parece_nome_pessoa(nome) and not _nome_bloqueado_temporario_inter(nome):
+                return nome[:160]
+    return ""
+
+
+def _extrair_pagador_banco_inter(texto):
+    linhas = [_normalizar_espacos(linha) for linha in texto.splitlines()]
+    nomes_recebedor = _extrair_nomes_recebedor_banco_inter(linhas)
+    candidatos_pagador = []
+    escolhido = _extrair_pagador_destino_nome_quebrado_inter(linhas)
+    if escolhido:
+        candidatos_pagador.append(escolhido)
+    for indice, linha in enumerate(linhas):
+        if escolhido:
+            break
+        if not _eh_rotulo_pagador_inter(linha):
+            continue
+
+        nome = _extrair_nome_mesma_linha_inter(linha)
+        if nome:
+            candidatos_pagador.append(nome)
+            if _nome_seguro_pagador_inter(nome, nomes_recebedor):
+                escolhido = nome[:160]
+                break
+
+        bloco = []
+        for proxima in linhas[indice + 1:indice + 10]:
+            if _eh_rotulo_recebedor_inter(proxima):
+                break
+            bloco.append(proxima)
+
+        nome = _extrair_nome_no_bloco(bloco)
+        if nome:
+            candidatos_pagador.append(nome)
+            if _nome_seguro_pagador_inter(nome, nomes_recebedor):
+                escolhido = nome[:160]
+                break
+
+        for candidato in bloco:
+            if _parece_nome_pessoa(candidato):
+                candidatos_pagador.append(candidato)
+            if _nome_seguro_pagador_inter(candidato, nomes_recebedor):
+                escolhido = candidato[:160]
+                break
+        if escolhido:
+            break
+
+    if _nome_bloqueado_temporario_inter(escolhido):
+        escolhido = ""
+
+    return escolhido
+
+
 def _extrair_pagador(texto):
     linhas = [_normalizar_espacos(linha) for linha in texto.splitlines()]
+    nome_destino_quebrado = _extrair_pagador_destino_nome_quebrado_inter(linhas)
+    if nome_destino_quebrado:
+        return nome_destino_quebrado
+
+    if _eh_comprovante_banco_inter(texto):
+        return _extrair_pagador_banco_inter(texto)
+
     for indice, linha in enumerate(linhas):
         linha_normalizada = _normalizar_linha(linha)
         rotulo_normalizado = _normalizar_rotulo_ocr(linha)
