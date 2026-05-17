@@ -61,6 +61,31 @@ def _pix_duplicado_pendente(dados):
     return None
 
 
+def _sugerir_cliente_por_pagador(nome_pagador):
+    pagador_normalizado = normalizar_texto_cliente(nome_pagador)
+    if not pagador_normalizado:
+        return None, "baixa", ""
+
+    clientes_parecidos = []
+    clientes = Cliente.objects.filter(ativo=True).only("id", "nome", "apelido_nome_conhecido").order_by("nome")
+    for cliente in clientes:
+        nome_parecido = textos_parecidos_cliente(pagador_normalizado, cliente.nome, minimo=0.96)
+        apelido_parecido = bool(cliente.apelido_nome_conhecido) and textos_parecidos_cliente(
+            pagador_normalizado,
+            cliente.apelido_nome_conhecido,
+            minimo=0.96,
+        )
+        if nome_parecido or apelido_parecido:
+            clientes_parecidos.append(cliente)
+            if len(clientes_parecidos) > 1:
+                return None, "ambigua", "Encontramos mais de um cliente parecido. Use a busca para escolher manualmente."
+
+    if clientes_parecidos:
+        return clientes_parecidos[0], "alta", ""
+
+    return None, "baixa", ""
+
+
 def normalizar_texto_cliente(valor):
     texto = " ".join(str(valor or "").strip().lower().split())
     texto = unicodedata.normalize("NFD", texto)
@@ -1684,21 +1709,7 @@ def central_pix_analisar_comprovante(request):
         }, status=400)
 
     dados = analisar_comprovante_pix(arquivo)
-    cliente_sugerido = None
-    confianca_cliente = "baixa"
-    pagador_normalizado = normalizar_texto_cliente(dados.get("pagador"))
-    if pagador_normalizado:
-        for cliente in Cliente.objects.filter(ativo=True).only("id", "nome", "apelido_nome_conhecido").order_by("nome"):
-            nome_parecido = textos_parecidos_cliente(pagador_normalizado, cliente.nome, minimo=0.96)
-            apelido_parecido = bool(cliente.apelido_nome_conhecido) and textos_parecidos_cliente(
-                pagador_normalizado,
-                cliente.apelido_nome_conhecido,
-                minimo=0.96,
-            )
-            if nome_parecido or apelido_parecido:
-                cliente_sugerido = cliente
-                confianca_cliente = "alta"
-                break
+    cliente_sugerido, confianca_cliente, mensagem_cliente = _sugerir_cliente_por_pagador(dados.get("pagador"))
 
     return JsonResponse({
         "ok": bool(dados.get("ok")),
@@ -1708,6 +1719,7 @@ def central_pix_analisar_comprovante(request):
         "cliente_sugerido_id": cliente_sugerido.id if cliente_sugerido else None,
         "cliente_sugerido_nome": cliente_sugerido.nome if cliente_sugerido else "",
         "confianca_cliente": confianca_cliente,
+        "mensagem_cliente": mensagem_cliente,
         "mensagem": dados.get("mensagem", ""),
         "observacao": (
             "Dados lidos automaticamente do comprovante. Conferir antes de confirmar."

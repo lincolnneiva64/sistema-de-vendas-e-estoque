@@ -225,6 +225,7 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(dados["data_pagamento"], "2026-05-16T17:30")
         self.assertEqual(dados["cliente_sugerido_id"], cliente.id)
         self.assertEqual(dados["confianca_cliente"], "alta")
+        self.assertEqual(dados["mensagem_cliente"], "")
         self.assertEqual(PixRecebido.objects.count(), 0)
         self.assertEqual(ContaReceber.objects.count(), 0)
         self.assertEqual(CreditoCliente.objects.count(), 0)
@@ -255,6 +256,31 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(dados["data_pagamento"], "2026-05-16T17:51")
         self.assertIsNone(dados["cliente_sugerido_id"])
         self.assertEqual(PixRecebido.objects.count(), 0)
+
+    def test_analisar_comprovante_pix_nao_sugere_cliente_quando_ambiguo(self):
+        Cliente.objects.create(nome="Joelson Ferreira dos Santos", ativo=True)
+        Cliente.objects.create(nome="Joelson Ferreira dos Santos", ativo=True)
+        conteudo = (
+            "Comprovante Pix\n"
+            "Origem\n"
+            "Nome: Joelson Ferreira dos Santos\n"
+            "Valor R$ 156,50\n"
+            "16 MAI 2026 - 17:51:46\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante.txt", conteudo, content_type="text/plain")
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_analisar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertIsNone(dados["cliente_sugerido_id"])
+        self.assertEqual(dados["confianca_cliente"], "ambigua")
+        self.assertIn("mais de um cliente parecido", dados["mensagem_cliente"])
 
     def test_analisar_comprovante_pix_nao_usa_instituicao_como_pagador(self):
         conteudo = (

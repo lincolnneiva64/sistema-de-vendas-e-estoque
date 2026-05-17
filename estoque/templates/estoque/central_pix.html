@@ -171,7 +171,7 @@
                   <input type="text" id="pixClienteBusca" placeholder="Buscar cliente cadastrado" autocomplete="off">
                   <div class="pix-cliente-sugerido" id="pixClienteSugerido">
                     <span id="pixClienteSugeridoTexto"></span>
-                    <button type="button" class="pix-mini-btn" id="pixConfirmarClienteSugerido">Confirmar cliente</button>
+                    <button type="button" class="pix-mini-btn" id="pixConfirmarClienteSugerido">Confirmar este cliente</button>
                   </div>
                   <div class="pix-cliente-sugestoes" id="pixClienteSugestoes"></div>
                 </div>
@@ -343,6 +343,7 @@
       mostrarFeedback("Lendo comprovante...", "");
       clienteSugeridoId = "";
       clienteSugerido?.classList.remove("visivel");
+      if (confirmarClienteSugerido) confirmarClienteSugerido.hidden = false;
 
       const formData = new FormData();
       formData.append("comprovante", arquivo);
@@ -370,6 +371,15 @@
             clienteSugeridoTexto.dataset.nome = dados.cliente_sugerido_nome || "";
             clienteSugeridoTexto.textContent = "Cliente sugerido: " + (dados.cliente_sugerido_nome || "-") + ". Confirme se for a conta correta.";
           }
+          clienteSugerido?.classList.add("visivel");
+          if (confirmarClienteSugerido) confirmarClienteSugerido.hidden = false;
+        } else if (dados.mensagem_cliente) {
+          clienteSugeridoId = "";
+          if (clienteSugeridoTexto) {
+            clienteSugeridoTexto.dataset.nome = "";
+            clienteSugeridoTexto.textContent = dados.mensagem_cliente;
+          }
+          if (confirmarClienteSugerido) confirmarClienteSugerido.hidden = true;
           clienteSugerido?.classList.add("visivel");
         }
       } catch (erro) {
