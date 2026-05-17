@@ -1,8 +1,12 @@
 import re
+import shutil
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
+from pathlib import Path
 
 from PIL import Image
+
+CAMINHO_TESSERACT_WINDOWS = Path("C:/Program Files/Tesseract-OCR/tesseract.exe")
 
 
 def _normalizar_espacos(valor):
@@ -11,6 +15,17 @@ def _normalizar_espacos(valor):
 
 def _normalizar_linha(valor):
     return _normalizar_espacos(valor).lower()
+
+
+def _resolver_tesseract_cmd():
+    tesseract_path = shutil.which("tesseract")
+    if tesseract_path:
+        return tesseract_path
+
+    if CAMINHO_TESSERACT_WINDOWS.exists():
+        return str(CAMINHO_TESSERACT_WINDOWS)
+
+    return None
 
 
 def _extrair_texto_comprovante(arquivo):
@@ -28,9 +43,17 @@ def _extrair_texto_comprovante(arquivo):
         # Sem um motor de OCR real no ambiente, imagens PNG/JPG nao geram texto.
         return ""
 
+    tesseract_cmd = _resolver_tesseract_cmd()
+    if not tesseract_cmd:
+        return ""
+    pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+
     try:
         imagem = Image.open(BytesIO(conteudo))
-        return pytesseract.image_to_string(imagem, lang="por")
+        try:
+            return pytesseract.image_to_string(imagem, lang="por")
+        except Exception:
+            return pytesseract.image_to_string(imagem)
     except Exception:
         return ""
 
@@ -77,7 +100,7 @@ def _extrair_data_pagamento(texto):
         "dez": 12,
     }
     encontrado = re.search(
-        r"\b([0-3]?\d)\s+([A-ZÇ]{3})\s+(\d{4})\D{0,12}([0-2]?\d):([0-5]\d)",
+        r"\b([0-3]?\d)\s+([A-Z]{3})\s+(\d{4})\D{0,12}([0-2]?\d):([0-5]\d)",
         texto,
         flags=re.IGNORECASE,
     )
