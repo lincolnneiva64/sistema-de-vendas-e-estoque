@@ -73,6 +73,7 @@ def _extrair_valor(texto):
     padroes = [
         r"(?:valor|total)\D{0,20}R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})",
         r"R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})",
+        r"R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*)\b",
         r"\b([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})\b",
     ]
     for padrao in padroes:
@@ -109,6 +110,19 @@ def _extrair_data_pagamento(texto):
         "out": 10,
         "nov": 11,
         "dez": 12,
+        "janeiro": 1,
+        "fevereiro": 2,
+        "marco": 3,
+        "março": 3,
+        "abril": 4,
+        "maio": 5,
+        "junho": 6,
+        "julho": 7,
+        "agosto": 8,
+        "setembro": 9,
+        "outubro": 10,
+        "novembro": 11,
+        "dezembro": 12,
     }
     encontrado = re.search(
         r"\b([0-3]?\d)\s+([A-Z]{3})\s+(\d{4})\D{0,12}([0-2]?\d):([0-5]\d)",
@@ -116,10 +130,17 @@ def _extrair_data_pagamento(texto):
         flags=re.IGNORECASE,
     )
     if not encontrado:
+        encontrado = re.search(
+            r"\b([0-3]?\d)/([A-ZÇ]+?)/(\d{4})\D{0,20}([0-2]?\d):([0-5]\d)",
+            texto,
+            flags=re.IGNORECASE,
+        )
+    if not encontrado:
         return ""
 
     dia, mes_texto, ano, hora, minuto = encontrado.groups()
-    mes = meses.get(mes_texto.lower()[:3])
+    mes_texto = mes_texto.lower()
+    mes = meses.get(mes_texto) or meses.get(mes_texto[:3])
     if not mes:
         return ""
     return f"{ano}-{int(mes):02d}-{int(dia):02d}T{int(hora):02d}:{int(minuto):02d}"
@@ -175,7 +196,12 @@ def _extrair_pagador(texto):
     linhas = [_normalizar_espacos(linha) for linha in texto.splitlines()]
     for indice, linha in enumerate(linhas):
         linha_normalizada = _normalizar_linha(linha)
-        if "origem" not in linha_normalizada and "pagador" not in linha_normalizada and "quem pagou" not in linha_normalizada:
+        if (
+            "origem" not in linha_normalizada
+            and "pagador" not in linha_normalizada
+            and "quem pagou" not in linha_normalizada
+            and not re.fullmatch(r"de:?", linha_normalizada)
+        ):
             continue
 
         nome_mesma_linha = _linha_apos_rotulo(linha, ["nome"])
@@ -185,11 +211,19 @@ def _extrair_pagador(texto):
         bloco = []
         for proxima in linhas[indice + 1:indice + 10]:
             proxima_normalizada = _normalizar_linha(proxima)
-            if re.search(r"\b(destino|recebedor|favorecido)\b", proxima_normalizada):
+            if re.search(r"\b(destino|recebedor|favorecido|para)\b:?", proxima_normalizada):
                 break
             bloco.append(proxima)
 
-        nome = _extrair_nome_no_bloco(bloco)
+        if re.fullmatch(r"de:?", linha_normalizada):
+            nome = ""
+            for candidato in bloco:
+                if _eh_linha_bloqueada_para_nome(candidato):
+                    break
+                nome = candidato
+                break
+        else:
+            nome = _extrair_nome_no_bloco(bloco)
         if nome:
             return nome[:160]
 
