@@ -1,5 +1,6 @@
 import re
 import shutil
+import unicodedata
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from pathlib import Path
@@ -17,6 +18,11 @@ def _normalizar_linha(valor):
     return _normalizar_espacos(valor).lower()
 
 
+def _sem_acentos(valor):
+    texto = unicodedata.normalize("NFD", str(valor or ""))
+    return "".join(caractere for caractere in texto if unicodedata.category(caractere) != "Mn")
+
+
 def _eh_linha_bloqueada_para_nome(linha):
     linha_normalizada = _normalizar_linha(linha)
     if not linha_normalizada:
@@ -26,6 +32,27 @@ def _eh_linha_bloqueada_para_nome(linha):
     if "nu pagamentos" in linha_normalizada:
         return True
     return False
+
+
+def _eh_linha_bloqueada_para_nome(linha):
+    linha_normalizada = _normalizar_linha(_sem_acentos(linha))
+    if not linha_normalizada:
+        return True
+    if re.search(r"^(cpf|cnpj|instituicao|banco|agencia|conta|transacao|id|para)\b", linha_normalizada):
+        return True
+    if "nu pagamentos" in linha_normalizada or "mercado pago" in linha_normalizada:
+        return True
+    return False
+
+
+def _parece_nome_pessoa(linha):
+    if _eh_linha_bloqueada_para_nome(linha):
+        return False
+    linha_normalizada = _normalizar_espacos(linha)
+    if re.search(r"(R\$|\d{2}/|\*{2,}|@)", linha_normalizada, flags=re.IGNORECASE):
+        return False
+    palavras = re.findall(r"[A-Za-zÀ-ÿ]{2,}", linha_normalizada)
+    return len(palavras) >= 2
 
 
 def _resolver_tesseract_cmd():
@@ -192,6 +219,17 @@ def _extrair_nome_no_bloco(linhas):
     return ""
 
 
+def _extrair_nome_secao_de(linha_rotulo, bloco):
+    candidato_inline = re.sub(r"^\s*de:?\s*", "", linha_rotulo, flags=re.IGNORECASE).strip()
+    if candidato_inline and _parece_nome_pessoa(candidato_inline):
+        return _normalizar_espacos(candidato_inline)
+
+    for candidato in bloco:
+        if _parece_nome_pessoa(candidato):
+            return candidato
+    return ""
+
+
 def _extrair_pagador(texto):
     linhas = [_normalizar_espacos(linha) for linha in texto.splitlines()]
     for indice, linha in enumerate(linhas):
@@ -200,7 +238,7 @@ def _extrair_pagador(texto):
             "origem" not in linha_normalizada
             and "pagador" not in linha_normalizada
             and "quem pagou" not in linha_normalizada
-            and not re.fullmatch(r"de:?", linha_normalizada)
+            and not re.fullmatch(r"de\b:?.*", linha_normalizada)
         ):
             continue
 
@@ -215,13 +253,8 @@ def _extrair_pagador(texto):
                 break
             bloco.append(proxima)
 
-        if re.fullmatch(r"de:?", linha_normalizada):
-            nome = ""
-            for candidato in bloco:
-                if _eh_linha_bloqueada_para_nome(candidato):
-                    break
-                nome = candidato
-                break
+        if re.fullmatch(r"de\b:?.*", linha_normalizada):
+            nome = _extrair_nome_secao_de(linha, bloco)
         else:
             nome = _extrair_nome_no_bloco(bloco)
         if nome:
