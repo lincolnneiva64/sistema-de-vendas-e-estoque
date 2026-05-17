@@ -67,6 +67,17 @@
   .pix-feedback.visivel { display: block; }
   .pix-feedback.success { border-color: #bbf7d0; background: #ecfdf3; color: #166534; }
   .pix-feedback.warning { border-color: #fde68a; background: #fffbeb; color: #92400e; }
+  .pix-debug-ocr {
+    grid-column: 1 / -1; display: none; border: 1px dashed #cbd5e1;
+    border-radius: 8px; background: #f8fafc; color: #475569;
+    padding: 7px 9px; font-size: 0.7rem; line-height: 1.25;
+  }
+  .pix-debug-ocr.visivel { display: block; }
+  .pix-debug-ocr strong { display: block; margin-bottom: 4px; color: #334155; }
+  .pix-debug-ocr pre {
+    margin: 0; max-height: 150px; overflow: auto; white-space: pre-wrap;
+    word-break: break-word; font: inherit;
+  }
   .pix-cliente-busca {
     margin-top: 6px; border: 1px dashed #bbf7d0; border-radius: 8px;
     background: #f0fdf4; padding: 7px; display: grid; gap: 5px;
@@ -186,6 +197,10 @@
             </div>
           {% endfor %}
           <div class="pix-feedback" id="pixLeituraFeedback"></div>
+          <div class="pix-debug-ocr" id="pixDebugOcr">
+            <strong>Texto lido do comprovante para conferencia tecnica:</strong>
+            <pre id="pixDebugOcrTexto"></pre>
+          </div>
           {% if form.non_field_errors %}
             {% for error in form.non_field_errors %}
               <div class="pix-error">{{ error }}</div>
@@ -271,6 +286,8 @@
     const dataPagamento = document.getElementById("id_data_pagamento");
     const observacao = document.getElementById("id_observacao");
     const feedback = document.getElementById("pixLeituraFeedback");
+    const debugOcr = document.getElementById("pixDebugOcr");
+    const debugOcrTexto = document.getElementById("pixDebugOcrTexto");
     let clienteSugeridoId = "";
     let buscaTimer = null;
 
@@ -278,6 +295,12 @@
       if (!feedback) return;
       feedback.textContent = texto || "";
       feedback.className = "pix-feedback visivel" + (tipo ? " " + tipo : "");
+    }
+
+    function mostrarDebugOcr(texto) {
+      if (!debugOcr || !debugOcrTexto) return;
+      debugOcrTexto.textContent = texto || "";
+      debugOcr.className = "pix-debug-ocr" + (texto ? " visivel" : "");
     }
 
     function preencherCliente(id, nome) {
@@ -341,6 +364,7 @@
       const arquivo = comprovante.files && comprovante.files[0];
       if (!arquivo) return;
       mostrarFeedback("Lendo comprovante...", "");
+      mostrarDebugOcr("");
       clienteSugeridoId = "";
       clienteSugerido?.classList.remove("visivel");
       if (confirmarClienteSugerido) confirmarClienteSugerido.hidden = false;
@@ -354,6 +378,7 @@
           body: formData,
         });
         const dados = await resposta.json();
+        mostrarDebugOcr(!dados.pagador ? (dados.debug_texto_ocr || dados.texto_ocr_bruto || "") : "");
         if (!dados.ok) {
           mostrarFeedback(dados.mensagem || "Nao foi possivel ler automaticamente. Preencha manualmente.", "warning");
           return;

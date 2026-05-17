@@ -273,6 +273,7 @@ def analisar_comprovante_pix(arquivo):
             "valor": "",
             "data_pagamento": "",
             "texto_extraido": "",
+            "texto_ocr_bruto": "",
             "mensagem": "Nao foi possivel ler automaticamente o comprovante. OCR de imagem nao esta disponivel neste ambiente; preencha manualmente.",
         }
 
@@ -287,6 +288,7 @@ def analisar_comprovante_pix(arquivo):
         "valor": valor,
         "data_pagamento": data_pagamento,
         "texto_extraido": _normalizar_espacos(texto)[:700],
+        "texto_ocr_bruto": texto[:2000],
         "mensagem": (
             "Dados lidos automaticamente. Confira antes de salvar."
             if ok
