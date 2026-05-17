@@ -86,6 +86,12 @@
     width: 100%; border: 1.5px solid #bbf7d0; border-radius: 8px;
     padding: 5px 8px; min-height: 30px; color: #172033; font-weight: 700;
   }
+  .pix-cliente-busca input.pix-cliente-pendente {
+    border-color: #facc15; background: #fffbeb; color: #713f12;
+  }
+  .pix-cliente-busca input.pix-cliente-confirmado {
+    border-color: #22c55e; background: #f0fdf4; color: #14532d;
+  }
   .pix-cliente-sugestoes { display: grid; gap: 4px; }
   .pix-cliente-sugestao {
     border: 1px solid #dcfce7; border-radius: 7px; background: #fff;
@@ -308,6 +314,37 @@
       clienteSelect.value = id || "";
       if (clienteBusca) clienteBusca.value = nome || "";
       if (clienteSugestoes) clienteSugestoes.innerHTML = "";
+      if (clienteBusca) {
+        clienteBusca.classList.remove("pix-cliente-pendente");
+        clienteBusca.classList.toggle("pix-cliente-confirmado", Boolean(id));
+      }
+    }
+
+    function limparSugestaoCliente() {
+      clienteSugeridoId = "";
+      clienteSugerido?.classList.remove("visivel");
+      if (clienteSugeridoTexto) {
+        clienteSugeridoTexto.dataset.nome = "";
+        clienteSugeridoTexto.textContent = "";
+      }
+      if (confirmarClienteSugerido) confirmarClienteSugerido.hidden = false;
+      clienteBusca?.classList.remove("pix-cliente-pendente");
+    }
+
+    function mostrarClienteSugerido(id, nome) {
+      clienteSugeridoId = String(id || "");
+      if (clienteSelect) clienteSelect.value = "";
+      if (clienteBusca) {
+        clienteBusca.value = nome || "";
+        clienteBusca.classList.add("pix-cliente-pendente");
+        clienteBusca.classList.remove("pix-cliente-confirmado");
+      }
+      if (clienteSugeridoTexto) {
+        clienteSugeridoTexto.dataset.nome = nome || "";
+        clienteSugeridoTexto.textContent = "Cliente sugerido. Confirme se for a conta correta.";
+      }
+      if (confirmarClienteSugerido) confirmarClienteSugerido.hidden = false;
+      clienteSugerido?.classList.add("visivel");
     }
 
     function renderizarSugestoes(clientes) {
@@ -325,6 +362,7 @@
           botao.appendChild(meta);
         }
         botao.addEventListener("click", function () {
+          limparSugestaoCliente();
           preencherCliente(cliente.id, cliente.nome);
         });
         clienteSugestoes.appendChild(botao);
@@ -345,6 +383,9 @@
     }
 
     clienteBusca?.addEventListener("input", function () {
+      if (clienteSelect) clienteSelect.value = "";
+      limparSugestaoCliente();
+      clienteBusca.classList.remove("pix-cliente-confirmado");
       window.clearTimeout(buscaTimer);
       buscaTimer = window.setTimeout(function () {
         buscarClientes(clienteBusca.value);
@@ -357,7 +398,13 @@
     });
 
     confirmarClienteSugerido?.addEventListener("click", function () {
-      if (clienteSugeridoId) preencherCliente(clienteSugeridoId, clienteSugeridoTexto?.dataset.nome || "");
+      if (!clienteSugeridoId) return;
+      const nome = clienteSugeridoTexto?.dataset.nome || "";
+      preencherCliente(clienteSugeridoId, nome);
+      if (clienteSugeridoTexto) {
+        clienteSugeridoTexto.textContent = "Cliente confirmado: " + (nome || "-");
+      }
+      clienteSugeridoId = "";
     });
 
     comprovante?.addEventListener("change", async function () {
@@ -365,9 +412,9 @@
       if (!arquivo) return;
       mostrarFeedback("Lendo comprovante...", "");
       mostrarDebugOcr("");
-      clienteSugeridoId = "";
-      clienteSugerido?.classList.remove("visivel");
-      if (confirmarClienteSugerido) confirmarClienteSugerido.hidden = false;
+      const sugestaoPendenteAnterior = clienteBusca?.classList.contains("pix-cliente-pendente");
+      limparSugestaoCliente();
+      if (sugestaoPendenteAnterior && clienteBusca && !clienteSelect?.value) clienteBusca.value = "";
 
       const formData = new FormData();
       formData.append("comprovante", arquivo);
@@ -391,15 +438,9 @@
         mostrarFeedback(dados.mensagem || "Dados encontrados. Confira antes de salvar.", "success");
 
         if (dados.cliente_sugerido_id && dados.confianca_cliente === "alta") {
-          clienteSugeridoId = String(dados.cliente_sugerido_id);
-          if (clienteSugeridoTexto) {
-            clienteSugeridoTexto.dataset.nome = dados.cliente_sugerido_nome || "";
-            clienteSugeridoTexto.textContent = "Cliente sugerido: " + (dados.cliente_sugerido_nome || "-") + ". Confirme se for a conta correta.";
-          }
-          clienteSugerido?.classList.add("visivel");
-          if (confirmarClienteSugerido) confirmarClienteSugerido.hidden = false;
+          mostrarClienteSugerido(dados.cliente_sugerido_id, dados.cliente_sugerido_nome || "");
         } else if (dados.mensagem_cliente) {
-          clienteSugeridoId = "";
+          limparSugestaoCliente();
           if (clienteSugeridoTexto) {
             clienteSugeridoTexto.dataset.nome = "";
             clienteSugeridoTexto.textContent = dados.mensagem_cliente;
