@@ -23,6 +23,11 @@ def _sem_acentos(valor):
     return "".join(caractere for caractere in texto if unicodedata.category(caractere) != "Mn")
 
 
+def _normalizar_rotulo_ocr(linha):
+    linha_normalizada = _normalizar_linha(_sem_acentos(linha))
+    return re.sub(r"^[^\w]+", "", linha_normalizada).strip()
+
+
 def _eh_linha_bloqueada_para_nome(linha):
     linha_normalizada = _normalizar_linha(linha)
     if not linha_normalizada:
@@ -220,7 +225,8 @@ def _extrair_nome_no_bloco(linhas):
 
 
 def _extrair_nome_secao_de(linha_rotulo, bloco):
-    candidato_inline = re.sub(r"^\s*de:?\s*", "", linha_rotulo, flags=re.IGNORECASE).strip()
+    linha_limpa = _normalizar_rotulo_ocr(linha_rotulo)
+    candidato_inline = re.sub(r"^\s*de:?\s*", "", linha_limpa, flags=re.IGNORECASE).strip()
     if candidato_inline and _parece_nome_pessoa(candidato_inline):
         return _normalizar_espacos(candidato_inline)
 
@@ -234,11 +240,12 @@ def _extrair_pagador(texto):
     linhas = [_normalizar_espacos(linha) for linha in texto.splitlines()]
     for indice, linha in enumerate(linhas):
         linha_normalizada = _normalizar_linha(linha)
+        rotulo_normalizado = _normalizar_rotulo_ocr(linha)
         if (
             "origem" not in linha_normalizada
             and "pagador" not in linha_normalizada
             and "quem pagou" not in linha_normalizada
-            and not re.fullmatch(r"de\b:?.*", linha_normalizada)
+            and not re.fullmatch(r"de\b:?.*", rotulo_normalizado)
         ):
             continue
 
@@ -248,12 +255,12 @@ def _extrair_pagador(texto):
 
         bloco = []
         for proxima in linhas[indice + 1:indice + 10]:
-            proxima_normalizada = _normalizar_linha(proxima)
+            proxima_normalizada = _normalizar_rotulo_ocr(proxima)
             if re.search(r"\b(destino|recebedor|favorecido|para)\b:?", proxima_normalizada):
                 break
             bloco.append(proxima)
 
-        if re.fullmatch(r"de\b:?.*", linha_normalizada):
+        if re.fullmatch(r"de\b:?.*", rotulo_normalizado):
             nome = _extrair_nome_secao_de(linha, bloco)
         else:
             nome = _extrair_nome_no_bloco(bloco)
