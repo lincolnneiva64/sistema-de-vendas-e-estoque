@@ -122,6 +122,21 @@ def _extrair_valor(texto):
 
 def _extrair_data_pagamento(texto):
     linhas = [_normalizar_espacos(linha) for linha in texto.splitlines()]
+    for linha in linhas:
+        if "data da operacao" not in _normalizar_rotulo_ocr(linha):
+            continue
+        encontrado = re.search(
+            r"\b([0-3]?\d)/([01]?\d)/(\d{4})\D{0,20}([O0-2]?\d)\s*[h:]\s*([0-5]\d)\b",
+            linha,
+            flags=re.IGNORECASE,
+        )
+        if not encontrado:
+            continue
+        dia, mes, ano, hora, minuto = encontrado.groups()
+        hora = hora.upper().replace("O", "0")
+        if int(hora) <= 23:
+            return f"{ano}-{int(mes):02d}-{int(dia):02d}T{int(hora):02d}:{int(minuto):02d}"
+
     for indice, linha in enumerate(linhas):
         encontrado_data = re.search(r"\b([0-3]?\d)/([01]?\d)/(\d{4})\b", linha)
         if not encontrado_data:
@@ -349,6 +364,12 @@ def _extrair_pagador_banpara(linhas):
     if not re.search(r"\b(banco do estado do para|banpara|comprovante de pix)\b", texto_normalizado):
         return ""
 
+    def nome_valido(candidato):
+        candidato_normalizado = _normalizar_rotulo_ocr(candidato)
+        if re.search(r"\b(agencia|conta|tipo de conta|codigo|sessao|transacao|instituicao|cpf|cnpj)\b", candidato_normalizado):
+            return False
+        return _parece_nome_pessoa(candidato)
+
     indice_origem = next(
         (
             indice
@@ -372,10 +393,15 @@ def _extrair_pagador_banpara(linhas):
         partes = re.split(r":|-", linha, maxsplit=1)
         if len(partes) > 1:
             candidato = _normalizar_espacos(partes[1])
-            if _parece_nome_pessoa(candidato):
+            if nome_valido(candidato):
                 return candidato[:160]
-        for proxima in bloco[indice + 1:indice + 3]:
-            if _parece_nome_pessoa(proxima):
+
+        candidato_inline = re.sub(r"^.*?\btitular\b", "", linha, flags=re.IGNORECASE).strip(" :-")
+        if candidato_inline and nome_valido(candidato_inline):
+            return _normalizar_espacos(candidato_inline)[:160]
+
+        for proxima in bloco[indice + 1:indice + 7]:
+            if nome_valido(proxima):
                 return proxima[:160]
     return ""
 

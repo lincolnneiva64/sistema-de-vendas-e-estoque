@@ -525,6 +525,53 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(dados["data_pagamento"], "2026-05-17T01:54")
         self.assertEqual(PixRecebido.objects.count(), 0)
 
+    def test_analisar_comprovante_pix_banpara_prioriza_origem_e_data_operacao(self):
+        conteudo = (
+            "BANCO DO ESTADO DO PARA S.A. - BANPARA\n"
+            "COMPROVANTE DE PIX\n"
+            "\n"
+            "Data da Operacao: 05/05/2026 16:45:50\n"
+            "Codigo da Sessao: APP00570000023744PP639135962448580000\n"
+            "\n"
+            "Dados de Origem\n"
+            "Titular: RUBEM ARRUDA DE SOUZA\n"
+            "Agencia: 0057\n"
+            "Conta: 000002374-4\n"
+            "Tipo de Conta: PP\n"
+            "\n"
+            "Dados do Recebedor\n"
+            "Instituicao: NU PAGAMENTOS - IP\n"
+            "Titular: Lincoln Albuquerque Neiva\n"
+            "CPF: ***.319.532-**\n"
+            "Agencia: 0001\n"
+            "Conta: 088228354-6\n"
+            "Tipo de Conta: Conta de Pagamento\n"
+            "\n"
+            "ID Transacao: E04913711202605051945RF704X8VJHS\n"
+            "Tipo de Pagamento: Chave\n"
+            "Finalidade: Compra/Transferencia\n"
+            "Valor: 847,70\n"
+            "17:36\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante.txt", conteudo, content_type="text/plain")
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_analisar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "RUBEM ARRUDA DE SOUZA")
+        self.assertNotEqual(dados["pagador"], "5")
+        self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque Neiva")
+        self.assertEqual(dados["valor"], "847.70")
+        self.assertEqual(dados["data_pagamento"], "2026-05-05T16:45")
+        self.assertNotEqual(dados["data_pagamento"], "2026-05-05T17:36")
+        self.assertEqual(PixRecebido.objects.count(), 0)
+
     def test_analisar_comprovante_pix_banco_inter_caso_real_recebido(self):
         conteudo = (
             "Inter\n"
