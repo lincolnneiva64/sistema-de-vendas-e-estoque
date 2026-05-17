@@ -1,4 +1,5 @@
 import json
+import re
 import textwrap
 import unicodedata
 from difflib import SequenceMatcher
@@ -61,19 +62,53 @@ def _pix_duplicado_pendente(dados):
     return None
 
 
+def _tokens_nome_pix(valor):
+    texto = normalizar_texto_cliente(valor)
+    texto = re.sub(r"[^a-z0-9\s]", " ", texto)
+    tokens = []
+    equivalencias = {"jr": "junior", "jrn": "junior"}
+    ignorar = {"de", "da", "do", "das", "dos", "e"}
+    for token in texto.split():
+        token = equivalencias.get(token, token)
+        if token and token not in ignorar:
+            tokens.append(token)
+    return tokens
+
+
+def _termos_nome_parecidos(termo_a, termo_b):
+    return termo_a == termo_b or SequenceMatcher(None, termo_a, termo_b).ratio() >= 0.90
+
+
+def _nome_cliente_parece_pagador_pix(nome_pagador, nome_cliente):
+    tokens_pagador = _tokens_nome_pix(nome_pagador)
+    tokens_cliente = _tokens_nome_pix(nome_cliente)
+    if len(tokens_pagador) < 2 or len(tokens_cliente) < 2:
+        return False
+    if not _termos_nome_parecidos(tokens_pagador[0], tokens_cliente[0]):
+        return False
+
+    termos_cliente_restantes = tokens_cliente[1:]
+    termos_pagador_restantes = tokens_pagador[1:]
+    termos_encontrados = 0
+    for termo_cliente in termos_cliente_restantes:
+        if any(_termos_nome_parecidos(termo_cliente, termo_pagador) for termo_pagador in termos_pagador_restantes):
+            termos_encontrados += 1
+
+    return termos_encontrados >= 1
+
+
 def _sugerir_cliente_por_pagador(nome_pagador):
     pagador_normalizado = normalizar_texto_cliente(nome_pagador)
-    if not pagador_normalizado:
+    if len(_tokens_nome_pix(nome_pagador)) < 2:
         return None, "baixa", ""
 
     clientes_parecidos = []
     clientes = Cliente.objects.filter(ativo=True).only("id", "nome", "apelido_nome_conhecido").order_by("nome")
     for cliente in clientes:
-        nome_parecido = textos_parecidos_cliente(pagador_normalizado, cliente.nome, minimo=0.96)
-        apelido_parecido = bool(cliente.apelido_nome_conhecido) and textos_parecidos_cliente(
+        nome_parecido = _nome_cliente_parece_pagador_pix(pagador_normalizado, cliente.nome)
+        apelido_parecido = bool(cliente.apelido_nome_conhecido) and _nome_cliente_parece_pagador_pix(
             pagador_normalizado,
             cliente.apelido_nome_conhecido,
-            minimo=0.96,
         )
         if nome_parecido or apelido_parecido:
             clientes_parecidos.append(cliente)

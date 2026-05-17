@@ -287,6 +287,58 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(dados["valor"], "600.00")
         self.assertEqual(dados["data_pagamento"], "2026-05-16T16:33")
 
+    def test_analisar_comprovante_pix_sugere_cliente_com_jr_e_nome_intermediario(self):
+        cliente = Cliente.objects.create(nome="Ivanildo Patricio Jr", ativo=True)
+        conteudo = (
+            "Comprovante de Pix\n"
+            "16/maio/2026 \u00e0s 16:33:29\n"
+            "R$ 600\n"
+            "@ De\n"
+            "Ivanildo Ferraz Patr\u00edcio Junior\n"
+            "CPF: ***.188.882-**\n"
+            "Mercado Pago\n"
+            "@ Para\n"
+            "Lincoln Albuquerque Neiva\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante.txt", conteudo, content_type="text/plain")
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_analisar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertEqual(dados["pagador"], "Ivanildo Ferraz Patr\u00edcio Junior")
+        self.assertEqual(dados["cliente_sugerido_id"], cliente.id)
+        self.assertEqual(dados["cliente_sugerido_nome"], "Ivanildo Patricio Jr")
+        self.assertEqual(dados["confianca_cliente"], "alta")
+        self.assertEqual(PixRecebido.objects.count(), 0)
+
+    def test_analisar_comprovante_pix_nome_generico_nao_sugere_cliente(self):
+        Cliente.objects.create(nome="Maria Silva", ativo=True)
+        conteudo = (
+            "Comprovante Pix\n"
+            "Origem\n"
+            "Nome: Maria\n"
+            "Valor R$ 20,00\n"
+            "Data 16/05/2026 17:30\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante.txt", conteudo, content_type="text/plain")
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_analisar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertEqual(dados["pagador"], "Maria")
+        self.assertIsNone(dados["cliente_sugerido_id"])
+        self.assertEqual(dados["confianca_cliente"], "baixa")
+
     def test_analisar_comprovante_pix_nao_sugere_cliente_quando_ambiguo(self):
         Cliente.objects.create(nome="Joelson Ferreira dos Santos", ativo=True)
         Cliente.objects.create(nome="Joelson Ferreira dos Santos", ativo=True)
