@@ -344,6 +344,42 @@ def _nome_bloqueado_temporario_inter(nome):
     return nome_normalizado in nomes_bloqueados
 
 
+def _extrair_pagador_banpara(linhas):
+    texto_normalizado = " ".join(_normalizar_rotulo_ocr(linha) for linha in linhas)
+    if not re.search(r"\b(banco do estado do para|banpara|comprovante de pix)\b", texto_normalizado):
+        return ""
+
+    indice_origem = next(
+        (
+            indice
+            for indice, linha in enumerate(linhas)
+            if "dados de origem" in _normalizar_rotulo_ocr(linha)
+        ),
+        -1,
+    )
+    if indice_origem < 0:
+        return ""
+
+    bloco = []
+    for linha in linhas[indice_origem + 1:]:
+        if "dados do recebedor" in _normalizar_rotulo_ocr(linha):
+            break
+        bloco.append(linha)
+
+    for indice, linha in enumerate(bloco):
+        if "titular" not in _normalizar_rotulo_ocr(linha):
+            continue
+        partes = re.split(r":|-", linha, maxsplit=1)
+        if len(partes) > 1:
+            candidato = _normalizar_espacos(partes[1])
+            if _parece_nome_pessoa(candidato):
+                return candidato[:160]
+        for proxima in bloco[indice + 1:indice + 3]:
+            if _parece_nome_pessoa(proxima):
+                return proxima[:160]
+    return ""
+
+
 def _extrair_pagador_inter_whatsapp_rotulos_antes(linhas):
     indice_quem_pagou = next(
         (
@@ -484,6 +520,10 @@ def _extrair_pagador_banco_inter(texto):
 
 def _extrair_pagador(texto):
     linhas = [_normalizar_espacos(linha) for linha in texto.splitlines()]
+    pagador_banpara = _extrair_pagador_banpara(linhas)
+    if pagador_banpara:
+        return pagador_banpara
+
     pagador_inter_whatsapp = _extrair_pagador_inter_whatsapp_rotulos_antes(linhas)
     if pagador_inter_whatsapp:
         return pagador_inter_whatsapp
