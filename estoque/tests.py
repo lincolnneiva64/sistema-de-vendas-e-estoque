@@ -390,6 +390,97 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(dados["data_pagamento"], "2026-05-16T17:30")
         self.assertEqual(PixRecebido.objects.count(), 0)
 
+    def test_analisar_comprovante_pix_normaliza_horario_com_o_no_lugar_de_zero(self):
+        conteudo = (
+            "Domingo, 17/05/2026\n"
+            "O8h09\n"
+            "Valor R$ 5,00\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante.txt", conteudo, content_type="text/plain")
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_analisar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["valor"], "5.00")
+        self.assertEqual(dados["data_pagamento"], "2026-05-17T08:09")
+        self.assertEqual(PixRecebido.objects.count(), 0)
+
+    def test_analisar_comprovante_pix_inter_whatsapp_ocr_real_extrai_pagador(self):
+        conteudo = (
+            "Sobre a transagao\n"
+            "Data da transacao\n"
+            "Horario\n"
+            "\n"
+            "Identificador\n"
+            "\n"
+            "ID da transacao\n"
+            "\n"
+            "sinter\n"
+            "\n"
+            "Pix enviado\n"
+            "R$ 5,00\n"
+            "\n"
+            "Domingo, 17/05/2026\n"
+            "\n"
+            "O8h09\n"
+            "\n"
+            "\u00a300416968202605171109huk671IHk1t\n"
+            "\n"
+            "Quem recebeu\n"
+            "\n"
+            "Nome\n"
+            "\n"
+            "CPF/CNPJ\n"
+            "\n"
+            "Instituicao\n"
+            "\n"
+            "Chave Pix\n"
+            "\n"
+            "Quem pagou\n"
+            "Nome\n"
+            "CPF/CNPJ\n"
+            "\n"
+            "Instituicao\n"
+            "\n"
+            "Lincoin Albuquerque Neiva\n"
+            "\n"
+            "*#*,319.532-\u00ab*\n"
+            "\n"
+            "NU PAGAMENTOS - IP\n"
+            "\n"
+            "+5591984111011\n"
+            "\n"
+            "FRANCISCO NETO DA SILVA MIRANDA\n"
+            "\n"
+            "***,467.952-**\n"
+            "\n"
+            "BANCO INTER\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante.txt", conteudo, content_type="text/plain")
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_analisar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "FRANCISCO NETO DA SILVA MIRANDA")
+        self.assertNotEqual(dados["pagador"], "Lincoin Albuquerque Neiva")
+        self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque Neiva")
+        self.assertNotEqual(dados["pagador"], "NU PAGAMENTOS - IP")
+        self.assertEqual(dados["valor"], "5.00")
+        self.assertEqual(dados["data_pagamento"], "2026-05-17T08:09")
+        self.assertEqual(PixRecebido.objects.count(), 0)
+
     def test_analisar_comprovante_pix_banco_inter_caso_real_recebido(self):
         conteudo = (
             "Inter\n"

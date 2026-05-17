@@ -121,6 +121,22 @@ def _extrair_valor(texto):
 
 
 def _extrair_data_pagamento(texto):
+    linhas = [_normalizar_espacos(linha) for linha in texto.splitlines()]
+    for indice, linha in enumerate(linhas):
+        encontrado_data = re.search(r"\b([0-3]?\d)/([01]?\d)/(\d{4})\b", linha)
+        if not encontrado_data:
+            continue
+        for proxima in linhas[indice:indice + 5]:
+            encontrado_horario = re.search(r"\b([O0-2]?\d)\s*[h:]\s*([0-5]\d)\b", proxima, flags=re.IGNORECASE)
+            if not encontrado_horario:
+                continue
+            dia, mes, ano = encontrado_data.groups()
+            hora, minuto = encontrado_horario.groups()
+            hora = hora.upper().replace("O", "0")
+            if int(hora) > 23:
+                continue
+            return f"{ano}-{int(mes):02d}-{int(dia):02d}T{int(hora):02d}:{int(minuto):02d}"
+
     encontrado = re.search(
         r"\b([0-3]?\d)/([01]?\d)/(\d{4})\D{0,12}([0-2]?\d):([0-5]\d)\b",
         texto,
@@ -322,9 +338,36 @@ def _nome_bloqueado_temporario_inter(nome):
     nomes_bloqueados = {
         "lincoln albuquerque",
         "lincoln albuquerque neiva",
+        "lincoin albuquerque neiva",
         "neiva",
     }
     return nome_normalizado in nomes_bloqueados
+
+
+def _extrair_pagador_inter_whatsapp_rotulos_antes(linhas):
+    indice_quem_pagou = next(
+        (
+            indice
+            for indice, linha in enumerate(linhas)
+            if "quem pagou" in _normalizar_rotulo_ocr(linha)
+        ),
+        -1,
+    )
+    if indice_quem_pagou < 0:
+        return ""
+
+    for indice, linha in enumerate(linhas[indice_quem_pagou + 1:], start=indice_quem_pagou + 1):
+        if _normalizar_rotulo_ocr(linha) != "banco inter":
+            continue
+        for anterior in reversed(linhas[indice_quem_pagou + 1:indice]):
+            anterior_normalizada = _normalizar_rotulo_ocr(anterior)
+            if re.search(r"\b(cpf|cnpj|instituicao|nome|chave pix)\b", anterior_normalizada):
+                continue
+            if _nome_bloqueado_temporario_inter(anterior):
+                continue
+            if _parece_nome_pessoa(anterior):
+                return anterior[:160]
+    return ""
 
 
 def _extrair_nomes_recebedor_banco_inter(linhas):
@@ -441,6 +484,10 @@ def _extrair_pagador_banco_inter(texto):
 
 def _extrair_pagador(texto):
     linhas = [_normalizar_espacos(linha) for linha in texto.splitlines()]
+    pagador_inter_whatsapp = _extrair_pagador_inter_whatsapp_rotulos_antes(linhas)
+    if pagador_inter_whatsapp:
+        return pagador_inter_whatsapp
+
     nome_destino_quebrado = _extrair_pagador_destino_nome_quebrado_inter(linhas)
     if nome_destino_quebrado:
         return nome_destino_quebrado
