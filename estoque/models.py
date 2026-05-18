@@ -483,6 +483,7 @@ class PixRecebido(models.Model):
     nome_pagador = models.CharField(max_length=160, blank=True)
     valor = models.DecimalField(max_digits=12, decimal_places=2)
     data_pagamento = models.DateTimeField(default=timezone.now)
+    instituicao_pix = models.CharField(max_length=80, blank=True)
     observacao = models.TextField(blank=True)
     comprovante = models.FileField(upload_to="pix/comprovantes/", blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDENTE)

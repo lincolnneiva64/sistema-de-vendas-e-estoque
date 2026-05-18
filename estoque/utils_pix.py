@@ -1,6 +1,7 @@
 import re
 import shutil
 import unicodedata
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from pathlib import Path
@@ -103,7 +104,8 @@ def _extrair_texto_comprovante(arquivo):
 
 def _extrair_valor(texto):
     padroes = [
-        r"(?:valor|total)\D{0,20}R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})",
+        r"(?:valor|total)\D{0,30}R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})",
+        r"(?:valor|total)\D{0,30}R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*)\b",
         r"R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})",
         r"R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*)\b",
         r"\b([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})\b",
@@ -120,6 +122,138 @@ def _extrair_valor(texto):
     return ""
 
 
+def _extrair_instituicao_pix(texto):
+    texto_normalizado = _normalizar_linha(_sem_acentos(texto))
+    padroes = [
+        ("PicPay", [r"\bpicpay\b", r"\bpic\s*pay\b", r"picpay instituicao de pagamento"]),
+        ("Mercado Pago", [r"\bmercado pago\b"]),
+        ("Nubank", [r"\bnubank\b", r"\bnu pagamentos\b"]),
+        ("Banco Inter", [r"\bbanco inter\b", r"\bintermedium\b", r"\binter\b"]),
+        ("Caixa Econômica", [r"\bcaixa economica\b", r"\bcaixa\b"]),
+        ("Banco do Brasil", [r"\bbanco do brasil\b"]),
+        ("Bradesco", [r"\bbradesco\b"]),
+        ("Itaú", [r"\bitau\b"]),
+        ("Santander", [r"\bsantander\b"]),
+        ("PagBank", [r"\bpagbank\b", r"\bpagseguro\b"]),
+        ("C6 Bank", [r"\bc6 bank\b", r"\bc6\b"]),
+        ("Sicredi", [r"\bsicredi\b"]),
+        ("Sicoob", [r"\bsicoob\b"]),
+        ("Stone", [r"\bstone\b"]),
+        ("InfinitePay", [r"\binfinitepay\b", r"\binfinite pay\b"]),
+    ]
+    for nome, termos in padroes:
+        if any(re.search(termo, texto_normalizado) for termo in termos):
+            return nome
+    return ""
+
+
+def _mes_ocr_para_numero(mes_texto):
+    meses = {
+        "jan": 1,
+        "fev": 2,
+        "mar": 3,
+        "abr": 4,
+        "mai": 5,
+        "jun": 6,
+        "jul": 7,
+        "ago": 8,
+        "set": 9,
+        "out": 10,
+        "nov": 11,
+        "dez": 12,
+        "janeiro": 1,
+        "fevereiro": 2,
+        "marco": 3,
+        "abril": 4,
+        "maio": 5,
+        "junho": 6,
+        "julho": 7,
+        "agosto": 8,
+        "setembro": 9,
+        "outubro": 10,
+        "novembro": 11,
+        "dezembro": 12,
+        "5et": 9,
+        "sct": 9,
+        "sel": 9,
+        "se1": 9,
+    }
+    mes_normalizado = _normalizar_linha(_sem_acentos(mes_texto))
+    mes_normalizado = mes_normalizado.strip(".").replace("5", "s").replace("1", "l")
+    return meses.get(mes_normalizado) or meses.get(mes_normalizado[:3])
+
+
+def _normalizar_numero_ocr(valor):
+    return (
+        str(valor or "")
+        .upper()
+        .replace("O", "0")
+        .replace("I", "1")
+        .replace("L", "1")
+        .replace("|", "1")
+    )
+
+
+def _formatar_data_pagamento_ocr(dia, mes, ano, hora, minuto):
+    dia = _normalizar_numero_ocr(dia)
+    ano = _normalizar_numero_ocr(ano)
+    hora = _normalizar_numero_ocr(hora)
+    minuto = _normalizar_numero_ocr(minuto)
+    try:
+        data = datetime(int(ano), int(mes), int(dia), int(hora), int(minuto))
+    except (TypeError, ValueError):
+        return ""
+    return data.strftime("%Y-%m-%dT%H:%M")
+
+
+def _extrair_hora_ocr(texto):
+    encontrado = re.search(
+        r"\b([O0-2IL|]?[0-9OIL|])\s*(?::|h|\.)\s*([0-5OIL|][0-9OIL|])(?:(?::|\.)[0-5OIL|][0-9OIL|])?\b",
+        texto,
+        flags=re.IGNORECASE,
+    )
+    return encontrado.groups() if encontrado else None
+
+
+def _extrair_data_textual_pagamento(texto):
+    texto_sem_acentos = _sem_acentos(texto)
+    encontrado = re.search(
+        r"\b([0-3OIL|]?[0-9OIL|])\s+([A-Za-z0-9]{3,9})\.?\s+([0-9OIL|]{4})\D{0,30}?([O0-2IL|]?[0-9OIL|])\s*(?::|h|\.)\s*([0-5OIL|][0-9OIL|])(?:(?::|\.)[0-5OIL|][0-9OIL|])?",
+        texto_sem_acentos,
+        flags=re.IGNORECASE,
+    )
+    if not encontrado:
+        encontrado = re.search(
+            r"\b([0-3OIL|]?[0-9OIL|])\s*/\s*([A-Za-z0-9]{3,9})\.?\s*/\s*([0-9OIL|]{4})\D{0,30}?([O0-2IL|]?[0-9OIL|])\s*(?::|h|\.)\s*([0-5OIL|][0-9OIL|])(?:(?::|\.)[0-5OIL|][0-9OIL|])?",
+            texto_sem_acentos,
+            flags=re.IGNORECASE,
+        )
+    if not encontrado:
+        return ""
+
+    dia, mes_texto, ano, hora, minuto = encontrado.groups()
+    mes = _mes_ocr_para_numero(mes_texto)
+    if not mes:
+        return ""
+    return _formatar_data_pagamento_ocr(dia, mes, ano, hora, minuto)
+
+
+def _debug_data_pagamento(texto, data_pagamento):
+    candidatos = []
+    for linha in texto.splitlines():
+        linha_limpa = _normalizar_espacos(linha)
+        linha_normalizada = _normalizar_linha(_sem_acentos(linha_limpa))
+        if re.search(r"\b(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez|\d{1,2}/)\b", linha_normalizada):
+            candidatos.append(linha_limpa)
+        if len(candidatos) >= 4:
+            break
+    trecho = " | ".join(candidatos) or "nenhum trecho de data localizado no OCR"
+    return (
+        f"Data enviada ao frontend: {data_pagamento or 'nao reconhecida'}\n"
+        f"Trechos candidatos de data no OCR: {trecho}"
+    )
+
+
 def _extrair_data_pagamento(texto):
     linhas = [_normalizar_espacos(linha) for linha in texto.splitlines()]
     for indice, linha in enumerate(linhas):
@@ -127,36 +261,40 @@ def _extrair_data_pagamento(texto):
             continue
         trecho = " ".join(linhas[indice:indice + 3])
         encontrado_data = re.search(r"\b([0-3]?\d)/([01]?\d)/(\d{4})\b", trecho)
-        encontrado_hora = re.search(r"\b([O0-2]?\d)\s*[h:]\s*([0-5]\d)\b", trecho, flags=re.IGNORECASE)
+        encontrado_hora = _extrair_hora_ocr(trecho)
         if encontrado_data and encontrado_hora:
             dia, mes, ano = encontrado_data.groups()
-            hora, minuto = encontrado_hora.groups()
-            hora = hora.upper().replace("O", "0")
-            if int(hora) <= 23:
-                return f"{ano}-{int(mes):02d}-{int(dia):02d}T{int(hora):02d}:{int(minuto):02d}"
+            hora, minuto = encontrado_hora
+            data_formatada = _formatar_data_pagamento_ocr(dia, mes, ano, hora, minuto)
+            if data_formatada:
+                return data_formatada
 
     for indice, linha in enumerate(linhas):
         encontrado_data = re.search(r"\b([0-3]?\d)/([01]?\d)/(\d{4})\b", linha)
         if not encontrado_data:
             continue
         for proxima in linhas[indice:indice + 5]:
-            encontrado_horario = re.search(r"\b([O0-2]?\d)\s*[h:]\s*([0-5]\d)\b", proxima, flags=re.IGNORECASE)
+            encontrado_horario = _extrair_hora_ocr(proxima)
             if not encontrado_horario:
                 continue
             dia, mes, ano = encontrado_data.groups()
-            hora, minuto = encontrado_horario.groups()
-            hora = hora.upper().replace("O", "0")
-            if int(hora) > 23:
-                continue
-            return f"{ano}-{int(mes):02d}-{int(dia):02d}T{int(hora):02d}:{int(minuto):02d}"
+            hora, minuto = encontrado_horario
+            data_formatada = _formatar_data_pagamento_ocr(dia, mes, ano, hora, minuto)
+            if data_formatada:
+                return data_formatada
 
     encontrado = re.search(
-        r"\b([0-3]?\d)/([01]?\d)/(\d{4})\D{0,12}([0-2]?\d):([0-5]\d)\b",
+        r"\b([0-3]?\d)/([01]?\d)/(\d{4})\D{0,20}([O0-2]?\d)\s*(?::|h)\s*([0-5]\d)(?::[0-5]\d)?\b",
         texto,
+        flags=re.IGNORECASE,
     )
     if encontrado:
         dia, mes, ano, hora, minuto = encontrado.groups()
-        return f"{ano}-{int(mes):02d}-{int(dia):02d}T{int(hora):02d}:{int(minuto):02d}"
+        return _formatar_data_pagamento_ocr(dia, mes, ano, hora, minuto)
+
+    data_textual = _extrair_data_textual_pagamento(texto)
+    if data_textual:
+        return data_textual
 
     meses = {
         "jan": 1,
@@ -600,6 +738,8 @@ def analisar_comprovante_pix(arquivo):
             "pagador": "",
             "valor": "",
             "data_pagamento": "",
+            "instituicao_pix": "",
+            "debug_data_pagamento": "Data enviada ao frontend: nao reconhecida",
             "texto_extraido": "",
             "texto_ocr_bruto": "",
             "mensagem": "Nao foi possivel ler automaticamente o comprovante. OCR de imagem nao esta disponivel neste ambiente; preencha manualmente.",
@@ -608,6 +748,7 @@ def analisar_comprovante_pix(arquivo):
     pagador = _extrair_pagador(texto)
     valor = _extrair_valor(texto)
     data_pagamento = _extrair_data_pagamento(texto)
+    instituicao_pix = _extrair_instituicao_pix(texto)
     ok = bool(pagador or valor or data_pagamento)
 
     return {
@@ -615,6 +756,8 @@ def analisar_comprovante_pix(arquivo):
         "pagador": pagador,
         "valor": valor,
         "data_pagamento": data_pagamento,
+        "instituicao_pix": instituicao_pix,
+        "debug_data_pagamento": _debug_data_pagamento(texto, data_pagamento),
         "texto_extraido": _normalizar_espacos(texto)[:700],
         "texto_ocr_bruto": texto[:2000],
         "mensagem": (

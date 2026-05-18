@@ -1711,7 +1711,9 @@ def central_pix(request):
                 )
                 messages.warning(request, "Pix duplicado nao foi salvo. Confira o registro pendente existente.")
             else:
-                form.save()
+                pix = form.save(commit=False)
+                pix.instituicao_pix = (request.POST.get("instituicao_pix") or "").strip()[:80]
+                pix.save()
                 messages.success(request, "Pix recebido registrado com sucesso.")
                 if retorno_url:
                     return redirect(f"{central_pix_url}?{urlencode({'next': retorno_url})}")
@@ -1741,6 +1743,7 @@ def central_pix_analisar_comprovante(request):
         return JsonResponse({
             "ok": False,
             "mensagem": "Envie um comprovante para leitura automatica.",
+            "nome_arquivo": "",
         }, status=400)
 
     dados = analisar_comprovante_pix(arquivo)
@@ -1752,12 +1755,15 @@ def central_pix_analisar_comprovante(request):
         "pagador": dados.get("pagador", ""),
         "valor": dados.get("valor", ""),
         "data_pagamento": dados.get("data_pagamento", ""),
+        "instituicao_pix": dados.get("instituicao_pix", ""),
         "cliente_sugerido_id": cliente_sugerido.id if cliente_sugerido else None,
         "cliente_sugerido_nome": cliente_sugerido.nome if cliente_sugerido else "",
         "confianca_cliente": confianca_cliente,
         "mensagem_cliente": mensagem_cliente,
+        "debug_data_pagamento": dados.get("debug_data_pagamento", ""),
         "debug_texto_ocr": debug_texto_ocr,
         "texto_ocr_bruto": debug_texto_ocr,
+        "nome_arquivo": arquivo.name,
         "mensagem": dados.get("mensagem", ""),
         "observacao": (
             "Dados lidos automaticamente do comprovante. Conferir antes de confirmar."
