@@ -122,9 +122,114 @@ def _extrair_valor(texto):
     return ""
 
 
+def _extrair_bloco_quem_vai_enviar(linhas):
+    indice_envio = next(
+        (
+            indice
+            for indice, linha in enumerate(linhas)
+            if "quem vai enviar" in _normalizar_rotulo_ocr(linha)
+        ),
+        -1,
+    )
+    if indice_envio < 0:
+        return []
+
+    bloco = []
+    for linha in linhas[indice_envio + 1:]:
+        linha_normalizada = _normalizar_rotulo_ocr(linha)
+        if re.search(r"\b(quem vai receber|dados da transacao|dados da operacao|id|nsu)\b", linha_normalizada):
+            break
+        bloco.append(linha)
+    return bloco
+
+
+def _valor_de_rotulo_no_bloco(bloco, rotulo):
+    for indice, linha in enumerate(bloco):
+        linha_normalizada = _normalizar_rotulo_ocr(linha)
+        if not re.match(rf"^{rotulo}\b", linha_normalizada):
+            continue
+
+        valores = []
+
+        partes = re.split(r":|-", linha, maxsplit=1)
+        if len(partes) > 1:
+            candidato = _normalizar_espacos(partes[1])
+            if candidato:
+                valores.append(candidato)
+        else:
+            candidato_inline = re.sub(
+                rf"^\s*{rotulo}\b\s*",
+                "",
+                linha,
+                flags=re.IGNORECASE,
+            )
+            candidato_inline = _normalizar_espacos(candidato_inline)
+            if candidato_inline:
+                valores.append(candidato_inline)
+
+        for proxima in bloco[indice + 1:indice + 6]:
+            proxima_normalizada = _normalizar_rotulo_ocr(proxima)
+            if not proxima_normalizada:
+                continue
+            if re.search(
+                r"\b(nome|cpf|cnpj|banco|instituicao|dados|transacao|operacao|id|nsu)\b",
+                proxima_normalizada,
+            ):
+                break
+            valores.append(proxima)
+
+        if valores:
+            return _normalizar_espacos(" ".join(valores))
+    return ""
+
+
+def _extrair_pagador_caixa_tem(linhas):
+    bloco = _extrair_bloco_quem_vai_enviar(linhas)
+    if not bloco:
+        return ""
+
+    nome = _valor_de_rotulo_no_bloco(bloco, "nome")
+    return nome[:160] if _parece_nome_pessoa(nome) else ""
+
+
+def _extrair_instituicao_caixa_tem(linhas):
+    bloco = _extrair_bloco_quem_vai_enviar(linhas)
+    if not bloco:
+        return ""
+
+    banco = _valor_de_rotulo_no_bloco(bloco, "banco")
+    banco_normalizado = _normalizar_linha(_sem_acentos(banco))
+    if "caixa" in banco_normalizado:
+        return "Caixa Econ\u00f4mica Federal"
+    if re.search(r"\b(nubank|nu pagamentos)\b", banco_normalizado):
+        return "Nubank"
+    return ""
+
+
 def _extrair_instituicao_pix(texto):
+    def eh_inicio_bloco_recebedor(linha_normalizada):
+        return bool(
+            re.search(r"\bdados do recebedor\b", linha_normalizada)
+            or re.search(r"\b(recebedor|beneficiario)\b", linha_normalizada)
+            or re.match(r"^@?\s*para\b", linha_normalizada)
+        )
+
+    linhas = [_normalizar_espacos(linha) for linha in texto.splitlines()]
+    instituicao_caixa_tem = _extrair_instituicao_caixa_tem(linhas)
+    if instituicao_caixa_tem:
+        return instituicao_caixa_tem
+
+    linhas_cabecalho = []
+    for linha in linhas:
+        linha_normalizada = _normalizar_rotulo_ocr(linha)
+        if eh_inicio_bloco_recebedor(linha_normalizada):
+            break
+        linhas_cabecalho.append(linha)
+
+    texto_cabecalho = _normalizar_linha(_sem_acentos("\n".join(linhas_cabecalho)))
     texto_normalizado = _normalizar_linha(_sem_acentos(texto))
     padroes = [
+        ("Banpar\u00e1", [r"\bbanpara\b", r"\bbanco do estado do para\b"]),
         ("PicPay", [r"\bpicpay\b", r"\bpic\s*pay\b", r"picpay instituicao de pagamento"]),
         ("Mercado Pago", [r"\bmercado pago\b"]),
         ("Nubank", [r"\bnubank\b", r"\bnu pagamentos\b"]),
@@ -141,9 +246,29 @@ def _extrair_instituicao_pix(texto):
         ("Stone", [r"\bstone\b"]),
         ("InfinitePay", [r"\binfinitepay\b", r"\binfinite pay\b"]),
     ]
+
     for nome, termos in padroes:
+        if any(re.search(termo, texto_cabecalho) for termo in termos):
+            return nome
+
+    for nome, termos in padroes:
+        if nome == "Nubank":
+            continue
         if any(re.search(termo, texto_normalizado) for termo in termos):
             return nome
+
+    em_bloco_recebedor = False
+    for linha in linhas:
+        linha_normalizada = _normalizar_rotulo_ocr(linha)
+        if eh_inicio_bloco_recebedor(linha_normalizada):
+            em_bloco_recebedor = True
+        elif re.search(r"\b(origem|pagador|quem pagou|dados de origem)\b", linha_normalizada):
+            em_bloco_recebedor = False
+
+        if em_bloco_recebedor and "nu pagamentos" in linha_normalizada:
+            continue
+        if re.search(r"\b(nubank|nu pagamentos)\b", linha_normalizada):
+            return "Nubank"
     return ""
 
 
@@ -218,7 +343,7 @@ def _extrair_hora_ocr(texto):
 def _extrair_data_textual_pagamento(texto):
     texto_sem_acentos = _sem_acentos(texto)
     encontrado = re.search(
-        r"\b([0-3OIL|]?[0-9OIL|])\s+([A-Za-z0-9]{3,9})\.?\s+([0-9OIL|]{4})\D{0,30}?([O0-2IL|]?[0-9OIL|])\s*(?::|h|\.)\s*([0-5OIL|][0-9OIL|])(?:(?::|\.)[0-5OIL|][0-9OIL|])?",
+        r"\b([0-3OIL|]?[0-9OIL|])(?:\s+de)?\s+([A-Za-z0-9]{3,9})\.?(?:\s+de)?\s+([0-9OIL|]{4})\D{0,30}?([O0-2IL|]?[0-9OIL|])\s*(?::|h|\.)\s*([0-5OIL|][0-9OIL|])(?:(?::|\.)[0-5OIL|][0-9OIL|])?",
         texto_sem_acentos,
         flags=re.IGNORECASE,
     )
@@ -682,6 +807,10 @@ def _extrair_pagador_banco_inter(texto):
 
 def _extrair_pagador(texto):
     linhas = [_normalizar_espacos(linha) for linha in texto.splitlines()]
+    pagador_caixa_tem = _extrair_pagador_caixa_tem(linhas)
+    if pagador_caixa_tem:
+        return pagador_caixa_tem
+
     pagador_banpara = _extrair_pagador_banpara(linhas)
     if pagador_banpara:
         return pagador_banpara
