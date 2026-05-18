@@ -38,6 +38,29 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px 8px;
   }
+  .pix-conferencia {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px 9px;
+    padding: 10px 11px 11px;
+    border: 2px solid #67c7d7;
+    border-radius: 10px;
+    background: #f2fbfc;
+    box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.06);
+  }
+  .pix-conferencia-titulo {
+    grid-column: 1 / -1;
+    color: #0f766e;
+    font-size: 0.76rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0;
+    background: #e0f7f6;
+    border: 1px solid #9de3dd;
+    border-radius: 7px;
+    padding: 5px 8px;
+  }
   .pix-field-full { grid-column: 1 / -1; }
   .pix-field label {
     display: block; margin-bottom: 2px; color: #64748b; font-size: 0.66rem;
@@ -163,6 +186,7 @@
   }
   @media (max-width: 520px) {
     .pix-form { grid-template-columns: 1fr; }
+    .pix-conferencia { grid-template-columns: 1fr; }
   }
 </style>
 
@@ -192,6 +216,10 @@
         <form method="post" enctype="multipart/form-data" class="pix-form">
           {% csrf_token %}
           {% for field in form %}
+            {% if field.name == "cliente" %}
+              <div class="pix-conferencia">
+                <div class="pix-conferencia-titulo">Conferência do comprovante</div>
+            {% endif %}
             <div class="pix-field {% if field.name == 'cliente' or field.name == 'nome_pagador' or field.name == 'observacao' %}pix-field-full{% endif %}">
               <label for="{{ field.id_for_label }}">{{ field.label }}</label>
               {{ field }}
@@ -218,6 +246,9 @@
                 <div class="pix-instituicao-analise" id="pixInstituicaoAnalise">Instituição/Banco: Não identificado</div>
               {% endif %}
             </div>
+            {% if field.name == "data_pagamento" %}
+              </div>
+            {% endif %}
           {% endfor %}
           <input type="hidden" name="instituicao_pix" id="id_instituicao_pix" value="">
           <div class="pix-feedback" id="pixLeituraFeedback"></div>
