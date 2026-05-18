@@ -492,27 +492,47 @@ def _linha_apos_rotulo(texto, rotulos):
     return ""
 
 
+
+def _limpar_nome_pagador_ocr(nome):
+    nome = _normalizar_espacos(nome)
+    nome = re.sub(r"^[0-9]{2,}\s+", "", nome).strip()
+    return _normalizar_espacos(nome)
+
+
 def _extrair_nome_no_bloco(linhas):
     for indice, linha in enumerate(linhas):
         if not re.search(r"\bnome\b", _normalizar_linha(linha)):
             continue
 
+        valores = []
+
         partes = re.split(r":|-", linha, maxsplit=1)
         if len(partes) > 1:
             candidato = _normalizar_espacos(partes[1])
             if candidato and not _eh_linha_bloqueada_para_nome(candidato):
-                return candidato
+                valores.append(candidato)
+        else:
+            candidato_inline = re.sub(r"^.*?\bnome\b", "", linha, flags=re.IGNORECASE).strip(" :-")
+            if candidato_inline and not _eh_linha_bloqueada_para_nome(candidato_inline):
+                valores.append(candidato_inline)
 
-        candidato_inline = re.sub(r"^.*?\bnome\b", "", linha, flags=re.IGNORECASE).strip(" :-")
-        if candidato_inline and not _eh_linha_bloqueada_para_nome(candidato_inline):
-            return _normalizar_espacos(candidato_inline)
-
-        for proxima in linhas[indice + 1:]:
+        for proxima in linhas[indice + 1:indice + 5]:
             if not proxima:
                 continue
+            proxima_normalizada = _normalizar_rotulo_ocr(proxima)
             if _eh_linha_bloqueada_para_nome(proxima):
-                return ""
-            return proxima
+                break
+            if re.search(r"\b(cpf|cnpj|instituicao|banco|chave|valor|data|destino|origem|recebedor|pagador)\b", proxima_normalizada):
+                break
+            if _parece_nome_pessoa(proxima) or re.fullmatch(r"[A-Za-z?-?]{2,}", proxima):
+                valores.append(proxima)
+                continue
+            break
+
+        if valores:
+            nome = _limpar_nome_pagador_ocr(" ".join(valores))
+            if nome and not _eh_linha_bloqueada_para_nome(nome):
+                return nome
     return ""
 
 

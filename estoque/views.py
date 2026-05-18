@@ -84,17 +84,25 @@ def _nome_cliente_parece_pagador_pix(nome_pagador, nome_cliente):
     tokens_cliente = _tokens_nome_pix(nome_cliente)
     if len(tokens_pagador) < 2 or len(tokens_cliente) < 2:
         return False
-    if not _termos_nome_parecidos(tokens_pagador[0], tokens_cliente[0]):
-        return False
 
-    termos_cliente_restantes = tokens_cliente[1:]
-    termos_pagador_restantes = tokens_pagador[1:]
     termos_encontrados = 0
-    for termo_cliente in termos_cliente_restantes:
-        if any(_termos_nome_parecidos(termo_cliente, termo_pagador) for termo_pagador in termos_pagador_restantes):
+    for termo_pagador in tokens_pagador:
+        if any(_termos_nome_parecidos(termo_pagador, termo_cliente) for termo_cliente in tokens_cliente):
             termos_encontrados += 1
 
-    return termos_encontrados >= 1
+    if termos_encontrados >= 3:
+        return True
+
+    if _termos_nome_parecidos(tokens_pagador[0], tokens_cliente[0]):
+        termos_cliente_restantes = tokens_cliente[1:]
+        termos_pagador_restantes = tokens_pagador[1:]
+        termos_restantes_encontrados = 0
+        for termo_cliente in termos_cliente_restantes:
+            if any(_termos_nome_parecidos(termo_cliente, termo_pagador) for termo_pagador in termos_pagador_restantes):
+                termos_restantes_encontrados += 1
+        return termos_restantes_encontrados >= 1
+
+    return False
 
 
 def _sugerir_cliente_por_pagador(nome_pagador):
@@ -1749,6 +1757,7 @@ def central_pix_analisar_comprovante(request):
     dados = analisar_comprovante_pix(arquivo)
     cliente_sugerido, confianca_cliente, mensagem_cliente = _sugerir_cliente_por_pagador(dados.get("pagador"))
     debug_texto_ocr = dados.get("texto_ocr_bruto", "")
+
 
     return JsonResponse({
         "ok": bool(dados.get("ok")),
