@@ -499,6 +499,7 @@ class PixRecebido(models.Model):
         related_name="possiveis_duplicados",
     )
     nome_pagador = models.CharField(max_length=160, blank=True)
+    enviado_por_nome = models.CharField(max_length=80, blank=True)
     valor = models.DecimalField(max_digits=12, decimal_places=2)
     data_pagamento = models.DateTimeField(default=timezone.now)
     instituicao_pix = models.CharField(max_length=80, blank=True)

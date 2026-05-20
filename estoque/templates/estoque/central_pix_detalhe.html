@@ -3,31 +3,38 @@
 {% block content %}
 <style>
   .pix-detail-page { min-height: 100vh; background: #f7fafc; color: #172033; padding: 14px 12px 28px; }
-  .pix-detail-shell { max-width: 920px; margin: 0 auto; }
+  .pix-detail-shell { max-width: 940px; margin: 0 auto; }
   .pix-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
   .pix-detail-title { margin: 0; font-size: 1.26rem; font-weight: 900; }
   .pix-detail-card { background: #fff; border: 1px solid #dbe4ef; border-radius: 8px; padding: 14px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06); }
-  .pix-detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 380px); gap: 14px; align-items: start; }
+  .pix-detail-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(280px, 360px); gap: 14px; align-items: start; }
   .pix-detail-list { display: grid; gap: 8px; }
   .pix-detail-row { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid #edf2f7; padding-bottom: 8px; }
   .pix-detail-row span:first-child { color: #64748b; font-weight: 800; }
   .pix-detail-row span:last-child { font-weight: 900; text-align: right; }
   .pix-detail-status { display: inline-flex; border: 1px solid #fde68a; background: #fffbeb; color: #92400e; border-radius: 999px; padding: 3px 8px; }
-  .pix-detail-img { width: 100%; max-height: 540px; object-fit: contain; border: 1px solid #dbe4ef; border-radius: 8px; background: #f8fafc; }
+  .pix-proof-card { align-self: start; border: 1px solid #dbe4ef; border-radius: 8px; background: #f8fafc; padding: 9px; display: grid; gap: 8px; }
+  .pix-proof-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .pix-proof-title { margin: 0; color: #172033; font-size: 1rem; font-weight: 900; }
+  .pix-proof-link { color: #0f766e; font-size: 0.9rem; font-weight: 900; text-decoration: none; }
+  .pix-proof-link:hover { text-decoration: underline; }
+  .pix-proof-frame { max-height: 560px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; }
+  .pix-detail-img { display: block; width: 100%; height: auto; max-width: 100%; background: #fff; }
   .pix-detail-ocr { margin-top: 14px; }
   .pix-detail-ocr h2 { margin: 0 0 8px; font-size: 0.98rem; font-weight: 900; }
   .pix-detail-ocr pre { white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow: auto; margin: 0; padding: 10px; border-radius: 8px; background: #0f172a; color: #e2e8f0; font-size: 0.82rem; }
   .pix-compare { margin-bottom: 14px; border: 1px solid #fdba74; border-radius: 8px; background: #fffaf3; padding: 12px; }
   .pix-compare h2 { margin: 0; font-size: 1rem; font-weight: 900; color: #9a3412; }
   .pix-compare-note { margin: 4px 0 10px; color: #92400e; font-weight: 800; }
-  .pix-compare-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .pix-compare-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
   .pix-compare-card { background: #fff; border: 1px solid #fed7aa; border-radius: 8px; padding: 10px; display: grid; gap: 7px; }
   .pix-compare-card h3 { margin: 0; font-size: 0.94rem; font-weight: 900; color: #172033; }
   .pix-compare-row { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid #f1f5f9; padding-top: 6px; font-size: 0.86rem; }
   .pix-compare-row span:first-child { color: #64748b; font-weight: 800; }
   .pix-compare-row span:last-child { color: #172033; font-weight: 900; text-align: right; }
-  .pix-compare-thumb { width: 100%; max-height: 180px; object-fit: contain; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
-  .pix-detail-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .pix-compare-thumb-wrap { max-height: 260px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
+  .pix-compare-thumb { display: block; width: 100%; height: auto; max-width: 100%; background: #fff; }
+  .pix-detail-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
   .pix-detail-btn, .pix-detail-link { min-height: 40px; border-radius: 8px; border: 1px solid #cbd5e1; padding: 8px 12px; font-weight: 900; text-decoration: none; background: #fff; color: #0f172a; transition: transform 0.08s ease, filter 0.12s ease; }
   .pix-detail-btn { border-color: #f59e0b; color: #92400e; }
   .pix-detail-btn:active, .pix-detail-link:active { transform: scale(0.98); filter: brightness(0.96); }
@@ -37,6 +44,7 @@
     .pix-detail-grid { grid-template-columns: 1fr; }
     .pix-compare-grid { grid-template-columns: 1fr; }
     .pix-detail-head { align-items: stretch; flex-direction: column; }
+    .pix-proof-frame { max-height: 480px; }
   }
 </style>
 <div class="pix-detail-page">
@@ -69,6 +77,7 @@
             <div class="pix-compare-card">
               <h3>Pix atual #{{ pix.id }}</h3>
               <div class="pix-compare-row"><span>Cadastro</span><span>{{ pix.criado_em|date:"d/m/Y H:i" }}</span></div>
+              <div class="pix-compare-row"><span>Enviado por</span><span>{{ pix.enviado_por_nome|default:"-" }}</span></div>
               <div class="pix-compare-row"><span>Pagador</span><span>{{ pix.nome_pagador|default:"Nao identificado" }}</span></div>
               <div class="pix-compare-row"><span>Valor</span><span>R$ {{ pix.valor|floatformat:2 }}</span></div>
               <div class="pix-compare-row"><span>Data</span><span>{{ pix.data_pagamento|date:"d/m/Y H:i" }}</span></div>
@@ -78,12 +87,15 @@
               <div class="pix-compare-row"><span>Status</span><span>{{ pix.get_status_display }}</span></div>
               <div class="pix-compare-row"><span>Observacao</span><span>{{ pix.observacao|default:"-"|truncatechars:90 }}</span></div>
               {% if pix.comprovante and pix.comprovante_eh_imagem %}
-                <img src="{{ pix.comprovante.url }}" alt="Comprovante do Pix atual" class="pix-compare-thumb">
+                <div class="pix-compare-thumb-wrap">
+                  <img src="{{ pix.comprovante.url }}" alt="Comprovante do Pix atual" class="pix-compare-thumb">
+                </div>
               {% endif %}
             </div>
             <div class="pix-compare-card">
               <h3>Pix parecido #{{ pix.pix_original.id }}</h3>
               <div class="pix-compare-row"><span>Cadastro</span><span>{{ pix.pix_original.criado_em|date:"d/m/Y H:i" }}</span></div>
+              <div class="pix-compare-row"><span>Enviado por</span><span>{{ pix.pix_original.enviado_por_nome|default:"-" }}</span></div>
               <div class="pix-compare-row"><span>Pagador</span><span>{{ pix.pix_original.nome_pagador|default:"Nao identificado" }}</span></div>
               <div class="pix-compare-row"><span>Valor</span><span>R$ {{ pix.pix_original.valor|floatformat:2 }}</span></div>
               <div class="pix-compare-row"><span>Data</span><span>{{ pix.pix_original.data_pagamento|date:"d/m/Y H:i" }}</span></div>
@@ -93,7 +105,9 @@
               <div class="pix-compare-row"><span>Status</span><span>{{ pix.pix_original.get_status_display }}</span></div>
               <div class="pix-compare-row"><span>Observacao</span><span>{{ pix.pix_original.observacao|default:"-"|truncatechars:90 }}</span></div>
               {% if pix.pix_original.comprovante and pix.pix_original.comprovante_eh_imagem %}
-                <img src="{{ pix.pix_original.comprovante.url }}" alt="Comprovante do Pix parecido" class="pix-compare-thumb">
+                <div class="pix-compare-thumb-wrap">
+                  <img src="{{ pix.pix_original.comprovante.url }}" alt="Comprovante do Pix parecido" class="pix-compare-thumb">
+                </div>
               {% endif %}
             </div>
           </div>
@@ -103,6 +117,7 @@
         <div>
           <div class="pix-detail-list">
             <div class="pix-detail-row"><span>Cadastro</span><span>{{ pix.criado_em|date:"d/m/Y H:i" }}</span></div>
+            <div class="pix-detail-row"><span>Enviado por</span><span>{{ pix.enviado_por_nome|default:"-" }}</span></div>
             <div class="pix-detail-row"><span>Pagador</span><span>{{ pix.nome_pagador|default:"Nao identificado" }}</span></div>
             <div class="pix-detail-row"><span>Valor</span><span>R$ {{ pix.valor|floatformat:2 }}</span></div>
             <div class="pix-detail-row"><span>Data do pagamento</span><span>{{ pix.data_pagamento|date:"d/m/Y H:i" }}</span></div>
@@ -121,16 +136,26 @@
               </form>
             {% endif %}
             <a href="{{ voltar_url }}" class="pix-detail-link">Voltar</a>
+            <a href="{% url 'estoque:central_pix_enviar_comprovante' %}" class="pix-detail-link">Enviar outro comprovante</a>
           </div>
         </div>
-        <div>
+        <div class="pix-proof-card">
           {% if pix.comprovante %}
+            <div class="pix-proof-head">
+              <h2 class="pix-proof-title">Comprovante original</h2>
+              <a href="{{ pix.comprovante.url }}" target="_blank" rel="noopener" class="pix-proof-link">{% if pix.comprovante_eh_imagem %}Abrir imagem{% else %}Abrir comprovante{% endif %}</a>
+            </div>
             {% if pix.comprovante_eh_imagem %}
-              <img src="{{ pix.comprovante.url }}" alt="Comprovante Pix" class="pix-detail-img">
+              <div class="pix-proof-frame">
+                <img src="{{ pix.comprovante.url }}" alt="Comprovante Pix" class="pix-detail-img">
+              </div>
             {% else %}
               <div class="pix-detail-row"><span>Comprovante</span><span><a href="{{ pix.comprovante.url }}" target="_blank" rel="noopener">Abrir arquivo</a></span></div>
             {% endif %}
           {% else %}
+            <div class="pix-proof-head">
+              <h2 class="pix-proof-title">Comprovante original</h2>
+            </div>
             <div class="pix-detail-row"><span>Comprovante</span><span>Sem imagem</span></div>
           {% endif %}
         </div>

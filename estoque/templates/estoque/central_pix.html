@@ -281,6 +281,7 @@
                 <th>Cadastro</th>
                 <th>Cliente</th>
                 <th>Pagador</th>
+                <th>Enviado por</th>
                 <th>Instituição</th>
                 <th>Valor</th>
                 <th>Status</th>
@@ -310,6 +311,7 @@
                       <span class="pix-muted">Nao informado</span>
                     {% endif %}
                   </td>
+                  <td>{{ pix.enviado_por_nome|default:"-" }}</td>
                   <td>{{ pix.instituicao_pix|default:"-" }}</td>
                   <td class="pix-valor">R$ {{ pix.valor|floatformat:2 }}</td>
                   <td><span class="pix-status {{ pix.status }}">{{ pix.get_status_display }}</span></td>
@@ -325,7 +327,7 @@
                 </tr>
               {% empty %}
                 <tr>
-                  <td colspan="10" class="pix-empty">Nenhum Pix registrado ainda.</td>
+                  <td colspan="11" class="pix-empty">Nenhum Pix registrado ainda.</td>
                 </tr>
               {% endfor %}
             </tbody>

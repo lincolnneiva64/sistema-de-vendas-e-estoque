@@ -253,17 +253,25 @@ class PixRecebidoTests(TestCase):
 
         resposta = self.client.post(
             reverse("estoque:central_pix_enviar_comprovante"),
-            {"comprovante": arquivo},
+            {"comprovante": arquivo, "enviado_por": "Lincoln"},
             secure=True,
             follow=True,
         )
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "Comprovante recebido e salvo como Pix pendente para conferencia.")
         pix = PixRecebido.objects.get()
+        detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id})
+        self.assertIn(detalhe_url, resposta.redirect_chain[-1][0])
+        self.assertIn("next=%2Fcentral-pix%2Fenviar-comprovante%2F", resposta.redirect_chain[-1][0])
+        self.assertContains(resposta, "Comprovante recebido e salvo na Central de Pix.")
+        self.assertContains(resposta, "Enviado por")
+        self.assertContains(resposta, "Lincoln")
+        self.assertContains(resposta, f'href="{reverse("estoque:central_pix_enviar_comprovante")}"')
+        self.assertContains(resposta, "Enviar outro comprovante")
         self.assertIsNone(pix.cliente)
         self.assertEqual(pix.cliente_sugerido, cliente)
         self.assertEqual(pix.nome_pagador, "Cicero Cristiano Silva Souza")
+        self.assertEqual(pix.enviado_por_nome, "Lincoln")
         self.assertEqual(str(pix.valor), "20.00")
         self.assertEqual(timezone.localtime(pix.data_pagamento).strftime("%Y-%m-%dT%H:%M"), "2026-05-16T17:30")
         self.assertEqual(pix.instituicao_pix, "Banco do Brasil")
@@ -299,6 +307,63 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(str(pix.valor), "600.00")
         self.assertEqual(pix.instituicao_pix, "Mercado Pago")
         self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
+
+    def test_enviar_comprovante_pix_com_outro_salva_nome_informado(self):
+        arquivo = SimpleUploadedFile(
+            "comprovante-outro.txt",
+            (
+                "Comprovante Pix\n"
+                "Nome: Cliente Sem Cadastro\n"
+                "Valor R$ 42,00\n"
+                "Data 16/05/2026 17:30\n"
+            ).encode("utf-8"),
+            content_type="text/plain",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_enviar_comprovante"),
+            {
+                "comprovante": arquivo,
+                "enviado_por": "Outro",
+                "enviado_por_outro": "  Ana Caixa  ",
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        pix = PixRecebido.objects.get()
+        detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id})
+        self.assertIn(detalhe_url, resposta.redirect_chain[-1][0])
+        self.assertIn("next=%2Fcentral-pix%2Fenviar-comprovante%2F", resposta.redirect_chain[-1][0])
+        self.assertEqual(pix.enviado_por_nome, "Ana Caixa")
+        self.assertContains(resposta, "Enviado por")
+        self.assertContains(resposta, "Ana Caixa")
+        self.assertContains(resposta, "Enviar outro comprovante")
+
+    def test_enviar_comprovante_pix_sem_ocr_completo_salva_nao_identificado(self):
+        arquivo = SimpleUploadedFile(
+            "comprovante-sem-ocr.txt",
+            b"texto sem dados de pix",
+            content_type="text/plain",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_enviar_comprovante"),
+            {"comprovante": arquivo, "enviado_por": "Roseli"},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Comprovante recebido e salvo na Central de Pix.")
+        self.assertContains(
+            resposta,
+            "Comprovante recebido na Central de Pix. A leitura automática não identificou todos os dados. Confira depois no computador.",
+        )
+        pix = PixRecebido.objects.get()
+        self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
+        self.assertEqual(pix.enviado_por_nome, "Roseli")
 
     def test_enviar_mesmo_comprovante_pix_duas_vezes_marca_segundo_como_possivel_duplicado(self):
         conteudo = (
@@ -432,6 +497,34 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta_detalhe, f"Pix parecido #{original.id}")
         self.assertContains(resposta_detalhe, "Compare os dados antes de decidir se este envio é duplicado.")
 
+    def test_enviado_por_aparece_na_central_detalhe_e_comparacao(self):
+        original = PixRecebido.objects.create(
+            nome_pagador="Pix original enviado",
+            enviado_por_nome="Lincoln",
+            valor="25.00",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+        duplicado = PixRecebido.objects.create(
+            nome_pagador="Pix duplicado enviado",
+            enviado_por_nome="Roseli",
+            valor="25.00",
+            status=PixRecebido.STATUS_POSSIVEL_DUPLICADO,
+            pix_original=original,
+        )
+
+        resposta_lista = self.client.get(reverse("estoque:central_pix"), secure=True)
+        self.assertContains(resposta_lista, "Enviado por")
+        self.assertContains(resposta_lista, "Lincoln")
+        self.assertContains(resposta_lista, "Roseli")
+
+        resposta_detalhe = self.client.get(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": duplicado.id}),
+            secure=True,
+        )
+        self.assertContains(resposta_detalhe, "Enviado por")
+        self.assertContains(resposta_detalhe, "Lincoln")
+        self.assertContains(resposta_detalhe, "Roseli")
+
     def test_detalhe_pix_volta_para_resumo_de_envio_quando_recebe_next_seguro(self):
         pix = PixRecebido.objects.create(
             nome_pagador="Pix do resumo",
@@ -478,6 +571,8 @@ class PixRecebidoTests(TestCase):
             reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
             secure=True,
         )
+        self.assertContains(resposta_detalhe, f'href="{reverse("estoque:central_pix")}"')
+        self.assertContains(resposta_detalhe, "Enviar outro comprovante")
         self.assertContains(resposta_detalhe, "Texto OCR bruto")
         self.assertContains(resposta_detalhe, "Texto tecnico do OCR")
 

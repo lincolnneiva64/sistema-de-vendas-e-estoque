@@ -146,6 +146,16 @@ def _data_pix_lida(valor):
     return data
 
 
+def _nome_envio_pix_mobile(post):
+    enviado_por = (post.get("enviado_por") or "").strip()
+    if enviado_por in {"Lincoln", "Roseli"}:
+        return enviado_por
+    if enviado_por == "Outro":
+        outro_nome = " ".join((post.get("enviado_por_outro") or "").strip().split())
+        return outro_nome[:80] or "Outro"
+    return ""
+
+
 def _identificador_pix_texto(texto):
     texto_normalizado = str(texto or "").upper()
     encontrados = re.findall(r"\bE\d{8}[A-Z0-9]{10,40}\b", texto_normalizado)
@@ -1809,29 +1819,14 @@ def central_pix(request):
 
 @ensure_csrf_cookie
 def central_pix_enviar_comprovante(request):
-    pix_recebido = None
     resumo = None
-    pix_id_resumo = request.GET.get("pix_recebido")
-    if pix_id_resumo:
-        pix_recebido = PixRecebido.objects.select_related("cliente_sugerido", "pix_original").filter(pk=pix_id_resumo).first()
-        if pix_recebido:
-            resumo = {
-                "pagador": pix_recebido.nome_pagador,
-                "valor": pix_recebido.valor,
-                "data_pagamento": pix_recebido.data_pagamento,
-                "instituicao_pix": pix_recebido.instituicao_pix,
-                "cliente_sugerido": pix_recebido.cliente_sugerido,
-                "pix_original": pix_recebido.pix_original,
-                "possivel_duplicado": pix_recebido.status == PixRecebido.STATUS_POSSIVEL_DUPLICADO,
-                "confianca_cliente": "",
-                "mensagem_cliente": "",
-            }
 
     if request.method == "POST":
         arquivo = request.FILES.get("comprovante")
         if not arquivo:
             messages.warning(request, "Escolha uma imagem ou arquivo de comprovante Pix.")
         else:
+            enviado_por_nome = _nome_envio_pix_mobile(request.POST)
             dados = analisar_comprovante_pix(arquivo)
             cliente_sugerido, confianca_cliente, mensagem_cliente = _sugerir_cliente_por_pagador(dados.get("pagador"))
             valor = _decimal_pix_lido(dados.get("valor"))
@@ -1859,6 +1854,7 @@ def central_pix_enviar_comprovante(request):
                 cliente_sugerido=cliente_sugerido,
                 pix_original=pix_duplicado,
                 nome_pagador=(dados.get("pagador") or "")[:160],
+                enviado_por_nome=enviado_por_nome,
                 valor=valor,
                 data_pagamento=data_pagamento,
                 instituicao_pix=(dados.get("instituicao_pix") or "")[:80],
@@ -1867,37 +1863,22 @@ def central_pix_enviar_comprovante(request):
                 status=status,
                 texto_ocr_bruto=texto_ocr_bruto,
             )
-            resumo = {
-                "pagador": pix_recebido.nome_pagador,
-                "valor": pix_recebido.valor,
-                "data_pagamento": pix_recebido.data_pagamento,
-                "instituicao_pix": pix_recebido.instituicao_pix,
-                "cliente_sugerido": cliente_sugerido,
-                "pix_original": pix_duplicado,
-                "possivel_duplicado": bool(pix_duplicado),
-                "confianca_cliente": confianca_cliente,
-                "mensagem_cliente": mensagem_cliente,
-            }
+            messages.success(request, "Comprovante recebido e salvo na Central de Pix.")
             if pix_duplicado:
                 messages.warning(request, "Possivel Pix duplicado encontrado. Confira antes de baixar.")
-            else:
-                messages.success(request, "Comprovante recebido e salvo como Pix pendente para conferencia.")
-            return redirect(f"{reverse('estoque:central_pix_enviar_comprovante')}?{urlencode({'pix_recebido': pix_recebido.id})}")
-
-    detalhe_url = ""
-    if pix_recebido:
-        detalhe_url = (
-            f"{reverse('estoque:central_pix_detalhe', kwargs={'pix_id': pix_recebido.id})}"
-            f"?{urlencode({'next': request.get_full_path()})}"
-        )
+            elif not dados.get("ok"):
+                messages.warning(
+                    request,
+                    "Comprovante recebido na Central de Pix. A leitura automática não identificou todos os dados. Confira depois no computador.",
+                )
+            detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix_recebido.id})
+            return redirect(f"{detalhe_url}?{urlencode({'next': reverse('estoque:central_pix_enviar_comprovante')})}")
 
     return render(
         request,
         "estoque/central_pix_enviar_comprovante.html",
         {
-            "pix_recebido": pix_recebido,
             "resumo": resumo,
-            "detalhe_url": detalhe_url,
         },
     )
 
