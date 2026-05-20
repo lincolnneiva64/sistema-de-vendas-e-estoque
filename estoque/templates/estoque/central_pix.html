@@ -287,7 +287,7 @@
                 <th>Status</th>
                 <th>Observacao</th>
                 <th>Comprovante</th>
-                <th>Detalhe</th>
+                <th>Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -323,7 +323,7 @@
                       <span class="pix-muted">Sem anexo</span>
                     {% endif %}
                   </td>
-                  <td><a href="{% url 'estoque:central_pix_detalhe' pix.id %}" class="pix-file-link">Ver</a></td>
+                  <td><a href="{% url 'estoque:central_pix_detalhe' pix.id %}?next={% url 'estoque:central_pix' %}" class="pix-file-link">Ver detalhe</a></td>
                 </tr>
               {% empty %}
                 <tr>

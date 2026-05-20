@@ -565,7 +565,12 @@ class PixRecebidoTests(TestCase):
 
         resposta_lista = self.client.get(reverse("estoque:central_pix"), secure=True)
         self.assertContains(resposta_lista, "Pix pendente detalhe")
-        self.assertContains(resposta_lista, reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}))
+        self.assertContains(resposta_lista, "Ações")
+        self.assertContains(resposta_lista, "Ver detalhe")
+        self.assertContains(
+            resposta_lista,
+            f'{reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id})}?next={reverse("estoque:central_pix")}',
+        )
 
         resposta_detalhe = self.client.get(
             reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
