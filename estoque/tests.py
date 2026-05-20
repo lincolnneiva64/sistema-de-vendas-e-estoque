@@ -565,7 +565,6 @@ class PixRecebidoTests(TestCase):
 
         resposta_lista = self.client.get(reverse("estoque:central_pix"), secure=True)
         self.assertContains(resposta_lista, "Pix pendente detalhe")
-        self.assertContains(resposta_lista, "Ações")
         self.assertContains(resposta_lista, "Ver detalhe")
         self.assertContains(
             resposta_lista,

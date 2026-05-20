@@ -172,6 +172,7 @@
   .pix-status.baixado { border-color: #86efac; background: #f0fdf4; color: #166534; }
   .pix-status.nao_identificado { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
   .pix-status.possivel_duplicado { border-color: #fdba74; background: #fff7ed; color: #9a3412; }
+  .pix-status-acoes { display: grid; gap: 6px; justify-items: start; }
   .pix-file-link {
     border: 1px solid #99f6e4; border-radius: 8px; background: #f0fdfa;
     color: #0f766e; padding: 5px 9px; font-size: 0.76rem;
@@ -287,7 +288,6 @@
                 <th>Status</th>
                 <th>Observacao</th>
                 <th>Comprovante</th>
-                <th>Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -314,7 +314,12 @@
                   <td>{{ pix.enviado_por_nome|default:"-" }}</td>
                   <td>{{ pix.instituicao_pix|default:"-" }}</td>
                   <td class="pix-valor">R$ {{ pix.valor|floatformat:2 }}</td>
-                  <td><span class="pix-status {{ pix.status }}">{{ pix.get_status_display }}</span></td>
+                  <td>
+                    <div class="pix-status-acoes">
+                      <span class="pix-status {{ pix.status }}">{{ pix.get_status_display }}</span>
+                      <a href="{% url 'estoque:central_pix_detalhe' pix.id %}?next={% url 'estoque:central_pix' %}" class="pix-file-link">Ver detalhe</a>
+                    </div>
+                  </td>
                   <td>{{ pix.observacao|default:"-"|truncatechars:70 }}</td>
                   <td>
                     {% if pix.comprovante %}
@@ -323,11 +328,10 @@
                       <span class="pix-muted">Sem anexo</span>
                     {% endif %}
                   </td>
-                  <td><a href="{% url 'estoque:central_pix_detalhe' pix.id %}?next={% url 'estoque:central_pix' %}" class="pix-file-link">Ver detalhe</a></td>
                 </tr>
               {% empty %}
                 <tr>
-                  <td colspan="11" class="pix-empty">Nenhum Pix registrado ainda.</td>
+                  <td colspan="10" class="pix-empty">Nenhum Pix registrado ainda.</td>
                 </tr>
               {% endfor %}
             </tbody>
