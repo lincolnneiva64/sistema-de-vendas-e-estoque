@@ -1,6 +1,7 @@
 import io
 import tempfile
 from contextlib import redirect_stdout
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -365,6 +366,56 @@ class PixRecebidoTests(TestCase):
         pix = PixRecebido.objects.get()
         self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
         self.assertEqual(pix.enviado_por_nome, "Roseli")
+
+    def test_enviar_comprovante_pix_com_erro_ocr_salva_diagnostico_sem_quebrar(self):
+        arquivo = SimpleUploadedFile(
+            "comprovante-render.jpg",
+            b"imagem recebida pelo celular",
+            content_type="image/jpeg",
+        )
+
+        with patch("estoque.utils_pix._extrair_texto_comprovante", side_effect=RuntimeError("tesseract nao encontrado")):
+            resposta = self.client.post(
+                reverse("estoque:central_pix_enviar_comprovante"),
+                {"comprovante": arquivo, "enviado_por": "Roseli"},
+                secure=True,
+                follow=True,
+            )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Comprovante recebido e salvo na Central de Pix.")
+        pix = PixRecebido.objects.get()
+        self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
+        self.assertEqual(pix.enviado_por_nome, "Roseli")
+        self.assertIn("ERRO OCR: RuntimeError: tesseract nao encontrado", pix.texto_ocr_bruto)
+
+        resposta_detalhe = self.client.get(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+            secure=True,
+        )
+        self.assertEqual(resposta_detalhe.status_code, 200)
+        self.assertContains(resposta_detalhe, "Texto OCR bruto")
+        self.assertContains(resposta_detalhe, "ERRO OCR: RuntimeError: tesseract nao encontrado")
+
+    def test_analisar_comprovante_pix_com_ocr_vazio_salva_diagnostico(self):
+        arquivo = SimpleUploadedFile(
+            "comprovante-vazio.jpg",
+            b"imagem sem texto",
+            content_type="image/jpeg",
+        )
+
+        with patch("estoque.utils_pix._extrair_texto_comprovante", return_value=""):
+            resposta = self.client.post(
+                reverse("estoque:central_pix_enviar_comprovante"),
+                {"comprovante": arquivo},
+                secure=True,
+                follow=True,
+            )
+
+        self.assertEqual(resposta.status_code, 200)
+        pix = PixRecebido.objects.get()
+        self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
+        self.assertEqual(pix.texto_ocr_bruto, "OCR executado, mas nao retornou texto.")
 
     def test_enviar_mesmo_comprovante_pix_duas_vezes_marca_segundo_como_possivel_duplicado(self):
         conteudo = (

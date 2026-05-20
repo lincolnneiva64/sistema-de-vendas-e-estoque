@@ -84,22 +84,51 @@ def _extrair_texto_comprovante(arquivo):
     try:
         import pytesseract
     except ImportError:
-        # Sem um motor de OCR real no ambiente, imagens PNG/JPG nao geram texto.
-        return ""
+        return "ERRO OCR: pytesseract nao instalado."
 
     tesseract_cmd = _resolver_tesseract_cmd()
     if not tesseract_cmd:
-        return ""
+        return "ERRO OCR: tesseract nao encontrado."
     pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
 
     try:
         imagem = Image.open(BytesIO(conteudo))
+    except Exception as exc:
+        return f"ERRO OCR: falha ao abrir imagem ({exc.__class__.__name__})."
+
+    try:
         try:
-            return pytesseract.image_to_string(imagem, lang="por")
+            texto = pytesseract.image_to_string(imagem, lang="por")
         except Exception:
-            return pytesseract.image_to_string(imagem)
-    except Exception:
-        return ""
+            texto = pytesseract.image_to_string(imagem)
+    except Exception as exc:
+        mensagem = str(exc).strip()
+        detalhe = f": {mensagem[:120]}" if mensagem else ""
+        return f"ERRO OCR: {exc.__class__.__name__}{detalhe}"
+
+    if not _normalizar_espacos(texto):
+        return "OCR executado, mas nao retornou texto."
+
+    return texto
+
+
+def _texto_eh_diagnostico_ocr(texto):
+    texto_limpo = _normalizar_espacos(texto)
+    return texto_limpo.startswith("ERRO OCR:") or texto_limpo == "OCR executado, mas nao retornou texto."
+
+
+def _resultado_comprovante_sem_leitura(texto_ocr_bruto):
+    return {
+        "ok": False,
+        "pagador": "",
+        "valor": "",
+        "data_pagamento": "",
+        "instituicao_pix": "",
+        "debug_data_pagamento": "Data enviada ao frontend: nao reconhecida",
+        "texto_extraido": "",
+        "texto_ocr_bruto": texto_ocr_bruto[:2000],
+        "mensagem": "Nao foi possivel ler automaticamente o comprovante. OCR de imagem nao esta disponivel neste ambiente; preencha manualmente.",
+    }
 
 
 def _extrair_valor(texto):
@@ -957,19 +986,18 @@ def _extrair_pagador(texto):
 
 
 def analisar_comprovante_pix(arquivo):
-    texto = _extrair_texto_comprovante(arquivo)
+    try:
+        texto = _extrair_texto_comprovante(arquivo)
+    except Exception as exc:
+        mensagem = str(exc).strip()
+        detalhe = f": {mensagem[:120]}" if mensagem else ""
+        return _resultado_comprovante_sem_leitura(f"ERRO OCR: {exc.__class__.__name__}{detalhe}")
+
     if not _normalizar_espacos(texto):
-        return {
-            "ok": False,
-            "pagador": "",
-            "valor": "",
-            "data_pagamento": "",
-            "instituicao_pix": "",
-            "debug_data_pagamento": "Data enviada ao frontend: nao reconhecida",
-            "texto_extraido": "",
-            "texto_ocr_bruto": "",
-            "mensagem": "Nao foi possivel ler automaticamente o comprovante. OCR de imagem nao esta disponivel neste ambiente; preencha manualmente.",
-        }
+        return _resultado_comprovante_sem_leitura("OCR executado, mas nao retornou texto.")
+
+    if _texto_eh_diagnostico_ocr(texto):
+        return _resultado_comprovante_sem_leitura(texto)
 
     pagador = _extrair_pagador(texto)
     valor = _extrair_valor(texto)
