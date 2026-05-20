@@ -13,10 +13,12 @@
   .pix-upload-input { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; background: #fff; }
   .pix-upload-outro { display: none; }
   .pix-upload-outro.visivel { display: block; }
-  .pix-upload-btn, .pix-upload-link { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; border-radius: 8px; border: 1px solid #16a34a; padding: 9px 13px; font-weight: 900; text-decoration: none; transition: transform 0.08s ease, filter 0.12s ease; }
-  .pix-upload-btn { background: #16a34a; color: #fff; width: 100%; }
+  .pix-upload-btn, .pix-upload-link { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; border-radius: 8px; border: 1px solid #16a34a; padding: 9px 13px; font-weight: 900; text-decoration: none; transition: transform 0.08s ease, filter 0.12s ease, background 0.12s ease, box-shadow 0.12s ease; box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12); }
+  .pix-upload-btn { background: #16a34a; color: #fff; width: 100%; box-shadow: 0 10px 20px rgba(22, 163, 74, 0.24); }
   .pix-upload-link { background: #fff; color: #0f172a; border-color: #cbd5e1; }
-  .pix-upload-btn:active, .pix-upload-link:active { transform: scale(0.98); filter: brightness(0.96); }
+  .pix-upload-btn:active, .pix-upload-btn.is-pressed { transform: translateY(2px) scale(0.98); background: #15803d; box-shadow: 0 2px 6px rgba(22, 163, 74, 0.18); filter: brightness(0.94); }
+  .pix-upload-link:active { transform: translateY(2px) scale(0.98); background: #e2e8f0; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12); filter: brightness(0.96); }
+  .pix-upload-btn:disabled { cursor: wait; opacity: 0.88; background: #15803d; box-shadow: 0 2px 6px rgba(22, 163, 74, 0.16); transform: translateY(2px) scale(0.98); }
   .pix-upload-alert { border-radius: 8px; padding: 9px 11px; margin-bottom: 10px; font-weight: 850; }
   .pix-upload-alert.success { background: #ecfdf3; border: 1px solid #bbf7d0; color: #166534; }
   .pix-upload-alert.warning, .pix-upload-alert.error { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
@@ -47,7 +49,7 @@
 
     <section class="pix-upload-card">
       <p class="pix-upload-intro">Use esta tela para enviar ao sistema um comprovante recebido pelo WhatsApp. A conferência e a baixa serão feitas depois na Central de Pix.</p>
-      <form method="post" enctype="multipart/form-data" class="pix-upload-form">
+      <form method="post" enctype="multipart/form-data" class="pix-upload-form" id="pixUploadForm">
         {% csrf_token %}
         <label for="id_enviado_por" class="pix-upload-label">Quem está enviando?</label>
         <select id="id_enviado_por" name="enviado_por" class="pix-upload-input">
@@ -62,7 +64,7 @@
         </div>
         <label for="id_comprovante" class="pix-upload-label">Comprovante Pix</label>
         <input type="file" id="id_comprovante" name="comprovante" class="pix-upload-input" accept="image/*,.pdf,.txt" required>
-        <button type="submit" class="pix-upload-btn">Enviar para a Central de Pix</button>
+        <button type="submit" class="pix-upload-btn" id="pixUploadSubmit">Enviar para a Central de Pix</button>
       </form>
     </section>
   </div>
@@ -77,6 +79,15 @@
     }
     select?.addEventListener("change", atualizarOutro);
     atualizarOutro();
+
+    const form = document.getElementById("pixUploadForm");
+    const submit = document.getElementById("pixUploadSubmit");
+    form?.addEventListener("submit", function () {
+      if (!submit) return;
+      submit.classList.add("is-pressed");
+      submit.textContent = "Enviando...";
+      submit.disabled = true;
+    });
   })();
 </script>
 {% endblock %}
