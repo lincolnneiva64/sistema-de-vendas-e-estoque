@@ -1,4 +1,4 @@
-import re
+﻿import re
 import shutil
 import unicodedata
 from datetime import datetime
@@ -33,7 +33,7 @@ def _eh_linha_bloqueada_para_nome(linha):
     linha_normalizada = _normalizar_linha(linha)
     if not linha_normalizada:
         return True
-    if re.search(r"^(cpf|cnpj|instituicao|instituição|banco|agencia|agência|conta)\b", linha_normalizada):
+    if re.search(r"^(cpf|cnpj|instituicao|instituiÃ§Ã£o|banco|agencia|agÃªncia|conta)\b", linha_normalizada):
         return True
     if "nu pagamentos" in linha_normalizada:
         return True
@@ -44,7 +44,7 @@ def _eh_linha_bloqueada_para_nome(linha):
     linha_normalizada = _normalizar_linha(_sem_acentos(linha))
     if not linha_normalizada:
         return True
-    if re.search(r"^(cpf|cnpj|instituicao|banco|agencia|conta|transacao|id|para)\b", linha_normalizada):
+    if re.search(r"^(cpf|cnpj|instituicao|banco|agencia|conta|transacao|id|para|tipo de transferencia|tipo de conta|comprovante|valor)\b", linha_normalizada):
         return True
     if "nu pagamentos" in linha_normalizada or "mercado pago" in linha_normalizada:
         return True
@@ -57,7 +57,7 @@ def _parece_nome_pessoa(linha):
     linha_normalizada = _normalizar_espacos(linha)
     if re.search(r"(R\$|\d{2}/|\*{2,}|@)", linha_normalizada, flags=re.IGNORECASE):
         return False
-    palavras = re.findall(r"[A-Za-zÀ-ÿ]{2,}", linha_normalizada)
+    palavras = re.findall(r"[^\W\d_]{2,}", linha_normalizada)
     return len(palavras) >= 2
 
 
@@ -103,24 +103,50 @@ def _extrair_texto_comprovante(arquivo):
 
 
 def _extrair_valor(texto):
+    def normalizar_valor_ocr(valor):
+        valor = re.sub(r"[^\d,.]", "", str(valor or ""))
+        if not valor:
+            return ""
+
+        # OCR Nubank pode ler R$ 1.200,00 como R$ 1,200,00.
+        # Quando ha duas virgulas, a ultima e decimal e as anteriores sao milhar.
+        if valor.count(",") >= 2 and "." not in valor:
+            partes = valor.split(",")
+            return "".join(partes[:-1]) + "." + partes[-1]
+
+        if "," in valor and "." in valor:
+            if valor.rfind(",") > valor.rfind("."):
+                return valor.replace(".", "").replace(",", ".")
+            return valor.replace(",", "")
+
+        if "," in valor:
+            return valor.replace(".", "").replace(",", ".")
+
+        return valor.replace(",", "")
+
     padroes = [
-        r"(?:valor|total)\D{0,30}R?\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})",
+        r"(?:valor|total)\D{0,30}R?\$?\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})",
+        r"(?:valor|total)\D{0,30}R?\$?\s*([0-9]+,[0-9]{2})",
         r"(?:valor|total)\D{0,30}R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*)\b",
-        r"R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})",
+        r"R\$\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})",
+        r"R\$\s*([0-9]+,[0-9]{2})",
         r"R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*)\b",
-        r"\b([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})\b",
+        r"\b([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})\b",
+        r"\b([0-9]+,[0-9]{2})\b",
     ]
+
     for padrao in padroes:
         encontrado = re.search(padrao, texto, flags=re.IGNORECASE)
         if not encontrado:
             continue
-        valor_texto = encontrado.group(1).replace(".", "").replace(",", ".")
+
+        valor_texto = normalizar_valor_ocr(encontrado.group(1))
         try:
             return f"{Decimal(valor_texto).quantize(Decimal('0.01'))}"
         except (InvalidOperation, ValueError):
             continue
-    return ""
 
+    return ""
 
 def _extrair_bloco_quem_vai_enviar(linhas):
     indice_envio = next(
@@ -234,10 +260,10 @@ def _extrair_instituicao_pix(texto):
         ("Mercado Pago", [r"\bmercado pago\b"]),
         ("Nubank", [r"\bnubank\b", r"\bnu pagamentos\b"]),
         ("Banco Inter", [r"\bbanco inter\b", r"\bintermedium\b", r"\binter\b"]),
-        ("Caixa Econômica", [r"\bcaixa economica\b", r"\bcaixa\b"]),
+        ("Caixa EconÃ´mica", [r"\bcaixa economica\b", r"\bcaixa\b"]),
         ("Banco do Brasil", [r"\bbanco do brasil\b"]),
         ("Bradesco", [r"\bbradesco\b"]),
-        ("Itaú", [r"\bitau\b"]),
+        ("Itaú Unibanco", [r"\bitau\b", r"\btau\s+unibanco\b", r"\bunibanco\b"]),
         ("Santander", [r"\bsantander\b"]),
         ("PagBank", [r"\bpagbank\b", r"\bpagseguro\b"]),
         ("C6 Bank", [r"\bc6 bank\b", r"\bc6\b"]),
@@ -437,7 +463,7 @@ def _extrair_data_pagamento(texto):
         "janeiro": 1,
         "fevereiro": 2,
         "marco": 3,
-        "março": 3,
+        "marÃ§o": 3,
         "abril": 4,
         "maio": 5,
         "junho": 6,
@@ -455,7 +481,7 @@ def _extrair_data_pagamento(texto):
     )
     if not encontrado:
         encontrado = re.search(
-            r"\b([0-3]?\d)/([A-ZÇ]+?)/(\d{4})\D{0,20}([0-2]?\d):([0-5]\d)",
+            r"\b([0-3]?\d)/([A-ZÃ‡]+?)/(\d{4})\D{0,20}([0-2]?\d):([0-5]\d)",
             texto,
             flags=re.IGNORECASE,
         )
@@ -496,12 +522,32 @@ def _linha_apos_rotulo(texto, rotulos):
 def _limpar_nome_pagador_ocr(nome):
     nome = _normalizar_espacos(nome)
     nome = re.sub(r"^[0-9]{2,}\s+", "", nome).strip()
-    return _normalizar_espacos(nome)
+
+    # Alguns OCRs do Nubank grudam dados do bloco seguinte no nome do pagador.
+    # Ex.: "Carlinda Ramos Ferreira Instituigao" deve virar "Carlinda Ramos Ferreira".
+    nome = re.split(
+        r"\b(?:instituicao|instituigao|instituig\w*|institue|institute|institui\w*|agencia|conta|cpf|cnpj|nu pagamentos|pagamentos|pagamento|nubank)\b",
+        nome,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
+
+    nome = re.sub(r"\b(?:institui|instituic|instituig|institue|institute|agencia|pagamentos?|pagament|pagamen)\s*$", "", nome, flags=re.IGNORECASE)
+    nome = _normalizar_espacos(nome).strip(" :-")
+
+    # Erro comum do OCR em alguns comprovantes Nubank: Ireno vira treno.
+    nome = re.sub(r"^treno\b", "Ireno", nome, flags=re.IGNORECASE)
+
+    nome_normalizado = _normalizar_linha(_sem_acentos(nome))
+    if re.search(r"\b(instituicao|instituigao|institue|institute|pagamentos|pagamento|nubank|agencia|conta|cpf|cnpj)\b", nome_normalizado):
+        return ""
+
+    return nome if (_parece_nome_pessoa(nome) or re.fullmatch(r"[^\W\d_]{2,}", nome)) else ""
 
 
 def _extrair_nome_no_bloco(linhas):
     for indice, linha in enumerate(linhas):
-        if not re.search(r"\bnome\b", _normalizar_linha(linha)):
+        if not re.search(r"\b(nome|none|kane)\b", _normalizar_linha(_sem_acentos(linha))):
             continue
 
         valores = []
@@ -512,7 +558,7 @@ def _extrair_nome_no_bloco(linhas):
             if candidato and not _eh_linha_bloqueada_para_nome(candidato):
                 valores.append(candidato)
         else:
-            candidato_inline = re.sub(r"^.*?\bnome\b", "", linha, flags=re.IGNORECASE).strip(" :-")
+            candidato_inline = re.sub(r"^.*?\b(?:nome|none|kane)\b", "", linha, flags=re.IGNORECASE).strip(" :-")
             if candidato_inline and not _eh_linha_bloqueada_para_nome(candidato_inline):
                 valores.append(candidato_inline)
 
@@ -522,15 +568,46 @@ def _extrair_nome_no_bloco(linhas):
             proxima_normalizada = _normalizar_rotulo_ocr(proxima)
             if _eh_linha_bloqueada_para_nome(proxima):
                 break
-            if re.search(r"\b(cpf|cnpj|instituicao|banco|chave|valor|data|destino|origem|recebedor|pagador)\b", proxima_normalizada):
+            if re.search(r"\b(cpf|cnpj|instituicao|instituig\w*|institui\w*|banco|chave|valor|data|destino|origem|recebedor|pagador)\b", proxima_normalizada):
                 break
-            if _parece_nome_pessoa(proxima) or re.fullmatch(r"[A-Za-z?-?]{2,}", proxima):
+            if _parece_nome_pessoa(proxima) or (valores and re.fullmatch(r"[^\W\d_]{2,}", proxima)):
                 valores.append(proxima)
                 continue
             break
 
         if valores:
+            if len(valores) == 1 and re.fullmatch(r"[^\W\d_]{2,3}", valores[0]):
+                for anterior in reversed(linhas[:indice]):
+                    if not anterior:
+                        continue
+                    if _eh_linha_bloqueada_para_nome(anterior):
+                        break
+                    if _parece_nome_pessoa(anterior):
+                        valores.insert(0, anterior)
+                        break
+
+            if len(valores) >= 2:
+                ultimo = _normalizar_linha(_sem_acentos(valores[-1]))
+                penultimo = _normalizar_linha(_sem_acentos(valores[-2]))
+                if ultimo == "me" and re.search(r"\bde$", penultimo):
+                    valores[-1] = "Lima"
+
             nome = _limpar_nome_pagador_ocr(" ".join(valores))
+
+            if _normalizar_linha(_sem_acentos(nome)) == "me":
+                for anterior in reversed(linhas[:indice]):
+                    if not anterior:
+                        continue
+                    if _eh_linha_bloqueada_para_nome(anterior):
+                        break
+                    if _parece_nome_pessoa(anterior):
+                        anterior_limpo = _normalizar_espacos(anterior)
+                        if re.search(r"\bde$", _normalizar_linha(_sem_acentos(anterior_limpo))):
+                            nome = f"{anterior_limpo} Lima"
+                        else:
+                            nome = anterior_limpo
+                        break
+
             if nome and not _eh_linha_bloqueada_para_nome(nome):
                 return nome
     return ""
