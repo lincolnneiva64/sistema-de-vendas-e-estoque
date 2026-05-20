@@ -1,9 +1,10 @@
 import io
+import tempfile
 from contextlib import redirect_stdout
 
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -579,6 +580,68 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta_detalhe, "Enviar outro comprovante")
         self.assertContains(resposta_detalhe, "Texto OCR bruto")
         self.assertContains(resposta_detalhe, "Texto tecnico do OCR")
+
+    def test_detalhe_pix_usa_rota_propria_do_comprovante(self):
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            pix_original = PixRecebido.objects.create(
+                nome_pagador="Pix original com imagem",
+                valor="35.50",
+                status=PixRecebido.STATUS_PENDENTE,
+                comprovante=SimpleUploadedFile("pix-original.jpg", b"imagem original", content_type="image/jpeg"),
+            )
+            pix = PixRecebido.objects.create(
+                nome_pagador="Pix com imagem",
+                valor="35.50",
+                status=PixRecebido.STATUS_POSSIVEL_DUPLICADO,
+                pix_original=pix_original,
+                comprovante=SimpleUploadedFile("pix-render.jpg", b"imagem pix", content_type="image/jpeg"),
+            )
+            comprovante_url = reverse("estoque:central_pix_comprovante", kwargs={"pix_id": pix.id})
+            comprovante_original_url = reverse("estoque:central_pix_comprovante", kwargs={"pix_id": pix_original.id})
+
+            resposta = self.client.get(
+                reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+                secure=True,
+            )
+
+            self.assertContains(resposta, f'href="{comprovante_url}"')
+            self.assertContains(resposta, f'src="{comprovante_url}"')
+            self.assertContains(resposta, f'src="{comprovante_original_url}"')
+            self.assertNotContains(resposta, "/media/")
+
+    def test_rota_comprovante_pix_retorna_arquivo_salvo(self):
+        conteudo = b"imagem pix"
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            pix = PixRecebido.objects.create(
+                nome_pagador="Pix com comprovante",
+                valor="20.00",
+                status=PixRecebido.STATUS_PENDENTE,
+                comprovante=SimpleUploadedFile("comprovante-render.jpg", conteudo, content_type="image/jpeg"),
+            )
+
+            resposta = self.client.get(
+                reverse("estoque:central_pix_comprovante", kwargs={"pix_id": pix.id}),
+                secure=True,
+            )
+
+            self.assertEqual(resposta.status_code, 200)
+            self.assertEqual(resposta["Content-Type"], "image/jpeg")
+            self.assertIn('inline; filename="comprovante-render', resposta["Content-Disposition"])
+            self.assertEqual(b"".join(resposta.streaming_content), conteudo)
+
+    def test_rota_comprovante_pix_retorna_404_sem_comprovante(self):
+        pix = PixRecebido.objects.create(
+            nome_pagador="Pix sem comprovante",
+            valor="10.00",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:central_pix_comprovante", kwargs={"pix_id": pix.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 404)
 
     def test_detalhe_pix_pendente_permite_marcar_como_ignorado(self):
         pix = PixRecebido.objects.create(

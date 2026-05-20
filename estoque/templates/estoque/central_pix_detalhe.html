@@ -88,7 +88,7 @@
               <div class="pix-compare-row"><span>Observacao</span><span>{{ pix.observacao|default:"-"|truncatechars:90 }}</span></div>
               {% if pix.comprovante and pix.comprovante_eh_imagem %}
                 <div class="pix-compare-thumb-wrap">
-                  <img src="{{ pix.comprovante.url }}" alt="Comprovante do Pix atual" class="pix-compare-thumb">
+                  <img src="{% url 'estoque:central_pix_comprovante' pix.id %}" alt="Comprovante do Pix atual" class="pix-compare-thumb">
                 </div>
               {% endif %}
             </div>
@@ -106,7 +106,7 @@
               <div class="pix-compare-row"><span>Observacao</span><span>{{ pix.pix_original.observacao|default:"-"|truncatechars:90 }}</span></div>
               {% if pix.pix_original.comprovante and pix.pix_original.comprovante_eh_imagem %}
                 <div class="pix-compare-thumb-wrap">
-                  <img src="{{ pix.pix_original.comprovante.url }}" alt="Comprovante do Pix parecido" class="pix-compare-thumb">
+                  <img src="{% url 'estoque:central_pix_comprovante' pix.pix_original.id %}" alt="Comprovante do Pix parecido" class="pix-compare-thumb">
                 </div>
               {% endif %}
             </div>
@@ -143,14 +143,14 @@
           {% if pix.comprovante %}
             <div class="pix-proof-head">
               <h2 class="pix-proof-title">Comprovante original</h2>
-              <a href="{{ pix.comprovante.url }}" target="_blank" rel="noopener" class="pix-proof-link">{% if pix.comprovante_eh_imagem %}Abrir imagem{% else %}Abrir comprovante{% endif %}</a>
+              <a href="{% url 'estoque:central_pix_comprovante' pix.id %}" target="_blank" rel="noopener" class="pix-proof-link">{% if pix.comprovante_eh_imagem %}Abrir imagem{% else %}Abrir comprovante{% endif %}</a>
             </div>
             {% if pix.comprovante_eh_imagem %}
               <div class="pix-proof-frame">
-                <img src="{{ pix.comprovante.url }}" alt="Comprovante Pix" class="pix-detail-img">
+                <img src="{% url 'estoque:central_pix_comprovante' pix.id %}" alt="Comprovante Pix" class="pix-detail-img">
               </div>
             {% else %}
-              <div class="pix-detail-row"><span>Comprovante</span><span><a href="{{ pix.comprovante.url }}" target="_blank" rel="noopener">Abrir arquivo</a></span></div>
+              <div class="pix-detail-row"><span>Comprovante</span><span><a href="{% url 'estoque:central_pix_comprovante' pix.id %}" target="_blank" rel="noopener">Abrir arquivo</a></span></div>
             {% endif %}
           {% else %}
             <div class="pix-proof-head">

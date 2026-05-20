@@ -1,4 +1,5 @@
 import json
+import mimetypes
 import re
 import textwrap
 import unicodedata
@@ -19,7 +20,7 @@ from .forms import CategoriaForm, ClienteForm, FuncionarioForm, PixRecebidoForm,
 from .models import Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import analisar_comprovante_pix
 from django.contrib import messages
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.utils.dateparse import parse_date, parse_datetime
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -1897,6 +1898,23 @@ def central_pix_detalhe(request, pix_id):
         return redirect(detalhe_url)
 
     return render(request, "estoque/central_pix_detalhe.html", {"pix": pix, "voltar_url": voltar_url})
+
+
+def central_pix_comprovante(request, pix_id):
+    pix = get_object_or_404(PixRecebido, pk=pix_id)
+    if not pix.comprovante:
+        raise Http404("Comprovante Pix nao encontrado.")
+
+    try:
+        arquivo = pix.comprovante.open("rb")
+    except (FileNotFoundError, OSError, ValueError):
+        raise Http404("Comprovante Pix nao encontrado.")
+
+    content_type = mimetypes.guess_type(pix.comprovante.name)[0] or "application/octet-stream"
+    response = FileResponse(arquivo, content_type=content_type)
+    nome_arquivo = Path(pix.comprovante.name).name
+    response["Content-Disposition"] = f'inline; filename="{nome_arquivo}"'
+    return response
 
 
 @require_POST

@@ -323,7 +323,7 @@
                   <td>{{ pix.observacao|default:"-"|truncatechars:70 }}</td>
                   <td>
                     {% if pix.comprovante %}
-                      <a href="{{ pix.comprovante.url }}" target="_blank" rel="noopener" class="pix-file-link">Abrir</a>
+                      <a href="{% url 'estoque:central_pix_comprovante' pix.id %}" target="_blank" rel="noopener" class="pix-file-link">Abrir</a>
                     {% else %}
                       <span class="pix-muted">Sem anexo</span>
                     {% endif %}
