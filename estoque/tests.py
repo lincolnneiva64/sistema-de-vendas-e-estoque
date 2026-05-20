@@ -236,6 +236,268 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(ContaReceber.objects.count(), 0)
         self.assertEqual(CreditoCliente.objects.count(), 0)
 
+    def test_enviar_comprovante_pix_cria_registro_pendente(self):
+        cliente = Cliente.objects.create(nome="Cicero Cristiano Silva Souza", ativo=True)
+        arquivo = SimpleUploadedFile(
+            "comprovante.txt",
+            (
+                "Comprovante Pix\n"
+                "Origem\n"
+                "Nome: Cicero Cristiano Silva Souza\n"
+                "Valor R$ 20,00\n"
+                "Data 16/05/2026 17:30\n"
+                "Banco do Brasil\n"
+            ).encode("utf-8"),
+            content_type="text/plain",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_enviar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Comprovante recebido e salvo como Pix pendente para conferencia.")
+        pix = PixRecebido.objects.get()
+        self.assertIsNone(pix.cliente)
+        self.assertEqual(pix.cliente_sugerido, cliente)
+        self.assertEqual(pix.nome_pagador, "Cicero Cristiano Silva Souza")
+        self.assertEqual(str(pix.valor), "20.00")
+        self.assertEqual(timezone.localtime(pix.data_pagamento).strftime("%Y-%m-%dT%H:%M"), "2026-05-16T17:30")
+        self.assertEqual(pix.instituicao_pix, "Banco do Brasil")
+        self.assertEqual(pix.status, PixRecebido.STATUS_PENDENTE)
+        self.assertIn("Comprovante Pix", pix.texto_ocr_bruto)
+        self.assertTrue(pix.comprovante)
+
+    def test_enviar_comprovante_pix_sem_cliente_sugerido_salva_nao_identificado(self):
+        arquivo = SimpleUploadedFile(
+            "comprovante-sem-cliente.txt",
+            (
+                "Mercado Pago\n"
+                "Comprovante de Pix\n"
+                "16/maio/2026 as 16:33:29\n"
+                "R$ 600\n"
+                "@ De\n"
+                "Ivanildo Ferraz Patricio Junior\n"
+            ).encode("utf-8"),
+            content_type="text/plain",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_enviar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        pix = PixRecebido.objects.get()
+        self.assertIsNone(pix.cliente)
+        self.assertEqual(pix.nome_pagador, "Ivanildo Ferraz Patricio Junior")
+        self.assertEqual(str(pix.valor), "600.00")
+        self.assertEqual(pix.instituicao_pix, "Mercado Pago")
+        self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
+
+    def test_enviar_mesmo_comprovante_pix_duas_vezes_marca_segundo_como_possivel_duplicado(self):
+        conteudo = (
+            "Comprovante Pix\n"
+            "Origem\n"
+            "Nome: Maria Duplicada Silva\n"
+            "Valor R$ 88,00\n"
+            "Data 16/05/2026 17:30\n"
+            "Banco do Brasil\n"
+            "ID da transacao\n"
+            "E00000000202605161730ABCDEF123456789\n"
+        ).encode("utf-8")
+        url = reverse("estoque:central_pix_enviar_comprovante")
+
+        primeira = self.client.post(
+            url,
+            {"comprovante": SimpleUploadedFile("pix-1.txt", conteudo, content_type="text/plain")},
+            secure=True,
+            follow=True,
+        )
+        segunda = self.client.post(
+            url,
+            {"comprovante": SimpleUploadedFile("pix-2.txt", conteudo, content_type="text/plain")},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(primeira.status_code, 200)
+        self.assertEqual(segunda.status_code, 200)
+        self.assertContains(segunda, "Possível Pix duplicado encontrado. Confira antes de baixar.")
+        pix_original, pix_duplicado = PixRecebido.objects.order_by("id")
+        self.assertNotEqual(pix_original.status, PixRecebido.STATUS_POSSIVEL_DUPLICADO)
+        self.assertEqual(pix_duplicado.status, PixRecebido.STATUS_POSSIVEL_DUPLICADO)
+        self.assertEqual(pix_duplicado.pix_original, pix_original)
+        self.assertIsNone(pix_duplicado.cliente)
+
+    def test_enviar_comprovante_com_mesmo_valor_data_pagador_banco_marca_possivel_duplicado(self):
+        PixRecebido.objects.create(
+            nome_pagador="Jose Parecido da Silva",
+            valor="55.00",
+            data_pagamento=timezone.make_aware(timezone.datetime(2026, 5, 16, 17, 30)),
+            instituicao_pix="PicPay",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+        arquivo = SimpleUploadedFile(
+            "provavel-duplicado.txt",
+            (
+                "PicPay\n"
+                "Comprovante Pix\n"
+                "Pagador: José Parecido da Silva\n"
+                "Valor R$ 55,00\n"
+                "16/05/2026 17:30\n"
+            ).encode("utf-8"),
+            content_type="text/plain",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_enviar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        novo_pix = PixRecebido.objects.order_by("-id").first()
+        self.assertEqual(novo_pix.status, PixRecebido.STATUS_POSSIVEL_DUPLICADO)
+        self.assertIsNotNone(novo_pix.pix_original)
+        self.assertIn("Possivel Pix duplicado", novo_pix.observacao)
+
+    def test_enviar_comprovante_pix_diferente_continua_pendente_normal(self):
+        cliente = Cliente.objects.create(nome="Cliente Diferente Pix", ativo=True)
+        PixRecebido.objects.create(
+            nome_pagador="Outro Pagador",
+            valor="55.00",
+            data_pagamento=timezone.make_aware(timezone.datetime(2026, 5, 16, 17, 30)),
+            instituicao_pix="PicPay",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+        arquivo = SimpleUploadedFile(
+            "pix-diferente.txt",
+            (
+                "Comprovante Pix\n"
+                "Origem\n"
+                "Nome: Cliente Diferente Pix\n"
+                "Valor R$ 75,00\n"
+                "Data 16/05/2026 18:30\n"
+                "Banco do Brasil\n"
+            ).encode("utf-8"),
+            content_type="text/plain",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_enviar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        novo_pix = PixRecebido.objects.order_by("-id").first()
+        self.assertEqual(novo_pix.cliente_sugerido, cliente)
+        self.assertEqual(novo_pix.status, PixRecebido.STATUS_PENDENTE)
+        self.assertIsNone(novo_pix.pix_original)
+
+    def test_status_possivel_duplicado_aparece_na_central_e_no_detalhe(self):
+        original = PixRecebido.objects.create(
+            nome_pagador="Pix original",
+            valor="25.00",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+        duplicado = PixRecebido.objects.create(
+            nome_pagador="Pix duplicado",
+            valor="25.00",
+            status=PixRecebido.STATUS_POSSIVEL_DUPLICADO,
+            pix_original=original,
+            observacao="Possivel Pix duplicado do registro #1.",
+        )
+
+        resposta_lista = self.client.get(reverse("estoque:central_pix"), secure=True)
+        self.assertContains(resposta_lista, "Possivel duplicado")
+        self.assertContains(resposta_lista, "possivel_duplicado")
+
+        resposta_detalhe = self.client.get(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": duplicado.id}),
+            secure=True,
+        )
+        self.assertContains(resposta_detalhe, "Possível Pix duplicado encontrado. Confira antes de baixar.")
+        self.assertContains(resposta_detalhe, f"Ver Pix parecido #{original.id}")
+        self.assertContains(resposta_detalhe, "Comparação com Pix parecido")
+        self.assertContains(resposta_detalhe, f"Pix atual #{duplicado.id}")
+        self.assertContains(resposta_detalhe, f"Pix parecido #{original.id}")
+        self.assertContains(resposta_detalhe, "Compare os dados antes de decidir se este envio é duplicado.")
+
+    def test_detalhe_pix_volta_para_resumo_de_envio_quando_recebe_next_seguro(self):
+        pix = PixRecebido.objects.create(
+            nome_pagador="Pix do resumo",
+            valor="40.00",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+        resumo_url = f"{reverse('estoque:central_pix_enviar_comprovante')}?pix_recebido={pix.id}"
+        detalhe_url = f"{reverse('estoque:central_pix_detalhe', kwargs={'pix_id': pix.id})}?next={resumo_url}"
+
+        resposta = self.client.get(detalhe_url, secure=True)
+
+        self.assertContains(resposta, f'href="{resumo_url}"')
+
+    def test_detalhe_pix_ignora_next_externo_e_volta_para_central(self):
+        pix = PixRecebido.objects.create(
+            nome_pagador="Pix next externo",
+            valor="15.00",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+        detalhe_url = (
+            f"{reverse('estoque:central_pix_detalhe', kwargs={'pix_id': pix.id})}"
+            "?next=https://example.com/roubo"
+        )
+
+        resposta = self.client.get(detalhe_url, secure=True)
+
+        self.assertContains(resposta, f'href="{reverse("estoque:central_pix")}"')
+        self.assertNotContains(resposta, "example.com")
+
+    def test_central_pix_lista_link_de_detalhe_do_pix_pendente(self):
+        pix = PixRecebido.objects.create(
+            nome_pagador="Pix pendente detalhe",
+            valor="35.50",
+            instituicao_pix="PicPay",
+            status=PixRecebido.STATUS_PENDENTE,
+            texto_ocr_bruto="Texto tecnico do OCR",
+        )
+
+        resposta_lista = self.client.get(reverse("estoque:central_pix"), secure=True)
+        self.assertContains(resposta_lista, "Pix pendente detalhe")
+        self.assertContains(resposta_lista, reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}))
+
+        resposta_detalhe = self.client.get(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+            secure=True,
+        )
+        self.assertContains(resposta_detalhe, "Texto OCR bruto")
+        self.assertContains(resposta_detalhe, "Texto tecnico do OCR")
+
+    def test_detalhe_pix_pendente_permite_marcar_como_ignorado(self):
+        pix = PixRecebido.objects.create(
+            nome_pagador="Pix para ignorar",
+            valor="10.00",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+            {"acao": "ignorar"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        pix.refresh_from_db()
+        self.assertEqual(pix.status, PixRecebido.STATUS_IGNORADO)
+
     def test_analisar_comprovante_pix_nubank_usa_nome_da_origem(self):
         conteudo = (
             "Comprovante Pix\n"

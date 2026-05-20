@@ -1,0 +1,79 @@
+{% extends "estoque/base.html" %}
+{% block title %}Enviar comprovante Pix{% endblock %}
+{% block content %}
+<style>
+  .pix-upload-page { min-height: 100vh; background: #f7fafc; color: #172033; padding: 14px 12px 28px; }
+  .pix-upload-shell { max-width: 560px; margin: 0 auto; }
+  .pix-upload-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+  .pix-upload-title { margin: 0; font-size: 1.28rem; font-weight: 900; }
+  .pix-upload-card { background: #fff; border: 1px solid #dbe4ef; border-radius: 8px; padding: 14px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06); }
+  .pix-upload-form { display: grid; gap: 12px; }
+  .pix-upload-label { font-weight: 850; color: #334155; }
+  .pix-upload-input { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; background: #fff; }
+  .pix-upload-btn, .pix-upload-link { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; border-radius: 8px; border: 1px solid #16a34a; padding: 9px 13px; font-weight: 900; text-decoration: none; transition: transform 0.08s ease, filter 0.12s ease; }
+  .pix-upload-btn { background: #16a34a; color: #fff; width: 100%; }
+  .pix-upload-link { background: #fff; color: #0f172a; border-color: #cbd5e1; }
+  .pix-upload-btn:active, .pix-upload-link:active { transform: scale(0.98); filter: brightness(0.96); }
+  .pix-upload-alert { border-radius: 8px; padding: 9px 11px; margin-bottom: 10px; font-weight: 850; }
+  .pix-upload-alert.success { background: #ecfdf3; border: 1px solid #bbf7d0; color: #166534; }
+  .pix-upload-alert.warning, .pix-upload-alert.error { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+  .pix-resumo { margin-top: 12px; display: grid; gap: 8px; }
+  .pix-resumo h2 { margin: 0; font-size: 1rem; font-weight: 900; }
+  .pix-resumo-linha { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid #edf2f7; padding-top: 8px; font-size: 0.92rem; }
+  .pix-resumo-linha span:first-child { color: #64748b; font-weight: 800; }
+  .pix-resumo-linha span:last-child { color: #172033; font-weight: 900; text-align: right; }
+  .pix-resumo-acoes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  @media (max-width: 420px) {
+    .pix-upload-head { align-items: stretch; flex-direction: column; }
+    .pix-upload-link { width: 100%; }
+    .pix-resumo-acoes { grid-template-columns: 1fr; }
+  }
+</style>
+<div class="pix-upload-page">
+  <div class="pix-upload-shell">
+    <header class="pix-upload-head">
+      <h1 class="pix-upload-title">Enviar comprovante Pix</h1>
+      <a href="{% url 'estoque:central_pix' %}" class="pix-upload-link">Central de Pix</a>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="pix-upload-alert {{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <section class="pix-upload-card">
+      <form method="post" enctype="multipart/form-data" class="pix-upload-form">
+        {% csrf_token %}
+        <label for="id_comprovante" class="pix-upload-label">Comprovante Pix</label>
+        <input type="file" id="id_comprovante" name="comprovante" class="pix-upload-input" accept="image/*,.pdf,.txt" required>
+        <button type="submit" class="pix-upload-btn">Enviar comprovante</button>
+      </form>
+
+      {% if resumo %}
+        <div class="pix-resumo">
+          <h2>Resumo lido</h2>
+          {% if resumo.possivel_duplicado %}
+            <div class="pix-upload-alert warning">Possível Pix duplicado encontrado. Confira antes de baixar.</div>
+          {% endif %}
+          <div class="pix-resumo-linha"><span>Pagador</span><span>{{ resumo.pagador|default:"Nao identificado" }}</span></div>
+          <div class="pix-resumo-linha"><span>Valor</span><span>R$ {{ resumo.valor|floatformat:2 }}</span></div>
+          <div class="pix-resumo-linha"><span>Data</span><span>{{ resumo.data_pagamento|date:"d/m/Y H:i" }}</span></div>
+          <div class="pix-resumo-linha"><span>Banco</span><span>{{ resumo.instituicao_pix|default:"Nao identificado" }}</span></div>
+          {% if resumo.pix_original %}
+            <div class="pix-resumo-linha"><span>Pix parecido</span><span>#{{ resumo.pix_original.id }}</span></div>
+          {% endif %}
+          <div class="pix-resumo-linha">
+            <span>Cliente sugerido</span>
+            <span>{% if resumo.cliente_sugerido %}{{ resumo.cliente_sugerido.nome }}{% else %}Nenhum{% endif %}</span>
+          </div>
+          <div class="pix-resumo-acoes">
+            <a href="{{ detalhe_url }}" class="pix-upload-link">Ver detalhe</a>
+            <a href="{% url 'estoque:central_pix_enviar_comprovante' %}" class="pix-upload-link">Enviar outro</a>
+          </div>
+        </div>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

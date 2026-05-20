@@ -465,11 +465,15 @@ class PixRecebido(models.Model):
     STATUS_PENDENTE = "pendente"
     STATUS_IDENTIFICADO = "identificado"
     STATUS_BAIXADO = "baixado"
+    STATUS_IGNORADO = "ignorado"
+    STATUS_POSSIVEL_DUPLICADO = "possivel_duplicado"
     STATUS_NAO_IDENTIFICADO = "nao_identificado"
     STATUS_CHOICES = [
         (STATUS_PENDENTE, "Pendente"),
         (STATUS_IDENTIFICADO, "Identificado"),
         (STATUS_BAIXADO, "Baixado"),
+        (STATUS_IGNORADO, "Ignorado"),
+        (STATUS_POSSIVEL_DUPLICADO, "Possivel duplicado"),
         (STATUS_NAO_IDENTIFICADO, "Nao identificado"),
     ]
 
@@ -480,11 +484,26 @@ class PixRecebido(models.Model):
         null=True,
         related_name="pix_recebidos",
     )
+    cliente_sugerido = models.ForeignKey(
+        Cliente,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="pix_sugeridos",
+    )
+    pix_original = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="possiveis_duplicados",
+    )
     nome_pagador = models.CharField(max_length=160, blank=True)
     valor = models.DecimalField(max_digits=12, decimal_places=2)
     data_pagamento = models.DateTimeField(default=timezone.now)
     instituicao_pix = models.CharField(max_length=80, blank=True)
     observacao = models.TextField(blank=True)
+    texto_ocr_bruto = models.TextField(blank=True)
     comprovante = models.FileField(upload_to="pix/comprovantes/", blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDENTE)
     criado_em = models.DateTimeField(auto_now_add=True)
@@ -498,6 +517,11 @@ class PixRecebido(models.Model):
     def __str__(self):
         pagador = self.nome_pagador or (self.cliente.nome if self.cliente else "Pagador nao informado")
         return f"Pix R$ {self.valor} - {pagador}"
+
+    @property
+    def comprovante_eh_imagem(self):
+        nome = (self.comprovante.name or "").lower()
+        return nome.endswith((".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"))
 
 
 class CreditoCliente(models.Model):

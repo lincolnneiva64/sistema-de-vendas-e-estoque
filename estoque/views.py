@@ -20,7 +20,7 @@ from .models import Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChe
 from .utils_pix import analisar_comprovante_pix
 from django.contrib import messages
 from django.http import Http404, HttpResponse, JsonResponse
-from django.utils.dateparse import parse_date
+from django.utils.dateparse import parse_date, parse_datetime
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -38,6 +38,7 @@ def _tem_pix_em_atencao():
         status__in=[
             PixRecebido.STATUS_PENDENTE,
             PixRecebido.STATUS_NAO_IDENTIFICADO,
+            PixRecebido.STATUS_POSSIVEL_DUPLICADO,
         ]
     ).exists()
 
@@ -127,6 +128,68 @@ def _sugerir_cliente_por_pagador(nome_pagador):
         return clientes_parecidos[0], "alta", ""
 
     return None, "baixa", ""
+
+
+def _decimal_pix_lido(valor):
+    try:
+        return Decimal(str(valor or "0").replace(",", ".")).quantize(Decimal("0.01"))
+    except (InvalidOperation, ValueError):
+        return Decimal("0.00")
+
+
+def _data_pix_lida(valor):
+    data = parse_datetime(valor or "")
+    if data is None:
+        return timezone.now()
+    if timezone.is_naive(data):
+        data = timezone.make_aware(data, timezone.get_current_timezone())
+    return data
+
+
+def _identificador_pix_texto(texto):
+    texto_normalizado = str(texto or "").upper()
+    encontrados = re.findall(r"\bE\d{8}[A-Z0-9]{10,40}\b", texto_normalizado)
+    return encontrados[0] if encontrados else ""
+
+
+def _mesmo_minuto(data_a, data_b):
+    if not data_a or not data_b:
+        return False
+    data_a = timezone.localtime(data_a) if timezone.is_aware(data_a) else data_a
+    data_b = timezone.localtime(data_b) if timezone.is_aware(data_b) else data_b
+    return data_a.replace(second=0, microsecond=0) == data_b.replace(second=0, microsecond=0)
+
+
+def _instituicao_pix_compativel(nova_instituicao, instituicao_existente):
+    nova = normalizar_texto_cliente(nova_instituicao)
+    existente = normalizar_texto_cliente(instituicao_existente)
+    return not nova or not existente or nova == existente
+
+
+def _detectar_pix_duplicado_comprovante(dados, valor, data_pagamento, texto_ocr_bruto):
+    identificador = _identificador_pix_texto(texto_ocr_bruto)
+    candidatos = PixRecebido.objects.exclude(status=PixRecebido.STATUS_IGNORADO).order_by("-criado_em", "-id")
+    if identificador:
+        for pix in candidatos.only("id", "texto_ocr_bruto", "criado_em"):
+            if _identificador_pix_texto(pix.texto_ocr_bruto) == identificador:
+                return pix
+
+    pagador = dados.get("pagador") or ""
+    if not (pagador and valor > 0 and data_pagamento):
+        return None
+
+    candidatos = candidatos.filter(valor=valor)
+    for pix in candidatos.only("id", "nome_pagador", "valor", "data_pagamento", "instituicao_pix", "criado_em"):
+        if not _mesmo_minuto(data_pagamento, pix.data_pagamento):
+            continue
+        if not _instituicao_pix_compativel(dados.get("instituicao_pix"), pix.instituicao_pix):
+            continue
+        if (
+            normalizar_texto_cliente(pagador) == normalizar_texto_cliente(pix.nome_pagador)
+            or textos_parecidos_cliente(pagador, pix.nome_pagador, minimo=0.90)
+        ):
+            return pix
+    return None
 
 
 def normalizar_texto_cliente(valor):
@@ -1731,7 +1794,7 @@ def central_pix(request):
     else:
         form = PixRecebidoForm()
 
-    pix_recebidos = PixRecebido.objects.select_related("cliente").order_by("-data_pagamento", "-id")
+    pix_recebidos = PixRecebido.objects.select_related("cliente", "cliente_sugerido").order_by("-criado_em", "-id")
     return render(
         request,
         "estoque/central_pix.html",
@@ -1742,6 +1805,117 @@ def central_pix(request):
             "voltar_url": retorno_url or reverse("estoque:contas_receber"),
         },
     )
+
+
+@ensure_csrf_cookie
+def central_pix_enviar_comprovante(request):
+    pix_recebido = None
+    resumo = None
+    pix_id_resumo = request.GET.get("pix_recebido")
+    if pix_id_resumo:
+        pix_recebido = PixRecebido.objects.select_related("cliente_sugerido", "pix_original").filter(pk=pix_id_resumo).first()
+        if pix_recebido:
+            resumo = {
+                "pagador": pix_recebido.nome_pagador,
+                "valor": pix_recebido.valor,
+                "data_pagamento": pix_recebido.data_pagamento,
+                "instituicao_pix": pix_recebido.instituicao_pix,
+                "cliente_sugerido": pix_recebido.cliente_sugerido,
+                "pix_original": pix_recebido.pix_original,
+                "possivel_duplicado": pix_recebido.status == PixRecebido.STATUS_POSSIVEL_DUPLICADO,
+                "confianca_cliente": "",
+                "mensagem_cliente": "",
+            }
+
+    if request.method == "POST":
+        arquivo = request.FILES.get("comprovante")
+        if not arquivo:
+            messages.warning(request, "Escolha uma imagem ou arquivo de comprovante Pix.")
+        else:
+            dados = analisar_comprovante_pix(arquivo)
+            cliente_sugerido, confianca_cliente, mensagem_cliente = _sugerir_cliente_por_pagador(dados.get("pagador"))
+            valor = _decimal_pix_lido(dados.get("valor"))
+            data_pagamento = _data_pix_lida(dados.get("data_pagamento"))
+            texto_ocr_bruto = dados.get("texto_ocr_bruto") or dados.get("texto_extraido") or ""
+            pix_duplicado = _detectar_pix_duplicado_comprovante(dados, valor, data_pagamento, texto_ocr_bruto)
+            status = (
+                PixRecebido.STATUS_POSSIVEL_DUPLICADO
+                if pix_duplicado
+                else (
+                    PixRecebido.STATUS_PENDENTE
+                    if cliente_sugerido
+                    else PixRecebido.STATUS_NAO_IDENTIFICADO
+                )
+            )
+            observacao = "Comprovante recebido pelo envio mobile. Conferir manualmente antes de baixar contas."
+            if not dados.get("ok"):
+                observacao = f"{observacao} Leitura automatica incompleta."
+            if pix_duplicado:
+                observacao = f"{observacao} Possivel Pix duplicado do registro #{pix_duplicado.id}."
+
+            if hasattr(arquivo, "seek"):
+                arquivo.seek(0)
+            pix_recebido = PixRecebido.objects.create(
+                cliente_sugerido=cliente_sugerido,
+                pix_original=pix_duplicado,
+                nome_pagador=(dados.get("pagador") or "")[:160],
+                valor=valor,
+                data_pagamento=data_pagamento,
+                instituicao_pix=(dados.get("instituicao_pix") or "")[:80],
+                observacao=observacao,
+                comprovante=arquivo,
+                status=status,
+                texto_ocr_bruto=texto_ocr_bruto,
+            )
+            resumo = {
+                "pagador": pix_recebido.nome_pagador,
+                "valor": pix_recebido.valor,
+                "data_pagamento": pix_recebido.data_pagamento,
+                "instituicao_pix": pix_recebido.instituicao_pix,
+                "cliente_sugerido": cliente_sugerido,
+                "pix_original": pix_duplicado,
+                "possivel_duplicado": bool(pix_duplicado),
+                "confianca_cliente": confianca_cliente,
+                "mensagem_cliente": mensagem_cliente,
+            }
+            if pix_duplicado:
+                messages.warning(request, "Possivel Pix duplicado encontrado. Confira antes de baixar.")
+            else:
+                messages.success(request, "Comprovante recebido e salvo como Pix pendente para conferencia.")
+            return redirect(f"{reverse('estoque:central_pix_enviar_comprovante')}?{urlencode({'pix_recebido': pix_recebido.id})}")
+
+    detalhe_url = ""
+    if pix_recebido:
+        detalhe_url = (
+            f"{reverse('estoque:central_pix_detalhe', kwargs={'pix_id': pix_recebido.id})}"
+            f"?{urlencode({'next': request.get_full_path()})}"
+        )
+
+    return render(
+        request,
+        "estoque/central_pix_enviar_comprovante.html",
+        {
+            "pix_recebido": pix_recebido,
+            "resumo": resumo,
+            "detalhe_url": detalhe_url,
+        },
+    )
+
+
+@ensure_csrf_cookie
+def central_pix_detalhe(request, pix_id):
+    pix = get_object_or_404(PixRecebido.objects.select_related("cliente", "cliente_sugerido", "pix_original"), pk=pix_id)
+    voltar_url = _url_retorno_segura(request) or reverse("estoque:central_pix")
+    if request.method == "POST" and request.POST.get("acao") == "ignorar":
+        pix.status = PixRecebido.STATUS_IGNORADO
+        pix.save(update_fields=["status", "atualizado_em"])
+        messages.success(request, "Pix marcado como ignorado.")
+        detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id})
+        if voltar_url:
+            detalhe_url = f"{detalhe_url}?{urlencode({'next': voltar_url})}"
+        return redirect(detalhe_url)
+
+    return render(request, "estoque/central_pix_detalhe.html", {"pix": pix, "voltar_url": voltar_url})
 
 
 @require_POST

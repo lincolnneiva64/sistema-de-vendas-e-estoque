@@ -171,6 +171,7 @@
   .pix-status.identificado { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
   .pix-status.baixado { border-color: #86efac; background: #f0fdf4; color: #166534; }
   .pix-status.nao_identificado { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+  .pix-status.possivel_duplicado { border-color: #fdba74; background: #fff7ed; color: #9a3412; }
   .pix-file-link {
     border: 1px solid #99f6e4; border-radius: 8px; background: #f0fdfa;
     color: #0f766e; padding: 5px 9px; font-size: 0.76rem;
@@ -198,6 +199,7 @@
         <p class="pix-subtitle">Registro manual de Pix recebidos para conferencia interna.</p>
       </div>
       <div class="pix-actions">
+        <a href="{% url 'estoque:central_pix_enviar_comprovante' %}" class="pix-btn pix-btn-primary">Enviar comprovante Pix</a>
         <a href="{{ voltar_url }}" class="pix-btn pix-btn-secondary">Voltar</a>
       </div>
     </header>
@@ -276,6 +278,7 @@
             <thead>
               <tr>
                 <th>Data/hora</th>
+                <th>Cadastro</th>
                 <th>Cliente</th>
                 <th>Pagador</th>
                 <th>Instituição</th>
@@ -283,15 +286,19 @@
                 <th>Status</th>
                 <th>Observacao</th>
                 <th>Comprovante</th>
+                <th>Detalhe</th>
               </tr>
             </thead>
             <tbody>
               {% for pix in pix_recebidos %}
                 <tr class="pix-row">
                   <td>{{ pix.data_pagamento|date:"d/m/Y H:i" }}</td>
+                  <td>{{ pix.criado_em|date:"d/m/Y H:i" }}</td>
                   <td>
                     {% if pix.cliente %}
                       <span class="pix-cliente">{{ pix.cliente.nome }}</span>
+                    {% elif pix.cliente_sugerido %}
+                      <span class="pix-cliente">{{ pix.cliente_sugerido.nome }}</span>
                     {% else %}
                       <span class="pix-muted">Sem cliente</span>
                     {% endif %}
@@ -314,10 +321,11 @@
                       <span class="pix-muted">Sem anexo</span>
                     {% endif %}
                   </td>
+                  <td><a href="{% url 'estoque:central_pix_detalhe' pix.id %}" class="pix-file-link">Ver</a></td>
                 </tr>
               {% empty %}
                 <tr>
-                  <td colspan="8" class="pix-empty">Nenhum Pix registrado ainda.</td>
+                  <td colspan="10" class="pix-empty">Nenhum Pix registrado ainda.</td>
                 </tr>
               {% endfor %}
             </tbody>
