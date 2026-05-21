@@ -1,5 +1,6 @@
 import io
 import tempfile
+import types
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
@@ -11,6 +12,7 @@ from django.utils import timezone
 
 from .forms import FuncionarioForm, PixRecebidoForm
 from .models import Cliente, ContaReceber, CreditoCliente, Funcionario, PixRecebido, RecebimentoContaReceber, Venda
+from .utils_pix import analisar_comprovante_pix
 
 
 class FuncionarioTests(TestCase):
@@ -436,6 +438,290 @@ class PixRecebidoTests(TestCase):
         pix = PixRecebido.objects.get()
         self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
         self.assertIn("OCR nao executado automaticamente no envio mobile", pix.texto_ocr_bruto)
+
+    def _imagem_pix_teste(self):
+        from PIL import Image
+
+        buffer = io.BytesIO()
+        Image.new("RGB", (900, 1600), "white").save(buffer, format="PNG")
+        return buffer.getvalue()
+
+    def _modulo_pytesseract_fake(self, respostas_por_recorte):
+        def image_to_string(imagem, **kwargs):
+            recorte = imagem.info.get("ocr_recorte", "inteira")
+            resposta = respostas_por_recorte.get(recorte, "")
+            if callable(resposta):
+                return resposta(imagem, kwargs)
+            if isinstance(resposta, Exception):
+                raise resposta
+            return resposta
+
+        return types.SimpleNamespace(
+            pytesseract=types.SimpleNamespace(tesseract_cmd=""),
+            image_to_string=image_to_string,
+        )
+
+    def test_analisar_comprovante_pix_ocr_parcial_nao_derruba_extracao(self):
+        arquivo = SimpleUploadedFile(
+            "comprovante-parcial.png",
+            self._imagem_pix_teste(),
+            content_type="image/png",
+        )
+        pytesseract_fake = self._modulo_pytesseract_fake({
+            "topo": "Comprovante Pix\nValor R$ 156,50\n16/05/2026 17:51\nNubank\n",
+            "pagador": RuntimeError("timeout no recorte"),
+            "inteira": "Origem\nNome: Joelson Ferreira dos Santos\nDestino\nNome: Lincoln Albuquerque Neiva\n",
+        })
+
+        with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+            "estoque.utils_pix._resolver_tesseract_cmd",
+            return_value="tesseract",
+        ):
+            dados = analisar_comprovante_pix(arquivo)
+
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "Joelson Ferreira dos Santos")
+        self.assertEqual(dados["valor"], "156.50")
+        self.assertEqual(dados["data_pagamento"], "2026-05-16T17:51")
+        self.assertEqual(dados["instituicao_pix"], "Nubank")
+        self.assertIn("[OCR avisos]", dados["texto_ocr_bruto"])
+
+    def test_analisar_comprovante_pix_fallback_imagem_inteira_continua_funcionando(self):
+        arquivo = SimpleUploadedFile(
+            "comprovante-fallback.png",
+            self._imagem_pix_teste(),
+            content_type="image/png",
+        )
+        pytesseract_fake = self._modulo_pytesseract_fake({
+            "topo": RuntimeError("falhou topo"),
+            "pagador": RuntimeError("falhou pagador"),
+            "inteira": (
+                "Comprovante Pix\n"
+                "Origem\n"
+                "Nome: Maria Fallback Silva\n"
+                "Valor R$ 88,00\n"
+                "16/05/2026 17:30\n"
+                "Banco do Brasil\n"
+            ),
+        })
+
+        with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+            "estoque.utils_pix._resolver_tesseract_cmd",
+            return_value="tesseract",
+        ):
+            dados = analisar_comprovante_pix(arquivo)
+
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "Maria Fallback Silva")
+        self.assertEqual(dados["valor"], "88.00")
+        self.assertEqual(dados["data_pagamento"], "2026-05-16T17:30")
+        self.assertEqual(dados["instituicao_pix"], "Banco do Brasil")
+
+    def test_analisar_comprovante_pix_tenta_eng_quando_por_traineddata_falha(self):
+        arquivo = SimpleUploadedFile(
+            "comprovante-sem-por.png",
+            self._imagem_pix_teste(),
+            content_type="image/png",
+        )
+
+        def texto_com_fallback(_imagem, kwargs):
+            if kwargs.get("lang") == "por":
+                raise RuntimeError("Error opening data file C:\\Program Files\\Tesseract-OCR/tessdata/por.traineddata")
+            if kwargs.get("lang") == "eng":
+                return "Pix enviado\nR$ 5,00\nData do pagamento\nSabado, 16/05/2026\nHorario\n23h41\n"
+            return ""
+
+        pytesseract_fake = self._modulo_pytesseract_fake({
+            "topo": texto_com_fallback,
+            "pagador": "",
+            "inteira": "",
+        })
+
+        with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+            "estoque.utils_pix._resolver_tesseract_cmd",
+            return_value="tesseract",
+        ), self.assertLogs("estoque.utils_pix", level="WARNING") as logs:
+            dados = analisar_comprovante_pix(arquivo)
+
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["valor"], "5.00")
+        self.assertEqual(dados["data_pagamento"], "2026-05-16T23:41")
+        self.assertIn("recorte=topo tentativa OCR falhou=por:", "\n".join(logs.output))
+        self.assertIn("recorte=topo idioma OCR usado=eng", "\n".join(logs.output))
+
+    def test_analisar_comprovante_pix_recortes_nao_usam_recebedor_como_pagador(self):
+        arquivo = SimpleUploadedFile(
+            "comprovante-recebedor.png",
+            self._imagem_pix_teste(),
+            content_type="image/png",
+        )
+        pytesseract_fake = self._modulo_pytesseract_fake({
+            "topo": "Valor R$ 600,00\n16/05/2026 16:33\nPara\nLincoln Albuquerque Neiva\n",
+            "pagador": "@ De\nIvanildo Ferraz Patricio Junior\nCPF ***.188.882-**\nMercado Pago\n",
+            "inteira": "Para\nLA Neiva\nNu Pagamentos S.A.\n",
+        })
+
+        with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+            "estoque.utils_pix._resolver_tesseract_cmd",
+            return_value="tesseract",
+        ):
+            dados = analisar_comprovante_pix(arquivo)
+
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "Ivanildo Ferraz Patricio Junior")
+        self.assertNotIn(dados["pagador"], ["Lincoln Albuquerque Neiva", "LA Neiva"])
+        self.assertEqual(dados["valor"], "600.00")
+        self.assertEqual(dados["instituicao_pix"], "Mercado Pago")
+
+    def test_analisar_comprovante_pix_sem_banco_pagador_retorna_parcial_sem_erro(self):
+        arquivo = SimpleUploadedFile(
+            "comprovante-sem-pagador.png",
+            self._imagem_pix_teste(),
+            content_type="image/png",
+        )
+        pytesseract_fake = self._modulo_pytesseract_fake({
+            "topo": "Comprovante Pix\nValor R$ 10,00\n21/05/2026 09:10\n",
+            "pagador": "",
+            "inteira": "Destino\nLincoln Albuquerque Neiva\n",
+        })
+
+        with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+            "estoque.utils_pix._resolver_tesseract_cmd",
+            return_value="tesseract",
+        ):
+            dados = analisar_comprovante_pix(arquivo)
+
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "")
+        self.assertEqual(dados["instituicao_pix"], "")
+        self.assertEqual(dados["valor"], "10.00")
+
+    def test_analisar_comprovante_pix_todos_recortes_falham_sem_excecao(self):
+        arquivo = SimpleUploadedFile(
+            "comprovante-falha.png",
+            self._imagem_pix_teste(),
+            content_type="image/png",
+        )
+        erro = RuntimeError("timeout")
+        pytesseract_fake = self._modulo_pytesseract_fake({
+            "topo": erro,
+            "pagador": erro,
+            "inteira": erro,
+        })
+
+        with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+            "estoque.utils_pix._resolver_tesseract_cmd",
+            return_value="tesseract",
+        ):
+            dados = analisar_comprovante_pix(arquivo)
+
+        self.assertFalse(dados["ok"])
+        self.assertEqual(dados["pagador"], "")
+        self.assertEqual(dados["valor"], "")
+        self.assertIn("preencha manualmente", dados["mensagem"].lower())
+
+    def test_analisar_comprovante_pix_inter_enviado_preenche_valor_data_sem_pagador(self):
+        arquivo = SimpleUploadedFile(
+            "comprovante-inter.png",
+            self._imagem_pix_teste(),
+            content_type="image/png",
+        )
+        pytesseract_fake = self._modulo_pytesseract_fake({
+            "topo": (
+                "Pix enviado\n"
+                "R$ 5,00\n"
+                "Data do pagamento\n"
+                "Sabado, 16/05/2026\n"
+                "Horario\n"
+                "23h41\n"
+            ),
+            "pagador": (
+                "ID da transacao\n"
+                "E00416968202605170241GgMBKIN9FUL\n"
+                "Quem recebeu\n"
+                "Lincoln Albuquerque Neiva\n"
+                "Instituicao do recebedor\n"
+                "Nu Pagamentos\n"
+            ),
+            "inteira": "",
+        })
+
+        with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+            "estoque.utils_pix._resolver_tesseract_cmd",
+            return_value="tesseract",
+        ):
+            dados = analisar_comprovante_pix(arquivo)
+
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "")
+        self.assertEqual(dados["valor"], "5.00")
+        self.assertEqual(dados["data_pagamento"], "2026-05-16T23:41")
+        self.assertEqual(dados["instituicao_pix"], "")
+        self.assertNotIn("Lincoln Albuquerque Neiva", dados["pagador"])
+
+    def test_analisar_comprovante_pix_inter_nao_usa_instituicao_do_recebedor_como_banco(self):
+        arquivo = SimpleUploadedFile(
+            "comprovante-inter-recebedor-nubank.png",
+            self._imagem_pix_teste(),
+            content_type="image/png",
+        )
+        pytesseract_fake = self._modulo_pytesseract_fake({
+            "topo": (
+                "Inter\n"
+                "Pix enviado\n"
+                "R$ 5,00\n"
+                "Data do pagamento\n"
+                "Sabado, 16/05/2026\n"
+                "Horario\n"
+                "23h41\n"
+            ),
+            "pagador": (
+                "Quem pagou\n"
+                "Nome\n"
+                "RONISE DO SOCORRO DOS SANTOS FERREIRA\n"
+                "Quem recebeu\n"
+                "Lincoln Albuquerque Neiva\n"
+                "Instituicao do recebedor\n"
+                "Nu Pagamentos\n"
+            ),
+            "inteira": "",
+        })
+
+        with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+            "estoque.utils_pix._resolver_tesseract_cmd",
+            return_value="tesseract",
+        ):
+            dados = analisar_comprovante_pix(arquivo)
+
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "RONISE DO SOCORRO DOS SANTOS FERREIRA")
+        self.assertEqual(dados["valor"], "5.00")
+        self.assertEqual(dados["data_pagamento"], "2026-05-16T23:41")
+        self.assertEqual(dados["instituicao_pix"], "Inter")
+        self.assertNotEqual(dados["instituicao_pix"], "Nubank")
+
+    def test_analisar_comprovante_pix_inter_nao_usa_la_neiva_como_pagador(self):
+        arquivo = SimpleUploadedFile(
+            "comprovante-inter-la-neiva.png",
+            self._imagem_pix_teste(),
+            content_type="image/png",
+        )
+        pytesseract_fake = self._modulo_pytesseract_fake({
+            "topo": "Pix enviado\nRS 5,00\nData do pagamento Sabado, 16/05/2026 Horario 23h41\n",
+            "pagador": "Quem recebeu\nLA Neiva\nInstituicao do recebedor\nNu Pagamentos\n",
+            "inteira": "",
+        })
+
+        with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+            "estoque.utils_pix._resolver_tesseract_cmd",
+            return_value="tesseract",
+        ):
+            dados = analisar_comprovante_pix(arquivo)
+
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "")
+        self.assertEqual(dados["valor"], "5.00")
+        self.assertEqual(dados["data_pagamento"], "2026-05-16T23:41")
 
     def test_enviar_mesmo_comprovante_pix_duas_vezes_nao_processa_duplicidade_no_mobile(self):
         conteudo = (

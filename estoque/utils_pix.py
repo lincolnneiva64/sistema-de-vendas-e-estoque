@@ -1,4 +1,5 @@
 ﻿import re
+import logging
 import shutil
 import unicodedata
 from datetime import datetime
@@ -11,6 +12,8 @@ from PIL import Image, ImageOps
 CAMINHO_TESSERACT_WINDOWS = Path("C:/Program Files/Tesseract-OCR/tesseract.exe")
 OCR_TIMEOUT_SEGUNDOS = 12
 OCR_LARGURA_MAXIMA = 1400
+OCR_ALTURA_MAXIMA = 2200
+logger = logging.getLogger(__name__)
 
 
 def _normalizar_espacos(valor):
@@ -91,6 +94,73 @@ def _preparar_imagem_ocr(conteudo):
     return imagem_preparada
 
 
+def _reduzir_imagem_ocr(imagem):
+    imagem = ImageOps.exif_transpose(imagem)
+    imagem = imagem.convert("L")
+    proporcao = min(
+        OCR_LARGURA_MAXIMA / float(imagem.width),
+        OCR_ALTURA_MAXIMA / float(imagem.height),
+        1,
+    )
+    if proporcao < 1:
+        novo_tamanho = (
+            max(1, int(imagem.width * proporcao)),
+            max(1, int(imagem.height * proporcao)),
+        )
+        imagem = imagem.resize(novo_tamanho, Image.LANCZOS)
+    return imagem
+
+
+def _copiar_recorte_ocr(imagem, nome, caixa):
+    recorte = imagem.crop(caixa)
+    recorte.info["ocr_recorte"] = nome
+    return recorte
+
+
+def _preparar_recortes_ocr(conteudo):
+    imagem = Image.open(BytesIO(conteudo))
+    tamanho_original = imagem.size
+    imagem = _reduzir_imagem_ocr(imagem)
+    largura, altura = imagem.size
+    topo_fim = max(1, int(altura * 0.38))
+    pagador_inicio = max(0, int(altura * 0.32))
+
+    imagem.info["ocr_recorte"] = "inteira"
+    recortes = [
+        ("topo", _copiar_recorte_ocr(imagem, "topo", (0, 0, largura, topo_fim)), (0, 0, largura, topo_fim)),
+        ("pagador", _copiar_recorte_ocr(imagem, "pagador", (0, pagador_inicio, largura, altura)), (0, pagador_inicio, largura, altura)),
+        ("inteira", imagem, (0, 0, largura, altura)),
+    ]
+    return tamanho_original, imagem.size, recortes
+
+
+def _log_diagnostico_ocr(caminho, mensagem, *args):
+    logger.warning("[PIX OCR][%s] " + mensagem, caminho, *args)
+
+
+def _extrair_texto_recorte_ocr(pytesseract, imagem):
+    erros = []
+    tentativas = [
+        ("por", {"lang": "por"}),
+        ("eng", {"lang": "eng"}),
+        ("padrao", {}),
+    ]
+    for idioma, opcoes in tentativas:
+        try:
+            texto = pytesseract.image_to_string(
+                imagem,
+                timeout=OCR_TIMEOUT_SEGUNDOS,
+                **opcoes,
+            )
+            return texto, idioma, erros
+        except Exception as exc:
+            mensagem = str(exc).strip()
+            detalhe = f": {mensagem[:80]}" if mensagem else ""
+            erros.append(f"{idioma}: {exc.__class__.__name__}{detalhe}")
+
+    raise RuntimeError("; ".join(erros) or "OCR falhou em todos os idiomas")
+
+
 def _extrair_texto_comprovante(arquivo):
     nome = (getattr(arquivo, "name", "") or "").lower()
     content_type = (getattr(arquivo, "content_type", "") or "").lower()
@@ -111,24 +181,54 @@ def _extrair_texto_comprovante(arquivo):
     pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
 
     try:
-        imagem = _preparar_imagem_ocr(conteudo)
+        tamanho_original, tamanho_reduzido, recortes = _preparar_recortes_ocr(conteudo)
     except Exception as exc:
         return f"ERRO OCR: falha ao abrir imagem ({exc.__class__.__name__})."
 
-    try:
+    _log_diagnostico_ocr(nome or "arquivo", "tamanho original=%s reduzido=%s", tamanho_original, tamanho_reduzido)
+
+    textos = []
+    erros = []
+    for nome_recorte, imagem, caixa in recortes:
+        x1, y1, x2, y2 = caixa
+        _log_diagnostico_ocr(
+            nome or "arquivo",
+            "recorte=%s caixa=%s tamanho=%sx%s",
+            nome_recorte,
+            caixa,
+            x2 - x1,
+            y2 - y1,
+        )
         try:
-            texto = pytesseract.image_to_string(imagem, lang="por", timeout=OCR_TIMEOUT_SEGUNDOS)
-        except RuntimeError:
-            raise
-        except Exception:
-            texto = pytesseract.image_to_string(imagem, timeout=OCR_TIMEOUT_SEGUNDOS)
-    except Exception as exc:
-        mensagem = str(exc).strip()
-        detalhe = f": {mensagem[:120]}" if mensagem else ""
-        return f"ERRO OCR: {exc.__class__.__name__}{detalhe}"
+            texto_recorte, idioma_usado, erros_idioma = _extrair_texto_recorte_ocr(pytesseract, imagem)
+        except Exception as exc:
+            mensagem = str(exc).strip()
+            detalhe = f": {mensagem[:80]}" if mensagem else ""
+            erros.append(f"{nome_recorte}: {exc.__class__.__name__}{detalhe}")
+            _log_diagnostico_ocr(nome or "arquivo", "recorte=%s excecao=%s%s", nome_recorte, exc.__class__.__name__, detalhe)
+            continue
+
+        for erro_idioma in erros_idioma:
+            _log_diagnostico_ocr(nome or "arquivo", "recorte=%s tentativa OCR falhou=%s", nome_recorte, erro_idioma)
+        _log_diagnostico_ocr(nome or "arquivo", "recorte=%s idioma OCR usado=%s", nome_recorte, idioma_usado)
+        _log_diagnostico_ocr(
+            nome or "arquivo",
+            "recorte=%s texto OCR:\n%s",
+            nome_recorte,
+            texto_recorte.strip() or "[vazio]",
+        )
+        if _normalizar_espacos(texto_recorte):
+            textos.append(f"[OCR {nome_recorte}]\n{texto_recorte.strip()}")
+
+    texto = "\n\n".join(textos)
 
     if not _normalizar_espacos(texto):
+        if erros:
+            return "ERRO OCR: todos os recortes falharam (" + "; ".join(erros)[:500] + ")."
         return "OCR executado, mas nao retornou texto."
+
+    if erros:
+        texto = f"{texto}\n\n[OCR avisos]\n" + "\n".join(erros)
 
     return texto
 
@@ -136,6 +236,16 @@ def _extrair_texto_comprovante(arquivo):
 def _texto_eh_diagnostico_ocr(texto):
     texto_limpo = _normalizar_espacos(texto)
     return texto_limpo.startswith("ERRO OCR:") or texto_limpo == "OCR executado, mas nao retornou texto."
+
+
+def _texto_para_parse_ocr(texto):
+    linhas = []
+    for linha in texto.splitlines():
+        linha_limpa = _normalizar_espacos(linha)
+        if re.fullmatch(r"\[OCR [^\]]+\]", linha_limpa):
+            continue
+        linhas.append(linha)
+    return "\n".join(linhas)
 
 
 def _resultado_comprovante_sem_leitura(texto_ocr_bruto):
@@ -178,6 +288,10 @@ def _extrair_valor(texto):
         r"(?:valor|total)\D{0,30}R?\$?\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})",
         r"(?:valor|total)\D{0,30}R?\$?\s*([0-9]+,[0-9]{2})",
         r"(?:valor|total)\D{0,30}R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*)\b",
+        r"(?:pix enviado|pix recebido)\D{0,40}R?[S$§]?\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})",
+        r"(?:pix enviado|pix recebido)\D{0,40}R?[S$§]?\s*([0-9]+,[0-9]{2})",
+        r"R[S$§]?\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})",
+        r"R[S$§]?\s*([0-9]+,[0-9]{2})",
         r"R\$\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})",
         r"R\$\s*([0-9]+,[0-9]{2})",
         r"R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*)\b",
@@ -286,9 +400,15 @@ def _extrair_instituicao_pix(texto):
     def eh_inicio_bloco_recebedor(linha_normalizada):
         return bool(
             re.search(r"\bdados do recebedor\b", linha_normalizada)
-            or re.search(r"\b(recebedor|beneficiario)\b", linha_normalizada)
+            or re.search(r"\b(quem recebeu|recebedor|beneficiario)\b", linha_normalizada)
             or re.match(r"^@?\s*para\b", linha_normalizada)
         )
+
+    def eh_inicio_bloco_pagador(linha_normalizada):
+        return bool(re.search(
+            r"\b(origem|pagador|quem pagou|quem vai enviar|dados de origem|dados do pagador|remetente)\b",
+            linha_normalizada,
+        ) or re.fullmatch(r"@?\s*de\b:?.*", linha_normalizada))
 
     linhas = [_normalizar_espacos(linha) for linha in texto.splitlines()]
     instituicao_caixa_tem = _extrair_instituicao_caixa_tem(linhas)
@@ -303,13 +423,26 @@ def _extrair_instituicao_pix(texto):
         linhas_cabecalho.append(linha)
 
     texto_cabecalho = _normalizar_linha(_sem_acentos("\n".join(linhas_cabecalho)))
-    texto_normalizado = _normalizar_linha(_sem_acentos(texto))
+    linhas_fora_recebedor = []
+    em_bloco_recebedor = False
+    for linha in linhas:
+        linha_normalizada = _normalizar_rotulo_ocr(linha)
+        if eh_inicio_bloco_recebedor(linha_normalizada):
+            em_bloco_recebedor = True
+            continue
+        if eh_inicio_bloco_pagador(linha_normalizada):
+            em_bloco_recebedor = False
+
+        if not em_bloco_recebedor:
+            linhas_fora_recebedor.append(linha)
+
+    texto_fora_recebedor = _normalizar_linha(_sem_acentos("\n".join(linhas_fora_recebedor)))
     padroes = [
         ("Banpar\u00e1", [r"\bbanpara\b", r"\bbanco do estado do para\b"]),
         ("PicPay", [r"\bpicpay\b", r"\bpic\s*pay\b", r"picpay instituicao de pagamento"]),
         ("Mercado Pago", [r"\bmercado pago\b"]),
         ("Nubank", [r"\bnubank\b", r"\bnu pagamentos\b"]),
-        ("Banco Inter", [r"\bbanco inter\b", r"\bintermedium\b", r"\binter\b"]),
+        ("Inter", [r"\bbanco inter\b", r"\bintermedium\b", r"\bsinter\b", r"\binter\b"]),
         ("Caixa EconÃ´mica", [r"\bcaixa economica\b", r"\bcaixa\b"]),
         ("Banco do Brasil", [r"\bbanco do brasil\b"]),
         ("Bradesco", [r"\bbradesco\b"]),
@@ -328,9 +461,7 @@ def _extrair_instituicao_pix(texto):
             return nome
 
     for nome, termos in padroes:
-        if nome == "Nubank":
-            continue
-        if any(re.search(termo, texto_normalizado) for termo in termos):
+        if any(re.search(termo, texto_fora_recebedor) for termo in termos):
             return nome
 
     em_bloco_recebedor = False
@@ -338,10 +469,10 @@ def _extrair_instituicao_pix(texto):
         linha_normalizada = _normalizar_rotulo_ocr(linha)
         if eh_inicio_bloco_recebedor(linha_normalizada):
             em_bloco_recebedor = True
-        elif re.search(r"\b(origem|pagador|quem pagou|dados de origem)\b", linha_normalizada):
+        elif eh_inicio_bloco_pagador(linha_normalizada):
             em_bloco_recebedor = False
 
-        if em_bloco_recebedor and "nu pagamentos" in linha_normalizada:
+        if em_bloco_recebedor:
             continue
         if re.search(r"\b(nubank|nu pagamentos)\b", linha_normalizada):
             return "Nubank"
@@ -457,6 +588,19 @@ def _debug_data_pagamento(texto, data_pagamento):
 
 def _extrair_data_pagamento(texto):
     linhas = [_normalizar_espacos(linha) for linha in texto.splitlines()]
+    for indice, linha in enumerate(linhas):
+        if "data do pagamento" not in _normalizar_rotulo_ocr(linha):
+            continue
+        trecho = " ".join(linhas[indice:indice + 8])
+        encontrado_data = re.search(r"\b([0-3]?\d)/([01]?\d)/(\d{4})\b", trecho)
+        encontrado_hora = _extrair_hora_ocr(trecho)
+        if encontrado_data and encontrado_hora:
+            dia, mes, ano = encontrado_data.groups()
+            hora, minuto = encontrado_hora
+            data_formatada = _formatar_data_pagamento_ocr(dia, mes, ano, hora, minuto)
+            if data_formatada:
+                return data_formatada
+
     for indice, linha in enumerate(linhas):
         if "data da operacao" not in _normalizar_rotulo_ocr(linha):
             continue
@@ -678,7 +822,7 @@ def _extrair_nome_secao_de(linha_rotulo, bloco):
 def _eh_comprovante_banco_inter(texto):
     texto_normalizado = _normalizar_linha(_sem_acentos(texto))
     if re.search(r"\b(nu pagamentos|nubank\.com\.br)\b", texto_normalizado):
-        return False
+        return bool("pix enviado" in texto_normalizado and "quem recebeu" in texto_normalizado)
 
     for linha in texto.splitlines():
         linha_normalizada = _normalizar_rotulo_ocr(linha)
@@ -689,13 +833,15 @@ def _eh_comprovante_banco_inter(texto):
         return True
     if "instituicao banco inter" in texto_normalizado and "destino" in texto_normalizado and "origem" in texto_normalizado:
         return True
+    if "pix enviado" in texto_normalizado and "quem recebeu" in texto_normalizado:
+        return True
     return any(_normalizar_rotulo_ocr(linha) == "inter" for linha in texto.splitlines())
 
 
 def _eh_rotulo_recebedor_inter(linha):
     linha_normalizada = _normalizar_rotulo_ocr(linha)
     return bool(re.search(
-        r"\b(beneficiario|recebedor|favorecido|destino|para|dados do recebedor|chave pix do recebedor|instituicao do recebedor)\b",
+        r"\b(beneficiario|recebedor|favorecido|destino|para|quem recebeu|dados do recebedor|chave pix do recebedor|instituicao do recebedor)\b",
         linha_normalizada,
     ))
 
@@ -759,6 +905,7 @@ def _nome_seguro_pagador_inter(nome, nomes_recebedor):
 def _nome_bloqueado_temporario_inter(nome):
     nome_normalizado = _normalizar_nome_inter(nome)
     nomes_bloqueados = {
+        "la neiva",
         "lincoln albuquerque",
         "lincoln albuquerque neiva",
         "lincoin albuquerque neiva",
@@ -1020,10 +1167,11 @@ def analisar_comprovante_pix(arquivo):
     if _texto_eh_diagnostico_ocr(texto):
         return _resultado_comprovante_sem_leitura(texto)
 
-    pagador = _extrair_pagador(texto)
-    valor = _extrair_valor(texto)
-    data_pagamento = _extrair_data_pagamento(texto)
-    instituicao_pix = _extrair_instituicao_pix(texto)
+    texto_parse = _texto_para_parse_ocr(texto)
+    pagador = _extrair_pagador(texto_parse)
+    valor = _extrair_valor(texto_parse)
+    data_pagamento = _extrair_data_pagamento(texto_parse)
+    instituicao_pix = _extrair_instituicao_pix(texto_parse)
     ok = bool(pagador or valor or data_pagamento)
 
     return {
@@ -1032,8 +1180,8 @@ def analisar_comprovante_pix(arquivo):
         "valor": valor,
         "data_pagamento": data_pagamento,
         "instituicao_pix": instituicao_pix,
-        "debug_data_pagamento": _debug_data_pagamento(texto, data_pagamento),
-        "texto_extraido": _normalizar_espacos(texto)[:700],
+        "debug_data_pagamento": _debug_data_pagamento(texto_parse, data_pagamento),
+        "texto_extraido": _normalizar_espacos(texto_parse)[:700],
         "texto_ocr_bruto": texto[:2000],
         "mensagem": (
             "Dados lidos automaticamente. Confira antes de salvar."
