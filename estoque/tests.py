@@ -708,7 +708,41 @@ class PixRecebidoTests(TestCase):
             pix.refresh_from_db()
             self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
             self.assertTrue(pix.comprovante)
-            self.assertIn("ERRO OCR: RuntimeError: timeout render", pix.texto_ocr_bruto)
+            self.assertIn("ERRO OCR MANUAL", pix.texto_ocr_bruto)
+            self.assertIn("timeout render", pix.texto_ocr_bruto)
+            self.assertContains(resposta, "Texto OCR bruto")
+
+    def test_detalhe_pix_processar_ocr_com_timeout_retornado_mantem_comprovante_salvo(self):
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            pix = PixRecebido.objects.create(
+                valor="0.00",
+                status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+                texto_ocr_bruto="OCR pendente",
+                comprovante=SimpleUploadedFile("comprovante.jpg", b"imagem", content_type="image/jpeg"),
+            )
+            dados_timeout = {
+                "ok": False,
+                "pagador": "",
+                "valor": "",
+                "data_pagamento": "",
+                "instituicao_pix": "",
+                "texto_ocr_bruto": "ERRO OCR: RuntimeError: Tesseract process timeout",
+            }
+
+            with patch("estoque.views.analisar_comprovante_pix", return_value=dados_timeout):
+                resposta = self.client.post(
+                    reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
+                    secure=True,
+                    follow=True,
+                )
+
+            self.assertEqual(resposta.status_code, 200)
+            pix.refresh_from_db()
+            self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
+            self.assertEqual(str(pix.valor), "0.00")
+            self.assertTrue(pix.comprovante)
+            self.assertIn("ERRO OCR MANUAL", pix.texto_ocr_bruto)
+            self.assertIn("Tesseract process timeout", pix.texto_ocr_bruto)
             self.assertContains(resposta, "Texto OCR bruto")
 
     def test_detalhe_pix_usa_rota_propria_do_comprovante(self):

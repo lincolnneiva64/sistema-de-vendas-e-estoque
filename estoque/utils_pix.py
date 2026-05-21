@@ -6,9 +6,11 @@ from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 CAMINHO_TESSERACT_WINDOWS = Path("C:/Program Files/Tesseract-OCR/tesseract.exe")
+OCR_TIMEOUT_SEGUNDOS = 12
+OCR_LARGURA_MAXIMA = 1400
 
 
 def _normalizar_espacos(valor):
@@ -72,6 +74,23 @@ def _resolver_tesseract_cmd():
     return None
 
 
+def _preparar_imagem_ocr(conteudo):
+    imagem = Image.open(BytesIO(conteudo))
+    imagem = ImageOps.exif_transpose(imagem)
+    imagem = imagem.convert("L")
+    if imagem.width > OCR_LARGURA_MAXIMA:
+        proporcao = OCR_LARGURA_MAXIMA / float(imagem.width)
+        nova_altura = max(1, int(imagem.height * proporcao))
+        imagem = imagem.resize((OCR_LARGURA_MAXIMA, nova_altura), Image.LANCZOS)
+
+    buffer = BytesIO()
+    imagem.save(buffer, format="PNG", optimize=True)
+    buffer.seek(0)
+    imagem_preparada = Image.open(buffer)
+    imagem_preparada.load()
+    return imagem_preparada
+
+
 def _extrair_texto_comprovante(arquivo):
     nome = (getattr(arquivo, "name", "") or "").lower()
     content_type = (getattr(arquivo, "content_type", "") or "").lower()
@@ -92,15 +111,17 @@ def _extrair_texto_comprovante(arquivo):
     pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
 
     try:
-        imagem = Image.open(BytesIO(conteudo))
+        imagem = _preparar_imagem_ocr(conteudo)
     except Exception as exc:
         return f"ERRO OCR: falha ao abrir imagem ({exc.__class__.__name__})."
 
     try:
         try:
-            texto = pytesseract.image_to_string(imagem, lang="por")
+            texto = pytesseract.image_to_string(imagem, lang="por", timeout=OCR_TIMEOUT_SEGUNDOS)
+        except RuntimeError:
+            raise
         except Exception:
-            texto = pytesseract.image_to_string(imagem)
+            texto = pytesseract.image_to_string(imagem, timeout=OCR_TIMEOUT_SEGUNDOS)
     except Exception as exc:
         mensagem = str(exc).strip()
         detalhe = f": {mensagem[:120]}" if mensagem else ""

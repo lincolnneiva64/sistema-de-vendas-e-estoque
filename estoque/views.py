@@ -33,6 +33,10 @@ PIX_OCR_PENDENTE_MOBILE = (
     "OCR nao executado automaticamente no envio mobile para evitar timeout. "
     "Use processamento manual posteriormente."
 )
+PIX_OCR_MANUAL_ERRO_RENDER = (
+    "ERRO OCR MANUAL: processamento excedeu o tempo limite ou falhou no Render. "
+    "Comprovante preservado para conferencia manual."
+)
 
 MENSAGEM_CLIENTE_DUPLICADO = (
     "Ja existe um cliente parecido cadastrado. Verifique antes de cadastrar novamente."
@@ -1863,6 +1867,11 @@ def central_pix_envio_sucesso(request, pix_id):
     return render(request, "estoque/central_pix_envio_sucesso.html", {"pix": pix})
 
 
+def _texto_indica_falha_ocr(texto):
+    texto_limpo = " ".join(str(texto or "").strip().split())
+    return texto_limpo.startswith("ERRO OCR:") or texto_limpo == "OCR executado, mas nao retornou texto."
+
+
 @ensure_csrf_cookie
 def central_pix_detalhe(request, pix_id):
     pix = get_object_or_404(PixRecebido.objects.select_related("cliente", "cliente_sugerido", "pix_original"), pk=pix_id)
@@ -1898,7 +1907,7 @@ def central_pix_processar_ocr(request, pix_id):
         dados = analisar_comprovante_pix(pix.comprovante)
     except Exception as exc:
         detalhe = f": {exc}" if str(exc) else ""
-        pix.texto_ocr_bruto = f"ERRO OCR: {exc.__class__.__name__}{detalhe}"
+        pix.texto_ocr_bruto = f"{PIX_OCR_MANUAL_ERRO_RENDER} Detalhe: {exc.__class__.__name__}{detalhe}"
         pix.save(update_fields=["texto_ocr_bruto", "atualizado_em"])
         messages.warning(request, "Nao foi possivel processar o OCR agora. O comprovante continua salvo.")
         return redirect(detalhe_url)
@@ -1912,6 +1921,13 @@ def central_pix_processar_ocr(request, pix_id):
     valor = _decimal_pix_lido(dados.get("valor"))
     data_pagamento = _data_pix_lida(dados.get("data_pagamento"))
     texto_ocr_bruto = dados.get("texto_ocr_bruto") or dados.get("texto_extraido") or ""
+    if _texto_indica_falha_ocr(texto_ocr_bruto):
+        detalhe_erro = str(texto_ocr_bruto or "").strip()
+        pix.texto_ocr_bruto = f"{PIX_OCR_MANUAL_ERRO_RENDER} Detalhe: {detalhe_erro[:240]}"
+        pix.save(update_fields=["texto_ocr_bruto", "atualizado_em"])
+        messages.warning(request, "Nao foi possivel processar o OCR agora. O comprovante continua salvo.")
+        return redirect(detalhe_url)
+
     pix_duplicado = _detectar_pix_duplicado_comprovante(dados, valor, data_pagamento, texto_ocr_bruto)
 
     pix.cliente_sugerido = cliente_sugerido
