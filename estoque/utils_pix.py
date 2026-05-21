@@ -284,34 +284,93 @@ def _extrair_valor(texto):
 
         return valor.replace(",", "")
 
-    padroes = [
+    def decimal_ou_vazio(valor_texto):
+        valor_normalizado = normalizar_valor_ocr(valor_texto)
+        try:
+            valor_decimal = Decimal(valor_normalizado).quantize(Decimal("0.01"))
+        except (InvalidOperation, ValueError):
+            return ""
+        if valor_decimal <= Decimal("0.00"):
+            return ""
+        return f"{valor_decimal}"
+
+    def contexto_suspeito(posicao_inicio, posicao_fim):
+        antes = texto[max(0, posicao_inicio - 100):posicao_inicio]
+        depois = texto[posicao_fim:posicao_fim + 100]
+        contexto = _normalizar_rotulo_ocr(f"{antes} {depois}")
+        termos_ruins = (
+            "cpf",
+            "cnpj",
+            "agencia",
+            "conta",
+            "documento",
+            "autenticacao",
+            "id",
+            "transacao",
+            "sessao",
+            "telefone",
+            "central",
+            "sac",
+            "ouvidoria",
+            "recebedor",
+            "pagador",
+            "instituicao",
+            "chave pix",
+        )
+        return any(termo in contexto for termo in termos_ruins)
+
+    # 1) Prioridade maxima: linha limpa com valor.
+    # Ex.: "R$ 5,00", "RS 5,00", "Valor R$ 5,00", "Pix enviado R$ 5,00".
+    for linha in str(texto or "").splitlines():
+        linha_limpa = " ".join(str(linha or "").strip().split())
+        if not linha_limpa:
+            continue
+
+        match_linha = re.search(
+            r"^(?:valor|total|pix enviado|pix recebido|comprovante)?\s*R[S$§]?\s*([0-9]{1,3}(?:[.,][0-9]{3})*,[0-9]{2}|[0-9]+,[0-9]{2})\s*$",
+            linha_limpa,
+            flags=re.IGNORECASE,
+        )
+        if match_linha:
+            valor_linha = decimal_ou_vazio(match_linha.group(1))
+            if valor_linha:
+                return valor_linha
+
+    padroes_prioritarios = [
         r"(?:valor|total)\D{0,30}R?\$?\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})",
         r"(?:valor|total)\D{0,30}R?\$?\s*([0-9]+,[0-9]{2})",
-        r"(?:valor|total)\D{0,30}R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*)\b",
         r"(?:pix enviado|pix recebido)\D{0,40}R?[S$§]?\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})",
         r"(?:pix enviado|pix recebido)\D{0,40}R?[S$§]?\s*([0-9]+,[0-9]{2})",
-        r"R[S$§]?\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})",
-        r"R[S$§]?\s*([0-9]+,[0-9]{2})",
-        r"R\$\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})",
-        r"R\$\s*([0-9]+,[0-9]{2})",
-        r"R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*)\b",
+        r"\bR[S$§]\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})",
+        r"\bR[S$§]\s*([0-9]+,[0-9]{2})",
+        r"\bR\$\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})",
+        r"\bR\$\s*([0-9]+,[0-9]{2})",
+    ]
+
+    padroes_genericos = [
         r"\b([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})\b",
         r"\b([0-9]+,[0-9]{2})\b",
     ]
 
-    for padrao in padroes:
-        encontrado = re.search(padrao, texto, flags=re.IGNORECASE)
-        if not encontrado:
-            continue
+    for padrao in padroes_prioritarios:
+        for encontrado in re.finditer(padrao, texto, flags=re.IGNORECASE):
+            if contexto_suspeito(encontrado.start(), encontrado.end()):
+                continue
 
-        valor_texto = normalizar_valor_ocr(encontrado.group(1))
-        try:
-            return f"{Decimal(valor_texto).quantize(Decimal('0.01'))}"
-        except (InvalidOperation, ValueError):
-            continue
+            valor_texto = decimal_ou_vazio(encontrado.group(1))
+            if valor_texto:
+                return valor_texto
+
+    for padrao in padroes_genericos:
+        for encontrado in re.finditer(padrao, texto, flags=re.IGNORECASE):
+            if contexto_suspeito(encontrado.start(), encontrado.end()):
+                continue
+
+            valor_texto = decimal_ou_vazio(encontrado.group(1))
+            if valor_texto:
+                return valor_texto
 
     return ""
-
 def _extrair_bloco_quem_vai_enviar(linhas):
     indice_envio = next(
         (
@@ -1189,3 +1248,6 @@ def analisar_comprovante_pix(arquivo):
             else "Nao foi possivel identificar dados principais. Preencha manualmente."
         ),
     }
+
+
+
