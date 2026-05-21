@@ -24,6 +24,10 @@ DEBUG = str(config('DEBUG', default='False')).strip().lower() in {'1', 'true', '
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='', cast=Csv())
 CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
 CHECKLIST_BASE_URL = config("CHECKLIST_BASE_URL", default=os.getenv("CHECKLIST_BASE_URL", "")).rstrip("/")
+SISTEMA_ONLINE_URL = config(
+    "SISTEMA_ONLINE_URL",
+    default=config("SISTEMA_RENDER_URL", default="https://sistema-de-vendas-e-estoque.onrender.com"),
+).rstrip("/")
 
 # Application definition
 
@@ -64,6 +68,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'estoque.context_processors.ambiente_sistema',
             ],
         },
     },

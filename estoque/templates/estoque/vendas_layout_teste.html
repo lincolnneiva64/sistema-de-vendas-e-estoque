@@ -916,10 +916,11 @@ td:first-child {
     tbody tr:hover {
         background: #f8fbff;
     }
-    .bloco-lancamento {
+.bloco-lancamento {
     border: 1px solid #93c5fd;
     background: #f0f7ff;
     box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+    position: relative;
 }
 
 
@@ -978,6 +979,54 @@ td:first-child {
             </select>
             <input type="text" id="operadorVenda" placeholder="Operador">
         </div>
+
+        <div class="vendas-ambiente-inline">
+            {% include "estoque/includes/ambiente_sistema.html" %}
+        </div>
+        <style>
+            .vendas-ambiente-inline {
+                position: absolute;
+                left: 14px;
+                right: 14px;
+                z-index: 4;
+                display: flex;
+                justify-content: flex-end;
+                pointer-events: none;
+            }
+
+            .vendas-ambiente-inline .ambiente-sistema {
+                max-width: min(760px, 100%);
+                width: auto;
+                box-sizing: border-box;
+                margin: 0;
+                padding: 1px 5px;
+                border-color: rgba(148, 163, 184, 0.45);
+                background: rgba(255, 255, 255, 0.72);
+                box-shadow: none;
+                font-size: 11px;
+                pointer-events: auto;
+            }
+
+            .vendas-ambiente-inline .ambiente-sistema__status {
+                min-height: 19px;
+            }
+
+            .vendas-ambiente-inline .ambiente-sistema__btn {
+                min-height: 20px;
+                padding: 2px 6px;
+                border-radius: 6px;
+            }
+
+            .vendas-ambiente-inline .ambiente-sistema__aviso {
+                display: none;
+            }
+
+            @media (max-width: 900px) {
+                .vendas-ambiente-inline .ambiente-sistema {
+                    max-width: 100%;
+                }
+            }
+        </style>
 
         <div id="msgEdicao" class="msg-edicao">Modo edição ativado</div>
         <div class="linha">

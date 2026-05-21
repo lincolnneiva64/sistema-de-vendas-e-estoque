@@ -1,0 +1,188 @@
+<div class="ambiente-sistema" aria-label="Ambiente atual do sistema">
+    <div class="ambiente-sistema__status">
+        <span class="ambiente-sistema__label">Ambiente atual:</span>
+        <strong>{{ ambiente_atual|default:"INDEFINIDO" }}</strong>
+    </div>
+    <div class="ambiente-sistema__acoes">
+        <a class="ambiente-sistema__btn" href="{{ sistema_online_url }}" target="_blank" rel="noopener">
+            Abrir ONLINE / Render
+        </a>
+        <button class="ambiente-sistema__btn" type="button" data-copy-url="{{ sistema_online_url }}">
+            Copiar link ONLINE
+        </button>
+        {% if sistema_local_url %}
+            <a class="ambiente-sistema__btn" href="{{ sistema_local_url }}" target="_blank" rel="noopener">
+                Abrir LOCAL / Wi-Fi
+            </a>
+            <button class="ambiente-sistema__btn" type="button" data-copy-url="{{ sistema_local_url }}">
+                Copiar link LOCAL
+            </button>
+        {% else %}
+            <button class="ambiente-sistema__btn ambiente-sistema__btn--disabled" type="button" disabled title="{{ sistema_local_aviso }}">
+                Abrir LOCAL / Wi-Fi
+            </button>
+            <button class="ambiente-sistema__btn ambiente-sistema__btn--disabled" type="button" disabled title="{{ sistema_local_aviso }}">
+                Copiar link LOCAL
+            </button>
+        {% endif %}
+    </div>
+    {% if sistema_local_aviso and not sistema_local_url %}
+        <div class="ambiente-sistema__aviso">{{ sistema_local_aviso }}</div>
+    {% endif %}
+</div>
+
+<style>
+    .ambiente-sistema {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        max-width: 980px;
+        margin: 8px auto;
+        padding: 3px 6px;
+        border: 1px solid rgba(148, 163, 184, 0.55);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.82);
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+        font-size: 12px;
+        line-height: 1.2;
+    }
+
+    .ambiente-sistema__status {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        min-height: 22px;
+        color: #111827;
+        white-space: nowrap;
+    }
+
+    .ambiente-sistema__label {
+        color: #4b5563;
+    }
+
+    .ambiente-sistema__acoes {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        flex-wrap: wrap;
+    }
+
+    .ambiente-sistema__btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 23px;
+        padding: 3px 8px;
+        border: 1px solid #94a3b8;
+        border-radius: 7px;
+        background: #ffffff;
+        color: #0f172a;
+        font: inherit;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        box-shadow: 0 2px 5px rgba(15, 23, 42, 0.13);
+        transition: transform 100ms ease, box-shadow 100ms ease, background 100ms ease;
+    }
+
+    .ambiente-sistema__btn:hover {
+        background: #f8fafc;
+        border-color: #64748b;
+        color: #0f172a;
+    }
+
+    .ambiente-sistema__btn:active,
+    .ambiente-sistema__btn.is-copied {
+        transform: translateY(2px);
+        box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.18);
+    }
+
+    .ambiente-sistema__btn--disabled,
+    .ambiente-sistema__btn--disabled:hover {
+        opacity: 0.58;
+        cursor: not-allowed;
+        background: #f3f4f6;
+    }
+
+    .ambiente-sistema__aviso {
+        flex-basis: 100%;
+        text-align: center;
+        color: #6b7280;
+        font-size: 11px;
+    }
+
+    @media (max-width: 640px) {
+        .ambiente-sistema {
+            justify-content: flex-start;
+            padding: 4px;
+            font-size: 11px;
+        }
+
+        .ambiente-sistema__acoes {
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 4px;
+        }
+
+        .ambiente-sistema__btn {
+            min-width: 0;
+            padding: 4px 6px;
+            white-space: normal;
+        }
+    }
+</style>
+
+<script>
+    (function () {
+        function fallbackCopy(text) {
+            var input = document.createElement("textarea");
+            input.value = text;
+            input.setAttribute("readonly", "");
+            input.style.position = "fixed";
+            input.style.left = "-9999px";
+            document.body.appendChild(input);
+            input.select();
+            try {
+                return document.execCommand("copy");
+            } finally {
+                document.body.removeChild(input);
+            }
+        }
+
+        function showFeedback(button, ok) {
+            var originalText = button.textContent;
+            button.classList.add("is-copied");
+            button.textContent = ok ? "Copiado" : "Nao copiou";
+            window.setTimeout(function () {
+                button.classList.remove("is-copied");
+                button.textContent = originalText;
+            }, 1200);
+        }
+
+        document.addEventListener("click", function (event) {
+            var button = event.target.closest("[data-copy-url]");
+            if (!button) {
+                return;
+            }
+
+            var text = button.getAttribute("data-copy-url");
+            if (!text) {
+                showFeedback(button, false);
+                return;
+            }
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text)
+                    .then(function () { showFeedback(button, true); })
+                    .catch(function () { showFeedback(button, fallbackCopy(text)); });
+                return;
+            }
+
+            showFeedback(button, fallbackCopy(text));
+        });
+    }());
+</script>

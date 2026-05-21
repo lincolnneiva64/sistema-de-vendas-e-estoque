@@ -47,3 +47,11 @@ Próxima etapa:
 - Usar provisoriamente o nome da empresa no cabeçalho da nota: LA Neiva.
 - Depois preparar geração de PDF, impressão e envio pelo WhatsApp.
 
+
+## 2026-05-21 - Identificação visual de ambiente
+
+- Adicionada barrinha discreta indicando ONLINE / Render ou LOCAL / Wi-Fi conforme o host acessado.
+- ONLINE / Render deve ser usado para acesso externo pela internet.
+- LOCAL / Wi-Fi deve ser usado para testes no notebook/desktop e celular na mesma rede.
+- O sistema apenas mostra atalhos para abrir/copiar links; ele nao troca banco de dados automaticamente.
+
