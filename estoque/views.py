@@ -29,6 +29,11 @@ from django.views.decorators.http import require_POST
 from PIL import Image, ImageDraw, ImageFont
 from uuid import uuid4
 
+PIX_OCR_PENDENTE_MOBILE = (
+    "OCR nao executado automaticamente no envio mobile para evitar timeout. "
+    "Use processamento manual posteriormente."
+)
+
 MENSAGEM_CLIENTE_DUPLICADO = (
     "Ja existe um cliente parecido cadastrado. Verifique antes de cadastrar novamente."
 )
@@ -1828,50 +1833,20 @@ def central_pix_enviar_comprovante(request):
             messages.warning(request, "Escolha uma imagem ou arquivo de comprovante Pix.")
         else:
             enviado_por_nome = _nome_envio_pix_mobile(request.POST)
-            dados = analisar_comprovante_pix(arquivo)
-            cliente_sugerido, confianca_cliente, mensagem_cliente = _sugerir_cliente_por_pagador(dados.get("pagador"))
-            valor = _decimal_pix_lido(dados.get("valor"))
-            data_pagamento = _data_pix_lida(dados.get("data_pagamento"))
-            texto_ocr_bruto = dados.get("texto_ocr_bruto") or dados.get("texto_extraido") or ""
-            pix_duplicado = _detectar_pix_duplicado_comprovante(dados, valor, data_pagamento, texto_ocr_bruto)
-            status = (
-                PixRecebido.STATUS_POSSIVEL_DUPLICADO
-                if pix_duplicado
-                else (
-                    PixRecebido.STATUS_PENDENTE
-                    if cliente_sugerido
-                    else PixRecebido.STATUS_NAO_IDENTIFICADO
-                )
-            )
-            observacao = "Comprovante recebido pelo envio mobile. Conferir manualmente antes de baixar contas."
-            if not dados.get("ok"):
-                observacao = f"{observacao} Leitura automatica incompleta."
-            if pix_duplicado:
-                observacao = f"{observacao} Possivel Pix duplicado do registro #{pix_duplicado.id}."
-
-            if hasattr(arquivo, "seek"):
-                arquivo.seek(0)
             pix_recebido = PixRecebido.objects.create(
-                cliente_sugerido=cliente_sugerido,
-                pix_original=pix_duplicado,
-                nome_pagador=(dados.get("pagador") or "")[:160],
                 enviado_por_nome=enviado_por_nome,
-                valor=valor,
-                data_pagamento=data_pagamento,
-                instituicao_pix=(dados.get("instituicao_pix") or "")[:80],
-                observacao=observacao,
+                valor=Decimal("0.00"),
+                data_pagamento=timezone.now(),
+                observacao="Comprovante recebido pelo envio mobile. OCR pendente para processamento posterior.",
                 comprovante=arquivo,
-                status=status,
-                texto_ocr_bruto=texto_ocr_bruto,
+                status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+                texto_ocr_bruto=PIX_OCR_PENDENTE_MOBILE,
             )
             messages.success(request, "Comprovante recebido e salvo na Central de Pix.")
-            if pix_duplicado:
-                messages.warning(request, "Possivel Pix duplicado encontrado. Confira antes de baixar.")
-            elif not dados.get("ok"):
-                messages.warning(
-                    request,
-                    "Comprovante recebido na Central de Pix. A leitura automática não identificou todos os dados. Confira depois no computador.",
-                )
+            messages.warning(
+                request,
+                "OCR nao executado no envio mobile para evitar timeout. Processe depois no detalhe do Pix.",
+            )
             detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix_recebido.id})
             return redirect(f"{detalhe_url}?{urlencode({'next': reverse('estoque:central_pix_enviar_comprovante')})}")
 
@@ -1898,6 +1873,83 @@ def central_pix_detalhe(request, pix_id):
         return redirect(detalhe_url)
 
     return render(request, "estoque/central_pix_detalhe.html", {"pix": pix, "voltar_url": voltar_url})
+
+
+@require_POST
+def central_pix_processar_ocr(request, pix_id):
+    pix = get_object_or_404(PixRecebido.objects.select_related("cliente", "cliente_sugerido", "pix_original"), pk=pix_id)
+    voltar_url = _url_retorno_segura(request) or reverse("estoque:central_pix")
+    detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id})
+    if voltar_url:
+        detalhe_url = f"{detalhe_url}?{urlencode({'next': voltar_url})}"
+
+    if not pix.comprovante:
+        pix.texto_ocr_bruto = "ERRO OCR: comprovante nao encontrado para processamento manual."
+        pix.save(update_fields=["texto_ocr_bruto", "atualizado_em"])
+        messages.warning(request, "Comprovante Pix nao encontrado para processar OCR.")
+        return redirect(detalhe_url)
+
+    try:
+        pix.comprovante.open("rb")
+        dados = analisar_comprovante_pix(pix.comprovante)
+    except Exception as exc:
+        detalhe = f": {exc}" if str(exc) else ""
+        pix.texto_ocr_bruto = f"ERRO OCR: {exc.__class__.__name__}{detalhe}"
+        pix.save(update_fields=["texto_ocr_bruto", "atualizado_em"])
+        messages.warning(request, "Nao foi possivel processar o OCR agora. O comprovante continua salvo.")
+        return redirect(detalhe_url)
+    finally:
+        try:
+            pix.comprovante.close()
+        except Exception:
+            pass
+
+    cliente_sugerido, confianca_cliente, mensagem_cliente = _sugerir_cliente_por_pagador(dados.get("pagador"))
+    valor = _decimal_pix_lido(dados.get("valor"))
+    data_pagamento = _data_pix_lida(dados.get("data_pagamento"))
+    texto_ocr_bruto = dados.get("texto_ocr_bruto") or dados.get("texto_extraido") or ""
+    pix_duplicado = _detectar_pix_duplicado_comprovante(dados, valor, data_pagamento, texto_ocr_bruto)
+
+    pix.cliente_sugerido = cliente_sugerido
+    pix.pix_original = pix_duplicado
+    pix.nome_pagador = (dados.get("pagador") or "")[:160]
+    pix.valor = valor
+    pix.data_pagamento = data_pagamento
+    pix.instituicao_pix = (dados.get("instituicao_pix") or "")[:80]
+    pix.texto_ocr_bruto = texto_ocr_bruto
+    pix.status = (
+        PixRecebido.STATUS_POSSIVEL_DUPLICADO
+        if pix_duplicado
+        else (
+            PixRecebido.STATUS_PENDENTE
+            if cliente_sugerido
+            else PixRecebido.STATUS_NAO_IDENTIFICADO
+        )
+    )
+    pix.observacao = "OCR processado manualmente pelo detalhe do Pix. Conferir antes de baixar contas."
+    if not dados.get("ok"):
+        pix.observacao = f"{pix.observacao} Leitura automatica incompleta."
+    if mensagem_cliente:
+        pix.observacao = f"{pix.observacao} {mensagem_cliente}"
+    if pix_duplicado:
+        pix.observacao = f"{pix.observacao} Possivel Pix duplicado do registro #{pix_duplicado.id}."
+    pix.save(update_fields=[
+        "cliente_sugerido",
+        "pix_original",
+        "nome_pagador",
+        "valor",
+        "data_pagamento",
+        "instituicao_pix",
+        "texto_ocr_bruto",
+        "status",
+        "observacao",
+        "atualizado_em",
+    ])
+    if dados.get("ok"):
+        messages.success(request, "OCR processado. Confira os dados antes de qualquer baixa.")
+    else:
+        messages.warning(request, "OCR processado, mas nao identificou todos os dados. Confira manualmente.")
+    return redirect(detalhe_url)
 
 
 def central_pix_comprovante(request, pix_id):

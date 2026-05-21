@@ -253,14 +253,16 @@ class PixRecebidoTests(TestCase):
             content_type="text/plain",
         )
 
-        resposta = self.client.post(
-            reverse("estoque:central_pix_enviar_comprovante"),
-            {"comprovante": arquivo, "enviado_por": "Lincoln"},
-            secure=True,
-            follow=True,
-        )
+        with patch("estoque.views.analisar_comprovante_pix") as analisar_mock:
+            resposta = self.client.post(
+                reverse("estoque:central_pix_enviar_comprovante"),
+                {"comprovante": arquivo, "enviado_por": "Lincoln"},
+                secure=True,
+                follow=True,
+            )
 
         self.assertEqual(resposta.status_code, 200)
+        analisar_mock.assert_not_called()
         pix = PixRecebido.objects.get()
         detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id})
         self.assertIn(detalhe_url, resposta.redirect_chain[-1][0])
@@ -271,15 +273,15 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, f'href="{reverse("estoque:central_pix_enviar_comprovante")}"')
         self.assertContains(resposta, "Enviar outro comprovante")
         self.assertIsNone(pix.cliente)
-        self.assertEqual(pix.cliente_sugerido, cliente)
-        self.assertEqual(pix.nome_pagador, "Cicero Cristiano Silva Souza")
+        self.assertIsNone(pix.cliente_sugerido)
+        self.assertEqual(pix.nome_pagador, "")
         self.assertEqual(pix.enviado_por_nome, "Lincoln")
-        self.assertEqual(str(pix.valor), "20.00")
-        self.assertEqual(timezone.localtime(pix.data_pagamento).strftime("%Y-%m-%dT%H:%M"), "2026-05-16T17:30")
-        self.assertEqual(pix.instituicao_pix, "Banco do Brasil")
-        self.assertEqual(pix.status, PixRecebido.STATUS_PENDENTE)
-        self.assertIn("Comprovante Pix", pix.texto_ocr_bruto)
+        self.assertEqual(str(pix.valor), "0.00")
+        self.assertEqual(pix.instituicao_pix, "")
+        self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
+        self.assertIn("OCR nao executado automaticamente no envio mobile", pix.texto_ocr_bruto)
         self.assertTrue(pix.comprovante)
+        self.assertContains(resposta, "Processar OCR agora")
 
     def test_enviar_comprovante_pix_sem_cliente_sugerido_salva_nao_identificado(self):
         arquivo = SimpleUploadedFile(
@@ -305,10 +307,11 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         pix = PixRecebido.objects.get()
         self.assertIsNone(pix.cliente)
-        self.assertEqual(pix.nome_pagador, "Ivanildo Ferraz Patricio Junior")
-        self.assertEqual(str(pix.valor), "600.00")
-        self.assertEqual(pix.instituicao_pix, "Mercado Pago")
+        self.assertEqual(pix.nome_pagador, "")
+        self.assertEqual(str(pix.valor), "0.00")
+        self.assertEqual(pix.instituicao_pix, "")
         self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
+        self.assertIn("OCR nao executado automaticamente no envio mobile", pix.texto_ocr_bruto)
 
     def test_enviar_comprovante_pix_com_outro_salva_nome_informado(self):
         arquivo = SimpleUploadedFile(
@@ -361,7 +364,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "Comprovante recebido e salvo na Central de Pix.")
         self.assertContains(
             resposta,
-            "Comprovante recebido na Central de Pix. A leitura automática não identificou todos os dados. Confira depois no computador.",
+            "OCR nao executado no envio mobile para evitar timeout. Processe depois no detalhe do Pix.",
         )
         pix = PixRecebido.objects.get()
         self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
@@ -387,7 +390,7 @@ class PixRecebidoTests(TestCase):
         pix = PixRecebido.objects.get()
         self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
         self.assertEqual(pix.enviado_por_nome, "Roseli")
-        self.assertIn("ERRO OCR: RuntimeError: tesseract nao encontrado", pix.texto_ocr_bruto)
+        self.assertIn("OCR nao executado automaticamente no envio mobile", pix.texto_ocr_bruto)
 
         resposta_detalhe = self.client.get(
             reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
@@ -395,7 +398,7 @@ class PixRecebidoTests(TestCase):
         )
         self.assertEqual(resposta_detalhe.status_code, 200)
         self.assertContains(resposta_detalhe, "Texto OCR bruto")
-        self.assertContains(resposta_detalhe, "ERRO OCR: RuntimeError: tesseract nao encontrado")
+        self.assertContains(resposta_detalhe, "OCR nao executado automaticamente no envio mobile")
 
     def test_analisar_comprovante_pix_com_ocr_vazio_salva_diagnostico(self):
         arquivo = SimpleUploadedFile(
@@ -415,9 +418,9 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         pix = PixRecebido.objects.get()
         self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
-        self.assertEqual(pix.texto_ocr_bruto, "OCR executado, mas nao retornou texto.")
+        self.assertIn("OCR nao executado automaticamente no envio mobile", pix.texto_ocr_bruto)
 
-    def test_enviar_mesmo_comprovante_pix_duas_vezes_marca_segundo_como_possivel_duplicado(self):
+    def test_enviar_mesmo_comprovante_pix_duas_vezes_nao_processa_duplicidade_no_mobile(self):
         conteudo = (
             "Comprovante Pix\n"
             "Origem\n"
@@ -445,14 +448,14 @@ class PixRecebidoTests(TestCase):
 
         self.assertEqual(primeira.status_code, 200)
         self.assertEqual(segunda.status_code, 200)
-        self.assertContains(segunda, "Possível Pix duplicado encontrado. Confira antes de baixar.")
+        self.assertContains(segunda, "OCR nao executado no envio mobile para evitar timeout.")
         pix_original, pix_duplicado = PixRecebido.objects.order_by("id")
         self.assertNotEqual(pix_original.status, PixRecebido.STATUS_POSSIVEL_DUPLICADO)
-        self.assertEqual(pix_duplicado.status, PixRecebido.STATUS_POSSIVEL_DUPLICADO)
-        self.assertEqual(pix_duplicado.pix_original, pix_original)
+        self.assertEqual(pix_duplicado.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
+        self.assertIsNone(pix_duplicado.pix_original)
         self.assertIsNone(pix_duplicado.cliente)
 
-    def test_enviar_comprovante_com_mesmo_valor_data_pagador_banco_marca_possivel_duplicado(self):
+    def test_enviar_comprovante_mobile_nao_roda_duplicidade_por_ocr(self):
         PixRecebido.objects.create(
             nome_pagador="Jose Parecido da Silva",
             valor="55.00",
@@ -481,9 +484,9 @@ class PixRecebidoTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         novo_pix = PixRecebido.objects.order_by("-id").first()
-        self.assertEqual(novo_pix.status, PixRecebido.STATUS_POSSIVEL_DUPLICADO)
-        self.assertIsNotNone(novo_pix.pix_original)
-        self.assertIn("Possivel Pix duplicado", novo_pix.observacao)
+        self.assertEqual(novo_pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
+        self.assertIsNone(novo_pix.pix_original)
+        self.assertIn("OCR pendente", novo_pix.observacao)
 
     def test_enviar_comprovante_pix_diferente_continua_pendente_normal(self):
         cliente = Cliente.objects.create(nome="Cliente Diferente Pix", ativo=True)
@@ -516,8 +519,8 @@ class PixRecebidoTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         novo_pix = PixRecebido.objects.order_by("-id").first()
-        self.assertEqual(novo_pix.cliente_sugerido, cliente)
-        self.assertEqual(novo_pix.status, PixRecebido.STATUS_PENDENTE)
+        self.assertIsNone(novo_pix.cliente_sugerido)
+        self.assertEqual(novo_pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
         self.assertIsNone(novo_pix.pix_original)
 
     def test_status_possivel_duplicado_aparece_na_central_e_no_detalhe(self):
@@ -542,7 +545,7 @@ class PixRecebidoTests(TestCase):
             reverse("estoque:central_pix_detalhe", kwargs={"pix_id": duplicado.id}),
             secure=True,
         )
-        self.assertContains(resposta_detalhe, "Possível Pix duplicado encontrado. Confira antes de baixar.")
+        self.assertContains(resposta_detalhe, "Possivel Pix duplicado")
         self.assertContains(resposta_detalhe, f"Ver Pix parecido #{original.id}")
         self.assertContains(resposta_detalhe, "Comparação com Pix parecido")
         self.assertContains(resposta_detalhe, f"Pix atual #{duplicado.id}")
@@ -631,6 +634,65 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta_detalhe, "Enviar outro comprovante")
         self.assertContains(resposta_detalhe, "Texto OCR bruto")
         self.assertContains(resposta_detalhe, "Texto tecnico do OCR")
+
+    def test_detalhe_pix_processar_ocr_agora_atualiza_dados_do_comprovante(self):
+        cliente = Cliente.objects.create(nome="Cicero Cristiano Silva Souza", ativo=True)
+        conteudo = (
+            "Comprovante Pix\n"
+            "Origem\n"
+            "Nome: Cicero Cristiano Silva Souza\n"
+            "Valor R$ 20,00\n"
+            "Data 16/05/2026 17:30\n"
+            "Banco do Brasil\n"
+        ).encode("utf-8")
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            pix = PixRecebido.objects.create(
+                valor="0.00",
+                status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+                texto_ocr_bruto="OCR pendente",
+                comprovante=SimpleUploadedFile("comprovante.txt", conteudo, content_type="text/plain"),
+            )
+
+            resposta = self.client.post(
+                reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
+                secure=True,
+                follow=True,
+            )
+
+            self.assertEqual(resposta.status_code, 200)
+            pix.refresh_from_db()
+            self.assertEqual(pix.cliente_sugerido, cliente)
+            self.assertEqual(pix.nome_pagador, "Cicero Cristiano Silva Souza")
+            self.assertEqual(str(pix.valor), "20.00")
+            self.assertEqual(pix.instituicao_pix, "Banco do Brasil")
+            self.assertEqual(pix.status, PixRecebido.STATUS_PENDENTE)
+            self.assertIn("Comprovante Pix", pix.texto_ocr_bruto)
+            self.assertTrue(pix.comprovante)
+            self.assertContains(resposta, "Texto OCR bruto")
+            self.assertContains(resposta, "Processar OCR agora")
+
+    def test_detalhe_pix_processar_ocr_com_erro_mantem_comprovante_salvo(self):
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            pix = PixRecebido.objects.create(
+                valor="0.00",
+                status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+                texto_ocr_bruto="OCR pendente",
+                comprovante=SimpleUploadedFile("comprovante.jpg", b"imagem", content_type="image/jpeg"),
+            )
+
+            with patch("estoque.views.analisar_comprovante_pix", side_effect=RuntimeError("timeout render")):
+                resposta = self.client.post(
+                    reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
+                    secure=True,
+                    follow=True,
+                )
+
+            self.assertEqual(resposta.status_code, 200)
+            pix.refresh_from_db()
+            self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
+            self.assertTrue(pix.comprovante)
+            self.assertIn("ERRO OCR: RuntimeError: timeout render", pix.texto_ocr_bruto)
+            self.assertContains(resposta, "Texto OCR bruto")
 
     def test_detalhe_pix_usa_rota_propria_do_comprovante(self):
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):

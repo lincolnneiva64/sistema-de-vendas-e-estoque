@@ -136,6 +136,12 @@
                 <button type="submit" class="pix-detail-btn">Marcar como ignorado</button>
               </form>
             {% endif %}
+            {% if pix.comprovante %}
+              <form method="post" action="{% url 'estoque:central_pix_processar_ocr' pix.id %}?next={{ voltar_url|urlencode }}">
+                {% csrf_token %}
+                <button type="submit" class="pix-detail-btn">Processar OCR agora</button>
+              </form>
+            {% endif %}
             <a href="{{ voltar_url }}" class="pix-detail-link">Voltar</a>
             <a href="{% url 'estoque:central_pix_enviar_comprovante' %}" class="pix-detail-link">Enviar outro comprovante</a>
           </div>

@@ -26,6 +26,7 @@ urlpatterns = [
     path("central-pix/", views.central_pix, name="central_pix"),
     path("central-pix/enviar-comprovante/", views.central_pix_enviar_comprovante, name="central_pix_enviar_comprovante"),
     path("central-pix/<int:pix_id>/comprovante/", views.central_pix_comprovante, name="central_pix_comprovante"),
+    path("central-pix/<int:pix_id>/processar-ocr/", views.central_pix_processar_ocr, name="central_pix_processar_ocr"),
     path("central-pix/<int:pix_id>/", views.central_pix_detalhe, name="central_pix_detalhe"),
     path("central-pix/analisar-comprovante/", views.central_pix_analisar_comprovante, name="central_pix_analisar_comprovante"),
     path("contas-a-receber/cliente/<int:cliente_id>/receber/", views.receber_cliente, name="receber_cliente"),
