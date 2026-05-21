@@ -1847,8 +1847,7 @@ def central_pix_enviar_comprovante(request):
                 request,
                 "OCR nao executado no envio mobile para evitar timeout. Processe depois no detalhe do Pix.",
             )
-            detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix_recebido.id})
-            return redirect(f"{detalhe_url}?{urlencode({'next': reverse('estoque:central_pix_enviar_comprovante')})}")
+            return redirect("estoque:central_pix_envio_sucesso", pix_id=pix_recebido.id)
 
     return render(
         request,
@@ -1857,6 +1856,11 @@ def central_pix_enviar_comprovante(request):
             "resumo": resumo,
         },
     )
+
+
+def central_pix_envio_sucesso(request, pix_id):
+    pix = get_object_or_404(PixRecebido, pk=pix_id)
+    return render(request, "estoque/central_pix_envio_sucesso.html", {"pix": pix})
 
 
 @ensure_csrf_cookie

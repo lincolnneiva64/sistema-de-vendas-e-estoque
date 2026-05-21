@@ -1,0 +1,45 @@
+{% extends "estoque/base.html" %}
+{% block title %}Comprovante enviado{% endblock %}
+{% block content %}
+<style>
+  .pix-success-page { min-height: 100vh; background: #f7fafc; color: #172033; padding: 18px 12px 28px; }
+  .pix-success-shell { max-width: 520px; margin: 0 auto; }
+  .pix-success-card { background: #fff; border: 1px solid #dbe4ef; border-radius: 8px; padding: 18px 14px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06); }
+  .pix-success-title { margin: 0 0 10px; color: #14532d; font-size: 1.4rem; font-weight: 900; }
+  .pix-success-main { margin: 0; color: #172033; font-size: 1rem; font-weight: 900; line-height: 1.4; }
+  .pix-success-note { margin: 8px 0 0; color: #475569; font-size: 0.94rem; font-weight: 750; line-height: 1.45; }
+  .pix-success-meta { display: grid; gap: 8px; margin: 16px 0; border-top: 1px solid #edf2f7; border-bottom: 1px solid #edf2f7; padding: 12px 0; }
+  .pix-success-row { display: flex; justify-content: space-between; gap: 12px; font-size: 0.92rem; }
+  .pix-success-row span:first-child { color: #64748b; font-weight: 800; }
+  .pix-success-row span:last-child { color: #172033; font-weight: 900; text-align: right; }
+  .pix-success-status { color: #92400e; }
+  .pix-success-actions { display: grid; gap: 9px; }
+  .pix-success-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; border-radius: 8px; border: 1px solid #16a34a; padding: 10px 13px; font-weight: 900; text-decoration: none; transition: transform 0.08s ease, filter 0.12s ease, background 0.12s ease, box-shadow 0.12s ease; box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12); }
+  .pix-success-btn.primary { background: #16a34a; color: #fff; box-shadow: 0 10px 20px rgba(22, 163, 74, 0.24); }
+  .pix-success-btn.secondary { background: #fff; color: #0f172a; border-color: #cbd5e1; }
+  .pix-success-btn.primary:active { transform: translateY(2px) scale(0.98); background: #15803d; box-shadow: 0 2px 6px rgba(22, 163, 74, 0.18); filter: brightness(0.94); }
+  .pix-success-btn.secondary:active { transform: translateY(2px) scale(0.98); background: #e2e8f0; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12); filter: brightness(0.96); }
+</style>
+<div class="pix-success-page">
+  <div class="pix-success-shell">
+    <section class="pix-success-card">
+      <h1 class="pix-success-title">Comprovante enviado</h1>
+      <p class="pix-success-main">Comprovante enviado com sucesso para a Central de Pix.</p>
+      <p class="pix-success-note">Confira depois no computador antes de baixar qualquer conta.</p>
+
+      <div class="pix-success-meta">
+        {% if pix.enviado_por_nome %}
+          <div class="pix-success-row"><span>Enviado por</span><span>{{ pix.enviado_por_nome }}</span></div>
+        {% endif %}
+        <div class="pix-success-row"><span>Cadastro</span><span>{{ pix.criado_em|date:"d/m/Y H:i" }}</span></div>
+        <div class="pix-success-row"><span>Status</span><span class="pix-success-status">OCR pendente / Conferencia pendente</span></div>
+      </div>
+
+      <div class="pix-success-actions">
+        <a href="{% url 'estoque:central_pix_enviar_comprovante' %}" class="pix-success-btn primary">Enviar outro comprovante</a>
+        <a href="{% url 'estoque:central_pix' %}" class="pix-success-btn secondary">Abrir Central de Pix</a>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

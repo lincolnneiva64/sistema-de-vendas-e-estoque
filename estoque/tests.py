@@ -264,13 +264,15 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         analisar_mock.assert_not_called()
         pix = PixRecebido.objects.get()
-        detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id})
-        self.assertIn(detalhe_url, resposta.redirect_chain[-1][0])
-        self.assertIn("next=%2Fcentral-pix%2Fenviar-comprovante%2F", resposta.redirect_chain[-1][0])
-        self.assertContains(resposta, "Comprovante recebido e salvo na Central de Pix.")
+        sucesso_url = reverse("estoque:central_pix_envio_sucesso", kwargs={"pix_id": pix.id})
+        self.assertTrue(resposta.redirect_chain[-1][0].endswith(sucesso_url))
+        self.assertContains(resposta, "Comprovante enviado")
+        self.assertContains(resposta, "Comprovante enviado com sucesso para a Central de Pix.")
+        self.assertContains(resposta, "Confira depois no computador antes de baixar qualquer conta.")
         self.assertContains(resposta, "Enviado por")
         self.assertContains(resposta, "Lincoln")
         self.assertContains(resposta, f'href="{reverse("estoque:central_pix_enviar_comprovante")}"')
+        self.assertContains(resposta, f'href="{reverse("estoque:central_pix")}"')
         self.assertContains(resposta, "Enviar outro comprovante")
         self.assertIsNone(pix.cliente)
         self.assertIsNone(pix.cliente_sugerido)
@@ -281,7 +283,15 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
         self.assertIn("OCR nao executado automaticamente no envio mobile", pix.texto_ocr_bruto)
         self.assertTrue(pix.comprovante)
-        self.assertContains(resposta, "Processar OCR agora")
+        self.assertContains(resposta, "OCR pendente / Conferencia pendente")
+
+        resposta_detalhe = self.client.get(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+            secure=True,
+        )
+        self.assertEqual(resposta_detalhe.status_code, 200)
+        self.assertContains(resposta_detalhe, "Texto OCR bruto")
+        self.assertContains(resposta_detalhe, "Processar OCR agora")
 
     def test_enviar_comprovante_pix_sem_cliente_sugerido_salva_nao_identificado(self):
         arquivo = SimpleUploadedFile(
@@ -338,9 +348,8 @@ class PixRecebidoTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         pix = PixRecebido.objects.get()
-        detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id})
-        self.assertIn(detalhe_url, resposta.redirect_chain[-1][0])
-        self.assertIn("next=%2Fcentral-pix%2Fenviar-comprovante%2F", resposta.redirect_chain[-1][0])
+        sucesso_url = reverse("estoque:central_pix_envio_sucesso", kwargs={"pix_id": pix.id})
+        self.assertTrue(resposta.redirect_chain[-1][0].endswith(sucesso_url))
         self.assertEqual(pix.enviado_por_nome, "Ana Caixa")
         self.assertContains(resposta, "Enviado por")
         self.assertContains(resposta, "Ana Caixa")
@@ -361,10 +370,10 @@ class PixRecebidoTests(TestCase):
         )
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "Comprovante recebido e salvo na Central de Pix.")
+        self.assertContains(resposta, "Comprovante enviado com sucesso para a Central de Pix.")
         self.assertContains(
             resposta,
-            "OCR nao executado no envio mobile para evitar timeout. Processe depois no detalhe do Pix.",
+            "Confira depois no computador antes de baixar qualquer conta.",
         )
         pix = PixRecebido.objects.get()
         self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
@@ -386,7 +395,7 @@ class PixRecebidoTests(TestCase):
             )
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "Comprovante recebido e salvo na Central de Pix.")
+        self.assertContains(resposta, "Comprovante enviado com sucesso para a Central de Pix.")
         pix = PixRecebido.objects.get()
         self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
         self.assertEqual(pix.enviado_por_nome, "Roseli")
@@ -448,7 +457,7 @@ class PixRecebidoTests(TestCase):
 
         self.assertEqual(primeira.status_code, 200)
         self.assertEqual(segunda.status_code, 200)
-        self.assertContains(segunda, "OCR nao executado no envio mobile para evitar timeout.")
+        self.assertContains(segunda, "Comprovante enviado com sucesso para a Central de Pix.")
         pix_original, pix_duplicado = PixRecebido.objects.order_by("id")
         self.assertNotEqual(pix_original.status, PixRecebido.STATUS_POSSIVEL_DUPLICADO)
         self.assertEqual(pix_duplicado.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
