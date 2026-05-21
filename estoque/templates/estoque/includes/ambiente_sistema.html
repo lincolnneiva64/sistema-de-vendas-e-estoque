@@ -1,30 +1,34 @@
 <div class="ambiente-sistema" aria-label="Ambiente atual do sistema">
-    <div class="ambiente-sistema__status">
-        <span class="ambiente-sistema__label">Ambiente atual:</span>
-        <strong>{{ ambiente_atual|default:"INDEFINIDO" }}</strong>
-    </div>
-    <div class="ambiente-sistema__acoes">
-        <a class="ambiente-sistema__btn" href="{{ sistema_online_url }}" target="_blank" rel="noopener">
-            Abrir ONLINE / Render
-        </a>
-        <button class="ambiente-sistema__btn" type="button" data-copy-url="{{ sistema_online_url }}">
-            Copiar link ONLINE
-        </button>
+    <div class="ambiente-sistema__grupo ambiente-sistema__grupo--local">
+        <span class="ambiente-sistema__ambiente{% if ambiente_is_local %} ambiente-sistema__ambiente--atual{% endif %}">
+            LOCAL / Wi-Fi
+        </span>
         {% if sistema_local_url %}
-            <a class="ambiente-sistema__btn" href="{{ sistema_local_url }}" target="_blank" rel="noopener">
-                Abrir LOCAL / Wi-Fi
-            </a>
             <button class="ambiente-sistema__btn" type="button" data-copy-url="{{ sistema_local_url }}">
                 Copiar link LOCAL
             </button>
-        {% else %}
-            <button class="ambiente-sistema__btn ambiente-sistema__btn--disabled" type="button" disabled title="{{ sistema_local_aviso }}">
+            <a class="ambiente-sistema__btn" href="{{ sistema_local_url }}" target="_blank" rel="noopener">
                 Abrir LOCAL / Wi-Fi
-            </button>
+            </a>
+        {% else %}
             <button class="ambiente-sistema__btn ambiente-sistema__btn--disabled" type="button" disabled title="{{ sistema_local_aviso }}">
                 Copiar link LOCAL
             </button>
+            <button class="ambiente-sistema__btn ambiente-sistema__btn--disabled" type="button" disabled title="{{ sistema_local_aviso }}">
+                Abrir LOCAL / Wi-Fi
+            </button>
         {% endif %}
+    </div>
+    <div class="ambiente-sistema__grupo ambiente-sistema__grupo--online">
+        <span class="ambiente-sistema__ambiente{% if ambiente_is_online %} ambiente-sistema__ambiente--atual{% endif %}">
+            ONLINE / Render
+        </span>
+        <button class="ambiente-sistema__btn" type="button" data-copy-url="{{ sistema_online_url }}">
+            Copiar link ONLINE
+        </button>
+        <a class="ambiente-sistema__btn" href="{{ sistema_online_url }}" target="_blank" rel="noopener">
+            Abrir ONLINE / Render
+        </a>
     </div>
     {% if sistema_local_aviso and not sistema_local_url %}
         <div class="ambiente-sistema__aviso">{{ sistema_local_aviso }}</div>
@@ -49,25 +53,32 @@
         line-height: 1.2;
     }
 
-    .ambiente-sistema__status {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        min-height: 22px;
-        color: #111827;
-        white-space: nowrap;
-    }
-
-    .ambiente-sistema__label {
-        color: #4b5563;
-    }
-
-    .ambiente-sistema__acoes {
+    .ambiente-sistema__grupo {
         display: flex;
         align-items: center;
         justify-content: center;
         gap: 5px;
         flex-wrap: wrap;
+        min-width: 0;
+    }
+
+    .ambiente-sistema__ambiente {
+        display: inline-flex;
+        align-items: center;
+        min-height: 23px;
+        padding: 3px 7px;
+        border: 1px solid transparent;
+        border-radius: 7px;
+        color: #475569;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .ambiente-sistema__ambiente--atual {
+        border-color: #22c55e;
+        background: #ecfdf5;
+        color: #166534;
+        box-shadow: 0 1px 4px rgba(22, 101, 52, 0.12);
     }
 
     .ambiente-sistema__btn {
@@ -121,11 +132,17 @@
             font-size: 11px;
         }
 
-        .ambiente-sistema__acoes {
+        .ambiente-sistema__grupo {
             width: 100%;
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: minmax(96px, 0.75fr) repeat(2, minmax(0, 1fr));
             gap: 4px;
+        }
+
+        .ambiente-sistema__ambiente {
+            min-width: 0;
+            padding: 4px 6px;
+            white-space: normal;
         }
 
         .ambiente-sistema__btn {

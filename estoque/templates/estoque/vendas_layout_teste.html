@@ -1004,17 +1004,28 @@ td:first-child {
                 background: rgba(255, 255, 255, 0.72);
                 box-shadow: none;
                 font-size: 11px;
+                gap: 4px;
+                flex-wrap: nowrap;
+                overflow-x: auto;
                 pointer-events: auto;
             }
 
-            .vendas-ambiente-inline .ambiente-sistema__status {
-                min-height: 19px;
+            .vendas-ambiente-inline .ambiente-sistema__grupo {
+                gap: 3px;
+                flex-wrap: nowrap;
+            }
+
+            .vendas-ambiente-inline .ambiente-sistema__ambiente {
+                min-height: 20px;
+                padding: 2px 6px;
+                border-radius: 6px;
             }
 
             .vendas-ambiente-inline .ambiente-sistema__btn {
                 min-height: 20px;
                 padding: 2px 6px;
                 border-radius: 6px;
+                white-space: nowrap;
             }
 
             .vendas-ambiente-inline .ambiente-sistema__aviso {
