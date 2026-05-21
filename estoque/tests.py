@@ -238,6 +238,14 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(ContaReceber.objects.count(), 0)
         self.assertEqual(CreditoCliente.objects.count(), 0)
 
+    def test_pagina_envio_comprovante_pix_inclui_manifest_pwa(self):
+        resposta = self.client.get(reverse("estoque:central_pix_enviar_comprovante"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'rel="manifest"')
+        self.assertContains(resposta, 'href="/static/manifest.json"')
+        self.assertContains(resposta, 'name="theme-color" content="#16a34a"')
+
     def test_enviar_comprovante_pix_cria_registro_pendente(self):
         cliente = Cliente.objects.create(nome="Cicero Cristiano Silva Souza", ativo=True)
         arquivo = SimpleUploadedFile(

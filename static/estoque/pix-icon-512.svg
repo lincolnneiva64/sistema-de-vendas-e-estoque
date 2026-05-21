@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Enviar Pix">
+  <rect width="512" height="512" rx="112" fill="#16a34a"/>
+  <rect x="128" y="90" width="256" height="332" rx="38" fill="#f8fafc"/>
+  <path d="M182 172h148M182 226h148M182 280h104" stroke="#16a34a" stroke-width="28" stroke-linecap="round"/>
+  <rect x="170" y="338" width="172" height="54" rx="27" fill="#dcfce7"/>
+  <text x="256" y="376" text-anchor="middle" font-family="Arial, sans-serif" font-size="58" font-weight="800" fill="#14532d">Pix</text>
+</svg>
