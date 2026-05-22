@@ -70,37 +70,45 @@
   }
   .pix-correction-input:focus, .pix-correction-field select:focus { border-color: #0f766e; box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12); }
   .pix-correction-error { color: #991b1b; font-size: 0.72rem; font-weight: 800; }
-  .pix-correction-client-search { display: grid; gap: 3px; }
+  .pix-correction-confirmado { grid-column: 1 / -1; }
+  .pix-correction-client-search { display: grid; gap: 8px; align-items: center; }
+  .pix-correction-client-search-with-button { grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr); }
+  .pix-correction-client-search-label { grid-column: 1 / -1; }
+  .pix-correction-client-search .pix-correction-input { min-width: 0; }
   .pix-correction-help { grid-column: 1 / -1; margin: -1px 0 1px; color: #64748b; font-size: 0.7rem; font-weight: 750; line-height: 1.25; }
   .pix-correction-hint {
     border: 1px solid #fde68a; border-radius: 7px; background: #fffbeb; color: #92400e;
     padding: 5px 7px; font-size: 0.78rem; font-weight: 850; min-height: 28px;
   }
-  .pix-suggested-box {
-    grid-column: 1 / -1; border: 1px solid #bbf7d0; border-radius: 8px; background: #f0fdf4;
-    color: #14532d; padding: 6px 7px; display: flex; align-items: center; justify-content: space-between;
-    gap: 8px; font-size: 0.78rem; font-weight: 850;
-  }
-  .pix-suggested-box strong { display: block; color: #14532d; font-size: 0.82rem; }
-  .pix-suggested-muted { grid-column: 1 / -1; color: #64748b; font-size: 0.72rem; font-weight: 800; }
   .pix-confirm-suggested {
     border: 1px solid #86efac; border-radius: 7px; background: #fff; color: #166534;
-    padding: 4px 7px; font: inherit; font-size: 0.74rem; font-weight: 900; cursor: pointer;
+    min-height: 28px; padding: 4px 7px; font: inherit; font-size: 0.74rem; font-weight: 900; cursor: pointer;
     white-space: nowrap;
+    transition: transform 0.08s ease, filter 0.12s ease, background 0.12s ease;
   }
+  .pix-confirm-suggested:active { transform: translateY(1px) scale(0.98); background: #ecfdf3; filter: brightness(0.96); }
   .pix-correction-pagador .pix-correction-input { background: #eff6ff; border-color: #bfdbfe; }
+  .pix-correction-valor { border: 1px solid #facc15; border-radius: 8px; background: #fffbeb; padding: 5px 6px; }
+  .pix-correction-valor .pix-correction-input { border-color: #f59e0b; background: #fffef3; font-weight: 900; color: #78350f; }
+  .pix-correction-valor-alert { color: #92400e; font-size: 0.72rem; font-weight: 850; line-height: 1.2; }
   .pix-correction-confirmado select { background: #ecfdf3; border-color: #bbf7d0; color: #14532d; }
-  .pix-correction-suggestions { display: grid; gap: 4px; }
+  .pix-correction-suggestions { grid-column: 1 / -1; display: grid; gap: 4px; }
   .pix-correction-suggestion { border: 1px solid #bbf7d0; border-radius: 7px; background: #fff; color: #14532d; padding: 5px 7px; text-align: left; font: inherit; font-size: 0.76rem; font-weight: 850; cursor: pointer; }
   .pix-correction-inline .pix-detail-row { grid-column: 1 / -1; padding: 2px 0 0; font-size: 0.8rem; }
   .pix-correction-actions { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
   .pix-correction-actions .pix-detail-btn { min-height: 30px; padding: 5px 9px; font-size: 0.8rem; }
+  @media (max-width: 620px) {
+    .pix-correction-client-search-with-button { grid-template-columns: 1fr; }
+    .pix-confirm-suggested { width: 100%; }
+  }
   @media (max-width: 760px) {
     .pix-detail-grid { grid-template-columns: 1fr; }
     .pix-compare-card { grid-template-columns: 1fr; }
     .pix-detail-head { align-items: stretch; flex-direction: column; }
     .pix-proof-frame { max-height: 480px; }
     .pix-correction-inline { grid-template-columns: 1fr; }
+    .pix-correction-client-search-with-button { grid-template-columns: 1fr; }
+    .pix-confirm-suggested { width: 100%; }
   }
 </style>
 <div class="pix-detail-page">
@@ -180,33 +188,25 @@
           <div class="pix-detail-list">
             <div class="pix-detail-row"><span>Cadastro</span><span>{{ pix.criado_em|date:"d/m/Y H:i" }}</span></div>
             <div class="pix-detail-row"><span>Enviado por</span><span>{{ pix.enviado_por_nome|default:"-" }}</span></div>
-            <form method="post" class="pix-correction-inline">
+            <form method="post" class="pix-correction-inline" autocomplete="off">
               {% csrf_token %}
               <input type="hidden" name="acao" value="corrigir">
               <h2 class="pix-correction-title">Conferencia do comprovante</h2>
               <div class="pix-correction-field pix-correction-confirmado">
                 <label for="{{ form_correcao.cliente.id_for_label }}">Cliente confirmado</label>
                 {{ form_correcao.cliente }}
-                <div class="pix-correction-client-search">
-                  <input type="text" id="pixDetailClienteBusca" class="pix-correction-input" placeholder="Buscar cliente cadastrado" autocomplete="off">
+                <div class="pix-correction-client-search{% if pix.cliente_sugerido %} pix-correction-client-search-with-button{% endif %}">
+                  <label for="pixDetailClienteBusca" class="pix-correction-client-search-label">Buscar cliente cadastrado</label>
+                  <input type="text" id="pixDetailClienteBusca" class="pix-correction-input" placeholder="Buscar outro cliente, se precisar" autocomplete="off" data-cliente-sugerido-nome="{% if pix.cliente_sugerido %}{{ pix.cliente_sugerido.nome }}{% endif %}">
+                  {% if pix.cliente_sugerido %}
+                    <button type="button" class="pix-confirm-suggested" data-cliente-id="{{ pix.cliente_sugerido.id }}" data-cliente-nome="{{ pix.cliente_sugerido.nome }}">Confirmar este cliente</button>
+                  {% endif %}
                   <div class="pix-correction-suggestions" id="pixDetailClienteSugestoes"></div>
                 </div>
                 {% for error in form_correcao.cliente.errors %}
                   <div class="pix-correction-error">{{ error }}</div>
                 {% endfor %}
               </div>
-              <div class="pix-correction-help">O pagador do Pix pode ser diferente do cliente da conta. Confirme o cliente manualmente antes de vincular.</div>
-              {% if pix.cliente_sugerido %}
-                <div class="pix-suggested-box">
-                  <span>
-                    Cliente sugerido. Confirme se for a conta correta.
-                    <strong>{{ pix.cliente_sugerido.nome }}</strong>
-                  </span>
-                  <button type="button" class="pix-confirm-suggested" data-cliente-id="{{ pix.cliente_sugerido.id }}" data-cliente-nome="{{ pix.cliente_sugerido.nome }}">Confirmar este cliente</button>
-                </div>
-              {% else %}
-                <div class="pix-suggested-muted">Nenhum cliente sugerido</div>
-              {% endif %}
               <div class="pix-correction-field pix-correction-field-full pix-correction-pagador">
                 <label for="{{ form_correcao.nome_pagador.id_for_label }}">Nome do pagador</label>
                 {{ form_correcao.nome_pagador }}
@@ -221,9 +221,10 @@
                   <div class="pix-correction-error">{{ error }}</div>
                 {% endfor %}
               </div>
-              <div class="pix-correction-field">
+              <div class="pix-correction-field pix-correction-valor">
                 <label for="{{ form_correcao.valor.id_for_label }}">Valor</label>
                 {{ form_correcao.valor }}
+                <div class="pix-correction-valor-alert">Confira se o valor bate com o comprovante ao lado.</div>
                 {% for error in form_correcao.valor.errors %}
                   <div class="pix-correction-error">{{ error }}</div>
                 {% endfor %}
@@ -236,7 +237,6 @@
                 {% endfor %}
               </div>
               <div class="pix-detail-row"><span>Status</span><span class="pix-detail-status">{{ pix.get_status_display }}</span></div>
-              <div class="pix-detail-row"><span>Observacao</span><span>{{ pix.observacao|default:"-" }}</span></div>
               {% if form_correcao.non_field_errors %}
                 {% for error in form_correcao.non_field_errors %}
                   <div class="pix-correction-error">{{ error }}</div>
@@ -332,7 +332,12 @@
     const clienteSugestoes = document.getElementById("pixDetailClienteSugestoes");
     const confirmarSugerido = document.querySelector(".pix-confirm-suggested");
     const formCorrecao = document.querySelector(".pix-correction-inline");
+    const valorInput = document.getElementById("id_valor");
     let buscaTimer = null;
+
+    function restaurarValorPixAtual() {
+      if (valorInput) valorInput.value = valorInput.defaultValue || "";
+    }
 
     function nomeClienteSelecionado() {
       if (!clienteSelect || !clienteSelect.value) return "";
@@ -370,7 +375,15 @@
       renderizarSugestoes(dados.clientes || []);
     }
 
-    if (clienteBusca) clienteBusca.value = nomeClienteSelecionado();
+    restaurarValorPixAtual();
+    window.setTimeout(restaurarValorPixAtual, 120);
+    window.addEventListener("pageshow", restaurarValorPixAtual);
+
+    if (clienteBusca) {
+      const nomeConfirmado = nomeClienteSelecionado();
+      clienteBusca.value = nomeConfirmado ? "" : clienteBusca.dataset.clienteSugeridoNome || "";
+      clienteBusca.focus();
+    }
     clienteBusca?.addEventListener("input", function () {
       if (clienteSelect) clienteSelect.value = "";
       window.clearTimeout(buscaTimer);

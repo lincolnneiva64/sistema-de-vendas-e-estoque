@@ -776,8 +776,9 @@ class PixRecebidoCorrecaoForm(forms.Form):
         label="Valor",
         widget=forms.TextInput(attrs={
             "class": "pix-correction-input",
+            "autocomplete": "off",
             "inputmode": "decimal",
-            "placeholder": "146,00",
+            "placeholder": "Valor do Pix atual",
         }),
     )
     data_pagamento = forms.DateTimeField(
@@ -785,7 +786,7 @@ class PixRecebidoCorrecaoForm(forms.Form):
         input_formats=["%Y-%m-%dT%H:%M"],
         label="Data do pagamento",
         widget=forms.DateTimeInput(
-            attrs={"class": "pix-correction-input", "type": "datetime-local"},
+            attrs={"class": "pix-correction-input", "type": "datetime-local", "autocomplete": "off"},
             format="%Y-%m-%dT%H:%M",
         ),
     )
@@ -833,7 +834,7 @@ class PixRecebidoCorrecaoForm(forms.Form):
         try:
             valor_decimal = Decimal(texto).quantize(Decimal("0.01"))
         except (InvalidOperation, ValueError):
-            raise forms.ValidationError("Informe um valor valido, como 146,00.")
+            raise forms.ValidationError("Informe um valor valido, como 650,00.")
 
         if valor_decimal < Decimal("0.00"):
             raise forms.ValidationError("Informe um valor de Pix valido.")
