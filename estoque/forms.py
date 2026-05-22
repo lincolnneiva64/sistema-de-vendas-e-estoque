@@ -751,3 +751,90 @@ class PixRecebidoForm(forms.ModelForm):
     def clean_observacao(self):
         observacao = self.cleaned_data.get("observacao") or ""
         return observacao.strip()
+
+
+class PixRecebidoCorrecaoForm(forms.Form):
+    cliente = forms.ModelChoiceField(
+        queryset=Cliente.objects.none(),
+        required=False,
+        empty_label="Sem cliente confirmado",
+        label="Cliente confirmado",
+        widget=forms.Select(attrs={"class": "pix-correction-input"}),
+    )
+    nome_pagador = forms.CharField(
+        required=False,
+        max_length=160,
+        label="Pagador",
+        widget=forms.TextInput(attrs={
+            "class": "pix-correction-input",
+            "autocomplete": "off",
+            "placeholder": "Nome lido ou corrigido do pagador",
+        }),
+    )
+    valor = forms.CharField(
+        required=False,
+        label="Valor",
+        widget=forms.TextInput(attrs={
+            "class": "pix-correction-input",
+            "inputmode": "decimal",
+            "placeholder": "146,00",
+        }),
+    )
+    data_pagamento = forms.DateTimeField(
+        required=False,
+        input_formats=["%Y-%m-%dT%H:%M"],
+        label="Data do pagamento",
+        widget=forms.DateTimeInput(
+            attrs={"class": "pix-correction-input", "type": "datetime-local"},
+            format="%Y-%m-%dT%H:%M",
+        ),
+    )
+    instituicao_pix = forms.CharField(
+        required=False,
+        max_length=80,
+        label="Banco/instituicao",
+        widget=forms.TextInput(attrs={
+            "class": "pix-correction-input",
+            "autocomplete": "off",
+            "placeholder": "Ex.: Nubank",
+        }),
+    )
+
+    def __init__(self, *args, pix=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.pix = pix
+        self.fields["cliente"].queryset = Cliente.objects.filter(ativo=True).order_by("nome")
+        if pix and not self.is_bound:
+            self.initial.update({
+                "cliente": pix.cliente_id,
+                "nome_pagador": pix.nome_pagador,
+                "valor": str(pix.valor or "").replace(".", ","),
+                "data_pagamento": timezone.localtime(pix.data_pagamento).strftime("%Y-%m-%dT%H:%M")
+                if pix.data_pagamento
+                else "",
+                "instituicao_pix": pix.instituicao_pix,
+            })
+
+    def clean_nome_pagador(self):
+        nome = self.cleaned_data.get("nome_pagador") or ""
+        return " ".join(nome.strip().split())[:160]
+
+    def clean_valor(self):
+        valor = self.cleaned_data.get("valor")
+        if valor in (None, ""):
+            return self.pix.valor if self.pix else Decimal("0.00")
+
+        texto = str(valor).strip().replace("R$", "").replace(" ", "")
+        if "," in texto and "." in texto:
+            texto = texto.replace(".", "").replace(",", ".")
+        else:
+            texto = texto.replace(",", ".")
+
+        try:
+            valor_decimal = Decimal(texto).quantize(Decimal("0.01"))
+        except (InvalidOperation, ValueError):
+            raise forms.ValidationError("Informe um valor valido, como 146,00.")
+
+        if valor_decimal < Decimal("0.00"):
+            raise forms.ValidationError("Informe um valor de Pix valido.")
+        return valor_decimal

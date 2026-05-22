@@ -2,50 +2,105 @@
 {% block title %}Detalhe do Pix pendente{% endblock %}
 {% block content %}
 <style>
-  .pix-detail-page { min-height: 100vh; background: #f7fafc; color: #172033; padding: 14px 12px 28px; }
+  .pix-detail-page { min-height: 100vh; background: #f7fafc; color: #172033; padding: 8px 10px 18px; }
   .pix-detail-shell { max-width: 940px; margin: 0 auto; }
-  .pix-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
-  .pix-detail-title { margin: 0; font-size: 1.26rem; font-weight: 900; }
-  .pix-detail-card { background: #fff; border: 1px solid #dbe4ef; border-radius: 8px; padding: 14px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06); }
-  .pix-detail-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(280px, 360px); gap: 14px; align-items: start; }
-  .pix-detail-list { display: grid; gap: 8px; }
-  .pix-detail-row { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid #edf2f7; padding-bottom: 8px; }
+  .pix-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  .pix-detail-title { margin: 0; font-size: 1.12rem; font-weight: 900; }
+  .pix-detail-card { background: #fff; border: 1px solid #dbe4ef; border-radius: 8px; padding: 9px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06); }
+  .pix-detail-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(280px, 360px); gap: 10px; align-items: start; }
+  .pix-detail-list { display: grid; gap: 5px; }
+  .pix-detail-row { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid #edf2f7; padding-bottom: 5px; font-size: 0.84rem; }
   .pix-detail-row span:first-child { color: #64748b; font-weight: 800; }
   .pix-detail-row span:last-child { font-weight: 900; text-align: right; }
+  .pix-detail-label { color: #64748b; font-weight: 800; }
+  .pix-detail-row-focus { border: 1px solid #dbe4ef; border-radius: 8px; padding: 9px 10px; }
+  .pix-detail-row-pagador { background: #eff6ff; border-color: #bfdbfe; }
+  .pix-detail-row-sugerido { background: #fffbeb; border-color: #fde68a; }
+  .pix-detail-row-confirmado { background: #ecfdf3; border-color: #bbf7d0; }
   .pix-detail-status { display: inline-flex; border: 1px solid #fde68a; background: #fffbeb; color: #92400e; border-radius: 999px; padding: 3px 8px; }
-  .pix-proof-card { align-self: start; border: 1px solid #dbe4ef; border-radius: 8px; background: #f8fafc; padding: 9px; display: grid; gap: 8px; }
-  .pix-proof-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  .pix-proof-title { margin: 0; color: #172033; font-size: 1rem; font-weight: 900; }
-  .pix-proof-link { color: #0f766e; font-size: 0.9rem; font-weight: 900; text-decoration: none; }
+  .pix-proof-card { align-self: start; border: 1px solid #dbe4ef; border-radius: 8px; background: #f8fafc; padding: 7px; display: grid; gap: 6px; }
+  .pix-proof-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .pix-proof-title { margin: 0; color: #172033; font-size: 0.9rem; font-weight: 900; }
+  .pix-proof-link { color: #0f766e; font-size: 0.82rem; font-weight: 900; text-decoration: none; }
   .pix-proof-link:hover { text-decoration: underline; }
-  .pix-proof-frame { max-height: 560px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; }
+  .pix-proof-frame { max-height: 520px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; }
   .pix-detail-img { display: block; width: 100%; height: auto; max-width: 100%; background: #fff; }
   .pix-detail-ocr { margin-top: 14px; }
   .pix-detail-ocr h2 { margin: 0 0 8px; font-size: 0.98rem; font-weight: 900; }
   .pix-detail-ocr pre { white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow: auto; margin: 0; padding: 10px; border-radius: 8px; background: #0f172a; color: #e2e8f0; font-size: 0.82rem; }
-  .pix-compare { margin-bottom: 14px; border: 1px solid #fdba74; border-radius: 8px; background: #fffaf3; padding: 12px; }
-  .pix-compare h2 { margin: 0; font-size: 1rem; font-weight: 900; color: #9a3412; }
-  .pix-compare-note { margin: 4px 0 10px; color: #92400e; font-weight: 800; }
-  .pix-compare-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
-  .pix-compare-card { background: #fff; border: 1px solid #fed7aa; border-radius: 8px; padding: 10px; display: grid; gap: 7px; }
-  .pix-compare-card h3 { margin: 0; font-size: 0.94rem; font-weight: 900; color: #172033; }
-  .pix-compare-row { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid #f1f5f9; padding-top: 6px; font-size: 0.86rem; }
+  .pix-compare { margin-bottom: 8px; border: 1px solid #fdba74; border-radius: 8px; background: #fffaf3; padding: 8px; }
+  .pix-compare h2 { margin: 0 0 6px; font-size: 0.9rem; font-weight: 900; color: #9a3412; }
+  .pix-compare-card { background: #fff; border: 1px solid #fed7aa; border-radius: 8px; padding: 8px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 10px; }
+  .pix-compare-card h3 { grid-column: 1 / -1; margin: 0; font-size: 0.86rem; font-weight: 900; color: #172033; }
+  .pix-compare-row { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid #f1f5f9; padding-top: 4px; font-size: 0.78rem; }
   .pix-compare-row span:first-child { color: #64748b; font-weight: 800; }
   .pix-compare-row span:last-child { color: #172033; font-weight: 900; text-align: right; }
-  .pix-compare-thumb-wrap { max-height: 260px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
-  .pix-compare-thumb { display: block; width: 100%; height: auto; max-width: 100%; background: #fff; }
-  .pix-detail-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
-  .pix-detail-btn, .pix-detail-link { min-height: 40px; border-radius: 8px; border: 1px solid #cbd5e1; padding: 8px 12px; font-weight: 900; text-decoration: none; background: #fff; color: #0f172a; transition: transform 0.08s ease, filter 0.12s ease, background 0.12s ease, box-shadow 0.12s ease; box-shadow: 0 7px 14px rgba(15, 23, 42, 0.1); }
+  .pix-compare-row-full { grid-column: 1 / -1; }
+  .pix-compare-actions { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+  .pix-compare-link { border: 1px solid #fdba74; border-radius: 7px; background: #fff7ed; color: #9a3412; padding: 5px 8px; font-size: 0.76rem; font-weight: 900; text-decoration: none; }
+  .pix-detail-card > .pix-compare .pix-compare-note,
+  .pix-detail-card > .pix-compare .pix-compare-card:first-child,
+  .pix-detail-card > .pix-compare .pix-compare-thumb-wrap { display: none; }
+  .pix-detail-card > .pix-compare { display: none; }
+  .pix-current-proof-compact { margin-top: 7px; }
+  .pix-detail-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
+  .pix-detail-btn, .pix-detail-link { min-height: 34px; border-radius: 8px; border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 0.84rem; font-weight: 900; text-decoration: none; background: #fff; color: #0f172a; transition: transform 0.08s ease, filter 0.12s ease, background 0.12s ease, box-shadow 0.12s ease; box-shadow: 0 5px 10px rgba(15, 23, 42, 0.09); }
   .pix-detail-btn { border-color: #f59e0b; color: #92400e; }
   .pix-detail-btn:active, .pix-detail-link:active { transform: translateY(2px) scale(0.98); background: #e2e8f0; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12); filter: brightness(0.96); }
   .pix-detail-btn:active { background: #fffbeb; }
-  .pix-detail-alert { border-radius: 8px; padding: 9px 11px; margin-bottom: 10px; font-weight: 850; background: #ecfdf3; border: 1px solid #bbf7d0; color: #166534; }
-  .pix-detail-warning { border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-weight: 900; background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; }
+  .pix-detail-alert { border-radius: 8px; padding: 6px 9px; margin-bottom: 6px; font-size: 0.84rem; font-weight: 850; background: #ecfdf3; border: 1px solid #bbf7d0; color: #166534; }
+  .pix-detail-warning { border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-weight: 900; background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; }
+  .pix-correction-inline {
+    border: 2px solid #67c7d7; border-radius: 8px; background: #f2fbfc;
+    padding: 7px 8px 8px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px 8px; box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.06);
+  }
+  .pix-correction-title {
+    grid-column: 1 / -1; margin: 0; color: #0f766e; font-size: 0.68rem; font-weight: 900;
+    text-transform: uppercase; letter-spacing: 0; background: #e0f7f6; border: 1px solid #9de3dd;
+    border-radius: 7px; padding: 4px 7px;
+  }
+  .pix-correction-field { min-width: 0; display: grid; gap: 2px; }
+  .pix-correction-field-full { grid-column: 1 / -1; }
+  .pix-correction-field label { display: block; color: #64748b; font-size: 0.66rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0; }
+  .pix-correction-input, .pix-correction-field select {
+    width: 100%; min-height: 28px; border: 1.5px solid #d3dbe8; border-radius: 8px;
+    background: #fff; color: #172033; font-weight: 750; padding: 4px 7px; outline: none;
+    font-size: 0.8rem;
+  }
+  .pix-correction-input:focus, .pix-correction-field select:focus { border-color: #0f766e; box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12); }
+  .pix-correction-error { color: #991b1b; font-size: 0.72rem; font-weight: 800; }
+  .pix-correction-client-search { display: grid; gap: 3px; }
+  .pix-correction-help { grid-column: 1 / -1; margin: -1px 0 1px; color: #64748b; font-size: 0.7rem; font-weight: 750; line-height: 1.25; }
+  .pix-correction-hint {
+    border: 1px solid #fde68a; border-radius: 7px; background: #fffbeb; color: #92400e;
+    padding: 5px 7px; font-size: 0.78rem; font-weight: 850; min-height: 28px;
+  }
+  .pix-suggested-box {
+    grid-column: 1 / -1; border: 1px solid #bbf7d0; border-radius: 8px; background: #f0fdf4;
+    color: #14532d; padding: 6px 7px; display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; font-size: 0.78rem; font-weight: 850;
+  }
+  .pix-suggested-box strong { display: block; color: #14532d; font-size: 0.82rem; }
+  .pix-suggested-muted { grid-column: 1 / -1; color: #64748b; font-size: 0.72rem; font-weight: 800; }
+  .pix-confirm-suggested {
+    border: 1px solid #86efac; border-radius: 7px; background: #fff; color: #166534;
+    padding: 4px 7px; font: inherit; font-size: 0.74rem; font-weight: 900; cursor: pointer;
+    white-space: nowrap;
+  }
+  .pix-correction-pagador .pix-correction-input { background: #eff6ff; border-color: #bfdbfe; }
+  .pix-correction-confirmado select { background: #ecfdf3; border-color: #bbf7d0; color: #14532d; }
+  .pix-correction-suggestions { display: grid; gap: 4px; }
+  .pix-correction-suggestion { border: 1px solid #bbf7d0; border-radius: 7px; background: #fff; color: #14532d; padding: 5px 7px; text-align: left; font: inherit; font-size: 0.76rem; font-weight: 850; cursor: pointer; }
+  .pix-correction-inline .pix-detail-row { grid-column: 1 / -1; padding: 2px 0 0; font-size: 0.8rem; }
+  .pix-correction-actions { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
+  .pix-correction-actions .pix-detail-btn { min-height: 30px; padding: 5px 9px; font-size: 0.8rem; }
   @media (max-width: 760px) {
     .pix-detail-grid { grid-template-columns: 1fr; }
-    .pix-compare-grid { grid-template-columns: 1fr; }
+    .pix-compare-card { grid-template-columns: 1fr; }
     .pix-detail-head { align-items: stretch; flex-direction: column; }
     .pix-proof-frame { max-height: 480px; }
+    .pix-correction-inline { grid-template-columns: 1fr; }
   }
 </style>
 <div class="pix-detail-page">
@@ -105,6 +160,12 @@
               <div class="pix-compare-row"><span>Cliente confirmado</span><span>{% if pix.pix_original.cliente %}{{ pix.pix_original.cliente.nome }}{% else %}Nenhum{% endif %}</span></div>
               <div class="pix-compare-row"><span>Status</span><span>{{ pix.pix_original.get_status_display }}</span></div>
               <div class="pix-compare-row"><span>Observacao</span><span>{{ pix.pix_original.observacao|default:"-"|truncatechars:90 }}</span></div>
+              <div class="pix-compare-actions">
+                <a href="{% url 'estoque:central_pix_detalhe' pix.pix_original.id %}?next={{ request.get_full_path|urlencode }}" class="pix-compare-link">Abrir Pix parecido</a>
+                {% if pix.pix_original.comprovante %}
+                  <a href="{% url 'estoque:central_pix_comprovante' pix.pix_original.id %}" target="_blank" rel="noopener" class="pix-compare-link">{% if pix.pix_original.comprovante_eh_imagem %}Abrir imagem do Pix parecido{% else %}Abrir comprovante do Pix parecido{% endif %}</a>
+                {% endif %}
+              </div>
               {% if pix.pix_original.comprovante and pix.pix_original.comprovante_eh_imagem %}
                 <div class="pix-compare-thumb-wrap">
                   <img src="{% url 'estoque:central_pix_comprovante' pix.pix_original.id %}" alt="Comprovante do Pix parecido" class="pix-compare-thumb">
@@ -119,14 +180,72 @@
           <div class="pix-detail-list">
             <div class="pix-detail-row"><span>Cadastro</span><span>{{ pix.criado_em|date:"d/m/Y H:i" }}</span></div>
             <div class="pix-detail-row"><span>Enviado por</span><span>{{ pix.enviado_por_nome|default:"-" }}</span></div>
-            <div class="pix-detail-row"><span>Pagador</span><span>{{ pix.nome_pagador|default:"Nao identificado" }}</span></div>
-            <div class="pix-detail-row"><span>Valor</span><span>R$ {{ pix.valor|floatformat:2 }}</span></div>
-            <div class="pix-detail-row"><span>Data do pagamento</span><span>{{ pix.data_pagamento|date:"d/m/Y H:i" }}</span></div>
-            <div class="pix-detail-row"><span>Banco</span><span>{{ pix.instituicao_pix|default:"Nao identificado" }}</span></div>
-            <div class="pix-detail-row"><span>Cliente confirmado</span><span>{% if pix.cliente %}{{ pix.cliente.nome }}{% else %}Nenhum{% endif %}</span></div>
-            <div class="pix-detail-row"><span>Cliente sugerido</span><span>{% if pix.cliente_sugerido %}{{ pix.cliente_sugerido.nome }}{% else %}Nenhum{% endif %}</span></div>
-            <div class="pix-detail-row"><span>Status</span><span class="pix-detail-status">{{ pix.get_status_display }}</span></div>
-            <div class="pix-detail-row"><span>Observacao</span><span>{{ pix.observacao|default:"-" }}</span></div>
+            <form method="post" class="pix-correction-inline">
+              {% csrf_token %}
+              <input type="hidden" name="acao" value="corrigir">
+              <h2 class="pix-correction-title">Conferencia do comprovante</h2>
+              <div class="pix-correction-field pix-correction-confirmado">
+                <label for="{{ form_correcao.cliente.id_for_label }}">Cliente confirmado</label>
+                {{ form_correcao.cliente }}
+                <div class="pix-correction-client-search">
+                  <input type="text" id="pixDetailClienteBusca" class="pix-correction-input" placeholder="Buscar cliente cadastrado" autocomplete="off">
+                  <div class="pix-correction-suggestions" id="pixDetailClienteSugestoes"></div>
+                </div>
+                {% for error in form_correcao.cliente.errors %}
+                  <div class="pix-correction-error">{{ error }}</div>
+                {% endfor %}
+              </div>
+              <div class="pix-correction-help">O pagador do Pix pode ser diferente do cliente da conta. Confirme o cliente manualmente antes de vincular.</div>
+              {% if pix.cliente_sugerido %}
+                <div class="pix-suggested-box">
+                  <span>
+                    Cliente sugerido. Confirme se for a conta correta.
+                    <strong>{{ pix.cliente_sugerido.nome }}</strong>
+                  </span>
+                  <button type="button" class="pix-confirm-suggested" data-cliente-id="{{ pix.cliente_sugerido.id }}" data-cliente-nome="{{ pix.cliente_sugerido.nome }}">Confirmar este cliente</button>
+                </div>
+              {% else %}
+                <div class="pix-suggested-muted">Nenhum cliente sugerido</div>
+              {% endif %}
+              <div class="pix-correction-field pix-correction-field-full pix-correction-pagador">
+                <label for="{{ form_correcao.nome_pagador.id_for_label }}">Nome do pagador</label>
+                {{ form_correcao.nome_pagador }}
+                {% for error in form_correcao.nome_pagador.errors %}
+                  <div class="pix-correction-error">{{ error }}</div>
+                {% endfor %}
+              </div>
+              <div class="pix-correction-field pix-correction-field-full">
+                <label for="{{ form_correcao.instituicao_pix.id_for_label }}">Instituicao/Banco</label>
+                {{ form_correcao.instituicao_pix }}
+                {% for error in form_correcao.instituicao_pix.errors %}
+                  <div class="pix-correction-error">{{ error }}</div>
+                {% endfor %}
+              </div>
+              <div class="pix-correction-field">
+                <label for="{{ form_correcao.valor.id_for_label }}">Valor</label>
+                {{ form_correcao.valor }}
+                {% for error in form_correcao.valor.errors %}
+                  <div class="pix-correction-error">{{ error }}</div>
+                {% endfor %}
+              </div>
+              <div class="pix-correction-field">
+                <label for="{{ form_correcao.data_pagamento.id_for_label }}">Data do pagamento</label>
+                {{ form_correcao.data_pagamento }}
+                {% for error in form_correcao.data_pagamento.errors %}
+                  <div class="pix-correction-error">{{ error }}</div>
+                {% endfor %}
+              </div>
+              <div class="pix-detail-row"><span>Status</span><span class="pix-detail-status">{{ pix.get_status_display }}</span></div>
+              <div class="pix-detail-row"><span>Observacao</span><span>{{ pix.observacao|default:"-" }}</span></div>
+              {% if form_correcao.non_field_errors %}
+                {% for error in form_correcao.non_field_errors %}
+                  <div class="pix-correction-error">{{ error }}</div>
+                {% endfor %}
+              {% endif %}
+              <div class="pix-correction-actions">
+                <button type="submit" class="pix-detail-btn">Salvar correcao</button>
+              </div>
+            </form>
           </div>
           <div class="pix-detail-actions">
             {% if pix.status != "ignorado" %}
@@ -143,9 +262,39 @@
               </form>
             {% endif %}
             <a href="{{ voltar_url }}" class="pix-detail-link">Voltar</a>
-            <a href="{% url 'estoque:central_pix_enviar_comprovante' %}" class="pix-detail-link">Enviar outro comprovante</a>
           </div>
+          {% if pix.pix_original and pix.comprovante %}
+            <div class="pix-proof-card pix-current-proof-compact">
+              <div class="pix-proof-head">
+                <h2 class="pix-proof-title">Comprovante atual</h2>
+                <a href="{% url 'estoque:central_pix_comprovante' pix.id %}" target="_blank" rel="noopener" class="pix-proof-link">{% if pix.comprovante_eh_imagem %}Abrir imagem{% else %}Abrir comprovante{% endif %}</a>
+              </div>
+            </div>
+          {% endif %}
         </div>
+        {% if pix.pix_original %}
+          <div class="pix-compare pix-compare-side">
+            <div class="pix-compare-card">
+              <h3>Pix parecido #{{ pix.pix_original.id }}</h3>
+              <div class="pix-compare-row"><span>Cadastro</span><span>{{ pix.pix_original.criado_em|date:"d/m/Y H:i" }}</span></div>
+              <div class="pix-compare-row"><span>Enviado por</span><span>{{ pix.pix_original.enviado_por_nome|default:"-" }}</span></div>
+              <div class="pix-compare-row"><span>Pagador</span><span>{{ pix.pix_original.nome_pagador|default:"Nao identificado" }}</span></div>
+              <div class="pix-compare-row"><span>Valor</span><span>R$ {{ pix.pix_original.valor|floatformat:2 }}</span></div>
+              <div class="pix-compare-row"><span>Data</span><span>{{ pix.pix_original.data_pagamento|date:"d/m/Y H:i" }}</span></div>
+              <div class="pix-compare-row"><span>Banco</span><span>{{ pix.pix_original.instituicao_pix|default:"Nao identificado" }}</span></div>
+              <div class="pix-compare-row"><span>Cliente sugerido</span><span>{% if pix.pix_original.cliente_sugerido %}{{ pix.pix_original.cliente_sugerido.nome }}{% else %}Nenhum{% endif %}</span></div>
+              <div class="pix-compare-row"><span>Cliente confirmado</span><span>{% if pix.pix_original.cliente %}{{ pix.pix_original.cliente.nome }}{% else %}Nenhum{% endif %}</span></div>
+              <div class="pix-compare-row"><span>Status</span><span>{{ pix.pix_original.get_status_display }}</span></div>
+              <div class="pix-compare-row pix-compare-row-full"><span>Observacao</span><span>{{ pix.pix_original.observacao|default:"-"|truncatechars:90 }}</span></div>
+              <div class="pix-compare-actions">
+                <a href="{% url 'estoque:central_pix_detalhe' pix.pix_original.id %}?next={{ request.get_full_path|urlencode }}" class="pix-compare-link">Abrir Pix parecido</a>
+                {% if pix.pix_original.comprovante %}
+                  <a href="{% url 'estoque:central_pix_comprovante' pix.pix_original.id %}" target="_blank" rel="noopener" class="pix-compare-link">{% if pix.pix_original.comprovante_eh_imagem %}Abrir imagem do Pix parecido{% else %}Abrir comprovante do Pix parecido{% endif %}</a>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        {% else %}
         <div class="pix-proof-card">
           {% if pix.comprovante %}
             <div class="pix-proof-head">
@@ -166,6 +315,7 @@
             <div class="pix-detail-row"><span>Comprovante</span><span>Sem imagem</span></div>
           {% endif %}
         </div>
+        {% endif %}
       </div>
       <div class="pix-detail-ocr">
         <h2>Texto OCR bruto</h2>
@@ -174,4 +324,72 @@
     </section>
   </div>
 </div>
+<script>
+  (function () {
+    const clientesUrl = "{% url 'estoque:clientes_autocomplete' %}";
+    const clienteSelect = document.getElementById("id_cliente");
+    const clienteBusca = document.getElementById("pixDetailClienteBusca");
+    const clienteSugestoes = document.getElementById("pixDetailClienteSugestoes");
+    const confirmarSugerido = document.querySelector(".pix-confirm-suggested");
+    const formCorrecao = document.querySelector(".pix-correction-inline");
+    let buscaTimer = null;
+
+    function nomeClienteSelecionado() {
+      if (!clienteSelect || !clienteSelect.value) return "";
+      const opcao = clienteSelect.options[clienteSelect.selectedIndex];
+      return opcao ? opcao.textContent.trim() : "";
+    }
+
+    function renderizarSugestoes(clientes) {
+      if (!clienteSugestoes) return;
+      clienteSugestoes.innerHTML = "";
+      (clientes || []).slice(0, 10).forEach(function (cliente) {
+        const botao = document.createElement("button");
+        botao.type = "button";
+        botao.className = "pix-correction-suggestion";
+        botao.textContent = cliente.nome || "Cliente sem nome";
+        botao.addEventListener("click", function () {
+          if (clienteSelect) clienteSelect.value = cliente.id || "";
+          if (clienteBusca) clienteBusca.value = cliente.nome || "";
+          clienteSugestoes.innerHTML = "";
+        });
+        clienteSugestoes.appendChild(botao);
+      });
+    }
+
+    async function buscarClientes(termo) {
+      if (!termo || termo.trim().length < 2) {
+        renderizarSugestoes([]);
+        return;
+      }
+      const resposta = await fetch(clientesUrl + "?q=" + encodeURIComponent(termo.trim()), {
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      });
+      if (!resposta.ok) return;
+      const dados = await resposta.json();
+      renderizarSugestoes(dados.clientes || []);
+    }
+
+    if (clienteBusca) clienteBusca.value = nomeClienteSelecionado();
+    clienteBusca?.addEventListener("input", function () {
+      if (clienteSelect) clienteSelect.value = "";
+      window.clearTimeout(buscaTimer);
+      buscaTimer = window.setTimeout(function () {
+        buscarClientes(clienteBusca.value);
+      }, 220);
+    });
+    clienteSelect?.addEventListener("change", function () {
+      if (clienteBusca) clienteBusca.value = nomeClienteSelecionado();
+      renderizarSugestoes([]);
+    });
+
+    confirmarSugerido?.addEventListener("click", function () {
+      if (!clienteSelect || !formCorrecao) return;
+      clienteSelect.value = confirmarSugerido.dataset.clienteId || "";
+      if (clienteBusca) clienteBusca.value = confirmarSugerido.dataset.clienteNome || nomeClienteSelecionado();
+      renderizarSugestoes([]);
+      formCorrecao.requestSubmit();
+    });
+  })();
+</script>
 {% endblock %}

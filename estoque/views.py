@@ -16,7 +16,7 @@ from urllib.parse import quote, urlencode
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count
-from .forms import CategoriaForm, ClienteForm, FuncionarioForm, PixRecebidoForm, ProdutoForm, UnidadeForm
+from .forms import CategoriaForm, ClienteForm, FuncionarioForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
 from .models import Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import analisar_comprovante_pix
 from django.contrib import messages
@@ -1872,20 +1872,60 @@ def _texto_indica_falha_ocr(texto):
     return texto_limpo.startswith("ERRO OCR:") or texto_limpo == "OCR executado, mas nao retornou texto."
 
 
+def _registrar_observacao_correcao_pix(pix):
+    momento = timezone.localtime(timezone.now()).strftime("%d/%m/%Y %H:%M")
+    registro = f"Correcao manual dos dados do Pix em {momento}. Conferir antes de baixar contas."
+    observacao_atual = (pix.observacao or "").strip()
+    pix.observacao = f"{observacao_atual}\n{registro}".strip() if observacao_atual else registro
+
+
 @ensure_csrf_cookie
 def central_pix_detalhe(request, pix_id):
     pix = get_object_or_404(PixRecebido.objects.select_related("cliente", "cliente_sugerido", "pix_original"), pk=pix_id)
     voltar_url = _url_retorno_segura(request) or reverse("estoque:central_pix")
+    detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id})
+    if voltar_url:
+        detalhe_url = f"{detalhe_url}?{urlencode({'next': voltar_url})}"
+
     if request.method == "POST" and request.POST.get("acao") == "ignorar":
         pix.status = PixRecebido.STATUS_IGNORADO
         pix.save(update_fields=["status", "atualizado_em"])
         messages.success(request, "Pix marcado como ignorado.")
-        detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id})
-        if voltar_url:
-            detalhe_url = f"{detalhe_url}?{urlencode({'next': voltar_url})}"
         return redirect(detalhe_url)
 
-    return render(request, "estoque/central_pix_detalhe.html", {"pix": pix, "voltar_url": voltar_url})
+    form_correcao = PixRecebidoCorrecaoForm(pix=pix)
+    if request.method == "POST" and request.POST.get("acao") == "corrigir":
+        form_correcao = PixRecebidoCorrecaoForm(request.POST, pix=pix)
+        if form_correcao.is_valid():
+            nome_pagador = form_correcao.cleaned_data["nome_pagador"]
+            cliente_sugerido, _confianca_cliente, _mensagem_cliente = _sugerir_cliente_por_pagador(nome_pagador)
+            pix.cliente = form_correcao.cleaned_data["cliente"]
+            pix.cliente_sugerido = cliente_sugerido
+            pix.nome_pagador = nome_pagador
+            pix.valor = form_correcao.cleaned_data["valor"]
+            if form_correcao.cleaned_data["data_pagamento"]:
+                pix.data_pagamento = form_correcao.cleaned_data["data_pagamento"]
+            pix.instituicao_pix = form_correcao.cleaned_data["instituicao_pix"]
+            _registrar_observacao_correcao_pix(pix)
+            pix.save(update_fields=[
+                "cliente",
+                "cliente_sugerido",
+                "nome_pagador",
+                "valor",
+                "data_pagamento",
+                "instituicao_pix",
+                "observacao",
+                "atualizado_em",
+            ])
+            messages.success(request, "Dados do Pix corrigidos. Nenhuma baixa financeira foi feita.")
+            return redirect(detalhe_url)
+        messages.warning(request, "Confira os dados da correcao antes de salvar.")
+
+    return render(
+        request,
+        "estoque/central_pix_detalhe.html",
+        {"pix": pix, "voltar_url": voltar_url, "form_correcao": form_correcao},
+    )
 
 
 @require_POST
