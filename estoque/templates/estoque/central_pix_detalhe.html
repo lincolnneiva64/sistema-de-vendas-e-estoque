@@ -111,6 +111,22 @@
   .pix-correction-field:has(#{{ form_correcao.instituicao_pix.id_for_label }}) { background: #f0fdfa; border-left: 4px solid #5eead4; border-radius: 8px; padding: 5px 6px; }
   .pix-correction-field:has(#{{ form_correcao.data_pagamento.id_for_label }}) { background: #f5f3ff; border-left: 4px solid #c4b5fd; border-radius: 8px; padding: 5px 6px; }
   .pix-correction-inline > .pix-detail-row { background: #fff7ed; border-left: 4px solid #fb923c; border-radius: 8px; padding: 5px 6px; }
+  .pix-correction-pagador .pix-correction-input, .pix-compare-side .pix-compare-row:nth-of-type(3) span:last-child { color: #9f1239; }
+  .pix-correction-field:has(#{{ form_correcao.instituicao_pix.id_for_label }}) .pix-correction-input, .pix-compare-side .pix-compare-row:nth-of-type(6) span:last-child { color: #1d4ed8; }
+  .pix-correction-valor .pix-correction-input, .pix-compare-side .pix-compare-row:nth-of-type(4) span:last-child { color: #92400e; }
+  .pix-correction-field:has(#{{ form_correcao.data_pagamento.id_for_label }}) .pix-correction-input, .pix-compare-side .pix-compare-row:nth-of-type(5) span:last-child { color: #166534; }
+  .pix-detail-status, .pix-compare-side .pix-compare-row:nth-of-type(9) span:last-child { color: #9a3412; }
+  .pix-confirmed-client-search, .pix-compare-side .pix-compare-row:nth-of-type(7) span:last-child, .pix-compare-side .pix-compare-row:nth-of-type(8) span:last-child { color: #047857; }
+  .pix-correction-pagador .pix-correction-input,
+  .pix-correction-field:has(#{{ form_correcao.instituicao_pix.id_for_label }}) .pix-correction-input,
+  .pix-correction-field:has(#{{ form_correcao.data_pagamento.id_for_label }}) .pix-correction-input,
+  .pix-detail-status,
+  .pix-compare-side .pix-compare-row:nth-of-type(3) span:last-child,
+  .pix-compare-side .pix-compare-row:nth-of-type(5) span:last-child,
+  .pix-compare-side .pix-compare-row:nth-of-type(6) span:last-child,
+  .pix-compare-side .pix-compare-row:nth-of-type(9) span:last-child { font-weight: 950; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65); }
+  .pix-correction-valor .pix-correction-input,
+  .pix-compare-side .pix-compare-row:nth-of-type(4) span:last-child { font-weight: 950; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.75); }
   @media (max-width: 620px) {
     .pix-confirm-suggested { width: 100%; }
   }
