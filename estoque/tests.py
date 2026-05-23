@@ -1139,6 +1139,34 @@ class PixRecebidoTests(TestCase):
         self.assertIsNone(dados["cliente_sugerido_id"])
         self.assertEqual(PixRecebido.objects.count(), 0)
 
+    def test_analisar_comprovante_pix_nubank_monta_pagador_origem_nome_quebrado(self):
+        conteudo = (
+            "Destino\n"
+            "\n"
+            "Nome Lincoln Albuquerque Neiva\n"
+            "\n"
+            "Instituigaéo = NU PAGAMENTOS - IP\n"
+            "\n"
+            "Chave Pix +5591984111011\n"
+            "\n"
+            "Origem\n"
+            "\n"
+            "Maria Antonia Alves de\n"
+            "\n"
+            "Nome\n"
+            "Paiva\n"
+            "\n"
+            "Instituigdo = NU PAGAMENTOS - IP\n"
+            "\n"
+            "CPF s+1.252.002-++\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante.txt", conteudo, content_type="text/plain")
+
+        dados = analisar_comprovante_pix(arquivo)
+
+        self.assertEqual(dados["pagador"], "Maria Antonia Alves de Paiva")
+        self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque Neiva")
+
     def test_analisar_comprovante_pix_nubank_com_destino_banco_inter_nao_usa_regra_inter(self):
         conteudo = (
             "nu,\n"

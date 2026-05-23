@@ -1158,6 +1158,45 @@ def _extrair_pagador_banco_inter(texto):
     return escolhido
 
 
+def _extrair_pagador_nubank_origem_nome_quebrado(texto, linhas):
+    if not re.search(r"\b(nubank|nu pagamentos)\b", _normalizar_linha(_sem_acentos(texto))):
+        return ""
+
+    for indice, linha in enumerate(linhas):
+        if _normalizar_rotulo_ocr(linha) != "origem":
+            continue
+
+        primeira_parte = ""
+        segunda_parte = ""
+        encontrou_nome = False
+        encontrou_instituicao = False
+        for proxima in linhas[indice + 1:indice + 8]:
+            if not proxima:
+                continue
+            proxima_normalizada = _normalizar_rotulo_ocr(proxima)
+            if re.search(r"\b(destino|cpf|cnpj|chave|valor|data|id|transacao)\b", proxima_normalizada):
+                break
+            if re.search(r"\binstitui\w*|\binstituig\w*", proxima_normalizada):
+                encontrou_instituicao = True
+                break
+            if proxima_normalizada == "nome":
+                encontrou_nome = True
+                continue
+            if not _parece_nome_pessoa(proxima) and not (encontrou_nome and re.fullmatch(r"[^\W\d_]{2,}", proxima)):
+                continue
+            if not encontrou_nome and not primeira_parte:
+                primeira_parte = proxima
+                continue
+            if encontrou_nome and not segunda_parte:
+                segunda_parte = proxima
+
+        if primeira_parte and segunda_parte and encontrou_instituicao:
+            nome = _limpar_nome_pagador_ocr(f"{primeira_parte} {segunda_parte}")
+            if nome:
+                return nome[:160]
+    return ""
+
+
 def _extrair_pagador(texto):
     linhas = [_normalizar_espacos(linha) for linha in texto.splitlines()]
     pagador_caixa_tem = _extrair_pagador_caixa_tem(linhas)
@@ -1171,6 +1210,10 @@ def _extrair_pagador(texto):
     pagador_inter_whatsapp = _extrair_pagador_inter_whatsapp_rotulos_antes(linhas)
     if pagador_inter_whatsapp:
         return pagador_inter_whatsapp
+
+    pagador_nubank_nome_quebrado = _extrair_pagador_nubank_origem_nome_quebrado(texto, linhas)
+    if pagador_nubank_nome_quebrado:
+        return pagador_nubank_nome_quebrado
 
     nome_destino_quebrado = _extrair_pagador_destino_nome_quebrado_inter(linhas)
     if nome_destino_quebrado:
