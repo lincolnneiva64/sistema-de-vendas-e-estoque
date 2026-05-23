@@ -468,6 +468,7 @@ class PixRecebido(models.Model):
     STATUS_IGNORADO = "ignorado"
     STATUS_POSSIVEL_DUPLICADO = "possivel_duplicado"
     STATUS_NAO_IDENTIFICADO = "nao_identificado"
+    STATUS_DUPLICADO = "duplicado"
     STATUS_CHOICES = [
         (STATUS_PENDENTE, "Pendente"),
         (STATUS_IDENTIFICADO, "Identificado"),
@@ -475,6 +476,7 @@ class PixRecebido(models.Model):
         (STATUS_IGNORADO, "Ignorado"),
         (STATUS_POSSIVEL_DUPLICADO, "Possivel duplicado"),
         (STATUS_NAO_IDENTIFICADO, "Nao identificado"),
+        (STATUS_DUPLICADO, "Duplicado/inativo"),
     ]
 
     cliente = models.ForeignKey(

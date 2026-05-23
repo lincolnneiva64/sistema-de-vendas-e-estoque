@@ -1110,6 +1110,130 @@ class PixRecebidoTests(TestCase):
         pix.refresh_from_db()
         self.assertEqual(pix.status, PixRecebido.STATUS_IGNORADO)
 
+    def _criar_conta_receber_pix(self, cliente, valor="100.00"):
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=valor,
+        )
+        return ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=valor,
+            valor_em_aberto=valor,
+            status=ContaReceber.STATUS_ABERTA,
+        )
+
+    def test_baixa_com_pix_atual_bloqueia_quando_parecido_ja_foi_baixado(self):
+        cliente = Cliente.objects.create(nome="Cliente Pix Duplicado", ativo=True)
+        self._criar_conta_receber_pix(cliente, "96.30")
+        pix_baixado = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="ABELARDO ROBSON V PIEDADE",
+            valor="96.30",
+            status=PixRecebido.STATUS_BAIXADO,
+        )
+        pix_atual = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="ABELARDO ROBSON V PIEDADE",
+            valor="96.30",
+            status=PixRecebido.STATUS_POSSIVEL_DUPLICADO,
+            pix_original=pix_baixado,
+        )
+
+        resposta = self.client.post(
+            f"{reverse('estoque:receber_cliente', kwargs={'cliente_id': cliente.id})}?pix_recebido={pix_atual.id}",
+            {
+                "pix_recebido": pix_atual.id,
+                "data_recebimento": timezone.localdate().isoformat(),
+                "valor": "96,30",
+                "forma_pagamento": "PIX",
+                "destino_diferenca": "troco",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
+        pix_atual.refresh_from_db()
+        self.assertEqual(pix_atual.status, PixRecebido.STATUS_POSSIVEL_DUPLICADO)
+
+    def test_baixa_com_pix_atual_marca_parecido_pendente_como_duplicado(self):
+        cliente = Cliente.objects.create(nome="Cliente Pix Atual", ativo=True)
+        self._criar_conta_receber_pix(cliente, "96.30")
+        pix_parecido = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="ABELARDO ROBSON V PIEDADE",
+            valor="96.30",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+        pix_atual = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="ABELARDO ROBSON V PIEDADE",
+            valor="96.30",
+            status=PixRecebido.STATUS_POSSIVEL_DUPLICADO,
+            pix_original=pix_parecido,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            {
+                "pix_recebido": pix_atual.id,
+                "data_recebimento": timezone.localdate().isoformat(),
+                "valor": "96,30",
+                "forma_pagamento": "PIX",
+                "destino_diferenca": "troco",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        pix_atual.refresh_from_db()
+        pix_parecido.refresh_from_db()
+        self.assertEqual(pix_atual.status, PixRecebido.STATUS_BAIXADO)
+        self.assertEqual(pix_parecido.status, PixRecebido.STATUS_DUPLICADO)
+        self.assertEqual(pix_parecido.pix_original, pix_atual)
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 1)
+
+    def test_baixa_com_pix_parecido_marca_pix_atual_como_duplicado(self):
+        cliente = Cliente.objects.create(nome="Cliente Pix Parecido", ativo=True)
+        self._criar_conta_receber_pix(cliente, "96.30")
+        pix_parecido = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="ABELARDO ROBSON V PIEDADE",
+            valor="96.30",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+        pix_atual = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="ABELARDO ROBSON V PIEDADE",
+            valor="96.30",
+            status=PixRecebido.STATUS_POSSIVEL_DUPLICADO,
+            pix_original=pix_parecido,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            {
+                "pix_recebido": pix_parecido.id,
+                "data_recebimento": timezone.localdate().isoformat(),
+                "valor": "96,30",
+                "forma_pagamento": "PIX",
+                "destino_diferenca": "troco",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        pix_atual.refresh_from_db()
+        pix_parecido.refresh_from_db()
+        self.assertEqual(pix_parecido.status, PixRecebido.STATUS_BAIXADO)
+        self.assertEqual(pix_atual.status, PixRecebido.STATUS_DUPLICADO)
+        self.assertEqual(pix_atual.pix_original, pix_parecido)
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 1)
+
     def test_analisar_comprovante_pix_nubank_usa_nome_da_origem(self):
         conteudo = (
             "Comprovante Pix\n"

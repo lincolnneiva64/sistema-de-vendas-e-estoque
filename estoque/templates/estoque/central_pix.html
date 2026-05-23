@@ -175,6 +175,7 @@
   .pix-status.baixado { border-color: #86efac; background: #f0fdf4; color: #166534; }
   .pix-status.nao_identificado { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
   .pix-status.possivel_duplicado { border-color: #fdba74; background: #fff7ed; color: #9a3412; }
+  .pix-status.duplicado { border-color: #cbd5e1; background: #f8fafc; color: #64748b; }
   .pix-status-acoes { display: grid; gap: 6px; justify-items: start; }
   .pix-file-link {
     border: 1px solid #99f6e4; border-radius: 8px; background: #f0fdfa;
@@ -323,7 +324,7 @@
                   <td>
                     <div class="pix-status-acoes">
                       <span class="pix-status {{ pix.status }}">{{ pix.get_status_display }}</span>
-                      <a href="{% url 'estoque:central_pix_detalhe' pix.id %}?next={% url 'estoque:central_pix' %}" class="pix-file-link">Ver detalhe</a>
+                      <a href="{% url 'estoque:central_pix_detalhe' pix.id %}?next={{ detalhe_retorno_url|urlencode }}" class="pix-file-link">Ver detalhe</a>
                     </div>
                   </td>
                   <td>{{ pix.observacao|default:"-"|truncatechars:70 }}</td>

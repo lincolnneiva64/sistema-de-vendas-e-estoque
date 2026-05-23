@@ -75,6 +75,10 @@
   .pix-detail-btn:active { background: #fffbeb; }
   .pix-detail-alert { border-radius: 8px; padding: 6px 9px; margin-bottom: 6px; font-size: 0.84rem; font-weight: 850; background: #ecfdf3; border: 1px solid #bbf7d0; color: #166534; }
   .pix-detail-warning { border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-weight: 900; background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; }
+  .pix-duplicate-safe-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 7px; }
+  .pix-compare-duplicate-note { grid-column: 1 / -1; border: 2px solid #fbbf24; border-radius: 8px; background: #fffbeb; color: #92400e; padding: 9px 10px; font-size: 0.94rem; font-weight: 950; line-height: 1.35; }
+  .pix-compare-duplicate-note.is-critical { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
+  .pix-compare-duplicate-title { display: block; margin-bottom: 3px; font-size: 1rem; font-weight: 950; }
   .pix-correction-inline {
     border: 2px solid #67c7d7; border-radius: 8px; background: #f2fbfc;
     padding: 7px 8px 8px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -169,14 +173,6 @@
     {% endif %}
 
     <section class="pix-detail-card">
-      {% if pix.status == "possivel_duplicado" %}
-        <div class="pix-detail-warning">
-          Possível Pix duplicado encontrado. Confira antes de baixar.
-          {% if pix.pix_original %}
-            <a href="{% url 'estoque:central_pix_detalhe' pix.pix_original.id %}?next={{ request.get_full_path|urlencode }}">Ver Pix parecido #{{ pix.pix_original.id }}</a>
-          {% endif %}
-        </div>
-      {% endif %}
       {% if pix.pix_original %}
         <div class="pix-compare">
           <h2>Comparação com Pix parecido</h2>
@@ -302,6 +298,10 @@
                 <button type="submit" class="pix-detail-btn">Processar OCR agora</button>
               </form>
             {% endif %}
+            {% if pix_retorno_baixa_url and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
+              <a href="{{ pix_retorno_baixa_url }}" class="pix-detail-link">Usar este Pix na baixa</a>
+            {% endif %}
+            <a href="{% url 'estoque:central_pix_enviar_comprovante' %}" class="pix-detail-link">Enviar outro comprovante</a>
             <a href="{{ voltar_url }}" class="pix-detail-link">Voltar</a>
           </div>
           {% if pix.pix_original and pix.comprovante %}
@@ -327,6 +327,24 @@
               <div class="pix-compare-row"><span>Cliente confirmado</span><span>{% if pix.pix_original.cliente %}{{ pix.pix_original.cliente.nome }}{% else %}Nenhum{% endif %}</span></div>
               <div class="pix-compare-row"><span>Status</span><span>{{ pix.pix_original.get_status_display }}</span></div>
               <div class="pix-compare-row pix-compare-row-full"><span>Observacao</span><span>{{ pix.pix_original.observacao|default:"-"|truncatechars:90 }}</span></div>
+              {% if pix_parecido_pendente or pix_parecido_baixado %}
+                <div class="pix-compare-duplicate-note {% if pix_parecido_baixado %}is-critical{% endif %}">
+                  <span class="pix-compare-duplicate-title">Possível Pix duplicado encontrado</span>
+                  {% if pix_parecido_baixado %}
+                    Este Pix parecido já foi baixado. Não baixe o Pix atual novamente sem conferir.
+                    <div class="pix-duplicate-safe-actions">
+                      <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="acao" value="marcar_duplicado">
+                        <button type="submit" class="pix-detail-btn">Marcar Pix atual como duplicado/inativo</button>
+                      </form>
+                    </div>
+                  {% else %}
+                    Este Pix parecido ainda não foi baixado. Se você confirmar a baixa usando o Pix atual, o Pix parecido será marcado automaticamente como duplicado/inativo.
+                    {% if pix_retorno_baixa_url %}Use o botão "Usar este Pix na baixa" no painel do Pix atual para seguir.{% endif %}
+                  {% endif %}
+                </div>
+              {% endif %}
               <div class="pix-compare-actions">
                 <a href="{% url 'estoque:central_pix_detalhe' pix.pix_original.id %}?next={{ request.get_full_path|urlencode }}" class="pix-compare-link">Abrir Pix parecido</a>
                 {% if pix.pix_original.comprovante %}

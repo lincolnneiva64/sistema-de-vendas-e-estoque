@@ -1848,6 +1848,7 @@ def central_pix(request):
             "pix_recebidos": pix_recebidos,
             "total_pix": pix_recebidos.count(),
             "voltar_url": retorno_url or reverse("estoque:contas_receber"),
+            "detalhe_retorno_url": retorno_url or central_pix_url,
         },
     )
 
@@ -1904,6 +1905,83 @@ def _registrar_observacao_correcao_pix(pix):
     pix.observacao = f"{observacao_atual}\n{registro}".strip() if observacao_atual else registro
 
 
+def _registrar_observacao_pix(pix, registro):
+    observacao_atual = (pix.observacao or "").strip()
+    pix.observacao = f"{observacao_atual}\n{registro}".strip() if observacao_atual else registro
+
+
+def _marcar_pix_como_duplicado(pix, pix_referencia, motivo):
+    if not pix or pix.status == PixRecebido.STATUS_BAIXADO:
+        return False
+    momento = timezone.localtime(timezone.now()).strftime("%d/%m/%Y %H:%M")
+    pix.status = PixRecebido.STATUS_DUPLICADO
+    pix.pix_original = pix_referencia
+    referencia = f" Pix valido usado como referencia: #{pix_referencia.id}." if pix_referencia else ""
+    _registrar_observacao_pix(pix, f"{momento} - Pix marcado como duplicado/inativo. {motivo}.{referencia}")
+    pix.save(update_fields=["status", "pix_original", "observacao", "atualizado_em"])
+    return True
+
+
+def _marcar_pix_baixado_com_duplicados(pix_id):
+    if not pix_id:
+        return None, 0
+    pix = PixRecebido.objects.select_for_update().filter(pk=pix_id).first()
+    if not pix:
+        raise RecebimentoContaErro("Pix informado para baixa nao foi encontrado.")
+    pix_original = None
+    if pix.pix_original_id:
+        pix_original = PixRecebido.objects.select_for_update().filter(pk=pix.pix_original_id).first()
+    if pix.status in {PixRecebido.STATUS_DUPLICADO, PixRecebido.STATUS_IGNORADO}:
+        raise RecebimentoContaErro("Este Pix esta inativo e nao pode ser usado para baixa.")
+    if pix.status == PixRecebido.STATUS_BAIXADO:
+        raise RecebimentoContaErro("Este Pix ja foi baixado e nao pode ser usado novamente.")
+    if pix_original and pix_original.status == PixRecebido.STATUS_BAIXADO:
+        raise RecebimentoContaErro(
+            f"O Pix parecido #{pix.pix_original_id} ja foi baixado. Este Pix atual nao deve ser baixado novamente."
+        )
+
+    momento = timezone.localtime(timezone.now()).strftime("%d/%m/%Y %H:%M")
+    pix.status = PixRecebido.STATUS_BAIXADO
+    _registrar_observacao_pix(pix, f"{momento} - Pix usado em baixa confirmada pelo operador.")
+    pix.save(update_fields=["status", "observacao", "atualizado_em"])
+
+    duplicados_marcados = 0
+    if pix_original:
+        duplicados_marcados += int(
+            _marcar_pix_como_duplicado(
+                pix_original,
+                pix,
+                f"Marcado automaticamente porque o Pix #{pix.id} foi usado para baixa confirmada",
+            )
+        )
+
+    duplicados_relacionados = PixRecebido.objects.select_for_update().filter(
+        pix_original=pix,
+        status__in=[
+            PixRecebido.STATUS_PENDENTE,
+            PixRecebido.STATUS_IDENTIFICADO,
+            PixRecebido.STATUS_POSSIVEL_DUPLICADO,
+            PixRecebido.STATUS_NAO_IDENTIFICADO,
+        ],
+    )
+    for duplicado in duplicados_relacionados:
+        duplicados_marcados += int(
+            _marcar_pix_como_duplicado(
+                duplicado,
+                pix,
+                f"Marcado automaticamente porque o Pix #{pix.id} foi usado para baixa confirmada",
+            )
+        )
+    return pix, duplicados_marcados
+
+
+def _url_com_pix_recebido(url, pix_id):
+    if not url or not pix_id:
+        return ""
+    separador = "&" if "?" in url else "?"
+    return f"{url}{separador}{urlencode({'pix_recebido': pix_id})}"
+
+
 @ensure_csrf_cookie
 def central_pix_detalhe(request, pix_id):
     pix = get_object_or_404(PixRecebido.objects.select_related("cliente", "cliente_sugerido", "pix_original"), pk=pix_id)
@@ -1916,6 +1994,15 @@ def central_pix_detalhe(request, pix_id):
         pix.status = PixRecebido.STATUS_IGNORADO
         pix.save(update_fields=["status", "atualizado_em"])
         messages.success(request, "Pix marcado como ignorado.")
+        return redirect(detalhe_url)
+
+    if request.method == "POST" and request.POST.get("acao") == "marcar_duplicado":
+        _marcar_pix_como_duplicado(
+            pix,
+            pix.pix_original,
+            "Marcado manualmente pelo operador apos conferencia de Pix parecido",
+        )
+        messages.success(request, "Pix marcado como duplicado/inativo. Nenhuma baixa financeira foi feita.")
         return redirect(detalhe_url)
 
     form_correcao = PixRecebidoCorrecaoForm(pix=pix)
@@ -1946,10 +2033,27 @@ def central_pix_detalhe(request, pix_id):
             return redirect(detalhe_url)
         messages.warning(request, "Confira os dados da correcao antes de salvar.")
 
+    pix_retorno_baixa_url = _url_com_pix_recebido(voltar_url, pix.id) if "/receber/" in voltar_url else ""
     return render(
         request,
         "estoque/central_pix_detalhe.html",
-        {"pix": pix, "voltar_url": voltar_url, "form_correcao": form_correcao},
+        {
+            "pix": pix,
+            "voltar_url": voltar_url,
+            "form_correcao": form_correcao,
+            "pix_retorno_baixa_url": pix_retorno_baixa_url,
+            "pix_parecido_baixado": bool(pix.pix_original and pix.pix_original.status == PixRecebido.STATUS_BAIXADO),
+            "pix_parecido_pendente": bool(
+                pix.pix_original
+                and pix.pix_original.status
+                in {
+                    PixRecebido.STATUS_PENDENTE,
+                    PixRecebido.STATUS_IDENTIFICADO,
+                    PixRecebido.STATUS_POSSIVEL_DUPLICADO,
+                    PixRecebido.STATUS_NAO_IDENTIFICADO,
+                }
+            ),
+        },
     )
 
 
@@ -2136,6 +2240,13 @@ def receber_cliente(request, cliente_id):
         "forma_pagamento": "Dinheiro",
         "destino_diferenca": "troco",
     }
+    pix_recebido_id = (request.POST.get("pix_recebido") if request.method == "POST" else request.GET.get("pix_recebido", "")).strip()
+    pix_recebido_escolhido = None
+    if pix_recebido_id.isdigit():
+        pix_recebido_escolhido = PixRecebido.objects.select_related("pix_original").filter(pk=pix_recebido_id).first()
+    if pix_recebido_escolhido and request.method != "POST":
+        valores["valor"] = str((pix_recebido_escolhido.valor or Decimal("0.00")).quantize(Decimal("0.01"))).replace(".", ",")
+        valores["forma_pagamento"] = "PIX"
     if feedback_recebimento and total_em_aberto <= Decimal("0.00"):
         valores["valor"] = ""
     credito_disponivel = (
@@ -2289,9 +2400,18 @@ def receber_cliente(request, cliente_id):
                                     "saldo_restante": resultado_recebimento["saldo_restante"],
                                     "quitada": resultado_recebimento["saldo_restante"] <= Decimal("0.00"),
                                 })
+                            pix_baixado = None
+                            duplicados_marcados = 0
+                            if pix_recebido_id:
+                                pix_baixado, duplicados_marcados = _marcar_pix_baixado_com_duplicados(pix_recebido_id)
                     except RecebimentoContaErro as exc:
                         messages.warning(request, str(exc))
                     else:
+                        if pix_baixado:
+                            messages.success(
+                                request,
+                                f"Pix #{pix_baixado.id} marcado como baixado. Duplicados/inativos marcados: {duplicados_marcados}.",
+                            )
                         saldo_atual_confirmacao = max(
                             (total_em_aberto - valor_aplicado_total).quantize(Decimal("0.01")),
                             Decimal("0.00"),
@@ -2400,6 +2520,7 @@ def receber_cliente(request, cliente_id):
             "hoje_iso": hoje.isoformat(),
             "retorno_url": destino_retorno,
             "tem_pix_em_atencao": _tem_pix_em_atencao(),
+            "pix_recebido_escolhido": pix_recebido_escolhido,
         },
     )
 
@@ -2664,6 +2785,13 @@ def conta_receber_receber(request, pk):
         "usar_credito": "",
         "credito_utilizado": "0,00",
     }
+    pix_recebido_id = (request.POST.get("pix_recebido") if request.method == "POST" else request.GET.get("pix_recebido", "")).strip()
+    pix_recebido_escolhido = None
+    if pix_recebido_id.isdigit():
+        pix_recebido_escolhido = PixRecebido.objects.select_related("pix_original").filter(pk=pix_recebido_id).first()
+    if pix_recebido_escolhido and request.method != "POST":
+        valores["valor"] = str((pix_recebido_escolhido.valor or Decimal("0.00")).quantize(Decimal("0.01")))
+        valores["forma_pagamento"] = "PIX"
     pagamentos_recentes = []
     credito_disponivel = Decimal("0.00")
     credito_sugerido = Decimal("0.00")
@@ -2748,6 +2876,10 @@ def conta_receber_receber(request, pk):
                                 valores["destino_diferenca"],
                                 credito_utilizado,
                             )
+                            pix_baixado = None
+                            duplicados_marcados = 0
+                            if pix_recebido_id:
+                                pix_baixado, duplicados_marcados = _marcar_pix_baixado_com_duplicados(pix_recebido_id)
                         except RecebimentoContaErro as exc:
                             messages.warning(request, str(exc))
                             return redirect(
@@ -2756,6 +2888,11 @@ def conta_receber_receber(request, pk):
                                 else url_receber
                             )
 
+                    if pix_baixado:
+                        messages.success(
+                            request,
+                            f"Pix #{pix_baixado.id} marcado como baixado. Duplicados/inativos marcados: {duplicados_marcados}.",
+                        )
                     messages.success(request, "Recebimento registrado com sucesso.")
                     return redirect(destino_retorno)
 
@@ -2771,6 +2908,7 @@ def conta_receber_receber(request, pk):
             "credito_sugerido": credito_sugerido,
             "hoje_iso": timezone.localdate().isoformat(),
             "retorno_url": retorno_url,
+            "pix_recebido_escolhido": pix_recebido_escolhido,
         },
     )
 

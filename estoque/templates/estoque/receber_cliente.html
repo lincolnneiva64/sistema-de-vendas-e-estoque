@@ -347,11 +347,19 @@
 
         <form method="post" id="formReceberCliente">
           {% csrf_token %}
+          {% if pix_recebido_escolhido %}
+            <input type="hidden" name="pix_recebido" value="{{ pix_recebido_escolhido.id }}">
+          {% endif %}
           <section class="rc-panel">
             <div class="rc-panel-head">
               <h2 class="rc-panel-title">Dados para recebimento</h2>
               <span>O servidor recalcula a distribuicao antes de gravar.</span>
             </div>
+            {% if pix_recebido_escolhido %}
+              <div class="rc-alert">
+                Baixa vinculada ao Pix #{{ pix_recebido_escolhido.id }}. Ao confirmar, este Pix será marcado como baixado e qualquer Pix parecido pendente será marcado automaticamente como duplicado/inativo.
+              </div>
+            {% endif %}
             <div class="rc-form">
               <div class="rc-field">
                 <label for="valorRecebidoCliente">Valor recebido</label>

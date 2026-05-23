@@ -164,6 +164,7 @@
   .receber-alert.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
   .receber-alert.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
   .receber-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+  .receber-form > .receber-alert { grid-column: 1 / -1; }
   .receber-form-msg {
     display: none;
     padding: 7px 9px;
@@ -369,6 +370,12 @@
 
         <form method="post" class="receber-form" id="formReceberConta">
           {% csrf_token %}
+        {% if pix_recebido_escolhido %}
+          <input type="hidden" name="pix_recebido" value="{{ pix_recebido_escolhido.id }}">
+          <div class="receber-alert warning">
+            Baixa vinculada ao Pix #{{ pix_recebido_escolhido.id }}. Ao confirmar, este Pix será marcado como baixado e qualquer Pix parecido pendente será marcado automaticamente como duplicado/inativo.
+          </div>
+        {% endif %}
         <div class="receber-grid">
           <div class="receber-field" id="valorField">
             <label for="valor">Valor recebido</label>
