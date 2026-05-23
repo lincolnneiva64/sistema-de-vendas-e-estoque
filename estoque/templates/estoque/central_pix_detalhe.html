@@ -41,6 +41,20 @@
   .pix-compare-side .pix-compare-card { grid-template-columns: 1fr; gap: 6px; }
   .pix-compare-side .pix-compare-row { align-items: flex-start; font-size: 0.84rem; }
   .pix-compare-side .pix-compare-row span:last-child { max-width: 68%; line-height: 1.25; }
+  .pix-compare-row-highlight { padding-top: 7px; padding-bottom: 6px; }
+  .pix-compare-row-highlight .pix-compare-primary-value {
+    font-size: 1.08rem;
+    font-weight: 950;
+    line-height: 1.22;
+  }
+  .pix-compare-field-highlight .pix-correction-input,
+  .pix-compare-field-highlight select {
+    min-height: 38px;
+    padding: 7px 9px;
+    font-size: 1.08rem;
+    font-weight: 950;
+    line-height: 1.22;
+  }
   .pix-compare-side .pix-compare-row:nth-of-type(3) { background: #eff6ff; border-left: 4px solid #93c5fd; padding-left: 6px; }
   .pix-compare-side .pix-compare-row:nth-of-type(4),
   .pix-compare-side .pix-compare-row:nth-of-type(5) { background: #ecfdf3; border-left: 4px solid #86efac; padding-left: 6px; }
@@ -234,21 +248,21 @@
                   <div class="pix-correction-error">{{ error }}</div>
                 {% endfor %}
               </div>
-              <div class="pix-correction-field pix-correction-field-full pix-correction-pagador">
+              <div class="pix-correction-field pix-correction-field-full pix-correction-pagador pix-compare-field-highlight">
                 <label for="{{ form_correcao.nome_pagador.id_for_label }}">Nome do pagador</label>
                 {{ form_correcao.nome_pagador }}
                 {% for error in form_correcao.nome_pagador.errors %}
                   <div class="pix-correction-error">{{ error }}</div>
                 {% endfor %}
               </div>
-              <div class="pix-correction-field pix-correction-field-full">
+              <div class="pix-correction-field pix-correction-field-full pix-compare-field-highlight">
                 <label for="{{ form_correcao.instituicao_pix.id_for_label }}">Instituicao/Banco</label>
                 {{ form_correcao.instituicao_pix }}
                 {% for error in form_correcao.instituicao_pix.errors %}
                   <div class="pix-correction-error">{{ error }}</div>
                 {% endfor %}
               </div>
-              <div class="pix-correction-field pix-correction-valor">
+              <div class="pix-correction-field pix-correction-valor pix-compare-field-highlight">
                 <label for="{{ form_correcao.valor.id_for_label }}">Valor</label>
                 {{ form_correcao.valor }}
                 <div class="pix-correction-valor-alert">Confira se o valor bate com o comprovante ao lado.</div>
@@ -256,7 +270,7 @@
                   <div class="pix-correction-error">{{ error }}</div>
                 {% endfor %}
               </div>
-              <div class="pix-correction-field">
+              <div class="pix-correction-field pix-compare-field-highlight">
                 <label for="{{ form_correcao.data_pagamento.id_for_label }}">Data do pagamento</label>
                 {{ form_correcao.data_pagamento }}
                 {% for error in form_correcao.data_pagamento.errors %}
@@ -305,10 +319,10 @@
               <h3>Pix parecido #{{ pix.pix_original.id }}</h3>
               <div class="pix-compare-row"><span>Cadastro</span><span>{{ pix.pix_original.criado_em|date:"d/m/Y H:i" }}</span></div>
               <div class="pix-compare-row"><span>Enviado por</span><span>{{ pix.pix_original.enviado_por_nome|default:"-" }}</span></div>
-              <div class="pix-compare-row"><span>Pagador</span><span>{{ pix.pix_original.nome_pagador|default:"Nao identificado" }}</span></div>
-              <div class="pix-compare-row"><span>Valor</span><span>R$ {{ pix.pix_original.valor|floatformat:2 }}</span></div>
-              <div class="pix-compare-row"><span>Data</span><span>{{ pix.pix_original.data_pagamento|date:"d/m/Y H:i" }}</span></div>
-              <div class="pix-compare-row"><span>Banco</span><span>{{ pix.pix_original.instituicao_pix|default:"Nao identificado" }}</span></div>
+              <div class="pix-compare-row pix-compare-row-highlight"><span>Pagador</span><span class="pix-compare-primary-value">{{ pix.pix_original.nome_pagador|default:"Nao identificado" }}</span></div>
+              <div class="pix-compare-row pix-compare-row-highlight"><span>Valor</span><span class="pix-compare-primary-value">R$ {{ pix.pix_original.valor|floatformat:2 }}</span></div>
+              <div class="pix-compare-row pix-compare-row-highlight"><span>Data</span><span class="pix-compare-primary-value">{{ pix.pix_original.data_pagamento|date:"d/m/Y H:i" }}</span></div>
+              <div class="pix-compare-row pix-compare-row-highlight"><span>Banco</span><span class="pix-compare-primary-value">{{ pix.pix_original.instituicao_pix|default:"Nao identificado" }}</span></div>
               <div class="pix-compare-row"><span>Cliente sugerido</span><span>{% if pix.pix_original.cliente_sugerido %}{{ pix.pix_original.cliente_sugerido.nome }}{% else %}Nenhum{% endif %}</span></div>
               <div class="pix-compare-row"><span>Cliente confirmado</span><span>{% if pix.pix_original.cliente %}{{ pix.pix_original.cliente.nome }}{% else %}Nenhum{% endif %}</span></div>
               <div class="pix-compare-row"><span>Status</span><span>{{ pix.pix_original.get_status_display }}</span></div>
