@@ -1326,20 +1326,45 @@ def _resumo_cliente_venda(cliente, hoje=None):
 
 def clientes_autocomplete(request):
     termo = request.GET.get("q", "").strip()
+    contexto = request.GET.get("contexto", "").strip()
     clientes_qs = Cliente.objects.filter(ativo=True).order_by("nome")
     hoje = timezone.localdate()
 
+    if contexto == "pix_detalhe" and len(normalizar_texto_cliente(termo)) < 3:
+        return JsonResponse({"clientes": []})
+
     if termo:
-        for parte in termo.split():
-            clientes_qs = clientes_qs.filter(
-                Q(nome__icontains=parte) |
-                Q(apelido_nome_conhecido__icontains=parte) |
-                Q(whatsapp__icontains=parte) |
-                Q(whatsapp_normalizado__icontains=parte)
+        if contexto == "pix_detalhe":
+            partes = normalizar_texto_cliente(termo).split()
+            clientes_filtrados = []
+            for cliente in clientes_qs:
+                nome_normalizado = normalizar_texto_cliente(cliente.nome)
+                apelido_normalizado = normalizar_texto_cliente(cliente.apelido_nome_conhecido)
+                if all(parte in nome_normalizado or parte in apelido_normalizado for parte in partes):
+                    clientes_filtrados.append(cliente)
+
+            termo_normalizado = " ".join(partes)
+            clientes_qs = sorted(
+                clientes_filtrados,
+                key=lambda cliente: (
+                    not normalizar_texto_cliente(cliente.nome).startswith(termo_normalizado),
+                    not normalizar_texto_cliente(cliente.apelido_nome_conhecido).startswith(termo_normalizado),
+                    cliente.nome or "",
+                ),
             )
+        else:
+            for parte in termo.split():
+                clientes_qs = clientes_qs.filter(
+                    Q(nome__icontains=parte) |
+                    Q(apelido_nome_conhecido__icontains=parte) |
+                    Q(whatsapp__icontains=parte) |
+                    Q(whatsapp_normalizado__icontains=parte)
+                )
+
+    limite = 8 if contexto == "pix_detalhe" else 12
 
     clientes = []
-    for cliente in clientes_qs[:12]:
+    for cliente in clientes_qs[:limite]:
         dados_cliente = _resumo_cliente_venda(cliente, hoje)
         dados_cliente["documento"] = cliente.cpf_cnpj or ""
         dados_cliente["telefone"] = cliente.whatsapp or cliente.telefone_alternativo or ""

@@ -71,10 +71,6 @@
   .pix-correction-input:focus, .pix-correction-field select:focus { border-color: #0f766e; box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12); }
   .pix-correction-error { color: #991b1b; font-size: 0.72rem; font-weight: 800; }
   .pix-correction-confirmado { grid-column: 1 / -1; }
-  .pix-correction-client-search { display: grid; gap: 8px; align-items: center; }
-  .pix-correction-client-search-with-button { grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr); }
-  .pix-correction-client-search-label { grid-column: 1 / -1; }
-  .pix-correction-client-search .pix-correction-input { min-width: 0; }
   .pix-correction-help { grid-column: 1 / -1; margin: -1px 0 1px; color: #64748b; font-size: 0.7rem; font-weight: 750; line-height: 1.25; }
   .pix-correction-hint {
     border: 1px solid #fde68a; border-radius: 7px; background: #fffbeb; color: #92400e;
@@ -92,13 +88,14 @@
   .pix-correction-valor .pix-correction-input { border-color: #f59e0b; background: #fffef3; font-weight: 900; color: #78350f; }
   .pix-correction-valor-alert { color: #92400e; font-size: 0.72rem; font-weight: 850; line-height: 1.2; }
   .pix-correction-confirmado select { background: #ecfdf3; border-color: #bbf7d0; color: #14532d; }
+  .pix-correction-confirmado select { display: none; }
+  .pix-confirmed-client-search { background: #ecfdf3; border-color: #bbf7d0; color: #14532d; }
   .pix-correction-suggestions { grid-column: 1 / -1; display: grid; gap: 4px; }
   .pix-correction-suggestion { border: 1px solid #bbf7d0; border-radius: 7px; background: #fff; color: #14532d; padding: 5px 7px; text-align: left; font: inherit; font-size: 0.76rem; font-weight: 850; cursor: pointer; }
   .pix-correction-inline .pix-detail-row { grid-column: 1 / -1; padding: 2px 0 0; font-size: 0.8rem; }
   .pix-correction-actions { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
   .pix-correction-actions .pix-detail-btn { min-height: 30px; padding: 5px 9px; font-size: 0.8rem; }
   @media (max-width: 620px) {
-    .pix-correction-client-search-with-button { grid-template-columns: 1fr; }
     .pix-confirm-suggested { width: 100%; }
   }
   @media (max-width: 760px) {
@@ -107,7 +104,6 @@
     .pix-detail-head { align-items: stretch; flex-direction: column; }
     .pix-proof-frame { max-height: 480px; }
     .pix-correction-inline { grid-template-columns: 1fr; }
-    .pix-correction-client-search-with-button { grid-template-columns: 1fr; }
     .pix-confirm-suggested { width: 100%; }
   }
 </style>
@@ -193,16 +189,13 @@
               <input type="hidden" name="acao" value="corrigir">
               <h2 class="pix-correction-title">Conferencia do comprovante</h2>
               <div class="pix-correction-field pix-correction-confirmado">
-                <label for="{{ form_correcao.cliente.id_for_label }}">Cliente confirmado</label>
+                <label for="pixClienteConfirmadoBusca">Cliente confirmado</label>
                 {{ form_correcao.cliente }}
-                <div class="pix-correction-client-search{% if pix.cliente_sugerido %} pix-correction-client-search-with-button{% endif %}">
-                  <label for="pixDetailClienteBusca" class="pix-correction-client-search-label">Buscar cliente cadastrado</label>
-                  <input type="text" id="pixDetailClienteBusca" class="pix-correction-input" placeholder="Buscar outro cliente, se precisar" autocomplete="off" data-cliente-sugerido-nome="{% if pix.cliente_sugerido %}{{ pix.cliente_sugerido.nome }}{% endif %}">
-                  {% if pix.cliente_sugerido %}
-                    <button type="button" class="pix-confirm-suggested" data-cliente-id="{{ pix.cliente_sugerido.id }}" data-cliente-nome="{{ pix.cliente_sugerido.nome }}">Confirmar este cliente</button>
-                  {% endif %}
-                  <div class="pix-correction-suggestions" id="pixDetailClienteSugestoes"></div>
-                </div>
+                <input type="text" id="pixClienteConfirmadoBusca" class="pix-correction-input pix-confirmed-client-search" placeholder="Sem cliente confirmado" autocomplete="off">
+                <div class="pix-correction-suggestions" id="pixClienteConfirmadoSugestoes"></div>
+                {% if not pix.cliente and not pix.cliente_sugerido %}
+                  <div class="pix-correction-help">Nenhum cliente cadastrado foi identificado com segurança. Digite ou selecione o cliente correto no campo Cliente confirmado.</div>
+                {% endif %}
                 {% for error in form_correcao.cliente.errors %}
                   <div class="pix-correction-error">{{ error }}</div>
                 {% endfor %}
@@ -328,10 +321,8 @@
   (function () {
     const clientesUrl = "{% url 'estoque:clientes_autocomplete' %}";
     const clienteSelect = document.getElementById("id_cliente");
-    const clienteBusca = document.getElementById("pixDetailClienteBusca");
-    const clienteSugestoes = document.getElementById("pixDetailClienteSugestoes");
-    const confirmarSugerido = document.querySelector(".pix-confirm-suggested");
-    const formCorrecao = document.querySelector(".pix-correction-inline");
+    const clienteConfirmadoBusca = document.getElementById("pixClienteConfirmadoBusca");
+    const clienteConfirmadoSugestoes = document.getElementById("pixClienteConfirmadoSugestoes");
     const valorInput = document.getElementById("id_valor");
     let buscaTimer = null;
 
@@ -345,63 +336,58 @@
       return opcao ? opcao.textContent.trim() : "";
     }
 
-    function renderizarSugestoes(clientes) {
-      if (!clienteSugestoes) return;
-      clienteSugestoes.innerHTML = "";
+    function preencherCliente(id, nome) {
+      if (clienteSelect) clienteSelect.value = id || "";
+      if (clienteConfirmadoBusca) clienteConfirmadoBusca.value = nome || nomeClienteSelecionado() || "";
+      if (clienteConfirmadoSugestoes) clienteConfirmadoSugestoes.innerHTML = "";
+    }
+
+    function renderizarSugestoes(clientes, sugestoesAlvo) {
+      if (!sugestoesAlvo) return;
+      sugestoesAlvo.innerHTML = "";
       (clientes || []).slice(0, 10).forEach(function (cliente) {
         const botao = document.createElement("button");
         botao.type = "button";
         botao.className = "pix-correction-suggestion";
         botao.textContent = cliente.nome || "Cliente sem nome";
         botao.addEventListener("click", function () {
-          if (clienteSelect) clienteSelect.value = cliente.id || "";
-          if (clienteBusca) clienteBusca.value = cliente.nome || "";
-          clienteSugestoes.innerHTML = "";
+          preencherCliente(cliente.id, cliente.nome);
         });
-        clienteSugestoes.appendChild(botao);
+        sugestoesAlvo.appendChild(botao);
       });
     }
 
-    async function buscarClientes(termo) {
+    async function buscarClientes(termo, sugestoesAlvo) {
       if (!termo || termo.trim().length < 2) {
-        renderizarSugestoes([]);
+        renderizarSugestoes([], sugestoesAlvo);
         return;
       }
-      const resposta = await fetch(clientesUrl + "?q=" + encodeURIComponent(termo.trim()), {
+      const resposta = await fetch(clientesUrl + "?contexto=pix_detalhe&q=" + encodeURIComponent(termo.trim()), {
         headers: { "X-Requested-With": "XMLHttpRequest" },
       });
       if (!resposta.ok) return;
       const dados = await resposta.json();
-      renderizarSugestoes(dados.clientes || []);
+      renderizarSugestoes(dados.clientes || [], sugestoesAlvo);
     }
 
     restaurarValorPixAtual();
     window.setTimeout(restaurarValorPixAtual, 120);
     window.addEventListener("pageshow", restaurarValorPixAtual);
 
-    if (clienteBusca) {
+    if (clienteConfirmadoBusca) {
       const nomeConfirmado = nomeClienteSelecionado();
-      clienteBusca.value = nomeConfirmado ? "" : clienteBusca.dataset.clienteSugeridoNome || "";
-      clienteBusca.focus();
+      clienteConfirmadoBusca.value = nomeConfirmado || "";
+      if (!nomeConfirmado) clienteConfirmadoBusca.focus();
     }
-    clienteBusca?.addEventListener("input", function () {
+    clienteConfirmadoBusca?.addEventListener("input", function () {
       if (clienteSelect) clienteSelect.value = "";
       window.clearTimeout(buscaTimer);
       buscaTimer = window.setTimeout(function () {
-        buscarClientes(clienteBusca.value);
+        buscarClientes(clienteConfirmadoBusca.value, clienteConfirmadoSugestoes);
       }, 220);
     });
     clienteSelect?.addEventListener("change", function () {
-      if (clienteBusca) clienteBusca.value = nomeClienteSelecionado();
-      renderizarSugestoes([]);
-    });
-
-    confirmarSugerido?.addEventListener("click", function () {
-      if (!clienteSelect || !formCorrecao) return;
-      clienteSelect.value = confirmarSugerido.dataset.clienteId || "";
-      if (clienteBusca) clienteBusca.value = confirmarSugerido.dataset.clienteNome || nomeClienteSelecionado();
-      renderizarSugestoes([]);
-      formCorrecao.requestSubmit();
+      preencherCliente(clienteSelect.value, nomeClienteSelecionado());
     });
   })();
 </script>
