@@ -1160,6 +1160,248 @@ class PixRecebidoTests(TestCase):
         pix_atual.refresh_from_db()
         self.assertEqual(pix_atual.status, PixRecebido.STATUS_POSSIVEL_DUPLICADO)
 
+    def test_central_pix_manual_identifica_duplicado_ja_baixado_e_bloqueia_botao(self):
+        cliente = Cliente.objects.create(nome="Ivanildo Ferraz Patricio Junior", ativo=True)
+        pix_baixado = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="Ivanildo Ferraz Patricio Junior",
+            valor="500.00",
+            data_pagamento=timezone.make_aware(timezone.datetime(2026, 5, 18, 17, 45)),
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_BAIXADO,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix"),
+            {
+                "cliente": cliente.id,
+                "nome_pagador": "Ivanildo Ferraz Patricio Jr",
+                "valor": "500.00",
+                "data_pagamento": "2026-05-18T17:45",
+                "instituicao_pix": "Mercado Pago",
+                "observacao": "",
+                "status": PixRecebido.STATUS_PENDENTE,
+            },
+            secure=True,
+            follow=True,
+        )
+
+        novo_pix = PixRecebido.objects.order_by("-id").first()
+        self.assertEqual(novo_pix.status, PixRecebido.STATUS_POSSIVEL_DUPLICADO)
+        self.assertEqual(novo_pix.pix_original, pix_baixado)
+        self.assertContains(resposta, "ja foi usado em baixa")
+        self.assertContains(resposta, "Use apenas para conferencia")
+        self.assertContains(resposta, "Ignorar Pix sem baixa")
+        self.assertNotContains(resposta, "este Pix ainda precisa ser usado na baixa")
+        self.assertNotContains(resposta, "Usar este Pix na baixa")
+        self.assertNotContains(resposta, "Abrir Pix parecido")
+        self.assertNotContains(resposta, "Abrir imagem do Pix parecido")
+        self.assertEqual(resposta.content.count(b">Ignorar Pix sem baixa</button>"), 1)
+
+    def test_central_pix_prioriza_duplicado_baixado_sobre_pendente(self):
+        cliente = Cliente.objects.create(nome="Ivanildo Ferraz Patricio Junior", ativo=True)
+        pix_baixado = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="Ivanildo Ferraz Patricio Junior",
+            valor="500.00",
+            data_pagamento=timezone.make_aware(timezone.datetime(2026, 5, 18, 17, 45)),
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_BAIXADO,
+        )
+        PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="Ivanildo Ferraz Patricio Junior",
+            valor="500.00",
+            data_pagamento=timezone.make_aware(timezone.datetime(2026, 5, 18, 17, 45)),
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix"),
+            {
+                "cliente": cliente.id,
+                "nome_pagador": "Ivanildo Ferraz Patricio Junior",
+                "valor": "500.00",
+                "data_pagamento": "2026-05-18T17:45",
+                "instituicao_pix": "Mercado Pago",
+                "observacao": "",
+                "status": PixRecebido.STATUS_PENDENTE,
+            },
+            secure=True,
+            follow=True,
+        )
+
+        pix_novo = PixRecebido.objects.order_by("-id").first()
+        self.assertEqual(pix_novo.pix_original, pix_baixado)
+        self.assertEqual(pix_novo.status, PixRecebido.STATUS_POSSIVEL_DUPLICADO)
+        self.assertContains(resposta, "ja foi usado em baixa")
+        self.assertNotContains(resposta, "Usar este Pix na baixa")
+
+    def test_reler_ocr_no_detalhe_nao_envia_next_para_central(self):
+        pix = PixRecebido.objects.create(
+            nome_pagador="Pix OCR detalhe",
+            valor="10.00",
+            status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+            comprovante=SimpleUploadedFile("ocr.txt", b"Comprovante Pix", content_type="text/plain"),
+        )
+
+        resposta = self.client.get(
+            f"{reverse('estoque:central_pix_detalhe', kwargs={'pix_id': pix.id})}?next={reverse('estoque:central_pix')}",
+            secure=True,
+        )
+
+        action = reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id})
+        self.assertContains(resposta, f'action="{action}"')
+        self.assertNotContains(resposta, f'action="{action}?next=')
+
+        with patch("estoque.views.analisar_comprovante_pix", return_value={
+            "ok": True,
+            "pagador": "Pix OCR detalhe",
+            "valor": "10.00",
+            "data_pagamento": "2026-05-18T17:45",
+            "instituicao_pix": "Mercado Pago",
+            "texto_ocr_bruto": "Comprovante Pix",
+        }):
+            resposta_ocr = self.client.post(action, secure=True, follow=True)
+
+        detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id})
+        self.assertContains(resposta_ocr, "Comprovante original")
+        self.assertContains(resposta_ocr, f'href="{detalhe_url}"')
+
+    def test_reler_ocr_preserva_bloqueio_quando_duplicado_ja_baixado(self):
+        cliente = Cliente.objects.create(nome="Cliente OCR Duplicado", ativo=True)
+        pix_baixado = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="Ivanildo Ferraz Patricio Junior",
+            valor="500.00",
+            data_pagamento=timezone.make_aware(timezone.datetime(2026, 5, 18, 17, 45)),
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_BAIXADO,
+        )
+        pix = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="Ivanildo Ferraz Patricio Junior",
+            valor="500.00",
+            data_pagamento=timezone.make_aware(timezone.datetime(2026, 5, 18, 17, 45)),
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_POSSIVEL_DUPLICADO,
+            pix_original=pix_baixado,
+            comprovante=SimpleUploadedFile("ocr.txt", b"Comprovante Pix", content_type="text/plain"),
+        )
+        action = reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id})
+
+        with patch("estoque.views.analisar_comprovante_pix", return_value={
+            "ok": False,
+            "pagador": "",
+            "valor": "",
+            "data_pagamento": "",
+            "instituicao_pix": "",
+            "texto_ocr_bruto": "Comprovante Pix sem leitura completa",
+        }):
+            resposta = self.client.post(action, secure=True, follow=True)
+
+        pix.refresh_from_db()
+        self.assertEqual(pix.pix_original, pix_baixado)
+        self.assertEqual(pix.status, PixRecebido.STATUS_POSSIVEL_DUPLICADO)
+        self.assertContains(resposta, "ja foi usado em baixa")
+        self.assertContains(resposta, "Ignorar Pix sem baixa")
+        self.assertContains(resposta, "Comprovante original")
+        self.assertNotContains(resposta, "Usar este Pix na baixa")
+        self.assertNotContains(resposta, "este Pix ainda precisa ser usado na baixa")
+
+    def test_detalhe_pix_sem_valor_nao_mostra_acao_de_baixa(self):
+        cliente = Cliente.objects.create(nome="Cliente Pix Sem Valor", ativo=True)
+        pix = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="Cliente Pix Sem Valor",
+            valor="0.00",
+            status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+            secure=True,
+        )
+
+        self.assertContains(resposta, "Confira/digite o valor do Pix")
+        self.assertNotContains(resposta, "Usar este Pix na baixa")
+
+    def test_baixa_bloqueia_pix_igual_a_baixado_mesmo_sem_vinculo_original(self):
+        cliente = Cliente.objects.create(nome="Cliente Pix Sem Vinculo", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "96.30")
+        PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="ABELARDO ROBSON V PIEDADE",
+            valor="96.30",
+            data_pagamento=timezone.make_aware(timezone.datetime(2026, 5, 18, 17, 45)),
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_BAIXADO,
+        )
+        pix_atual = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="ABELARDO ROBSON V PIEDADE",
+            valor="96.30",
+            data_pagamento=timezone.make_aware(timezone.datetime(2026, 5, 18, 17, 45)),
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:conta_receber_receber", kwargs={"pk": conta.id}),
+            {
+                "pix_recebido": pix_atual.id,
+                "data_recebimento": timezone.localdate().isoformat(),
+                "valor": "96,30",
+                "forma_pagamento": "PIX",
+                "observacao": "",
+                "destino_diferenca": "troco",
+                "usar_credito": "0",
+                "credito_utilizado": "0,00",
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Ja existe Pix igual baixado")
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
+        pix_atual.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertEqual(pix_atual.status, PixRecebido.STATUS_PENDENTE)
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+
+    def test_baixa_marca_pix_baixado_quando_id_vem_na_url(self):
+        cliente = Cliente.objects.create(nome="Ivanildo Patricio Jr", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "500.00")
+        pix = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="Ivanildo Ferraz Patricio Junior",
+            valor="500.00",
+            data_pagamento=timezone.make_aware(timezone.datetime(2026, 5, 18, 17, 45)),
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+
+        resposta = self.client.post(
+            f"{reverse('estoque:receber_cliente', kwargs={'cliente_id': cliente.id})}?pix_recebido={pix.id}",
+            {
+                "data_recebimento": timezone.localdate().isoformat(),
+                "valor": "500,00",
+                "forma_pagamento": "PIX",
+                "destino_diferenca": "troco",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        pix.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertEqual(pix.status, PixRecebido.STATUS_BAIXADO)
+        self.assertIn(f"conta(s): {conta.id}", pix.observacao)
+        self.assertIn("valor: R$ 500,00", pix.observacao)
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 1)
+
     def test_baixa_com_pix_atual_marca_parecido_pendente_como_duplicado(self):
         cliente = Cliente.objects.create(nome="Cliente Pix Atual", ativo=True)
         self._criar_conta_receber_pix(cliente, "96.30")
