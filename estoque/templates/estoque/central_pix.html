@@ -85,6 +85,52 @@
   }
   .pix-help { margin-top: 2px; color: #64748b; font-size: 0.68rem; font-weight: 700; line-height: 1.2; }
   .pix-error { margin-top: 3px; color: #991b1b; font-size: 0.74rem; font-weight: 750; }
+  .pix-valor-comprovante {
+    display: none;
+    gap: 5px;
+    margin-top: 5px;
+  }
+  .pix-valor-comprovante.visivel { display: grid; }
+  .pix-ver-comprovante {
+    justify-self: start;
+    border: 1px solid #99f6e4;
+    border-radius: 7px;
+    background: #f0fdfa;
+    color: #0f766e;
+    padding: 5px 8px;
+    font: inherit;
+    font-size: 0.74rem;
+    font-weight: 900;
+    cursor: pointer;
+    box-shadow: 0 5px 10px rgba(15, 118, 110, 0.1);
+    transition: transform 0.08s ease, box-shadow 0.12s ease, background 0.12s ease, filter 0.12s ease;
+  }
+  .pix-ver-comprovante:hover { background: #ccfbf1; transform: translateY(-1px); }
+  .pix-ver-comprovante:active {
+    background: #99f6e4;
+    transform: translateY(2px) scale(0.98);
+    box-shadow: 0 2px 5px rgba(15, 118, 110, 0.12);
+    filter: brightness(0.96);
+  }
+  .pix-valor-aviso {
+    display: none;
+    color: #92400e;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 7px;
+    padding: 5px 7px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    line-height: 1.25;
+  }
+  .pix-valor-aviso.visivel { display: block; }
+  .pix-valor-aviso.clicavel {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+  .pix-valor-aviso.clicavel:hover { background: #fef3c7; }
   .pix-feedback {
     grid-column: 1 / -1; border: 1px solid #bfdbfe; border-radius: 8px;
     background: #eff6ff; color: #1e3a8a; padding: 7px 9px;
@@ -338,6 +384,11 @@
               {% endfor %}
               {% if field.name == "nome_pagador" %}
                 <div class="pix-instituicao-analise" id="pixInstituicaoAnalise">Instituição/Banco: Não identificado</div>
+              {% elif field.name == "valor" %}
+                <div class="pix-valor-comprovante" id="pixValorComprovante">
+                  <button type="button" class="pix-ver-comprovante" id="pixVerComprovante">Ver comprovante</button>
+                  <div class="pix-valor-aviso" id="pixValorAviso">Não consegui preencher o valor automaticamente. Clique aqui para abrir o comprovante e digite o valor.</div>
+                </div>
               {% endif %}
             </div>
             {% endif %}
@@ -451,6 +502,9 @@
     const comprovante = document.getElementById("id_comprovante");
     const pagador = document.getElementById("id_nome_pagador");
     const valor = document.getElementById("id_valor");
+    const valorComprovante = document.getElementById("pixValorComprovante");
+    const valorAviso = document.getElementById("pixValorAviso");
+    const verComprovante = document.getElementById("pixVerComprovante");
     const dataPagamento = document.getElementById("id_data_pagamento");
     const observacao = document.getElementById("id_observacao");
     const instituicaoPix = document.getElementById("id_instituicao_pix");
@@ -467,6 +521,7 @@
     let clienteSugeridoId = "";
     let buscaTimer = null;
     let analiseAtualId = 0;
+    let comprovantePreviewUrl = "";
 
     function mostrarFeedback(texto, tipo) {
       if (!feedback) return;
@@ -503,6 +558,28 @@
         : texto.replace(",", ".");
       const numero = Number(normalizado);
       return Number.isFinite(numero) && numero > 0;
+    }
+
+    function comprovanteSelecionado() {
+      return Boolean(comprovante && comprovante.files && comprovante.files.length);
+    }
+
+    function atualizarAjudaValor() {
+      const temComprovante = comprovanteSelecionado();
+      valorComprovante?.classList.toggle("visivel", temComprovante);
+      valorAviso?.classList.toggle("visivel", temComprovante && !valorPixValido());
+      valorAviso?.classList.toggle("clicavel", Boolean(comprovantePreviewUrl));
+    }
+
+    function atualizarPreviewComprovante(arquivo) {
+      if (comprovantePreviewUrl) {
+        URL.revokeObjectURL(comprovantePreviewUrl);
+        comprovantePreviewUrl = "";
+      }
+      if (arquivo) {
+        comprovantePreviewUrl = URL.createObjectURL(arquivo);
+      }
+      atualizarAjudaValor();
     }
 
     function mostrarDebugOcr(texto, nomeArquivo, debugData) {
@@ -630,6 +707,20 @@
       if (clienteBusca) clienteBusca.value = clienteSelect.value ? (opcao?.textContent || "") : "";
     });
 
+    valor?.addEventListener("input", atualizarAjudaValor);
+
+    function abrirComprovanteSelecionado() {
+      if (!comprovantePreviewUrl) return;
+      window.open(comprovantePreviewUrl, "_blank", "noopener");
+    }
+
+    verComprovante?.addEventListener("click", abrirComprovanteSelecionado);
+
+    valorAviso?.addEventListener("click", function () {
+      if (!comprovantePreviewUrl) return;
+      abrirComprovanteSelecionado();
+    });
+
     confirmarClienteSugerido?.addEventListener("click", function () {
       if (!clienteSugeridoId) return;
       const nome = clienteSugeridoTexto?.dataset.nome || "";
@@ -644,10 +735,13 @@
       const arquivo = comprovante.files && comprovante.files[0];
       const analiseId = ++analiseAtualId;
       if (!arquivo) {
+        atualizarPreviewComprovante(null);
         limparAnaliseAnterior("");
         return;
       }
+      atualizarPreviewComprovante(arquivo);
       limparAnaliseAnterior(arquivo.name);
+      atualizarAjudaValor();
       mostrarFeedback("Analisando novo comprovante...", "");
 
       const formData = new FormData();
@@ -675,6 +769,7 @@
 
         if (dados.pagador) pagador.value = dados.pagador;
         if (dados.valor) valor.value = String(dados.valor).replace(",", ".");
+        atualizarAjudaValor();
         if (dados.data_pagamento) dataPagamento.value = normalizarDataPagamento(dados.data_pagamento);
         if (dados.observacao && !observacao.value.trim()) observacao.value = dados.observacao;
         mostrarFeedback("", "");
