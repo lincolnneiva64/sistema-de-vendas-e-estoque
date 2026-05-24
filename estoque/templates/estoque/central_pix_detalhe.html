@@ -71,10 +71,13 @@
   .pix-detail-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
   .pix-detail-btn, .pix-detail-link { min-height: 34px; border-radius: 8px; border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 0.84rem; font-weight: 900; text-decoration: none; background: #fff; color: #0f172a; transition: transform 0.08s ease, filter 0.12s ease, background 0.12s ease, box-shadow 0.12s ease; box-shadow: 0 5px 10px rgba(15, 23, 42, 0.09); }
   .pix-detail-btn { border-color: #f59e0b; color: #92400e; }
+  .pix-detail-link-primary { border-color: #16a34a; background: #16a34a; color: #fff; box-shadow: 0 8px 18px rgba(22, 163, 74, 0.2); }
   .pix-detail-btn:active, .pix-detail-link:active { transform: translateY(2px) scale(0.98); background: #e2e8f0; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12); filter: brightness(0.96); }
   .pix-detail-btn:active { background: #fffbeb; }
+  .pix-detail-link-primary:active { background: #15803d; }
   .pix-detail-alert { border-radius: 8px; padding: 6px 9px; margin-bottom: 6px; font-size: 0.84rem; font-weight: 850; background: #ecfdf3; border: 1px solid #bbf7d0; color: #166534; }
   .pix-detail-warning { border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-weight: 900; background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; }
+  .pix-detail-next-step { margin: 7px 0 0; border: 1px solid #bbf7d0; border-radius: 8px; background: #ecfdf3; color: #166534; padding: 7px 9px; font-size: 0.82rem; font-weight: 900; line-height: 1.35; }
   .pix-duplicate-safe-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 7px; }
   .pix-compare-duplicate-note { grid-column: 1 / -1; border: 2px solid #fbbf24; border-radius: 8px; background: #fffbeb; color: #92400e; padding: 9px 10px; font-size: 0.94rem; font-weight: 950; line-height: 1.35; }
   .pix-compare-duplicate-note.is-critical { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
@@ -280,28 +283,39 @@
                 {% endfor %}
               {% endif %}
               <div class="pix-correction-actions">
-                <button type="submit" class="pix-detail-btn">Salvar correcao</button>
+                <button type="submit" class="pix-detail-btn">Salvar dados conferidos</button>
               </div>
             </form>
           </div>
+          {% if pix_retorno_baixa_url and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
+            <div class="pix-detail-next-step">
+              Depois de conferir/salvar os dados, use este Pix na baixa para abrir o recebimento existente com forma PIX e valor do comprovante preenchidos. A baixa só acontece na confirmação final.
+            </div>
+          {% elif not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
+            <div class="pix-correction-help">
+              Para baixar este Pix, confirme/corrija o cliente e depois abra a conta em aberto do cliente para receber usando este Pix.
+            </div>
+          {% endif %}
           <div class="pix-detail-actions">
             {% if pix.status != "ignorado" %}
               <form method="post">
                 {% csrf_token %}
                 <input type="hidden" name="acao" value="ignorar">
-                <button type="submit" class="pix-detail-btn">Marcar como ignorado</button>
+                <button type="submit" class="pix-detail-btn">Ignorar Pix sem baixa</button>
               </form>
             {% endif %}
             {% if pix.comprovante %}
               <form method="post" action="{% url 'estoque:central_pix_processar_ocr' pix.id %}?next={{ voltar_url|urlencode }}">
                 {% csrf_token %}
-                <button type="submit" class="pix-detail-btn">Processar OCR agora</button>
+                <button type="submit" class="pix-detail-btn">Reler comprovante (OCR)</button>
               </form>
             {% endif %}
             {% if pix_retorno_baixa_url and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
-              <a href="{{ pix_retorno_baixa_url }}" class="pix-detail-link">Usar este Pix na baixa</a>
+              <a href="{{ pix_retorno_baixa_url }}" class="pix-detail-link pix-detail-link-primary">Usar este Pix na baixa</a>
+            {% elif pix.cliente and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
+              <a href="{% url 'estoque:receber_cliente' pix.cliente.id %}?pix_recebido={{ pix.id }}&next={{ request.get_full_path|urlencode }}" class="pix-detail-link pix-detail-link-primary">Usar este Pix na baixa</a>
             {% endif %}
-            <a href="{% url 'estoque:central_pix_enviar_comprovante' %}" class="pix-detail-link">Enviar outro comprovante</a>
+            <a href="{% url 'estoque:central_pix_enviar_comprovante' %}" class="pix-detail-link">Enviar novo comprovante para leitura</a>
             <a href="{{ voltar_url }}" class="pix-detail-link">Voltar</a>
           </div>
           {% if pix.pix_original and pix.comprovante %}
