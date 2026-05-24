@@ -1826,20 +1826,15 @@ def central_pix(request):
         form = PixRecebidoForm(request.POST, request.FILES)
         if form.is_valid():
             pix_duplicado = _pix_duplicado_pendente(form.cleaned_data)
+            pix = form.save(commit=False)
+            pix.instituicao_pix = (request.POST.get("instituicao_pix") or "").strip()[:80]
             if pix_duplicado:
-                form.add_error(
-                    None,
-                    "Ja existe um Pix pendente com mesmo pagador, valor e horario muito proximo. Confira antes de cadastrar novamente.",
-                )
-                messages.warning(request, "Pix duplicado nao foi salvo. Confira o registro pendente existente.")
-            else:
-                pix = form.save(commit=False)
-                pix.instituicao_pix = (request.POST.get("instituicao_pix") or "").strip()[:80]
-                pix.save()
-                messages.success(request, "Pix recebido registrado com sucesso.")
-                detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id})
-                detalhe_next = retorno_url or central_pix_url
-                return redirect(f"{detalhe_url}?{urlencode({'next': detalhe_next})}")
+                pix.pix_original = pix_duplicado
+                pix.status = PixRecebido.STATUS_POSSIVEL_DUPLICADO
+            pix.save()
+            messages.success(request, "Pix recebido registrado com sucesso.")
+            detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id})
+            return redirect(f"{detalhe_url}?{urlencode({'next': central_pix_url})}")
         else:
             messages.warning(request, "Confira os campos do Pix antes de salvar.")
     else:

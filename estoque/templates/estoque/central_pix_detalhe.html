@@ -79,6 +79,7 @@
   .pix-detail-alert { border-radius: 8px; padding: 6px 9px; margin-bottom: 6px; font-size: 0.84rem; font-weight: 850; background: #ecfdf3; border: 1px solid #bbf7d0; color: #166534; }
   .pix-detail-warning { border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-weight: 900; background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; }
   .pix-detail-next-step { margin: 7px 0 0; border: 1px solid #bbf7d0; border-radius: 8px; background: #ecfdf3; color: #166534; padding: 7px 9px; font-size: 0.82rem; font-weight: 900; line-height: 1.35; }
+  .pix-detail-next-step-warning { border-color: #fde68a; background: #fffbeb; color: #92400e; }
   .pix-duplicate-safe-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 7px; }
   .pix-compare-duplicate-note { grid-column: 1 / -1; border: 2px solid #fbbf24; border-radius: 8px; background: #fffbeb; color: #92400e; padding: 9px 10px; font-size: 0.94rem; font-weight: 950; line-height: 1.35; }
   .pix-compare-duplicate-note.is-critical { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
@@ -104,6 +105,10 @@
   .pix-correction-input:focus, .pix-correction-field select:focus { border-color: #0f766e; box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12); }
   .pix-correction-error { color: #991b1b; font-size: 0.72rem; font-weight: 800; }
   .pix-correction-confirmado { grid-column: 1 / -1; }
+  .pix-correction-confirmado.pix-client-attention {
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18);
+    border-radius: 8px;
+  }
   .pix-correction-help { grid-column: 1 / -1; margin: -1px 0 1px; color: #64748b; font-size: 0.7rem; font-weight: 750; line-height: 1.25; }
   .pix-correction-hint {
     border: 1px solid #fde68a; border-radius: 7px; background: #fffbeb; color: #92400e;
@@ -236,7 +241,7 @@
               {% csrf_token %}
               <input type="hidden" name="acao" value="corrigir">
               <h2 class="pix-correction-title">Conferencia do comprovante</h2>
-              <div class="pix-correction-field pix-correction-confirmado">
+              <div class="pix-correction-field pix-correction-confirmado" id="pixClienteConfirmadoArea">
                 <label for="pixClienteConfirmadoBusca">Cliente confirmado</label>
                 {{ form_correcao.cliente }}
                 <input type="text" id="pixClienteConfirmadoBusca" class="pix-correction-input pix-confirmed-client-search" placeholder="Sem cliente confirmado" autocomplete="off">
@@ -292,6 +297,10 @@
           <div class="pix-detail-next-step" data-pix-pendente-baixa="1">
             Atenção: este Pix ainda precisa ser usado na baixa da conta do cliente. Clique em "Usar este Pix na baixa" para concluir.
           </div>
+          {% elif not pix.cliente and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
+            <div class="pix-detail-next-step pix-detail-next-step-warning" data-pix-cliente-baixa-alert hidden>
+              Confirme o cliente antes de usar este Pix na baixa da conta.
+            </div>
           {% elif pix_retorno_baixa_url and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
             <div class="pix-detail-next-step">
               Depois de conferir/salvar os dados, use este Pix na baixa para abrir o recebimento existente com forma PIX e valor do comprovante preenchidos. A baixa só acontece na confirmação final.
@@ -315,7 +324,9 @@
                 <button type="submit" class="pix-detail-btn">Reler comprovante (OCR)</button>
               </form>
             {% endif %}
-            {% if pix_retorno_baixa_url and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
+            {% if not pix.cliente and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
+              <button type="button" class="pix-detail-link pix-detail-link-primary" data-pix-baixa-sem-cliente>Usar este Pix na baixa</button>
+            {% elif pix_retorno_baixa_url and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
               <a href="{{ pix_retorno_baixa_url }}" class="pix-detail-link pix-detail-link-primary" data-pix-continuar-baixa>Usar este Pix na baixa</a>
             {% elif pix.cliente and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
               <a href="{% url 'estoque:receber_cliente' pix.cliente.id %}?pix_recebido={{ pix.id }}&next={{ request.get_full_path|urlencode }}" class="pix-detail-link pix-detail-link-primary" data-pix-continuar-baixa>Usar este Pix na baixa</a>
@@ -409,6 +420,9 @@
     const clienteConfirmadoBusca = document.getElementById("pixClienteConfirmadoBusca");
     const clienteConfirmadoSugestoes = document.getElementById("pixClienteConfirmadoSugestoes");
     const valorInput = document.getElementById("id_valor");
+    const clienteConfirmadoArea = document.getElementById("pixClienteConfirmadoArea");
+    const clienteBaixaAlert = document.querySelector("[data-pix-cliente-baixa-alert]");
+    const botaoBaixaSemCliente = document.querySelector("[data-pix-baixa-sem-cliente]");
     const pixPendenteBaixa = document.querySelector("[data-pix-pendente-baixa='1']");
     const botaoContinuarBaixa = document.querySelector("[data-pix-continuar-baixa]");
     const mensagemPixPendente = "Antes de sair, conclua a baixa deste Pix ou escolha Ignorar Pix sem baixa.";
@@ -429,6 +443,8 @@
       if (clienteSelect) clienteSelect.value = id || "";
       if (clienteConfirmadoBusca) clienteConfirmadoBusca.value = nome || nomeClienteSelecionado() || "";
       if (clienteConfirmadoSugestoes) clienteConfirmadoSugestoes.innerHTML = "";
+      clienteConfirmadoArea?.classList.remove("pix-client-attention");
+      if (clienteBaixaAlert && id) clienteBaixaAlert.hidden = true;
     }
 
     function renderizarSugestoes(clientes, sugestoesAlvo) {
@@ -487,6 +503,15 @@
       link.addEventListener("click", function () {
         liberarSaidaPix = true;
       });
+    });
+    botaoBaixaSemCliente?.addEventListener("click", function () {
+      if (clienteBaixaAlert) {
+        clienteBaixaAlert.hidden = false;
+        clienteBaixaAlert.textContent = "Confirme o cliente antes de usar este Pix na baixa da conta.";
+      }
+      clienteConfirmadoArea?.classList.add("pix-client-attention");
+      clienteConfirmadoBusca?.scrollIntoView({ behavior: "smooth", block: "center" });
+      clienteConfirmadoBusca?.focus({ preventScroll: true });
     });
     function reforcarBaixaPendente(event) {
       if (!pixPendenteBaixa || liberarSaidaPix) return;

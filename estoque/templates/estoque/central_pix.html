@@ -193,6 +193,22 @@
   .pix-cliente-busca input.pix-cliente-confirmado {
     border-color: #22c55e; background: #f0fdf4; color: #14532d;
   }
+  .pix-cliente-busca.pix-cliente-alerta {
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.14);
+  }
+  .pix-cliente-alerta-texto {
+    display: none;
+    color: #92400e;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 7px;
+    padding: 5px 7px;
+    font-size: 0.7rem;
+    font-weight: 850;
+    line-height: 1.25;
+  }
+  .pix-cliente-alerta-texto.visivel { display: block; }
   .pix-cliente-sugestoes { display: grid; gap: 4px; }
   .pix-cliente-sugestao {
     border: 1px solid #dcfce7; border-radius: 7px; background: #fff;
@@ -370,13 +386,14 @@
               {% endif %}
               {% if field.name == "cliente" %}
                 <div class="pix-help">O pagador do Pix pode ser diferente do cliente da conta. Confirme o cliente manualmente antes de vincular.</div>
-                <div class="pix-cliente-busca">
+                <div class="pix-cliente-busca" id="pixClienteBuscaArea">
                   <input type="text" id="pixClienteBusca" placeholder="Buscar cliente cadastrado" autocomplete="off">
                   <div class="pix-cliente-sugerido" id="pixClienteSugerido">
                     <span id="pixClienteSugeridoTexto"></span>
                     <button type="button" class="pix-mini-btn" id="pixConfirmarClienteSugerido">Confirmar este cliente</button>
                   </div>
                   <div class="pix-cliente-sugestoes" id="pixClienteSugestoes"></div>
+                  <div class="pix-cliente-alerta-texto" id="pixClienteAlerta">Confirme o cliente antes de salvar o Pix.</div>
                 </div>
               {% endif %}
               {% for error in field.errors %}
@@ -495,6 +512,8 @@
     const csrfToken = document.querySelector("[name=csrfmiddlewaretoken]")?.value || "";
     const clienteSelect = document.getElementById("id_cliente");
     const clienteBusca = document.getElementById("pixClienteBusca");
+    const clienteBuscaArea = document.getElementById("pixClienteBuscaArea");
+    const clienteAlerta = document.getElementById("pixClienteAlerta");
     const clienteSugestoes = document.getElementById("pixClienteSugestoes");
     const clienteSugerido = document.getElementById("pixClienteSugerido");
     const clienteSugeridoTexto = document.getElementById("pixClienteSugeridoTexto");
@@ -560,6 +579,26 @@
       return Number.isFinite(numero) && numero > 0;
     }
 
+    function clienteConfirmadoValido() {
+      return Boolean(clienteSelect && clienteSelect.value);
+    }
+
+    function mostrarErroCliente() {
+      if (!clienteAlerta) return;
+      clienteAlerta.textContent = clienteSugeridoId
+        ? "Confirme o cliente sugerido ou escolha outro cliente antes de salvar."
+        : "Confirme o cliente antes de salvar o Pix.";
+      clienteAlerta.classList.add("visivel");
+      clienteBuscaArea?.classList.add("pix-cliente-alerta");
+      clienteBusca?.scrollIntoView({ behavior: "smooth", block: "center" });
+      clienteBusca?.focus({ preventScroll: true });
+    }
+
+    function limparErroCliente() {
+      clienteAlerta?.classList.remove("visivel");
+      clienteBuscaArea?.classList.remove("pix-cliente-alerta");
+    }
+
     function comprovanteSelecionado() {
       return Boolean(comprovante && comprovante.files && comprovante.files.length);
     }
@@ -610,6 +649,7 @@
         clienteBusca.classList.remove("pix-cliente-pendente");
         clienteBusca.classList.toggle("pix-cliente-confirmado", Boolean(id));
       }
+      if (id) limparErroCliente();
     }
 
     function limparSugestaoCliente() {
@@ -621,6 +661,7 @@
       }
       if (confirmarClienteSugerido) confirmarClienteSugerido.hidden = false;
       clienteBusca?.classList.remove("pix-cliente-pendente");
+      if (clienteConfirmadoValido()) limparErroCliente();
     }
 
     function limparAnaliseAnterior(nomeArquivo) {
@@ -802,9 +843,16 @@
     pixForm?.addEventListener("submit", function (event) {
       if (!valorPixValido()) {
         event.preventDefault();
-        mostrarFeedback("Informe o valor do Pix antes de salvar. O valor não pode ser 0,00.", "warning");
+        mostrarFeedback("Informe o valor do Pix antes de salvar.", "warning");
         valor?.focus();
         valor?.select();
+        return;
+      }
+      if (!clienteConfirmadoValido()) {
+        event.preventDefault();
+        mostrarFeedback("", "");
+        if (feedback) feedback.className = "pix-feedback";
+        mostrarErroCliente();
         return;
       }
       if (!pixSubmit) return;
