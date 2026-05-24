@@ -150,6 +150,50 @@
     display: none;
   }
   .pix-arquivo-selecionado.visivel { display: block; }
+  .pix-file-control {
+    position: relative;
+    display: grid;
+    gap: 4px;
+  }
+  .pix-file-control input[type="file"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .pix-file-trigger {
+    width: 100%;
+    border: 1px solid #99f6e4;
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: #ccfbf1;
+    color: #115e59;
+    font-size: 0.84rem;
+    font-weight: 900;
+    line-height: 1.2;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    box-shadow: 0 6px 12px rgba(15, 118, 110, 0.12);
+    transition: transform 0.08s ease, box-shadow 0.12s ease, background 0.12s ease, filter 0.12s ease;
+  }
+  .pix-file-trigger:hover {
+    background: #99f6e4;
+    transform: translateY(-1px);
+  }
+  .pix-file-trigger:active {
+    background: #5eead4;
+    transform: translateY(2px) scale(0.98);
+    box-shadow: 0 2px 6px rgba(15, 118, 110, 0.16);
+    filter: brightness(0.96);
+  }
+  .pix-file-control input[type="file"]:focus + .pix-file-trigger {
+    border-color: #0f766e;
+    box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
+  }
   .pix-table-wrap { overflow-x: auto; }
   .pix-table { width: 100%; border-collapse: collapse; min-width: 850px; }
   .pix-table th {
@@ -188,6 +232,18 @@
   .pix-file-link:active { transform: translateY(2px) scale(0.98); background: #ccfbf1; box-shadow: 0 2px 5px rgba(15, 118, 110, 0.12); filter: brightness(0.96); }
   .pix-empty { padding: 22px 16px; color: #64748b; text-align: center; font-weight: 750; }
   .pix-form .pix-btn-primary { grid-column: 1 / -1; width: 100%; margin-top: 1px; }
+  .pix-form-submit {
+    min-height: 44px;
+    font-size: 0.92rem;
+    box-shadow: 0 10px 20px rgba(22, 163, 74, 0.24);
+  }
+  .pix-form-submit.salvando,
+  .pix-form-submit:disabled {
+    cursor: wait;
+    filter: brightness(0.94);
+    transform: translateY(2px) scale(0.99);
+    box-shadow: 0 2px 8px rgba(22, 163, 74, 0.16);
+  }
   @media (max-width: 920px) {
     .pix-grid { grid-template-columns: 1fr; }
     .pix-header { align-items: stretch; flex-direction: column; }
@@ -230,9 +286,19 @@
               <div class="pix-conferencia">
                 <div class="pix-conferencia-titulo">Conferência do comprovante</div>
             {% endif %}
+            {% if field.name == "observacao" %}
+              {{ field.as_hidden }}
+            {% else %}
             <div class="pix-field {% if field.name == 'cliente' or field.name == 'nome_pagador' or field.name == 'observacao' %}pix-field-full{% endif %}">
               <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-              {{ field }}
+              {% if field.name == "comprovante" %}
+                <div class="pix-file-control">
+                  {{ field }}
+                  <label for="{{ field.id_for_label }}" class="pix-file-trigger">Escolha o comprovante Pix para leitura</label>
+                </div>
+              {% else %}
+                {{ field }}
+              {% endif %}
               {% if field.name == "cliente" %}
                 <div class="pix-help">O pagador do Pix pode ser diferente do cliente da conta. Confirme o cliente manualmente antes de vincular.</div>
                 <div class="pix-cliente-busca">
@@ -243,10 +309,7 @@
                   </div>
                   <div class="pix-cliente-sugestoes" id="pixClienteSugestoes"></div>
                 </div>
-              {% elif field.name == "status" %}
-                <div class="pix-help">Nesta fase o status e apenas informativo. Nao baixa contas automaticamente.</div>
               {% elif field.name == "comprovante" %}
-                <div class="pix-help">Ao anexar um comprovante, o sistema tenta ler se houver OCR disponivel. Confira tudo antes de salvar.</div>
                 <div class="pix-arquivo-selecionado" id="pixArquivoSelecionado"></div>
               {% endif %}
               {% for error in field.errors %}
@@ -256,6 +319,7 @@
                 <div class="pix-instituicao-analise" id="pixInstituicaoAnalise">Instituição/Banco: Não identificado</div>
               {% endif %}
             </div>
+            {% endif %}
             {% if field.name == "data_pagamento" %}
               </div>
             {% endif %}
@@ -272,7 +336,7 @@
               <div class="pix-error">{{ error }}</div>
             {% endfor %}
           {% endif %}
-          <button type="submit" class="pix-btn pix-btn-primary">Salvar Pix</button>
+          <button type="submit" class="pix-btn pix-btn-primary pix-form-submit" data-pix-submit>Salvar Pix e abrir detalhe</button>
         </form>
       </section>
 
@@ -366,6 +430,8 @@
     const observacao = document.getElementById("id_observacao");
     const instituicaoPix = document.getElementById("id_instituicao_pix");
     const feedback = document.getElementById("pixLeituraFeedback");
+    const pixForm = document.querySelector(".pix-form");
+    const pixSubmit = document.querySelector("[data-pix-submit]");
     const instituicaoAnalise = document.getElementById("pixInstituicaoAnalise");
     const debugOcr = document.getElementById("pixDebugOcr");
     const debugOcrTexto = document.getElementById("pixDebugOcrTexto");
@@ -570,7 +636,8 @@
         if (dados.valor) valor.value = String(dados.valor).replace(",", ".");
         if (dados.data_pagamento) dataPagamento.value = normalizarDataPagamento(dados.data_pagamento);
         if (dados.observacao && !observacao.value.trim()) observacao.value = dados.observacao;
-        mostrarFeedback(dados.mensagem || "Dados encontrados. Confira antes de salvar.", "success");
+        mostrarFeedback("", "");
+        if (feedback) feedback.className = "pix-feedback";
 
         if (dados.cliente_sugerido_id && dados.confianca_cliente === "alta") {
           mostrarClienteSugerido(dados.cliente_sugerido_id, dados.cliente_sugerido_nome || "");
@@ -588,6 +655,13 @@
         mostrarDebugOcr("", arquivo.name);
         mostrarFeedback("Nao foi possivel ler automaticamente o comprovante. Preencha manualmente.", "warning");
       }
+    });
+
+    pixForm?.addEventListener("submit", function () {
+      if (!pixSubmit) return;
+      pixSubmit.classList.add("salvando");
+      pixSubmit.textContent = "Salvando...";
+      pixSubmit.disabled = true;
     });
   })();
 </script>

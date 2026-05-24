@@ -1837,9 +1837,9 @@ def central_pix(request):
                 pix.instituicao_pix = (request.POST.get("instituicao_pix") or "").strip()[:80]
                 pix.save()
                 messages.success(request, "Pix recebido registrado com sucesso.")
-                if retorno_url:
-                    return redirect(f"{central_pix_url}?{urlencode({'next': retorno_url})}")
-                return redirect("estoque:central_pix")
+                detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id})
+                detalhe_next = retorno_url or central_pix_url
+                return redirect(f"{detalhe_url}?{urlencode({'next': detalhe_next})}")
         else:
             messages.warning(request, "Confira os campos do Pix antes de salvar.")
     else:
