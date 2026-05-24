@@ -1465,10 +1465,16 @@ def _numero_whatsapp_cliente(cliente):
 
 
 def _montar_mensagem_confirmacao_recebimento(dados):
+    forma_pagamento = str(dados.get("forma_pagamento") or "").strip().upper()
+    texto_comprovante = (
+        "Segue o comprovante de pagamento realizado por Pix."
+        if forma_pagamento == "PIX"
+        else "Segue comprovante de pagamento."
+    )
     linhas = [
         f"Olá, {dados['cliente_nome']}.",
         "",
-        "Segue comprovante de pagamento.",
+        texto_comprovante,
         "",
         "Obrigado.",
         "L A Neiva",

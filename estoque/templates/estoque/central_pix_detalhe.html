@@ -72,6 +72,7 @@
   .pix-detail-btn, .pix-detail-link { min-height: 34px; border-radius: 8px; border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 0.84rem; font-weight: 900; text-decoration: none; background: #fff; color: #0f172a; transition: transform 0.08s ease, filter 0.12s ease, background 0.12s ease, box-shadow 0.12s ease; box-shadow: 0 5px 10px rgba(15, 23, 42, 0.09); }
   .pix-detail-btn { border-color: #f59e0b; color: #92400e; }
   .pix-detail-link-primary { border-color: #16a34a; background: #16a34a; color: #fff; box-shadow: 0 8px 18px rgba(22, 163, 74, 0.2); }
+  .pix-detail-link-primary.pix-attention { box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.18), 0 10px 22px rgba(22, 163, 74, 0.28); }
   .pix-detail-btn:active, .pix-detail-link:active { transform: translateY(2px) scale(0.98); background: #e2e8f0; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12); filter: brightness(0.96); }
   .pix-detail-btn:active { background: #fffbeb; }
   .pix-detail-link-primary:active { background: #15803d; }
@@ -166,7 +167,7 @@
   <div class="pix-detail-shell">
     <header class="pix-detail-head">
       <h1 class="pix-detail-title">Detalhe do Pix pendente</h1>
-      <a href="{{ voltar_url }}" class="pix-detail-link">Voltar</a>
+        <a href="{{ voltar_url }}" class="pix-detail-link" data-pix-voltar>Voltar</a>
     </header>
 
     {% if messages %}
@@ -287,7 +288,11 @@
               </div>
             </form>
           </div>
-          {% if pix_retorno_baixa_url and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
+        {% if pix.cliente and pix.valor > 0 and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
+          <div class="pix-detail-next-step" data-pix-pendente-baixa="1">
+            Atenção: este Pix ainda precisa ser usado na baixa da conta do cliente. Clique em "Usar este Pix na baixa" para concluir.
+          </div>
+          {% elif pix_retorno_baixa_url and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
             <div class="pix-detail-next-step">
               Depois de conferir/salvar os dados, use este Pix na baixa para abrir o recebimento existente com forma PIX e valor do comprovante preenchidos. A baixa só acontece na confirmação final.
             </div>
@@ -311,12 +316,12 @@
               </form>
             {% endif %}
             {% if pix_retorno_baixa_url and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
-              <a href="{{ pix_retorno_baixa_url }}" class="pix-detail-link pix-detail-link-primary">Usar este Pix na baixa</a>
+              <a href="{{ pix_retorno_baixa_url }}" class="pix-detail-link pix-detail-link-primary" data-pix-continuar-baixa>Usar este Pix na baixa</a>
             {% elif pix.cliente and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
-              <a href="{% url 'estoque:receber_cliente' pix.cliente.id %}?pix_recebido={{ pix.id }}&next={{ request.get_full_path|urlencode }}" class="pix-detail-link pix-detail-link-primary">Usar este Pix na baixa</a>
+              <a href="{% url 'estoque:receber_cliente' pix.cliente.id %}?pix_recebido={{ pix.id }}&next={{ request.get_full_path|urlencode }}" class="pix-detail-link pix-detail-link-primary" data-pix-continuar-baixa>Usar este Pix na baixa</a>
             {% endif %}
             <a href="{% url 'estoque:central_pix_enviar_comprovante' %}" class="pix-detail-link">Enviar novo comprovante para leitura</a>
-            <a href="{{ voltar_url }}" class="pix-detail-link">Voltar</a>
+            <a href="{{ voltar_url }}" class="pix-detail-link" data-pix-voltar>Voltar</a>
           </div>
           {% if pix.pix_original and pix.comprovante %}
             <div class="pix-proof-card pix-current-proof-compact">
@@ -404,7 +409,11 @@
     const clienteConfirmadoBusca = document.getElementById("pixClienteConfirmadoBusca");
     const clienteConfirmadoSugestoes = document.getElementById("pixClienteConfirmadoSugestoes");
     const valorInput = document.getElementById("id_valor");
+    const pixPendenteBaixa = document.querySelector("[data-pix-pendente-baixa='1']");
+    const botaoContinuarBaixa = document.querySelector("[data-pix-continuar-baixa]");
+    const mensagemPixPendente = "Antes de sair, conclua a baixa deste Pix ou escolha Ignorar Pix sem baixa.";
     let buscaTimer = null;
+    let liberarSaidaPix = false;
 
     function restaurarValorPixAtual() {
       if (valorInput) valorInput.value = valorInput.defaultValue || "";
@@ -468,6 +477,36 @@
     });
     clienteSelect?.addEventListener("change", function () {
       preencherCliente(clienteSelect.value, nomeClienteSelecionado());
+    });
+    document.querySelectorAll("form").forEach(function (formulario) {
+      formulario.addEventListener("submit", function () {
+        liberarSaidaPix = true;
+      });
+    });
+    document.querySelectorAll("[data-pix-continuar-baixa]").forEach(function (link) {
+      link.addEventListener("click", function () {
+        liberarSaidaPix = true;
+      });
+    });
+    function reforcarBaixaPendente(event) {
+      if (!pixPendenteBaixa || liberarSaidaPix) return;
+      event.preventDefault();
+      pixPendenteBaixa.textContent = mensagemPixPendente;
+      if (botaoContinuarBaixa) {
+        botaoContinuarBaixa.classList.add("pix-attention");
+        botaoContinuarBaixa.scrollIntoView({ behavior: "smooth", block: "center" });
+        botaoContinuarBaixa.focus({ preventScroll: true });
+      }
+    }
+
+    const linksVoltar = Array.from(document.querySelectorAll("[data-pix-voltar]"));
+    document.querySelectorAll("a").forEach(function (link) {
+      if (link.textContent.trim() === "Voltar" && !linksVoltar.includes(link)) {
+        linksVoltar.push(link);
+      }
+    });
+    linksVoltar.forEach(function (link) {
+      link.addEventListener("click", reforcarBaixaPendente);
     });
   })();
 </script>
