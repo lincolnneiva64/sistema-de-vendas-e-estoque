@@ -28,6 +28,11 @@ SISTEMA_ONLINE_URL = config(
     "SISTEMA_ONLINE_URL",
     default=config("SISTEMA_RENDER_URL", default="https://sistema-de-vendas-e-estoque.onrender.com"),
 ).rstrip("/")
+PIX_LOCAL_URL = config("PIX_LOCAL_URL", default="")
+PIX_ONLINE_URL = config(
+    "PIX_ONLINE_URL",
+    default=f"{SISTEMA_ONLINE_URL}/central-pix/enviar-comprovante/",
+)
 
 # Application definition
 

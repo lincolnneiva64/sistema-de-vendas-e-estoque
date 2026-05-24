@@ -248,6 +248,49 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, 'href="/static/manifest.json"')
         self.assertContains(resposta, 'name="theme-color" content="#16a34a"')
 
+    @override_settings(
+        PIX_LOCAL_URL="http://10.0.0.154:8000/central-pix/enviar-comprovante/",
+        PIX_ONLINE_URL="https://sistema-de-vendas-e-estoque.onrender.com/central-pix/enviar-comprovante/",
+    )
+    def test_atalho_inteligente_pix_carrega_urls_configuradas(self):
+        resposta = self.client.get(reverse("estoque:pix_enviar_inteligente"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Abrindo Enviar Pix")
+        self.assertContains(resposta, "Tentando conexao local pelo Wi-Fi")
+        self.assertContains(resposta, "http://10.0.0.154:8000/central-pix/enviar-comprovante/")
+        self.assertContains(resposta, "https://sistema-de-vendas-e-estoque.onrender.com/central-pix/enviar-comprovante/")
+        self.assertContains(resposta, "fetch(localUrl")
+        self.assertContains(resposta, "window.location.replace(onlineUrl)")
+
+    @override_settings(
+        PIX_LOCAL_URL="http://10.0.0.154:8000/central-pix/enviar-comprovante/",
+        PIX_ONLINE_URL="https://sistema-de-vendas-e-estoque.onrender.com/central-pix/enviar-comprovante/",
+    )
+    def test_pagina_envio_comprovante_pix_mostra_ambiente_local(self):
+        resposta = self.client.get(
+            reverse("estoque:central_pix_enviar_comprovante"),
+            secure=True,
+            HTTP_HOST="10.0.0.154:8000",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "LOCAL / Wi-Fi")
+
+    @override_settings(
+        PIX_LOCAL_URL="http://10.0.0.154:8000/central-pix/enviar-comprovante/",
+        PIX_ONLINE_URL="https://sistema-de-vendas-e-estoque.onrender.com/central-pix/enviar-comprovante/",
+    )
+    def test_pagina_envio_comprovante_pix_mostra_ambiente_online(self):
+        resposta = self.client.get(
+            reverse("estoque:central_pix_enviar_comprovante"),
+            secure=True,
+            HTTP_HOST="sistema-de-vendas-e-estoque.onrender.com",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "ONLINE / Render")
+
     def test_enviar_comprovante_pix_cria_registro_pendente(self):
         cliente = Cliente.objects.create(nome="Cicero Cristiano Silva Souza", ativo=True)
         arquivo = SimpleUploadedFile(

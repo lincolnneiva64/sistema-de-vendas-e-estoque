@@ -1,0 +1,64 @@
+{% extends "estoque/base.html" %}
+{% block title %}Abrindo Enviar Pix{% endblock %}
+{% block content %}
+{{ local_url|json_script:"pix-local-url" }}
+{{ online_url|json_script:"pix-online-url" }}
+{{ timeout_ms|json_script:"pix-timeout-ms" }}
+<style>
+  .pix-smart-page { min-height: 100vh; display: grid; place-items: center; background: #f7fafc; color: #172033; padding: 18px; }
+  .pix-smart-box { width: min(100%, 440px); background: #fff; border: 1px solid #dbe4ef; border-radius: 8px; padding: 18px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06); }
+  .pix-smart-title { margin: 0 0 8px; font-size: 1.25rem; font-weight: 900; }
+  .pix-smart-text { margin: 0; color: #475569; font-weight: 800; line-height: 1.45; }
+  .pix-smart-actions { display: grid; gap: 8px; margin-top: 14px; }
+  .pix-smart-link { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid #cbd5e1; color: #0f172a; background: #fff; text-decoration: none; font-weight: 900; }
+  .pix-smart-link.primary { background: #16a34a; border-color: #16a34a; color: #fff; }
+</style>
+<div class="pix-smart-page">
+  <section class="pix-smart-box">
+    <h1 class="pix-smart-title">Abrindo Enviar Pix...</h1>
+    <p class="pix-smart-text" id="pixSmartStatus">Tentando conexao local pelo Wi-Fi.</p>
+    <div class="pix-smart-actions">
+      <a href="{{ local_url }}" class="pix-smart-link primary">Abrir local</a>
+      <a href="{{ online_url }}" class="pix-smart-link">Abrir online</a>
+    </div>
+  </section>
+</div>
+<script>
+  (function () {
+    const localUrl = JSON.parse(document.getElementById("pix-local-url").textContent);
+    const onlineUrl = JSON.parse(document.getElementById("pix-online-url").textContent);
+    const timeoutMs = JSON.parse(document.getElementById("pix-timeout-ms").textContent);
+    const status = document.getElementById("pixSmartStatus");
+
+    function abrirOnline() {
+      if (status) status.textContent = "Conexao local nao respondeu. Abrindo online pelo Render.";
+      window.location.replace(onlineUrl);
+    }
+
+    if (!localUrl || localUrl === onlineUrl) {
+      abrirOnline();
+      return;
+    }
+
+    const controller = "AbortController" in window ? new AbortController() : null;
+    const timeout = window.setTimeout(function () {
+      if (controller) controller.abort();
+      abrirOnline();
+    }, timeoutMs || 2500);
+
+    fetch(localUrl, {
+      method: "GET",
+      mode: "no-cors",
+      cache: "no-store",
+      signal: controller ? controller.signal : undefined
+    }).then(function () {
+      window.clearTimeout(timeout);
+      if (status) status.textContent = "Conexao local encontrada. Abrindo pelo Wi-Fi.";
+      window.location.replace(localUrl);
+    }).catch(function () {
+      window.clearTimeout(timeout);
+      abrirOnline();
+    });
+  })();
+</script>
+{% endblock %}

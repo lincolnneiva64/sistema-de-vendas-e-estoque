@@ -1,7 +1,7 @@
 {
   "name": "Sistema de Vendas",
   "short_name": "Enviar Pix",
-  "start_url": "/central-pix/enviar-comprovante/",
+  "start_url": "/pix/enviar/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f8fafc",

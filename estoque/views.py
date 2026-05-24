@@ -28,6 +28,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 from PIL import Image, ImageDraw, ImageFont
 from uuid import uuid4
+from urllib.parse import urlparse
 
 PIX_OCR_PENDENTE_MOBILE = (
     "OCR nao executado automaticamente no envio mobile para evitar timeout. "
@@ -51,6 +52,32 @@ def _tem_pix_em_atencao():
             PixRecebido.STATUS_POSSIVEL_DUPLICADO,
         ]
     ).exists()
+
+
+def _pix_envio_url_padrao(request):
+    return request.build_absolute_uri(reverse("estoque:central_pix_enviar_comprovante"))
+
+
+def _mobile_url_configurada(nome_config, fallback):
+    return (getattr(settings, nome_config, "") or fallback or "").strip()
+
+
+def _host_configurado(url):
+    try:
+        return urlparse(url).netloc.lower()
+    except ValueError:
+        return ""
+
+
+def _ambiente_envio_pix(request):
+    host_atual = request.get_host().lower()
+    host_local = _host_configurado(getattr(settings, "PIX_LOCAL_URL", ""))
+    host_online = _host_configurado(getattr(settings, "PIX_ONLINE_URL", ""))
+    if host_local and host_atual == host_local:
+        return "LOCAL / Wi-Fi"
+    if host_online and host_atual == host_online:
+        return "ONLINE / Render"
+    return ""
 
 
 def _pix_duplicado_pendente(dados):
@@ -1901,6 +1928,22 @@ def central_pix(request):
 
 
 @ensure_csrf_cookie
+def pix_enviar_inteligente(request):
+    envio_padrao = _pix_envio_url_padrao(request)
+    local_url = _mobile_url_configurada("PIX_LOCAL_URL", envio_padrao)
+    online_url = _mobile_url_configurada("PIX_ONLINE_URL", envio_padrao)
+    return render(
+        request,
+        "estoque/pix_enviar_inteligente.html",
+        {
+            "local_url": local_url,
+            "online_url": online_url,
+            "timeout_ms": 2500,
+        },
+    )
+
+
+@ensure_csrf_cookie
 def central_pix_enviar_comprovante(request):
     resumo = None
 
@@ -1931,6 +1974,7 @@ def central_pix_enviar_comprovante(request):
         "estoque/central_pix_enviar_comprovante.html",
         {
             "resumo": resumo,
+            "ambiente_pix": _ambiente_envio_pix(request),
         },
     )
 
