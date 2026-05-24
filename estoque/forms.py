@@ -745,7 +745,7 @@ class PixRecebidoForm(forms.ModelForm):
     def clean_valor(self):
         valor = self.cleaned_data.get("valor")
         if valor is None or valor <= 0:
-            raise forms.ValidationError("Informe um valor de Pix maior que zero.")
+            raise forms.ValidationError("Informe o valor do Pix antes de salvar. O valor não pode ser 0,00.")
         return valor
 
     def clean_observacao(self):

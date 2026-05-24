@@ -99,16 +99,37 @@
     border-radius: 8px; background: #f0fdfa;
   }
   .pix-debug-ocr {
-    grid-column: 1 / -1; display: none; border: 1px dashed #cbd5e1;
+    grid-column: 1 / -1; display: none;
+  }
+  .pix-debug-ocr.visivel { display: block; }
+  .pix-debug-toggle {
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    background: #fff;
+    color: #475569;
+    padding: 5px 8px;
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 850;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06);
+  }
+  .pix-debug-toggle:hover { background: #f8fafc; }
+  .pix-debug-toggle:active {
+    transform: translateY(1px);
+    box-shadow: 0 2px 5px rgba(15, 23, 42, 0.08);
+  }
+  .pix-debug-content {
+    display: none; margin-top: 6px; border: 1px dashed #cbd5e1;
     border-radius: 8px; background: #f8fafc; color: #475569;
     padding: 7px 9px; font-size: 0.7rem; line-height: 1.25;
   }
-  .pix-debug-ocr.visivel { display: block; }
-  .pix-debug-ocr strong { display: block; margin-bottom: 4px; color: #334155; }
+  .pix-debug-ocr.aberto .pix-debug-content { display: block; }
+  .pix-debug-content strong { display: block; margin-bottom: 4px; color: #334155; }
   .pix-debug-ocr .pix-arquivo-analisado {
     display: block; margin-bottom: 4px; color: #0f766e; font-weight: 850;
   }
-  .pix-debug-ocr pre {
+  .pix-debug-content pre {
     margin: 0; max-height: 150px; overflow: auto; white-space: pre-wrap;
     word-break: break-word; font: inherit;
   }
@@ -146,8 +167,10 @@
   .pix-alert.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
   .pix-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
   .pix-arquivo-selecionado {
-    margin-top: 4px; color: #0f766e; font-size: 0.72rem; font-weight: 850;
+    grid-column: 1 / -1;
+    margin-top: -2px; color: #64748b; font-size: 0.7rem; font-weight: 750;
     display: none;
+    text-align: center;
   }
   .pix-arquivo-selecionado.visivel { display: block; }
   .pix-file-control {
@@ -309,8 +332,6 @@
                   </div>
                   <div class="pix-cliente-sugestoes" id="pixClienteSugestoes"></div>
                 </div>
-              {% elif field.name == "comprovante" %}
-                <div class="pix-arquivo-selecionado" id="pixArquivoSelecionado"></div>
               {% endif %}
               {% for error in field.errors %}
                 <div class="pix-error">{{ error }}</div>
@@ -326,17 +347,21 @@
           {% endfor %}
           <input type="hidden" name="instituicao_pix" id="id_instituicao_pix" value="">
           <div class="pix-feedback" id="pixLeituraFeedback"></div>
-          <div class="pix-debug-ocr" id="pixDebugOcr">
-            <strong>Texto lido do comprovante para conferencia tecnica:</strong>
-            <span class="pix-arquivo-analisado" id="pixArquivoAnalisado"></span>
-            <pre id="pixDebugOcrTexto"></pre>
-          </div>
           {% if form.non_field_errors %}
             {% for error in form.non_field_errors %}
               <div class="pix-error">{{ error }}</div>
             {% endfor %}
           {% endif %}
           <button type="submit" class="pix-btn pix-btn-primary pix-form-submit" data-pix-submit>Salvar Pix e abrir detalhe</button>
+          <div class="pix-arquivo-selecionado" id="pixArquivoSelecionado"></div>
+          <div class="pix-debug-ocr" id="pixDebugOcr">
+            <button type="button" class="pix-debug-toggle" id="pixDebugOcrToggle" aria-expanded="false" aria-controls="pixDebugOcrConteudo">Ver texto tecnico lido pelo OCR</button>
+            <div class="pix-debug-content" id="pixDebugOcrConteudo">
+              <strong>Texto lido do comprovante para conferencia tecnica:</strong>
+              <span class="pix-arquivo-analisado" id="pixArquivoAnalisado"></span>
+              <pre id="pixDebugOcrTexto"></pre>
+            </div>
+          </div>
         </form>
       </section>
 
@@ -434,6 +459,7 @@
     const pixSubmit = document.querySelector("[data-pix-submit]");
     const instituicaoAnalise = document.getElementById("pixInstituicaoAnalise");
     const debugOcr = document.getElementById("pixDebugOcr");
+    const debugOcrToggle = document.getElementById("pixDebugOcrToggle");
     const debugOcrTexto = document.getElementById("pixDebugOcrTexto");
     const arquivoSelecionado = document.getElementById("pixArquivoSelecionado");
     const arquivoAnalisado = document.getElementById("pixArquivoAnalisado");
@@ -468,6 +494,17 @@
       return encontrado ? encontrado[1] + "T" + encontrado[2] : "";
     }
 
+    function valorPixValido() {
+      if (!valor) return false;
+      const texto = String(valor.value || "").trim().replace("R$", "").replace(/\s/g, "");
+      if (!texto) return false;
+      const normalizado = texto.includes(",") && texto.includes(".")
+        ? texto.replace(/\./g, "").replace(",", ".")
+        : texto.replace(",", ".");
+      const numero = Number(normalizado);
+      return Number.isFinite(numero) && numero > 0;
+    }
+
     function mostrarDebugOcr(texto, nomeArquivo, debugData) {
       if (!debugOcr || !debugOcrTexto) return;
       debugOcrTexto.textContent = [debugData, texto].filter(Boolean).join("\n\n");
@@ -475,6 +512,10 @@
         arquivoAnalisado.textContent = nomeArquivo ? "Arquivo analisado: " + nomeArquivo : "";
       }
       debugOcr.className = "pix-debug-ocr" + ((texto || debugData) ? " visivel" : "");
+      if (debugOcrToggle) {
+        debugOcrToggle.textContent = "Ver texto tecnico lido pelo OCR";
+        debugOcrToggle.setAttribute("aria-expanded", "false");
+      }
     }
 
     function mostrarArquivoSelecionado(nomeArquivo) {
@@ -657,7 +698,20 @@
       }
     });
 
-    pixForm?.addEventListener("submit", function () {
+    debugOcrToggle?.addEventListener("click", function () {
+      const aberto = debugOcr?.classList.toggle("aberto");
+      debugOcrToggle.setAttribute("aria-expanded", aberto ? "true" : "false");
+      debugOcrToggle.textContent = aberto ? "Ocultar texto tecnico lido pelo OCR" : "Ver texto tecnico lido pelo OCR";
+    });
+
+    pixForm?.addEventListener("submit", function (event) {
+      if (!valorPixValido()) {
+        event.preventDefault();
+        mostrarFeedback("Informe o valor do Pix antes de salvar. O valor não pode ser 0,00.", "warning");
+        valor?.focus();
+        valor?.select();
+        return;
+      }
       if (!pixSubmit) return;
       pixSubmit.classList.add("salvando");
       pixSubmit.textContent = "Salvando...";
