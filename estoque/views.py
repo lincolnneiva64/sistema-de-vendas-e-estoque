@@ -2059,8 +2059,15 @@ def central_pix_detalhe(request, pix_id):
         detalhe_url = f"{detalhe_url}?{urlencode({'next': voltar_url})}"
 
     if request.method == "POST" and request.POST.get("acao") == "ignorar":
-        pix.status = PixRecebido.STATUS_IGNORADO
-        pix.save(update_fields=["status", "atualizado_em"])
+        momento = timezone.localtime(timezone.now()).strftime("%d/%m/%Y %H:%M")
+        observacao_atual = (pix.observacao or "").strip()
+        registro = f"{momento} - Pix ignorado sem baixa pelo operador."
+        observacao = f"{observacao_atual}\n{registro}".strip() if observacao_atual else registro
+        PixRecebido.objects.filter(pk=pix.pk).update(
+            status=PixRecebido.STATUS_IGNORADO,
+            observacao=observacao,
+            atualizado_em=timezone.now(),
+        )
         messages.success(request, "Pix marcado como ignorado.")
         return redirect(detalhe_url)
 

@@ -1110,6 +1110,54 @@ class PixRecebidoTests(TestCase):
         pix.refresh_from_db()
         self.assertEqual(pix.status, PixRecebido.STATUS_IGNORADO)
 
+    def test_ignorar_pix_preserva_dados_conferidos(self):
+        cliente = Cliente.objects.create(nome="Cliente Pix Ignorado", ativo=True)
+        pix_original = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="Ivanildo Ferraz Patricio Junior",
+            valor="500.00",
+            data_pagamento=timezone.make_aware(timezone.datetime(2026, 5, 18, 17, 45)),
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_BAIXADO,
+        )
+        data_pagamento = timezone.make_aware(timezone.datetime(2026, 5, 18, 17, 45))
+        pix = PixRecebido.objects.create(
+            cliente=cliente,
+            cliente_sugerido=cliente,
+            pix_original=pix_original,
+            nome_pagador="Ivanildo Ferraz Patricio Junior",
+            valor="500.00",
+            data_pagamento=data_pagamento,
+            instituicao_pix="Mercado Pago",
+            observacao="Conferido antes de ignorar.",
+            status=PixRecebido.STATUS_POSSIVEL_DUPLICADO,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+            {
+                "acao": "ignorar",
+                "valor": "",
+                "nome_pagador": "",
+                "instituicao_pix": "",
+                "cliente": "",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        pix.refresh_from_db()
+        self.assertEqual(pix.status, PixRecebido.STATUS_IGNORADO)
+        self.assertEqual(str(pix.valor), "500.00")
+        self.assertEqual(pix.data_pagamento, data_pagamento)
+        self.assertEqual(pix.instituicao_pix, "Mercado Pago")
+        self.assertEqual(pix.nome_pagador, "Ivanildo Ferraz Patricio Junior")
+        self.assertEqual(pix.cliente, cliente)
+        self.assertEqual(pix.cliente_sugerido, cliente)
+        self.assertEqual(pix.pix_original, pix_original)
+        self.assertIn("Conferido antes de ignorar.", pix.observacao)
+        self.assertIn("Pix ignorado sem baixa pelo operador", pix.observacao)
+
     def _criar_conta_receber_pix(self, cliente, valor="100.00"):
         venda = Venda.objects.create(
             cliente=cliente,
