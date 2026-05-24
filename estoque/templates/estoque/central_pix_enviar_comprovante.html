@@ -42,9 +42,7 @@
       <a href="{% url 'estoque:central_pix' %}" class="pix-upload-link">Central de Pix</a>
     </header>
 
-    {% if ambiente_pix %}
-      <div class="pix-upload-status">{{ ambiente_pix }}</div>
-    {% endif %}
+    <div class="pix-upload-status">{{ ambiente_pix|default:"AMBIENTE NÃO IDENTIFICADO" }}</div>
 
     {% if messages %}
       {% for message in messages %}

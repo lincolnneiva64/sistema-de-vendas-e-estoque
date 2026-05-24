@@ -2,6 +2,7 @@ import io
 import tempfile
 import types
 from contextlib import redirect_stdout
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
@@ -290,6 +291,70 @@ class PixRecebidoTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "ONLINE / Render")
+
+    @override_settings(ALLOWED_HOSTS=["example.com"])
+    def test_pagina_envio_comprovante_pix_mostra_ambiente_nao_identificado(self):
+        resposta = self.client.get(
+            reverse("estoque:central_pix_enviar_comprovante"),
+            secure=True,
+            HTTP_HOST="example.com",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "AMBIENTE NÃO IDENTIFICADO")
+
+    def test_pagina_sucesso_comprovante_pix_mostra_ambiente_local(self):
+        pix = PixRecebido.objects.create(valor=Decimal("0.00"), data_pagamento=timezone.now())
+
+        resposta = self.client.get(
+            reverse("estoque:central_pix_envio_sucesso", kwargs={"pix_id": pix.id}),
+            secure=True,
+            HTTP_HOST="10.0.0.154:8000",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "LOCAL / Wi-Fi")
+
+    def test_pagina_sucesso_comprovante_pix_mostra_ambiente_online(self):
+        pix = PixRecebido.objects.create(valor=Decimal("0.00"), data_pagamento=timezone.now())
+
+        resposta = self.client.get(
+            reverse("estoque:central_pix_envio_sucesso", kwargs={"pix_id": pix.id}),
+            secure=True,
+            HTTP_HOST="sistema-de-vendas-e-estoque.onrender.com",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "ONLINE / Render")
+
+    def test_rota_antiga_envio_pix_post_sem_arquivo_mantem_selo_local(self):
+        resposta = self.client.post(
+            reverse("estoque:central_pix_enviar_comprovante"),
+            {"enviado_por": "Lincoln"},
+            secure=True,
+            HTTP_HOST="10.0.0.154:8000",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "LOCAL / Wi-Fi")
+        self.assertContains(resposta, "Escolha uma imagem ou arquivo de comprovante Pix.")
+
+    def test_rota_antiga_envio_pix_sucesso_mantem_selo_online(self):
+        arquivo = SimpleUploadedFile("comprovante.txt", b"Comprovante Pix", content_type="text/plain")
+
+        with patch("estoque.views.analisar_comprovante_pix") as analisar_mock:
+            resposta = self.client.post(
+                reverse("estoque:central_pix_enviar_comprovante"),
+                {"comprovante": arquivo, "enviado_por": "Lincoln"},
+                secure=True,
+                HTTP_HOST="sistema-de-vendas-e-estoque.onrender.com",
+                follow=True,
+            )
+
+        self.assertEqual(resposta.status_code, 200)
+        analisar_mock.assert_not_called()
+        self.assertContains(resposta, "ONLINE / Render")
+        self.assertContains(resposta, "Comprovante enviado com sucesso para a Central de Pix.")
 
     def test_enviar_comprovante_pix_cria_registro_pendente(self):
         cliente = Cliente.objects.create(nome="Cicero Cristiano Silva Souza", ativo=True)

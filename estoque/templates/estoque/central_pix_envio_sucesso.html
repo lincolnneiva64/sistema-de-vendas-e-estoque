@@ -6,6 +6,7 @@
   .pix-success-shell { max-width: 520px; margin: 0 auto; }
   .pix-success-card { background: #fff; border: 1px solid #dbe4ef; border-radius: 8px; padding: 18px 14px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06); }
   .pix-success-title { margin: 0 0 10px; color: #14532d; font-size: 1.4rem; font-weight: 900; }
+  .pix-success-status-env { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; margin: 0 0 10px; border-radius: 8px; border: 1px solid #bbf7d0; background: #ecfdf3; color: #166534; padding: 6px 10px; font-size: 0.78rem; font-weight: 900; }
   .pix-success-main { margin: 0; color: #172033; font-size: 1rem; font-weight: 900; line-height: 1.4; }
   .pix-success-note { margin: 8px 0 0; color: #475569; font-size: 0.94rem; font-weight: 750; line-height: 1.45; }
   .pix-success-meta { display: grid; gap: 8px; margin: 16px 0; border-top: 1px solid #edf2f7; border-bottom: 1px solid #edf2f7; padding: 12px 0; }
@@ -24,6 +25,7 @@
   <div class="pix-success-shell">
     <section class="pix-success-card">
       <h1 class="pix-success-title">Comprovante enviado</h1>
+      <div class="pix-success-status-env">{{ ambiente_pix|default:"AMBIENTE NÃO IDENTIFICADO" }}</div>
       <p class="pix-success-main">Comprovante enviado com sucesso para a Central de Pix.</p>
       <p class="pix-success-note">Confira depois no computador antes de baixar qualquer conta.</p>
 

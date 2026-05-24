@@ -3,6 +3,7 @@ import mimetypes
 import re
 import textwrap
 import unicodedata
+import ipaddress
 from difflib import SequenceMatcher
 from io import BytesIO
 from decimal import Decimal, InvalidOperation
@@ -70,14 +71,22 @@ def _host_configurado(url):
 
 
 def _ambiente_envio_pix(request):
-    host_atual = request.get_host().lower()
-    host_local = _host_configurado(getattr(settings, "PIX_LOCAL_URL", ""))
-    host_online = _host_configurado(getattr(settings, "PIX_ONLINE_URL", ""))
+    host_atual = request.get_host().split(":")[0].strip().lower()
+    host_local = _host_configurado(getattr(settings, "PIX_LOCAL_URL", "")).split(":")[0]
+    host_online = _host_configurado(getattr(settings, "PIX_ONLINE_URL", "")).split(":")[0]
+    try:
+        ip_atual = ipaddress.ip_address(host_atual)
+    except ValueError:
+        ip_atual = None
+    if host_atual in {"localhost", "127.0.0.1"} or (ip_atual and (ip_atual.is_private or ip_atual.is_loopback)):
+        return "LOCAL / Wi-Fi"
     if host_local and host_atual == host_local:
         return "LOCAL / Wi-Fi"
+    if host_atual.endswith(".onrender.com") or host_atual == "onrender.com":
+        return "ONLINE / Render"
     if host_online and host_atual == host_online:
         return "ONLINE / Render"
-    return ""
+    return "AMBIENTE NÃO IDENTIFICADO"
 
 
 def _pix_duplicado_pendente(dados):
@@ -1946,6 +1955,7 @@ def pix_enviar_inteligente(request):
 @ensure_csrf_cookie
 def central_pix_enviar_comprovante(request):
     resumo = None
+    ambiente_pix = _ambiente_envio_pix(request)
 
     if request.method == "POST":
         arquivo = request.FILES.get("comprovante")
@@ -1974,14 +1984,22 @@ def central_pix_enviar_comprovante(request):
         "estoque/central_pix_enviar_comprovante.html",
         {
             "resumo": resumo,
-            "ambiente_pix": _ambiente_envio_pix(request),
+            "ambiente_pix": ambiente_pix,
         },
     )
 
 
 def central_pix_envio_sucesso(request, pix_id):
     pix = get_object_or_404(PixRecebido, pk=pix_id)
-    return render(request, "estoque/central_pix_envio_sucesso.html", {"pix": pix})
+    ambiente_pix = _ambiente_envio_pix(request)
+    return render(
+        request,
+        "estoque/central_pix_envio_sucesso.html",
+        {
+            "pix": pix,
+            "ambiente_pix": ambiente_pix,
+        },
+    )
 
 
 def _texto_indica_falha_ocr(texto):
