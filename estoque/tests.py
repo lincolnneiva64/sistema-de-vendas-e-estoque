@@ -413,6 +413,26 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta_detalhe, "Texto OCR bruto")
         self.assertContains(resposta_detalhe, "Reler comprovante (OCR)")
 
+    def test_enviar_comprovante_pix_erro_storage_nao_derruba_pagina(self):
+        arquivo = SimpleUploadedFile("comprovante.txt", b"Comprovante Pix", content_type="text/plain")
+
+        with patch("estoque.views.PixRecebido.objects.create", side_effect=RuntimeError("falha storage")):
+            with self.assertLogs("estoque.views", level="ERROR") as logs:
+                resposta = self.client.post(
+                    reverse("estoque:central_pix_enviar_comprovante"),
+                    {"comprovante": arquivo, "enviado_por": "Lincoln"},
+                    secure=True,
+                )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(
+            resposta,
+            "Erro ao salvar comprovante Pix. Verifique a configuração do armazenamento online.",
+        )
+        self.assertIn("RuntimeError", "\n".join(logs.output))
+        self.assertIn("diagnostico_storage", "\n".join(logs.output))
+        self.assertEqual(PixRecebido.objects.count(), 0)
+
     def test_enviar_comprovante_pix_sem_cliente_sugerido_salva_nao_identificado(self):
         arquivo = SimpleUploadedFile(
             "comprovante-sem-cliente.txt",

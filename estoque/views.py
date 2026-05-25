@@ -1,4 +1,5 @@
 import json
+import logging
 import mimetypes
 import re
 import textwrap
@@ -30,6 +31,8 @@ from django.views.decorators.http import require_POST
 from PIL import Image, ImageDraw, ImageFont
 from uuid import uuid4
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 PIX_OCR_PENDENTE_MOBILE = (
     "OCR nao executado automaticamente no envio mobile para evitar timeout. "
@@ -87,6 +90,18 @@ def _ambiente_envio_pix(request):
     if host_online and host_atual == host_online:
         return "ONLINE / Render"
     return "AMBIENTE NÃO IDENTIFICADO"
+
+
+def _diagnostico_storage_seguro():
+    storage_backend = settings.STORAGES.get("default", {}).get("BACKEND", "")
+    return {
+        "storage_backend": storage_backend,
+        "use_cloudflare_r2_storage": getattr(settings, "USE_CLOUDFLARE_R2_STORAGE", False),
+        "cloudflare_r2_enabled": getattr(settings, "CLOUDFLARE_R2_ENABLED", False),
+        "cloudflare_r2_bucket": getattr(settings, "CLOUDFLARE_R2_BUCKET_NAME", ""),
+        "cloudflare_r2_endpoint": getattr(settings, "CLOUDFLARE_R2_ENDPOINT_URL", ""),
+        "cloudflare_r2_region": getattr(settings, "CLOUDFLARE_R2_REGION_NAME", ""),
+    }
 
 
 def _pix_duplicado_pendente(dados):
@@ -1963,15 +1978,36 @@ def central_pix_enviar_comprovante(request):
             messages.warning(request, "Escolha uma imagem ou arquivo de comprovante Pix.")
         else:
             enviado_por_nome = _nome_envio_pix_mobile(request.POST)
-            pix_recebido = PixRecebido.objects.create(
-                enviado_por_nome=enviado_por_nome,
-                valor=Decimal("0.00"),
-                data_pagamento=timezone.now(),
-                observacao="Comprovante recebido pelo envio mobile. OCR pendente para processamento posterior.",
-                comprovante=arquivo,
-                status=PixRecebido.STATUS_NAO_IDENTIFICADO,
-                texto_ocr_bruto=PIX_OCR_PENDENTE_MOBILE,
-            )
+            try:
+                pix_recebido = PixRecebido.objects.create(
+                    enviado_por_nome=enviado_por_nome,
+                    valor=Decimal("0.00"),
+                    data_pagamento=timezone.now(),
+                    observacao="Comprovante recebido pelo envio mobile. OCR pendente para processamento posterior.",
+                    comprovante=arquivo,
+                    status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+                    texto_ocr_bruto=PIX_OCR_PENDENTE_MOBILE,
+                )
+            except Exception as exc:
+                logger.exception(
+                    "Erro ao salvar comprovante Pix mobile. tipo=%s mensagem=%s diagnostico_storage=%s",
+                    exc.__class__.__name__,
+                    str(exc),
+                    _diagnostico_storage_seguro(),
+                )
+                messages.error(
+                    request,
+                    "Erro ao salvar comprovante Pix. Verifique a configuração do armazenamento online.",
+                )
+                return render(
+                    request,
+                    "estoque/central_pix_enviar_comprovante.html",
+                    {
+                        "resumo": resumo,
+                        "ambiente_pix": ambiente_pix,
+                    },
+                    status=200,
+                )
             messages.success(request, "Comprovante recebido e salvo na Central de Pix.")
             messages.warning(
                 request,
