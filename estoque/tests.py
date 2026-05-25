@@ -3,6 +3,7 @@ import tempfile
 import types
 from contextlib import redirect_stdout
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
@@ -14,6 +15,7 @@ from django.utils import timezone
 from .forms import FuncionarioForm, PixRecebidoForm
 from .models import Cliente, ContaReceber, CreditoCliente, Funcionario, PixRecebido, RecebimentoContaReceber, Venda
 from .utils_pix import analisar_comprovante_pix
+from . import views
 
 
 class FuncionarioTests(TestCase):
@@ -409,7 +411,7 @@ class PixRecebidoTests(TestCase):
         )
         self.assertEqual(resposta_detalhe.status_code, 200)
         self.assertContains(resposta_detalhe, "Texto OCR bruto")
-        self.assertContains(resposta_detalhe, "Processar OCR agora")
+        self.assertContains(resposta_detalhe, "Reler comprovante (OCR)")
 
     def test_enviar_comprovante_pix_sem_cliente_sugerido_salva_nao_identificado(self):
         arquivo = SimpleUploadedFile(
@@ -1080,7 +1082,7 @@ class PixRecebidoTests(TestCase):
             self.assertIn("Comprovante Pix", pix.texto_ocr_bruto)
             self.assertTrue(pix.comprovante)
             self.assertContains(resposta, "Texto OCR bruto")
-            self.assertContains(resposta, "Processar OCR agora")
+            self.assertContains(resposta, "Reler comprovante (OCR)")
 
     def test_detalhe_pix_processar_ocr_com_erro_mantem_comprovante_salvo(self):
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
@@ -1186,6 +1188,22 @@ class PixRecebidoTests(TestCase):
             self.assertEqual(resposta["Content-Type"], "image/jpeg")
             self.assertIn('inline; filename="comprovante-render', resposta["Content-Disposition"])
             self.assertEqual(b"".join(resposta.streaming_content), conteudo)
+
+    def test_abrir_comprovante_pix_usa_fallback_media_root_para_arquivo_antigo(self):
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            caminho_antigo = Path(media_root) / "pix" / "comprovantes" / "antigo.txt"
+            caminho_antigo.parent.mkdir(parents=True, exist_ok=True)
+            caminho_antigo.write_bytes(b"arquivo antigo")
+            pix = PixRecebido(valor=Decimal("0.00"), data_pagamento=timezone.now())
+            pix.comprovante.name = "pix/comprovantes/antigo.txt"
+
+            with patch.object(pix.comprovante, "open", side_effect=FileNotFoundError):
+                arquivo = views._abrir_comprovante_pix(pix)
+
+            try:
+                self.assertEqual(arquivo.read(), b"arquivo antigo")
+            finally:
+                arquivo.close()
 
     def test_rota_comprovante_pix_retorna_404_sem_comprovante(self):
         pix = PixRecebido.objects.create(

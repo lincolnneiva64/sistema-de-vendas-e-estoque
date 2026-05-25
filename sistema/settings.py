@@ -133,6 +133,30 @@ STATICFILES_DIRS = [
 ]
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+USE_CLOUDFLARE_R2_STORAGE = str(config("USE_CLOUDFLARE_R2_STORAGE", default="False")).strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+CLOUDFLARE_R2_ACCESS_KEY_ID = config("CLOUDFLARE_R2_ACCESS_KEY_ID", default="")
+CLOUDFLARE_R2_SECRET_ACCESS_KEY = config("CLOUDFLARE_R2_SECRET_ACCESS_KEY", default="")
+CLOUDFLARE_R2_BUCKET_NAME = config("CLOUDFLARE_R2_BUCKET_NAME", default="")
+CLOUDFLARE_R2_ENDPOINT_URL = config("CLOUDFLARE_R2_ENDPOINT_URL", default="")
+CLOUDFLARE_R2_REGION_NAME = config("CLOUDFLARE_R2_REGION_NAME", default="auto")
+CLOUDFLARE_R2_CUSTOM_DOMAIN = config("CLOUDFLARE_R2_CUSTOM_DOMAIN", default="")
+CLOUDFLARE_R2_QUERYSTRING_AUTH = str(
+    config("CLOUDFLARE_R2_QUERYSTRING_AUTH", default="True")
+).strip().lower() in {"1", "true", "yes", "on"}
+CLOUDFLARE_R2_ENABLED = USE_CLOUDFLARE_R2_STORAGE and all(
+    [
+        CLOUDFLARE_R2_ACCESS_KEY_ID,
+        CLOUDFLARE_R2_SECRET_ACCESS_KEY,
+        CLOUDFLARE_R2_BUCKET_NAME,
+        CLOUDFLARE_R2_ENDPOINT_URL,
+    ]
+)
 STORAGES = {
     'default': {
         'BACKEND': 'django.core.files.storage.FileSystemStorage',
@@ -141,6 +165,24 @@ STORAGES = {
         'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
     },
 }
+
+if CLOUDFLARE_R2_ENABLED:
+    r2_options = {
+        "access_key": CLOUDFLARE_R2_ACCESS_KEY_ID,
+        "secret_key": CLOUDFLARE_R2_SECRET_ACCESS_KEY,
+        "bucket_name": CLOUDFLARE_R2_BUCKET_NAME,
+        "endpoint_url": CLOUDFLARE_R2_ENDPOINT_URL,
+        "region_name": CLOUDFLARE_R2_REGION_NAME,
+        "default_acl": None,
+        "file_overwrite": False,
+        "querystring_auth": CLOUDFLARE_R2_QUERYSTRING_AUTH,
+    }
+    if CLOUDFLARE_R2_CUSTOM_DOMAIN:
+        r2_options["custom_domain"] = CLOUDFLARE_R2_CUSTOM_DOMAIN
+    STORAGES["default"] = {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": r2_options,
+    }
 
 if not DEBUG:
     SECURE_SSL_REDIRECT = True

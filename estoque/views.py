@@ -2111,6 +2111,29 @@ def _url_com_pix_recebido(url, pix_id):
     return f"{url}{separador}{urlencode({'pix_recebido': pix_id})}"
 
 
+def _caminho_comprovante_pix_media_antiga(nome_arquivo):
+    nome_arquivo = str(nome_arquivo or "").strip()
+    if not nome_arquivo:
+        return None
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+    caminho = (media_root / nome_arquivo).resolve()
+    try:
+        caminho.relative_to(media_root)
+    except ValueError:
+        return None
+    return caminho if caminho.is_file() else None
+
+
+def _abrir_comprovante_pix(pix):
+    try:
+        return pix.comprovante.open("rb")
+    except (FileNotFoundError, OSError, ValueError):
+        caminho_antigo = _caminho_comprovante_pix_media_antiga(pix.comprovante.name)
+        if caminho_antigo:
+            return caminho_antigo.open("rb")
+        raise
+
+
 @ensure_csrf_cookie
 def central_pix_detalhe(request, pix_id):
     pix = get_object_or_404(PixRecebido.objects.select_related("cliente", "cliente_sugerido", "pix_original"), pk=pix_id)
@@ -2237,9 +2260,10 @@ def central_pix_processar_ocr(request, pix_id):
         messages.warning(request, "Comprovante Pix nao encontrado para processar OCR.")
         return redirect(detalhe_url)
 
+    arquivo = None
     try:
-        pix.comprovante.open("rb")
-        dados = analisar_comprovante_pix(pix.comprovante)
+        arquivo = _abrir_comprovante_pix(pix)
+        dados = analisar_comprovante_pix(arquivo)
     except Exception as exc:
         detalhe = f": {exc}" if str(exc) else ""
         pix.texto_ocr_bruto = f"{PIX_OCR_MANUAL_ERRO_RENDER} Detalhe: {exc.__class__.__name__}{detalhe}"
@@ -2247,10 +2271,11 @@ def central_pix_processar_ocr(request, pix_id):
         messages.warning(request, "Nao foi possivel processar o OCR agora. O comprovante continua salvo.")
         return redirect(detalhe_url)
     finally:
-        try:
-            pix.comprovante.close()
-        except Exception:
-            pass
+        if arquivo:
+            try:
+                arquivo.close()
+            except Exception:
+                pass
 
     cliente_sugerido, confianca_cliente, mensagem_cliente = _sugerir_cliente_por_pagador(dados.get("pagador"))
     valor = _decimal_pix_lido(dados.get("valor"))
@@ -2322,7 +2347,7 @@ def central_pix_comprovante(request, pix_id):
         raise Http404("Comprovante Pix nao encontrado.")
 
     try:
-        arquivo = pix.comprovante.open("rb")
+        arquivo = _abrir_comprovante_pix(pix)
     except (FileNotFoundError, OSError, ValueError):
         raise Http404("Comprovante Pix nao encontrado.")
 
