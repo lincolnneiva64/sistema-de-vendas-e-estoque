@@ -1167,6 +1167,40 @@ class PixRecebidoTests(TestCase):
             self.assertIn("Tesseract process timeout", "\n".join(logs.output))
             self.assertContains(resposta, "Texto OCR bruto")
 
+    def test_detalhe_pix_processar_ocr_aproveita_texto_parcial_com_valor_e_data(self):
+        conteudo = (
+            "ERRO OCR: timeout parcial no Render\n"
+            "21 ABR 2026 - 13:05:01\n"
+            "Valor R$ 172,00\n"
+            "Tipo de transferencia Pix\n"
+        ).encode("utf-8")
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            pix = PixRecebido.objects.create(
+                valor="0.00",
+                status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+                texto_ocr_bruto="OCR pendente",
+                comprovante=SimpleUploadedFile("comprovante-parcial.txt", conteudo, content_type="text/plain"),
+            )
+
+            with self.assertLogs("estoque.views", level="INFO") as logs:
+                resposta = self.client.post(
+                    reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
+                    secure=True,
+                    follow=True,
+                )
+
+            self.assertEqual(resposta.status_code, 200)
+            pix.refresh_from_db()
+            self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
+            self.assertEqual(pix.nome_pagador, "")
+            self.assertEqual(str(pix.valor), "172.00")
+            self.assertEqual(timezone.localtime(pix.data_pagamento).strftime("%Y-%m-%dT%H:%M"), "2026-04-21T13:05")
+            self.assertIn("Valor R$ 172,00", pix.texto_ocr_bruto)
+            self.assertContains(resposta, "OCR parcial concluido. Confira os dados antes de qualquer baixa.")
+            self.assertContains(resposta, "Reler comprovante (OCR)")
+            self.assertIn("extraiu_valor=True", "\n".join(logs.output))
+            self.assertIn("extraiu_data=True", "\n".join(logs.output))
+
     def test_detalhe_pix_usa_rota_propria_do_comprovante(self):
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
             pix_original = PixRecebido.objects.create(

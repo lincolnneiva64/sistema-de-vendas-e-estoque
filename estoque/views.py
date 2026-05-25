@@ -2056,10 +2056,16 @@ def _texto_indica_falha_ocr(texto):
     return texto_limpo.startswith("ERRO OCR:") or texto_limpo == "OCR executado, mas nao retornou texto."
 
 
+def _ocr_tem_dados_aproveitaveis(valor, data_pagamento, instituicao_pix, pagador):
+    return bool((valor and valor > Decimal("0.00")) or data_pagamento or instituicao_pix or pagador)
+
+
 def _pix_tem_texto_ocr_util(pix):
     texto = " ".join(str(getattr(pix, "texto_ocr_bruto", "") or "").strip().split())
     if not texto:
         return False
+    if getattr(pix, "valor", Decimal("0.00")) > Decimal("0.00") or pix.nome_pagador or pix.instituicao_pix:
+        return True
     return texto not in {PIX_OCR_PENDENTE_MOBILE, PIX_OCR_MANUAL_ERRO_RENDER} and not _texto_indica_falha_ocr(texto)
 
 
@@ -2347,17 +2353,28 @@ def central_pix_processar_ocr(request, pix_id):
 
     cliente_sugerido, confianca_cliente, mensagem_cliente = _sugerir_cliente_por_pagador(dados.get("pagador"))
     valor = _decimal_pix_lido(dados.get("valor"))
-    data_pagamento = _data_pix_lida(dados.get("data_pagamento"))
+    data_pagamento_texto = dados.get("data_pagamento")
+    data_pagamento = _data_pix_lida(data_pagamento_texto)
+    instituicao_pix = (dados.get("instituicao_pix") or "")[:80]
+    nome_pagador = (dados.get("pagador") or "")[:160]
     texto_ocr_bruto = dados.get("texto_ocr_bruto") or dados.get("texto_extraido") or ""
-    if _texto_indica_falha_ocr(texto_ocr_bruto):
+    dados_aproveitaveis = _ocr_tem_dados_aproveitaveis(
+        valor,
+        data_pagamento if data_pagamento_texto else None,
+        instituicao_pix,
+        nome_pagador,
+    )
+    if _texto_indica_falha_ocr(texto_ocr_bruto) and not dados_aproveitaveis:
         detalhe_erro = str(texto_ocr_bruto or "").strip()
         tempo_ocr = time.monotonic() - inicio_ocr
         _salvar_falha_ocr_manual(pix)
         logger.warning(
-            "OCR manual Pix retornou falha. pix_id=%s arquivo=%s tempo=%.1fs erro=%s",
+            "OCR manual Pix retornou falha. pix_id=%s arquivo=%s tempo=%.1fs extraiu_valor=%s extraiu_data=%s erro=%s",
             pix.id,
             nome_arquivo,
             tempo_ocr,
+            bool(valor and valor > Decimal("0.00")),
+            bool(data_pagamento_texto),
             detalhe_erro[:180],
         )
         messages.warning(request, "OCR nao concluido no Render. O comprovante continua salvo para conferencia manual.")
@@ -2376,10 +2393,10 @@ def central_pix_processar_ocr(request, pix_id):
 
     pix.cliente_sugerido = cliente_sugerido
     pix.pix_original = pix_duplicado
-    pix.nome_pagador = (dados.get("pagador") or "")[:160]
+    pix.nome_pagador = nome_pagador
     pix.valor = valor
     pix.data_pagamento = data_pagamento
-    pix.instituicao_pix = (dados.get("instituicao_pix") or "")[:80]
+    pix.instituicao_pix = instituicao_pix
     pix.texto_ocr_bruto = texto_ocr_bruto
     pix.status = (
         PixRecebido.STATUS_POSSIVEL_DUPLICADO
@@ -2409,16 +2426,21 @@ def central_pix_processar_ocr(request, pix_id):
         "observacao",
         "atualizado_em",
     ])
-    if dados.get("ok"):
+    ocr_parcial = dados_aproveitaveis and not (nome_pagador and cliente_sugerido)
+    if ocr_parcial:
+        messages.warning(request, "OCR parcial concluido. Confira os dados antes de qualquer baixa.")
+    elif dados.get("ok"):
         messages.success(request, "OCR processado. Confira os dados antes de qualquer baixa.")
     else:
         messages.warning(request, "OCR processado, mas nao identificou todos os dados. Confira manualmente.")
     logger.info(
-        "OCR manual Pix concluido. pix_id=%s arquivo=%s tempo=%.1fs ok=%s",
+        "OCR manual Pix concluido. pix_id=%s arquivo=%s tempo=%.1fs ok=%s extraiu_valor=%s extraiu_data=%s",
         pix.id,
         nome_arquivo,
         time.monotonic() - inicio_ocr,
         bool(dados.get("ok")),
+        bool(valor and valor > Decimal("0.00")),
+        bool(data_pagamento_texto),
     )
     return redirect(detalhe_url)
 

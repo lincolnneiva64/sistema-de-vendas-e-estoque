@@ -269,6 +269,29 @@ def _resultado_comprovante_sem_leitura(texto_ocr_bruto):
     }
 
 
+def _resultado_comprovante_parcial(texto):
+    texto_parse = _texto_para_parse_ocr(texto)
+    pagador = _extrair_pagador(texto_parse)
+    valor = _extrair_valor(texto_parse)
+    data_pagamento = _extrair_data_pagamento(texto_parse)
+    instituicao_pix = _extrair_instituicao_pix(texto_parse)
+    ok = bool(pagador or valor or data_pagamento or instituicao_pix)
+    if not ok:
+        return None
+
+    return {
+        "ok": True,
+        "pagador": pagador,
+        "valor": valor,
+        "data_pagamento": data_pagamento,
+        "instituicao_pix": instituicao_pix,
+        "debug_data_pagamento": _debug_data_pagamento(texto_parse, data_pagamento),
+        "texto_extraido": _normalizar_espacos(texto_parse)[:700],
+        "texto_ocr_bruto": texto[:2000],
+        "mensagem": "OCR parcial concluido. Confira os dados antes de salvar.",
+    }
+
+
 def _extrair_valor(texto):
     def normalizar_valor_ocr(valor):
         valor = re.sub(r"[^\d,.]", "", str(valor or ""))
@@ -1274,6 +1297,9 @@ def analisar_comprovante_pix(arquivo):
         return _resultado_comprovante_sem_leitura("OCR executado, mas nao retornou texto.")
 
     if _texto_eh_diagnostico_ocr(texto):
+        resultado_parcial = _resultado_comprovante_parcial(texto)
+        if resultado_parcial:
+            return resultado_parcial
         return _resultado_comprovante_sem_leitura(texto)
 
     texto_parse = _texto_para_parse_ocr(texto)
