@@ -3,6 +3,7 @@ import logging
 import mimetypes
 import re
 import textwrap
+import time
 import unicodedata
 import ipaddress
 from difflib import SequenceMatcher
@@ -39,8 +40,7 @@ PIX_OCR_PENDENTE_MOBILE = (
     "Use processamento manual posteriormente."
 )
 PIX_OCR_MANUAL_ERRO_RENDER = (
-    "ERRO OCR MANUAL: processamento excedeu o tempo limite ou falhou no Render. "
-    "Comprovante preservado para conferencia manual."
+    "OCR nao concluido no Render. Comprovante preservado para conferencia manual."
 )
 
 MENSAGEM_CLIENTE_DUPLICADO = (
@@ -106,6 +106,15 @@ def _diagnostico_storage_seguro():
         "cloudflare_r2_endpoint": getattr(settings, "CLOUDFLARE_R2_ENDPOINT_URL", ""),
         "cloudflare_r2_region": getattr(settings, "CLOUDFLARE_R2_REGION_NAME", ""),
     }
+
+
+def _nome_arquivo_seguro(arquivo):
+    return Path(getattr(arquivo, "name", "") or "").name
+
+
+def _salvar_falha_ocr_manual(pix):
+    pix.texto_ocr_bruto = PIX_OCR_MANUAL_ERRO_RENDER
+    pix.save(update_fields=["texto_ocr_bruto", "atualizado_em"])
 
 
 def _pix_duplicado_pendente(dados):
@@ -2047,6 +2056,13 @@ def _texto_indica_falha_ocr(texto):
     return texto_limpo.startswith("ERRO OCR:") or texto_limpo == "OCR executado, mas nao retornou texto."
 
 
+def _pix_tem_texto_ocr_util(pix):
+    texto = " ".join(str(getattr(pix, "texto_ocr_bruto", "") or "").strip().split())
+    if not texto:
+        return False
+    return texto not in {PIX_OCR_PENDENTE_MOBILE, PIX_OCR_MANUAL_ERRO_RENDER} and not _texto_indica_falha_ocr(texto)
+
+
 def _registrar_observacao_correcao_pix(pix):
     momento = timezone.localtime(timezone.now()).strftime("%d/%m/%Y %H:%M")
     registro = f"Correcao manual dos dados do Pix em {momento}. Conferir antes de baixar contas."
@@ -2282,6 +2298,7 @@ def central_pix_detalhe(request, pix_id):
                     PixRecebido.STATUS_NAO_IDENTIFICADO,
                 }
             ),
+            "pix_tem_texto_ocr_util": _pix_tem_texto_ocr_util(pix),
             "modo_conferencia_ocr": modo_conferencia_ocr,
         },
     )
@@ -2301,14 +2318,25 @@ def central_pix_processar_ocr(request, pix_id):
         return redirect(detalhe_url)
 
     arquivo = None
+    inicio_ocr = time.monotonic()
+    nome_arquivo = _nome_arquivo_seguro(pix.comprovante)
     try:
         arquivo = _abrir_comprovante_pix(pix)
+        nome_arquivo = _nome_arquivo_seguro(arquivo) or nome_arquivo
         dados = analisar_comprovante_pix(arquivo)
     except Exception as exc:
-        detalhe = f": {exc}" if str(exc) else ""
-        pix.texto_ocr_bruto = f"{PIX_OCR_MANUAL_ERRO_RENDER} Detalhe: {exc.__class__.__name__}{detalhe}"
-        pix.save(update_fields=["texto_ocr_bruto", "atualizado_em"])
-        messages.warning(request, "Nao foi possivel processar o OCR agora. O comprovante continua salvo.")
+        tempo_ocr = time.monotonic() - inicio_ocr
+        erro_resumido = str(exc).strip()[:180]
+        _salvar_falha_ocr_manual(pix)
+        logger.warning(
+            "Falha no OCR manual Pix. pix_id=%s arquivo=%s tempo=%.1fs erro=%s%s",
+            pix.id,
+            nome_arquivo,
+            tempo_ocr,
+            exc.__class__.__name__,
+            f": {erro_resumido}" if erro_resumido else "",
+        )
+        messages.warning(request, "OCR nao concluido no Render. O comprovante continua salvo para conferencia manual.")
         return redirect(detalhe_url)
     finally:
         if arquivo:
@@ -2323,9 +2351,16 @@ def central_pix_processar_ocr(request, pix_id):
     texto_ocr_bruto = dados.get("texto_ocr_bruto") or dados.get("texto_extraido") or ""
     if _texto_indica_falha_ocr(texto_ocr_bruto):
         detalhe_erro = str(texto_ocr_bruto or "").strip()
-        pix.texto_ocr_bruto = f"{PIX_OCR_MANUAL_ERRO_RENDER} Detalhe: {detalhe_erro[:240]}"
-        pix.save(update_fields=["texto_ocr_bruto", "atualizado_em"])
-        messages.warning(request, "Nao foi possivel processar o OCR agora. O comprovante continua salvo.")
+        tempo_ocr = time.monotonic() - inicio_ocr
+        _salvar_falha_ocr_manual(pix)
+        logger.warning(
+            "OCR manual Pix retornou falha. pix_id=%s arquivo=%s tempo=%.1fs erro=%s",
+            pix.id,
+            nome_arquivo,
+            tempo_ocr,
+            detalhe_erro[:180],
+        )
+        messages.warning(request, "OCR nao concluido no Render. O comprovante continua salvo para conferencia manual.")
         return redirect(detalhe_url)
 
     pix_duplicado = _pix_duplicado_baixado(
@@ -2378,6 +2413,13 @@ def central_pix_processar_ocr(request, pix_id):
         messages.success(request, "OCR processado. Confira os dados antes de qualquer baixa.")
     else:
         messages.warning(request, "OCR processado, mas nao identificou todos os dados. Confira manualmente.")
+    logger.info(
+        "OCR manual Pix concluido. pix_id=%s arquivo=%s tempo=%.1fs ok=%s",
+        pix.id,
+        nome_arquivo,
+        time.monotonic() - inicio_ocr,
+        bool(dados.get("ok")),
+    )
     return redirect(detalhe_url)
 
 

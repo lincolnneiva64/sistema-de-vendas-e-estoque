@@ -1,5 +1,6 @@
 ﻿import re
 import logging
+import os
 import shutil
 import unicodedata
 from datetime import datetime
@@ -10,9 +11,10 @@ from pathlib import Path
 from PIL import Image, ImageOps
 
 CAMINHO_TESSERACT_WINDOWS = Path("C:/Program Files/Tesseract-OCR/tesseract.exe")
-OCR_TIMEOUT_SEGUNDOS = 12
-OCR_LARGURA_MAXIMA = 1400
-OCR_ALTURA_MAXIMA = 2200
+OCR_RENDER_MODO_LEVE = bool(os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID"))
+OCR_TIMEOUT_SEGUNDOS = 5 if OCR_RENDER_MODO_LEVE else 12
+OCR_LARGURA_MAXIMA = 900 if OCR_RENDER_MODO_LEVE else 1400
+OCR_ALTURA_MAXIMA = 1400 if OCR_RENDER_MODO_LEVE else 2200
 logger = logging.getLogger(__name__)
 
 
@@ -126,6 +128,11 @@ def _preparar_recortes_ocr(conteudo):
     pagador_inicio = max(0, int(altura * 0.32))
 
     imagem.info["ocr_recorte"] = "inteira"
+    if OCR_RENDER_MODO_LEVE:
+        return tamanho_original, imagem.size, [
+            ("inteira", imagem, (0, 0, largura, altura)),
+        ]
+
     recortes = [
         ("topo", _copiar_recorte_ocr(imagem, "topo", (0, 0, largura, topo_fim)), (0, 0, largura, topo_fim)),
         ("pagador", _copiar_recorte_ocr(imagem, "pagador", (0, pagador_inicio, largura, altura)), (0, pagador_inicio, largura, altura)),
@@ -140,7 +147,7 @@ def _log_diagnostico_ocr(caminho, mensagem, *args):
 
 def _extrair_texto_recorte_ocr(pytesseract, imagem):
     erros = []
-    tentativas = [
+    tentativas = [("padrao", {})] if OCR_RENDER_MODO_LEVE else [
         ("por", {"lang": "por"}),
         ("eng", {"lang": "eng"}),
         ("padrao", {}),

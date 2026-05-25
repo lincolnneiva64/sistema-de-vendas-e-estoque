@@ -411,7 +411,7 @@ class PixRecebidoTests(TestCase):
         )
         self.assertEqual(resposta_detalhe.status_code, 200)
         self.assertContains(resposta_detalhe, "Texto OCR bruto")
-        self.assertContains(resposta_detalhe, "Reler comprovante (OCR)")
+        self.assertContains(resposta_detalhe, "Ler comprovante (OCR)")
 
     def test_enviar_comprovante_pix_erro_storage_nao_derruba_pagina(self):
         arquivo = SimpleUploadedFile("comprovante.txt", b"Comprovante Pix", content_type="text/plain")
@@ -1114,18 +1114,21 @@ class PixRecebidoTests(TestCase):
             )
 
             with patch("estoque.views.analisar_comprovante_pix", side_effect=RuntimeError("timeout render")):
-                resposta = self.client.post(
-                    reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
-                    secure=True,
-                    follow=True,
-                )
+                with self.assertLogs("estoque.views", level="WARNING") as logs:
+                    resposta = self.client.post(
+                        reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
+                        secure=True,
+                        follow=True,
+                    )
 
             self.assertEqual(resposta.status_code, 200)
             pix.refresh_from_db()
             self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
             self.assertTrue(pix.comprovante)
-            self.assertIn("ERRO OCR MANUAL", pix.texto_ocr_bruto)
-            self.assertIn("timeout render", pix.texto_ocr_bruto)
+            self.assertIn("OCR nao concluido no Render", pix.texto_ocr_bruto)
+            self.assertIn(f"pix_id={pix.id}", "\n".join(logs.output))
+            self.assertIn("arquivo=comprovante_", "\n".join(logs.output))
+            self.assertIn("timeout render", "\n".join(logs.output))
             self.assertContains(resposta, "Texto OCR bruto")
 
     def test_detalhe_pix_processar_ocr_com_timeout_retornado_mantem_comprovante_salvo(self):
@@ -1146,19 +1149,22 @@ class PixRecebidoTests(TestCase):
             }
 
             with patch("estoque.views.analisar_comprovante_pix", return_value=dados_timeout):
-                resposta = self.client.post(
-                    reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
-                    secure=True,
-                    follow=True,
-                )
+                with self.assertLogs("estoque.views", level="WARNING") as logs:
+                    resposta = self.client.post(
+                        reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
+                        secure=True,
+                        follow=True,
+                    )
 
             self.assertEqual(resposta.status_code, 200)
             pix.refresh_from_db()
             self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
             self.assertEqual(str(pix.valor), "0.00")
             self.assertTrue(pix.comprovante)
-            self.assertIn("ERRO OCR MANUAL", pix.texto_ocr_bruto)
-            self.assertIn("Tesseract process timeout", pix.texto_ocr_bruto)
+            self.assertIn("OCR nao concluido no Render", pix.texto_ocr_bruto)
+            self.assertNotIn("Tesseract process timeout", pix.texto_ocr_bruto)
+            self.assertIn(f"pix_id={pix.id}", "\n".join(logs.output))
+            self.assertIn("Tesseract process timeout", "\n".join(logs.output))
             self.assertContains(resposta, "Texto OCR bruto")
 
     def test_detalhe_pix_usa_rota_propria_do_comprovante(self):

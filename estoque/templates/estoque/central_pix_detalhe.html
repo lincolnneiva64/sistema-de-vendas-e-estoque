@@ -332,7 +332,7 @@
             {% if pix.comprovante %}
               <form method="post" action="{% url 'estoque:central_pix_processar_ocr' pix.id %}">
                 {% csrf_token %}
-                <button type="submit" class="pix-detail-btn">Reler comprovante (OCR)</button>
+                <button type="submit" class="pix-detail-btn">{% if pix_tem_texto_ocr_util %}Reler comprovante (OCR){% else %}Ler comprovante (OCR){% endif %}</button>
               </form>
             {% endif %}
             {% if pix.valor > 0 and not pix.cliente and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
