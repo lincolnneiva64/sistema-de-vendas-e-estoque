@@ -28,6 +28,11 @@ def _normalizar_espacos(valor):
     return " ".join(str(valor or "").strip().split())
 
 
+def _nome_arquivo_seguro_ocr(valor):
+    nome = Path(str(valor or "arquivo")).name
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", nome).strip("._") or "arquivo"
+
+
 def _normalizar_linha(valor):
     return _normalizar_espacos(valor).lower()
 
@@ -150,7 +155,31 @@ def _preparar_recorte_rapido_ocr(imagem, nome, caixa):
     return recorte
 
 
-def _preparar_faixa_linha_ocr(imagem, nome, caixa, configs):
+def _salvar_debug_recorte_ocr(caminho, nome_recorte, imagem):
+    try:
+        from django.conf import settings
+
+        if not getattr(settings, "DEBUG", False):
+            return
+        pasta = Path(settings.MEDIA_ROOT) / "debug_ocr"
+        pasta.mkdir(parents=True, exist_ok=True)
+        nome_base = _nome_arquivo_seguro_ocr(caminho)
+        destino = pasta / f"{nome_base}_{nome_recorte}.jpg"
+        imagem.convert("L").save(destino, format="JPEG", quality=90)
+    except Exception:
+        return
+
+
+def _caixa_percentual(largura, altura, x1, y1, x2, y2):
+    return (
+        max(0, int(largura * x1)),
+        max(0, int(altura * y1)),
+        min(largura, int(largura * x2)),
+        min(altura, int(altura * y2)),
+    )
+
+
+def _preparar_faixa_linha_ocr(imagem, nome, caixa, configs, percentuais, base_nome):
     recorte = _copiar_recorte_ocr(imagem, nome, caixa)
     tamanho_antes = recorte.size
     recorte = ImageOps.autocontrast(recorte.convert("L"), cutoff=1)
@@ -166,6 +195,9 @@ def _preparar_faixa_linha_ocr(imagem, nome, caixa, configs):
     recorte.info["ocr_faixa"] = True
     recorte.info["ocr_tamanho_antes"] = tamanho_antes
     recorte.info["ocr_tamanho_depois"] = recorte.size
+    recorte.info["ocr_base_nome"] = base_nome
+    recorte.info["ocr_base_tamanho"] = imagem.size
+    recorte.info["ocr_caixa_percentual"] = percentuais
     return recorte
 
 
@@ -194,49 +226,65 @@ def _preparar_recortes_ocr(conteudo):
         if usar_faixas_linhas:
             imagem_faixas = _imagem_intermediaria_faixas_ocr(imagem_original)
             largura_faixa, altura_faixa = imagem_faixas.size
-            valor_x_inicio = max(0, int(largura_faixa * 0.45))
+            base_nome = "nubank_700"
             configs_valor = [OCR_CONFIG_VALOR_LINHA, OCR_CONFIG_RAPIDO]
             configs_data = [OCR_CONFIG_LINHA, OCR_CONFIG_RAPIDO]
+            caixa_valor_principal_pct = (0.40, 0.30, 1.00, 0.38)
+            caixa_valor_alternativa_pct = (0.40, 0.34, 1.00, 0.42)
+            caixa_data_principal_pct = (0.05, 0.18, 0.95, 0.25)
+            caixa_data_alternativa_pct = (0.05, 0.20, 0.95, 0.28)
+            caixa_valor_principal = _caixa_percentual(largura_faixa, altura_faixa, *caixa_valor_principal_pct)
+            caixa_valor_alternativa = _caixa_percentual(largura_faixa, altura_faixa, *caixa_valor_alternativa_pct)
+            caixa_data_principal = _caixa_percentual(largura_faixa, altura_faixa, *caixa_data_principal_pct)
+            caixa_data_alternativa = _caixa_percentual(largura_faixa, altura_faixa, *caixa_data_alternativa_pct)
             recortes_rapidos.extend([
                 (
                     "faixa_valor_principal",
                     _preparar_faixa_linha_ocr(
                         imagem_faixas,
                         "faixa_valor_principal",
-                        (valor_x_inicio, max(0, int(altura_faixa * 0.34)), largura_faixa, min(altura_faixa, int(altura_faixa * 0.42))),
+                        caixa_valor_principal,
                         configs_valor,
+                        caixa_valor_principal_pct,
+                        base_nome,
                     ),
-                    (valor_x_inicio, max(0, int(altura_faixa * 0.34)), largura_faixa, min(altura_faixa, int(altura_faixa * 0.42))),
+                    caixa_valor_principal,
                 ),
                 (
-                    "faixa_valor_alternativa_acima",
+                    "faixa_valor_alternativa",
                     _preparar_faixa_linha_ocr(
                         imagem_faixas,
-                        "faixa_valor_alternativa_acima",
-                        (valor_x_inicio, max(0, int(altura_faixa * 0.30)), largura_faixa, min(altura_faixa, int(altura_faixa * 0.38))),
+                        "faixa_valor_alternativa",
+                        caixa_valor_alternativa,
                         configs_valor,
+                        caixa_valor_alternativa_pct,
+                        base_nome,
                     ),
-                    (valor_x_inicio, max(0, int(altura_faixa * 0.30)), largura_faixa, min(altura_faixa, int(altura_faixa * 0.38))),
+                    caixa_valor_alternativa,
                 ),
                 (
                     "faixa_data_principal",
                     _preparar_faixa_linha_ocr(
                         imagem_faixas,
                         "faixa_data_principal",
-                        (0, max(0, int(altura_faixa * 0.27)), largura_faixa, min(altura_faixa, int(altura_faixa * 0.34))),
+                        caixa_data_principal,
                         configs_data,
+                        caixa_data_principal_pct,
+                        base_nome,
                     ),
-                    (0, max(0, int(altura_faixa * 0.27)), largura_faixa, min(altura_faixa, int(altura_faixa * 0.34))),
+                    caixa_data_principal,
                 ),
                 (
                     "faixa_data_alternativa",
                     _preparar_faixa_linha_ocr(
                         imagem_faixas,
                         "faixa_data_alternativa",
-                        (0, max(0, int(altura_faixa * 0.24)), largura_faixa, min(altura_faixa, int(altura_faixa * 0.31))),
+                        caixa_data_alternativa,
                         configs_data,
+                        caixa_data_alternativa_pct,
+                        base_nome,
                     ),
-                    (0, max(0, int(altura_faixa * 0.24)), largura_faixa, min(altura_faixa, int(altura_faixa * 0.31))),
+                    caixa_data_alternativa,
                 ),
             ])
         if not (OCR_RENDER_MODO_LEVE and usar_faixas_linhas):
@@ -335,7 +383,7 @@ def _extrair_texto_comprovante(arquivo):
     for nome_recorte, imagem, caixa in recortes:
         texto_parcial_atual = "\n\n".join(textos)
         resultado_atual = _resultado_comprovante_parcial(texto_parcial_atual) if texto_parcial_atual else None
-        if nome_recorte == "faixa_valor_alternativa_acima" and resultado_atual and resultado_atual.get("valor"):
+        if nome_recorte == "faixa_valor_alternativa" and resultado_atual and resultado_atual.get("valor"):
             continue
         if nome_recorte == "faixa_data_alternativa" and resultado_atual and resultado_atual.get("data_pagamento"):
             continue
@@ -343,14 +391,18 @@ def _extrair_texto_comprovante(arquivo):
         x1, y1, x2, y2 = caixa
         _log_diagnostico_ocr(
             nome or "arquivo",
-            "recorte=%s caixa=%s tamanho=%sx%s tamanho_antes=%s tamanho_depois=%s",
+            "recorte=%s imagem_base=%s base_tamanho=%s caixa_pct=%s caixa=%s tamanho=%sx%s tamanho_antes=%s tamanho_depois=%s",
             nome_recorte,
+            imagem.info.get("ocr_base_nome", "reduzida"),
+            imagem.info.get("ocr_base_tamanho", imagem.size),
+            imagem.info.get("ocr_caixa_percentual", ""),
             caixa,
             x2 - x1,
             y2 - y1,
             imagem.info.get("ocr_tamanho_antes", (x2 - x1, y2 - y1)),
             imagem.info.get("ocr_tamanho_depois", imagem.size),
         )
+        _salvar_debug_recorte_ocr(nome or "arquivo", nome_recorte, imagem)
         try:
             inicio_tentativa = time.monotonic()
             texto_recorte, idioma_usado, config_usada, timeout_usado, erros_idioma = _extrair_texto_recorte_ocr(pytesseract, imagem)

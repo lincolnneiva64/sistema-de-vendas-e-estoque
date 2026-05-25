@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from .forms import FuncionarioForm, PixRecebidoForm
 from .models import Cliente, ContaReceber, CreditoCliente, Funcionario, PixRecebido, RecebimentoContaReceber, Venda
-from .utils_pix import analisar_comprovante_pix
+from .utils_pix import analisar_comprovante_pix, _preparar_recortes_ocr
 from . import views
 
 
@@ -1310,6 +1310,22 @@ class PixRecebidoTests(TestCase):
             self.assertIn("recorte=faixa_data_principal", "\n".join(logs.output))
             self.assertIn("texto=R$ 172,00", "\n".join(logs.output))
             self.assertIn("modo leve parou apos faixas", "\n".join(logs.output))
+
+    def test_analisar_comprovante_pix_nubank_faixas_calculadas_na_imagem_700(self):
+        with patch("estoque.utils_pix.OCR_RENDER_MODO_LEVE", True):
+            _original, _reduzido, recortes = _preparar_recortes_ocr(self._imagem_pix_teste((485, 1600)))
+
+        por_nome = {nome: (imagem, caixa) for nome, imagem, caixa in recortes}
+        imagem_valor, caixa_valor = por_nome["faixa_valor_principal"]
+        imagem_data, caixa_data = por_nome["faixa_data_principal"]
+
+        self.assertEqual(imagem_valor.info["ocr_base_nome"], "nubank_700")
+        self.assertEqual(imagem_valor.info["ocr_base_tamanho"][0], 700)
+        self.assertEqual(imagem_valor.info["ocr_caixa_percentual"], (0.40, 0.30, 1.00, 0.38))
+        self.assertEqual(imagem_data.info["ocr_caixa_percentual"], (0.05, 0.18, 0.95, 0.25))
+        self.assertLess(caixa_data[1], int(imagem_data.info["ocr_base_tamanho"][1] * 0.27))
+        self.assertLess(caixa_valor[1], int(imagem_valor.info["ocr_base_tamanho"][1] * 0.40))
+        self.assertEqual(imagem_valor.info["ocr_tamanho_depois"][0], imagem_valor.info["ocr_tamanho_antes"][0] * 3)
 
     def test_detalhe_pix_processar_ocr_sem_data_preserva_data_existente(self):
         data_original = timezone.make_aware(timezone.datetime(2026, 4, 21, 13, 5))
