@@ -129,8 +129,12 @@ def _preparar_recortes_ocr(conteudo):
 
     imagem.info["ocr_recorte"] = "inteira"
     if OCR_RENDER_MODO_LEVE:
+        topo_fim_render = max(1, int(altura * 0.45))
+        meio_inicio_render = max(0, int(altura * 0.18))
+        meio_fim_render = max(meio_inicio_render + 1, int(altura * 0.62))
         return tamanho_original, imagem.size, [
-            ("inteira", imagem, (0, 0, largura, altura)),
+            ("topo", _copiar_recorte_ocr(imagem, "topo", (0, 0, largura, topo_fim_render)), (0, 0, largura, topo_fim_render)),
+            ("meio_superior", _copiar_recorte_ocr(imagem, "meio_superior", (0, meio_inicio_render, largura, meio_fim_render)), (0, meio_inicio_render, largura, meio_fim_render)),
         ]
 
     recortes = [
@@ -196,7 +200,9 @@ def _extrair_texto_comprovante(arquivo):
 
     textos = []
     erros = []
+    recortes_tentados = []
     for nome_recorte, imagem, caixa in recortes:
+        recortes_tentados.append(nome_recorte)
         x1, y1, x2, y2 = caixa
         _log_diagnostico_ocr(
             nome or "arquivo",
@@ -218,14 +224,31 @@ def _extrair_texto_comprovante(arquivo):
         for erro_idioma in erros_idioma:
             _log_diagnostico_ocr(nome or "arquivo", "recorte=%s tentativa OCR falhou=%s", nome_recorte, erro_idioma)
         _log_diagnostico_ocr(nome or "arquivo", "recorte=%s idioma OCR usado=%s", nome_recorte, idioma_usado)
-        _log_diagnostico_ocr(
-            nome or "arquivo",
-            "recorte=%s texto OCR:\n%s",
-            nome_recorte,
-            texto_recorte.strip() or "[vazio]",
-        )
         if _normalizar_espacos(texto_recorte):
-            textos.append(f"[OCR {nome_recorte}]\n{texto_recorte.strip()}")
+            texto_atual = f"[OCR {nome_recorte}]\n{texto_recorte.strip()}"
+            textos.append(texto_atual)
+            texto_parcial = "\n\n".join(textos)
+            resultado_parcial = _resultado_comprovante_parcial(texto_parcial)
+            extraiu_valor = bool(resultado_parcial and resultado_parcial.get("valor"))
+            extraiu_data = bool(resultado_parcial and resultado_parcial.get("data_pagamento"))
+            _log_diagnostico_ocr(
+                nome or "arquivo",
+                "recorte=%s texto_tamanho=%s extraiu_valor=%s extraiu_data=%s",
+                nome_recorte,
+                len(texto_recorte.strip()),
+                extraiu_valor,
+                extraiu_data,
+            )
+            if OCR_RENDER_MODO_LEVE and (extraiu_valor or extraiu_data):
+                _log_diagnostico_ocr(
+                    nome or "arquivo",
+                    "modo leve parou cedo recorte=%s recortes_tentados=%s extraiu_valor=%s extraiu_data=%s",
+                    nome_recorte,
+                    ",".join(recortes_tentados),
+                    extraiu_valor,
+                    extraiu_data,
+                )
+                return texto_parcial
 
     texto = "\n\n".join(textos)
 
