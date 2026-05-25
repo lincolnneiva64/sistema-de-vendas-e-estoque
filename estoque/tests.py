@@ -1321,10 +1321,10 @@ class PixRecebidoTests(TestCase):
 
         self.assertEqual(imagem_valor.info["ocr_base_nome"], "nubank_700")
         self.assertEqual(imagem_valor.info["ocr_base_tamanho"][0], 700)
-        self.assertEqual(imagem_valor.info["ocr_caixa_percentual"], (0.40, 0.30, 1.00, 0.38))
-        self.assertEqual(imagem_data.info["ocr_caixa_percentual"], (0.05, 0.18, 0.95, 0.25))
-        self.assertLess(caixa_data[1], int(imagem_data.info["ocr_base_tamanho"][1] * 0.27))
-        self.assertLess(caixa_valor[1], int(imagem_valor.info["ocr_base_tamanho"][1] * 0.40))
+        self.assertEqual(imagem_valor.info["ocr_caixa_percentual"], (0.35, 0.38, 1.00, 0.47))
+        self.assertEqual(imagem_data.info["ocr_caixa_percentual"], (0.05, 0.25, 0.95, 0.33))
+        self.assertLess(caixa_data[1], int(imagem_data.info["ocr_base_tamanho"][1] * 0.34))
+        self.assertLess(caixa_valor[1], int(imagem_valor.info["ocr_base_tamanho"][1] * 0.48))
         self.assertEqual(imagem_valor.info["ocr_tamanho_depois"][0], imagem_valor.info["ocr_tamanho_antes"][0] * 3)
 
     def test_detalhe_pix_processar_ocr_sem_data_preserva_data_existente(self):

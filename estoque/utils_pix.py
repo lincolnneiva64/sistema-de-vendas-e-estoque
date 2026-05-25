@@ -229,10 +229,10 @@ def _preparar_recortes_ocr(conteudo):
             base_nome = "nubank_700"
             configs_valor = [OCR_CONFIG_VALOR_LINHA, OCR_CONFIG_RAPIDO]
             configs_data = [OCR_CONFIG_LINHA, OCR_CONFIG_RAPIDO]
-            caixa_valor_principal_pct = (0.40, 0.30, 1.00, 0.38)
-            caixa_valor_alternativa_pct = (0.40, 0.34, 1.00, 0.42)
-            caixa_data_principal_pct = (0.05, 0.18, 0.95, 0.25)
-            caixa_data_alternativa_pct = (0.05, 0.20, 0.95, 0.28)
+            caixa_valor_principal_pct = (0.35, 0.38, 1.00, 0.47)
+            caixa_valor_alternativa_pct = (0.45, 0.35, 1.00, 0.45)
+            caixa_data_principal_pct = (0.05, 0.25, 0.95, 0.33)
+            caixa_data_alternativa_pct = (0.05, 0.23, 0.95, 0.31)
             caixa_valor_principal = _caixa_percentual(largura_faixa, altura_faixa, *caixa_valor_principal_pct)
             caixa_valor_alternativa = _caixa_percentual(largura_faixa, altura_faixa, *caixa_valor_alternativa_pct)
             caixa_data_principal = _caixa_percentual(largura_faixa, altura_faixa, *caixa_data_principal_pct)
@@ -427,7 +427,11 @@ def _extrair_texto_comprovante(arquivo):
         for erro_idioma in erros_idioma:
             _log_diagnostico_ocr(nome or "arquivo", "recorte=%s tentativa OCR falhou=%s", nome_recorte, erro_idioma)
         if _normalizar_espacos(texto_recorte):
-            texto_atual = f"[OCR {nome_recorte}]\n{texto_recorte.strip()}"
+            caixa_percentual = imagem.info.get("ocr_caixa_percentual")
+            rotulo_recorte = nome_recorte
+            if caixa_percentual:
+                rotulo_recorte = f"{nome_recorte} pct={caixa_percentual}"
+            texto_atual = f"[OCR {rotulo_recorte}]\n{texto_recorte.strip()}"
             textos.append(texto_atual)
             texto_parcial = "\n\n".join(textos)
             resultado_parcial = _resultado_comprovante_parcial(texto_parcial)
