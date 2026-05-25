@@ -577,6 +577,17 @@ class PixRecebidoTests(TestCase):
         Image.new("RGB", tamanho, "white").save(buffer, format="PNG")
         return buffer.getvalue()
 
+    def _imagem_linhas_ocr_teste(self):
+        from PIL import Image, ImageDraw
+
+        imagem = Image.new("RGB", (500, 900), "white")
+        desenho = ImageDraw.Draw(imagem)
+        for y in (80, 150, 220, 290, 360):
+            desenho.rectangle((60, y, 430, y + 18), fill="black")
+        buffer = io.BytesIO()
+        imagem.save(buffer, format="PNG")
+        return buffer.getvalue()
+
     def _modulo_pytesseract_fake(self, respostas_por_recorte):
         def image_to_string(imagem, **kwargs):
             recorte = imagem.info.get("ocr_recorte", "inteira")
@@ -1327,6 +1338,86 @@ class PixRecebidoTests(TestCase):
         self.assertLess(caixa_data[1], int(imagem_data.info["ocr_base_tamanho"][1] * 0.34))
         self.assertLess(caixa_valor[1], int(imagem_valor.info["ocr_base_tamanho"][1] * 0.48))
         self.assertEqual(imagem_valor.info["ocr_tamanho_depois"][0], imagem_valor.info["ocr_tamanho_antes"][0] * 3)
+
+    def test_analisar_comprovante_pix_ocr_por_linhas_extrai_valor_e_data(self):
+        arquivo = SimpleUploadedFile(
+            "comprovante-linhas.png",
+            self._imagem_linhas_ocr_teste(),
+            content_type="image/png",
+        )
+
+        respostas = {
+            "linha_01": "Comprovante de transferencia",
+            "linha_02": "21 ABR 2026 - 13:05:01",
+            "linha_03": "Valor",
+            "linha_04": "R$ 172,00",
+            "linha_05": "Tipo de transferencia Pix",
+        }
+
+        def image_to_string(imagem, **_kwargs):
+            return respostas.get(imagem.info.get("ocr_recorte"), "")
+
+        pytesseract_fake = types.SimpleNamespace(
+            pytesseract=types.SimpleNamespace(tesseract_cmd=""),
+            image_to_string=image_to_string,
+        )
+
+        with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+            "estoque.utils_pix._resolver_tesseract_cmd",
+            return_value="tesseract",
+        ):
+            dados = analisar_comprovante_pix(arquivo)
+
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["valor"], "172.00")
+        self.assertEqual(dados["data_pagamento"], "2026-04-21T13:05")
+        self.assertIn("[OCR linhas detectadas]", dados["texto_ocr_bruto"])
+
+    def test_analisar_comprovante_pix_ocr_por_linhas_timeout_continua(self):
+        arquivo = SimpleUploadedFile(
+            "comprovante-linhas-timeout.png",
+            self._imagem_linhas_ocr_teste(),
+            content_type="image/png",
+        )
+
+        def image_to_string(imagem, **_kwargs):
+            recorte = imagem.info.get("ocr_recorte")
+            if recorte == "linha_01":
+                raise RuntimeError("Tesseract process timeout")
+            if recorte == "linha_02":
+                return "21 ABR 2026 - 13:05:01"
+            if recorte == "linha_04":
+                return "R$ 172,00"
+            return ""
+
+        pytesseract_fake = types.SimpleNamespace(
+            pytesseract=types.SimpleNamespace(tesseract_cmd=""),
+            image_to_string=image_to_string,
+        )
+
+        with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+            "estoque.utils_pix._resolver_tesseract_cmd",
+            return_value="tesseract",
+        ):
+            dados = analisar_comprovante_pix(arquivo)
+
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["valor"], "172.00")
+        self.assertEqual(dados["data_pagamento"], "2026-04-21T13:05")
+
+    def test_analisar_comprovante_pix_ids_de_transacao_nao_viram_valor(self):
+        conteudo = (
+            "Comprovante de transferencia\n"
+            "ID da transacao 14605308174802dd\n"
+            "E182361202604211305\n"
+            "NU PAGAMENTOS - IP\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante-id.txt", conteudo, content_type="text/plain")
+
+        dados = analisar_comprovante_pix(arquivo)
+
+        self.assertEqual(dados["valor"], "")
+        self.assertEqual(dados["data_pagamento"], "")
 
     def test_detalhe_pix_processar_ocr_salva_debug_recortes_com_variavel(self):
         chamadas = []
