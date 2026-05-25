@@ -220,7 +220,7 @@
               <div class="pix-compare-row"><span>Observacao</span><span>{{ pix.pix_original.observacao|default:"-"|truncatechars:90 }}</span></div>
               {% if not pix_parecido_baixado %}
                 <div class="pix-compare-actions">
-                  <a href="{% url 'estoque:central_pix_detalhe' pix.pix_original.id %}?next={{ request.get_full_path|urlencode }}" class="pix-compare-link">Abrir Pix parecido</a>
+                  <a href="{% url 'estoque:central_pix_detalhe' pix.pix_original.id %}?next={{ request.get_full_path|urlencode }}" class="pix-compare-link">Ver Pix parecido #{{ pix.pix_original.id }}</a>
                   {% if pix.pix_original.comprovante %}
                     <a href="{% url 'estoque:central_pix_comprovante' pix.pix_original.id %}" target="_blank" rel="noopener" class="pix-compare-link">{% if pix.pix_original.comprovante_eh_imagem %}Abrir imagem do Pix parecido{% else %}Abrir comprovante do Pix parecido{% endif %}</a>
                   {% endif %}
@@ -240,7 +240,7 @@
           <div class="pix-detail-list">
             <div class="pix-detail-row"><span>Cadastro</span><span>{{ pix.criado_em|date:"d/m/Y H:i" }}</span></div>
             <div class="pix-detail-row"><span>Enviado por</span><span>{{ pix.enviado_por_nome|default:"-" }}</span></div>
-            <form method="post" class="pix-correction-inline" autocomplete="off">
+            <form method="post" class="pix-correction-inline" autocomplete="off" id="pixCorrectionForm">
               {% csrf_token %}
               <input type="hidden" name="acao" value="corrigir">
               <h2 class="pix-correction-title">Conferencia do comprovante</h2>
@@ -335,14 +335,10 @@
                 <button type="submit" class="pix-detail-btn">{% if pix_tem_texto_ocr_util %}Reler comprovante (OCR){% else %}Ler comprovante (OCR){% endif %}</button>
               </form>
             {% endif %}
-            {% if pix.valor > 0 and not pix.cliente and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
-              <button type="button" class="pix-detail-link pix-detail-link-primary" data-pix-baixa-sem-cliente>Usar este Pix na baixa</button>
-            {% elif pix.valor > 0 and pix_retorno_baixa_url and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
-              <a href="{{ pix_retorno_baixa_url }}" class="pix-detail-link pix-detail-link-primary" data-pix-continuar-baixa>Usar este Pix na baixa</a>
-            {% elif pix.valor > 0 and pix.cliente and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
-              <a href="{% url 'estoque:receber_cliente' pix.cliente.id %}?pix_recebido={{ pix.id }}&next={{ request.get_full_path|urlencode }}" class="pix-detail-link pix-detail-link-primary" data-pix-continuar-baixa>Usar este Pix na baixa</a>
+            {% if not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
+              <button type="submit" form="pixCorrectionForm" name="acao" value="usar_baixa" class="pix-detail-link pix-detail-link-primary" data-pix-continuar-baixa>Usar este Pix na baixa</button>
             {% endif %}
-            <a href="{% url 'estoque:central_pix_enviar_comprovante' %}" class="pix-detail-link">Enviar novo comprovante para leitura</a>
+            <a href="{% url 'estoque:central_pix_enviar_comprovante' %}" class="pix-detail-link">Enviar outro comprovante</a>
             <a href="{{ voltar_url }}" class="pix-detail-link" data-pix-voltar>Voltar</a>
           </div>
           {% if pix.pix_original and pix.comprovante %}
@@ -381,7 +377,7 @@
               {% endif %}
               {% if not pix_parecido_baixado %}
                 <div class="pix-compare-actions">
-                  <a href="{% url 'estoque:central_pix_detalhe' pix.pix_original.id %}?next={{ request.get_full_path|urlencode }}" class="pix-compare-link">Abrir Pix parecido</a>
+                  <a href="{% url 'estoque:central_pix_detalhe' pix.pix_original.id %}?next={{ request.get_full_path|urlencode }}" class="pix-compare-link">Ver Pix parecido #{{ pix.pix_original.id }}</a>
                   {% if pix.pix_original.comprovante %}
                     <a href="{% url 'estoque:central_pix_comprovante' pix.pix_original.id %}" target="_blank" rel="noopener" class="pix-compare-link">{% if pix.pix_original.comprovante_eh_imagem %}Abrir imagem do Pix parecido{% else %}Abrir comprovante do Pix parecido{% endif %}</a>
                   {% endif %}

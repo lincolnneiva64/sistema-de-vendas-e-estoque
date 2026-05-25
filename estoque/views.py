@@ -1935,11 +1935,26 @@ def central_pix(request):
         if form.is_valid():
             dados_pix = dict(form.cleaned_data)
             dados_pix["instituicao_pix"] = (request.POST.get("instituicao_pix") or "").strip()[:80]
-            pix_duplicado = _pix_duplicado_baixado(dados_pix) or _pix_duplicado_pendente(dados_pix)
+            pix_duplicado_baixado = _pix_duplicado_baixado(dados_pix)
+            pix_duplicado_pendente = None if pix_duplicado_baixado else _pix_duplicado_pendente(dados_pix)
+            if pix_duplicado_pendente:
+                messages.warning(request, f"Pix duplicado nao foi salvo. Confira o Pix #{pix_duplicado_pendente.id}.")
+                pix_recebidos = PixRecebido.objects.select_related("cliente", "cliente_sugerido").order_by("-criado_em", "-id")
+                return render(
+                    request,
+                    "estoque/central_pix.html",
+                    {
+                        "form": form,
+                        "pix_recebidos": pix_recebidos,
+                        "total_pix": pix_recebidos.count(),
+                        "voltar_url": retorno_url or reverse("estoque:contas_receber"),
+                        "detalhe_retorno_url": retorno_url or central_pix_url,
+                    },
+                )
             pix = form.save(commit=False)
             pix.instituicao_pix = dados_pix["instituicao_pix"]
-            if pix_duplicado:
-                pix.pix_original = pix_duplicado
+            if pix_duplicado_baixado:
+                pix.pix_original = pix_duplicado_baixado
                 pix.status = PixRecebido.STATUS_POSSIVEL_DUPLICADO
             pix.save()
             messages.success(request, "Pix recebido registrado com sucesso.")
@@ -2228,17 +2243,32 @@ def central_pix_detalhe(request, pix_id):
         return redirect(detalhe_url)
 
     form_correcao = PixRecebidoCorrecaoForm(pix=pix)
-    if request.method == "POST" and request.POST.get("acao") == "corrigir":
+    acoes_pix = request.POST.getlist("acao")
+    acao_pix = acoes_pix[-1] if acoes_pix else ""
+    if request.method == "POST" and acao_pix in {"corrigir", "usar_baixa"}:
         form_correcao = PixRecebidoCorrecaoForm(request.POST, pix=pix)
         if form_correcao.is_valid():
             nome_pagador = form_correcao.cleaned_data["nome_pagador"]
             cliente_sugerido, _confianca_cliente, _mensagem_cliente = _sugerir_cliente_por_pagador(nome_pagador)
+            cliente_confirmado = form_correcao.cleaned_data["cliente"]
+            valor_corrigido = form_correcao.cleaned_data["valor"]
+            data_corrigida = form_correcao.cleaned_data["data_pagamento"]
+            if acao_pix == "usar_baixa":
+                if not cliente_confirmado:
+                    messages.warning(request, "Confirme o cliente antes de usar este Pix na baixa.")
+                    return redirect(detalhe_url)
+                if not valor_corrigido or valor_corrigido <= Decimal("0.00"):
+                    messages.warning(request, "Informe o valor do Pix antes de usar na baixa.")
+                    return redirect(detalhe_url)
+                if not data_corrigida:
+                    messages.warning(request, "Informe a data do pagamento do Pix antes de usar na baixa.")
+                    return redirect(detalhe_url)
             pix.cliente = form_correcao.cleaned_data["cliente"]
             pix.cliente_sugerido = cliente_sugerido
             pix.nome_pagador = nome_pagador
-            pix.valor = form_correcao.cleaned_data["valor"]
-            if form_correcao.cleaned_data["data_pagamento"]:
-                pix.data_pagamento = form_correcao.cleaned_data["data_pagamento"]
+            pix.valor = valor_corrigido
+            if data_corrigida:
+                pix.data_pagamento = data_corrigida
             pix.instituicao_pix = form_correcao.cleaned_data["instituicao_pix"]
             pix_duplicado_baixado = _pix_duplicado_baixado(
                 {
@@ -2266,6 +2296,11 @@ def central_pix_detalhe(request, pix_id):
                 "observacao",
                 "atualizado_em",
             ])
+            if acao_pix == "usar_baixa":
+                baixa_url = reverse("estoque:receber_cliente", kwargs={"cliente_id": pix.cliente_id})
+                baixa_url = f"{baixa_url}?{urlencode({'pix_recebido': pix.id, 'next': detalhe_url})}"
+                messages.success(request, "Dados do Pix salvos. Confira e confirme a baixa do cliente; nenhuma baixa foi feita ainda.")
+                return redirect(baixa_url)
             messages.success(request, "Dados do Pix corrigidos. Nenhuma baixa financeira foi feita.")
             return redirect(detalhe_url)
         messages.warning(request, "Confira os dados da correcao antes de salvar.")
@@ -2555,6 +2590,8 @@ def receber_cliente(request, cliente_id):
     if pix_recebido_escolhido and request.method != "POST":
         valores["valor"] = str((pix_recebido_escolhido.valor or Decimal("0.00")).quantize(Decimal("0.01"))).replace(".", ",")
         valores["forma_pagamento"] = "PIX"
+        if pix_recebido_escolhido.data_pagamento:
+            valores["data_recebimento"] = timezone.localtime(pix_recebido_escolhido.data_pagamento).date().isoformat()
     if feedback_recebimento and total_em_aberto <= Decimal("0.00"):
         valores["valor"] = ""
     credito_disponivel = (

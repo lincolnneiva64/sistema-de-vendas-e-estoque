@@ -750,8 +750,6 @@ class PixRecebidoForm(forms.ModelForm):
 
     def clean_cliente(self):
         cliente = self.cleaned_data.get("cliente")
-        if not cliente:
-            raise forms.ValidationError("Confirme o cliente antes de salvar o Pix.")
         return cliente
 
     def clean_observacao(self):

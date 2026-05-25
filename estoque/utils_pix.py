@@ -439,11 +439,13 @@ def _extrair_texto_recorte_ocr(pytesseract, imagem):
                 )
                 if _normalizar_espacos(texto) or config_tentativa == configs[-1]:
                     return texto, idioma, config_tentativa, timeout, erros
-                erros.append(f"{idioma}/{config_tentativa or 'padrao'}: OCR sem texto")
+                rotulo_erro = idioma if not config_tentativa else f"{idioma}/{config_tentativa}"
+                erros.append(f"{rotulo_erro}: OCR sem texto")
             except Exception as exc:
                 mensagem = str(exc).strip()
                 detalhe = f": {mensagem[:80]}" if mensagem else ""
-                erros.append(f"{idioma}/{config_tentativa or 'padrao'}: {exc.__class__.__name__}{detalhe}")
+                rotulo_erro = idioma if not config_tentativa else f"{idioma}/{config_tentativa}"
+                erros.append(f"{rotulo_erro}: {exc.__class__.__name__}{detalhe}")
 
     raise RuntimeError("; ".join(erros) or "OCR falhou em todos os idiomas")
 
@@ -757,7 +759,7 @@ def _texto_para_parse_ocr(texto):
         if re.fullmatch(r"\[OCR [^\]]+\]", linha_limpa):
             continue
         linha = re.sub(r"^\s*\d{1,2}\s+candidata_data:\s*", "", linha)
-        linha = re.sub(r"^\s*\d{1,2}:\s*", "", linha)
+        linha = re.sub(r"^\s*\d{1,2}:\s+(?=\D)", "", linha)
         linhas.append(linha)
     return "\n".join(linhas)
 
@@ -864,12 +866,12 @@ def _extrair_valor(texto):
             continue
 
         match_linha = re.search(
-            r"^(?:valor|total|pix enviado|pix recebido|comprovante)?\s*R[S$§]?\s*([0-9]{1,3}(?:[.,][0-9]{3})*,[0-9]{2}|[0-9]+,[0-9]{2})\s*$",
+            r"^(?:(?:valor|total|pix enviado|pix recebido|comprovante)\D{0,20}R?[S$§]?\s*|\bR[S$§]\s*)([0-9]{1,3}(?:[.,][0-9]{3})*,[0-9]{2}|[0-9]+,[0-9]{2}|[0-9]{1,6})\s*$|^([0-9]{1,3}(?:[.,][0-9]{3})*,[0-9]{2}|[0-9]+,[0-9]{2})\s*$",
             linha_limpa,
             flags=re.IGNORECASE,
         )
         if match_linha:
-            valor_linha = decimal_ou_vazio(match_linha.group(1))
+            valor_linha = decimal_ou_vazio(match_linha.group(1) or match_linha.group(2))
             if valor_linha:
                 return valor_linha
 

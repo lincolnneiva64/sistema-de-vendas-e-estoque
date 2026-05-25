@@ -1872,7 +1872,130 @@ class PixRecebidoTests(TestCase):
         )
 
         self.assertContains(resposta, "Confira/digite o valor do Pix")
-        self.assertNotContains(resposta, "Usar este Pix na baixa")
+        self.assertContains(resposta, "Usar este Pix na baixa")
+
+    def test_detalhe_pix_usar_na_baixa_salva_dados_e_abre_recebimento_com_data_do_pix(self):
+        cliente = Cliente.objects.create(nome="Cliente Pix Conferido", ativo=True)
+        self._criar_conta_receber_pix(cliente, "172.00")
+        data_pix = timezone.make_aware(timezone.datetime(2026, 4, 21, 13, 5))
+        pix = PixRecebido.objects.create(
+            nome_pagador="Nome OCR antigo",
+            valor="0.00",
+            data_pagamento=timezone.make_aware(timezone.datetime(2026, 5, 25, 17, 10)),
+            status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+            {
+                "acao": "usar_baixa",
+                "cliente": cliente.id,
+                "nome_pagador": "Pagador conferido",
+                "valor": "172,00",
+                "data_pagamento": "2026-04-21T13:05",
+                "instituicao_pix": "Nubank",
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        pix.refresh_from_db()
+        self.assertEqual(pix.cliente, cliente)
+        self.assertEqual(pix.nome_pagador, "Pagador conferido")
+        self.assertEqual(str(pix.valor), "172.00")
+        self.assertEqual(timezone.localtime(pix.data_pagamento).strftime("%Y-%m-%dT%H:%M"), "2026-04-21T13:05")
+        self.assertEqual(pix.instituicao_pix, "Nubank")
+        self.assertContains(resposta, 'name="valor" type="text" inputmode="decimal" autocomplete="off" value="172,00"')
+        self.assertContains(resposta, 'name="data_recebimento" type="date" value="2026-04-21"')
+        self.assertContains(resposta, '<option value="PIX" selected>PIX</option>', html=True)
+        self.assertContains(resposta, "nenhuma baixa foi feita ainda")
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
+        pix.refresh_from_db()
+        self.assertNotEqual(pix.status, PixRecebido.STATUS_BAIXADO)
+        self.assertEqual(timezone.localtime(pix.data_pagamento), data_pix)
+
+    def test_detalhe_pix_usar_na_baixa_sem_cliente_nao_avanca(self):
+        pix = PixRecebido.objects.create(
+            nome_pagador="Pagador sem cliente",
+            valor="172.00",
+            data_pagamento=timezone.make_aware(timezone.datetime(2026, 4, 21, 13, 5)),
+            status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+            {
+                "acao": "usar_baixa",
+                "cliente": "",
+                "nome_pagador": "Pagador sem cliente",
+                "valor": "172,00",
+                "data_pagamento": "2026-04-21T13:05",
+                "instituicao_pix": "Nubank",
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Confirme o cliente antes de usar este Pix na baixa.")
+        self.assertNotContains(resposta, "Confirmar recebimento do cliente")
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
+
+    def test_detalhe_pix_usar_na_baixa_sem_valor_nao_avanca(self):
+        cliente = Cliente.objects.create(nome="Cliente Pix Sem Valor Baixa", ativo=True)
+        pix = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="Pagador sem valor",
+            valor="0.00",
+            data_pagamento=timezone.make_aware(timezone.datetime(2026, 4, 21, 13, 5)),
+            status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+            {
+                "acao": "usar_baixa",
+                "cliente": cliente.id,
+                "nome_pagador": "Pagador sem valor",
+                "valor": "",
+                "data_pagamento": "2026-04-21T13:05",
+                "instituicao_pix": "Nubank",
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertContains(resposta, "Informe o valor do Pix antes de usar na baixa.")
+        self.assertNotContains(resposta, "Confirmar recebimento do cliente")
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
+
+    def test_detalhe_pix_usar_na_baixa_sem_data_nao_avanca(self):
+        cliente = Cliente.objects.create(nome="Cliente Pix Sem Data Baixa", ativo=True)
+        pix = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="Pagador sem data",
+            valor="172.00",
+            status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+            {
+                "acao": "usar_baixa",
+                "cliente": cliente.id,
+                "nome_pagador": "Pagador sem data",
+                "valor": "172,00",
+                "data_pagamento": "",
+                "instituicao_pix": "Nubank",
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertContains(resposta, "Informe a data do pagamento do Pix antes de usar na baixa.")
+        self.assertNotContains(resposta, "Confirmar recebimento do cliente")
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
 
     def test_baixa_bloqueia_pix_igual_a_baixado_mesmo_sem_vinculo_original(self):
         cliente = Cliente.objects.create(nome="Cliente Pix Sem Vinculo", ativo=True)
