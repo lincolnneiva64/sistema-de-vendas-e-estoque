@@ -1203,11 +1203,13 @@ class PixRecebidoTests(TestCase):
 
     def test_detalhe_pix_processar_ocr_render_para_apos_topo_com_valor_e_data(self):
         chamadas = []
+        configs = []
 
-        def image_to_string(imagem, **_kwargs):
+        def image_to_string(imagem, **kwargs):
             recorte = imagem.info.get("ocr_recorte", "inteira")
             chamadas.append(recorte)
-            if recorte == "topo":
+            configs.append(kwargs.get("config"))
+            if recorte == "rapido_superior":
                 return (
                     "21 ABR 2026 - 13:05:01\n"
                     "Valor R$ 172,00\n"
@@ -1240,15 +1242,70 @@ class PixRecebidoTests(TestCase):
 
             self.assertEqual(resposta.status_code, 200)
             pix.refresh_from_db()
-            self.assertEqual(chamadas, ["topo"])
+            self.assertEqual(chamadas, ["rapido_superior"])
+            self.assertEqual(configs, ["--oem 1 --psm 6"])
             self.assertEqual(str(pix.valor), "172.00")
             self.assertEqual(timezone.localtime(pix.data_pagamento).strftime("%Y-%m-%dT%H:%M"), "2026-04-21T13:05")
             self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
             self.assertIn("Valor R$ 172,00", pix.texto_ocr_bruto)
             self.assertContains(resposta, "OCR parcial concluido. Confira os dados antes de qualquer baixa.")
-            self.assertIn("modo leve parou cedo recorte=topo", "\n".join(logs.output))
+            self.assertIn("modo leve parou cedo recorte=rapido_superior", "\n".join(logs.output))
+            self.assertIn("config=--oem 1 --psm 6", "\n".join(logs.output))
             self.assertIn("extraiu_valor=True", "\n".join(logs.output))
             self.assertIn("extraiu_data=True", "\n".join(logs.output))
+
+    def test_detalhe_pix_processar_ocr_render_timeout_rapido_aproveita_segundo_recorte(self):
+        chamadas = []
+        timeouts = []
+
+        def image_to_string(imagem, **kwargs):
+            recorte = imagem.info.get("ocr_recorte", "inteira")
+            chamadas.append(recorte)
+            timeouts.append(kwargs.get("timeout"))
+            if recorte == "rapido_superior":
+                raise RuntimeError("Tesseract process timeout")
+            if recorte == "rapido_meio_superior":
+                return (
+                    "21 ABR 2026 - 13:05:01\n"
+                    "Valor R$ 172,00\n"
+                    "Tipo de transferencia Pix\n"
+                )
+            raise RuntimeError(f"recorte inesperado: {recorte}")
+
+        pytesseract_fake = types.SimpleNamespace(
+            pytesseract=types.SimpleNamespace(tesseract_cmd=""),
+            image_to_string=image_to_string,
+        )
+
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            pix = PixRecebido.objects.create(
+                valor="0.00",
+                status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+                texto_ocr_bruto="OCR pendente",
+                comprovante=SimpleUploadedFile("comprovante-render.png", self._imagem_pix_teste(), content_type="image/png"),
+            )
+
+            with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+                "estoque.utils_pix._resolver_tesseract_cmd",
+                return_value="tesseract",
+            ), patch("estoque.utils_pix.OCR_RENDER_MODO_LEVE", True), self.assertLogs("estoque.utils_pix", level="WARNING") as logs:
+                resposta = self.client.post(
+                    reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
+                    secure=True,
+                    follow=True,
+                )
+
+            self.assertEqual(resposta.status_code, 200)
+            pix.refresh_from_db()
+            self.assertEqual(chamadas, ["rapido_superior", "rapido_meio_superior"])
+            self.assertEqual(timeouts, [3, 3])
+            self.assertTrue(pix.comprovante)
+            self.assertEqual(str(pix.valor), "172.00")
+            self.assertEqual(timezone.localtime(pix.data_pagamento).strftime("%Y-%m-%dT%H:%M"), "2026-04-21T13:05")
+            self.assertIn("Valor R$ 172,00", pix.texto_ocr_bruto)
+            self.assertContains(resposta, "OCR parcial concluido. Confira os dados antes de qualquer baixa.")
+            self.assertIn("recorte=rapido_superior excecao=RuntimeError: padrao: RuntimeError: Tesseract process timeout", "\n".join(logs.output))
+            self.assertIn("modo leve parou cedo recorte=rapido_meio_superior", "\n".join(logs.output))
 
     def test_detalhe_pix_usa_rota_propria_do_comprovante(self):
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
