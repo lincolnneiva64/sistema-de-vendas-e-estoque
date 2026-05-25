@@ -23,6 +23,7 @@ OCR_LARGURA_FAIXAS_NUBANK = 700
 OCR_UPSCALE_FAIXA = 3
 OCR_LARGURA_LINHAS = 1000
 OCR_TIMEOUT_LINHA_SEGUNDOS = 2
+OCR_TIMEOUT_DATA_LINHA_SEGUNDOS = 4
 OCR_MAX_LINHAS = 30
 OCR_MAX_DEBUG_LINHAS = 12
 logger = logging.getLogger(__name__)
@@ -162,7 +163,7 @@ def _copiar_recorte_ocr(imagem, nome, caixa):
     return recorte
 
 
-def _preparar_recorte_linha_ocr(imagem, nome, caixa):
+def _preparar_recorte_linha_ocr(imagem, nome, caixa, candidata_data=False):
     recorte = _copiar_recorte_ocr(imagem, nome, caixa)
     tamanho_antes = recorte.size
     recorte = ImageOps.autocontrast(recorte.convert("L"), cutoff=1)
@@ -171,9 +172,10 @@ def _preparar_recorte_linha_ocr(imagem, nome, caixa):
     recorte.info["ocr_recorte"] = nome
     recorte.info["ocr_config"] = OCR_CONFIG_LINHA
     recorte.info["ocr_configs"] = [OCR_CONFIG_LINHA, OCR_CONFIG_RAPIDO]
-    recorte.info["ocr_timeout"] = OCR_TIMEOUT_LINHA_SEGUNDOS
+    recorte.info["ocr_timeout"] = OCR_TIMEOUT_DATA_LINHA_SEGUNDOS if candidata_data else OCR_TIMEOUT_LINHA_SEGUNDOS
     recorte.info["ocr_linha"] = True
     recorte.info["ocr_rapido"] = True
+    recorte.info["ocr_candidata_data"] = candidata_data
     recorte.info["ocr_tamanho_antes"] = tamanho_antes
     recorte.info["ocr_tamanho_depois"] = recorte.size
     recorte.info["ocr_base_nome"] = "linhas_1000"
@@ -446,6 +448,19 @@ def _extrair_texto_recorte_ocr(pytesseract, imagem):
     raise RuntimeError("; ".join(erros) or "OCR falhou em todos os idiomas")
 
 
+def _indice_linhas_candidatas_data(caixas):
+    candidatas = set()
+    if len(caixas) >= 4:
+        candidatas.add(3)
+    for indice in range(1, len(caixas) - 1):
+        y1_anterior = caixas[indice - 1][1]
+        y1_atual = caixas[indice][1]
+        y1_proxima = caixas[indice + 1][1]
+        if y1_atual - y1_anterior < 260 and y1_proxima - y1_atual < 360:
+            candidatas.add(indice)
+    return candidatas
+
+
 def _extrair_texto_por_linhas_ocr(pytesseract, conteudo, caminho, debug_prefix=None):
     inicio_total = time.monotonic()
     try:
@@ -468,12 +483,14 @@ def _extrair_texto_por_linhas_ocr(pytesseract, conteudo, caminho, debug_prefix=N
     textos = []
     erros = []
     debug_recortes = []
+    candidatas_data = _indice_linhas_candidatas_data(caixas)
     for indice, caixa in enumerate(caixas, start=1):
-        if time.monotonic() - inicio_total > 18:
+        candidata_data = (indice - 1) in candidatas_data
+        if time.monotonic() - inicio_total > 18 and not candidata_data:
             erros.append("limite de tempo total atingido")
             break
         nome_recorte = f"linha_{indice:02d}"
-        imagem_recorte = _preparar_recorte_linha_ocr(imagem_linhas, nome_recorte, caixa)
+        imagem_recorte = _preparar_recorte_linha_ocr(imagem_linhas, nome_recorte, caixa, candidata_data=candidata_data)
         x1, y1, x2, y2 = caixa
         _log_diagnostico_ocr(
             caminho or "arquivo",
@@ -506,6 +523,8 @@ def _extrair_texto_por_linhas_ocr(pytesseract, conteudo, caminho, debug_prefix=N
         if not texto_limpo:
             continue
         textos.append(f"{indice:02d}: {texto_limpo}")
+        if candidata_data:
+            textos[-1] = f"{indice:02d} candidata_data: {texto_limpo}"
         texto_parcial = "\n".join(textos)
         resultado_parcial = _resultado_comprovante_parcial(texto_parcial)
         extraiu_valor = bool(resultado_parcial and resultado_parcial.get("valor"))
@@ -737,6 +756,8 @@ def _texto_para_parse_ocr(texto):
         linha_limpa = _normalizar_espacos(linha)
         if re.fullmatch(r"\[OCR [^\]]+\]", linha_limpa):
             continue
+        linha = re.sub(r"^\s*\d{1,2}\s+candidata_data:\s*", "", linha)
+        linha = re.sub(r"^\s*\d{1,2}:\s*", "", linha)
         linhas.append(linha)
     return "\n".join(linhas)
 
@@ -1125,7 +1146,7 @@ def _extrair_hora_ocr(texto):
 def _extrair_data_textual_pagamento(texto):
     texto_sem_acentos = _sem_acentos(texto)
     encontrado = re.search(
-        r"\b([0-3OIL|]?[0-9OIL|])(?:\s+de)?\s+([A-Za-z0-9]{3,9})\.?(?:\s+de)?\s+([0-9OIL|]{4})\D{0,30}?([O0-2IL|]?[0-9OIL|])\s*(?::|h|\.)\s*([0-5OIL|][0-9OIL|])(?:(?::|\.)[0-5OIL|][0-9OIL|])?",
+        r"\b([0-3OIL|]?[0-9OIL|])(?:\s+de)?\s+([A-Za-z0-9]{3,9})\.?(?:\s+de)?\s+([0-9OIL|]{4})(?:\s*[-–—]?\s*|\D{0,30}?)([O0-2IL|]?[0-9OIL|])\s*(?::|h|\.)\s*([0-5OIL|][0-9OIL|])(?:(?::|\.)[0-5OIL|][0-9OIL|])?",
         texto_sem_acentos,
         flags=re.IGNORECASE,
     )

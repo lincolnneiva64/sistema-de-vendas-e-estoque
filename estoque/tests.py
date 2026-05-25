@@ -588,6 +588,17 @@ class PixRecebidoTests(TestCase):
         imagem.save(buffer, format="PNG")
         return buffer.getvalue()
 
+    def _imagem_linhas_nubank_teste(self):
+        from PIL import Image, ImageDraw
+
+        imagem = Image.new("RGB", (500, 900), "white")
+        desenho = ImageDraw.Draw(imagem)
+        for y, largura in zip((70, 135, 195, 260, 340), (80, 260, 320, 360, 340)):
+            desenho.rectangle((70, y, 70 + largura, y + 18), fill="black")
+        buffer = io.BytesIO()
+        imagem.save(buffer, format="PNG")
+        return buffer.getvalue()
+
     def _modulo_pytesseract_fake(self, respostas_por_recorte):
         def image_to_string(imagem, **kwargs):
             recorte = imagem.info.get("ocr_recorte", "inteira")
@@ -1342,20 +1353,23 @@ class PixRecebidoTests(TestCase):
     def test_analisar_comprovante_pix_ocr_por_linhas_extrai_valor_e_data(self):
         arquivo = SimpleUploadedFile(
             "comprovante-linhas.png",
-            self._imagem_linhas_ocr_teste(),
+            self._imagem_linhas_nubank_teste(),
             content_type="image/png",
         )
+        timeouts = {}
 
         respostas = {
-            "linha_01": "Comprovante de transferencia",
-            "linha_02": "21 ABR 2026 - 13:05:01",
-            "linha_03": "Valor",
-            "linha_04": "R$ 172,00",
-            "linha_05": "Tipo de transferencia Pix",
+            "linha_01": "NU",
+            "linha_02": "Comprovante de",
+            "linha_03": "transferencia",
+            "linha_04": "21 ABR 2026 - 13:05:01",
+            "linha_05": "Valor R$ 172,00",
         }
 
-        def image_to_string(imagem, **_kwargs):
-            return respostas.get(imagem.info.get("ocr_recorte"), "")
+        def image_to_string(imagem, **kwargs):
+            recorte = imagem.info.get("ocr_recorte")
+            timeouts[recorte] = kwargs.get("timeout")
+            return respostas.get(recorte, "")
 
         pytesseract_fake = types.SimpleNamespace(
             pytesseract=types.SimpleNamespace(tesseract_cmd=""),
@@ -1371,7 +1385,9 @@ class PixRecebidoTests(TestCase):
         self.assertTrue(dados["ok"])
         self.assertEqual(dados["valor"], "172.00")
         self.assertEqual(dados["data_pagamento"], "2026-04-21T13:05")
+        self.assertEqual(timeouts["linha_04"], 4)
         self.assertIn("[OCR linhas detectadas]", dados["texto_ocr_bruto"])
+        self.assertIn("04 candidata_data: 21 ABR 2026 - 13:05:01", dados["texto_ocr_bruto"])
 
     def test_analisar_comprovante_pix_ocr_por_linhas_timeout_continua(self):
         arquivo = SimpleUploadedFile(
