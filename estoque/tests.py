@@ -1209,9 +1209,9 @@ class PixRecebidoTests(TestCase):
             recorte = imagem.info.get("ocr_recorte", "inteira")
             chamadas.append(recorte)
             configs.append(kwargs.get("config"))
-            if recorte == "faixa_valor":
+            if recorte == "faixa_valor_principal":
                 return "R$ 172,00"
-            if recorte == "faixa_data":
+            if recorte == "faixa_data_principal":
                 return "21 ABR 2026 - 13:05:01"
             raise RuntimeError(f"recorte inesperado: {recorte}")
 
@@ -1240,8 +1240,14 @@ class PixRecebidoTests(TestCase):
 
             self.assertEqual(resposta.status_code, 200)
             pix.refresh_from_db()
-            self.assertEqual(chamadas, ["faixa_valor", "faixa_data"])
-            self.assertEqual(configs, ["--oem 1 --psm 7", "--oem 1 --psm 7"])
+            self.assertEqual(chamadas, ["faixa_valor_principal", "faixa_data_principal"])
+            self.assertEqual(
+                configs,
+                [
+                    "--oem 1 --psm 7 -c tessedit_char_whitelist=0123456789R$r$.,,",
+                    "--oem 1 --psm 7",
+                ],
+            )
             self.assertEqual(str(pix.valor), "172.00")
             self.assertEqual(timezone.localtime(pix.data_pagamento).strftime("%Y-%m-%dT%H:%M"), "2026-04-21T13:05")
             self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
@@ -1260,9 +1266,9 @@ class PixRecebidoTests(TestCase):
             recorte = imagem.info.get("ocr_recorte", "inteira")
             chamadas.append(recorte)
             timeouts.append(kwargs.get("timeout"))
-            if recorte == "faixa_valor":
+            if recorte == "faixa_valor_principal":
                 return "R$ 172,00"
-            if recorte == "faixa_data":
+            if recorte == "faixa_data_principal":
                 return "21 ABR 2026 - 13:05:01"
             if recorte in {"rapido_superior", "rapido_meio_superior"}:
                 raise RuntimeError("Tesseract process timeout")
@@ -1293,17 +1299,51 @@ class PixRecebidoTests(TestCase):
 
             self.assertEqual(resposta.status_code, 200)
             pix.refresh_from_db()
-            self.assertEqual(chamadas, ["faixa_valor", "faixa_data"])
+            self.assertEqual(chamadas, ["faixa_valor_principal", "faixa_data_principal"])
             self.assertEqual(timeouts, [4, 4])
             self.assertTrue(pix.comprovante)
             self.assertEqual(str(pix.valor), "172.00")
             self.assertEqual(timezone.localtime(pix.data_pagamento).strftime("%Y-%m-%dT%H:%M"), "2026-04-21T13:05")
             self.assertIn("R$ 172,00", pix.texto_ocr_bruto)
             self.assertContains(resposta, "OCR parcial concluido. Confira os dados antes de qualquer baixa.")
-            self.assertIn("recorte=faixa_valor", "\n".join(logs.output))
-            self.assertIn("recorte=faixa_data", "\n".join(logs.output))
+            self.assertIn("recorte=faixa_valor_principal", "\n".join(logs.output))
+            self.assertIn("recorte=faixa_data_principal", "\n".join(logs.output))
             self.assertIn("texto=R$ 172,00", "\n".join(logs.output))
             self.assertIn("modo leve parou apos faixas", "\n".join(logs.output))
+
+    def test_detalhe_pix_processar_ocr_sem_data_preserva_data_existente(self):
+        data_original = timezone.make_aware(timezone.datetime(2026, 4, 21, 13, 5))
+        dados_sem_data = {
+            "ok": True,
+            "pagador": "",
+            "valor": "172.00",
+            "data_pagamento": "",
+            "instituicao_pix": "",
+            "texto_ocr_bruto": "[OCR faixa_valor_principal]\nR$ 172,00",
+        }
+
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            pix = PixRecebido.objects.create(
+                valor="0.00",
+                data_pagamento=data_original,
+                status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+                texto_ocr_bruto="OCR pendente",
+                comprovante=SimpleUploadedFile("comprovante-sem-data.jpg", b"imagem", content_type="image/jpeg"),
+            )
+
+            with patch("estoque.views.analisar_comprovante_pix", return_value=dados_sem_data):
+                resposta = self.client.post(
+                    reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
+                    secure=True,
+                    follow=True,
+                )
+
+            self.assertEqual(resposta.status_code, 200)
+            pix.refresh_from_db()
+            self.assertEqual(str(pix.valor), "172.00")
+            self.assertEqual(pix.data_pagamento, data_original)
+            self.assertTrue(pix.comprovante)
+            self.assertContains(resposta, "OCR parcial concluido. Confira os dados antes de qualquer baixa.")
 
     def test_detalhe_pix_usa_rota_propria_do_comprovante(self):
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):

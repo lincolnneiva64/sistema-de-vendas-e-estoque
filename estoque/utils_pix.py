@@ -18,6 +18,9 @@ OCR_LARGURA_MAXIMA = 700 if OCR_RENDER_MODO_LEVE else 1400
 OCR_ALTURA_MAXIMA = 1100 if OCR_RENDER_MODO_LEVE else 2200
 OCR_CONFIG_RAPIDO = "--oem 1 --psm 6"
 OCR_CONFIG_LINHA = "--oem 1 --psm 7"
+OCR_CONFIG_VALOR_LINHA = "--oem 1 --psm 7 -c tessedit_char_whitelist=0123456789R$r$.,,"
+OCR_LARGURA_FAIXAS_NUBANK = 700
+OCR_UPSCALE_FAIXA = 3
 logger = logging.getLogger(__name__)
 
 
@@ -116,6 +119,20 @@ def _reduzir_imagem_ocr(imagem):
     return imagem
 
 
+def _imagem_intermediaria_faixas_ocr(imagem):
+    imagem = ImageOps.exif_transpose(imagem).convert("L")
+    if imagem.width <= 0:
+        return imagem
+    proporcao = OCR_LARGURA_FAIXAS_NUBANK / float(imagem.width)
+    if proporcao > 1:
+        novo_tamanho = (
+            OCR_LARGURA_FAIXAS_NUBANK,
+            max(1, int(imagem.height * proporcao)),
+        )
+        imagem = imagem.resize(novo_tamanho, Image.LANCZOS)
+    return imagem
+
+
 def _copiar_recorte_ocr(imagem, nome, caixa):
     recorte = imagem.crop(caixa)
     recorte.info["ocr_recorte"] = nome
@@ -133,12 +150,22 @@ def _preparar_recorte_rapido_ocr(imagem, nome, caixa):
     return recorte
 
 
-def _preparar_faixa_linha_ocr(imagem, nome, caixa):
-    recorte = _preparar_recorte_rapido_ocr(imagem, nome, caixa)
-    recorte.info["ocr_config"] = OCR_CONFIG_LINHA
-    recorte.info["ocr_configs"] = [OCR_CONFIG_LINHA, OCR_CONFIG_RAPIDO]
+def _preparar_faixa_linha_ocr(imagem, nome, caixa, configs):
+    recorte = _copiar_recorte_ocr(imagem, nome, caixa)
+    tamanho_antes = recorte.size
+    recorte = ImageOps.autocontrast(recorte.convert("L"), cutoff=1)
+    recorte = recorte.resize(
+        (max(1, recorte.width * OCR_UPSCALE_FAIXA), max(1, recorte.height * OCR_UPSCALE_FAIXA)),
+        Image.LANCZOS,
+    )
+    recorte = recorte.point(lambda pixel: 255 if pixel > 190 else 0).convert("L")
+    recorte.info["ocr_recorte"] = nome
+    recorte.info["ocr_config"] = configs[0]
+    recorte.info["ocr_configs"] = configs
     recorte.info["ocr_timeout"] = 4
     recorte.info["ocr_faixa"] = True
+    recorte.info["ocr_tamanho_antes"] = tamanho_antes
+    recorte.info["ocr_tamanho_depois"] = recorte.size
     return recorte
 
 
@@ -148,9 +175,9 @@ def _imagem_vertical_grande(tamanho):
 
 
 def _preparar_recortes_ocr(conteudo):
-    imagem = Image.open(BytesIO(conteudo))
-    tamanho_original = imagem.size
-    imagem = _reduzir_imagem_ocr(imagem)
+    imagem_original = Image.open(BytesIO(conteudo))
+    tamanho_original = imagem_original.size
+    imagem = _reduzir_imagem_ocr(imagem_original)
     largura, altura = imagem.size
     topo_fim = max(1, int(altura * 0.38))
     pagador_inicio = max(0, int(altura * 0.32))
@@ -165,35 +192,66 @@ def _preparar_recortes_ocr(conteudo):
         alternativa_fim = min(altura, max(alternativa_inicio + 1, int(altura * 0.48)))
         recortes_rapidos = []
         if usar_faixas_linhas:
-            data_inicio = max(0, int(altura * 0.25))
-            data_fim = min(altura, max(data_inicio + 1, int(altura * 0.32)))
-            valor_inicio = max(0, int(altura * 0.40))
-            valor_fim = min(altura, max(valor_inicio + 1, int(altura * 0.48)))
-            valor_x_inicio = max(0, int(largura * 0.45))
+            imagem_faixas = _imagem_intermediaria_faixas_ocr(imagem_original)
+            largura_faixa, altura_faixa = imagem_faixas.size
+            valor_x_inicio = max(0, int(largura_faixa * 0.45))
+            configs_valor = [OCR_CONFIG_VALOR_LINHA, OCR_CONFIG_RAPIDO]
+            configs_data = [OCR_CONFIG_LINHA, OCR_CONFIG_RAPIDO]
             recortes_rapidos.extend([
                 (
-                    "faixa_valor",
-                    _preparar_faixa_linha_ocr(imagem, "faixa_valor", (valor_x_inicio, valor_inicio, largura, valor_fim)),
-                    (valor_x_inicio, valor_inicio, largura, valor_fim),
+                    "faixa_valor_principal",
+                    _preparar_faixa_linha_ocr(
+                        imagem_faixas,
+                        "faixa_valor_principal",
+                        (valor_x_inicio, max(0, int(altura_faixa * 0.34)), largura_faixa, min(altura_faixa, int(altura_faixa * 0.42))),
+                        configs_valor,
+                    ),
+                    (valor_x_inicio, max(0, int(altura_faixa * 0.34)), largura_faixa, min(altura_faixa, int(altura_faixa * 0.42))),
                 ),
                 (
-                    "faixa_data",
-                    _preparar_faixa_linha_ocr(imagem, "faixa_data", (0, data_inicio, largura, data_fim)),
-                    (0, data_inicio, largura, data_fim),
+                    "faixa_valor_alternativa_acima",
+                    _preparar_faixa_linha_ocr(
+                        imagem_faixas,
+                        "faixa_valor_alternativa_acima",
+                        (valor_x_inicio, max(0, int(altura_faixa * 0.30)), largura_faixa, min(altura_faixa, int(altura_faixa * 0.38))),
+                        configs_valor,
+                    ),
+                    (valor_x_inicio, max(0, int(altura_faixa * 0.30)), largura_faixa, min(altura_faixa, int(altura_faixa * 0.38))),
+                ),
+                (
+                    "faixa_data_principal",
+                    _preparar_faixa_linha_ocr(
+                        imagem_faixas,
+                        "faixa_data_principal",
+                        (0, max(0, int(altura_faixa * 0.27)), largura_faixa, min(altura_faixa, int(altura_faixa * 0.34))),
+                        configs_data,
+                    ),
+                    (0, max(0, int(altura_faixa * 0.27)), largura_faixa, min(altura_faixa, int(altura_faixa * 0.34))),
+                ),
+                (
+                    "faixa_data_alternativa",
+                    _preparar_faixa_linha_ocr(
+                        imagem_faixas,
+                        "faixa_data_alternativa",
+                        (0, max(0, int(altura_faixa * 0.24)), largura_faixa, min(altura_faixa, int(altura_faixa * 0.31))),
+                        configs_data,
+                    ),
+                    (0, max(0, int(altura_faixa * 0.24)), largura_faixa, min(altura_faixa, int(altura_faixa * 0.31))),
                 ),
             ])
-        recortes_rapidos.extend([
-            (
-                "rapido_superior",
-                _preparar_recorte_rapido_ocr(imagem, "rapido_superior", (0, rapido_inicio, largura, rapido_fim)),
-                (0, rapido_inicio, largura, rapido_fim),
-            ),
-            (
-                "rapido_meio_superior",
-                _preparar_recorte_rapido_ocr(imagem, "rapido_meio_superior", (0, alternativa_inicio, largura, alternativa_fim)),
-                (0, alternativa_inicio, largura, alternativa_fim),
-            ),
-        ])
+        if not (OCR_RENDER_MODO_LEVE and usar_faixas_linhas):
+            recortes_rapidos.extend([
+                (
+                    "rapido_superior",
+                    _preparar_recorte_rapido_ocr(imagem, "rapido_superior", (0, rapido_inicio, largura, rapido_fim)),
+                    (0, rapido_inicio, largura, rapido_fim),
+                ),
+                (
+                    "rapido_meio_superior",
+                    _preparar_recorte_rapido_ocr(imagem, "rapido_meio_superior", (0, alternativa_inicio, largura, alternativa_fim)),
+                    (0, alternativa_inicio, largura, alternativa_fim),
+                ),
+            ])
         if not OCR_RENDER_MODO_LEVE:
             recortes_rapidos.extend([
                 ("topo", _copiar_recorte_ocr(imagem, "topo", (0, 0, largura, topo_fim)), (0, 0, largura, topo_fim)),
@@ -275,15 +333,23 @@ def _extrair_texto_comprovante(arquivo):
     erros = []
     recortes_tentados = []
     for nome_recorte, imagem, caixa in recortes:
+        texto_parcial_atual = "\n\n".join(textos)
+        resultado_atual = _resultado_comprovante_parcial(texto_parcial_atual) if texto_parcial_atual else None
+        if nome_recorte == "faixa_valor_alternativa_acima" and resultado_atual and resultado_atual.get("valor"):
+            continue
+        if nome_recorte == "faixa_data_alternativa" and resultado_atual and resultado_atual.get("data_pagamento"):
+            continue
         recortes_tentados.append(nome_recorte)
         x1, y1, x2, y2 = caixa
         _log_diagnostico_ocr(
             nome or "arquivo",
-            "recorte=%s caixa=%s tamanho=%sx%s",
+            "recorte=%s caixa=%s tamanho=%sx%s tamanho_antes=%s tamanho_depois=%s",
             nome_recorte,
             caixa,
             x2 - x1,
             y2 - y1,
+            imagem.info.get("ocr_tamanho_antes", (x2 - x1, y2 - y1)),
+            imagem.info.get("ocr_tamanho_depois", imagem.size),
         )
         try:
             inicio_tentativa = time.monotonic()
@@ -361,7 +427,7 @@ def _extrair_texto_comprovante(arquivo):
             extraiu_valor,
             extraiu_data,
         )
-        if OCR_RENDER_MODO_LEVE and nome_recorte == "faixa_data" and (extraiu_valor or extraiu_data):
+        if OCR_RENDER_MODO_LEVE and nome_recorte == "faixa_data_alternativa" and (extraiu_valor or extraiu_data):
             _log_diagnostico_ocr(
                 nome or "arquivo",
                 "modo leve parou apos faixas recortes_tentados=%s extraiu_valor=%s extraiu_data=%s",

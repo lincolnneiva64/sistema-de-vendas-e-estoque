@@ -252,7 +252,7 @@ def _decimal_pix_lido(valor):
 def _data_pix_lida(valor):
     data = parse_datetime(valor or "")
     if data is None:
-        return timezone.now()
+        return None
     if timezone.is_naive(data):
         data = timezone.make_aware(data, timezone.get_current_timezone())
     return data
@@ -2354,13 +2354,14 @@ def central_pix_processar_ocr(request, pix_id):
     cliente_sugerido, confianca_cliente, mensagem_cliente = _sugerir_cliente_por_pagador(dados.get("pagador"))
     valor = _decimal_pix_lido(dados.get("valor"))
     data_pagamento_texto = dados.get("data_pagamento")
-    data_pagamento = _data_pix_lida(data_pagamento_texto)
+    data_pagamento_lida = _data_pix_lida(data_pagamento_texto)
+    data_pagamento = data_pagamento_lida or pix.data_pagamento
     instituicao_pix = (dados.get("instituicao_pix") or "")[:80]
     nome_pagador = (dados.get("pagador") or "")[:160]
     texto_ocr_bruto = dados.get("texto_ocr_bruto") or dados.get("texto_extraido") or ""
     dados_aproveitaveis = _ocr_tem_dados_aproveitaveis(
         valor,
-        data_pagamento if data_pagamento_texto else None,
+        data_pagamento_lida,
         instituicao_pix,
         nome_pagador,
     )
@@ -2374,7 +2375,7 @@ def central_pix_processar_ocr(request, pix_id):
             nome_arquivo,
             tempo_ocr,
             bool(valor and valor > Decimal("0.00")),
-            bool(data_pagamento_texto),
+            bool(data_pagamento_lida),
             detalhe_erro[:180],
         )
         messages.warning(request, "OCR nao concluido no Render. O comprovante continua salvo para conferencia manual.")
@@ -2384,12 +2385,12 @@ def central_pix_processar_ocr(request, pix_id):
         {
             "pagador": dados.get("pagador"),
             "valor": valor,
-            "data_pagamento": data_pagamento,
+            "data_pagamento": data_pagamento_lida,
             "instituicao_pix": dados.get("instituicao_pix"),
         },
         excluir_pix_id=pix.id,
         texto_ocr_bruto=texto_ocr_bruto,
-    ) or pix_original_baixado or _detectar_pix_duplicado_comprovante(dados, valor, data_pagamento, texto_ocr_bruto)
+    ) or pix_original_baixado or _detectar_pix_duplicado_comprovante(dados, valor, data_pagamento_lida, texto_ocr_bruto)
 
     pix.cliente_sugerido = cliente_sugerido
     pix.pix_original = pix_duplicado
@@ -2440,7 +2441,7 @@ def central_pix_processar_ocr(request, pix_id):
         time.monotonic() - inicio_ocr,
         bool(dados.get("ok")),
         bool(valor and valor > Decimal("0.00")),
-        bool(data_pagamento_texto),
+        bool(data_pagamento_lida),
     )
     return redirect(detalhe_url)
 
