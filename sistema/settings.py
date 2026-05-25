@@ -19,6 +19,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 from decouple import config, Csv
 import os
 
+
+def _clean_env_value(value):
+    return str(value or "").strip()
+
+
+def _clean_env_config(name, default=""):
+    return _clean_env_value(config(name, default=default))
+
+
+def _clean_env_config_with_changed(name, default=""):
+    raw_value = config(name, default=default)
+    clean_value = _clean_env_value(raw_value)
+    return clean_value, str(raw_value or "") != clean_value
+
+
 SECRET_KEY = config('SECRET_KEY')
 DEBUG = str(config('DEBUG', default='False')).strip().lower() in {'1', 'true', 'yes', 'on', 'debug'}
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='', cast=Csv())
@@ -140,15 +155,24 @@ USE_CLOUDFLARE_R2_STORAGE = str(config("USE_CLOUDFLARE_R2_STORAGE", default="Fal
     "yes",
     "on",
 }
-CLOUDFLARE_R2_ACCESS_KEY_ID = config("CLOUDFLARE_R2_ACCESS_KEY_ID", default="")
-CLOUDFLARE_R2_SECRET_ACCESS_KEY = config("CLOUDFLARE_R2_SECRET_ACCESS_KEY", default="")
-CLOUDFLARE_R2_BUCKET_NAME = config("CLOUDFLARE_R2_BUCKET_NAME", default="")
-CLOUDFLARE_R2_ENDPOINT_URL = config("CLOUDFLARE_R2_ENDPOINT_URL", default="")
-CLOUDFLARE_R2_REGION_NAME = config("CLOUDFLARE_R2_REGION_NAME", default="auto")
-CLOUDFLARE_R2_CUSTOM_DOMAIN = config("CLOUDFLARE_R2_CUSTOM_DOMAIN", default="")
+CLOUDFLARE_R2_ACCESS_KEY_ID, CLOUDFLARE_R2_ACCESS_KEY_ID_STRIPPED = _clean_env_config_with_changed(
+    "CLOUDFLARE_R2_ACCESS_KEY_ID",
+    default="",
+)
+CLOUDFLARE_R2_SECRET_ACCESS_KEY, CLOUDFLARE_R2_SECRET_ACCESS_KEY_STRIPPED = _clean_env_config_with_changed(
+    "CLOUDFLARE_R2_SECRET_ACCESS_KEY",
+    default="",
+)
+CLOUDFLARE_R2_ACCOUNT_ID = _clean_env_config("CLOUDFLARE_R2_ACCOUNT_ID", default="")
+CLOUDFLARE_R2_BUCKET_NAME = _clean_env_config("CLOUDFLARE_R2_BUCKET_NAME", default="")
+CLOUDFLARE_R2_ENDPOINT_URL = _clean_env_config("CLOUDFLARE_R2_ENDPOINT_URL", default="")
+CLOUDFLARE_R2_REGION_NAME = _clean_env_config("CLOUDFLARE_R2_REGION_NAME", default="auto")
+CLOUDFLARE_R2_CUSTOM_DOMAIN = _clean_env_config("CLOUDFLARE_R2_CUSTOM_DOMAIN", default="")
 CLOUDFLARE_R2_QUERYSTRING_AUTH = str(
-    config("CLOUDFLARE_R2_QUERYSTRING_AUTH", default="True")
+    _clean_env_config("CLOUDFLARE_R2_QUERYSTRING_AUTH", default="True")
 ).strip().lower() in {"1", "true", "yes", "on"}
+AWS_ACCESS_KEY_ID = CLOUDFLARE_R2_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY = CLOUDFLARE_R2_SECRET_ACCESS_KEY
 CLOUDFLARE_R2_ENABLED = USE_CLOUDFLARE_R2_STORAGE and all(
     [
         CLOUDFLARE_R2_ACCESS_KEY_ID,

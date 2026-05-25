@@ -93,11 +93,15 @@ def _ambiente_envio_pix(request):
 
 
 def _diagnostico_storage_seguro():
-    storage_backend = settings.STORAGES.get("default", {}).get("BACKEND", "")
+    access_key_id = getattr(settings, "CLOUDFLARE_R2_ACCESS_KEY_ID", "") or ""
+    secret_access_key = getattr(settings, "CLOUDFLARE_R2_SECRET_ACCESS_KEY", "") or ""
     return {
-        "storage_backend": storage_backend,
-        "use_cloudflare_r2_storage": getattr(settings, "USE_CLOUDFLARE_R2_STORAGE", False),
-        "cloudflare_r2_enabled": getattr(settings, "CLOUDFLARE_R2_ENABLED", False),
+        "access_key_id_exists": bool(access_key_id),
+        "access_key_id_length": len(access_key_id),
+        "secret_access_key_exists": bool(secret_access_key),
+        "secret_access_key_length": len(secret_access_key),
+        "access_key_id_stripped": getattr(settings, "CLOUDFLARE_R2_ACCESS_KEY_ID_STRIPPED", False),
+        "secret_access_key_stripped": getattr(settings, "CLOUDFLARE_R2_SECRET_ACCESS_KEY_STRIPPED", False),
         "cloudflare_r2_bucket": getattr(settings, "CLOUDFLARE_R2_BUCKET_NAME", ""),
         "cloudflare_r2_endpoint": getattr(settings, "CLOUDFLARE_R2_ENDPOINT_URL", ""),
         "cloudflare_r2_region": getattr(settings, "CLOUDFLARE_R2_REGION_NAME", ""),
