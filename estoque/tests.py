@@ -569,11 +569,11 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
         self.assertIn("OCR nao executado automaticamente no envio mobile", pix.texto_ocr_bruto)
 
-    def _imagem_pix_teste(self):
+    def _imagem_pix_teste(self, tamanho=(900, 1600)):
         from PIL import Image
 
         buffer = io.BytesIO()
-        Image.new("RGB", (900, 1600), "white").save(buffer, format="PNG")
+        Image.new("RGB", tamanho, "white").save(buffer, format="PNG")
         return buffer.getvalue()
 
     def _modulo_pytesseract_fake(self, respostas_por_recorte):
@@ -1209,12 +1209,10 @@ class PixRecebidoTests(TestCase):
             recorte = imagem.info.get("ocr_recorte", "inteira")
             chamadas.append(recorte)
             configs.append(kwargs.get("config"))
-            if recorte == "rapido_superior":
-                return (
-                    "21 ABR 2026 - 13:05:01\n"
-                    "Valor R$ 172,00\n"
-                    "Tipo de transferencia Pix\n"
-                )
+            if recorte == "faixa_valor":
+                return "R$ 172,00"
+            if recorte == "faixa_data":
+                return "21 ABR 2026 - 13:05:01"
             raise RuntimeError(f"recorte inesperado: {recorte}")
 
         pytesseract_fake = types.SimpleNamespace(
@@ -1227,7 +1225,7 @@ class PixRecebidoTests(TestCase):
                 valor="0.00",
                 status=PixRecebido.STATUS_NAO_IDENTIFICADO,
                 texto_ocr_bruto="OCR pendente",
-                comprovante=SimpleUploadedFile("comprovante-topo.png", self._imagem_pix_teste(), content_type="image/png"),
+                comprovante=SimpleUploadedFile("comprovante-topo.png", self._imagem_pix_teste((485, 1600)), content_type="image/png"),
             )
 
             with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
@@ -1242,19 +1240,19 @@ class PixRecebidoTests(TestCase):
 
             self.assertEqual(resposta.status_code, 200)
             pix.refresh_from_db()
-            self.assertEqual(chamadas, ["rapido_superior"])
-            self.assertEqual(configs, ["--oem 1 --psm 6"])
+            self.assertEqual(chamadas, ["faixa_valor", "faixa_data"])
+            self.assertEqual(configs, ["--oem 1 --psm 7", "--oem 1 --psm 7"])
             self.assertEqual(str(pix.valor), "172.00")
             self.assertEqual(timezone.localtime(pix.data_pagamento).strftime("%Y-%m-%dT%H:%M"), "2026-04-21T13:05")
             self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
-            self.assertIn("Valor R$ 172,00", pix.texto_ocr_bruto)
+            self.assertIn("R$ 172,00", pix.texto_ocr_bruto)
             self.assertContains(resposta, "OCR parcial concluido. Confira os dados antes de qualquer baixa.")
-            self.assertIn("modo leve parou cedo recorte=rapido_superior", "\n".join(logs.output))
-            self.assertIn("config=--oem 1 --psm 6", "\n".join(logs.output))
+            self.assertIn("modo leve parou apos faixas", "\n".join(logs.output))
+            self.assertIn("config=--oem 1 --psm 7", "\n".join(logs.output))
             self.assertIn("extraiu_valor=True", "\n".join(logs.output))
             self.assertIn("extraiu_data=True", "\n".join(logs.output))
 
-    def test_detalhe_pix_processar_ocr_render_timeout_rapido_aproveita_segundo_recorte(self):
+    def test_detalhe_pix_processar_ocr_render_faixas_evita_bloco_grande_com_timeout(self):
         chamadas = []
         timeouts = []
 
@@ -1262,14 +1260,12 @@ class PixRecebidoTests(TestCase):
             recorte = imagem.info.get("ocr_recorte", "inteira")
             chamadas.append(recorte)
             timeouts.append(kwargs.get("timeout"))
-            if recorte == "rapido_superior":
+            if recorte == "faixa_valor":
+                return "R$ 172,00"
+            if recorte == "faixa_data":
+                return "21 ABR 2026 - 13:05:01"
+            if recorte in {"rapido_superior", "rapido_meio_superior"}:
                 raise RuntimeError("Tesseract process timeout")
-            if recorte == "rapido_meio_superior":
-                return (
-                    "21 ABR 2026 - 13:05:01\n"
-                    "Valor R$ 172,00\n"
-                    "Tipo de transferencia Pix\n"
-                )
             raise RuntimeError(f"recorte inesperado: {recorte}")
 
         pytesseract_fake = types.SimpleNamespace(
@@ -1282,7 +1278,7 @@ class PixRecebidoTests(TestCase):
                 valor="0.00",
                 status=PixRecebido.STATUS_NAO_IDENTIFICADO,
                 texto_ocr_bruto="OCR pendente",
-                comprovante=SimpleUploadedFile("comprovante-render.png", self._imagem_pix_teste(), content_type="image/png"),
+                comprovante=SimpleUploadedFile("comprovante-render.png", self._imagem_pix_teste((485, 1600)), content_type="image/png"),
             )
 
             with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
@@ -1297,15 +1293,17 @@ class PixRecebidoTests(TestCase):
 
             self.assertEqual(resposta.status_code, 200)
             pix.refresh_from_db()
-            self.assertEqual(chamadas, ["rapido_superior", "rapido_meio_superior"])
-            self.assertEqual(timeouts, [3, 3])
+            self.assertEqual(chamadas, ["faixa_valor", "faixa_data"])
+            self.assertEqual(timeouts, [4, 4])
             self.assertTrue(pix.comprovante)
             self.assertEqual(str(pix.valor), "172.00")
             self.assertEqual(timezone.localtime(pix.data_pagamento).strftime("%Y-%m-%dT%H:%M"), "2026-04-21T13:05")
-            self.assertIn("Valor R$ 172,00", pix.texto_ocr_bruto)
+            self.assertIn("R$ 172,00", pix.texto_ocr_bruto)
             self.assertContains(resposta, "OCR parcial concluido. Confira os dados antes de qualquer baixa.")
-            self.assertIn("recorte=rapido_superior excecao=RuntimeError: padrao: RuntimeError: Tesseract process timeout", "\n".join(logs.output))
-            self.assertIn("modo leve parou cedo recorte=rapido_meio_superior", "\n".join(logs.output))
+            self.assertIn("recorte=faixa_valor", "\n".join(logs.output))
+            self.assertIn("recorte=faixa_data", "\n".join(logs.output))
+            self.assertIn("texto=R$ 172,00", "\n".join(logs.output))
+            self.assertIn("modo leve parou apos faixas", "\n".join(logs.output))
 
     def test_detalhe_pix_usa_rota_propria_do_comprovante(self):
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):

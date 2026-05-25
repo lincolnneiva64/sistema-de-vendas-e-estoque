@@ -17,6 +17,7 @@ OCR_TIMEOUT_SEGUNDOS = 3 if OCR_RENDER_MODO_LEVE else 12
 OCR_LARGURA_MAXIMA = 700 if OCR_RENDER_MODO_LEVE else 1400
 OCR_ALTURA_MAXIMA = 1100 if OCR_RENDER_MODO_LEVE else 2200
 OCR_CONFIG_RAPIDO = "--oem 1 --psm 6"
+OCR_CONFIG_LINHA = "--oem 1 --psm 7"
 logger = logging.getLogger(__name__)
 
 
@@ -132,6 +133,15 @@ def _preparar_recorte_rapido_ocr(imagem, nome, caixa):
     return recorte
 
 
+def _preparar_faixa_linha_ocr(imagem, nome, caixa):
+    recorte = _preparar_recorte_rapido_ocr(imagem, nome, caixa)
+    recorte.info["ocr_config"] = OCR_CONFIG_LINHA
+    recorte.info["ocr_configs"] = [OCR_CONFIG_LINHA, OCR_CONFIG_RAPIDO]
+    recorte.info["ocr_timeout"] = 4
+    recorte.info["ocr_faixa"] = True
+    return recorte
+
+
 def _imagem_vertical_grande(tamanho):
     largura, altura = tamanho
     return altura >= 1200 and largura > 0 and (altura / float(largura)) >= 2.2
@@ -147,12 +157,32 @@ def _preparar_recortes_ocr(conteudo):
 
     imagem.info["ocr_recorte"] = "inteira"
     usar_recorte_rapido = OCR_RENDER_MODO_LEVE or _imagem_vertical_grande(tamanho_original)
+    usar_faixas_linhas = _imagem_vertical_grande(tamanho_original)
     if usar_recorte_rapido:
         rapido_inicio = max(0, int(altura * 0.04))
         rapido_fim = min(altura, max(rapido_inicio + 1, int(altura * 0.36)))
         alternativa_inicio = max(0, int(altura * 0.12))
         alternativa_fim = min(altura, max(alternativa_inicio + 1, int(altura * 0.48)))
-        recortes_rapidos = [
+        recortes_rapidos = []
+        if usar_faixas_linhas:
+            data_inicio = max(0, int(altura * 0.25))
+            data_fim = min(altura, max(data_inicio + 1, int(altura * 0.32)))
+            valor_inicio = max(0, int(altura * 0.40))
+            valor_fim = min(altura, max(valor_inicio + 1, int(altura * 0.48)))
+            valor_x_inicio = max(0, int(largura * 0.45))
+            recortes_rapidos.extend([
+                (
+                    "faixa_valor",
+                    _preparar_faixa_linha_ocr(imagem, "faixa_valor", (valor_x_inicio, valor_inicio, largura, valor_fim)),
+                    (valor_x_inicio, valor_inicio, largura, valor_fim),
+                ),
+                (
+                    "faixa_data",
+                    _preparar_faixa_linha_ocr(imagem, "faixa_data", (0, data_inicio, largura, data_fim)),
+                    (0, data_inicio, largura, data_fim),
+                ),
+            ])
+        recortes_rapidos.extend([
             (
                 "rapido_superior",
                 _preparar_recorte_rapido_ocr(imagem, "rapido_superior", (0, rapido_inicio, largura, rapido_fim)),
@@ -163,7 +193,7 @@ def _preparar_recortes_ocr(conteudo):
                 _preparar_recorte_rapido_ocr(imagem, "rapido_meio_superior", (0, alternativa_inicio, largura, alternativa_fim)),
                 (0, alternativa_inicio, largura, alternativa_fim),
             ),
-        ]
+        ])
         if not OCR_RENDER_MODO_LEVE:
             recortes_rapidos.extend([
                 ("topo", _copiar_recorte_ocr(imagem, "topo", (0, 0, largura, topo_fim)), (0, 0, largura, topo_fim)),
@@ -187,6 +217,7 @@ def _log_diagnostico_ocr(caminho, mensagem, *args):
 def _extrair_texto_recorte_ocr(pytesseract, imagem):
     erros = []
     config = imagem.info.get("ocr_config", "")
+    configs = imagem.info.get("ocr_configs") or [config]
     timeout = imagem.info.get("ocr_timeout", OCR_TIMEOUT_SEGUNDOS)
     rapido = bool(imagem.info.get("ocr_rapido"))
     tentativas = [("padrao", {})] if OCR_RENDER_MODO_LEVE or rapido else [
@@ -195,18 +226,21 @@ def _extrair_texto_recorte_ocr(pytesseract, imagem):
         ("padrao", {}),
     ]
     for idioma, opcoes in tentativas:
-        try:
-            texto = pytesseract.image_to_string(
-                imagem,
-                timeout=timeout,
-                config=config,
-                **opcoes,
-            )
-            return texto, idioma, config, timeout, erros
-        except Exception as exc:
-            mensagem = str(exc).strip()
-            detalhe = f": {mensagem[:80]}" if mensagem else ""
-            erros.append(f"{idioma}: {exc.__class__.__name__}{detalhe}")
+        for config_tentativa in configs:
+            try:
+                texto = pytesseract.image_to_string(
+                    imagem,
+                    timeout=timeout,
+                    config=config_tentativa,
+                    **opcoes,
+                )
+                if _normalizar_espacos(texto) or config_tentativa == configs[-1]:
+                    return texto, idioma, config_tentativa, timeout, erros
+                erros.append(f"{idioma}/{config_tentativa or 'padrao'}: OCR sem texto")
+            except Exception as exc:
+                mensagem = str(exc).strip()
+                detalhe = f": {mensagem[:80]}" if mensagem else ""
+                erros.append(f"{idioma}/{config_tentativa or 'padrao'}: {exc.__class__.__name__}{detalhe}")
 
     raise RuntimeError("; ".join(erros) or "OCR falhou em todos os idiomas")
 
@@ -262,10 +296,12 @@ def _extrair_texto_comprovante(arquivo):
             erros.append(f"{nome_recorte}: {exc.__class__.__name__}{detalhe}")
             _log_diagnostico_ocr(
                 nome or "arquivo",
-                "recorte=%s excecao=%s%s tempo=%.2fs",
+                "recorte=%s excecao=%s%s config=%s timeout=%ss tempo=%.2fs",
                 nome_recorte,
                 exc.__class__.__name__,
                 detalhe,
+                ",".join(imagem.info.get("ocr_configs") or [imagem.info.get("ocr_config", "")]) or "padrao",
+                imagem.info.get("ocr_timeout", OCR_TIMEOUT_SEGUNDOS),
                 tempo_tentativa,
             )
             continue
@@ -279,7 +315,7 @@ def _extrair_texto_comprovante(arquivo):
             resultado_parcial = _resultado_comprovante_parcial(texto_parcial)
             extraiu_valor = bool(resultado_parcial and resultado_parcial.get("valor"))
             extraiu_data = bool(resultado_parcial and resultado_parcial.get("data_pagamento"))
-            if OCR_RENDER_MODO_LEVE and (extraiu_valor or extraiu_data):
+            if OCR_RENDER_MODO_LEVE and not imagem.info.get("ocr_faixa") and (extraiu_valor or extraiu_data):
                 _log_diagnostico_ocr(
                     nome or "arquivo",
                     "modo leve parou cedo recorte=%s recortes_tentados=%s config=%s timeout=%ss tempo=%.2fs texto_tamanho=%s extraiu_valor=%s extraiu_data=%s",
@@ -293,6 +329,20 @@ def _extrair_texto_comprovante(arquivo):
                     extraiu_data,
                 )
                 return texto_parcial
+            if OCR_RENDER_MODO_LEVE and imagem.info.get("ocr_faixa") and extraiu_valor and extraiu_data:
+                _log_diagnostico_ocr(
+                    nome or "arquivo",
+                    "modo leve parou apos faixas recorte=%s recortes_tentados=%s config=%s timeout=%ss tempo=%.2fs texto=%s extraiu_valor=%s extraiu_data=%s",
+                    nome_recorte,
+                    ",".join(recortes_tentados),
+                    config_usada or "padrao",
+                    timeout_usado,
+                    tempo_tentativa,
+                    _normalizar_espacos(texto_recorte)[:80],
+                    extraiu_valor,
+                    extraiu_data,
+                )
+                return texto_parcial
         else:
             texto_parcial = "\n\n".join(textos)
             resultado_parcial = _resultado_comprovante_parcial(texto_parcial) if texto_parcial else None
@@ -300,16 +350,26 @@ def _extrair_texto_comprovante(arquivo):
             extraiu_data = bool(resultado_parcial and resultado_parcial.get("data_pagamento"))
         _log_diagnostico_ocr(
             nome or "arquivo",
-            "recorte=%s idioma OCR usado=%s config=%s timeout=%ss tempo=%.2fs texto_tamanho=%s extraiu_valor=%s extraiu_data=%s",
+            "recorte=%s idioma OCR usado=%s config=%s timeout=%ss tempo=%.2fs texto_tamanho=%s texto=%s extraiu_valor=%s extraiu_data=%s",
             nome_recorte,
             idioma_usado,
             config_usada or "padrao",
             timeout_usado,
             tempo_tentativa,
             len(texto_recorte.strip()),
+            _normalizar_espacos(texto_recorte)[:80],
             extraiu_valor,
             extraiu_data,
         )
+        if OCR_RENDER_MODO_LEVE and nome_recorte == "faixa_data" and (extraiu_valor or extraiu_data):
+            _log_diagnostico_ocr(
+                nome or "arquivo",
+                "modo leve parou apos faixas recortes_tentados=%s extraiu_valor=%s extraiu_data=%s",
+                ",".join(recortes_tentados),
+                extraiu_valor,
+                extraiu_data,
+            )
+            return "\n\n".join(textos)
 
     texto = "\n\n".join(textos)
 
