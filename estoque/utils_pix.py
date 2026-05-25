@@ -158,16 +158,22 @@ def _preparar_recorte_rapido_ocr(imagem, nome, caixa):
 def _salvar_debug_recorte_ocr(caminho, nome_recorte, imagem):
     try:
         from django.conf import settings
+        from django.core.files.base import ContentFile
+        from django.core.files.storage import default_storage
 
-        if not getattr(settings, "DEBUG", False):
-            return
-        pasta = Path(settings.MEDIA_ROOT) / "debug_ocr"
-        pasta.mkdir(parents=True, exist_ok=True)
+        debug_env = str(os.getenv("PIX_OCR_DEBUG_CROPS", "")).strip().lower() in {"1", "true", "sim", "yes", "on"}
+        if not (getattr(settings, "DEBUG", False) or debug_env):
+            return ""
         nome_base = _nome_arquivo_seguro_ocr(caminho)
-        destino = pasta / f"{nome_base}_{nome_recorte}.jpg"
-        imagem.convert("L").save(destino, format="JPEG", quality=90)
+        caminho_storage = f"debug_ocr/{nome_base}_{nome_recorte}.jpg"
+        buffer = BytesIO()
+        imagem.convert("L").save(buffer, format="JPEG", quality=90)
+        if default_storage.exists(caminho_storage):
+            default_storage.delete(caminho_storage)
+        default_storage.save(caminho_storage, ContentFile(buffer.getvalue()))
+        return default_storage.url(caminho_storage)
     except Exception:
-        return
+        return ""
 
 
 def _caixa_percentual(largura, altura, x1, y1, x2, y2):
@@ -351,7 +357,7 @@ def _extrair_texto_recorte_ocr(pytesseract, imagem):
     raise RuntimeError("; ".join(erros) or "OCR falhou em todos os idiomas")
 
 
-def _extrair_texto_comprovante(arquivo):
+def _extrair_texto_comprovante(arquivo, debug_prefix=None):
     nome = (getattr(arquivo, "name", "") or "").lower()
     content_type = (getattr(arquivo, "content_type", "") or "").lower()
     conteudo = arquivo.read()
@@ -379,6 +385,7 @@ def _extrair_texto_comprovante(arquivo):
 
     textos = []
     erros = []
+    debug_recortes = []
     recortes_tentados = []
     for nome_recorte, imagem, caixa in recortes:
         texto_parcial_atual = "\n\n".join(textos)
@@ -402,7 +409,11 @@ def _extrair_texto_comprovante(arquivo):
             imagem.info.get("ocr_tamanho_antes", (x2 - x1, y2 - y1)),
             imagem.info.get("ocr_tamanho_depois", imagem.size),
         )
-        _salvar_debug_recorte_ocr(nome or "arquivo", nome_recorte, imagem)
+        debug_url = _salvar_debug_recorte_ocr(debug_prefix or nome or "arquivo", nome_recorte, imagem)
+        if debug_url:
+            debug_linha = f"{nome_recorte}: {debug_url}"
+            debug_recortes.append(debug_linha)
+            _log_diagnostico_ocr(nome or "arquivo", "recorte=%s debug_url=%s", nome_recorte, debug_url)
         try:
             inicio_tentativa = time.monotonic()
             texto_recorte, idioma_usado, config_usada, timeout_usado, erros_idioma = _extrair_texto_recorte_ocr(pytesseract, imagem)
@@ -450,6 +461,8 @@ def _extrair_texto_comprovante(arquivo):
                     extraiu_valor,
                     extraiu_data,
                 )
+                if debug_recortes:
+                    texto_parcial = f"{texto_parcial}\n\n[OCR debug recortes]\n" + "\n".join(debug_recortes)
                 return texto_parcial
             if OCR_RENDER_MODO_LEVE and imagem.info.get("ocr_faixa") and extraiu_valor and extraiu_data:
                 _log_diagnostico_ocr(
@@ -464,6 +477,8 @@ def _extrair_texto_comprovante(arquivo):
                     extraiu_valor,
                     extraiu_data,
                 )
+                if debug_recortes:
+                    texto_parcial = f"{texto_parcial}\n\n[OCR debug recortes]\n" + "\n".join(debug_recortes)
                 return texto_parcial
         else:
             texto_parcial = "\n\n".join(textos)
@@ -491,17 +506,29 @@ def _extrair_texto_comprovante(arquivo):
                 extraiu_valor,
                 extraiu_data,
             )
-            return "\n\n".join(textos)
+            texto_faixas = "\n\n".join(textos)
+            if debug_recortes:
+                texto_faixas = f"{texto_faixas}\n\n[OCR debug recortes]\n" + "\n".join(debug_recortes)
+            return texto_faixas
 
     texto = "\n\n".join(textos)
 
     if not _normalizar_espacos(texto):
         if erros:
-            return "ERRO OCR: todos os recortes falharam (" + "; ".join(erros)[:500] + ")."
-        return "OCR executado, mas nao retornou texto."
+            texto_erro = "ERRO OCR: todos os recortes falharam (" + "; ".join(erros)[:500] + ")."
+            if debug_recortes:
+                texto_erro = f"{texto_erro}\n\n[OCR debug recortes]\n" + "\n".join(debug_recortes)
+            return texto_erro
+        texto_vazio = "OCR executado, mas nao retornou texto."
+        if debug_recortes:
+            texto_vazio = f"{texto_vazio}\n\n[OCR debug recortes]\n" + "\n".join(debug_recortes)
+        return texto_vazio
 
     if erros:
         texto = f"{texto}\n\n[OCR avisos]\n" + "\n".join(erros)
+
+    if debug_recortes:
+        texto = f"{texto}\n\n[OCR debug recortes]\n" + "\n".join(debug_recortes)
 
     return texto
 
@@ -1551,9 +1578,9 @@ def _extrair_pagador(texto):
     return nome[:160] if nome else ""
 
 
-def analisar_comprovante_pix(arquivo):
+def analisar_comprovante_pix(arquivo, debug_prefix=None):
     try:
-        texto = _extrair_texto_comprovante(arquivo)
+        texto = _extrair_texto_comprovante(arquivo, debug_prefix=debug_prefix)
     except Exception as exc:
         mensagem = str(exc).strip()
         detalhe = f": {mensagem[:120]}" if mensagem else ""

@@ -1,4 +1,5 @@
 import io
+import os
 import tempfile
 import types
 from contextlib import redirect_stdout
@@ -1326,6 +1327,51 @@ class PixRecebidoTests(TestCase):
         self.assertLess(caixa_data[1], int(imagem_data.info["ocr_base_tamanho"][1] * 0.34))
         self.assertLess(caixa_valor[1], int(imagem_valor.info["ocr_base_tamanho"][1] * 0.48))
         self.assertEqual(imagem_valor.info["ocr_tamanho_depois"][0], imagem_valor.info["ocr_tamanho_antes"][0] * 3)
+
+    def test_detalhe_pix_processar_ocr_salva_debug_recortes_com_variavel(self):
+        chamadas = []
+
+        def image_to_string(imagem, **_kwargs):
+            recorte = imagem.info.get("ocr_recorte", "inteira")
+            chamadas.append(recorte)
+            if recorte == "faixa_valor_principal":
+                return "R$ 172,00"
+            if recorte == "faixa_data_principal":
+                return "21 ABR 2026 - 13:05:01"
+            return ""
+
+        pytesseract_fake = types.SimpleNamespace(
+            pytesseract=types.SimpleNamespace(tesseract_cmd=""),
+            image_to_string=image_to_string,
+        )
+
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root, DEBUG=False):
+            pix = PixRecebido.objects.create(
+                valor="0.00",
+                status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+                texto_ocr_bruto="OCR pendente",
+                comprovante=SimpleUploadedFile("comprovante-debug.png", self._imagem_pix_teste((485, 1600)), content_type="image/png"),
+            )
+
+            with patch.dict(os.environ, {"PIX_OCR_DEBUG_CROPS": "True"}), patch.dict(
+                "sys.modules",
+                {"pytesseract": pytesseract_fake},
+            ), patch(
+                "estoque.utils_pix._resolver_tesseract_cmd",
+                return_value="tesseract",
+            ), patch("estoque.utils_pix.OCR_RENDER_MODO_LEVE", True):
+                resposta = self.client.post(
+                    reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
+                    secure=True,
+                    follow=True,
+                )
+
+            self.assertEqual(resposta.status_code, 200)
+            pix.refresh_from_db()
+            self.assertIn("[OCR debug recortes]", pix.texto_ocr_bruto)
+            self.assertIn(f"debug_ocr/pix_{pix.id}_faixa_valor_principal.jpg", pix.texto_ocr_bruto)
+            self.assertIn(f"debug_ocr/pix_{pix.id}_faixa_data_principal.jpg", pix.texto_ocr_bruto)
+            self.assertEqual(str(pix.valor), "172.00")
 
     def test_detalhe_pix_processar_ocr_sem_data_preserva_data_existente(self):
         data_original = timezone.make_aware(timezone.datetime(2026, 4, 21, 13, 5))

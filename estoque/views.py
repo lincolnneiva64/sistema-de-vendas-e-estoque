@@ -2329,7 +2329,7 @@ def central_pix_processar_ocr(request, pix_id):
     try:
         arquivo = _abrir_comprovante_pix(pix)
         nome_arquivo = _nome_arquivo_seguro(arquivo) or nome_arquivo
-        dados = analisar_comprovante_pix(arquivo)
+        dados = analisar_comprovante_pix(arquivo, debug_prefix=f"pix_{pix.id}")
     except Exception as exc:
         tempo_ocr = time.monotonic() - inicio_ocr
         erro_resumido = str(exc).strip()[:180]
