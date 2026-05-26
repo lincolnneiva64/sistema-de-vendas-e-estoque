@@ -393,7 +393,7 @@
                     <button type="button" class="pix-mini-btn" id="pixConfirmarClienteSugerido">Confirmar este cliente</button>
                   </div>
                   <div class="pix-cliente-sugestoes" id="pixClienteSugestoes"></div>
-                  <div class="pix-cliente-alerta-texto" id="pixClienteAlerta">Confirme o cliente antes de salvar o Pix.</div>
+                  <div class="pix-cliente-alerta-texto" id="pixClienteAlerta">Pix pode ser salvo sem cliente. Selecione o cliente antes de usar na baixa.</div>
                 </div>
               {% endif %}
               {% for error in field.errors %}
@@ -586,8 +586,8 @@
     function mostrarErroCliente() {
       if (!clienteAlerta) return;
       clienteAlerta.textContent = clienteSugeridoId
-        ? "Confirme o cliente sugerido ou escolha outro cliente antes de salvar."
-        : "Confirme o cliente antes de salvar o Pix.";
+        ? "Cliente sugerido ainda nao confirmado. O Pix pode ser salvo como pendente."
+        : "Pix salvo como pendente. Selecione o cliente antes de usar na baixa.";
       clienteAlerta.classList.add("visivel");
       clienteBuscaArea?.classList.add("pix-cliente-alerta");
       clienteBusca?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -846,13 +846,6 @@
         mostrarFeedback("Informe o valor do Pix antes de salvar.", "warning");
         valor?.focus();
         valor?.select();
-        return;
-      }
-      if (!clienteConfirmadoValido()) {
-        event.preventDefault();
-        mostrarFeedback("", "");
-        if (feedback) feedback.className = "pix-feedback";
-        mostrarErroCliente();
         return;
       }
       if (!pixSubmit) return;

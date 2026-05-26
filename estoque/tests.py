@@ -159,6 +159,49 @@ class PixRecebidoTests(TestCase):
         }
         self.assertEqual(contagens_depois, contagens_antes)
 
+    def test_central_pix_salva_pendente_sem_cliente_e_sem_pagador(self):
+        url = reverse("estoque:central_pix")
+        contagens_antes = {
+            "contas": ContaReceber.objects.count(),
+            "recebimentos": RecebimentoContaReceber.objects.count(),
+            "creditos": CreditoCliente.objects.count(),
+            "vendas": Venda.objects.count(),
+        }
+        comprovante = SimpleUploadedFile(
+            "mercado-pago.jpg",
+            b"comprovante pix mercado pago",
+            content_type="image/jpeg",
+        )
+
+        resposta = self.client.post(url, data={
+            "cliente": "",
+            "nome_pagador": "",
+            "valor": "645.00",
+            "data_pagamento": "2026-05-23T18:55",
+            "instituicao_pix": "Mercado Pago",
+            "observacao": "",
+            "status": PixRecebido.STATUS_PENDENTE,
+            "comprovante": comprovante,
+        }, secure=True)
+
+        self.assertEqual(resposta.status_code, 302)
+        pix = PixRecebido.objects.get(valor=Decimal("645.00"))
+        self.assertIsNone(pix.cliente)
+        self.assertEqual(pix.nome_pagador, "")
+        self.assertEqual(pix.status, PixRecebido.STATUS_PENDENTE)
+        self.assertEqual(pix.instituicao_pix, "Mercado Pago")
+        self.assertTrue(pix.comprovante)
+        self.assertEqual(timezone.localtime(pix.data_pagamento).strftime("%Y-%m-%dT%H:%M"), "2026-05-23T18:55")
+        self.assertIn(reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}), resposta["Location"])
+
+        contagens_depois = {
+            "contas": ContaReceber.objects.count(),
+            "recebimentos": RecebimentoContaReceber.objects.count(),
+            "creditos": CreditoCliente.objects.count(),
+            "vendas": Venda.objects.count(),
+        }
+        self.assertEqual(contagens_depois, contagens_antes)
+
     def test_central_pix_usa_next_interno_e_ignora_next_externo(self):
         url = reverse("estoque:central_pix")
 

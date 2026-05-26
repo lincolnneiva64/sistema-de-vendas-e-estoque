@@ -1979,7 +1979,10 @@ def central_pix(request):
                 pix.pix_original = pix_duplicado_baixado
                 pix.status = PixRecebido.STATUS_POSSIVEL_DUPLICADO
             pix.save()
-            messages.success(request, "Pix recebido registrado com sucesso.")
+            if pix.cliente_id:
+                messages.success(request, "Pix recebido registrado com sucesso.")
+            else:
+                messages.success(request, "Pix salvo como pendente. Selecione o cliente antes de usar na baixa.")
             detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id})
             return redirect(f"{detalhe_url}?{urlencode({'next': central_pix_url})}")
         else:
