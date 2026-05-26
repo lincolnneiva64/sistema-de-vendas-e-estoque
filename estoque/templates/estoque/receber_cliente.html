@@ -358,6 +358,14 @@
             {% if pix_recebido_escolhido %}
               <div class="rc-alert">
                 Baixa vinculada ao Pix #{{ pix_recebido_escolhido.id }}. Ao confirmar, este Pix será marcado como baixado e qualquer Pix parecido pendente será marcado automaticamente como duplicado/inativo.
+                {% if total_contas == 0 %}
+                  <br>Este cliente nao tem contas abertas. Voce pode trocar o cliente, remover o vinculo ou manter este Pix pendente para revisao.
+                {% endif %}
+                <div class="rc-actions" style="margin-top: 8px;">
+                  <a href="{{ pix_detalhe_url }}" class="rc-btn">Voltar ao Pix</a>
+                  <a href="{{ pix_detalhe_url }}" class="rc-btn">Trocar cliente</a>
+                  <button type="submit" form="pixRemoverClienteConfirmadoForm" class="rc-btn">Remover cliente confirmado{% if total_contas == 0 %} e manter pendente{% endif %}</button>
+                </div>
               </div>
             {% endif %}
             <div class="rc-form">
@@ -419,6 +427,11 @@
             <div class="rc-note">Confira a previa antes de confirmar. A baixa real sera gravada somente apos a confirmacao final.</div>
           </section>
         </form>
+        {% if pix_recebido_escolhido %}
+          <form id="pixRemoverClienteConfirmadoForm" method="post" action="{{ pix_remover_cliente_url }}">
+            {% csrf_token %}
+          </form>
+        {% endif %}
 
         {% if feedback_recebimento %}
           <section id="recebimento-confirmado" class="rc-confirmacao-sucesso" role="status" aria-live="polite">

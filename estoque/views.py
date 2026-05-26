@@ -2261,6 +2261,26 @@ def _url_com_pix_recebido(url, pix_id):
     return f"{url}{separador}{urlencode({'pix_recebido': pix_id})}"
 
 
+def _url_detalhe_pix(pix_id, next_url=""):
+    url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix_id})
+    if next_url:
+        url = f"{url}?{urlencode({'next': next_url})}"
+    return url
+
+
+def _pix_pode_remover_cliente_confirmado(pix):
+    return bool(
+        pix
+        and pix.status
+        in {
+            PixRecebido.STATUS_PENDENTE,
+            PixRecebido.STATUS_IDENTIFICADO,
+            PixRecebido.STATUS_POSSIVEL_DUPLICADO,
+            PixRecebido.STATUS_NAO_IDENTIFICADO,
+        }
+    )
+
+
 def _caminho_comprovante_pix_media_antiga(nome_arquivo):
     nome_arquivo = str(nome_arquivo or "").strip()
     if not nome_arquivo:
@@ -2417,6 +2437,35 @@ def central_pix_detalhe(request, pix_id):
             "modo_conferencia_ocr": modo_conferencia_ocr,
         },
     )
+
+
+@require_POST
+def central_pix_remover_cliente_confirmado(request, pix_id):
+    pix = get_object_or_404(PixRecebido, pk=pix_id)
+    detalhe_url = _url_detalhe_pix(pix.id)
+
+    if not _pix_pode_remover_cliente_confirmado(pix):
+        messages.warning(
+            request,
+            "Este Pix ja foi baixado/inativado. Para alterar cliente ou valor, use o fluxo proprio de estorno/cancelamento.",
+        )
+        return redirect(detalhe_url)
+
+    momento = timezone.localtime(timezone.now()).strftime("%d/%m/%Y %H:%M")
+    pix.cliente = None
+    pix.cliente_sugerido = None
+    if pix.status != PixRecebido.STATUS_POSSIVEL_DUPLICADO:
+        pix.status = PixRecebido.STATUS_PENDENTE
+    _registrar_observacao_pix(
+        pix,
+        f"{momento} - Cliente confirmado removido pelo operador antes de baixa/credito. Pix mantido para revisao.",
+    )
+    pix.save(update_fields=["cliente", "cliente_sugerido", "status", "observacao", "atualizado_em"])
+    messages.success(
+        request,
+        "Cliente confirmado removido. O Pix continua salvo para revisao; nenhuma baixa ou credito foi gerado.",
+    )
+    return redirect(detalhe_url)
 
 
 @require_POST
@@ -2693,13 +2742,26 @@ def receber_cliente(request, cliente_id):
         or request.GET.get("pix_recebido", "")
     ).strip()
     pix_recebido_escolhido = None
+    pix_detalhe_url = ""
+    pix_remover_cliente_url = ""
     if pix_recebido_id.isdigit():
         pix_recebido_escolhido = PixRecebido.objects.select_related("pix_original").filter(pk=pix_recebido_id).first()
+    if pix_recebido_escolhido:
+        pix_detalhe_url = _url_detalhe_pix(pix_recebido_escolhido.id, request.get_full_path())
+        pix_remover_cliente_url = reverse(
+            "estoque:central_pix_remover_cliente_confirmado",
+            kwargs={"pix_id": pix_recebido_escolhido.id},
+        )
     if pix_recebido_escolhido and request.method != "POST":
         valores["valor"] = str((pix_recebido_escolhido.valor or Decimal("0.00")).quantize(Decimal("0.01"))).replace(".", ",")
         valores["forma_pagamento"] = "PIX"
         if pix_recebido_escolhido.data_pagamento:
             valores["data_recebimento"] = timezone.localtime(pix_recebido_escolhido.data_pagamento).date().isoformat()
+        if not contas:
+            messages.warning(
+                request,
+                "Este cliente nao tem contas abertas. Voce pode trocar o cliente, remover o vinculo ou manter este Pix pendente para revisao.",
+            )
     if feedback_recebimento and total_em_aberto <= Decimal("0.00"):
         valores["valor"] = ""
     credito_disponivel = (
@@ -2978,6 +3040,8 @@ def receber_cliente(request, cliente_id):
             "retorno_url": destino_retorno,
             "tem_pix_em_atencao": _tem_pix_em_atencao(),
             "pix_recebido_escolhido": pix_recebido_escolhido,
+            "pix_detalhe_url": pix_detalhe_url,
+            "pix_remover_cliente_url": pix_remover_cliente_url,
         },
     )
 
@@ -3247,8 +3311,16 @@ def conta_receber_receber(request, pk):
         or request.GET.get("pix_recebido", "")
     ).strip()
     pix_recebido_escolhido = None
+    pix_detalhe_url = ""
+    pix_remover_cliente_url = ""
     if pix_recebido_id.isdigit():
         pix_recebido_escolhido = PixRecebido.objects.select_related("pix_original").filter(pk=pix_recebido_id).first()
+    if pix_recebido_escolhido:
+        pix_detalhe_url = _url_detalhe_pix(pix_recebido_escolhido.id, request.get_full_path())
+        pix_remover_cliente_url = reverse(
+            "estoque:central_pix_remover_cliente_confirmado",
+            kwargs={"pix_id": pix_recebido_escolhido.id},
+        )
     if pix_recebido_escolhido and request.method != "POST":
         valores["valor"] = str((pix_recebido_escolhido.valor or Decimal("0.00")).quantize(Decimal("0.01")))
         valores["forma_pagamento"] = "PIX"
@@ -3374,6 +3446,8 @@ def conta_receber_receber(request, pk):
             "hoje_iso": timezone.localdate().isoformat(),
             "retorno_url": retorno_url,
             "pix_recebido_escolhido": pix_recebido_escolhido,
+            "pix_detalhe_url": pix_detalhe_url,
+            "pix_remover_cliente_url": pix_remover_cliente_url,
         },
     )
 

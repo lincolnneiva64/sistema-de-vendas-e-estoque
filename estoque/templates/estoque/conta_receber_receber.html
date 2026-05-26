@@ -374,6 +374,11 @@
           <input type="hidden" name="pix_recebido" value="{{ pix_recebido_escolhido.id }}">
           <div class="receber-alert warning">
             Baixa vinculada ao Pix #{{ pix_recebido_escolhido.id }}. Ao confirmar, este Pix será marcado como baixado e qualquer Pix parecido pendente será marcado automaticamente como duplicado/inativo.
+            <div class="receber-actions" style="margin-top: 8px;">
+              <a href="{{ pix_detalhe_url }}" class="receber-btn receber-btn-secondary">Voltar ao Pix</a>
+              <a href="{{ pix_detalhe_url }}" class="receber-btn receber-btn-secondary">Trocar cliente</a>
+              <button type="submit" form="pixRemoverClienteConfirmadoForm" class="receber-btn receber-btn-secondary">Remover cliente confirmado</button>
+            </div>
           </div>
         {% endif %}
         <div class="receber-grid">
@@ -449,6 +454,11 @@
           <button type="submit" class="receber-btn receber-btn-primary" id="btnConfirmarRecebimento">Confirmar recebimento</button>
         </div>
         </form>
+        {% if pix_recebido_escolhido %}
+          <form id="pixRemoverClienteConfirmadoForm" method="post" action="{{ pix_remover_cliente_url }}">
+            {% csrf_token %}
+          </form>
+        {% endif %}
       </section>
 
       <aside class="receber-side">

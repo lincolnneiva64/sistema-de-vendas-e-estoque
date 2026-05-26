@@ -1497,6 +1497,101 @@ class PixRecebidoTests(TestCase):
             self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
             self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
 
+    def test_central_pix_pendente_pode_remover_cliente_confirmado_sem_baixa(self):
+        cliente = Cliente.objects.create(nome="João De Almeida E Silva", ativo=True)
+        conteudo = b"comprovante pix"
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            pix = PixRecebido.objects.create(
+                cliente=cliente,
+                cliente_sugerido=cliente,
+                nome_pagador="Joao de Almeida E Silva",
+                valor=Decimal("5.00"),
+                data_pagamento=timezone.now(),
+                instituicao_pix="Mercado Pago",
+                status=PixRecebido.STATUS_PENDENTE,
+                texto_ocr_bruto="[Google Vision OCR]\nJoao de Almeida E Silva",
+                comprovante=SimpleUploadedFile("mercado-pago.jpg", conteudo, content_type="image/jpeg"),
+            )
+            comprovante_nome = pix.comprovante.name
+
+            resposta = self.client.post(
+                reverse("estoque:central_pix_remover_cliente_confirmado", kwargs={"pix_id": pix.id}),
+                secure=True,
+                follow=True,
+            )
+
+            self.assertEqual(resposta.status_code, 200)
+            pix.refresh_from_db()
+            self.assertIsNone(pix.cliente)
+            self.assertIsNone(pix.cliente_sugerido)
+            self.assertEqual(pix.status, PixRecebido.STATUS_PENDENTE)
+            self.assertEqual(pix.nome_pagador, "Joao de Almeida E Silva")
+            self.assertEqual(str(pix.valor), "5.00")
+            self.assertEqual(pix.instituicao_pix, "Mercado Pago")
+            self.assertEqual(pix.comprovante.name, comprovante_nome)
+            self.assertIn("[Google Vision OCR]", pix.texto_ocr_bruto)
+            self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
+            self.assertEqual(CreditoCliente.objects.count(), 0)
+            self.assertContains(resposta, "Cliente confirmado removido")
+
+    def test_central_pix_baixado_nao_remove_cliente_confirmado(self):
+        cliente = Cliente.objects.create(nome="João De Almeida E Silva", ativo=True)
+        pix = PixRecebido.objects.create(
+            cliente=cliente,
+            cliente_sugerido=cliente,
+            nome_pagador="Joao de Almeida E Silva",
+            valor=Decimal("5.00"),
+            data_pagamento=timezone.now(),
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_BAIXADO,
+            texto_ocr_bruto="[Google Vision OCR]\nJoao de Almeida E Silva",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_remover_cliente_confirmado", kwargs={"pix_id": pix.id}),
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        pix.refresh_from_db()
+        self.assertEqual(pix.cliente, cliente)
+        self.assertEqual(pix.cliente_sugerido, cliente)
+        self.assertEqual(pix.status, PixRecebido.STATUS_BAIXADO)
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
+        self.assertEqual(CreditoCliente.objects.count(), 0)
+        self.assertContains(resposta, "Este Pix ja foi baixado/inativado")
+
+    def test_receber_cliente_com_pix_sem_contas_abertas_oferece_saida_segura(self):
+        cliente = Cliente.objects.create(nome="Cliente Sem Conta", ativo=True)
+        pix = PixRecebido.objects.create(
+            cliente=cliente,
+            cliente_sugerido=cliente,
+            nome_pagador="Cliente Sem Conta",
+            valor=Decimal("5.00"),
+            data_pagamento=timezone.now(),
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_PENDENTE,
+            texto_ocr_bruto="[Google Vision OCR]\nCliente Sem Conta",
+        )
+
+        resposta = self.client.get(
+            f"{reverse('estoque:receber_cliente', kwargs={'cliente_id': cliente.id})}?pix_recebido={pix.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Este cliente nao tem contas abertas")
+        self.assertContains(resposta, "Voltar ao Pix")
+        self.assertContains(resposta, "Trocar cliente")
+        self.assertContains(resposta, "Remover cliente confirmado e manter pendente")
+        self.assertContains(
+            resposta,
+            reverse("estoque:central_pix_remover_cliente_confirmado", kwargs={"pix_id": pix.id}),
+        )
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
+        self.assertEqual(CreditoCliente.objects.count(), 0)
+
     def test_detalhe_pix_processar_ocr_com_erro_mantem_comprovante_salvo(self):
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
             pix = PixRecebido.objects.create(
