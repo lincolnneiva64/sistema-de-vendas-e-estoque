@@ -72,9 +72,9 @@ def _eh_linha_bloqueada_para_nome(linha):
     linha_normalizada = _normalizar_linha(_sem_acentos(linha))
     if not linha_normalizada:
         return True
-    if re.search(r"^(cpf|cnpj|instituicao|banco|agencia|conta|transacao|id|para|tipo de transferencia|tipo de conta|comprovante|valor)\b", linha_normalizada):
+    if re.search(r"^(cpf|cnpj|instituicao|banco|agencia|conta|transacao|id|para|tipo de transferencia|tipo de conta|comprovante|valor|chave|codigo|autenticacao)\b", linha_normalizada):
         return True
-    if "nu pagamentos" in linha_normalizada or "mercado pago" in linha_normalizada:
+    if re.search(r"\b(nu pagamentos|mercado pago|pagbank|pagseguro|itau|unibanco)\b", linha_normalizada):
         return True
     return False
 
@@ -1632,12 +1632,13 @@ def _extrair_nome_no_bloco(linhas):
 def _extrair_nome_secao_de(linha_rotulo, bloco):
     linha_limpa = _normalizar_rotulo_ocr(linha_rotulo)
     candidato_inline = re.sub(r"^\s*@?\s*de:?\s*", "", _normalizar_espacos(linha_rotulo), flags=re.IGNORECASE).strip()
-    if candidato_inline and _parece_nome_pessoa(candidato_inline):
+    if candidato_inline and _parece_nome_pessoa(candidato_inline) and not _nome_bloqueado_pagador_geral(candidato_inline):
         return _normalizar_espacos(candidato_inline)
 
     for candidato in bloco:
-        if _parece_nome_pessoa(candidato):
-            return candidato
+        nome = _limpar_nome_pagador_ocr(candidato)
+        if nome and _parece_nome_pessoa(nome) and not _nome_bloqueado_pagador_geral(nome):
+            return nome
     return ""
 
 
@@ -1767,6 +1768,11 @@ def _nome_bloqueado_pagador_geral(nome):
         or nome_normalizado in nomes_bloqueados
         or "nu pagamentos" in nome_normalizado
         or "nubank" in nome_normalizado
+        or "mercado pago" in nome_normalizado
+        or "pagbank" in nome_normalizado
+        or "pagseguro" in nome_normalizado
+        or "itau" in nome_normalizado
+        or "unibanco" in nome_normalizado
     )
 
 

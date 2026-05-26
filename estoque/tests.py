@@ -3038,6 +3038,98 @@ class PixRecebidoTests(TestCase):
                 self.assertEqual(dados["pagador"], pagador_esperado)
                 self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque Neiva")
 
+    def test_analisar_comprovante_pix_extrai_pagador_de_em_comprovantes_reais(self):
+        casos = [
+            (
+                "pagbank-roceli.txt",
+                (
+                    "Comprovante de envio de Pix\n"
+                    "18/05/2026 \u00e0s 07:08:52\n"
+                    "Valor da transferencia R$ 5,00\n"
+                    "De\n"
+                    "ROSELI DA COSTA GAMA\n"
+                    "CPF ***.115.912-**\n"
+                    "Instituicao\n"
+                    "PagBank (PagSeguro Internet Instituicao de Pagamento S.A.)\n"
+                    "Para\n"
+                    "Lincoln Albuquerque Neiva\n"
+                ),
+                "ROSELI DA COSTA GAMA",
+                "5.00",
+                "2026-05-18T07:08",
+                "PagBank",
+            ),
+            (
+                "mercado-pago-joao.txt",
+                (
+                    "Comprovante de Pix\n"
+                    "23/maio/2026 \u00e0s 18:55:32\n"
+                    "R$ 645\n"
+                    "De\n"
+                    "Joao de Almeida E Silva\n"
+                    "CPF: ***.105.902-**\n"
+                    "Mercado Pago\n"
+                    "Para\n"
+                    "Lincoln Albuquerque Neiva\n"
+                ),
+                "Joao de Almeida E Silva",
+                "645.00",
+                "2026-05-23T18:55",
+                "Mercado Pago",
+            ),
+            (
+                "itau-devolucao-euclides.txt",
+                (
+                    "Comprovante de devolucao de Pix\n"
+                    "R$ 5,00\n"
+                    "Realizado em 19/05/2026 \u00e0s 17:18:36\n"
+                    "De\n"
+                    "EUCLIDES CARNEIRO NEIVA NETO\n"
+                    "CPF/CNPJ: 787.484.883-72\n"
+                    "Instituicao: ITAU UNIBANCO S.A\n"
+                    "Para\n"
+                    "Lincoln Albuquerque Neiva\n"
+                ),
+                "EUCLIDES CARNEIRO NEIVA NETO",
+                "5.00",
+                "2026-05-19T17:18",
+                "Ita\u00fa Unibanco",
+            ),
+            (
+                "mercado-pago-ivanildo.txt",
+                (
+                    "Comprovante de Pix\n"
+                    "18/maio/2026 \u00e0s 17:45:00\n"
+                    "R$ 500\n"
+                    "De\n"
+                    "Ivanildo Ferraz Patricio Junior\n"
+                    "CPF: ***.188.882-**\n"
+                    "Mercado Pago\n"
+                    "Para\n"
+                    "Lincoln Albuquerque Neiva\n"
+                ),
+                "Ivanildo Ferraz Patricio Junior",
+                "500.00",
+                "2026-05-18T17:45",
+                "Mercado Pago",
+            ),
+        ]
+        url = reverse("estoque:central_pix_analisar_comprovante")
+
+        for nome_arquivo, conteudo, pagador, valor, data_pagamento, instituicao in casos:
+            with self.subTest(nome=nome_arquivo):
+                arquivo = SimpleUploadedFile(nome_arquivo, conteudo.encode("utf-8"), content_type="text/plain")
+                resposta = self.client.post(url, {"comprovante": arquivo}, secure=True)
+
+                self.assertEqual(resposta.status_code, 200)
+                dados = resposta.json()
+                self.assertTrue(dados["ok"])
+                self.assertEqual(dados["pagador"], pagador)
+                self.assertEqual(dados["valor"], valor)
+                self.assertEqual(dados["data_pagamento"], data_pagamento)
+                self.assertEqual(dados["instituicao_pix"], instituicao)
+                self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque Neiva")
+
     def test_analisar_comprovante_pix_retorna_nome_arquivo_e_nao_reaproveita_upload_anterior(self):
         primeiro = SimpleUploadedFile(
             "mercado_pago_100.txt",
