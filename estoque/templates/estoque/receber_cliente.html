@@ -62,6 +62,12 @@
     color: #9a3412; padding: 9px 10px; font-size: 0.84rem; font-weight: 850; line-height: 1.35;
   }
   .rc-pix-safe-actions .rc-actions { margin-top: 8px; }
+  .rc-pix-safe-actions .rc-btn-pix-voltar { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+  .rc-pix-safe-actions .rc-btn-pix-trocar { border-color: #86efac; background: #ecfdf3; color: #15803d; }
+  .rc-pix-safe-actions .rc-btn-pix-remover { border-color: #fdba74; background: #ffedd5; color: #9a3412; }
+  .rc-pix-safe-actions .rc-btn-pix-voltar:active,
+  .rc-pix-safe-actions .rc-btn-pix-trocar:active,
+  .rc-pix-safe-actions .rc-btn-pix-remover:active { filter: brightness(0.96); }
   .rc-confirmacao-sucesso {
     border: 2px solid #4ade80; border-left: 8px solid #16a34a; border-radius: 12px;
     background: #dcfce7; color: #14532d;
@@ -545,9 +551,9 @@
                 Se este Pix estiver com cliente incorreto, volte ao detalhe para revisar antes de confirmar a baixa.
               {% endif %}
               <div class="rc-actions">
-                <a href="{{ pix_detalhe_url }}" class="rc-btn">Voltar ao Pix</a>
-                <a href="{{ pix_trocar_cliente_url }}" class="rc-btn">Trocar cliente</a>
-                <button type="submit" form="pixRemoverClienteConfirmadoForm" class="rc-btn">Remover cliente confirmado{% if total_contas == 0 %} e manter pendente{% endif %}</button>
+                <a href="{{ pix_detalhe_url }}" class="rc-btn rc-btn-pix-voltar">Voltar ao Pix</a>
+                <a href="{{ pix_trocar_cliente_url }}" class="rc-btn rc-btn-pix-trocar">Trocar cliente</a>
+                <button type="submit" form="pixRemoverClienteConfirmadoForm" class="rc-btn rc-btn-pix-remover">Remover cliente confirmado{% if total_contas == 0 %} e manter pendente{% endif %}</button>
               </div>
             </div>
           {% endif %}

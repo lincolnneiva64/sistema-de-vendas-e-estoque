@@ -580,6 +580,7 @@
       window.setTimeout(function () {
         clienteConfirmadoBusca.scrollIntoView({ behavior: "smooth", block: "center" });
         clienteConfirmadoBusca.focus({ preventScroll: true });
+        clienteConfirmadoBusca.select();
         buscarClientes("", clienteConfirmadoSugestoes);
       }, 80);
     }

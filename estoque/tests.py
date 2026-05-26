@@ -1670,6 +1670,9 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "Voltar ao Pix")
         self.assertContains(resposta, "Trocar cliente")
         self.assertContains(resposta, "foco_cliente=1")
+        self.assertContains(resposta, "rc-btn-pix-voltar")
+        self.assertContains(resposta, "rc-btn-pix-trocar")
+        self.assertContains(resposta, "rc-btn-pix-remover")
         self.assertContains(resposta, "Remover cliente confirmado e manter pendente")
         self.assertContains(
             resposta,
@@ -1705,6 +1708,7 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(resposta_com_foco.status_code, 200)
         self.assertContains(resposta_sem_foco, "const focarClienteConfirmado = false;")
         self.assertContains(resposta_com_foco, "const focarClienteConfirmado = true;")
+        self.assertContains(resposta_com_foco, "clienteConfirmadoBusca.select();")
 
     def test_detalhe_pix_processar_ocr_com_erro_mantem_comprovante_salvo(self):
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
