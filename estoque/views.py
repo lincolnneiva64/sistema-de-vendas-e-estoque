@@ -2032,6 +2032,45 @@ def central_pix(request):
     ):
         retorno_url = ""
     central_pix_url = reverse("estoque:central_pix")
+    termo_busca_pix = request.GET.get("q", "").strip()
+
+    def pix_recebidos_filtrados():
+        pix_qs = PixRecebido.objects.select_related("cliente", "cliente_sugerido").order_by("-criado_em", "-id")
+        if not termo_busca_pix:
+            return list(pix_qs)
+
+        termo_normalizado = normalizar_texto_cliente(termo_busca_pix)
+        termo_documento = normalizar_documento_cliente(termo_busca_pix)
+        termo_valor = termo_busca_pix.replace("R$", "").strip().replace(".", "").replace(",", ".")
+        resultado = []
+        for pix in pix_qs:
+            data_pix = timezone.localtime(pix.data_pagamento).strftime("%d/%m/%Y %H:%M") if pix.data_pagamento else ""
+            data_cadastro = timezone.localtime(pix.criado_em).strftime("%d/%m/%Y %H:%M") if pix.criado_em else ""
+            valor_texto = str(pix.valor or "").replace(".", ",")
+            campos_busca = " ".join(
+                parte
+                for parte in [
+                    pix.nome_pagador,
+                    pix.cliente.nome if pix.cliente else "",
+                    pix.cliente_sugerido.nome if pix.cliente_sugerido else "",
+                    pix.instituicao_pix,
+                    pix.get_status_display(),
+                    pix.status,
+                    data_pix,
+                    data_cadastro,
+                    valor_texto,
+                    str(pix.valor or ""),
+                ]
+                if parte
+            )
+            campos_normalizados = normalizar_texto_cliente(campos_busca)
+            if (
+                termo_normalizado in campos_normalizados
+                or (termo_documento and termo_documento in normalizar_documento_cliente(campos_busca))
+                or (termo_valor and termo_valor in str(pix.valor or ""))
+            ):
+                resultado.append(pix)
+        return resultado
 
     if request.method == "POST":
         form = PixRecebidoForm(request.POST, request.FILES)
@@ -2042,14 +2081,15 @@ def central_pix(request):
             pix_duplicado_pendente = None if pix_duplicado_baixado else _pix_duplicado_pendente(dados_pix)
             if pix_duplicado_pendente:
                 messages.warning(request, f"Pix duplicado nao foi salvo. Confira o Pix #{pix_duplicado_pendente.id}.")
-                pix_recebidos = PixRecebido.objects.select_related("cliente", "cliente_sugerido").order_by("-criado_em", "-id")
+                pix_recebidos = pix_recebidos_filtrados()
                 return render(
                     request,
                     "estoque/central_pix.html",
                     {
                         "form": form,
                         "pix_recebidos": pix_recebidos,
-                        "total_pix": pix_recebidos.count(),
+                        "total_pix": len(pix_recebidos),
+                        "pix_busca": termo_busca_pix,
                         "voltar_url": retorno_url or reverse("estoque:contas_receber"),
                         "detalhe_retorno_url": retorno_url or central_pix_url,
                     },
@@ -2071,14 +2111,15 @@ def central_pix(request):
     else:
         form = PixRecebidoForm()
 
-    pix_recebidos = PixRecebido.objects.select_related("cliente", "cliente_sugerido").order_by("-criado_em", "-id")
+    pix_recebidos = pix_recebidos_filtrados()
     return render(
         request,
         "estoque/central_pix.html",
         {
             "form": form,
             "pix_recebidos": pix_recebidos,
-            "total_pix": pix_recebidos.count(),
+            "total_pix": len(pix_recebidos),
+            "pix_busca": termo_busca_pix,
             "voltar_url": retorno_url or reverse("estoque:contas_receber"),
             "detalhe_retorno_url": retorno_url or central_pix_url,
         },

@@ -279,28 +279,49 @@
     border-color: #0f766e;
     box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
   }
-  .pix-table-wrap { overflow-x: auto; }
-  .pix-table { width: 100%; border-collapse: collapse; min-width: 980px; table-layout: fixed; }
+  .pix-list-tools {
+    display: flex; gap: 8px; align-items: center; justify-content: space-between;
+    margin: 8px 0 10px; flex-wrap: wrap;
+  }
+  .pix-search-form { display: flex; gap: 7px; align-items: center; flex: 1 1 360px; }
+  .pix-search-input {
+    width: 100%; min-height: 34px; border: 1px solid #cbd5e1; border-radius: 8px;
+    background: #fff; color: #172033; padding: 7px 9px; font-size: 0.84rem; font-weight: 700;
+  }
+  .pix-search-input::placeholder { color: #64748b; }
+  .pix-search-input:focus { outline: 3px solid rgba(20, 184, 166, 0.18); border-color: #14b8a6; }
+  .pix-search-btn, .pix-search-clear {
+    min-height: 34px; border: 1px solid #99f6e4; border-radius: 8px; background: #ccfbf1;
+    color: #0f766e; padding: 6px 10px; font-size: 0.78rem; font-weight: 900;
+    text-decoration: none; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .pix-search-clear { border-color: #cbd5e1; background: #f8fafc; color: #475569; }
+  .pix-table-wrap {
+    overflow-x: auto; border: 1px solid #dbe3ef; border-radius: 10px; background: #fff;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.62);
+  }
+  .pix-table { width: 100%; border-collapse: collapse; min-width: 1110px; table-layout: fixed; }
   .pix-table th {
-    background: #f8fafc; color: #64748b; font-size: 0.7rem;
+    background: #eaf2fb; color: #334155; font-size: 0.7rem;
     letter-spacing: 0.04em; text-transform: uppercase;
-    padding: 6px 8px; border-bottom: 1px solid #edf1f6; text-align: left;
+    padding: 7px 8px; border-bottom: 1px solid #cbd5e1; text-align: left;
     white-space: nowrap;
   }
   .pix-table td {
-    padding: 6px 8px; border-bottom: 1px solid #f0f3f8;
-    vertical-align: middle; font-size: 0.8rem;
+    padding: 6px 8px; border-bottom: 1px solid #dfe7f1;
+    vertical-align: middle; font-size: 0.8rem; color: #263244;
   }
-  .pix-col-data { width: 112px; }
-  .pix-col-cadastro { width: 112px; }
-  .pix-col-cliente { width: 170px; }
-  .pix-col-pagador { width: 180px; }
-  .pix-col-enviado { width: 112px; }
-  .pix-col-instituicao { width: 105px; }
-  .pix-col-valor { width: 88px; }
-  .pix-col-status { width: 118px; }
-  .pix-col-observacao { width: 150px; }
-  .pix-col-comprovante { width: 92px; }
+  .pix-row:nth-child(even) td { background: #fbfdff; }
+  .pix-col-data { width: 115px; }
+  .pix-col-cadastro { width: 115px; }
+  .pix-col-cliente { width: 165px; }
+  .pix-col-pagador { width: 175px; }
+  .pix-col-enviado { width: 105px; }
+  .pix-col-instituicao { width: 130px; }
+  .pix-col-valor { width: 95px; }
+  .pix-col-status { width: 130px; }
+  .pix-col-observacao { width: 125px; }
+  .pix-col-comprovante { width: 70px; }
   .pix-row:hover td { background: #f8fbff; }
   .pix-valor { color: #166534; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .pix-cliente, .pix-pagador, .pix-cell-muted, .pix-observacao {
@@ -308,12 +329,12 @@
   }
   .pix-cliente { font-weight: 850; color: #172033; }
   .pix-pagador { font-weight: 750; color: #334155; }
-  .pix-cell-muted, .pix-meta { color: #94a3b8; font-weight: 700; }
+  .pix-cell-muted, .pix-meta { color: #64748b; font-weight: 750; }
   .pix-meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pix-sem-cliente {
     display: inline-flex; align-items: center; max-width: 100%;
-    border: 1px solid #cbd5e1; border-radius: 999px; background: #f8fafc;
-    color: #64748b; padding: 3px 7px; font-size: 0.72rem; font-weight: 850;
+    border: 1px solid #94a3b8; border-radius: 999px; background: #f1f5f9;
+    color: #475569; padding: 3px 7px; font-size: 0.72rem; font-weight: 850;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .pix-muted { color: #94a3b8; font-weight: 700; }
@@ -460,6 +481,25 @@
         <div class="pix-panel-head">
           <h2 class="pix-panel-title" id="listaPixTitulo">Pix registrados</h2>
           <span class="pix-count">{{ total_pix }} registro{{ total_pix|pluralize }}</span>
+        </div>
+        <div class="pix-list-tools">
+          <form method="get" class="pix-search-form">
+            {% if voltar_url %}
+              <input type="hidden" name="next" value="{{ voltar_url }}">
+            {% endif %}
+            <input
+              type="search"
+              name="q"
+              value="{{ pix_busca }}"
+              class="pix-search-input"
+              placeholder="Buscar por pagador, cliente, instituicao, status ou data..."
+              aria-label="Buscar Pix registrados"
+            >
+            <button type="submit" class="pix-search-btn">Buscar</button>
+            {% if pix_busca %}
+              <a href="{% url 'estoque:central_pix' %}{% if voltar_url %}?next={{ voltar_url|urlencode }}{% endif %}" class="pix-search-clear">Limpar</a>
+            {% endif %}
+          </form>
         </div>
         <div class="pix-table-wrap">
           <table class="pix-table">

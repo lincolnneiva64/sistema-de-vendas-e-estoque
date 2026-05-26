@@ -3,6 +3,7 @@ import os
 import tempfile
 import types
 from contextlib import redirect_stdout
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
@@ -1354,6 +1355,40 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta_detalhe, "Enviar outro comprovante")
         self.assertContains(resposta_detalhe, "Texto OCR bruto")
         self.assertContains(resposta_detalhe, "Texto tecnico do OCR")
+
+    def test_central_pix_busca_filtra_pix_registrados(self):
+        cliente = Cliente.objects.create(nome="Jo\u00e3o De Almeida E Silva", ativo=True)
+        pix_joao = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="Joao de Almeida e Silva",
+            valor="42.50",
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_PENDENTE,
+            data_pagamento=timezone.make_aware(datetime(2026, 5, 23, 18, 55)),
+        )
+        PixRecebido.objects.create(
+            nome_pagador="Maria Ignorada",
+            valor="12.00",
+            instituicao_pix="Nubank",
+            status=PixRecebido.STATUS_IGNORADO,
+            data_pagamento=timezone.make_aware(datetime(2026, 5, 22, 8, 30)),
+        )
+
+        for termo in ("joao", "almeida", "mercado", "pendente", "23/05/2026", "42,50"):
+            resposta = self.client.get(f"{reverse('estoque:central_pix')}?q={termo}", secure=True)
+            self.assertEqual(resposta.status_code, 200)
+            self.assertContains(resposta, "Joao de Almeida e Silva")
+            self.assertContains(resposta, "Mercado Pago")
+            self.assertNotContains(resposta, "Maria Ignorada")
+            self.assertContains(
+                resposta,
+                f'{reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix_joao.id})}?next={reverse("estoque:central_pix")}',
+            )
+
+        resposta_ignorado = self.client.get(f"{reverse('estoque:central_pix')}?q=ignorado", secure=True)
+        self.assertContains(resposta_ignorado, "Maria Ignorada")
+        self.assertNotContains(resposta_ignorado, "Joao de Almeida e Silva")
+        self.assertContains(resposta_ignorado, "Limpar")
 
     def test_detalhe_pix_processar_ocr_agora_atualiza_dados_do_comprovante(self):
         cliente = Cliente.objects.create(nome="Cicero Cristiano Silva Souza", ativo=True)
