@@ -281,6 +281,32 @@ def _sugerir_cliente_por_pagador(nome_pagador):
     return None, "baixa", ""
 
 
+def _normalizar_nome_pix_exato(valor):
+    texto = normalizar_texto_cliente(valor)
+    texto = re.sub(r"[^a-z0-9\s]", " ", texto)
+    return " ".join(texto.split())
+
+
+def _cliente_exato_por_pagador_pix(nome_pagador):
+    pagador_normalizado = _normalizar_nome_pix_exato(nome_pagador)
+    if len(_tokens_nome_pix(nome_pagador)) < 2:
+        return None
+
+    encontrados = []
+    clientes = Cliente.objects.filter(ativo=True).only("id", "nome", "apelido_nome_conhecido").order_by("nome")
+    for cliente in clientes:
+        nomes_cliente = [
+            _normalizar_nome_pix_exato(cliente.nome),
+            _normalizar_nome_pix_exato(cliente.apelido_nome_conhecido),
+        ]
+        if pagador_normalizado and pagador_normalizado in nomes_cliente:
+            encontrados.append(cliente)
+            if len(encontrados) > 1:
+                return None
+
+    return encontrados[0] if encontrados else None
+
+
 def _decimal_pix_lido(valor):
     try:
         return Decimal(str(valor or "0").replace(",", ".")).quantize(Decimal("0.01"))
@@ -2436,6 +2462,9 @@ def central_pix_processar_ocr(request, pix_id):
                 pass
 
     cliente_sugerido, confianca_cliente, mensagem_cliente = _sugerir_cliente_por_pagador(dados.get("pagador"))
+    cliente_confirmado_automatico = pix.cliente
+    if not cliente_confirmado_automatico and confianca_cliente != "ambigua":
+        cliente_confirmado_automatico = _cliente_exato_por_pagador_pix(dados.get("pagador"))
     valor = _decimal_pix_lido(dados.get("valor"))
     data_pagamento_texto = dados.get("data_pagamento")
     data_pagamento_lida = _data_pix_lida(data_pagamento_texto)
@@ -2480,7 +2509,8 @@ def central_pix_processar_ocr(request, pix_id):
         texto_ocr_bruto=texto_ocr_bruto,
     ) or pix_original_baixado or _detectar_pix_duplicado_comprovante(dados, valor, data_pagamento_lida, texto_ocr_bruto)
 
-    pix.cliente_sugerido = cliente_sugerido
+    pix.cliente = cliente_confirmado_automatico
+    pix.cliente_sugerido = cliente_sugerido or cliente_confirmado_automatico
     pix.pix_original = pix_duplicado
     pix.nome_pagador = nome_pagador
     pix.valor = valor
@@ -2492,7 +2522,7 @@ def central_pix_processar_ocr(request, pix_id):
         if pix_duplicado
         else (
             PixRecebido.STATUS_PENDENTE
-            if cliente_sugerido
+            if pix.cliente or pix.cliente_sugerido
             else PixRecebido.STATUS_NAO_IDENTIFICADO
         )
     )
@@ -2505,6 +2535,7 @@ def central_pix_processar_ocr(request, pix_id):
         pix.observacao = f"{pix.observacao} Possivel Pix duplicado do registro #{pix_duplicado.id}."
     pix.save(update_fields=[
         "cliente_sugerido",
+        "cliente",
         "pix_original",
         "nome_pagador",
         "valor",
@@ -2515,7 +2546,7 @@ def central_pix_processar_ocr(request, pix_id):
         "observacao",
         "atualizado_em",
     ])
-    ocr_parcial = dados_aproveitaveis and not (nome_pagador and cliente_sugerido)
+    ocr_parcial = dados_aproveitaveis and not (nome_pagador and (pix.cliente or pix.cliente_sugerido))
     if ocr_parcial:
         messages.warning(request, "OCR parcial concluido. Confira os dados antes de qualquer baixa.")
     elif dados.get("ok"):

@@ -1427,6 +1427,76 @@ class PixRecebidoTests(TestCase):
             self.assertIn("[Google Vision OCR]", pix.texto_ocr_bruto)
             self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
 
+    def test_detalhe_pix_processar_google_vision_confirma_cliente_exato_normalizado(self):
+        cliente = Cliente.objects.create(nome="João De Almeida E Silva", ativo=True)
+        dados_vision = {
+            "ok": True,
+            "pagador": "Joao de Almeida E Silva",
+            "valor": "5.00",
+            "data_pagamento": "2026-05-18T07:08",
+            "instituicao_pix": "Mercado Pago",
+            "texto_ocr_bruto": (
+                "[Google Vision OCR]\n"
+                "Mercado Pago\n"
+                "@ De\n"
+                "Joao de Almeida E Silva\n"
+                "Valor: R$ 5,00\n"
+            ),
+        }
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root, PIX_USAR_GOOGLE_VISION=True):
+            pix = PixRecebido.objects.create(
+                valor="0.00",
+                status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+                texto_ocr_bruto="OCR pendente",
+                comprovante=SimpleUploadedFile("mercado-pago.jpg", b"imagem", content_type="image/jpeg"),
+            )
+
+            with patch("estoque.views.analisar_comprovante_pix_google_vision", return_value=dados_vision):
+                resposta = self.client.post(
+                    reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
+                    secure=True,
+                    follow=True,
+                )
+
+            self.assertEqual(resposta.status_code, 200)
+            pix.refresh_from_db()
+            self.assertEqual(pix.cliente, cliente)
+            self.assertEqual(pix.cliente_sugerido, cliente)
+            self.assertEqual(pix.nome_pagador, "Joao de Almeida E Silva")
+            self.assertEqual(pix.status, PixRecebido.STATUS_PENDENTE)
+            self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
+
+    def test_detalhe_pix_processar_google_vision_cliente_inexistente_continua_sem_confirmacao(self):
+        dados_vision = {
+            "ok": True,
+            "pagador": "Cliente Inexistente Silva",
+            "valor": "5.00",
+            "data_pagamento": "2026-05-18T07:08",
+            "instituicao_pix": "Mercado Pago",
+            "texto_ocr_bruto": "[Google Vision OCR]\nCliente Inexistente Silva\nValor: R$ 5,00\n",
+        }
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root, PIX_USAR_GOOGLE_VISION=True):
+            pix = PixRecebido.objects.create(
+                valor="0.00",
+                status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+                texto_ocr_bruto="OCR pendente",
+                comprovante=SimpleUploadedFile("mercado-pago.jpg", b"imagem", content_type="image/jpeg"),
+            )
+
+            with patch("estoque.views.analisar_comprovante_pix_google_vision", return_value=dados_vision):
+                resposta = self.client.post(
+                    reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
+                    secure=True,
+                    follow=True,
+                )
+
+            self.assertEqual(resposta.status_code, 200)
+            pix.refresh_from_db()
+            self.assertIsNone(pix.cliente)
+            self.assertIsNone(pix.cliente_sugerido)
+            self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
+            self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
+
     def test_detalhe_pix_processar_ocr_com_erro_mantem_comprovante_salvo(self):
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
             pix = PixRecebido.objects.create(
