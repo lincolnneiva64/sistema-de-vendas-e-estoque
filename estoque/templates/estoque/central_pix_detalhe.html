@@ -30,6 +30,8 @@
   .pix-detail-ocr pre { white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow: auto; margin: 0; padding: 10px; border-radius: 8px; background: #0f172a; color: #e2e8f0; font-size: 0.82rem; }
   .pix-compare { margin-bottom: 8px; border: 1px solid #fdba74; border-radius: 8px; background: #fffaf3; padding: 8px; }
   .pix-compare h2 { margin: 0 0 6px; font-size: 0.9rem; font-weight: 900; color: #9a3412; }
+  .pix-compare-note { margin: 0 0 8px; color: #7c2d12; font-size: 0.82rem; font-weight: 850; }
+  .pix-compare-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
   .pix-compare-card { background: #fff; border: 1px solid #fed7aa; border-radius: 8px; padding: 8px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 10px; }
   .pix-compare-card h3 { grid-column: 1 / -1; margin: 0; font-size: 0.86rem; font-weight: 900; color: #172033; }
   .pix-compare-row { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid #f1f5f9; padding-top: 4px; font-size: 0.78rem; }
@@ -38,6 +40,11 @@
   .pix-compare-row-full { grid-column: 1 / -1; }
   .pix-compare-actions { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
   .pix-compare-link { border: 1px solid #fdba74; border-radius: 7px; background: #fff7ed; color: #9a3412; padding: 5px 8px; font-size: 0.76rem; font-weight: 900; text-decoration: none; }
+  .pix-compare-main .pix-compare-card { grid-template-columns: 1fr; gap: 6px; }
+  .pix-compare-main .pix-compare-row { align-items: flex-start; min-height: 34px; border-radius: 8px; padding: 7px 8px; }
+  .pix-compare-main .pix-compare-row span:first-child { min-width: 92px; }
+  .pix-compare-main .pix-compare-row span:last-child { max-width: 70%; line-height: 1.25; }
+  .pix-compare-main .pix-compare-thumb-wrap { display: none; }
   .pix-compare-side .pix-compare-card { grid-template-columns: 1fr; gap: 6px; }
   .pix-compare-side .pix-compare-row { align-items: flex-start; font-size: 0.84rem; }
   .pix-compare-side .pix-compare-row span:last-child { max-width: 68%; line-height: 1.25; }
@@ -63,10 +70,16 @@
   .pix-compare-side .pix-compare-row:nth-of-type(8) { background: #f0fdfa; border-left: 4px solid #5eead4; padding-left: 6px; }
   .pix-compare-side .pix-compare-row:nth-of-type(9) { background: #fff7ed; border-left: 4px solid #fb923c; padding-left: 6px; }
   .pix-compare-side .pix-compare-row-full { background: #f8fafc; border-left: 4px solid #cbd5e1; padding-left: 6px; }
-  .pix-detail-card > .pix-compare .pix-compare-note,
-  .pix-detail-card > .pix-compare .pix-compare-card:first-child,
-  .pix-detail-card > .pix-compare .pix-compare-thumb-wrap { display: none; }
-  .pix-detail-card > .pix-compare { display: none; }
+  .pix-compare-important-pagador { background: #eff6ff; border-left: 4px solid #93c5fd; }
+  .pix-compare-important-valor { background: #fffbeb; border-left: 4px solid #facc15; }
+  .pix-compare-important-data { background: #ecfdf3; border-left: 4px solid #86efac; }
+  .pix-compare-important-banco { background: #f0fdfa; border-left: 4px solid #5eead4; }
+  .pix-compare-important-status { background: #fff7ed; border-left: 4px solid #fb923c; }
+  .pix-compare-important-pagador span:last-child { color: #9f1239; }
+  .pix-compare-important-valor span:last-child { color: #92400e; }
+  .pix-compare-important-data span:last-child { color: #166534; }
+  .pix-compare-important-banco span:last-child { color: #1d4ed8; }
+  .pix-compare-important-status span:last-child { color: #9a3412; }
   .pix-current-proof-compact { margin-top: 7px; }
   .pix-detail-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
   .pix-detail-btn, .pix-detail-link { min-height: 34px; border-radius: 8px; border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 0.84rem; font-weight: 900; text-decoration: none; background: #fff; color: #0f172a; transition: transform 0.08s ease, filter 0.12s ease, background 0.12s ease, box-shadow 0.12s ease; box-shadow: 0 5px 10px rgba(15, 23, 42, 0.09); }
@@ -161,6 +174,7 @@
   @media (max-width: 900px) {
     .pix-detail-grid { grid-template-columns: 1fr; }
     .pix-compare-card { grid-template-columns: 1fr; }
+    .pix-compare-grid { grid-template-columns: 1fr; }
   }
   @media (max-width: 760px) {
     .pix-detail-head { align-items: stretch; flex-direction: column; }
@@ -184,21 +198,31 @@
 
     <section class="pix-detail-card">
       {% if pix.pix_original %}
-        <div class="pix-compare">
+        <div class="pix-compare pix-compare-main">
           <h2>Comparação com Pix parecido</h2>
           <p class="pix-compare-note">Compare os dados antes de decidir se este envio é duplicado.</p>
+          {% if pix_parecido_pendente or pix_parecido_baixado %}
+            <div class="pix-compare-duplicate-note {% if pix_parecido_baixado %}is-critical{% endif %}">
+              <span class="pix-compare-duplicate-title">Possivel Pix duplicado encontrado</span>
+              {% if pix_parecido_baixado %}
+                Este Pix parecido ja foi baixado. Use apenas para conferencia.
+              {% else %}
+                Este Pix parecido ainda nao foi baixado. Se voce confirmar a baixa usando o Pix atual, o Pix parecido sera marcado automaticamente como duplicado/inativo.
+              {% endif %}
+            </div>
+          {% endif %}
           <div class="pix-compare-grid">
             <div class="pix-compare-card">
               <h3>Pix atual #{{ pix.id }}</h3>
               <div class="pix-compare-row"><span>Cadastro</span><span>{{ pix.criado_em|date:"d/m/Y H:i" }}</span></div>
               <div class="pix-compare-row"><span>Enviado por</span><span>{{ pix.enviado_por_nome|default:"-" }}</span></div>
-              <div class="pix-compare-row"><span>Pagador</span><span>{{ pix.nome_pagador|default:"Nao identificado" }}</span></div>
-              <div class="pix-compare-row"><span>Valor</span><span>R$ {{ pix.valor|floatformat:2 }}</span></div>
-              <div class="pix-compare-row"><span>Data</span><span>{{ pix.data_pagamento|date:"d/m/Y H:i" }}</span></div>
-              <div class="pix-compare-row"><span>Banco</span><span>{{ pix.instituicao_pix|default:"Nao identificado" }}</span></div>
+              <div class="pix-compare-row pix-compare-important-pagador"><span>Pagador</span><span>{{ pix.nome_pagador|default:"Nao identificado" }}</span></div>
+              <div class="pix-compare-row pix-compare-important-valor"><span>Valor</span><span>R$ {{ pix.valor|floatformat:2 }}</span></div>
+              <div class="pix-compare-row pix-compare-important-data"><span>Data</span><span>{{ pix.data_pagamento|date:"d/m/Y H:i" }}</span></div>
+              <div class="pix-compare-row pix-compare-important-banco"><span>Banco</span><span>{{ pix.instituicao_pix|default:"Nao identificado" }}</span></div>
               <div class="pix-compare-row"><span>Cliente sugerido</span><span>{% if pix.cliente_sugerido %}{{ pix.cliente_sugerido.nome }}{% else %}Nenhum{% endif %}</span></div>
               <div class="pix-compare-row"><span>Cliente confirmado</span><span>{% if pix.cliente %}{{ pix.cliente.nome }}{% else %}Nenhum{% endif %}</span></div>
-              <div class="pix-compare-row"><span>Status</span><span>{{ pix.get_status_display }}</span></div>
+              <div class="pix-compare-row pix-compare-important-status"><span>Status</span><span>{{ pix.get_status_display }}</span></div>
               <div class="pix-compare-row"><span>Observacao</span><span>{{ pix.observacao|default:"-"|truncatechars:90 }}</span></div>
               {% if pix.comprovante and pix.comprovante_eh_imagem %}
                 <div class="pix-compare-thumb-wrap">
@@ -207,16 +231,16 @@
               {% endif %}
             </div>
             <div class="pix-compare-card">
-              <h3>Pix parecido #{{ pix.pix_original.id }}</h3>
+              <h3>Pix parecido #{{ pix.pix_original.id }} ja encontrado</h3>
               <div class="pix-compare-row"><span>Cadastro</span><span>{{ pix.pix_original.criado_em|date:"d/m/Y H:i" }}</span></div>
               <div class="pix-compare-row"><span>Enviado por</span><span>{{ pix.pix_original.enviado_por_nome|default:"-" }}</span></div>
-              <div class="pix-compare-row"><span>Pagador</span><span>{{ pix.pix_original.nome_pagador|default:"Nao identificado" }}</span></div>
-              <div class="pix-compare-row"><span>Valor</span><span>R$ {{ pix.pix_original.valor|floatformat:2 }}</span></div>
-              <div class="pix-compare-row"><span>Data</span><span>{{ pix.pix_original.data_pagamento|date:"d/m/Y H:i" }}</span></div>
-              <div class="pix-compare-row"><span>Banco</span><span>{{ pix.pix_original.instituicao_pix|default:"Nao identificado" }}</span></div>
+              <div class="pix-compare-row pix-compare-important-pagador"><span>Pagador</span><span>{{ pix.pix_original.nome_pagador|default:"Nao identificado" }}</span></div>
+              <div class="pix-compare-row pix-compare-important-valor"><span>Valor</span><span>R$ {{ pix.pix_original.valor|floatformat:2 }}</span></div>
+              <div class="pix-compare-row pix-compare-important-data"><span>Data</span><span>{{ pix.pix_original.data_pagamento|date:"d/m/Y H:i" }}</span></div>
+              <div class="pix-compare-row pix-compare-important-banco"><span>Banco</span><span>{{ pix.pix_original.instituicao_pix|default:"Nao identificado" }}</span></div>
               <div class="pix-compare-row"><span>Cliente sugerido</span><span>{% if pix.pix_original.cliente_sugerido %}{{ pix.pix_original.cliente_sugerido.nome }}{% else %}Nenhum{% endif %}</span></div>
               <div class="pix-compare-row"><span>Cliente confirmado</span><span>{% if pix.pix_original.cliente %}{{ pix.pix_original.cliente.nome }}{% else %}Nenhum{% endif %}</span></div>
-              <div class="pix-compare-row"><span>Status</span><span>{{ pix.pix_original.get_status_display }}</span></div>
+              <div class="pix-compare-row pix-compare-important-status"><span>Status</span><span>{{ pix.pix_original.get_status_display }}</span></div>
               <div class="pix-compare-row"><span>Observacao</span><span>{{ pix.pix_original.observacao|default:"-"|truncatechars:90 }}</span></div>
               {% if not pix_parecido_baixado %}
                 <div class="pix-compare-actions">
@@ -356,7 +380,7 @@
             </div>
           {% endif %}
         </div>
-        {% if pix.pix_original and not modo_conferencia_ocr %}
+        {% if pix.pix_original and not modo_conferencia_ocr and not pix.pix_original %}
           <div class="pix-compare pix-compare-side">
             <div class="pix-compare-card">
               <h3>Pix parecido #{{ pix.pix_original.id }}</h3>
@@ -368,7 +392,7 @@
               <div class="pix-compare-row pix-compare-row-highlight"><span>Banco</span><span class="pix-compare-primary-value">{{ pix.pix_original.instituicao_pix|default:"Nao identificado" }}</span></div>
               <div class="pix-compare-row"><span>Cliente sugerido</span><span>{% if pix.pix_original.cliente_sugerido %}{{ pix.pix_original.cliente_sugerido.nome }}{% else %}Nenhum{% endif %}</span></div>
               <div class="pix-compare-row"><span>Cliente confirmado</span><span>{% if pix.pix_original.cliente %}{{ pix.pix_original.cliente.nome }}{% else %}Nenhum{% endif %}</span></div>
-              <div class="pix-compare-row"><span>Status</span><span>{{ pix.pix_original.get_status_display }}</span></div>
+              <div class="pix-compare-row pix-compare-important-status"><span>Status</span><span>{{ pix.pix_original.get_status_display }}</span></div>
               <div class="pix-compare-row pix-compare-row-full"><span>Observacao</span><span>{{ pix.pix_original.observacao|default:"-"|truncatechars:90 }}</span></div>
               {% if pix_parecido_pendente or pix_parecido_baixado %}
                 <div class="pix-compare-duplicate-note {% if pix_parecido_baixado %}is-critical{% endif %}">
@@ -415,12 +439,12 @@
         {% if modo_conferencia_ocr and pix.pix_original %}
           <div class="pix-compare pix-compare-side">
             <div class="pix-compare-card">
-              <h3>Pix parecido #{{ pix.pix_original.id }}</h3>
-              <div class="pix-compare-row"><span>Pagador</span><span>{{ pix.pix_original.nome_pagador|default:"Nao identificado" }}</span></div>
-              <div class="pix-compare-row"><span>Valor</span><span>R$ {{ pix.pix_original.valor|floatformat:2 }}</span></div>
-              <div class="pix-compare-row"><span>Data</span><span>{{ pix.pix_original.data_pagamento|date:"d/m/Y H:i" }}</span></div>
-              <div class="pix-compare-row"><span>Banco</span><span>{{ pix.pix_original.instituicao_pix|default:"Nao identificado" }}</span></div>
-              <div class="pix-compare-row"><span>Status</span><span>{{ pix.pix_original.get_status_display }}</span></div>
+              <h3>Pix parecido #{{ pix.pix_original.id }} ja encontrado</h3>
+              <div class="pix-compare-row pix-compare-important-pagador"><span>Pagador</span><span>{{ pix.pix_original.nome_pagador|default:"Nao identificado" }}</span></div>
+              <div class="pix-compare-row pix-compare-important-valor"><span>Valor</span><span>R$ {{ pix.pix_original.valor|floatformat:2 }}</span></div>
+              <div class="pix-compare-row pix-compare-important-data"><span>Data</span><span>{{ pix.pix_original.data_pagamento|date:"d/m/Y H:i" }}</span></div>
+              <div class="pix-compare-row pix-compare-important-banco"><span>Banco</span><span>{{ pix.pix_original.instituicao_pix|default:"Nao identificado" }}</span></div>
+              <div class="pix-compare-row pix-compare-important-status"><span>Status</span><span>{{ pix.pix_original.get_status_display }}</span></div>
               {% if pix_parecido_baixado %}
                 <div class="pix-compare-duplicate-note is-critical">
                   <span class="pix-compare-duplicate-title">Possivel Pix duplicado encontrado</span>
