@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from .forms import FuncionarioForm, PixRecebidoForm
 from .models import Cliente, ContaReceber, CreditoCliente, Funcionario, PixRecebido, RecebimentoContaReceber, Venda
-from .utils_pix import analisar_comprovante_pix, _preparar_recortes_ocr
+from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
 from . import views
 
 
@@ -625,6 +625,68 @@ class PixRecebidoTests(TestCase):
             pytesseract=types.SimpleNamespace(tesseract_cmd=""),
             image_to_string=image_to_string,
         )
+
+    def _mock_google_vision_texto(self, texto):
+        class ImagemFake:
+            def __init__(self, content):
+                self.content = content
+
+        cliente = types.SimpleNamespace(
+            document_text_detection=lambda image: types.SimpleNamespace(
+                full_text_annotation=types.SimpleNamespace(text=texto),
+                text_annotations=[],
+                error=types.SimpleNamespace(message=""),
+            )
+        )
+        vision = types.SimpleNamespace(Image=ImagemFake)
+        return cliente, vision
+
+    def test_analisar_comprovante_pix_google_vision_banpara_extrai_dados(self):
+        texto = (
+            "BANCO DO ESTADO DO PARÁ S.A. - BANPARÁ\n"
+            "COMPROVANTE DE PIX\n"
+            "Data da Operação: 05/05/2026 16:45:50\n"
+            "Dados de Origem\n"
+            "Titular: RUBEM ARRUDA DE SOUZA\n"
+            "Dados do Recebedor\n"
+            "Instituição: NU PAGAMENTOS - IP\n"
+            "Titular: Lincoln Albuquerque Neiva\n"
+            "Valor: 847,70\n"
+        )
+        arquivo = SimpleUploadedFile("banpara.jpg", b"imagem", content_type="image/jpeg")
+
+        with patch("estoque.utils_pix._criar_cliente_google_vision", return_value=self._mock_google_vision_texto(texto)):
+            dados = analisar_comprovante_pix_google_vision(arquivo)
+
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["valor"], "847.70")
+        self.assertEqual(dados["data_pagamento"], "2026-05-05T16:45")
+        self.assertEqual(dados["pagador"], "RUBEM ARRUDA DE SOUZA")
+        self.assertEqual(dados["instituicao_pix"], "Banpará")
+        self.assertIn("[Google Vision OCR]", dados["texto_ocr_bruto"])
+        self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque Neiva")
+
+    def test_analisar_comprovante_pix_google_vision_nubank_extrai_valor_data(self):
+        texto = "NU\nComprovante de transferência\n21 ABR 2026 - 13:05:01\nValor R$ 172,00\n"
+        arquivo = SimpleUploadedFile("nubank.jpg", b"imagem", content_type="image/jpeg")
+
+        with patch("estoque.utils_pix._criar_cliente_google_vision", return_value=self._mock_google_vision_texto(texto)):
+            dados = analisar_comprovante_pix_google_vision(arquivo)
+
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["valor"], "172.00")
+        self.assertEqual(dados["data_pagamento"], "2026-04-21T13:05")
+        self.assertIn("[Google Vision OCR]", dados["texto_ocr_bruto"])
+
+    def test_analisar_comprovante_pix_google_vision_falha_sem_500(self):
+        arquivo = SimpleUploadedFile("erro.jpg", b"imagem", content_type="image/jpeg")
+
+        with patch("estoque.utils_pix._criar_cliente_google_vision", side_effect=RuntimeError("sem credencial")):
+            dados = analisar_comprovante_pix_google_vision(arquivo)
+
+        self.assertFalse(dados["ok"])
+        self.assertEqual(dados["valor"], "")
+        self.assertIn("[Google Vision OCR erro]", dados["texto_ocr_bruto"])
 
     def test_analisar_comprovante_pix_ocr_parcial_nao_derruba_extracao(self):
         arquivo = SimpleUploadedFile(
@@ -1252,6 +1314,46 @@ class PixRecebidoTests(TestCase):
             self.assertTrue(pix.comprovante)
             self.assertContains(resposta, "Texto OCR bruto")
             self.assertContains(resposta, "Reler comprovante (OCR)")
+
+    def test_detalhe_pix_processar_google_vision_preenche_sem_criar_baixa(self):
+        cliente = Cliente.objects.create(nome="Rubem Arruda de Souza", ativo=True)
+        dados_vision = {
+            "ok": True,
+            "pagador": "RUBEM ARRUDA DE SOUZA",
+            "valor": "847.70",
+            "data_pagamento": "2026-05-05T16:45",
+            "instituicao_pix": "Banpará",
+            "texto_ocr_bruto": (
+                "[Google Vision OCR]\n"
+                "Dados de Origem\n"
+                "Titular: RUBEM ARRUDA DE SOUZA\n"
+                "Valor: 847,70\n"
+            ),
+        }
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root, PIX_USAR_GOOGLE_VISION=True):
+            pix = PixRecebido.objects.create(
+                valor="0.00",
+                status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+                texto_ocr_bruto="OCR pendente",
+                comprovante=SimpleUploadedFile("banpara.jpg", b"imagem", content_type="image/jpeg"),
+            )
+
+            with patch("estoque.views.analisar_comprovante_pix_google_vision", return_value=dados_vision):
+                resposta = self.client.post(
+                    reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
+                    secure=True,
+                    follow=True,
+                )
+
+            self.assertEqual(resposta.status_code, 200)
+            pix.refresh_from_db()
+            self.assertEqual(pix.cliente_sugerido, cliente)
+            self.assertEqual(pix.nome_pagador, "RUBEM ARRUDA DE SOUZA")
+            self.assertEqual(str(pix.valor), "847.70")
+            self.assertEqual(timezone.localtime(pix.data_pagamento).strftime("%Y-%m-%dT%H:%M"), "2026-05-05T16:45")
+            self.assertEqual(pix.instituicao_pix, "Banpará")
+            self.assertIn("[Google Vision OCR]", pix.texto_ocr_bruto)
+            self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
 
     def test_detalhe_pix_processar_ocr_com_erro_mantem_comprovante_salvo(self):
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):

@@ -1,5 +1,7 @@
 ﻿import re
 import logging
+import base64
+import json
 import os
 import shutil
 import time
@@ -862,6 +864,7 @@ def _texto_eh_diagnostico_ocr(texto):
     return (
         texto_limpo.startswith("ERRO OCR:")
         or texto_limpo.startswith("[OCR bloqueado")
+        or texto_limpo.startswith("[Google Vision OCR erro]")
         or texto_limpo == "OCR executado, mas nao retornou texto."
     )
 
@@ -913,6 +916,113 @@ def _resultado_comprovante_parcial(texto):
         "texto_ocr_bruto": texto[:2000],
         "mensagem": "OCR parcial concluido. Confira os dados antes de salvar.",
     }
+
+
+def _resultado_comprovante_google_vision_texto(texto):
+    texto_bruto = f"[Google Vision OCR]\n{str(texto or '').strip()}"
+    texto_parse = _texto_para_parse_ocr(texto_bruto)
+    pagador = _extrair_pagador(texto_parse)
+    valor = _extrair_valor(texto_parse)
+    data_pagamento = _extrair_data_pagamento(texto_parse)
+    instituicao_pix = _extrair_instituicao_pix(texto_parse)
+    ok = bool(pagador or valor or data_pagamento or instituicao_pix)
+    return {
+        "ok": ok,
+        "pagador": pagador,
+        "valor": valor,
+        "data_pagamento": data_pagamento,
+        "instituicao_pix": instituicao_pix,
+        "debug_data_pagamento": _debug_data_pagamento(texto_parse, data_pagamento),
+        "texto_extraido": _normalizar_espacos(texto_parse)[:700],
+        "texto_ocr_bruto": texto_bruto[:4000],
+        "mensagem": (
+            "Dados lidos pelo Google Vision. Confira antes de salvar."
+            if ok
+            else "Google Vision executado, mas nao identificou dados principais. Preencha manualmente."
+        ),
+    }
+
+
+def _resultado_comprovante_google_vision_falha(mensagem, configurado=True):
+    texto = f"[Google Vision OCR erro]\n{_normalizar_espacos(mensagem)}"
+    return {
+        "ok": False,
+        "pagador": "",
+        "valor": "",
+        "data_pagamento": "",
+        "instituicao_pix": "",
+        "debug_data_pagamento": "Data enviada ao frontend: nao reconhecida",
+        "texto_extraido": "",
+        "texto_ocr_bruto": texto[:2000],
+        "mensagem": "Google Vision nao conseguiu ler o comprovante. Confira manualmente.",
+        "google_vision_erro": True,
+        "google_vision_configurado": bool(configurado),
+    }
+
+
+def _criar_cliente_google_vision():
+    from google.cloud import vision
+
+    credencial_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON", "").strip()
+    credencial_base64 = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_BASE64", "").strip()
+    credencial_arquivo = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+    if credencial_json or credencial_base64:
+        from google.oauth2 import service_account
+
+        conteudo = credencial_json
+        if credencial_base64:
+            conteudo = base64.b64decode(credencial_base64).decode("utf-8")
+        credenciais = service_account.Credentials.from_service_account_info(json.loads(conteudo))
+        return vision.ImageAnnotatorClient(credentials=credenciais), vision
+
+    if not credencial_arquivo:
+        raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS nao configurado")
+
+    return vision.ImageAnnotatorClient(), vision
+
+
+def analisar_comprovante_pix_google_vision(arquivo):
+    nome = (getattr(arquivo, "name", "") or "arquivo").lower()
+    content_type = (getattr(arquivo, "content_type", "") or "").lower()
+    try:
+        conteudo = arquivo.read()
+        arquivo.seek(0)
+    except Exception as exc:
+        logger.exception("Google Vision OCR falhou ao ler arquivo. arquivo=%s", nome)
+        return _resultado_comprovante_google_vision_falha(f"{exc.__class__.__name__}: falha ao ler arquivo")
+
+    if content_type.startswith("text/") or nome.endswith(".txt"):
+        return _resultado_comprovante_google_vision_texto(conteudo.decode("utf-8", errors="ignore"))
+
+    try:
+        cliente, vision = _criar_cliente_google_vision()
+    except ImportError as exc:
+        logger.exception("Google Vision OCR biblioteca indisponivel. arquivo=%s", nome)
+        return _resultado_comprovante_google_vision_falha(
+            f"{exc.__class__.__name__}: google-cloud-vision nao instalado",
+            configurado=False,
+        )
+    except Exception as exc:
+        logger.exception("Google Vision OCR nao configurado ou indisponivel. arquivo=%s", nome)
+        return _resultado_comprovante_google_vision_falha(
+            f"{exc.__class__.__name__}: credencial Google Vision indisponivel",
+            configurado=False,
+        )
+
+    try:
+        resposta = cliente.document_text_detection(image=vision.Image(content=conteudo))
+        erro = getattr(getattr(resposta, "error", None), "message", "")
+        if erro:
+            raise RuntimeError(erro)
+        texto = getattr(getattr(resposta, "full_text_annotation", None), "text", "") or ""
+        if not texto and getattr(resposta, "text_annotations", None):
+            texto = getattr(resposta.text_annotations[0], "description", "") or ""
+        if not _normalizar_espacos(texto):
+            return _resultado_comprovante_google_vision_falha("Google Vision nao retornou texto.")
+        return _resultado_comprovante_google_vision_texto(texto)
+    except Exception as exc:
+        logger.exception("Google Vision OCR falhou. arquivo=%s", nome)
+        return _resultado_comprovante_google_vision_falha(f"{exc.__class__.__name__}: {str(exc)[:160]}")
 
 
 def _extrair_valor(texto):

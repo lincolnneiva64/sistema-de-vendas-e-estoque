@@ -21,7 +21,7 @@ from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count
 from .forms import CategoriaForm, ClienteForm, FuncionarioForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
 from .models import Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
-from .utils_pix import analisar_comprovante_pix
+from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.utils.dateparse import parse_date, parse_datetime
@@ -121,6 +121,22 @@ def _salvar_falha_ocr_manual(pix, resumo=""):
         texto = f"{texto}\nResumo: {resumo[:180]}"
     pix.texto_ocr_bruto = texto
     pix.save(update_fields=["texto_ocr_bruto", "atualizado_em"])
+
+
+def _analisar_comprovante_pix_principal(arquivo, debug_prefix=None):
+    usar_vision = bool(getattr(settings, "PIX_USAR_GOOGLE_VISION", False))
+    if not usar_vision:
+        return analisar_comprovante_pix(arquivo, debug_prefix=debug_prefix)
+
+    dados = analisar_comprovante_pix_google_vision(arquivo)
+    if (
+        dados.get("google_vision_erro")
+        and not dados.get("google_vision_configurado")
+        and not OCR_RENDER_MODO_LEVE
+    ):
+        logger.warning("Google Vision indisponivel; usando OCR local como fallback no ambiente local.")
+        return analisar_comprovante_pix(arquivo, debug_prefix=debug_prefix)
+    return dados
 
 
 def _pix_duplicado_pendente(dados):
@@ -2077,6 +2093,7 @@ def _texto_indica_falha_ocr(texto):
     return (
         texto_limpo.startswith("ERRO OCR:")
         or texto_limpo.startswith("[OCR bloqueado")
+        or texto_limpo.startswith("[Google Vision OCR erro]")
         or texto_limpo == "OCR executado, mas nao retornou texto."
     )
 
@@ -2374,7 +2391,7 @@ def central_pix_processar_ocr(request, pix_id):
     try:
         arquivo = _abrir_comprovante_pix(pix)
         nome_arquivo = _nome_arquivo_seguro(arquivo) or nome_arquivo
-        dados = analisar_comprovante_pix(arquivo, debug_prefix=f"pix_{pix.id}")
+        dados = _analisar_comprovante_pix_principal(arquivo, debug_prefix=f"pix_{pix.id}")
     except Exception as exc:
         tempo_ocr = time.monotonic() - inicio_ocr
         erro_resumido = str(exc).strip()[:180]
@@ -2413,7 +2430,7 @@ def central_pix_processar_ocr(request, pix_id):
     if _texto_indica_falha_ocr(texto_ocr_bruto) and not dados_aproveitaveis:
         detalhe_erro = str(texto_ocr_bruto or "").strip()
         tempo_ocr = time.monotonic() - inicio_ocr
-        if detalhe_erro.startswith("[OCR bloqueado"):
+        if detalhe_erro.startswith("[OCR bloqueado") or detalhe_erro.startswith("[Google Vision OCR erro]"):
             pix.texto_ocr_bruto = detalhe_erro
             pix.save(update_fields=["texto_ocr_bruto", "atualizado_em"])
         else:
