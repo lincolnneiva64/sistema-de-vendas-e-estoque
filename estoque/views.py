@@ -2729,7 +2729,7 @@ def central_pix_analisar_comprovante(request):
         }, status=400)
 
     try:
-        dados = analisar_comprovante_pix(arquivo)
+        dados = _analisar_comprovante_pix_principal(arquivo, debug_prefix="pix_upload")
     except Exception as exc:
         logger.exception(
             "Falha inesperada ao analisar comprovante Pix enviado. arquivo=%s erro=%s",

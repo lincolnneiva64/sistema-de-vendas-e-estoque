@@ -1338,6 +1338,8 @@ class PixRecebidoTests(TestCase):
         resposta_lista = self.client.get(reverse("estoque:central_pix"), secure=True)
         self.assertContains(resposta_lista, "Data do Pix")
         self.assertContains(resposta_lista, "Registrado em")
+        self.assertNotContains(resposta_lista, "<th class=\"pix-col-observacao\">Observacao</th>")
+        self.assertNotContains(resposta_lista, "Texto tecnico do OCR")
         self.assertContains(resposta_lista, "Pix pendente detalhe")
         self.assertContains(resposta_lista, 'class="pix-pagador" title="Pix pendente detalhe"')
         self.assertContains(resposta_lista, 'class="pix-sem-cliente">Sem cliente</span>')
@@ -1408,6 +1410,37 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta_ignorado, "Maria Ignorada")
         self.assertNotContains(resposta_ignorado, "Joao de Almeida e Silva")
         self.assertContains(resposta_ignorado, "Limpar")
+
+    def test_analisar_comprovante_pix_usa_google_vision_quando_habilitado(self):
+        dados_vision = {
+            "ok": True,
+            "pagador": "Joao de Almeida e Silva",
+            "valor": "42.50",
+            "data_pagamento": "2026-05-23T18:55",
+            "instituicao_pix": "Mercado Pago",
+            "texto_ocr_bruto": "[Google Vision OCR]\nJoao de Almeida e Silva\nR$ 42,50",
+            "mensagem": "Dados lidos pelo Google Vision. Confira antes de salvar.",
+        }
+        arquivo = SimpleUploadedFile("mercado-pago.jpg", b"imagem", content_type="image/jpeg")
+
+        with override_settings(PIX_USAR_GOOGLE_VISION=True):
+            with patch("estoque.views.analisar_comprovante_pix_google_vision", return_value=dados_vision) as vision_mock:
+                with patch("estoque.views.analisar_comprovante_pix") as local_mock:
+                    resposta = self.client.post(
+                        reverse("estoque:central_pix_analisar_comprovante"),
+                        {"comprovante": arquivo},
+                        secure=True,
+                    )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "Joao de Almeida e Silva")
+        self.assertEqual(dados["instituicao_pix"], "Mercado Pago")
+        self.assertIn("[Google Vision OCR]", dados["texto_ocr_bruto"])
+        vision_mock.assert_called_once()
+        local_mock.assert_not_called()
+        self.assertEqual(PixRecebido.objects.count(), 0)
 
     def test_detalhe_pix_processar_ocr_agora_atualiza_dados_do_comprovante(self):
         cliente = Cliente.objects.create(nome="Cicero Cristiano Silva Souza", ativo=True)
