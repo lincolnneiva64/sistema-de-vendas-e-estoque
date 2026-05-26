@@ -280,35 +280,58 @@
     box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
   }
   .pix-table-wrap { overflow-x: auto; }
-  .pix-table { width: 100%; border-collapse: collapse; min-width: 850px; }
+  .pix-table { width: 100%; border-collapse: collapse; min-width: 980px; table-layout: fixed; }
   .pix-table th {
     background: #f8fafc; color: #64748b; font-size: 0.7rem;
     letter-spacing: 0.04em; text-transform: uppercase;
-    padding: 7px 9px; border-bottom: 1px solid #edf1f6; text-align: left;
+    padding: 6px 8px; border-bottom: 1px solid #edf1f6; text-align: left;
+    white-space: nowrap;
   }
   .pix-table td {
-    padding: 8px 9px; border-bottom: 1px solid #f0f3f8;
-    vertical-align: middle; font-size: 0.82rem;
+    padding: 6px 8px; border-bottom: 1px solid #f0f3f8;
+    vertical-align: middle; font-size: 0.8rem;
   }
+  .pix-col-data { width: 112px; }
+  .pix-col-cadastro { width: 112px; }
+  .pix-col-cliente { width: 170px; }
+  .pix-col-pagador { width: 180px; }
+  .pix-col-enviado { width: 112px; }
+  .pix-col-instituicao { width: 105px; }
+  .pix-col-valor { width: 88px; }
+  .pix-col-status { width: 118px; }
+  .pix-col-observacao { width: 150px; }
+  .pix-col-comprovante { width: 92px; }
   .pix-row:hover td { background: #f8fbff; }
   .pix-valor { color: #166534; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .pix-cliente, .pix-pagador { font-weight: 800; color: #172033; }
+  .pix-cliente, .pix-pagador, .pix-cell-muted, .pix-observacao {
+    display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .pix-cliente { font-weight: 850; color: #172033; }
+  .pix-pagador { font-weight: 750; color: #334155; }
+  .pix-cell-muted, .pix-meta { color: #94a3b8; font-weight: 700; }
+  .pix-meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pix-sem-cliente {
+    display: inline-flex; align-items: center; max-width: 100%;
+    border: 1px solid #cbd5e1; border-radius: 999px; background: #f8fafc;
+    color: #64748b; padding: 3px 7px; font-size: 0.72rem; font-weight: 850;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .pix-muted { color: #94a3b8; font-weight: 700; }
   .pix-status {
-    display: inline-flex; border-radius: 999px; padding: 5px 9px;
-    font-size: 0.76rem; font-weight: 900; line-height: 1.15;
+    display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; padding: 4px 8px;
+    font-size: 0.72rem; font-weight: 900; line-height: 1.1;
     border: 2px solid #fde68a; background: #fffbeb; color: #92400e;
-    white-space: nowrap;
+    white-space: nowrap; max-width: 100%;
   }
   .pix-status.identificado { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
   .pix-status.baixado { border-color: #86efac; background: #f0fdf4; color: #166534; }
   .pix-status.nao_identificado { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
   .pix-status.possivel_duplicado { border-color: #fdba74; background: #fff7ed; color: #9a3412; }
   .pix-status.duplicado { border-color: #cbd5e1; background: #f8fafc; color: #64748b; }
-  .pix-status-acoes { display: grid; gap: 6px; justify-items: start; }
+  .pix-status-acoes { display: grid; gap: 4px; justify-items: start; align-items: center; }
   .pix-file-link {
     border: 1px solid #99f6e4; border-radius: 8px; background: #f0fdfa;
-    color: #0f766e; padding: 5px 9px; font-size: 0.76rem;
+    color: #0f766e; padding: 4px 8px; font-size: 0.73rem;
     font-weight: 850; text-decoration: none; display: inline-flex;
     align-items: center; justify-content: center;
     transition: transform 0.08s ease, box-shadow 0.12s ease, background 0.12s ease, filter 0.12s ease;
@@ -442,41 +465,41 @@
           <table class="pix-table">
             <thead>
               <tr>
-                <th>Data/hora</th>
-                <th>Cadastro</th>
-                <th>Cliente</th>
-                <th>Pagador</th>
-                <th>Enviado por</th>
-                <th>Instituição</th>
-                <th>Valor</th>
-                <th>Status</th>
-                <th>Observacao</th>
-                <th>Comprovante</th>
+                <th class="pix-col-data">Data do Pix</th>
+                <th class="pix-col-cadastro">Registrado em</th>
+                <th class="pix-col-cliente">Cliente</th>
+                <th class="pix-col-pagador">Pagador</th>
+                <th class="pix-col-enviado">Enviado por</th>
+                <th class="pix-col-instituicao">Instituição</th>
+                <th class="pix-col-valor">Valor</th>
+                <th class="pix-col-status">Status</th>
+                <th class="pix-col-observacao">Observacao</th>
+                <th class="pix-col-comprovante">Comprovante</th>
               </tr>
             </thead>
             <tbody>
               {% for pix in pix_recebidos %}
                 <tr class="pix-row">
-                  <td>{{ pix.data_pagamento|date:"d/m/Y H:i" }}</td>
-                  <td>{{ pix.criado_em|date:"d/m/Y H:i" }}</td>
+                  <td class="pix-col-data"><span class="pix-meta">{{ pix.data_pagamento|date:"d/m/Y H:i"|default:"-" }}</span></td>
+                  <td class="pix-col-cadastro"><span class="pix-meta">{{ pix.criado_em|date:"d/m/Y H:i" }}</span></td>
                   <td>
                     {% if pix.cliente %}
-                      <span class="pix-cliente">{{ pix.cliente.nome }}</span>
+                      <span class="pix-cliente" title="{{ pix.cliente.nome }}">{{ pix.cliente.nome }}</span>
                     {% elif pix.cliente_sugerido %}
-                      <span class="pix-cliente">{{ pix.cliente_sugerido.nome }}</span>
+                      <span class="pix-cliente" title="{{ pix.cliente_sugerido.nome }}">{{ pix.cliente_sugerido.nome }}</span>
                     {% else %}
-                      <span class="pix-muted">Sem cliente</span>
+                      <span class="pix-sem-cliente">Sem cliente</span>
                     {% endif %}
                   </td>
                   <td>
                     {% if pix.nome_pagador %}
-                      <span class="pix-pagador">{{ pix.nome_pagador }}</span>
+                      <span class="pix-pagador" title="{{ pix.nome_pagador }}">{{ pix.nome_pagador }}</span>
                     {% else %}
-                      <span class="pix-muted">Nao informado</span>
+                      <span class="pix-cell-muted">Nao informado</span>
                     {% endif %}
                   </td>
-                  <td>{{ pix.enviado_por_nome|default:"-" }}</td>
-                  <td>{{ pix.instituicao_pix|default:"-" }}</td>
+                  <td><span class="pix-meta" title="{{ pix.enviado_por_nome|default:'-' }}">{{ pix.enviado_por_nome|default:"-" }}</span></td>
+                  <td><span class="pix-meta" title="{{ pix.instituicao_pix|default:'-' }}">{{ pix.instituicao_pix|default:"-" }}</span></td>
                   <td class="pix-valor">R$ {{ pix.valor|floatformat:2 }}</td>
                   <td>
                     <div class="pix-status-acoes">
@@ -484,12 +507,12 @@
                       <a href="{% url 'estoque:central_pix_detalhe' pix.id %}?next={{ detalhe_retorno_url|urlencode }}" class="pix-file-link">Ver detalhe</a>
                     </div>
                   </td>
-                  <td>{{ pix.observacao|default:"-"|truncatechars:70 }}</td>
+                  <td><span class="pix-observacao" title="{{ pix.observacao|default:'-' }}">{{ pix.observacao|default:"-"|truncatechars:70 }}</span></td>
                   <td>
                     {% if pix.comprovante %}
                       <a href="{% url 'estoque:central_pix_comprovante' pix.id %}" target="_blank" rel="noopener" class="pix-file-link">Abrir</a>
                     {% else %}
-                      <span class="pix-muted">Sem anexo</span>
+                      <span class="pix-cell-muted">Sem anexo</span>
                     {% endif %}
                   </td>
                 </tr>

@@ -1335,7 +1335,11 @@ class PixRecebidoTests(TestCase):
         )
 
         resposta_lista = self.client.get(reverse("estoque:central_pix"), secure=True)
+        self.assertContains(resposta_lista, "Data do Pix")
+        self.assertContains(resposta_lista, "Registrado em")
         self.assertContains(resposta_lista, "Pix pendente detalhe")
+        self.assertContains(resposta_lista, 'class="pix-pagador" title="Pix pendente detalhe"')
+        self.assertContains(resposta_lista, 'class="pix-sem-cliente">Sem cliente</span>')
         self.assertContains(resposta_lista, "Ver detalhe")
         self.assertContains(
             resposta_lista,
