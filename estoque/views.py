@@ -2299,10 +2299,15 @@ def _url_com_pix_recebido(url, pix_id):
     return f"{url}{separador}{urlencode({'pix_recebido': pix_id})}"
 
 
-def _url_detalhe_pix(pix_id, next_url=""):
+def _url_detalhe_pix(pix_id, next_url="", foco_cliente=False):
     url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix_id})
+    parametros = {}
     if next_url:
-        url = f"{url}?{urlencode({'next': next_url})}"
+        parametros["next"] = next_url
+    if foco_cliente:
+        parametros["foco_cliente"] = "1"
+    if parametros:
+        url = f"{url}?{urlencode(parametros)}"
     return url
 
 
@@ -2474,6 +2479,7 @@ def central_pix_detalhe(request, pix_id):
             "pix_google_vision_habilitado": pix_google_vision_habilitado(),
             "modo_conferencia_ocr": modo_conferencia_ocr,
             "clientes_pix_autocomplete": _clientes_pix_autocomplete_local(),
+            "foco_cliente_confirmado": request.GET.get("foco_cliente") == "1",
         },
     )
 
@@ -2782,11 +2788,17 @@ def receber_cliente(request, cliente_id):
     ).strip()
     pix_recebido_escolhido = None
     pix_detalhe_url = ""
+    pix_trocar_cliente_url = ""
     pix_remover_cliente_url = ""
     if pix_recebido_id.isdigit():
         pix_recebido_escolhido = PixRecebido.objects.select_related("pix_original").filter(pk=pix_recebido_id).first()
     if pix_recebido_escolhido:
         pix_detalhe_url = _url_detalhe_pix(pix_recebido_escolhido.id, request.get_full_path())
+        pix_trocar_cliente_url = _url_detalhe_pix(
+            pix_recebido_escolhido.id,
+            request.get_full_path(),
+            foco_cliente=True,
+        )
         pix_remover_cliente_url = reverse(
             "estoque:central_pix_remover_cliente_confirmado",
             kwargs={"pix_id": pix_recebido_escolhido.id},
@@ -3080,6 +3092,7 @@ def receber_cliente(request, cliente_id):
             "tem_pix_em_atencao": _tem_pix_em_atencao(),
             "pix_recebido_escolhido": pix_recebido_escolhido,
             "pix_detalhe_url": pix_detalhe_url,
+            "pix_trocar_cliente_url": pix_trocar_cliente_url,
             "pix_remover_cliente_url": pix_remover_cliente_url,
         },
     )

@@ -448,6 +448,7 @@
   (function () {
     const clienteSugeridoInicial = {% if pix.cliente_sugerido %}{ id: "{{ pix.cliente_sugerido.id }}", nome: "{{ pix.cliente_sugerido.nome|escapejs }}" }{% else %}null{% endif %};
     const clientesAutocompleteLocal = JSON.parse(document.getElementById("pixClientesAutocompleteData")?.textContent || "[]");
+    const focarClienteConfirmado = {{ foco_cliente_confirmado|yesno:"true,false" }};
     const clienteSelect = document.getElementById("id_cliente");
     const clienteConfirmadoBusca = document.getElementById("pixClienteConfirmadoBusca");
     const clienteConfirmadoSugestoes = document.getElementById("pixClienteConfirmadoSugestoes");
@@ -575,6 +576,13 @@
     clienteSelect?.addEventListener("change", function () {
       preencherCliente(clienteSelect.value, nomeClienteSelecionado());
     });
+    if (focarClienteConfirmado && clienteConfirmadoBusca) {
+      window.setTimeout(function () {
+        clienteConfirmadoBusca.scrollIntoView({ behavior: "smooth", block: "center" });
+        clienteConfirmadoBusca.focus({ preventScroll: true });
+        buscarClientes("", clienteConfirmadoSugestoes);
+      }, 80);
+    }
     document.querySelectorAll("form").forEach(function (formulario) {
       formulario.addEventListener("submit", function () {
         liberarSaidaPix = true;

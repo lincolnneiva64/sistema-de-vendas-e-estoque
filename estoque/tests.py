@@ -1669,13 +1669,42 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "Este cliente nao tem contas abertas")
         self.assertContains(resposta, "Voltar ao Pix")
         self.assertContains(resposta, "Trocar cliente")
+        self.assertContains(resposta, "foco_cliente=1")
         self.assertContains(resposta, "Remover cliente confirmado e manter pendente")
         self.assertContains(
             resposta,
             reverse("estoque:central_pix_remover_cliente_confirmado", kwargs={"pix_id": pix.id}),
         )
+        conteudo = resposta.content.decode()
+        self.assertLess(
+            conteudo.rindex("Saldo atual em aberto"),
+            conteudo.rindex("Este cliente nao tem contas abertas"),
+        )
         self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
         self.assertEqual(CreditoCliente.objects.count(), 0)
+
+    def test_detalhe_pix_com_foco_cliente_abre_marcador_do_autocomplete(self):
+        pix = PixRecebido.objects.create(
+            nome_pagador="Cliente Teste",
+            valor=Decimal("5.00"),
+            data_pagamento=timezone.now(),
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+
+        resposta_sem_foco = self.client.get(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+            secure=True,
+        )
+        resposta_com_foco = self.client.get(
+            f"{reverse('estoque:central_pix_detalhe', kwargs={'pix_id': pix.id})}?foco_cliente=1",
+            secure=True,
+        )
+
+        self.assertEqual(resposta_sem_foco.status_code, 200)
+        self.assertEqual(resposta_com_foco.status_code, 200)
+        self.assertContains(resposta_sem_foco, "const focarClienteConfirmado = false;")
+        self.assertContains(resposta_com_foco, "const focarClienteConfirmado = true;")
 
     def test_detalhe_pix_processar_ocr_com_erro_mantem_comprovante_salvo(self):
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):

@@ -533,6 +533,10 @@
           {% else %}
             <div class="rc-empty">Nenhuma conta aberta para este cliente.</div>
           {% endif %}
+          <div class="rc-saldo-total">
+            <span>Saldo atual em aberto: R$ {{ total_em_aberto|floatformat:2 }}</span>
+            <span>Saldo após recebimento: <strong id="saldoAposRecebimentoResumo">R$ {{ total_em_aberto|floatformat:2 }}</strong></span>
+          </div>
           {% if pix_recebido_escolhido %}
             <div class="rc-pix-safe-actions">
               {% if total_contas == 0 %}
@@ -542,15 +546,11 @@
               {% endif %}
               <div class="rc-actions">
                 <a href="{{ pix_detalhe_url }}" class="rc-btn">Voltar ao Pix</a>
-                <a href="{{ pix_detalhe_url }}" class="rc-btn">Trocar cliente</a>
+                <a href="{{ pix_trocar_cliente_url }}" class="rc-btn">Trocar cliente</a>
                 <button type="submit" form="pixRemoverClienteConfirmadoForm" class="rc-btn">Remover cliente confirmado{% if total_contas == 0 %} e manter pendente{% endif %}</button>
               </div>
             </div>
           {% endif %}
-          <div class="rc-saldo-total">
-            <span>Saldo atual em aberto: R$ {{ total_em_aberto|floatformat:2 }}</span>
-            <span>Saldo após recebimento: <strong id="saldoAposRecebimentoResumo">R$ {{ total_em_aberto|floatformat:2 }}</strong></span>
-          </div>
           <div class="rc-actions">
             <a href="{{ retorno_url }}" class="rc-btn">Voltar</a>
           </div>
