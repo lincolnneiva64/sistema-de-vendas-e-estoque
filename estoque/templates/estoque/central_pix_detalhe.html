@@ -79,6 +79,7 @@
   .pix-detail-link-primary:active { background: #15803d; }
   .pix-detail-alert { border-radius: 8px; padding: 6px 9px; margin-bottom: 6px; font-size: 0.84rem; font-weight: 850; background: #ecfdf3; border: 1px solid #bbf7d0; color: #166534; }
   .pix-detail-warning { border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-weight: 900; background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; }
+  .pix-detail-return-note { margin-top: 6px; border: 1px solid #fde68a; border-radius: 8px; background: #fffbeb; color: #92400e; padding: 6px 9px; font-size: 0.8rem; font-weight: 850; line-height: 1.3; }
   .pix-detail-next-step { margin: 7px 0 0; border: 1px solid #bbf7d0; border-radius: 8px; background: #ecfdf3; color: #166534; padding: 7px 9px; font-size: 0.82rem; font-weight: 900; line-height: 1.35; }
   .pix-detail-next-step-warning { border-color: #fde68a; background: #fffbeb; color: #92400e; }
   .pix-duplicate-safe-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 7px; }
@@ -347,6 +348,11 @@
             <a href="{% url 'estoque:central_pix_enviar_comprovante' %}" class="pix-detail-link">Enviar outro comprovante</a>
             <a href="{{ voltar_url }}" class="pix-detail-link" data-pix-voltar>Voltar</a>
           </div>
+          {% if pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
+            <div class="pix-detail-return-note">
+              Se voltar sem baixar, este Pix continuara pendente na Central de Pix.
+            </div>
+          {% endif %}
           {% if pix.pix_original and pix.comprovante %}
             <div class="pix-proof-card pix-current-proof-compact">
               <div class="pix-proof-head">
