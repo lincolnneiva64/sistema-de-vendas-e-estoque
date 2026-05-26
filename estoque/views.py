@@ -40,7 +40,9 @@ PIX_OCR_PENDENTE_MOBILE = (
     "Use processamento manual posteriormente."
 )
 PIX_OCR_MANUAL_ERRO_RENDER = (
-    "OCR nao concluido no Render. Comprovante preservado para conferencia manual."
+    "[OCR erro]\n"
+    "OCR nao conseguiu ler todos os dados. Confira manualmente.\n"
+    "Comprovante preservado para conferencia manual."
 )
 
 MENSAGEM_CLIENTE_DUPLICADO = (
@@ -112,8 +114,12 @@ def _nome_arquivo_seguro(arquivo):
     return Path(getattr(arquivo, "name", "") or "").name
 
 
-def _salvar_falha_ocr_manual(pix):
-    pix.texto_ocr_bruto = PIX_OCR_MANUAL_ERRO_RENDER
+def _salvar_falha_ocr_manual(pix, resumo=""):
+    resumo = str(resumo or "").strip()
+    texto = PIX_OCR_MANUAL_ERRO_RENDER
+    if resumo:
+        texto = f"{texto}\nResumo: {resumo[:180]}"
+    pix.texto_ocr_bruto = texto
     pix.save(update_fields=["texto_ocr_bruto", "atualizado_em"])
 
 
@@ -2368,16 +2374,16 @@ def central_pix_processar_ocr(request, pix_id):
     except Exception as exc:
         tempo_ocr = time.monotonic() - inicio_ocr
         erro_resumido = str(exc).strip()[:180]
-        _salvar_falha_ocr_manual(pix)
-        logger.warning(
-            "Falha no OCR manual Pix. pix_id=%s arquivo=%s tempo=%.1fs erro=%s%s",
+        resumo_erro = f"{exc.__class__.__name__}{f': {erro_resumido}' if erro_resumido else ''}"
+        _salvar_falha_ocr_manual(pix, resumo_erro)
+        logger.exception(
+            "Falha inesperada no OCR manual Pix. pix_id=%s arquivo=%s tempo=%.1fs erro=%s",
             pix.id,
             nome_arquivo,
             tempo_ocr,
-            exc.__class__.__name__,
-            f": {erro_resumido}" if erro_resumido else "",
+            resumo_erro,
         )
-        messages.warning(request, "OCR nao concluido no Render. O comprovante continua salvo para conferencia manual.")
+        messages.warning(request, "OCR nao conseguiu ler todos os dados. Confira manualmente.")
         return redirect(detalhe_url)
     finally:
         if arquivo:
@@ -2403,7 +2409,7 @@ def central_pix_processar_ocr(request, pix_id):
     if _texto_indica_falha_ocr(texto_ocr_bruto) and not dados_aproveitaveis:
         detalhe_erro = str(texto_ocr_bruto or "").strip()
         tempo_ocr = time.monotonic() - inicio_ocr
-        _salvar_falha_ocr_manual(pix)
+        _salvar_falha_ocr_manual(pix, "Falha retornada pelo OCR")
         logger.warning(
             "OCR manual Pix retornou falha. pix_id=%s arquivo=%s tempo=%.1fs extraiu_valor=%s extraiu_data=%s erro=%s",
             pix.id,
@@ -2413,7 +2419,7 @@ def central_pix_processar_ocr(request, pix_id):
             bool(data_pagamento_lida),
             detalhe_erro[:180],
         )
-        messages.warning(request, "OCR nao concluido no Render. O comprovante continua salvo para conferencia manual.")
+        messages.warning(request, "OCR nao conseguiu ler todos os dados. Confira manualmente.")
         return redirect(detalhe_url)
 
     pix_duplicado = _pix_duplicado_baixado(
@@ -2508,7 +2514,31 @@ def central_pix_analisar_comprovante(request):
             "nome_arquivo": "",
         }, status=400)
 
-    dados = analisar_comprovante_pix(arquivo)
+    try:
+        dados = analisar_comprovante_pix(arquivo)
+    except Exception as exc:
+        logger.exception(
+            "Falha inesperada ao analisar comprovante Pix enviado. arquivo=%s erro=%s",
+            _nome_arquivo_seguro(arquivo),
+            exc.__class__.__name__,
+        )
+        return JsonResponse({
+            "ok": False,
+            "pagador": "",
+            "valor": "",
+            "data_pagamento": "",
+            "instituicao_pix": "",
+            "cliente_sugerido_id": None,
+            "cliente_sugerido_nome": "",
+            "confianca_cliente": 0,
+            "mensagem_cliente": "",
+            "debug_data_pagamento": "Data enviada ao frontend: nao reconhecida",
+            "debug_texto_ocr": f"[OCR erro]\n{exc.__class__.__name__}",
+            "texto_ocr_bruto": f"[OCR erro]\n{exc.__class__.__name__}",
+            "nome_arquivo": arquivo.name,
+            "mensagem": "OCR nao conseguiu ler todos os dados. Confira manualmente.",
+            "observacao": "",
+        })
     cliente_sugerido, confianca_cliente, mensagem_cliente = _sugerir_cliente_por_pagador(dados.get("pagador"))
     debug_texto_ocr = dados.get("texto_ocr_bruto", "")
 

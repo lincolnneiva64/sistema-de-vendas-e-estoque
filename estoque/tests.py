@@ -1148,11 +1148,37 @@ class PixRecebidoTests(TestCase):
             pix.refresh_from_db()
             self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
             self.assertTrue(pix.comprovante)
-            self.assertIn("OCR nao concluido no Render", pix.texto_ocr_bruto)
+            self.assertIn("[OCR erro]", pix.texto_ocr_bruto)
+            self.assertIn("RuntimeError", pix.texto_ocr_bruto)
             self.assertIn(f"pix_id={pix.id}", "\n".join(logs.output))
             self.assertIn("arquivo=comprovante_", "\n".join(logs.output))
             self.assertIn("timeout render", "\n".join(logs.output))
             self.assertContains(resposta, "Texto OCR bruto")
+
+    def test_detalhe_pix_processar_ocr_excecao_inesperada_nao_retorna_500(self):
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            pix = PixRecebido.objects.create(
+                valor="0.00",
+                status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+                texto_ocr_bruto="OCR pendente",
+                comprovante=SimpleUploadedFile("banpara.jpg", b"imagem", content_type="image/jpeg"),
+            )
+
+            with patch("estoque.views.analisar_comprovante_pix", side_effect=ValueError("falha banpara")):
+                resposta = self.client.post(
+                    reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
+                    secure=True,
+                    follow=True,
+                )
+
+            self.assertEqual(resposta.status_code, 200)
+            pix.refresh_from_db()
+            self.assertTrue(pix.comprovante)
+            self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
+            self.assertEqual(str(pix.valor), "0.00")
+            self.assertIn("[OCR erro]", pix.texto_ocr_bruto)
+            self.assertIn("ValueError", pix.texto_ocr_bruto)
+            self.assertContains(resposta, "OCR nao conseguiu ler todos os dados")
 
     def test_detalhe_pix_processar_ocr_com_timeout_retornado_mantem_comprovante_salvo(self):
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
@@ -1184,8 +1210,7 @@ class PixRecebidoTests(TestCase):
             self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
             self.assertEqual(str(pix.valor), "0.00")
             self.assertTrue(pix.comprovante)
-            self.assertIn("OCR nao concluido no Render", pix.texto_ocr_bruto)
-            self.assertNotIn("Tesseract process timeout", pix.texto_ocr_bruto)
+            self.assertIn("[OCR erro]", pix.texto_ocr_bruto)
             self.assertIn(f"pix_id={pix.id}", "\n".join(logs.output))
             self.assertIn("Tesseract process timeout", "\n".join(logs.output))
             self.assertContains(resposta, "Texto OCR bruto")
@@ -2279,6 +2304,32 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(dados["valor"], "600.00")
         self.assertEqual(dados["data_pagamento"], "2026-05-16T16:33")
         self.assertEqual(dados["instituicao_pix"], "Mercado Pago")
+
+    def test_analisar_comprovante_pix_pagador_por_contexto_sem_usar_recebedor(self):
+        casos = [
+            (
+                "mercado-pago-de.txt",
+                "Mercado Pago\nComprovante de Pix\n17/05/2026 11:09\nR$ 100\nDe Ivanildo Ferraz Patricio Junior\nCPF ***.188.882-**\nPara Lincoln Albuquerque Neiva\n",
+                "Ivanildo Ferraz Patricio Junior",
+            ),
+            (
+                "quem-pagou.txt",
+                "Comprovante Pix\nQuem pagou\nNome RONISE DO SOCORRO DOS SANTOS FERREIRA\nQuem recebeu Lincoln Albuquerque Neiva\nValor R$ 76,00\n27 ABR 2026 - 08:04:01\n",
+                "RONISE DO SOCORRO DOS SANTOS FERREIRA",
+            ),
+        ]
+        url = reverse("estoque:central_pix_analisar_comprovante")
+
+        for nome_arquivo, conteudo, pagador_esperado in casos:
+            with self.subTest(nome=nome_arquivo):
+                arquivo = SimpleUploadedFile(nome_arquivo, conteudo.encode("utf-8"), content_type="text/plain")
+                resposta = self.client.post(url, {"comprovante": arquivo}, secure=True)
+
+                self.assertEqual(resposta.status_code, 200)
+                dados = resposta.json()
+                self.assertTrue(dados["ok"])
+                self.assertEqual(dados["pagador"], pagador_esperado)
+                self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque Neiva")
 
     def test_analisar_comprovante_pix_retorna_nome_arquivo_e_nao_reaproveita_upload_anterior(self):
         primeiro = SimpleUploadedFile(

@@ -1360,7 +1360,7 @@ def _extrair_nome_no_bloco(linhas):
             proxima_normalizada = _normalizar_rotulo_ocr(proxima)
             if _eh_linha_bloqueada_para_nome(proxima):
                 break
-            if re.search(r"\b(cpf|cnpj|instituicao|instituig\w*|institui\w*|banco|chave|valor|data|destino|origem|recebedor|pagador)\b", proxima_normalizada):
+            if re.search(r"\b(cpf|cnpj|instituicao|instituig\w*|institui\w*|banco|chave|valor|data|destino|origem|recebedor|quem recebeu|pagador)\b", proxima_normalizada):
                 break
             if _parece_nome_pessoa(proxima) or (valores and re.fullmatch(r"[^\W\d_]{2,}", proxima)):
                 valores.append(proxima)
@@ -1407,7 +1407,7 @@ def _extrair_nome_no_bloco(linhas):
 
 def _extrair_nome_secao_de(linha_rotulo, bloco):
     linha_limpa = _normalizar_rotulo_ocr(linha_rotulo)
-    candidato_inline = re.sub(r"^\s*de:?\s*", "", linha_limpa, flags=re.IGNORECASE).strip()
+    candidato_inline = re.sub(r"^\s*@?\s*de:?\s*", "", _normalizar_espacos(linha_rotulo), flags=re.IGNORECASE).strip()
     if candidato_inline and _parece_nome_pessoa(candidato_inline):
         return _normalizar_espacos(candidato_inline)
 
@@ -1450,7 +1450,7 @@ def _eh_rotulo_pagador_inter(linha):
         return False
     if re.search(r"\b(pagador|remetente|origem|quem pagou|dados do pagador)\b", linha_normalizada):
         return True
-    return bool(re.fullmatch(r"@?\s*de\b:?.*", linha_normalizada))
+    return bool(re.fullmatch(r"@?\s*de\b:?.*", linha_normalizada) or re.match(r"^@?\s*de\s+\S", linha_normalizada))
 
 
 def _extrair_nome_mesma_linha_inter(linha):
@@ -1510,6 +1510,23 @@ def _nome_bloqueado_temporario_inter(nome):
         "neiva",
     }
     return nome_normalizado in nomes_bloqueados
+
+
+def _nome_bloqueado_pagador_geral(nome):
+    nome_normalizado = _normalizar_nome_inter(nome)
+    nomes_bloqueados = {
+        "la neiva",
+        "lincoln albuquerque",
+        "lincoln albuquerque neiva",
+        "lincoin albuquerque neiva",
+        "neiva",
+    }
+    return (
+        not nome_normalizado
+        or nome_normalizado in nomes_bloqueados
+        or "nu pagamentos" in nome_normalizado
+        or "nubank" in nome_normalizado
+    )
 
 
 def _extrair_pagador_banpara(linhas):
@@ -1769,11 +1786,12 @@ def _extrair_pagador(texto):
             and "pagador" not in linha_normalizada
             and "quem pagou" not in linha_normalizada
             and not re.fullmatch(r"de\b:?.*", rotulo_normalizado)
+            and not re.match(r"^de\s+\S", rotulo_normalizado)
         ):
             continue
 
         nome_mesma_linha = _linha_apos_rotulo(linha, ["nome"])
-        if nome_mesma_linha:
+        if nome_mesma_linha and not _nome_bloqueado_pagador_geral(nome_mesma_linha):
             return nome_mesma_linha[:160]
 
         bloco = []
@@ -1783,15 +1801,15 @@ def _extrair_pagador(texto):
                 break
             bloco.append(proxima)
 
-        if re.fullmatch(r"de\b:?.*", rotulo_normalizado):
+        if re.fullmatch(r"de\b:?.*", rotulo_normalizado) or re.match(r"^de\s+\S", rotulo_normalizado):
             nome = _extrair_nome_secao_de(linha, bloco)
         else:
             nome = _extrair_nome_no_bloco(bloco)
-        if nome:
+        if nome and not _nome_bloqueado_pagador_geral(nome):
             return nome[:160]
 
     nome = _linha_apos_rotulo(texto, ["nome do pagador", "pagador", "remetente"])
-    return nome[:160] if nome else ""
+    return nome[:160] if nome and not _nome_bloqueado_pagador_geral(nome) else ""
 
 
 def analisar_comprovante_pix(arquivo, debug_prefix=None):
