@@ -1503,9 +1503,6 @@ def clientes_autocomplete(request):
     clientes_qs = Cliente.objects.filter(ativo=True).order_by("nome")
     hoje = timezone.localdate()
 
-    if contexto == "pix_detalhe" and len(normalizar_texto_cliente(termo)) < 3:
-        return JsonResponse({"clientes": []})
-
     if termo:
         if contexto == "pix_detalhe":
             partes = normalizar_texto_cliente(termo).split()
@@ -1513,7 +1510,16 @@ def clientes_autocomplete(request):
             for cliente in clientes_qs:
                 nome_normalizado = normalizar_texto_cliente(cliente.nome)
                 apelido_normalizado = normalizar_texto_cliente(cliente.apelido_nome_conhecido)
-                if all(parte in nome_normalizado or parte in apelido_normalizado for parte in partes):
+                documento_normalizado = normalizar_documento_cliente(cliente.cpf_cnpj)
+                whatsapp_normalizado = normalizar_documento_cliente(cliente.whatsapp or cliente.whatsapp_normalizado)
+                termo_documento = normalizar_documento_cliente(termo)
+                if all(
+                    parte in nome_normalizado
+                    or parte in apelido_normalizado
+                    or (parte.isdigit() and parte in documento_normalizado)
+                    or (parte.isdigit() and parte in whatsapp_normalizado)
+                    for parte in partes
+                ) or (termo_documento and (termo_documento in documento_normalizado or termo_documento in whatsapp_normalizado)):
                     clientes_filtrados.append(cliente)
 
             termo_normalizado = " ".join(partes)
@@ -1534,7 +1540,7 @@ def clientes_autocomplete(request):
                     Q(whatsapp_normalizado__icontains=parte)
                 )
 
-    limite = 8 if contexto == "pix_detalhe" else 12
+    limite = 12 if contexto == "pix_detalhe" else 12
 
     clientes = []
     for cliente in clientes_qs[:limite]:

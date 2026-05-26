@@ -1497,6 +1497,58 @@ class PixRecebidoTests(TestCase):
             self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
             self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
 
+    def test_central_pix_cliente_confirmado_autocomplete_lista_ao_focar(self):
+        Cliente.objects.create(nome="João De Almeida E Silva", ativo=True)
+        Cliente.objects.create(nome="Maria Cliente Ativa", ativo=True)
+        Cliente.objects.create(nome="Cliente Inativo", ativo=False)
+
+        resposta = self.client.get(
+            f"{reverse('estoque:clientes_autocomplete')}?contexto=pix_detalhe",
+            secure=True,
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        nomes = [cliente["nome"] for cliente in resposta.json()["clientes"]]
+        self.assertIn("João De Almeida E Silva", nomes)
+        self.assertIn("Maria Cliente Ativa", nomes)
+        self.assertNotIn("Cliente Inativo", nomes)
+        self.assertLessEqual(len(nomes), 12)
+
+    def test_central_pix_cliente_confirmado_autocomplete_busca_normalizada(self):
+        cliente = Cliente.objects.create(
+            nome="João De Almeida E Silva",
+            apelido_nome_conhecido="Joao Almeida",
+            cpf_cnpj="123.456.789-00",
+            whatsapp="(85) 99999-0000",
+            ativo=True,
+        )
+
+        for termo in ("alm", "joao", "123456", "999990000"):
+            resposta = self.client.get(
+                f"{reverse('estoque:clientes_autocomplete')}?contexto=pix_detalhe&q={termo}",
+                secure=True,
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+            self.assertEqual(resposta.status_code, 200)
+            ids = [item["id"] for item in resposta.json()["clientes"]]
+            self.assertIn(cliente.id, ids)
+
+    def test_central_pix_cliente_confirmado_autocomplete_sem_resultado_nao_confirma_cliente(self):
+        Cliente.objects.create(nome="João De Almeida E Silva", ativo=True)
+
+        resposta = self.client.get(
+            f"{reverse('estoque:clientes_autocomplete')}?contexto=pix_detalhe&q=clienteinexistente",
+            secure=True,
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.json()["clientes"], [])
+        self.assertEqual(PixRecebido.objects.count(), 0)
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
+        self.assertEqual(CreditoCliente.objects.count(), 0)
+
     def test_central_pix_pendente_pode_remover_cliente_confirmado_sem_baixa(self):
         cliente = Cliente.objects.create(nome="João De Almeida E Silva", ativo=True)
         conteudo = b"comprovante pix"
