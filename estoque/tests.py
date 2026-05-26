@@ -1515,6 +1515,39 @@ class PixRecebidoTests(TestCase):
         self.assertNotIn("Cliente Inativo", nomes)
         self.assertLessEqual(len(nomes), 12)
 
+    def test_central_pix_detalhe_carrega_clientes_para_autocomplete_local(self):
+        cliente = Cliente.objects.create(
+            nome="Jo\u00e3o De Almeida E Silva",
+            apelido_nome_conhecido="Almeida",
+            cpf_cnpj="123.456.789-00",
+            whatsapp="(85) 99999-0000",
+            ativo=True,
+        )
+        Cliente.objects.create(nome="Cliente Inativo", ativo=False)
+        pix = PixRecebido.objects.create(
+            nome_pagador="Joao de Almeida E Silva",
+            valor=Decimal("5.00"),
+            data_pagamento=timezone.now(),
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "pixClientesAutocompleteData")
+        clientes = resposta.context["clientes_pix_autocomplete"]
+        item = next(cliente_local for cliente_local in clientes if cliente_local["id"] == cliente.id)
+        self.assertEqual(item["nome"], "Jo\u00e3o De Almeida E Silva")
+        self.assertIn("joao", item["busca"])
+        self.assertIn("almeida", item["busca"])
+        self.assertIn("12345678900", item["busca"])
+        self.assertIn("85999990000", item["busca"])
+        self.assertNotIn("Cliente Inativo", [cliente_local["nome"] for cliente_local in clientes])
+
     def test_central_pix_cliente_confirmado_autocomplete_busca_normalizada(self):
         cliente = Cliente.objects.create(
             nome="João De Almeida E Silva",

@@ -443,10 +443,11 @@
     </section>
   </div>
 </div>
+{{ clientes_pix_autocomplete|json_script:"pixClientesAutocompleteData" }}
 <script>
   (function () {
-    const clientesUrl = "{% url 'estoque:clientes_autocomplete' %}";
     const clienteSugeridoInicial = {% if pix.cliente_sugerido %}{ id: "{{ pix.cliente_sugerido.id }}", nome: "{{ pix.cliente_sugerido.nome|escapejs }}" }{% else %}null{% endif %};
+    const clientesAutocompleteLocal = JSON.parse(document.getElementById("pixClientesAutocompleteData")?.textContent || "[]");
     const clienteSelect = document.getElementById("id_cliente");
     const clienteConfirmadoBusca = document.getElementById("pixClienteConfirmadoBusca");
     const clienteConfirmadoSugestoes = document.getElementById("pixClienteConfirmadoSugestoes");
@@ -457,8 +458,22 @@
     const pixPendenteBaixa = document.querySelector("[data-pix-pendente-baixa='1']");
     const botaoContinuarBaixa = document.querySelector("[data-pix-continuar-baixa]");
     const mensagemPixPendente = "Antes de sair, conclua a baixa deste Pix ou escolha Ignorar Pix sem baixa.";
-    let buscaTimer = null;
+    let buscaFrame = null;
     let liberarSaidaPix = false;
+
+    function normalizarBusca(valor) {
+      return String(valor || "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[.,;:()[\]{}\/\\|_-]+/g, " ")
+        .replace(/\s+/g, " ");
+    }
+
+    function apenasDigitos(valor) {
+      return String(valor || "").replace(/\D/g, "");
+    }
 
     function restaurarValorPixAtual() {
       if (valorInput) valorInput.value = valorInput.defaultValue || "";
@@ -494,7 +509,7 @@
         sugestoesAlvo.appendChild(vazio);
         return;
       }
-      clientesRenderizados.slice(0, 12).forEach(function (cliente) {
+      clientesRenderizados.slice(0, 10).forEach(function (cliente) {
         const botao = document.createElement("button");
         botao.type = "button";
         botao.className = "pix-correction-suggestion";
@@ -506,13 +521,33 @@
       });
     }
 
-    async function buscarClientes(termo, sugestoesAlvo) {
-      const resposta = await fetch(clientesUrl + "?contexto=pix_detalhe&q=" + encodeURIComponent((termo || "").trim()), {
-        headers: { "X-Requested-With": "XMLHttpRequest" },
-      });
-      if (!resposta.ok) return;
-      const dados = await resposta.json();
-      renderizarSugestoes(dados.clientes || [], sugestoesAlvo);
+    function filtrarClientesLocais(termo) {
+      const termoNormalizado = normalizarBusca(termo);
+      const termoDigitos = apenasDigitos(termo);
+      if (!termoNormalizado && !termoDigitos) return clientesAutocompleteLocal.slice(0, 10);
+      const partes = termoNormalizado.split(" ").filter(Boolean);
+      return clientesAutocompleteLocal
+        .filter(function (cliente) {
+          const busca = cliente.busca || "";
+          const textoEncontrado = partes.every(function (parte) {
+            return busca.includes(parte);
+          });
+          const documentoEncontrado = termoDigitos && busca.includes(termoDigitos);
+          return textoEncontrado || documentoEncontrado;
+        })
+        .sort(function (a, b) {
+          const buscaA = a.busca || "";
+          const buscaB = b.busca || "";
+          const aComeca = termoNormalizado && buscaA.startsWith(termoNormalizado);
+          const bComeca = termoNormalizado && buscaB.startsWith(termoNormalizado);
+          if (aComeca !== bComeca) return aComeca ? -1 : 1;
+          return String(a.nome || "").localeCompare(String(b.nome || ""));
+        })
+        .slice(0, 10);
+    }
+
+    function buscarClientes(termo, sugestoesAlvo) {
+      renderizarSugestoes(filtrarClientesLocais(termo), sugestoesAlvo);
     }
 
     restaurarValorPixAtual();
@@ -525,17 +560,17 @@
       if (!nomeConfirmado) clienteConfirmadoBusca.focus();
     }
     clienteConfirmadoBusca?.addEventListener("focus", function () {
-      buscarClientes(clienteConfirmadoBusca.value, clienteConfirmadoSugestoes);
+      buscarClientes("", clienteConfirmadoSugestoes);
     });
     clienteConfirmadoBusca?.addEventListener("click", function () {
-      buscarClientes(clienteConfirmadoBusca.value, clienteConfirmadoSugestoes);
+      buscarClientes("", clienteConfirmadoSugestoes);
     });
     clienteConfirmadoBusca?.addEventListener("input", function () {
       if (clienteSelect) clienteSelect.value = "";
-      window.clearTimeout(buscaTimer);
-      buscaTimer = window.setTimeout(function () {
+      if (buscaFrame) window.cancelAnimationFrame(buscaFrame);
+      buscaFrame = window.requestAnimationFrame(function () {
         buscarClientes(clienteConfirmadoBusca.value, clienteConfirmadoSugestoes);
-      }, 220);
+      });
     });
     clienteSelect?.addEventListener("change", function () {
       preencherCliente(clienteSelect.value, nomeClienteSelecionado());

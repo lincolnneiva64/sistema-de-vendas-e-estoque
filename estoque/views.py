@@ -1552,6 +1552,38 @@ def clientes_autocomplete(request):
     return JsonResponse({"clientes": clientes})
 
 
+def _clientes_pix_autocomplete_local(limite=500):
+    clientes = []
+    clientes_qs = Cliente.objects.filter(ativo=True).order_by("nome").only(
+        "id",
+        "nome",
+        "apelido_nome_conhecido",
+        "cpf_cnpj",
+        "whatsapp",
+        "whatsapp_normalizado",
+        "telefone_alternativo",
+    )[:limite]
+    for cliente in clientes_qs:
+        busca = " ".join(
+            parte
+            for parte in [
+                normalizar_texto_cliente(cliente.nome),
+                normalizar_texto_cliente(cliente.apelido_nome_conhecido),
+                normalizar_documento_cliente(cliente.cpf_cnpj),
+                normalizar_documento_cliente(cliente.whatsapp),
+                normalizar_documento_cliente(cliente.whatsapp_normalizado),
+                normalizar_documento_cliente(cliente.telefone_alternativo),
+            ]
+            if parte
+        )
+        clientes.append({
+            "id": cliente.id,
+            "nome": cliente.nome or "Cliente sem nome",
+            "busca": busca,
+        })
+    return clientes
+
+
 def cliente_cobranca_imagem(request, cliente_id):
     cliente = get_object_or_404(Cliente, pk=cliente_id)
     resumo = _resumo_cliente_venda(cliente)
@@ -2441,6 +2473,7 @@ def central_pix_detalhe(request, pix_id):
             "pix_tem_texto_ocr_util": _pix_tem_texto_ocr_util(pix),
             "pix_google_vision_habilitado": pix_google_vision_habilitado(),
             "modo_conferencia_ocr": modo_conferencia_ocr,
+            "clientes_pix_autocomplete": _clientes_pix_autocomplete_local(),
         },
     )
 
