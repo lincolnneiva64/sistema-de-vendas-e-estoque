@@ -1,7 +1,9 @@
 import json
 import logging
 import mimetypes
+import os
 import re
+import sys
 import textwrap
 import time
 import unicodedata
@@ -124,7 +126,7 @@ def _salvar_falha_ocr_manual(pix, resumo=""):
 
 
 def _analisar_comprovante_pix_principal(arquivo, debug_prefix=None):
-    usar_vision = bool(getattr(settings, "PIX_USAR_GOOGLE_VISION", False))
+    usar_vision = pix_google_vision_habilitado()
     if not usar_vision:
         return analisar_comprovante_pix(arquivo, debug_prefix=debug_prefix)
 
@@ -137,6 +139,21 @@ def _analisar_comprovante_pix_principal(arquivo, debug_prefix=None):
         logger.warning("Google Vision indisponivel; usando OCR local como fallback no ambiente local.")
         return analisar_comprovante_pix(arquivo, debug_prefix=debug_prefix)
     return dados
+
+
+def _bool_config_ativa(valor):
+    if isinstance(valor, bool):
+        return valor
+    return str(valor or "").strip().lower() in {"1", "true", "sim", "yes", "on"}
+
+
+def pix_google_vision_habilitado():
+    valor_settings = getattr(settings, "PIX_USAR_GOOGLE_VISION", None)
+    if valor_settings is not None:
+        return _bool_config_ativa(valor_settings)
+    if "test" in sys.argv:
+        return False
+    return _bool_config_ativa(os.getenv("PIX_USAR_GOOGLE_VISION", ""))
 
 
 def _pix_duplicado_pendente(dados):
@@ -2370,6 +2387,7 @@ def central_pix_detalhe(request, pix_id):
                 }
             ),
             "pix_tem_texto_ocr_util": _pix_tem_texto_ocr_util(pix),
+            "pix_google_vision_habilitado": pix_google_vision_habilitado(),
             "modo_conferencia_ocr": modo_conferencia_ocr,
         },
     )
@@ -2394,6 +2412,7 @@ def central_pix_processar_ocr(request, pix_id):
     try:
         arquivo = _abrir_comprovante_pix(pix)
         nome_arquivo = _nome_arquivo_seguro(arquivo) or nome_arquivo
+        logger.info("[PIX OCR] Google Vision habilitado=%s pix_id=%s", pix_google_vision_habilitado(), pix.id)
         dados = _analisar_comprovante_pix_principal(arquivo, debug_prefix=f"pix_{pix.id}")
     except Exception as exc:
         tempo_ocr = time.monotonic() - inicio_ocr

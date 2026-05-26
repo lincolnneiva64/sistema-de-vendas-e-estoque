@@ -721,6 +721,35 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(dados["data_pagamento"], "2026-04-21T13:05")
         self.assertIn("[Google Vision OCR]", dados["texto_ocr_bruto"])
 
+    def test_analisar_comprovante_pix_google_vision_mercado_pago_extrai_pagador_de(self):
+        texto = (
+            "Comprovante de Pix\n"
+            "23/maio/2026 as 18:55:32\n"
+            "R$ 645\n"
+            "De\n"
+            "Joao de Almeida E Silva\n"
+            "CPF: ***.105.902-**\n"
+            "Mercado Pago\n"
+            "Para\n"
+            "Lincoln Albuquerque Neiva\n"
+        )
+        arquivo = SimpleUploadedFile("mercado-pago.jpg", b"imagem", content_type="image/jpeg")
+
+        with patch("estoque.utils_pix._criar_cliente_google_vision", return_value=self._mock_google_vision_texto(texto)):
+            dados = analisar_comprovante_pix_google_vision(arquivo)
+
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "Joao de Almeida E Silva")
+        self.assertEqual(dados["valor"], "645.00")
+        self.assertEqual(dados["data_pagamento"], "2026-05-23T18:55")
+        self.assertEqual(dados["instituicao_pix"], "Mercado Pago")
+        self.assertIn("[Google Vision OCR]", dados["texto_ocr_bruto"])
+        self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque Neiva")
+
+    def test_pix_google_vision_habilitado_le_variavel_de_ambiente_fora_dos_testes(self):
+        with patch.dict(os.environ, {"PIX_USAR_GOOGLE_VISION": "True"}), patch("sys.argv", ["manage.py", "runserver"]):
+            self.assertTrue(views.pix_google_vision_habilitado())
+
     def test_analisar_comprovante_pix_google_vision_falha_sem_500(self):
         arquivo = SimpleUploadedFile("erro.jpg", b"imagem", content_type="image/jpeg")
 

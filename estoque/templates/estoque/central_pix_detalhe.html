@@ -332,7 +332,13 @@
             {% if pix.comprovante %}
               <form method="post" action="{% url 'estoque:central_pix_processar_ocr' pix.id %}">
                 {% csrf_token %}
-                <button type="submit" class="pix-detail-btn">{% if pix_tem_texto_ocr_util %}Reler comprovante (OCR){% else %}Ler comprovante (OCR){% endif %}</button>
+                <button type="submit" class="pix-detail-btn">
+                  {% if pix_google_vision_habilitado %}
+                    {% if pix_tem_texto_ocr_util %}Reler comprovante com Google Vision{% else %}Ler comprovante com Google Vision{% endif %}
+                  {% else %}
+                    {% if pix_tem_texto_ocr_util %}Reler comprovante (OCR){% else %}Ler comprovante (OCR){% endif %}
+                  {% endif %}
+                </button>
               </form>
             {% endif %}
             {% if not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
