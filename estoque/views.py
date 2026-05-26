@@ -2032,6 +2032,7 @@ def central_pix(request):
     ):
         retorno_url = ""
     central_pix_url = reverse("estoque:central_pix")
+    central_pix_atual_url = request.get_full_path()
     termo_busca_pix = request.GET.get("q", "").strip()
 
     def pix_recebidos_filtrados():
@@ -2091,7 +2092,7 @@ def central_pix(request):
                         "total_pix": len(pix_recebidos),
                         "pix_busca": termo_busca_pix,
                         "voltar_url": retorno_url or reverse("estoque:contas_receber"),
-                        "detalhe_retorno_url": retorno_url or central_pix_url,
+                        "detalhe_retorno_url": central_pix_atual_url,
                     },
                 )
             pix = form.save(commit=False)
@@ -2121,7 +2122,7 @@ def central_pix(request):
             "total_pix": len(pix_recebidos),
             "pix_busca": termo_busca_pix,
             "voltar_url": retorno_url or reverse("estoque:contas_receber"),
-            "detalhe_retorno_url": retorno_url or central_pix_url,
+            "detalhe_retorno_url": central_pix_atual_url,
         },
     )
 

@@ -1356,6 +1356,24 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta_detalhe, "Texto OCR bruto")
         self.assertContains(resposta_detalhe, "Texto tecnico do OCR")
 
+    def test_central_pix_ver_detalhe_retorna_para_central_mesmo_com_next_externo(self):
+        pix = PixRecebido.objects.create(
+            nome_pagador="Pix com retorno central",
+            valor="18.00",
+            instituicao_pix="PagBank",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+        central_url = reverse("estoque:central_pix")
+        contas_url = reverse("estoque:contas_receber")
+        caminho_lista = f"{central_url}?next={contas_url}&q=pagbank"
+
+        resposta_lista = self.client.get(caminho_lista, secure=True)
+
+        detalhe_path = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id})
+        self.assertContains(resposta_lista, f"{detalhe_path}?next=")
+        self.assertContains(resposta_lista, "central-pix")
+        self.assertContains(resposta_lista, "q%3Dpagbank")
+
     def test_central_pix_busca_filtra_pix_registrados(self):
         cliente = Cliente.objects.create(nome="Jo\u00e3o De Almeida E Silva", ativo=True)
         pix_joao = PixRecebido.objects.create(
@@ -1382,8 +1400,9 @@ class PixRecebidoTests(TestCase):
             self.assertNotContains(resposta, "Maria Ignorada")
             self.assertContains(
                 resposta,
-                f'{reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix_joao.id})}?next={reverse("estoque:central_pix")}',
+                f'{reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix_joao.id})}?next=',
             )
+            self.assertContains(resposta, "q%3D")
 
         resposta_ignorado = self.client.get(f"{reverse('estoque:central_pix')}?q=ignorado", secure=True)
         self.assertContains(resposta_ignorado, "Maria Ignorada")
