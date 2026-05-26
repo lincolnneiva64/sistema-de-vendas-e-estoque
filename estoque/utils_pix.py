@@ -25,6 +25,8 @@ OCR_LARGURA_LINHAS = 1000
 OCR_TIMEOUT_LINHA_SEGUNDOS = 2
 OCR_TIMEOUT_DATA_LINHA_SEGUNDOS = 4
 OCR_MAX_LINHAS = 30
+OCR_RENDER_MAX_LINHAS = 10
+OCR_RENDER_TEMPO_TOTAL_SEGUNDOS = 8
 OCR_MAX_DEBUG_LINHAS = 12
 logger = logging.getLogger(__name__)
 
@@ -172,7 +174,10 @@ def _preparar_recorte_linha_ocr(imagem, nome, caixa, candidata_data=False):
     recorte.info["ocr_recorte"] = nome
     recorte.info["ocr_config"] = OCR_CONFIG_LINHA
     recorte.info["ocr_configs"] = [OCR_CONFIG_LINHA, OCR_CONFIG_RAPIDO]
-    recorte.info["ocr_timeout"] = OCR_TIMEOUT_DATA_LINHA_SEGUNDOS if candidata_data else OCR_TIMEOUT_LINHA_SEGUNDOS
+    if OCR_RENDER_MODO_LEVE:
+        recorte.info["ocr_timeout"] = 3 if candidata_data else 2
+    else:
+        recorte.info["ocr_timeout"] = OCR_TIMEOUT_DATA_LINHA_SEGUNDOS if candidata_data else OCR_TIMEOUT_LINHA_SEGUNDOS
     recorte.info["ocr_linha"] = True
     recorte.info["ocr_rapido"] = True
     recorte.info["ocr_candidata_data"] = candidata_data
@@ -315,10 +320,16 @@ def _preparar_recortes_ocr(conteudo):
     usar_recorte_rapido = OCR_RENDER_MODO_LEVE or _imagem_vertical_grande(tamanho_original)
     usar_faixas_linhas = _imagem_vertical_grande(tamanho_original)
     if usar_recorte_rapido:
-        rapido_inicio = max(0, int(altura * 0.04))
-        rapido_fim = min(altura, max(rapido_inicio + 1, int(altura * 0.36)))
-        alternativa_inicio = max(0, int(altura * 0.12))
-        alternativa_fim = min(altura, max(alternativa_inicio + 1, int(altura * 0.48)))
+        if OCR_RENDER_MODO_LEVE:
+            rapido_inicio = max(0, int(altura * 0.02))
+            rapido_fim = min(altura, max(rapido_inicio + 1, int(altura * 0.24)))
+            alternativa_inicio = max(0, int(altura * 0.24))
+            alternativa_fim = min(altura, max(alternativa_inicio + 1, int(altura * 0.50)))
+        else:
+            rapido_inicio = max(0, int(altura * 0.04))
+            rapido_fim = min(altura, max(rapido_inicio + 1, int(altura * 0.36)))
+            alternativa_inicio = max(0, int(altura * 0.12))
+            alternativa_fim = min(altura, max(alternativa_inicio + 1, int(altura * 0.48)))
         recortes_rapidos = []
         if usar_faixas_linhas:
             imagem_faixas = _imagem_intermediaria_faixas_ocr(imagem_original)
@@ -473,6 +484,17 @@ def _extrair_texto_por_linhas_ocr(pytesseract, conteudo, caminho, debug_prefix=N
         _log_diagnostico_ocr(caminho or "arquivo", "linhas deteccao falhou=%s: %s", exc.__class__.__name__, str(exc)[:120])
         return ""
 
+    total_detectado = len(caixas)
+    if OCR_RENDER_MODO_LEVE and len(caixas) > OCR_RENDER_MAX_LINHAS:
+        caixas = caixas[:OCR_RENDER_MAX_LINHAS]
+        _log_diagnostico_ocr(
+            caminho or "arquivo",
+            "linhas limitadas no Render detectadas=%s usadas=%s tempo_limite=%ss",
+            total_detectado,
+            len(caixas),
+            OCR_RENDER_TEMPO_TOTAL_SEGUNDOS,
+        )
+
     _log_diagnostico_ocr(
         caminho or "arquivo",
         "linhas detectadas=%s imagem_base=linhas_1000 base_tamanho=%s",
@@ -488,7 +510,15 @@ def _extrair_texto_por_linhas_ocr(pytesseract, conteudo, caminho, debug_prefix=N
     candidatas_data = _indice_linhas_candidatas_data(caixas)
     for indice, caixa in enumerate(caixas, start=1):
         candidata_data = (indice - 1) in candidatas_data
-        if time.monotonic() - inicio_total > 18 and not candidata_data:
+        tempo_limite = OCR_RENDER_TEMPO_TOTAL_SEGUNDOS if OCR_RENDER_MODO_LEVE else 18
+        if time.monotonic() - inicio_total > tempo_limite and not candidata_data:
+            _log_diagnostico_ocr(
+                caminho or "arquivo",
+                "linhas OCR parou por limite de tempo tempo_total=%.2fs linhas_lidas=%s limite=%ss",
+                time.monotonic() - inicio_total,
+                len(textos),
+                tempo_limite,
+            )
             erros.append("limite de tempo total atingido")
             break
         nome_recorte = f"linha_{indice:02d}"
@@ -585,10 +615,15 @@ def _extrair_texto_comprovante(arquivo, debug_prefix=None):
         return "ERRO OCR: tesseract nao encontrado."
     pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
 
+    inicio_ocr_total = time.monotonic()
     texto_linhas = _extrair_texto_por_linhas_ocr(pytesseract, conteudo, nome or "arquivo", debug_prefix=debug_prefix)
     resultado_linhas = _resultado_comprovante_parcial(texto_linhas) if texto_linhas else None
     if resultado_linhas and (resultado_linhas.get("valor") or resultado_linhas.get("data_pagamento")):
         return texto_linhas
+    if OCR_RENDER_MODO_LEVE and texto_linhas and "limite de tempo total atingido" in texto_linhas:
+        return texto_linhas
+    if OCR_RENDER_MODO_LEVE and time.monotonic() - inicio_ocr_total >= OCR_RENDER_TEMPO_TOTAL_SEGUNDOS:
+        return texto_linhas or "ERRO OCR: limite de tempo total atingido no Render."
 
     try:
         tamanho_original, tamanho_reduzido, recortes = _preparar_recortes_ocr(conteudo)
@@ -596,6 +631,12 @@ def _extrair_texto_comprovante(arquivo, debug_prefix=None):
         return f"ERRO OCR: falha ao abrir imagem ({exc.__class__.__name__})."
 
     _log_diagnostico_ocr(nome or "arquivo", "tamanho original=%s reduzido=%s", tamanho_original, tamanho_reduzido)
+    if OCR_RENDER_MODO_LEVE and not any(nome_recorte == "inteira" for nome_recorte, _imagem, _caixa in recortes):
+        _log_diagnostico_ocr(
+            nome or "arquivo",
+            "OCR inteiro pulado por seguranca no Render recortes=%s",
+            ",".join(nome_recorte for nome_recorte, _imagem, _caixa in recortes),
+        )
 
     textos = []
     erros = []

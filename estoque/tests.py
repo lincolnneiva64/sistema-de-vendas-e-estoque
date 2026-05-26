@@ -773,6 +773,69 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(dados["valor"], "")
         self.assertIn("preencha manualmente", dados["mensagem"].lower())
 
+    def test_analisar_comprovante_pix_render_nao_usa_imagem_inteira_em_imagem_grande(self):
+        arquivo = SimpleUploadedFile(
+            "banpara-grande.png",
+            self._imagem_pix_teste(tamanho=(900, 1800)),
+            content_type="image/png",
+        )
+        recortes_chamados = []
+
+        def falhar_recorte(imagem, _kwargs):
+            recortes_chamados.append(imagem.info.get("ocr_recorte", "inteira"))
+            raise RuntimeError("timeout render")
+
+        pytesseract_fake = self._modulo_pytesseract_fake({
+            "faixa_valor_principal": falhar_recorte,
+            "faixa_valor_alternativa": falhar_recorte,
+            "faixa_data_principal": falhar_recorte,
+            "faixa_data_alternativa": falhar_recorte,
+            "rapido_superior": falhar_recorte,
+            "rapido_meio_superior": falhar_recorte,
+            "inteira": AssertionError("nao deve usar imagem inteira no Render"),
+        })
+
+        with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+            "estoque.utils_pix._resolver_tesseract_cmd",
+            return_value="tesseract",
+        ), patch("estoque.utils_pix.OCR_RENDER_MODO_LEVE", True):
+            dados = analisar_comprovante_pix(arquivo)
+
+        self.assertFalse(dados["ok"])
+        self.assertNotIn("inteira", recortes_chamados)
+        self.assertIn("ERRO OCR", dados["texto_ocr_bruto"])
+
+    def test_analisar_comprovante_pix_render_timeouts_sucessivos_retornam_falha_segura(self):
+        arquivo = SimpleUploadedFile(
+            "banpara-timeout.png",
+            self._imagem_linhas_ocr_teste(),
+            content_type="image/png",
+        )
+
+        def timeout(_imagem, _kwargs):
+            raise RuntimeError("Tesseract process timeout")
+
+        pytesseract_fake = self._modulo_pytesseract_fake({
+            "linha_01": timeout,
+            "linha_02": timeout,
+            "linha_03": timeout,
+            "linha_04": timeout,
+            "linha_05": timeout,
+            "rapido_superior": timeout,
+            "rapido_meio_superior": timeout,
+            "inteira": AssertionError("nao deve usar imagem inteira no Render"),
+        })
+
+        with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+            "estoque.utils_pix._resolver_tesseract_cmd",
+            return_value="tesseract",
+        ), patch("estoque.utils_pix.OCR_RENDER_MODO_LEVE", True):
+            dados = analisar_comprovante_pix(arquivo)
+
+        self.assertFalse(dados["ok"])
+        self.assertEqual(dados["valor"], "")
+        self.assertIn("ERRO OCR", dados["texto_ocr_bruto"])
+
     def test_analisar_comprovante_pix_inter_enviado_preenche_valor_data_sem_pagador(self):
         arquivo = SimpleUploadedFile(
             "comprovante-inter.png",
