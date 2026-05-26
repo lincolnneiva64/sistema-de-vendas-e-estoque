@@ -2074,7 +2074,11 @@ def central_pix_envio_sucesso(request, pix_id):
 
 def _texto_indica_falha_ocr(texto):
     texto_limpo = " ".join(str(texto or "").strip().split())
-    return texto_limpo.startswith("ERRO OCR:") or texto_limpo == "OCR executado, mas nao retornou texto."
+    return (
+        texto_limpo.startswith("ERRO OCR:")
+        or texto_limpo.startswith("[OCR bloqueado")
+        or texto_limpo == "OCR executado, mas nao retornou texto."
+    )
 
 
 def _ocr_tem_dados_aproveitaveis(valor, data_pagamento, instituicao_pix, pagador):
@@ -2409,7 +2413,11 @@ def central_pix_processar_ocr(request, pix_id):
     if _texto_indica_falha_ocr(texto_ocr_bruto) and not dados_aproveitaveis:
         detalhe_erro = str(texto_ocr_bruto or "").strip()
         tempo_ocr = time.monotonic() - inicio_ocr
-        _salvar_falha_ocr_manual(pix, "Falha retornada pelo OCR")
+        if detalhe_erro.startswith("[OCR bloqueado"):
+            pix.texto_ocr_bruto = detalhe_erro
+            pix.save(update_fields=["texto_ocr_bruto", "atualizado_em"])
+        else:
+            _salvar_falha_ocr_manual(pix, "Falha retornada pelo OCR")
         logger.warning(
             "OCR manual Pix retornou falha. pix_id=%s arquivo=%s tempo=%.1fs extraiu_valor=%s extraiu_data=%s erro=%s",
             pix.id,

@@ -599,6 +599,18 @@ class PixRecebidoTests(TestCase):
         imagem.save(buffer, format="PNG")
         return buffer.getvalue()
 
+    def _imagem_texto_denso_teste(self):
+        from PIL import Image, ImageDraw
+
+        imagem = Image.new("RGB", (700, 1500), "white")
+        desenho = ImageDraw.Draw(imagem)
+        for y in range(60, 1280, 28):
+            desenho.rectangle((70, y, 610, y + 5), fill="black")
+            desenho.rectangle((70, y + 10, 420, y + 14), fill="black")
+        buffer = io.BytesIO()
+        imagem.save(buffer, format="PNG")
+        return buffer.getvalue()
+
     def _modulo_pytesseract_fake(self, respostas_por_recorte):
         def image_to_string(imagem, **kwargs):
             recorte = imagem.info.get("ocr_recorte", "inteira")
@@ -804,6 +816,57 @@ class PixRecebidoTests(TestCase):
         self.assertFalse(dados["ok"])
         self.assertNotIn("inteira", recortes_chamados)
         self.assertIn("ERRO OCR", dados["texto_ocr_bruto"])
+
+    def test_analisar_comprovante_pix_render_bloqueia_imagem_densa_antes_do_tesseract(self):
+        arquivo = SimpleUploadedFile(
+            "banpara-denso.png",
+            self._imagem_texto_denso_teste(),
+            content_type="image/png",
+        )
+        pytesseract_fake = self._modulo_pytesseract_fake({
+            "inteira": AssertionError("nao deve chamar Tesseract para imagem densa no Render"),
+        })
+
+        with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+            "estoque.utils_pix.OCR_RENDER_MODO_LEVE",
+            True,
+        ), self.assertLogs("estoque.utils_pix", level="WARNING") as logs:
+            dados = analisar_comprovante_pix(arquivo)
+
+        self.assertFalse(dados["ok"])
+        self.assertEqual(dados["valor"], "")
+        self.assertIn("OCR bloqueado por seguran", dados["texto_ocr_bruto"])
+        self.assertIn("OCR bloqueado por seguranca no Render antes do Tesseract", "\n".join(logs.output))
+
+    def test_detalhe_pix_processar_ocr_render_bloqueado_volta_sem_500(self):
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            pix = PixRecebido.objects.create(
+                valor="0.00",
+                status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+                texto_ocr_bruto="OCR pendente",
+                comprovante=SimpleUploadedFile("banpara-denso.png", self._imagem_texto_denso_teste(), content_type="image/png"),
+            )
+            pytesseract_fake = self._modulo_pytesseract_fake({
+                "inteira": AssertionError("nao deve chamar Tesseract para imagem densa no Render"),
+            })
+
+            with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+                "estoque.utils_pix.OCR_RENDER_MODO_LEVE",
+                True,
+            ):
+                resposta = self.client.post(
+                    reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
+                    secure=True,
+                    follow=True,
+                )
+
+            self.assertEqual(resposta.status_code, 200)
+            pix.refresh_from_db()
+            self.assertTrue(pix.comprovante)
+            self.assertEqual(str(pix.valor), "0.00")
+            self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
+            self.assertIn("OCR bloqueado por seguran", pix.texto_ocr_bruto)
+            self.assertContains(resposta, "OCR nao conseguiu ler todos os dados")
 
     def test_analisar_comprovante_pix_render_timeouts_sucessivos_retornam_falha_segura(self):
         arquivo = SimpleUploadedFile(

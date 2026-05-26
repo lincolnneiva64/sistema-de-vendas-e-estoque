@@ -28,6 +28,7 @@ OCR_MAX_LINHAS = 30
 OCR_RENDER_MAX_LINHAS = 10
 OCR_RENDER_TEMPO_TOTAL_SEGUNDOS = 8
 OCR_MAX_DEBUG_LINHAS = 12
+OCR_RENDER_BLOQUEADO_DENSO = "[OCR bloqueado por segurança no Render: comprovante muito denso/pesado para leitura automática]"
 logger = logging.getLogger(__name__)
 
 
@@ -129,6 +130,71 @@ def _reduzir_imagem_ocr(imagem):
         )
         imagem = imagem.resize(novo_tamanho, Image.LANCZOS)
     return imagem
+
+
+def _diagnostico_imagem_densa_render(conteudo, caminho):
+    try:
+        imagem = Image.open(BytesIO(conteudo))
+        imagem = ImageOps.exif_transpose(imagem).convert("L")
+    except Exception as exc:
+        _log_diagnostico_ocr(caminho or "arquivo", "preflight Render falhou=%s: %s", exc.__class__.__name__, str(exc)[:100])
+        return False
+
+    largura_original, altura_original = imagem.size
+    if largura_original <= 0 or altura_original <= 0:
+        return False
+
+    escala = min(320 / float(largura_original), 520 / float(altura_original), 1)
+    if escala < 1:
+        imagem = imagem.resize(
+            (max(1, int(largura_original * escala)), max(1, int(altura_original * escala))),
+            Image.LANCZOS,
+        )
+    imagem = ImageOps.autocontrast(imagem, cutoff=1)
+    largura, altura = imagem.size
+    pixels = imagem.load()
+
+    escuros_total = 0
+    linhas_ativas = []
+    limite_linha = max(2, int(largura * 0.012))
+    for y in range(altura):
+        escuros_linha = 0
+        for x in range(largura):
+            if pixels[x, y] < 145:
+                escuros_linha += 1
+        escuros_total += escuros_linha
+        if escuros_linha >= limite_linha:
+            linhas_ativas.append(y)
+
+    grupos_linhas = 0
+    anterior = None
+    for y in linhas_ativas:
+        if anterior is None or y - anterior > 3:
+            grupos_linhas += 1
+        anterior = y
+
+    densidade = escuros_total / float(max(1, largura * altura))
+    proporcao = altura_original / float(largura_original)
+    bloquear = (
+        altura_original >= 1100
+        and largura_original >= 400
+        and proporcao >= 1.45
+        and grupos_linhas >= 28
+        and 0.008 <= densidade <= 0.28
+    )
+    _log_diagnostico_ocr(
+        caminho or "arquivo",
+        "preflight Render tamanho_original=%s reduzido=%s proporcao=%.2f densidade=%.4f linhas=%s bloquear=%s",
+        (largura_original, altura_original),
+        (largura, altura),
+        proporcao,
+        densidade,
+        grupos_linhas,
+        bloquear,
+    )
+    if bloquear:
+        _log_diagnostico_ocr(caminho or "arquivo", "OCR bloqueado por seguranca no Render antes do Tesseract")
+    return bloquear
 
 
 def _imagem_intermediaria_faixas_ocr(imagem):
@@ -605,6 +671,9 @@ def _extrair_texto_comprovante(arquivo, debug_prefix=None):
     if content_type.startswith("text/") or nome.endswith(".txt"):
         return conteudo.decode("utf-8", errors="ignore")
 
+    if OCR_RENDER_MODO_LEVE and _diagnostico_imagem_densa_render(conteudo, nome or "arquivo"):
+        return OCR_RENDER_BLOQUEADO_DENSO
+
     try:
         import pytesseract
     except ImportError:
@@ -790,7 +859,11 @@ def _extrair_texto_comprovante(arquivo, debug_prefix=None):
 
 def _texto_eh_diagnostico_ocr(texto):
     texto_limpo = _normalizar_espacos(texto)
-    return texto_limpo.startswith("ERRO OCR:") or texto_limpo == "OCR executado, mas nao retornou texto."
+    return (
+        texto_limpo.startswith("ERRO OCR:")
+        or texto_limpo.startswith("[OCR bloqueado")
+        or texto_limpo == "OCR executado, mas nao retornou texto."
+    )
 
 
 def _texto_para_parse_ocr(texto):
