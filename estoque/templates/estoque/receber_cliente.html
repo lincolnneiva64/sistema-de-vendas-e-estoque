@@ -57,6 +57,11 @@
   }
   .rc-message.success { background: #ecfdf3; border-color: #bbf7d0; color: #166534; }
   .rc-message.error { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+  .rc-pix-safe-actions {
+    margin: 9px 10px 0; border: 1px solid #fdba74; border-radius: 9px; background: #fff7ed;
+    color: #9a3412; padding: 9px 10px; font-size: 0.84rem; font-weight: 850; line-height: 1.35;
+  }
+  .rc-pix-safe-actions .rc-actions { margin-top: 8px; }
   .rc-confirmacao-sucesso {
     border: 2px solid #4ade80; border-left: 8px solid #16a34a; border-radius: 12px;
     background: #dcfce7; color: #14532d;
@@ -358,14 +363,6 @@
             {% if pix_recebido_escolhido %}
               <div class="rc-alert">
                 Baixa vinculada ao Pix #{{ pix_recebido_escolhido.id }}. Ao confirmar, este Pix será marcado como baixado e qualquer Pix parecido pendente será marcado automaticamente como duplicado/inativo.
-                {% if total_contas == 0 %}
-                  <br>Este cliente nao tem contas abertas. Voce pode trocar o cliente, remover o vinculo ou manter este Pix pendente para revisao.
-                {% endif %}
-                <div class="rc-actions" style="margin-top: 8px;">
-                  <a href="{{ pix_detalhe_url }}" class="rc-btn">Voltar ao Pix</a>
-                  <a href="{{ pix_detalhe_url }}" class="rc-btn">Trocar cliente</a>
-                  <button type="submit" form="pixRemoverClienteConfirmadoForm" class="rc-btn">Remover cliente confirmado{% if total_contas == 0 %} e manter pendente{% endif %}</button>
-                </div>
               </div>
             {% endif %}
             <div class="rc-form">
@@ -535,6 +532,20 @@
             </div>
           {% else %}
             <div class="rc-empty">Nenhuma conta aberta para este cliente.</div>
+          {% endif %}
+          {% if pix_recebido_escolhido %}
+            <div class="rc-pix-safe-actions">
+              {% if total_contas == 0 %}
+                Este cliente nao tem contas abertas. Voce pode trocar o cliente, remover o vinculo ou manter este Pix pendente para revisao.
+              {% else %}
+                Se este Pix estiver com cliente incorreto, volte ao detalhe para revisar antes de confirmar a baixa.
+              {% endif %}
+              <div class="rc-actions">
+                <a href="{{ pix_detalhe_url }}" class="rc-btn">Voltar ao Pix</a>
+                <a href="{{ pix_detalhe_url }}" class="rc-btn">Trocar cliente</a>
+                <button type="submit" form="pixRemoverClienteConfirmadoForm" class="rc-btn">Remover cliente confirmado{% if total_contas == 0 %} e manter pendente{% endif %}</button>
+              </div>
+            </div>
           {% endif %}
           <div class="rc-saldo-total">
             <span>Saldo atual em aberto: R$ {{ total_em_aberto|floatformat:2 }}</span>
