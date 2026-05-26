@@ -1641,6 +1641,23 @@ def _extrair_nome_secao_de(linha_rotulo, bloco):
     return ""
 
 
+def _extrair_nome_por_contexto_pagador(bloco):
+    termos_contexto = r"\b(cpf|cnpj|instituicao|instituig\w*|banco|agencia|conta|chave pix)\b"
+    for indice, linha in enumerate(bloco):
+        linha_normalizada = _normalizar_rotulo_ocr(linha)
+        if re.fullmatch(r"(nome|pagador|remetente|origem|dados do pagador)", linha_normalizada):
+            continue
+
+        candidato = _limpar_nome_pagador_ocr(linha)
+        if not candidato or _nome_bloqueado_pagador_geral(candidato):
+            continue
+
+        vizinhas = " ".join(bloco[max(0, indice - 2):indice] + bloco[indice + 1:indice + 4])
+        if re.search(termos_contexto, _normalizar_rotulo_ocr(vizinhas)):
+            return candidato
+    return ""
+
+
 def _eh_comprovante_banco_inter(texto):
     texto_normalizado = _normalizar_linha(_sem_acentos(texto))
     if re.search(r"\b(nu pagamentos|nubank\.com\.br)\b", texto_normalizado):
@@ -2029,6 +2046,8 @@ def _extrair_pagador(texto):
             nome = _extrair_nome_secao_de(linha, bloco)
         else:
             nome = _extrair_nome_no_bloco(bloco)
+        if not nome:
+            nome = _extrair_nome_por_contexto_pagador(bloco)
         if nome and not _nome_bloqueado_pagador_geral(nome):
             return nome[:160]
 

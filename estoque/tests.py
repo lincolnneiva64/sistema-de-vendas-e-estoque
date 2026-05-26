@@ -722,6 +722,32 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(dados["data_pagamento"], "2026-04-21T13:05")
         self.assertIn("[Google Vision OCR]", dados["texto_ocr_bruto"])
 
+    def test_analisar_comprovante_pix_google_vision_nubank_extrai_pagador_origem_por_contexto(self):
+        texto = (
+            "NU\n"
+            "Comprovante de transferencia\n"
+            "21 ABR 2026 - 13:05:01\n"
+            "Valor R$ 172,00\n"
+            "Destino\n"
+            "Nome Lincoln Albuquerque Neiva\n"
+            "Origem\n"
+            "Juliana Cotrim Cardoso\n"
+            "CPF ***.123.456-**\n"
+            "Instituicao NU PAGAMENTOS - IP\n"
+        )
+        arquivo = SimpleUploadedFile("nubank.jpg", b"imagem", content_type="image/jpeg")
+
+        with patch("estoque.utils_pix._criar_cliente_google_vision", return_value=self._mock_google_vision_texto(texto)):
+            dados = analisar_comprovante_pix_google_vision(arquivo)
+
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "Juliana Cotrim Cardoso")
+        self.assertEqual(dados["valor"], "172.00")
+        self.assertEqual(dados["data_pagamento"], "2026-04-21T13:05")
+        self.assertEqual(dados["instituicao_pix"], "Nubank")
+        self.assertIn("[Google Vision OCR]", dados["texto_ocr_bruto"])
+        self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque Neiva")
+
     def test_analisar_comprovante_pix_google_vision_mercado_pago_extrai_pagador_de(self):
         texto = (
             "Comprovante de Pix\n"
