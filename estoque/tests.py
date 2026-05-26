@@ -1686,7 +1686,7 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
         self.assertEqual(CreditoCliente.objects.count(), 0)
 
-    def test_detalhe_pix_com_foco_cliente_abre_marcador_do_autocomplete(self):
+    def test_detalhe_pix_com_foco_cliente_foca_sem_abrir_autocomplete(self):
         pix = PixRecebido.objects.create(
             nome_pagador="Cliente Teste",
             valor=Decimal("5.00"),
@@ -1709,6 +1709,13 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta_sem_foco, "const focarClienteConfirmado = false;")
         self.assertContains(resposta_com_foco, "const focarClienteConfirmado = true;")
         self.assertContains(resposta_com_foco, "clienteConfirmadoBusca.select();")
+        self.assertContains(resposta_com_foco, 'addEventListener("click"')
+        self.assertContains(resposta_com_foco, 'addEventListener("input"')
+        conteudo = resposta_com_foco.content.decode()
+        bloco_foco = conteudo.split("if (focarClienteConfirmado && clienteConfirmadoBusca)", 1)[1]
+        bloco_foco = bloco_foco.split('document.querySelectorAll("form")', 1)[0]
+        self.assertNotIn("buscarClientes", bloco_foco)
+        self.assertNotIn('addEventListener("focus"', conteudo)
 
     def test_detalhe_pix_processar_ocr_com_erro_mantem_comprovante_salvo(self):
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):

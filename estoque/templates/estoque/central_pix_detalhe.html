@@ -558,13 +558,14 @@
     if (clienteConfirmadoBusca) {
       const nomeConfirmado = nomeClienteSelecionado();
       clienteConfirmadoBusca.value = nomeConfirmado || "";
-      if (!nomeConfirmado) clienteConfirmadoBusca.focus();
     }
-    clienteConfirmadoBusca?.addEventListener("focus", function () {
-      buscarClientes("", clienteConfirmadoSugestoes);
-    });
     clienteConfirmadoBusca?.addEventListener("click", function () {
       buscarClientes("", clienteConfirmadoSugestoes);
+    });
+    clienteConfirmadoBusca?.addEventListener("keydown", function (evento) {
+      if (evento.key === "ArrowDown" || evento.key === "Enter") {
+        buscarClientes(clienteConfirmadoBusca.value, clienteConfirmadoSugestoes);
+      }
     });
     clienteConfirmadoBusca?.addEventListener("input", function () {
       if (clienteSelect) clienteSelect.value = "";
@@ -581,7 +582,6 @@
         clienteConfirmadoBusca.scrollIntoView({ behavior: "smooth", block: "center" });
         clienteConfirmadoBusca.focus({ preventScroll: true });
         clienteConfirmadoBusca.select();
-        buscarClientes("", clienteConfirmadoSugestoes);
       }, 80);
     }
     document.querySelectorAll("form").forEach(function (formulario) {
