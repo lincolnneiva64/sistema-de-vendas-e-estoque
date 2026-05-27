@@ -61,6 +61,15 @@ def _normalizar_rotulo_ocr(linha):
     return re.sub(r"^[^\w]+", "", linha_normalizada).strip()
 
 
+def _linha_tem_mes_ano_hora(linha):
+    linha_normalizada = _normalizar_linha(_sem_acentos(linha))
+    meses = r"jan(?:eiro)?|fev(?:ereiro)?|mar(?:co)?|abr(?:il)?|mai(?:o)?|jun(?:ho)?|jul(?:ho)?|ago(?:sto)?|set(?:embro)?|out(?:ubro)?|nov(?:embro)?|dez(?:embro)?"
+    return bool(
+        re.search(rf"\b(?:{meses})\b\s+(?:de\s+)?\d{{4}}\b", linha_normalizada)
+        and re.search(r"\b\d{1,2}\s*(?::|h)\s*\d{2}", linha_normalizada)
+    )
+
+
 def _eh_linha_bloqueada_para_nome(linha):
     linha_normalizada = _normalizar_linha(linha)
     if not linha_normalizada:
@@ -76,9 +85,11 @@ def _eh_linha_bloqueada_para_nome(linha):
     linha_normalizada = _normalizar_linha(_sem_acentos(linha))
     if not linha_normalizada:
         return True
+    if _linha_tem_mes_ano_hora(linha_normalizada):
+        return True
     if "transferencia" in linha_normalizada and re.search(r"\b\d{1,2}\s+[a-z]{3,9}\s+\d{4}\b", linha_normalizada):
         return True
-    if re.search(r"^(cpf|cnpj|instituicao|banco|agencia|conta|transacao|id|para|tipo de transferencia|tipo de conta|comprovante|valor|chave|codigo|autenticacao)\b", linha_normalizada):
+    if re.search(r"^(cpf|cnpj|instituicao|banco|agencia|conta|transacao|id|para|tipo de transferencia|tipo de conta|comprovante|valor|chave|codigo|autenticacao|pix pagamento|dados da transacao)\b", linha_normalizada):
         return True
     if re.search(r"\b(nu pagamentos|mercado pago|pagbank|pagseguro|itau|unibanco)\b", linha_normalizada):
         return True
@@ -1224,7 +1235,10 @@ def _extrair_pagador_caixa_tem(linhas):
         return ""
 
     nome = _valor_de_rotulo_no_bloco(bloco, "nome")
-    return nome[:160] if _parece_nome_pessoa(nome) else ""
+    if not nome:
+        nome = _extrair_nome_no_bloco(bloco)
+    nome = _limpar_nome_pagador_ocr(nome)
+    return nome[:160] if nome and not _nome_bloqueado_pagador_geral(nome) else ""
 
 
 def _extrair_instituicao_caixa_tem(linhas):
@@ -1809,6 +1823,8 @@ def _nome_bloqueado_temporario_inter(nome):
 
 def _nome_bloqueado_pagador_geral(nome):
     nome_normalizado = _normalizar_nome_inter(nome)
+    if _linha_tem_mes_ano_hora(nome):
+        return True
     if "transferencia" in nome_normalizado and re.search(r"\b\d{1,2}\s+[a-z]{3,9}\s+\d{4}\b", nome_normalizado):
         return True
     nomes_bloqueados = {

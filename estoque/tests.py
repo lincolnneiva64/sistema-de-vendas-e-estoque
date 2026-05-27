@@ -3099,6 +3099,39 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(dados["data_pagamento"], "2026-05-04T10:49")
         self.assertRegex(dados["instituicao_pix"], r"Nubank|NU PAGAMENTOS")
 
+    def test_analisar_comprovante_pix_caixa_tem_quem_vai_enviar_nao_usa_data(self):
+        conteudo = (
+            "Pix Pagamento\n"
+            "17 de maio de 2026 \u00e0s 08:19:21\n"
+            "Valor\n"
+            "R$ 826,62\n"
+            "Quem vai receber\n"
+            "Nome\n"
+            "Lincoln Albuquerque Neiva\n"
+            "CPF/CNPJ\n"
+            "***.319.532-**\n"
+            "Banco\n"
+            "NU PAGAMENTOS S.A.\n"
+            "Quem vai enviar\n"
+            "Nome\n"
+            "ELIANA NAZARE DA SILVA FERREIRA\n"
+            "CPF/CNPJ\n"
+            "***.020.762-**\n"
+            "Banco\n"
+            "Caixa Econ\u00f4mica Federal\n"
+            "Dados da transa\u00e7\u00e3o\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante.txt", conteudo, content_type="text/plain")
+
+        dados = analisar_comprovante_pix(arquivo)
+
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "ELIANA NAZARE DA SILVA FERREIRA")
+        self.assertNotIn("maio de 2026", dados["pagador"].lower())
+        self.assertEqual(dados["valor"], "826.62")
+        self.assertEqual(dados["data_pagamento"], "2026-05-17T08:19")
+        self.assertRegex(dados["instituicao_pix"], r"Caixa|Caixa Econ")
+
     def test_analisar_comprovante_pix_nubank_monta_pagador_origem_nome_quebrado(self):
         conteudo = (
             "Destino\n"
