@@ -76,6 +76,8 @@ def _eh_linha_bloqueada_para_nome(linha):
     linha_normalizada = _normalizar_linha(_sem_acentos(linha))
     if not linha_normalizada:
         return True
+    if "transferencia" in linha_normalizada and re.search(r"\b\d{1,2}\s+[a-z]{3,9}\s+\d{4}\b", linha_normalizada):
+        return True
     if re.search(r"^(cpf|cnpj|instituicao|banco|agencia|conta|transacao|id|para|tipo de transferencia|tipo de conta|comprovante|valor|chave|codigo|autenticacao)\b", linha_normalizada):
         return True
     if re.search(r"\b(nu pagamentos|mercado pago|pagbank|pagseguro|itau|unibanco)\b", linha_normalizada):
@@ -1807,6 +1809,8 @@ def _nome_bloqueado_temporario_inter(nome):
 
 def _nome_bloqueado_pagador_geral(nome):
     nome_normalizado = _normalizar_nome_inter(nome)
+    if "transferencia" in nome_normalizado and re.search(r"\b\d{1,2}\s+[a-z]{3,9}\s+\d{4}\b", nome_normalizado):
+        return True
     nomes_bloqueados = {
         "de",
         "la neiva",
@@ -2037,6 +2041,11 @@ def _extrair_pagador_nubank_origem_nome_quebrado(texto, linhas):
             if proxima_normalizada == "nome":
                 encontrou_nome = True
                 continue
+            nome_mesma_linha = _linha_apos_rotulo(proxima, ["nome"])
+            if nome_mesma_linha:
+                nome = _limpar_nome_pagador_ocr(nome_mesma_linha)
+                if nome and not _nome_bloqueado_pagador_geral(nome):
+                    return nome[:160]
             if not _parece_nome_pessoa(proxima) and not (encontrou_nome and re.fullmatch(r"[^\W\d_]{2,}", proxima)):
                 continue
             if not encontrou_nome and not primeira_parte:
@@ -2048,6 +2057,11 @@ def _extrair_pagador_nubank_origem_nome_quebrado(texto, linhas):
         if primeira_parte and segunda_parte and encontrou_instituicao:
             nome = _limpar_nome_pagador_ocr(f"{primeira_parte} {segunda_parte}")
             if nome:
+                return nome[:160]
+
+        if encontrou_nome and segunda_parte and encontrou_instituicao:
+            nome = _limpar_nome_pagador_ocr(segunda_parte)
+            if nome and not _nome_bloqueado_pagador_geral(nome):
                 return nome[:160]
     return ""
 
