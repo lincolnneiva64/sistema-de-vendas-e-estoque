@@ -203,21 +203,31 @@
     border-color: #22c55e; background: #f0fdf4; color: #14532d;
   }
   .pix-cliente-busca.pix-cliente-alerta {
-    border-color: #f59e0b;
-    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.14);
+    border-color: #f97316;
+    background: #fff7ed;
+    box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.22);
   }
   .pix-cliente-alerta-texto {
     display: none;
-    color: #92400e;
-    background: #fffbeb;
-    border: 1px solid #fde68a;
+    color: #7c2d12;
+    background: #ffedd5;
+    border: 2px solid #fb923c;
     border-radius: 7px;
-    padding: 5px 7px;
-    font-size: 0.7rem;
-    font-weight: 850;
+    padding: 7px 9px;
+    font-size: 0.78rem;
+    font-weight: 950;
     line-height: 1.25;
   }
   .pix-cliente-alerta-texto.visivel { display: block; }
+  .pix-cliente-alerta-forte {
+    animation: pixClienteAlertaPulso 0.75s ease-in-out 3;
+  }
+  .pix-cliente-sugerido.pix-cliente-alerta-forte {
+    border: 2px solid #fb923c;
+    border-radius: 8px;
+    background: #ffedd5;
+    padding: 6px;
+  }
   .pix-cliente-sugestoes { display: grid; gap: 4px; }
   .pix-cliente-sugestao {
     border: 1px solid #dcfce7; border-radius: 7px; background: #fff;
@@ -232,6 +242,16 @@
     border: 1px solid #86efac; border-radius: 7px; background: #fff;
     color: #166534; padding: 4px 7px; font: inherit; font-size: 0.74rem;
     font-weight: 900; cursor: pointer;
+  }
+  .pix-mini-btn.pix-confirmar-alerta {
+    border-color: #ea580c;
+    background: #f97316;
+    color: #fff;
+    box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.22);
+  }
+  @keyframes pixClienteAlertaPulso {
+    0%, 100% { transform: translateY(0); }
+    45% { transform: translateY(-1px); box-shadow: 0 0 0 5px rgba(249, 115, 22, 0.28); }
   }
   .pix-alert { border-radius: 9px; padding: 7px 9px; margin-bottom: 7px; font-size: 0.84rem; font-weight: 850; }
   .pix-alert.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
@@ -448,7 +468,7 @@
                     <button type="button" class="pix-mini-btn" id="pixConfirmarClienteSugerido">Confirmar este cliente</button>
                   </div>
                   <div class="pix-cliente-sugestoes" id="pixClienteSugestoes"></div>
-                  <div class="pix-cliente-alerta-texto" id="pixClienteAlerta">Pix pode ser salvo sem cliente. Selecione o cliente antes de usar na baixa.</div>
+                  <div class="pix-cliente-alerta-texto" id="pixClienteAlerta">Confirme o cliente antes de salvar o Pix.</div>
                 </div>
               {% endif %}
               {% for error in field.errors %}
@@ -613,6 +633,7 @@
     let buscaTimer = null;
     let analiseAtualId = 0;
     let comprovantePreviewUrl = "";
+    let clienteAlertaTimer = null;
 
     function mostrarFeedback(texto, tipo) {
       if (!feedback) return;
@@ -658,17 +679,30 @@
     function mostrarErroCliente() {
       if (!clienteAlerta) return;
       clienteAlerta.textContent = clienteSugeridoId
-        ? "Cliente sugerido ainda nao confirmado. O Pix pode ser salvo como pendente."
-        : "Pix salvo como pendente. Selecione o cliente antes de usar na baixa.";
+        ? "⚠️ Confirme este cliente antes de salvar o Pix."
+        : "Busque e confirme um cliente antes de salvar o Pix.";
       clienteAlerta.classList.add("visivel");
       clienteBuscaArea?.classList.add("pix-cliente-alerta");
-      clienteBusca?.scrollIntoView({ behavior: "smooth", block: "center" });
-      clienteBusca?.focus({ preventScroll: true });
+      if (clienteSugeridoId) {
+        clienteSugerido?.classList.add("pix-cliente-alerta-forte");
+        confirmarClienteSugerido?.classList.add("pix-confirmar-alerta", "pix-cliente-alerta-forte");
+        window.clearTimeout(clienteAlertaTimer);
+        clienteAlertaTimer = window.setTimeout(function () {
+          clienteSugerido?.classList.remove("pix-cliente-alerta-forte");
+          confirmarClienteSugerido?.classList.remove("pix-cliente-alerta-forte");
+        }, 2600);
+      }
+      const alvo = clienteSugeridoId ? confirmarClienteSugerido : clienteBusca;
+      alvo?.scrollIntoView({ behavior: "smooth", block: "center" });
+      alvo?.focus({ preventScroll: true });
     }
 
     function limparErroCliente() {
       clienteAlerta?.classList.remove("visivel");
       clienteBuscaArea?.classList.remove("pix-cliente-alerta");
+      clienteSugerido?.classList.remove("pix-cliente-alerta-forte");
+      confirmarClienteSugerido?.classList.remove("pix-confirmar-alerta", "pix-cliente-alerta-forte");
+      window.clearTimeout(clienteAlertaTimer);
     }
 
     function comprovanteSelecionado() {
@@ -918,6 +952,17 @@
         mostrarFeedback("Informe o valor do Pix antes de salvar.", "warning");
         valor?.focus();
         valor?.select();
+        return;
+      }
+      if (!clienteConfirmadoValido()) {
+        event.preventDefault();
+        mostrarErroCliente();
+        mostrarFeedback(
+          clienteSugeridoId
+            ? "Confirme o cliente sugerido antes de salvar o Pix."
+            : "Busque e confirme um cliente antes de salvar o Pix.",
+          "warning"
+        );
         return;
       }
       if (!pixSubmit) return;

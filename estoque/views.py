@@ -125,19 +125,54 @@ def _salvar_falha_ocr_manual(pix, resumo=""):
     pix.save(update_fields=["texto_ocr_bruto", "atualizado_em"])
 
 
+def _pix_ocr_local_fallback_permitido():
+    return _bool_config_ativa(os.getenv("PIX_PERMITIR_OCR_LOCAL_FALLBACK", ""))
+
+
+def _resultado_google_vision_indisponivel(motivo):
+    detalhe = str(motivo or "Google Vision nao configurado").strip()
+    texto = f"[Google Vision indisponivel]\n{detalhe[:500]}"
+    return {
+        "ok": False,
+        "pagador": "",
+        "valor": "",
+        "data_pagamento": "",
+        "instituicao_pix": "",
+        "debug_data_pagamento": "Data enviada ao frontend: nao reconhecida",
+        "texto_extraido": "",
+        "texto_ocr_bruto": texto,
+        "mensagem": "Leitura automatica nao realizada. Configure o Google Vision ou preencha os dados manualmente.",
+        "google_vision_erro": True,
+        "google_vision_configurado": False,
+    }
+
+
+def _arquivo_pix_eh_texto(arquivo):
+    nome = (getattr(arquivo, "name", "") or "").lower()
+    content_type = (getattr(arquivo, "content_type", "") or "").lower()
+    return content_type.startswith("text/") or nome.endswith(".txt")
+
+
 def _analisar_comprovante_pix_principal(arquivo, debug_prefix=None):
-    usar_vision = pix_google_vision_habilitado()
-    if not usar_vision:
+    if _arquivo_pix_eh_texto(arquivo):
+        logger.info("Leitura automatica Pix usando texto enviado, sem OCR local de imagem.")
         return analisar_comprovante_pix(arquivo, debug_prefix=debug_prefix)
 
+    usar_vision = pix_google_vision_habilitado()
+    if not usar_vision:
+        if _pix_ocr_local_fallback_permitido():
+            logger.warning("OCR local fallback permitido por PIX_PERMITIR_OCR_LOCAL_FALLBACK; usando OCR local.")
+            return analisar_comprovante_pix(arquivo, debug_prefix=debug_prefix)
+        logger.warning("Leitura automatica Pix nao realizada: Google Vision nao configurado e fallback local desativado.")
+        return _resultado_google_vision_indisponivel("Google Vision nao configurado e fallback local desativado.")
+
+    logger.info("Leitura automatica Pix usando Google Vision.")
     dados = analisar_comprovante_pix_google_vision(arquivo)
-    if (
-        dados.get("google_vision_erro")
-        and not dados.get("google_vision_configurado")
-        and not OCR_RENDER_MODO_LEVE
-    ):
-        logger.warning("Google Vision indisponivel; usando OCR local como fallback no ambiente local.")
+    if dados.get("google_vision_erro") and _pix_ocr_local_fallback_permitido():
+        logger.warning("Google Vision falhou; usando OCR local fallback permitido por PIX_PERMITIR_OCR_LOCAL_FALLBACK.")
         return analisar_comprovante_pix(arquivo, debug_prefix=debug_prefix)
+    if dados.get("google_vision_erro"):
+        logger.warning("Leitura automatica Pix nao realizada por falha do Google Vision; fallback local desativado.")
     return dados
 
 
@@ -2088,6 +2123,22 @@ def central_pix(request):
         if form.is_valid():
             dados_pix = dict(form.cleaned_data)
             dados_pix["instituicao_pix"] = (request.POST.get("instituicao_pix") or "").strip()[:80]
+            if not dados_pix.get("cliente"):
+                form.add_error("cliente", "Confirme um cliente antes de salvar o Pix.")
+                messages.warning(request, "Busque e confirme um cliente antes de salvar o Pix.")
+                pix_recebidos = pix_recebidos_filtrados()
+                return render(
+                    request,
+                    "estoque/central_pix.html",
+                    {
+                        "form": form,
+                        "pix_recebidos": pix_recebidos,
+                        "total_pix": len(pix_recebidos),
+                        "pix_busca": termo_busca_pix,
+                        "voltar_url": retorno_url or reverse("estoque:contas_receber"),
+                        "detalhe_retorno_url": central_pix_atual_url,
+                    },
+                )
             pix_duplicado_baixado = _pix_duplicado_baixado(dados_pix)
             pix_duplicado_pendente = None if pix_duplicado_baixado else _pix_duplicado_pendente(dados_pix)
             if pix_duplicado_pendente:
@@ -2230,6 +2281,7 @@ def _texto_indica_falha_ocr(texto):
         texto_limpo.startswith("ERRO OCR:")
         or texto_limpo.startswith("[OCR bloqueado")
         or texto_limpo.startswith("[Google Vision OCR erro]")
+        or texto_limpo.startswith("[Google Vision indisponivel]")
         or texto_limpo == "OCR executado, mas nao retornou texto."
     )
 

@@ -160,7 +160,7 @@ class PixRecebidoTests(TestCase):
         }
         self.assertEqual(contagens_depois, contagens_antes)
 
-    def test_central_pix_salva_pendente_sem_cliente_e_sem_pagador(self):
+    def test_central_pix_bloqueia_salvar_sem_cliente_confirmado(self):
         url = reverse("estoque:central_pix")
         contagens_antes = {
             "contas": ContaReceber.objects.count(),
@@ -185,15 +185,10 @@ class PixRecebidoTests(TestCase):
             "comprovante": comprovante,
         }, secure=True)
 
-        self.assertEqual(resposta.status_code, 302)
-        pix = PixRecebido.objects.get(valor=Decimal("645.00"))
-        self.assertIsNone(pix.cliente)
-        self.assertEqual(pix.nome_pagador, "")
-        self.assertEqual(pix.status, PixRecebido.STATUS_PENDENTE)
-        self.assertEqual(pix.instituicao_pix, "Mercado Pago")
-        self.assertTrue(pix.comprovante)
-        self.assertEqual(timezone.localtime(pix.data_pagamento).strftime("%Y-%m-%dT%H:%M"), "2026-05-23T18:55")
-        self.assertIn(reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}), resposta["Location"])
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Busque e confirme um cliente antes de salvar o Pix.")
+        self.assertContains(resposta, "Confirme um cliente antes de salvar o Pix.")
+        self.assertEqual(PixRecebido.objects.count(), 0)
 
         contagens_depois = {
             "contas": ContaReceber.objects.count(),
@@ -1067,7 +1062,10 @@ class PixRecebidoTests(TestCase):
                 "inteira": AssertionError("nao deve chamar Tesseract para imagem densa no Render"),
             })
 
-            with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+            with patch.dict(os.environ, {"PIX_PERMITIR_OCR_LOCAL_FALLBACK": "True"}), patch.dict(
+                "sys.modules",
+                {"pytesseract": pytesseract_fake},
+            ), patch(
                 "estoque.utils_pix.OCR_RENDER_MODO_LEVE",
                 True,
             ):
@@ -1524,6 +1522,55 @@ class PixRecebidoTests(TestCase):
         local_mock.assert_not_called()
         self.assertEqual(PixRecebido.objects.count(), 0)
 
+    def test_analisar_comprovante_pix_nao_usa_ocr_local_sem_fallback_explicito(self):
+        arquivo = SimpleUploadedFile("comprovante.jpg", b"imagem", content_type="image/jpeg")
+
+        with patch("estoque.views.analisar_comprovante_pix") as local_mock, self.assertLogs("estoque.views", level="WARNING") as logs:
+            resposta = self.client.post(
+                reverse("estoque:central_pix_analisar_comprovante"),
+                {"comprovante": arquivo},
+                secure=True,
+            )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertFalse(dados["ok"])
+        self.assertEqual(dados["pagador"], "")
+        self.assertIn("Leitura automatica nao realizada", dados["mensagem"])
+        self.assertIn("[Google Vision indisponivel]", dados["texto_ocr_bruto"])
+        self.assertIn("fallback local desativado", "\n".join(logs.output))
+        local_mock.assert_not_called()
+
+    def test_analisar_comprovante_pix_usa_ocr_local_quando_fallback_explicito(self):
+        dados_local = {
+            "ok": True,
+            "pagador": "Pagador Local",
+            "valor": "5.00",
+            "data_pagamento": "2026-05-18T07:08",
+            "instituicao_pix": "PagBank",
+            "texto_ocr_bruto": "[OCR linhas detectadas]\nPagador Local",
+            "mensagem": "OCR parcial concluido. Confira os dados antes de salvar.",
+        }
+        arquivo = SimpleUploadedFile("comprovante.jpg", b"imagem", content_type="image/jpeg")
+
+        with patch.dict(os.environ, {"PIX_PERMITIR_OCR_LOCAL_FALLBACK": "True"}), patch(
+            "estoque.views.analisar_comprovante_pix",
+            return_value=dados_local,
+        ) as local_mock, self.assertLogs("estoque.views", level="WARNING") as logs:
+            resposta = self.client.post(
+                reverse("estoque:central_pix_analisar_comprovante"),
+                {"comprovante": arquivo},
+                secure=True,
+            )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["pagador"], "Pagador Local")
+        self.assertIn("[OCR linhas detectadas]", dados["texto_ocr_bruto"])
+        self.assertIn("OCR local fallback permitido", "\n".join(logs.output))
+        local_mock.assert_called_once()
+
     def test_detalhe_pix_processar_ocr_agora_atualiza_dados_do_comprovante(self):
         cliente = Cliente.objects.create(nome="Cicero Cristiano Silva Souza", ativo=True)
         conteudo = (
@@ -1899,7 +1946,10 @@ class PixRecebidoTests(TestCase):
                 comprovante=SimpleUploadedFile("comprovante.jpg", b"imagem", content_type="image/jpeg"),
             )
 
-            with patch("estoque.views.analisar_comprovante_pix", side_effect=RuntimeError("timeout render")):
+            with patch.dict(os.environ, {"PIX_PERMITIR_OCR_LOCAL_FALLBACK": "True"}), patch(
+                "estoque.views.analisar_comprovante_pix",
+                side_effect=RuntimeError("timeout render"),
+            ):
                 with self.assertLogs("estoque.views", level="WARNING") as logs:
                     resposta = self.client.post(
                         reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
@@ -1927,7 +1977,10 @@ class PixRecebidoTests(TestCase):
                 comprovante=SimpleUploadedFile("banpara.jpg", b"imagem", content_type="image/jpeg"),
             )
 
-            with patch("estoque.views.analisar_comprovante_pix", side_effect=ValueError("falha banpara")):
+            with patch.dict(os.environ, {"PIX_PERMITIR_OCR_LOCAL_FALLBACK": "True"}), patch(
+                "estoque.views.analisar_comprovante_pix",
+                side_effect=ValueError("falha banpara"),
+            ):
                 resposta = self.client.post(
                     reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
                     secure=True,
@@ -1960,7 +2013,10 @@ class PixRecebidoTests(TestCase):
                 "texto_ocr_bruto": "ERRO OCR: RuntimeError: Tesseract process timeout",
             }
 
-            with patch("estoque.views.analisar_comprovante_pix", return_value=dados_timeout):
+            with patch.dict(os.environ, {"PIX_PERMITIR_OCR_LOCAL_FALLBACK": "True"}), patch(
+                "estoque.views.analisar_comprovante_pix",
+                return_value=dados_timeout,
+            ):
                 with self.assertLogs("estoque.views", level="WARNING") as logs:
                     resposta = self.client.post(
                         reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
@@ -2039,7 +2095,10 @@ class PixRecebidoTests(TestCase):
                 comprovante=SimpleUploadedFile("comprovante-topo.png", self._imagem_pix_teste((485, 1600)), content_type="image/png"),
             )
 
-            with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+            with patch.dict(os.environ, {"PIX_PERMITIR_OCR_LOCAL_FALLBACK": "True"}), patch.dict(
+                "sys.modules",
+                {"pytesseract": pytesseract_fake},
+            ), patch(
                 "estoque.utils_pix._resolver_tesseract_cmd",
                 return_value="tesseract",
             ), patch("estoque.utils_pix.OCR_RENDER_MODO_LEVE", True), self.assertLogs("estoque.utils_pix", level="WARNING") as logs:
@@ -2098,7 +2157,10 @@ class PixRecebidoTests(TestCase):
                 comprovante=SimpleUploadedFile("comprovante-render.png", self._imagem_pix_teste((485, 1600)), content_type="image/png"),
             )
 
-            with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+            with patch.dict(os.environ, {"PIX_PERMITIR_OCR_LOCAL_FALLBACK": "True"}), patch.dict(
+                "sys.modules",
+                {"pytesseract": pytesseract_fake},
+            ), patch(
                 "estoque.utils_pix._resolver_tesseract_cmd",
                 return_value="tesseract",
             ), patch("estoque.utils_pix.OCR_RENDER_MODO_LEVE", True), self.assertLogs("estoque.utils_pix", level="WARNING") as logs:
@@ -2286,7 +2348,10 @@ class PixRecebidoTests(TestCase):
                 comprovante=SimpleUploadedFile("comprovante-debug.png", self._imagem_pix_teste((485, 1600)), content_type="image/png"),
             )
 
-            with patch.dict(os.environ, {"PIX_OCR_DEBUG_CROPS": "True"}), patch.dict(
+            with patch.dict(os.environ, {
+                "PIX_OCR_DEBUG_CROPS": "True",
+                "PIX_PERMITIR_OCR_LOCAL_FALLBACK": "True",
+            }), patch.dict(
                 "sys.modules",
                 {"pytesseract": pytesseract_fake},
             ), patch(
@@ -2326,7 +2391,10 @@ class PixRecebidoTests(TestCase):
                 comprovante=SimpleUploadedFile("comprovante-sem-data.jpg", b"imagem", content_type="image/jpeg"),
             )
 
-            with patch("estoque.views.analisar_comprovante_pix", return_value=dados_sem_data):
+            with patch.dict(os.environ, {"PIX_PERMITIR_OCR_LOCAL_FALLBACK": "True"}), patch(
+                "estoque.views.analisar_comprovante_pix",
+                return_value=dados_sem_data,
+            ):
                 resposta = self.client.post(
                     reverse("estoque:central_pix_processar_ocr", kwargs={"pix_id": pix.id}),
                     secure=True,
