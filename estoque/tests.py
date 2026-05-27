@@ -773,8 +773,64 @@ class PixRecebidoTests(TestCase):
         self.assertIn("[Google Vision OCR]", dados["texto_ocr_bruto"])
         self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque Neiva")
 
+    def test_analisar_comprovante_pix_google_vision_debug_texto_bruto_env(self):
+        texto = "Comprovante de Pix\nDe\nJoao de Almeida E Silva\nPara\nLincoln Albuquerque Neiva\n"
+        arquivo = SimpleUploadedFile("mercado-pago.jpg", b"imagem", content_type="image/jpeg")
+
+        with patch.dict(os.environ, {"PIX_OCR_DEBUG_TEXT": "True"}), patch(
+            "estoque.utils_pix._criar_cliente_google_vision",
+            return_value=self._mock_google_vision_texto(texto),
+        ), self.assertLogs("estoque.utils_pix", level="WARNING") as logs:
+            analisar_comprovante_pix_google_vision(arquivo)
+
+        saida = "\n".join(logs.output)
+        self.assertIn("[PIX OCR][Google Vision texto bruto]", saida)
+        self.assertIn("--- INICIO GOOGLE VISION OCR ---", saida)
+        self.assertIn("Joao de Almeida E Silva", saida)
+        self.assertIn("--- FIM GOOGLE VISION OCR ---", saida)
+
+    def test_analisar_comprovante_pix_google_vision_extrai_de_para_em_texto_achatado(self):
+        casos = [
+            (
+                "pagbank.jpg",
+                "Comprovante de envio de Pix 18/05/2026 as 07:08:52 Valor da transferencia R$ 5,00 De ROSELI DA COSTA GAMA CPF ***.115.912-** Instituicao PagBank Para Lincoln Albuquerque Neiva",
+                "ROSELI DA COSTA GAMA",
+                "5.00",
+                "2026-05-18T07:08",
+                "PagBank",
+            ),
+            (
+                "itau.jpg",
+                "Comprovante de devolucao de Pix R$ 5,00 Realizado em 19/05/2026 as 17:18:36 De EUCLIDES CARNEIRO NEIVA NETO CPF/CNPJ: 787.484.883-72 Instituicao: ITAU UNIBANCO S.A Para Lincoln Albuquerque Neiva",
+                "EUCLIDES CARNEIRO NEIVA NETO",
+                "5.00",
+                "2026-05-19T17:18",
+                "Ita\u00fa Unibanco",
+            ),
+        ]
+
+        for nome_arquivo, texto, pagador, valor, data_pagamento, instituicao in casos:
+            with self.subTest(nome=nome_arquivo):
+                arquivo = SimpleUploadedFile(nome_arquivo, b"imagem", content_type="image/jpeg")
+                with patch("estoque.utils_pix._criar_cliente_google_vision", return_value=self._mock_google_vision_texto(texto)):
+                    dados = analisar_comprovante_pix_google_vision(arquivo)
+
+                self.assertTrue(dados["ok"])
+                self.assertEqual(dados["pagador"], pagador)
+                self.assertEqual(dados["valor"], valor)
+                self.assertEqual(dados["data_pagamento"], data_pagamento)
+                self.assertEqual(dados["instituicao_pix"], instituicao)
+                self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque Neiva")
+
     def test_pix_google_vision_habilitado_le_variavel_de_ambiente_fora_dos_testes(self):
         with patch.dict(os.environ, {"PIX_USAR_GOOGLE_VISION": "True"}), patch("sys.argv", ["manage.py", "runserver"]):
+            self.assertTrue(views.pix_google_vision_habilitado())
+
+    def test_pix_google_vision_habilitado_usa_credencial_quando_flag_nao_definida(self):
+        with patch.dict(os.environ, {"GOOGLE_APPLICATION_CREDENTIALS": "google-vision.json"}, clear=True), patch(
+            "sys.argv",
+            ["manage.py", "runserver"],
+        ):
             self.assertTrue(views.pix_google_vision_habilitado())
 
     def test_analisar_comprovante_pix_google_vision_falha_sem_500(self):
@@ -2120,6 +2176,44 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(timeouts["linha_04"], 4)
         self.assertIn("[OCR linhas detectadas]", dados["texto_ocr_bruto"])
         self.assertIn("04 candidata_data: 21 ABR 2026 - 13:05:01", dados["texto_ocr_bruto"])
+
+    def test_analisar_comprovante_pix_ocr_por_linhas_continua_ate_pagador(self):
+        arquivo = SimpleUploadedFile(
+            "comprovante-linhas-santander.png",
+            self._imagem_linhas_ocr_teste(),
+            content_type="image/png",
+        )
+        chamadas = []
+        respostas = {
+            "linha_01": "RS 500,00",
+            "linha_02": "18/05/2026 as 17:45:00",
+            "linha_03": "Dados do pagador",
+            "linha_04": "De",
+            "linha_05": "lvanildo Ferraz Patricio Junior",
+        }
+
+        def image_to_string(imagem, **_kwargs):
+            recorte = imagem.info.get("ocr_recorte")
+            chamadas.append(recorte)
+            return respostas.get(recorte, "")
+
+        pytesseract_fake = types.SimpleNamespace(
+            pytesseract=types.SimpleNamespace(tesseract_cmd=""),
+            image_to_string=image_to_string,
+        )
+
+        with patch.dict("sys.modules", {"pytesseract": pytesseract_fake}), patch(
+            "estoque.utils_pix._resolver_tesseract_cmd",
+            return_value="tesseract",
+        ):
+            dados = analisar_comprovante_pix(arquivo)
+
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["valor"], "500.00")
+        self.assertEqual(dados["data_pagamento"], "2026-05-18T17:45")
+        self.assertEqual(dados["pagador"], "Ivanildo Ferraz Patricio Junior")
+        self.assertIn("linha_05", chamadas)
+        self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque Neiva")
 
     def test_analisar_comprovante_pix_ocr_por_linhas_timeout_continua(self):
         arquivo = SimpleUploadedFile(

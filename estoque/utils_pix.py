@@ -34,6 +34,10 @@ OCR_RENDER_BLOQUEADO_DENSO = "[OCR bloqueado por segurança no Render: comprovan
 logger = logging.getLogger(__name__)
 
 
+def _env_bool_ativa(nome):
+    return str(os.getenv(nome, "")).strip().lower() in {"1", "true", "sim", "yes", "on"}
+
+
 def _normalizar_espacos(valor):
     return " ".join(str(valor or "").strip().split())
 
@@ -273,7 +277,7 @@ def _salvar_debug_recorte_ocr(caminho, nome_recorte, imagem):
         from django.core.files.base import ContentFile
         from django.core.files.storage import default_storage
 
-        debug_env = str(os.getenv("PIX_OCR_DEBUG_CROPS", "")).strip().lower() in {"1", "true", "sim", "yes", "on"}
+        debug_env = _env_bool_ativa("PIX_OCR_DEBUG_CROPS")
         if not (getattr(settings, "DEBUG", False) or debug_env):
             return ""
         nome_base = _nome_arquivo_seguro_ocr(caminho)
@@ -629,9 +633,10 @@ def _extrair_texto_por_linhas_ocr(pytesseract, conteudo, caminho, debug_prefix=N
         resultado_parcial = _resultado_comprovante_parcial(texto_parcial)
         extraiu_valor = bool(resultado_parcial and resultado_parcial.get("valor"))
         extraiu_data = bool(resultado_parcial and resultado_parcial.get("data_pagamento"))
+        extraiu_pagador = bool(resultado_parcial and resultado_parcial.get("pagador"))
         _log_diagnostico_ocr(
             caminho or "arquivo",
-            "recorte=%s config=%s timeout=%ss tempo=%.2fs texto=%s extraiu_valor=%s extraiu_data=%s",
+            "recorte=%s config=%s timeout=%ss tempo=%.2fs texto=%s extraiu_valor=%s extraiu_data=%s extraiu_pagador=%s",
             nome_recorte,
             config_usada or "padrao",
             timeout_usado,
@@ -639,8 +644,9 @@ def _extrair_texto_por_linhas_ocr(pytesseract, conteudo, caminho, debug_prefix=N
             texto_limpo[:100],
             extraiu_valor,
             extraiu_data,
+            extraiu_pagador,
         )
-        if extraiu_valor and extraiu_data:
+        if extraiu_valor and extraiu_data and extraiu_pagador:
             break
 
     if not textos:
@@ -960,6 +966,18 @@ def _resultado_comprovante_google_vision_falha(mensagem, configurado=True):
     }
 
 
+def _registrar_debug_texto_google_vision(nome, texto):
+    if not _env_bool_ativa("PIX_OCR_DEBUG_TEXT"):
+        return
+
+    logger.warning(
+        "[PIX OCR][Google Vision texto bruto][%s] tamanho=%s\n--- INICIO GOOGLE VISION OCR ---\n%s\n--- FIM GOOGLE VISION OCR ---",
+        nome or "arquivo",
+        len(str(texto or "")),
+        str(texto or ""),
+    )
+
+
 def _criar_cliente_google_vision():
     from google.cloud import vision
 
@@ -1017,6 +1035,7 @@ def analisar_comprovante_pix_google_vision(arquivo):
         texto = getattr(getattr(resposta, "full_text_annotation", None), "text", "") or ""
         if not texto and getattr(resposta, "text_annotations", None):
             texto = getattr(resposta.text_annotations[0], "description", "") or ""
+        _registrar_debug_texto_google_vision(nome, texto)
         if not _normalizar_espacos(texto):
             return _resultado_comprovante_google_vision_falha("Google Vision nao retornou texto.")
         return _resultado_comprovante_google_vision_texto(texto)
@@ -1100,14 +1119,16 @@ def _extrair_valor(texto):
                 return valor_linha
 
     padroes_prioritarios = [
-        r"(?:valor|total)\D{0,30}R?\$?\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})",
-        r"(?:valor|total)\D{0,30}R?\$?\s*([0-9]+,[0-9]{2})",
-        r"(?:pix enviado|pix recebido)\D{0,40}R?[S$§]?\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})",
-        r"(?:pix enviado|pix recebido)\D{0,40}R?[S$§]?\s*([0-9]+,[0-9]{2})",
-        r"\bR[S$§]\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})",
-        r"\bR[S$§]\s*([0-9]+,[0-9]{2})",
-        r"\bR\$\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})",
-        r"\bR\$\s*([0-9]+,[0-9]{2})",
+        (r"(?:valor|total)\D{0,30}R?\$?\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})", False),
+        (r"(?:valor|total)\D{0,30}R?\$?\s*([0-9]+,[0-9]{2})", False),
+        (r"(?:pix enviado|pix recebido)\D{0,40}R?[S$§]?\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})", False),
+        (r"(?:pix enviado|pix recebido)\D{0,40}R?[S$§]?\s*([0-9]+,[0-9]{2})", False),
+        (r"comprovante\D{0,50}\bpix\D{0,20}R?[S$§]\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})", False),
+        (r"comprovante\D{0,50}\bpix\D{0,20}R?[S$§]\s*([0-9]+,[0-9]{2})", False),
+        (r"\bR[S$§]\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})", True),
+        (r"\bR[S$§]\s*([0-9]+,[0-9]{2})", True),
+        (r"\bR\$\s*([0-9]{1,3}(?:[.,][0-9]{3})+,[0-9]{2})", True),
+        (r"\bR\$\s*([0-9]+,[0-9]{2})", True),
     ]
 
     padroes_genericos = [
@@ -1115,9 +1136,9 @@ def _extrair_valor(texto):
         r"\b([0-9]+,[0-9]{2})\b",
     ]
 
-    for padrao in padroes_prioritarios:
+    for padrao, validar_contexto in padroes_prioritarios:
         for encontrado in re.finditer(padrao, texto, flags=re.IGNORECASE):
-            if contexto_suspeito(encontrado.start(), encontrado.end()):
+            if validar_contexto and contexto_suspeito(encontrado.start(), encontrado.end()):
                 continue
 
             valor_texto = decimal_ou_vazio(encontrado.group(1))
@@ -1553,6 +1574,8 @@ def _limpar_nome_pagador_ocr(nome):
 
     # Erro comum do OCR em alguns comprovantes Nubank: Ireno vira treno.
     nome = re.sub(r"^treno\b", "Ireno", nome, flags=re.IGNORECASE)
+    # OCR pode trocar I maiusculo por l minusculo no inicio do nome.
+    nome = re.sub(r"^lvanildo\b", "Ivanildo", nome, flags=re.IGNORECASE)
 
     nome_normalizado = _normalizar_linha(_sem_acentos(nome))
     if re.search(r"\b(instituicao|instituigao|institue|institute|pagamentos|pagamento|nubank|agencia|conta|cpf|cnpj)\b", nome_normalizado):
@@ -1659,6 +1682,33 @@ def _extrair_nome_por_contexto_pagador(bloco):
     return ""
 
 
+def _extrair_pagador_bloco_de_para_texto(texto):
+    texto_limpo = _normalizar_espacos(texto)
+    if not texto_limpo:
+        return ""
+
+    for encontrado_de in re.finditer(r"\bde\b", texto_limpo, flags=re.IGNORECASE):
+        depois_de = texto_limpo[encontrado_de.end():]
+        encontrado_para = re.search(r"\bpara\b", depois_de, flags=re.IGNORECASE)
+        if not encontrado_para:
+            continue
+
+        bloco = depois_de[:encontrado_para.start()].strip(" :-")
+        if not bloco:
+            continue
+
+        bloco = re.split(
+            r"\b(?:cpf(?:/cnpj)?|cnpj|instituicao|instituig\w*|banco|chave|codigo|autenticacao|id|valor|dados da transacao|tipo de transferencia)\b",
+            bloco,
+            maxsplit=1,
+            flags=re.IGNORECASE,
+        )[0]
+        nome = _limpar_nome_pagador_ocr(bloco)
+        if nome and not _nome_bloqueado_pagador_geral(nome):
+            return nome[:160]
+    return ""
+
+
 def _eh_comprovante_banco_inter(texto):
     texto_normalizado = _normalizar_linha(_sem_acentos(texto))
     if re.search(r"\b(nu pagamentos|nubank\.com\.br)\b", texto_normalizado):
@@ -1745,6 +1795,7 @@ def _nome_seguro_pagador_inter(nome, nomes_recebedor):
 def _nome_bloqueado_temporario_inter(nome):
     nome_normalizado = _normalizar_nome_inter(nome)
     nomes_bloqueados = {
+        "de",
         "la neiva",
         "lincoln albuquerque",
         "lincoln albuquerque neiva",
@@ -1757,6 +1808,7 @@ def _nome_bloqueado_temporario_inter(nome):
 def _nome_bloqueado_pagador_geral(nome):
     nome_normalizado = _normalizar_nome_inter(nome)
     nomes_bloqueados = {
+        "de",
         "la neiva",
         "lincoln albuquerque",
         "lincoln albuquerque neiva",
@@ -2024,6 +2076,10 @@ def _extrair_pagador(texto):
 
     if _eh_comprovante_banco_inter(texto):
         return _extrair_pagador_banco_inter(texto)
+
+    pagador_de_para = _extrair_pagador_bloco_de_para_texto(texto)
+    if pagador_de_para:
+        return pagador_de_para
 
     for indice, linha in enumerate(linhas):
         linha_normalizada = _normalizar_linha(linha)

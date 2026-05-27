@@ -153,7 +153,17 @@ def pix_google_vision_habilitado():
         return _bool_config_ativa(valor_settings)
     if "test" in sys.argv:
         return False
-    return _bool_config_ativa(os.getenv("PIX_USAR_GOOGLE_VISION", ""))
+    valor_env = os.getenv("PIX_USAR_GOOGLE_VISION")
+    if valor_env is not None:
+        return _bool_config_ativa(valor_env)
+    return any(
+        str(os.getenv(nome, "")).strip()
+        for nome in (
+            "GOOGLE_APPLICATION_CREDENTIALS_JSON",
+            "GOOGLE_APPLICATION_CREDENTIALS_BASE64",
+            "GOOGLE_APPLICATION_CREDENTIALS",
+        )
+    )
 
 
 def _pix_duplicado_pendente(dados):
