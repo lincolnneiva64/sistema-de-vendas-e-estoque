@@ -30,3 +30,12 @@ staticfiles/
 local_settings.py
 
 db_backups/
+
+# Segredos locais - nao enviar ao GitHub
+secrets/
+*.json
+
+# Segredos locais - nao enviar ao GitHub
+secrets/
+*.json
+
