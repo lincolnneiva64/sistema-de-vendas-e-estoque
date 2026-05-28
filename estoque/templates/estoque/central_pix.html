@@ -789,7 +789,13 @@
       }
       clienteCampoPrincipal?.classList.remove("pix-cliente-vinculado-sugestao");
       confirmarClienteSugerido?.classList.remove("pix-confirmar-principal", "pix-confirmar-alerta", "pix-cliente-alerta-forte");
-      if (id) limparErroCliente();
+      if (id) {
+        limparErroCliente();
+        if (feedback) {
+          feedback.textContent = "";
+          feedback.className = "pix-feedback";
+        }
+      }
     }
 
     function limparSugestaoCliente() {
