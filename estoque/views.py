@@ -2079,20 +2079,53 @@ def central_pix(request):
     central_pix_url = reverse("estoque:central_pix")
     central_pix_atual_url = request.get_full_path()
     termo_busca_pix = request.GET.get("q", "").strip()
+    data_inicio_pix = request.GET.get("data_inicio", "").strip()
+    data_fim_pix = request.GET.get("data_fim", "").strip()
+    status_pix = request.GET.get("status", "").strip()
+    cliente_pix = request.GET.get("cliente", "").strip()
+    data_inicio_filtro = parse_date(data_inicio_pix)
+    data_fim_filtro = parse_date(data_fim_pix)
+    status_validos_pix = {status for status, _rotulo in PixRecebido.STATUS_CHOICES}
+    if status_pix not in status_validos_pix:
+        status_pix = ""
 
     def pix_recebidos_filtrados():
         pix_qs = PixRecebido.objects.select_related("cliente", "cliente_sugerido").order_by("-criado_em", "-id")
-        if not termo_busca_pix:
-            return list(pix_qs)
+        if status_pix:
+            pix_qs = pix_qs.filter(status=status_pix)
 
         termo_normalizado = normalizar_texto_cliente(termo_busca_pix)
         termo_documento = normalizar_documento_cliente(termo_busca_pix)
         termo_valor = termo_busca_pix.replace("R$", "").strip().replace(".", "").replace(",", ".")
+        cliente_normalizado = normalizar_texto_cliente(cliente_pix)
+        cliente_documento = normalizar_documento_cliente(cliente_pix)
         resultado = []
         for pix in pix_qs:
             data_pix = timezone.localtime(pix.data_pagamento).strftime("%d/%m/%Y %H:%M") if pix.data_pagamento else ""
+            data_pix_date = timezone.localtime(pix.data_pagamento).date() if pix.data_pagamento else None
+            if data_inicio_filtro and (not data_pix_date or data_pix_date < data_inicio_filtro):
+                continue
+            if data_fim_filtro and (not data_pix_date or data_pix_date > data_fim_filtro):
+                continue
             data_cadastro = timezone.localtime(pix.criado_em).strftime("%d/%m/%Y %H:%M") if pix.criado_em else ""
             valor_texto = str(pix.valor or "").replace(".", ",")
+            campos_cliente = " ".join(
+                parte
+                for parte in [
+                    pix.cliente.nome if pix.cliente else "",
+                    pix.cliente_sugerido.nome if pix.cliente_sugerido else "",
+                    pix.cliente.cpf_cnpj if pix.cliente else "",
+                    pix.cliente_sugerido.cpf_cnpj if pix.cliente_sugerido else "",
+                ]
+                if parte
+            )
+            if cliente_pix:
+                campos_cliente_normalizados = normalizar_texto_cliente(campos_cliente)
+                if not (
+                    cliente_normalizado in campos_cliente_normalizados
+                    or (cliente_documento and cliente_documento in normalizar_documento_cliente(campos_cliente))
+                ):
+                    continue
             campos_busca = " ".join(
                 parte
                 for parte in [
@@ -2110,13 +2143,24 @@ def central_pix(request):
                 if parte
             )
             campos_normalizados = normalizar_texto_cliente(campos_busca)
-            if (
+            if termo_busca_pix and not (
                 termo_normalizado in campos_normalizados
                 or (termo_documento and termo_documento in normalizar_documento_cliente(campos_busca))
                 or (termo_valor and termo_valor in str(pix.valor or ""))
             ):
-                resultado.append(pix)
+                continue
+            resultado.append(pix)
         return resultado
+
+    pix_filtro_contexto = {
+        "pix_busca": termo_busca_pix,
+        "pix_data_inicio": data_inicio_pix,
+        "pix_data_fim": data_fim_pix,
+        "pix_status": status_pix,
+        "pix_cliente_filtro": cliente_pix,
+        "pix_status_choices": PixRecebido.STATUS_CHOICES,
+        "pix_tem_filtro": any([termo_busca_pix, data_inicio_pix, data_fim_pix, status_pix, cliente_pix]),
+    }
 
     if request.method == "POST":
         form = PixRecebidoForm(request.POST, request.FILES)
@@ -2134,9 +2178,9 @@ def central_pix(request):
                         "form": form,
                         "pix_recebidos": pix_recebidos,
                         "total_pix": len(pix_recebidos),
-                        "pix_busca": termo_busca_pix,
                         "voltar_url": retorno_url or reverse("estoque:contas_receber"),
                         "detalhe_retorno_url": central_pix_atual_url,
+                        **pix_filtro_contexto,
                     },
                 )
             pix_duplicado_baixado = _pix_duplicado_baixado(dados_pix)
@@ -2151,9 +2195,9 @@ def central_pix(request):
                         "form": form,
                         "pix_recebidos": pix_recebidos,
                         "total_pix": len(pix_recebidos),
-                        "pix_busca": termo_busca_pix,
                         "voltar_url": retorno_url or reverse("estoque:contas_receber"),
                         "detalhe_retorno_url": central_pix_atual_url,
+                        **pix_filtro_contexto,
                     },
                 )
             pix = form.save(commit=False)
@@ -2181,9 +2225,9 @@ def central_pix(request):
             "form": form,
             "pix_recebidos": pix_recebidos,
             "total_pix": len(pix_recebidos),
-            "pix_busca": termo_busca_pix,
             "voltar_url": retorno_url or reverse("estoque:contas_receber"),
             "detalhe_retorno_url": central_pix_atual_url,
+            **pix_filtro_contexto,
         },
     )
 

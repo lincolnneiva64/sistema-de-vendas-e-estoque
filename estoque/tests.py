@@ -186,8 +186,9 @@ class PixRecebidoTests(TestCase):
         }, secure=True)
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "Busque e confirme um cliente antes de salvar o Pix.")
+        self.assertContains(resposta, "Confirme o cliente antes de salvar o Pix.")
         self.assertContains(resposta, "Confirme um cliente antes de salvar o Pix.")
+        self.assertContains(resposta, 'placeholder="Sem cliente identificado"')
         self.assertEqual(PixRecebido.objects.count(), 0)
 
         contagens_depois = {
@@ -1490,6 +1491,94 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta_ignorado, "Maria Ignorada")
         self.assertNotContains(resposta_ignorado, "Joao de Almeida e Silva")
         self.assertContains(resposta_ignorado, "Limpar")
+
+    def test_central_pix_filtro_por_data(self):
+        PixRecebido.objects.create(
+            nome_pagador="Pix dentro da data",
+            valor="30.00",
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_PENDENTE,
+            data_pagamento=timezone.make_aware(datetime(2026, 5, 4, 10, 0)),
+        )
+        PixRecebido.objects.create(
+            nome_pagador="Pix fora da data",
+            valor="30.00",
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_PENDENTE,
+            data_pagamento=timezone.make_aware(datetime(2026, 5, 5, 10, 0)),
+        )
+
+        resposta = self.client.get(
+            f"{reverse('estoque:central_pix')}?data_inicio=2026-05-04&data_fim=2026-05-04",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Pix dentro da data")
+        self.assertNotContains(resposta, "Pix fora da data")
+
+    def test_central_pix_filtro_por_status(self):
+        PixRecebido.objects.create(
+            nome_pagador="Pix status pendente",
+            valor="30.00",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+        PixRecebido.objects.create(
+            nome_pagador="Pix status baixado",
+            valor="30.00",
+            status=PixRecebido.STATUS_BAIXADO,
+        )
+
+        resposta = self.client.get(
+            f"{reverse('estoque:central_pix')}?status={PixRecebido.STATUS_PENDENTE}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Pix status pendente")
+        self.assertNotContains(resposta, "Pix status baixado")
+
+    def test_central_pix_combina_texto_cliente_data_e_status(self):
+        cliente_roseli = Cliente.objects.create(nome="Roseli Cliente", ativo=True)
+        cliente_maria = Cliente.objects.create(nome="Maria Cliente", ativo=True)
+        PixRecebido.objects.create(
+            cliente=cliente_roseli,
+            nome_pagador="Pix combo certo",
+            valor="45.00",
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_PENDENTE,
+            data_pagamento=timezone.make_aware(datetime(2026, 5, 4, 10, 0)),
+        )
+        PixRecebido.objects.create(
+            cliente=cliente_roseli,
+            nome_pagador="Pix combo baixado",
+            valor="45.00",
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_BAIXADO,
+            data_pagamento=timezone.make_aware(datetime(2026, 5, 4, 10, 0)),
+        )
+        PixRecebido.objects.create(
+            cliente=cliente_maria,
+            nome_pagador="Pix combo maria",
+            valor="45.00",
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_PENDENTE,
+            data_pagamento=timezone.make_aware(datetime(2026, 5, 4, 10, 0)),
+        )
+
+        resposta = self.client.get(
+            (
+                f"{reverse('estoque:central_pix')}?q=Mercado&cliente=Roseli"
+                f"&data_inicio=2026-05-04&data_fim=2026-05-04&status={PixRecebido.STATUS_PENDENTE}"
+            ),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Pix combo certo")
+        self.assertNotContains(resposta, "Pix combo baixado")
+        self.assertNotContains(resposta, "Pix combo maria")
+        self.assertContains(resposta, "status%3Dpendente")
 
     def test_analisar_comprovante_pix_usa_google_vision_quando_habilitado(self):
         dados_vision = {
@@ -4046,6 +4135,7 @@ class PixRecebidoTests(TestCase):
         self.assertIsNone(dados["cliente_sugerido_id"])
 
     def test_central_pix_bloqueia_duplicado_pendente_evidente(self):
+        cliente = Cliente.objects.create(nome="Joelson Ferreira dos Santos", ativo=True)
         data_pagamento = timezone.make_aware(timezone.datetime(2026, 5, 16, 17, 51))
         PixRecebido.objects.create(
             nome_pagador="Joelson Ferreira dos Santos",
@@ -4055,7 +4145,7 @@ class PixRecebidoTests(TestCase):
         )
 
         resposta = self.client.post(reverse("estoque:central_pix"), data={
-            "cliente": "",
+            "cliente": cliente.id,
             "nome_pagador": "  joelson ferreira dos santos ",
             "valor": "156.50",
             "data_pagamento": "2026-05-16T17:52",
