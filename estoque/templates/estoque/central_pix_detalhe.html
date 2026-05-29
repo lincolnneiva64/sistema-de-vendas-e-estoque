@@ -621,7 +621,9 @@
       }
     });
     linksVoltar.forEach(function (link) {
-      link.addEventListener("click", reforcarBaixaPendente);
+      if (link.getAttribute("href") === window.location.pathname + window.location.search) {
+        link.addEventListener("click", reforcarBaixaPendente);
+      }
     });
   })();
 </script>

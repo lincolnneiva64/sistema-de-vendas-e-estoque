@@ -182,6 +182,14 @@ def _bool_config_ativa(valor):
     return str(valor or "").strip().lower() in {"1", "true", "sim", "yes", "on"}
 
 
+def _mensagem_unica(request, nivel, texto):
+    mensagens_pendentes = list(messages.get_messages(request))
+    for mensagem in mensagens_pendentes:
+        if str(mensagem) != texto:
+            messages.add_message(request, mensagem.level, str(mensagem), extra_tags=mensagem.extra_tags)
+    messages.add_message(request, nivel, texto)
+
+
 def pix_google_vision_habilitado():
     valor_settings = getattr(settings, "PIX_USAR_GOOGLE_VISION", None)
     if valor_settings is not None:
@@ -2185,28 +2193,20 @@ def central_pix(request):
                 )
             pix_duplicado_baixado = _pix_duplicado_baixado(dados_pix)
             pix_duplicado_pendente = None if pix_duplicado_baixado else _pix_duplicado_pendente(dados_pix)
-            if pix_duplicado_pendente:
-                messages.warning(request, f"Pix duplicado nao foi salvo. Confira o Pix #{pix_duplicado_pendente.id}.")
-                pix_recebidos = pix_recebidos_filtrados()
-                return render(
-                    request,
-                    "estoque/central_pix.html",
-                    {
-                        "form": form,
-                        "pix_recebidos": pix_recebidos,
-                        "total_pix": len(pix_recebidos),
-                        "voltar_url": retorno_url or reverse("estoque:contas_receber"),
-                        "detalhe_retorno_url": central_pix_atual_url,
-                        **pix_filtro_contexto,
-                    },
-                )
+            pix_duplicado = pix_duplicado_baixado or pix_duplicado_pendente
             pix = form.save(commit=False)
             pix.instituicao_pix = dados_pix["instituicao_pix"]
-            if pix_duplicado_baixado:
-                pix.pix_original = pix_duplicado_baixado
+            if pix_duplicado:
+                pix.pix_original = pix_duplicado
                 pix.status = PixRecebido.STATUS_POSSIVEL_DUPLICADO
             pix.save()
-            if pix.cliente_id:
+            if pix_duplicado:
+                _mensagem_unica(
+                    request,
+                    messages.WARNING,
+                    f"Pix salvo como possivel duplicado. Confira a comparacao com o Pix #{pix_duplicado.id}.",
+                )
+            elif pix.cliente_id:
                 messages.success(request, "Pix recebido registrado com sucesso.")
             else:
                 messages.success(request, "Pix salvo como pendente. Selecione o cliente antes de usar na baixa.")
@@ -2457,6 +2457,16 @@ def _url_detalhe_pix(pix_id, next_url="", foco_cliente=False):
     if parametros:
         url = f"{url}?{urlencode(parametros)}"
     return url
+
+
+def _url_detalhe_pix_preservando_retorno(pix_id, retorno_url, fallback_next="", foco_cliente=False):
+    detalhe_base = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix_id})
+    if retorno_url == detalhe_base or retorno_url.startswith(f"{detalhe_base}?"):
+        if foco_cliente and "foco_cliente=1" not in retorno_url:
+            separador = "&" if "?" in retorno_url else "?"
+            return f"{retorno_url}{separador}{urlencode({'foco_cliente': '1'})}"
+        return retorno_url
+    return _url_detalhe_pix(pix_id, fallback_next, foco_cliente=foco_cliente)
 
 
 def _pix_pode_remover_cliente_confirmado(pix):
@@ -2941,9 +2951,14 @@ def receber_cliente(request, cliente_id):
     if pix_recebido_id.isdigit():
         pix_recebido_escolhido = PixRecebido.objects.select_related("pix_original").filter(pk=pix_recebido_id).first()
     if pix_recebido_escolhido:
-        pix_detalhe_url = _url_detalhe_pix(pix_recebido_escolhido.id, request.get_full_path())
-        pix_trocar_cliente_url = _url_detalhe_pix(
+        pix_detalhe_url = _url_detalhe_pix_preservando_retorno(
             pix_recebido_escolhido.id,
+            retorno_url,
+            request.get_full_path(),
+        )
+        pix_trocar_cliente_url = _url_detalhe_pix_preservando_retorno(
+            pix_recebido_escolhido.id,
+            retorno_url,
             request.get_full_path(),
             foco_cliente=True,
         )

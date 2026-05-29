@@ -6,6 +6,7 @@ from contextlib import redirect_stdout
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+from urllib.parse import urlencode
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
@@ -1456,6 +1457,30 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta_lista, f"{detalhe_path}?next=")
         self.assertContains(resposta_lista, "central-pix")
         self.assertContains(resposta_lista, "q%3Dpagbank")
+
+    def test_receber_cliente_voltar_ao_pix_preserva_next_original_do_detalhe(self):
+        cliente = Cliente.objects.create(nome="Cliente retorno pix", ativo=True)
+        pix = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="Cliente retorno pix",
+            valor="25.00",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+        central_url = reverse("estoque:central_pix")
+        detalhe_url = (
+            f"{reverse('estoque:central_pix_detalhe', kwargs={'pix_id': pix.id})}"
+            f"?{urlencode({'next': central_url})}"
+        )
+        receber_url = (
+            f"{reverse('estoque:receber_cliente', kwargs={'cliente_id': cliente.id})}"
+            f"?{urlencode({'pix_recebido': pix.id, 'next': detalhe_url})}"
+        )
+
+        resposta = self.client.get(receber_url, secure=True)
+
+        self.assertContains(resposta, f'href="{detalhe_url}"')
+        self.assertNotContains(resposta, f"{detalhe_url}?")
+        self.assertNotContains(resposta, f"{reverse('estoque:receber_cliente', kwargs={'cliente_id': cliente.id})}?pix_recebido=")
 
     def test_central_pix_busca_filtra_pix_registrados(self):
         cliente = Cliente.objects.create(nome="Jo\u00e3o De Almeida E Silva", ativo=True)
@@ -4137,7 +4162,7 @@ class PixRecebidoTests(TestCase):
     def test_central_pix_bloqueia_duplicado_pendente_evidente(self):
         cliente = Cliente.objects.create(nome="Joelson Ferreira dos Santos", ativo=True)
         data_pagamento = timezone.make_aware(timezone.datetime(2026, 5, 16, 17, 51))
-        PixRecebido.objects.create(
+        pix_parecido = PixRecebido.objects.create(
             nome_pagador="Joelson Ferreira dos Santos",
             valor="156.50",
             data_pagamento=data_pagamento,
@@ -4151,8 +4176,15 @@ class PixRecebidoTests(TestCase):
             "data_pagamento": "2026-05-16T17:52",
             "observacao": "Tentativa duplicada",
             "status": PixRecebido.STATUS_PENDENTE,
-        }, secure=True)
+        }, secure=True, follow=True)
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "Pix duplicado nao foi salvo")
-        self.assertEqual(PixRecebido.objects.count(), 1)
+        novo_pix = PixRecebido.objects.order_by("-id").first()
+        self.assertEqual(PixRecebido.objects.count(), 2)
+        self.assertEqual(novo_pix.status, PixRecebido.STATUS_POSSIVEL_DUPLICADO)
+        self.assertEqual(novo_pix.pix_original, pix_parecido)
+        detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": novo_pix.id})
+        self.assertTrue(any(url.startswith(detalhe_url) for url, _status in resposta.redirect_chain))
+        mensagem = f"Pix salvo como possivel duplicado. Confira a comparacao com o Pix #{pix_parecido.id}."
+        self.assertContains(resposta, mensagem, count=1)
+        self.assertContains(resposta, f"Pix parecido #{pix_parecido.id}")
