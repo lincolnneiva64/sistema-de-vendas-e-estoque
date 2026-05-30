@@ -1255,6 +1255,101 @@ def _extrair_instituicao_caixa_tem(linhas):
     return ""
 
 
+def _eh_secao_dados_destino(linha):
+    rotulo = _normalizar_rotulo_ocr(linha).strip(" :")
+    return bool(re.fullmatch(r"dados de destino", rotulo))
+
+
+def _eh_secao_origem_ton_stone(linha):
+    rotulo = _normalizar_rotulo_ocr(linha).strip(" :")
+    return bool(re.fullmatch(r"dados de origem|de", rotulo))
+
+
+def _extrair_bloco_origem_ton_stone(linhas):
+    indice_destino = next((indice for indice, linha in enumerate(linhas) if _eh_secao_dados_destino(linha)), -1)
+    if indice_destino < 0:
+        return []
+
+    indice_origem = next(
+        (
+            indice
+            for indice, linha in enumerate(linhas[indice_destino + 1:], start=indice_destino + 1)
+            if _eh_secao_origem_ton_stone(linha)
+        ),
+        -1,
+    )
+    if indice_origem < 0:
+        return []
+
+    bloco = []
+    for linha in linhas[indice_origem + 1:]:
+        linha_normalizada = _normalizar_rotulo_ocr(linha).strip(" :")
+        if re.fullmatch(r"dados de destino|dados da transacao|dados da transferencia|para", linha_normalizada):
+            break
+        bloco.append(linha)
+    return bloco
+
+
+def _extrair_pagador_ton_stone_origem(linhas):
+    bloco = _extrair_bloco_origem_ton_stone(linhas)
+    if not bloco:
+        return ""
+    nome = _extrair_nome_no_bloco(bloco)
+    return nome[:160] if nome and not _nome_bloqueado_pagador_geral(nome) else ""
+
+
+def _normalizar_instituicao_pix_conhecida(texto):
+    texto_normalizado = _normalizar_linha(_sem_acentos(texto))
+    padroes = [
+        ("Banpar\u00e1", [r"\bbanpara\b", r"\bbanco do estado do para\b"]),
+        ("PicPay", [r"\bpicpay\b", r"\bpic\s*pay\b", r"picpay instituicao de pagamento"]),
+        ("Mercado Pago", [r"\bmercado pago\b"]),
+        ("Nubank", [r"\bnubank\b", r"\bnu pagamentos\b"]),
+        ("Inter", [r"\bbanco inter\b", r"\bintermedium\b", r"\bsinter\b", r"\binter\b"]),
+        ("Caixa EconÃ´mica", [r"\bcaixa economica\b", r"\bcaixa\b"]),
+        ("Banco do Brasil", [r"\bbanco do brasil\b"]),
+        ("Bradesco", [r"\bbradesco\b"]),
+        ("Itaú Unibanco", [r"\bitau\b", r"\btau\s+unibanco\b", r"\bunibanco\b"]),
+        ("Santander", [r"\bsantander\b"]),
+        ("PagBank", [r"\bpagbank\b", r"\bpagseguro\b"]),
+        ("C6 Bank", [r"\bc6 bank\b", r"\bc6\b"]),
+        ("Sicredi", [r"\bsicredi\b"]),
+        ("Sicoob", [r"\bsicoob\b"]),
+        ("Stone", [r"\bstone\b"]),
+        ("InfinitePay", [r"\binfinitepay\b", r"\binfinite pay\b"]),
+    ]
+    for nome, termos in padroes:
+        if any(re.search(termo, texto_normalizado) for termo in termos):
+            return nome
+    return ""
+
+
+def _extrair_instituicao_ton_stone_origem(linhas):
+    bloco = _extrair_bloco_origem_ton_stone(linhas)
+    if not bloco:
+        return ""
+
+    for indice, linha in enumerate(bloco):
+        linha_normalizada = _normalizar_rotulo_ocr(linha)
+        if not re.search(r"\b(instituicao|banco)\b", linha_normalizada):
+            continue
+        candidato = ""
+        partes = re.split(r":|-", linha, maxsplit=1)
+        if len(partes) > 1:
+            candidato = _normalizar_espacos(partes[1])
+        if not candidato:
+            for proxima in bloco[indice + 1:indice + 4]:
+                proxima_normalizada = _normalizar_rotulo_ocr(proxima)
+                if not proxima or re.search(r"\b(cpf|cnpj|agencia|conta|nome)\b", proxima_normalizada):
+                    break
+                candidato = _normalizar_espacos(proxima)
+                break
+        instituicao = _normalizar_instituicao_pix_conhecida(candidato)
+        if instituicao:
+            return instituicao
+    return _normalizar_instituicao_pix_conhecida(" ".join(bloco))
+
+
 def _extrair_instituicao_pix(texto):
     def eh_inicio_bloco_recebedor(linha_normalizada):
         return bool(
@@ -1273,6 +1368,10 @@ def _extrair_instituicao_pix(texto):
     instituicao_caixa_tem = _extrair_instituicao_caixa_tem(linhas)
     if instituicao_caixa_tem:
         return instituicao_caixa_tem
+
+    instituicao_ton_stone = _extrair_instituicao_ton_stone_origem(linhas)
+    if instituicao_ton_stone:
+        return instituicao_ton_stone
 
     linhas_cabecalho = []
     for linha in linhas:
@@ -2087,6 +2186,10 @@ def _extrair_pagador(texto):
     pagador_caixa_tem = _extrair_pagador_caixa_tem(linhas)
     if pagador_caixa_tem:
         return pagador_caixa_tem
+
+    pagador_ton_stone = _extrair_pagador_ton_stone_origem(linhas)
+    if pagador_ton_stone:
+        return pagador_ton_stone
 
     pagador_banpara = _extrair_pagador_banpara(linhas)
     if pagador_banpara:

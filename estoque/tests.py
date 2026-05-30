@@ -3241,6 +3241,41 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(dados["data_pagamento"], "2026-05-04T10:49")
         self.assertRegex(dados["instituicao_pix"], r"Nubank|NU PAGAMENTOS")
 
+    def test_analisar_comprovante_pix_ton_stone_usa_dados_de_origem(self):
+        conteudo = (
+            "Comprovante de transfer\u00eancia\n"
+            "14/05/2026 09:15\n"
+            "Valor R$ 548,30\n"
+            "Tipo Pix | Transfer\u00eancia\n"
+            "\n"
+            "DADOS DE DESTINO\n"
+            "Nome\n"
+            "Lincoln Albuquerque Neiva\n"
+            "CPF ***.319.532-**\n"
+            "Institui\u00e7\u00e3o\n"
+            "NU PAGAMENTOS S.A. - INSTITUI\u00c7\u00c3O DE PAGAMENTO\n"
+            "\n"
+            "DADOS DE ORIGEM\n"
+            "Nome\n"
+            "Lisandra De Oliveira Da Silva\n"
+            "CPF ***.157.092-**\n"
+            "Institui\u00e7\u00e3o\n"
+            "STONE INSTITUI\u00c7\u00c3O DE PAGAMENTO S.A.\n"
+            "Ag\u00eancia 0001\n"
+            "Conta 24279683-7\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("ton-stone.txt", conteudo, content_type="text/plain")
+
+        dados = analisar_comprovante_pix(arquivo)
+
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["valor"], "548.30")
+        self.assertEqual(dados["data_pagamento"], "2026-05-14T09:15")
+        self.assertEqual(dados["pagador"], "Lisandra De Oliveira Da Silva")
+        self.assertEqual(dados["instituicao_pix"], "Stone")
+        self.assertNotEqual(dados["pagador"], "Lincoln Albuquerque Neiva")
+        self.assertNotIn("DESTINO", dados["pagador"].upper())
+
     def test_analisar_comprovante_pix_caixa_tem_quem_vai_enviar_nao_usa_data(self):
         conteudo = (
             "Pix Pagamento\n"
