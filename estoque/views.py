@@ -1888,14 +1888,14 @@ def consultar_vendas(request, mostrar_canceladas=False):
         .order_by("-data_venda", "-id")
     )
 
-    if data_inicial:
+    if not numero_texto and data_inicial:
         vendas_qs = vendas_qs.filter(data_venda__gte=data_inicial)
-    elif data_inicial_texto:
+    elif not numero_texto and data_inicial_texto:
         messages.warning(request, "Data inicial invalida. O filtro foi ignorado.")
 
-    if data_final:
+    if not numero_texto and data_final:
         vendas_qs = vendas_qs.filter(data_venda__lte=data_final)
-    elif data_final_texto:
+    elif not numero_texto and data_final_texto:
         messages.warning(request, "Data final invalida. O filtro foi ignorado.")
 
     if cliente_texto:

@@ -106,6 +106,32 @@ class FuncionarioTests(TestCase):
 
 
 class PixRecebidoTests(TestCase):
+    def test_consulta_vendas_por_numero_ignora_datas_preenchidas(self):
+        cliente = Cliente.objects.create(nome="Lincoln Neiva", ativo=True)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=datetime(2026, 5, 11).date(),
+            tipo_pagamento="A prazo",
+            total=Decimal("1043.70"),
+        )
+        hoje = timezone.localdate().isoformat()
+
+        resposta = self.client.get(
+            reverse("estoque:consultar_vendas"),
+            {
+                "data_inicial": hoje,
+                "data_final": hoje,
+                "cliente": "",
+                "numero": str(venda.id),
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, f"#{venda.id}")
+        self.assertContains(resposta, "Lincoln Neiva")
+        self.assertContains(resposta, "11/05/2026")
+
     def test_form_permite_cliente_opcional_e_status_pendente(self):
         form = PixRecebidoForm(data={
             "cliente": "",
