@@ -2617,6 +2617,14 @@ def central_pix_detalhe(request, pix_id):
         )
     )
     pix_retorno_baixa_url = _url_com_pix_recebido(voltar_url, pix.id) if "/receber/" in voltar_url else ""
+    pix_tem_dados_lidos_sem_cliente = bool(
+        not pix.cliente_id
+        and pix.nome_pagador
+        and pix.instituicao_pix
+        and pix.valor
+        and pix.valor > Decimal("0.00")
+        and pix.data_pagamento
+    )
     return render(
         request,
         "estoque/central_pix_detalhe.html",
@@ -2641,6 +2649,7 @@ def central_pix_detalhe(request, pix_id):
             "modo_conferencia_ocr": modo_conferencia_ocr,
             "clientes_pix_autocomplete": _clientes_pix_autocomplete_local(),
             "foco_cliente_confirmado": request.GET.get("foco_cliente") == "1" or not pix.cliente_id,
+            "pix_tem_dados_lidos_sem_cliente": pix_tem_dados_lidos_sem_cliente,
         },
     )
 

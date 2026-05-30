@@ -2126,6 +2126,27 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "pix-client-confirmed-visible")
         self.assertContains(resposta, "Cliente encontrado com seguranca")
 
+    def test_detalhe_pix_com_dados_lidos_sem_cliente_orienta_vincular_pagador(self):
+        pix = PixRecebido.objects.create(
+            nome_pagador="Lisandra De Oliveira Da Silva",
+            valor=Decimal("548.30"),
+            data_pagamento=timezone.make_aware(timezone.datetime(2026, 5, 14, 9, 15)),
+            instituicao_pix="Stone",
+            status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Este Pix j\u00e1 tem dados lidos")
+        self.assertContains(resposta, "Vincule o pagador a um cliente para usar este Pix na baixa")
+        self.assertContains(resposta, "const focarClienteConfirmado = true;")
+        pix.refresh_from_db()
+        self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
+
     def test_detalhe_pix_processar_ocr_com_erro_mantem_comprovante_salvo(self):
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
             pix = PixRecebido.objects.create(

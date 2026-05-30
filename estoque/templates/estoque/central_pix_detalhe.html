@@ -321,8 +321,12 @@
             Atenção: este Pix ainda precisa ser usado na baixa da conta do cliente. Clique em "Usar este Pix na baixa" para concluir.
           </div>
           {% elif pix.valor > 0 and not pix.cliente and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
-            <div class="pix-detail-next-step pix-detail-next-step-warning" data-pix-cliente-baixa-alert hidden>
-              Confirme o cliente antes de usar este Pix na baixa.
+            <div class="pix-detail-next-step pix-detail-next-step-warning" data-pix-cliente-baixa-alert {% if not pix_tem_dados_lidos_sem_cliente %}hidden{% endif %}>
+              {% if pix_tem_dados_lidos_sem_cliente %}
+                Este Pix já tem dados lidos. Vincule o pagador a um cliente para usar este Pix na baixa.
+              {% else %}
+                Confirme o cliente antes de usar este Pix na baixa.
+              {% endif %}
             </div>
           {% elif pix.valor > 0 and pix_retorno_baixa_url and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
             <div class="pix-detail-next-step">
