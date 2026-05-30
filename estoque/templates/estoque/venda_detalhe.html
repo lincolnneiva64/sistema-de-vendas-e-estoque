@@ -328,6 +328,12 @@
             word-break: break-word;
         }
 
+        @media screen and (max-width: 600px) {
+            .dados {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -1065,6 +1071,10 @@
 
                     <div class="dados">
                         <div class="campo">
+                            <span class="label">Nº da venda</span>
+                            <span class="valor">#{{ venda.id }}</span>
+                        </div>
+                        <div class="campo">
                             <span class="label">Cliente</span>
                             <span class="valor">{{ venda.cliente.nome|default:"Consumidor" }}</span>
                         </div>
@@ -1079,6 +1089,10 @@
                         <div class="campo">
                             <span class="label">Pagamento</span>
                             <span class="valor">{{ venda.tipo_pagamento|default:"-" }}</span>
+                        </div>
+                        <div class="campo">
+                            <span class="label">Total da venda</span>
+                            <span class="valor">R$ {{ venda.total|floatformat:2 }}</span>
                         </div>
                     </div>
 
@@ -1210,6 +1224,10 @@
                 <section class="conteudo">
                     <div class="dados">
                         <div class="campo">
+                            <span class="label">Nº da venda</span>
+                            <span class="valor">#{{ venda.id }}</span>
+                        </div>
+                        <div class="campo">
                             <span class="label">Cliente</span>
                             <span class="valor">{{ venda.cliente.nome|default:"Consumidor" }}</span>
                         </div>
@@ -1224,6 +1242,10 @@
                         <div class="campo">
                             <span class="label">Pagamento</span>
                             <span class="valor">{{ venda.tipo_pagamento|default:"-" }}</span>
+                        </div>
+                        <div class="campo">
+                            <span class="label">Total da venda</span>
+                            <span class="valor">R$ {{ venda.total|floatformat:2 }}</span>
                         </div>
                     </div>
 
