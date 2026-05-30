@@ -62,6 +62,11 @@
     filter: brightness(0.96);
   }
   .review-btn.danger { border-color: #dc2626; background: #dc2626; color: #fff; }
+  .review-btn:disabled, .review-btn.is-processing {
+    cursor: progress; opacity: 0.82; transform: translateY(1px);
+    box-shadow: inset 0 2px 5px rgba(15, 23, 42, 0.18);
+    filter: brightness(0.94);
+  }
   @media (max-width: 680px) {
     .review-summary { grid-template-columns: 1fr; }
     .review-item { grid-template-columns: 1fr; gap: 5px; }
@@ -138,14 +143,27 @@
           {% endfor %}
         </section>
 
-        <form method="post" class="review-actions">
+        <form method="post" class="review-actions" id="reviewRemovalForm">
           {% csrf_token %}
           <input type="hidden" name="next" value="{{ voltar_url }}">
           <a class="review-btn" href="{{ voltar_url }}">Cancelar / Voltar</a>
-          <button class="review-btn danger" type="submit">Confirmar remocao e resolver pendencia</button>
+          <button class="review-btn danger" type="submit" id="reviewRemovalSubmit">Confirmar remocao e resolver pendencia</button>
         </form>
       </div>
     </section>
   </div>
 </main>
+<script>
+  (function () {
+    var form = document.getElementById("reviewRemovalForm");
+    var submit = document.getElementById("reviewRemovalSubmit");
+    if (!form || !submit) return;
+
+    form.addEventListener("submit", function () {
+      submit.textContent = "Removendo item...";
+      submit.disabled = true;
+      submit.classList.add("is-processing");
+    });
+  }());
+</script>
 {% endblock %}

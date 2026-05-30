@@ -4091,7 +4091,7 @@ def revisar_remocao_pendencia_da_nota(request, checklist_id):
             request,
             "Item removido da nota e pendencia resolvida com sucesso.",
         )
-        return redirect(f"{reverse('estoque:venda_detalhe', kwargs={'pk': venda_id})}?origem=pendencias")
+        return redirect(f"{reverse('estoque:venda_detalhe', kwargs={'pk': venda_id})}?origem=pendencias#dados-da-nota")
 
     return render(
         request,
