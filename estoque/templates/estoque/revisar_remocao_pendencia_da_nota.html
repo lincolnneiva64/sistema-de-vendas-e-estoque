@@ -27,6 +27,27 @@
   .review-total { border: 1px solid #dbeafe; border-radius: 10px; background: #eff6ff; padding: 10px; }
   .review-total.final { border-color: #bbf7d0; background: #f0fdf4; }
   .review-total .review-value { font-size: 1.08rem; }
+  .review-items { border: 1px solid #edf1f6; border-radius: 10px; overflow: hidden; }
+  .review-items-title {
+    margin: 0; padding: 10px 12px; background: #f8fafc; border-bottom: 1px solid #edf1f6;
+    color: #334155; font-size: 0.86rem; font-weight: 950;
+  }
+  .review-item {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 10px; align-items: center;
+    padding: 10px 12px; border-bottom: 1px solid #edf1f6; background: #fff;
+  }
+  .review-item:last-child { border-bottom: 0; }
+  .review-item.remove { border-left: 4px solid #dc2626; background: #fef2f2; }
+  .review-item.keep { border-left: 4px solid #16a34a; }
+  .review-item-name { color: #111827; font-size: 0.9rem; font-weight: 950; overflow-wrap: anywhere; }
+  .review-item-meta, .review-item-value {
+    color: #475569; font-size: 0.82rem; font-weight: 850; white-space: nowrap;
+  }
+  .review-badge {
+    border-radius: 999px; padding: 4px 8px; background: #dc2626; color: #fff;
+    font-size: 0.68rem; font-weight: 950; text-transform: uppercase; white-space: nowrap;
+  }
+  .review-badge.keep { background: #dcfce7; color: #166534; }
   .review-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
   .review-btn {
     min-height: 38px; border: 1px solid #cbd5e1; border-radius: 9px; padding: 8px 13px;
@@ -43,6 +64,8 @@
   .review-btn.danger { border-color: #dc2626; background: #dc2626; color: #fff; }
   @media (max-width: 680px) {
     .review-grid, .review-total-row { grid-template-columns: 1fr; }
+    .review-item { grid-template-columns: 1fr; gap: 5px; }
+    .review-item-meta, .review-item-value, .review-badge { justify-self: start; white-space: normal; }
     .review-actions { justify-content: stretch; }
     .review-btn { width: 100%; }
   }
@@ -57,7 +80,7 @@
       </header>
       <div class="review-body">
         <div class="review-warning">
-          Esta acao altera a nota/venda original. O item abaixo sera removido somente depois da confirmacao.
+          Esta acao altera a nota/venda original. Confira todos os itens antes da confirmacao.
         </div>
 
         <div class="review-grid">
@@ -87,6 +110,22 @@
           </div>
         </div>
 
+        <section class="review-items" aria-label="Itens atuais da venda">
+          <h2 class="review-items-title">Itens atuais da nota/venda</h2>
+          {% for item in itens_venda %}
+            <div class="review-item {% if item.id == item_venda.id %}remove{% else %}keep{% endif %}">
+              <span class="review-item-name">{{ item.produto.nome|default:"Produto nao identificado" }}</span>
+              <span class="review-item-meta">{{ item.quantidade }} {{ item.unidade }}</span>
+              <span class="review-item-value">R$ {{ item.valor_total|floatformat:2 }}</span>
+              {% if item.id == item_venda.id %}
+                <span class="review-badge">Sera removido</span>
+              {% else %}
+                <span class="review-badge keep">Permanece na nota</span>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </section>
+
         <div class="review-total-row">
           <div class="review-total">
             <span class="review-label">Total atual da venda</span>
@@ -102,7 +141,7 @@
           {% csrf_token %}
           <input type="hidden" name="next" value="{{ voltar_url }}">
           <a class="review-btn" href="{{ voltar_url }}">Cancelar / Voltar</a>
-          <button class="review-btn danger" type="submit">Confirmar remocao da nota</button>
+          <button class="review-btn danger" type="submit">Confirmar remocao e resolver pendencia</button>
         </form>
       </div>
     </section>

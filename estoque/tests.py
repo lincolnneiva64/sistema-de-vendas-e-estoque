@@ -154,7 +154,7 @@ class PixRecebidoTests(TestCase):
             carregado=True,
             entregue=True,
         )
-        EntregaChecklistItem.objects.create(
+        checklist_pendente = EntregaChecklistItem.objects.create(
             rota_item=item_rota,
             item_venda=item_pendente,
             carregado=False,
@@ -164,18 +164,47 @@ class PixRecebidoTests(TestCase):
         pendencias_antes = views.listar_pendencias_entrega()
         self.assertTrue(any(pendencia["item_venda_id"] == item_pendente.id for pendencia in pendencias_antes))
 
+        revisao_url = reverse(
+            "estoque:revisar_remocao_pendencia_da_nota",
+            kwargs={"checklist_id": checklist_pendente.id},
+        )
+        resposta_revisao = self.client.get(revisao_url, secure=True)
+        self.assertContains(resposta_revisao, "Agua Teste")
+        self.assertContains(resposta_revisao, "Coca Cola 2L Teste")
+        self.assertContains(resposta_revisao, "Sera removido")
+        self.assertContains(resposta_revisao, "Permanece na nota")
+
         resposta = self.client.post(
-            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item_pendente.id}),
+            revisao_url,
             secure=True,
+            follow=True,
         )
 
-        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Item removido da nota e pendencia resolvida com sucesso.")
         self.assertFalse(ItemVenda.objects.filter(pk=item_pendente.id).exists())
         item_rota.refresh_from_db()
         self.assertEqual(item_rota.status, EntregaRotaItem.STATUS_ENTREGUE)
         self.assertTrue(item_rota.entrega_concluida)
         pendencias_depois = views.listar_pendencias_entrega()
         self.assertFalse(any(pendencia["venda"].id == venda.id for pendencia in pendencias_depois))
+
+        resposta_abertas = self.client.get(reverse("estoque:pendencias_entrega"), secure=True)
+        self.assertContains(resposta_abertas, "Ver pendencias resolvidas")
+        self.assertNotContains(resposta_abertas, "Coca Cola 2L Teste")
+        resposta_resolvidas = self.client.get(
+            reverse("estoque:pendencias_entrega"),
+            {"status": "resolvidas"},
+            secure=True,
+        )
+        self.assertContains(resposta_resolvidas, "Ver pendencias em aberto")
+        self.assertContains(resposta_resolvidas, "Coca Cola 2L Teste")
+        self.assertContains(resposta_resolvidas, "Resolvida removendo item da nota")
+        self.assertContains(resposta_resolvidas, "Abrir nota")
+        self.assertContains(
+            resposta_resolvidas,
+            f'{reverse("estoque:venda_detalhe", kwargs={"pk": venda.id})}?entrega={rota.id}&origem=pendencias',
+        )
 
     def test_consulta_vendas_por_numero_ignora_datas_preenchidas(self):
         cliente = Cliente.objects.create(nome="Lincoln Neiva", ativo=True)

@@ -45,6 +45,8 @@
     border: 1px solid #fde68a; background: #fffbeb; color: #92400e;
     font-size: 0.72rem; font-weight: 900;
   }
+  .pend-status.resolvida { border-color: #bbf7d0; background: #f0fdf4; color: #166534; }
+  .pend-resolved-row td { background: #f8fffb; }
   .pend-actions { display: flex; gap: 7px; flex-wrap: wrap; }
   .pend-detail-row[hidden] { display: none; }
   .pend-detail-cell {
@@ -99,15 +101,31 @@
     <header class="pend-header">
       <div>
         <h1 class="pend-title">Pendencias de Entrega</h1>
-        <p class="pend-subtitle">Itens e entregas com pendencia registrada no checklist.</p>
+        <p class="pend-subtitle">
+          {% if exibindo_resolvidas %}
+            Pendencias resolvidas para consulta operacional.
+          {% else %}
+            Itens e entregas com pendencia registrada no checklist.
+          {% endif %}
+        </p>
       </div>
-      <a class="pend-btn btn-pressionavel" href="{% url 'estoque:entregas_dia' %}">Voltar para Entregas</a>
+      <div class="pend-actions">
+        {% if exibindo_resolvidas %}
+          <a class="pend-btn btn-pressionavel" href="{% url 'estoque:pendencias_entrega' %}">Ver pendencias em aberto</a>
+        {% else %}
+          <a class="pend-btn btn-pressionavel" href="{% url 'estoque:pendencias_entrega' %}?status=resolvidas">Ver pendencias resolvidas</a>
+        {% endif %}
+        <a class="pend-btn btn-pressionavel" href="{% url 'estoque:entregas_dia' %}">Voltar para Entregas</a>
+      </div>
     </header>
 
     <section class="pend-card">
       <div class="pend-card-head">
-        <h2 class="pend-card-title">Pendencias encontradas</h2>
-        <span class="pend-muted">{{ total_pendencias }} registro(s)</span>
+        <h2 class="pend-card-title">{% if exibindo_resolvidas %}Pendencias resolvidas{% else %}Pendencias em aberto{% endif %}</h2>
+        <span class="pend-muted">
+          {{ total_pendencias }} registro(s)
+          {% if exibindo_resolvidas %}resolvido(s){% else %}em aberto{% endif %}
+        </span>
       </div>
       {% if pendencias %}
         <div class="pend-table-wrap">
@@ -126,22 +144,30 @@
             </thead>
             <tbody>
               {% for pendencia in pendencias %}
-                <tr>
+                <tr{% if exibindo_resolvidas %} class="pend-resolved-row"{% endif %}>
                   <td><span class="pend-strong">{{ pendencia.cliente }}</span></td>
                   <td>Venda #{{ pendencia.venda.id }}</td>
-                  <td>Rota #{{ pendencia.rota.id }}</td>
+                  <td>{% if pendencia.rota %}Rota #{{ pendencia.rota.id }}{% elif pendencia.rota_id %}Rota #{{ pendencia.rota_id }}{% else %}-{% endif %}</td>
                   <td>{{ pendencia.data|date:"d/m/Y" }}</td>
                   <td>{{ pendencia.produto|default:"-" }}</td>
                   <td>{% if pendencia.quantidade %}{{ pendencia.quantidade }} {{ pendencia.unidade }}{% else %}-{% endif %}</td>
-                  <td><span class="pend-status">{{ pendencia.status }}</span></td>
+                  <td>
+                    <span class="pend-status{% if exibindo_resolvidas %} resolvida{% endif %}">{{ pendencia.status }}</span>
+                    {% if exibindo_resolvidas and pendencia.resolucao %}
+                      <div class="pend-muted">{{ pendencia.resolucao }}</div>
+                    {% endif %}
+                  </td>
                   <td>
                     <div class="pend-actions">
-                      <a class="pend-btn btn-pressionavel" href="{% url 'estoque:venda_detalhe' pendencia.venda.id %}?entrega={{ pendencia.rota.id }}&origem=pendencias">Abrir nota</a>
-                      <a class="pend-btn primary btn-pressionavel" href="{% url 'estoque:entrega_rota_checklist' pendencia.rota.id %}?origem=pendencias">Abrir checklist</a>
+                      <a class="pend-btn btn-pressionavel" href="{% url 'estoque:venda_detalhe' pendencia.venda.id %}{% if pendencia.rota %}?entrega={{ pendencia.rota.id }}&origem=pendencias{% else %}?origem=pendencias{% endif %}">Abrir nota</a>
+                      {% if not exibindo_resolvidas %}
+                        <a class="pend-btn primary btn-pressionavel" href="{% url 'estoque:entrega_rota_checklist' pendencia.rota.id %}?origem=pendencias">Abrir checklist</a>
                       <button class="pend-btn btn-pressionavel pend-tratar-toggle" type="button" data-target="pend-tratar-{{ forloop.counter }}" aria-expanded="false">Tratar pendência</button>
+                      {% endif %}
                     </div>
                   </td>
                 </tr>
+                {% if not exibindo_resolvidas %}
                 <tr class="pend-detail-row" id="pend-tratar-{{ forloop.counter }}" hidden>
                   <td class="pend-detail-cell" colspan="8">
                     <div class="pend-tratar-panel">
@@ -174,12 +200,19 @@
                     </div>
                   </td>
                 </tr>
+                {% endif %}
               {% endfor %}
             </tbody>
           </table>
         </div>
       {% else %}
-        <div class="pend-empty">Nenhuma pendencia de entrega encontrada.</div>
+        <div class="pend-empty">
+          {% if exibindo_resolvidas %}
+            Nenhuma pendencia resolvida encontrada.
+          {% else %}
+            Nenhuma pendencia de entrega encontrada.
+          {% endif %}
+        </div>
       {% endif %}
     </section>
   </div>

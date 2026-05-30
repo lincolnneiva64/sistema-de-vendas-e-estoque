@@ -1023,7 +1023,7 @@
                         </div>
                     {% endif %}
 
-                    {% if request.GET.nota_atualizada == "1" %}
+                    {% if request.GET.nota_atualizada == "1" or request.GET.origem == "pendencias" %}
                         {% for message in messages %}
                             <div class="nota-feedback {{ message.tags }}">{{ message }}</div>
                         {% endfor %}

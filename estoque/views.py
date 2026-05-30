@@ -774,6 +774,52 @@ def pendencias_sugeriveis_entrega():
     return [pendencia for pendencia in listar_pendencias_entrega() if pendencia.get("id")]
 
 
+def listar_pendencias_resolvidas_entrega(limite=None):
+    eventos = (
+        EventoVenda.objects.filter(tipo_evento="pendencia_removida_da_nota")
+        .select_related("venda", "venda__cliente")
+        .order_by("-criado_em", "-id")
+    )
+    if limite:
+        eventos = eventos[:limite]
+
+    rota_ids = []
+    dados_eventos = []
+    for evento in eventos:
+        rota_match = re.search(r"rota #(\d+)", evento.descricao or "", flags=re.IGNORECASE)
+        rota_id = int(rota_match.group(1)) if rota_match else None
+        if rota_id:
+            rota_ids.append(rota_id)
+        dados_eventos.append((evento, rota_id))
+
+    rotas = EntregaRota.objects.in_bulk(rota_ids)
+    pendencias = []
+    for evento, rota_id in dados_eventos:
+        descricao = evento.descricao or ""
+        item_match = re.search(
+            r"Item removido:\s*(?P<produto>.*?)\s*-\s*(?P<quantidade>[\d.,]+)\s*(?P<unidade>[^\(]*?)\s*\(",
+            descricao,
+            flags=re.IGNORECASE,
+        )
+        venda = evento.venda
+        cliente = venda.cliente if venda else None
+        pendencias.append({
+            "id": evento.id,
+            "cliente": cliente.nome if cliente else "Consumidor",
+            "venda": venda,
+            "rota": rotas.get(rota_id),
+            "rota_id": rota_id,
+            "data": evento.criado_em,
+            "produto": item_match.group("produto").strip() if item_match else "",
+            "quantidade": item_match.group("quantidade").strip() if item_match else "",
+            "unidade": item_match.group("unidade").strip() if item_match else "",
+            "status": "Resolvida",
+            "resolucao": "Resolvida removendo item da nota",
+        })
+
+    return pendencias
+
+
 def pendencias_checklist_validas(checklist_ids):
     ids = [int(checklist_id) for checklist_id in checklist_ids if str(checklist_id).isdigit()]
     if not ids:
@@ -3941,13 +3987,19 @@ def entregas_dia(request):
 
 
 def pendencias_entrega(request):
-    pendencias = listar_pendencias_entrega()
+    exibindo_resolvidas = request.GET.get("status") == "resolvidas"
+    pendencias_abertas = listar_pendencias_entrega()
+    pendencias_resolvidas = listar_pendencias_resolvidas_entrega()
+    pendencias = pendencias_resolvidas if exibindo_resolvidas else pendencias_abertas
     return render(
         request,
         "estoque/pendencias_entrega.html",
         {
             "pendencias": pendencias,
             "total_pendencias": len(pendencias),
+            "total_pendencias_abertas": len(pendencias_abertas),
+            "total_pendencias_resolvidas": len(pendencias_resolvidas),
+            "exibindo_resolvidas": exibindo_resolvidas,
         },
     )
 
@@ -3963,7 +4015,7 @@ def revisar_remocao_pendencia_da_nota(request, checklist_id):
             "rota_item__venda__cliente",
             "rota_item__origem_pendencia",
         )
-        .prefetch_related("rota_item__checklist_itens", "rota_item__venda__itens")
+        .prefetch_related("rota_item__checklist_itens", "rota_item__venda__itens__produto")
         .filter(pk=checklist_id)
         .first()
     )
@@ -4037,7 +4089,7 @@ def revisar_remocao_pendencia_da_nota(request, checklist_id):
 
         messages.success(
             request,
-            f"Item removido da venda #{venda_id} e pendencia resolvida com sucesso.",
+            "Item removido da nota e pendencia resolvida com sucesso.",
         )
         return redirect(f"{reverse('estoque:venda_detalhe', kwargs={'pk': venda_id})}?origem=pendencias")
 
@@ -4051,6 +4103,7 @@ def revisar_remocao_pendencia_da_nota(request, checklist_id):
             "venda": venda,
             "cliente": venda.cliente,
             "item_venda": item_venda,
+            "itens_venda": venda.itens.all(),
             "produto_nome": item_venda.produto.nome if item_venda.produto else "Produto nao identificado",
             "total_atual": total_atual,
             "novo_total": novo_total,
