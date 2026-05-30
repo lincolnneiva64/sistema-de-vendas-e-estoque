@@ -509,6 +509,7 @@ class PixRecebido(models.Model):
     texto_ocr_bruto = models.TextField(blank=True)
     comprovante = models.FileField(upload_to="pix/comprovantes/", blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDENTE)
+    visualizado_em = models.DateTimeField(blank=True, null=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 

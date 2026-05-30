@@ -2508,6 +2508,9 @@ def _abrir_comprovante_pix(pix):
 @ensure_csrf_cookie
 def central_pix_detalhe(request, pix_id):
     pix = get_object_or_404(PixRecebido.objects.select_related("cliente", "cliente_sugerido", "pix_original"), pk=pix_id)
+    if request.method == "GET" and not pix.visualizado_em:
+        pix.visualizado_em = timezone.now()
+        pix.save(update_fields=["visualizado_em"])
     voltar_url = _url_retorno_segura(request) or reverse("estoque:central_pix")
     modo_conferencia_ocr = request.GET.get("modo") == "ocr"
     detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id})

@@ -161,6 +161,59 @@ class PixRecebidoTests(TestCase):
         }
         self.assertEqual(contagens_depois, contagens_antes)
 
+    def test_central_pix_pix_novo_aparece_com_linha_destacada(self):
+        PixRecebido.objects.create(
+            nome_pagador="Pix novo visual",
+            valor="25.00",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+
+        resposta = self.client.get(reverse("estoque:central_pix"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Pix novo visual")
+        self.assertContains(resposta, "pix-row-novo")
+        self.assertNotContains(resposta, "pix-novo-badge")
+        self.assertNotContains(resposta, ">Novo<")
+        pix = PixRecebido.objects.get(nome_pagador="Pix novo visual")
+        self.assertIsNone(pix.visualizado_em)
+
+    def test_central_pix_detalhe_marca_pix_como_visualizado(self):
+        pix = PixRecebido.objects.create(
+            nome_pagador="Pix abre detalhe",
+            valor="35.00",
+            status=PixRecebido.STATUS_NAO_IDENTIFICADO,
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        pix.refresh_from_db()
+        self.assertIsNotNone(pix.visualizado_em)
+
+        resposta_lista = self.client.get(reverse("estoque:central_pix"), secure=True)
+        self.assertContains(resposta_lista, "Pix abre detalhe")
+        self.assertNotContains(resposta_lista, '<tr class="pix-row pix-row-novo">', html=True)
+
+    def test_central_pix_marcar_visualizado_nao_altera_status_financeiro(self):
+        pix = PixRecebido.objects.create(
+            nome_pagador="Pix status preservado",
+            valor="45.00",
+            status=PixRecebido.STATUS_POSSIVEL_DUPLICADO,
+        )
+
+        self.client.get(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+            secure=True,
+        )
+
+        pix.refresh_from_db()
+        self.assertIsNotNone(pix.visualizado_em)
+        self.assertEqual(pix.status, PixRecebido.STATUS_POSSIVEL_DUPLICADO)
+
     def test_central_pix_bloqueia_salvar_sem_cliente_confirmado(self):
         url = reverse("estoque:central_pix")
         contagens_antes = {
