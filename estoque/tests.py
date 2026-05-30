@@ -16,7 +16,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FuncionarioForm, PixRecebidoForm
-from .models import Cliente, ContaReceber, CreditoCliente, Funcionario, PixRecebido, RecebimentoContaReceber, Venda
+from .models import Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, Funcionario, ItemVenda, PixRecebido, Produto, RecebimentoContaReceber, Venda
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
 from . import views
 
@@ -106,6 +106,77 @@ class FuncionarioTests(TestCase):
 
 
 class PixRecebidoTests(TestCase):
+    def _produto_teste(self, nome):
+        return Produto.objects.create(
+            nome=nome,
+            preco_compra=Decimal("1.00"),
+            preco_vista=Decimal("2.00"),
+            preco_prazo=Decimal("3.00"),
+            permitir_prejuizo=False,
+        )
+
+    def test_remover_item_da_nota_resolve_pendencia_de_entrega_do_item(self):
+        cliente = Cliente.objects.create(nome="Cliente Entrega", ativo=True)
+        produto_entregue = self._produto_teste("Agua Teste")
+        produto_pendente = self._produto_teste("Coca Cola 2L Teste")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("25.00"),
+        )
+        item_entregue = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_entregue,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("10.00"),
+        )
+        item_pendente = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_pendente,
+            quantidade=Decimal("5.000"),
+            unidade="pct",
+            preco_unitario=Decimal("3.00"),
+            valor_total=Decimal("15.00"),
+        )
+        rota = EntregaRota.objects.create(data=timezone.localdate(), tipo=EntregaRota.TIPO_UNITARIA)
+        item_rota = EntregaRotaItem.objects.create(
+            rota=rota,
+            venda=venda,
+            status=EntregaRotaItem.STATUS_PARCIAL,
+            observacao="[checklist_entrega_salva]",
+        )
+        EntregaChecklistItem.objects.create(
+            rota_item=item_rota,
+            item_venda=item_entregue,
+            carregado=True,
+            entregue=True,
+        )
+        EntregaChecklistItem.objects.create(
+            rota_item=item_rota,
+            item_venda=item_pendente,
+            carregado=False,
+            entregue=False,
+        )
+
+        pendencias_antes = views.listar_pendencias_entrega()
+        self.assertTrue(any(pendencia["item_venda_id"] == item_pendente.id for pendencia in pendencias_antes))
+
+        resposta = self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item_pendente.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertFalse(ItemVenda.objects.filter(pk=item_pendente.id).exists())
+        item_rota.refresh_from_db()
+        self.assertEqual(item_rota.status, EntregaRotaItem.STATUS_ENTREGUE)
+        self.assertTrue(item_rota.entrega_concluida)
+        pendencias_depois = views.listar_pendencias_entrega()
+        self.assertFalse(any(pendencia["venda"].id == venda.id for pendencia in pendencias_depois))
+
     def test_consulta_vendas_por_numero_ignora_datas_preenchidas(self):
         cliente = Cliente.objects.create(nome="Lincoln Neiva", ativo=True)
         venda = Venda.objects.create(

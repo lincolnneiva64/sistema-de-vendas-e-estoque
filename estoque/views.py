@@ -890,6 +890,27 @@ def checklists_pendencia_selecionados(checklists, ids_selecionados):
     ]
 
 
+def resolver_entregas_sem_pendencias_ativas(rota_item_ids):
+    ids = [rota_item_id for rota_item_id in rota_item_ids if rota_item_id]
+    if not ids:
+        return
+
+    itens_rota = (
+        EntregaRotaItem.objects.filter(pk__in=ids)
+        .select_related("origem_pendencia")
+        .prefetch_related("checklist_itens")
+    )
+    for item_rota in itens_rota:
+        checklists = checklists_validos_rota_item(item_rota)
+        if any(not checklist.entregue for checklist in checklists):
+            continue
+        if item_rota.status == EntregaRotaItem.STATUS_ENTREGUE and item_rota.entrega_concluida:
+            continue
+        item_rota.status = EntregaRotaItem.STATUS_ENTREGUE
+        item_rota.entrega_concluida = True
+        item_rota.save(update_fields=["status", "entrega_concluida"])
+
+
 def ordem_postada(valor, padrao=9999):
     try:
         return int(valor or padrao)
@@ -3995,7 +4016,12 @@ def revisar_remocao_pendencia_da_nota(request, checklist_id):
             valor_total = item_venda.valor_total or Decimal("0.00")
             venda_id = venda.id
             rota_id = item_rota.rota_id
+            rota_item_ids_afetados = list(
+                EntregaChecklistItem.objects.filter(item_venda=item_venda)
+                .values_list("rota_item_id", flat=True)
+            )
             item_venda.delete()
+            resolver_entregas_sem_pendencias_ativas(rota_item_ids_afetados)
             novo_total = recalcular_total_venda(venda)
 
             _registrar_evento_venda(
@@ -5446,7 +5472,12 @@ def venda_revisar_remocao_item(request, pk, item_id):
         total_anterior = total_atual_venda
 
         with transaction.atomic():
+            rota_item_ids_afetados = list(
+                EntregaChecklistItem.objects.filter(item_venda=item_venda)
+                .values_list("rota_item_id", flat=True)
+            )
             item_venda.delete()
+            resolver_entregas_sem_pendencias_ativas(rota_item_ids_afetados)
             total_recalculado = sum(
                 (
                     valor or Decimal("0.00")
