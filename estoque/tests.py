@@ -2040,7 +2040,7 @@ class PixRecebidoTests(TestCase):
 
         self.assertEqual(resposta_sem_foco.status_code, 200)
         self.assertEqual(resposta_com_foco.status_code, 200)
-        self.assertContains(resposta_sem_foco, "const focarClienteConfirmado = false;")
+        self.assertContains(resposta_sem_foco, "const focarClienteConfirmado = true;")
         self.assertContains(resposta_com_foco, "const focarClienteConfirmado = true;")
         self.assertContains(resposta_com_foco, "clienteConfirmadoBusca.select();")
         self.assertContains(resposta_com_foco, 'addEventListener("click"')
@@ -2050,6 +2050,28 @@ class PixRecebidoTests(TestCase):
         bloco_foco = bloco_foco.split('document.querySelectorAll("form")', 1)[0]
         self.assertNotIn("buscarClientes", bloco_foco)
         self.assertNotIn('addEventListener("focus"', conteudo)
+
+    def test_detalhe_pix_com_cliente_confirmado_destaca_sem_focar_digitacao(self):
+        cliente = Cliente.objects.create(nome="Cliente Pix Confirmado", ativo=True)
+        pix = PixRecebido.objects.create(
+            cliente=cliente,
+            cliente_sugerido=cliente,
+            nome_pagador="Cliente Pix Confirmado",
+            valor=Decimal("5.00"),
+            data_pagamento=timezone.now(),
+            instituicao_pix="Mercado Pago",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "const focarClienteConfirmado = false;")
+        self.assertContains(resposta, "pix-client-confirmed-visible")
+        self.assertContains(resposta, "Cliente encontrado com seguranca")
 
     def test_detalhe_pix_processar_ocr_com_erro_mantem_comprovante_salvo(self):
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
@@ -2947,8 +2969,14 @@ class PixRecebidoTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "Confirme o cliente antes de usar este Pix na baixa.")
+        self.assertContains(resposta, "baixaSemClienteConfirmado")
+        self.assertContains(resposta, "event.preventDefault();")
+        self.assertContains(resposta, "pix-client-attention")
         self.assertNotContains(resposta, "Confirmar recebimento do cliente")
         self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
+        pix.refresh_from_db()
+        self.assertIsNone(pix.cliente)
+        self.assertEqual(pix.status, PixRecebido.STATUS_NAO_IDENTIFICADO)
 
     def test_detalhe_pix_usar_na_baixa_sem_valor_nao_avanca(self):
         cliente = Cliente.objects.create(nome="Cliente Pix Sem Valor Baixa", ativo=True)

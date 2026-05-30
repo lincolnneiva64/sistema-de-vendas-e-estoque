@@ -111,6 +111,12 @@
     box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18);
     border-radius: 8px;
   }
+  .pix-correction-confirmado.pix-client-confirmed-visible { box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.13); }
+  .pix-correction-confirmado.pix-client-confirmed-visible .pix-confirmed-client-search {
+    border-color: #16a34a;
+    font-size: 0.98rem;
+    font-weight: 950;
+  }
   .pix-correction-help { grid-column: 1 / -1; margin: -1px 0 0; color: #64748b; font-size: 0.68rem; font-weight: 750; line-height: 1.2; }
   .pix-correction-hint {
     border: 1px solid #fde68a; border-radius: 7px; background: #fffbeb; color: #92400e;
@@ -246,12 +252,14 @@
               {% csrf_token %}
               <input type="hidden" name="acao" value="corrigir">
               <h2 class="pix-correction-title">Conferencia do comprovante</h2>
-              <div class="pix-correction-field pix-correction-confirmado" id="pixClienteConfirmadoArea">
+              <div class="pix-correction-field pix-correction-confirmado {% if pix.cliente %}pix-client-confirmed-visible{% endif %}{% if foco_cliente_confirmado %} pix-client-attention{% endif %}" id="pixClienteConfirmadoArea">
                 <label for="pixClienteConfirmadoBusca">Cliente confirmado</label>
                 {{ form_correcao.cliente }}
                 <input type="text" id="pixClienteConfirmadoBusca" class="pix-correction-input pix-confirmed-client-search" placeholder="Sem cliente confirmado" autocomplete="off">
                 <div class="pix-correction-suggestions" id="pixClienteConfirmadoSugestoes"></div>
-                {% if not pix.cliente and not pix.cliente_sugerido %}
+                {% if pix.cliente %}
+                  <div class="pix-correction-help">Cliente encontrado com seguranca. Confira e siga para usar este Pix na baixa.</div>
+                {% elif not pix.cliente_sugerido %}
                   <div class="pix-correction-help">Nenhum cliente cadastrado foi identificado com segurança. Digite ou selecione o cliente correto no campo Cliente confirmado.</div>
                 {% endif %}
                 {% for error in form_correcao.cliente.errors %}
@@ -314,7 +322,7 @@
           </div>
           {% elif pix.valor > 0 and not pix.cliente and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
             <div class="pix-detail-next-step pix-detail-next-step-warning" data-pix-cliente-baixa-alert hidden>
-              Confirme o cliente antes de usar este Pix na baixa da conta.
+              Confirme o cliente antes de usar este Pix na baixa.
             </div>
           {% elif pix.valor > 0 and pix_retorno_baixa_url and not pix_parecido_baixado and pix.status != "duplicado" and pix.status != "ignorado" and pix.status != "baixado" %}
             <div class="pix-detail-next-step">
@@ -455,10 +463,11 @@
     const valorInput = document.getElementById("id_valor");
     const clienteConfirmadoArea = document.getElementById("pixClienteConfirmadoArea");
     const clienteBaixaAlert = document.querySelector("[data-pix-cliente-baixa-alert]");
-    const botaoBaixaSemCliente = document.querySelector("[data-pix-baixa-sem-cliente]");
     const pixPendenteBaixa = document.querySelector("[data-pix-pendente-baixa='1']");
     const botaoContinuarBaixa = document.querySelector("[data-pix-continuar-baixa]");
+    const pixCorrectionForm = document.getElementById("pixCorrectionForm");
     const mensagemPixPendente = "Antes de sair, conclua a baixa deste Pix ou escolha Ignorar Pix sem baixa.";
+    const mensagemClienteObrigatorio = "Confirme o cliente antes de usar este Pix na baixa.";
     let buscaFrame = null;
     let liberarSaidaPix = false;
 
@@ -551,6 +560,27 @@
       renderizarSugestoes(filtrarClientesLocais(termo), sugestoesAlvo);
     }
 
+    function orientarClienteConfirmado() {
+      if (clienteBaixaAlert) {
+        clienteBaixaAlert.hidden = false;
+        clienteBaixaAlert.textContent = mensagemClienteObrigatorio;
+      }
+      clienteConfirmadoArea?.classList.add("pix-client-attention");
+      clienteConfirmadoBusca?.scrollIntoView({ behavior: "smooth", block: "center" });
+      window.setTimeout(function () {
+        clienteConfirmadoBusca?.focus({ preventScroll: true });
+        clienteConfirmadoBusca?.select();
+      }, 40);
+    }
+
+    function baixaSemClienteConfirmado(event) {
+      if (!botaoContinuarBaixa || !clienteSelect || clienteSelect.value) return false;
+      if (event) event.preventDefault();
+      liberarSaidaPix = false;
+      orientarClienteConfirmado();
+      return true;
+    }
+
     restaurarValorPixAtual();
     window.setTimeout(restaurarValorPixAtual, 120);
     window.addEventListener("pageshow", restaurarValorPixAtual);
@@ -584,6 +614,11 @@
         clienteConfirmadoBusca.select();
       }, 80);
     }
+    botaoContinuarBaixa?.addEventListener("click", baixaSemClienteConfirmado);
+    pixCorrectionForm?.addEventListener("submit", function (evento) {
+      const acao = evento.submitter?.value || "";
+      if (acao === "usar_baixa") baixaSemClienteConfirmado(evento);
+    });
     document.querySelectorAll("form").forEach(function (formulario) {
       formulario.addEventListener("submit", function () {
         liberarSaidaPix = true;
@@ -591,17 +626,9 @@
     });
     document.querySelectorAll("[data-pix-continuar-baixa]").forEach(function (link) {
       link.addEventListener("click", function () {
+        if (!clienteSelect || !clienteSelect.value) return;
         liberarSaidaPix = true;
       });
-    });
-    botaoBaixaSemCliente?.addEventListener("click", function () {
-      if (clienteBaixaAlert) {
-        clienteBaixaAlert.hidden = false;
-        clienteBaixaAlert.textContent = "Confirme o cliente antes de usar este Pix na baixa da conta.";
-      }
-      clienteConfirmadoArea?.classList.add("pix-client-attention");
-      clienteConfirmadoBusca?.scrollIntoView({ behavior: "smooth", block: "center" });
-      clienteConfirmadoBusca?.focus({ preventScroll: true });
     });
     function reforcarBaixaPendente(event) {
       if (!pixPendenteBaixa || liberarSaidaPix) return;
