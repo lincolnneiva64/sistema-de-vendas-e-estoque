@@ -2528,7 +2528,7 @@ def central_pix_detalhe(request, pix_id):
             atualizado_em=timezone.now(),
         )
         messages.success(request, "Pix marcado como ignorado.")
-        return redirect(detalhe_url)
+        return redirect("estoque:central_pix")
 
     if request.method == "POST" and request.POST.get("acao") == "marcar_duplicado":
         _marcar_pix_como_duplicado(

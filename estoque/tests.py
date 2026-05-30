@@ -2710,6 +2710,7 @@ class PixRecebidoTests(TestCase):
         )
 
         self.assertEqual(resposta.status_code, 302)
+        self.assertRedirects(resposta, reverse("estoque:central_pix"), fetch_redirect_response=False)
         pix.refresh_from_db()
         self.assertEqual(pix.status, PixRecebido.STATUS_IGNORADO)
 
@@ -2749,6 +2750,7 @@ class PixRecebidoTests(TestCase):
         )
 
         self.assertEqual(resposta.status_code, 302)
+        self.assertRedirects(resposta, reverse("estoque:central_pix"), fetch_redirect_response=False)
         pix.refresh_from_db()
         self.assertEqual(pix.status, PixRecebido.STATUS_IGNORADO)
         self.assertEqual(str(pix.valor), "500.00")
