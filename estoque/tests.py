@@ -287,6 +287,74 @@ class PixRecebidoTests(TestCase):
             f'{reverse("estoque:venda_detalhe", kwargs={"pk": venda.id})}?entrega={rota.id}&origem=pendencias',
         )
 
+    def test_remover_ultimo_item_por_pendencia_anula_venda_sem_itens(self):
+        cliente = Cliente.objects.create(nome="Cliente Venda Anulada Pendencia", ativo=True)
+        produto_pendente = self._produto_teste("Skol 24/600ml Teste")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("50.00"),
+        )
+        item_pendente = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_pendente,
+            quantidade=Decimal("2.000"),
+            unidade="CX",
+            preco_unitario=Decimal("25.00"),
+            valor_total=Decimal("50.00"),
+        )
+        rota = EntregaRota.objects.create(data=timezone.localdate(), tipo=EntregaRota.TIPO_UNITARIA)
+        item_rota = EntregaRotaItem.objects.create(
+            rota=rota,
+            venda=venda,
+            status=EntregaRotaItem.STATUS_PARCIAL,
+            observacao="[checklist_entrega_salva]",
+        )
+        EntregaChecklistItem.objects.create(
+            rota_item=item_rota,
+            item_venda=item_pendente,
+            carregado=False,
+            entregue=False,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item_pendente.id}),
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        self.assertFalse(ItemVenda.objects.filter(venda=venda).exists())
+        self.assertEqual(venda.total, Decimal("0.00"))
+        self.assertTrue(venda.cancelada)
+        self.assertIsNotNone(venda.cancelada_em)
+        self.assertIn("Remocao de pendencia deixou a nota sem itens", venda.motivo_cancelamento)
+        self.assertFalse(any(pendencia["venda"].id == venda.id for pendencia in views.listar_pendencias_entrega()))
+
+        resolvidas = views.listar_pendencias_resolvidas_entrega()
+        self.assertTrue(
+            any(
+                pendencia["venda"].id == venda.id
+                and pendencia["produto"] == produto_pendente.nome
+                and pendencia["resolucao"] == "Resolvida removendo item da nota pela edicao da venda"
+                for pendencia in resolvidas
+            )
+        )
+        self.assertTrue(
+            EventoVenda.objects.filter(
+                venda=venda,
+                tipo_evento="venda_anulada_sem_itens_por_pendencia",
+                descricao__icontains="Venda anulada porque a remocao da pendencia deixou a nota sem itens",
+            ).exists()
+        )
+
+        resposta_ativas = self.client.get(reverse("estoque:consultar_vendas"), secure=True)
+        self.assertNotContains(resposta_ativas, "Cliente Venda Anulada Pendencia")
+        resposta_canceladas = self.client.get(reverse("estoque:consultar_vendas_canceladas"), secure=True)
+        self.assertContains(resposta_canceladas, "Cliente Venda Anulada Pendencia")
+
     def test_filtros_de_pendencias_resolvidas(self):
         cliente_lincoln = Cliente.objects.create(nome="Lincoln Cliente", ativo=True)
         cliente_camila = Cliente.objects.create(nome="Camila Cliente", ativo=True)

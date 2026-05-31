@@ -934,6 +934,25 @@ def recalcular_total_venda(venda):
     return venda.total
 
 
+def _anular_venda_sem_itens_por_remocao_pendencia(venda):
+    if venda.cancelada or ItemVenda.objects.filter(venda=venda).exists():
+        return False
+
+    motivo = "Remocao de pendencia deixou a nota sem itens."
+    venda.cancelada = True
+    venda.cancelada_em = timezone.now()
+    venda.motivo_cancelamento = motivo
+    venda.save(update_fields=["cancelada", "cancelada_em", "motivo_cancelamento", "atualizado_em"])
+    _registrar_evento_venda(
+        venda,
+        "venda_anulada_sem_itens_por_pendencia",
+        "Venda anulada porque a remocao da pendencia deixou a nota sem itens.",
+        canal="sistema",
+        usuario=venda.operador,
+    )
+    return True
+
+
 def chave_cliente_entrega(venda):
     if venda and venda.cliente_id:
         return f"cliente:{venda.cliente_id}"
@@ -4108,6 +4127,7 @@ def revisar_remocao_pendencia_da_nota(request, checklist_id):
             item_venda.delete()
             resolver_entregas_sem_pendencias_ativas(rota_item_ids_afetados)
             novo_total = recalcular_total_venda(venda)
+            _anular_venda_sem_itens_por_remocao_pendencia(venda)
 
             _registrar_evento_venda(
                 venda,
@@ -5614,6 +5634,7 @@ def venda_revisar_remocao_item(request, pk, item_id):
             total_recalculado = total_recalculado.quantize(Decimal("0.01"))
             venda.total = total_recalculado
             venda.save(update_fields=["total", "atualizado_em"])
+            _anular_venda_sem_itens_por_remocao_pendencia(venda)
             _registrar_evento_venda(
                 venda,
                 "item_removido_da_nota",
