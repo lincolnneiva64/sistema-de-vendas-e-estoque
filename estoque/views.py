@@ -774,12 +774,30 @@ def pendencias_sugeriveis_entrega():
     return [pendencia for pendencia in listar_pendencias_entrega() if pendencia.get("id")]
 
 
-def listar_pendencias_resolvidas_entrega(limite=None):
+def listar_pendencias_resolvidas_entrega(limite=None, filtros=None):
+    filtros = filtros or {}
     eventos = (
         EventoVenda.objects.filter(tipo_evento="pendencia_removida_da_nota")
         .select_related("venda", "venda__cliente")
         .order_by("-criado_em", "-id")
     )
+    cliente_filtro = (filtros.get("cliente") or "").strip()
+    venda_filtro = (filtros.get("venda") or "").strip()
+    produto_filtro = (filtros.get("produto") or "").strip()
+    data_inicial = parse_date((filtros.get("data_inicial") or "").strip())
+    data_final = parse_date((filtros.get("data_final") or "").strip())
+
+    if cliente_filtro:
+        eventos = eventos.filter(venda__cliente__nome__icontains=cliente_filtro)
+    if venda_filtro.isdigit():
+        eventos = eventos.filter(venda_id=int(venda_filtro))
+    if produto_filtro:
+        eventos = eventos.filter(descricao__icontains=produto_filtro)
+    if data_inicial:
+        eventos = eventos.filter(criado_em__date__gte=data_inicial)
+    if data_final:
+        eventos = eventos.filter(criado_em__date__lte=data_final)
+
     if limite:
         eventos = eventos[:limite]
 
@@ -3993,8 +4011,17 @@ def entregas_dia(request):
 
 def pendencias_entrega(request):
     exibindo_resolvidas = request.GET.get("status") == "resolvidas"
+    filtros_resolvidas = {
+        "cliente": request.GET.get("cliente", "").strip(),
+        "venda": request.GET.get("venda", "").strip(),
+        "data_inicial": request.GET.get("data_inicial", "").strip(),
+        "data_final": request.GET.get("data_final", "").strip(),
+        "produto": request.GET.get("produto", "").strip(),
+    }
     pendencias_abertas = listar_pendencias_entrega()
-    pendencias_resolvidas = listar_pendencias_resolvidas_entrega()
+    pendencias_resolvidas = listar_pendencias_resolvidas_entrega(
+        filtros=filtros_resolvidas if exibindo_resolvidas else None
+    )
     pendencias = pendencias_resolvidas if exibindo_resolvidas else pendencias_abertas
     return render(
         request,
@@ -4005,6 +4032,7 @@ def pendencias_entrega(request):
             "total_pendencias_abertas": len(pendencias_abertas),
             "total_pendencias_resolvidas": len(pendencias_resolvidas),
             "exibindo_resolvidas": exibindo_resolvidas,
+            "filtros_resolvidas": filtros_resolvidas,
         },
     )
 

@@ -3,7 +3,7 @@ import os
 import tempfile
 import types
 from contextlib import redirect_stdout
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from urllib.parse import urlencode
@@ -16,7 +16,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FuncionarioForm, PixRecebidoForm
-from .models import Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, Funcionario, ItemVenda, PixRecebido, Produto, RecebimentoContaReceber, Venda
+from .models import Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, PixRecebido, Produto, RecebimentoContaReceber, Venda
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
 from . import views
 
@@ -286,6 +286,127 @@ class PixRecebidoTests(TestCase):
             resposta_resolvidas,
             f'{reverse("estoque:venda_detalhe", kwargs={"pk": venda.id})}?entrega={rota.id}&origem=pendencias',
         )
+
+    def test_filtros_de_pendencias_resolvidas(self):
+        cliente_lincoln = Cliente.objects.create(nome="Lincoln Cliente", ativo=True)
+        cliente_camila = Cliente.objects.create(nome="Camila Cliente", ativo=True)
+        produto_aberto = self._produto_teste("Produto Aberto Teste")
+        produto_coca = self._produto_teste("Coca Filtro Teste")
+        produto_fanta = self._produto_teste("Fanta Filtro Teste")
+        venda_lincoln = Venda.objects.create(
+            cliente=cliente_lincoln,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("10.00"),
+        )
+        venda_camila = Venda.objects.create(
+            cliente=cliente_camila,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("12.00"),
+        )
+        venda_aberta = Venda.objects.create(
+            cliente=cliente_lincoln,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("5.00"),
+        )
+        item_aberto = ItemVenda.objects.create(
+            venda=venda_aberta,
+            produto=produto_aberto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("5.00"),
+            valor_total=Decimal("5.00"),
+        )
+        rota_aberta = EntregaRota.objects.create(data=timezone.localdate(), tipo=EntregaRota.TIPO_UNITARIA)
+        item_rota_aberto = EntregaRotaItem.objects.create(
+            rota=rota_aberta,
+            venda=venda_aberta,
+            status=EntregaRotaItem.STATUS_PARCIAL,
+            observacao="[checklist_entrega_salva]",
+        )
+        EntregaChecklistItem.objects.create(
+            rota_item=item_rota_aberto,
+            item_venda=item_aberto,
+            carregado=False,
+            entregue=False,
+        )
+
+        rota_lincoln = EntregaRota.objects.create(data=timezone.localdate(), tipo=EntregaRota.TIPO_UNITARIA)
+        rota_camila = EntregaRota.objects.create(data=timezone.localdate() - timedelta(days=2), tipo=EntregaRota.TIPO_UNITARIA)
+        evento_lincoln = EventoVenda.objects.create(
+            venda=venda_lincoln,
+            tipo_evento="pendencia_removida_da_nota",
+            descricao=(
+                f"Pendencia da rota #{rota_lincoln.id} resolvida por remocao da nota. "
+                "Item removido: Coca Filtro Teste - 2.000 un (R$ 10.00). Novo total: R$ 0.00."
+            ),
+            canal="sistema",
+        )
+        evento_camila = EventoVenda.objects.create(
+            venda=venda_camila,
+            tipo_evento="pendencia_removida_da_nota",
+            descricao=(
+                f"Pendencia da rota #{rota_camila.id} resolvida pela edicao da nota. "
+                "Item removido: Fanta Filtro Teste - 3.000 un (R$ 12.00). Novo total: R$ 0.00."
+            ),
+            canal="sistema",
+        )
+        data_lincoln = timezone.make_aware(datetime(2026, 5, 10, 9, 0))
+        data_camila = timezone.make_aware(datetime(2026, 5, 12, 9, 0))
+        EventoVenda.objects.filter(pk=evento_lincoln.pk).update(criado_em=data_lincoln)
+        EventoVenda.objects.filter(pk=evento_camila.pk).update(criado_em=data_camila)
+
+        resposta_sem_filtro = self.client.get(
+            reverse("estoque:pendencias_entrega"),
+            {"status": "resolvidas"},
+            secure=True,
+        )
+        self.assertContains(resposta_sem_filtro, "Coca Filtro Teste")
+        self.assertContains(resposta_sem_filtro, "Fanta Filtro Teste")
+        self.assertContains(resposta_sem_filtro, "Limpar")
+
+        resposta_venda = self.client.get(
+            reverse("estoque:pendencias_entrega"),
+            {"status": "resolvidas", "venda": str(venda_lincoln.id)},
+            secure=True,
+        )
+        self.assertContains(resposta_venda, "Coca Filtro Teste")
+        self.assertNotContains(resposta_venda, "Fanta Filtro Teste")
+
+        resposta_cliente = self.client.get(
+            reverse("estoque:pendencias_entrega"),
+            {"status": "resolvidas", "cliente": "Lincoln"},
+            secure=True,
+        )
+        self.assertContains(resposta_cliente, "Coca Filtro Teste")
+        self.assertNotContains(resposta_cliente, "Fanta Filtro Teste")
+
+        resposta_produto = self.client.get(
+            reverse("estoque:pendencias_entrega"),
+            {"status": "resolvidas", "produto": "Fanta"},
+            secure=True,
+        )
+        self.assertContains(resposta_produto, "Fanta Filtro Teste")
+        self.assertNotContains(resposta_produto, "Coca Filtro Teste")
+
+        resposta_data = self.client.get(
+            reverse("estoque:pendencias_entrega"),
+            {"status": "resolvidas", "data_inicial": "2026-05-10", "data_final": "2026-05-10"},
+            secure=True,
+        )
+        self.assertContains(resposta_data, "Coca Filtro Teste")
+        self.assertNotContains(resposta_data, "Fanta Filtro Teste")
+
+        resposta_abertas = self.client.get(
+            reverse("estoque:pendencias_entrega"),
+            {"cliente": "Camila", "produto": "Fanta"},
+            secure=True,
+        )
+        self.assertContains(resposta_abertas, "Produto Aberto Teste")
+        self.assertContains(resposta_abertas, "Ver pendencias resolvidas")
+        self.assertNotContains(resposta_abertas, "Coca Filtro Teste")
 
     def test_consulta_vendas_por_numero_ignora_datas_preenchidas(self):
         cliente = Cliente.objects.create(nome="Lincoln Neiva", ativo=True)
