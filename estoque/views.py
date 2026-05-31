@@ -803,6 +803,11 @@ def listar_pendencias_resolvidas_entrega(limite=None):
         )
         venda = evento.venda
         cliente = venda.cliente if venda else None
+        resolucao = (
+            "Resolvida removendo item da nota pela edicao da venda"
+            if "edicao da nota" in descricao.lower() or "edicao da venda" in descricao.lower()
+            else "Resolvida removendo item da nota"
+        )
         pendencias.append({
             "id": evento.id,
             "cliente": cliente.nome if cliente else "Consumidor",
@@ -814,7 +819,7 @@ def listar_pendencias_resolvidas_entrega(limite=None):
             "quantidade": item_match.group("quantidade").strip() if item_match else "",
             "unidade": item_match.group("unidade").strip() if item_match else "",
             "status": "Resolvida",
-            "resolucao": "Resolvida removendo item da nota",
+            "resolucao": resolucao,
         })
 
     return pendencias
@@ -5523,6 +5528,13 @@ def venda_revisar_remocao_item(request, pk, item_id):
         unidade_removida = item_venda.unidade
         valor_abatido = valor_atual_item
         total_anterior = total_atual_venda
+        pendencias_abertas_item = [
+            pendencia
+            for pendencia in listar_pendencias_entrega()
+            if pendencia.get("item_venda_id") == item_venda.id
+            and pendencia.get("venda")
+            and pendencia["venda"].id == venda.id
+        ]
 
         with transaction.atomic():
             rota_item_ids_afetados = list(
@@ -5551,6 +5563,32 @@ def venda_revisar_remocao_item(request, pk, item_id):
                 canal="sistema",
                 usuario=venda.operador,
             )
+            for pendencia in pendencias_abertas_item:
+                rota = pendencia.get("rota")
+                rota_id = rota.id if rota else ""
+                evento_existente = (
+                    EventoVenda.objects.filter(
+                        venda=venda,
+                        tipo_evento="pendencia_removida_da_nota",
+                    )
+                    .filter(descricao__icontains=f"rota #{rota_id}")
+                    .filter(descricao__icontains=f"Item removido: {produto_nome}")
+                    .exists()
+                )
+                if evento_existente:
+                    continue
+
+                _registrar_evento_venda(
+                    venda,
+                    "pendencia_removida_da_nota",
+                    (
+                        f"Pendencia da rota #{rota_id} resolvida pela edicao da nota. "
+                        f"Item removido: {produto_nome} - {quantidade_removida} {unidade_removida} "
+                        f"(R$ {valor_abatido:.2f}). Novo total: R$ {total_recalculado:.2f}."
+                    ),
+                    canal="sistema",
+                    usuario=venda.operador,
+                )
             _sincronizar_conta_receber(venda, "item removido da nota")
 
         messages.success(request, f'Item "{produto_nome}" removido da nota com sucesso.')

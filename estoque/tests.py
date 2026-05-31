@@ -206,6 +206,87 @@ class PixRecebidoTests(TestCase):
             f'{reverse("estoque:venda_detalhe", kwargs={"pk": venda.id})}?entrega={rota.id}&origem=pendencias',
         )
 
+    def test_remover_item_pela_edicao_da_nota_lista_pendencia_resolvida(self):
+        cliente = Cliente.objects.create(nome="Cliente Edicao", ativo=True)
+        produto_entregue = self._produto_teste("Agua Edicao Teste")
+        produto_pendente = self._produto_teste("Guarana Pendente Teste")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("30.00"),
+        )
+        item_entregue = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_entregue,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("12.00"),
+            valor_total=Decimal("12.00"),
+        )
+        item_pendente = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_pendente,
+            quantidade=Decimal("6.000"),
+            unidade="un",
+            preco_unitario=Decimal("3.00"),
+            valor_total=Decimal("18.00"),
+        )
+        rota = EntregaRota.objects.create(data=timezone.localdate(), tipo=EntregaRota.TIPO_UNITARIA)
+        item_rota = EntregaRotaItem.objects.create(
+            rota=rota,
+            venda=venda,
+            status=EntregaRotaItem.STATUS_PARCIAL,
+            observacao="[checklist_entrega_salva]",
+        )
+        EntregaChecklistItem.objects.create(
+            rota_item=item_rota,
+            item_venda=item_entregue,
+            carregado=True,
+            entregue=True,
+        )
+        EntregaChecklistItem.objects.create(
+            rota_item=item_rota,
+            item_venda=item_pendente,
+            carregado=False,
+            entregue=False,
+        )
+
+        pendencias_antes = views.listar_pendencias_entrega()
+        self.assertTrue(any(pendencia["item_venda_id"] == item_pendente.id for pendencia in pendencias_antes))
+
+        resposta = self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item_pendente.id}),
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertFalse(ItemVenda.objects.filter(pk=item_pendente.id).exists())
+        pendencias_depois = views.listar_pendencias_entrega()
+        self.assertFalse(any(pendencia["venda"].id == venda.id for pendencia in pendencias_depois))
+
+        resolvidas = views.listar_pendencias_resolvidas_entrega()
+        resolvidas_item = [
+            pendencia
+            for pendencia in resolvidas
+            if pendencia["venda"].id == venda.id and pendencia["produto"] == "Guarana Pendente Teste"
+        ]
+        self.assertEqual(len(resolvidas_item), 1)
+        self.assertEqual(resolvidas_item[0]["resolucao"], "Resolvida removendo item da nota pela edicao da venda")
+
+        resposta_resolvidas = self.client.get(
+            reverse("estoque:pendencias_entrega"),
+            {"status": "resolvidas"},
+            secure=True,
+        )
+        self.assertContains(resposta_resolvidas, "Guarana Pendente Teste")
+        self.assertContains(resposta_resolvidas, "Resolvida removendo item da nota pela edicao da venda")
+        self.assertContains(
+            resposta_resolvidas,
+            f'{reverse("estoque:venda_detalhe", kwargs={"pk": venda.id})}?entrega={rota.id}&origem=pendencias',
+        )
+
     def test_consulta_vendas_por_numero_ignora_datas_preenchidas(self):
         cliente = Cliente.objects.create(nome="Lincoln Neiva", ativo=True)
         venda = Venda.objects.create(
