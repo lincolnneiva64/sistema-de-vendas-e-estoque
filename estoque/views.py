@@ -4778,16 +4778,49 @@ def _sincronizar_conta_receber(venda, observacao_origem="", permitir_reabrir_can
             observacao=f"Criada automaticamente para venda a prazo.{origem}".strip(),
         )
 
-    if conta.status == ContaReceber.STATUS_ABERTA or (
-        permitir_reabrir_cancelada and conta.status == ContaReceber.STATUS_CANCELADA
-    ):
+    if conta.status == ContaReceber.STATUS_CANCELADA and not permitir_reabrir_cancelada:
+        return conta
+
+    if conta.status in {
+        ContaReceber.STATUS_ABERTA,
+        ContaReceber.STATUS_PARCIAL,
+        ContaReceber.STATUS_PAGA,
+        ContaReceber.STATUS_CANCELADA,
+    }:
+        valor_original_anterior = (conta.valor_original or Decimal("0.00")).quantize(Decimal("0.01"))
+        valor_aberto_anterior = (conta.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
+        valor_ja_recebido = max(
+            (valor_original_anterior - valor_aberto_anterior).quantize(Decimal("0.01")),
+            Decimal("0.00"),
+        )
+        novo_valor_aberto = max((valor - valor_ja_recebido).quantize(Decimal("0.01")), Decimal("0.00"))
+        if novo_valor_aberto == Decimal("0.00"):
+            novo_status = ContaReceber.STATUS_PAGA
+        elif valor_ja_recebido > Decimal("0.00"):
+            novo_status = ContaReceber.STATUS_PARCIAL
+        else:
+            novo_status = ContaReceber.STATUS_ABERTA
+
+        ajuste_extra = ""
+        if valor_ja_recebido > valor:
+            ajuste_extra = (
+                f" Valor ja recebido ({_formatar_moeda(valor_ja_recebido)}) "
+                f"maior que o novo total da venda ({_formatar_moeda(valor)}); saldo mantido zerado."
+            )
+
         conta.cliente = venda.cliente
         conta.data_emissao = venda.data_venda
         conta.data_vencimento = venda.data_vencimento
         conta.valor_original = valor
-        conta.valor_em_aberto = valor
-        conta.status = ContaReceber.STATUS_ABERTA
-        conta.observacao = f"Sincronizada automaticamente com venda a prazo.{origem}".strip()
+        conta.valor_em_aberto = novo_valor_aberto
+        conta.status = novo_status
+        conta.observacao = (
+            f"Sincronizada automaticamente com venda a prazo.{origem} "
+            f"Valor ja recebido preservado: {_formatar_moeda(valor_ja_recebido)}. "
+            f"Saldo anterior: {_formatar_moeda(valor_aberto_anterior)}; "
+            f"novo saldo: {_formatar_moeda(novo_valor_aberto)}."
+            f"{ajuste_extra}"
+        ).strip()
         conta.save(update_fields=[
             "cliente",
             "data_emissao",

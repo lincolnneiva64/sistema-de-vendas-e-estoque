@@ -408,6 +408,253 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta_abertas, "Ver pendencias resolvidas")
         self.assertNotContains(resposta_abertas, "Coca Filtro Teste")
 
+    def test_remover_item_da_nota_atualiza_conta_receber_aberta(self):
+        cliente = Cliente.objects.create(nome="Cliente Conta Aberta", ativo=True)
+        produto_base = self._produto_teste("Produto Base Conta")
+        produto_removido = self._produto_teste("Produto Removido Conta")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("100.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_base,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("75.00"),
+            valor_total=Decimal("75.00"),
+        )
+        item_removido = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_removido,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("25.00"),
+            valor_total=Decimal("25.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("100.00"),
+            valor_em_aberto=Decimal("100.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item_removido.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertEqual(venda.total, Decimal("75.00"))
+        self.assertEqual(conta.valor_original, Decimal("75.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("75.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+
+    def test_remover_item_da_nota_atualiza_conta_receber_parcial_preservando_recebido(self):
+        cliente = Cliente.objects.create(nome="Cliente Conta Parcial", ativo=True)
+        produto_base = self._produto_teste("Produto Base Parcial")
+        produto_removido = self._produto_teste("Produto Removido Parcial")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("100.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_base,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("80.00"),
+            valor_total=Decimal("80.00"),
+        )
+        item_removido = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_removido,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("20.00"),
+            valor_total=Decimal("20.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("100.00"),
+            valor_em_aberto=Decimal("40.00"),
+            status=ContaReceber.STATUS_PARCIAL,
+        )
+        recebimento = RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=timezone.localdate(),
+            valor=Decimal("60.00"),
+            forma_pagamento="PIX",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item_removido.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        recebimento.refresh_from_db()
+        self.assertEqual(venda.total, Decimal("80.00"))
+        self.assertEqual(recebimento.valor, Decimal("60.00"))
+        self.assertEqual(conta.valor_original, Decimal("80.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("20.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_PARCIAL)
+
+    def test_adicionar_item_na_nota_atualiza_conta_receber_parcial_preservando_recebido(self):
+        cliente = Cliente.objects.create(nome="Cliente Conta Aumento", ativo=True)
+        produto_base = self._produto_teste("Produto Base Aumento")
+        produto_novo = self._produto_teste("Produto Novo Aumento")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("100.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_base,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("100.00"),
+            valor_total=Decimal("100.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("100.00"),
+            valor_em_aberto=Decimal("40.00"),
+            status=ContaReceber.STATUS_PARCIAL,
+        )
+        RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=timezone.localdate(),
+            valor=Decimal("60.00"),
+            forma_pagamento="PIX",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_adicionar_produto_item", kwargs={"pk": venda.id}),
+            {
+                "produto_id": str(produto_novo.id),
+                "quantidade": "1",
+                "preco_unitario": "30.00",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertEqual(venda.total, Decimal("130.00"))
+        self.assertEqual(conta.valor_original, Decimal("130.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("70.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_PARCIAL)
+
+    def test_remover_item_de_venda_a_vista_sem_conta_receber_nao_quebra(self):
+        cliente = Cliente.objects.create(nome="Cliente Vista Sem Conta", ativo=True)
+        produto_base = self._produto_teste("Produto Vista Base")
+        produto_removido = self._produto_teste("Produto Vista Removido")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("50.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_base,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("30.00"),
+            valor_total=Decimal("30.00"),
+        )
+        item_removido = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_removido,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("20.00"),
+            valor_total=Decimal("20.00"),
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item_removido.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        venda.refresh_from_db()
+        self.assertEqual(venda.total, Decimal("30.00"))
+        self.assertFalse(ContaReceber.objects.filter(venda=venda).exists())
+
+    def test_edicao_com_total_menor_que_recebido_mantem_conta_zerada(self):
+        cliente = Cliente.objects.create(nome="Cliente Conta Quitada", ativo=True)
+        produto_base = self._produto_teste("Produto Quitado Base")
+        produto_removido = self._produto_teste("Produto Quitado Removido")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("100.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_base,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("80.00"),
+            valor_total=Decimal("80.00"),
+        )
+        item_removido = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_removido,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("20.00"),
+            valor_total=Decimal("20.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("100.00"),
+            valor_em_aberto=Decimal("0.00"),
+            status=ContaReceber.STATUS_PAGA,
+        )
+        RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=timezone.localdate(),
+            valor=Decimal("100.00"),
+            forma_pagamento="PIX",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item_removido.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertEqual(venda.total, Decimal("80.00"))
+        self.assertEqual(conta.valor_original, Decimal("80.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_PAGA)
+        self.assertIn("maior que o novo total da venda", conta.observacao)
+
     def test_consulta_vendas_por_numero_ignora_datas_preenchidas(self):
         cliente = Cliente.objects.create(nome="Lincoln Neiva", ativo=True)
         venda = Venda.objects.create(
