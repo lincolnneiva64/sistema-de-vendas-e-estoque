@@ -186,6 +186,14 @@ class PixRecebidoTests(TestCase):
         item_rota.refresh_from_db()
         self.assertEqual(item_rota.status, EntregaRotaItem.STATUS_ENTREGUE)
         self.assertTrue(item_rota.entrega_concluida)
+        evento_historico = EventoVenda.objects.get(
+            venda=venda,
+            tipo_evento="pendencia_removida_da_nota",
+        )
+        self.assertIn("Pendencia resolvida por resolucao de pendencia de entrega", evento_historico.descricao)
+        self.assertIn("removido 5 pct de Coca Cola 2L Teste da nota", evento_historico.descricao)
+        self.assertIn("motivo: item nao entregue", evento_historico.descricao)
+        self.assertIn("Total alterado de R$ 25,00 para R$ 10,00", evento_historico.descricao)
         pendencias_depois = views.listar_pendencias_entrega()
         self.assertFalse(any(pendencia["venda"].id == venda.id for pendencia in pendencias_depois))
 

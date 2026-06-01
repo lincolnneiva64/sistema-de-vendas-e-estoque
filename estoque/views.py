@@ -934,6 +934,27 @@ def recalcular_total_venda(venda):
     return venda.total
 
 
+def descricao_pendencia_removida_da_nota(
+    rota_id,
+    produto_nome,
+    quantidade,
+    unidade,
+    valor_removido,
+    total_anterior,
+    total_novo,
+    origem="resolucao de pendencia de entrega",
+):
+    quantidade_texto = _formatar_quantidade(quantidade)
+    unidade_texto = (unidade or "").strip()
+    quantidade_unidade = f"{quantidade_texto} {unidade_texto}".strip()
+    return (
+        f"Pendencia resolvida por {origem}: removido {quantidade_unidade} de {produto_nome} da nota "
+        f"(motivo: item nao entregue, rota #{rota_id}). "
+        f"Item removido: {produto_nome} - {quantidade_unidade} ({_formatar_moeda(valor_removido)}). "
+        f"Total alterado de {_formatar_moeda(total_anterior)} para {_formatar_moeda(total_novo)}."
+    )
+
+
 def _anular_venda_sem_itens_por_remocao_pendencia(venda):
     if venda.cancelada or ItemVenda.objects.filter(venda=venda).exists():
         return False
@@ -4118,6 +4139,7 @@ def revisar_remocao_pendencia_da_nota(request, checklist_id):
             quantidade = item_venda.quantidade
             unidade = item_venda.unidade
             valor_total = item_venda.valor_total or Decimal("0.00")
+            total_anterior = venda.total or Decimal("0.00")
             venda_id = venda.id
             rota_id = item_rota.rota_id
             rota_item_ids_afetados = list(
@@ -4132,10 +4154,14 @@ def revisar_remocao_pendencia_da_nota(request, checklist_id):
             _registrar_evento_venda(
                 venda,
                 "pendencia_removida_da_nota",
-                (
-                    f"Pendencia da rota #{rota_id} resolvida por remocao da nota. "
-                    f"Item removido: {produto_nome} - {quantidade} {unidade} "
-                    f"(R$ {valor_total:.2f}). Novo total: R$ {novo_total:.2f}."
+                descricao_pendencia_removida_da_nota(
+                    rota_id,
+                    produto_nome,
+                    quantidade,
+                    unidade,
+                    valor_total,
+                    total_anterior,
+                    novo_total,
                 ),
                 canal="sistema",
             )
@@ -5663,10 +5689,15 @@ def venda_revisar_remocao_item(request, pk, item_id):
                 _registrar_evento_venda(
                     venda,
                     "pendencia_removida_da_nota",
-                    (
-                        f"Pendencia da rota #{rota_id} resolvida pela edicao da nota. "
-                        f"Item removido: {produto_nome} - {quantidade_removida} {unidade_removida} "
-                        f"(R$ {valor_abatido:.2f}). Novo total: R$ {total_recalculado:.2f}."
+                    descricao_pendencia_removida_da_nota(
+                        rota_id,
+                        produto_nome,
+                        quantidade_removida,
+                        unidade_removida,
+                        valor_abatido,
+                        total_anterior,
+                        total_recalculado,
+                        origem="edicao da nota",
                     ),
                     canal="sistema",
                     usuario=venda.operador,
