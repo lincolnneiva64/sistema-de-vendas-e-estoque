@@ -5833,10 +5833,9 @@ def venda_cancelar(request, pk):
         key=lambda item: ((item.produto.nome if item.produto else "Produto nao identificado").casefold(), item.id),
     )
     motivos_cancelamento = (
-        "Cliente não estava / comércio fechado",
         "Cliente desistiu da compra",
         "Pedido duplicado",
-        "Venda lançada e não realizada",
+        "Venda lançada por engano / cliente errado",
         "Outro motivo",
     )
     motivo = ""
