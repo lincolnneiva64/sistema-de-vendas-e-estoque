@@ -695,6 +695,14 @@
             display: none;
         }
 
+        .venda-nota-corpo {
+            padding: 10px;
+            border: 1.5px solid #94a3b8;
+            border-radius: 12px;
+            background: #ffffff;
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.10);
+        }
+
         @media print {
             @page {
                 size: A4 portrait;
@@ -761,6 +769,14 @@
 
             .nota-copia .cabecalho {
                 display: block;
+            }
+
+            .nota-copia .venda-nota-corpo {
+                padding: 0;
+                border: 0;
+                border-radius: 0;
+                background: transparent;
+                box-shadow: none;
             }
 
             .nota-copia h1 {
@@ -1069,6 +1085,7 @@
 
                     {% endif %}
 
+                    <div class="venda-nota-corpo">
                     <div class="dados" id="dados-da-nota">
                         <div class="campo">
                             <span class="label">Nº da venda</span>
@@ -1157,6 +1174,7 @@
                     <div class="total">
                         <span>Total da venda</span>
                         <span>R$ {{ venda.total|floatformat:2 }}</span>
+                    </div>
                     </div>
 
                     {% if request.GET.nota_atualizada != "1" %}
