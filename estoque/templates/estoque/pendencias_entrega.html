@@ -200,7 +200,7 @@
                   </td>
                   <td>
                     <div class="pend-actions">
-                      <a class="pend-btn btn-pressionavel" href="{% url 'estoque:venda_detalhe' pendencia.venda.id %}{% if pendencia.rota %}?entrega={{ pendencia.rota.id }}&origem=pendencias{% else %}?origem=pendencias{% endif %}">Abrir nota</a>
+                      <a class="pend-btn btn-pressionavel" href="{% url 'estoque:venda_detalhe' pendencia.venda.id %}{% if exibindo_resolvidas %}?{% if pendencia.rota %}entrega={{ pendencia.rota.id }}&{% endif %}origem=pendencias_resolvidas&evento={{ pendencia.id }}{% elif pendencia.rota %}?entrega={{ pendencia.rota.id }}&origem=pendencias{% else %}?origem=pendencias{% endif %}">Abrir nota</a>
                       {% if not exibindo_resolvidas %}
                         <a class="pend-btn primary btn-pressionavel" href="{% url 'estoque:entrega_rota_checklist' pendencia.rota.id %}?origem=pendencias">Abrir checklist</a>
                       <button class="pend-btn btn-pressionavel pend-tratar-toggle" type="button" data-target="pend-tratar-{{ forloop.counter }}" aria-expanded="false">Tratar pendência</button>

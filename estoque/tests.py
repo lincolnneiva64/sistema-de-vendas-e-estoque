@@ -211,8 +211,25 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta_resolvidas, "Abrir nota")
         self.assertContains(
             resposta_resolvidas,
-            f'{reverse("estoque:venda_detalhe", kwargs={"pk": venda.id})}?entrega={rota.id}&origem=pendencias',
+            f'{reverse("estoque:venda_detalhe", kwargs={"pk": venda.id})}?entrega={rota.id}&origem=pendencias_resolvidas&evento={evento_historico.id}',
         )
+
+        resposta_nota_resolvida = self.client.get(
+            f'{reverse("estoque:venda_detalhe", kwargs={"pk": venda.id})}?entrega={rota.id}&origem=pendencias_resolvidas&evento={evento_historico.id}',
+            secure=True,
+        )
+        self.assertContains(resposta_nota_resolvida, "Pendencia de entrega resolvida.")
+        self.assertContains(resposta_nota_resolvida, "5 pct de Coca Cola 2L Teste")
+        self.assertContains(resposta_nota_resolvida, "item nao entregue removido da nota")
+        self.assertContains(resposta_nota_resolvida, "Total alterado de R$ 25,00 para R$ 10,00")
+        self.assertContains(resposta_nota_resolvida, "A venda continuou ativa com os itens restantes.")
+        self.assertContains(resposta_nota_resolvida, "Voltar para pendencias resolvidas")
+        self.assertNotContains(resposta_nota_resolvida, "Editar nota")
+        self.assertNotContains(resposta_nota_resolvida, "Cancelar venda")
+        self.assertNotContains(resposta_nota_resolvida, "Imagem / WhatsApp")
+        self.assertNotContains(resposta_nota_resolvida, ">PDF</a>")
+        self.assertNotContains(resposta_nota_resolvida, "Imprimir</button>")
+        self.assertNotContains(resposta_nota_resolvida, "Entrega / checklist")
 
     def test_remover_item_pela_edicao_da_nota_lista_pendencia_resolvida(self):
         cliente = Cliente.objects.create(nome="Cliente Edicao", ativo=True)
@@ -292,7 +309,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta_resolvidas, "Resolvida removendo item da nota pela edicao da venda")
         self.assertContains(
             resposta_resolvidas,
-            f'{reverse("estoque:venda_detalhe", kwargs={"pk": venda.id})}?entrega={rota.id}&origem=pendencias',
+            f'{reverse("estoque:venda_detalhe", kwargs={"pk": venda.id})}?entrega={rota.id}&origem=pendencias_resolvidas',
         )
 
     def test_remover_ultimo_item_por_pendencia_anula_venda_sem_itens(self):

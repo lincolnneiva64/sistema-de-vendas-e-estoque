@@ -843,6 +843,54 @@ def listar_pendencias_resolvidas_entrega(limite=None, filtros=None):
     return pendencias
 
 
+def contexto_pendencia_resolvida_nota(request, venda):
+    if request.GET.get("origem") != "pendencias_resolvidas":
+        return None
+
+    evento_id = request.GET.get("evento")
+    evento = (
+        EventoVenda.objects.filter(
+            pk=evento_id,
+            venda=venda,
+            tipo_evento="pendencia_removida_da_nota",
+        )
+        .first()
+        if str(evento_id or "").isdigit()
+        else None
+    )
+    if not evento:
+        evento = (
+            EventoVenda.objects.filter(venda=venda, tipo_evento="pendencia_removida_da_nota")
+            .order_by("-criado_em", "-id")
+            .first()
+        )
+
+    descricao = evento.descricao if evento else ""
+    item_match = re.search(
+        r"Item removido:\s*(?P<produto>.*?)\s*-\s*(?P<quantidade>[\d.,]+)\s*(?P<unidade>[^\(]*?)\s*\(",
+        descricao,
+        flags=re.IGNORECASE,
+    )
+    totais_match = re.search(
+        r"Total alterado de\s*(?P<total_anterior>R\$\s*[\d.,]+)\s*para\s*(?P<total_novo>R\$\s*[\d.,]+)",
+        descricao,
+        flags=re.IGNORECASE,
+    )
+    rota_match = re.search(r"rota #(\d+)", descricao, flags=re.IGNORECASE)
+
+    return {
+        "evento": evento,
+        "produto": item_match.group("produto").strip() if item_match else "",
+        "quantidade": item_match.group("quantidade").strip() if item_match else "",
+        "unidade": item_match.group("unidade").strip() if item_match else "",
+        "rota_id": rota_match.group(1) if rota_match else "",
+        "total_anterior": totais_match.group("total_anterior") if totais_match else "",
+        "total_novo": totais_match.group("total_novo") if totais_match else "",
+        "venda_cancelada": venda.cancelada,
+        "descricao": descricao,
+    }
+
+
 def pendencias_checklist_validas(checklist_ids):
     ids = [int(checklist_id) for checklist_id in checklist_ids if str(checklist_id).isdigit()]
     if not ids:
@@ -4708,6 +4756,8 @@ def venda_detalhe(request, pk):
         incluir_edicoes_registradas=request.GET.get("nota_atualizada") == "1",
     )
     itens_adicionados_destacar_ids = set(itens_adicionados_ids) | alteracoes_pendentes_whatsapp["itens_adicionados_ids"]
+    contexto_pendencia_resolvida = contexto_pendencia_resolvida_nota(request, venda)
+    modo_pendencia_resolvida = contexto_pendencia_resolvida is not None
 
     # Verificar se venda já tem entrega/rota
     entrega_existente = EntregaRotaItem.objects.filter(venda=venda).select_related("rota").first()
@@ -4757,6 +4807,8 @@ def venda_detalhe(request, pk):
             "venda_a_prazo": _venda_a_prazo(venda),
             "retorno_url": retorno_url,
             "retorno_querystring": _querystring_retorno(retorno_url),
+            "modo_pendencia_resolvida": modo_pendencia_resolvida,
+            "contexto_pendencia_resolvida": contexto_pendencia_resolvida,
         },
     )
 

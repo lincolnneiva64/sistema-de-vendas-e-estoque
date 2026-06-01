@@ -185,6 +185,26 @@
             box-shadow: 0 12px 26px rgba(220, 38, 38, 0.13);
         }
 
+        .pendencia-resolvida-banner {
+            margin-bottom: 10px;
+            padding: 10px 12px;
+            border: 2px solid #f59e0b;
+            border-radius: 10px;
+            background: #fffbeb;
+            color: #78350f;
+            font-size: 13px;
+            font-weight: 900;
+            line-height: 1.35;
+            box-shadow: 0 12px 26px rgba(217, 119, 6, 0.16);
+        }
+
+        .pendencia-resolvida-banner strong {
+            display: block;
+            margin-bottom: 3px;
+            font-size: 13.5px;
+            font-weight: 950;
+        }
+
         .cancelar-venda-acao {
             background: #dc2626 !important;
             border-color: #b91c1c !important;
@@ -940,6 +960,10 @@
                         <div style="margin-top: 1px; color: #334155; font-size: 11.5px;">Venda #{{ venda.id }}</div>
                     </div>
                     <div class="acoes">
+                        {% if modo_pendencia_resolvida %}
+                            <a href="{% url 'estoque:pendencias_entrega' %}?status=resolvidas">Voltar para pendencias resolvidas</a>
+                            <a href="{% url 'estoque:pendencias_entrega' %}">Voltar para pendencias de entrega</a>
+                        {% else %}
                         {% if request.GET.origem == "pendencias" %}
                             <a href="{% url 'estoque:pendencias_entrega' %}">Voltar para pendências de entrega</a>
                         {% endif %}
@@ -974,11 +998,12 @@
                             </button>
                         {% endif %}
                         {% endif %}
+                        {% endif %}
                     </div>
                 </header>
 
                 <section class="conteudo">
-                    {% if venda.cancelada %}
+                    {% if venda.cancelada and not modo_pendencia_resolvida %}
                         <div class="venda-cancelada-banner">
                             CANCELADA / VENDA NAO REALIZADA.
                             {% if venda.cancelada_em %} Cancelada em {{ venda.cancelada_em|date:"d/m/Y H:i" }}.{% endif %}
@@ -986,6 +1011,24 @@
                             Itens preservados somente para historico.
                         </div>
                     {% endif %}
+                    {% if modo_pendencia_resolvida %}
+                        <div class="pendencia-resolvida-banner">
+                            <strong>Pendencia de entrega resolvida.</strong>
+                            {% if contexto_pendencia_resolvida.produto %}
+                                Produto resolvido: {{ contexto_pendencia_resolvida.quantidade }} {{ contexto_pendencia_resolvida.unidade }} de {{ contexto_pendencia_resolvida.produto }}.
+                            {% endif %}
+                            Solucao: item nao entregue removido da nota{% if contexto_pendencia_resolvida.rota_id %} na rota #{{ contexto_pendencia_resolvida.rota_id }}{% endif %}.
+                            {% if contexto_pendencia_resolvida.total_anterior and contexto_pendencia_resolvida.total_novo %}
+                                Total alterado de {{ contexto_pendencia_resolvida.total_anterior }} para {{ contexto_pendencia_resolvida.total_novo }}.
+                            {% endif %}
+                            {% if contexto_pendencia_resolvida.venda_cancelada %}
+                                A venda foi cancelada/anulada porque ficou sem itens.
+                            {% else %}
+                                A venda continuou ativa com os itens restantes.
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                    {% if not modo_pendencia_resolvida %}
                     <div id="avisoWhatsapp" class="aviso-whatsapp" role="status" aria-live="polite">
                         Este cliente nao possui WhatsApp cadastrado para envio da nota.
                     </div>
@@ -1084,6 +1127,7 @@
                     </div>
 
                     {% endif %}
+                    {% endif %}
 
                     <div class="venda-nota-corpo">
                     <div class="dados" id="dados-da-nota">
@@ -1177,7 +1221,7 @@
                     </div>
                     </div>
 
-                    {% if request.GET.nota_atualizada != "1" %}
+                    {% if request.GET.nota_atualizada != "1" and not modo_pendencia_resolvida %}
                     <div class="historico">
                         <h2 style="margin: 0 0 5px; font-size: 13px; color: #1e3a8a;">Historico da nota</h2>
                         <div class="historico-lista">
