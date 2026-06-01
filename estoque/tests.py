@@ -207,7 +207,7 @@ class PixRecebidoTests(TestCase):
         )
         self.assertContains(resposta_resolvidas, "Ver pendencias em aberto")
         self.assertContains(resposta_resolvidas, "Coca Cola 2L Teste")
-        self.assertContains(resposta_resolvidas, "Resolvida removendo item da nota")
+        self.assertContains(resposta_resolvidas, "Item removido da nota - venda continuou ativa")
         self.assertContains(resposta_resolvidas, "Abrir nota")
         self.assertContains(
             resposta_resolvidas,
@@ -306,7 +306,7 @@ class PixRecebidoTests(TestCase):
             secure=True,
         )
         self.assertContains(resposta_resolvidas, "Guarana Pendente Teste")
-        self.assertContains(resposta_resolvidas, "Resolvida removendo item da nota pela edicao da venda")
+        self.assertContains(resposta_resolvidas, "Item removido da nota - venda continuou ativa")
         self.assertContains(
             resposta_resolvidas,
             f'{reverse("estoque:venda_detalhe", kwargs={"pk": venda.id})}?entrega={rota.id}&origem=pendencias_resolvidas',
@@ -364,9 +364,16 @@ class PixRecebidoTests(TestCase):
                 pendencia["venda"].id == venda.id
                 and pendencia["produto"] == produto_pendente.nome
                 and pendencia["resolucao"] == "Resolvida removendo item da nota pela edicao da venda"
+                and pendencia["resumo_resolucao"] == "Item removido da nota - venda anulada porque ficou sem itens"
                 for pendencia in resolvidas
             )
         )
+        resposta_resolvidas = self.client.get(
+            reverse("estoque:pendencias_entrega"),
+            {"status": "resolvidas"},
+            secure=True,
+        )
+        self.assertContains(resposta_resolvidas, "Item removido da nota - venda anulada porque ficou sem itens")
         self.assertTrue(
             EventoVenda.objects.filter(
                 venda=venda,

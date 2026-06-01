@@ -826,6 +826,11 @@ def listar_pendencias_resolvidas_entrega(limite=None, filtros=None):
             if "edicao da nota" in descricao.lower() or "edicao da venda" in descricao.lower()
             else "Resolvida removendo item da nota"
         )
+        resumo_resolucao = (
+            "Item removido da nota - venda anulada porque ficou sem itens"
+            if venda and venda.cancelada
+            else "Item removido da nota - venda continuou ativa"
+        )
         pendencias.append({
             "id": evento.id,
             "cliente": cliente.nome if cliente else "Consumidor",
@@ -838,6 +843,7 @@ def listar_pendencias_resolvidas_entrega(limite=None, filtros=None):
             "unidade": item_match.group("unidade").strip() if item_match else "",
             "status": "Resolvida",
             "resolucao": resolucao,
+            "resumo_resolucao": resumo_resolucao,
         })
 
     return pendencias

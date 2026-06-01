@@ -194,8 +194,8 @@
                   <td>{% if pendencia.quantidade %}{{ pendencia.quantidade }} {{ pendencia.unidade }}{% else %}-{% endif %}</td>
                   <td>
                     <span class="pend-status{% if exibindo_resolvidas %} resolvida{% endif %}">{{ pendencia.status }}</span>
-                    {% if exibindo_resolvidas and pendencia.resolucao %}
-                      <div class="pend-muted">{{ pendencia.resolucao }}</div>
+                    {% if exibindo_resolvidas and pendencia.resumo_resolucao %}
+                      <div class="pend-muted">{{ pendencia.resumo_resolucao }}</div>
                     {% endif %}
                   </td>
                   <td>
