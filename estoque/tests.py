@@ -115,6 +115,164 @@ class PixRecebidoTests(TestCase):
             permitir_prejuizo=False,
         )
 
+    def _post_cancelar_venda(self, venda, motivo="Pedido duplicado"):
+        return self.client.post(
+            reverse("estoque:venda_cancelar", kwargs={"pk": venda.id}),
+            {
+                "motivo_padrao": motivo,
+                "observacao_cancelamento": "",
+                "confirmacao_cancelamento": "CANCELAR",
+            },
+            secure=True,
+            follow=True,
+        )
+
+    def test_cancelamento_manual_preserva_venda_itens_total_e_registra_historico(self):
+        cliente = Cliente.objects.create(nome="Cliente Cancelamento Manual", ativo=True)
+        produto = self._produto_teste("Produto Cancelamento Manual")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            operador="Operador Teste",
+            total=Decimal("42.50"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("21.25"),
+            valor_total=Decimal("42.50"),
+        )
+
+        resposta = self._post_cancelar_venda(venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        self.assertTrue(venda.cancelada)
+        self.assertEqual(venda.motivo_cancelamento, "Pedido duplicado")
+        self.assertIsNotNone(venda.cancelada_em)
+        self.assertTrue(ItemVenda.objects.filter(pk=item.pk, venda=venda).exists())
+        self.assertEqual(venda.total, Decimal("42.50"))
+        self.assertTrue(
+            EventoVenda.objects.filter(
+                venda=venda,
+                tipo_evento="venda_cancelada",
+                descricao__icontains="Motivo: Pedido duplicado",
+                usuario="Operador Teste",
+            ).exists()
+        )
+
+    def test_cancelamento_manual_cancela_conta_aberta_sem_excluir_venda_ou_itens(self):
+        cliente = Cliente.objects.create(nome="Cliente Conta Aberta Cancelamento", ativo=True)
+        produto = self._produto_teste("Produto Conta Aberta Cancelamento")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("75.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("3.000"),
+            unidade="un",
+            preco_unitario=Decimal("25.00"),
+            valor_total=Decimal("75.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("75.00"),
+            valor_em_aberto=Decimal("75.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+
+        resposta = self._post_cancelar_venda(venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertTrue(venda.cancelada)
+        self.assertTrue(ItemVenda.objects.filter(pk=item.pk, venda=venda).exists())
+        self.assertEqual(venda.total, Decimal("75.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_CANCELADA)
+        self.assertEqual(conta.valor_original, Decimal("75.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertIn("Cancelada por venda nao realizada", conta.observacao)
+
+    def test_cancelamento_manual_preserva_conta_parcial_e_recebimentos(self):
+        cliente = Cliente.objects.create(nome="Cliente Conta Parcial Cancelamento", ativo=True)
+        produto = self._produto_teste("Produto Conta Parcial Cancelamento")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("100.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("100.00"),
+            valor_total=Decimal("100.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("100.00"),
+            valor_em_aberto=Decimal("40.00"),
+            status=ContaReceber.STATUS_PARCIAL,
+        )
+        recebimento = RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=timezone.localdate(),
+            valor=Decimal("60.00"),
+            forma_pagamento="PIX",
+        )
+
+        resposta = self._post_cancelar_venda(venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        recebimento.refresh_from_db()
+        self.assertTrue(venda.cancelada)
+        self.assertEqual(conta.status, ContaReceber.STATUS_PARCIAL)
+        self.assertEqual(conta.valor_original, Decimal("100.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("40.00"))
+        self.assertEqual(recebimento.valor, Decimal("60.00"))
+        self.assertTrue(RecebimentoContaReceber.objects.filter(pk=recebimento.pk, conta=conta).exists())
+
+    def test_cancelamento_manual_move_venda_para_consulta_de_canceladas(self):
+        cliente = Cliente.objects.create(nome="Cliente Consulta Cancelada Manual", ativo=True)
+        produto = self._produto_teste("Produto Consulta Cancelada Manual")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("30.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("30.00"),
+            valor_total=Decimal("30.00"),
+        )
+
+        self._post_cancelar_venda(venda)
+
+        resposta_ativas = self.client.get(reverse("estoque:consultar_vendas"), secure=True)
+        self.assertNotContains(resposta_ativas, "Cliente Consulta Cancelada Manual")
+        resposta_canceladas = self.client.get(reverse("estoque:consultar_vendas_canceladas"), secure=True)
+        self.assertContains(resposta_canceladas, "Cliente Consulta Cancelada Manual")
+
     def test_remover_item_da_nota_resolve_pendencia_de_entrega_do_item(self):
         cliente = Cliente.objects.create(nome="Cliente Entrega", ativo=True)
         produto_entregue = self._produto_teste("Agua Teste")

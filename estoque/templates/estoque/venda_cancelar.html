@@ -142,7 +142,7 @@
         {% endif %}
 
         <div class="cancel-alert">
-          Esta acao preserva a nota e seus itens para historico/auditoria, mas a venda deixa de ser tratada como ativa. Nesta fase, estoque, contas a receber e caixa nao serao alterados.
+          A venda sera marcada como cancelada/anulada, sem excluir fisicamente a nota. Os itens e valores da venda ficarao preservados para historico. Se houver conta a receber em aberto, ela podera ser cancelada/zerada junto com a venda. Valores ja pagos ou baixados nao serao apagados automaticamente. Estoque, caixa, Pix, entrega, checklist e pendencias vinculadas nao serao alterados automaticamente nesta etapa.
         </div>
 
         {% if tem_sinais_consolidacao %}
