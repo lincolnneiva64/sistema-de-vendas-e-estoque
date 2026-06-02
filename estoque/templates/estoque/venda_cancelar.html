@@ -70,6 +70,11 @@
     text-transform: uppercase;
   }
   .cancel-confirm-hint { color: #7f1d1d; font-size: 0.76rem; font-weight: 850; }
+  .cancel-awareness {
+    display: flex; align-items: flex-start; gap: 8px; color: #7f1d1d;
+    font-size: 0.78rem; font-weight: 900; line-height: 1.3;
+  }
+  .cancel-awareness input { margin-top: 2px; accent-color: #dc2626; }
   .cancel-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
   .cancel-btn {
     min-height: 34px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 7px 12px;
@@ -258,6 +263,10 @@
                 <span class="cancel-confirm-hint">Digite CANCELAR para confirmar o cancelamento definitivo da venda #{{ venda.id }}.</span>
               </label>
               <input id="id_confirmacao_cancelamento" name="confirmacao_cancelamento" type="text" value="{{ confirmacao_cancelamento }}" autocomplete="off">
+              <label class="cancel-awareness" for="id_ciencia_cancelamento">
+                <input id="id_ciencia_cancelamento" name="ciencia_cancelamento" type="checkbox" value="1" {% if ciencia_cancelamento == "1" %}checked{% endif %}>
+                <span>Estou ciente de que a venda nao sera apagada, os itens ficarao preservados no historico e contas abertas vinculadas podem ser canceladas/zeradas conforme a regra atual.</span>
+              </label>
             </div>
             <div class="cancel-actions">
               <a class="cancel-btn" href="{% url 'estoque:venda_detalhe' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}">Voltar sem cancelar</a>
@@ -284,6 +293,7 @@
     const radios = Array.from(document.querySelectorAll("input[name='motivo_padrao']"));
     const observacao = document.getElementById("id_observacao_cancelamento");
     const confirmacao = document.getElementById("id_confirmacao_cancelamento");
+    const ciencia = document.getElementById("id_ciencia_cancelamento");
     const botaoConfirmar = document.getElementById("btnConfirmarCancelamentoVenda");
     const form = document.getElementById("formCancelarVenda");
     const modalOverlay = document.getElementById("cancelModalOverlay");
@@ -365,6 +375,10 @@
 
     function textoConfirmacaoValido() {
       return valorConfirmacao() === "CANCELAR";
+    }
+
+    function cienciaConfirmada() {
+      return ciencia ? ciencia.checked : false;
     }
 
     function atualizarConfirmacao() {
@@ -452,10 +466,23 @@
           }
           return;
         }
+        if (!cienciaConfirmada()) {
+          await abrirModalCancelamento({
+            aviso: true,
+            perigo: false,
+            titulo: "Ciencia obrigatoria",
+            texto: "Marque a ciencia de que a venda nao sera apagada e os itens ficarao preservados no historico.",
+            confirmar: "Entendi"
+          });
+          if (ciencia) {
+            ciencia.focus();
+          }
+          return;
+        }
 
         const confirmado = await abrirModalCancelamento({
           titulo: "Confirmar cancelamento",
-          texto: "Deseja cancelar a venda #{{ venda.id }}? A venda sera marcada como cancelada.",
+          texto: "Deseja cancelar a venda #{{ venda.id }}? A venda sera marcada como cancelada, sem apagar a nota nem seus itens.",
           cancelar: "Nao cancelar",
           confirmar: "Cancelar venda"
         });

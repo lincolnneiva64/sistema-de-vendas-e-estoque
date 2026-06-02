@@ -5905,11 +5905,13 @@ def venda_cancelar(request, pk):
     motivo_padrao = ""
     observacao_cancelamento = ""
     confirmacao_cancelamento = ""
+    ciencia_cancelamento = ""
 
     if request.method == "POST":
         motivo_padrao = request.POST.get("motivo_padrao", "").strip()
         observacao_cancelamento = request.POST.get("observacao_cancelamento", "").strip()
         confirmacao_cancelamento = request.POST.get("confirmacao_cancelamento", "")
+        ciencia_cancelamento = request.POST.get("ciencia_cancelamento", "")
         confirmacao_normalizada = confirmacao_cancelamento.strip().upper()
         if motivo_padrao not in motivos_cancelamento:
             messages.warning(request, "Informe o motivo do cancelamento.")
@@ -5917,6 +5919,8 @@ def venda_cancelar(request, pk):
             messages.warning(request, "Informe a observacao adicional para outro motivo.")
         elif confirmacao_normalizada != "CANCELAR":
             messages.warning(request, "Digite CANCELAR exatamente para confirmar o cancelamento da venda.")
+        elif ciencia_cancelamento != "1":
+            messages.warning(request, "Marque a ciencia de que a venda nao sera apagada e os itens ficarao no historico.")
         else:
             motivo = motivo_padrao
             if observacao_cancelamento:
@@ -5953,6 +5957,7 @@ def venda_cancelar(request, pk):
             "observacao_cancelamento": observacao_cancelamento,
             "motivos_cancelamento": motivos_cancelamento,
             "confirmacao_cancelamento": confirmacao_cancelamento,
+            "ciencia_cancelamento": ciencia_cancelamento,
             "conta_receber": conta_receber,
             "recebimentos_count": recebimentos_count,
             "creditos_count": creditos_count,
