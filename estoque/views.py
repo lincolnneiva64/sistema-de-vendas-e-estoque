@@ -4903,6 +4903,17 @@ def _bloquear_venda_cancelada(request, venda, destino="estoque:venda_detalhe"):
     return redirect(destino, pk=venda.pk)
 
 
+def _bloquear_edicao_venda_quitada(request, venda):
+    if not _contexto_venda_quitada(venda).get("quitada"):
+        return None
+    messages.warning(
+        request,
+        "Venda quitada: edicao comum bloqueada. Para produto nao entregue/nao aceito, use futuramente o fluxo proprio de ajuste financeiro/estoque.",
+    )
+    detalhe_url = reverse("estoque:venda_detalhe", kwargs={"pk": venda.pk})
+    return redirect(f"{detalhe_url}?edicao_bloqueada=1")
+
+
 def _venda_a_prazo(venda):
     return normalizar_texto_cliente(venda.tipo_pagamento) in {"a prazo", "carteira"}
 
@@ -5311,6 +5322,9 @@ def venda_editar_revisao(request, pk):
     bloqueio = _bloquear_venda_cancelada(request, venda)
     if bloqueio:
         return bloqueio
+    bloqueio = _bloquear_edicao_venda_quitada(request, venda)
+    if bloqueio:
+        return bloqueio
     retorno_url = _url_retorno_segura(request)
     alteracao_quantidade = request.session.pop(f"venda_quantidade_alterada_{venda.pk}", None)
     item_removido = request.session.pop(f"venda_item_removido_{venda.pk}", None)
@@ -5355,6 +5369,9 @@ def venda_editar_cabecalho(request, pk):
         pk=pk,
     )
     bloqueio = _bloquear_venda_cancelada(request, venda)
+    if bloqueio:
+        return bloqueio
+    bloqueio = _bloquear_edicao_venda_quitada(request, venda)
     if bloqueio:
         return bloqueio
     retorno_url = _url_retorno_segura(request)
@@ -5451,6 +5468,9 @@ def venda_editar_quantidade_item(request, pk, item_id):
         pk=pk,
     )
     bloqueio = _bloquear_venda_cancelada(request, venda)
+    if bloqueio:
+        return bloqueio
+    bloqueio = _bloquear_edicao_venda_quitada(request, venda)
     if bloqueio:
         return bloqueio
     retorno_url = _url_retorno_segura(request)
@@ -5567,6 +5587,9 @@ def venda_adicionar_produto_item(request, pk):
         pk=pk,
     )
     bloqueio = _bloquear_venda_cancelada(request, venda)
+    if bloqueio:
+        return bloqueio
+    bloqueio = _bloquear_edicao_venda_quitada(request, venda)
     if bloqueio:
         return bloqueio
     retorno_url = _url_retorno_segura(request)
@@ -5753,6 +5776,9 @@ def venda_revisar_remocao_item(request, pk, item_id):
         pk=pk,
     )
     bloqueio = _bloquear_venda_cancelada(request, venda)
+    if bloqueio:
+        return bloqueio
+    bloqueio = _bloquear_edicao_venda_quitada(request, venda)
     if bloqueio:
         return bloqueio
     retorno_url = _url_retorno_segura(request)

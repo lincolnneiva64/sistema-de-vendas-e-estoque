@@ -6,7 +6,7 @@ from contextlib import redirect_stdout
 from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
@@ -462,7 +462,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "Esta nota j&aacute; possui pagamento registrado")
         self.assertContains(resposta, "Evite editar produtos ou valores")
 
-    def test_venda_com_recebimento_registrado_mostra_aviso_na_edicao(self):
+    def test_acesso_direto_edicao_de_venda_quitada_e_bloqueado(self):
         cliente = Cliente.objects.create(nome="Cliente Aviso Recebimento", ativo=True)
         produto = self._produto_teste("Produto Aviso Recebimento")
         venda = Venda.objects.create(
@@ -494,12 +494,149 @@ class PixRecebidoTests(TestCase):
             forma_pagamento="PIX",
         )
 
-        resposta = self.client.get(reverse("estoque:venda_editar_revisao", kwargs={"pk": venda.id}), secure=True)
+        resposta = self.client.get(
+            reverse("estoque:venda_editar_revisao", kwargs={"pk": venda.id}),
+            secure=True,
+            follow=True,
+        )
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "VENDA JA QUITADA / RECEBIMENTOS REGISTRADOS")
-        self.assertContains(resposta, "1 recebimento(s)/baixa(s) registrado(s)")
-        self.assertContains(resposta, "Alteracoes na nota podem gerar diferenca financeira")
+        redirect_url = urlsplit(resposta.redirect_chain[0][0])
+        self.assertEqual(
+            f"{redirect_url.path}?{redirect_url.query}",
+            reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}) + "?edicao_bloqueada=1",
+        )
+        self.assertContains(resposta, "Venda quitada: edicao comum bloqueada")
+        self.assertNotContains(resposta, "Editar nota - Venda")
+
+    def test_venda_quitada_nao_mostra_botoes_de_edicao_comum_no_detalhe(self):
+        cliente = Cliente.objects.create(nome="Cliente Botoes Quitada", ativo=True)
+        produto = self._produto_teste("Produto Botoes Quitada")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("85.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("85.00"),
+            valor_total=Decimal("85.00"),
+        )
+        ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("85.00"),
+            valor_em_aberto=Decimal("0.00"),
+            status=ContaReceber.STATUS_PAGA,
+        )
+
+        resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Venda quitada: edicao comum bloqueada")
+        self.assertNotContains(resposta, reverse("estoque:venda_editar_revisao", kwargs={"pk": venda.id}))
+        self.assertNotContains(resposta, reverse("estoque:venda_editar_cabecalho", kwargs={"pk": venda.id}))
+        self.assertNotContains(resposta, reverse("estoque:venda_adicionar_produto_item", kwargs={"pk": venda.id}))
+        self.assertContains(resposta, reverse("estoque:venda_cancelar", kwargs={"pk": venda.id}))
+        self.assertContains(resposta, reverse("estoque:preparar_whatsapp_venda", kwargs={"pk": venda.id}))
+        self.assertContains(resposta, reverse("estoque:venda_whatsapp_pdf", kwargs={"pk": venda.id}))
+        self.assertContains(resposta, reverse("estoque:venda_criar_entrega", kwargs={"pk": venda.id}))
+        self.assertContains(resposta, 'id="btnImprimir"')
+        self.assertEqual(
+            self.client.get(reverse("estoque:preparar_whatsapp_venda", kwargs={"pk": venda.id}), secure=True).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.get(reverse("estoque:venda_whatsapp_pdf", kwargs={"pk": venda.id}), secure=True).status_code,
+            200,
+        )
+
+    def test_acesso_direto_adicionar_produto_em_venda_quitada_e_bloqueado(self):
+        cliente = Cliente.objects.create(nome="Cliente Add Quitada", ativo=True)
+        produto = self._produto_teste("Produto Add Quitada")
+        produto_novo = self._produto_teste("Produto Add Bloqueado")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("40.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("40.00"),
+            valor_total=Decimal("40.00"),
+        )
+        ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("40.00"),
+            valor_em_aberto=Decimal("0.00"),
+            status=ContaReceber.STATUS_PAGA,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_adicionar_produto_item", kwargs={"pk": venda.id}),
+            {
+                "produto_id": str(produto_novo.id),
+                "quantidade": "1",
+                "preco_unitario": "10.00",
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        redirect_url = urlsplit(resposta.redirect_chain[0][0])
+        self.assertEqual(
+            f"{redirect_url.path}?{redirect_url.query}",
+            reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}) + "?edicao_bloqueada=1",
+        )
+        self.assertContains(resposta, "Venda quitada: edicao comum bloqueada")
+        self.assertFalse(ItemVenda.objects.filter(venda=venda, produto=produto_novo).exists())
+
+    def test_venda_aberta_continua_permitindo_edicao_normal(self):
+        cliente = Cliente.objects.create(nome="Cliente Aberta Editavel", ativo=True)
+        produto = self._produto_teste("Produto Aberta Editavel")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("45.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("45.00"),
+            valor_total=Decimal("45.00"),
+        )
+        ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("45.00"),
+            valor_em_aberto=Decimal("45.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+
+        resposta_detalhe = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+        resposta_edicao = self.client.get(reverse("estoque:venda_editar_revisao", kwargs={"pk": venda.id}), secure=True)
+
+        self.assertEqual(resposta_detalhe.status_code, 200)
+        self.assertContains(resposta_detalhe, reverse("estoque:venda_editar_revisao", kwargs={"pk": venda.id}))
+        self.assertContains(resposta_detalhe, reverse("estoque:venda_adicionar_produto_item", kwargs={"pk": venda.id}))
+        self.assertEqual(resposta_edicao.status_code, 200)
+        self.assertContains(resposta_edicao, "Editar nota - Venda")
 
     def test_cancelamento_de_venda_paga_mostra_aviso_de_recebimentos_preservados(self):
         cliente = Cliente.objects.create(nome="Cliente Cancelar Conta Paga Aviso", ativo=True)

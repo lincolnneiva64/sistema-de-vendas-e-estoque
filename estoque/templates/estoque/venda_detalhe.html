@@ -233,6 +233,26 @@
             box-shadow: 0 4px 10px rgba(220, 38, 38, 0.22) !important;
         }
 
+        .editar-nota-bloqueada {
+            border: 1px solid #fbbf24;
+            border-radius: 7px;
+            padding: 4px 7px;
+            background: #fffbeb;
+            color: #78350f;
+            font-size: 10.5px;
+            font-weight: 900;
+            line-height: 1.15;
+            max-width: 245px;
+        }
+
+        .editar-nota-bloqueada small {
+            display: block;
+            margin-top: 2px;
+            color: #92400e;
+            font-size: 9.5px;
+            font-weight: 800;
+        }
+
         .edit-review-whatsapp {
             border: 1px solid #fed7aa;
             border-radius: 10px;
@@ -1021,9 +1041,16 @@
                             <a href="{% url 'estoque:entrega_rota_detalhe' entrega_contexto.id %}">Voltar para {% if entrega_contexto.tipo == "unitaria" %}Entrega{% else %}Rota{% endif %} #{{ entrega_contexto.id }}</a>
                         {% endif %}
                         {% if not venda.cancelada %}
+                        {% if contexto_venda_quitada.quitada %}
+                        <span class="editar-nota-bloqueada">
+                            Venda quitada: edicao comum bloqueada.
+                            <small>Para produto nao entregue/nao aceito, use futuramente o fluxo proprio de ajuste financeiro/estoque.</small>
+                        </span>
+                        {% else %}
                         <a href="{% url 'estoque:venda_editar_revisao' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}" class="editar-nota-acao">Editar nota</a>
                         <a href="{% url 'estoque:venda_editar_cabecalho' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}" class="editar-nota-acao">Editar cabeçalho</a>
                         <a href="{% url 'estoque:venda_adicionar_produto_item' venda.id %}{% if itens_adicionados_param or retorno_querystring %}?{% if itens_adicionados_param %}itens_adicionados={{ itens_adicionados_param }}{% if retorno_querystring %}&{% endif %}{% endif %}{% if retorno_querystring %}{{ retorno_querystring }}{% endif %}{% endif %}" class="editar-nota-acao">Adicionar produto</a>
+                        {% endif %}
                         <a href="{% url 'estoque:venda_cancelar' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}" class="cancelar-venda-acao">Cancelar venda</a>
                         {% endif %}
                         <button type="button" id="btnImprimir">Imprimir</button>
@@ -1126,7 +1153,7 @@
                         </div>
                     {% endif %}
 
-                    {% if request.GET.nota_atualizada == "1" or request.GET.origem == "pendencias" %}
+                    {% if request.GET.nota_atualizada == "1" or request.GET.origem == "pendencias" or request.GET.edicao_bloqueada == "1" %}
                         {% for message in messages %}
                             <div class="nota-feedback {{ message.tags }}">{{ message }}</div>
                         {% endfor %}
