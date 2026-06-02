@@ -185,6 +185,27 @@
             box-shadow: 0 12px 26px rgba(220, 38, 38, 0.13);
         }
 
+        .venda-quitada-banner {
+            width: min(100%, 430px);
+            margin: 0 0 0 auto;
+            padding: 8px 10px;
+            border: 2px solid #d97706;
+            border-radius: 10px;
+            background: #fffbeb;
+            color: #78350f;
+            font-size: 12px;
+            font-weight: 850;
+            line-height: 1.3;
+            box-shadow: 0 8px 18px rgba(217, 119, 6, 0.12);
+        }
+
+        .venda-quitada-banner strong {
+            display: block;
+            margin-bottom: 2px;
+            font-size: 12.5px;
+            font-weight: 950;
+        }
+
         .pendencia-resolvida-banner {
             margin-bottom: 10px;
             padding: 10px 12px;
@@ -543,6 +564,18 @@
             padding: 8px 10px;
         }
 
+        .entrega-layout {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            justify-content: space-between;
+        }
+
+        .entrega-main {
+            min-width: 220px;
+            flex: 1 1 auto;
+        }
+
         .entrega-status {
             margin-bottom: 6px;
             font-size: 11px;
@@ -627,6 +660,17 @@
 
         .entrega-feedback.success { color: #166534; }
         .entrega-feedback.warning { color: #92400e; }
+
+        @media screen and (max-width: 600px) {
+            .entrega-layout {
+                display: grid;
+            }
+
+            .venda-quitada-banner {
+                width: 100%;
+                margin-left: 0;
+            }
+        }
 
         .historico-lista {
             border: 1px solid #e2e8f0;
@@ -1094,6 +1138,8 @@
                             <h3 class="entrega-title">Entrega / checklist</h3>
                         </div>
                         <div class="entrega-body">
+                            <div class="entrega-layout">
+                            <div class="entrega-main">
                             {% if entrega_info %}
                                 <div class="entrega-status">Status: {{ entrega_info.status }}</div>
                                 <div class="entrega-actions">
@@ -1123,6 +1169,14 @@
                                     <a href="{% url 'estoque:venda_criar_entrega' venda.id %}" class="success">Criar entrega/checklist</a>
                                 </div>
                             {% endif %}
+                            </div>
+                            {% if contexto_venda_quitada.quitada %}
+                                <div class="venda-quitada-banner">
+                                    <strong>VENDA J&Aacute; QUITADA / RECEBIMENTOS REGISTRADOS</strong>
+                                    Esta nota j&aacute; possui pagamento registrado. Evite editar produtos ou valores. Se houver diferen&ccedil;a, resolva por devolu&ccedil;&atilde;o, cr&eacute;dito, abatimento autorizado ou pend&ecirc;ncia financeira.
+                                </div>
+                            {% endif %}
+                            </div>
                         </div>
                     </div>
 
@@ -1165,10 +1219,6 @@
                         {% elif venda_a_prazo and conta_receber and conta_receber.status == "parcial" %}
                             <div class="conta-receber-info parcial">
                                 Conta a receber parcial - Valor em aberto: R$ {{ conta_receber.valor_em_aberto|floatformat:2 }} - Vencimento: {{ conta_receber.data_vencimento|date:"d/m/Y"|default:"-" }}
-                            </div>
-                        {% elif venda_a_prazo and conta_receber and conta_receber.status == "paga" %}
-                            <div class="conta-receber-info paga">
-                                Conta paga.
                             </div>
                         {% elif not venda_a_prazo %}
                             <div class="conta-receber-info">

@@ -429,6 +429,150 @@ class PixRecebidoTests(TestCase):
         resposta_canceladas = self.client.get(reverse("estoque:consultar_vendas_canceladas"), secure=True)
         self.assertContains(resposta_canceladas, "Cliente Consulta Cancelada Manual")
 
+    def test_venda_com_conta_paga_mostra_aviso_de_quitada_no_detalhe(self):
+        cliente = Cliente.objects.create(nome="Cliente Aviso Conta Paga", ativo=True)
+        produto = self._produto_teste("Produto Aviso Conta Paga")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("80.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("80.00"),
+            valor_total=Decimal("80.00"),
+        )
+        ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("80.00"),
+            valor_em_aberto=Decimal("0.00"),
+            status=ContaReceber.STATUS_PAGA,
+        )
+
+        resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "VENDA J&Aacute; QUITADA / RECEBIMENTOS REGISTRADOS")
+        self.assertContains(resposta, "Esta nota j&aacute; possui pagamento registrado")
+        self.assertContains(resposta, "Evite editar produtos ou valores")
+
+    def test_venda_com_recebimento_registrado_mostra_aviso_na_edicao(self):
+        cliente = Cliente.objects.create(nome="Cliente Aviso Recebimento", ativo=True)
+        produto = self._produto_teste("Produto Aviso Recebimento")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("120.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("120.00"),
+            valor_total=Decimal("120.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("120.00"),
+            valor_em_aberto=Decimal("70.00"),
+            status=ContaReceber.STATUS_PARCIAL,
+        )
+        RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=timezone.localdate(),
+            valor=Decimal("50.00"),
+            forma_pagamento="PIX",
+        )
+
+        resposta = self.client.get(reverse("estoque:venda_editar_revisao", kwargs={"pk": venda.id}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "VENDA JA QUITADA / RECEBIMENTOS REGISTRADOS")
+        self.assertContains(resposta, "1 recebimento(s)/baixa(s) registrado(s)")
+        self.assertContains(resposta, "Alteracoes na nota podem gerar diferenca financeira")
+
+    def test_cancelamento_de_venda_paga_mostra_aviso_de_recebimentos_preservados(self):
+        cliente = Cliente.objects.create(nome="Cliente Cancelar Conta Paga Aviso", ativo=True)
+        produto = self._produto_teste("Produto Cancelar Conta Paga Aviso")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("60.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("60.00"),
+            valor_total=Decimal("60.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("60.00"),
+            valor_em_aberto=Decimal("0.00"),
+            status=ContaReceber.STATUS_PAGA,
+        )
+        RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=timezone.localdate(),
+            valor=Decimal("60.00"),
+            forma_pagamento="PIX",
+        )
+
+        resposta = self.client.get(reverse("estoque:venda_cancelar", kwargs={"pk": venda.id}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "VENDA JA QUITADA / RECEBIMENTOS REGISTRADOS")
+        self.assertContains(resposta, "Recebimentos nao serao apagados")
+        self.assertContains(resposta, "historico financeiro sera preservado")
+        self.assertContains(resposta, "Conta quitada / recebimentos registrados")
+
+    def test_venda_com_conta_aberta_sem_recebimento_nao_mostra_aviso_de_quitada(self):
+        cliente = Cliente.objects.create(nome="Cliente Sem Aviso Quitada", ativo=True)
+        produto = self._produto_teste("Produto Sem Aviso Quitada")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("45.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("45.00"),
+            valor_total=Decimal("45.00"),
+        )
+        ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("45.00"),
+            valor_em_aberto=Decimal("45.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+
+        resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotContains(resposta, "VENDA J&Aacute; QUITADA / RECEBIMENTOS REGISTRADOS")
+        self.assertNotContains(resposta, "Esta nota j&aacute; possui pagamento registrado")
+
     def test_remover_item_da_nota_resolve_pendencia_de_entrega_do_item(self):
         cliente = Cliente.objects.create(nome="Cliente Entrega", ativo=True)
         produto_entregue = self._produto_teste("Agua Teste")

@@ -74,6 +74,11 @@
     border: 1px solid #f7d98b; border-radius: 10px; background: #fff7ed;
     color: #92400e; padding: 7px 9px; font-size: 0.8rem; font-weight: 850; line-height: 1.25;
   }
+  .edit-review-paid-warning {
+    border: 2px solid #d97706; border-radius: 10px; background: #fffbeb;
+    color: #78350f; padding: 8px 10px; font-size: 0.82rem; font-weight: 900; line-height: 1.3;
+  }
+  .edit-review-paid-warning strong { display: block; margin-bottom: 3px; font-size: 0.88rem; }
   .edit-review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
   .edit-review-field { border: 1px solid #edf1f6; border-radius: 8px; background: #fbfdff; padding: 6px 8px; }
   .edit-review-label { display: block; color: #64748b; font-size: 0.66rem; font-weight: 900; text-transform: uppercase; }
@@ -188,6 +193,13 @@
         <div class="edit-review-notice">
           Modo de edicao segura. Nesta etapa, cabecalho pode ter data, vencimento e pagamento alterados; produto pode ser acrescentado, quantidade de item existente pode ser alterada e item pode ser removido com confirmacao.
         </div>
+
+        {% if contexto_venda_quitada.quitada %}
+          <div class="edit-review-paid-warning">
+            <strong>VENDA JA QUITADA / RECEBIMENTOS REGISTRADOS</strong>
+            {{ contexto_venda_quitada.resumo }} Alteracoes na nota podem gerar diferenca financeira. Nesta etapa o sistema apenas avisa; confira antes de salvar qualquer alteracao.
+          </div>
+        {% endif %}
 
         {% if possui_alerta_operacional %}
           <div class="edit-review-warning">

@@ -4827,6 +4827,7 @@ def venda_detalhe(request, pk):
     itens_adicionados_destacar_ids = set(itens_adicionados_ids) | alteracoes_pendentes_whatsapp["itens_adicionados_ids"]
     contexto_pendencia_resolvida = contexto_pendencia_resolvida_nota(request, venda)
     modo_pendencia_resolvida = contexto_pendencia_resolvida is not None
+    contexto_venda_quitada = _contexto_venda_quitada(venda, conta_receber)
 
     # Verificar se venda já tem entrega/rota
     entrega_existente = EntregaRotaItem.objects.filter(venda=venda).select_related("rota").first()
@@ -4873,6 +4874,7 @@ def venda_detalhe(request, pk):
             "whatsapp_atualizacao": whatsapp_atualizacao,
             "alteracoes_pendentes_whatsapp": alteracoes_pendentes_whatsapp,
             "conta_receber": conta_receber,
+            "contexto_venda_quitada": contexto_venda_quitada,
             "venda_a_prazo": _venda_a_prazo(venda),
             "retorno_url": retorno_url,
             "retorno_querystring": _querystring_retorno(retorno_url),
@@ -4910,6 +4912,28 @@ def _conta_receber_da_venda(venda):
         return venda.conta_receber
     except ContaReceber.DoesNotExist:
         return None
+
+
+def _contexto_venda_quitada(venda, conta_receber=None):
+    conta = conta_receber if conta_receber is not None else _conta_receber_da_venda(venda)
+    recebimentos_count = conta.recebimentos.count() if conta else 0
+    conta_paga = bool(conta and conta.status == ContaReceber.STATUS_PAGA)
+    venda_a_vista = normalizar_texto_cliente(venda.tipo_pagamento) in {"a vista", "avista"}
+    motivos = []
+    if venda_a_vista:
+        motivos.append("Venda a vista.")
+    if conta_paga:
+        motivos.append("Conta a receber quitada.")
+    if recebimentos_count:
+        motivos.append(f"{recebimentos_count} recebimento(s)/baixa(s) registrado(s).")
+    return {
+        "quitada": venda_a_vista or conta_paga or recebimentos_count > 0,
+        "venda_a_vista": venda_a_vista,
+        "conta_paga": conta_paga,
+        "recebimentos_count": recebimentos_count,
+        "motivos": motivos,
+        "resumo": " ".join(motivos),
+    }
 
 
 def _sincronizar_conta_receber(venda, observacao_origem="", permitir_reabrir_cancelada=False):
@@ -5302,6 +5326,7 @@ def venda_editar_revisao(request, pk):
     total_checklists = EntregaChecklistItem.objects.filter(rota_item__venda=venda).count()
     existe_pendencia = EntregaRotaItem.objects.filter(venda=venda, is_pendencia=True).exists()
     whatsapp_atualizacao = _montar_whatsapp_atualizacao_nota(request, venda)
+    contexto_venda_quitada = _contexto_venda_quitada(venda)
 
     return render(
         request,
@@ -5315,6 +5340,7 @@ def venda_editar_revisao(request, pk):
             "total_checklists": total_checklists,
             "existe_pendencia": existe_pendencia,
             "possui_alerta_operacional": total_entregas or existe_checklist or existe_pendencia,
+            "contexto_venda_quitada": contexto_venda_quitada,
             "alteracao_quantidade": alteracao_quantidade,
             "whatsapp_atualizacao": whatsapp_atualizacao,
             "retorno_url": retorno_url,
@@ -5867,6 +5893,7 @@ def venda_cancelar(request, pk):
 
     conta_receber = _conta_receber_da_venda(venda)
     recebimentos_count = conta_receber.recebimentos.count() if conta_receber else 0
+    contexto_venda_quitada = _contexto_venda_quitada(venda, conta_receber)
     creditos_count = (
         CreditoCliente.objects.filter(origem_conta_receber=conta_receber).count()
         if conta_receber
@@ -5959,6 +5986,7 @@ def venda_cancelar(request, pk):
             "confirmacao_cancelamento": confirmacao_cancelamento,
             "ciencia_cancelamento": ciencia_cancelamento,
             "conta_receber": conta_receber,
+            "contexto_venda_quitada": contexto_venda_quitada,
             "recebimentos_count": recebimentos_count,
             "creditos_count": creditos_count,
             "entregas_count": entregas_count,

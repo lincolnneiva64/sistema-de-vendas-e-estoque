@@ -150,6 +150,13 @@
           A venda sera marcada como cancelada/anulada, sem excluir fisicamente a nota. Os itens e valores da venda ficarao preservados para historico. Se houver conta a receber em aberto, ela podera ser cancelada/zerada junto com a venda. Valores ja pagos ou baixados nao serao apagados automaticamente. Estoque, caixa, Pix, entrega, checklist e pendencias vinculadas nao serao alterados automaticamente nesta etapa.
         </div>
 
+        {% if contexto_venda_quitada.quitada %}
+          <div class="cancel-alert strong">
+            <strong class="cancel-alert-title">VENDA JA QUITADA / RECEBIMENTOS REGISTRADOS</strong>
+            {{ contexto_venda_quitada.resumo }} Recebimentos nao serao apagados e o historico financeiro sera preservado. Se houver diferenca ou devolucao, resolva depois por credito, devolucao, abatimento ou pendencia financeira.
+          </div>
+        {% endif %}
+
         {% if tem_sinais_consolidacao %}
           <div class="cancel-alert strong">
             <strong class="cancel-alert-title">Atencao: esta venda ja possui movimentacao financeira, historico ou e uma venda antiga.</strong>
@@ -191,7 +198,7 @@
             <span class="cancel-label">Conta a receber</span>
             <span class="cancel-value">
               {% if conta_receber %}
-                #{{ conta_receber.id }} - {{ conta_receber.get_status_display }} - aberto R$ {{ conta_receber.valor_em_aberto|floatformat:2 }}
+                #{{ conta_receber.id }} - {% if contexto_venda_quitada.quitada %}Conta quitada / recebimentos registrados{% else %}{{ conta_receber.get_status_display }}{% endif %} - aberto R$ {{ conta_receber.valor_em_aberto|floatformat:2 }}
               {% else %}
                 Sem conta vinculada
               {% endif %}
