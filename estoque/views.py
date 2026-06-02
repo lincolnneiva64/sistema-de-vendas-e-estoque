@@ -4266,6 +4266,7 @@ def revisar_remocao_pendencia_da_nota(request, checklist_id):
             resolver_entregas_sem_pendencias_ativas(rota_item_ids_afetados)
             novo_total = recalcular_total_venda(venda)
             _anular_venda_sem_itens_por_remocao_pendencia(venda)
+            _sincronizar_conta_receber(venda, "pendencia removida da nota")
 
             _registrar_evento_venda(
                 venda,

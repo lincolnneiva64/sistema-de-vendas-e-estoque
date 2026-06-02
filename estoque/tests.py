@@ -470,6 +470,127 @@ class PixRecebidoTests(TestCase):
             f'{reverse("estoque:venda_detalhe", kwargs={"pk": venda.id})}?entrega={rota.id}&origem=pendencias_resolvidas',
         )
 
+    def test_remover_item_por_pendencia_atualiza_conta_receber_aberta(self):
+        cliente = Cliente.objects.create(nome="Cliente Pendencia Conta Aberta", ativo=True)
+        produto_entregue = self._produto_teste("Agua Pendencia Conta")
+        produto_pendente = self._produto_teste("Refri Pendencia Conta")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("100.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_entregue,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("70.00"),
+            valor_total=Decimal("70.00"),
+        )
+        item_pendente = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_pendente,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("30.00"),
+            valor_total=Decimal("30.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("100.00"),
+            valor_em_aberto=Decimal("100.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+        rota = EntregaRota.objects.create(data=timezone.localdate(), tipo=EntregaRota.TIPO_UNITARIA)
+        item_rota = EntregaRotaItem.objects.create(
+            rota=rota,
+            venda=venda,
+            status=EntregaRotaItem.STATUS_PARCIAL,
+            observacao="[checklist_entrega_salva]",
+        )
+        checklist_pendente = EntregaChecklistItem.objects.create(
+            rota_item=item_rota,
+            item_venda=item_pendente,
+            carregado=False,
+            entregue=False,
+        )
+
+        resposta = self.client.post(
+            reverse(
+                "estoque:revisar_remocao_pendencia_da_nota",
+                kwargs={"checklist_id": checklist_pendente.id},
+            ),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertEqual(venda.total, Decimal("70.00"))
+        self.assertEqual(conta.valor_original, Decimal("70.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("70.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+
+    def test_remover_ultimo_item_por_pendencia_cancela_conta_receber_aberta(self):
+        cliente = Cliente.objects.create(nome="Cliente Pendencia Conta Cancelada", ativo=True)
+        produto_pendente = self._produto_teste("Produto Pendencia Cancela Conta")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("50.00"),
+        )
+        item_pendente = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_pendente,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("50.00"),
+            valor_total=Decimal("50.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("50.00"),
+            valor_em_aberto=Decimal("50.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+        rota = EntregaRota.objects.create(data=timezone.localdate(), tipo=EntregaRota.TIPO_UNITARIA)
+        item_rota = EntregaRotaItem.objects.create(
+            rota=rota,
+            venda=venda,
+            status=EntregaRotaItem.STATUS_PARCIAL,
+            observacao="[checklist_entrega_salva]",
+        )
+        checklist_pendente = EntregaChecklistItem.objects.create(
+            rota_item=item_rota,
+            item_venda=item_pendente,
+            carregado=False,
+            entregue=False,
+        )
+
+        resposta = self.client.post(
+            reverse(
+                "estoque:revisar_remocao_pendencia_da_nota",
+                kwargs={"checklist_id": checklist_pendente.id},
+            ),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertTrue(venda.cancelada)
+        self.assertEqual(venda.total, Decimal("0.00"))
+        self.assertEqual(conta.valor_original, Decimal("50.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_CANCELADA)
+        self.assertIn("Cancelada por venda nao realizada", conta.observacao)
+
     def test_remover_ultimo_item_por_pendencia_anula_venda_sem_itens(self):
         cliente = Cliente.objects.create(nome="Cliente Venda Anulada Pendencia", ativo=True)
         produto_pendente = self._produto_teste("Skol 24/600ml Teste")
