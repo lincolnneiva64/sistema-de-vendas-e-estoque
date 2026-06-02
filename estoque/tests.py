@@ -1011,6 +1011,32 @@ class PixRecebidoTests(TestCase):
         pix = PixRecebido.objects.get(nome_pagador="Pix novo visual")
         self.assertIsNone(pix.visualizado_em)
 
+    def test_central_pix_lista_mostra_id_e_busca_por_numero_pix(self):
+        alvo = PixRecebido.objects.create(
+            nome_pagador="Pix alvo busca id",
+            valor="25.00",
+            status=PixRecebido.STATUS_BAIXADO,
+        )
+        PixRecebido.objects.create(
+            nome_pagador="Pix fora da busca id",
+            valor="35.00",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:central_pix"),
+            {"q": str(alvo.id)},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Nº Pix")
+        self.assertContains(resposta, f"#{alvo.id}")
+        self.assertContains(resposta, "Buscar por nº do Pix, pagador, cliente, instituicao, status ou data...")
+        self.assertContains(resposta, "Pix alvo busca id")
+        self.assertContains(resposta, "pix-status baixado")
+        self.assertNotContains(resposta, "Pix fora da busca id")
+
     def test_central_pix_detalhe_marca_pix_como_visualizado(self):
         pix = PixRecebido.objects.create(
             nome_pagador="Pix abre detalhe",
@@ -1046,6 +1072,115 @@ class PixRecebidoTests(TestCase):
         pix.refresh_from_db()
         self.assertIsNotNone(pix.visualizado_em)
         self.assertEqual(pix.status, PixRecebido.STATUS_POSSIVEL_DUPLICADO)
+
+    def test_central_pix_detalhe_baixado_mostra_id_status_e_sem_botao_excluir(self):
+        pix = PixRecebido.objects.create(
+            nome_pagador="Pix detalhe baixado",
+            valor="99.00",
+            status=PixRecebido.STATUS_BAIXADO,
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, f"Detalhe do Pix baixado - Pix #{pix.id}")
+        self.assertContains(resposta, "ID do Pix")
+        self.assertContains(resposta, f"#{pix.id}")
+        self.assertContains(resposta, "Este Pix ja foi baixado/usado financeiramente e nao pode ser excluido.")
+        self.assertContains(resposta, "pix-detail-status-baixado")
+        self.assertNotContains(resposta, ">Ignorar Pix sem baixa</button>")
+        self.assertNotContains(resposta, "Excluir Pix enviado errado")
+        self.assertNotContains(resposta, "Se voltar sem baixar, este Pix continuara pendente na Central de Pix.")
+
+    def test_central_pix_nao_permite_ignorar_pix_baixado_por_post_direto(self):
+        pix = PixRecebido.objects.create(
+            nome_pagador="Pix baixado protegido",
+            valor="88.00",
+            status=PixRecebido.STATUS_BAIXADO,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id}),
+            {"acao": "ignorar"},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        pix.refresh_from_db()
+        self.assertEqual(pix.status, PixRecebido.STATUS_BAIXADO)
+        self.assertContains(resposta, "Pix baixado/usado financeiramente nao pode ser ignorado.")
+
+    def test_central_pix_pendente_pode_ser_excluido_com_confirmacao_forte(self):
+        cliente = Cliente.objects.create(nome="Cliente Pix Excluir", ativo=True)
+        pix = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="Arquivo enviado errado",
+            valor="12.34",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+        url = reverse("estoque:central_pix_excluir", kwargs={"pix_id": pix.id})
+
+        resposta_get = self.client.get(url, secure=True)
+        self.assertEqual(resposta_get.status_code, 200)
+        self.assertContains(resposta_get, f"#{pix.id}")
+        self.assertContains(resposta_get, "Cliente Pix Excluir")
+        self.assertContains(resposta_get, "Arquivo enviado errado")
+
+        resposta_post = self.client.post(
+            url,
+            {"confirmacao": "EXCLUIR"},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta_post.status_code, 200)
+        self.assertFalse(PixRecebido.objects.filter(pk=pix.id).exists())
+        self.assertContains(resposta_post, f"Pix #{pix.id} excluido com sucesso.")
+
+    def test_central_pix_nao_exclui_se_confirmacao_estiver_errada(self):
+        pix = PixRecebido.objects.create(
+            nome_pagador="Confirmacao errada",
+            valor="22.00",
+            status=PixRecebido.STATUS_PENDENTE,
+        )
+        url = reverse("estoque:central_pix_excluir", kwargs={"pix_id": pix.id})
+
+        resposta = self.client.post(
+            url,
+            {"confirmacao": "excluir"},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(PixRecebido.objects.filter(pk=pix.id).exists())
+        self.assertContains(resposta, "Digite exatamente EXCLUIR para confirmar a exclusao do Pix.")
+
+    def test_central_pix_baixado_nao_pode_ser_excluido(self):
+        pix = PixRecebido.objects.create(
+            nome_pagador="Pix ja baixado",
+            valor="33.00",
+            status=PixRecebido.STATUS_BAIXADO,
+        )
+        url = reverse("estoque:central_pix_excluir", kwargs={"pix_id": pix.id})
+
+        resposta_get = self.client.get(url, secure=True, follow=True)
+        self.assertEqual(resposta_get.status_code, 200)
+        self.assertTrue(PixRecebido.objects.filter(pk=pix.id).exists())
+        self.assertContains(resposta_get, "Nao e possivel excluir este Pix porque ele ja tem vinculo financeiro/baixa.")
+
+        resposta_post = self.client.post(
+            url,
+            {"confirmacao": "EXCLUIR"},
+            secure=True,
+            follow=True,
+        )
+        self.assertEqual(resposta_post.status_code, 200)
+        self.assertTrue(PixRecebido.objects.filter(pk=pix.id).exists())
 
     def test_central_pix_bloqueia_salvar_sem_cliente_confirmado(self):
         url = reverse("estoque:central_pix")

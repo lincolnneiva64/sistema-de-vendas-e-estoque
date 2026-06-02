@@ -366,7 +366,7 @@
     overflow-x: auto; border-top: 1px solid #c7dff3; background: #fff;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
   }
-  .pix-table { width: 100%; border-collapse: collapse; min-width: 980px; table-layout: fixed; }
+  .pix-table { width: 100%; border-collapse: collapse; min-width: 1040px; table-layout: fixed; }
   .pix-table th {
     background: #dbeafe; color: #1f3b57; font-size: 0.7rem;
     letter-spacing: 0.04em; text-transform: uppercase;
@@ -394,6 +394,7 @@
     border-radius: 0 8px 8px 0;
   }
   .pix-row.pix-row-novo:hover td { background: #fff4e6; }
+  .pix-col-id { width: 66px; }
   .pix-col-data { width: 96px; }
   .pix-col-cadastro { width: 96px; }
   .pix-col-cliente { width: 136px; }
@@ -419,6 +420,12 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .pix-muted { color: #94a3b8; font-weight: 700; }
+  .pix-id {
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid #bfdbfe; border-radius: 999px; background: #eff6ff;
+    color: #1d4ed8; padding: 3px 7px; font-size: 0.74rem; font-weight: 950;
+    white-space: nowrap;
+  }
   .pix-status {
     display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; padding: 4px 8px;
     font-size: 0.72rem; font-weight: 900; line-height: 1.1;
@@ -426,10 +433,12 @@
     white-space: nowrap; max-width: 100%;
   }
   .pix-status.identificado { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
-  .pix-status.baixado { border-color: #86efac; background: #f0fdf4; color: #166534; }
+  .pix-status.pendente { border-color: #facc15; background: #fef9c3; color: #854d0e; box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.15); }
+  .pix-status.baixado { border-color: #16a34a; background: #dcfce7; color: #14532d; font-size: 0.82rem; font-weight: 950; padding: 6px 10px; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.16); }
+  .pix-status.ignorado { border-color: #cbd5e1; background: #f1f5f9; color: #475569; }
   .pix-status.nao_identificado { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
-  .pix-status.possivel_duplicado { border-color: #fdba74; background: #fff7ed; color: #9a3412; }
-  .pix-status.duplicado { border-color: #cbd5e1; background: #f8fafc; color: #64748b; }
+  .pix-status.possivel_duplicado { border-color: #ea580c; background: #ffedd5; color: #9a3412; box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.16); }
+  .pix-status.duplicado { border-color: #94a3b8; background: #f8fafc; color: #475569; }
   .pix-status-acoes { display: grid; gap: 4px; justify-items: start; align-items: center; }
   .pix-file-link {
     border: 1px solid #5eead4; border-radius: 8px; background: #ccfbf1;
@@ -572,7 +581,7 @@
               name="q"
               value="{{ pix_busca }}"
               class="pix-search-input pix-search-text"
-              placeholder="Buscar por pagador, cliente, instituicao, status ou data..."
+              placeholder="Buscar por nº do Pix, pagador, cliente, instituicao, status ou data..."
               aria-label="Buscar Pix registrados"
             >
             <input
@@ -615,6 +624,7 @@
           <table class="pix-table">
             <thead>
               <tr>
+                <th class="pix-col-id">Nº Pix</th>
                 <th class="pix-col-data">Data do Pix</th>
                 <th class="pix-col-cadastro">Registrado em</th>
                 <th class="pix-col-cliente">Cliente</th>
@@ -629,6 +639,7 @@
             <tbody>
               {% for pix in pix_recebidos %}
                 <tr class="pix-row {% if not pix.visualizado_em %}pix-row-novo{% endif %}">
+                  <td class="pix-col-id"><span class="pix-id">#{{ pix.id }}</span></td>
                   <td class="pix-col-data"><span class="pix-meta">{{ pix.data_pagamento|date:"d/m/Y H:i"|default:"-" }}</span></td>
                   <td class="pix-col-cadastro"><span class="pix-meta">{{ pix.criado_em|date:"d/m/Y H:i" }}</span></td>
                   <td>
@@ -666,7 +677,7 @@
                 </tr>
               {% empty %}
                 <tr>
-                  <td colspan="9" class="pix-empty">Nenhum Pix registrado ainda.</td>
+                  <td colspan="10" class="pix-empty">Nenhum Pix registrado ainda.</td>
                 </tr>
               {% endfor %}
             </tbody>

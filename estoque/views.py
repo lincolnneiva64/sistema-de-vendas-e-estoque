@@ -2321,6 +2321,8 @@ def central_pix(request):
             campos_busca = " ".join(
                 parte
                 for parte in [
+                    f"#{pix.id}",
+                    str(pix.id),
                     pix.nome_pagador,
                     pix.cliente.nome if pix.cliente else "",
                     pix.cliente_sugerido.nome if pix.cliente_sugerido else "",
@@ -2666,6 +2668,22 @@ def _pix_pode_remover_cliente_confirmado(pix):
     )
 
 
+def _pix_tem_vinculo_financeiro(pix):
+    return bool(pix and pix.status == PixRecebido.STATUS_BAIXADO)
+
+
+def _titulo_detalhe_pix(pix):
+    titulos = {
+        PixRecebido.STATUS_BAIXADO: "Detalhe do Pix baixado",
+        PixRecebido.STATUS_IGNORADO: "Detalhe do Pix ignorado",
+        PixRecebido.STATUS_POSSIVEL_DUPLICADO: "Detalhe do Pix possivel duplicado",
+        PixRecebido.STATUS_DUPLICADO: "Detalhe do Pix duplicado",
+        PixRecebido.STATUS_NAO_IDENTIFICADO: "Detalhe do Pix nao identificado",
+        PixRecebido.STATUS_PENDENTE: "Detalhe do Pix pendente",
+    }
+    return titulos.get(pix.status, "Detalhe do Pix")
+
+
 def _caminho_comprovante_pix_media_antiga(nome_arquivo):
     nome_arquivo = str(nome_arquivo or "").strip()
     if not nome_arquivo:
@@ -2702,6 +2720,9 @@ def central_pix_detalhe(request, pix_id):
         detalhe_url = f"{detalhe_url}?{urlencode({'next': voltar_url})}"
 
     if request.method == "POST" and request.POST.get("acao") == "ignorar":
+        if pix.status == PixRecebido.STATUS_BAIXADO:
+            messages.warning(request, "Pix baixado/usado financeiramente nao pode ser ignorado.")
+            return redirect(detalhe_url)
         momento = timezone.localtime(timezone.now()).strftime("%d/%m/%Y %H:%M")
         observacao_atual = (pix.observacao or "").strip()
         registro = f"{momento} - Pix ignorado sem baixa pelo operador."
@@ -2834,6 +2855,47 @@ def central_pix_detalhe(request, pix_id):
             "clientes_pix_autocomplete": _clientes_pix_autocomplete_local(),
             "foco_cliente_confirmado": request.GET.get("foco_cliente") == "1" or not pix.cliente_id,
             "pix_tem_dados_lidos_sem_cliente": pix_tem_dados_lidos_sem_cliente,
+            "pix_pode_excluir": not _pix_tem_vinculo_financeiro(pix),
+            "pix_titulo_detalhe": _titulo_detalhe_pix(pix),
+        },
+    )
+
+
+def central_pix_excluir(request, pix_id):
+    pix = get_object_or_404(PixRecebido.objects.select_related("cliente"), pk=pix_id)
+    detalhe_url = reverse("estoque:central_pix_detalhe", kwargs={"pix_id": pix.id})
+
+    if _pix_tem_vinculo_financeiro(pix):
+        messages.warning(request, "Nao e possivel excluir este Pix porque ele ja tem vinculo financeiro/baixa.")
+        return redirect(detalhe_url)
+
+    if request.method == "POST":
+        confirmacao = (request.POST.get("confirmacao") or "").strip()
+        if confirmacao != "EXCLUIR":
+            messages.warning(request, "Digite exatamente EXCLUIR para confirmar a exclusao do Pix.")
+            return redirect("estoque:central_pix_excluir", pix_id=pix.id)
+
+        pix_id_excluido = pix.id
+        nome_comprovante = pix.comprovante.name if pix.comprovante else ""
+        if pix.comprovante:
+            try:
+                pix.comprovante.delete(save=False)
+            except Exception:
+                # Storage remoto pode falhar; a prioridade segura aqui e remover o registro enviado errado.
+                pass
+        pix.delete()
+        mensagem = f"Pix #{pix_id_excluido} excluido com sucesso."
+        if nome_comprovante:
+            mensagem += " Comprovante associado removido quando o storage permitiu."
+        messages.success(request, mensagem)
+        return redirect("estoque:central_pix")
+
+    return render(
+        request,
+        "estoque/central_pix_excluir.html",
+        {
+            "pix": pix,
+            "detalhe_url": detalhe_url,
         },
     )
 

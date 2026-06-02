@@ -1,0 +1,56 @@
+{% extends "estoque/base.html" %}
+{% block title %}Excluir Pix enviado errado{% endblock %}
+{% block content %}
+<style>
+  .pix-delete-page { min-height: 100vh; background: #f7fafc; color: #172033; padding: 14px 10px 20px; }
+  .pix-delete-shell { max-width: 720px; margin: 0 auto; }
+  .pix-delete-card { background: #fff; border: 1px solid #fecaca; border-radius: 8px; padding: 14px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06); display: grid; gap: 12px; }
+  .pix-delete-title { margin: 0; font-size: 1.12rem; font-weight: 900; color: #991b1b; }
+  .pix-delete-warning { border: 1px solid #fdba74; background: #fff7ed; color: #9a3412; border-radius: 8px; padding: 9px 10px; font-weight: 900; line-height: 1.35; }
+  .pix-delete-list { display: grid; gap: 6px; }
+  .pix-delete-row { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid #edf2f7; padding-bottom: 5px; font-size: 0.9rem; }
+  .pix-delete-row span:first-child { color: #64748b; font-weight: 800; }
+  .pix-delete-row span:last-child { color: #172033; font-weight: 900; text-align: right; overflow-wrap: anywhere; }
+  .pix-delete-alert { border-radius: 8px; padding: 8px 10px; font-weight: 850; background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+  .pix-delete-form { display: grid; gap: 8px; }
+  .pix-delete-form label { font-weight: 900; color: #172033; }
+  .pix-delete-input { min-height: 42px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; font-weight: 900; }
+  .pix-delete-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pix-delete-btn, .pix-delete-link { min-height: 36px; border-radius: 8px; border: 1px solid #cbd5e1; padding: 7px 11px; font-size: 0.88rem; font-weight: 900; text-decoration: none; background: #fff; color: #0f172a; }
+  .pix-delete-btn { border-color: #dc2626; background: #dc2626; color: #fff; }
+  .pix-delete-link { display: inline-flex; align-items: center; justify-content: center; }
+</style>
+<div class="pix-delete-page">
+  <section class="pix-delete-shell">
+    <div class="pix-delete-card">
+      <h1 class="pix-delete-title">Excluir Pix enviado errado</h1>
+      {% if messages %}
+        {% for message in messages %}
+          <div class="pix-delete-alert">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+      <div class="pix-delete-warning">
+        Use esta acao somente para arquivo enviado errado ou arquivo que nao e comprovante Pix. Pix baixado ou com vinculo financeiro nao pode ser excluido.
+      </div>
+      <div class="pix-delete-list">
+        <div class="pix-delete-row"><span>ID do Pix</span><span>#{{ pix.id }}</span></div>
+        <div class="pix-delete-row"><span>Cliente vinculado</span><span>{% if pix.cliente %}{{ pix.cliente.nome }}{% else %}Sem cliente{% endif %}</span></div>
+        <div class="pix-delete-row"><span>Pagador lido</span><span>{{ pix.nome_pagador|default:"Nao informado" }}</span></div>
+        <div class="pix-delete-row"><span>Valor</span><span>R$ {{ pix.valor|floatformat:2 }}</span></div>
+        <div class="pix-delete-row"><span>Data/hora</span><span>{{ pix.data_pagamento|date:"d/m/Y H:i" }}</span></div>
+        <div class="pix-delete-row"><span>Status atual</span><span>{{ pix.get_status_display }}</span></div>
+        <div class="pix-delete-row"><span>Arquivo</span><span>{% if pix.comprovante %}{{ pix.comprovante.name }}{% else %}Sem arquivo{% endif %}</span></div>
+      </div>
+      <form method="post" class="pix-delete-form">
+        {% csrf_token %}
+        <label for="id_confirmacao">Digite EXCLUIR para confirmar</label>
+        <input id="id_confirmacao" name="confirmacao" class="pix-delete-input" autocomplete="off" autofocus>
+        <div class="pix-delete-actions">
+          <button type="submit" class="pix-delete-btn">Excluir definitivamente</button>
+          <a href="{{ detalhe_url }}" class="pix-delete-link">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+{% endblock %}
