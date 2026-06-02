@@ -4731,6 +4731,73 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(dados["data_pagamento"], "2026-05-16T17:30")
         self.assertEqual(PixRecebido.objects.count(), 0)
 
+    def test_extrair_valor_mercado_pago_sem_separador_decimal_11150_vira_111_50(self):
+        """Problema: OCR Mercado Pago retorna 'R$ 11150' em vez de 'R$ 111,50'.
+        Esperado: valor deve ser interpretado como 111,50 (últimos 2 dígitos são centavos).
+        """
+        conteudo = (
+            "Comprovante de Pix\n"
+            "23/maio/2026 as 18:55:32\n"
+            "R$ 11150\n"
+            "De\n"
+            "Joao de Almeida E Silva\n"
+            "Para\n"
+            "Lincoln Albuquerque Neiva\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("mercado-pago-sem-separador.txt", conteudo, content_type="text/plain")
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_analisar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["valor"], "111.50", f"Erro: OCR retornou '{dados['valor']}' em vez de '111.50'")
+        self.assertEqual(dados["data_pagamento"], "2026-05-23T18:55")
+
+    def test_extrair_valor_com_virgula_345_00_continua_funcionando(self):
+        """Garantir que valores com vírgula como 'R$ 345,00' continuam sendo extraídos corretamente."""
+        conteudo = (
+            "Comprovante de Pix\n"
+            "Valor R$ 345,00\n"
+            "Data 10/06/2026 14:30\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante-virgula.txt", conteudo, content_type="text/plain")
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_analisar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["valor"], "345.00")
+
+    def test_extrair_valor_com_ponto_e_virgula_1449_08_continua_funcionando(self):
+        """Garantir que valores com ponto e virgula como 'R$ 1.449,08' continuam sendo extraídos corretamente."""
+        conteudo = (
+            "Comprovante de Pix\n"
+            "Valor R$ 1.449,08\n"
+            "Data 10/06/2026 14:30\n"
+        ).encode("utf-8")
+        arquivo = SimpleUploadedFile("comprovante-ponto-virgula.txt", conteudo, content_type="text/plain")
+
+        resposta = self.client.post(
+            reverse("estoque:central_pix_analisar_comprovante"),
+            {"comprovante": arquivo},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["valor"], "1449.08")
+
     def test_analisar_comprovante_pix_banco_inter_nao_usa_recebedor_como_pagador(self):
         conteudo = (
             "Banco Inter\n"

@@ -1058,10 +1058,18 @@ def analisar_comprovante_pix_google_vision(arquivo):
 
 
 def _extrair_valor(texto):
-    def normalizar_valor_ocr(valor):
+    def normalizar_valor_ocr(valor, forcar_centavos_finais=False):
         valor = re.sub(r"[^\d,.]", "", str(valor or ""))
         if not valor:
             return ""
+
+        # Mercado Pago sem separador: detectar se há indicação de tratar últimos 2 dígitos como centavos.
+        # Exemplo: OCR retorna "11150" que deveria ser "111,50"
+        if forcar_centavos_finais and len(valor) >= 3 and "," not in valor and "." not in valor:
+            # Tratar últimos 2 dígitos como centavos: 11150 -> 111.50
+            parte_inteira = valor[:-2]
+            parte_centavos = valor[-2:]
+            return f"{parte_inteira}.{parte_centavos}"
 
         # OCR Nubank pode ler R$ 1.200,00 como R$ 1,200,00.
         # Quando ha duas virgulas, a ultima e decimal e as anteriores sao milhar.
@@ -1079,8 +1087,8 @@ def _extrair_valor(texto):
 
         return valor.replace(",", "")
 
-    def decimal_ou_vazio(valor_texto):
-        valor_normalizado = normalizar_valor_ocr(valor_texto)
+    def decimal_ou_vazio(valor_texto, forcar_centavos_finais=False):
+        valor_normalizado = normalizar_valor_ocr(valor_texto, forcar_centavos_finais)
         try:
             valor_decimal = Decimal(valor_normalizado).quantize(Decimal("0.01"))
         except (InvalidOperation, ValueError):
@@ -1113,6 +1121,20 @@ def _extrair_valor(texto):
             "chave pix",
         )
         return any(termo in contexto for termo in termos_ruins)
+
+    # Detectar se é comprovante Mercado Pago sem separador decimal
+    eh_mercado_pago_ou_pix = bool(re.search(
+        r"(?:mercado\s*pago|comprovante\s*de\s*pix)",
+        texto,
+        flags=re.IGNORECASE
+    ))
+
+    # Se for Mercado Pago, tentar extrair valor sem separador (últimos 2 dígitos = centavos)
+    if eh_mercado_pago_ou_pix:
+        for match in re.finditer(r"\bR[\$S§]\s*([0-9]{4,})\b", texto, flags=re.IGNORECASE):
+            valor_texto = decimal_ou_vazio(match.group(1), forcar_centavos_finais=True)
+            if valor_texto:
+                return valor_texto
 
     # 1) Prioridade maxima: linha limpa com valor.
     # Ex.: "R$ 5,00", "RS 5,00", "Valor R$ 5,00", "Pix enviado R$ 5,00".
