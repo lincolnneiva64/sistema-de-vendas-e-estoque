@@ -55,3 +55,5 @@ Próxima etapa:
 - LOCAL / Wi-Fi deve ser usado para testes no notebook/desktop e celular na mesma rede.
 - O sistema apenas mostra atalhos para abrir/copiar links; ele nao troca banco de dados automaticamente.
 
+
+[2026-06-02] Render / Cloudflare R2 corrigido: adicionadas no Render as variaveis USE_CLOUDFLARE_R2_STORAGE, CLOUDFLARE_R2_ACCESS_KEY_ID, CLOUDFLARE_R2_SECRET_ACCESS_KEY, CLOUDFLARE_R2_BUCKET_NAME, CLOUDFLARE_R2_ENDPOINT_URL, CLOUDFLARE_R2_REGION_NAME e CLOUDFLARE_R2_QUERYSTRING_AUTH. Deploy live confirmado no commit ff0ee57 da branch codex. Testado no Render: comprovantes/imagens da Central Pix voltaram a abrir corretamente. Pendencia futura: criar botao seguro para excluir Pix/comprovante enviado errado quando nao tiver baixa financeira vinculada.
