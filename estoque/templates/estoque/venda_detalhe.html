@@ -1217,10 +1217,18 @@
                 <section class="conteudo">
                     {% if venda.cancelada and not modo_pendencia_resolvida %}
                         <div class="venda-cancelada-banner">
+                            <strong>VENDA CANCELADA</strong>
                             CANCELADA / VENDA NAO REALIZADA.
                             {% if venda.cancelada_em %} Cancelada em {{ venda.cancelada_em|date:"d/m/Y H:i" }}.{% endif %}
                             {% if venda.motivo_cancelamento %} Motivo: {{ venda.motivo_cancelamento }}{% endif %}
-                            Itens preservados somente para historico.
+                            Itens e total original preservados somente para historico.
+                            {% if sinais_cancelamento.tem_sinais %}
+                                <ul class="ajuste-pendente-lista">
+                                    {% for sinal in sinais_cancelamento.sinais %}
+                                        <li>{{ sinal }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
                         </div>
                     {% endif %}
                     {% if modo_pendencia_resolvida %}
@@ -1294,7 +1302,7 @@
                         </div>
                     {% endif %}
 
-                    {% if request.GET.nota_atualizada == "1" or request.GET.origem == "pendencias" or request.GET.edicao_bloqueada == "1" or request.GET.ajuste_registrado == "1" or request.GET.ajuste_bloqueado == "1" or request.GET.credito_resolvido == "1" or request.GET.credito_bloqueado == "1" or request.GET.remocao_desfeita == "1" or request.GET.desfazer_bloqueado == "1" %}
+                    {% if request.GET.nota_atualizada == "1" or request.GET.origem == "pendencias" or request.GET.edicao_bloqueada == "1" or request.GET.ajuste_registrado == "1" or request.GET.ajuste_bloqueado == "1" or request.GET.credito_resolvido == "1" or request.GET.credito_bloqueado == "1" or request.GET.remocao_desfeita == "1" or request.GET.desfazer_bloqueado == "1" or request.GET.cancelar_bloqueado == "1" %}
                         {% for message in messages %}
                             <div class="nota-feedback {{ message.tags }}">{{ message }}</div>
                         {% endfor %}

@@ -1313,6 +1313,7 @@ const clienteResumoStorageKey = "vendas.clienteSelecionado";
 let clientesSugestoes = [];
 let clienteIndexAtivo = -1;
 let clienteSelecionado = null;
+let clientePrevisualizado = null;
 let clienteResumoSuspenso = false;
 let clienteBuscaAbortController = null;
 let vendaGravadaId = null;
@@ -1481,7 +1482,13 @@ function navegarResumoFinanceiroCliente(e) {
     const cliente = obterClienteResumoFinanceiro(e.currentTarget.clientePreview);
     e.preventDefault();
     e.stopPropagation();
-    if (!clienteSelecionadoValido()) return;
+    if (!clienteSelecionadoValido()) {
+        if (clientePrevisualizado?.id && cliente?.id && String(clientePrevisualizado.id) === String(cliente.id)) {
+            selecionarClienteSugestao(clientePrevisualizado);
+        } else {
+            return;
+        }
+    }
     const link = montarLinkReceberCliente(cliente);
     window.location.href = link;
 }
@@ -1517,13 +1524,14 @@ function atualizarResumoFinanceiroCliente(cliente) {
     if (abertasQtd > 0 && whatsappCobrancaUrl) {
         clienteResumoFinanceiro.appendChild(criarLinkWhatsappCobranca(whatsappCobrancaUrl, cliente));
     }
-    if (credito <= 0 && abertasQtd <= 0 && vencidasQtd <= 0) {
-        clienteResumoFinanceiro.appendChild(criarLinhaFinanceira("", "Sem pendencias financeiras."));
+    if (!clienteResumoFinanceiro.children.length) {
+        clienteResumoFinanceiro.appendChild(criarLinhaFinanceira("", "Sem contas em aberto / sem credito disponivel."));
     }
 }
 
 function limparClienteSelecionado() {
     clienteSelecionado = null;
+    clientePrevisualizado = null;
     clienteResumoSuspenso = false;
     clienteId.value = "";
     vencimentoVenda.value = "";
@@ -1675,6 +1683,7 @@ function fecharPreviewCobranca() {
 
 function preencherResumoCliente(cliente) {
     clienteSelecionado = cliente;
+    clientePrevisualizado = null;
     clienteResumoSuspenso = false;
     clienteId.value = cliente.id || "";
     clienteBusca.value = cliente.nome || "";
@@ -1683,6 +1692,29 @@ function preencherResumoCliente(cliente) {
     atualizarPrazoEVencimentoCliente();
     clienteSugestoesBox.style.display = "none";
     clienteIndexAtivo = -1;
+}
+
+function selecionarClienteSugestao(cliente) {
+    if (clienteBuscaAbortController) {
+        clienteBuscaAbortController.abort();
+        clienteBuscaAbortController = null;
+    }
+    clientesSugestoes = [];
+    clienteIndexAtivo = -1;
+    preencherResumoCliente(cliente);
+    atualizarClienteSelecionadoDoServidor(cliente);
+}
+
+function previsualizarClienteSugestao(cliente) {
+    if (!cliente?.id) return;
+    if (clienteSelecionadoValido() && String(clienteSelecionado.id) === String(cliente.id)) {
+        clientePrevisualizado = null;
+        ativarResumoClienteSelecionado();
+        return;
+    }
+    clientePrevisualizado = cliente;
+    clienteResumoSuspenso = Boolean(clienteSelecionado?.id && String(clienteSelecionado.id) !== String(cliente.id));
+    atualizarCabecalhoCliente(cliente);
 }
 
 function clienteSelecionadoValido() {
@@ -1740,6 +1772,7 @@ function textoCompativelComClienteSelecionado(texto) {
 }
 
 function suspenderResumoClienteSelecionado() {
+    clientePrevisualizado = null;
     clienteResumoSuspenso = true;
     if (clienteResumoFinanceiro) {
         clienteResumoFinanceiro.innerHTML = "";
@@ -1749,6 +1782,7 @@ function suspenderResumoClienteSelecionado() {
 
 function ativarResumoClienteSelecionado() {
     if (!clienteSelecionado?.id) return;
+    clientePrevisualizado = null;
     clienteResumoSuspenso = false;
     atualizarCabecalhoCliente(clienteSelecionado);
 }
@@ -1789,6 +1823,10 @@ function renderizarSugestoesClientes() {
     clienteSugestoesBox.innerHTML = "";
 
     if (!clientesSugestoes.length) {
+        clientePrevisualizado = null;
+        if (!clienteSelecionadoValido()) {
+            clienteResumo.classList.remove("visivel");
+        }
         const vazio = document.createElement("div");
         vazio.className = "cliente-sugestao-vazio";
         vazio.textContent = "Nenhum cliente encontrado.";
@@ -1817,7 +1855,7 @@ function renderizarSugestoesClientes() {
         });
         item.addEventListener("mousedown", (e) => {
             e.preventDefault();
-            preencherResumoCliente(cliente);
+            selecionarClienteSugestao(cliente);
         });
 
         clienteSugestoesBox.appendChild(item);
@@ -1827,6 +1865,9 @@ function renderizarSugestoesClientes() {
     const itemAtivoCliente = clienteSugestoesBox.querySelector(".cliente-sugestao-item.ativo");
     if (itemAtivoCliente) {
         itemAtivoCliente.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+    if (clienteIndexAtivo >= 0 && clientesSugestoes[clienteIndexAtivo]) {
+        previsualizarClienteSugestao(clientesSugestoes[clienteIndexAtivo]);
     }
 }
 
@@ -1855,6 +1896,7 @@ async function buscarClientes(texto) {
         if (erro.name !== "AbortError") {
             clientesSugestoes = [];
             clienteIndexAtivo = -1;
+            clientePrevisualizado = null;
             renderizarSugestoesClientes();
         }
     }
@@ -1894,6 +1936,7 @@ function reidratarClienteSelecionado() {
 
 clienteBusca.addEventListener("input", () => {
     const texto = clienteBusca.value.trim();
+    clientePrevisualizado = null;
 
     if (clienteSelecionado?.id) {
         if (textoCompativelComClienteSelecionado(texto)) {
@@ -1909,6 +1952,9 @@ clienteBusca.addEventListener("input", () => {
     clienteSugestoesBox.style.display = "none";
 
     if (!texto) {
+        if (!clienteSelecionado?.id) {
+            clienteResumo.classList.remove("visivel");
+        }
         return;
     }
 
@@ -1934,6 +1980,7 @@ clienteBusca.addEventListener("blur", () => {
                 limparClienteSelecionado();
             }
         } else {
+            clientePrevisualizado = null;
             clienteResumo.classList.remove("visivel");
         }
     }, 150);
@@ -1957,7 +2004,7 @@ clienteBusca.addEventListener("keydown", (e) => {
         e.preventDefault();
         const listaAberta = clienteSugestoesBox.style.display === "block";
         if (listaAberta && clienteIndexAtivo >= 0 && clientesSugestoes[clienteIndexAtivo]) {
-            preencherResumoCliente(clientesSugestoes[clienteIndexAtivo]);
+            selecionarClienteSugestao(clientesSugestoes[clienteIndexAtivo]);
             focarProximoCampo(tipoVenda);
             return;
         }
@@ -2320,8 +2367,12 @@ btnConsultarVendas.addEventListener("click", () => {
 });
 
 btnContasReceberVenda?.addEventListener("click", (event) => {
-    if (!clienteSelecionadoValido()) return;
-    const cliente = clienteSelecionado;
+    let cliente = clienteSelecionadoValido() ? clienteSelecionado : null;
+    if (!cliente && clientePrevisualizado?.id) {
+        cliente = clientePrevisualizado;
+        selecionarClienteSugestao(cliente);
+    }
+    if (!cliente?.id) return;
 
     event.preventDefault();
     window.location.href = montarLinkReceberCliente(cliente);

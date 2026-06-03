@@ -4866,6 +4866,7 @@ def venda_detalhe(request, pk):
     )
     whatsapp_atualizacao = None if venda.cancelada else _montar_whatsapp_atualizacao_nota(request, venda)
     conta_receber = _conta_receber_da_venda(venda)
+    sinais_cancelamento = _sinais_cancelamento_venda(venda, conta_receber) if venda.cancelada else None
     alteracoes_pendentes_whatsapp = _resumo_alteracoes_pendentes_whatsapp(
         venda,
         itens_nota,
@@ -4996,6 +4997,7 @@ def venda_detalhe(request, pk):
             "whatsapp_atualizacao": whatsapp_atualizacao,
             "alteracoes_pendentes_whatsapp": alteracoes_pendentes_whatsapp,
             "conta_receber": conta_receber,
+            "sinais_cancelamento": sinais_cancelamento,
             "contexto_venda_quitada": contexto_venda_quitada,
             "ajustes_itens_quitados_pendentes": ajustes_itens_quitados_pendentes,
             "venda_a_prazo": _venda_a_prazo(venda),
@@ -5056,6 +5058,65 @@ def _conta_receber_da_venda(venda):
         return venda.conta_receber
     except ContaReceber.DoesNotExist:
         return None
+
+
+def _sinais_cancelamento_venda(venda, conta_receber=None):
+    conta = conta_receber if conta_receber is not None else _conta_receber_da_venda(venda)
+    recebimentos_count = conta.recebimentos.count() if conta else 0
+    creditos_count = (
+        CreditoCliente.objects.filter(origem_conta_receber=conta).count()
+        if conta
+        else 0
+    )
+    pix_count = (
+        PixRecebido.objects.filter(cliente=venda.cliente, status=PixRecebido.STATUS_BAIXADO).count()
+        if venda.cliente_id
+        else 0
+    )
+    entregas_count = EntregaRotaItem.objects.filter(venda=venda).count()
+    ajustes_count = AjusteItemVendaQuitada.objects.filter(venda=venda).exclude(
+        status=AjusteItemVendaQuitada.STATUS_CANCELADO
+    ).count()
+    itens_removidos_count = ItemVendaRemovido.objects.filter(
+        venda=venda,
+        status=ItemVendaRemovido.STATUS_REMOVIDO,
+    ).count()
+    eventos_count = EventoVenda.objects.filter(venda=venda).count()
+    venda_antiga = bool(venda.data_venda and venda.data_venda != timezone.localdate())
+
+    sinais = []
+    if conta:
+        sinais.append(f"Conta a receber #{conta.id} vinculada ({conta.get_status_display()}).")
+    if recebimentos_count:
+        sinais.append(f"{recebimentos_count} recebimento(s)/baixa(s) registrado(s).")
+    if pix_count:
+        sinais.append(f"{pix_count} Pix baixado(s) vinculado(s) ao cliente da venda.")
+    if creditos_count:
+        sinais.append(f"{creditos_count} movimento(s) de credito vinculado(s).")
+    if ajustes_count:
+        sinais.append(f"{ajustes_count} ajuste(s) de item nao entregue/nao aceito vinculado(s).")
+    if itens_removidos_count:
+        sinais.append(f"{itens_removidos_count} remocao(oes) de item ainda registrada(s).")
+    if venda_antiga:
+        sinais.append("Venda de data anterior ao dia de hoje.")
+    if entregas_count:
+        sinais.append(f"{entregas_count} vinculo(s) de entrega/checklist encontrado(s).")
+    if eventos_count:
+        sinais.append(f"{eventos_count} registro(s) no historico da venda.")
+
+    return {
+        "conta_receber": conta,
+        "recebimentos_count": recebimentos_count,
+        "creditos_count": creditos_count,
+        "pix_count": pix_count,
+        "entregas_count": entregas_count,
+        "ajustes_count": ajustes_count,
+        "itens_removidos_count": itens_removidos_count,
+        "eventos_count": eventos_count,
+        "venda_antiga": venda_antiga,
+        "sinais": sinais,
+        "tem_sinais": bool(sinais),
+    }
 
 
 def _credito_disponivel_cliente(cliente):
@@ -6465,34 +6526,20 @@ def venda_cancelar(request, pk):
     detalhe_url = reverse("estoque:venda_detalhe", kwargs={"pk": venda.pk})
     if venda.cancelada:
         messages.warning(request, "Esta venda ja esta cancelada.")
-        return redirect(_url_com_retorno(detalhe_url, retorno_url))
+        return redirect(_url_com_retorno(f"{detalhe_url}?cancelar_bloqueado=1", retorno_url))
 
     conta_receber = _conta_receber_da_venda(venda)
-    recebimentos_count = conta_receber.recebimentos.count() if conta_receber else 0
     contexto_venda_quitada = _contexto_venda_quitada(venda, conta_receber)
-    creditos_count = (
-        CreditoCliente.objects.filter(origem_conta_receber=conta_receber).count()
-        if conta_receber
-        else 0
-    )
-    entregas_count = EntregaRotaItem.objects.filter(venda=venda).count()
-    eventos_count = EventoVenda.objects.filter(venda=venda).count()
-    venda_antiga = bool(venda.data_venda and venda.data_venda != timezone.localdate())
-    sinais_consolidacao = []
-    if conta_receber:
-        sinais_consolidacao.append(
-            f"Conta a receber #{conta_receber.id} vinculada ({conta_receber.get_status_display()})."
-        )
-    if recebimentos_count:
-        sinais_consolidacao.append(f"{recebimentos_count} recebimento(s)/baixa(s) registrado(s).")
-    if creditos_count:
-        sinais_consolidacao.append(f"{creditos_count} movimento(s) de credito vinculado(s).")
-    if venda_antiga:
-        sinais_consolidacao.append("Venda de data anterior ao dia de hoje.")
-    if entregas_count:
-        sinais_consolidacao.append(f"{entregas_count} vinculo(s) de entrega/checklist encontrado(s).")
-    if eventos_count:
-        sinais_consolidacao.append(f"{eventos_count} registro(s) no historico da venda.")
+    sinais_cancelamento = _sinais_cancelamento_venda(venda, conta_receber)
+    recebimentos_count = sinais_cancelamento["recebimentos_count"]
+    creditos_count = sinais_cancelamento["creditos_count"]
+    pix_count = sinais_cancelamento["pix_count"]
+    entregas_count = sinais_cancelamento["entregas_count"]
+    ajustes_count = sinais_cancelamento["ajustes_count"]
+    itens_removidos_count = sinais_cancelamento["itens_removidos_count"]
+    eventos_count = sinais_cancelamento["eventos_count"]
+    venda_antiga = sinais_cancelamento["venda_antiga"]
+    sinais_consolidacao = sinais_cancelamento["sinais"]
 
     itens_nota = sorted(
         list(venda.itens.all()),
@@ -6529,8 +6576,12 @@ def venda_cancelar(request, pk):
             if observacao_cancelamento:
                 motivo = f"{motivo_padrao} - Observação: {observacao_cancelamento}"
             with transaction.atomic():
+                status_anterior = "cancelada" if venda.cancelada else "ativa"
+                total_original = (venda.total or Decimal("0.00")).quantize(Decimal("0.01"))
+                cancelada_em = timezone.now()
+                cancelada_em_texto = timezone.localtime(cancelada_em).strftime("%d/%m/%Y %H:%M")
                 venda.cancelada = True
-                venda.cancelada_em = timezone.now()
+                venda.cancelada_em = cancelada_em
                 venda.motivo_cancelamento = motivo
                 venda.save(update_fields=["cancelada", "cancelada_em", "motivo_cancelamento", "atualizado_em"])
                 _registrar_evento_venda(
@@ -6538,7 +6589,14 @@ def venda_cancelar(request, pk):
                     "venda_cancelada",
                     (
                         "Venda cancelada / venda nao realizada. "
+                        f"Data/hora: {cancelada_em_texto}. "
                         f"Motivo: {motivo}. "
+                        f"Status anterior: {status_anterior}. "
+                        f"Total original preservado: {_formatar_moeda(total_original)}. "
+                        f"Conta a receber: {'sim' if conta_receber else 'nao'}. "
+                        f"Recebimentos: {recebimentos_count}. Pix baixados do cliente: {pix_count}. "
+                        f"Creditos vinculados: {creditos_count}. Entregas/checklists: {entregas_count}. "
+                        f"Ajustes/pendencias: {ajustes_count + itens_removidos_count}. "
                         "Itens preservados para historico. Conta a receber vinculada cancelada quando existente. Estoque e caixa nao foram alterados nesta fase."
                     ),
                     canal="sistema",
@@ -6565,7 +6623,10 @@ def venda_cancelar(request, pk):
             "contexto_venda_quitada": contexto_venda_quitada,
             "recebimentos_count": recebimentos_count,
             "creditos_count": creditos_count,
+            "pix_count": pix_count,
             "entregas_count": entregas_count,
+            "ajustes_count": ajustes_count,
+            "itens_removidos_count": itens_removidos_count,
             "eventos_count": eventos_count,
             "venda_antiga": venda_antiga,
             "sinais_consolidacao": sinais_consolidacao,

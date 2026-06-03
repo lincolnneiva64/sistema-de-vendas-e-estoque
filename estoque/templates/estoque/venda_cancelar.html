@@ -208,6 +208,14 @@
             <span class="cancel-label">Recebimentos</span>
             <span class="cancel-value">{{ recebimentos_count }} baixa(s) registrada(s)</span>
           </div>
+          <div class="cancel-field {% if pix_count %}danger{% endif %}">
+            <span class="cancel-label">Pix baixados</span>
+            <span class="cancel-value">{{ pix_count }} Pix baixado(s) do cliente preservado(s)</span>
+          </div>
+          <div class="cancel-field {% if ajustes_count or itens_removidos_count %}warning{% endif %}">
+            <span class="cancel-label">Ajustes / pendencias</span>
+            <span class="cancel-value">{{ ajustes_count }} ajuste(s), {{ itens_removidos_count }} remocao(oes) preservada(s)</span>
+          </div>
           <div class="cancel-field {% if venda_antiga %}warning{% endif %}">
             <span class="cancel-label">Seguranca</span>
             <span class="cancel-value">

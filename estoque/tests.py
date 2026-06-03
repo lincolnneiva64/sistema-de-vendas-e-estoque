@@ -165,6 +165,12 @@ class PixRecebidoTests(TestCase):
                 usuario="Operador Teste",
             ).exists()
         )
+        evento = EventoVenda.objects.get(venda=venda, tipo_evento="venda_cancelada")
+        self.assertIn("Status anterior: ativa", evento.descricao)
+        self.assertIn("Total original preservado: R$ 42,50", evento.descricao)
+        self.assertContains(resposta, "VENDA CANCELADA")
+        self.assertContains(resposta, "Produto Cancelamento Manual")
+        self.assertContains(resposta, "R$ 42.50")
 
     def test_cancelamento_manual_exige_confirmacao_cancelar(self):
         cliente = Cliente.objects.create(nome="Cliente Confirmacao Errada", ativo=True)
@@ -275,6 +281,7 @@ class PixRecebidoTests(TestCase):
         self.assertTrue(venda.cancelada)
         self.assertEqual(venda.motivo_cancelamento, "Cancelamento anterior")
         self.assertEqual(EventoVenda.objects.filter(venda=venda, tipo_evento="venda_cancelada").count(), 1)
+        self.assertContains(resposta, "Esta venda ja esta cancelada.")
 
     def test_cancelamento_manual_cancela_conta_aberta_sem_excluir_venda_ou_itens(self):
         cliente = Cliente.objects.create(nome="Cliente Conta Aberta Cancelamento", ativo=True)
@@ -404,6 +411,68 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
         self.assertEqual(recebimento.valor, Decimal("90.00"))
         self.assertTrue(RecebimentoContaReceber.objects.filter(pk=recebimento.pk, conta=conta).exists())
+
+    def test_cancelamento_manual_com_pix_recebimento_e_entrega_preserva_e_mostra_alerta(self):
+        cliente = Cliente.objects.create(nome="Cliente Pix Cancelamento", ativo=True)
+        produto = self._produto_teste("Produto Pix Cancelamento")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("120.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("120.00"),
+            valor_total=Decimal("120.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("120.00"),
+            valor_em_aberto=Decimal("60.00"),
+            status=ContaReceber.STATUS_PARCIAL,
+        )
+        recebimento = RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=timezone.localdate(),
+            valor=Decimal("60.00"),
+            forma_pagamento="PIX",
+        )
+        pix = PixRecebido.objects.create(
+            cliente=cliente,
+            nome_pagador="Cliente Pix Cancelamento",
+            valor=Decimal("60.00"),
+            status=PixRecebido.STATUS_BAIXADO,
+        )
+        rota = EntregaRota.objects.create(data=timezone.localdate(), tipo=EntregaRota.TIPO_UNITARIA)
+        EntregaRotaItem.objects.create(rota=rota, venda=venda, status=EntregaRotaItem.STATUS_PENDENTE)
+
+        tela_confirmacao = self.client.get(reverse("estoque:venda_cancelar", kwargs={"pk": venda.id}), secure=True)
+        self.assertContains(tela_confirmacao, "1 recebimento(s)/baixa(s) registrado(s).")
+        self.assertContains(tela_confirmacao, "1 Pix baixado(s) vinculado(s) ao cliente da venda.")
+        self.assertContains(tela_confirmacao, "1 vinculo(s) de entrega/checklist encontrado(s).")
+
+        resposta = self._post_cancelar_venda(venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertTrue(venda.cancelada)
+        self.assertEqual(conta.status, ContaReceber.STATUS_PARCIAL)
+        self.assertTrue(RecebimentoContaReceber.objects.filter(pk=recebimento.pk, conta=conta).exists())
+        self.assertTrue(PixRecebido.objects.filter(pk=pix.pk, status=PixRecebido.STATUS_BAIXADO).exists())
+        self.assertContains(resposta, "VENDA CANCELADA")
+        self.assertContains(resposta, "1 Pix baixado(s) vinculado(s) ao cliente da venda.")
+        self.assertContains(resposta, "1 vinculo(s) de entrega/checklist encontrado(s).")
+        evento = EventoVenda.objects.get(venda=venda, tipo_evento="venda_cancelada")
+        self.assertIn("Recebimentos: 1", evento.descricao)
+        self.assertIn("Pix baixados do cliente: 1", evento.descricao)
+        self.assertIn("Entregas/checklists: 1", evento.descricao)
 
     def test_cancelamento_manual_move_venda_para_consulta_de_canceladas(self):
         cliente = Cliente.objects.create(nome="Cliente Consulta Cancelada Manual", ativo=True)
