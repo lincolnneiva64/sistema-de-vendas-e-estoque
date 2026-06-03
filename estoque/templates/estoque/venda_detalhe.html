@@ -1294,7 +1294,7 @@
                         </div>
                     {% endif %}
 
-                    {% if request.GET.nota_atualizada == "1" or request.GET.origem == "pendencias" or request.GET.edicao_bloqueada == "1" or request.GET.ajuste_registrado == "1" or request.GET.ajuste_bloqueado == "1" or request.GET.credito_resolvido == "1" or request.GET.credito_bloqueado == "1" %}
+                    {% if request.GET.nota_atualizada == "1" or request.GET.origem == "pendencias" or request.GET.edicao_bloqueada == "1" or request.GET.ajuste_registrado == "1" or request.GET.ajuste_bloqueado == "1" or request.GET.credito_resolvido == "1" or request.GET.credito_bloqueado == "1" or request.GET.remocao_desfeita == "1" or request.GET.desfazer_bloqueado == "1" %}
                         {% for message in messages %}
                             <div class="nota-feedback {{ message.tags }}">{{ message }}</div>
                         {% endfor %}
@@ -1367,6 +1367,29 @@
                                 {% if ajuste.status != ajuste.STATUS_RESOLVIDO and ajuste.resolucao_financeira == ajuste.RESOLUCAO_NAO_DEFINIDA %}
                                     <br>
                                     <a href="{% url 'estoque:venda_ajuste_item_quitado_credito' venda.id ajuste.id %}">Resolver como cr&eacute;dito do cliente</a>
+                                {% endif %}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+
+                    {% if itens_removidos %}
+                    <div class="ajuste-pendente-banner" id="itens-removidos">
+                        <strong>ITENS REMOVIDOS DA NOTA</strong>
+                        <ul class="ajuste-pendente-lista">
+                            {% for item_removido in itens_removidos %}
+                            <li>
+                                {{ item_removido.produto_nome_snapshot }} -
+                                {{ item_removido.quantidade_snapshot }} {{ item_removido.unidade_snapshot|default:"" }}
+                                (R$ {{ item_removido.valor_total_snapshot|floatformat:2 }}).
+                                Status: {{ item_removido.get_status_display }}.
+                                {% if item_removido.contexto_desfazer.permitido %}
+                                    <br>
+                                    <a href="{% url 'estoque:venda_desfazer_remocao_item' venda.id item_removido.id %}">Desfazer remoção</a>
+                                {% elif item_removido.contexto_desfazer.motivo %}
+                                    <br>
+                                    {{ item_removido.contexto_desfazer.motivo }}
                                 {% endif %}
                             </li>
                             {% endfor %}
@@ -1500,6 +1523,18 @@
                                             {% endif %}
                                         </span>
                                     </div>
+                                    {% if ajuste.contexto_desfazer %}
+                                    <div class="item-ajustado-campo resolucao">
+                                        <span class="item-ajustado-label">Revers&atilde;o</span>
+                                        <span class="item-ajustado-valor">
+                                            {% if ajuste.remocao_reversao and ajuste.contexto_desfazer.permitido %}
+                                                <a href="{% url 'estoque:venda_desfazer_remocao_item' venda.id ajuste.remocao_reversao.id %}">Desfazer remo&ccedil;&atilde;o</a>
+                                            {% elif ajuste.contexto_desfazer.motivo %}
+                                                {{ ajuste.contexto_desfazer.motivo }}
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                    {% endif %}
                                 </div>
                             </article>
                             {% endfor %}

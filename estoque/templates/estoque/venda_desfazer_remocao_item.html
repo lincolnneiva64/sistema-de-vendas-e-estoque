@@ -1,0 +1,76 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Desfazer remoção{% endblock %}
+{% block content %}
+<style>
+  .undo-page { max-width: 760px; margin: 24px auto; padding: 0 16px; color: #172033; }
+  .undo-card { border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08); overflow: hidden; }
+  .undo-head { padding: 16px 18px; border-bottom: 1px solid #edf1f6; background: #f8fafc; }
+  .undo-title { margin: 0; font-size: 1.15rem; font-weight: 950; color: #111827; }
+  .undo-body { padding: 16px 18px; display: grid; gap: 12px; }
+  .undo-alert { border: 1px solid #fde68a; border-radius: 8px; background: #fffbeb; color: #92400e; padding: 10px 12px; font-weight: 800; }
+  .undo-alert.blocked { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+  .undo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .undo-field { border: 1px solid #e5e7eb; border-radius: 8px; padding: 9px 10px; background: #fbfdff; }
+  .undo-label { display: block; color: #64748b; font-size: 0.68rem; font-weight: 900; text-transform: uppercase; }
+  .undo-value { display: block; margin-top: 2px; color: #111827; font-weight: 900; }
+  .undo-form { display: grid; gap: 8px; }
+  .undo-form label { color: #475569; font-weight: 850; }
+  .undo-form input { width: 100%; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 9px 10px; font: inherit; font-weight: 800; }
+  .undo-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+  .undo-btn { border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #0f172a; padding: 8px 12px; text-decoration: none; font-weight: 900; cursor: pointer; }
+  .undo-btn.danger { border-color: #fca5a5; background: #dc2626; color: #fff; }
+  @media (max-width: 620px) { .undo-grid { grid-template-columns: 1fr; } .undo-actions { flex-direction: column-reverse; } .undo-btn { width: 100%; text-align: center; } }
+</style>
+
+<div class="undo-page">
+  <div class="undo-card">
+    <div class="undo-head">
+      <h1 class="undo-title">Desfazer remoção de item</h1>
+    </div>
+    <div class="undo-body">
+      {% if not contexto_desfazer.permitido %}
+        <div class="undo-alert blocked">{{ contexto_desfazer.motivo }}</div>
+      {% else %}
+        <div class="undo-alert">
+          Esta ação recoloca o item na nota, recalcula o total e sincroniza a conta a receber. O histórico da remoção será preservado.
+        </div>
+      {% endif %}
+
+      <div class="undo-grid">
+        <div class="undo-field">
+          <span class="undo-label">Venda</span>
+          <span class="undo-value">#{{ venda.id }}</span>
+        </div>
+        <div class="undo-field">
+          <span class="undo-label">Item</span>
+          <span class="undo-value">{{ item_removido.produto_nome_snapshot }}</span>
+        </div>
+        <div class="undo-field">
+          <span class="undo-label">Quantidade</span>
+          <span class="undo-value">{{ item_removido.quantidade_snapshot }} {{ item_removido.unidade_snapshot|default:"" }}</span>
+        </div>
+        <div class="undo-field">
+          <span class="undo-label">Valor</span>
+          <span class="undo-value">R$ {{ item_removido.valor_total_snapshot|floatformat:2 }}</span>
+        </div>
+      </div>
+
+      {% if contexto_desfazer.permitido %}
+        <form method="post" class="undo-form">
+          {% csrf_token %}
+          <label for="confirmacao_desfazer">Digite DESFAZER para confirmar</label>
+          <input id="confirmacao_desfazer" name="confirmacao_desfazer" autocomplete="off" autofocus>
+          <div class="undo-actions">
+            <a href="{{ retorno_url }}" class="undo-btn">Voltar</a>
+            <button type="submit" class="undo-btn danger">Desfazer remoção</button>
+          </div>
+        </form>
+      {% else %}
+        <div class="undo-actions">
+          <a href="{{ retorno_url }}" class="undo-btn">Voltar</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

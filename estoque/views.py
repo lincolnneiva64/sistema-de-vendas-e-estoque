@@ -22,7 +22,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count
 from .forms import CategoriaForm, ClienteForm, FuncionarioForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, ItemVendaRemovido, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -4891,10 +4891,23 @@ def venda_detalhe(request, pk):
         for item in itens_nota
         if item.id not in item_ids_ajustados
     ]
+    ajustes_itens_quitados_para_total = []
+    ajustes_total_chaves = set()
+    for ajuste in ajustes_itens_quitados:
+        chave_total = (
+            ("produto", ajuste.produto_id)
+            if ajuste.produto_id
+            else (ajuste.item_venda_id or ("produto_nome", ajuste.produto_nome_snapshot))
+        )
+        if chave_total in ajustes_total_chaves:
+            continue
+        ajustes_total_chaves.add(chave_total)
+        ajustes_itens_quitados_para_total.append(ajuste)
+
     total_ajustes_itens_quitados = sum(
         (
             ajuste.diferenca_financeira or Decimal("0.00")
-            for ajuste in ajustes_itens_quitados
+            for ajuste in ajustes_itens_quitados_para_total
         ),
         Decimal("0.00"),
     ).quantize(Decimal("0.01"))
@@ -4913,6 +4926,27 @@ def venda_detalhe(request, pk):
     ]
 
     # Verificar se venda já tem entrega/rota
+    itens_removidos = list(
+        ItemVendaRemovido.objects.filter(venda=venda)
+        .select_related("produto", "credito_gerado", "ajuste_origem", "venda__cliente")
+    )
+    for item_removido in itens_removidos:
+        item_removido.contexto_desfazer = _contexto_desfazer_item_removido(item_removido)
+    remocoes_por_ajuste = {
+        item_removido.ajuste_origem_id: item_removido
+        for item_removido in itens_removidos
+        if item_removido.ajuste_origem_id
+    }
+    for ajuste in ajustes_itens_quitados:
+        ajuste.remocao_reversao = remocoes_por_ajuste.get(ajuste.id)
+        if ajuste.remocao_reversao:
+            ajuste.contexto_desfazer = ajuste.remocao_reversao.contexto_desfazer
+        else:
+            ajuste.contexto_desfazer = {
+                "permitido": False,
+                "motivo": "Este ajuste foi criado antes do controle de reversão automática. Não é possível desfazer automaticamente.",
+            }
+
     entrega_existente = EntregaRotaItem.objects.filter(venda=venda).select_related("rota").first()
     entrega_info = None
     if entrega_existente:
@@ -4956,6 +4990,7 @@ def venda_detalhe(request, pk):
             "itens_nota": itens_nota,
             "itens_nota_principais": itens_nota_principais,
             "ajustes_itens_quitados": ajustes_itens_quitados,
+            "itens_removidos": itens_removidos,
             "total_ajustes_itens_quitados": total_ajustes_itens_quitados,
             "total_ajustado_entregue": total_ajustado_entregue,
             "whatsapp_atualizacao": whatsapp_atualizacao,
@@ -5021,6 +5056,42 @@ def _conta_receber_da_venda(venda):
         return venda.conta_receber
     except ContaReceber.DoesNotExist:
         return None
+
+
+def _credito_disponivel_cliente(cliente):
+    if not cliente:
+        return Decimal("0.00")
+    total = (
+        CreditoCliente.objects.filter(cliente=cliente)
+        .aggregate(total=Sum("valor"))
+        .get("total")
+        or Decimal("0.00")
+    ).quantize(Decimal("0.01"))
+    return max(total, Decimal("0.00"))
+
+
+def _item_removido_credito_foi_usado(item_removido):
+    credito = item_removido.credito_gerado
+    if not credito:
+        return False
+    valor_credito = (credito.valor or Decimal("0.00")).quantize(Decimal("0.01"))
+    if valor_credito <= Decimal("0.00"):
+        return False
+    return _credito_disponivel_cliente(item_removido.venda.cliente) < valor_credito
+
+
+def _contexto_desfazer_item_removido(item_removido):
+    if item_removido.status != ItemVendaRemovido.STATUS_REMOVIDO:
+        return {
+            "permitido": False,
+            "motivo": "Esta remoção já foi desfeita.",
+        }
+    if _item_removido_credito_foi_usado(item_removido):
+        return {
+            "permitido": False,
+            "motivo": "Este crédito já foi usado e não pode ser desfeito automaticamente nesta etapa.",
+        }
+    return {"permitido": True, "motivo": ""}
 
 
 def _contexto_venda_quitada(venda, conta_receber=None):
@@ -5098,12 +5169,15 @@ def venda_ajuste_item_quitado(request, pk):
         list(venda.itens.all()),
         key=lambda item: ((item.produto.nome if item.produto else "Produto nao identificado").casefold(), item.id),
     )
-    ajustes_pendentes_item_ids = set(
-        AjusteItemVendaQuitada.objects.filter(
-            venda=venda,
-            status=AjusteItemVendaQuitada.STATUS_PENDENTE,
-        ).values_list("item_venda_id", flat=True)
+    ajustes_ativos = AjusteItemVendaQuitada.objects.filter(venda=venda).exclude(
+        status=AjusteItemVendaQuitada.STATUS_CANCELADO
     )
+    ajustes_pendentes_item_ids = set(ajustes_ativos.values_list("item_venda_id", flat=True))
+    ajustes_ativos_produto_ids = {
+        produto_id
+        for produto_id in ajustes_ativos.values_list("produto_id", flat=True)
+        if produto_id
+    }
     motivos = AjusteItemVendaQuitada.MOTIVO_CHOICES
     valores = {
         "item_id": "",
@@ -5124,8 +5198,13 @@ def venda_ajuste_item_quitado(request, pk):
             messages.warning(request, "Selecione um motivo valido para o ajuste.")
         elif valores["motivo"] == AjusteItemVendaQuitada.MOTIVO_OUTRO and not valores["observacao"]:
             messages.warning(request, "Informe uma observacao quando o motivo for outro.")
-        elif item_venda.id in ajustes_pendentes_item_ids:
-            messages.warning(request, "Ja existe ajuste pendente para este item desta venda.")
+        elif item_venda.id in ajustes_pendentes_item_ids or (
+            item_venda.produto_id and item_venda.produto_id in ajustes_ativos_produto_ids
+        ):
+            messages.warning(
+                request,
+                "Este item já possui ajuste registrado nesta venda. Desfaça ou resolva o ajuste existente antes de registrar outro.",
+            )
         else:
             with transaction.atomic():
                 ajuste = criar_ajuste_item_venda_quitada(
@@ -5133,6 +5212,19 @@ def venda_ajuste_item_quitado(request, pk):
                     item_venda,
                     valores["motivo"],
                     observacao=valores["observacao"],
+                )
+                ItemVendaRemovido.objects.create(
+                    venda=venda,
+                    produto=ajuste.produto,
+                    produto_nome_snapshot=ajuste.produto_nome_snapshot,
+                    quantidade_snapshot=ajuste.quantidade_snapshot,
+                    unidade_snapshot=ajuste.unidade_snapshot or "",
+                    preco_unitario_snapshot=ajuste.preco_unitario_snapshot,
+                    valor_total_snapshot=ajuste.valor_total_snapshot,
+                    item_venda_original_id=item_venda.id,
+                    ajuste_origem=ajuste,
+                    operador=ajuste.operador or venda.operador or "",
+                    observacao="Ajuste de item nao entregue/nao aceito registrado com controle de reversao.",
                 )
                 motivo_texto = dict(AjusteItemVendaQuitada.MOTIVO_CHOICES).get(
                     ajuste.motivo,
@@ -5230,6 +5322,11 @@ def venda_ajuste_item_quitado_credito(request, pk, ajuste_id):
                 ajuste_locked.resolucao_financeira = AjusteItemVendaQuitada.RESOLUCAO_CREDITO_CLIENTE
                 ajuste_locked.status = AjusteItemVendaQuitada.STATUS_RESOLVIDO
                 ajuste_locked.save(update_fields=["resolucao_financeira", "status", "atualizado_em"])
+                ItemVendaRemovido.objects.filter(
+                    ajuste_origem=ajuste_locked,
+                    status=ItemVendaRemovido.STATUS_REMOVIDO,
+                    credito_gerado__isnull=True,
+                ).update(credito_gerado=credito)
                 quantidade_texto = _formatar_quantidade(ajuste_locked.quantidade_snapshot)
                 unidade_texto = (ajuste_locked.unidade_snapshot or "").strip()
                 quantidade_unidade = f"{quantidade_texto} {unidade_texto}".strip()
@@ -5309,6 +5406,11 @@ def _sincronizar_conta_receber(venda, observacao_origem="", permitir_reabrir_can
             (valor_original_anterior - valor_aberto_anterior).quantize(Decimal("0.01")),
             Decimal("0.00"),
         )
+        valor_recebido_registrado = (
+            conta.recebimentos.aggregate(total=Sum("valor")).get("total")
+            or Decimal("0.00")
+        ).quantize(Decimal("0.01"))
+        valor_ja_recebido = max(valor_ja_recebido, valor_recebido_registrado)
         novo_valor_aberto = max((valor - valor_ja_recebido).quantize(Decimal("0.01")), Decimal("0.00"))
         if novo_valor_aberto == Decimal("0.00"):
             novo_status = ContaReceber.STATUS_PAGA
@@ -6132,6 +6234,18 @@ def venda_revisar_remocao_item(request, pk, item_id):
                 EntregaChecklistItem.objects.filter(item_venda=item_venda)
                 .values_list("rota_item_id", flat=True)
             )
+            item_removido = ItemVendaRemovido.objects.create(
+                venda=venda,
+                produto=item_venda.produto,
+                produto_nome_snapshot=produto_nome,
+                quantidade_snapshot=quantidade_removida,
+                unidade_snapshot=unidade_removida or "",
+                preco_unitario_snapshot=item_venda.preco_unitario,
+                valor_total_snapshot=valor_abatido,
+                item_venda_original_id=item_venda.id,
+                operador=venda.operador or "",
+                observacao="Item removido da nota por edicao.",
+            )
             item_venda.delete()
             resolver_entregas_sem_pendencias_ativas(rota_item_ids_afetados)
             total_recalculado = sum(
@@ -6150,7 +6264,8 @@ def venda_revisar_remocao_item(request, pk, item_id):
                 "item_removido_da_nota",
                 (
                     f"Item removido da nota: {produto_nome}, quantidade {quantidade_removida} {unidade_removida or ''}, "
-                    f"valor abatido R$ {valor_abatido}. Total da venda: R$ {total_anterior} -> R$ {total_recalculado}."
+                    f"valor abatido R$ {valor_abatido}. Registro de remocao #{item_removido.id}. "
+                    f"Total da venda: R$ {total_anterior} -> R$ {total_recalculado}."
                 ),
                 canal="sistema",
                 usuario=venda.operador,
@@ -6213,6 +6328,130 @@ def venda_revisar_remocao_item(request, pk, item_id):
             "total_checklists_item": total_checklists_item,
             "retorno_url": retorno_url,
             "retorno_querystring": _querystring_retorno(retorno_url),
+        },
+    )
+
+
+def venda_desfazer_remocao_item(request, pk, remocao_id):
+    venda = get_object_or_404(
+        Venda.objects.select_related("cliente").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+    bloqueio = _bloquear_venda_cancelada(request, venda)
+    if bloqueio:
+        return bloqueio
+    retorno_url = _url_retorno_segura(request)
+    item_removido = get_object_or_404(
+        ItemVendaRemovido.objects.select_related(
+            "venda",
+            "produto",
+            "credito_gerado",
+            "ajuste_origem",
+            "venda__cliente",
+        ),
+        pk=remocao_id,
+        venda=venda,
+    )
+    contexto_desfazer = _contexto_desfazer_item_removido(item_removido)
+    detalhe_url = reverse("estoque:venda_detalhe", kwargs={"pk": venda.pk})
+
+    if request.method == "POST":
+        confirmacao = request.POST.get("confirmacao_desfazer", "").strip().upper()
+        if not contexto_desfazer["permitido"]:
+            messages.warning(request, contexto_desfazer["motivo"])
+            return redirect(f"{detalhe_url}?desfazer_bloqueado=1#itens-removidos")
+        if confirmacao != "DESFAZER":
+            messages.warning(request, 'Digite "DESFAZER" para confirmar a reversao da remocao.')
+        else:
+            with transaction.atomic():
+                item_removido_locked = (
+                    ItemVendaRemovido.objects.select_for_update()
+                    .get(pk=item_removido.pk, venda=venda)
+                )
+                contexto_locked = _contexto_desfazer_item_removido(item_removido_locked)
+                if not contexto_locked["permitido"]:
+                    messages.warning(request, contexto_locked["motivo"])
+                    return redirect(f"{detalhe_url}?desfazer_bloqueado=1#itens-removidos")
+
+                credito_cancelado = Decimal("0.00")
+                if item_removido_locked.credito_gerado_id:
+                    credito_original = item_removido_locked.credito_gerado
+                    credito_cancelado = (credito_original.valor or Decimal("0.00")).quantize(Decimal("0.01"))
+                    if credito_cancelado > Decimal("0.00"):
+                        CreditoCliente.objects.create(
+                            cliente=venda.cliente,
+                            valor=-credito_cancelado,
+                            tipo=CreditoCliente.TIPO_CREDITO_GERADO,
+                            origem_conta_receber=credito_original.origem_conta_receber,
+                            origem_recebimento=credito_original.origem_recebimento,
+                            observacao=(
+                                f"Credito cancelado por reversao da remocao #{item_removido_locked.id} "
+                                f"da venda #{venda.id}. Credito original #{credito_original.id}."
+                            ),
+                        )
+
+                total_anterior = (venda.total or Decimal("0.00")).quantize(Decimal("0.01"))
+                ajuste_cancelado = item_removido_locked.ajuste_origem
+                if ajuste_cancelado:
+                    ajuste_cancelado.status = AjusteItemVendaQuitada.STATUS_CANCELADO
+                    ajuste_cancelado.resolucao_financeira = AjusteItemVendaQuitada.RESOLUCAO_NAO_DEFINIDA
+                    ajuste_cancelado.observacao = (
+                        f"{ajuste_cancelado.observacao}\n"
+                        "Ajuste desfeito por reversao da remocao registrada."
+                    ).strip()
+                    ajuste_cancelado.save(
+                        update_fields=[
+                            "status",
+                            "resolucao_financeira",
+                            "observacao",
+                            "atualizado_em",
+                        ]
+                    )
+                else:
+                    ItemVenda.objects.create(
+                        venda=venda,
+                        produto=item_removido_locked.produto,
+                        quantidade=item_removido_locked.quantidade_snapshot,
+                        unidade=item_removido_locked.unidade_snapshot,
+                        preco_unitario=item_removido_locked.preco_unitario_snapshot,
+                        valor_total=item_removido_locked.valor_total_snapshot,
+                    )
+                total_recalculado = _recalcular_total_venda_pelos_itens(venda)
+                venda.total = total_recalculado
+                venda.save(update_fields=["total", "atualizado_em"])
+                _sincronizar_conta_receber(venda, "reversao de remocao de item")
+                item_removido_locked.status = ItemVendaRemovido.STATUS_REVERTIDO
+                item_removido_locked.revertido_em = timezone.now()
+                item_removido_locked.observacao = (
+                    f"{item_removido_locked.observacao}\n"
+                    f"Reversao feita em {timezone.localtime(item_removido_locked.revertido_em).strftime('%d/%m/%Y %H:%M')}."
+                ).strip()
+                item_removido_locked.save(update_fields=["status", "revertido_em", "observacao"])
+                _registrar_evento_venda(
+                    venda,
+                    "remocao_item_desfeita",
+                    (
+                        f"Remocao de item desfeita: {item_removido_locked.produto_nome_snapshot}, "
+                        f"quantidade {item_removido_locked.quantidade_snapshot} {item_removido_locked.unidade_snapshot or ''}, "
+                        f"valor R$ {item_removido_locked.valor_total_snapshot}. "
+                        f"Total da venda: R$ {total_anterior} -> R$ {total_recalculado}. "
+                        f"Credito cancelado: R$ {credito_cancelado}. "
+                        f"{'Ajuste financeiro cancelado.' if ajuste_cancelado else 'Item recolocado na nota.'}"
+                    ),
+                    canal="sistema",
+                    usuario=venda.operador,
+                )
+            messages.success(request, "Remocao do item desfeita com sucesso.")
+            return redirect(f"{detalhe_url}?remocao_desfeita=1#dados-da-nota")
+
+    return render(
+        request,
+        "estoque/venda_desfazer_remocao_item.html",
+        {
+            "venda": venda,
+            "item_removido": item_removido,
+            "contexto_desfazer": contexto_desfazer,
+            "retorno_url": retorno_url or detalhe_url,
         },
     )
 

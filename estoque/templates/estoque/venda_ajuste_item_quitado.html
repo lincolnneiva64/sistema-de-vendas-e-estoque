@@ -140,7 +140,7 @@
                     <td class="adjust-number">R$ {{ item.valor_total|floatformat:2 }}</td>
                     <td>
                       {% if item.id in ajustes_pendentes_item_ids %}
-                        <span class="adjust-muted">Ajuste pendente já registrado</span>
+                        <span class="adjust-muted">Ajuste já registrado</span>
                       {% else %}
                         <span class="adjust-muted">Disponível</span>
                       {% endif %}

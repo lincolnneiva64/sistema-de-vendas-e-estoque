@@ -402,6 +402,59 @@ class ItemVenda(models.Model):
         return f"{nome_produto} - Venda #{self.venda_id}"
 
 
+class ItemVendaRemovido(models.Model):
+    STATUS_REMOVIDO = "removido"
+    STATUS_REVERTIDO = "revertido"
+    STATUS_CHOICES = [
+        (STATUS_REMOVIDO, "Removido"),
+        (STATUS_REVERTIDO, "Revertido"),
+    ]
+
+    venda = models.ForeignKey(
+        Venda,
+        on_delete=models.CASCADE,
+        related_name="itens_removidos",
+    )
+    produto = models.ForeignKey(
+        Produto,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="itens_venda_removidos",
+    )
+    produto_nome_snapshot = models.CharField(max_length=120)
+    quantidade_snapshot = models.DecimalField(max_digits=12, decimal_places=3)
+    unidade_snapshot = models.CharField(max_length=20, blank=True)
+    preco_unitario_snapshot = models.DecimalField(max_digits=12, decimal_places=2)
+    valor_total_snapshot = models.DecimalField(max_digits=12, decimal_places=2)
+    item_venda_original_id = models.PositiveIntegerField(blank=True, null=True)
+    credito_gerado = models.ForeignKey(
+        "CreditoCliente",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="itens_removidos_origem",
+    )
+    ajuste_origem = models.ForeignKey(
+        "AjusteItemVendaQuitada",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="itens_removidos_origem",
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_REMOVIDO)
+    operador = models.CharField(max_length=120, blank=True)
+    observacao = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    revertido_em = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        ordering = ["-criado_em", "-id"]
+
+    def __str__(self):
+        return f"Item removido - Venda #{self.venda_id} - {self.produto_nome_snapshot}"
+
+
 class ContaReceber(models.Model):
     STATUS_ABERTA = "aberta"
     STATUS_PARCIAL = "parcial"

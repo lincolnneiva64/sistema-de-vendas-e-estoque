@@ -50,6 +50,7 @@ urlpatterns = [
     path("vendas/<int:pk>/editar/adicionar-produto/", views.venda_adicionar_produto_item, name="venda_adicionar_produto_item"),
     path("vendas/<int:pk>/editar/item/<int:item_id>/quantidade/", views.venda_editar_quantidade_item, name="venda_editar_quantidade_item"),
     path("vendas/<int:pk>/editar/item/<int:item_id>/remover/", views.venda_revisar_remocao_item, name="venda_revisar_remocao_item"),
+    path("vendas/<int:pk>/editar/remocao/<int:remocao_id>/desfazer/", views.venda_desfazer_remocao_item, name="venda_desfazer_remocao_item"),
     path("vendas/<int:pk>/ajuste-item-quitado/", views.venda_ajuste_item_quitado, name="venda_ajuste_item_quitado"),
     path("vendas/<int:pk>/ajuste-item-quitado/<int:ajuste_id>/credito/", views.venda_ajuste_item_quitado_credito, name="venda_ajuste_item_quitado_credito"),
     path("vendas/<int:pk>/cancelar/", views.venda_cancelar, name="venda_cancelar"),

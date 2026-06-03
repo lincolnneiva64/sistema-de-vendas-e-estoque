@@ -11,12 +11,13 @@ from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db.models import Sum
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, PixRecebido, Produto, RecebimentoContaReceber, Venda
+from .models import AjusteItemVendaQuitada, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, ItemVendaRemovido, PixRecebido, Produto, RecebimentoContaReceber, Venda
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
 from . import views
 
@@ -1486,6 +1487,13 @@ class PixRecebidoTests(TestCase):
         self.assertTrue(RecebimentoContaReceber.objects.filter(pk=recebimento.pk, conta=conta).exists())
         self.assertEqual(produto.quantidade, 7)
         self.assertEqual(CreditoCliente.objects.count(), 0)
+        remocao = ItemVendaRemovido.objects.get(venda=venda, ajuste_origem=ajuste)
+        self.assertEqual(remocao.produto_nome_snapshot, "Produto Fluxo Ajuste")
+        self.assertEqual(remocao.valor_total_snapshot, Decimal("32.00"))
+        self.assertEqual(remocao.status, ItemVendaRemovido.STATUS_REMOVIDO)
+
+        detalhe = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+        self.assertContains(detalhe, reverse("estoque:venda_desfazer_remocao_item", kwargs={"pk": venda.id, "remocao_id": remocao.id}))
 
     def test_post_ajuste_item_quitado_bloqueia_item_de_outra_venda(self):
         cliente = Cliente.objects.create(nome="Cliente Bloqueia Outra Venda", ativo=True)
@@ -1591,8 +1599,172 @@ class PixRecebidoTests(TestCase):
             follow=True,
         )
 
-        self.assertContains(resposta, "Ja existe ajuste pendente para este item desta venda.")
+        self.assertContains(
+            resposta,
+            "Este item já possui ajuste registrado nesta venda. Desfaça ou resolva o ajuste existente antes de registrar outro.",
+        )
         self.assertEqual(AjusteItemVendaQuitada.objects.filter(venda=venda, item_venda=item).count(), 1)
+
+    def test_post_ajuste_item_quitado_bloqueia_duplicidade_resolvida_com_credito(self):
+        cliente = Cliente.objects.create(nome="Cliente Duplicidade Resolvida", ativo=True)
+        produto = self._produto_teste("Produto Duplicidade Resolvida")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("67.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("67.00"),
+            valor_total=Decimal("67.00"),
+        )
+        ajuste = views.criar_ajuste_item_venda_quitada(
+            venda,
+            item,
+            AjusteItemVendaQuitada.MOTIVO_ITEM_NAO_ENTREGUE,
+        )
+        CreditoCliente.objects.create(
+            cliente=cliente,
+            valor=Decimal("67.00"),
+            observacao="Credito do ajuste.",
+        )
+        ajuste.status = AjusteItemVendaQuitada.STATUS_RESOLVIDO
+        ajuste.resolucao_financeira = AjusteItemVendaQuitada.RESOLUCAO_CREDITO_CLIENTE
+        ajuste.save(update_fields=["status", "resolucao_financeira", "atualizado_em"])
+
+        resposta = self.client.post(
+            reverse("estoque:venda_ajuste_item_quitado", kwargs={"pk": venda.id}),
+            data={
+                "item_id": str(item.id),
+                "motivo": AjusteItemVendaQuitada.MOTIVO_CLIENTE_RECUSOU,
+                "observacao": "",
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertContains(
+            resposta,
+            "Este item já possui ajuste registrado nesta venda. Desfaça ou resolva o ajuste existente antes de registrar outro.",
+        )
+        self.assertEqual(AjusteItemVendaQuitada.objects.filter(venda=venda, item_venda=item).count(), 1)
+
+    def test_post_ajuste_item_quitado_bloqueia_mesmo_produto_da_mesma_venda(self):
+        cliente = Cliente.objects.create(nome="Cliente Duplicidade Produto", ativo=True)
+        produto = self._produto_teste("Produto Mesmo Ajuste")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("40.00"),
+        )
+        item_1 = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("20.00"),
+            valor_total=Decimal("20.00"),
+        )
+        item_2 = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("20.00"),
+            valor_total=Decimal("20.00"),
+        )
+        views.criar_ajuste_item_venda_quitada(
+            venda,
+            item_1,
+            AjusteItemVendaQuitada.MOTIVO_ITEM_NAO_ENTREGUE,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_ajuste_item_quitado", kwargs={"pk": venda.id}),
+            data={
+                "item_id": str(item_2.id),
+                "motivo": AjusteItemVendaQuitada.MOTIVO_CLIENTE_RECUSOU,
+                "observacao": "",
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertContains(
+            resposta,
+            "Este item já possui ajuste registrado nesta venda. Desfaça ou resolva o ajuste existente antes de registrar outro.",
+        )
+        self.assertEqual(AjusteItemVendaQuitada.objects.filter(venda=venda).count(), 1)
+
+    def test_detalhe_ajuste_antigo_sem_snapshot_mostra_mensagem_sem_quebrar(self):
+        cliente = Cliente.objects.create(nome="Cliente Ajuste Antigo", ativo=True)
+        produto = self._produto_teste("Produto Ajuste Antigo")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("25.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("25.00"),
+            valor_total=Decimal("25.00"),
+        )
+        views.criar_ajuste_item_venda_quitada(
+            venda,
+            item,
+            AjusteItemVendaQuitada.MOTIVO_ITEM_NAO_ENTREGUE,
+        )
+
+        resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+
+        self.assertContains(
+            resposta,
+            "Este ajuste foi criado antes do controle de reversão automática. Não é possível desfazer automaticamente.",
+        )
+        self.assertNotContains(resposta, "Reverse for &#x27;venda_desfazer_remocao_item&#x27;")
+
+    def test_detalhe_nao_duplica_total_de_ajustes_repetidos_do_mesmo_produto(self):
+        cliente = Cliente.objects.create(nome="Cliente Total Duplicado", ativo=True)
+        produto = self._produto_teste("Coca Cola Total Duplicado")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("290.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("67.00"),
+            valor_total=Decimal("67.00"),
+        )
+        views.criar_ajuste_item_venda_quitada(
+            venda,
+            item,
+            AjusteItemVendaQuitada.MOTIVO_ITEM_NAO_ENTREGUE,
+        )
+        views.criar_ajuste_item_venda_quitada(
+            venda,
+            item,
+            AjusteItemVendaQuitada.MOTIVO_CLIENTE_RECUSOU,
+        )
+
+        resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+
+        self.assertContains(resposta, "Itens n&atilde;o entregues/n&atilde;o aceitos")
+        self.assertContains(resposta, "R$ 67.00")
+        self.assertNotContains(resposta, "R$ 134.00")
 
     def test_remover_item_da_nota_resolve_pendencia_de_entrega_do_item(self):
         cliente = Cliente.objects.create(nome="Cliente Entrega", ativo=True)
@@ -2353,7 +2525,277 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(conta.valor_original, Decimal("80.00"))
         self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
         self.assertEqual(conta.status, ContaReceber.STATUS_PAGA)
-        self.assertIn("maior que o novo total da venda", conta.observacao)
+
+    def test_desfazer_remocao_sem_credito_recoloca_item_e_sincroniza_conta(self):
+        cliente = Cliente.objects.create(nome="Cliente Desfazer Simples", ativo=True)
+        produto_base = self._produto_teste("Produto Desfazer Base")
+        produto_removido = self._produto_teste("Produto Desfazer Removido")
+        produto_removido.quantidade = 10
+        produto_removido.save()
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("100.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_base,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("70.00"),
+            valor_total=Decimal("70.00"),
+        )
+        item_removido_original = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_removido,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("30.00"),
+            valor_total=Decimal("30.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("100.00"),
+            valor_em_aberto=Decimal("100.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+
+        self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item_removido_original.id}),
+            secure=True,
+        )
+        remocao = ItemVendaRemovido.objects.get(venda=venda)
+        resposta = self.client.post(
+            reverse("estoque:venda_desfazer_remocao_item", kwargs={"pk": venda.id, "remocao_id": remocao.id}),
+            {"confirmacao_desfazer": "DESFAZER"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        produto_removido.refresh_from_db()
+        remocao.refresh_from_db()
+        self.assertTrue(ItemVenda.objects.filter(venda=venda, produto=produto_removido, valor_total=Decimal("30.00")).exists())
+        self.assertEqual(venda.total, Decimal("100.00"))
+        self.assertEqual(conta.valor_original, Decimal("100.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("100.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+        self.assertEqual(produto_removido.quantidade, 10)
+        self.assertEqual(remocao.status, ItemVendaRemovido.STATUS_REVERTIDO)
+        self.assertTrue(EventoVenda.objects.filter(venda=venda, tipo_evento="remocao_item_desfeita").exists())
+
+    def test_desfazer_remocao_com_credito_disponivel_cancela_credito_e_recoloca_item(self):
+        cliente = Cliente.objects.create(nome="Cliente Desfazer Credito", ativo=True)
+        produto_base = self._produto_teste("Produto Credito Base")
+        produto_removido = self._produto_teste("Produto Credito Removido")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("100.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_base,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("70.00"),
+            valor_total=Decimal("70.00"),
+        )
+        item_removido_original = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_removido,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("30.00"),
+            valor_total=Decimal("30.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("100.00"),
+            valor_em_aberto=Decimal("0.00"),
+            status=ContaReceber.STATUS_PAGA,
+        )
+        RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=timezone.localdate(),
+            valor=Decimal("100.00"),
+            forma_pagamento="PIX",
+        )
+
+        self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item_removido_original.id}),
+            secure=True,
+        )
+        remocao = ItemVendaRemovido.objects.get(venda=venda)
+        credito = CreditoCliente.objects.create(
+            cliente=cliente,
+            valor=Decimal("30.00"),
+            origem_conta_receber=conta,
+            observacao=f"Credito gerado pela remocao #{remocao.id}.",
+        )
+        remocao.credito_gerado = credito
+        remocao.save(update_fields=["credito_gerado"])
+
+        resposta = self.client.post(
+            reverse("estoque:venda_desfazer_remocao_item", kwargs={"pk": venda.id, "remocao_id": remocao.id}),
+            {"confirmacao_desfazer": "DESFAZER"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        remocao.refresh_from_db()
+        credito_total = CreditoCliente.objects.filter(cliente=cliente).aggregate(total=Sum("valor")).get("total")
+        self.assertEqual(credito_total, Decimal("0.00"))
+        self.assertTrue(ItemVenda.objects.filter(venda=venda, produto=produto_removido, valor_total=Decimal("30.00")).exists())
+        self.assertEqual(venda.total, Decimal("100.00"))
+        self.assertEqual(conta.valor_original, Decimal("100.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_PAGA)
+        self.assertEqual(remocao.status, ItemVendaRemovido.STATUS_REVERTIDO)
+
+    def test_desfazer_remocao_bloqueia_quando_credito_ja_foi_usado(self):
+        cliente = Cliente.objects.create(nome="Cliente Credito Usado", ativo=True)
+        produto_base = self._produto_teste("Produto Usado Base")
+        produto_removido = self._produto_teste("Produto Usado Removido")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("100.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_base,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("70.00"),
+            valor_total=Decimal("70.00"),
+        )
+        item_removido_original = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_removido,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("30.00"),
+            valor_total=Decimal("30.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("100.00"),
+            valor_em_aberto=Decimal("0.00"),
+            status=ContaReceber.STATUS_PAGA,
+        )
+
+        self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item_removido_original.id}),
+            secure=True,
+        )
+        remocao = ItemVendaRemovido.objects.get(venda=venda)
+        credito = CreditoCliente.objects.create(
+            cliente=cliente,
+            valor=Decimal("30.00"),
+            origem_conta_receber=conta,
+            observacao=f"Credito gerado pela remocao #{remocao.id}.",
+        )
+        CreditoCliente.objects.create(
+            cliente=cliente,
+            valor=Decimal("-30.00"),
+            origem_conta_receber=conta,
+            observacao="Credito usado em abatimento.",
+        )
+        remocao.credito_gerado = credito
+        remocao.save(update_fields=["credito_gerado"])
+
+        detalhe = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+        self.assertContains(detalhe, "Este crédito já foi usado e não pode ser desfeito automaticamente nesta etapa.")
+        self.assertNotContains(detalhe, reverse("estoque:venda_desfazer_remocao_item", kwargs={"pk": venda.id, "remocao_id": remocao.id}))
+
+        resposta = self.client.post(
+            reverse("estoque:venda_desfazer_remocao_item", kwargs={"pk": venda.id, "remocao_id": remocao.id}),
+            {"confirmacao_desfazer": "DESFAZER"},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Este crédito já foi usado e não pode ser desfeito automaticamente nesta etapa.")
+        remocao.refresh_from_db()
+        self.assertEqual(remocao.status, ItemVendaRemovido.STATUS_REMOVIDO)
+        self.assertFalse(ItemVenda.objects.filter(venda=venda, produto=produto_removido).exists())
+
+    def test_desfazer_ajuste_novo_com_credito_cancela_credito_sem_duplicar_item(self):
+        cliente = Cliente.objects.create(nome="Cliente Desfazer Ajuste", ativo=True)
+        produto = self._produto_teste("Produto Desfazer Ajuste")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            operador="Operador Ajuste",
+            total=Decimal("67.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("67.00"),
+            valor_total=Decimal("67.00"),
+        )
+
+        self.client.post(
+            reverse("estoque:venda_ajuste_item_quitado", kwargs={"pk": venda.id}),
+            data={
+                "item_id": str(item.id),
+                "motivo": AjusteItemVendaQuitada.MOTIVO_ITEM_NAO_ENTREGUE,
+                "observacao": "Nao entregue.",
+            },
+            secure=True,
+        )
+        ajuste = AjusteItemVendaQuitada.objects.get(venda=venda, item_venda=item)
+        remocao = ItemVendaRemovido.objects.get(venda=venda, ajuste_origem=ajuste)
+
+        detalhe = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+        self.assertContains(
+            detalhe,
+            reverse("estoque:venda_desfazer_remocao_item", kwargs={"pk": venda.id, "remocao_id": remocao.id}),
+        )
+
+        self.client.post(
+            reverse("estoque:venda_ajuste_item_quitado_credito", kwargs={"pk": venda.id, "ajuste_id": ajuste.id}),
+            data={"confirmacao_credito": "CREDITO", "ciencia_credito": "1"},
+            secure=True,
+        )
+        remocao.refresh_from_db()
+        self.assertIsNotNone(remocao.credito_gerado_id)
+
+        resposta = self.client.post(
+            reverse("estoque:venda_desfazer_remocao_item", kwargs={"pk": venda.id, "remocao_id": remocao.id}),
+            {"confirmacao_desfazer": "DESFAZER"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        venda.refresh_from_db()
+        ajuste.refresh_from_db()
+        remocao.refresh_from_db()
+        credito_total = CreditoCliente.objects.filter(cliente=cliente).aggregate(total=Sum("valor")).get("total")
+        self.assertEqual(credito_total, Decimal("0.00"))
+        self.assertEqual(ajuste.status, AjusteItemVendaQuitada.STATUS_CANCELADO)
+        self.assertEqual(remocao.status, ItemVendaRemovido.STATUS_REVERTIDO)
+        self.assertEqual(venda.total, Decimal("67.00"))
+        self.assertEqual(ItemVenda.objects.filter(venda=venda, produto=produto).count(), 1)
+        self.assertTrue(EventoVenda.objects.filter(venda=venda, tipo_evento="remocao_item_desfeita").exists())
 
     def test_consulta_vendas_por_numero_ignora_datas_preenchidas(self):
         cliente = Cliente.objects.create(nome="Lincoln Neiva", ativo=True)
