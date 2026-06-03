@@ -272,8 +272,60 @@
             font-weight: 950;
         }
 
-        .itens-ajustados-section table {
+        .itens-ajustados-lista {
+            display: grid;
+            gap: 7px;
+        }
+
+        .item-ajustado-card {
+            border: 1px solid #fcd34d;
+            border-radius: 9px;
             background: #ffffff;
+            padding: 8px;
+            box-shadow: 0 5px 12px rgba(120, 53, 15, 0.08);
+        }
+
+        .item-ajustado-produto {
+            margin-bottom: 6px;
+            color: #78350f;
+            font-size: 12.5px;
+            font-weight: 950;
+            overflow-wrap: anywhere;
+        }
+
+        .item-ajustado-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 5px;
+        }
+
+        .item-ajustado-campo {
+            border: 1px solid #fed7aa;
+            border-radius: 8px;
+            background: #fff7ed;
+            padding: 5px 6px;
+            min-width: 0;
+        }
+
+        .item-ajustado-campo.resolucao {
+            grid-column: span 2;
+        }
+
+        .item-ajustado-label {
+            display: block;
+            color: #92400e;
+            font-size: 8.5px;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .item-ajustado-valor {
+            display: block;
+            margin-top: 1px;
+            color: #111827;
+            font-size: 11.5px;
+            font-weight: 850;
+            overflow-wrap: anywhere;
         }
 
         .total-ajustado {
@@ -769,6 +821,14 @@
             .venda-quitada-banner {
                 width: 100%;
                 margin-left: 0;
+            }
+
+            .item-ajustado-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .item-ajustado-campo.resolucao {
+                grid-column: 1 / -1;
             }
         }
 
@@ -1403,52 +1463,47 @@
                     {% if ajustes_itens_quitados %}
                     <section class="itens-ajustados-section">
                         <h2>Itens n&atilde;o entregues / n&atilde;o aceitos</h2>
-                        <table class="tabela-itens-ajustados">
-                            <colgroup>
-                                <col style="width: 34%;">
-                                <col style="width: 9%;">
-                                <col style="width: 7%;">
-                                <col style="width: 11%;">
-                                <col style="width: 11%;">
-                                <col style="width: 12%;">
-                                <col style="width: 8%;">
-                                <col style="width: 8%;">
-                            </colgroup>
-                            <thead>
-                                <tr>
-                                    <th>Produto</th>
-                                    <th class="numero">Qtd</th>
-                                    <th>Un</th>
-                                    <th class="numero">Preco</th>
-                                    <th class="numero">Valor</th>
-                                    <th>Motivo</th>
-                                    <th>Status</th>
-                                    <th>Resolucao</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for ajuste in ajustes_itens_quitados %}
-                                <tr>
-                                    <td>{{ ajuste.produto_nome_snapshot }}</td>
-                                    <td class="numero">{{ ajuste.quantidade_snapshot }}</td>
-                                    <td>{{ ajuste.unidade_snapshot|default:"-" }}</td>
-                                    <td class="numero">R$ {{ ajuste.preco_unitario_snapshot|floatformat:2 }}</td>
-                                    <td class="numero">R$ {{ ajuste.valor_total_snapshot|floatformat:2 }}</td>
-                                    <td>{{ ajuste.get_motivo_display }}</td>
-                                    <td>{{ ajuste.get_status_display }}</td>
-                                    <td>
-                                        {% if ajuste.resolucao_financeira == ajuste.RESOLUCAO_CREDITO_CLIENTE %}
-                                            Cr&eacute;dito gerado para o cliente: R$ {{ ajuste.diferenca_financeira|floatformat:2 }}
-                                        {% elif ajuste.resolucao_financeira == ajuste.RESOLUCAO_NAO_DEFINIDA %}
-                                            Resolu&ccedil;&atilde;o financeira pendente
-                                        {% else %}
-                                            {{ ajuste.get_resolucao_financeira_display }}
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                        <div class="itens-ajustados-lista">
+                            {% for ajuste in ajustes_itens_quitados %}
+                            <article class="item-ajustado-card">
+                                <div class="item-ajustado-produto">{{ ajuste.produto_nome_snapshot }}</div>
+                                <div class="item-ajustado-grid">
+                                    <div class="item-ajustado-campo">
+                                        <span class="item-ajustado-label">Qtd</span>
+                                        <span class="item-ajustado-valor">{{ ajuste.quantidade_snapshot }} {{ ajuste.unidade_snapshot|default:"-" }}</span>
+                                    </div>
+                                    <div class="item-ajustado-campo">
+                                        <span class="item-ajustado-label">Pre&ccedil;o</span>
+                                        <span class="item-ajustado-valor">R$ {{ ajuste.preco_unitario_snapshot|floatformat:2 }}</span>
+                                    </div>
+                                    <div class="item-ajustado-campo">
+                                        <span class="item-ajustado-label">Valor</span>
+                                        <span class="item-ajustado-valor">R$ {{ ajuste.valor_total_snapshot|floatformat:2 }}</span>
+                                    </div>
+                                    <div class="item-ajustado-campo">
+                                        <span class="item-ajustado-label">Motivo</span>
+                                        <span class="item-ajustado-valor">{{ ajuste.get_motivo_display }}</span>
+                                    </div>
+                                    <div class="item-ajustado-campo">
+                                        <span class="item-ajustado-label">Status</span>
+                                        <span class="item-ajustado-valor">{{ ajuste.get_status_display }}</span>
+                                    </div>
+                                    <div class="item-ajustado-campo resolucao">
+                                        <span class="item-ajustado-label">Resolu&ccedil;&atilde;o</span>
+                                        <span class="item-ajustado-valor">
+                                            {% if ajuste.resolucao_financeira == ajuste.RESOLUCAO_CREDITO_CLIENTE %}
+                                                Cr&eacute;dito gerado para o cliente: R$ {{ ajuste.diferenca_financeira|floatformat:2 }}
+                                            {% elif ajuste.resolucao_financeira == ajuste.RESOLUCAO_NAO_DEFINIDA %}
+                                                Resolu&ccedil;&atilde;o financeira pendente
+                                            {% else %}
+                                                {{ ajuste.get_resolucao_financeira_display }}
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                </div>
+                            </article>
+                            {% endfor %}
+                        </div>
                     </section>
                     {% endif %}
 
