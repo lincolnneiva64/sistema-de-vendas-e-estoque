@@ -580,8 +580,10 @@ class AjusteItemVendaQuitada(models.Model):
     ]
 
     RESOLUCAO_NAO_DEFINIDA = "nao_definida"
+    RESOLUCAO_CREDITO_CLIENTE = "credito_cliente"
     RESOLUCAO_CHOICES = [
         (RESOLUCAO_NAO_DEFINIDA, "Nao definida"),
+        (RESOLUCAO_CREDITO_CLIENTE, "Credito do cliente"),
     ]
 
     STATUS_RASCUNHO = "rascunho"

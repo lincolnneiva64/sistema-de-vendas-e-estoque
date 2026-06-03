@@ -959,6 +959,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "Motivo: Item nao entregue")
         self.assertContains(resposta, "Resolu&ccedil;&atilde;o: Nao definida")
         self.assertContains(resposta, "Status: Pendente")
+        self.assertContains(resposta, "Resolver como cr&eacute;dito do cliente")
         venda.refresh_from_db()
         conta.refresh_from_db()
         produto.refresh_from_db()
@@ -999,6 +1000,376 @@ class PixRecebidoTests(TestCase):
 
         self.assertNotContains(resposta, "AJUSTE PENDENTE EM VENDA QUITADA")
         self.assertNotContains(resposta, "Existe item registrado como n&atilde;o entregue/n&atilde;o aceito")
+
+    def test_detalhe_separa_item_ajustado_da_tabela_principal_sem_alterar_dados(self):
+        cliente = Cliente.objects.create(nome="Cliente Separa Ajuste", ativo=True)
+        produto_normal = self._produto_teste("Produto Normal Separa")
+        produto_ajustado = self._produto_teste("Produto Ajustado Separa")
+        produto_ajustado.quantidade = 8
+        produto_ajustado.save()
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("70.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_normal,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("40.00"),
+            valor_total=Decimal("40.00"),
+        )
+        item_ajustado = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_ajustado,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("15.00"),
+            valor_total=Decimal("30.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("70.00"),
+            valor_em_aberto=Decimal("0.00"),
+            status=ContaReceber.STATUS_PAGA,
+        )
+        recebimento = RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=timezone.localdate(),
+            valor=Decimal("70.00"),
+            forma_pagamento="PIX",
+        )
+        views.criar_ajuste_item_venda_quitada(
+            venda,
+            item_ajustado,
+            AjusteItemVendaQuitada.MOTIVO_ITEM_NAO_ENTREGUE,
+        )
+
+        resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+        conteudo = resposta.content.decode("utf-8")
+        tabela_principal = conteudo.split('<table class="tabela-itens-principais">', 1)[1].split("</table>", 1)[0]
+
+        self.assertIn("Produto Normal Separa", tabela_principal)
+        self.assertNotIn("Produto Ajustado Separa", tabela_principal)
+        self.assertContains(resposta, "Itens n&atilde;o entregues / n&atilde;o aceitos")
+        self.assertContains(resposta, "Produto Ajustado Separa")
+        self.assertContains(resposta, "2.000")
+        self.assertContains(resposta, "R$ 30.00")
+        self.assertContains(resposta, "Resolu&ccedil;&atilde;o financeira pendente")
+        self.assertContains(resposta, "Total original preservado")
+        self.assertContains(resposta, "R$ 70.00")
+        self.assertContains(resposta, "Itens n&atilde;o entregues/n&atilde;o aceitos")
+        self.assertContains(resposta, "R$ 30.00")
+        self.assertContains(resposta, "Total ajustado/entregue")
+        self.assertContains(resposta, "R$ 40.00")
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        produto_ajustado.refresh_from_db()
+        self.assertEqual(venda.total, Decimal("70.00"))
+        self.assertEqual(conta.valor_original, Decimal("70.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_PAGA)
+        self.assertTrue(RecebimentoContaReceber.objects.filter(pk=recebimento.pk, conta=conta).exists())
+        self.assertEqual(produto_ajustado.quantidade, 8)
+        self.assertTrue(ItemVenda.objects.filter(pk=item_ajustado.pk, venda=venda).exists())
+
+    def test_detalhe_item_resolvido_com_credito_mostra_credito_na_secao_ajustada(self):
+        cliente = Cliente.objects.create(nome="Cliente Ajuste Credito Secao", ativo=True)
+        produto = self._produto_teste("Produto Ajuste Credito Secao")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("22.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("22.00"),
+            valor_total=Decimal("22.00"),
+        )
+        ajuste = views.criar_ajuste_item_venda_quitada(
+            venda,
+            item,
+            AjusteItemVendaQuitada.MOTIVO_CLIENTE_RECUSOU,
+        )
+        ajuste.status = AjusteItemVendaQuitada.STATUS_RESOLVIDO
+        ajuste.resolucao_financeira = AjusteItemVendaQuitada.RESOLUCAO_CREDITO_CLIENTE
+        ajuste.save(update_fields=["status", "resolucao_financeira", "atualizado_em"])
+
+        resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+        conteudo = resposta.content.decode("utf-8")
+        tabela_principal = conteudo.split('<table class="tabela-itens-principais">', 1)[1].split("</table>", 1)[0]
+
+        self.assertNotIn("Produto Ajuste Credito Secao", tabela_principal)
+        self.assertContains(resposta, "Itens n&atilde;o entregues / n&atilde;o aceitos")
+        self.assertContains(resposta, "Cr&eacute;dito gerado para o cliente: R$ 22.00")
+        self.assertContains(resposta, "Total ajustado/entregue")
+        self.assertContains(resposta, "R$ 0.00")
+
+    def test_detalhe_venda_sem_ajuste_mantem_item_na_tabela_principal_e_sem_secao_ajustada(self):
+        cliente = Cliente.objects.create(nome="Cliente Layout Sem Ajuste", ativo=True)
+        produto = self._produto_teste("Produto Layout Sem Ajuste")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("18.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("18.00"),
+            valor_total=Decimal("18.00"),
+        )
+
+        resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+        conteudo = resposta.content.decode("utf-8")
+        tabela_principal = conteudo.split('<table class="tabela-itens-principais">', 1)[1].split("</table>", 1)[0]
+
+        self.assertIn("Produto Layout Sem Ajuste", tabela_principal)
+        self.assertNotContains(resposta, "Itens n&atilde;o entregues / n&atilde;o aceitos")
+        self.assertNotContains(resposta, "Total ajustado/entregue")
+
+    def test_get_confirmacao_credito_mostra_dados_do_ajuste(self):
+        cliente = Cliente.objects.create(nome="Cliente GET Credito", ativo=True)
+        produto = self._produto_teste("Produto GET Credito")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("15.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("15.00"),
+            valor_total=Decimal("15.00"),
+        )
+        ajuste = views.criar_ajuste_item_venda_quitada(
+            venda,
+            item,
+            AjusteItemVendaQuitada.MOTIVO_CLIENTE_RECUSOU,
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:venda_ajuste_item_quitado_credito", kwargs={"pk": venda.id, "ajuste_id": ajuste.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Resolver ajuste como crédito do cliente")
+        self.assertContains(resposta, "Venda #")
+        self.assertContains(resposta, "Cliente Get Credito")
+        self.assertContains(resposta, "Produto Get Credito")
+        self.assertContains(resposta, "1.000 un")
+        self.assertContains(resposta, "R$ 15.00")
+        self.assertContains(resposta, "Item, venda, conta a receber e recebimentos não serão apagados")
+
+    def test_post_credito_sem_confirmacao_forte_nao_gera_credito(self):
+        cliente = Cliente.objects.create(nome="Cliente Credito Sem Confirmacao", ativo=True)
+        produto = self._produto_teste("Produto Credito Sem Confirmacao")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("15.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("15.00"),
+            valor_total=Decimal("15.00"),
+        )
+        ajuste = views.criar_ajuste_item_venda_quitada(
+            venda,
+            item,
+            AjusteItemVendaQuitada.MOTIVO_ITEM_NAO_ENTREGUE,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_ajuste_item_quitado_credito", kwargs={"pk": venda.id, "ajuste_id": ajuste.id}),
+            data={"confirmacao_credito": "CRED", "ciencia_credito": "1"},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertContains(resposta, "Digite CREDITO exatamente")
+        ajuste.refresh_from_db()
+        self.assertEqual(CreditoCliente.objects.count(), 0)
+        self.assertEqual(ajuste.status, AjusteItemVendaQuitada.STATUS_PENDENTE)
+        self.assertEqual(ajuste.resolucao_financeira, AjusteItemVendaQuitada.RESOLUCAO_NAO_DEFINIDA)
+
+    def test_post_credito_resolve_ajuste_sem_alterar_venda_financeiro_estoque_ou_item(self):
+        cliente = Cliente.objects.create(nome="Cliente Credito Resolve", ativo=True)
+        produto = self._produto_teste("Produto Credito Resolve")
+        produto.quantidade = 11
+        produto.save()
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            operador="Operador Credito",
+            total=Decimal("28.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("14.00"),
+            valor_total=Decimal("28.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("28.00"),
+            valor_em_aberto=Decimal("0.00"),
+            status=ContaReceber.STATUS_PAGA,
+        )
+        recebimento = RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=timezone.localdate(),
+            valor=Decimal("28.00"),
+            forma_pagamento="PIX",
+        )
+        ajuste = views.criar_ajuste_item_venda_quitada(
+            venda,
+            item,
+            AjusteItemVendaQuitada.MOTIVO_PRODUTO_FALTOU,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_ajuste_item_quitado_credito", kwargs={"pk": venda.id, "ajuste_id": ajuste.id}),
+            data={"confirmacao_credito": "CREDITO", "ciencia_credito": "1"},
+            secure=True,
+        )
+
+        self.assertRedirects(
+            resposta,
+            reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}) + "?credito_resolvido=1",
+            fetch_redirect_response=False,
+        )
+        credito = CreditoCliente.objects.get(cliente=cliente)
+        self.assertEqual(credito.valor, Decimal("28.00"))
+        self.assertEqual(credito.origem_conta_receber, conta)
+        self.assertIn(f"ajuste #{ajuste.id}", credito.observacao)
+        ajuste.refresh_from_db()
+        self.assertEqual(ajuste.status, AjusteItemVendaQuitada.STATUS_RESOLVIDO)
+        self.assertEqual(ajuste.resolucao_financeira, AjusteItemVendaQuitada.RESOLUCAO_CREDITO_CLIENTE)
+        self.assertTrue(
+            EventoVenda.objects.filter(
+                venda=venda,
+                tipo_evento="ajuste_item_quitado_resolvido_credito",
+                descricao__icontains="credito do cliente",
+            ).exists()
+        )
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        produto.refresh_from_db()
+        self.assertTrue(ItemVenda.objects.filter(pk=item.pk, venda=venda).exists())
+        self.assertEqual(venda.total, Decimal("28.00"))
+        self.assertEqual(conta.valor_original, Decimal("28.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_PAGA)
+        self.assertTrue(RecebimentoContaReceber.objects.filter(pk=recebimento.pk, conta=conta).exists())
+        self.assertEqual(produto.quantidade, 11)
+
+    def test_post_credito_nao_permite_resolver_duas_vezes(self):
+        cliente = Cliente.objects.create(nome="Cliente Credito Duplo", ativo=True)
+        produto = self._produto_teste("Produto Credito Duplo")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("19.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("19.00"),
+            valor_total=Decimal("19.00"),
+        )
+        ajuste = views.criar_ajuste_item_venda_quitada(
+            venda,
+            item,
+            AjusteItemVendaQuitada.MOTIVO_ITEM_NAO_ENTREGUE,
+        )
+        url = reverse("estoque:venda_ajuste_item_quitado_credito", kwargs={"pk": venda.id, "ajuste_id": ajuste.id})
+
+        primeira = self.client.post(
+            url,
+            data={"confirmacao_credito": "CREDITO", "ciencia_credito": "1"},
+            secure=True,
+        )
+        segunda = self.client.post(
+            url,
+            data={"confirmacao_credito": "CREDITO", "ciencia_credito": "1"},
+            secure=True,
+        )
+
+        self.assertEqual(primeira.status_code, 302)
+        self.assertRedirects(
+            segunda,
+            reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}) + "?credito_bloqueado=1",
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(CreditoCliente.objects.filter(cliente=cliente).count(), 1)
+
+    def test_post_credito_nao_resolve_ajuste_de_outra_venda(self):
+        cliente = Cliente.objects.create(nome="Cliente Credito Outra Venda", ativo=True)
+        produto = self._produto_teste("Produto Credito Outra Venda")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("12.00"),
+        )
+        outra_venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("12.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=outra_venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("12.00"),
+            valor_total=Decimal("12.00"),
+        )
+        ajuste = views.criar_ajuste_item_venda_quitada(
+            outra_venda,
+            item,
+            AjusteItemVendaQuitada.MOTIVO_ITEM_NAO_ENTREGUE,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_ajuste_item_quitado_credito", kwargs={"pk": venda.id, "ajuste_id": ajuste.id}),
+            data={"confirmacao_credito": "CREDITO", "ciencia_credito": "1"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 404)
+        self.assertEqual(CreditoCliente.objects.count(), 0)
+        ajuste.refresh_from_db()
+        self.assertEqual(ajuste.status, AjusteItemVendaQuitada.STATUS_PENDENTE)
 
     def test_tela_ajuste_item_quitado_so_permite_venda_quitada(self):
         cliente = Cliente.objects.create(nome="Cliente GET Ajuste Aberto", ativo=True)

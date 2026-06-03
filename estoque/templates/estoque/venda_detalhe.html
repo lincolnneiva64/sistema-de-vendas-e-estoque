@@ -241,6 +241,45 @@
             background: #fff7ed;
         }
 
+        .ajuste-pendente-lista a {
+            display: inline-flex;
+            margin-top: 5px;
+            min-height: 24px;
+            align-items: center;
+            border: 1px solid #16a34a;
+            border-radius: 7px;
+            padding: 0 7px;
+            background: #dcfce7;
+            color: #14532d;
+            font-size: 10.5px;
+            font-weight: 900;
+            text-decoration: none;
+        }
+
+        .itens-ajustados-section {
+            margin-top: 8px;
+            padding: 8px;
+            border: 1px solid #f7d98b;
+            border-radius: 10px;
+            background: #fff7ed;
+            color: #78350f;
+        }
+
+        .itens-ajustados-section h2 {
+            margin: 0 0 6px;
+            color: #78350f;
+            font-size: 12.5px;
+            font-weight: 950;
+        }
+
+        .itens-ajustados-section table {
+            background: #ffffff;
+        }
+
+        .total-ajustado {
+            color: #1e3a8a;
+        }
+
         .pendencia-resolvida-banner {
             margin-bottom: 10px;
             padding: 10px 12px;
@@ -1195,7 +1234,7 @@
                         </div>
                     {% endif %}
 
-                    {% if request.GET.nota_atualizada == "1" or request.GET.origem == "pendencias" or request.GET.edicao_bloqueada == "1" or request.GET.ajuste_registrado == "1" or request.GET.ajuste_bloqueado == "1" %}
+                    {% if request.GET.nota_atualizada == "1" or request.GET.origem == "pendencias" or request.GET.edicao_bloqueada == "1" or request.GET.ajuste_registrado == "1" or request.GET.ajuste_bloqueado == "1" or request.GET.credito_resolvido == "1" or request.GET.credito_bloqueado == "1" %}
                         {% for message in messages %}
                             <div class="nota-feedback {{ message.tags }}">{{ message }}</div>
                         {% endfor %}
@@ -1265,6 +1304,10 @@
                                 Motivo: {{ ajuste.get_motivo_display }}.
                                 Resolu&ccedil;&atilde;o: {{ ajuste.get_resolucao_financeira_display }}.
                                 Status: {{ ajuste.get_status_display }}.
+                                {% if ajuste.status != ajuste.STATUS_RESOLVIDO and ajuste.resolucao_financeira == ajuste.RESOLUCAO_NAO_DEFINIDA %}
+                                    <br>
+                                    <a href="{% url 'estoque:venda_ajuste_item_quitado_credito' venda.id ajuste.id %}">Resolver como cr&eacute;dito do cliente</a>
+                                {% endif %}
                             </li>
                             {% endfor %}
                         </ul>
@@ -1315,7 +1358,7 @@
                         {% endif %}
                     {% endif %}
 
-                    <table>
+                    <table class="tabela-itens-principais">
                         <colgroup>
                              <col style="width: 54%;">
                              <col style="width: 10%;">
@@ -1333,7 +1376,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for item in itens_nota %}
+                            {% for item in itens_nota_principais %}
                             <tr class="{% if item.id in itens_adicionados_destacar_ids %}item-adicionado-destaque{% elif item.id in alteracoes_pendentes_whatsapp.itens_quantidade_ids %}item-quantidade-destaque{% endif %}">
                                 <td>
                                     {{ item.produto.nome|default:"Produto nao identificado" }}
@@ -1349,14 +1392,80 @@
                                 <td class="numero">R$ {{ item.preco_unitario|floatformat:2 }}</td>
                                 <td class="numero">R$ {{ item.valor_total|floatformat:2 }}</td>
                             </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5">Nenhum item entregue/normal nesta nota.</td>
+                            </tr>
                             {% endfor %}
                         </tbody>
                     </table>
 
+                    {% if ajustes_itens_quitados %}
+                    <section class="itens-ajustados-section">
+                        <h2>Itens n&atilde;o entregues / n&atilde;o aceitos</h2>
+                        <table class="tabela-itens-ajustados">
+                            <colgroup>
+                                <col style="width: 34%;">
+                                <col style="width: 9%;">
+                                <col style="width: 7%;">
+                                <col style="width: 11%;">
+                                <col style="width: 11%;">
+                                <col style="width: 12%;">
+                                <col style="width: 8%;">
+                                <col style="width: 8%;">
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th>Produto</th>
+                                    <th class="numero">Qtd</th>
+                                    <th>Un</th>
+                                    <th class="numero">Preco</th>
+                                    <th class="numero">Valor</th>
+                                    <th>Motivo</th>
+                                    <th>Status</th>
+                                    <th>Resolucao</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for ajuste in ajustes_itens_quitados %}
+                                <tr>
+                                    <td>{{ ajuste.produto_nome_snapshot }}</td>
+                                    <td class="numero">{{ ajuste.quantidade_snapshot }}</td>
+                                    <td>{{ ajuste.unidade_snapshot|default:"-" }}</td>
+                                    <td class="numero">R$ {{ ajuste.preco_unitario_snapshot|floatformat:2 }}</td>
+                                    <td class="numero">R$ {{ ajuste.valor_total_snapshot|floatformat:2 }}</td>
+                                    <td>{{ ajuste.get_motivo_display }}</td>
+                                    <td>{{ ajuste.get_status_display }}</td>
+                                    <td>
+                                        {% if ajuste.resolucao_financeira == ajuste.RESOLUCAO_CREDITO_CLIENTE %}
+                                            Cr&eacute;dito gerado para o cliente: R$ {{ ajuste.diferenca_financeira|floatformat:2 }}
+                                        {% elif ajuste.resolucao_financeira == ajuste.RESOLUCAO_NAO_DEFINIDA %}
+                                            Resolu&ccedil;&atilde;o financeira pendente
+                                        {% else %}
+                                            {{ ajuste.get_resolucao_financeira_display }}
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </section>
+                    {% endif %}
+
                     <div class="total">
-                        <span>Total da venda</span>
+                        <span>Total original preservado</span>
                         <span>R$ {{ venda.total|floatformat:2 }}</span>
                     </div>
+                    {% if ajustes_itens_quitados %}
+                    <div class="total total-ajustado">
+                        <span>Itens n&atilde;o entregues/n&atilde;o aceitos</span>
+                        <span>R$ {{ total_ajustes_itens_quitados|floatformat:2 }}</span>
+                    </div>
+                    <div class="total total-ajustado">
+                        <span>Total ajustado/entregue</span>
+                        <span>R$ {{ total_ajustado_entregue|floatformat:2 }}</span>
+                    </div>
+                    {% endif %}
                     </div>
 
                     {% if request.GET.nota_atualizada != "1" and not modo_pendencia_resolvida %}
@@ -1449,7 +1558,7 @@
                         </div>
                     </div>
 
-                    <table>
+                    <table class="tabela-itens-principais">
                         <colgroup>
                              <col style="width: 54%;">
                              <col style="width: 10%;">
@@ -1467,7 +1576,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for item in itens_nota %}
+                            {% for item in itens_nota_principais %}
                             <tr class="{% if item.id in itens_adicionados_destacar_ids %}item-adicionado-destaque{% elif item.id in alteracoes_pendentes_whatsapp.itens_quantidade_ids %}item-quantidade-destaque{% endif %}">
                                 <td>
                                     {{ item.produto.nome|default:"Produto nao identificado" }}
@@ -1483,14 +1592,28 @@
                                 <td class="numero">R$ {{ item.preco_unitario|floatformat:2 }}</td>
                                 <td class="numero">R$ {{ item.valor_total|floatformat:2 }}</td>
                             </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5">Nenhum item entregue/normal nesta nota.</td>
+                            </tr>
                             {% endfor %}
                         </tbody>
                     </table>
 
                     <div class="total">
-                        <span>Total da venda</span>
+                        <span>Total original preservado</span>
                         <span>R$ {{ venda.total|floatformat:2 }}</span>
                     </div>
+                    {% if ajustes_itens_quitados %}
+                    <div class="total total-ajustado">
+                        <span>Itens n&atilde;o entregues/n&atilde;o aceitos</span>
+                        <span>R$ {{ total_ajustes_itens_quitados|floatformat:2 }}</span>
+                    </div>
+                    <div class="total total-ajustado">
+                        <span>Total ajustado/entregue</span>
+                        <span>R$ {{ total_ajustado_entregue|floatformat:2 }}</span>
+                    </div>
+                    {% endif %}
                 </section>
             </article>
         </div>

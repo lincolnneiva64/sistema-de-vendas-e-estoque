@@ -4828,18 +4828,42 @@ def venda_detalhe(request, pk):
     contexto_pendencia_resolvida = contexto_pendencia_resolvida_nota(request, venda)
     modo_pendencia_resolvida = contexto_pendencia_resolvida is not None
     contexto_venda_quitada = _contexto_venda_quitada(venda, conta_receber)
-    ajustes_itens_quitados_pendentes = list(
+    ajustes_itens_quitados = list(
         AjusteItemVendaQuitada.objects.filter(venda=venda)
-        .filter(
-            Q(status__in=[
-                AjusteItemVendaQuitada.STATUS_RASCUNHO,
-                AjusteItemVendaQuitada.STATUS_PENDENTE,
-            ])
-            | Q(resolucao_financeira=AjusteItemVendaQuitada.RESOLUCAO_NAO_DEFINIDA)
-        )
+        .exclude(status=AjusteItemVendaQuitada.STATUS_CANCELADO)
         .select_related("item_venda", "produto")
-        .order_by("-criado_em", "-id")
+        .order_by("item_venda_id", "-criado_em", "-id")
     )
+    item_ids_ajustados = {
+        ajuste.item_venda_id
+        for ajuste in ajustes_itens_quitados
+        if ajuste.item_venda_id
+    }
+    itens_nota_principais = [
+        item
+        for item in itens_nota
+        if item.id not in item_ids_ajustados
+    ]
+    total_ajustes_itens_quitados = sum(
+        (
+            ajuste.diferenca_financeira or Decimal("0.00")
+            for ajuste in ajustes_itens_quitados
+        ),
+        Decimal("0.00"),
+    ).quantize(Decimal("0.01"))
+    total_ajustado_entregue = max(
+        ((venda.total or Decimal("0.00")) - total_ajustes_itens_quitados).quantize(Decimal("0.01")),
+        Decimal("0.00"),
+    )
+    ajustes_itens_quitados_pendentes = [
+        ajuste
+        for ajuste in ajustes_itens_quitados
+        if ajuste.status in {
+            AjusteItemVendaQuitada.STATUS_RASCUNHO,
+            AjusteItemVendaQuitada.STATUS_PENDENTE,
+        }
+        or ajuste.resolucao_financeira == AjusteItemVendaQuitada.RESOLUCAO_NAO_DEFINIDA
+    ]
 
     # Verificar se venda já tem entrega/rota
     entrega_existente = EntregaRotaItem.objects.filter(venda=venda).select_related("rota").first()
@@ -4883,6 +4907,10 @@ def venda_detalhe(request, pk):
             "itens_adicionados_destacar_ids": itens_adicionados_destacar_ids,
             "itens_adicionados_param": itens_adicionados_param,
             "itens_nota": itens_nota,
+            "itens_nota_principais": itens_nota_principais,
+            "ajustes_itens_quitados": ajustes_itens_quitados,
+            "total_ajustes_itens_quitados": total_ajustes_itens_quitados,
+            "total_ajustado_entregue": total_ajustado_entregue,
             "whatsapp_atualizacao": whatsapp_atualizacao,
             "alteracoes_pendentes_whatsapp": alteracoes_pendentes_whatsapp,
             "conta_receber": conta_receber,
@@ -5081,6 +5109,97 @@ def venda_ajuste_item_quitado(request, pk):
             "valores": valores,
             "contexto_venda_quitada": contexto_venda_quitada,
             "ajustes_pendentes_item_ids": ajustes_pendentes_item_ids,
+        },
+    )
+
+
+def venda_ajuste_item_quitado_credito(request, pk, ajuste_id):
+    venda = get_object_or_404(
+        Venda.objects.select_related("cliente"),
+        pk=pk,
+    )
+    detalhe_url = reverse("estoque:venda_detalhe", kwargs={"pk": venda.pk})
+    ajuste = get_object_or_404(
+        AjusteItemVendaQuitada.objects.select_related("item_venda", "produto", "cliente", "venda"),
+        pk=ajuste_id,
+        venda=venda,
+    )
+
+    if not venda.cliente_id:
+        messages.warning(request, "Nao e possivel gerar credito sem cliente vinculado a venda.")
+        return redirect(f"{detalhe_url}?credito_bloqueado=1")
+
+    if (
+        ajuste.status == AjusteItemVendaQuitada.STATUS_RESOLVIDO
+        or ajuste.resolucao_financeira != AjusteItemVendaQuitada.RESOLUCAO_NAO_DEFINIDA
+    ):
+        messages.warning(request, "Este ajuste ja foi resolvido.")
+        return redirect(f"{detalhe_url}?credito_bloqueado=1")
+
+    confirmacao_credito = ""
+    ciencia_credito = ""
+    if request.method == "POST":
+        confirmacao_credito = request.POST.get("confirmacao_credito", "")
+        ciencia_credito = request.POST.get("ciencia_credito", "")
+        if confirmacao_credito.strip().upper() != "CREDITO":
+            messages.warning(request, "Digite CREDITO exatamente para confirmar a geracao do credito.")
+        elif ciencia_credito != "1":
+            messages.warning(request, "Marque a ciencia de que item, venda, conta e recebimentos serao preservados.")
+        else:
+            with transaction.atomic():
+                ajuste_locked = (
+                    AjusteItemVendaQuitada.objects.select_for_update()
+                    .get(pk=ajuste.pk, venda_id=venda.pk)
+                )
+                if (
+                    ajuste_locked.status == AjusteItemVendaQuitada.STATUS_RESOLVIDO
+                    or ajuste_locked.resolucao_financeira != AjusteItemVendaQuitada.RESOLUCAO_NAO_DEFINIDA
+                ):
+                    messages.warning(request, "Este ajuste ja foi resolvido.")
+                    return redirect(f"{detalhe_url}?credito_bloqueado=1")
+
+                valor_credito = (ajuste_locked.diferenca_financeira or Decimal("0.00")).quantize(Decimal("0.01"))
+                conta_receber = _conta_receber_da_venda(venda)
+                credito = CreditoCliente.objects.create(
+                    cliente=venda.cliente,
+                    valor=valor_credito,
+                    tipo=CreditoCliente.TIPO_CREDITO_GERADO,
+                    origem_conta_receber=conta_receber,
+                    observacao=(
+                        f"Credito gerado pela resolucao do ajuste #{ajuste_locked.id} "
+                        f"da venda #{venda.id}: {ajuste_locked.produto_nome_snapshot}."
+                    ),
+                )
+                ajuste_locked.resolucao_financeira = AjusteItemVendaQuitada.RESOLUCAO_CREDITO_CLIENTE
+                ajuste_locked.status = AjusteItemVendaQuitada.STATUS_RESOLVIDO
+                ajuste_locked.save(update_fields=["resolucao_financeira", "status", "atualizado_em"])
+                quantidade_texto = _formatar_quantidade(ajuste_locked.quantidade_snapshot)
+                unidade_texto = (ajuste_locked.unidade_snapshot or "").strip()
+                quantidade_unidade = f"{quantidade_texto} {unidade_texto}".strip()
+                _registrar_evento_venda(
+                    venda,
+                    "ajuste_item_quitado_resolvido_credito",
+                    (
+                        f"Ajuste de item em venda quitada resolvido como credito do cliente: "
+                        f"{ajuste_locked.produto_nome_snapshot}, quantidade {quantidade_unidade}, "
+                        f"credito gerado {_formatar_moeda(valor_credito)} (credito #{credito.id}). "
+                        f"Item, venda, conta a receber, recebimentos e estoque foram preservados."
+                    ),
+                    canal="sistema",
+                    usuario=ajuste_locked.operador or venda.operador,
+                )
+
+            messages.success(request, "Credito do cliente gerado e ajuste marcado como resolvido.")
+            return redirect(f"{detalhe_url}?credito_resolvido=1")
+
+    return render(
+        request,
+        "estoque/venda_ajuste_item_quitado_credito.html",
+        {
+            "venda": venda,
+            "ajuste": ajuste,
+            "confirmacao_credito": confirmacao_credito,
+            "ciencia_credito": ciencia_credito,
         },
     )
 

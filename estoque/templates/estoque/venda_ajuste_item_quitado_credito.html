@@ -1,0 +1,128 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Resolver ajuste como crédito{% endblock %}
+{% block content %}
+<style>
+  .credit-page { color: #172033; padding: 12px 0 28px; }
+  .credit-shell { max-width: 920px; margin: 0 auto; padding: 0 14px; }
+  .credit-card {
+    background: #fff; border: 1px solid #f7d98b; border-radius: 13px;
+    box-shadow: 0 12px 28px rgba(120, 53, 15, 0.08); overflow: hidden;
+  }
+  .credit-head {
+    padding: 12px; border-bottom: 1px solid #f7d98b; background: #fffbeb;
+    display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  }
+  .credit-title { margin: 0; color: #78350f; font-size: 1.08rem; font-weight: 950; }
+  .credit-subtitle { margin: 3px 0 0; color: #92400e; font-size: 0.82rem; font-weight: 800; }
+  .credit-body { padding: 10px 12px; display: grid; gap: 10px; }
+  .credit-alert {
+    border: 1px solid #f7d98b; border-radius: 10px; background: #fff7ed;
+    color: #92400e; padding: 9px 10px; font-size: 0.84rem; font-weight: 900; line-height: 1.3;
+  }
+  .credit-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .credit-field { border: 1px solid #edf1f6; border-radius: 8px; background: #fbfdff; padding: 7px 9px; }
+  .credit-field.highlight { border-color: #86efac; background: #f0fdf4; color: #14532d; }
+  .credit-label { display: block; color: #64748b; font-size: 0.66rem; font-weight: 900; text-transform: uppercase; }
+  .credit-value { display: block; margin-top: 2px; color: #111827; font-size: 0.86rem; font-weight: 900; overflow-wrap: anywhere; }
+  .credit-field.highlight .credit-value { color: #14532d; font-size: 1rem; }
+  .credit-confirm-box {
+    border: 1px solid #f7d98b; border-radius: 10px; background: #fffbeb;
+    padding: 9px 10px; display: grid; gap: 5px;
+  }
+  .credit-confirm-box strong { color: #78350f; font-size: 0.88rem; }
+  .credit-confirm-box input[type="text"] {
+    min-height: 34px; border: 1px solid #d97706; border-radius: 8px;
+    padding: 7px 9px; color: #0f172a; font: inherit; font-weight: 900;
+    text-transform: uppercase;
+  }
+  .credit-awareness {
+    display: flex; align-items: flex-start; gap: 8px; color: #78350f;
+    font-size: 0.78rem; font-weight: 900; line-height: 1.3;
+  }
+  .credit-awareness input { margin-top: 2px; accent-color: #d97706; }
+  .credit-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  .credit-btn {
+    min-height: 34px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 7px 12px;
+    background: #fff; color: #0f172a; font-size: 0.82rem; font-weight: 900;
+    text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08); font-family: inherit;
+  }
+  .credit-btn.primary { border-color: #16a34a; background: #16a34a; color: #fff; }
+  .credit-message {
+    border: 1px solid #f7d98b; border-radius: 10px; background: #fff7ed;
+    color: #92400e; padding: 7px 9px; font-size: 0.82rem; font-weight: 850;
+  }
+  @media (max-width: 720px) {
+    .credit-grid { grid-template-columns: 1fr; }
+    .credit-actions { justify-content: stretch; }
+    .credit-btn { width: 100%; }
+  }
+</style>
+
+<main class="credit-page">
+  <div class="credit-shell">
+    <section class="credit-card">
+      <header class="credit-head">
+        <div>
+          <h1 class="credit-title">Resolver ajuste como crédito do cliente</h1>
+          <p class="credit-subtitle">Venda #{{ venda.id }} - ajuste #{{ ajuste.id }}</p>
+        </div>
+        <a class="credit-btn" href="{% url 'estoque:venda_detalhe' venda.id %}">Voltar para a venda</a>
+      </header>
+
+      <div class="credit-body">
+        {% for message in messages %}
+          <div class="credit-message {{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+
+        <div class="credit-alert">
+          Esta confirmação gera crédito para o cliente no valor da diferença financeira. Item, venda, conta a receber e recebimentos não serão apagados ou alterados. Estoque também não será alterado nesta etapa.
+        </div>
+
+        <section class="credit-grid" aria-label="Dados do ajuste">
+          <div class="credit-field">
+            <span class="credit-label">Venda</span>
+            <span class="credit-value">#{{ venda.id }}</span>
+          </div>
+          <div class="credit-field">
+            <span class="credit-label">Cliente</span>
+            <span class="credit-value">{{ venda.cliente.nome|default:"Consumidor" }}</span>
+          </div>
+          <div class="credit-field">
+            <span class="credit-label">Produto</span>
+            <span class="credit-value">{{ ajuste.produto_nome_snapshot }}</span>
+          </div>
+          <div class="credit-field">
+            <span class="credit-label">Quantidade</span>
+            <span class="credit-value">{{ ajuste.quantidade_snapshot }} {{ ajuste.unidade_snapshot|default:"" }}</span>
+          </div>
+          <div class="credit-field">
+            <span class="credit-label">Motivo</span>
+            <span class="credit-value">{{ ajuste.get_motivo_display }}</span>
+          </div>
+          <div class="credit-field highlight">
+            <span class="credit-label">Valor do crédito</span>
+            <span class="credit-value">R$ {{ ajuste.diferenca_financeira|floatformat:2 }}</span>
+          </div>
+        </section>
+
+        <form method="post">
+          {% csrf_token %}
+          <div class="credit-confirm-box">
+            <strong>Digite CREDITO para confirmar.</strong>
+            <input type="text" name="confirmacao_credito" value="{{ confirmacao_credito }}" autocomplete="off">
+            <label class="credit-awareness">
+              <input type="checkbox" name="ciencia_credito" value="1" {% if ciencia_credito == "1" %}checked{% endif %}>
+              Estou ciente de que esta ação gera crédito para o cliente e não altera item, venda, conta, recebimentos ou estoque.
+            </label>
+          </div>
+          <div class="credit-actions">
+            <a class="credit-btn" href="{% url 'estoque:venda_detalhe' venda.id %}">Cancelar / Voltar</a>
+            <button class="credit-btn primary" type="submit">Gerar crédito do cliente</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </div>
+</main>
+{% endblock %}
