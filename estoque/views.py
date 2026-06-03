@@ -22,7 +22,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count
 from .forms import CategoriaForm, ClienteForm, FuncionarioForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -4945,6 +4945,40 @@ def _contexto_venda_quitada(venda, conta_receber=None):
         "motivos": motivos,
         "resumo": " ".join(motivos),
     }
+
+
+def criar_ajuste_item_venda_quitada(
+    venda,
+    item_venda,
+    motivo,
+    observacao="",
+    operador="",
+):
+    if item_venda.venda_id != venda.id:
+        raise ValueError("O item informado nao pertence a venda do ajuste.")
+    if not _contexto_venda_quitada(venda).get("quitada"):
+        raise ValueError("Ajuste de item quitado permitido apenas para venda quitada.")
+
+    produto = item_venda.produto
+    produto_nome = produto.nome if produto else "Produto nao identificado"
+    valor_total = (item_venda.valor_total or Decimal("0.00")).quantize(Decimal("0.01"))
+    return AjusteItemVendaQuitada.objects.create(
+        venda=venda,
+        item_venda=item_venda,
+        cliente=venda.cliente,
+        produto=produto,
+        produto_nome_snapshot=produto_nome,
+        quantidade_snapshot=item_venda.quantidade,
+        unidade_snapshot=item_venda.unidade or "",
+        preco_unitario_snapshot=item_venda.preco_unitario,
+        valor_total_snapshot=valor_total,
+        motivo=motivo,
+        observacao=observacao,
+        diferenca_financeira=valor_total,
+        resolucao_financeira=AjusteItemVendaQuitada.RESOLUCAO_NAO_DEFINIDA,
+        status=AjusteItemVendaQuitada.STATUS_PENDENTE,
+        operador=operador or venda.operador or "",
+    )
 
 
 def _sincronizar_conta_receber(venda, observacao_origem="", permitir_reabrir_cancelada=False):

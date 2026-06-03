@@ -16,7 +16,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FuncionarioForm, PixRecebidoForm
-from .models import Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, PixRecebido, Produto, RecebimentoContaReceber, Venda
+from .models import AjusteItemVendaQuitada, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, PixRecebido, Produto, RecebimentoContaReceber, Venda
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
 from . import views
 
@@ -709,6 +709,144 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertNotContains(resposta, "VENDA J&Aacute; QUITADA / RECEBIMENTOS REGISTRADOS")
         self.assertNotContains(resposta, "Esta nota j&aacute; possui pagamento registrado")
+
+    def test_ajuste_item_venda_quitada_cria_snapshot_sem_alterar_dados_existentes(self):
+        cliente = Cliente.objects.create(nome="Cliente Ajuste Quitado", ativo=True)
+        produto = self._produto_teste("Coca Cola Ajuste Quitado")
+        produto.quantidade = 10
+        produto.save()
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            operador="Operador Ajuste",
+            total=Decimal("25.50"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("3.000"),
+            unidade="un",
+            preco_unitario=Decimal("8.50"),
+            valor_total=Decimal("25.50"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("25.50"),
+            valor_em_aberto=Decimal("0.00"),
+            status=ContaReceber.STATUS_PAGA,
+        )
+        recebimento = RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=timezone.localdate(),
+            valor=Decimal("25.50"),
+            forma_pagamento="PIX",
+        )
+
+        ajuste = views.criar_ajuste_item_venda_quitada(
+            venda,
+            item,
+            AjusteItemVendaQuitada.MOTIVO_ITEM_NAO_ENTREGUE,
+            observacao="Cliente nao recebeu o item.",
+        )
+
+        venda.refresh_from_db()
+        item.refresh_from_db()
+        conta.refresh_from_db()
+        produto.refresh_from_db()
+        self.assertTrue(ItemVenda.objects.filter(pk=item.pk, venda=venda).exists())
+        self.assertEqual(venda.total, Decimal("25.50"))
+        self.assertEqual(conta.valor_original, Decimal("25.50"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_PAGA)
+        self.assertTrue(RecebimentoContaReceber.objects.filter(pk=recebimento.pk, conta=conta).exists())
+        self.assertEqual(produto.quantidade, 10)
+        self.assertEqual(CreditoCliente.objects.count(), 0)
+        self.assertEqual(ajuste.venda, venda)
+        self.assertEqual(ajuste.item_venda, item)
+        self.assertEqual(ajuste.cliente, cliente)
+        self.assertEqual(ajuste.produto, produto)
+        self.assertEqual(ajuste.produto_nome_snapshot, "Coca Cola Ajuste Quitado")
+        self.assertEqual(ajuste.quantidade_snapshot, Decimal("3.000"))
+        self.assertEqual(ajuste.unidade_snapshot, "un")
+        self.assertEqual(ajuste.preco_unitario_snapshot, Decimal("8.50"))
+        self.assertEqual(ajuste.valor_total_snapshot, Decimal("25.50"))
+        self.assertEqual(ajuste.diferenca_financeira, Decimal("25.50"))
+        self.assertEqual(ajuste.resolucao_financeira, AjusteItemVendaQuitada.RESOLUCAO_NAO_DEFINIDA)
+        self.assertEqual(ajuste.status, AjusteItemVendaQuitada.STATUS_PENDENTE)
+        self.assertEqual(ajuste.operador, "Operador Ajuste")
+
+    def test_ajuste_item_venda_quitada_nao_permite_item_de_outra_venda(self):
+        cliente = Cliente.objects.create(nome="Cliente Item Outra Venda", ativo=True)
+        produto = self._produto_teste("Produto Item Outra Venda")
+        venda_quitada = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("10.00"),
+        )
+        outra_venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("10.00"),
+        )
+        item_outra_venda = ItemVenda.objects.create(
+            venda=outra_venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("10.00"),
+        )
+
+        with self.assertRaisesMessage(ValueError, "O item informado nao pertence a venda do ajuste."):
+            views.criar_ajuste_item_venda_quitada(
+                venda_quitada,
+                item_outra_venda,
+                AjusteItemVendaQuitada.MOTIVO_CLIENTE_RECUSOU,
+            )
+
+        self.assertEqual(AjusteItemVendaQuitada.objects.count(), 0)
+
+    def test_ajuste_item_venda_quitada_exige_venda_quitada(self):
+        cliente = Cliente.objects.create(nome="Cliente Ajuste Venda Aberta", ativo=True)
+        produto = self._produto_teste("Produto Ajuste Venda Aberta")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("10.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("10.00"),
+        )
+        ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("10.00"),
+            valor_em_aberto=Decimal("10.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+
+        with self.assertRaisesMessage(ValueError, "Ajuste de item quitado permitido apenas para venda quitada."):
+            views.criar_ajuste_item_venda_quitada(
+                venda,
+                item,
+                AjusteItemVendaQuitada.MOTIVO_PRODUTO_FALTOU,
+            )
+
+        venda.refresh_from_db()
+        self.assertEqual(venda.total, Decimal("10.00"))
+        self.assertEqual(AjusteItemVendaQuitada.objects.count(), 0)
 
     def test_remover_item_da_nota_resolve_pendencia_de_entrega_do_item(self):
         cliente = Cliente.objects.create(nome="Cliente Entrega", ativo=True)

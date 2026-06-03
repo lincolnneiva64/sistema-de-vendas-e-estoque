@@ -565,6 +565,93 @@ class CreditoCliente(models.Model):
         return f"Credito R$ {self.valor} - {self.cliente}"
 
 
+class AjusteItemVendaQuitada(models.Model):
+    MOTIVO_ITEM_NAO_ENTREGUE = "item_nao_entregue"
+    MOTIVO_CLIENTE_RECUSOU = "cliente_recusou"
+    MOTIVO_PRODUTO_FALTOU = "produto_faltou"
+    MOTIVO_SUBSTITUICAO = "substituicao"
+    MOTIVO_OUTRO = "outro"
+    MOTIVO_CHOICES = [
+        (MOTIVO_ITEM_NAO_ENTREGUE, "Item nao entregue"),
+        (MOTIVO_CLIENTE_RECUSOU, "Cliente recusou"),
+        (MOTIVO_PRODUTO_FALTOU, "Produto faltou"),
+        (MOTIVO_SUBSTITUICAO, "Substituicao"),
+        (MOTIVO_OUTRO, "Outro"),
+    ]
+
+    RESOLUCAO_NAO_DEFINIDA = "nao_definida"
+    RESOLUCAO_CHOICES = [
+        (RESOLUCAO_NAO_DEFINIDA, "Nao definida"),
+    ]
+
+    STATUS_RASCUNHO = "rascunho"
+    STATUS_PENDENTE = "pendente"
+    STATUS_RESOLVIDO = "resolvido"
+    STATUS_CANCELADO = "cancelado"
+    STATUS_CHOICES = [
+        (STATUS_RASCUNHO, "Rascunho"),
+        (STATUS_PENDENTE, "Pendente"),
+        (STATUS_RESOLVIDO, "Resolvido"),
+        (STATUS_CANCELADO, "Cancelado"),
+    ]
+
+    venda = models.ForeignKey(
+        Venda,
+        on_delete=models.CASCADE,
+        related_name="ajustes_itens_quitados",
+    )
+    item_venda = models.ForeignKey(
+        ItemVenda,
+        on_delete=models.PROTECT,
+        related_name="ajustes_quitados",
+    )
+    cliente = models.ForeignKey(
+        Cliente,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="ajustes_itens_quitados",
+    )
+    produto = models.ForeignKey(
+        Produto,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="ajustes_itens_quitados",
+    )
+    produto_nome_snapshot = models.CharField(max_length=120)
+    quantidade_snapshot = models.DecimalField(max_digits=12, decimal_places=3)
+    unidade_snapshot = models.CharField(max_length=20, blank=True)
+    preco_unitario_snapshot = models.DecimalField(max_digits=12, decimal_places=2)
+    valor_total_snapshot = models.DecimalField(max_digits=12, decimal_places=2)
+    motivo = models.CharField(max_length=30, choices=MOTIVO_CHOICES)
+    observacao = models.TextField(blank=True)
+    diferenca_financeira = models.DecimalField(max_digits=12, decimal_places=2)
+    resolucao_financeira = models.CharField(
+        max_length=30,
+        choices=RESOLUCAO_CHOICES,
+        default=RESOLUCAO_NAO_DEFINIDA,
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDENTE)
+    operador = models.CharField(max_length=120, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-criado_em", "-id"]
+
+    def clean(self):
+        if self.item_venda_id and self.venda_id and self.item_venda.venda_id != self.venda_id:
+            raise ValidationError("O item informado nao pertence a venda do ajuste.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Ajuste de item quitado - Venda #{self.venda_id}"
+
+
 class EntregaRota(models.Model):
     TIPO_UNITARIA = "unitaria"
     TIPO_ROTA = "rota"
