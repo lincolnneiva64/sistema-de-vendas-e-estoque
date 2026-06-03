@@ -4828,6 +4828,18 @@ def venda_detalhe(request, pk):
     contexto_pendencia_resolvida = contexto_pendencia_resolvida_nota(request, venda)
     modo_pendencia_resolvida = contexto_pendencia_resolvida is not None
     contexto_venda_quitada = _contexto_venda_quitada(venda, conta_receber)
+    ajustes_itens_quitados_pendentes = list(
+        AjusteItemVendaQuitada.objects.filter(venda=venda)
+        .filter(
+            Q(status__in=[
+                AjusteItemVendaQuitada.STATUS_RASCUNHO,
+                AjusteItemVendaQuitada.STATUS_PENDENTE,
+            ])
+            | Q(resolucao_financeira=AjusteItemVendaQuitada.RESOLUCAO_NAO_DEFINIDA)
+        )
+        .select_related("item_venda", "produto")
+        .order_by("-criado_em", "-id")
+    )
 
     # Verificar se venda já tem entrega/rota
     entrega_existente = EntregaRotaItem.objects.filter(venda=venda).select_related("rota").first()
@@ -4875,6 +4887,7 @@ def venda_detalhe(request, pk):
             "alteracoes_pendentes_whatsapp": alteracoes_pendentes_whatsapp,
             "conta_receber": conta_receber,
             "contexto_venda_quitada": contexto_venda_quitada,
+            "ajustes_itens_quitados_pendentes": ajustes_itens_quitados_pendentes,
             "venda_a_prazo": _venda_a_prazo(venda),
             "retorno_url": retorno_url,
             "retorno_querystring": _querystring_retorno(retorno_url),
@@ -4978,6 +4991,97 @@ def criar_ajuste_item_venda_quitada(
         resolucao_financeira=AjusteItemVendaQuitada.RESOLUCAO_NAO_DEFINIDA,
         status=AjusteItemVendaQuitada.STATUS_PENDENTE,
         operador=operador or venda.operador or "",
+    )
+
+
+def venda_ajuste_item_quitado(request, pk):
+    venda = get_object_or_404(
+        Venda.objects.select_related("cliente").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+    bloqueio = _bloquear_venda_cancelada(request, venda)
+    if bloqueio:
+        return bloqueio
+
+    contexto_venda_quitada = _contexto_venda_quitada(venda)
+    detalhe_url = reverse("estoque:venda_detalhe", kwargs={"pk": venda.pk})
+    if not contexto_venda_quitada.get("quitada"):
+        messages.warning(request, "Este fluxo e permitido apenas para venda quitada/paga.")
+        return redirect(f"{detalhe_url}?ajuste_bloqueado=1")
+
+    itens_nota = sorted(
+        list(venda.itens.all()),
+        key=lambda item: ((item.produto.nome if item.produto else "Produto nao identificado").casefold(), item.id),
+    )
+    ajustes_pendentes_item_ids = set(
+        AjusteItemVendaQuitada.objects.filter(
+            venda=venda,
+            status=AjusteItemVendaQuitada.STATUS_PENDENTE,
+        ).values_list("item_venda_id", flat=True)
+    )
+    motivos = AjusteItemVendaQuitada.MOTIVO_CHOICES
+    valores = {
+        "item_id": "",
+        "motivo": AjusteItemVendaQuitada.MOTIVO_ITEM_NAO_ENTREGUE,
+        "observacao": "",
+    }
+
+    if request.method == "POST":
+        valores["item_id"] = request.POST.get("item_id", "").strip()
+        valores["motivo"] = request.POST.get("motivo", "").strip()
+        valores["observacao"] = request.POST.get("observacao", "").strip()
+        item_venda = ItemVenda.objects.filter(pk=valores["item_id"]).select_related("produto").first()
+        motivo_valido = valores["motivo"] in dict(motivos)
+
+        if not item_venda or item_venda.venda_id != venda.id:
+            messages.warning(request, "Selecione um item valido desta venda.")
+        elif not motivo_valido:
+            messages.warning(request, "Selecione um motivo valido para o ajuste.")
+        elif valores["motivo"] == AjusteItemVendaQuitada.MOTIVO_OUTRO and not valores["observacao"]:
+            messages.warning(request, "Informe uma observacao quando o motivo for outro.")
+        elif item_venda.id in ajustes_pendentes_item_ids:
+            messages.warning(request, "Ja existe ajuste pendente para este item desta venda.")
+        else:
+            with transaction.atomic():
+                ajuste = criar_ajuste_item_venda_quitada(
+                    venda,
+                    item_venda,
+                    valores["motivo"],
+                    observacao=valores["observacao"],
+                )
+                motivo_texto = dict(AjusteItemVendaQuitada.MOTIVO_CHOICES).get(
+                    ajuste.motivo,
+                    ajuste.motivo,
+                )
+                quantidade_texto = _formatar_quantidade(ajuste.quantidade_snapshot)
+                unidade_texto = (ajuste.unidade_snapshot or "").strip()
+                quantidade_unidade = f"{quantidade_texto} {unidade_texto}".strip()
+                _registrar_evento_venda(
+                    venda,
+                    "ajuste_item_quitado_registrado",
+                    (
+                        f"Ajuste de item em venda quitada registrado: {ajuste.produto_nome_snapshot}, "
+                        f"quantidade {quantidade_unidade}, valor {_formatar_moeda(ajuste.valor_total_snapshot)}. "
+                        f"Motivo: {motivo_texto}. Resolucao financeira pendente; estoque, conta e recebimentos nao foram alterados."
+                    ),
+                    canal="sistema",
+                    usuario=ajuste.operador,
+                )
+
+            messages.success(request, "Ajuste registrado com resolucao financeira pendente.")
+            return redirect(f"{detalhe_url}?ajuste_registrado=1")
+
+    return render(
+        request,
+        "estoque/venda_ajuste_item_quitado.html",
+        {
+            "venda": venda,
+            "itens_nota": itens_nota,
+            "motivos": motivos,
+            "valores": valores,
+            "contexto_venda_quitada": contexto_venda_quitada,
+            "ajustes_pendentes_item_ids": ajustes_pendentes_item_ids,
+        },
     )
 
 

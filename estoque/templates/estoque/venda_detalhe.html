@@ -206,6 +206,41 @@
             font-weight: 950;
         }
 
+        .ajuste-pendente-banner {
+            margin: 0 0 10px;
+            padding: 9px 11px;
+            border: 2px solid #d97706;
+            border-radius: 10px;
+            background: #fffbeb;
+            color: #78350f;
+            font-size: 12px;
+            font-weight: 850;
+            line-height: 1.3;
+            box-shadow: 0 8px 18px rgba(217, 119, 6, 0.12);
+        }
+
+        .ajuste-pendente-banner strong {
+            display: block;
+            margin-bottom: 2px;
+            font-size: 12.5px;
+            font-weight: 950;
+        }
+
+        .ajuste-pendente-lista {
+            margin: 7px 0 0;
+            padding: 0;
+            list-style: none;
+            display: grid;
+            gap: 5px;
+        }
+
+        .ajuste-pendente-lista li {
+            padding: 6px 7px;
+            border: 1px solid #fcd34d;
+            border-radius: 8px;
+            background: #fff7ed;
+        }
+
         .pendencia-resolvida-banner {
             margin-bottom: 10px;
             padding: 10px 12px;
@@ -251,6 +286,12 @@
             color: #92400e;
             font-size: 9.5px;
             font-weight: 800;
+        }
+
+        .ajuste-quitado-acao {
+            border-color: #d97706 !important;
+            background: #fffbeb !important;
+            color: #78350f !important;
         }
 
         .edit-review-whatsapp {
@@ -1044,8 +1085,9 @@
                         {% if contexto_venda_quitada.quitada %}
                         <span class="editar-nota-bloqueada">
                             Venda quitada: edicao comum bloqueada.
-                            <small>Para produto nao entregue/nao aceito, use futuramente o fluxo proprio de ajuste financeiro/estoque.</small>
+                            <small>Para produto nao entregue/nao aceito, use o fluxo proprio de ajuste financeiro/estoque.</small>
                         </span>
+                        <a href="{% url 'estoque:venda_ajuste_item_quitado' venda.id %}" class="ajuste-quitado-acao">Resolver item nao entregue/nao aceito</a>
                         {% else %}
                         <a href="{% url 'estoque:venda_editar_revisao' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}" class="editar-nota-acao">Editar nota</a>
                         <a href="{% url 'estoque:venda_editar_cabecalho' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}" class="editar-nota-acao">Editar cabeçalho</a>
@@ -1153,7 +1195,7 @@
                         </div>
                     {% endif %}
 
-                    {% if request.GET.nota_atualizada == "1" or request.GET.origem == "pendencias" or request.GET.edicao_bloqueada == "1" %}
+                    {% if request.GET.nota_atualizada == "1" or request.GET.origem == "pendencias" or request.GET.edicao_bloqueada == "1" or request.GET.ajuste_registrado == "1" or request.GET.ajuste_bloqueado == "1" %}
                         {% for message in messages %}
                             <div class="nota-feedback {{ message.tags }}">{{ message }}</div>
                         {% endfor %}
@@ -1208,6 +1250,25 @@
                     </div>
 
                     {% endif %}
+                    {% endif %}
+
+                    {% if ajustes_itens_quitados_pendentes %}
+                    <div class="ajuste-pendente-banner">
+                        <strong>AJUSTE PENDENTE EM VENDA QUITADA</strong>
+                        Existe item registrado como n&atilde;o entregue/n&atilde;o aceito. A resolu&ccedil;&atilde;o financeira ainda est&aacute; pendente.
+                        <ul class="ajuste-pendente-lista">
+                            {% for ajuste in ajustes_itens_quitados_pendentes %}
+                            <li>
+                                {{ ajuste.produto_nome_snapshot }} -
+                                {{ ajuste.quantidade_snapshot }} {{ ajuste.unidade_snapshot|default:"" }}
+                                (R$ {{ ajuste.valor_total_snapshot|floatformat:2 }}).
+                                Motivo: {{ ajuste.get_motivo_display }}.
+                                Resolu&ccedil;&atilde;o: {{ ajuste.get_resolucao_financeira_display }}.
+                                Status: {{ ajuste.get_status_display }}.
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
                     {% endif %}
 
                     <div class="venda-nota-corpo">
