@@ -1737,8 +1737,18 @@ def _resumo_cliente_venda(cliente, hoje=None):
 def clientes_autocomplete(request):
     termo = request.GET.get("q", "").strip()
     contexto = request.GET.get("contexto", "").strip()
+    cliente_id = request.GET.get("cliente_id", "").strip()
     clientes_qs = Cliente.objects.filter(ativo=True).order_by("nome")
     hoje = timezone.localdate()
+
+    if cliente_id.isdigit():
+        cliente = clientes_qs.filter(pk=cliente_id).first()
+        if not cliente:
+            return JsonResponse({"clientes": []})
+        dados_cliente = _resumo_cliente_venda(cliente, hoje)
+        dados_cliente["documento"] = cliente.cpf_cnpj or ""
+        dados_cliente["telefone"] = cliente.whatsapp or cliente.telefone_alternativo or ""
+        return JsonResponse({"clientes": [dados_cliente]})
 
     if termo:
         if contexto == "pix_detalhe":
@@ -3243,6 +3253,41 @@ def receber_cliente(request, cliente_id):
         or Decimal("0.00")
     ).quantize(Decimal("0.01"))
     credito_disponivel = max(credito_disponivel, Decimal("0.00"))
+    saldo_resultante_credito = max(
+        (total_em_aberto - credito_disponivel).quantize(Decimal("0.01")),
+        Decimal("0.00"),
+    )
+    creditos_disponiveis = []
+    creditos_qs = (
+        CreditoCliente.objects.select_related(
+            "origem_conta_receber",
+            "origem_conta_receber__venda",
+            "origem_recebimento",
+        )
+        .filter(cliente=cliente, valor__gt=Decimal("0.00"))
+        .order_by("-criado_em", "-id")
+    )
+    credito_restante_para_exibir = credito_disponivel
+    for credito in creditos_qs:
+        if credito_restante_para_exibir <= Decimal("0.00"):
+            break
+        conta_origem = credito.origem_conta_receber
+        venda_origem = conta_origem.venda if conta_origem else None
+        valor_credito_original = (credito.valor or Decimal("0.00")).quantize(Decimal("0.01"))
+        valor_credito = min(valor_credito_original, credito_restante_para_exibir).quantize(Decimal("0.01"))
+        credito_restante_para_exibir = (credito_restante_para_exibir - valor_credito).quantize(Decimal("0.01"))
+        creditos_disponiveis.append({
+            "id": credito.id,
+            "criado_em": credito.criado_em,
+            "valor": valor_credito,
+            "conta_id": credito.origem_conta_receber_id,
+            "venda_id": venda_origem.id if venda_origem else None,
+            "motivo": credito.observacao or "Credito gerado para o cliente.",
+            "saldo_resultante": max(
+                (total_em_aberto - valor_credito).quantize(Decimal("0.01")),
+                Decimal("0.00"),
+            ),
+        })
     pagamentos_hoje_preview = [
         float(valor or Decimal("0.00"))
         for valor in RecebimentoContaReceber.objects.filter(
@@ -3493,6 +3538,8 @@ def receber_cliente(request, cliente_id):
             "total_contas": len(contas),
             "total_em_aberto": total_em_aberto,
             "credito_disponivel": credito_disponivel,
+            "creditos_disponiveis": creditos_disponiveis,
+            "saldo_resultante_credito": saldo_resultante_credito,
             "formas_pagamento": formas_pagamento,
             "valores": valores,
             "pagamentos_hoje_preview": pagamentos_hoje_preview,
@@ -4944,8 +4991,18 @@ def _bloquear_venda_cancelada(request, venda, destino="estoque:venda_detalhe"):
     return redirect(destino, pk=venda.pk)
 
 
-def _bloquear_edicao_venda_quitada(request, venda):
-    if not _contexto_venda_quitada(venda).get("quitada"):
+def _bloquear_edicao_venda_quitada(request, venda, permitir_conta_parcial=False):
+    contexto = _contexto_venda_quitada(venda)
+    conta = _conta_receber_da_venda(venda)
+    if (
+        permitir_conta_parcial
+        and conta
+        and conta.status == ContaReceber.STATUS_PARCIAL
+        and not contexto.get("venda_a_vista")
+        and not contexto.get("conta_paga")
+    ):
+        return None
+    if not contexto.get("quitada"):
         return None
     messages.warning(
         request,
@@ -5846,7 +5903,7 @@ def venda_adicionar_produto_item(request, pk):
     bloqueio = _bloquear_venda_cancelada(request, venda)
     if bloqueio:
         return bloqueio
-    bloqueio = _bloquear_edicao_venda_quitada(request, venda)
+    bloqueio = _bloquear_edicao_venda_quitada(request, venda, permitir_conta_parcial=True)
     if bloqueio:
         return bloqueio
     retorno_url = _url_retorno_segura(request)
@@ -6033,9 +6090,6 @@ def venda_revisar_remocao_item(request, pk, item_id):
         pk=pk,
     )
     bloqueio = _bloquear_venda_cancelada(request, venda)
-    if bloqueio:
-        return bloqueio
-    bloqueio = _bloquear_edicao_venda_quitada(request, venda)
     if bloqueio:
         return bloqueio
     retorno_url = _url_retorno_segura(request)

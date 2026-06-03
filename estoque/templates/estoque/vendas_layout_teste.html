@@ -1078,7 +1078,7 @@ td:first-child {
             <button type="button" id="btnLimparCabecalho" class="acao-venda-btn secundaria">Limpar Cabeçalho</button>
             <button type="button" id="btnLimparItens" class="acao-venda-btn secundaria">Limpar Itens</button>
             <button type="button" id="btnConsultarVendas" class="acao-venda-btn secundaria">Consultar Vendas</button>
-            <a href="{% url 'estoque:contas_receber' %}" class="acao-venda-btn secundaria">Contas a Receber</a>
+            <a href="{% url 'estoque:contas_receber' %}" id="btnContasReceberVenda" class="acao-venda-btn secundaria">Contas a Receber</a>
             <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="acao-venda-btn secundaria {% if tem_pix_em_atencao %}pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
             <a href="{% url 'estoque:entregas_dia' %}" class="acao-venda-btn secundaria">Ir para Entregas</a>
             <a href="{% url 'estoque:home' %}" class="acao-venda-btn secundaria">Voltar para Painel</a>
@@ -1270,6 +1270,7 @@ const btnNovaVenda = document.getElementById("btnNovaVenda");
 const btnLimparCabecalho = document.getElementById("btnLimparCabecalho");
 const btnLimparItens = document.getElementById("btnLimparItens");
 const btnConsultarVendas = document.getElementById("btnConsultarVendas");
+const btnContasReceberVenda = document.getElementById("btnContasReceberVenda");
 const vendaToast = document.getElementById("vendaToast");
 const vendaGravadaBloco = document.getElementById("vendaGravadaBloco");
 const vendaGravadaTexto = document.getElementById("vendaGravadaTexto");
@@ -1308,9 +1309,11 @@ const receberClienteUrlBase = "{% url 'estoque:receber_cliente' 0 %}";
 const vendasUrl = "{% url 'estoque:vendas' %}";
 const gravarVendaUrl = "{% url 'estoque:gravar_venda' %}";
 const clienteInicialVenda = JSON.parse(document.getElementById("clienteInicialVenda").textContent || "null");
+const clienteResumoStorageKey = "vendas.clienteSelecionado";
 let clientesSugestoes = [];
 let clienteIndexAtivo = -1;
 let clienteSelecionado = null;
+let clienteResumoSuspenso = false;
 let clienteBuscaAbortController = null;
 let vendaGravadaId = null;
 let vendaGravadaUrl = "";
@@ -1424,11 +1427,36 @@ function criarLinkWhatsappCobranca(url, cliente) {
 }
 
 function obterClienteResumoFinanceiro(clientePreview) {
-    if (clienteSelecionado) return clienteSelecionado;
+    if (clienteSelecionado && !clienteResumoSuspenso) return clienteSelecionado;
     if (clienteIndexAtivo >= 0 && clientesSugestoes[clienteIndexAtivo]) {
         return clientesSugestoes[clienteIndexAtivo];
     }
     return clientePreview;
+}
+
+function guardarClienteSelecionado(cliente) {
+    if (!cliente?.id) return;
+    try {
+        sessionStorage.setItem(clienteResumoStorageKey, JSON.stringify(cliente));
+    } catch (erro) {
+        // Cache apenas para manter o resumo ao voltar para Vendas.
+    }
+}
+
+function esquecerClienteSelecionado() {
+    try {
+        sessionStorage.removeItem(clienteResumoStorageKey);
+    } catch (erro) {
+    }
+}
+
+function recuperarClienteSelecionadoCache() {
+    try {
+        const cliente = JSON.parse(sessionStorage.getItem(clienteResumoStorageKey) || "null");
+        return cliente && cliente.id ? cliente : null;
+    } catch (erro) {
+        return null;
+    }
 }
 
 function montarLinkContasReceberCliente(cliente) {
@@ -1451,9 +1479,10 @@ function montarLinkReceberCliente(cliente) {
 
 function navegarResumoFinanceiroCliente(e) {
     const cliente = obterClienteResumoFinanceiro(e.currentTarget.clientePreview);
-    const link = montarLinkReceberCliente(cliente);
     e.preventDefault();
     e.stopPropagation();
+    if (!clienteSelecionadoValido()) return;
+    const link = montarLinkReceberCliente(cliente);
     window.location.href = link;
 }
 
@@ -1471,7 +1500,9 @@ function atualizarResumoFinanceiroCliente(cliente) {
     const whatsappCobrancaUrl = cliente.whatsapp_cobranca?.url || "";
 
     if (credito > 0) {
-        clienteResumoFinanceiro.appendChild(criarLinhaFinanceira("credito", "Credito disponivel: " + formatarMoedaCliente(credito)));
+        const linhaCredito = criarLinhaFinanceira("credito", "Credito disponivel: " + formatarMoedaCliente(credito), linkReceberCliente, "Ver creditos");
+        linhaCredito.clientePreview = cliente;
+        clienteResumoFinanceiro.appendChild(linhaCredito);
     }
     if (abertasQtd > 0) {
         const linhaAbertas = criarLinhaFinanceira("aberto", "Contas em aberto: " + abertasQtd + " / " + formatarMoedaCliente(abertasTotal), linkReceberCliente, "Receber do cliente");
@@ -1493,9 +1524,14 @@ function atualizarResumoFinanceiroCliente(cliente) {
 
 function limparClienteSelecionado() {
     clienteSelecionado = null;
+    clienteResumoSuspenso = false;
     clienteId.value = "";
     vencimentoVenda.value = "";
+    if (clienteResumoFinanceiro) {
+        clienteResumoFinanceiro.innerHTML = "";
+    }
     clienteResumo.classList.remove("visivel");
+    esquecerClienteSelecionado();
 }
 
 dataVenda.value = dataLocalHojeInput();
@@ -1639,8 +1675,10 @@ function fecharPreviewCobranca() {
 
 function preencherResumoCliente(cliente) {
     clienteSelecionado = cliente;
+    clienteResumoSuspenso = false;
     clienteId.value = cliente.id || "";
     clienteBusca.value = cliente.nome || "";
+    guardarClienteSelecionado(cliente);
     atualizarCabecalhoCliente(cliente);
     atualizarPrazoEVencimentoCliente();
     clienteSugestoesBox.style.display = "none";
@@ -1650,15 +1688,24 @@ function preencherResumoCliente(cliente) {
 function clienteSelecionadoValido() {
     return Boolean(
         clienteSelecionado?.id
+        && !clienteResumoSuspenso
         && clienteId.value
         && String(clienteSelecionado.id) === String(clienteId.value)
-        && clienteBusca.value === (clienteSelecionado.nome || "")
     );
 }
 
 if (clienteInicialVenda && clienteInicialVenda.id) {
     preencherResumoCliente(clienteInicialVenda);
+    atualizarClienteSelecionadoDoServidor(clienteInicialVenda);
+} else {
+    const clienteCache = recuperarClienteSelecionadoCache();
+    if (clienteCache?.id) {
+        preencherResumoCliente(clienteCache);
+        atualizarClienteSelecionadoDoServidor(clienteCache);
+    }
 }
+
+window.addEventListener("pageshow", reidratarClienteSelecionado);
 
 function atualizarCabecalhoCliente(cliente) {
     clienteResumoNome.textContent = cliente.nome || "-";
@@ -1677,6 +1724,33 @@ function normalizarTextoCliente(valor) {
         .replace(/[\u0300-\u036f]/g, "")
         .toLowerCase()
         .trim();
+}
+
+function textoCompativelComClienteSelecionado(texto) {
+    if (!clienteSelecionado?.nome) return false;
+    const busca = normalizarTextoCliente(texto);
+    if (!busca) return false;
+
+    const nome = normalizarTextoCliente(clienteSelecionado.nome);
+    const palavras = nome.split(/\s+/).filter(Boolean);
+    return nome.startsWith(busca)
+        || nome.includes(busca)
+        || palavras.some((palavra) => palavra.startsWith(busca))
+        || iniciaisCliente(clienteSelecionado.nome).startsWith(busca);
+}
+
+function suspenderResumoClienteSelecionado() {
+    clienteResumoSuspenso = true;
+    if (clienteResumoFinanceiro) {
+        clienteResumoFinanceiro.innerHTML = "";
+    }
+    clienteResumo.classList.remove("visivel");
+}
+
+function ativarResumoClienteSelecionado() {
+    if (!clienteSelecionado?.id) return;
+    clienteResumoSuspenso = false;
+    atualizarCabecalhoCliente(clienteSelecionado);
 }
 
 function iniciaisCliente(nome) {
@@ -1754,9 +1828,6 @@ function renderizarSugestoesClientes() {
     if (itemAtivoCliente) {
         itemAtivoCliente.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
-    if (clienteIndexAtivo >= 0 && clientesSugestoes[clienteIndexAtivo]) {
-        atualizarCabecalhoCliente(clientesSugestoes[clienteIndexAtivo]);
-    }
 }
 
 async function buscarClientes(texto) {
@@ -1789,11 +1860,47 @@ async function buscarClientes(texto) {
     }
 }
 
+async function atualizarClienteSelecionadoDoServidor(clienteBase) {
+    if (!clienteBase?.id) return;
+
+    const clienteIdSolicitado = String(clienteBase.id);
+    const params = new URLSearchParams({ cliente_id: clienteIdSolicitado });
+    try {
+        const resposta = await fetch(clientesAutocompleteUrl + "?" + params.toString(), {
+            headers: { "X-Requested-With": "XMLHttpRequest" }
+        });
+        const dados = await resposta.json();
+        const clienteAtualizado = (dados.clientes || [])[0];
+        if (
+            clienteAtualizado
+            && clienteSelecionado?.id
+            && !clienteResumoSuspenso
+            && String(clienteSelecionado.id) === clienteIdSolicitado
+        ) {
+            preencherResumoCliente(clienteAtualizado);
+        }
+    } catch (erro) {
+    }
+}
+
+function reidratarClienteSelecionado() {
+    const clienteBase = clienteSelecionado || recuperarClienteSelecionadoCache();
+    if (!clienteBase?.id) return;
+    if (!clienteSelecionado) {
+        preencherResumoCliente(clienteBase);
+    }
+    atualizarClienteSelecionadoDoServidor(clienteBase);
+}
+
 clienteBusca.addEventListener("input", () => {
     const texto = clienteBusca.value.trim();
 
-    if (!clienteSelecionado || clienteSelecionado.nome !== clienteBusca.value) {
-        limparClienteSelecionado();
+    if (clienteSelecionado?.id) {
+        if (textoCompativelComClienteSelecionado(texto)) {
+            ativarResumoClienteSelecionado();
+        } else {
+            suspenderResumoClienteSelecionado();
+        }
     }
 
     clientesSugestoes = [];
@@ -1818,7 +1925,15 @@ clienteBusca.addEventListener("click", () => {
 clienteBusca.addEventListener("blur", () => {
     setTimeout(() => {
         clienteSugestoesBox.style.display = "none";
-        if (!clienteSelecionado) {
+        if (clienteSelecionado?.id) {
+            if (textoCompativelComClienteSelecionado(clienteBusca.value)) {
+                clienteBusca.value = clienteSelecionado.nome || "";
+                ativarResumoClienteSelecionado();
+            } else {
+                clienteBusca.value = "";
+                limparClienteSelecionado();
+            }
+        } else {
             clienteResumo.classList.remove("visivel");
         }
     }, 150);
@@ -2202,6 +2317,14 @@ btnVisualizarVenda.addEventListener("click", (e) => {
 
 btnConsultarVendas.addEventListener("click", () => {
     window.location.href = "{% url 'estoque:consultar_vendas' %}";
+});
+
+btnContasReceberVenda?.addEventListener("click", (event) => {
+    if (!clienteSelecionadoValido()) return;
+    const cliente = clienteSelecionado;
+
+    event.preventDefault();
+    window.location.href = montarLinkReceberCliente(cliente);
 });
 
 btnLimparCabecalho.addEventListener("click", () => {

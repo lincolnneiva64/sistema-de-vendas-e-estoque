@@ -5189,6 +5189,77 @@ class PixRecebidoTests(TestCase):
             status=ContaReceber.STATUS_ABERTA,
         )
 
+    def test_receber_cliente_mostra_credito_disponivel_com_origem_e_saldo_resultante(self):
+        cliente = Cliente.objects.create(nome="Cliente Com Credito", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "100.00")
+        CreditoCliente.objects.create(
+            cliente=cliente,
+            valor=Decimal("35.00"),
+            origem_conta_receber=conta,
+            observacao="Ajuste por item nao entregue.",
+        )
+        CreditoCliente.objects.create(
+            cliente=cliente,
+            valor=Decimal("-10.00"),
+            origem_conta_receber=conta,
+            observacao="Credito usado em recebimento posterior.",
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Créditos disponíveis do cliente")
+        self.assertContains(resposta, "Total: R$ 25.00")
+        self.assertContains(resposta, f"Venda #{conta.venda_id}")
+        self.assertContains(resposta, f"Conta #{conta.id}")
+        self.assertContains(resposta, "Motivo: Ajuste por item nao entregue.")
+        self.assertContains(resposta, "Saldo resultante se o crédito for considerado")
+        self.assertContains(resposta, "R$ 75.00")
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
+
+    def test_receber_cliente_sem_contas_mostra_mensagem_de_credito_disponivel(self):
+        cliente = Cliente.objects.create(nome="Cliente Somente Credito", ativo=True)
+        CreditoCliente.objects.create(
+            cliente=cliente,
+            valor=Decimal("42.50"),
+            observacao="Credito manual de teste.",
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Cliente não possui contas em aberto. Crédito disponível: R$ 42.50")
+        self.assertContains(resposta, "Motivo: Credito manual de teste.")
+        self.assertNotContains(resposta, "Usar credito")
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
+
+    def test_clientes_autocomplete_por_id_retorna_financeiro_com_credito_atualizado(self):
+        cliente = Cliente.objects.create(nome="Lisandra Credito", ativo=True)
+        CreditoCliente.objects.create(
+            cliente=cliente,
+            valor=Decimal("67.00"),
+            observacao="Credito disponivel para restauracao em vendas.",
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:clientes_autocomplete"),
+            {"cliente_id": cliente.id, "q": "texto que nao precisa bater"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertEqual(len(dados["clientes"]), 1)
+        self.assertEqual(dados["clientes"][0]["id"], cliente.id)
+        self.assertEqual(dados["clientes"][0]["nome"], "Lisandra Credito")
+        self.assertEqual(dados["clientes"][0]["financeiro"]["credito_disponivel"], "67.00")
+
     def test_baixa_com_pix_atual_bloqueia_quando_parecido_ja_foi_baixado(self):
         cliente = Cliente.objects.create(nome="Cliente Pix Duplicado", ativo=True)
         self._criar_conta_receber_pix(cliente, "96.30")

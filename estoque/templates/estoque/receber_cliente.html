@@ -167,6 +167,26 @@
     grid-column: 1 / -1; border: 1px dashed #bbf7d0; border-radius: 9px;
     background: #f0fdf4; color: #166534; padding: 7px 9px; font-size: 0.8rem; font-weight: 800;
   }
+  .rc-creditos-disponiveis {
+    border: 1px solid #bbf7d0; border-radius: 10px; background: #f0fdf4;
+    margin: 9px 10px; overflow: hidden;
+  }
+  .rc-creditos-head {
+    display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+    padding: 8px 10px; border-bottom: 1px solid #bbf7d0; color: #166534;
+  }
+  .rc-creditos-title { margin: 0; font-size: 0.88rem; font-weight: 950; color: #14532d; }
+  .rc-creditos-total { font-size: 0.82rem; font-weight: 950; }
+  .rc-creditos-lista { display: grid; gap: 7px; padding: 8px 10px; }
+  .rc-credito-item {
+    border: 1px solid #d9f99d; border-radius: 8px; background: #fff;
+    padding: 8px 9px; display: grid; gap: 5px;
+  }
+  .rc-credito-topo { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .rc-credito-origem { color: #172033; font-size: 0.82rem; font-weight: 950; }
+  .rc-credito-valor { color: #166534; font-size: 0.86rem; font-weight: 950; white-space: nowrap; }
+  .rc-credito-meta { color: #475569; font-size: 0.78rem; font-weight: 750; line-height: 1.32; }
+  .rc-credito-saldo { color: #92400e; font-size: 0.78rem; font-weight: 900; }
   .rc-distribuicao {
     margin: 0 10px 9px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 7px;
@@ -499,6 +519,50 @@
             <h2 class="rc-panel-title">Contas abertas do cliente</h2>
             <span id="resumoPreviaCliente">Informe um valor para calcular a previa.</span>
           </div>
+          {% if credito_disponivel > 0 %}
+            <section class="rc-creditos-disponiveis" aria-label="Creditos disponiveis do cliente">
+              <div class="rc-creditos-head">
+                <h3 class="rc-creditos-title">Créditos disponíveis do cliente</h3>
+                <span class="rc-creditos-total">Total: R$ {{ credito_disponivel|floatformat:2 }}</span>
+              </div>
+              <div class="rc-creditos-lista">
+                {% if total_contas == 0 %}
+                  <div class="rc-credito-item">
+                    <div class="rc-credito-topo">
+                      <span class="rc-credito-origem">Cliente não possui contas em aberto. Crédito disponível: R$ {{ credito_disponivel|floatformat:2 }}</span>
+                    </div>
+                  </div>
+                {% else %}
+                  <div class="rc-credito-item">
+                    <div class="rc-credito-topo">
+                      <span class="rc-credito-origem">Saldo resultante se o crédito for considerado</span>
+                      <span class="rc-credito-valor">R$ {{ saldo_resultante_credito|floatformat:2 }}</span>
+                    </div>
+                    <div class="rc-credito-meta">Este valor é apenas informativo. O crédito não será aplicado automaticamente.</div>
+                  </div>
+                {% endif %}
+                {% for credito in creditos_disponiveis %}
+                  <div class="rc-credito-item">
+                    <div class="rc-credito-topo">
+                      <span class="rc-credito-origem">
+                        Origem:
+                        {% if credito.venda_id %}Venda #{{ credito.venda_id }}{% else %}Venda n&atilde;o vinculada{% endif %}
+                        {% if credito.conta_id %} / Conta #{{ credito.conta_id }}{% endif %}
+                      </span>
+                      <span class="rc-credito-valor">R$ {{ credito.valor|floatformat:2 }}</span>
+                    </div>
+                    <div class="rc-credito-meta">
+                      Motivo: {{ credito.motivo }}<br>
+                      Gerado em: {{ credito.criado_em|date:"d/m/Y H:i" }}
+                    </div>
+                    {% if total_contas > 0 %}
+                      <div class="rc-credito-saldo">Saldo resultante com este crédito: R$ {{ credito.saldo_resultante|floatformat:2 }}</div>
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              </div>
+            </section>
+          {% endif %}
           {% if contas %}
             <div class="rc-table-wrap">
               <table class="rc-table">
