@@ -70,4 +70,8 @@ urlpatterns = [
     path("lixeira/", views.lixeira, name="lixeira"),
     path("restaurar/<int:pk>/", views.produto_restaurar, name="produto_restaurar"),
     path("excluir-definitivo/<int:pk>/", views.produto_excluir_definitivo, name="produto_excluir_definitivo"),
+    # Rotas de Pedidos
+    path("pedidos/", views.pedidos, name="pedidos"),
+    path("pedidos/criar/", views.pedido_criar, name="pedido_criar"),
+    path("pedidos/<int:pk>/", views.pedido_detalhe, name="pedido_detalhe"),
 ]

@@ -696,19 +696,68 @@ class AjusteItemVendaQuitada(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
+
+class Pedido(models.Model):
+    STATUS_ABERTO = "aberto"
+    STATUS_CANCELADO = "cancelado"
+    STATUS_CONVERTIDO_EM_VENDA = "convertido_em_venda"
+    STATUS_CHOICES = [
+        (STATUS_ABERTO, "Aberto"),
+        (STATUS_CANCELADO, "Cancelado"),
+        (STATUS_CONVERTIDO_EM_VENDA, "Convertido em venda"),
+    ]
+
+    cliente = models.ForeignKey(
+        Cliente,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="pedidos",
+    )
+    data_pedido = models.DateField()
+    data_prevista_entrega = models.DateField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ABERTO)
+    operador = models.CharField(max_length=120, blank=True)
+    observacao = models.TextField(blank=True, null=True)
+    total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
     class Meta:
-        ordering = ["-criado_em", "-id"]
-
-    def clean(self):
-        if self.item_venda_id and self.venda_id and self.item_venda.venda_id != self.venda_id:
-            raise ValidationError("O item informado nao pertence a venda do ajuste.")
-
-    def save(self, *args, **kwargs):
-        self.full_clean()
-        super().save(*args, **kwargs)
+        ordering = ["-id"]
 
     def __str__(self):
-        return f"Ajuste de item quitado - Venda #{self.venda_id}"
+        cliente_nome = self.cliente.nome if self.cliente else "Cliente nao informado"
+        return f"Pedido #{self.id} - {cliente_nome}"
+
+
+class ItemPedido(models.Model):
+    pedido = models.ForeignKey(
+        Pedido,
+        on_delete=models.CASCADE,
+        related_name="itens",
+    )
+    produto = models.ForeignKey(
+        Produto,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="itens_pedido",
+    )
+    quantidade = models.DecimalField(max_digits=12, decimal_places=3)
+    unidade = models.CharField(max_length=20, blank=True)
+    preco_unitario = models.DecimalField(max_digits=12, decimal_places=2)
+    valor_total = models.DecimalField(max_digits=12, decimal_places=2)
+    estoque_no_momento = models.IntegerField(blank=True, null=True)
+    observacao = models.TextField(blank=True, null=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        nome_produto = self.produto.nome if self.produto else "Produto nao identificado"
+        return f"{nome_produto} - Pedido #{self.pedido_id}"
 
 
 class EntregaRota(models.Model):

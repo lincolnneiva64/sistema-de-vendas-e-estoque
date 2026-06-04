@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detalhe do Pedido #{{ pedido.id }} - Sistema de Vendas e Estoque</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: "Segoe UI", Arial, sans-serif;
+            background-color: #f5f7fa;
+            color: #1f2937;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        
+        .header-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .card-titulo {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 15px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .info-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #9ca3af;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+        
+        .info-valor {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .status-aberto {
+            background-color: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .status-cancelado {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .status-convertido {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+        
+        .tabela {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        .tabela thead {
+            background-color: #f3f4f6;
+            border-bottom: 2px solid #d1d5db;
+        }
+        
+        .tabela th {
+            padding: 12px 15px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            color: #4b5563;
+        }
+        
+        .tabela td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 14px;
+        }
+        
+        .tabela tbody tr:hover {
+            background-color: #f9fafb;
+        }
+        
+        .sem-itens {
+            text-align: center;
+            padding: 30px;
+            color: #9ca3af;
+            font-size: 14px;
+        }
+        
+        .resumo {
+            background-color: #f0f9ff;
+            border-left: 4px solid #3b82f6;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+        }
+        
+        .resumo-linha {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 14px;
+        }
+        
+        .resumo-total {
+            font-weight: 700;
+            font-size: 18px;
+            color: #1f2937;
+            padding-top: 12px;
+            border-top: 2px solid #3b82f6;
+            margin-top: 12px;
+        }
+        
+        .observacao {
+            background-color: #f9fafb;
+            padding: 12px;
+            border-radius: 6px;
+            border-left: 4px solid #d1d5db;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        
+        .acoes {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        
+        .btn-voltar {
+            background-color: #6b7280;
+            color: white;
+        }
+        
+        .btn-voltar:hover {
+            background-color: #4b5563;
+        }
+        
+        .btn-editar {
+            background-color: #3b82f6;
+            color: white;
+        }
+        
+        .btn-editar:hover {
+            background-color: #2563eb;
+        }
+        
+        .aviso {
+            background-color: #fffbeb;
+            border: 1px solid #fcd34d;
+            border-radius: 6px;
+            padding: 12px 15px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: #92400e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Pedido #{{ pedido.id }}</h1>
+            <span class="header-badge">
+                <span class="status-badge status-{% if pedido.status == 'aberto' %}aberto{% elif pedido.status == 'cancelado' %}cancelado{% else %}convertido{% endif %}">
+                    {{ pedido.get_status_display }}
+                </span>
+            </span>
+        </div>
+        
+        <div class="aviso">
+            <strong>ℹ️ Informação:</strong> Este é um pedido (intenção de venda futura). Não afeta estoque nem cria financeiro.
+        </div>
+        
+        <div class="card">
+            <div class="card-titulo">Informações Gerais</div>
+            
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Data do Pedido</span>
+                    <span class="info-valor">{{ pedido.data_pedido|date:"d/m/Y" }}</span>
+                </div>
+                
+                <div class="info-item">
+                    <span class="info-label">Cliente</span>
+                    <span class="info-valor">
+                        {% if pedido.cliente %}
+                            {{ pedido.cliente.nome }}
+                        {% else %}
+                            <em>Não informado</em>
+                        {% endif %}
+                    </span>
+                </div>
+                
+                <div class="info-item">
+                    <span class="info-label">Entrega Prevista</span>
+                    <span class="info-valor">
+                        {% if pedido.data_prevista_entrega %}
+                            {{ pedido.data_prevista_entrega|date:"d/m/Y" }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </span>
+                </div>
+                
+                <div class="info-item">
+                    <span class="info-label">Operador</span>
+                    <span class="info-valor">{{ pedido.operador|default:"-" }}</span>
+                </div>
+            </div>
+            
+            {% if pedido.observacao %}
+                <div style="margin-top: 15px;">
+                    <span class="info-label">Observação</span>
+                    <div class="observacao">{{ pedido.observacao }}</div>
+                </div>
+            {% endif %}
+        </div>
+        
+        <div class="card">
+            <div class="card-titulo">Itens do Pedido</div>
+            
+            {% if pedido.itens.all %}
+                <table class="tabela">
+                    <thead>
+                        <tr>
+                            <th>Produto</th>
+                            <th>Quantidade</th>
+                            <th>Unidade</th>
+                            <th>Preço Unit.</th>
+                            <th>Total</th>
+                            <th>Estoque</th>
+                            <th>Observação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in pedido.itens.all %}
+                            <tr>
+                                <td>
+                                    {% if item.produto %}
+                                        <strong>{{ item.produto.nome }}</strong>
+                                        <div style="font-size: 12px; color: #6b7280;">
+                                            {% if item.produto.categoria %}
+                                                {{ item.produto.categoria }}
+                                            {% endif %}
+                                        </div>
+                                    {% else %}
+                                        <em>Produto não identificado</em>
+                                    {% endif %}
+                                </td>
+                                <td>{{ item.quantidade|floatformat:"3" }}</td>
+                                <td>{{ item.unidade|default:"-" }}</td>
+                                <td>R$ {{ item.preco_unitario|floatformat:"2" }}</td>
+                                <td><strong>R$ {{ item.valor_total|floatformat:"2" }}</strong></td>
+                                <td>
+                                    <span {% if item.estoque_no_momento <= 0 %}style="color: #ef4444; font-weight: 600;"{% endif %}>
+                                        {{ item.estoque_no_momento }}
+                                    </span>
+                                </td>
+                                <td>{{ item.observacao|default:"-" }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                
+                <div class="resumo">
+                    <div class="resumo-linha">
+                        <span>Quantidade Total de Itens:</span>
+                        <strong>{{ pedido.itens.count }}</strong>
+                    </div>
+                    <div class="resumo-linha resumo-total">
+                        <span>Total do Pedido:</span>
+                        <span>R$ {{ pedido.total|floatformat:"2" }}</span>
+                    </div>
+                </div>
+            {% else %}
+                <div class="sem-itens">Nenhum item adicionado a este pedido.</div>
+            {% endif %}
+        </div>
+        
+        <div class="card">
+            <div class="card-titulo">Histórico</div>
+            
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Criado em</span>
+                    <span class="info-valor">{{ pedido.criado_em|date:"d/m/Y H:i" }}</span>
+                </div>
+                
+                <div class="info-item">
+                    <span class="info-label">Última Atualização</span>
+                    <span class="info-valor">{{ pedido.atualizado_em|date:"d/m/Y H:i" }}</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="acoes">
+            <a href="{% url 'estoque:pedidos' %}" class="btn btn-voltar">← Voltar para Pedidos</a>
+        </div>
+    </div>
+</body>
+</html>

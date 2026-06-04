@@ -7688,3 +7688,185 @@ def montar_link_whatsapp_venda(venda):
 
     mensagem = "\n".join(linhas)
     return f"https://web.whatsapp.com/send?phone={numero}&text={quote(mensagem)}"
+
+
+def pedidos(request):
+    """Listar pedidos com filtros básicos."""
+    from .models import Pedido
+    
+    pedidos_lista = Pedido.objects.select_related("cliente").order_by("-id")
+    
+    # Filtro por status
+    status = request.GET.get("status", "")
+    if status:
+        pedidos_lista = pedidos_lista.filter(status=status)
+    
+    # Filtro por cliente
+    cliente_id = request.GET.get("cliente_id", "")
+    if cliente_id:
+        pedidos_lista = pedidos_lista.filter(cliente_id=cliente_id)
+    
+    # Filtro por data
+    data_inicio = request.GET.get("data_inicio", "")
+    data_fim = request.GET.get("data_fim", "")
+    if data_inicio:
+        try:
+            data_inicio_obj = parse_date(data_inicio)
+            if data_inicio_obj:
+                pedidos_lista = pedidos_lista.filter(data_pedido__gte=data_inicio_obj)
+        except:
+            pass
+    if data_fim:
+        try:
+            data_fim_obj = parse_date(data_fim)
+            if data_fim_obj:
+                pedidos_lista = pedidos_lista.filter(data_pedido__lte=data_fim_obj)
+        except:
+            pass
+    
+    clientes = Cliente.objects.filter(ativo=True).order_by("nome")
+    
+    return render(request, "estoque/pedidos_lista.html", {
+        "pedidos": pedidos_lista,
+        "clientes": clientes,
+        "status_choices": Pedido.STATUS_CHOICES,
+        "status_filtro": status,
+        "cliente_filtro": cliente_id,
+        "data_inicio": data_inicio,
+        "data_fim": data_fim,
+    })
+
+
+def pedido_criar(request):
+    """Criar novo pedido."""
+    from .models import Pedido, ItemPedido
+    
+    if request.method == "POST":
+        try:
+            data_pedido_str = request.POST.get("data_pedido", "")
+            cliente_id = request.POST.get("cliente_id", "")
+            data_prevista_entrega_str = request.POST.get("data_prevista_entrega", "")
+            operador = request.POST.get("operador", "").strip()
+            observacao = request.POST.get("observacao", "").strip()
+            
+            # Validar dados obrigatórios
+            if not data_pedido_str:
+                return JsonResponse({"sucesso": False, "mensagem": "Data do pedido é obrigatória."})
+            if not cliente_id:
+                return JsonResponse({"sucesso": False, "mensagem": "Cliente é obrigatório."})
+            
+            try:
+                data_pedido = parse_date(data_pedido_str)
+                if not data_pedido:
+                    raise ValueError("Data inválida")
+            except:
+                return JsonResponse({"sucesso": False, "mensagem": "Data do pedido inválida."})
+            
+            try:
+                cliente_id_int = int(cliente_id)
+                cliente = Cliente.objects.filter(pk=cliente_id_int, ativo=True).first()
+                if not cliente:
+                    return JsonResponse({"sucesso": False, "mensagem": "Cliente inválido."})
+            except:
+                return JsonResponse({"sucesso": False, "mensagem": "Cliente inválido."})
+            
+            data_prevista_entrega = None
+            if data_prevista_entrega_str:
+                try:
+                    data_prevista_entrega = parse_date(data_prevista_entrega_str)
+                except:
+                    pass
+            
+            # Obter itens do POST
+            itens_data = request.POST.get("itens_json", "")
+            if not itens_data:
+                return JsonResponse({"sucesso": False, "mensagem": "Adicione pelo menos um item ao pedido."})
+            
+            try:
+                itens = json.loads(itens_data)
+                if not itens:
+                    return JsonResponse({"sucesso": False, "mensagem": "Adicione pelo menos um item ao pedido."})
+            except:
+                return JsonResponse({"sucesso": False, "mensagem": "Dados de itens inválidos."})
+            
+            # Criar pedido
+            with transaction.atomic():
+                total = Decimal(0)
+                for item in itens:
+                    try:
+                        valor_total = Decimal(str(item.get("valor_total", 0)))
+                        total += valor_total
+                    except:
+                        pass
+                
+                pedido = Pedido.objects.create(
+                    cliente=cliente,
+                    data_pedido=data_pedido,
+                    data_prevista_entrega=data_prevista_entrega,
+                    operador=operador,
+                    observacao=observacao or None,
+                    total=total,
+                )
+                
+                # Criar itens do pedido
+                for item in itens:
+                    try:
+                        produto_id = int(item.get("produto_id", 0))
+                        produto = Produto.objects.filter(pk=produto_id, excluido=False).first()
+                        if not produto:
+                            continue
+                        
+                        quantidade = Decimal(str(item.get("quantidade", 0)))
+                        unidade = item.get("unidade", "").strip()
+                        preco_unitario = Decimal(str(item.get("preco_unitario", 0)))
+                        valor_total = Decimal(str(item.get("valor_total", 0)))
+                        estoque_no_momento = int(produto.quantidade or 0)
+                        observacao_item = item.get("observacao", "").strip()
+                        
+                        ItemPedido.objects.create(
+                            pedido=pedido,
+                            produto=produto,
+                            quantidade=quantidade,
+                            unidade=unidade,
+                            preco_unitario=preco_unitario,
+                            valor_total=valor_total,
+                            estoque_no_momento=estoque_no_momento,
+                            observacao=observacao_item or None,
+                        )
+                    except Exception as e:
+                        logger.exception(f"Erro ao criar item do pedido: {e}")
+                        continue
+            
+            return JsonResponse({
+                "sucesso": True,
+                "pedido_id": pedido.id,
+                "mensagem": f"Pedido #{pedido.id} criado com sucesso.",
+                "redirect_url": reverse("estoque:pedido_detalhe", args=[pedido.id]),
+            })
+        
+        except Exception as e:
+            logger.exception(f"Erro ao criar pedido: {e}")
+            return JsonResponse({"sucesso": False, "mensagem": "Erro ao criar pedido."}, status=500)
+    
+    # GET: mostrar formulário de criação
+    produtos = Produto.objects.filter(excluido=False).order_by("nome")
+    clientes = Cliente.objects.filter(ativo=True).order_by("nome")
+    
+    return render(request, "estoque/pedido_criar.html", {
+        "produtos": produtos,
+        "clientes": clientes,
+    })
+
+
+def pedido_detalhe(request, pk):
+    """Mostrar detalhe do pedido."""
+    from .models import Pedido
+    
+    pedido = get_object_or_404(
+        Pedido.objects.select_related("cliente").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+    
+    return render(request, "estoque/pedido_detalhe.html", {
+        "pedido": pedido,
+    })

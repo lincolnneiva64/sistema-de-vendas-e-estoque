@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Criar Pedido - Sistema de Vendas e Estoque</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: "Segoe UI", Arial, sans-serif;
+            background-color: #f5f7fa;
+            color: #1f2937;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #1f2937;
+            margin: 0 0 15px 0;
+        }
+        
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .form-group label {
+            font-weight: 500;
+            font-size: 13px;
+            margin-bottom: 6px;
+            color: #374151;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        
+        .form-group textarea {
+            resize: vertical;
+            min-height: 60px;
+            grid-column: 1 / -1;
+        }
+        
+        .section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .section-titulo {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 15px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+        
+        .item-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr 100px;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .item-grid:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        
+        .item-grid input {
+            padding: 8px 10px;
+            font-size: 13px;
+            width: 100%;
+        }
+        
+        .estoque-info {
+            font-size: 12px;
+            color: #6b7280;
+            padding: 4px 0;
+            margin-top: 2px;
+        }
+        
+        .produto-select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        .btn-adicionar-item {
+            background-color: #3b82f6;
+            color: white;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+            margin-bottom: 15px;
+        }
+        
+        .btn-adicionar-item:hover {
+            background-color: #2563eb;
+        }
+        
+        .botoes {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .btn-salvar {
+            background-color: #10b981;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background-color 0.2s;
+            flex: 1;
+            max-width: 200px;
+        }
+        
+        .btn-salvar:hover {
+            background-color: #059669;
+        }
+        
+        .btn-salvar:disabled {
+            background-color: #d1d5db;
+            cursor: not-allowed;
+        }
+        
+        .btn-cancelar {
+            background-color: #6b7280;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            max-width: 200px;
+            transition: background-color 0.2s;
+        }
+        
+        .btn-cancelar:hover {
+            background-color: #4b5563;
+        }
+        
+        .btn-remover-item {
+            background-color: #ef4444;
+            color: white;
+            padding: 6px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.2s;
+        }
+        
+        .btn-remover-item:hover {
+            background-color: #dc2626;
+        }
+        
+        .resumo {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .resumo-linha {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            font-size: 14px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .resumo-linha:last-child {
+            border-bottom: none;
+            font-weight: 600;
+            font-size: 16px;
+            padding-top: 15px;
+        }
+        
+        .resumo-label {
+            color: #6b7280;
+        }
+        
+        .resumo-valor {
+            font-weight: 600;
+            color: #1f2937;
+        }
+        
+        .alerta {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        
+        .alerta-sucesso {
+            background-color: #dcfce7;
+            color: #166534;
+            border-left: 4px solid #10b981;
+        }
+        
+        .alerta-erro {
+            background-color: #fee2e2;
+            color: #991b1b;
+            border-left: 4px solid #ef4444;
+        }
+        
+        .tabela-itens {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .tabela-itens th {
+            background-color: #f3f4f6;
+            padding: 10px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 12px;
+            border-bottom: 2px solid #d1d5db;
+        }
+        
+        .tabela-itens td {
+            padding: 10px;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 13px;
+        }
+        
+        .tabela-itens tbody tr:hover {
+            background-color: #f9fafb;
+        }
+        
+        .sem-itens {
+            text-align: center;
+            padding: 30px;
+            color: #9ca3af;
+            font-size: 14px;
+        }
+        
+        .campo-obrigatorio::after {
+            content: " *";
+            color: #ef4444;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Criar Novo Pedido</h1>
+            <p style="color: #6b7280; margin: 0; font-size: 14px;">
+                Pedidos são intenções de venda futura. Eles não alteram o estoque nem criam conta a receber.
+            </p>
+        </div>
+        
+        <form method="POST" id="form-pedido">
+            {% csrf_token %}
+            
+            <div class="section">
+                <div class="section-titulo">Informações do Pedido</div>
+                
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="data_pedido" class="campo-obrigatorio">Data do Pedido</label>
+                        <input type="date" id="data_pedido" name="data_pedido" value="{% now 'Y-m-d' %}" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="cliente_id" class="campo-obrigatorio">Cliente</label>
+                        <select id="cliente_id" name="cliente_id" required>
+                            <option value="">Selecione um cliente</option>
+                            {% for cliente in clientes %}
+                                <option value="{{ cliente.id }}">{{ cliente.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="data_prevista_entrega">Data Prevista de Entrega</label>
+                        <input type="date" id="data_prevista_entrega" name="data_prevista_entrega">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="operador">Operador</label>
+                        <input type="text" id="operador" name="operador" placeholder="Seu nome">
+                    </div>
+                    
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label for="observacao">Observação</label>
+                        <textarea id="observacao" name="observacao" placeholder="Observações adicionais sobre o pedido"></textarea>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-titulo">Itens do Pedido</div>
+                
+                <div style="margin-bottom: 15px;">
+                    <label for="produto-select">Selecione um Produto:</label>
+                    <select id="produto-select" class="produto-select" onchange="adicionarItem()">
+                        <option value="">-- Escolha um produto --</option>
+                        {% for produto in produtos %}
+                            <option value="{{ produto.id }}" data-estoque="{{ produto.quantidade|default:0 }}" data-nome="{{ produto.nome }}">
+                                {{ produto.nome }} (Est: {{ produto.quantidade|default:0 }})
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div id="itens-container">
+                    <div class="sem-itens">Nenhum item adicionado ainda. Selecione um produto acima.</div>
+                </div>
+                
+                <table id="tabela-itens" class="tabela-itens" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th>Produto</th>
+                            <th>Quantidade</th>
+                            <th>Unidade</th>
+                            <th>Preço Unit.</th>
+                            <th>Total</th>
+                            <th>Estoque</th>
+                            <th>Obs.</th>
+                            <th>Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-itens"></tbody>
+                </table>
+            </div>
+            
+            <div class="resumo">
+                <div class="resumo-linha">
+                    <span class="resumo-label">Quantidade de Itens:</span>
+                    <span class="resumo-valor" id="resumo-qtd-itens">0</span>
+                </div>
+                <div class="resumo-linha">
+                    <span class="resumo-label">Total do Pedido:</span>
+                    <span class="resumo-valor" id="resumo-total">R$ 0,00</span>
+                </div>
+            </div>
+            
+            <input type="hidden" id="itens_json" name="itens_json" value="[]">
+            
+            <div class="botoes">
+                <button type="submit" class="btn-salvar" id="btn-salvar">Salvar Pedido</button>
+                <a href="{% url 'estoque:pedidos' %}" class="btn-cancelar">Cancelar</a>
+            </div>
+        </form>
+    </div>
+    
+    <script>
+        let itens = [];
+        
+        function adicionarItem() {
+            const select = document.getElementById('produto-select');
+            const produto_id = select.value;
+            
+            if (!produto_id) return;
+            
+            const option = select.options[select.selectedIndex];
+            const produto_nome = option.dataset.nome;
+            const estoque = parseInt(option.dataset.estoque) || 0;
+            
+            const item = {
+                produto_id: produto_id,
+                produto_nome: produto_nome,
+                quantidade: 1,
+                unidade: '',
+                preco_unitario: 0,
+                valor_total: 0,
+                estoque_no_momento: estoque,
+                observacao: '',
+            };
+            
+            itens.push(item);
+            select.value = '';
+            atualizarTabela();
+        }
+        
+        function removerItem(index) {
+            itens.splice(index, 1);
+            atualizarTabela();
+        }
+        
+        function atualizarItem(index, campo, valor) {
+            if (index >= 0 && index < itens.length) {
+                itens[index][campo] = valor;
+                
+                // Recalcular total se quantidade ou preço mudaram
+                if (campo === 'quantidade' || campo === 'preco_unitario') {
+                    const qtd = parseFloat(itens[index].quantidade) || 0;
+                    const preco = parseFloat(itens[index].preco_unitario) || 0;
+                    itens[index].valor_total = (qtd * preco).toFixed(2);
+                }
+                
+                atualizarTabela();
+            }
+        }
+        
+        function atualizarTabela() {
+            const tbody = document.getElementById('tbody-itens');
+            const container = document.getElementById('itens-container');
+            const tabela = document.getElementById('tabela-itens');
+            
+            tbody.innerHTML = '';
+            
+            if (itens.length === 0) {
+                container.innerHTML = '<div class="sem-itens">Nenhum item adicionado ainda. Selecione um produto acima.</div>';
+                tabela.style.display = 'none';
+            } else {
+                container.innerHTML = '';
+                
+                itens.forEach((item, index) => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${item.produto_nome}</td>
+                        <td><input type="number" step="0.001" value="${item.quantidade}" onchange="atualizarItem(${index}, 'quantidade', this.value)" style="width: 80px;"></td>
+                        <td><input type="text" value="${item.unidade}" placeholder="ex: kg" onchange="atualizarItem(${index}, 'unidade', this.value)" style="width: 60px;"></td>
+                        <td><input type="number" step="0.01" value="${item.preco_unitario}" onchange="atualizarItem(${index}, 'preco_unitario', this.value)" style="width: 100px;"></td>
+                        <td>R$ ${parseFloat(item.valor_total).toFixed(2)}</td>
+                        <td>${item.estoque_no_momento}</td>
+                        <td><input type="text" value="${item.observacao}" placeholder="obs" onchange="atualizarItem(${index}, 'observacao', this.value)" style="width: 70px;"></td>
+                        <td><button type="button" class="btn-remover-item" onclick="removerItem(${index})">Remover</button></td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+                
+                tabela.style.display = 'table';
+            }
+            
+            atualizarResumo();
+        }
+        
+        function atualizarResumo() {
+            let totalItens = itens.length;
+            let totalValor = 0;
+            
+            itens.forEach(item => {
+                totalValor += parseFloat(item.valor_total) || 0;
+            });
+            
+            document.getElementById('resumo-qtd-itens').textContent = totalItens;
+            document.getElementById('resumo-total').textContent = 'R$ ' + totalValor.toFixed(2).replace('.', ',');
+            document.getElementById('itens_json').value = JSON.stringify(itens);
+        }
+        
+        document.getElementById('form-pedido').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            if (itens.length === 0) {
+                alert('Adicione pelo menos um item ao pedido!');
+                return;
+            }
+            
+            const formData = new FormData(this);
+            const btn = document.getElementById('btn-salvar');
+            btn.disabled = true;
+            btn.textContent = 'Salvando...';
+            
+            fetch('{% url "estoque:pedido_criar" %}', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.sucesso) {
+                    window.location.href = data.redirect_url;
+                } else {
+                    alert('Erro: ' + (data.mensagem || 'Erro ao criar pedido'));
+                    btn.disabled = false;
+                    btn.textContent = 'Salvar Pedido';
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                alert('Erro ao criar pedido: ' + error);
+                btn.disabled = false;
+                btn.textContent = 'Salvar Pedido';
+            });
+        });
+    </script>
+</body>
+</html>

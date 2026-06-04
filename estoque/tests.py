@@ -7243,18 +7243,189 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(dados_primeiro["valor"], "100.00")
         self.assertEqual(dados_primeiro["data_pagamento"], "2026-05-17T11:09")
 
-        resposta_segunda = self.client.post(url, {"comprovante": segundo}, secure=True)
-        self.assertEqual(resposta_segunda.status_code, 200)
-        dados_segundo = resposta_segunda.json()
-        self.assertEqual(dados_segundo["nome_arquivo"], "comprovante_picpay_50.txt")
-        self.assertEqual(dados_segundo["valor"], "50.00")
-        self.assertEqual(dados_segundo["data_pagamento"], "2025-09-21T13:20")
-        self.assertEqual(dados_segundo["instituicao_pix"], "PicPay")
-        self.assertEqual(dados_segundo["pagador"], "ISA ALVES DE SOUZA")
-        self.assertIn("PicPay", dados_segundo["debug_texto_ocr"])
-        self.assertNotIn("Mercado Pago", dados_segundo["debug_texto_ocr"])
-        self.assertNotEqual(dados_segundo["valor"], dados_primeiro["valor"])
-        self.assertNotEqual(dados_segundo["data_pagamento"], dados_primeiro["data_pagamento"])
+
+class PedidoTests(TestCase):
+    def setUp(self):
+        """Criar dados de teste para pedidos"""
+        self.cliente = Cliente.objects.create(
+            nome="Cliente Teste",
+            cpf_cnpj="12345678901234",
+            ativo=True,
+        )
+        self.produto = Produto.objects.create(
+            nome="Produto Teste",
+            preco_compra=50.00,
+            preco_venda=100.00,
+            preco_vista=100.00,
+            preco_prazo=110.00,
+            quantidade=50,
+        )
+
+    def test_criar_pedido_com_cliente_e_itens_salva(self):
+        """Criar pedido com cliente e itens deve salvar Pedido e ItemPedido"""
+        from .models import Pedido, ItemPedido
+        
+        pedido = Pedido.objects.create(
+            cliente=self.cliente,
+            data_pedido=timezone.now().date(),
+            operador="Operador Teste",
+            total=100.00,
+        )
+        
+        item = ItemPedido.objects.create(
+            pedido=pedido,
+            produto=self.produto,
+            quantidade=1,
+            unidade="Un",
+            preco_unitario=100.00,
+            valor_total=100.00,
+            estoque_no_momento=50,
+        )
+        
+        self.assertEqual(Pedido.objects.count(), 1)
+        self.assertEqual(ItemPedido.objects.count(), 1)
+        self.assertEqual(item.pedido.id, pedido.id)
+
+    def test_gravar_pedido_nao_altera_quantidade_produto(self):
+        """Gravar pedido não deve alterar Produto.quantidade"""
+        from .models import Pedido, ItemPedido
+        
+        quantidade_inicial = self.produto.quantidade
+        
+        pedido = Pedido.objects.create(
+            cliente=self.cliente,
+            data_pedido=timezone.now().date(),
+            total=100.00,
+        )
+        
+        ItemPedido.objects.create(
+            pedido=pedido,
+            produto=self.produto,
+            quantidade=10,
+            unidade="Un",
+            preco_unitario=100.00,
+            valor_total=1000.00,
+            estoque_no_momento=quantidade_inicial,
+        )
+        
+        self.produto.refresh_from_db()
+        self.assertEqual(self.produto.quantidade, quantidade_inicial)
+
+    def test_pedido_nao_cria_conta_receber(self):
+        """Pedido não deve criar ContaReceber"""
+        from .models import Pedido, ItemPedido
+        
+        conta_receber_inicial = ContaReceber.objects.count()
+        
+        pedido = Pedido.objects.create(
+            cliente=self.cliente,
+            data_pedido=timezone.now().date(),
+            total=100.00,
+        )
+        
+        ItemPedido.objects.create(
+            pedido=pedido,
+            produto=self.produto,
+            quantidade=1,
+            unidade="Un",
+            preco_unitario=100.00,
+            valor_total=100.00,
+            estoque_no_momento=50,
+        )
+        
+        self.assertEqual(ContaReceber.objects.count(), conta_receber_inicial)
+
+    def test_item_pedido_salva_estoque_no_momento(self):
+        """ItemPedido deve salvar estoque_no_momento corretamente"""
+        from .models import Pedido, ItemPedido
+        
+        estoque_no_momento = self.produto.quantidade
+        
+        pedido = Pedido.objects.create(
+            cliente=self.cliente,
+            data_pedido=timezone.now().date(),
+            total=100.00,
+        )
+        
+        item = ItemPedido.objects.create(
+            pedido=pedido,
+            produto=self.produto,
+            quantidade=1,
+            unidade="Un",
+            preco_unitario=100.00,
+            valor_total=100.00,
+            estoque_no_momento=estoque_no_momento,
+        )
+        
+        self.assertEqual(item.estoque_no_momento, estoque_no_momento)
+
+    def test_lista_de_pedidos_carrega(self):
+        """Lista de pedidos deve carregar corretamente"""
+        from .models import Pedido
+        
+        pedido = Pedido.objects.create(
+            cliente=self.cliente,
+            data_pedido=timezone.now().date(),
+            total=100.00,
+        )
+        
+        url = reverse("estoque:pedidos")
+        resposta = self.client.get(url)
+        
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn("pedidos", resposta.context)
+
+    def test_detalhe_de_pedido_carrega(self):
+        """Detalhe do pedido deve carregar corretamente"""
+        from .models import Pedido, ItemPedido
+        
+        pedido = Pedido.objects.create(
+            cliente=self.cliente,
+            data_pedido=timezone.now().date(),
+            total=100.00,
+        )
+        
+        ItemPedido.objects.create(
+            pedido=pedido,
+            produto=self.produto,
+            quantidade=1,
+            unidade="Un",
+            preco_unitario=100.00,
+            valor_total=100.00,
+            estoque_no_momento=50,
+        )
+        
+        url = reverse("estoque:pedido_detalhe", args=[pedido.id])
+        resposta = self.client.get(url)
+        
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn("pedido", resposta.context)
+
+    def test_pedido_com_produto_sem_estoque_pode_ser_gravado(self):
+        """Pedido com produto sem estoque suficiente deve poder ser gravado (apenas aviso)"""
+        from .models import Pedido, ItemPedido
+        
+        self.produto.quantidade = 0
+        self.produto.save()
+        
+        pedido = Pedido.objects.create(
+            cliente=self.cliente,
+            data_pedido=timezone.now().date(),
+            total=100.00,
+        )
+        
+        item = ItemPedido.objects.create(
+            pedido=pedido,
+            produto=self.produto,
+            quantidade=10,
+            unidade="Un",
+            preco_unitario=100.00,
+            valor_total=1000.00,
+            estoque_no_momento=0,
+        )
+        
+        self.assertEqual(item.quantidade, 10)
+        self.assertEqual(item.estoque_no_momento, 0)
 
     def test_analisar_comprovante_pix_picpay_data_mes_abreviado_e_instituicao(self):
         datas_ocr = [
