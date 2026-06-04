@@ -53,6 +53,26 @@
     border: 1px solid rgba(255, 193, 7, 0.48);
     min-height: auto;
 }
+    .historico-produto-cliente {
+    margin-top: 6px;
+    font-size: 12.5px;
+    font-weight: 800;
+    line-height: 1.25;
+    color: #1e3a8a;
+    display: none;
+    width: fit-content;
+    max-width: 100%;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    overflow-wrap: anywhere;
+}
+.historico-produto-cliente.sem-historico {
+    color: #64748b;
+    background: #f8fafc;
+    border-color: #e2e8f0;
+}
     .bloco-itens-scroll {
     flex: 1;
     min-height: 0;
@@ -1045,12 +1065,14 @@ td:first-child {
     <input type="text" id="produtoBusca" placeholder="Selecione um produto" autocomplete="off">
     <div id="produtoSugestoes" class="produto-sugestoes"></div>
 <div id="estoquePreview" class="estoque-preview"></div>
+<div id="historicoProdutoCliente" class="historico-produto-cliente" aria-live="polite"></div>
 
     <select id="produto" hidden>
         <option value="">Selecione um produto</option>
         {% for produto in produtos %}
             <option
     value="{{ produto.nome }}"
+    data-produto-id="{{ produto.id }}"
     data-unidade="{{ produto.unidade_venda_1|default_if_none:'' }}"
     data-preco="{{ produto.preco_venda|default_if_none:'' }}"
     data-estoque="{{ produto.quantidade|default_if_none:0 }}"
@@ -1260,6 +1282,7 @@ const operadorVenda = document.getElementById("operadorVenda");
 const produtoBusca = document.getElementById("produtoBusca");
 const sugestoesBox = document.getElementById("produtoSugestoes");
 const estoquePreview = document.getElementById("estoquePreview");
+const historicoProdutoCliente = document.getElementById("historicoProdutoCliente");
 const quantidade = document.getElementById("quantidade");
 const unidade = document.getElementById("unidade");
 const preco = document.getElementById("preco");
@@ -1308,6 +1331,7 @@ const contasReceberUrl = "{% url 'estoque:contas_receber' %}";
 const receberClienteUrlBase = "{% url 'estoque:receber_cliente' 0 %}";
 const vendasUrl = "{% url 'estoque:vendas' %}";
 const gravarVendaUrl = "{% url 'estoque:gravar_venda' %}";
+const historicoClienteProdutoUrl = "{% url 'estoque:vendas_cliente_produto_historico' %}";
 const clienteInicialVenda = JSON.parse(document.getElementById("clienteInicialVenda").textContent || "null");
 const clienteResumoStorageKey = "vendas.clienteSelecionado";
 let clientesSugestoes = [];
@@ -1315,6 +1339,7 @@ let clienteIndexAtivo = -1;
 let clienteSelecionado = null;
 let clienteResumoSuspenso = false;
 let clienteBuscaAbortController = null;
+let historicoProdutoAbortController = null;
 let vendaGravadaId = null;
 let vendaGravadaUrl = "";
 
@@ -1353,6 +1378,80 @@ function formatarMoedaCliente(valor) {
         style: "currency",
         currency: "BRL"
     }).format(numero);
+}
+
+function formatarDataHistoricoProduto(valor) {
+    if (!valor) return "";
+    const partes = String(valor).split("-");
+    if (partes.length !== 3) return valor;
+    return `${partes[2]}/${partes[1]}/${partes[0]}`;
+}
+
+function formatarQuantidadeHistoricoProduto(valor) {
+    const numero = parseFloat(String(valor || "0").replace(",", "."));
+    if (isNaN(numero)) return String(valor || "");
+    return new Intl.NumberFormat("pt-BR", {
+        minimumFractionDigits: Number.isInteger(numero) ? 0 : 3,
+        maximumFractionDigits: 3
+    }).format(numero);
+}
+
+function ocultarHistoricoProdutoCliente() {
+    if (historicoProdutoAbortController) {
+        historicoProdutoAbortController.abort();
+        historicoProdutoAbortController = null;
+    }
+    if (!historicoProdutoCliente) return;
+    historicoProdutoCliente.textContent = "";
+    historicoProdutoCliente.classList.remove("sem-historico");
+    historicoProdutoCliente.style.display = "none";
+}
+
+function renderizarHistoricoProdutoCliente(historico) {
+    if (!historicoProdutoCliente) return;
+    historicoProdutoCliente.classList.remove("sem-historico");
+    historicoProdutoCliente.style.display = "inline-block";
+    if (!historico) {
+        historicoProdutoCliente.textContent = "Sem compra anterior deste produto para este cliente.";
+        historicoProdutoCliente.classList.add("sem-historico");
+        return;
+    }
+    const quantidadeHistorico = formatarQuantidadeHistoricoProduto(historico.quantidade);
+    const unidadeHistorico = historico.unidade ? " " + historico.unidade : "";
+    const precoHistorico = formatarMoedaCliente(historico.preco_unitario);
+    historicoProdutoCliente.textContent =
+        `Última compra deste cliente: Venda #${historico.venda_id} em ${formatarDataHistoricoProduto(historico.data_venda)} - ` +
+        `${quantidadeHistorico}${unidadeHistorico} - ${precoHistorico}`;
+}
+
+function atualizarHistoricoProdutoCliente() {
+    const optionSelecionada = produto.options[produto.selectedIndex];
+    const produtoIdSelecionado = optionSelecionada?.dataset?.produtoId || "";
+    if (!clienteSelecionadoValido() || !produtoIdSelecionado) {
+        ocultarHistoricoProdutoCliente();
+        return;
+    }
+    if (historicoProdutoAbortController) {
+        historicoProdutoAbortController.abort();
+    }
+    historicoProdutoAbortController = new AbortController();
+    const params = new URLSearchParams({
+        cliente_id: clienteId.value,
+        produto_id: produtoIdSelecionado
+    });
+    fetch(historicoClienteProdutoUrl + "?" + params.toString(), {
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+        signal: historicoProdutoAbortController.signal
+    })
+        .then((resposta) => resposta.ok ? resposta.json() : Promise.reject())
+        .then((dados) => {
+            renderizarHistoricoProdutoCliente(dados.historico || null);
+        })
+        .catch((erro) => {
+            if (erro?.name !== "AbortError") {
+                ocultarHistoricoProdutoCliente();
+            }
+        });
 }
 
 function numeroCliente(valor) {
@@ -1527,6 +1626,7 @@ function limparClienteSelecionado() {
     clienteResumoSuspenso = false;
     clienteId.value = "";
     vencimentoVenda.value = "";
+    ocultarHistoricoProdutoCliente();
     if (clienteResumoFinanceiro) {
         clienteResumoFinanceiro.innerHTML = "";
     }
@@ -1681,6 +1781,7 @@ function preencherResumoCliente(cliente) {
     guardarClienteSelecionado(cliente);
     atualizarCabecalhoCliente(cliente);
     atualizarPrazoEVencimentoCliente();
+    atualizarHistoricoProdutoCliente();
     clienteSugestoesBox.style.display = "none";
     clienteIndexAtivo = -1;
 }
@@ -1993,10 +2094,14 @@ clienteBusca.addEventListener("keydown", (e) => {
 
   produto.addEventListener("change", function () {
     const optionSelecionada = this.options[this.selectedIndex];
-    if (!optionSelecionada) return;
+    if (!optionSelecionada) {
+        ocultarHistoricoProdutoCliente();
+        return;
+    }
 
     unidade.value = optionSelecionada.dataset.unidade || "";
     preco.value = optionSelecionada.dataset.preco || "";
+    atualizarHistoricoProdutoCliente();
 });
 let linhaSelecionada = null;
 let ultimoItemRemovido = null;
@@ -2184,6 +2289,7 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
 function limparCamposProdutoVenda() {
     estoquePreview.innerText = "";
     estoquePreview.style.display = "none";
+    ocultarHistoricoProdutoCliente();
     produtoBusca.value = "";
     produto.value = "";
     quantidade.value = "";
@@ -2760,6 +2866,7 @@ scrollLinhaDentroDaLista(linhaSelecionada);
 linhaSelecionada = null;
 estoquePreview.innerText = "";
 estoquePreview.style.display = "none";
+ocultarHistoricoProdutoCliente();
 produtoBusca.value = "";
 produto.value = "";
 quantidade.value = "";
@@ -2785,6 +2892,7 @@ return;
     tabelaBody.appendChild(novaLinha);
     estoquePreview.innerText = "";
     estoquePreview.style.display = "none";
+    ocultarHistoricoProdutoCliente();
     atualizarTotalGeral();
 
     requestAnimationFrame(() => {

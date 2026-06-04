@@ -2056,6 +2056,43 @@ def vendas(request):
     })
 
 
+def vendas_cliente_produto_historico(request):
+    cliente_id = request.GET.get("cliente_id", "").strip()
+    produto_id = request.GET.get("produto_id", "").strip()
+    if not cliente_id or not produto_id:
+        return JsonResponse({"sucesso": True, "historico": None})
+
+    try:
+        cliente_id_int = int(cliente_id)
+        produto_id_int = int(produto_id)
+    except ValueError:
+        return JsonResponse({"sucesso": False, "mensagem": "Cliente ou produto invalido."}, status=400)
+
+    item = (
+        ItemVenda.objects.select_related("venda")
+        .filter(
+            venda__cliente_id=cliente_id_int,
+            venda__cancelada=False,
+            produto_id=produto_id_int,
+        )
+        .order_by("-venda__data_venda", "-venda_id", "-id")
+        .first()
+    )
+    if not item:
+        return JsonResponse({"sucesso": True, "historico": None})
+
+    return JsonResponse({
+        "sucesso": True,
+        "historico": {
+            "venda_id": item.venda_id,
+            "data_venda": item.venda.data_venda.isoformat() if item.venda.data_venda else "",
+            "preco_unitario": str((item.preco_unitario or Decimal("0.00")).quantize(Decimal("0.01"))),
+            "quantidade": str(item.quantidade),
+            "unidade": item.unidade or "",
+        },
+    })
+
+
 @ensure_csrf_cookie
 def consultar_vendas(request, mostrar_canceladas=False):
     hoje = timezone.localdate()

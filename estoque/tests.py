@@ -964,6 +964,151 @@ class PixRecebidoTests(TestCase):
         produto.refresh_from_db()
         self.assertEqual(produto.quantidade, 5)
 
+    def test_historico_cliente_produto_retorna_ultima_venda_ativa(self):
+        cliente = Cliente.objects.create(nome="Cliente Historico Produto", ativo=True)
+        produto = self._produto_teste("Produto Historico Ultima Compra", quantidade=10)
+        venda_antiga = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate() - timedelta(days=3),
+            tipo_pagamento="A prazo",
+            total=Decimal("8.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda_antiga,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("8.00"),
+            valor_total=Decimal("8.00"),
+        )
+        venda_recente = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate() - timedelta(days=1),
+            tipo_pagamento="A prazo",
+            total=Decimal("30.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda_recente,
+            produto=produto,
+            quantidade=Decimal("3.000"),
+            unidade="un",
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("30.00"),
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:vendas_cliente_produto_historico"),
+            {"cliente_id": cliente.id, "produto_id": produto.id},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["sucesso"])
+        self.assertEqual(dados["historico"]["venda_id"], venda_recente.id)
+        self.assertEqual(dados["historico"]["data_venda"], venda_recente.data_venda.isoformat())
+        self.assertEqual(dados["historico"]["preco_unitario"], "10.00")
+        self.assertEqual(dados["historico"]["quantidade"], "3.000")
+        self.assertEqual(dados["historico"]["unidade"], "un")
+
+    def test_historico_cliente_produto_ignora_venda_cancelada(self):
+        cliente = Cliente.objects.create(nome="Cliente Historico Ignora Cancelada", ativo=True)
+        produto = self._produto_teste("Produto Historico Ignora Cancelada", quantidade=10)
+        venda_ativa = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate() - timedelta(days=5),
+            tipo_pagamento="A prazo",
+            total=Decimal("12.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda_ativa,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("6.00"),
+            valor_total=Decimal("12.00"),
+        )
+        venda_cancelada = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("40.00"),
+            cancelada=True,
+            cancelada_em=timezone.now(),
+        )
+        ItemVenda.objects.create(
+            venda=venda_cancelada,
+            produto=produto,
+            quantidade=Decimal("4.000"),
+            unidade="un",
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("40.00"),
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:vendas_cliente_produto_historico"),
+            {"cliente_id": cliente.id, "produto_id": produto.id},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.json()["historico"]["venda_id"], venda_ativa.id)
+
+    def test_historico_cliente_produto_ignora_outro_cliente(self):
+        cliente = Cliente.objects.create(nome="Cliente Historico Alvo", ativo=True)
+        outro_cliente = Cliente.objects.create(nome="Cliente Historico Outro", ativo=True)
+        produto = self._produto_teste("Produto Historico Outro Cliente", quantidade=10)
+        Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate() - timedelta(days=4),
+            tipo_pagamento="A prazo",
+            total=Decimal("5.00"),
+        )
+        venda_outro_cliente = Venda.objects.create(
+            cliente=outro_cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("20.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda_outro_cliente,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("20.00"),
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:vendas_cliente_produto_historico"),
+            {"cliente_id": cliente.id, "produto_id": produto.id},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIsNone(resposta.json()["historico"])
+
+    def test_historico_cliente_produto_sem_compra_retorna_vazio(self):
+        cliente = Cliente.objects.create(nome="Cliente Sem Historico Produto", ativo=True)
+        produto = self._produto_teste("Produto Nunca Comprado", quantidade=10)
+
+        resposta = self.client.get(
+            reverse("estoque:vendas_cliente_produto_historico"),
+            {"cliente_id": cliente.id, "produto_id": produto.id},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["sucesso"])
+        self.assertIsNone(resposta.json()["historico"])
+
+    def test_tela_vendas_carrega_com_bloco_de_historico(self):
+        resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "historicoProdutoCliente")
+        self.assertContains(resposta, reverse("estoque:vendas_cliente_produto_historico"))
+
     def test_venda_com_conta_paga_mostra_aviso_de_quitada_no_detalhe(self):
         cliente = Cliente.objects.create(nome="Cliente Aviso Conta Paga", ativo=True)
         produto = self._produto_teste("Produto Aviso Conta Paga")
