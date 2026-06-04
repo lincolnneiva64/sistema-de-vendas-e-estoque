@@ -116,15 +116,18 @@ class PixRecebidoTests(TestCase):
             permitir_prejuizo=False,
         )
 
-    def _post_cancelar_venda(self, venda, motivo="Pedido duplicado"):
+    def _post_cancelar_venda(self, venda, motivo="Pedido duplicado", destino_financeiro=""):
+        dados = {
+            "motivo_padrao": motivo,
+            "observacao_cancelamento": "",
+            "confirmacao_cancelamento": "CANCELAR",
+            "ciencia_cancelamento": "1",
+        }
+        if destino_financeiro:
+            dados["destino_financeiro"] = destino_financeiro
         return self.client.post(
             reverse("estoque:venda_cancelar", kwargs={"pk": venda.id}),
-            {
-                "motivo_padrao": motivo,
-                "observacao_cancelamento": "",
-                "confirmacao_cancelamento": "CANCELAR",
-                "ciencia_cancelamento": "1",
-            },
+            dados,
             secure=True,
             follow=True,
         )
@@ -347,18 +350,174 @@ class PixRecebidoTests(TestCase):
             forma_pagamento="PIX",
         )
 
-        resposta = self._post_cancelar_venda(venda)
+        resposta = self._post_cancelar_venda(venda, destino_financeiro="credito_cliente")
 
         self.assertEqual(resposta.status_code, 200)
         venda.refresh_from_db()
         conta.refresh_from_db()
         recebimento.refresh_from_db()
         self.assertTrue(venda.cancelada)
-        self.assertEqual(conta.status, ContaReceber.STATUS_PARCIAL)
+        self.assertEqual(conta.status, ContaReceber.STATUS_CANCELADA)
         self.assertEqual(conta.valor_original, Decimal("100.00"))
-        self.assertEqual(conta.valor_em_aberto, Decimal("40.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
         self.assertEqual(recebimento.valor, Decimal("60.00"))
         self.assertTrue(RecebimentoContaReceber.objects.filter(pk=recebimento.pk, conta=conta).exists())
+        credito = CreditoCliente.objects.get(cliente=cliente)
+        self.assertEqual(credito.valor, Decimal("60.00"))
+        self.assertEqual(credito.origem_conta_receber, conta)
+        self.assertEqual(credito.origem_recebimento, recebimento)
+        self.assertIn("cancelamento da venda", credito.observacao)
+        self.assertTrue(
+            EventoVenda.objects.filter(
+                venda=venda,
+                tipo_evento="venda_cancelada",
+                descricao__icontains="virou credito do cliente",
+            ).exists()
+        )
+
+    def test_cancelamento_manual_com_recebimento_sem_destino_financeiro_bloqueia_cancelamento(self):
+        cliente = Cliente.objects.create(nome="Cliente Sem Destino Financeiro", ativo=True)
+        produto = self._produto_teste("Produto Sem Destino Financeiro")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("100.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("100.00"),
+            valor_total=Decimal("100.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("100.00"),
+            valor_em_aberto=Decimal("30.00"),
+            status=ContaReceber.STATUS_PARCIAL,
+        )
+        recebimento = RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=timezone.localdate(),
+            valor=Decimal("70.00"),
+            forma_pagamento="PIX",
+        )
+
+        resposta = self._post_cancelar_venda(venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertFalse(venda.cancelada)
+        self.assertEqual(conta.status, ContaReceber.STATUS_PARCIAL)
+        self.assertEqual(conta.valor_em_aberto, Decimal("30.00"))
+        self.assertTrue(RecebimentoContaReceber.objects.filter(pk=recebimento.pk, conta=conta).exists())
+        self.assertEqual(CreditoCliente.objects.count(), 0)
+        self.assertContains(resposta, "Escolha o destino financeiro")
+
+    def test_cancelamento_manual_com_devolucao_manual_ou_pendencia_nao_cria_credito(self):
+        cenarios = (
+            ("devolucao_manual", "devolucao manual ao cliente"),
+            ("pendencia_financeira", "pendencia financeira"),
+        )
+        for destino, texto_evento in cenarios:
+            with self.subTest(destino=destino):
+                cliente = Cliente.objects.create(nome=f"Cliente {destino}", ativo=True)
+                produto = self._produto_teste(f"Produto {destino}")
+                venda = Venda.objects.create(
+                    cliente=cliente,
+                    data_venda=timezone.localdate(),
+                    tipo_pagamento="A prazo",
+                    total=Decimal("80.00"),
+                )
+                ItemVenda.objects.create(
+                    venda=venda,
+                    produto=produto,
+                    quantidade=Decimal("1.000"),
+                    unidade="un",
+                    preco_unitario=Decimal("80.00"),
+                    valor_total=Decimal("80.00"),
+                )
+                conta = ContaReceber.objects.create(
+                    venda=venda,
+                    cliente=cliente,
+                    data_emissao=timezone.localdate(),
+                    valor_original=Decimal("80.00"),
+                    valor_em_aberto=Decimal("20.00"),
+                    status=ContaReceber.STATUS_PARCIAL,
+                )
+                recebimento = RecebimentoContaReceber.objects.create(
+                    conta=conta,
+                    data_recebimento=timezone.localdate(),
+                    valor=Decimal("60.00"),
+                    forma_pagamento="PIX",
+                )
+
+                resposta = self._post_cancelar_venda(venda, destino_financeiro=destino)
+
+                self.assertEqual(resposta.status_code, 200)
+                venda.refresh_from_db()
+                conta.refresh_from_db()
+                recebimento.refresh_from_db()
+                self.assertTrue(venda.cancelada)
+                self.assertEqual(conta.status, ContaReceber.STATUS_CANCELADA)
+                self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+                self.assertEqual(recebimento.valor, Decimal("60.00"))
+                self.assertFalse(CreditoCliente.objects.filter(cliente=cliente).exists())
+                self.assertIn(texto_evento, conta.observacao)
+                self.assertTrue(
+                    EventoVenda.objects.filter(
+                        venda=venda,
+                        tipo_evento="venda_cancelada",
+                        descricao__icontains=texto_evento,
+                    ).exists()
+                )
+
+    def test_cancelamento_manual_com_credito_sem_cliente_bloqueia_cancelamento(self):
+        produto = self._produto_teste("Produto Credito Sem Cliente")
+        venda = Venda.objects.create(
+            cliente=None,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("50.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("50.00"),
+            valor_total=Decimal("50.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=None,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("50.00"),
+            valor_em_aberto=Decimal("10.00"),
+            status=ContaReceber.STATUS_PARCIAL,
+        )
+        RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=timezone.localdate(),
+            valor=Decimal("40.00"),
+            forma_pagamento="PIX",
+        )
+
+        resposta = self._post_cancelar_venda(venda, destino_financeiro="credito_cliente")
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertFalse(venda.cancelada)
+        self.assertEqual(conta.status, ContaReceber.STATUS_PARCIAL)
+        self.assertEqual(conta.valor_em_aberto, Decimal("10.00"))
+        self.assertEqual(CreditoCliente.objects.count(), 0)
+        self.assertContains(resposta, "Nao e possivel gerar credito")
 
     def test_cancelamento_manual_preserva_conta_paga_e_recebimentos(self):
         cliente = Cliente.objects.create(nome="Cliente Conta Paga Cancelamento", ativo=True)
@@ -392,18 +551,29 @@ class PixRecebidoTests(TestCase):
             forma_pagamento="PIX",
         )
 
-        resposta = self._post_cancelar_venda(venda)
+        resposta = self._post_cancelar_venda(venda, destino_financeiro="credito_cliente")
 
         self.assertEqual(resposta.status_code, 200)
         venda.refresh_from_db()
         conta.refresh_from_db()
         recebimento.refresh_from_db()
         self.assertTrue(venda.cancelada)
-        self.assertEqual(conta.status, ContaReceber.STATUS_PAGA)
+        self.assertEqual(conta.status, ContaReceber.STATUS_CANCELADA)
         self.assertEqual(conta.valor_original, Decimal("90.00"))
         self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
         self.assertEqual(recebimento.valor, Decimal("90.00"))
         self.assertTrue(RecebimentoContaReceber.objects.filter(pk=recebimento.pk, conta=conta).exists())
+        credito = CreditoCliente.objects.get(cliente=cliente)
+        self.assertEqual(credito.valor, Decimal("90.00"))
+        self.assertEqual(credito.origem_conta_receber, conta)
+        self.assertEqual(credito.origem_recebimento, recebimento)
+        self.assertTrue(
+            EventoVenda.objects.filter(
+                venda=venda,
+                tipo_evento="venda_cancelada",
+                descricao__icontains="virou credito do cliente",
+            ).exists()
+        )
 
     def test_cancelamento_manual_move_venda_para_consulta_de_canceladas(self):
         cliente = Cliente.objects.create(nome="Cliente Consulta Cancelada Manual", ativo=True)

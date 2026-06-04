@@ -6509,13 +6509,26 @@ def venda_cancelar(request, pk):
     observacao_cancelamento = ""
     confirmacao_cancelamento = ""
     ciencia_cancelamento = ""
+    destino_financeiro = ""
+    destinos_financeiros_recebimento = {
+        "credito_cliente": "gerar credito para o cliente",
+        "devolucao_manual": "registrar devolucao manual ao cliente",
+        "pendencia_financeira": "deixar como pendencia financeira",
+    }
 
     if request.method == "POST":
         motivo_padrao = request.POST.get("motivo_padrao", "").strip()
         observacao_cancelamento = request.POST.get("observacao_cancelamento", "").strip()
         confirmacao_cancelamento = request.POST.get("confirmacao_cancelamento", "")
         ciencia_cancelamento = request.POST.get("ciencia_cancelamento", "")
+        destino_financeiro = request.POST.get("destino_financeiro", "").strip()
         confirmacao_normalizada = confirmacao_cancelamento.strip().upper()
+        total_recebido = (
+            conta_receber.recebimentos.aggregate(total=Sum("valor")).get("total")
+            if conta_receber
+            else Decimal("0.00")
+        ) or Decimal("0.00")
+        total_recebido = total_recebido.quantize(Decimal("0.01"))
         if motivo_padrao not in motivos_cancelamento:
             messages.warning(request, "Informe o motivo do cancelamento.")
         elif motivo_padrao == "Outro motivo" and not observacao_cancelamento:
@@ -6524,11 +6537,62 @@ def venda_cancelar(request, pk):
             messages.warning(request, "Digite CANCELAR exatamente para confirmar o cancelamento da venda.")
         elif ciencia_cancelamento != "1":
             messages.warning(request, "Marque a ciencia de que a venda nao sera apagada e os itens ficarao no historico.")
+        elif recebimentos_count and destino_financeiro not in destinos_financeiros_recebimento:
+            messages.warning(request, "Escolha o destino financeiro do valor ja recebido antes de cancelar a venda.")
+        elif recebimentos_count and destino_financeiro == "credito_cliente" and not venda.cliente:
+            messages.warning(request, "Nao e possivel gerar credito porque a venda nao tem cliente vinculado.")
         else:
             motivo = motivo_padrao
             if observacao_cancelamento:
                 motivo = f"{motivo_padrao} - Observação: {observacao_cancelamento}"
             with transaction.atomic():
+                resumo_financeiro = ""
+                if conta_receber and recebimentos_count:
+                    primeiro_recebimento = conta_receber.recebimentos.order_by("data_recebimento", "id").first()
+                    if destino_financeiro == "credito_cliente":
+                        CreditoCliente.objects.create(
+                            cliente=venda.cliente,
+                            valor=total_recebido,
+                            tipo=CreditoCliente.TIPO_CREDITO_GERADO,
+                            origem_conta_receber=conta_receber,
+                            origem_recebimento=primeiro_recebimento,
+                            observacao=(
+                                f"Credito gerado pelo cancelamento da venda #{venda.id}. "
+                                f"Valor ja recebido preservado: {_formatar_moeda(total_recebido)}."
+                            ),
+                        )
+                        resumo_financeiro = (
+                            f" Valor ja pago ({_formatar_moeda(total_recebido)}) virou credito do cliente. "
+                            "Recebimentos antigos preservados."
+                        )
+                        observacao_conta = (
+                            f"Cancelada por venda nao realizada. Valor ja recebido "
+                            f"({_formatar_moeda(total_recebido)}) transformado em credito do cliente."
+                        )
+                    elif destino_financeiro == "devolucao_manual":
+                        resumo_financeiro = (
+                            f" Valor ja pago ({_formatar_moeda(total_recebido)}) marcado como devolucao manual ao cliente. "
+                            "Recebimentos antigos preservados; caixa nao foi alterado nesta fase."
+                        )
+                        observacao_conta = (
+                            f"Cancelada por venda nao realizada. Valor ja recebido "
+                            f"({_formatar_moeda(total_recebido)}) marcado como devolucao manual ao cliente."
+                        )
+                    else:
+                        resumo_financeiro = (
+                            f" Valor ja pago ({_formatar_moeda(total_recebido)}) ficou como pendencia financeira para resolucao posterior. "
+                            "Recebimentos antigos preservados."
+                        )
+                        observacao_conta = (
+                            f"Cancelada por venda nao realizada. Valor ja recebido "
+                            f"({_formatar_moeda(total_recebido)}) ficou como pendencia financeira para resolucao posterior."
+                        )
+
+                    conta_receber.status = ContaReceber.STATUS_CANCELADA
+                    conta_receber.valor_em_aberto = Decimal("0.00")
+                    conta_receber.observacao = observacao_conta
+                    conta_receber.save(update_fields=["status", "valor_em_aberto", "observacao", "atualizado_em"])
+
                 venda.cancelada = True
                 venda.cancelada_em = timezone.now()
                 venda.motivo_cancelamento = motivo
@@ -6539,12 +6603,15 @@ def venda_cancelar(request, pk):
                     (
                         "Venda cancelada / venda nao realizada. "
                         f"Motivo: {motivo}. "
-                        "Itens preservados para historico. Conta a receber vinculada cancelada quando existente. Estoque e caixa nao foram alterados nesta fase."
+                        "Itens preservados para historico. "
+                        f"{resumo_financeiro} "
+                        "Conta a receber vinculada cancelada/zerada quando existente. Estoque e caixa nao foram alterados nesta fase."
                     ),
                     canal="sistema",
                     usuario=venda.operador,
                 )
-                _sincronizar_conta_receber(venda, "venda cancelada")
+                if not (conta_receber and recebimentos_count):
+                    _sincronizar_conta_receber(venda, "venda cancelada")
 
             messages.success(request, "Venda marcada como CANCELADA / VENDA NAO REALIZADA.")
             return redirect(_url_com_retorno(detalhe_url, retorno_url))
@@ -6561,6 +6628,8 @@ def venda_cancelar(request, pk):
             "motivos_cancelamento": motivos_cancelamento,
             "confirmacao_cancelamento": confirmacao_cancelamento,
             "ciencia_cancelamento": ciencia_cancelamento,
+            "destino_financeiro": destino_financeiro,
+            "destinos_financeiros_recebimento": destinos_financeiros_recebimento,
             "conta_receber": conta_receber,
             "contexto_venda_quitada": contexto_venda_quitada,
             "recebimentos_count": recebimentos_count,

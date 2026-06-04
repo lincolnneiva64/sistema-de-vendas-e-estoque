@@ -264,6 +264,26 @@
             </div>
             <label for="id_observacao_cancelamento">Observação adicional <span id="observacaoObrigatoriaAviso">(obrigatória se escolher Outro motivo)</span></label>
             <textarea id="id_observacao_cancelamento" name="observacao_cancelamento">{{ observacao_cancelamento }}</textarea>
+            {% if recebimentos_count %}
+              <div class="cancel-confirm-box">
+                <strong>Destino do valor ja recebido</strong>
+                <span class="cancel-confirm-hint">Obrigatorio porque esta venda possui baixa/recebimento registrado. Os recebimentos antigos serao preservados.</span>
+                <div class="cancel-options">
+                  <label class="cancel-option">
+                    <input type="radio" name="destino_financeiro" value="credito_cliente" {% if destino_financeiro == "credito_cliente" %}checked{% endif %} required>
+                    <span>Gerar credito para o cliente</span>
+                  </label>
+                  <label class="cancel-option">
+                    <input type="radio" name="destino_financeiro" value="devolucao_manual" {% if destino_financeiro == "devolucao_manual" %}checked{% endif %} required>
+                    <span>Registrar devolucao manual</span>
+                  </label>
+                  <label class="cancel-option">
+                    <input type="radio" name="destino_financeiro" value="pendencia_financeira" {% if destino_financeiro == "pendencia_financeira" %}checked{% endif %} required>
+                    <span>Deixar como pendencia financeira</span>
+                  </label>
+                </div>
+              </div>
+            {% endif %}
             <div class="cancel-confirm-box">
               <label for="id_confirmacao_cancelamento">
                 <strong>Confirmacao obrigatoria</strong>
