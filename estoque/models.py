@@ -324,6 +324,8 @@ class Venda(models.Model):
     cancelada = models.BooleanField(default=False)
     cancelada_em = models.DateTimeField(blank=True, null=True)
     motivo_cancelamento = models.TextField(blank=True)
+    estoque_devolvido_cancelamento = models.BooleanField(default=False)
+    estoque_devolvido_cancelamento_em = models.DateTimeField(blank=True, null=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -443,6 +445,8 @@ class ItemVendaRemovido(models.Model):
         related_name="itens_removidos_origem",
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_REMOVIDO)
+    estoque_devolvido = models.BooleanField(default=False)
+    estoque_devolvido_em = models.DateTimeField(blank=True, null=True)
     operador = models.CharField(max_length=120, blank=True)
     observacao = models.TextField(blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)

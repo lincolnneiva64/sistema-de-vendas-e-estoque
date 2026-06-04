@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import tempfile
 import types
@@ -107,12 +108,13 @@ class FuncionarioTests(TestCase):
 
 
 class PixRecebidoTests(TestCase):
-    def _produto_teste(self, nome):
+    def _produto_teste(self, nome, quantidade=None):
         return Produto.objects.create(
             nome=nome,
             preco_compra=Decimal("1.00"),
             preco_vista=Decimal("2.00"),
             preco_prazo=Decimal("3.00"),
+            quantidade=quantidade,
             permitir_prejuizo=False,
         )
 
@@ -130,6 +132,28 @@ class PixRecebidoTests(TestCase):
             dados,
             secure=True,
             follow=True,
+        )
+
+    def _post_gravar_venda(self, produto, quantidade="1"):
+        return self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps({
+                "cliente_id": "",
+                "data_venda": timezone.localdate().isoformat(),
+                "data_vencimento": "",
+                "tipo_pagamento": "A vista",
+                "operador": "Operador Teste",
+                "itens": [
+                    {
+                        "produto_nome": produto.nome,
+                        "quantidade": quantidade,
+                        "unidade": "un",
+                        "preco_unitario": "2.00",
+                    }
+                ],
+            }),
+            content_type="application/json",
+            secure=True,
         )
 
     def test_cancelamento_manual_preserva_venda_itens_total_e_registra_historico(self):
@@ -599,6 +623,346 @@ class PixRecebidoTests(TestCase):
         self.assertNotContains(resposta_ativas, "Cliente Consulta Cancelada Manual")
         resposta_canceladas = self.client.get(reverse("estoque:consultar_vendas_canceladas"), secure=True)
         self.assertContains(resposta_canceladas, "Cliente Consulta Cancelada Manual")
+
+    def test_gravar_venda_baixa_estoque(self):
+        produto = self._produto_teste("Produto Baixa Estoque Venda", quantidade=5)
+
+        resposta = self._post_gravar_venda(produto, quantidade="2")
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["sucesso"])
+        produto.refresh_from_db()
+        self.assertEqual(produto.quantidade, 3)
+        venda = Venda.objects.get(pk=resposta.json()["venda_id"])
+        self.assertEqual(venda.itens.get().quantidade, Decimal("2.000"))
+        self.assertTrue(
+            EventoVenda.objects.filter(
+                venda=venda,
+                tipo_evento="venda_gravada",
+                descricao__icontains="Estoque baixado",
+            ).exists()
+        )
+
+    def test_gravar_venda_bloqueia_estoque_insuficiente(self):
+        produto = self._produto_teste("Produto Estoque Insuficiente Venda", quantidade=1)
+
+        resposta = self._post_gravar_venda(produto, quantidade="2")
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertFalse(resposta.json()["sucesso"])
+        self.assertIn("Estoque insuficiente", resposta.json()["mensagem"])
+        produto.refresh_from_db()
+        self.assertEqual(produto.quantidade, 1)
+        self.assertEqual(Venda.objects.count(), 0)
+        self.assertEqual(ItemVenda.objects.count(), 0)
+
+    def test_adicionar_item_na_nota_baixa_estoque(self):
+        cliente = Cliente.objects.create(nome="Cliente Adicao Estoque", ativo=True)
+        produto = self._produto_teste("Produto Adicao Estoque", quantidade=5)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("0.00"),
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_adicionar_produto_item", kwargs={"pk": venda.id}),
+            data={
+                "produto_id": str(produto.id),
+                "quantidade": "2",
+                "preco_unitario": "2.00",
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto.refresh_from_db()
+        venda.refresh_from_db()
+        self.assertEqual(produto.quantidade, 3)
+        self.assertEqual(venda.total, Decimal("4.00"))
+        self.assertTrue(ItemVenda.objects.filter(venda=venda, produto=produto, quantidade=Decimal("2.000")).exists())
+
+    def test_remover_item_da_nota_devolve_estoque_do_item(self):
+        cliente = Cliente.objects.create(nome="Cliente Remove Estoque", ativo=True)
+        produto = self._produto_teste("Produto Remove Estoque", quantidade=3)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("4.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("2.00"),
+            valor_total=Decimal("4.00"),
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item.id}),
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto.refresh_from_db()
+        venda.refresh_from_db()
+        remocao = ItemVendaRemovido.objects.get(venda=venda)
+        self.assertEqual(produto.quantidade, 5)
+        self.assertTrue(remocao.estoque_devolvido)
+        self.assertIsNotNone(remocao.estoque_devolvido_em)
+        self.assertFalse(ItemVenda.objects.filter(pk=item.pk).exists())
+        self.assertTrue(
+            EventoVenda.objects.filter(
+                venda=venda,
+                tipo_evento="item_removido_da_nota",
+                descricao__icontains="Estoque devolvido",
+            ).exists()
+        )
+
+    def test_desfazer_remocao_baixa_estoque_novamente(self):
+        cliente = Cliente.objects.create(nome="Cliente Desfaz Estoque", ativo=True)
+        produto = self._produto_teste("Produto Desfaz Estoque", quantidade=3)
+        produto_extra = self._produto_teste("Produto Extra Desfaz Estoque", quantidade=4)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("6.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("2.00"),
+            valor_total=Decimal("4.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_extra,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("2.00"),
+            valor_total=Decimal("2.00"),
+        )
+        self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item.id}),
+            secure=True,
+            follow=True,
+        )
+        produto.refresh_from_db()
+        self.assertEqual(produto.quantidade, 5)
+        remocao = ItemVendaRemovido.objects.get(venda=venda)
+
+        resposta = self.client.post(
+            reverse("estoque:venda_desfazer_remocao_item", kwargs={"pk": venda.id, "remocao_id": remocao.id}),
+            data={"confirmacao_desfazer": "DESFAZER"},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto.refresh_from_db()
+        remocao.refresh_from_db()
+        self.assertEqual(produto.quantidade, 3)
+        self.assertEqual(remocao.status, ItemVendaRemovido.STATUS_REVERTIDO)
+        self.assertFalse(remocao.estoque_devolvido)
+        self.assertTrue(ItemVenda.objects.filter(venda=venda, produto=produto, quantidade=Decimal("2.000")).exists())
+
+    def test_desfazer_remocao_bloqueia_estoque_insuficiente_sem_alterar_nota(self):
+        cliente = Cliente.objects.create(nome="Cliente Desfaz Sem Estoque", ativo=True)
+        produto = self._produto_teste("Produto Desfaz Sem Estoque", quantidade=0)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("0.00"),
+        )
+        remocao = ItemVendaRemovido.objects.create(
+            venda=venda,
+            produto=produto,
+            produto_nome_snapshot=produto.nome,
+            quantidade_snapshot=Decimal("2.000"),
+            unidade_snapshot="un",
+            preco_unitario_snapshot=Decimal("2.00"),
+            valor_total_snapshot=Decimal("4.00"),
+            status=ItemVendaRemovido.STATUS_REMOVIDO,
+            estoque_devolvido=True,
+            estoque_devolvido_em=timezone.now(),
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_desfazer_remocao_item", kwargs={"pk": venda.id, "remocao_id": remocao.id}),
+            data={"confirmacao_desfazer": "DESFAZER"},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto.refresh_from_db()
+        remocao.refresh_from_db()
+        venda.refresh_from_db()
+        self.assertEqual(produto.quantidade, 0)
+        self.assertEqual(remocao.status, ItemVendaRemovido.STATUS_REMOVIDO)
+        self.assertTrue(remocao.estoque_devolvido)
+        self.assertEqual(venda.total, Decimal("0.00"))
+        self.assertEqual(ItemVenda.objects.count(), 0)
+        self.assertContains(resposta, "Estoque insuficiente")
+
+    def test_cancelamento_manual_devolve_estoque_dos_itens_ativos(self):
+        cliente = Cliente.objects.create(nome="Cliente Cancela Estoque", ativo=True)
+        produto = self._produto_teste("Produto Cancela Estoque", quantidade=2)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("6.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("3.000"),
+            unidade="un",
+            preco_unitario=Decimal("2.00"),
+            valor_total=Decimal("6.00"),
+        )
+
+        resposta = self._post_cancelar_venda(venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        produto.refresh_from_db()
+        venda.refresh_from_db()
+        self.assertEqual(produto.quantidade, 5)
+        self.assertTrue(venda.cancelada)
+        self.assertTrue(venda.estoque_devolvido_cancelamento)
+        self.assertIsNotNone(venda.estoque_devolvido_cancelamento_em)
+        self.assertTrue(
+            EventoVenda.objects.filter(
+                venda=venda,
+                tipo_evento="venda_cancelada",
+                descricao__icontains="Estoque devolvido dos itens ativos",
+            ).exists()
+        )
+
+    def test_cancelamento_manual_nao_devolve_item_ja_removido_duas_vezes(self):
+        cliente = Cliente.objects.create(nome="Cliente Cancela Item Removido Estoque", ativo=True)
+        produto_ativo = self._produto_teste("Produto Ativo Cancelamento Estoque", quantidade=8)
+        produto_removido = self._produto_teste("Produto Removido Cancelamento Estoque", quantidade=7)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("4.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_ativo,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("2.00"),
+            valor_total=Decimal("4.00"),
+        )
+        ItemVendaRemovido.objects.create(
+            venda=venda,
+            produto=produto_removido,
+            produto_nome_snapshot=produto_removido.nome,
+            quantidade_snapshot=Decimal("3.000"),
+            unidade_snapshot="un",
+            preco_unitario_snapshot=Decimal("2.00"),
+            valor_total_snapshot=Decimal("6.00"),
+            status=ItemVendaRemovido.STATUS_REMOVIDO,
+            estoque_devolvido=True,
+            estoque_devolvido_em=timezone.now(),
+        )
+
+        resposta = self._post_cancelar_venda(venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        produto_ativo.refresh_from_db()
+        produto_removido.refresh_from_db()
+        self.assertEqual(produto_ativo.quantidade, 10)
+        self.assertEqual(produto_removido.quantidade, 7)
+
+    def test_cancelamento_manual_com_credito_cliente_cria_credito_e_devolve_estoque(self):
+        cliente = Cliente.objects.create(nome="Cliente Credito Estoque", ativo=True)
+        produto = self._produto_teste("Produto Credito Estoque", quantidade=5)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("4.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("2.00"),
+            valor_total=Decimal("4.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("4.00"),
+            valor_em_aberto=Decimal("0.00"),
+            status=ContaReceber.STATUS_PAGA,
+        )
+        recebimento = RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=timezone.localdate(),
+            valor=Decimal("4.00"),
+            forma_pagamento="PIX",
+        )
+
+        resposta = self._post_cancelar_venda(venda, destino_financeiro="credito_cliente")
+
+        self.assertEqual(resposta.status_code, 200)
+        produto.refresh_from_db()
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        credito = CreditoCliente.objects.get(cliente=cliente)
+        self.assertEqual(produto.quantidade, 7)
+        self.assertTrue(venda.cancelada)
+        self.assertTrue(venda.estoque_devolvido_cancelamento)
+        self.assertEqual(conta.status, ContaReceber.STATUS_CANCELADA)
+        self.assertEqual(credito.valor, Decimal("4.00"))
+        self.assertEqual(credito.origem_conta_receber, conta)
+        self.assertEqual(credito.origem_recebimento, recebimento)
+
+    def test_venda_ja_cancelada_nao_devolve_estoque_novamente(self):
+        cliente = Cliente.objects.create(nome="Cliente Cancelada Sem Dobrar Estoque", ativo=True)
+        produto = self._produto_teste("Produto Cancelada Sem Dobrar Estoque", quantidade=5)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("4.00"),
+            cancelada=True,
+            cancelada_em=timezone.now(),
+            motivo_cancelamento="Cancelamento anterior",
+            estoque_devolvido_cancelamento=True,
+            estoque_devolvido_cancelamento_em=timezone.now(),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("2.00"),
+            valor_total=Decimal("4.00"),
+        )
+
+        resposta = self._post_cancelar_venda(venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        produto.refresh_from_db()
+        self.assertEqual(produto.quantidade, 5)
 
     def test_venda_com_conta_paga_mostra_aviso_de_quitada_no_detalhe(self):
         cliente = Cliente.objects.create(nome="Cliente Aviso Conta Paga", ativo=True)
