@@ -1824,6 +1824,19 @@ function renderizarSugestoesClientes() {
     });
 
     clienteSugestoesBox.style.display = "block";
+
+    const clientePreviewFinanceiro = clientesSugestoes[
+        clienteIndexAtivo >= 0 ? clienteIndexAtivo : 0
+    ];
+    if (clientePreviewFinanceiro?.id) {
+        clienteSelecionado = clientePreviewFinanceiro;
+        clienteResumoSuspenso = false;
+        clienteId.value = clientePreviewFinanceiro.id || "";
+        guardarClienteSelecionado(clientePreviewFinanceiro);
+        atualizarCabecalhoCliente(clientePreviewFinanceiro);
+        atualizarPrazoEVencimentoCliente();
+    }
+
     const itemAtivoCliente = clienteSugestoesBox.querySelector(".cliente-sugestao-item.ativo");
     if (itemAtivoCliente) {
         itemAtivoCliente.scrollIntoView({ block: "nearest", behavior: "smooth" });
