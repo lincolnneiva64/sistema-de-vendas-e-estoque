@@ -349,13 +349,13 @@
 
         .sugestoes-cliente-tabela {
             width: 100%;
-            min-width: 1120px;
+            min-width: 1180px;
             border-collapse: collapse;
             table-layout: fixed;
         }
 
         .sugestoes-col-produto {
-            width: 30%;
+            width: 27%;
         }
 
         .sugestoes-col-qtd {
@@ -390,8 +390,12 @@
         }
 
         .sugestoes-col-acao {
-            width: 8%;
+            position: sticky;
+            right: 0;
+            z-index: 3;
+            width: 150px;
             text-align: center !important;
+            box-shadow: -8px 0 12px rgba(18, 60, 38, 0.06);
         }
 
         .sugestoes-cliente-tabela th {
@@ -416,6 +420,14 @@
             white-space: nowrap;
         }
 
+        .sugestoes-cliente-tabela th.sugestoes-col-acao {
+            background: #edf8f1;
+        }
+
+        .sugestoes-cliente-tabela td.sugestoes-col-acao {
+            background: #ffffff;
+        }
+
         .sugestoes-cliente-tabela .sugestoes-col-produto {
             white-space: normal;
         }
@@ -435,11 +447,24 @@
 
         .sugestoes-cliente-acoes {
             display: flex;
-            justify-content: flex-end;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            flex-wrap: wrap;
             margin-top: 8px;
         }
 
-        .btn-sugestoes-toggle {
+        .sugestoes-modo-controles,
+        .sugestoes-lista-controles {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .btn-sugestoes-toggle,
+        .btn-sugestoes-modo,
+        .btn-sugestoes-limpar {
             border: 1px solid #b7d8c0;
             border-radius: 6px;
             background: #f6fff8;
@@ -451,8 +476,26 @@
             padding: 7px 11px;
         }
 
-        .btn-sugestoes-toggle:hover {
+        .btn-sugestoes-toggle:hover,
+        .btn-sugestoes-modo:hover,
+        .btn-sugestoes-limpar:hover {
             background: #dcfce7;
+        }
+
+        .btn-sugestoes-modo.ativo {
+            border-color: #16a34a;
+            background: #dcfce7;
+            color: #14532d;
+        }
+
+        .btn-sugestoes-limpar {
+            border-color: #f0c66a;
+            background: #fff7d6;
+            color: #7a4b00;
+        }
+
+        .btn-sugestoes-limpar:hover {
+            background: #fde68a;
         }
 
         .sugestao-qtd-input {
@@ -518,8 +561,8 @@
             border-color: #fecaca;
             background: #fff1f2;
             color: #991b1b;
-            min-width: 30px;
-            padding: 5px 8px;
+            min-width: 32px;
+            padding: 5px 9px;
         }
 
         .btn-sugestao-ignorar:hover {
@@ -912,6 +955,17 @@
                     <span class="status-chip">Ultimas compras</span>
                 </div>
 
+                <div class="sugestoes-cliente-acoes">
+                    <div class="sugestoes-modo-controles" aria-label="Modo de lancamento do pedido">
+                        <button type="button" class="btn-sugestoes-modo ativo" id="btn-sugestoes-usar">Usar sugestoes</button>
+                        <button type="button" class="btn-sugestoes-modo" id="btn-sugestoes-sem">Pedido sem sugestao</button>
+                    </div>
+                    <div class="sugestoes-lista-controles">
+                        <button type="button" class="btn-sugestoes-limpar" id="btn-sugestoes-limpar">Limpar sugestoes</button>
+                        <button type="button" class="btn-sugestoes-toggle" id="btn-sugestoes-toggle" style="display: none;">Ver mais sugestoes</button>
+                    </div>
+                </div>
+
                 <div id="sugestoes-cliente-vazio" class="sugestoes-cliente-vazio">
                     Selecione um cliente para consultar sugestoes pelas ultimas compras.
                 </div>
@@ -931,9 +985,6 @@
                         </thead>
                         <tbody id="sugestoes-cliente-tbody"></tbody>
                     </table>
-                </div>
-                <div class="sugestoes-cliente-acoes">
-                    <button type="button" class="btn-sugestoes-toggle" id="btn-sugestoes-toggle" style="display: none;">Ver mais sugestoes</button>
                 </div>
             </section>
 
@@ -1079,6 +1130,9 @@
         const sugestoesClienteWrap = document.getElementById("sugestoes-cliente-wrap");
         const sugestoesClienteTbody = document.getElementById("sugestoes-cliente-tbody");
         const btnSugestoesToggle = document.getElementById("btn-sugestoes-toggle");
+        const btnSugestoesUsar = document.getElementById("btn-sugestoes-usar");
+        const btnSugestoesSem = document.getElementById("btn-sugestoes-sem");
+        const btnSugestoesLimpar = document.getElementById("btn-sugestoes-limpar");
         const produtoBusca = document.getElementById("produto-busca");
         const produtoSugestoes = document.getElementById("produto-sugestoes");
         const produtoId = document.getElementById("produto-id");
@@ -1100,6 +1154,7 @@
         let sugestoesClienteRequisicao = 0;
         let sugestoesClienteLista = [];
         let sugestoesClienteExpandida = false;
+        let sugestoesClienteAtivas = true;
         let manterTelaNasSugestoes = false;
 
         function normalizarTexto(valor) {
@@ -1171,6 +1226,22 @@
             }
         }
 
+        function atualizarModoSugestoesCliente() {
+            btnSugestoesUsar.classList.toggle("ativo", sugestoesClienteAtivas);
+            btnSugestoesSem.classList.toggle("ativo", !sugestoesClienteAtivas);
+        }
+
+        function limparSugestoesClienteVisualmente(mensagem) {
+            sugestoesClienteRequisicao += 1;
+            sugestoesClienteLista = [];
+            sugestoesClienteExpandida = false;
+            sugestoesClienteTbody.innerHTML = "";
+            sugestoesClienteWrap.style.display = "none";
+            btnSugestoesToggle.style.display = "none";
+            sugestoesClienteVazio.style.display = "block";
+            sugestoesClienteVazio.textContent = mensagem;
+        }
+
         function mostrarSugestoesCliente(sugestoes, mensagemVazia) {
             sugestoesClienteLista = deduplicarSugestoesCliente(sugestoes || []);
             sugestoesClienteExpandida = false;
@@ -1193,6 +1264,11 @@
             const clienteId = clientePedido.value;
             sugestoesClienteRequisicao += 1;
             const requisicaoAtual = sugestoesClienteRequisicao;
+
+            if (!sugestoesClienteAtivas) {
+                limparSugestoesClienteVisualmente("Pedido sem sugestao. Continue lancando os produtos manualmente.");
+                return;
+            }
 
             if (!clienteId) {
                 mostrarSugestoesCliente([], "Selecione um cliente para consultar sugestoes pelas ultimas compras.");
@@ -1228,6 +1304,7 @@
         }
 
         function prepararSugestoesClienteInicial() {
+            atualizarModoSugestoesCliente();
             mostrarSugestoesCliente([], "Selecione um cliente para consultar sugestoes pelas ultimas compras.");
         }
 
@@ -1906,6 +1983,24 @@
             manterSugestoesClienteVisiveis();
         });
 
+        btnSugestoesUsar.addEventListener("click", () => {
+            sugestoesClienteAtivas = true;
+            atualizarModoSugestoesCliente();
+            carregarSugestoesCliente();
+        });
+
+        btnSugestoesSem.addEventListener("click", () => {
+            sugestoesClienteAtivas = false;
+            atualizarModoSugestoesCliente();
+            limparSugestoesClienteVisualmente("Pedido sem sugestao. Continue lancando os produtos manualmente.");
+            focarSemSelecionar(produtoBusca);
+        });
+
+        btnSugestoesLimpar.addEventListener("click", () => {
+            limparSugestoesClienteVisualmente("Sugestoes limpas. Continue lancando os produtos manualmente.");
+            focarSemSelecionar(produtoBusca);
+        });
+
         sugestoesClienteTbody.addEventListener("click", (event) => {
             const btnQtd = event.target.closest("[data-sugestao-qtd-ajuste]");
             if (btnQtd) {
@@ -1925,6 +2020,8 @@
         });
 
         clientePedido.addEventListener("change", () => {
+            sugestoesClienteAtivas = true;
+            atualizarModoSugestoesCliente();
             if (clientePedido.value) {
                 clientePedido.classList.remove("campo-invalido");
                 limparMensagem();
