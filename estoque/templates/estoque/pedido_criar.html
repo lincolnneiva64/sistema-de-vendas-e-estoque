@@ -12,17 +12,19 @@
         }
 
         body {
+            --rodape-pedido-altura: 76px;
             min-height: 100vh;
             font-family: "Segoe UI", Arial, sans-serif;
             background: #eef7f0;
             color: #10251a;
             font-size: 16px;
+            scroll-padding-bottom: calc(var(--rodape-pedido-altura) + 24px);
         }
 
         .pedido-page {
             width: min(1280px, calc(100% - 28px));
             margin: 0 auto;
-            padding: 18px 0 248px;
+            padding: 18px 0 calc(var(--rodape-pedido-altura) + 26px);
         }
 
         .pedido-topo {
@@ -205,6 +207,12 @@
             box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.16);
         }
 
+        .campo-invalido {
+            border-color: #e11d48 !important;
+            background: #fff1f2 !important;
+            box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.16) !important;
+        }
+
         .lancamento-card {
             border: 3px solid #16a34a;
             box-shadow: 0 18px 42px rgba(22, 163, 74, 0.20);
@@ -228,7 +236,7 @@
             right: 0;
             z-index: 30;
             display: none;
-            max-height: 206px;
+            max-height: min(246px, calc(100vh - var(--rodape-pedido-altura) - 210px));
             overflow-y: auto;
             border: 1px solid #91c99f;
             border-radius: 8px;
@@ -586,7 +594,7 @@
             }
 
             .pedido-page {
-                padding-bottom: 282px;
+                padding-bottom: calc(var(--rodape-pedido-altura) + 22px);
             }
         }
     </style>
@@ -771,6 +779,7 @@
         let itemDuplicadoIndex = null;
         let timerItemDuplicado = null;
         let abrirSugestoesNoFoco = false;
+        let termoSequenciaProdutos = "";
 
         const dataPedido = document.getElementById("data_pedido");
         const clientePedido = document.getElementById("cliente_id");
@@ -790,6 +799,8 @@
         const contadorItens = document.getElementById("contador-itens");
         const itensJson = document.getElementById("itens_json");
         const btnSalvar = document.getElementById("btn-salvar");
+        const formPedido = document.getElementById("form-pedido");
+        const rodapePedido = document.querySelector(".rodape-pedido");
 
         function normalizarTexto(valor) {
             return String(valor || "").trim().toLowerCase();
@@ -818,6 +829,41 @@
             mensagemTela.textContent = "";
         }
 
+        function atualizarEspacoRodape() {
+            const altura = rodapePedido ? Math.ceil(rodapePedido.getBoundingClientRect().height) : 76;
+            document.body.style.setProperty("--rodape-pedido-altura", `${altura}px`);
+        }
+
+        function focarSemSelecionar(campo) {
+            campo.focus({ preventScroll: true });
+            if (typeof campo.setSelectionRange === "function") {
+                const posicao = String(campo.value || "").length;
+                campo.setSelectionRange(posicao, posicao);
+            }
+        }
+
+        function focarSelecionando(campo) {
+            campo.focus({ preventScroll: true });
+            if (typeof campo.select === "function") campo.select();
+        }
+
+        function focarClienteObrigatorio() {
+            clientePedido.classList.add("campo-invalido");
+            mostrarMensagem("erro", "Selecione um cliente para continuar com o pedido.");
+            clientePedido.scrollIntoView({ behavior: "smooth", block: "center" });
+            window.setTimeout(() => clientePedido.focus(), 180);
+        }
+
+        function validarClienteObrigatorio() {
+            if (clientePedido.value) {
+                clientePedido.classList.remove("campo-invalido");
+                return true;
+            }
+
+            focarClienteObrigatorio();
+            return false;
+        }
+
         function localizarProduto(valor) {
             const termo = normalizarTexto(valor);
             if (!termo) return null;
@@ -841,14 +887,47 @@
             return exatos.concat(parciais).slice(0, 6);
         }
 
-        function manterLancamentoVisivel() {
-            const margemRodape = 142;
-            const lancamento = produtoBusca.closest(".lancamento-card") || produtoBusca;
-            const rect = lancamento.getBoundingClientRect();
-            const limiteInferior = window.innerHeight - margemRodape;
+        function produtoCombinaComTermo(produto, termo) {
+            if (!termo) return true;
+            return normalizarTexto(produto.nome).includes(termo);
+        }
 
-            if (rect.top < 56 || rect.bottom + 224 > limiteInferior) {
-                lancamento.scrollIntoView({ behavior: "smooth", block: "center" });
+        function produtoJaLancado(produto) {
+            return itens.some((item) => String(item.produto_id) === String(produto.id));
+        }
+
+        function indiceProduto(produto) {
+            return produtos.findIndex((item) => String(item.id) === String(produto.id));
+        }
+
+        function proximoProdutoNaSequencia(produtoAtual) {
+            const inicio = indiceProduto(produtoAtual);
+            if (inicio === -1) return null;
+
+            const restantes = produtos.slice(inicio + 1);
+            const proximoDoFiltro = restantes.find((produto) => {
+                return produtoCombinaComTermo(produto, termoSequenciaProdutos) && !produtoJaLancado(produto);
+            });
+
+            if (proximoDoFiltro) return proximoDoFiltro;
+            return restantes.find((produto) => !produtoJaLancado(produto)) || null;
+        }
+
+        function manterLancamentoVisivel() {
+            atualizarEspacoRodape();
+            const lancamento = produtoBusca.closest(".lancamento-card") || produtoBusca;
+            const tabela = tabelaWrap.style.display === "none" ? semItens : tabelaWrap;
+            const rectProduto = produtoBusca.getBoundingClientRect();
+            const rectLancamento = lancamento.getBoundingClientRect();
+            const rectTabela = tabela.getBoundingClientRect();
+            const alturaRodape = rodapePedido ? rodapePedido.getBoundingClientRect().height : 76;
+            const limiteInferior = window.innerHeight - alturaRodape - 18;
+            const areaBaixa = Math.min(rectTabela.top + 120, rectLancamento.bottom + 190);
+            const precisaSubir = rectProduto.top < 64 || areaBaixa > limiteInferior;
+
+            if (precisaSubir) {
+                const destino = window.scrollY + rectProduto.top - 86;
+                window.scrollTo({ top: Math.max(destino, 0), behavior: "smooth" });
             }
         }
 
@@ -966,6 +1045,56 @@
             abrirSugestoesNoFoco = false;
             atualizarContextoProduto(null);
             fecharSugestoes();
+            if (typeof produtoBusca.setSelectionRange === "function") {
+                produtoBusca.setSelectionRange(0, 0);
+            }
+        }
+
+        function limparCamposDoItem() {
+            itemQuantidade.value = "";
+            itemUnidade.value = "";
+            itemPreco.value = "";
+        }
+
+        function prepararProximoProduto(produtoAtual, opcoes) {
+            const deveLimparCampos = !opcoes || opcoes.limparCamposItem !== false;
+            const proximoProduto = proximoProdutoNaSequencia(produtoAtual);
+            if (deveLimparCampos) limparCamposDoItem();
+            fecharSugestoes();
+
+            if (!proximoProduto) {
+                produtoBusca.value = "";
+                produtoId.value = "";
+                produtoSelecionado = null;
+                abrirSugestoesNoFoco = false;
+                atualizarContextoProduto(null);
+                if (deveLimparCampos) focarSemSelecionar(produtoBusca);
+                return;
+            }
+
+            if (deveLimparCampos) {
+                preencherProduto(proximoProduto);
+            } else {
+                produtoSelecionado = proximoProduto;
+                produtoBusca.value = proximoProduto.nome;
+                produtoId.value = proximoProduto.id;
+                atualizarContextoProduto(proximoProduto);
+                fecharSugestoes();
+            }
+            abrirSugestoesNoFoco = false;
+            focarSelecionando(produtoBusca);
+        }
+
+        function bloquearProdutoDuplicadoNoProduto(produto) {
+            const itemExistenteIndex = itens.findIndex((item) => String(item.produto_id) === String(produto.id));
+            if (itemExistenteIndex === -1) return false;
+
+            destacarItemDuplicado(itemExistenteIndex);
+            mostrarMensagem("erro", "Este produto j\u00e1 est\u00e1 no pedido. Altere a quantidade na linha do item j\u00e1 lan\u00e7ado.");
+            prepararProximoProduto(produto, { limparCamposItem: false });
+            focarSemSelecionar(produtoBusca);
+            manterLancamentoVisivel();
+            return true;
         }
 
         function destacarItemDuplicado(index) {
@@ -1013,23 +1142,13 @@
             }
 
             const valorTotal = quantidade * precoUnitario;
-            const unidadeNormalizada = normalizarTexto(unidade);
             const itemExistenteIndex = itens.findIndex((item) => String(item.produto_id) === String(produto.id));
 
             if (itemExistenteIndex !== -1) {
                 destacarItemDuplicado(itemExistenteIndex);
-                const itemExistente = itens[itemExistenteIndex];
-                const precoDiferente = Number(itemExistente.preco_unitario) !== Number(precoUnitario.toFixed(2));
-                const unidadeDiferente = normalizarTexto(itemExistente.unidade) !== unidadeNormalizada;
-
-                if (precoDiferente || unidadeDiferente) {
-                    mostrarMensagem("erro", "Este produto ja esta no pedido. Para usar preco/unidade diferente, revise o item existente.");
-                } else {
-                    mostrarMensagem("erro", "Este produto ja esta no pedido. Altere a quantidade na linha do item ja lancado.");
-                }
-
-                produtoBusca.focus();
-                produtoBusca.select();
+                mostrarMensagem("erro", "Este produto j\u00e1 est\u00e1 no pedido. Altere a quantidade na linha do item j\u00e1 lan\u00e7ado.");
+                prepararProximoProduto(produto);
+                focarSemSelecionar(produtoBusca);
                 manterLancamentoVisivel();
                 return;
             }
@@ -1048,10 +1167,9 @@
             btnAdicionar.classList.add("click-feedback");
             window.setTimeout(() => btnAdicionar.classList.remove("click-feedback"), 130);
 
-            limparLancamento();
             atualizarTabela();
+            prepararProximoProduto(produto);
             mostrarMensagem("sucesso", "Item adicionado ao pedido.");
-            produtoBusca.focus();
             manterLancamentoVisivel();
         }
 
@@ -1064,7 +1182,7 @@
             window.clearTimeout(timerRemocaoPendente);
             atualizarTabela();
             mostrarMensagem("sucesso", `Item removido: ${item.produto_nome}.`);
-            produtoBusca.focus();
+            focarSemSelecionar(produtoBusca);
         }
 
         function pedirConfirmacaoRemocao(index) {
@@ -1127,6 +1245,7 @@
         produtoBusca.addEventListener("input", () => {
             limparMensagem();
             abrirSugestoesNoFoco = true;
+            termoSequenciaProdutos = normalizarTexto(produtoBusca.value);
             produtoSelecionado = localizarProduto(produtoBusca.value);
             produtoId.value = produtoSelecionado ? produtoSelecionado.id : "";
             atualizarContextoProduto(produtoSelecionado);
@@ -1135,6 +1254,7 @@
 
         produtoBusca.addEventListener("focus", () => {
             if (abrirSugestoesNoFoco) renderizarSugestoes();
+            manterLancamentoVisivel();
         });
         produtoBusca.addEventListener("click", () => {
             abrirSugestoesNoFoco = true;
@@ -1167,13 +1287,22 @@
             if (event.key === "Enter") {
                 event.preventDefault();
                 const sugestao = produtosSugeridos[sugestaoAtiva];
-                if ((sugestao && preencherProduto(sugestao)) || selecionarProdutoPeloTexto()) {
+                const produto = sugestao || localizarProduto(produtoBusca.value);
+
+                if (!produto) {
+                    mostrarMensagem("erro", "Produto nao encontrado no cadastro.");
+                    produtoBusca.select();
+                    return;
+                }
+
+                if (bloquearProdutoDuplicadoNoProduto(produto)) {
+                    return;
+                }
+
+                if (preencherProduto(produto)) {
                     if (!itemQuantidade.value) itemQuantidade.value = "1";
                     itemQuantidade.focus();
                     itemQuantidade.select();
-                } else {
-                    mostrarMensagem("erro", "Produto nao encontrado no cadastro.");
-                    produtoBusca.select();
                 }
             }
         });
@@ -1184,6 +1313,10 @@
             if (!btn) return;
 
             const produto = produtosSugeridos[Number(btn.dataset.index)];
+            if (produto && bloquearProdutoDuplicadoNoProduto(produto)) {
+                return;
+            }
+
             if (preencherProduto(produto)) {
                 if (!itemQuantidade.value) itemQuantidade.value = "1";
                 itemQuantidade.focus();
@@ -1216,17 +1349,25 @@
 
         btnAdicionar.addEventListener("click", adicionarItem);
 
-        function avancarComEnter(origem, destino) {
+        clientePedido.addEventListener("change", () => {
+            if (clientePedido.value) {
+                clientePedido.classList.remove("campo-invalido");
+                limparMensagem();
+            }
+        });
+
+        function avancarComEnter(origem, destino, antesDeAvancar) {
             origem.addEventListener("keydown", (event) => {
                 if (event.key !== "Enter") return;
                 event.preventDefault();
+                if (antesDeAvancar && !antesDeAvancar()) return;
                 destino.focus();
                 if (typeof destino.select === "function") destino.select();
             });
         }
 
         avancarComEnter(dataPedido, clientePedido);
-        avancarComEnter(clientePedido, dataPrevistaEntrega);
+        avancarComEnter(clientePedido, dataPrevistaEntrega, validarClienteObrigatorio);
         avancarComEnter(dataPrevistaEntrega, operadorPedido);
         avancarComEnter(operadorPedido, produtoBusca);
 
@@ -1248,13 +1389,18 @@
             }
         });
 
-        document.getElementById("form-pedido").addEventListener("submit", function(event) {
+        formPedido.addEventListener("submit", function(event) {
             event.preventDefault();
             limparMensagem();
 
+            if (!validarClienteObrigatorio()) {
+                return;
+            }
+
             if (!itens.length) {
                 mostrarMensagem("erro", "Adicione pelo menos um item ao pedido.");
-                produtoBusca.focus();
+                focarSemSelecionar(produtoBusca);
+                manterLancamentoVisivel();
                 return;
             }
 
@@ -1278,6 +1424,9 @@
                 }
 
                 mostrarMensagem("erro", data.mensagem || "Erro ao criar pedido.");
+                if (String(data.mensagem || "").toLowerCase().includes("cliente")) {
+                    focarClienteObrigatorio();
+                }
                 btnSalvar.disabled = false;
                 btnSalvar.textContent = "Salvar Pedido";
             })
@@ -1290,7 +1439,10 @@
 
         atualizarContextoProduto(null);
         atualizarTabela();
+        atualizarEspacoRodape();
+        window.addEventListener("resize", atualizarEspacoRodape);
         window.addEventListener("load", () => {
+            atualizarEspacoRodape();
             dataPedido.focus();
             dataPedido.select();
         });
