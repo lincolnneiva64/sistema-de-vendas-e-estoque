@@ -625,46 +625,75 @@
             background: #f4fff7;
         }
 
-        .col-produto {
-            width: 40%;
+        .tabela-itens .itens-col-produto {
+            width: 34%;
+            text-align: left;
         }
 
-        .col-qtd {
-            width: 9%;
-        }
-
-        .col-unidade {
-            width: 9%;
+        .tabela-itens .itens-col-estoque {
+            width: 58px;
             text-align: center;
+            white-space: nowrap;
         }
 
-        .col-preco,
-        .col-total {
-            width: 11%;
-        }
-
-        .col-obs {
-            width: 15%;
-        }
-
-        .col-acao {
-            width: 86px;
+        .tabela-itens .itens-col-qtd {
+            width: 68px;
             text-align: center;
+            white-space: nowrap;
+        }
+
+        .tabela-itens .itens-col-un {
+            width: 62px;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .tabela-itens .itens-col-preco,
+        .tabela-itens .itens-col-total {
+            width: 118px;
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .tabela-itens .itens-col-obs {
+            width: 170px;
+            text-align: left;
+        }
+
+        .tabela-itens .itens-col-acao {
+            width: 104px;
+            text-align: center;
+            white-space: nowrap;
         }
 
         .item-produto {
             display: block;
             color: #123c26;
             font-weight: 850;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
-        .item-estoque-ref {
-            display: block;
-            margin-top: 3px;
-            color: #447056;
+        .tabela-itens td.itens-col-estoque {
+            color: #31543b;
+            font-weight: 800;
+        }
+
+        .item-estoque-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 24px;
+            height: 20px;
+            padding: 0 6px;
+            border: 1px solid #d2e4d3;
+            border-radius: 999px;
+            background: #f1f8f0;
+            color: #31543b;
             font-size: 12px;
-            font-weight: 700;
-            line-height: 1.2;
+            font-weight: 850;
+            line-height: 1;
         }
 
         .item-total {
@@ -673,6 +702,8 @@
         }
 
         .tabela-itens input {
+            width: 100%;
+            box-sizing: border-box;
             min-height: 30px;
             padding: 5px 7px;
             font-size: 13px;
@@ -969,15 +1000,26 @@
                 <div id="sem-itens" class="sem-itens">Nenhum item adicionado. Use a linha de lancamento acima.</div>
                 <div id="tabela-wrap" class="tabela-wrap" style="display: none;">
                     <table class="tabela-itens">
+                        <colgroup>
+                            <col class="itens-col-produto">
+                            <col class="itens-col-estoque">
+                            <col class="itens-col-qtd">
+                            <col class="itens-col-un">
+                            <col class="itens-col-preco">
+                            <col class="itens-col-total">
+                            <col class="itens-col-obs">
+                            <col class="itens-col-acao">
+                        </colgroup>
                         <thead>
                             <tr>
-                                <th class="col-produto">Produto</th>
-                                <th class="numero col-qtd">Qtd</th>
-                                <th class="col-unidade">Un</th>
-                                <th class="numero col-preco">Preco unit.</th>
-                                <th class="numero col-total">Total</th>
-                                <th class="col-obs">Obs.</th>
-                                <th class="col-acao">Acao</th>
+                                <th class="itens-col-produto">Produto</th>
+                                <th class="itens-col-estoque">Est.</th>
+                                <th class="itens-col-qtd">Qtd</th>
+                                <th class="itens-col-un">Un</th>
+                                <th class="itens-col-preco">Preco unit.</th>
+                                <th class="itens-col-total">Total</th>
+                                <th class="itens-col-obs">Obs.</th>
+                                <th class="itens-col-acao">Acao</th>
                             </tr>
                         </thead>
                         <tbody id="tbody-itens"></tbody>
@@ -1727,16 +1769,16 @@
                 if (index === itemDuplicadoIndex) tr.classList.add("linha-duplicada");
                 tr.dataset.index = index;
                 tr.innerHTML = `
-                    <td class="col-produto">
+                    <td class="itens-col-produto">
                         <span class="item-produto">${escaparHtml(item.produto_nome)}</span>
-                        <span class="item-estoque-ref">Estoque atual: ${escaparHtml(formatarEstoqueItem(item.estoque_no_momento))}</span>
                     </td>
-                    <td class="numero col-qtd">${Number(item.quantidade).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</td>
-                    <td class="col-unidade">${escaparHtml(item.unidade || "-")}</td>
-                    <td class="numero col-preco">${formatarMoeda(item.preco_unitario)}</td>
-                    <td class="numero col-total"><span class="item-total">${formatarMoeda(item.valor_total)}</span></td>
-                    <td class="col-obs"><input type="text" value="${escaparHtml(item.observacao || "")}" placeholder="obs" aria-label="Observacao do item" data-index="${index}"></td>
-                    <td class="col-acao"><button type="button" class="btn btn-remover${index === remocaoPendente ? " confirmar" : ""}" data-remover="${index}">${index === remocaoPendente ? "Confirmar" : "Remover"}</button></td>
+                    <td class="itens-col-estoque"><span class="item-estoque-badge">${escaparHtml(formatarEstoqueItem(item.estoque_no_momento))}</span></td>
+                    <td class="itens-col-qtd">${Number(item.quantidade).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</td>
+                    <td class="itens-col-un">${escaparHtml(item.unidade || "-")}</td>
+                    <td class="itens-col-preco">${formatarMoeda(item.preco_unitario)}</td>
+                    <td class="itens-col-total"><span class="item-total">${formatarMoeda(item.valor_total)}</span></td>
+                    <td class="itens-col-obs"><input type="text" value="${escaparHtml(item.observacao || "")}" placeholder="obs" aria-label="Observacao do item" data-index="${index}"></td>
+                    <td class="itens-col-acao"><button type="button" class="btn btn-remover${index === remocaoPendente ? " confirmar" : ""}" data-remover="${index}">${index === remocaoPendente ? "Confirmar" : "Remover"}</button></td>
                 `;
                 tbodyItens.appendChild(tr);
             });
