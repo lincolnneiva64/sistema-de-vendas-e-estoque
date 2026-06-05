@@ -456,14 +456,41 @@
         }
 
         .sugestao-qtd-input {
-            width: 78px;
+            width: 62px;
             min-height: 30px;
             padding: 5px 7px;
             text-align: center;
             font-size: 13px;
         }
 
-        .btn-sugestao-adicionar {
+        .sugestao-qtd-controle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            white-space: nowrap;
+        }
+
+        .btn-sugestao-qtd {
+            width: 28px;
+            min-height: 30px;
+            border: 1px solid #b7d8c0;
+            border-radius: 6px;
+            background: #f6fff8;
+            color: #14532d;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 15px;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        .btn-sugestao-qtd:hover {
+            background: #dcfce7;
+        }
+
+        .btn-sugestao-adicionar,
+        .btn-sugestao-ignorar {
             min-height: 30px;
             border: 1px solid #86efac;
             border-radius: 6px;
@@ -476,8 +503,27 @@
             padding: 5px 9px;
         }
 
+        .sugestao-acoes-linha {
+            display: inline-flex;
+            justify-content: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+
         .btn-sugestao-adicionar:hover {
             background: #bbf7d0;
+        }
+
+        .btn-sugestao-ignorar {
+            border-color: #fecaca;
+            background: #fff1f2;
+            color: #991b1b;
+            min-width: 30px;
+            padding: 5px 8px;
+        }
+
+        .btn-sugestao-ignorar:hover {
+            background: #fee2e2;
         }
 
         .btn {
@@ -580,7 +626,7 @@
         }
 
         .col-produto {
-            width: 31%;
+            width: 40%;
         }
 
         .col-qtd {
@@ -597,12 +643,8 @@
             width: 11%;
         }
 
-        .col-estoque {
-            width: 10%;
-        }
-
         .col-obs {
-            width: 12%;
+            width: 15%;
         }
 
         .col-acao {
@@ -611,8 +653,18 @@
         }
 
         .item-produto {
+            display: block;
             color: #123c26;
             font-weight: 850;
+        }
+
+        .item-estoque-ref {
+            display: block;
+            margin-top: 3px;
+            color: #447056;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1.2;
         }
 
         .item-total {
@@ -924,7 +976,6 @@
                                 <th class="col-unidade">Un</th>
                                 <th class="numero col-preco">Preco unit.</th>
                                 <th class="numero col-total">Total</th>
-                                <th class="numero col-estoque">Estoque ref.</th>
                                 <th class="col-obs">Obs.</th>
                                 <th class="col-acao">Acao</th>
                             </tr>
@@ -1031,6 +1082,11 @@
             return String(valor);
         }
 
+        function formatarEstoqueItem(valor) {
+            if (valor === null || valor === undefined || valor === "") return "-";
+            return String(valor);
+        }
+
         function renderizarSugestoesCliente() {
             sugestoesClienteTbody.innerHTML = "";
             const sugestoesVisiveis = sugestoesClienteExpandida
@@ -1038,7 +1094,9 @@
                 : sugestoesClienteLista.slice(0, limiteSugestoesCliente);
 
             sugestoesVisiveis.forEach((sugestao, index) => {
+                const produtoSugestaoId = escaparHtml(sugestao.produto_id);
                 const tr = document.createElement("tr");
+                tr.dataset.sugestaoProdutoId = String(sugestao.produto_id || "");
                 tr.innerHTML = `
                     <td class="sugestoes-col-produto"><span class="sugestao-produto">${escaparHtml(sugestao.produto)}</span></td>
                     <td class="sugestoes-col-qtd">${escaparHtml(sugestao.quantidade)}</td>
@@ -1046,8 +1104,19 @@
                     <td class="sugestoes-col-data">${escaparHtml(sugestao.data)}</td>
                     <td class="sugestoes-col-vezes">${escaparHtml(sugestao.frequencia)}</td>
                     <td class="sugestoes-col-estoque">${escaparHtml(formatarEstoqueSugestao(sugestao.estoque))}</td>
-                    <td class="sugestoes-col-qtd-pedido"><input type="text" class="sugestao-qtd-input" value="${escaparHtml(sugestao.quantidade)}" inputmode="decimal" data-sugestao-qtd="${index}" aria-label="Quantidade do pedido para ${escaparHtml(sugestao.produto)}"></td>
-                    <td class="sugestoes-col-acao"><button type="button" class="btn-sugestao-adicionar" data-sugestao-adicionar="${index}">Adicionar</button></td>
+                    <td class="sugestoes-col-qtd-pedido">
+                        <span class="sugestao-qtd-controle">
+                            <button type="button" class="btn-sugestao-qtd" data-sugestao-qtd-ajuste="-1" data-sugestao-produto-id="${produtoSugestaoId}" aria-label="Diminuir quantidade">-</button>
+                            <input type="text" class="sugestao-qtd-input" value="${escaparHtml(sugestao.quantidade)}" inputmode="decimal" data-sugestao-qtd="${produtoSugestaoId}" aria-label="Quantidade do pedido para ${escaparHtml(sugestao.produto)}">
+                            <button type="button" class="btn-sugestao-qtd" data-sugestao-qtd-ajuste="1" data-sugestao-produto-id="${produtoSugestaoId}" aria-label="Aumentar quantidade">+</button>
+                        </span>
+                    </td>
+                    <td class="sugestoes-col-acao">
+                        <span class="sugestao-acoes-linha">
+                            <button type="button" class="btn-sugestao-adicionar" data-sugestao-adicionar="${produtoSugestaoId}">Adicionar</button>
+                            <button type="button" class="btn-sugestao-ignorar" data-sugestao-ignorar="${produtoSugestaoId}" aria-label="Ignorar sugestao">X</button>
+                        </span>
+                    </td>
                 `;
                 sugestoesClienteTbody.appendChild(tr);
             });
@@ -1061,7 +1130,7 @@
         }
 
         function mostrarSugestoesCliente(sugestoes, mensagemVazia) {
-            sugestoesClienteLista = sugestoes || [];
+            sugestoesClienteLista = deduplicarSugestoesCliente(sugestoes || []);
             sugestoesClienteExpandida = false;
             sugestoesClienteTbody.innerHTML = "";
             btnSugestoesToggle.style.display = "none";
@@ -1124,15 +1193,75 @@
             return Number(String(valor || "").trim().replace(",", "."));
         }
 
-        function adicionarSugestaoAoPedido(index) {
+        function deduplicarSugestoesCliente(sugestoes) {
+            const produtoIds = new Set();
+            return sugestoes.filter((sugestao) => {
+                const produtoId = String(sugestao.produto_id || "").trim();
+                if (!produtoId || produtoIds.has(produtoId)) return false;
+                produtoIds.add(produtoId);
+                return true;
+            });
+        }
+
+        function formatarQuantidadeSugestao(valor) {
+            return Number(valor || 0).toFixed(3).replace(/\.?0+$/, "").replace(".", ",") || "0";
+        }
+
+        function indiceSugestaoPorProdutoId(produtoId) {
+            return sugestoesClienteLista.findIndex((sugestao) => String(sugestao.produto_id) === String(produtoId));
+        }
+
+        function removerSugestaoClientePorProdutoId(produtoId) {
+            const index = indiceSugestaoPorProdutoId(produtoId);
+            if (index === -1) return;
+            sugestoesClienteLista.splice(index, 1);
+            if (!sugestoesClienteLista.length) {
+                mostrarSugestoesCliente([], "Nenhuma sugestao encontrada para este cliente ainda.");
+                return;
+            }
+            if (sugestoesClienteLista.length <= limiteSugestoesCliente) {
+                sugestoesClienteExpandida = false;
+            }
+            renderizarSugestoesCliente();
+        }
+
+        function ajustarQuantidadeSugestao(produtoId, direcao, origem) {
+            const linhaSugestao = origem ? origem.closest("tr") : null;
+            const inputQtd = linhaSugestao
+                ? linhaSugestao.querySelector(".sugestao-qtd-input")
+                : sugestoesClienteTbody.querySelector(`[data-sugestao-qtd="${produtoId}"]`);
+            if (!inputQtd) return;
+
+            const quantidadeAtual = Math.max(0, numeroDaSugestao(inputQtd.value) || 0);
+            const passo = quantidadeAtual > 0 && quantidadeAtual < 1 ? 0.5 : 1;
+            const proximaQuantidade = Math.max(0, quantidadeAtual + (Number(direcao) * passo));
+            inputQtd.value = formatarQuantidadeSugestao(proximaQuantidade);
+        }
+
+        function mostrarItemPedidoAdicionado(index) {
+            manterTelaNasSugestoes = false;
+            atualizarEspacoRodape();
+            window.requestAnimationFrame(() => {
+                const linha = tbodyItens.querySelector(`[data-index="${index}"]`);
+                const destino = linha || tabelaWrap;
+                if (destino) destino.scrollIntoView({ behavior: "smooth", block: "center" });
+            });
+        }
+
+        function adicionarSugestaoAoPedido(produtoId, origem) {
+            const index = indiceSugestaoPorProdutoId(produtoId);
             const sugestao = sugestoesClienteLista[index];
             if (!sugestao) return;
 
-            const inputQtd = sugestoesClienteTbody.querySelector(`[data-sugestao-qtd="${index}"]`);
+            const produtoIdReal = String(sugestao.produto_id || produtoId || "").trim();
+            const linhaSugestao = origem ? origem.closest("tr") : null;
+            const inputQtd = linhaSugestao
+                ? linhaSugestao.querySelector(".sugestao-qtd-input")
+                : sugestoesClienteTbody.querySelector(`[data-sugestao-qtd="${produtoIdReal}"]`);
             const quantidade = numeroDaSugestao(inputQtd ? inputQtd.value : sugestao.quantidade);
             const precoUnitario = numeroDaSugestao(sugestao.preco_valor);
-            const produto = produtos.find((item) => String(item.id) === String(sugestao.produto_id)) || {
-                id: sugestao.produto_id,
+            const produto = produtos.find((item) => String(item.id) === produtoIdReal) || {
+                id: produtoIdReal,
                 nome: sugestao.produto,
                 unidade: sugestao.unidade || "",
                 preco: precoUnitario,
@@ -1172,8 +1301,11 @@
                 observacao: ""
             });
 
+            const indexAdicionado = itens.length - 1;
             atualizarTabela();
+            removerSugestaoClientePorProdutoId(produtoIdReal);
             mostrarMensagem("sucesso", "Sugestao adicionada ao pedido.");
+            mostrarItemPedidoAdicionado(indexAdicionado);
         }
 
         function mostrarMensagem(tipo, texto) {
@@ -1595,12 +1727,14 @@
                 if (index === itemDuplicadoIndex) tr.classList.add("linha-duplicada");
                 tr.dataset.index = index;
                 tr.innerHTML = `
-                    <td class="col-produto"><span class="item-produto">${escaparHtml(item.produto_nome)}</span></td>
+                    <td class="col-produto">
+                        <span class="item-produto">${escaparHtml(item.produto_nome)}</span>
+                        <span class="item-estoque-ref">Estoque atual: ${escaparHtml(formatarEstoqueItem(item.estoque_no_momento))}</span>
+                    </td>
                     <td class="numero col-qtd">${Number(item.quantidade).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</td>
                     <td class="col-unidade">${escaparHtml(item.unidade || "-")}</td>
                     <td class="numero col-preco">${formatarMoeda(item.preco_unitario)}</td>
                     <td class="numero col-total"><span class="item-total">${formatarMoeda(item.valor_total)}</span></td>
-                    <td class="numero col-estoque">${item.estoque_no_momento}</td>
                     <td class="col-obs"><input type="text" value="${escaparHtml(item.observacao || "")}" placeholder="obs" aria-label="Observacao do item" data-index="${index}"></td>
                     <td class="col-acao"><button type="button" class="btn btn-remover${index === remocaoPendente ? " confirmar" : ""}" data-remover="${index}">${index === remocaoPendente ? "Confirmar" : "Remover"}</button></td>
                 `;
@@ -1731,9 +1865,21 @@
         });
 
         sugestoesClienteTbody.addEventListener("click", (event) => {
-            const btn = event.target.closest("[data-sugestao-adicionar]");
-            if (!btn) return;
-            adicionarSugestaoAoPedido(Number(btn.dataset.sugestaoAdicionar));
+            const btnQtd = event.target.closest("[data-sugestao-qtd-ajuste]");
+            if (btnQtd) {
+                ajustarQuantidadeSugestao(btnQtd.dataset.sugestaoProdutoId, Number(btnQtd.dataset.sugestaoQtdAjuste), btnQtd);
+                return;
+            }
+
+            const btnIgnorar = event.target.closest("[data-sugestao-ignorar]");
+            if (btnIgnorar) {
+                removerSugestaoClientePorProdutoId(btnIgnorar.dataset.sugestaoIgnorar);
+                return;
+            }
+
+            const btnAdicionar = event.target.closest("[data-sugestao-adicionar]");
+            if (!btnAdicionar) return;
+            adicionarSugestaoAoPedido(btnAdicionar.dataset.sugestaoAdicionar, btnAdicionar);
         });
 
         clientePedido.addEventListener("change", () => {
