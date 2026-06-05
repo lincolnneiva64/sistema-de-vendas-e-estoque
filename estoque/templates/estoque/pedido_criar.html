@@ -4,6 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Criar Pedido - Sistema de Vendas e Estoque</title>
+    <script>
+        if ("scrollRestoration" in history) {
+            history.scrollRestoration = "manual";
+        }
+        window.scrollTo(0, 0);
+        window.addEventListener("pageshow", () => {
+            window.scrollTo(0, 0);
+        });
+    </script>
     <style>
         * {
             box-sizing: border-box;
@@ -322,6 +331,118 @@
 
         .contexto-item.aviso .contexto-valor {
             color: #9a3412;
+        }
+
+        .sugestoes-cliente-card {
+            border-color: #d5eadb;
+            padding: 14px;
+            scroll-margin-top: 12px;
+            box-shadow: 0 10px 24px rgba(18, 60, 38, 0.08);
+        }
+
+        .sugestoes-cliente-wrap {
+            overflow-x: auto;
+            border: 1px solid #e2efe6;
+            border-radius: 8px;
+            background: #ffffff;
+        }
+
+        .sugestoes-cliente-tabela {
+            width: 100%;
+            min-width: 900px;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        .sugestoes-col-produto {
+            width: 38%;
+        }
+
+        .sugestoes-col-qtd {
+            width: 12%;
+            text-align: center !important;
+        }
+
+        .sugestoes-col-preco {
+            width: 14%;
+            text-align: right !important;
+        }
+
+        .sugestoes-col-data {
+            width: 15%;
+            text-align: center !important;
+        }
+
+        .sugestoes-col-vezes {
+            width: 9%;
+            text-align: center !important;
+        }
+
+        .sugestoes-col-estoque {
+            width: 12%;
+            padding-right: 14px !important;
+            text-align: center !important;
+        }
+
+        .sugestoes-cliente-tabela th {
+            background: #f3fbf5;
+            color: #315240;
+            padding: 8px 9px;
+            border-bottom: 1px solid #dcefe2;
+            font-size: 12px;
+            font-weight: 850;
+            text-align: left;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .sugestoes-cliente-tabela td {
+            padding: 8px 9px;
+            border-bottom: 1px solid #eef6f0;
+            color: #1f3529;
+            font-size: 13px;
+            font-weight: 650;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+
+        .sugestoes-cliente-tabela .sugestoes-col-produto {
+            white-space: normal;
+        }
+
+        .sugestao-produto {
+            color: #123c26;
+            font-weight: 850;
+        }
+
+        .sugestoes-cliente-vazio {
+            padding: 12px;
+            color: #64756b;
+            font-size: 13px;
+            font-weight: 700;
+            background: #fbfffc;
+        }
+
+        .sugestoes-cliente-acoes {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 8px;
+        }
+
+        .btn-sugestoes-toggle {
+            border: 1px solid #b7d8c0;
+            border-radius: 6px;
+            background: #f6fff8;
+            color: #14532d;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 850;
+            padding: 7px 11px;
+        }
+
+        .btn-sugestoes-toggle:hover {
+            background: #dcfce7;
         }
 
         .btn {
@@ -667,6 +788,35 @@
                 </div>
             </section>
 
+            <section class="pedido-card sugestoes-cliente-card" id="sugestoes-cliente-card">
+                <div class="pedido-card-title">
+                    <span>Produtos comprados recentemente por este cliente</span>
+                    <span class="status-chip">Ultimas compras</span>
+                </div>
+
+                <div id="sugestoes-cliente-vazio" class="sugestoes-cliente-vazio">
+                    Selecione um cliente para consultar sugestoes pelas ultimas compras.
+                </div>
+                <div class="sugestoes-cliente-wrap" id="sugestoes-cliente-wrap" style="display: none;">
+                    <table class="sugestoes-cliente-tabela">
+                        <thead>
+                            <tr>
+                                <th class="sugestoes-col-produto">Produto</th>
+                                <th class="sugestoes-col-qtd">Ultima qtd</th>
+                                <th class="sugestoes-col-preco">Ultimo preco</th>
+                                <th class="sugestoes-col-data">Ultima compra</th>
+                                <th class="sugestoes-col-vezes">Vezes</th>
+                                <th class="sugestoes-col-estoque">Estoque atual</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sugestoes-cliente-tbody"></tbody>
+                    </table>
+                </div>
+                <div class="sugestoes-cliente-acoes">
+                    <button type="button" class="btn-sugestoes-toggle" id="btn-sugestoes-toggle" style="display: none;">Ver mais sugestoes</button>
+                </div>
+            </section>
+
             <section class="pedido-card lancamento-card">
                 <div class="pedido-card-title">
                     <span>Lancamento de item</span>
@@ -794,6 +944,11 @@
         const clientePedido = document.getElementById("cliente_id");
         const dataPrevistaEntrega = document.getElementById("data_prevista_entrega");
         const operadorPedido = document.getElementById("operador");
+        const sugestoesClienteCard = document.getElementById("sugestoes-cliente-card");
+        const sugestoesClienteVazio = document.getElementById("sugestoes-cliente-vazio");
+        const sugestoesClienteWrap = document.getElementById("sugestoes-cliente-wrap");
+        const sugestoesClienteTbody = document.getElementById("sugestoes-cliente-tbody");
+        const btnSugestoesToggle = document.getElementById("btn-sugestoes-toggle");
         const produtoBusca = document.getElementById("produto-busca");
         const produtoSugestoes = document.getElementById("produto-sugestoes");
         const produtoId = document.getElementById("produto-id");
@@ -810,6 +965,12 @@
         const btnSalvar = document.getElementById("btn-salvar");
         const formPedido = document.getElementById("form-pedido");
         const rodapePedido = document.querySelector(".rodape-pedido");
+        const sugestoesClienteUrl = "{% url 'estoque:pedido_criar' %}";
+        const limiteSugestoesCliente = 10;
+        let sugestoesClienteRequisicao = 0;
+        let sugestoesClienteLista = [];
+        let sugestoesClienteExpandida = false;
+        let manterTelaNasSugestoes = false;
 
         function normalizarTexto(valor) {
             return String(valor || "").trim().toLowerCase();
@@ -828,6 +989,98 @@
                 .replace(/'/g, "&#039;");
         }
 
+        function formatarEstoqueSugestao(valor) {
+            if (valor === null || valor === undefined || valor === "") return "-";
+            return String(valor);
+        }
+
+        function renderizarSugestoesCliente() {
+            sugestoesClienteTbody.innerHTML = "";
+            const sugestoesVisiveis = sugestoesClienteExpandida
+                ? sugestoesClienteLista
+                : sugestoesClienteLista.slice(0, limiteSugestoesCliente);
+
+            sugestoesVisiveis.forEach((sugestao) => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td class="sugestoes-col-produto"><span class="sugestao-produto">${escaparHtml(sugestao.produto)}</span></td>
+                    <td class="sugestoes-col-qtd">${escaparHtml(sugestao.quantidade)}</td>
+                    <td class="sugestoes-col-preco">${escaparHtml(sugestao.preco)}</td>
+                    <td class="sugestoes-col-data">${escaparHtml(sugestao.data)}</td>
+                    <td class="sugestoes-col-vezes">${escaparHtml(sugestao.frequencia)}</td>
+                    <td class="sugestoes-col-estoque">${escaparHtml(formatarEstoqueSugestao(sugestao.estoque))}</td>
+                `;
+                sugestoesClienteTbody.appendChild(tr);
+            });
+
+            if (sugestoesClienteLista.length > limiteSugestoesCliente) {
+                btnSugestoesToggle.style.display = "inline-flex";
+                btnSugestoesToggle.textContent = sugestoesClienteExpandida ? "Mostrar menos" : "Ver mais sugestoes";
+            } else {
+                btnSugestoesToggle.style.display = "none";
+            }
+        }
+
+        function mostrarSugestoesCliente(sugestoes, mensagemVazia) {
+            sugestoesClienteLista = sugestoes || [];
+            sugestoesClienteExpandida = false;
+            sugestoesClienteTbody.innerHTML = "";
+            btnSugestoesToggle.style.display = "none";
+
+            if (!sugestoesClienteLista.length) {
+                sugestoesClienteWrap.style.display = "none";
+                sugestoesClienteVazio.style.display = "block";
+                sugestoesClienteVazio.textContent = mensagemVazia || "Nenhuma sugestao encontrada para este cliente ainda.";
+                return;
+            }
+
+            sugestoesClienteVazio.style.display = "none";
+            sugestoesClienteWrap.style.display = "block";
+            renderizarSugestoesCliente();
+        }
+
+        function carregarSugestoesCliente() {
+            const clienteId = clientePedido.value;
+            sugestoesClienteRequisicao += 1;
+            const requisicaoAtual = sugestoesClienteRequisicao;
+
+            if (!clienteId) {
+                mostrarSugestoesCliente([], "Selecione um cliente para consultar sugestoes pelas ultimas compras.");
+                return;
+            }
+
+            mostrarSugestoesCliente([], "Carregando sugestoes do cliente...");
+            const url = new URL(sugestoesClienteUrl, window.location.origin);
+            url.searchParams.set("sugestoes_cliente_id", clienteId);
+
+            fetch(url.toString(), {
+                headers: {
+                    "Accept": "application/json",
+                    "X-Requested-With": "XMLHttpRequest"
+                }
+            })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then((data) => {
+                    if (requisicaoAtual !== sugestoesClienteRequisicao) return;
+                    mostrarSugestoesCliente(data.sugestoes || []);
+                    manterSugestoesClienteVisiveis();
+                })
+                .catch(() => {
+                    if (requisicaoAtual !== sugestoesClienteRequisicao) return;
+                    mostrarSugestoesCliente([], "Nao foi possivel carregar sugestoes deste cliente agora.");
+                    manterSugestoesClienteVisiveis();
+                });
+        }
+
+        function prepararSugestoesClienteInicial() {
+            mostrarSugestoesCliente([], "Selecione um cliente para consultar sugestoes pelas ultimas compras.");
+        }
+
         function mostrarMensagem(tipo, texto) {
             mensagemTela.className = "mensagem-tela " + tipo;
             mensagemTela.textContent = texto;
@@ -841,6 +1094,17 @@
         function atualizarEspacoRodape() {
             const altura = rodapePedido ? Math.ceil(rodapePedido.getBoundingClientRect().height) : 76;
             document.body.style.setProperty("--rodape-pedido-altura", `${altura}px`);
+        }
+
+        function manterSugestoesClienteVisiveis() {
+            atualizarEspacoRodape();
+            manterTelaNasSugestoes = true;
+            sugestoesClienteCard.scrollIntoView({ behavior: "auto", block: "start" });
+            window.setTimeout(() => {
+                if (manterTelaNasSugestoes) {
+                    sugestoesClienteCard.scrollIntoView({ behavior: "auto", block: "start" });
+                }
+            }, 120);
         }
 
         function focarSemSelecionar(campo) {
@@ -923,6 +1187,7 @@
         }
 
         function manterLancamentoVisivel() {
+            if (manterTelaNasSugestoes) return;
             atualizarEspacoRodape();
             const lancamento = produtoBusca.closest(".lancamento-card") || produtoBusca;
             const tabela = tabelaWrap.style.display === "none" ? semItens : tabelaWrap;
@@ -1254,6 +1519,7 @@
         }
 
         produtoBusca.addEventListener("input", () => {
+            manterTelaNasSugestoes = false;
             limparMensagem();
             produtoBusca.classList.remove("campo-invalido");
             abrirSugestoesNoFoco = true;
@@ -1269,6 +1535,7 @@
             manterLancamentoVisivel();
         });
         produtoBusca.addEventListener("click", () => {
+            manterTelaNasSugestoes = false;
             abrirSugestoesNoFoco = true;
             renderizarSugestoes();
         });
@@ -1277,6 +1544,7 @@
         });
 
         produtoBusca.addEventListener("keydown", (event) => {
+            manterTelaNasSugestoes = false;
             if (event.key === "ArrowDown") {
                 event.preventDefault();
                 if (!produtoSugestoes.classList.contains("aberto")) renderizarSugestoes();
@@ -1361,11 +1629,18 @@
 
         btnAdicionar.addEventListener("click", adicionarItem);
 
+        btnSugestoesToggle.addEventListener("click", () => {
+            sugestoesClienteExpandida = !sugestoesClienteExpandida;
+            renderizarSugestoesCliente();
+            manterSugestoesClienteVisiveis();
+        });
+
         clientePedido.addEventListener("change", () => {
             if (clientePedido.value) {
                 clientePedido.classList.remove("campo-invalido");
                 limparMensagem();
             }
+            carregarSugestoesCliente();
         });
 
         function avancarComEnter(origem, destino, antesDeAvancar) {
@@ -1451,12 +1726,17 @@
 
         atualizarContextoProduto(null);
         atualizarTabela();
+        prepararSugestoesClienteInicial();
         atualizarEspacoRodape();
         window.addEventListener("resize", atualizarEspacoRodape);
         window.addEventListener("load", () => {
             atualizarEspacoRodape();
-            dataPedido.focus();
-            dataPedido.select();
+            window.scrollTo({ top: 0, behavior: "auto" });
+            dataPedido.focus({ preventScroll: true });
+            if (typeof dataPedido.select === "function") {
+                dataPedido.select();
+            }
+            window.scrollTo({ top: 0, behavior: "auto" });
         });
     </script>
 </body>

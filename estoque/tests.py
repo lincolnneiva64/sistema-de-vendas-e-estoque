@@ -7375,6 +7375,75 @@ class PedidoTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertIn("pedidos", resposta.context)
 
+    def test_criar_pedido_retorna_sugestoes_por_vendas_ativas_do_cliente(self):
+        """Sugestoes de pedido devem usar ultimas vendas ativas do cliente"""
+        hoje = timezone.now().date()
+        venda_antiga = Venda.objects.create(
+            cliente=self.cliente,
+            data_venda=hoje - timedelta(days=2),
+            total=100,
+            cancelada=False,
+        )
+        venda_recente = Venda.objects.create(
+            cliente=self.cliente,
+            data_venda=hoje,
+            total=200,
+            cancelada=False,
+        )
+        venda_cancelada = Venda.objects.create(
+            cliente=self.cliente,
+            data_venda=hoje,
+            total=300,
+            cancelada=True,
+        )
+        produto_cancelado = Produto.objects.create(
+            nome="Produto Cancelado",
+            preco_compra=10,
+            preco_venda=20,
+            preco_vista=20,
+            preco_prazo=25,
+            quantidade=5,
+        )
+
+        ItemVenda.objects.create(
+            venda=venda_antiga,
+            produto=self.produto,
+            quantidade=1,
+            unidade="Un",
+            preco_unitario=100,
+            valor_total=100,
+        )
+        ItemVenda.objects.create(
+            venda=venda_recente,
+            produto=self.produto,
+            quantidade=2,
+            unidade="Un",
+            preco_unitario=90,
+            valor_total=180,
+        )
+        ItemVenda.objects.create(
+            venda=venda_cancelada,
+            produto=produto_cancelado,
+            quantidade=3,
+            unidade="Un",
+            preco_unitario=20,
+            valor_total=60,
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:pedido_criar"),
+            {"sugestoes_cliente_id": self.cliente.id},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        sugestoes = resposta.json()["sugestoes"]
+        self.assertEqual(len(sugestoes), 1)
+        self.assertEqual(sugestoes[0]["produto"], self.produto.nome)
+        self.assertEqual(sugestoes[0]["quantidade"], "2")
+        self.assertEqual(sugestoes[0]["preco"], "R$ 90,00")
+        self.assertEqual(sugestoes[0]["frequencia"], 2)
+
     def test_detalhe_de_pedido_carrega(self):
         """Detalhe do pedido deve carregar corretamente"""
         from .models import Pedido, ItemPedido

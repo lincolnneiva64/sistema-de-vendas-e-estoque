@@ -7731,9 +7731,78 @@ def pedidos(request):
     })
 
 
+def _formatar_decimal_pedido(valor, casas=3):
+    texto = f"{Decimal(valor or 0):.{casas}f}".rstrip("0").rstrip(".")
+    return texto.replace(".", ",")
+
+
+def _formatar_moeda_pedido(valor):
+    return "R$ " + f"{Decimal(valor or 0):.2f}".replace(".", ",")
+
+
+def _sugestoes_ultimas_compras_cliente(cliente_id):
+    vendas_ids = list(
+        Venda.objects.filter(cliente_id=cliente_id, cancelada=False)
+        .order_by("-data_venda", "-id")
+        .values_list("id", flat=True)[:6]
+    )
+    if not vendas_ids:
+        return []
+
+    sugestoes = {}
+    itens = (
+        ItemVenda.objects.filter(venda_id__in=vendas_ids, produto__isnull=False)
+        .select_related("venda", "produto")
+        .order_by("-venda__data_venda", "-venda_id", "id")
+    )
+    for item in itens:
+        produto = item.produto
+        chave = produto.id
+        if chave not in sugestoes:
+            sugestoes[chave] = {
+                "produto": produto.nome,
+                "quantidade": _formatar_decimal_pedido(item.quantidade),
+                "preco": _formatar_moeda_pedido(item.preco_unitario),
+                "data": item.venda.data_venda.strftime("%d/%m/%Y"),
+                "ultima_data_ordem": item.venda.data_venda,
+                "ultima_venda_id": item.venda_id,
+                "vendas": set(),
+                "estoque": produto.quantidade if produto.quantidade is not None else "-",
+            }
+        sugestoes[chave]["vendas"].add(item.venda_id)
+
+    resultado = []
+    for sugestao in sugestoes.values():
+        frequencia = len(sugestao["vendas"])
+        resultado.append({
+            "produto": sugestao["produto"],
+            "quantidade": sugestao["quantidade"],
+            "preco": sugestao["preco"],
+            "data": sugestao["data"],
+            "frequencia": frequencia,
+            "estoque": sugestao["estoque"],
+            "_ultima_data_ordem": sugestao["ultima_data_ordem"],
+            "_ultima_venda_id": sugestao["ultima_venda_id"],
+        })
+
+    resultado.sort(key=lambda item: (item["frequencia"], item["_ultima_data_ordem"], item["_ultima_venda_id"]), reverse=True)
+    for item in resultado:
+        item.pop("_ultima_data_ordem", None)
+        item.pop("_ultima_venda_id", None)
+    return resultado
+
+
 def pedido_criar(request):
     """Criar novo pedido."""
     from .models import Pedido, ItemPedido
+
+    sugestoes_cliente_id = request.GET.get("sugestoes_cliente_id")
+    if request.method == "GET" and sugestoes_cliente_id:
+        try:
+            cliente_id = int(sugestoes_cliente_id)
+        except (TypeError, ValueError):
+            return JsonResponse({"sugestoes": []})
+        return JsonResponse({"sugestoes": _sugestoes_ultimas_compras_cliente(cliente_id)})
     
     if request.method == "POST":
         try:
