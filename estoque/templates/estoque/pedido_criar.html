@@ -215,6 +215,10 @@
 
         .lancamento-card {
             border: 3px solid #16a34a;
+            position: sticky;
+            top: 8px;
+            z-index: 25;
+            padding: 14px;
             box-shadow: 0 18px 42px rgba(22, 163, 74, 0.20);
         }
 
@@ -234,7 +238,7 @@
             top: calc(100% + 6px);
             left: 0;
             right: 0;
-            z-index: 30;
+            z-index: 40;
             display: none;
             max-height: min(246px, calc(100vh - var(--rodape-pedido-altura) - 210px));
             overflow-y: auto;
@@ -379,33 +383,38 @@
         }
 
         .tabela-wrap {
-            overflow-x: auto;
+            max-height: min(52vh, 520px);
+            overflow: auto;
             border: 1px solid #d5eadb;
             border-radius: 8px;
+            background: #ffffff;
         }
 
         .tabela-itens {
             width: 100%;
             border-collapse: collapse;
             table-layout: fixed;
-            min-width: 940px;
+            min-width: 1020px;
         }
 
         .tabela-itens th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
             background: #14532d;
             color: #ffffff;
-            padding: 12px 10px;
+            padding: 8px 9px;
             text-align: left;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 800;
             white-space: nowrap;
         }
 
         .tabela-itens td {
             border-bottom: 1px solid #e5f3e9;
-            padding: 11px 10px;
+            padding: 7px 9px;
             color: #1f3529;
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 650;
             vertical-align: middle;
         }
@@ -415,11 +424,11 @@
         }
 
         .col-produto {
-            width: 30%;
+            width: 31%;
         }
 
         .col-qtd {
-            width: 10%;
+            width: 9%;
         }
 
         .col-unidade {
@@ -429,7 +438,7 @@
 
         .col-preco,
         .col-total {
-            width: 12%;
+            width: 11%;
         }
 
         .col-estoque {
@@ -437,11 +446,11 @@
         }
 
         .col-obs {
-            width: 11%;
+            width: 12%;
         }
 
         .col-acao {
-            width: 96px;
+            width: 86px;
             text-align: center;
         }
 
@@ -456,9 +465,9 @@
         }
 
         .tabela-itens input {
-            min-height: 34px;
-            padding: 6px 8px;
-            font-size: 14px;
+            min-height: 30px;
+            padding: 5px 7px;
+            font-size: 13px;
             font-weight: 650;
         }
 
@@ -494,7 +503,7 @@
             align-items: center;
             justify-content: space-between;
             gap: 14px;
-            padding: 8px 0;
+            padding: 6px 0;
         }
 
         .resumo {
@@ -507,7 +516,7 @@
 
         .resumo strong {
             color: #123c26;
-            font-size: 20px;
+            font-size: 18px;
         }
 
         .acoes {
@@ -977,6 +986,7 @@
         function preencherProduto(produto) {
             if (!produto) return false;
 
+            produtoBusca.classList.remove("campo-invalido");
             produtoSelecionado = produto;
             produtoBusca.value = produto.nome;
             produtoId.value = produto.id;
@@ -1089,10 +1099,15 @@
             const itemExistenteIndex = itens.findIndex((item) => String(item.produto_id) === String(produto.id));
             if (itemExistenteIndex === -1) return false;
 
+            produtoSelecionado = produto;
+            produtoBusca.value = produto.nome;
+            produtoId.value = produto.id;
+            atualizarContextoProduto(produto);
+            fecharSugestoes();
+            produtoBusca.classList.add("campo-invalido");
             destacarItemDuplicado(itemExistenteIndex);
             mostrarMensagem("erro", "Este produto j\u00e1 est\u00e1 no pedido. Altere a quantidade na linha do item j\u00e1 lan\u00e7ado.");
-            prepararProximoProduto(produto, { limparCamposItem: false });
-            focarSemSelecionar(produtoBusca);
+            focarSelecionando(produtoBusca);
             manterLancamentoVisivel();
             return true;
         }
@@ -1127,6 +1142,12 @@
                 return;
             }
 
+            const itemExistenteIndex = itens.findIndex((item) => String(item.produto_id) === String(produto.id));
+            if (itemExistenteIndex !== -1) {
+                bloquearProdutoDuplicadoNoProduto(produto);
+                return;
+            }
+
             if (!quantidade || quantidade <= 0) {
                 mostrarMensagem("erro", "Informe uma quantidade maior que zero.");
                 itemQuantidade.focus();
@@ -1142,16 +1163,6 @@
             }
 
             const valorTotal = quantidade * precoUnitario;
-            const itemExistenteIndex = itens.findIndex((item) => String(item.produto_id) === String(produto.id));
-
-            if (itemExistenteIndex !== -1) {
-                destacarItemDuplicado(itemExistenteIndex);
-                mostrarMensagem("erro", "Este produto j\u00e1 est\u00e1 no pedido. Altere a quantidade na linha do item j\u00e1 lan\u00e7ado.");
-                prepararProximoProduto(produto);
-                focarSemSelecionar(produtoBusca);
-                manterLancamentoVisivel();
-                return;
-            }
 
             itens.push({
                 produto_id: produto.id,
@@ -1244,6 +1255,7 @@
 
         produtoBusca.addEventListener("input", () => {
             limparMensagem();
+            produtoBusca.classList.remove("campo-invalido");
             abrirSugestoesNoFoco = true;
             termoSequenciaProdutos = normalizarTexto(produtoBusca.value);
             produtoSelecionado = localizarProduto(produtoBusca.value);
