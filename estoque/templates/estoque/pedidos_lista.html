@@ -14,7 +14,7 @@
         body {
             font-family: "Segoe UI", Arial, sans-serif;
             background-color: #f5f7fa;
-            color: #1f2937;
+            color: #172033;
         }
         
         .container {
@@ -26,128 +26,174 @@
         .header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
+            align-items: flex-end;
+            gap: 14px;
+            margin-bottom: 14px;
             background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            padding: 18px 20px;
+            border: 1px solid #e1e7ef;
+            border-radius: 12px;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.055);
         }
         
         .header h1 {
             font-size: 28px;
-            font-weight: 600;
-            color: #1f2937;
+            font-weight: 800;
+            color: #111827;
             margin: 0;
         }
         
         .btn-criar {
-            background-color: #10b981;
+            background-color: #16a34a;
             color: white;
-            padding: 10px 20px;
+            padding: 9px 16px;
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
             cursor: pointer;
             font-size: 14px;
-            font-weight: 500;
+            font-weight: 800;
             text-decoration: none;
-            display: inline-block;
-            transition: background-color 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 40px;
+            white-space: nowrap;
+            box-shadow: 0 10px 24px rgba(22, 163, 74, 0.22);
+            transition: background-color 0.2s, transform 0.15s ease, box-shadow 0.15s ease;
         }
         
         .btn-criar:hover {
-            background-color: #059669;
+            background-color: #15803d;
+            transform: translateY(-1px);
         }
         
         .filtros {
             background: white;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            padding: 14px;
+            border: 1px solid #e1e7ef;
+            border-radius: 12px;
+            margin-bottom: 14px;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.055);
         }
         
         .filtros-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 15px;
+            grid-template-columns: minmax(150px, 0.8fr) minmax(240px, 1.4fr) repeat(2, minmax(150px, 0.8fr));
+            gap: 10px;
+            align-items: end;
+            margin-bottom: 12px;
+        }
+
+        .filtros-grid label {
+            display: block;
+            margin-bottom: 5px;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 850;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
         }
         
         .filtros-grid select,
         .filtros-grid input {
-            padding: 8px 12px;
-            border: 1px solid #d1d5db;
-            border-radius: 6px;
+            min-height: 40px;
+            padding: 9px 11px;
+            border: 1.5px solid #d3dbe8;
+            border-radius: 8px;
+            background: #ffffff;
+            color: #172033;
             font-size: 14px;
+            font-weight: 650;
             width: 100%;
+            outline: none;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .filtros-grid select:focus,
+        .filtros-grid input:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.13);
         }
         
         .filtros-botoes {
             display: flex;
             gap: 10px;
+            justify-content: flex-end;
+            flex-wrap: wrap;
         }
         
+        .btn-filtrar,
+        .btn-limpar {
+            min-height: 38px;
+            padding: 8px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 800;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s, transform 0.15s ease;
+        }
+
         .btn-filtrar {
             background-color: #3b82f6;
             color: white;
-            padding: 8px 16px;
             border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background-color 0.2s;
         }
         
         .btn-filtrar:hover {
             background-color: #2563eb;
+            transform: translateY(-1px);
         }
         
         .btn-limpar {
-            background-color: #6b7280;
-            color: white;
-            padding: 8px 16px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background-color 0.2s;
+            background-color: #dbeafe;
+            color: #164173;
+            border: 1px solid #7ea6d9;
         }
         
         .btn-limpar:hover {
-            background-color: #4b5563;
+            background-color: #bfdbfe;
+            transform: translateY(-1px);
         }
         
         .tabela-container {
             background: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            border: 1px solid #e1e7ef;
+            border-radius: 12px;
+            overflow-x: auto;
+            box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
         }
         
         .tabela {
             width: 100%;
             border-collapse: collapse;
+            min-width: 1040px;
         }
         
         .tabela thead {
-            background-color: #f3f4f6;
-            border-bottom: 2px solid #d1d5db;
+            background-color: #14532d;
+            border-bottom: 2px solid #0f3d22;
         }
         
         .tabela th {
-            padding: 15px;
+            padding: 11px 12px;
             text-align: left;
-            font-weight: 600;
-            font-size: 13px;
+            font-weight: 850;
+            font-size: 12px;
             text-transform: uppercase;
-            color: #4b5563;
+            letter-spacing: 0.04em;
+            color: #ffffff;
+            white-space: nowrap;
         }
         
         .tabela td {
-            padding: 12px 15px;
-            border-bottom: 1px solid #e5e7eb;
+            padding: 11px 12px;
+            border-bottom: 1px solid #edf1f6;
             font-size: 14px;
+            vertical-align: middle;
         }
         
         .tabela tbody tr {
@@ -155,43 +201,84 @@
         }
         
         .tabela tbody tr:hover {
-            background-color: #f9fafb;
+            background-color: #f8fbff;
+        }
+
+        .pedido-id {
+            color: #172033;
+            font-weight: 900;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .pedido-data,
+        .pedido-entrega {
+            color: #475569;
+            font-weight: 700;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .pedido-cliente {
+            color: #172033;
+            font-weight: 800;
+        }
+
+        .pedido-operador {
+            color: #475569;
+            font-weight: 650;
         }
         
         .status-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 88px;
+            padding: 5px 10px;
+            border-radius: 999px;
             font-size: 12px;
-            font-weight: 600;
+            font-weight: 900;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.04em;
+            line-height: 1.15;
         }
         
         .status-aberto {
-            background-color: #dbeafe;
-            color: #1e40af;
+            background-color: #dcfce7;
+            border: 1px solid #86efac;
+            color: #14532d;
         }
         
         .status-cancelado {
             background-color: #fee2e2;
+            border: 1px solid #fecaca;
             color: #991b1b;
         }
         
         .status-convertido {
-            background-color: #dcfce7;
-            color: #166534;
+            background-color: #dbeafe;
+            border: 1px solid #93c5fd;
+            color: #1e40af;
         }
         
         .link-pedido {
-            color: #3b82f6;
+            min-height: 32px;
+            min-width: 68px;
+            padding: 6px 11px;
+            border: 1px solid #93c5fd;
+            border-radius: 8px;
+            background: #eff6ff;
+            color: #1d4ed8;
             text-decoration: none;
-            font-weight: 500;
+            font-size: 13px;
+            font-weight: 850;
             cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
         
         .link-pedido:hover {
-            text-decoration: underline;
+            background: #dbeafe;
         }
         
         .sem-pedidos {
@@ -206,9 +293,54 @@
         }
         
         .total {
-            font-weight: 600;
-            color: #1f2937;
+            font-weight: 900;
+            color: #166534;
             text-align: right;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        .col-data,
+        .col-entrega,
+        .col-status,
+        .col-acoes {
+            text-align: center;
+        }
+
+        .col-total {
+            text-align: right;
+        }
+
+        .tabela th:last-child {
+            text-align: center;
+        }
+
+        @media (max-width: 900px) {
+            .container {
+                padding: 14px;
+            }
+
+            .header {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .filtros-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 620px) {
+            .filtros-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .filtros-botoes,
+            .btn-criar,
+            .btn-filtrar,
+            .btn-limpar {
+                width: 100%;
+            }
         }
     </style>
 </head>
@@ -220,7 +352,7 @@
         </div>
         
         <div class="filtros">
-            <form method="GET" class="filtros-form">
+            <form method="GET" class="filtros-form" id="form-filtros-pedidos">
                 <div class="filtros-grid">
                     <div>
                         <label for="status">Status:</label>
@@ -270,11 +402,11 @@
                     <thead>
                         <tr>
                             <th>ID</th>
-                            <th>Data</th>
+                            <th class="col-data">Data</th>
                             <th>Cliente</th>
-                            <th>Status</th>
-                            <th>Entrega Prevista</th>
-                            <th>Total</th>
+                            <th class="col-status">Status</th>
+                            <th class="col-entrega">Entrega Prevista</th>
+                            <th class="col-total">Total</th>
                             <th>Operador</th>
                             <th>Ações</th>
                         </tr>
@@ -282,21 +414,21 @@
                     <tbody>
                         {% for pedido in pedidos %}
                             <tr>
-                                <td>#{{ pedido.id }}</td>
-                                <td>{{ pedido.data_pedido|date:"d/m/Y" }}</td>
-                                <td>
+                                <td><span class="pedido-id">#{{ pedido.id }}</span></td>
+                                <td class="pedido-data">{{ pedido.data_pedido|date:"d/m/Y" }}</td>
+                                <td class="pedido-cliente">
                                     {% if pedido.cliente %}
                                         {{ pedido.cliente.nome }}
                                     {% else %}
                                         <em>Não informado</em>
                                     {% endif %}
                                 </td>
-                                <td>
+                                <td class="col-status">
                                     <span class="status-badge status-{% if pedido.status == 'aberto' %}aberto{% elif pedido.status == 'cancelado' %}cancelado{% else %}convertido{% endif %}">
                                         {{ pedido.get_status_display }}
                                     </span>
                                 </td>
-                                <td>
+                                <td class="pedido-entrega">
                                     {% if pedido.data_prevista_entrega %}
                                         {{ pedido.data_prevista_entrega|date:"d/m/Y" }}
                                     {% else %}
@@ -304,8 +436,8 @@
                                     {% endif %}
                                 </td>
                                 <td class="total">R$ {{ pedido.total|floatformat:"2" }}</td>
-                                <td>{{ pedido.operador|default:"-" }}</td>
-                                <td>
+                                <td class="pedido-operador">{{ pedido.operador|default:"-" }}</td>
+                                <td class="col-acoes">
                                     <a href="{% url 'estoque:pedido_detalhe' pedido.id %}" class="link-pedido">Ver</a>
                                 </td>
                             </tr>
@@ -320,5 +452,57 @@
             </div>
         {% endif %}
     </div>
+    <script>
+        (function () {
+            const form = document.getElementById("form-filtros-pedidos");
+            if (!form) return;
+
+            const status = document.getElementById("status");
+            const cliente = document.getElementById("cliente_id");
+            const dataInicio = document.getElementById("data_inicio");
+            const dataFim = document.getElementById("data_fim");
+            let timerFiltro = null;
+
+            function enviarFiltros() {
+                window.clearTimeout(timerFiltro);
+                form.requestSubmit();
+            }
+
+            function avancarComEnter(event) {
+                if (event.key !== "Enter") return;
+                event.preventDefault();
+
+                const ordemCampos = [status, cliente, dataInicio, dataFim];
+                const indiceAtual = ordemCampos.indexOf(event.currentTarget);
+                const proximoCampo = ordemCampos[indiceAtual + 1];
+                if (proximoCampo) {
+                    proximoCampo.focus();
+                    return;
+                }
+
+                enviarFiltros();
+            }
+
+            function dataCompletaOuVazia(campo) {
+                return !campo.value || /^\d{4}-\d{2}-\d{2}$/.test(campo.value);
+            }
+
+            function agendarFiltroData(campo) {
+                window.clearTimeout(timerFiltro);
+                if (!dataCompletaOuVazia(campo)) return;
+                timerFiltro = window.setTimeout(() => form.requestSubmit(), 350);
+            }
+
+            status.addEventListener("change", enviarFiltros);
+            cliente.addEventListener("change", enviarFiltros);
+            dataInicio.addEventListener("change", () => agendarFiltroData(dataInicio));
+            dataFim.addEventListener("change", () => agendarFiltroData(dataFim));
+            dataInicio.addEventListener("input", () => agendarFiltroData(dataInicio));
+            dataFim.addEventListener("input", () => agendarFiltroData(dataFim));
+            [status, cliente, dataInicio, dataFim].forEach((campo) => {
+                campo.addEventListener("keydown", avancarComEnter);
+            });
+        })();
+    </script>
 </body>
 </html>

@@ -7709,20 +7709,14 @@ def pedidos(request):
     # Filtro por data
     data_inicio = request.GET.get("data_inicio", "")
     data_fim = request.GET.get("data_fim", "")
-    if data_inicio:
-        try:
-            data_inicio_obj = parse_date(data_inicio)
-            if data_inicio_obj:
-                pedidos_lista = pedidos_lista.filter(data_pedido__gte=data_inicio_obj)
-        except:
-            pass
-    if data_fim:
-        try:
-            data_fim_obj = parse_date(data_fim)
-            if data_fim_obj:
-                pedidos_lista = pedidos_lista.filter(data_pedido__lte=data_fim_obj)
-        except:
-            pass
+    data_inicio_obj = parse_date(data_inicio) if data_inicio else None
+    data_fim_obj = parse_date(data_fim) if data_fim else None
+    if data_inicio_obj and data_fim_obj:
+        pedidos_lista = pedidos_lista.filter(data_pedido__gte=data_inicio_obj, data_pedido__lte=data_fim_obj)
+    elif data_inicio_obj:
+        pedidos_lista = pedidos_lista.filter(data_pedido=data_inicio_obj)
+    elif data_fim_obj:
+        pedidos_lista = pedidos_lista.filter(data_pedido__lte=data_fim_obj)
     
     clientes = Cliente.objects.filter(ativo=True).order_by("nome")
     
