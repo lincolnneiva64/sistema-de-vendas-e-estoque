@@ -7370,7 +7370,7 @@ class PedidoTests(TestCase):
         )
         
         url = reverse("estoque:pedidos")
-        resposta = self.client.get(url)
+        resposta = self.client.get(url, secure=True)
         
         self.assertEqual(resposta.status_code, 200)
         self.assertIn("pedidos", resposta.context)
@@ -7396,7 +7396,7 @@ class PedidoTests(TestCase):
         )
         
         url = reverse("estoque:pedido_detalhe", args=[pedido.id])
-        resposta = self.client.get(url)
+        resposta = self.client.get(url, secure=True)
         
         self.assertEqual(resposta.status_code, 200)
         self.assertIn("pedido", resposta.context)
