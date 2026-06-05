@@ -349,38 +349,48 @@
 
         .sugestoes-cliente-tabela {
             width: 100%;
-            min-width: 900px;
+            min-width: 1120px;
             border-collapse: collapse;
             table-layout: fixed;
         }
 
         .sugestoes-col-produto {
-            width: 38%;
+            width: 30%;
         }
 
         .sugestoes-col-qtd {
-            width: 12%;
+            width: 10%;
             text-align: center !important;
         }
 
         .sugestoes-col-preco {
-            width: 14%;
+            width: 12%;
             text-align: right !important;
         }
 
         .sugestoes-col-data {
-            width: 15%;
+            width: 13%;
             text-align: center !important;
         }
 
         .sugestoes-col-vezes {
-            width: 9%;
+            width: 7%;
             text-align: center !important;
         }
 
         .sugestoes-col-estoque {
-            width: 12%;
+            width: 10%;
             padding-right: 14px !important;
+            text-align: center !important;
+        }
+
+        .sugestoes-col-qtd-pedido {
+            width: 10%;
+            text-align: center !important;
+        }
+
+        .sugestoes-col-acao {
+            width: 8%;
             text-align: center !important;
         }
 
@@ -443,6 +453,31 @@
 
         .btn-sugestoes-toggle:hover {
             background: #dcfce7;
+        }
+
+        .sugestao-qtd-input {
+            width: 78px;
+            min-height: 30px;
+            padding: 5px 7px;
+            text-align: center;
+            font-size: 13px;
+        }
+
+        .btn-sugestao-adicionar {
+            min-height: 30px;
+            border: 1px solid #86efac;
+            border-radius: 6px;
+            background: #dcfce7;
+            color: #14532d;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 850;
+            padding: 5px 9px;
+        }
+
+        .btn-sugestao-adicionar:hover {
+            background: #bbf7d0;
         }
 
         .btn {
@@ -807,6 +842,8 @@
                                 <th class="sugestoes-col-data">Ultima compra</th>
                                 <th class="sugestoes-col-vezes">Vezes</th>
                                 <th class="sugestoes-col-estoque">Estoque atual</th>
+                                <th class="sugestoes-col-qtd-pedido">Qtd pedido</th>
+                                <th class="sugestoes-col-acao">Acao</th>
                             </tr>
                         </thead>
                         <tbody id="sugestoes-cliente-tbody"></tbody>
@@ -1000,7 +1037,7 @@
                 ? sugestoesClienteLista
                 : sugestoesClienteLista.slice(0, limiteSugestoesCliente);
 
-            sugestoesVisiveis.forEach((sugestao) => {
+            sugestoesVisiveis.forEach((sugestao, index) => {
                 const tr = document.createElement("tr");
                 tr.innerHTML = `
                     <td class="sugestoes-col-produto"><span class="sugestao-produto">${escaparHtml(sugestao.produto)}</span></td>
@@ -1009,6 +1046,8 @@
                     <td class="sugestoes-col-data">${escaparHtml(sugestao.data)}</td>
                     <td class="sugestoes-col-vezes">${escaparHtml(sugestao.frequencia)}</td>
                     <td class="sugestoes-col-estoque">${escaparHtml(formatarEstoqueSugestao(sugestao.estoque))}</td>
+                    <td class="sugestoes-col-qtd-pedido"><input type="text" class="sugestao-qtd-input" value="${escaparHtml(sugestao.quantidade)}" inputmode="decimal" data-sugestao-qtd="${index}" aria-label="Quantidade do pedido para ${escaparHtml(sugestao.produto)}"></td>
+                    <td class="sugestoes-col-acao"><button type="button" class="btn-sugestao-adicionar" data-sugestao-adicionar="${index}">Adicionar</button></td>
                 `;
                 sugestoesClienteTbody.appendChild(tr);
             });
@@ -1079,6 +1118,62 @@
 
         function prepararSugestoesClienteInicial() {
             mostrarSugestoesCliente([], "Selecione um cliente para consultar sugestoes pelas ultimas compras.");
+        }
+
+        function numeroDaSugestao(valor) {
+            return Number(String(valor || "").trim().replace(",", "."));
+        }
+
+        function adicionarSugestaoAoPedido(index) {
+            const sugestao = sugestoesClienteLista[index];
+            if (!sugestao) return;
+
+            const inputQtd = sugestoesClienteTbody.querySelector(`[data-sugestao-qtd="${index}"]`);
+            const quantidade = numeroDaSugestao(inputQtd ? inputQtd.value : sugestao.quantidade);
+            const precoUnitario = numeroDaSugestao(sugestao.preco_valor);
+            const produto = produtos.find((item) => String(item.id) === String(sugestao.produto_id)) || {
+                id: sugestao.produto_id,
+                nome: sugestao.produto,
+                unidade: sugestao.unidade || "",
+                preco: precoUnitario,
+                estoque: numeroDaSugestao(sugestao.estoque) || 0
+            };
+
+            limparMensagem();
+
+            if (!quantidade || quantidade <= 0) {
+                mostrarMensagem("erro", "Informe uma quantidade maior que zero para adicionar a sugestao.");
+                if (inputQtd) {
+                    inputQtd.focus();
+                    inputQtd.select();
+                }
+                return;
+            }
+
+            if (!precoUnitario || precoUnitario <= 0) {
+                mostrarMensagem("erro", "Sugestao sem preco valido para adicionar ao pedido.");
+                return;
+            }
+
+            if (bloquearProdutoDuplicadoNoProduto(produto)) {
+                return;
+            }
+
+            const unidade = sugestao.unidade || produto.unidade || "";
+            const valorTotal = quantidade * precoUnitario;
+            itens.push({
+                produto_id: produto.id,
+                produto_nome: produto.nome,
+                quantidade: quantidade.toFixed(3),
+                unidade: unidade,
+                preco_unitario: precoUnitario.toFixed(2),
+                valor_total: valorTotal.toFixed(2),
+                estoque_no_momento: produto.estoque,
+                observacao: ""
+            });
+
+            atualizarTabela();
+            mostrarMensagem("sucesso", "Sugestao adicionada ao pedido.");
         }
 
         function mostrarMensagem(tipo, texto) {
@@ -1633,6 +1728,12 @@
             sugestoesClienteExpandida = !sugestoesClienteExpandida;
             renderizarSugestoesCliente();
             manterSugestoesClienteVisiveis();
+        });
+
+        sugestoesClienteTbody.addEventListener("click", (event) => {
+            const btn = event.target.closest("[data-sugestao-adicionar]");
+            if (!btn) return;
+            adicionarSugestaoAoPedido(Number(btn.dataset.sugestaoAdicionar));
         });
 
         clientePedido.addEventListener("change", () => {

@@ -7760,9 +7760,12 @@ def _sugestoes_ultimas_compras_cliente(cliente_id):
         chave = produto.id
         if chave not in sugestoes:
             sugestoes[chave] = {
+                "produto_id": produto.id,
                 "produto": produto.nome,
                 "quantidade": _formatar_decimal_pedido(item.quantidade),
                 "preco": _formatar_moeda_pedido(item.preco_unitario),
+                "preco_valor": str(item.preco_unitario),
+                "unidade": produto.unidade_venda_1 or produto.unidade_compra or item.unidade or "",
                 "data": item.venda.data_venda.strftime("%d/%m/%Y"),
                 "ultima_data_ordem": item.venda.data_venda,
                 "ultima_venda_id": item.venda_id,
@@ -7775,9 +7778,12 @@ def _sugestoes_ultimas_compras_cliente(cliente_id):
     for sugestao in sugestoes.values():
         frequencia = len(sugestao["vendas"])
         resultado.append({
+            "produto_id": sugestao["produto_id"],
             "produto": sugestao["produto"],
             "quantidade": sugestao["quantidade"],
             "preco": sugestao["preco"],
+            "preco_valor": sugestao["preco_valor"],
+            "unidade": sugestao["unidade"],
             "data": sugestao["data"],
             "frequencia": frequencia,
             "estoque": sugestao["estoque"],

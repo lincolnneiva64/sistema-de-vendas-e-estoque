@@ -7442,6 +7442,9 @@ class PedidoTests(TestCase):
         self.assertEqual(sugestoes[0]["produto"], self.produto.nome)
         self.assertEqual(sugestoes[0]["quantidade"], "2")
         self.assertEqual(sugestoes[0]["preco"], "R$ 90,00")
+        self.assertEqual(sugestoes[0]["preco_valor"], "90.00")
+        self.assertEqual(sugestoes[0]["produto_id"], self.produto.id)
+        self.assertEqual(sugestoes[0]["unidade"], "Un")
         self.assertEqual(sugestoes[0]["frequencia"], 2)
 
     def test_detalhe_de_pedido_carrega(self):
