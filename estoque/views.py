@@ -5145,6 +5145,21 @@ def gravar_venda(request):
                     else Pedido.STATUS_CONVERTIDO_EM_VENDA
                 )
                 pedido_origem.save(update_fields=["status", "atualizado_em"])
+                if pedido_pendencias_estoque:
+                    descricao_pedido_parcial = [
+                        f"Venda gerada parcialmente a partir do Pedido #{pedido_origem.id}.",
+                        "Itens pendentes do pedido:",
+                    ]
+                    descricao_pedido_parcial.extend(
+                        f"- {pendencia}" for pendencia in pedido_pendencias_estoque
+                    )
+                    _registrar_evento_venda(
+                        venda,
+                        "pedido_parcial",
+                        "\n".join(descricao_pedido_parcial),
+                        canal="sistema",
+                        usuario=venda.operador,
+                    )
     except ValueError as exc:
         return JsonResponse({"sucesso": False, "mensagem": str(exc)}, status=400)
 
@@ -5173,6 +5188,7 @@ def venda_detalhe(request, pk):
     )
     retorno_url = _url_retorno_segura(request)
     whatsapp_url = montar_link_whatsapp_venda(venda)
+    contexto_pedido_parcial = _contexto_venda_pedido_parcial(venda)
     entrega_contexto = None
     entrega_id = request.GET.get("entrega")
     if entrega_id:
@@ -5322,6 +5338,7 @@ def venda_detalhe(request, pk):
             "retorno_querystring": _querystring_retorno(retorno_url),
             "modo_pendencia_resolvida": modo_pendencia_resolvida,
             "contexto_pendencia_resolvida": contexto_pendencia_resolvida,
+            "contexto_pedido_parcial": contexto_pedido_parcial,
         },
     )
 
@@ -7392,6 +7409,8 @@ def _gerar_paginas_nota_whatsapp(venda):
     draw.text((x1 + 22, y + 118), "Segue a nota referente à venda abaixo.", fill=suave, font=fonte_intro)
     y += 164
 
+    contexto_pedido_parcial = _contexto_venda_pedido_parcial(venda)
+
     largura_campo = (largura - margem * 2 - 60 - 22) // 2
     x2 = x1 + largura_campo + 22
     desenhar_campo(x1, y, largura_campo, "Cliente", cliente)
@@ -7400,6 +7419,40 @@ def _gerar_paginas_nota_whatsapp(venda):
     desenhar_campo(x1, y, largura_campo, "Pagamento", pagamento)
     desenhar_campo(x2, y, largura_campo, "Vencimento", vencimento)
     y += 106
+
+    if contexto_pedido_parcial:
+        largura_aviso = largura - margem * 2 - 60
+        linhas_aviso = []
+        linhas_aviso.extend(
+            _quebrar_texto(
+                draw,
+                contexto_pedido_parcial["mensagem"],
+                fonte_tabela_negrito,
+                largura_aviso - 54,
+            )
+        )
+        if contexto_pedido_parcial["itens_pendentes"]:
+            linhas_aviso.append("Itens pendentes:")
+            for item_pendente in contexto_pedido_parcial["itens_pendentes"]:
+                linhas_aviso.extend(
+                    _quebrar_texto(draw, f"- {item_pendente}", fonte_tabela, largura_aviso - 64)
+                )
+        altura_aviso = 30 + len(linhas_aviso) * 29
+        adicionar_pagina_se_precisar(altura_aviso + 18)
+        draw.rounded_rectangle(
+            (x1, y, largura - margem - 30, y + altura_aviso),
+            radius=16,
+            fill="#eff6ff",
+            outline="#60a5fa",
+            width=3,
+        )
+        draw.rectangle((x1, y + 10, x1 + 8, y + altura_aviso - 10), fill="#2563eb")
+        aviso_y = y + 16
+        for indice, linha in enumerate(linhas_aviso):
+            fonte_linha = fonte_tabela_negrito if indice == 0 else fonte_tabela
+            draw.text((x1 + 24, aviso_y), linha, fill="#1e3a8a", font=fonte_linha)
+            aviso_y += 29
+        y += altura_aviso + 18
 
     draw.text((x1, y), "Itens da venda", fill=texto, font=fonte_subtitulo)
     y += 42
@@ -7841,6 +7894,119 @@ def _registrar_evento_venda(
     )
 
 
+def _evento_pedido_parcial_da_venda(venda):
+    eventos_prefetch = getattr(venda, "_prefetched_objects_cache", {}).get("eventos")
+    if eventos_prefetch is not None:
+        eventos = [
+            evento
+            for evento in eventos_prefetch
+            if evento.tipo_evento == "pedido_parcial"
+        ]
+        if eventos:
+            return sorted(eventos, key=lambda evento: (evento.criado_em, evento.id), reverse=True)[0]
+        return None
+    return (
+        EventoVenda.objects.filter(venda=venda, tipo_evento="pedido_parcial")
+        .order_by("-criado_em", "-id")
+        .first()
+    )
+
+
+def _contexto_venda_pedido_parcial(venda):
+    evento = _evento_pedido_parcial_da_venda(venda)
+    if not evento or not evento.descricao:
+        pedido_inferido = _pedido_parcial_inferido_da_venda(venda)
+        if not pedido_inferido:
+            return None
+        return _contexto_venda_pedido_parcial_por_pedido(pedido_inferido)
+
+    pedido_id = None
+    pedido_match = re.search(r"Pedido #(\d+)", evento.descricao)
+    if pedido_match:
+        pedido_id = pedido_match.group(1)
+
+    itens_pendentes = []
+    for linha in evento.descricao.splitlines():
+        linha = linha.strip()
+        if linha.startswith("- "):
+            itens_pendentes.append(linha[2:].strip())
+
+    if not pedido_id:
+        return None
+
+    return _contexto_venda_pedido_parcial_base(pedido_id, itens_pendentes)
+
+
+def _contexto_venda_pedido_parcial_base(pedido_id, itens_pendentes):
+    return {
+        "pedido_id": str(pedido_id),
+        "mensagem": (
+            f"Venda parcial gerada a partir do Pedido #{pedido_id}. "
+            "Esta nota contém os itens disponíveis agora. Os itens pendentes continuam "
+            "registrados no pedido para entrega/venda futura."
+        ),
+        "itens_pendentes": itens_pendentes,
+    }
+
+
+def _contexto_venda_pedido_parcial_por_pedido(pedido):
+    itens_pendentes = []
+    for item in pedido.itens.all():
+        if (item.quantidade or Decimal("0.000")) <= 0:
+            continue
+        produto_nome = item.produto.nome if item.produto else "Produto nao identificado"
+        quantidade = _formatar_quantidade(item.quantidade)
+        unidade = f" {item.unidade}" if item.unidade else ""
+        itens_pendentes.append(f"{produto_nome} - {quantidade}{unidade}")
+    return _contexto_venda_pedido_parcial_base(pedido.id, itens_pendentes)
+
+
+def _pedido_parcial_inferido_da_venda(venda):
+    if not venda or not venda.cliente_id:
+        return None
+
+    from .models import Pedido
+
+    venda_produto_ids = {
+        produto_id
+        for produto_id in venda.itens.values_list("produto_id", flat=True)
+        if produto_id
+    }
+    if not venda_produto_ids:
+        return None
+
+    candidatos = (
+        Pedido.objects.filter(cliente_id=venda.cliente_id, status=Pedido.STATUS_PARCIAL)
+        .prefetch_related("itens__produto")
+        .order_by("-atualizado_em", "-id")
+    )
+    melhor_pedido = None
+    melhor_pontuacao = (0, 0)
+
+    for pedido in candidatos:
+        if pedido.data_pedido and venda.data_venda and pedido.data_pedido > venda.data_venda:
+            continue
+        itens = list(pedido.itens.all())
+        if not any((item.quantidade or Decimal("0.000")) > 0 for item in itens):
+            continue
+        produto_ids_pedido = {item.produto_id for item in itens if item.produto_id}
+        produtos_em_comum = venda_produto_ids & produto_ids_pedido
+        if not produtos_em_comum:
+            continue
+        produtos_zerados = {
+            item.produto_id
+            for item in itens
+            if item.produto_id and (item.quantidade or Decimal("0.000")) <= 0
+        }
+        produtos_vendidos_zerados = venda_produto_ids & produtos_zerados
+        pontuacao = (len(produtos_vendidos_zerados), len(produtos_em_comum))
+        if pontuacao > melhor_pontuacao:
+            melhor_pedido = pedido
+            melhor_pontuacao = pontuacao
+
+    return melhor_pedido
+
+
 def montar_link_whatsapp_venda(venda):
     cliente = venda.cliente
     if not cliente:
@@ -7854,6 +8020,15 @@ def montar_link_whatsapp_venda(venda):
         numero = "55" + numero
 
     linhas = ["Segue nota em imagem."]
+    contexto_pedido_parcial = _contexto_venda_pedido_parcial(venda)
+    if contexto_pedido_parcial:
+        linhas.extend(["", contexto_pedido_parcial["mensagem"]])
+        if contexto_pedido_parcial["itens_pendentes"]:
+            linhas.append("Itens pendentes:")
+            linhas.extend(
+                f"- {item_pendente}"
+                for item_pendente in contexto_pedido_parcial["itens_pendentes"]
+            )
 
     mensagem = "\n".join(linhas)
     return f"https://web.whatsapp.com/send?phone={numero}&text={quote(mensagem)}"

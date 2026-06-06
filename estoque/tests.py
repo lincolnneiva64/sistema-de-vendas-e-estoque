@@ -7,7 +7,7 @@ from contextlib import redirect_stdout
 from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
@@ -7946,6 +7946,134 @@ class PedidoTests(TestCase):
         self.assertContains(resposta_detalhe, "Produto Teste")
         self.assertContains(resposta_detalhe, "1.000")
         self.assertContains(resposta_detalhe, "R$ 100.00")
+
+    def test_venda_de_pedido_parcial_exibe_aviso_na_nota_e_whatsapp(self):
+        from .models import Pedido
+
+        self.cliente.whatsapp = "11999999999"
+        self.cliente.save(update_fields=["whatsapp"])
+        self.produto.quantidade = 4
+        self.produto.save(update_fields=["quantidade"])
+        pedido = self._criar_pedido_com_item(quantidade=Decimal("5.000"), total=Decimal("500.00"))
+
+        resposta = self._post_gravar_venda_com_item(pedido_id=pedido.id, quantidade="5.000")
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["sucesso"])
+        pedido.refresh_from_db()
+        self.produto.refresh_from_db()
+        venda = Venda.objects.get()
+        item_pendente = pedido.itens.get(produto=self.produto)
+        estoque_apos_venda = self.produto.quantidade
+        contas_apos_venda = ContaReceber.objects.count()
+        self.assertEqual(pedido.status, Pedido.STATUS_PARCIAL)
+        self.assertEqual(item_pendente.quantidade, Decimal("1.000"))
+        self.assertEqual(item_pendente.valor_total, Decimal("100.00"))
+        self.assertTrue(EventoVenda.objects.filter(venda=venda, tipo_evento="pedido_parcial").exists())
+
+        resposta_detalhe = self.client.get(reverse("estoque:venda_detalhe", args=[venda.id]), secure=True)
+
+        self.assertEqual(resposta_detalhe.status_code, 200)
+        self.assertContains(resposta_detalhe, f"Venda parcial gerada a partir do Pedido #{pedido.id}")
+        self.assertContains(resposta_detalhe, "Esta nota cont")
+        self.assertContains(resposta_detalhe, "Itens pendentes:")
+        self.assertContains(resposta_detalhe, "Produto Teste: 1 Un")
+        self.produto.refresh_from_db()
+        self.assertEqual(self.produto.quantidade, estoque_apos_venda)
+        self.assertEqual(ContaReceber.objects.count(), contas_apos_venda)
+        self.assertEqual(Venda.objects.count(), 1)
+
+        whatsapp_url = views.montar_link_whatsapp_venda(venda)
+        mensagem_whatsapp = parse_qs(urlsplit(whatsapp_url).query)["text"][0]
+        self.assertIn(f"Pedido #{pedido.id}", mensagem_whatsapp)
+        self.assertIn("Itens pendentes:", mensagem_whatsapp)
+        self.assertIn("Produto Teste: 1 Un", mensagem_whatsapp)
+
+    def test_venda_parcial_antiga_sem_evento_inferida_pelo_pedido(self):
+        from .models import ItemPedido, Pedido
+
+        produto_vendido = Produto.objects.create(
+            nome="Produto Vendido Legado",
+            preco_compra=Decimal("5.00"),
+            preco_venda=Decimal("20.00"),
+            preco_vista=Decimal("20.00"),
+            preco_prazo=Decimal("22.00"),
+            quantidade=0,
+        )
+        produto_pendente = Produto.objects.create(
+            nome="Produto Pendente Legado",
+            preco_compra=Decimal("2.00"),
+            preco_venda=Decimal("6.80"),
+            preco_vista=Decimal("6.80"),
+            preco_prazo=Decimal("7.50"),
+            quantidade=0,
+        )
+        pedido = Pedido.objects.create(
+            cliente=self.cliente,
+            data_pedido=timezone.localdate(),
+            status=Pedido.STATUS_PARCIAL,
+            total=Decimal("6.80"),
+        )
+        ItemPedido.objects.create(
+            pedido=pedido,
+            produto=produto_vendido,
+            quantidade=Decimal("0.000"),
+            unidade="Un",
+            preco_unitario=Decimal("20.00"),
+            valor_total=Decimal("0.00"),
+            estoque_no_momento=2,
+        )
+        ItemPedido.objects.create(
+            pedido=pedido,
+            produto=produto_pendente,
+            quantidade=Decimal("1.000"),
+            unidade="Un",
+            preco_unitario=Decimal("6.80"),
+            valor_total=Decimal("6.80"),
+            estoque_no_momento=0,
+        )
+        venda = Venda.objects.create(
+            cliente=self.cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            operador="Operador Teste",
+            total=Decimal("40.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_vendido,
+            quantidade=Decimal("2.000"),
+            unidade="Un",
+            preco_unitario=Decimal("20.00"),
+            valor_total=Decimal("40.00"),
+        )
+        EventoVenda.objects.create(
+            venda=venda,
+            tipo_evento="venda_gravada",
+            descricao="Venda gravada com sucesso. Estoque baixado para os itens vendidos.",
+            canal="sistema",
+        )
+
+        resposta = self.client.get(reverse("estoque:venda_detalhe", args=[venda.id]), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, f"Venda parcial gerada a partir do Pedido #{pedido.id}")
+        self.assertContains(resposta, "Produto Pendente Legado - 1 Un")
+        self.assertFalse(EventoVenda.objects.filter(venda=venda, tipo_evento="pedido_parcial").exists())
+
+    def test_venda_normal_sem_pedido_parcial_nao_exibe_aviso(self):
+        resposta = self._post_gravar_venda_com_item()
+
+        self.assertEqual(resposta.status_code, 200)
+        venda = Venda.objects.get()
+
+        resposta_detalhe = self.client.get(reverse("estoque:venda_detalhe", args=[venda.id]), secure=True)
+
+        self.assertEqual(resposta_detalhe.status_code, 200)
+        self.assertNotContains(resposta_detalhe, "Venda parcial gerada a partir do Pedido")
+        self.assertNotContains(resposta_detalhe, "Esta nota contém os itens disponíveis agora")
+        self.assertFalse(EventoVenda.objects.filter(venda=venda, tipo_evento="pedido_parcial").exists())
 
     def test_detalhe_pedido_parcial_antigo_calcula_saldo_pendente_pela_venda_compativel(self):
         from .models import Pedido, ItemPedido

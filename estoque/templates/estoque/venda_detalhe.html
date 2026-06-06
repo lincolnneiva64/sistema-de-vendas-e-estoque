@@ -352,6 +352,36 @@
             font-weight: 950;
         }
 
+        .pedido-parcial-banner {
+            margin-bottom: 10px;
+            padding: 10px 12px;
+            border: 2px solid #60a5fa;
+            border-left: 7px solid #2563eb;
+            border-radius: 10px;
+            background: #eff6ff;
+            color: #1e3a8a;
+            font-size: 13px;
+            font-weight: 850;
+            line-height: 1.35;
+            box-shadow: 0 10px 24px rgba(37, 99, 235, 0.12);
+        }
+
+        .pedido-parcial-banner strong {
+            display: block;
+            margin-bottom: 3px;
+            font-size: 13.5px;
+            font-weight: 950;
+        }
+
+        .pedido-parcial-banner ul {
+            margin: 6px 0 0 16px;
+            padding: 0;
+        }
+
+        .pedido-parcial-banner li {
+            margin: 2px 0;
+        }
+
         .cancelar-venda-acao {
             background: #dc2626 !important;
             border-color: #b91c1c !important;
@@ -1237,6 +1267,20 @@
                                 A venda foi cancelada/anulada porque ficou sem itens.
                             {% else %}
                                 A venda continuou ativa com os itens restantes.
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                    {% if contexto_pedido_parcial and not venda.cancelada %}
+                        <div class="pedido-parcial-banner">
+                            <strong>Venda parcial gerada a partir do Pedido #{{ contexto_pedido_parcial.pedido_id }}</strong>
+                            {{ contexto_pedido_parcial.mensagem }}
+                            {% if contexto_pedido_parcial.itens_pendentes %}
+                                <div>Itens pendentes:</div>
+                                <ul>
+                                    {% for item_pendente in contexto_pedido_parcial.itens_pendentes %}
+                                        <li>{{ item_pendente }}</li>
+                                    {% endfor %}
+                                </ul>
                             {% endif %}
                         </div>
                     {% endif %}
