@@ -192,6 +192,7 @@
         .acoes {
             display: flex;
             gap: 10px;
+            flex-wrap: wrap;
             margin-top: 20px;
         }
         
@@ -225,6 +226,15 @@
         
         .btn-editar:hover {
             background-color: #15803d;
+        }
+
+        .btn-venda {
+            background-color: #1e40af;
+            color: white;
+        }
+
+        .btn-venda:hover {
+            background-color: #1d4ed8;
         }
         
         .aviso {
@@ -378,6 +388,7 @@
         
         <div class="acoes">
             <a href="{% url 'estoque:pedidos' %}" class="btn btn-voltar">← Voltar para Pedidos</a>
+            <a href="{% url 'estoque:vendas' %}" class="btn btn-venda">Ir para Venda</a>
         </div>
     </div>
 </body>

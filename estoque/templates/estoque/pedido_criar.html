@@ -75,6 +75,29 @@
             box-shadow: 0 5px 12px rgba(20, 83, 45, 0.13);
         }
 
+        .pedido-topo-acoes {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 0 0 auto;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .pedido-topo-acoes .pedido-voltar {
+            flex: 0 0 auto;
+        }
+
+        .pedido-vendas-link {
+            background: #14532d;
+            color: #ffffff;
+        }
+
+        .pedido-vendas-link:hover {
+            background: #0f3d22;
+            color: #ffffff;
+        }
+
         .pedido-voltar:active,
         .btn:active {
             transform: translateY(1px) scale(0.99);
@@ -884,6 +907,18 @@
                 width: 100%;
             }
 
+            .pedido-topo-acoes {
+                align-items: stretch;
+                flex-direction: column;
+                width: 100%;
+            }
+
+            .pedido-topo-acoes .pedido-voltar {
+                justify-content: center;
+                text-align: center;
+                width: 100%;
+            }
+
             .pedido-page {
                 padding-bottom: calc(var(--rodape-pedido-altura) + 22px);
             }
@@ -897,7 +932,10 @@
                 <h1 class="pedido-title">Criar Pedido</h1>
                 <p class="pedido-subtitle">Pedido registra uma intencao de venda futura. O estoque abaixo e apenas referencia.</p>
             </div>
-            <a href="{% url 'estoque:pedidos' %}" class="pedido-voltar">Voltar para Pedidos</a>
+            <div class="pedido-topo-acoes">
+                <a href="{% url 'estoque:vendas' %}" class="pedido-voltar pedido-vendas-link">Ir para Vendas</a>
+                <a href="{% url 'estoque:pedidos' %}" class="pedido-voltar">Voltar para Pedidos</a>
+            </div>
         </div>
 
         <div class="pedido-alerta">

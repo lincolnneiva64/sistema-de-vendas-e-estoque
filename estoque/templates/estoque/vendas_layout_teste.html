@@ -1100,6 +1100,7 @@ td:first-child {
             <button type="button" id="btnLimparCabecalho" class="acao-venda-btn secundaria">Limpar Cabeçalho</button>
             <button type="button" id="btnLimparItens" class="acao-venda-btn secundaria">Limpar Itens</button>
             <button type="button" id="btnConsultarVendas" class="acao-venda-btn secundaria">Consultar Vendas</button>
+            <a href="{% url 'estoque:pedidos' %}" class="acao-venda-btn secundaria">Pedidos</a>
             <a href="{% url 'estoque:contas_receber' %}" id="btnContasReceberVenda" class="acao-venda-btn secundaria">Contas a Receber</a>
             <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="acao-venda-btn secundaria {% if tem_pix_em_atencao %}pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
             <a href="{% url 'estoque:entregas_dia' %}" class="acao-venda-btn secundaria">Ir para Entregas</a>
