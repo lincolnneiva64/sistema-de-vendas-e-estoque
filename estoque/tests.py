@@ -7338,6 +7338,12 @@ class PedidoTests(TestCase):
             secure=True,
         )
 
+    def _post_cancelar_pedido(self, pedido):
+        return self.client.post(
+            reverse("estoque:pedido_cancelar", args=[pedido.id]),
+            secure=True,
+        )
+
     def test_criar_pedido_com_cliente_e_itens_salva(self):
         """Criar pedido com cliente e itens deve salvar Pedido e ItemPedido"""
         from .models import Pedido, ItemPedido
@@ -7602,6 +7608,88 @@ class PedidoTests(TestCase):
         self.assertEqual(Venda.objects.count(), vendas_antes)
         self.assertEqual(ItemVenda.objects.count(), itens_venda_antes)
         self.assertEqual(ContaReceber.objects.count(), contas_antes)
+
+    def test_cancelar_pedido_aberto_marca_cancelado_sem_apagar(self):
+        from .models import ItemPedido, Pedido
+
+        pedido = self._criar_pedido_com_item()
+        item_id = pedido.itens.get().id
+
+        resposta = self._post_cancelar_pedido(pedido)
+
+        self.assertEqual(resposta.status_code, 302)
+        pedido.refresh_from_db()
+        self.assertEqual(pedido.status, Pedido.STATUS_CANCELADO)
+        self.assertTrue(ItemPedido.objects.filter(pk=item_id, pedido=pedido).exists())
+
+        resposta_detalhe = self.client.get(reverse("estoque:pedido_detalhe", args=[pedido.id]), secure=True)
+        self.assertEqual(resposta_detalhe.status_code, 200)
+        self.assertContains(resposta_detalhe, "Cancelado")
+        self.assertNotContains(resposta_detalhe, "Cancelar Pedido")
+        self.assertNotContains(resposta_detalhe, "Editar Pedido")
+
+    def test_cancelar_pedido_cancelado_nao_mexe_no_estoque_nem_financeiro(self):
+        from .models import Pedido
+
+        pedido = self._criar_pedido_com_item()
+        estoque_antes = self.produto.quantidade
+        contas_antes = ContaReceber.objects.count()
+        vendas_antes = Venda.objects.count()
+
+        resposta = self._post_cancelar_pedido(pedido)
+
+        self.assertEqual(resposta.status_code, 302)
+        pedido.refresh_from_db()
+        self.produto.refresh_from_db()
+        self.assertEqual(pedido.status, Pedido.STATUS_CANCELADO)
+        self.assertEqual(self.produto.quantidade, estoque_antes)
+        self.assertEqual(ContaReceber.objects.count(), contas_antes)
+        self.assertEqual(Venda.objects.count(), vendas_antes)
+
+    def test_cancelar_pedido_convertido_total_bloqueia(self):
+        from .models import Pedido
+
+        pedido = self._criar_pedido_com_item()
+        pedido.status = Pedido.STATUS_CONVERTIDO_EM_VENDA
+        pedido.save(update_fields=["status", "atualizado_em"])
+        item_id = pedido.itens.get().id
+
+        resposta = self._post_cancelar_pedido(pedido)
+
+        self.assertEqual(resposta.status_code, 302)
+        pedido.refresh_from_db()
+        self.assertEqual(pedido.status, Pedido.STATUS_CONVERTIDO_EM_VENDA)
+        self.assertTrue(pedido.itens.filter(pk=item_id).exists())
+
+    def test_cancelar_pedido_parcial_nao_cancela_venda_ja_gerada(self):
+        from .models import Pedido
+
+        self.produto.quantidade = 4
+        self.produto.save(update_fields=["quantidade"])
+        pedido = self._criar_pedido_com_item(quantidade=Decimal("5.000"), total=Decimal("500.00"))
+        resposta_venda = self._post_gravar_venda_com_item(pedido_id=pedido.id, quantidade="5.000")
+        self.assertEqual(resposta_venda.status_code, 200)
+        pedido.refresh_from_db()
+        self.produto.refresh_from_db()
+        self.assertEqual(pedido.status, Pedido.STATUS_PARCIAL)
+        venda = Venda.objects.get()
+        estoque_apos_venda = self.produto.quantidade
+        vendas_antes = Venda.objects.count()
+        itens_venda_antes = ItemVenda.objects.count()
+        contas_antes = ContaReceber.objects.count()
+
+        resposta = self._post_cancelar_pedido(pedido)
+
+        self.assertEqual(resposta.status_code, 302)
+        pedido.refresh_from_db()
+        venda.refresh_from_db()
+        self.produto.refresh_from_db()
+        self.assertEqual(pedido.status, Pedido.STATUS_CANCELADO)
+        self.assertFalse(venda.cancelada)
+        self.assertEqual(Venda.objects.count(), vendas_antes)
+        self.assertEqual(ItemVenda.objects.count(), itens_venda_antes)
+        self.assertEqual(ContaReceber.objects.count(), contas_antes)
+        self.assertEqual(self.produto.quantidade, estoque_apos_venda)
 
     def test_importar_pedido_para_vendas_prepara_tela_sem_gravar(self):
         from .models import Pedido

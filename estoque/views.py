@@ -8353,6 +8353,36 @@ def pedido_editar(request, pk):
     })
 
 
+@require_POST
+def pedido_cancelar(request, pk):
+    """Cancelar pedido sem apagar o registro nem os itens."""
+    from .models import Pedido
+
+    with transaction.atomic():
+        pedido = get_object_or_404(Pedido.objects.select_for_update(), pk=pk)
+
+        if pedido.status == Pedido.STATUS_CANCELADO:
+            messages.warning(request, f"Pedido #{pedido.id} ja esta cancelado.")
+            return redirect("estoque:pedido_detalhe", pk=pedido.pk)
+
+        if pedido.status == Pedido.STATUS_CONVERTIDO_EM_VENDA:
+            messages.warning(
+                request,
+                "Pedido totalmente convertido em venda nao pode ser cancelado livremente.",
+            )
+            return redirect("estoque:pedido_detalhe", pk=pedido.pk)
+
+        if pedido.status not in [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL]:
+            messages.warning(request, "Este pedido nao esta disponivel para cancelamento.")
+            return redirect("estoque:pedido_detalhe", pk=pedido.pk)
+
+        pedido.status = Pedido.STATUS_CANCELADO
+        pedido.save(update_fields=["status", "atualizado_em"])
+
+    messages.success(request, f"Pedido #{pedido.id} cancelado com sucesso. Histórico preservado.")
+    return redirect(f"{reverse('estoque:pedido_detalhe', args=[pedido.id])}?pedido_cancelado=1")
+
+
 def _itens_pendentes_exibicao_pedido_parcial(pedido, itens_pedido):
     itens_positivos = [item for item in itens_pedido if item.quantidade > 0]
     total_positivo = sum((item.valor_total for item in itens_positivos), Decimal("0.00"))
@@ -8450,5 +8480,7 @@ def pedido_detalhe(request, pk):
         "titulo_itens": titulo_itens,
         "rotulo_total": rotulo_total,
         "pode_editar_pedido": pedido.status in [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL],
+        "pode_cancelar_pedido": pedido.status in [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL],
         "pedido_editado": request.GET.get("pedido_editado") == "1",
+        "pedido_cancelado": request.GET.get("pedido_cancelado") == "1",
     })
