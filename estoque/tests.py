@@ -8006,6 +8006,72 @@ class PedidoTests(TestCase):
         
         self.assertEqual(resposta.status_code, 200)
         self.assertIn("pedidos", resposta.context)
+        self.assertIn("localidades", resposta.context)
+
+    def test_lista_de_pedidos_filtra_por_bairro_ou_cidade_do_cliente(self):
+        from .models import Pedido
+
+        self.cliente.bairro = "Centro"
+        self.cliente.cidade = "Fortaleza"
+        self.cliente.save(update_fields=["bairro", "cidade"])
+        cliente_outro = Cliente.objects.create(
+            nome="Cliente Outra Localidade",
+            bairro="Aldeota",
+            cidade="Caucaia",
+            ativo=True,
+        )
+        pedido_centro = Pedido.objects.create(
+            cliente=self.cliente,
+            data_pedido=timezone.now().date(),
+            total=Decimal("100.00"),
+        )
+        pedido_outro = Pedido.objects.create(
+            cliente=cliente_outro,
+            data_pedido=timezone.now().date(),
+            total=Decimal("80.00"),
+        )
+
+        resposta_bairro = self.client.get(reverse("estoque:pedidos"), {"localidade": "Centro"}, secure=True)
+        self.assertEqual(resposta_bairro.status_code, 200)
+        self.assertContains(resposta_bairro, f"#{pedido_centro.id}")
+        self.assertNotContains(resposta_bairro, f"#{pedido_outro.id}")
+        self.assertContains(resposta_bairro, "Centro")
+
+        resposta_cidade = self.client.get(reverse("estoque:pedidos"), {"localidade": "Caucaia"}, secure=True)
+        self.assertEqual(resposta_cidade.status_code, 200)
+        self.assertContains(resposta_cidade, f"#{pedido_outro.id}")
+        self.assertNotContains(resposta_cidade, f"#{pedido_centro.id}")
+
+    def test_lista_de_pedidos_mantem_filtros_atuais_com_localidade(self):
+        from .models import Pedido
+
+        hoje = timezone.now().date()
+        self.cliente.bairro = "Messejana"
+        self.cliente.cidade = "Fortaleza"
+        self.cliente.save(update_fields=["bairro", "cidade"])
+        pedido = Pedido.objects.create(
+            cliente=self.cliente,
+            data_pedido=hoje,
+            status=Pedido.STATUS_CANCELADO,
+            total=Decimal("55.00"),
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:pedidos"),
+            {
+                "status": Pedido.STATUS_CANCELADO,
+                "cliente_id": self.cliente.id,
+                "localidade": "Messejana",
+                "data_inicio": hoje.isoformat(),
+                "data_fim": hoje.isoformat(),
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, f"#{pedido.id}")
+        self.assertContains(resposta, "Cancelado")
+        self.assertContains(resposta, "Messejana")
 
     def test_criar_pedido_retorna_sugestoes_por_vendas_ativas_do_cliente(self):
         """Sugestoes de pedido devem usar ultimas vendas ativas do cliente"""

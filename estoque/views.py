@@ -7874,6 +7874,13 @@ def pedidos(request):
     cliente_id = request.GET.get("cliente_id", "")
     if cliente_id:
         pedidos_lista = pedidos_lista.filter(cliente_id=cliente_id)
+
+    localidade = request.GET.get("localidade", "").strip()
+    if localidade:
+        pedidos_lista = pedidos_lista.filter(
+            Q(cliente__bairro__icontains=localidade) |
+            Q(cliente__cidade__icontains=localidade)
+        )
     
     # Filtro por data
     data_inicio = request.GET.get("data_inicio", "")
@@ -7888,13 +7895,24 @@ def pedidos(request):
         pedidos_lista = pedidos_lista.filter(data_pedido__lte=data_fim_obj)
     
     clientes = Cliente.objects.filter(ativo=True).order_by("nome")
+    localidades = []
+    localidades_vistas = set()
+    for cliente in Cliente.objects.filter(ativo=True).order_by("bairro", "cidade", "nome"):
+        for valor in (cliente.bairro, cliente.cidade):
+            valor = (valor or "").strip()
+            chave = valor.lower()
+            if valor and chave not in localidades_vistas:
+                localidades.append(valor)
+                localidades_vistas.add(chave)
     
     return render(request, "estoque/pedidos_lista.html", {
         "pedidos": pedidos_lista,
         "clientes": clientes,
+        "localidades": localidades,
         "status_choices": Pedido.STATUS_CHOICES,
         "status_filtro": status,
         "cliente_filtro": cliente_id,
+        "localidade_filtro": localidade,
         "data_inicio": data_inicio,
         "data_fim": data_fim,
     })

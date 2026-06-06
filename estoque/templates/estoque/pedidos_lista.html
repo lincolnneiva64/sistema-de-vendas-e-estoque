@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
@@ -78,7 +78,7 @@
         
         .filtros-grid {
             display: grid;
-            grid-template-columns: minmax(150px, 0.8fr) minmax(240px, 1.4fr) repeat(2, minmax(150px, 0.8fr));
+            grid-template-columns: minmax(150px, 0.8fr) minmax(240px, 1.4fr) minmax(170px, 0.9fr) repeat(2, minmax(150px, 0.8fr));
             gap: 10px;
             align-items: end;
             margin-bottom: 12px;
@@ -170,7 +170,8 @@
         .tabela {
             width: 100%;
             border-collapse: collapse;
-            min-width: 1040px;
+            min-width: 1080px;
+            table-layout: fixed;
         }
         
         .tabela thead {
@@ -205,6 +206,8 @@
         }
 
         .pedido-id {
+            display: inline-block;
+            min-width: 42px;
             color: #172033;
             font-weight: 900;
             font-variant-numeric: tabular-nums;
@@ -221,11 +224,18 @@
         .pedido-cliente {
             color: #172033;
             font-weight: 800;
+            overflow-wrap: anywhere;
         }
 
         .pedido-operador {
             color: #475569;
             font-weight: 650;
+        }
+
+        .pedido-localidade {
+            color: #334155;
+            font-weight: 850;
+            overflow-wrap: anywhere;
         }
         
         .status-badge {
@@ -313,8 +323,41 @@
             text-align: center;
         }
 
+        .col-id {
+            width: 70px;
+        }
+
+        .col-data {
+            width: 100px;
+        }
+
+        .col-cliente {
+            width: 26%;
+        }
+
+        .col-localidade {
+            width: 150px;
+        }
+
+        .col-status {
+            width: 120px;
+        }
+
+        .col-entrega {
+            width: 130px;
+        }
+
         .col-total {
             text-align: right;
+            width: 115px;
+        }
+
+        .col-operador {
+            width: 130px;
+        }
+
+        .col-acoes {
+            width: 90px;
         }
 
         .tabela th:last-child {
@@ -383,6 +426,18 @@
                             {% endfor %}
                         </select>
                     </div>
+
+                    <div>
+                        <label for="localidade">Bairro/Cidade:</label>
+                        <select name="localidade" id="localidade">
+                            <option value="">Todos</option>
+                            {% for localidade in localidades %}
+                                <option value="{{ localidade }}" {% if localidade_filtro == localidade %}selected{% endif %}>
+                                    {{ localidade }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
                     
                     <div>
                         <label for="data_inicio">Data Início:</label>
@@ -407,26 +462,40 @@
                 <table class="tabela">
                     <thead>
                         <tr>
-                            <th>ID</th>
+                            <th class="col-id">ID</th>
                             <th class="col-data">Data</th>
-                            <th>Cliente</th>
+                            <th class="col-cliente">Cliente</th>
+                            <th class="col-localidade">Rota/Bairro</th>
                             <th class="col-status">Status</th>
                             <th class="col-entrega">Entrega Prevista</th>
                             <th class="col-total">Total</th>
-                            <th>Operador</th>
-                            <th>Ações</th>
+                            <th class="col-operador">Operador</th>
+                            <th class="col-acoes">A&ccedil;&otilde;es</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for pedido in pedidos %}
                             <tr>
-                                <td><span class="pedido-id">#{{ pedido.id }}</span></td>
+                                <td class="col-id"><span class="pedido-id">#{{ pedido.id }}</span></td>
                                 <td class="pedido-data">{{ pedido.data_pedido|date:"d/m/Y" }}</td>
-                                <td class="pedido-cliente">
+                                <td class="pedido-cliente col-cliente">
                                     {% if pedido.cliente %}
                                         {{ pedido.cliente.nome }}
                                     {% else %}
                                         <em>Não informado</em>
+                                    {% endif %}
+                                </td>
+                                <td class="pedido-localidade col-localidade">
+                                    {% if pedido.cliente %}
+                                        {% if pedido.cliente.bairro %}
+                                            {{ pedido.cliente.bairro }}
+                                        {% elif pedido.cliente.cidade %}
+                                            {{ pedido.cliente.cidade }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    {% else %}
+                                        -
                                     {% endif %}
                                 </td>
                                 <td class="col-status">
@@ -442,7 +511,7 @@
                                     {% endif %}
                                 </td>
                                 <td class="total">R$ {{ pedido.total|floatformat:"2" }}</td>
-                                <td class="pedido-operador">{{ pedido.operador|default:"-" }}</td>
+                                <td class="pedido-operador col-operador">{{ pedido.operador|default:"-" }}</td>
                                 <td class="col-acoes">
                                     <a href="{% url 'estoque:pedido_detalhe' pedido.id %}" class="link-pedido">Ver</a>
                                 </td>
@@ -465,6 +534,7 @@
 
             const status = document.getElementById("status");
             const cliente = document.getElementById("cliente_id");
+            const localidade = document.getElementById("localidade");
             const dataInicio = document.getElementById("data_inicio");
             const dataFim = document.getElementById("data_fim");
             let timerFiltro = null;
@@ -478,7 +548,7 @@
                 if (event.key !== "Enter") return;
                 event.preventDefault();
 
-                const ordemCampos = [status, cliente, dataInicio, dataFim];
+                const ordemCampos = [status, cliente, localidade, dataInicio, dataFim];
                 const indiceAtual = ordemCampos.indexOf(event.currentTarget);
                 const proximoCampo = ordemCampos[indiceAtual + 1];
                 if (proximoCampo) {
@@ -501,14 +571,16 @@
 
             status.addEventListener("change", enviarFiltros);
             cliente.addEventListener("change", enviarFiltros);
+            localidade.addEventListener("change", enviarFiltros);
             dataInicio.addEventListener("change", () => agendarFiltroData(dataInicio));
             dataFim.addEventListener("change", () => agendarFiltroData(dataFim));
             dataInicio.addEventListener("input", () => agendarFiltroData(dataInicio));
             dataFim.addEventListener("input", () => agendarFiltroData(dataFim));
-            [status, cliente, dataInicio, dataFim].forEach((campo) => {
+            [status, cliente, localidade, dataInicio, dataFim].forEach((campo) => {
                 campo.addEventListener("keydown", avancarComEnter);
             });
         })();
     </script>
 </body>
 </html>
+
