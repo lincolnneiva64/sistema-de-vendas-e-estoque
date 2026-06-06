@@ -8243,7 +8243,11 @@ def pedido_criar(request):
                 "sucesso": True,
                 "pedido_id": pedido.id,
                 "mensagem": f"Pedido #{pedido.id} criado com sucesso.",
-                "redirect_url": reverse("estoque:pedido_detalhe", args=[pedido.id]),
+                "redirect_url": (
+                    f"{reverse('estoque:vendas')}?pedido_id={pedido.id}"
+                    if request.POST.get("proxima_acao") == "enviar_venda"
+                    else reverse("estoque:pedido_detalhe", args=[pedido.id])
+                ),
             })
         
         except Exception as e:

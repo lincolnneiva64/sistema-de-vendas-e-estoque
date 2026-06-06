@@ -7344,6 +7344,33 @@ class PedidoTests(TestCase):
             secure=True,
         )
 
+    def _post_criar_pedido(self, proxima_acao=""):
+        itens = [
+            {
+                "produto_id": self.produto.id,
+                "produto_nome": self.produto.nome,
+                "quantidade": "2.000",
+                "unidade": "Un",
+                "preco_unitario": "100.00",
+                "valor_total": "200.00",
+                "estoque_no_momento": self.produto.quantidade,
+                "observacao": "",
+            }
+        ]
+        return self.client.post(
+            reverse("estoque:pedido_criar"),
+            data={
+                "data_pedido": timezone.localdate().isoformat(),
+                "cliente_id": self.cliente.id,
+                "data_prevista_entrega": "",
+                "operador": "Operador Pedido",
+                "observacao": "",
+                "itens_json": json.dumps(itens),
+                "proxima_acao": proxima_acao,
+            },
+            secure=True,
+        )
+
     def test_criar_pedido_com_cliente_e_itens_salva(self):
         """Criar pedido com cliente e itens deve salvar Pedido e ItemPedido"""
         from .models import Pedido, ItemPedido
@@ -7368,6 +7395,49 @@ class PedidoTests(TestCase):
         self.assertEqual(Pedido.objects.count(), 1)
         self.assertEqual(ItemPedido.objects.count(), 1)
         self.assertEqual(item.pedido.id, pedido.id)
+
+    def test_salvar_pedido_normal_continua_redirecionando_para_detalhe(self):
+        from .models import Pedido
+
+        estoque_antes = self.produto.quantidade
+        contas_antes = ContaReceber.objects.count()
+
+        resposta = self._post_criar_pedido()
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["sucesso"])
+        pedido = Pedido.objects.get(pk=dados["pedido_id"])
+        self.assertEqual(dados["redirect_url"], reverse("estoque:pedido_detalhe", args=[pedido.id]))
+        self.produto.refresh_from_db()
+        self.assertEqual(self.produto.quantidade, estoque_antes)
+        self.assertEqual(ContaReceber.objects.count(), contas_antes)
+        self.assertEqual(Venda.objects.count(), 0)
+
+    def test_salvar_pedido_e_enviar_para_venda_redireciona_sem_gravar_venda(self):
+        from .models import Pedido
+
+        estoque_antes = self.produto.quantidade
+        contas_antes = ContaReceber.objects.count()
+
+        resposta = self._post_criar_pedido(proxima_acao="enviar_venda")
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["sucesso"])
+        pedido = Pedido.objects.get(pk=dados["pedido_id"])
+        self.assertEqual(dados["redirect_url"], f"{reverse('estoque:vendas')}?pedido_id={pedido.id}")
+        self.assertEqual(pedido.status, Pedido.STATUS_ABERTO)
+        self.assertEqual(pedido.itens.count(), 1)
+        self.produto.refresh_from_db()
+        self.assertEqual(self.produto.quantidade, estoque_antes)
+        self.assertEqual(ContaReceber.objects.count(), contas_antes)
+        self.assertEqual(Venda.objects.count(), 0)
+
+        resposta_vendas = self.client.get(reverse("estoque:vendas"), {"pedido_id": pedido.id}, secure=True)
+        self.assertEqual(resposta_vendas.status_code, 200)
+        self.assertContains(resposta_vendas, f"Venda preparada a partir do Pedido #{pedido.id}")
+        self.assertContains(resposta_vendas, "Produto Teste")
 
     def test_gravar_pedido_nao_altera_quantidade_produto(self):
         """Gravar pedido não deve alterar Produto.quantidade"""

@@ -847,6 +847,22 @@
             transform: none;
         }
 
+        .btn-salvar-venda {
+            background: #1e40af;
+            color: #ffffff;
+            min-width: 220px;
+        }
+
+        .btn-salvar-venda:hover {
+            background: #1d4ed8;
+        }
+
+        .btn-salvar-venda:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .btn-cancelar {
             display: inline-flex;
             align-items: center;
@@ -1128,6 +1144,7 @@
             </section>
 
             <input type="hidden" id="itens_json" name="itens_json" value="[]">
+            <input type="hidden" id="proxima_acao" name="proxima_acao" value="">
 
             <footer class="rodape-pedido">
                 <div class="rodape-inner">
@@ -1138,6 +1155,9 @@
                     <div class="acoes">
                         <a href="{% if pedido_modo_edicao %}{% url 'estoque:pedido_detalhe' pedido.id %}{% else %}{% url 'estoque:pedidos' %}{% endif %}" class="btn-cancelar">Cancelar</a>
                         <button type="submit" class="btn btn-salvar" id="btn-salvar">{% if pedido_modo_edicao %}Salvar Alteracoes{% else %}Salvar Pedido{% endif %}</button>
+                        {% if not pedido_modo_edicao %}
+                            <button type="submit" class="btn btn-salvar-venda" id="btn-salvar-venda" data-proxima-acao="enviar_venda">Salvar e Enviar para Venda</button>
+                        {% endif %}
                     </div>
                 </div>
             </footer>
@@ -1200,7 +1220,9 @@
         const semItens = document.getElementById("sem-itens");
         const contadorItens = document.getElementById("contador-itens");
         const itensJson = document.getElementById("itens_json");
+        const proximaAcao = document.getElementById("proxima_acao");
         const btnSalvar = document.getElementById("btn-salvar");
+        const btnSalvarVenda = document.getElementById("btn-salvar-venda");
         const formPedido = document.getElementById("form-pedido");
         const rodapePedido = document.querySelector(".rodape-pedido");
         const sugestoesClienteUrl = pedidoUrlSalvar;
@@ -1535,6 +1557,24 @@
 
             focarClienteObrigatorio();
             return false;
+        }
+
+        function prepararBotoesSalvamento(botaoAcionado) {
+            btnSalvar.disabled = true;
+            btnSalvar.textContent = "Salvando...";
+            if (btnSalvarVenda) {
+                btnSalvarVenda.disabled = true;
+                btnSalvarVenda.textContent = botaoAcionado === btnSalvarVenda ? "Salvando..." : "Salvar e Enviar para Venda";
+            }
+        }
+
+        function restaurarBotoesSalvamento() {
+            btnSalvar.disabled = false;
+            btnSalvar.textContent = textoBotaoSalvar;
+            if (btnSalvarVenda) {
+                btnSalvarVenda.disabled = false;
+                btnSalvarVenda.textContent = "Salvar e Enviar para Venda";
+            }
         }
 
         function localizarProduto(valor) {
@@ -2171,9 +2211,10 @@
                 return;
             }
 
+            const botaoAcionado = event.submitter || btnSalvar;
+            proximaAcao.value = botaoAcionado?.dataset?.proximaAcao || "";
             const formData = new FormData(this);
-            btnSalvar.disabled = true;
-            btnSalvar.textContent = "Salvando...";
+            prepararBotoesSalvamento(botaoAcionado);
 
             fetch(pedidoUrlSalvar, {
                 method: "POST",
@@ -2194,13 +2235,11 @@
                 if (String(data.mensagem || "").toLowerCase().includes("cliente")) {
                     focarClienteObrigatorio();
                 }
-                btnSalvar.disabled = false;
-                btnSalvar.textContent = textoBotaoSalvar;
+                restaurarBotoesSalvamento();
             })
             .catch(() => {
                 mostrarMensagem("erro", pedidoModoEdicao ? "Erro ao atualizar pedido. Tente novamente." : "Erro ao criar pedido. Tente novamente.");
-                btnSalvar.disabled = false;
-                btnSalvar.textContent = textoBotaoSalvar;
+                restaurarBotoesSalvamento();
             });
         });
 

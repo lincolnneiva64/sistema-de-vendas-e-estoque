@@ -281,10 +281,11 @@
         }
 
         .aviso-convertido {
-            background-color: #eff6ff;
-            border-color: #93c5fd;
-            border-left-color: #2563eb;
-            color: #1e40af;
+            background-color: #dbeafe;
+            border-color: #60a5fa;
+            border-left: 7px solid #2563eb;
+            color: #153e8a;
+            font-weight: 650;
         }
 
         @media (max-width: 640px) {
@@ -363,7 +364,7 @@
 
         {% if pedido.status == 'parcial' %}
             <div class="aviso aviso-convertido">
-                <strong>Pedido parcialmente atendido.</strong> Parte dos itens jÃ¡ foi enviada para venda. Abaixo estÃ¡ apenas o saldo pendente.
+                <strong>Pedido parcialmente atendido.</strong> Parte dos itens j&aacute; foi enviada para venda. Abaixo est&aacute; apenas o saldo pendente.
             </div>
         {% endif %}
         
