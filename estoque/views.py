@@ -7909,6 +7909,152 @@ def _formatar_moeda_pedido(valor):
     return "R$ " + f"{Decimal(valor or 0):.2f}".replace(".", ",")
 
 
+def _decimal_pedido(valor, casas, padrao="0"):
+    try:
+        decimal = Decimal(str(valor if valor is not None else padrao).replace(",", "."))
+    except (InvalidOperation, ValueError, TypeError):
+        decimal = Decimal(padrao)
+    quantizador = Decimal("1").scaleb(-casas)
+    return decimal.quantize(quantizador)
+
+
+def _validar_dados_pedido_post(request):
+    data_pedido_str = request.POST.get("data_pedido", "")
+    cliente_id = request.POST.get("cliente_id", "")
+    data_prevista_entrega_str = request.POST.get("data_prevista_entrega", "")
+    operador = request.POST.get("operador", "").strip()
+    observacao = request.POST.get("observacao", "").strip()
+
+    if not data_pedido_str:
+        return None, JsonResponse({"sucesso": False, "mensagem": "Data do pedido é obrigatória."})
+    if not cliente_id:
+        return None, JsonResponse({"sucesso": False, "mensagem": "Cliente é obrigatório."})
+
+    try:
+        data_pedido = parse_date(data_pedido_str)
+        if not data_pedido:
+            raise ValueError("Data inválida")
+    except Exception:
+        return None, JsonResponse({"sucesso": False, "mensagem": "Data do pedido inválida."})
+
+    try:
+        cliente_id_int = int(cliente_id)
+        cliente = Cliente.objects.filter(pk=cliente_id_int, ativo=True).first()
+        if not cliente:
+            return None, JsonResponse({"sucesso": False, "mensagem": "Cliente inválido."})
+    except Exception:
+        return None, JsonResponse({"sucesso": False, "mensagem": "Cliente inválido."})
+
+    data_prevista_entrega = None
+    if data_prevista_entrega_str:
+        data_prevista_entrega = parse_date(data_prevista_entrega_str)
+
+    itens_data = request.POST.get("itens_json", "")
+    if not itens_data:
+        return None, JsonResponse({"sucesso": False, "mensagem": "Adicione pelo menos um item ao pedido."})
+
+    try:
+        itens = json.loads(itens_data)
+        if not itens:
+            return None, JsonResponse({"sucesso": False, "mensagem": "Adicione pelo menos um item ao pedido."})
+    except Exception:
+        return None, JsonResponse({"sucesso": False, "mensagem": "Dados de itens inválidos."})
+
+    return {
+        "cliente": cliente,
+        "data_pedido": data_pedido,
+        "data_prevista_entrega": data_prevista_entrega,
+        "operador": operador,
+        "observacao": observacao,
+        "itens": itens,
+    }, None
+
+
+def _item_pedido_inicial(item):
+    produto = item.produto
+    return {
+        "item_id": item.id,
+        "produto_id": produto.id if produto else "",
+        "produto_nome": produto.nome if produto else "Produto nao identificado",
+        "quantidade": f"{Decimal(item.quantidade or 0):.3f}",
+        "unidade": item.unidade or "",
+        "preco_unitario": f"{Decimal(item.preco_unitario or 0):.2f}",
+        "valor_total": f"{Decimal(item.valor_total or 0):.2f}",
+        "estoque_no_momento": item.estoque_no_momento if item.estoque_no_momento is not None else "",
+        "observacao": item.observacao or "",
+    }
+
+
+def _salvar_itens_pedido(pedido, itens, item_ids_editaveis=None):
+    from .models import ItemPedido
+
+    total = Decimal("0.00")
+    itens_validos = []
+    ids_editaveis = set(item_ids_editaveis) if item_ids_editaveis is not None else None
+
+    for item in itens:
+        try:
+            produto_id = int(item.get("produto_id", 0))
+        except (TypeError, ValueError):
+            continue
+
+        produto = Produto.objects.filter(pk=produto_id, excluido=False).first()
+        if not produto:
+            continue
+
+        quantidade = _decimal_pedido(item.get("quantidade"), 3)
+        preco_unitario = _decimal_pedido(item.get("preco_unitario"), 2)
+        if quantidade <= 0 or preco_unitario <= 0:
+            continue
+
+        valor_total = (quantidade * preco_unitario).quantize(Decimal("0.01"))
+        total += valor_total
+        itens_validos.append((item, produto, quantidade, preco_unitario, valor_total))
+
+    if not itens_validos:
+        raise ValueError("Adicione pelo menos um item ao pedido.")
+
+    if ids_editaveis is None:
+        pedido.itens.all().delete()
+    else:
+        pedido.itens.exclude(id__in=ids_editaveis).update(
+            quantidade=Decimal("0.000"),
+            valor_total=Decimal("0.00"),
+        )
+        enviados = {
+            int(item.get("item_id"))
+            for item, _produto, _quantidade, _preco_unitario, _valor_total in itens_validos
+            if str(item.get("item_id") or "").isdigit()
+        }
+        ItemPedido.objects.filter(pedido=pedido, id__in=ids_editaveis).exclude(id__in=enviados).delete()
+
+    for item, produto, quantidade, preco_unitario, valor_total in itens_validos:
+        item_id = item.get("item_id")
+        item_existente = None
+        if str(item_id or "").isdigit():
+            item_existente = ItemPedido.objects.filter(pedido=pedido, id=int(item_id)).first()
+            if ids_editaveis is not None and item_existente and item_existente.id not in ids_editaveis:
+                item_existente = None
+
+        dados_item = {
+            "produto": produto,
+            "quantidade": quantidade,
+            "unidade": item.get("unidade", "").strip(),
+            "preco_unitario": preco_unitario,
+            "valor_total": valor_total,
+            "estoque_no_momento": int(produto.quantidade or 0),
+            "observacao": item.get("observacao", "").strip() or None,
+        }
+        if item_existente:
+            for campo, valor in dados_item.items():
+                setattr(item_existente, campo, valor)
+            item_existente.save()
+        else:
+            ItemPedido.objects.create(pedido=pedido, **dados_item)
+
+    pedido.total = total.quantize(Decimal("0.01"))
+
+
 def _sugestoes_ultimas_compras_cliente(cliente_id):
     vendas_ids = list(
         Venda.objects.filter(cliente_id=cliente_id, cancelada=False)
@@ -8096,6 +8242,117 @@ def pedido_criar(request):
     })
 
 
+def pedido_editar(request, pk):
+    """Editar pedido aberto ou saldo pendente de pedido parcial."""
+    from .models import Pedido
+
+    pedido = get_object_or_404(
+        Pedido.objects.select_related("cliente").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+
+    if pedido.status == Pedido.STATUS_CONVERTIDO_EM_VENDA:
+        if request.method == "POST":
+            return JsonResponse(
+                {
+                    "sucesso": False,
+                    "mensagem": "Pedido totalmente convertido em venda nao pode ser editado livremente.",
+                },
+                status=400,
+            )
+        messages.warning(request, "Pedido totalmente convertido em venda nao pode ser editado livremente.")
+        return redirect("estoque:pedido_detalhe", pk=pedido.pk)
+
+    if pedido.status not in [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL]:
+        if request.method == "POST":
+            return JsonResponse(
+                {"sucesso": False, "mensagem": "Este pedido nao esta disponivel para edicao."},
+                status=400,
+            )
+        messages.warning(request, "Este pedido nao esta disponivel para edicao.")
+        return redirect("estoque:pedido_detalhe", pk=pedido.pk)
+
+    itens_pedido = list(pedido.itens.all())
+    if pedido.status == Pedido.STATUS_PARCIAL:
+        itens_editaveis, _total_pendente = _itens_pendentes_exibicao_pedido_parcial(pedido, itens_pedido)
+    else:
+        itens_editaveis = itens_pedido
+    item_ids_editaveis = {item.id for item in itens_editaveis if item.id}
+
+    sugestoes_cliente_id = request.GET.get("sugestoes_cliente_id")
+    if request.method == "GET" and sugestoes_cliente_id:
+        try:
+            cliente_id = int(sugestoes_cliente_id)
+        except (TypeError, ValueError):
+            return JsonResponse({"sugestoes": []})
+        return JsonResponse({"sugestoes": _sugestoes_ultimas_compras_cliente(cliente_id)})
+
+    if request.method == "POST":
+        dados, resposta_erro = _validar_dados_pedido_post(request)
+        if resposta_erro:
+            return resposta_erro
+
+        try:
+            with transaction.atomic():
+                pedido = Pedido.objects.select_for_update().get(pk=pedido.pk)
+                if pedido.status == Pedido.STATUS_CONVERTIDO_EM_VENDA:
+                    return JsonResponse(
+                        {
+                            "sucesso": False,
+                            "mensagem": "Pedido totalmente convertido em venda nao pode ser editado livremente.",
+                        },
+                        status=400,
+                    )
+                if pedido.status not in [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL]:
+                    return JsonResponse(
+                        {"sucesso": False, "mensagem": "Este pedido nao esta disponivel para edicao."},
+                        status=400,
+                    )
+
+                pedido.cliente = dados["cliente"]
+                pedido.data_pedido = dados["data_pedido"]
+                pedido.data_prevista_entrega = dados["data_prevista_entrega"]
+                pedido.operador = dados["operador"]
+                pedido.observacao = dados["observacao"] or None
+                ids_para_editar = None if pedido.status == Pedido.STATUS_ABERTO else item_ids_editaveis
+                _salvar_itens_pedido(pedido, dados["itens"], ids_para_editar)
+                pedido.save(
+                    update_fields=[
+                        "cliente",
+                        "data_pedido",
+                        "data_prevista_entrega",
+                        "operador",
+                        "observacao",
+                        "total",
+                        "atualizado_em",
+                    ]
+                )
+        except ValueError as exc:
+            return JsonResponse({"sucesso": False, "mensagem": str(exc)}, status=400)
+        except Exception as exc:
+            logger.exception(f"Erro ao editar pedido: {exc}")
+            return JsonResponse({"sucesso": False, "mensagem": "Erro ao editar pedido."}, status=500)
+
+        return JsonResponse({
+            "sucesso": True,
+            "pedido_id": pedido.id,
+            "mensagem": f"Pedido #{pedido.id} atualizado com sucesso.",
+            "redirect_url": f"{reverse('estoque:pedido_detalhe', args=[pedido.id])}?pedido_editado=1",
+        })
+
+    produtos = Produto.objects.filter(excluido=False).order_by("nome")
+    clientes = Cliente.objects.filter(ativo=True).order_by("nome")
+
+    return render(request, "estoque/pedido_criar.html", {
+        "produtos": produtos,
+        "clientes": clientes,
+        "pedido": pedido,
+        "pedido_modo_edicao": True,
+        "pedido_itens_iniciais": [_item_pedido_inicial(item) for item in itens_editaveis],
+        "pedido_url_salvar": reverse("estoque:pedido_editar", args=[pedido.id]),
+    })
+
+
 def _itens_pendentes_exibicao_pedido_parcial(pedido, itens_pedido):
     itens_positivos = [item for item in itens_pedido if item.quantidade > 0]
     total_positivo = sum((item.valor_total for item in itens_positivos), Decimal("0.00"))
@@ -8192,4 +8449,6 @@ def pedido_detalhe(request, pk):
         "total_exibido": total_exibido,
         "titulo_itens": titulo_itens,
         "rotulo_total": rotulo_total,
+        "pode_editar_pedido": pedido.status in [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL],
+        "pedido_editado": request.GET.get("pedido_editado") == "1",
     })

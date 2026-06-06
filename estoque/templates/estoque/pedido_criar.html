@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Criar Pedido - Sistema de Vendas e Estoque</title>
+    <title>{% if pedido_modo_edicao %}Editar Pedido #{{ pedido.id }}{% else %}Criar Pedido{% endif %} - Sistema de Vendas e Estoque</title>
+    {{ pedido_itens_iniciais|default:"[]"|json_script:"pedido-itens-iniciais" }}
     <script>
         if ("scrollRestoration" in history) {
             history.scrollRestoration = "manual";
@@ -929,8 +930,14 @@
     <main class="pedido-page">
         <div class="pedido-topo">
             <div>
-                <h1 class="pedido-title">Criar Pedido</h1>
-                <p class="pedido-subtitle">Pedido registra uma intencao de venda futura. O estoque abaixo e apenas referencia.</p>
+                <h1 class="pedido-title">{% if pedido_modo_edicao %}Editar Pedido #{{ pedido.id }}{% else %}Criar Pedido{% endif %}</h1>
+                <p class="pedido-subtitle">
+                    {% if pedido_modo_edicao and pedido.status == 'parcial' %}
+                        Edite apenas o saldo pendente do pedido parcial. O que ja foi enviado para venda permanece preservado.
+                    {% else %}
+                        Pedido registra uma intencao de venda futura. O estoque abaixo e apenas referencia.
+                    {% endif %}
+                </p>
             </div>
             <div class="pedido-topo-acoes">
                 <a href="{% url 'estoque:vendas' %}" class="pedido-voltar pedido-vendas-link">Ir para Vendas</a>
@@ -939,7 +946,11 @@
         </div>
 
         <div class="pedido-alerta">
-            Pedido nao baixa estoque, nao cria conta a receber e sera salvo inicialmente como ABERTO.
+            {% if pedido_modo_edicao %}
+                Editar pedido nao baixa estoque, nao cria conta a receber e nao gera venda automaticamente.
+            {% else %}
+                Pedido nao baixa estoque, nao cria conta a receber e sera salvo inicialmente como ABERTO.
+            {% endif %}
         </div>
 
         <div id="mensagem-tela" class="mensagem-tela" aria-live="polite"></div>
@@ -950,13 +961,13 @@
             <section class="pedido-card">
                 <div class="pedido-card-title">
                     <span>Cabecalho do pedido</span>
-                    <span class="status-chip">Aberto</span>
+                    <span class="status-chip">{% if pedido_modo_edicao %}{{ pedido.get_status_display }}{% else %}Aberto{% endif %}</span>
                 </div>
 
                 <div class="pedido-grid">
                     <div class="form-group">
                         <label for="data_pedido" class="campo-obrigatorio">Data do pedido</label>
-                        <input type="date" id="data_pedido" name="data_pedido" value="{% now 'Y-m-d' %}" required>
+                        <input type="date" id="data_pedido" name="data_pedido" value="{% if pedido_modo_edicao %}{{ pedido.data_pedido|date:'Y-m-d' }}{% else %}{% now 'Y-m-d' %}{% endif %}" required>
                     </div>
 
                     <div class="form-group">
@@ -964,25 +975,25 @@
                         <select id="cliente_id" name="cliente_id" required>
                             <option value="">Selecione um cliente</option>
                             {% for cliente in clientes %}
-                                <option value="{{ cliente.id }}">{{ cliente.nome }}</option>
+                                <option value="{{ cliente.id }}" {% if pedido_modo_edicao and pedido.cliente_id == cliente.id %}selected{% endif %}>{{ cliente.nome }}</option>
                             {% endfor %}
                         </select>
                     </div>
 
                     <div class="form-group">
                         <label for="data_prevista_entrega">Entrega prevista</label>
-                        <input type="date" id="data_prevista_entrega" name="data_prevista_entrega" value="{% now 'Y-m-d' %}">
+                        <input type="date" id="data_prevista_entrega" name="data_prevista_entrega" value="{% if pedido_modo_edicao and pedido.data_prevista_entrega %}{{ pedido.data_prevista_entrega|date:'Y-m-d' }}{% elif not pedido_modo_edicao %}{% now 'Y-m-d' %}{% endif %}">
                     </div>
 
                     <div class="form-group">
                         <label for="operador">Operador</label>
-                        <input type="text" id="operador" name="operador" placeholder="Nome do operador">
+                        <input type="text" id="operador" name="operador" placeholder="Nome do operador" value="{% if pedido_modo_edicao %}{{ pedido.operador|default:'' }}{% endif %}">
                         <span class="campo-ajuda">Preparado para vincular futuramente ao cadastro de funcionarios autorizados.</span>
                     </div>
 
                     <div class="form-group full">
                         <label for="observacao">Observacao</label>
-                        <textarea id="observacao" name="observacao" placeholder="Observacoes combinadas com o cliente"></textarea>
+                        <textarea id="observacao" name="observacao" placeholder="Observacoes combinadas com o cliente">{% if pedido_modo_edicao %}{{ pedido.observacao|default:'' }}{% endif %}</textarea>
                     </div>
                 </div>
             </section>
@@ -1125,8 +1136,8 @@
                         <span>Total do pedido: <strong id="resumo-total">R$ 0,00</strong></span>
                     </div>
                     <div class="acoes">
-                        <a href="{% url 'estoque:pedidos' %}" class="btn-cancelar">Cancelar</a>
-                        <button type="submit" class="btn btn-salvar" id="btn-salvar">Salvar Pedido</button>
+                        <a href="{% if pedido_modo_edicao %}{% url 'estoque:pedido_detalhe' pedido.id %}{% else %}{% url 'estoque:pedidos' %}{% endif %}" class="btn-cancelar">Cancelar</a>
+                        <button type="submit" class="btn btn-salvar" id="btn-salvar">{% if pedido_modo_edicao %}Salvar Alteracoes{% else %}Salvar Pedido{% endif %}</button>
                     </div>
                 </div>
             </footer>
@@ -1148,7 +1159,12 @@
             {% endfor %}
         ];
 
-        let itens = [];
+        const pedidoModoEdicao = {% if pedido_modo_edicao %}true{% else %}false{% endif %};
+        const pedidoUrlSalvar = "{% if pedido_url_salvar %}{{ pedido_url_salvar }}{% else %}{% url 'estoque:pedido_criar' %}{% endif %}";
+        const textoBotaoSalvar = pedidoModoEdicao ? "Salvar Alteracoes" : "Salvar Pedido";
+        const pedidoItensIniciaisEl = document.getElementById("pedido-itens-iniciais");
+        const itensIniciais = pedidoItensIniciaisEl ? JSON.parse(pedidoItensIniciaisEl.textContent || "[]") : [];
+        let itens = Array.isArray(itensIniciais) ? itensIniciais : [];
         let produtoSelecionado = null;
         let produtosSugeridos = [];
         let sugestaoAtiva = -1;
@@ -1187,7 +1203,7 @@
         const btnSalvar = document.getElementById("btn-salvar");
         const formPedido = document.getElementById("form-pedido");
         const rodapePedido = document.querySelector(".rodape-pedido");
-        const sugestoesClienteUrl = "{% url 'estoque:pedido_criar' %}";
+        const sugestoesClienteUrl = pedidoUrlSalvar;
         const limiteSugestoesCliente = 10;
         let sugestoesClienteRequisicao = 0;
         let sugestoesClienteLista = [];
@@ -1748,15 +1764,16 @@
             const itemExistenteIndex = itens.findIndex((item) => String(item.produto_id) === String(produto.id));
             if (itemExistenteIndex === -1) return false;
 
-            produtoSelecionado = produto;
-            produtoBusca.value = produto.nome;
-            produtoId.value = produto.id;
-            atualizarContextoProduto(produto);
+            produtoSelecionado = null;
+            produtoBusca.value = "";
+            produtoId.value = "";
+            limparCamposDoItem();
+            atualizarContextoProduto(null);
             fecharSugestoes();
             produtoBusca.classList.add("campo-invalido");
             destacarItemDuplicado(itemExistenteIndex);
             mostrarMensagem("erro", "Este produto j\u00e1 est\u00e1 no pedido. Altere a quantidade na linha do item j\u00e1 lan\u00e7ado.");
-            focarSelecionando(produtoBusca);
+            focarSemSelecionar(produtoBusca);
             manterLancamentoVisivel();
             return true;
         }
@@ -1865,6 +1882,32 @@
             }
         }
 
+        function atualizarCampoItem(index, campo, valor) {
+            if (!itens[index]) return;
+
+            if (campo === "quantidade") {
+                const quantidade = Math.max(0, Number(String(valor).replace(",", ".")) || 0);
+                itens[index].quantidade = quantidade.toFixed(3);
+            } else if (campo === "preco_unitario") {
+                const preco = Math.max(0, Number(String(valor).replace(",", ".")) || 0);
+                itens[index].preco_unitario = preco.toFixed(2);
+            } else if (campo === "unidade") {
+                itens[index].unidade = String(valor || "").trim();
+            } else if (campo === "observacao") {
+                itens[index].observacao = valor;
+            }
+
+            if (campo === "quantidade" || campo === "preco_unitario") {
+                const quantidade = Number(itens[index].quantidade) || 0;
+                const preco = Number(itens[index].preco_unitario) || 0;
+                itens[index].valor_total = (quantidade * preco).toFixed(2);
+                atualizarTabela();
+                return;
+            }
+
+            itensJson.value = JSON.stringify(itens);
+        }
+
         function atualizarTabela() {
             tbodyItens.innerHTML = "";
 
@@ -1888,11 +1931,11 @@
                         <span class="item-produto">${escaparHtml(item.produto_nome)}</span>
                     </td>
                     <td class="itens-col-estoque"><span class="item-estoque-badge">${escaparHtml(formatarEstoqueItem(item.estoque_no_momento))}</span></td>
-                    <td class="itens-col-qtd">${Number(item.quantidade).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</td>
-                    <td class="itens-col-un">${escaparHtml(item.unidade || "-")}</td>
-                    <td class="itens-col-preco">${formatarMoeda(item.preco_unitario)}</td>
+                    <td class="itens-col-qtd"><input type="number" min="0" step="0.001" value="${escaparHtml(item.quantidade)}" aria-label="Quantidade do item" data-index="${index}" data-campo-item="quantidade"></td>
+                    <td class="itens-col-un"><input type="text" maxlength="20" value="${escaparHtml(item.unidade || "")}" aria-label="Unidade do item" data-index="${index}" data-campo-item="unidade"></td>
+                    <td class="itens-col-preco"><input type="number" min="0" step="0.01" value="${escaparHtml(item.preco_unitario)}" aria-label="Preco unitario do item" data-index="${index}" data-campo-item="preco_unitario"></td>
                     <td class="itens-col-total"><span class="item-total">${formatarMoeda(item.valor_total)}</span></td>
-                    <td class="itens-col-obs"><input type="text" value="${escaparHtml(item.observacao || "")}" placeholder="obs" aria-label="Observacao do item" data-index="${index}"></td>
+                    <td class="itens-col-obs"><input type="text" value="${escaparHtml(item.observacao || "")}" placeholder="obs" aria-label="Observacao do item" data-index="${index}" data-campo-item="observacao"></td>
                     <td class="itens-col-acao"><button type="button" class="btn btn-remover${index === remocaoPendente ? " confirmar" : ""}" data-remover="${index}">${index === remocaoPendente ? "Confirmar" : "Remover"}</button></td>
                 `;
                 tbodyItens.appendChild(tr);
@@ -2095,8 +2138,21 @@
         });
 
         tbodyItens.addEventListener("input", (event) => {
-            if (event.target.matches("input[data-index]")) {
-                atualizarObservacao(Number(event.target.dataset.index), event.target.value);
+            if (event.target.matches("input[data-campo-item]")) {
+                const campo = event.target.dataset.campoItem;
+                if (campo === "observacao" || campo === "unidade") {
+                    atualizarCampoItem(Number(event.target.dataset.index), campo, event.target.value);
+                }
+            }
+        });
+
+        tbodyItens.addEventListener("change", (event) => {
+            if (event.target.matches("input[data-campo-item]")) {
+                atualizarCampoItem(
+                    Number(event.target.dataset.index),
+                    event.target.dataset.campoItem,
+                    event.target.value
+                );
             }
         });
 
@@ -2119,7 +2175,7 @@
             btnSalvar.disabled = true;
             btnSalvar.textContent = "Salvando...";
 
-            fetch("{% url 'estoque:pedido_criar' %}", {
+            fetch(pedidoUrlSalvar, {
                 method: "POST",
                 body: formData,
                 headers: {
@@ -2129,22 +2185,22 @@
             .then((response) => response.json())
             .then((data) => {
                 if (data.sucesso) {
-                    mostrarMensagem("sucesso", data.mensagem || "Pedido criado com sucesso.");
+                    mostrarMensagem("sucesso", data.mensagem || (pedidoModoEdicao ? "Pedido atualizado com sucesso." : "Pedido criado com sucesso."));
                     window.location.href = data.redirect_url;
                     return;
                 }
 
-                mostrarMensagem("erro", data.mensagem || "Erro ao criar pedido.");
+                mostrarMensagem("erro", data.mensagem || (pedidoModoEdicao ? "Erro ao atualizar pedido." : "Erro ao criar pedido."));
                 if (String(data.mensagem || "").toLowerCase().includes("cliente")) {
                     focarClienteObrigatorio();
                 }
                 btnSalvar.disabled = false;
-                btnSalvar.textContent = "Salvar Pedido";
+                btnSalvar.textContent = textoBotaoSalvar;
             })
             .catch(() => {
-                mostrarMensagem("erro", "Erro ao criar pedido. Tente novamente.");
+                mostrarMensagem("erro", pedidoModoEdicao ? "Erro ao atualizar pedido. Tente novamente." : "Erro ao criar pedido. Tente novamente.");
                 btnSalvar.disabled = false;
-                btnSalvar.textContent = "Salvar Pedido";
+                btnSalvar.textContent = textoBotaoSalvar;
             });
         });
 

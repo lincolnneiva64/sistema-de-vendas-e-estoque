@@ -73,5 +73,6 @@ urlpatterns = [
     # Rotas de Pedidos
     path("pedidos/", views.pedidos, name="pedidos"),
     path("pedidos/criar/", views.pedido_criar, name="pedido_criar"),
+    path("pedidos/<int:pk>/editar/", views.pedido_editar, name="pedido_editar"),
     path("pedidos/<int:pk>/", views.pedido_detalhe, name="pedido_detalhe"),
 ]

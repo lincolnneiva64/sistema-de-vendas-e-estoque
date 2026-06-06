@@ -200,6 +200,11 @@
             flex-wrap: wrap;
             margin-top: 20px;
         }
+
+        .acoes-topo {
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
         
         .btn {
             padding: 10px 20px;
@@ -268,6 +273,16 @@
             border-left-color: #2563eb;
             color: #1e40af;
         }
+
+        @media (max-width: 640px) {
+            .acoes {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
@@ -280,10 +295,40 @@
                 </span>
             </span>
         </div>
+
+        <div class="acoes acoes-topo">
+            <a href="{% url 'estoque:pedidos' %}" class="btn btn-voltar">â† Voltar para Pedidos</a>
+            {% if pode_editar_pedido %}
+                <a href="{% url 'estoque:pedido_editar' pedido.id %}" class="btn btn-editar">Editar Pedido</a>
+            {% endif %}
+            {% if pedido.status == 'aberto' %}
+                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar">Enviar para Venda</a>
+            {% elif pedido.status == 'parcial' %}
+                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar">Enviar pendÃƒÂªncia para Venda</a>
+            {% elif pedido.status == 'convertido_em_venda' %}
+                <a href="{% url 'estoque:vendas' %}" class="btn btn-venda">Ir para Vendas</a>
+            {% else %}
+                <a href="{% url 'estoque:vendas' %}" class="btn btn-venda">Ir para Vendas</a>
+            {% endif %}
+        </div>
         
         <div class="aviso">
             <strong>ℹ️ Informação:</strong> Este é um pedido (intenção de venda futura). Não afeta estoque nem cria financeiro.
         </div>
+
+        {% if pedido_editado %}
+            <div class="aviso">
+                <strong>Pedido atualizado com sucesso.</strong>
+            </div>
+        {% endif %}
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="aviso aviso-convertido">
+                    <strong>{{ message }}</strong>
+                </div>
+            {% endfor %}
+        {% endif %}
 
         {% if pedido.status == 'convertido_em_venda' %}
             <div class="aviso aviso-convertido">
@@ -421,6 +466,9 @@
         
         <div class="acoes">
             <a href="{% url 'estoque:pedidos' %}" class="btn btn-voltar">← Voltar para Pedidos</a>
+            {% if pode_editar_pedido %}
+                <a href="{% url 'estoque:pedido_editar' pedido.id %}" class="btn btn-editar">Editar Pedido</a>
+            {% endif %}
             {% if pedido.status == 'aberto' %}
                 <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar">Enviar para Venda</a>
             {% elif pedido.status == 'parcial' %}
