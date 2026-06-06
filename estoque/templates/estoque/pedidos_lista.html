@@ -253,6 +253,12 @@
             border: 1px solid #fecaca;
             color: #991b1b;
         }
+
+        .status-parcial {
+            background-color: #fef3c7;
+            border: 1px solid #fcd34d;
+            color: #92400e;
+        }
         
         .status-convertido {
             background-color: #dbeafe;
@@ -424,7 +430,7 @@
                                     {% endif %}
                                 </td>
                                 <td class="col-status">
-                                    <span class="status-badge status-{% if pedido.status == 'aberto' %}aberto{% elif pedido.status == 'cancelado' %}cancelado{% else %}convertido{% endif %}">
+                                    <span class="status-badge status-{% if pedido.status == 'aberto' %}aberto{% elif pedido.status == 'cancelado' %}cancelado{% elif pedido.status == 'parcial' %}parcial{% else %}convertido{% endif %}">
                                         {{ pedido.get_status_display }}
                                     </span>
                                 </td>

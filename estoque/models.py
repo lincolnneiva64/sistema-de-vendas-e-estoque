@@ -700,10 +700,12 @@ class AjusteItemVendaQuitada(models.Model):
 class Pedido(models.Model):
     STATUS_ABERTO = "aberto"
     STATUS_CANCELADO = "cancelado"
+    STATUS_PARCIAL = "parcial"
     STATUS_CONVERTIDO_EM_VENDA = "convertido_em_venda"
     STATUS_CHOICES = [
         (STATUS_ABERTO, "Aberto"),
         (STATUS_CANCELADO, "Cancelado"),
+        (STATUS_PARCIAL, "Parcial"),
         (STATUS_CONVERTIDO_EM_VENDA, "Convertido em venda"),
     ]
 

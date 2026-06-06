@@ -73,6 +73,44 @@
     background: #f8fafc;
     border-color: #e2e8f0;
 }
+
+.pedido-importado-aviso {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 6px 0 8px;
+    padding: 8px 12px;
+    border: 1px solid #bfdbfe;
+    border-left: 5px solid #2563eb;
+    border-radius: 10px;
+    background: #eff6ff;
+    color: #1e3a8a;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.pedido-importado-aviso-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    border: 1px solid #93c5fd;
+    background: #ffffff;
+    color: #1d4ed8;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 900;
+    white-space: nowrap;
+}
+
+.pedido-importado-aviso-link:hover {
+    background: #dbeafe;
+}
+
     .bloco-itens-scroll {
     flex: 1;
     min-height: 0;
@@ -985,6 +1023,15 @@ td:first-child {
         </div>
         </div>
 
+        {% if pedido_importado_aviso %}
+            <div class="pedido-importado-aviso">
+                <span>{{ pedido_importado_aviso }}</span>
+                {% if pedido_importado %}
+                    <a href="{{ pedido_importado.detalhe_url }}" class="pedido-importado-aviso-link">Voltar ao Pedido #{{ pedido_importado.id }}</a>
+                {% endif %}
+            </div>
+        {% endif %}
+
         <div class="linha linha-cabecalho-venda">
             <input type="date" id="dataVenda" title="Data da venda">
             <div class="cliente-autocomplete-wrap">
@@ -1236,6 +1283,7 @@ td:first-child {
 </div>
 
 {{ cliente_inicial|json_script:"clienteInicialVenda" }}
+{{ pedido_importado|json_script:"pedidoImportadoVenda" }}
 <script>
     function mostrarMsgEdicao() {
     const msg = document.getElementById("msgEdicao");
@@ -1334,6 +1382,7 @@ const vendasUrl = "{% url 'estoque:vendas' %}";
 const gravarVendaUrl = "{% url 'estoque:gravar_venda' %}";
 const historicoClienteProdutoUrl = "{% url 'estoque:vendas_cliente_produto_historico' %}";
 const clienteInicialVenda = JSON.parse(document.getElementById("clienteInicialVenda").textContent || "null");
+let pedidoImportadoVenda = JSON.parse(document.getElementById("pedidoImportadoVenda").textContent || "null");
 const clienteResumoStorageKey = "vendas.clienteSelecionado";
 let clientesSugestoes = [];
 let clienteIndexAtivo = -1;
@@ -2320,6 +2369,79 @@ function limparItensVenda() {
     atualizarTotalGeral();
 }
 
+function limparPedidoImportadoVenda() {
+    pedidoImportadoVenda = null;
+    document.querySelector(".pedido-importado-aviso")?.remove();
+    if (window.history?.replaceState) {
+        const urlAtual = new URL(window.location.href);
+        urlAtual.searchParams.delete("pedido_id");
+        window.history.replaceState({}, "", urlAtual.toString());
+    }
+}
+
+function limparVendaAposGravacao() {
+    limparItensVenda();
+    limparCabecalhoVenda(true);
+    limparPedidoImportadoVenda();
+    atualizarTotalGeral();
+}
+
+function criarLinhaItemVenda(item) {
+    const linha = document.createElement("tr");
+    if (item.produto_id) {
+        linha.dataset.produtoId = String(item.produto_id);
+    }
+    const quantidadeItem = normalizarNumeroVenda(item.quantidade);
+    const precoItem = normalizarNumeroVenda(item.preco_unitario);
+    const totalInformado = normalizarNumeroVenda(item.valor_total);
+    const quantidadeNumero = parseFloat(quantidadeItem);
+    const precoNumero = parseFloat(precoItem);
+    const totalNumero = parseFloat(totalInformado);
+    const totalCalculado = !isNaN(totalNumero)
+        ? totalNumero
+        : quantidadeNumero * precoNumero;
+    const valores = [
+        item.produto_nome || "",
+        quantidadeItem,
+        item.unidade || "",
+        precoItem,
+        isNaN(totalCalculado) ? "" : totalCalculado.toFixed(2),
+    ];
+
+    valores.forEach((valor) => {
+        const celula = document.createElement("td");
+        celula.textContent = valor;
+        linha.appendChild(celula);
+    });
+
+    return linha;
+}
+
+function prepararVendaComPedidoImportado() {
+    if (!pedidoImportadoVenda || !Array.isArray(pedidoImportadoVenda.itens)) return;
+
+    tabelaBody.innerHTML = "";
+    linhaSelecionada = null;
+    ultimoItemRemovido = null;
+    pedidoImportadoVenda.itens.forEach((item) => {
+        if (!item || !item.produto_nome) return;
+        tabelaBody.appendChild(criarLinhaItemVenda(item));
+    });
+    atualizarTotalGeral();
+
+    window.requestAnimationFrame(() => {
+        const primeiraLinha = tabelaBody.querySelector("tr");
+        if (primeiraLinha) {
+            scrollLinhaDentroDaLista(primeiraLinha, "auto");
+        }
+        produtoBusca.focus({ preventScroll: true });
+        produtoBusca.scrollIntoView({ behavior: "smooth", block: "center" });
+        window.setTimeout(() => produtoBusca.focus({ preventScroll: true }), 180);
+    });
+}
+
+prepararVendaComPedidoImportado();
+
 function quantidadeInformadaValida() {
     const valor = parseFloat(String(quantidade.value || "").replace(",", "."));
     return !isNaN(valor) && valor > 0;
@@ -2367,6 +2489,7 @@ function coletarItensVenda() {
 
 function coletarDadosVenda() {
     return {
+        pedido_id: pedidoImportadoVenda?.id || null,
         cliente_id: clienteId.value || null,
         data_venda: dataVenda.value,
         data_vencimento: vencimentoVenda.value || null,
@@ -2411,6 +2534,7 @@ async function gravarVendaAtual() {
         vendaGravadaUrl = retorno.visualizar_url || "";
         mostrarToastVenda(retorno.mensagem || ("Venda #" + vendaGravadaId + " gravada com sucesso."));
         mostrarBlocoVendaGravada(vendaGravadaId, vendaGravadaUrl, retorno.mensagem);
+        limparVendaAposGravacao();
     } catch (erro) {
         mostrarToastVenda("Falha de comunicacao ao gravar a venda.");
     } finally {

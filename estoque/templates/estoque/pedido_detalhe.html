@@ -110,6 +110,11 @@
             background-color: #fee2e2;
             color: #991b1b;
         }
+
+        .status-parcial {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
         
         .status-convertido {
             background-color: #dbeafe;
@@ -236,6 +241,15 @@
         .btn-venda:hover {
             background-color: #1d4ed8;
         }
+
+        .btn-importar {
+            background-color: #16a34a;
+            color: white;
+        }
+
+        .btn-importar:hover {
+            background-color: #15803d;
+        }
         
         .aviso {
             background-color: #f0fdf4;
@@ -247,6 +261,13 @@
             color: #14532d;
             border-left: 5px solid #16a34a;
         }
+
+        .aviso-convertido {
+            background-color: #eff6ff;
+            border-color: #93c5fd;
+            border-left-color: #2563eb;
+            color: #1e40af;
+        }
     </style>
 </head>
 <body>
@@ -254,7 +275,7 @@
         <div class="header">
             <h1>Pedido #{{ pedido.id }}</h1>
             <span class="header-badge">
-                <span class="status-badge status-{% if pedido.status == 'aberto' %}aberto{% elif pedido.status == 'cancelado' %}cancelado{% else %}convertido{% endif %}">
+                <span class="status-badge status-{% if pedido.status == 'aberto' %}aberto{% elif pedido.status == 'cancelado' %}cancelado{% elif pedido.status == 'parcial' %}parcial{% else %}convertido{% endif %}">
                     {{ pedido.get_status_display }}
                 </span>
             </span>
@@ -263,6 +284,18 @@
         <div class="aviso">
             <strong>ℹ️ Informação:</strong> Este é um pedido (intenção de venda futura). Não afeta estoque nem cria financeiro.
         </div>
+
+        {% if pedido.status == 'convertido_em_venda' %}
+            <div class="aviso aviso-convertido">
+                <strong>Pedido convertido em venda.</strong> Consulte a venda criada na tela de vendas.
+            </div>
+        {% endif %}
+
+        {% if pedido.status == 'parcial' %}
+            <div class="aviso aviso-convertido">
+                <strong>Pedido parcialmente atendido.</strong> Parte dos itens jÃ¡ foi enviada para venda. Abaixo estÃ¡ apenas o saldo pendente.
+            </div>
+        {% endif %}
         
         <div class="card">
             <div class="card-titulo">Informações Gerais</div>
@@ -310,9 +343,9 @@
         </div>
         
         <div class="card">
-            <div class="card-titulo">Itens do Pedido</div>
+            <div class="card-titulo">{{ titulo_itens }}</div>
             
-            {% if pedido.itens.all %}
+            {% if itens_exibidos %}
                 <table class="tabela">
                     <thead>
                         <tr>
@@ -326,7 +359,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for item in pedido.itens.all %}
+                        {% for item in itens_exibidos %}
                             <tr>
                                 <td>
                                     {% if item.produto %}
@@ -358,15 +391,15 @@
                 <div class="resumo">
                     <div class="resumo-linha">
                         <span>Quantidade Total de Itens:</span>
-                        <strong>{{ pedido.itens.count }}</strong>
+                        <strong>{{ itens_exibidos|length }}</strong>
                     </div>
                     <div class="resumo-linha resumo-total">
-                        <span>Total do Pedido:</span>
-                        <span>R$ {{ pedido.total|floatformat:"2" }}</span>
+                        <span>{{ rotulo_total }}:</span>
+                        <span>R$ {{ total_exibido|floatformat:"2" }}</span>
                     </div>
                 </div>
             {% else %}
-                <div class="sem-itens">Nenhum item adicionado a este pedido.</div>
+                <div class="sem-itens">Nenhum item pendente neste pedido.</div>
             {% endif %}
         </div>
         
@@ -388,7 +421,15 @@
         
         <div class="acoes">
             <a href="{% url 'estoque:pedidos' %}" class="btn btn-voltar">← Voltar para Pedidos</a>
-            <a href="{% url 'estoque:vendas' %}" class="btn btn-venda">Ir para Venda</a>
+            {% if pedido.status == 'aberto' %}
+                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar">Enviar para Venda</a>
+            {% elif pedido.status == 'parcial' %}
+                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar">Enviar pendÃªncia para Venda</a>
+            {% elif pedido.status == 'convertido_em_venda' %}
+                <a href="{% url 'estoque:vendas' %}" class="btn btn-venda">Ir para Vendas</a>
+            {% else %}
+                <a href="{% url 'estoque:vendas' %}" class="btn btn-venda">Ir para Vendas</a>
+            {% endif %}
         </div>
     </div>
 </body>

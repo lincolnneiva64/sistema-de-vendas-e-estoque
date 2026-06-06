@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import mimetypes
@@ -2045,13 +2046,64 @@ def vendas(request):
     produtos = Produto.objects.filter(excluido=False).order_by('nome')
     cliente_inicial = None
     cliente_id = request.GET.get("cliente_id")
+    pedido_importado = None
+    pedido_importado_aviso = ""
     if cliente_id:
         cliente = Cliente.objects.filter(pk=cliente_id, ativo=True).first()
         if cliente:
             cliente_inicial = _resumo_cliente_venda(cliente)
+    pedido_id = request.GET.get("pedido_id")
+    if pedido_id:
+        from .models import Pedido
+
+        pedido = (
+            Pedido.objects.select_related("cliente")
+            .prefetch_related("itens__produto")
+            .filter(pk=pedido_id)
+            .first()
+        )
+        if not pedido:
+            pedido_importado_aviso = "Pedido nao encontrado. A venda foi aberta sem importacao."
+        elif pedido.status not in [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL]:
+            pedido_importado_aviso = "Apenas pedidos abertos ou parciais podem ser preparados para venda nesta etapa."
+        else:
+            if pedido.cliente:
+                cliente_inicial = _resumo_cliente_venda(pedido.cliente)
+            itens_importados = []
+            itens_pedido = list(pedido.itens.all())
+            if pedido.status == Pedido.STATUS_PARCIAL:
+                itens_para_importar, _total_pendente = _itens_pendentes_exibicao_pedido_parcial(pedido, itens_pedido)
+            else:
+                itens_para_importar = itens_pedido
+            for item in itens_para_importar:
+                if item.quantidade <= 0:
+                    continue
+                produto_nome = item.produto.nome if item.produto else ""
+                if not produto_nome:
+                    continue
+                itens_importados.append({
+                    "produto_id": item.produto_id,
+                    "produto_nome": produto_nome,
+                    "quantidade": str(item.quantidade),
+                    "unidade": item.unidade or "",
+                    "preco_unitario": str(item.preco_unitario),
+                    "valor_total": str(item.valor_total),
+                })
+            pedido_importado = {
+                "id": pedido.id,
+                "cliente_id": pedido.cliente_id,
+                "detalhe_url": reverse("estoque:pedido_detalhe", args=[pedido.id]),
+                "itens": itens_importados,
+            }
+            pedido_importado_aviso = (
+                f"Venda preparada a partir do Pedido #{pedido.id}. "
+                "Confira os itens antes de gravar."
+            )
     return render(request, 'estoque/vendas_layout_teste.html', {
         'produtos': produtos,
         'cliente_inicial': cliente_inicial,
+        'pedido_importado': pedido_importado,
+        'pedido_importado_aviso': pedido_importado_aviso,
         'tem_pix_em_atencao': _tem_pix_em_atencao(),
     })
 
@@ -4835,6 +4887,40 @@ def _baixar_estoque_movimentos(movimentos):
         _baixar_estoque_produto(produto_id, quantidade_total, produto_nome)
 
 
+def _atualizar_saldo_pendente_pedido(pedido, itens_vendidos):
+    vendidos_por_produto = {}
+    for item in itens_vendidos:
+        produto = item.get("produto")
+        if not produto:
+            continue
+        vendidos_por_produto[produto.pk] = (
+            vendidos_por_produto.get(produto.pk, Decimal("0.000"))
+            + Decimal(item.get("quantidade") or "0")
+        )
+
+    total_pendente = Decimal("0.00")
+    itens_pedido = pedido.itens.select_for_update().order_by("id")
+    for item_pedido in itens_pedido:
+        quantidade_vendida = vendidos_por_produto.get(item_pedido.produto_id, Decimal("0.000"))
+        if quantidade_vendida > 0:
+            quantidade_original = Decimal(item_pedido.quantidade or "0")
+            quantidade_restante = max(quantidade_original - quantidade_vendida, Decimal("0.000"))
+            vendidos_por_produto[item_pedido.produto_id] = max(
+                quantidade_vendida - quantidade_original,
+                Decimal("0.000"),
+            )
+            item_pedido.quantidade = quantidade_restante.quantize(Decimal("0.001"))
+            item_pedido.valor_total = (
+                item_pedido.quantidade * item_pedido.preco_unitario
+            ).quantize(Decimal("0.01"))
+            item_pedido.save(update_fields=["quantidade", "valor_total"])
+
+        total_pendente += Decimal(item_pedido.valor_total or "0")
+
+    pedido.total = total_pendente.quantize(Decimal("0.01"))
+    pedido.save(update_fields=["total", "atualizado_em"])
+
+
 def _devolver_estoque_item_removido(item_removido):
     if item_removido.estoque_devolvido or not item_removido.produto_id:
         return False
@@ -4957,24 +5043,88 @@ def gravar_venda(request):
             "valor_total": valor_total,
         })
 
+    pedido_pendencias_estoque = []
     try:
         with transaction.atomic():
-            _baixar_estoque_movimentos(
-                (item["produto"], item["quantidade"])
-                for item in itens_validados
-            )
+            pedido_origem = None
+            pedido_id = dados.get("pedido_id")
+            if pedido_id:
+                from .models import Pedido
+
+                pedido_origem = Pedido.objects.select_for_update().filter(pk=pedido_id).first()
+                if not pedido_origem:
+                    return JsonResponse(
+                        {"sucesso": False, "mensagem": "Pedido de origem nao foi encontrado."},
+                        status=400,
+                    )
+                if pedido_origem.status not in [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL]:
+                    return JsonResponse(
+                        {"sucesso": False, "mensagem": "Pedido de origem nao esta aberto nem parcial."},
+                        status=400,
+                    )
+
+            itens_para_venda = itens_validados
+            total_venda = total_calculado
+            if pedido_origem:
+                itens_para_venda = []
+                total_venda = Decimal("0.00")
+                for item in itens_validados:
+                    produto_bloqueado = Produto.objects.select_for_update().get(pk=item["produto"].pk)
+                    quantidade_necessaria = _quantidade_estoque_inteira(item["quantidade"], produto_bloqueado.nome)
+                    estoque_disponivel = max(produto_bloqueado.quantidade or 0, 0)
+                    quantidade_vendida_int = min(quantidade_necessaria, estoque_disponivel)
+                    quantidade_pendente_int = quantidade_necessaria - quantidade_vendida_int
+
+                    if quantidade_vendida_int > 0:
+                        quantidade_vendida = Decimal(quantidade_vendida_int).quantize(Decimal("0.001"))
+                        valor_total_vendido = (quantidade_vendida * item["preco_unitario"]).quantize(Decimal("0.01"))
+                        itens_para_venda.append({
+                            "produto": produto_bloqueado,
+                            "quantidade": quantidade_vendida,
+                            "unidade": item["unidade"],
+                            "preco_unitario": item["preco_unitario"],
+                            "valor_total": valor_total_vendido,
+                        })
+                        total_venda += valor_total_vendido
+                        produto_bloqueado.quantidade = estoque_disponivel - quantidade_vendida_int
+                        Produto.objects.filter(pk=produto_bloqueado.pk).update(
+                            quantidade=produto_bloqueado.quantidade,
+                            atualizado_em=timezone.now(),
+                        )
+
+                    if quantidade_pendente_int > 0:
+                        quantidade_pendente = Decimal(quantidade_pendente_int).quantize(Decimal("0.001"))
+                        pendencia = f"{produto_bloqueado.nome}: {_formatar_quantidade(quantidade_pendente)}"
+                        if item["unidade"]:
+                            pendencia = f"{pendencia} {item['unidade']}"
+                        pedido_pendencias_estoque.append(pendencia)
+
+                if not itens_para_venda:
+                    return JsonResponse(
+                        {
+                            "sucesso": False,
+                            "mensagem": "Nenhum item do pedido possui estoque disponivel para gerar venda.",
+                        },
+                        status=400,
+                    )
+            else:
+                _baixar_estoque_movimentos(
+                    (item["produto"], item["quantidade"])
+                    for item in itens_para_venda
+                )
+
             venda = Venda.objects.create(
                 cliente=cliente,
                 data_venda=data_venda,
                 data_vencimento=data_vencimento,
                 tipo_pagamento=str(dados.get("tipo_pagamento") or "").strip(),
                 operador=str(dados.get("operador") or "").strip(),
-                total=total_calculado.quantize(Decimal("0.01")),
+                total=total_venda.quantize(Decimal("0.01")),
             )
 
             ItemVenda.objects.bulk_create([
                 ItemVenda(venda=venda, **item)
-                for item in itens_validados
+                for item in itens_para_venda
             ])
 
             _registrar_evento_venda(
@@ -4985,12 +5135,31 @@ def gravar_venda(request):
                 usuario=venda.operador,
             )
             _sincronizar_conta_receber(venda, "venda gravada")
+
+            if pedido_origem:
+                if pedido_pendencias_estoque:
+                    _atualizar_saldo_pendente_pedido(pedido_origem, itens_para_venda)
+                pedido_origem.status = (
+                    Pedido.STATUS_PARCIAL
+                    if pedido_pendencias_estoque
+                    else Pedido.STATUS_CONVERTIDO_EM_VENDA
+                )
+                pedido_origem.save(update_fields=["status", "atualizado_em"])
     except ValueError as exc:
         return JsonResponse({"sucesso": False, "mensagem": str(exc)}, status=400)
 
+    mensagem = f"Venda #{venda.id} gravada com sucesso."
+    if pedido_pendencias_estoque:
+        mensagem = (
+            f"Venda #{venda.id} gravada com itens disponiveis. "
+            "Alguns itens ficaram pendentes por falta de estoque: "
+            + "; ".join(pedido_pendencias_estoque)
+            + "."
+        )
+
     return JsonResponse({
         "sucesso": True,
-        "mensagem": f"Venda #{venda.id} gravada com sucesso.",
+        "mensagem": mensagem,
         "venda_id": venda.id,
         "visualizar_url": reverse("estoque:venda_detalhe", args=[venda.id]),
     })
@@ -7927,6 +8096,77 @@ def pedido_criar(request):
     })
 
 
+def _itens_pendentes_exibicao_pedido_parcial(pedido, itens_pedido):
+    itens_positivos = [item for item in itens_pedido if item.quantidade > 0]
+    total_positivo = sum((item.valor_total for item in itens_positivos), Decimal("0.00"))
+
+    if not pedido.cliente_id or not itens_positivos:
+        return itens_positivos, total_positivo
+
+    # Pedidos parciais novos ja carregam o saldo pendente nos ItemPedido.
+    # Este fallback atende pedidos parciais antigos desta etapa, que ficaram com
+    # os itens originais apesar de uma venda parcial ja ter sido gravada.
+    if any(item.quantidade <= 0 for item in itens_pedido):
+        return itens_positivos, total_positivo
+
+    candidatos = (
+        Venda.objects.prefetch_related("itens__produto")
+        .filter(
+            cliente_id=pedido.cliente_id,
+            cancelada=False,
+            total__lt=pedido.total,
+            criado_em__gte=pedido.criado_em,
+            criado_em__lte=pedido.atualizado_em + timedelta(minutes=5),
+        )
+        .order_by("-id")[:10]
+    )
+    itens_por_produto = {
+        item.produto_id: item
+        for item in itens_pedido
+        if item.produto_id
+    }
+
+    for venda in candidatos:
+        vendidos_por_produto = {}
+        venda_compativel = True
+        for item_venda in venda.itens.all():
+            item_pedido = itens_por_produto.get(item_venda.produto_id)
+            if (
+                not item_pedido
+                or item_venda.preco_unitario != item_pedido.preco_unitario
+                or item_venda.quantidade > item_pedido.quantidade
+            ):
+                venda_compativel = False
+                break
+            vendidos_por_produto[item_venda.produto_id] = (
+                vendidos_por_produto.get(item_venda.produto_id, Decimal("0.000"))
+                + item_venda.quantidade
+            )
+
+        if not venda_compativel or not vendidos_por_produto:
+            continue
+
+        itens_pendentes = []
+        total_pendente = Decimal("0.00")
+        for item_pedido in itens_pedido:
+            quantidade_vendida = vendidos_por_produto.get(item_pedido.produto_id, Decimal("0.000"))
+            quantidade_pendente = max(item_pedido.quantidade - quantidade_vendida, Decimal("0.000"))
+            if quantidade_pendente <= 0:
+                continue
+
+            item_exibicao = copy.copy(item_pedido)
+            item_exibicao.quantidade = quantidade_pendente.quantize(Decimal("0.001"))
+            item_exibicao.valor_total = (
+                item_exibicao.quantidade * item_exibicao.preco_unitario
+            ).quantize(Decimal("0.01"))
+            itens_pendentes.append(item_exibicao)
+            total_pendente += item_exibicao.valor_total
+
+        return itens_pendentes, total_pendente.quantize(Decimal("0.01"))
+
+    return itens_positivos, total_positivo
+
+
 def pedido_detalhe(request, pk):
     """Mostrar detalhe do pedido."""
     from .models import Pedido
@@ -7935,7 +8175,21 @@ def pedido_detalhe(request, pk):
         Pedido.objects.select_related("cliente").prefetch_related("itens__produto"),
         pk=pk,
     )
+    itens_pedido = list(pedido.itens.all())
+    if pedido.status == Pedido.STATUS_PARCIAL:
+        itens_exibidos, total_exibido = _itens_pendentes_exibicao_pedido_parcial(pedido, itens_pedido)
+        titulo_itens = "Itens pendentes do pedido"
+        rotulo_total = "Total pendente"
+    else:
+        itens_exibidos = itens_pedido
+        total_exibido = pedido.total
+        titulo_itens = "Itens do Pedido"
+        rotulo_total = "Total do Pedido"
     
     return render(request, "estoque/pedido_detalhe.html", {
         "pedido": pedido,
+        "itens_exibidos": itens_exibidos,
+        "total_exibido": total_exibido,
+        "titulo_itens": titulo_itens,
+        "rotulo_total": rotulo_total,
     })

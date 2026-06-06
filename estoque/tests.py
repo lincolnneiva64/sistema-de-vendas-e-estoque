@@ -7261,6 +7261,69 @@ class PedidoTests(TestCase):
             quantidade=50,
         )
 
+    def _criar_pedido_com_item(self, quantidade=Decimal("2.000"), total=Decimal("200.00")):
+        from .models import Pedido, ItemPedido
+
+        pedido = Pedido.objects.create(
+            cliente=self.cliente,
+            data_pedido=timezone.now().date(),
+            operador="Operador Pedido",
+            total=total,
+        )
+        ItemPedido.objects.create(
+            pedido=pedido,
+            produto=self.produto,
+            quantidade=quantidade,
+            unidade="Un",
+            preco_unitario=Decimal("100.00"),
+            valor_total=total,
+            estoque_no_momento=self.produto.quantidade,
+        )
+        return pedido
+
+    def _post_gravar_venda_com_itens(self, pedido_id=None, itens=None):
+        if itens is None:
+            itens = [
+                {
+                    "produto_nome": self.produto.nome,
+                    "quantidade": "2.000",
+                    "unidade": "Un",
+                    "preco_unitario": "100.00",
+                    "subtotal": "200.00",
+                }
+            ]
+        dados = {
+            "cliente_id": self.cliente.id,
+            "data_venda": timezone.localdate().isoformat(),
+            "data_vencimento": "",
+            "tipo_pagamento": "A vista",
+            "operador": "Operador Teste",
+            "total": "200.00",
+            "itens": itens,
+        }
+        if pedido_id is not None:
+            dados["pedido_id"] = pedido_id
+        return self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(dados),
+            content_type="application/json",
+            secure=True,
+        )
+
+    def _post_gravar_venda_com_item(self, pedido_id=None, quantidade="2.000"):
+        return self._post_gravar_venda_com_itens(
+            pedido_id=pedido_id,
+            itens=[
+                {
+                    "produto_nome": self.produto.nome,
+                    "quantidade": quantidade,
+                    "unidade": "Un",
+                    "preco_unitario": "100.00",
+                    "subtotal": "200.00",
+                }
+            ],
+        )
+
     def test_criar_pedido_com_cliente_e_itens_salva(self):
         """Criar pedido com cliente e itens deve salvar Pedido e ItemPedido"""
         from .models import Pedido, ItemPedido
@@ -7358,6 +7421,319 @@ class PedidoTests(TestCase):
         )
         
         self.assertEqual(item.estoque_no_momento, estoque_no_momento)
+
+    def test_detalhe_pedido_aberto_mostra_enviar_para_venda(self):
+        pedido = self._criar_pedido_com_item()
+
+        resposta = self.client.get(reverse("estoque:pedido_detalhe", args=[pedido.id]), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Enviar para Venda")
+        self.assertContains(resposta, f'{reverse("estoque:vendas")}?pedido_id={pedido.id}')
+        self.assertNotContains(resposta, "Enviar pend")
+        self.assertContains(resposta, "Itens do Pedido")
+        self.assertContains(resposta, "Total do Pedido")
+        self.assertNotContains(resposta, "Itens pendentes")
+
+    def test_importar_pedido_para_vendas_prepara_tela_sem_gravar(self):
+        from .models import Pedido
+
+        quantidade_inicial = self.produto.quantidade
+        pedido = self._criar_pedido_com_item()
+
+        resposta = self.client.get(
+            reverse("estoque:vendas"),
+            {"pedido_id": pedido.id},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, f"Venda preparada a partir do Pedido #{pedido.id}")
+        self.assertContains(resposta, "pedidoImportadoVenda")
+        self.assertContains(resposta, "Produto Teste")
+        self.assertContains(resposta, f'"produto_id": {self.produto.id}')
+        self.assertContains(resposta, f'"detalhe_url": "{reverse("estoque:pedido_detalhe", args=[pedido.id])}"')
+        self.assertContains(resposta, f"Voltar ao Pedido #{pedido.id}")
+        conteudo = resposta.content.decode("utf-8")
+        self.assertLess(
+            conteudo.index("let linhaSelecionada = null;"),
+            conteudo.rindex("prepararVendaComPedidoImportado();"),
+        )
+        self.assertContains(resposta, 'produtoBusca.focus({ preventScroll: true });')
+        self.assertContains(resposta, 'produtoBusca.scrollIntoView({ behavior: "smooth", block: "center" });')
+        self.assertContains(resposta, 'window.setTimeout(() => produtoBusca.focus({ preventScroll: true }), 180);')
+        self.assertContains(resposta, 'let pedidoImportadoVenda = JSON.parse')
+        self.assertContains(resposta, 'pedido_id: pedidoImportadoVenda?.id || null')
+        self.assertContains(resposta, 'function limparPedidoImportadoVenda()')
+        self.assertContains(resposta, 'document.querySelector(".pedido-importado-aviso")?.remove();')
+        self.assertContains(resposta, 'function limparVendaAposGravacao()')
+        self.assertContains(resposta, 'limparVendaAposGravacao();')
+
+        pedido.refresh_from_db()
+        self.produto.refresh_from_db()
+        self.assertEqual(pedido.status, Pedido.STATUS_ABERTO)
+        self.assertEqual(self.produto.quantidade, quantidade_inicial)
+        self.assertEqual(Venda.objects.count(), 0)
+        self.assertEqual(ItemVenda.objects.count(), 0)
+        self.assertEqual(ContaReceber.objects.count(), 0)
+
+    def test_gravar_venda_a_partir_de_pedido_converte_pedido_apos_sucesso(self):
+        from .models import Pedido
+
+        pedido = self._criar_pedido_com_item()
+
+        resposta = self._post_gravar_venda_com_item(pedido_id=pedido.id)
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["sucesso"])
+        self.assertIn("venda_id", dados)
+        self.assertIn("visualizar_url", dados)
+        pedido.refresh_from_db()
+        self.produto.refresh_from_db()
+        self.assertEqual(pedido.status, Pedido.STATUS_CONVERTIDO_EM_VENDA)
+        self.assertEqual(Venda.objects.count(), 1)
+        self.assertEqual(ItemVenda.objects.count(), 1)
+        self.assertEqual(self.produto.quantidade, 48)
+
+        resposta_detalhe = self.client.get(reverse("estoque:pedido_detalhe", args=[pedido.id]), secure=True)
+        self.assertContains(resposta_detalhe, "Convertido em venda")
+        self.assertContains(resposta_detalhe, "Pedido convertido em venda.")
+        self.assertNotContains(resposta_detalhe, "Enviar para Venda")
+        self.assertNotContains(resposta_detalhe, "Enviar pend")
+        self.assertContains(resposta_detalhe, "Ir para Vendas")
+        self.assertContains(resposta_detalhe, "Itens do Pedido")
+        self.assertNotContains(resposta_detalhe, "Itens pendentes")
+
+        resposta_lista = self.client.get(reverse("estoque:pedidos"), secure=True)
+        self.assertContains(resposta_lista, f"#{pedido.id}")
+        self.assertContains(resposta_lista, "Convertido em venda")
+
+        resposta_abertos = self.client.get(reverse("estoque:pedidos"), {"status": Pedido.STATUS_ABERTO}, secure=True)
+        self.assertNotContains(resposta_abertos, f"#{pedido.id}")
+
+    def test_gravar_venda_de_pedido_com_item_zerado_grava_disponiveis_e_deixa_pendente(self):
+        from .models import Pedido, ItemPedido
+
+        produto_zerado = Produto.objects.create(
+            nome="Produto Sem Estoque",
+            preco_compra=Decimal("10.00"),
+            preco_venda=Decimal("50.00"),
+            preco_vista=Decimal("50.00"),
+            preco_prazo=Decimal("60.00"),
+            quantidade=0,
+        )
+        pedido = self._criar_pedido_com_item()
+        ItemPedido.objects.create(
+            pedido=pedido,
+            produto=produto_zerado,
+            quantidade=Decimal("1.000"),
+            unidade="Un",
+            preco_unitario=Decimal("50.00"),
+            valor_total=Decimal("50.00"),
+            estoque_no_momento=0,
+        )
+
+        resposta = self._post_gravar_venda_com_itens(
+            pedido_id=pedido.id,
+            itens=[
+                {
+                    "produto_nome": self.produto.nome,
+                    "quantidade": "2.000",
+                    "unidade": "Un",
+                    "preco_unitario": "100.00",
+                    "subtotal": "200.00",
+                },
+                {
+                    "produto_nome": produto_zerado.nome,
+                    "quantidade": "1.000",
+                    "unidade": "Un",
+                    "preco_unitario": "50.00",
+                    "subtotal": "50.00",
+                },
+            ],
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["sucesso"])
+        self.assertIn("itens disponiveis", dados["mensagem"])
+        self.assertIn("Produto Sem Estoque", dados["mensagem"])
+        pedido.refresh_from_db()
+        self.produto.refresh_from_db()
+        produto_zerado.refresh_from_db()
+        self.assertEqual(pedido.status, Pedido.STATUS_PARCIAL)
+        self.assertEqual(pedido.total, Decimal("50.00"))
+        self.assertEqual(Venda.objects.count(), 1)
+        venda = Venda.objects.get()
+        self.assertEqual(venda.total, Decimal("200.00"))
+        self.assertEqual(ItemVenda.objects.count(), 1)
+        self.assertEqual(ItemVenda.objects.get().produto, self.produto)
+        self.assertEqual(self.produto.quantidade, 48)
+        self.assertEqual(produto_zerado.quantidade, 0)
+        item_vendido = pedido.itens.get(produto=self.produto)
+        item_pendente = pedido.itens.get(produto=produto_zerado)
+        self.assertEqual(item_vendido.quantidade, Decimal("0.000"))
+        self.assertEqual(item_vendido.valor_total, Decimal("0.00"))
+        self.assertEqual(item_pendente.quantidade, Decimal("1.000"))
+        self.assertEqual(item_pendente.valor_total, Decimal("50.00"))
+
+        resposta_detalhe = self.client.get(reverse("estoque:pedido_detalhe", args=[pedido.id]), secure=True)
+        self.assertContains(resposta_detalhe, "Parcial")
+        self.assertContains(resposta_detalhe, "Pedido parcialmente atendido.")
+        self.assertContains(resposta_detalhe, "Itens pendentes do pedido")
+        self.assertContains(resposta_detalhe, "Produto Sem Estoque")
+        self.assertContains(resposta_detalhe, "Total pendente")
+        self.assertContains(resposta_detalhe, "R$ 50.00")
+        self.assertNotContains(resposta_detalhe, "Produto Teste")
+
+    def test_gravar_venda_de_pedido_com_estoque_parcial_vende_disponivel_e_deixa_restante(self):
+        from .models import Pedido
+
+        self.produto.quantidade = 4
+        self.produto.save(update_fields=["quantidade"])
+        pedido = self._criar_pedido_com_item(quantidade=Decimal("5.000"), total=Decimal("500.00"))
+
+        resposta = self._post_gravar_venda_com_item(pedido_id=pedido.id, quantidade="5.000")
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["sucesso"])
+        self.assertIn("Produto Teste: 1 Un", dados["mensagem"])
+        pedido.refresh_from_db()
+        self.produto.refresh_from_db()
+        self.assertEqual(pedido.status, Pedido.STATUS_PARCIAL)
+        self.assertEqual(pedido.total, Decimal("100.00"))
+        self.assertEqual(Venda.objects.count(), 1)
+        venda = Venda.objects.get()
+        self.assertEqual(venda.total, Decimal("400.00"))
+        item = ItemVenda.objects.get()
+        self.assertEqual(item.quantidade, Decimal("4.000"))
+        self.assertEqual(item.valor_total, Decimal("400.00"))
+        self.assertEqual(self.produto.quantidade, 0)
+        item_pedido = pedido.itens.get(produto=self.produto)
+        self.assertEqual(item_pedido.quantidade, Decimal("1.000"))
+        self.assertEqual(item_pedido.valor_total, Decimal("100.00"))
+
+        resposta_detalhe = self.client.get(reverse("estoque:pedido_detalhe", args=[pedido.id]), secure=True)
+        self.assertContains(resposta_detalhe, "Itens pendentes do pedido")
+        self.assertContains(resposta_detalhe, "Produto Teste")
+        self.assertContains(resposta_detalhe, "1.000")
+        self.assertContains(resposta_detalhe, "R$ 100.00")
+
+    def test_detalhe_pedido_parcial_antigo_calcula_saldo_pendente_pela_venda_compativel(self):
+        from .models import Pedido, ItemPedido
+
+        produto_vendido = Produto.objects.create(
+            nome="Produto Vendido Pedido Parcial",
+            preco_compra=Decimal("10.00"),
+            preco_venda=Decimal("48.00"),
+            preco_vista=Decimal("48.00"),
+            preco_prazo=Decimal("48.00"),
+            quantidade=0,
+        )
+        produto_pendente = Produto.objects.create(
+            nome="Produto Pendente Pedido Parcial",
+            preco_compra=Decimal("5.00"),
+            preco_venda=Decimal("10.50"),
+            preco_vista=Decimal("10.50"),
+            preco_prazo=Decimal("10.50"),
+            quantidade=0,
+        )
+        pedido = Pedido.objects.create(
+            cliente=self.cliente,
+            data_pedido=timezone.now().date(),
+            total=Decimal("127.50"),
+            status=Pedido.STATUS_ABERTO,
+        )
+        ItemPedido.objects.create(
+            pedido=pedido,
+            produto=produto_vendido,
+            quantidade=Decimal("2.000"),
+            unidade="Un",
+            preco_unitario=Decimal("48.00"),
+            valor_total=Decimal("96.00"),
+            estoque_no_momento=2,
+        )
+        ItemPedido.objects.create(
+            pedido=pedido,
+            produto=produto_pendente,
+            quantidade=Decimal("3.000"),
+            unidade="Un",
+            preco_unitario=Decimal("10.50"),
+            valor_total=Decimal("31.50"),
+            estoque_no_momento=0,
+        )
+        venda = Venda.objects.create(
+            cliente=self.cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            operador="Operador Teste",
+            total=Decimal("96.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_vendido,
+            quantidade=Decimal("2.000"),
+            unidade="Un",
+            preco_unitario=Decimal("48.00"),
+            valor_total=Decimal("96.00"),
+        )
+        pedido.status = Pedido.STATUS_PARCIAL
+        pedido.save(update_fields=["status", "atualizado_em"])
+
+        resposta = self.client.get(reverse("estoque:pedido_detalhe", args=[pedido.id]), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Itens pendentes do pedido")
+        self.assertContains(resposta, "Produto Pendente Pedido Parcial")
+        self.assertContains(resposta, "3.000")
+        self.assertContains(resposta, "R$ 31.50")
+        self.assertNotContains(resposta, "Produto Vendido Pedido Parcial")
+        self.assertContains(resposta, "Enviar pend")
+        self.assertContains(resposta, f'{reverse("estoque:vendas")}?pedido_id={pedido.id}')
+        self.assertNotContains(resposta, ">Ir para Venda<")
+
+        resposta_vendas = self.client.get(reverse("estoque:vendas"), {"pedido_id": pedido.id}, secure=True)
+        self.assertEqual(resposta_vendas.status_code, 200)
+        conteudo_vendas = resposta_vendas.content.decode("utf-8")
+        self.assertIn("Venda preparada a partir do Pedido", conteudo_vendas)
+        self.assertIn('"produto_nome": "Produto Pendente Pedido Parcial"', conteudo_vendas)
+        self.assertIn('"quantidade": "3.000"', conteudo_vendas)
+        self.assertIn('"valor_total": "31.50"', conteudo_vendas)
+        self.assertNotIn('"produto_nome": "Produto Vendido Pedido Parcial"', conteudo_vendas)
+
+    def test_gravar_venda_de_pedido_sem_estoque_nao_grava_e_mantem_aberto(self):
+        from .models import Pedido
+
+        self.produto.quantidade = 0
+        self.produto.save(update_fields=["quantidade"])
+        pedido = self._criar_pedido_com_item()
+
+        resposta = self._post_gravar_venda_com_item(pedido_id=pedido.id)
+
+        self.assertEqual(resposta.status_code, 400)
+        dados = resposta.json()
+        self.assertFalse(dados["sucesso"])
+        self.assertIn("Nenhum item do pedido possui estoque disponivel", dados["mensagem"])
+        pedido.refresh_from_db()
+        self.produto.refresh_from_db()
+        self.assertEqual(pedido.status, Pedido.STATUS_ABERTO)
+        self.assertEqual(Venda.objects.count(), 0)
+        self.assertEqual(ItemVenda.objects.count(), 0)
+        self.assertEqual(self.produto.quantidade, 0)
+
+    def test_gravar_venda_sem_pedido_id_nao_altera_pedidos_abertos(self):
+        from .models import Pedido
+
+        pedido = self._criar_pedido_com_item()
+
+        resposta = self._post_gravar_venda_com_item()
+
+        self.assertEqual(resposta.status_code, 200)
+        pedido.refresh_from_db()
+        self.assertEqual(pedido.status, Pedido.STATUS_ABERTO)
+        self.assertEqual(Venda.objects.count(), 1)
 
     def test_lista_de_pedidos_carrega(self):
         """Lista de pedidos deve carregar corretamente"""
