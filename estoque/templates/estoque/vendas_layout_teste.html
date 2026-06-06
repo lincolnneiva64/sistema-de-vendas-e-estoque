@@ -1716,7 +1716,7 @@ let resolverConfirmacaoVenda = null;
 let cobrancaPreviewUrl = "";
 let cobrancaVisualUrl = "";
 
-function mostrarToastVenda(mensagem) {
+function mostrarToastVenda(mensagem, opcoes = {}) {
     if (!vendaToast) return;
 
     vendaToast.textContent = mensagem;
@@ -1726,9 +1726,10 @@ function mostrarToastVenda(mensagem) {
         clearTimeout(vendaToastTimer);
     }
 
+    const duracaoMs = Number(opcoes.duracaoMs) || 3200;
     vendaToastTimer = setTimeout(() => {
         vendaToast.classList.remove("visivel");
-    }, 3200);
+    }, duracaoMs);
 }
 
 function mostrarBlocoVendaGravada(vendaId, visualizarUrl, mensagem) {
@@ -2526,7 +2527,10 @@ async function gravarVendaAtual() {
         const retorno = await resposta.json();
 
         if (!resposta.ok || !retorno.sucesso) {
-            mostrarToastVenda(retorno.mensagem || "Nao foi possivel gravar a venda.");
+            mostrarToastVenda(
+                retorno.mensagem || "Nao foi possivel gravar a venda.",
+                { duracaoMs: retorno.toast_duracao_ms }
+            );
             return;
         }
 

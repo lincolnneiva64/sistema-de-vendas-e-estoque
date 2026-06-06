@@ -8169,7 +8169,12 @@ class PedidoTests(TestCase):
         self.assertEqual(resposta.status_code, 400)
         dados = resposta.json()
         self.assertFalse(dados["sucesso"])
-        self.assertIn("Nenhum item do pedido possui estoque disponivel", dados["mensagem"])
+        self.assertEqual(
+            dados["mensagem"],
+            f"Nenhum item do Pedido #{pedido.id} possui estoque disponivel para gerar venda. "
+            "Os itens continuam pendentes no pedido.",
+        )
+        self.assertEqual(dados["toast_duracao_ms"], 12000)
         pedido.refresh_from_db()
         self.produto.refresh_from_db()
         self.assertEqual(pedido.status, Pedido.STATUS_ABERTO)

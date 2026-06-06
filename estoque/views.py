@@ -5103,7 +5103,11 @@ def gravar_venda(request):
                     return JsonResponse(
                         {
                             "sucesso": False,
-                            "mensagem": "Nenhum item do pedido possui estoque disponivel para gerar venda.",
+                            "mensagem": (
+                                f"Nenhum item do Pedido #{pedido_origem.id} possui estoque disponivel "
+                                "para gerar venda. Os itens continuam pendentes no pedido."
+                            ),
+                            "toast_duracao_ms": 12000,
                         },
                         status=400,
                     )
