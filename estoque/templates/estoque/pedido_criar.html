@@ -302,6 +302,16 @@
             background: #dcfce7;
         }
 
+        .produto-sugestao:active,
+        .btn-sugestoes-toggle:active,
+        .btn-sugestoes-modo:active,
+        .btn-sugestoes-limpar:active,
+        .btn-sugestao-qtd:active,
+        .btn-sugestao-adicionar:active,
+        .btn-sugestao-ignorar:active {
+            transform: translateY(1px) scale(0.99);
+        }
+
         .produto-sugestao-nome {
             display: block;
             font-size: 15px;
@@ -768,6 +778,11 @@
             font-weight: 850;
         }
 
+        .itens-mobile-titulo,
+        .itens-pedido-ajuda {
+            display: none;
+        }
+
         .tabela-itens input {
             width: 100%;
             box-sizing: border-box;
@@ -904,11 +919,48 @@
         }
 
         @media (max-width: 620px) {
+            body {
+                --rodape-pedido-altura: 0px;
+                background: #f3fbf5;
+            }
+
+            .pedido-page {
+                width: min(100% - 16px, 620px);
+                padding-top: 10px;
+                padding-bottom: 18px;
+            }
+
             .pedido-topo,
             .resumo,
             .acoes {
                 align-items: stretch;
                 flex-direction: column;
+            }
+
+            .pedido-topo {
+                gap: 10px;
+                margin-bottom: 10px;
+            }
+
+            .pedido-title {
+                font-size: 23px;
+                line-height: 1.12;
+            }
+
+            .pedido-subtitle {
+                font-size: 13px;
+            }
+
+            .pedido-card {
+                padding: 12px;
+                margin-bottom: 10px;
+            }
+
+            .pedido-card-title {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 8px;
+                font-size: 16px;
             }
 
             .pedido-grid,
@@ -917,11 +969,186 @@
                 grid-template-columns: 1fr;
             }
 
+            .lancamento-card {
+                position: static;
+                border-width: 2px;
+                padding: 12px;
+            }
+
+            input,
+            select,
+            textarea,
+            .btn,
+            .btn-cancelar,
+            .pedido-voltar {
+                min-height: 48px;
+                font-size: 16px;
+            }
+
             .pedido-voltar,
             .btn,
             .btn-cancelar {
                 justify-content: center;
+                text-align: center;
                 width: 100%;
+            }
+
+            .produto-sugestoes {
+                max-height: min(58vh, 360px);
+            }
+
+            .produto-sugestao {
+                min-height: 52px;
+                padding: 11px 12px;
+            }
+
+            .produto-contexto {
+                gap: 7px;
+            }
+
+            .contexto-item {
+                min-height: 52px;
+            }
+
+            .sugestoes-cliente-acoes,
+            .sugestoes-modo-controles,
+            .sugestoes-lista-controles {
+                align-items: stretch;
+                flex-direction: column;
+                width: 100%;
+            }
+
+            .btn-sugestoes-toggle,
+            .btn-sugestoes-modo,
+            .btn-sugestoes-limpar {
+                min-height: 44px;
+                width: 100%;
+                font-size: 14px;
+            }
+
+            .sugestoes-cliente-wrap {
+                border: 0;
+                overflow: visible;
+                background: transparent;
+            }
+
+            .sugestoes-cliente-tabela,
+            .sugestoes-cliente-tabela tbody,
+            .sugestoes-cliente-tabela tr,
+            .sugestoes-cliente-tabela td {
+                display: block;
+                width: 100%;
+            }
+
+            .sugestoes-cliente-tabela {
+                min-width: 0;
+                border-collapse: separate;
+                table-layout: auto;
+            }
+
+            .sugestoes-cliente-tabela thead {
+                display: none;
+            }
+
+            .sugestoes-cliente-tabela tbody {
+                display: grid;
+                gap: 14px;
+            }
+
+            .sugestoes-cliente-tabela tr {
+                border: 1px solid #bfdbfe;
+                border-left: 6px solid #2563eb;
+                border-radius: 8px;
+                background: #f8fbff;
+                padding: 0 10px 10px;
+                box-shadow: 0 10px 22px rgba(30, 64, 175, 0.10);
+            }
+
+            .sugestoes-cliente-tabela tr::before {
+                content: attr(data-sugestao-label);
+                display: block;
+                margin: 0 -10px 8px;
+                padding: 8px 10px;
+                border-radius: 8px 8px 0 0;
+                background: #eff6ff;
+                color: #1e40af;
+                font-size: 12px;
+                font-weight: 900;
+                text-transform: uppercase;
+            }
+
+            .sugestoes-cliente-tabela td {
+                border-bottom: 1px solid #dbeafe;
+                padding: 8px 0;
+                text-align: left !important;
+                white-space: normal;
+            }
+
+            .sugestoes-cliente-tabela td:last-child {
+                border-bottom: 0;
+                padding-bottom: 0;
+            }
+
+            .sugestoes-cliente-tabela td::before {
+                content: attr(data-label);
+                display: block;
+                margin-bottom: 5px;
+                color: #5a7565;
+                font-size: 11px;
+                font-weight: 900;
+                text-transform: uppercase;
+            }
+
+            .sugestoes-cliente-tabela .sugestoes-col-produto,
+            .sugestoes-cliente-tabela .sugestoes-col-qtd,
+            .sugestoes-cliente-tabela .sugestoes-col-preco,
+            .sugestoes-cliente-tabela .sugestoes-col-data,
+            .sugestoes-cliente-tabela .sugestoes-col-vezes,
+            .sugestoes-cliente-tabela .sugestoes-col-estoque,
+            .sugestoes-cliente-tabela .sugestoes-col-qtd-pedido,
+            .sugestoes-cliente-tabela .sugestoes-col-acao {
+                width: 100%;
+                padding-right: 0 !important;
+            }
+
+            .sugestoes-col-acao {
+                position: static;
+                box-shadow: none;
+            }
+
+            .sugestao-produto {
+                display: block;
+                color: #10251a;
+                font-size: 17px;
+                font-weight: 900;
+                line-height: 1.25;
+            }
+
+            .sugestao-qtd-controle {
+                display: grid;
+                grid-template-columns: 48px minmax(0, 1fr) 48px;
+                gap: 8px;
+                width: 100%;
+            }
+
+            .btn-sugestao-qtd,
+            .sugestao-qtd-input {
+                width: 100%;
+                min-height: 44px;
+                font-size: 16px;
+            }
+
+            .sugestao-acoes-linha {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 52px;
+                gap: 8px;
+                width: 100%;
+            }
+
+            .btn-sugestao-adicionar,
+            .btn-sugestao-ignorar {
+                min-height: 44px;
+                font-size: 14px;
             }
 
             .pedido-topo-acoes {
@@ -936,8 +1163,214 @@
                 width: 100%;
             }
 
-            .pedido-page {
-                padding-bottom: calc(var(--rodape-pedido-altura) + 22px);
+            .tabela-wrap {
+                max-height: none;
+                overflow: visible;
+                border: 0;
+                background: transparent;
+            }
+
+            .tabela-itens,
+            .tabela-itens tbody,
+            .tabela-itens tr,
+            .tabela-itens td {
+                display: block;
+                width: 100%;
+            }
+
+            .tabela-itens {
+                min-width: 0;
+                border-collapse: separate;
+            }
+
+            .tabela-itens colgroup,
+            .tabela-itens thead {
+                display: none;
+            }
+
+            .tabela-itens tbody {
+                display: grid;
+                gap: 10px;
+            }
+
+            .tabela-itens tbody tr {
+                border: 1px solid #cfe7d5;
+                border-radius: 8px;
+                background: #ffffff;
+                padding: 10px;
+                box-shadow: 0 8px 20px rgba(18, 60, 38, 0.08);
+            }
+
+            .tabela-itens tbody tr:hover {
+                background: #ffffff;
+            }
+
+            .tabela-itens td {
+                border-bottom: 1px solid #edf6ef;
+                padding: 8px 0;
+            }
+
+            .tabela-itens td:last-child {
+                border-bottom: 0;
+                padding-bottom: 0;
+            }
+
+            .tabela-itens td::before {
+                content: attr(data-label);
+                display: block;
+                margin-bottom: 5px;
+                color: #5a7565;
+                font-size: 11px;
+                font-weight: 900;
+                text-align: left;
+                text-transform: uppercase;
+            }
+
+            .tabela-itens .itens-col-produto,
+            .tabela-itens .itens-col-estoque,
+            .tabela-itens .itens-col-qtd,
+            .tabela-itens .itens-col-un,
+            .tabela-itens .itens-col-preco,
+            .tabela-itens .itens-col-total,
+            .tabela-itens .itens-col-obs,
+            .tabela-itens .itens-col-acao {
+                width: 100%;
+                text-align: left;
+                white-space: normal;
+            }
+
+            .itens-pedido-card {
+                border-color: #86efac;
+                background: #f7fef9;
+                box-shadow: 0 14px 30px rgba(20, 83, 45, 0.12);
+            }
+
+            .itens-pedido-card .pedido-card-title {
+                border-bottom-color: #86efac;
+                background: #ecfdf3;
+                margin: -12px -12px 0;
+                padding: 12px;
+                border-radius: 8px 8px 0 0;
+            }
+
+            .itens-desktop-titulo {
+                display: none;
+            }
+
+            .itens-mobile-titulo {
+                display: block;
+                color: #14532d;
+                font-size: 18px;
+                line-height: 1.15;
+            }
+
+            .itens-pedido-ajuda {
+                display: block;
+                margin: 10px 0;
+                padding: 9px 10px;
+                border: 1px solid #bbf7d0;
+                border-radius: 8px;
+                background: #ffffff;
+                color: #166534;
+                font-size: 13px;
+                font-weight: 800;
+                line-height: 1.3;
+            }
+
+            .itens-pedido-card .tabela-itens tbody {
+                gap: 14px;
+            }
+
+            .itens-pedido-card .tabela-itens tbody tr {
+                position: relative;
+                border: 2px solid #bbf7d0;
+                border-left: 6px solid #16a34a;
+                background: #ffffff;
+                padding: 12px;
+                box-shadow: 0 12px 24px rgba(20, 83, 45, 0.12);
+            }
+
+            .itens-pedido-card .tabela-itens tbody tr::before {
+                content: attr(data-item-label);
+                display: inline-flex;
+                align-items: center;
+                min-height: 28px;
+                margin-bottom: 8px;
+                padding: 4px 9px;
+                border-radius: 6px;
+                background: #14532d;
+                color: #ffffff;
+                font-size: 12px;
+                font-weight: 900;
+                text-transform: uppercase;
+            }
+
+            .itens-pedido-card .itens-col-produto {
+                margin-bottom: 4px;
+                padding: 9px 0 10px;
+                border-bottom-color: #bbf7d0;
+            }
+
+            .itens-pedido-card .itens-col-produto::before {
+                color: #166534;
+            }
+
+            .item-produto {
+                overflow: visible;
+                text-overflow: clip;
+                white-space: normal;
+            }
+
+            .itens-pedido-card .item-produto {
+                color: #10251a;
+                font-size: 18px;
+                line-height: 1.25;
+            }
+
+            .tabela-itens input {
+                min-height: 44px;
+                font-size: 16px;
+            }
+
+            .item-total {
+                display: block;
+                font-size: 18px;
+            }
+
+            .btn-remover {
+                min-height: 44px;
+            }
+
+            .rodape-pedido {
+                position: static;
+                z-index: auto;
+                margin-top: 10px;
+                overflow: visible;
+                border: 1px solid #b7d8c0;
+                border-radius: 8px;
+                background: #ffffff;
+            }
+
+            .rodape-inner {
+                width: 100%;
+                gap: 8px;
+                padding: 10px;
+            }
+
+            .resumo {
+                gap: 5px;
+                padding: 8px 10px;
+                border: 1px solid #d5eadb;
+                border-radius: 8px;
+                background: #f6fff8;
+            }
+
+            .resumo strong {
+                font-size: 19px;
+            }
+
+            .acoes {
+                gap: 7px;
             }
         }
     </style>
@@ -1107,11 +1540,13 @@
                 </div>
             </section>
 
-            <section class="pedido-card">
+            <section class="pedido-card itens-pedido-card">
                 <div class="pedido-card-title">
-                    <span>Itens do pedido</span>
+                    <span class="itens-desktop-titulo">Itens do pedido</span>
+                    <span class="itens-mobile-titulo">Pedido real / Itens lancados</span>
                     <span id="contador-itens" class="status-chip">0 itens</span>
                 </div>
+                <p class="itens-pedido-ajuda">Estes sao os produtos que serao gravados neste pedido.</p>
 
                 <div id="sem-itens" class="sem-itens">Nenhum item adicionado. Use a linha de lancamento acima.</div>
                 <div id="tabela-wrap" class="tabela-wrap" style="display: none;">
@@ -1270,21 +1705,22 @@
                 const produtoSugestaoId = escaparHtml(sugestao.produto_id);
                 const tr = document.createElement("tr");
                 tr.dataset.sugestaoProdutoId = String(sugestao.produto_id || "");
+                tr.dataset.sugestaoLabel = `Sugestao ${index + 1}`;
                 tr.innerHTML = `
-                    <td class="sugestoes-col-produto"><span class="sugestao-produto">${escaparHtml(sugestao.produto)}</span></td>
-                    <td class="sugestoes-col-qtd">${escaparHtml(sugestao.quantidade)}</td>
-                    <td class="sugestoes-col-preco">${escaparHtml(sugestao.preco)}</td>
-                    <td class="sugestoes-col-data">${escaparHtml(sugestao.data)}</td>
-                    <td class="sugestoes-col-vezes">${escaparHtml(sugestao.frequencia)}</td>
-                    <td class="sugestoes-col-estoque">${escaparHtml(formatarEstoqueSugestao(sugestao.estoque))}</td>
-                    <td class="sugestoes-col-qtd-pedido">
+                    <td class="sugestoes-col-produto" data-label="Produto"><span class="sugestao-produto">${escaparHtml(sugestao.produto)}</span></td>
+                    <td class="sugestoes-col-qtd" data-label="Ultima qtd">${escaparHtml(sugestao.quantidade)}</td>
+                    <td class="sugestoes-col-preco" data-label="Ultimo preco">${escaparHtml(sugestao.preco)}</td>
+                    <td class="sugestoes-col-data" data-label="Ultima compra">${escaparHtml(sugestao.data)}</td>
+                    <td class="sugestoes-col-vezes" data-label="Vezes">${escaparHtml(sugestao.frequencia)}</td>
+                    <td class="sugestoes-col-estoque" data-label="Estoque atual">${escaparHtml(formatarEstoqueSugestao(sugestao.estoque))}</td>
+                    <td class="sugestoes-col-qtd-pedido" data-label="Qtd pedido">
                         <span class="sugestao-qtd-controle">
                             <button type="button" class="btn-sugestao-qtd" data-sugestao-qtd-ajuste="-1" data-sugestao-produto-id="${produtoSugestaoId}" aria-label="Diminuir quantidade">-</button>
                             <input type="text" class="sugestao-qtd-input" value="${escaparHtml(sugestao.quantidade)}" inputmode="decimal" data-sugestao-qtd="${produtoSugestaoId}" aria-label="Quantidade do pedido para ${escaparHtml(sugestao.produto)}">
                             <button type="button" class="btn-sugestao-qtd" data-sugestao-qtd-ajuste="1" data-sugestao-produto-id="${produtoSugestaoId}" aria-label="Aumentar quantidade">+</button>
                         </span>
                     </td>
-                    <td class="sugestoes-col-acao">
+                    <td class="sugestoes-col-acao" data-label="Acao">
                         <span class="sugestao-acoes-linha">
                             <button type="button" class="btn-sugestao-adicionar" data-sugestao-adicionar="${produtoSugestaoId}">Adicionar</button>
                             <button type="button" class="btn-sugestao-ignorar" data-sugestao-ignorar="${produtoSugestaoId}" aria-label="Ignorar sugestao">X</button>
@@ -1436,6 +1872,9 @@
         function mostrarItemPedidoAdicionado(index) {
             manterTelaNasSugestoes = false;
             atualizarEspacoRodape();
+            if (window.matchMedia("(max-width: 620px)").matches) {
+                return;
+            }
             window.requestAnimationFrame(() => {
                 const linha = tbodyItens.querySelector(`[data-index="${index}"]`);
                 const destino = linha || tabelaWrap;
@@ -1966,17 +2405,18 @@
                 if (index === remocaoPendente) tr.classList.add("linha-remocao-pendente");
                 if (index === itemDuplicadoIndex) tr.classList.add("linha-duplicada");
                 tr.dataset.index = index;
+                tr.dataset.itemLabel = `Item ${index + 1}`;
                 tr.innerHTML = `
-                    <td class="itens-col-produto">
+                    <td class="itens-col-produto" data-label="Produto">
                         <span class="item-produto">${escaparHtml(item.produto_nome)}</span>
                     </td>
-                    <td class="itens-col-estoque"><span class="item-estoque-badge">${escaparHtml(formatarEstoqueItem(item.estoque_no_momento))}</span></td>
-                    <td class="itens-col-qtd"><input type="number" min="0" step="0.001" value="${escaparHtml(item.quantidade)}" aria-label="Quantidade do item" data-index="${index}" data-campo-item="quantidade"></td>
-                    <td class="itens-col-un"><input type="text" maxlength="20" value="${escaparHtml(item.unidade || "")}" aria-label="Unidade do item" data-index="${index}" data-campo-item="unidade"></td>
-                    <td class="itens-col-preco"><input type="number" min="0" step="0.01" value="${escaparHtml(item.preco_unitario)}" aria-label="Preco unitario do item" data-index="${index}" data-campo-item="preco_unitario"></td>
-                    <td class="itens-col-total"><span class="item-total">${formatarMoeda(item.valor_total)}</span></td>
-                    <td class="itens-col-obs"><input type="text" value="${escaparHtml(item.observacao || "")}" placeholder="obs" aria-label="Observacao do item" data-index="${index}" data-campo-item="observacao"></td>
-                    <td class="itens-col-acao"><button type="button" class="btn btn-remover${index === remocaoPendente ? " confirmar" : ""}" data-remover="${index}">${index === remocaoPendente ? "Confirmar" : "Remover"}</button></td>
+                    <td class="itens-col-estoque" data-label="Estoque"><span class="item-estoque-badge">${escaparHtml(formatarEstoqueItem(item.estoque_no_momento))}</span></td>
+                    <td class="itens-col-qtd" data-label="Quantidade"><input type="number" min="0" step="0.001" value="${escaparHtml(item.quantidade)}" aria-label="Quantidade do item" data-index="${index}" data-campo-item="quantidade"></td>
+                    <td class="itens-col-un" data-label="Unidade"><input type="text" maxlength="20" value="${escaparHtml(item.unidade || "")}" aria-label="Unidade do item" data-index="${index}" data-campo-item="unidade"></td>
+                    <td class="itens-col-preco" data-label="Preco unitario"><input type="number" min="0" step="0.01" value="${escaparHtml(item.preco_unitario)}" aria-label="Preco unitario do item" data-index="${index}" data-campo-item="preco_unitario"></td>
+                    <td class="itens-col-total" data-label="Total"><span class="item-total">${formatarMoeda(item.valor_total)}</span></td>
+                    <td class="itens-col-obs" data-label="Observacao"><input type="text" value="${escaparHtml(item.observacao || "")}" placeholder="obs" aria-label="Observacao do item" data-index="${index}" data-campo-item="observacao"></td>
+                    <td class="itens-col-acao" data-label="Acao"><button type="button" class="btn btn-remover${index === remocaoPendente ? " confirmar" : ""}" data-remover="${index}">${index === remocaoPendente ? "Confirmar" : "Remover"}</button></td>
                 `;
                 tbodyItens.appendChild(tr);
             });
