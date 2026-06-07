@@ -266,6 +266,67 @@
             position: relative;
         }
 
+        .cliente-busca-wrap {
+            position: relative;
+            display: none;
+        }
+
+        .cliente-sugestoes {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            right: 0;
+            z-index: 55;
+            display: none;
+            max-height: min(52vh, 340px);
+            overflow-y: auto;
+            border: 1px solid #91c99f;
+            border-radius: 8px;
+            background: #ffffff;
+            box-shadow: 0 16px 28px rgba(18, 60, 38, 0.18);
+        }
+
+        .cliente-sugestoes.aberto {
+            display: block;
+        }
+
+        .cliente-sugestao {
+            width: 100%;
+            min-height: 48px;
+            border: 0;
+            border-bottom: 1px solid #e5f3e9;
+            background: #ffffff;
+            padding: 10px 12px;
+            color: #10251a;
+            cursor: pointer;
+            font-family: inherit;
+            text-align: left;
+        }
+
+        .cliente-sugestao:hover,
+        .cliente-sugestao.ativo {
+            background: #dcfce7;
+        }
+
+        .cliente-sugestao:active {
+            transform: translateY(1px) scale(0.99);
+        }
+
+        .cliente-sugestao-nome {
+            display: block;
+            color: #10251a;
+            font-size: 15px;
+            font-weight: 850;
+        }
+
+        .cliente-sugestao-meta {
+            display: block;
+            margin-top: 2px;
+            color: #315240;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
         .produto-sugestoes {
             position: absolute;
             top: calc(100% + 6px);
@@ -918,6 +979,31 @@
             }
         }
 
+        @media (max-width: 760px), (hover: none) and (pointer: coarse) {
+            .cliente-busca-wrap {
+                display: block;
+            }
+
+            .cliente-select-mobile {
+                position: absolute !important;
+                width: 1px !important;
+                height: 1px !important;
+                min-height: 1px !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: 0 !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                clip: rect(0 0 0 0);
+                clip-path: inset(50%);
+            }
+
+            .cliente-sugestao {
+                min-height: 52px;
+                padding: 11px 12px;
+            }
+        }
+
         @media (max-width: 620px) {
             body {
                 --rodape-pedido-altura: 0px;
@@ -1420,8 +1506,12 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="cliente_id" class="campo-obrigatorio">Cliente</label>
-                        <select id="cliente_id" name="cliente_id" required>
+                        <label for="cliente_id" class="campo-obrigatorio" id="cliente-label">Cliente</label>
+                        <div class="cliente-busca-wrap">
+                            <input type="text" id="cliente-busca" autocomplete="off" placeholder="Digite para pesquisar o cliente">
+                            <div class="cliente-sugestoes" id="cliente-sugestoes"></div>
+                        </div>
+                        <select id="cliente_id" name="cliente_id" class="cliente-select-mobile" required>
                             <option value="">Selecione um cliente</option>
                             {% for cliente in clientes %}
                                 <option value="{{ cliente.id }}" {% if pedido_modo_edicao and pedido.cliente_id == cliente.id %}selected{% endif %}>{{ cliente.nome }}</option>
@@ -1616,6 +1706,7 @@
 
         const pedidoModoEdicao = {% if pedido_modo_edicao %}true{% else %}false{% endif %};
         const pedidoUrlSalvar = "{% if pedido_url_salvar %}{{ pedido_url_salvar }}{% else %}{% url 'estoque:pedido_criar' %}{% endif %}";
+        const clientesAutocompleteUrl = "{% url 'estoque:clientes_autocomplete' %}";
         const textoBotaoSalvar = pedidoModoEdicao ? "Salvar Alteracoes" : "Salvar Pedido";
         const pedidoItensIniciaisEl = document.getElementById("pedido-itens-iniciais");
         const itensIniciais = pedidoItensIniciaisEl ? JSON.parse(pedidoItensIniciaisEl.textContent || "[]") : [];
@@ -1632,6 +1723,9 @@
 
         const dataPedido = document.getElementById("data_pedido");
         const clientePedido = document.getElementById("cliente_id");
+        const clienteLabel = document.getElementById("cliente-label");
+        const clienteBusca = document.getElementById("cliente-busca");
+        const clienteSugestoes = document.getElementById("cliente-sugestoes");
         const dataPrevistaEntrega = document.getElementById("data_prevista_entrega");
         const operadorPedido = document.getElementById("operador");
         const sugestoesClienteCard = document.getElementById("sugestoes-cliente-card");
@@ -1667,9 +1761,110 @@
         let sugestoesClienteExpandida = false;
         let sugestoesClienteAtivas = true;
         let manterTelaNasSugestoes = false;
+        let clientesBuscaLista = [];
+        let clienteBuscaAtivo = -1;
+        let clienteBuscaRequisicao = 0;
 
         function normalizarTexto(valor) {
             return String(valor || "").trim().toLowerCase();
+        }
+
+        function campoClienteDigitavelVisivel() {
+            return Boolean(clienteBusca && window.getComputedStyle(clienteBusca.closest(".cliente-busca-wrap")).display !== "none");
+        }
+
+        function atualizarAlvoLabelCliente() {
+            if (!clienteLabel || !clienteBusca) return;
+            clienteLabel.htmlFor = campoClienteDigitavelVisivel() ? "cliente-busca" : "cliente_id";
+        }
+
+        function nomeClienteSelecionado() {
+            const option = clientePedido.options[clientePedido.selectedIndex];
+            return option && option.value ? option.textContent.trim() : "";
+        }
+
+        function fecharSugestoesClientes() {
+            if (!clienteSugestoes) return;
+            clienteSugestoes.classList.remove("aberto");
+            clienteSugestoes.innerHTML = "";
+            clientesBuscaLista = [];
+            clienteBuscaAtivo = -1;
+        }
+
+        function renderizarSugestoesClientes() {
+            if (!clienteSugestoes) return;
+            clienteSugestoes.innerHTML = "";
+
+            if (!clientesBuscaLista.length) {
+                fecharSugestoesClientes();
+                return;
+            }
+
+            clientesBuscaLista.forEach((cliente, index) => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "cliente-sugestao" + (index === clienteBuscaAtivo ? " ativo" : "");
+                btn.dataset.index = index;
+                btn.innerHTML = `
+                    <span class="cliente-sugestao-nome">${escaparHtml(cliente.nome || "Cliente sem nome")}</span>
+                    <span class="cliente-sugestao-meta">${escaparHtml(cliente.telefone || cliente.documento || "Cliente ativo")}</span>
+                `;
+                clienteSugestoes.appendChild(btn);
+            });
+
+            clienteSugestoes.classList.add("aberto");
+        }
+
+        function selecionarClienteBusca(cliente) {
+            if (!cliente || !cliente.id) return;
+
+            let option = Array.from(clientePedido.options).find((item) => String(item.value) === String(cliente.id));
+            if (!option) {
+                option = new Option(cliente.nome || "Cliente selecionado", cliente.id);
+                clientePedido.add(option);
+            }
+
+            clientePedido.value = String(cliente.id);
+            if (clienteBusca) {
+                clienteBusca.value = cliente.nome || option.textContent.trim();
+                clienteBusca.classList.remove("campo-invalido");
+            }
+            clientePedido.classList.remove("campo-invalido");
+            fecharSugestoesClientes();
+            clientePedido.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+
+        function buscarClientesPedido(termo) {
+            if (!clienteSugestoes) return;
+            clienteBuscaRequisicao += 1;
+            const requisicaoAtual = clienteBuscaRequisicao;
+            const texto = String(termo || "").trim();
+
+            if (!texto) {
+                fecharSugestoesClientes();
+                return;
+            }
+
+            const url = new URL(clientesAutocompleteUrl, window.location.origin);
+            url.searchParams.set("q", texto);
+
+            fetch(url.toString(), { headers: { "X-Requested-With": "XMLHttpRequest" } })
+                .then((response) => response.ok ? response.json() : Promise.reject())
+                .then((data) => {
+                    if (requisicaoAtual !== clienteBuscaRequisicao) return;
+                    clientesBuscaLista = Array.isArray(data.clientes) ? data.clientes : [];
+                    clienteBuscaAtivo = clientesBuscaLista.length ? 0 : -1;
+                    renderizarSugestoesClientes();
+                })
+                .catch(() => {
+                    if (requisicaoAtual !== clienteBuscaRequisicao) return;
+                    fecharSugestoesClientes();
+                });
+        }
+
+        function prepararBuscaClienteInicial() {
+            if (!clienteBusca) return;
+            clienteBusca.value = nomeClienteSelecionado();
         }
 
         function formatarMoeda(valor) {
@@ -1983,14 +2178,19 @@
 
         function focarClienteObrigatorio() {
             clientePedido.classList.add("campo-invalido");
+            if (campoClienteDigitavelVisivel()) {
+                clienteBusca.classList.add("campo-invalido");
+            }
             mostrarMensagem("erro", "Selecione um cliente para continuar com o pedido.");
-            clientePedido.scrollIntoView({ behavior: "smooth", block: "center" });
-            window.setTimeout(() => clientePedido.focus(), 180);
+            const campoFoco = campoClienteDigitavelVisivel() ? clienteBusca : clientePedido;
+            campoFoco.scrollIntoView({ behavior: "smooth", block: "center" });
+            window.setTimeout(() => campoFoco.focus(), 180);
         }
 
         function validarClienteObrigatorio() {
             if (clientePedido.value) {
                 clientePedido.classList.remove("campo-invalido");
+                if (clienteBusca) clienteBusca.classList.remove("campo-invalido");
                 return true;
             }
 
@@ -2585,9 +2785,81 @@
             atualizarModoSugestoesCliente();
             if (clientePedido.value) {
                 clientePedido.classList.remove("campo-invalido");
+                if (clienteBusca) {
+                    clienteBusca.classList.remove("campo-invalido");
+                    if (!clienteBusca.value.trim()) clienteBusca.value = nomeClienteSelecionado();
+                }
                 limparMensagem();
+            } else if (clienteBusca) {
+                clienteBusca.value = "";
             }
             carregarSugestoesCliente();
+        });
+
+        if (clienteBusca) {
+            clienteBusca.addEventListener("input", () => {
+                clienteBusca.classList.remove("campo-invalido");
+                clientePedido.classList.remove("campo-invalido");
+                if (clienteBusca.value.trim() !== nomeClienteSelecionado()) {
+                    clientePedido.value = "";
+                }
+                buscarClientesPedido(clienteBusca.value);
+            });
+
+            clienteBusca.addEventListener("focus", () => {
+                if (clienteBusca.value.trim()) buscarClientesPedido(clienteBusca.value);
+            });
+
+            clienteBusca.addEventListener("keydown", (event) => {
+                if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    if (!clientesBuscaLista.length) {
+                        buscarClientesPedido(clienteBusca.value);
+                        return;
+                    }
+                    clienteBuscaAtivo = (clienteBuscaAtivo + 1) % clientesBuscaLista.length;
+                    renderizarSugestoesClientes();
+                    return;
+                }
+
+                if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    if (!clientesBuscaLista.length) return;
+                    clienteBuscaAtivo = (clienteBuscaAtivo - 1 + clientesBuscaLista.length) % clientesBuscaLista.length;
+                    renderizarSugestoesClientes();
+                    return;
+                }
+
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    if (clientesBuscaLista.length && clienteBuscaAtivo >= 0) {
+                        selecionarClienteBusca(clientesBuscaLista[clienteBuscaAtivo]);
+                        dataPrevistaEntrega.focus();
+                        return;
+                    }
+                    validarClienteObrigatorio();
+                }
+
+                if (event.key === "Escape") {
+                    fecharSugestoesClientes();
+                }
+            });
+        }
+
+        if (clienteSugestoes) {
+            clienteSugestoes.addEventListener("mousedown", (event) => {
+                event.preventDefault();
+                const btn = event.target.closest(".cliente-sugestao");
+                if (!btn) return;
+                selecionarClienteBusca(clientesBuscaLista[Number(btn.dataset.index)]);
+                dataPrevistaEntrega.focus();
+            });
+        }
+
+        document.addEventListener("click", (event) => {
+            if (clienteBusca && !clienteBusca.contains(event.target) && clienteSugestoes && !clienteSugestoes.contains(event.target)) {
+                fecharSugestoesClientes();
+            }
         });
 
         function avancarComEnter(origem, destino, antesDeAvancar) {
@@ -2595,8 +2867,9 @@
                 if (event.key !== "Enter") return;
                 event.preventDefault();
                 if (antesDeAvancar && !antesDeAvancar()) return;
-                destino.focus();
-                if (typeof destino.select === "function") destino.select();
+                const destinoReal = destino === clientePedido && campoClienteDigitavelVisivel() ? clienteBusca : destino;
+                destinoReal.focus();
+                if (typeof destinoReal.select === "function") destinoReal.select();
             });
         }
 
@@ -2685,9 +2958,14 @@
 
         atualizarContextoProduto(null);
         atualizarTabela();
+        prepararBuscaClienteInicial();
+        atualizarAlvoLabelCliente();
         prepararSugestoesClienteInicial();
         atualizarEspacoRodape();
-        window.addEventListener("resize", atualizarEspacoRodape);
+        window.addEventListener("resize", () => {
+            atualizarEspacoRodape();
+            atualizarAlvoLabelCliente();
+        });
         window.addEventListener("load", () => {
             atualizarEspacoRodape();
             window.scrollTo({ top: 0, behavior: "auto" });
