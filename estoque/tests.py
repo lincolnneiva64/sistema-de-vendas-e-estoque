@@ -7426,6 +7426,18 @@ class PedidoTests(TestCase):
         self.assertNotIn("avancarComEnter(operadorPedido, observacaoPedido);", conteudo)
         self.assertNotIn("avancarComEnter(observacaoPedido, produtoBusca);", conteudo)
 
+    def test_pedido_criar_tem_protecao_para_acoes_perigosas(self):
+        resposta = self.client.get(reverse("estoque:pedido_criar"), secure=True)
+        conteudo = resposta.content.decode("utf-8")
+
+        self.assertContains(resposta, 'id="btn-cancelar-form"')
+        self.assertIn("Sair sem salvar o pedido?", conteudo)
+        self.assertIn("Deseja limpar as sugestoes carregadas?", conteudo)
+        self.assertIn("Deseja ocultar as sugestoes deste pedido?", conteudo)
+        self.assertIn("Salvar este pedido e abrir o envio para venda?", conteudo)
+        self.assertIn("salvamentoEmAndamento", conteudo)
+        self.assertIn('index === remocaoPendente ? "Confirmar" : "Remover"', conteudo)
+
     def test_funcionario_marcado_na_tela_aparece_como_operador_no_pedido(self):
         resposta_funcionario = self.client.post(
             reverse("estoque:funcionarios"),
@@ -7631,6 +7643,8 @@ class PedidoTests(TestCase):
         self.assertContains(resposta, "Total do Pedido")
         self.assertNotContains(resposta, "Itens pendentes")
         self.assertContains(resposta, "Editar Pedido")
+        self.assertContains(resposta, "Enviar este pedido para venda? Confira os dados antes de continuar.")
+        self.assertContains(resposta, "Tem certeza que deseja cancelar este pedido? O historico sera preservado, mas o pedido deixara de ficar ativo.")
 
     def test_editar_pedido_aberto_atualiza_itens_sem_baixar_estoque_ou_criar_financeiro(self):
         from .models import ItemPedido

@@ -1690,7 +1690,7 @@
                         <span>Total do pedido: <strong id="resumo-total">R$ 0,00</strong></span>
                     </div>
                     <div class="acoes">
-                        <a href="{% if pedido_modo_edicao %}{% url 'estoque:pedido_detalhe' pedido.id %}{% else %}{% url 'estoque:pedidos' %}{% endif %}" class="btn-cancelar">Cancelar</a>
+                        <a href="{% if pedido_modo_edicao %}{% url 'estoque:pedido_detalhe' pedido.id %}{% else %}{% url 'estoque:pedidos' %}{% endif %}" class="btn-cancelar" id="btn-cancelar-form">Cancelar</a>
                         <button type="submit" class="btn btn-salvar" id="btn-salvar">{% if pedido_modo_edicao %}Salvar Alteracoes{% else %}Salvar Pedido{% endif %}</button>
                         {% if not pedido_modo_edicao %}
                             <button type="submit" class="btn btn-salvar-venda" id="btn-salvar-venda" data-proxima-acao="enviar_venda">Salvar e Enviar para Venda</button>
@@ -1774,6 +1774,7 @@
         let sugestoesClienteAtivas = true;
         let manterTelaNasSugestoes = false;
         let operadorPedidoConfirmado = false;
+        let salvamentoEmAndamento = false;
         let clientesBuscaLista = [];
         let clienteBuscaAtivo = -1;
         let clienteBuscaRequisicao = 0;
@@ -2765,6 +2766,9 @@
         });
 
         btnSugestoesSem.addEventListener("click", () => {
+            if (sugestoesClienteLista.length && !confirm("Deseja ocultar as sugestoes deste pedido? Os itens ja lancados serao preservados.")) {
+                return;
+            }
             sugestoesClienteAtivas = false;
             atualizarModoSugestoesCliente();
             limparSugestoesClienteVisualmente("Pedido sem sugestao. Continue lancando os produtos manualmente.");
@@ -2772,6 +2776,9 @@
         });
 
         btnSugestoesLimpar.addEventListener("click", () => {
+            if (sugestoesClienteLista.length && !confirm("Deseja limpar as sugestoes carregadas? Os itens ja lancados serao preservados.")) {
+                return;
+            }
             limparSugestoesClienteVisualmente("Sugestoes limpas. Continue lancando os produtos manualmente.");
             focarSemSelecionar(produtoBusca);
         });
@@ -2904,6 +2911,13 @@
         avancarComEnter(dataPrevistaEntrega, operadorPedido);
         avancarComEnter(operadorPedido, produtoBusca);
 
+        document.getElementById("btn-cancelar-form")?.addEventListener("click", (event) => {
+            const confirmarSaida = confirm("Sair sem salvar o pedido? Dados digitados que ainda nao foram salvos serao perdidos.");
+            if (!confirmarSaida) {
+                event.preventDefault();
+            }
+        });
+
         tbodyItens.addEventListener("click", (event) => {
             const btn = event.target.closest("[data-remover]");
             if (btn) {
@@ -2937,6 +2951,7 @@
 
         formPedido.addEventListener("submit", function(event) {
             event.preventDefault();
+            if (salvamentoEmAndamento) return;
             limparMensagem();
 
             if (!validarClienteObrigatorio()) {
@@ -2952,7 +2967,12 @@
 
             const botaoAcionado = event.submitter || btnSalvar;
             proximaAcao.value = botaoAcionado?.dataset?.proximaAcao || "";
+            if (proximaAcao.value === "enviar_venda" && !confirm("Salvar este pedido e abrir o envio para venda? Confira os dados antes de continuar.")) {
+                proximaAcao.value = "";
+                return;
+            }
             const formData = new FormData(this);
+            salvamentoEmAndamento = true;
             prepararBotoesSalvamento(botaoAcionado);
 
             fetch(pedidoUrlSalvar, {
@@ -2974,10 +2994,12 @@
                 if (String(data.mensagem || "").toLowerCase().includes("cliente")) {
                     focarClienteObrigatorio();
                 }
+                salvamentoEmAndamento = false;
                 restaurarBotoesSalvamento();
             })
             .catch(() => {
                 mostrarMensagem("erro", pedidoModoEdicao ? "Erro ao atualizar pedido. Tente novamente." : "Erro ao criar pedido. Tente novamente.");
+                salvamentoEmAndamento = false;
                 restaurarBotoesSalvamento();
             });
         });

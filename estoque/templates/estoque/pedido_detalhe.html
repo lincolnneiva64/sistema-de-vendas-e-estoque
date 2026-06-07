@@ -486,16 +486,16 @@
                 <a href="{% url 'estoque:pedido_editar' pedido.id %}" class="btn btn-editar">Editar Pedido</a>
             {% endif %}
             {% if pedido.status == 'aberto' %}
-                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar">Enviar para Venda</a>
+                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar" onclick="return confirm('Enviar este pedido para venda? Confira os dados antes de continuar.');">Enviar para Venda</a>
             {% elif pedido.status == 'parcial' %}
-                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar">Enviar pend&ecirc;ncia para Venda</a>
+                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar" onclick="return confirm('Enviar a pendencia deste pedido para venda? Confira os dados antes de continuar.');">Enviar pend&ecirc;ncia para Venda</a>
             {% elif pedido.status == 'convertido_em_venda' %}
                 <a href="{% url 'estoque:vendas' %}" class="btn btn-venda">Ir para Vendas</a>
             {% else %}
                 <a href="{% url 'estoque:vendas' %}" class="btn btn-venda">Ir para Vendas</a>
             {% endif %}
             {% if pode_cancelar_pedido %}
-                <form method="post" action="{% url 'estoque:pedido_cancelar' pedido.id %}" class="form-cancelar-pedido" onsubmit="return confirm('Cancelar este pedido? O pedido ser&aacute; marcado como CANCELADO, mas o hist&oacute;rico e os itens ser&atilde;o preservados.');">
+                <form method="post" action="{% url 'estoque:pedido_cancelar' pedido.id %}" class="form-cancelar-pedido" onsubmit="return confirm('Tem certeza que deseja cancelar este pedido? O historico sera preservado, mas o pedido deixara de ficar ativo.');">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-cancelar-pedido">Cancelar Pedido</button>
                 </form>
@@ -666,16 +666,16 @@
                 <a href="{% url 'estoque:pedido_editar' pedido.id %}" class="btn btn-editar">Editar Pedido</a>
             {% endif %}
             {% if pedido.status == 'aberto' %}
-                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar">Enviar para Venda</a>
+                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar" onclick="return confirm('Enviar este pedido para venda? Confira os dados antes de continuar.');">Enviar para Venda</a>
             {% elif pedido.status == 'parcial' %}
-                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar">Enviar pend&ecirc;ncia para Venda</a>
+                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar" onclick="return confirm('Enviar a pendencia deste pedido para venda? Confira os dados antes de continuar.');">Enviar pend&ecirc;ncia para Venda</a>
             {% elif pedido.status == 'convertido_em_venda' %}
                 <a href="{% url 'estoque:vendas' %}" class="btn btn-venda">Ir para Vendas</a>
             {% else %}
                 <a href="{% url 'estoque:vendas' %}" class="btn btn-venda">Ir para Vendas</a>
             {% endif %}
             {% if pode_cancelar_pedido %}
-                <form method="post" action="{% url 'estoque:pedido_cancelar' pedido.id %}" class="form-cancelar-pedido" onsubmit="return confirm('Cancelar este pedido? O pedido ser&aacute; marcado como CANCELADO, mas o hist&oacute;rico e os itens ser&atilde;o preservados.');">
+                <form method="post" action="{% url 'estoque:pedido_cancelar' pedido.id %}" class="form-cancelar-pedido" onsubmit="return confirm('Tem certeza que deseja cancelar este pedido? O historico sera preservado, mas o pedido deixara de ficar ativo.');">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-cancelar-pedido">Cancelar Pedido</button>
                 </form>
