@@ -92,7 +92,9 @@
         }
         
         .status-badge {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             padding: 4px 12px;
             border-radius: 20px;
             font-size: 12px;
@@ -219,6 +221,10 @@
             justify-content: center;
             transition: all 0.2s;
         }
+
+        .btn:active {
+            transform: translateY(1px) scale(0.99);
+        }
         
         .btn-voltar {
             background-color: #14532d;
@@ -288,13 +294,177 @@
             font-weight: 650;
         }
 
+        .produto-nome {
+            font-weight: 800;
+        }
+
+        .produto-categoria {
+            margin-top: 3px;
+            color: #6b7280;
+            font-size: 12px;
+            font-weight: 650;
+        }
+
+        .estoque-zero {
+            color: #ef4444;
+            font-weight: 700;
+        }
+
         @media (max-width: 640px) {
+            .container {
+                padding: 10px;
+            }
+
+            .header {
+                padding: 18px;
+                border-radius: 8px;
+                margin-bottom: 12px;
+            }
+
+            .header h1 {
+                font-size: 24px;
+                line-height: 1.12;
+            }
+
+            .header-badge,
+            .status-badge {
+                width: 100%;
+            }
+
+            .status-badge {
+                min-height: 38px;
+                border-radius: 8px;
+                font-size: 13px;
+                font-weight: 900;
+            }
+
+            .card {
+                padding: 14px;
+                margin-bottom: 12px;
+            }
+
+            .card-titulo {
+                font-size: 17px;
+                margin-bottom: 12px;
+            }
+
+            .info-grid {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+
+            .info-item {
+                border: 1px solid #d9f0df;
+                border-radius: 8px;
+                background: #f6fff8;
+                padding: 10px;
+            }
+
             .acoes {
                 flex-direction: column;
+                gap: 8px;
+            }
+
+            .acoes-topo {
+                margin-bottom: 12px;
+            }
+
+            .btn,
+            .form-cancelar-pedido {
+                width: 100%;
             }
 
             .btn {
+                min-height: 48px;
+                font-size: 16px;
+                font-weight: 800;
+            }
+
+            .tabela,
+            .tabela tbody,
+            .tabela tr,
+            .tabela td {
+                display: block;
                 width: 100%;
+            }
+
+            .tabela {
+                border-collapse: separate;
+                margin-top: 10px;
+            }
+
+            .tabela thead {
+                display: none;
+            }
+
+            .tabela tbody {
+                display: grid;
+                gap: 12px;
+            }
+
+            .tabela tbody tr {
+                border: 1px solid #cfe7d5;
+                border-left: 6px solid #16a34a;
+                border-radius: 8px;
+                background: #ffffff;
+                padding: 12px;
+                box-shadow: 0 10px 22px rgba(18, 60, 38, 0.10);
+            }
+
+            .tabela tbody tr:hover {
+                background: #ffffff;
+            }
+
+            .tabela td {
+                border-bottom: 1px solid #edf6ef;
+                padding: 8px 0;
+                font-size: 15px;
+            }
+
+            .tabela td:last-child {
+                border-bottom: 0;
+                padding-bottom: 0;
+            }
+
+            .tabela td::before {
+                content: attr(data-label);
+                display: block;
+                margin-bottom: 5px;
+                color: #476154;
+                font-size: 11px;
+                font-weight: 900;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+            }
+
+            .pedido-item-produto {
+                padding-top: 2px;
+                border-bottom-color: #bbf7d0;
+            }
+
+            .pedido-item-produto::before {
+                color: #166534;
+            }
+
+            .produto-nome {
+                display: block;
+                color: #10251a;
+                font-size: 18px;
+                line-height: 1.25;
+            }
+
+            .resumo {
+                margin-top: 12px;
+            }
+
+            .resumo-linha {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            .resumo-total {
+                font-size: 17px;
             }
         }
     </style>
@@ -432,10 +602,10 @@
                     <tbody>
                         {% for item in itens_exibidos %}
                             <tr>
-                                <td>
+                                <td class="pedido-item-produto" data-label="Produto">
                                     {% if item.produto %}
-                                        <strong>{{ item.produto.nome }}</strong>
-                                        <div style="font-size: 12px; color: #6b7280;">
+                                        <strong class="produto-nome">{{ item.produto.nome }}</strong>
+                                        <div class="produto-categoria">
                                             {% if item.produto.categoria %}
                                                 {{ item.produto.categoria }}
                                             {% endif %}
@@ -444,16 +614,16 @@
                                         <em>Produto não identificado</em>
                                     {% endif %}
                                 </td>
-                                <td>{{ item.quantidade|floatformat:"3" }}</td>
-                                <td>{{ item.unidade|default:"-" }}</td>
-                                <td>R$ {{ item.preco_unitario|floatformat:"2" }}</td>
-                                <td><strong>R$ {{ item.valor_total|floatformat:"2" }}</strong></td>
-                                <td>
-                                    <span {% if item.estoque_no_momento <= 0 %}style="color: #ef4444; font-weight: 600;"{% endif %}>
+                                <td data-label="Quantidade">{{ item.quantidade|floatformat:"3" }}</td>
+                                <td data-label="Unidade">{{ item.unidade|default:"-" }}</td>
+                                <td data-label="Preco unit.">R$ {{ item.preco_unitario|floatformat:"2" }}</td>
+                                <td data-label="Total"><strong>R$ {{ item.valor_total|floatformat:"2" }}</strong></td>
+                                <td data-label="Estoque">
+                                    <span {% if item.estoque_no_momento <= 0 %}class="estoque-zero"{% endif %}>
                                         {{ item.estoque_no_momento }}
                                     </span>
                                 </td>
-                                <td>{{ item.observacao|default:"-" }}</td>
+                                <td data-label="Observacao">{{ item.observacao|default:"-" }}</td>
                             </tr>
                         {% endfor %}
                     </tbody>
