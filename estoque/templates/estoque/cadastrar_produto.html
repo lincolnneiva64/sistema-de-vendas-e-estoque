@@ -350,12 +350,109 @@ select.campo-obrigatorio-piscando:focus,
 }
 
 @media (max-width: 575.98px) {
+    body {
+        overflow-x: hidden;
+    }
+
+    main.container {
+        padding-left: 10px;
+        padding-right: 10px;
+        padding-bottom: 180px !important;
+    }
+
+    .card-form-padrao {
+        width: 100%;
+        margin-top: 0;
+        border-width: 1px;
+        border-radius: 12px !important;
+    }
+
+    #form-produto {
+        --bs-gutter-x: 0;
+        --bs-gutter-y: 0.75rem;
+    }
+
+    #form-produto > [class*="col-"],
+    .linha-identificacao-produto > [class*="col-"] {
+        width: 100%;
+        max-width: 100%;
+        flex: 0 0 100%;
+    }
+
+    .form-campo,
+    #form-produto > [class*="col-"] {
+        min-width: 0;
+    }
+
+    .form-label,
+    .secao-titulo {
+        font-size: 0.96rem;
+        line-height: 1.25;
+    }
+
+    .form-control,
+    .form-select,
+    .input-group-text {
+        min-height: 48px;
+        font-size: 16px;
+    }
+
+    .input-group {
+        flex-wrap: nowrap;
+        width: 100%;
+    }
+
+    .input-group .form-control {
+        min-width: 0;
+    }
+
+    .d-flex.gap-2 {
+        flex-direction: column;
+    }
+
     .categoria-controle {
         flex-direction: column;
     }
 
-    .categoria-controle .btn-gerenciar-unidades {
+    .categoria-controle .btn-gerenciar-unidades,
+    .btn-gerenciar-unidades {
         width: 100%;
+        min-height: 48px;
+        text-align: center;
+        white-space: normal;
+    }
+
+    .acoes-flutuantes {
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1000;
+        padding: 8px 10px;
+        background: rgba(248, 250, 252, 0.96);
+        border-top: 1px solid #d9dee7;
+    }
+
+    .acoes-flutuantes-card {
+        width: 100%;
+        border-radius: 12px;
+        padding: 8px;
+    }
+
+    .acoes-flutuantes-botoes {
+        gap: 7px;
+    }
+
+    .acoes-flutuantes-botoes .btn-cancelar,
+    .acoes-flutuantes-botoes .btn-salvar {
+        width: 100%;
+        min-height: 48px;
+        padding: 11px 14px;
+        font-size: 16px;
+    }
+
+    .acao-criar-mais {
+        min-height: 44px;
+        font-size: 0.95rem;
     }
 }
 </style>
