@@ -178,7 +178,7 @@
             display: grid;
             grid-template-columns: 1.2fr 2fr 1.2fr 1.2fr;
             gap: 12px;
-            align-items: end;
+            align-items: start;
         }
 
         .form-group {
@@ -197,6 +197,10 @@
             font-size: 12px;
             font-weight: 700;
             line-height: 1.25;
+        }
+
+        .operador-ajuda {
+            min-height: 15px;
         }
 
         label {
@@ -1524,10 +1528,18 @@
                         <input type="date" id="data_prevista_entrega" name="data_prevista_entrega" value="{% if pedido_modo_edicao and pedido.data_prevista_entrega %}{{ pedido.data_prevista_entrega|date:'Y-m-d' }}{% elif not pedido_modo_edicao %}{% now 'Y-m-d' %}{% endif %}">
                     </div>
 
-                    <div class="form-group">
+                    <div class="form-group operador-group">
                         <label for="operador">Operador</label>
-                        <input type="text" id="operador" name="operador" placeholder="Nome do operador" value="{% if pedido_modo_edicao %}{{ pedido.operador|default:'' }}{% endif %}">
-                        <span class="campo-ajuda">Preparado para vincular futuramente ao cadastro de funcionarios autorizados.</span>
+                        <select id="operador" name="operador">
+                            <option value="">Sem operador</option>
+                            {% for funcionario in operadores_pedido %}
+                                <option value="{{ funcionario.id }}" {% if pedido_modo_edicao and pedido.operador == funcionario.nome %}selected{% endif %}>{{ funcionario.nome }}</option>
+                            {% endfor %}
+                            {% if pedido_modo_edicao and pedido.operador and not operador_atual_habilitado %}
+                                <option value="{{ pedido.operador }}" selected>{{ pedido.operador }} (operador atual)</option>
+                            {% endif %}
+                        </select>
+                        <span class="campo-ajuda operador-ajuda">Apenas funcionarios ativos marcados como operadores aparecem aqui.</span>
                     </div>
 
                     <div class="form-group full">
@@ -1761,6 +1773,7 @@
         let sugestoesClienteExpandida = false;
         let sugestoesClienteAtivas = true;
         let manterTelaNasSugestoes = false;
+        let operadorPedidoConfirmado = false;
         let clientesBuscaLista = [];
         let clienteBuscaAtivo = -1;
         let clienteBuscaRequisicao = 0;
@@ -2153,6 +2166,7 @@
         }
 
         function manterSugestoesClienteVisiveis() {
+            if (!operadorPedidoConfirmado) return;
             atualizarEspacoRodape();
             manterTelaNasSugestoes = true;
             sugestoesClienteCard.scrollIntoView({ behavior: "auto", block: "start" });
@@ -2781,6 +2795,8 @@
         });
 
         clientePedido.addEventListener("change", () => {
+            operadorPedidoConfirmado = false;
+            manterTelaNasSugestoes = false;
             sugestoesClienteAtivas = true;
             atualizarModoSugestoesCliente();
             if (clientePedido.value) {
@@ -2862,14 +2878,24 @@
             }
         });
 
+        function focarCampoPedido(campo) {
+            if (!campo) return;
+            campo.focus({ preventScroll: true });
+            if (typeof campo.select === "function" && campo.tagName !== "SELECT") {
+                campo.select();
+            }
+        }
+
         function avancarComEnter(origem, destino, antesDeAvancar) {
+            if (!origem || !destino) return;
             origem.addEventListener("keydown", (event) => {
                 if (event.key !== "Enter") return;
                 event.preventDefault();
+                event.stopPropagation();
                 if (antesDeAvancar && !antesDeAvancar()) return;
+                if (origem === operadorPedido) operadorPedidoConfirmado = true;
                 const destinoReal = destino === clientePedido && campoClienteDigitavelVisivel() ? clienteBusca : destino;
-                destinoReal.focus();
-                if (typeof destinoReal.select === "function") destinoReal.select();
+                window.setTimeout(() => focarCampoPedido(destinoReal), 0);
             });
         }
 

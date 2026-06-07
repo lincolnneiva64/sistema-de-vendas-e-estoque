@@ -53,6 +53,23 @@ class FuncionarioTests(TestCase):
 
         self.assertEqual(list(Funcionario.habilitados_para_checklist()), [habilitado])
 
+    def test_operadores_do_sistema_filtra_ativos_e_marcados(self):
+        operador = Funcionario.objects.create(
+            nome="Bruna Operadora",
+            pode_operar_sistema=True,
+        )
+        Funcionario.objects.create(
+            nome="Funcionario Inativo",
+            ativo=False,
+            pode_operar_sistema=True,
+        )
+        Funcionario.objects.create(
+            nome="Funcionario Sem Operador",
+            pode_operar_sistema=False,
+        )
+
+        self.assertEqual(list(Funcionario.operadores_do_sistema()), [operador])
+
     def test_form_valida_whatsapp_quando_checklist_marcado(self):
         form = FuncionarioForm(data={
             "nome": "Carlos Entregador",
@@ -71,6 +88,7 @@ class FuncionarioTests(TestCase):
             "nome": "Ana Entregadora",
             "telefone_whatsapp": "85999990000",
             "pode_receber_checklist": "on",
+            "pode_operar_sistema": "on",
             "ativo": "on",
             "observacoes": "Rota centro",
         }, secure=True)
@@ -79,6 +97,7 @@ class FuncionarioTests(TestCase):
         funcionario = Funcionario.objects.get(nome="Ana Entregadora")
         self.assertTrue(funcionario.ativo)
         self.assertTrue(funcionario.pode_receber_checklist)
+        self.assertTrue(funcionario.pode_operar_sistema)
         self.assertEqual(funcionario.telefone_whatsapp_normalizado, "85999990000")
 
         resposta_busca = self.client.get(url, {"q": "99999"}, secure=True)
@@ -89,6 +108,7 @@ class FuncionarioTests(TestCase):
             "nome": "Ana Silva",
             "telefone_whatsapp": "85988887777",
             "pode_receber_checklist": "on",
+            "pode_operar_sistema": "on",
             "ativo": "on",
         }, secure=True)
         self.assertEqual(resposta_editar.status_code, 302)
@@ -105,6 +125,7 @@ class FuncionarioTests(TestCase):
         funcionario.refresh_from_db()
         self.assertFalse(funcionario.ativo)
         self.assertFalse(funcionario.pode_receber_checklist)
+        self.assertFalse(funcionario.pode_operar_sistema)
 
 
 class PixRecebidoTests(TestCase):
@@ -7344,7 +7365,7 @@ class PedidoTests(TestCase):
             secure=True,
         )
 
-    def _post_criar_pedido(self, proxima_acao=""):
+    def _post_criar_pedido(self, proxima_acao="", operador="Operador Pedido"):
         itens = [
             {
                 "produto_id": self.produto.id,
@@ -7363,13 +7384,98 @@ class PedidoTests(TestCase):
                 "data_pedido": timezone.localdate().isoformat(),
                 "cliente_id": self.cliente.id,
                 "data_prevista_entrega": "",
-                "operador": "Operador Pedido",
+                "operador": operador,
                 "observacao": "",
                 "itens_json": json.dumps(itens),
                 "proxima_acao": proxima_acao,
             },
             secure=True,
         )
+
+    def test_pedido_exibe_apenas_funcionarios_operadores_no_campo_operador(self):
+        operador = Funcionario.objects.create(
+            nome="Livia Operadora",
+            pode_operar_sistema=True,
+        )
+        Funcionario.objects.create(
+            nome="Marcos Sem Operador",
+            pode_operar_sistema=False,
+        )
+        Funcionario.objects.create(
+            nome="Operador Inativo",
+            ativo=False,
+            pode_operar_sistema=True,
+        )
+
+        resposta = self.client.get(reverse("estoque:pedido_criar"), secure=True)
+
+        self.assertContains(resposta, '<option value="">Sem operador</option>', html=True)
+        self.assertContains(resposta, f'<option value="{operador.id}">Livia Operadora</option>', html=True)
+        self.assertNotContains(resposta, "Marcos Sem Operador")
+        self.assertNotContains(resposta, "Operador Inativo")
+
+    def test_pedido_enter_do_cabecalho_passa_por_operador_sem_observacao(self):
+        resposta = self.client.get(reverse("estoque:pedido_criar"), secure=True)
+        conteudo = resposta.content.decode("utf-8")
+
+        self.assertIn('const operadorPedido = document.getElementById("operador");', conteudo)
+        self.assertIn('<textarea id="observacao" name="observacao"', conteudo)
+        self.assertIn("avancarComEnter(dataPrevistaEntrega, operadorPedido);", conteudo)
+        self.assertIn("avancarComEnter(operadorPedido, produtoBusca);", conteudo)
+        self.assertIn("if (!operadorPedidoConfirmado) return;", conteudo)
+        self.assertNotIn("avancarComEnter(operadorPedido, observacaoPedido);", conteudo)
+        self.assertNotIn("avancarComEnter(observacaoPedido, produtoBusca);", conteudo)
+
+    def test_funcionario_marcado_na_tela_aparece_como_operador_no_pedido(self):
+        resposta_funcionario = self.client.post(
+            reverse("estoque:funcionarios"),
+            data={
+                "nome": "Rita Operadora",
+                "telefone_whatsapp": "",
+                "pode_operar_sistema": "on",
+                "ativo": "on",
+            },
+            secure=True,
+        )
+        self.assertEqual(resposta_funcionario.status_code, 302)
+        operador = Funcionario.objects.get(nome="Rita Operadora")
+        self.assertTrue(operador.pode_operar_sistema)
+
+        resposta_pedido = self.client.get(reverse("estoque:pedido_criar"), secure=True)
+
+        self.assertContains(resposta_pedido, f'<option value="{operador.id}">Rita Operadora</option>', html=True)
+
+    def test_salvar_pedido_com_operador_funcionario_grava_e_exibe_nome(self):
+        from .models import Pedido
+
+        operador = Funcionario.objects.create(
+            nome="Paula Operadora",
+            pode_operar_sistema=True,
+        )
+
+        resposta = self._post_criar_pedido(operador=str(operador.id))
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["sucesso"])
+        pedido = Pedido.objects.get(pk=dados["pedido_id"])
+        self.assertEqual(pedido.operador, "Paula Operadora")
+
+        resposta_detalhe = self.client.get(reverse("estoque:pedido_detalhe", args=[pedido.id]), secure=True)
+        self.assertContains(resposta_detalhe, "Paula Operadora")
+
+        resposta_lista = self.client.get(reverse("estoque:pedidos"), secure=True)
+        self.assertContains(resposta_lista, "Paula Operadora")
+
+    def test_pedido_antigo_sem_operador_continua_exibindo_sem_operador(self):
+        resposta = self._post_criar_pedido(operador="")
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["sucesso"])
+
+        resposta_detalhe = self.client.get(reverse("estoque:pedido_detalhe", args=[dados["pedido_id"]]), secure=True)
+        self.assertContains(resposta_detalhe, "Sem operador")
 
     def test_criar_pedido_com_cliente_e_itens_salva(self):
         """Criar pedido com cliente e itens deve salvar Pedido e ItemPedido"""
@@ -7832,11 +7938,11 @@ class PedidoTests(TestCase):
         self.assertNotContains(resposta_detalhe, "Itens pendentes")
 
         resposta_lista = self.client.get(reverse("estoque:pedidos"), secure=True)
-        self.assertContains(resposta_lista, f"#{pedido.id}")
+        self.assertContains(resposta_lista, reverse("estoque:pedido_detalhe", args=[pedido.id]))
         self.assertContains(resposta_lista, "Convertido em venda")
 
         resposta_abertos = self.client.get(reverse("estoque:pedidos"), {"status": Pedido.STATUS_ABERTO}, secure=True)
-        self.assertNotContains(resposta_abertos, f"#{pedido.id}")
+        self.assertNotContains(resposta_abertos, reverse("estoque:pedido_detalhe", args=[pedido.id]))
 
     def test_gravar_venda_de_pedido_com_item_zerado_grava_disponiveis_e_deixa_pendente(self):
         from .models import Pedido, ItemPedido
@@ -8236,14 +8342,14 @@ class PedidoTests(TestCase):
 
         resposta_bairro = self.client.get(reverse("estoque:pedidos"), {"localidade": "Centro"}, secure=True)
         self.assertEqual(resposta_bairro.status_code, 200)
-        self.assertContains(resposta_bairro, f"#{pedido_centro.id}")
-        self.assertNotContains(resposta_bairro, f"#{pedido_outro.id}")
+        self.assertContains(resposta_bairro, reverse("estoque:pedido_detalhe", args=[pedido_centro.id]))
+        self.assertNotContains(resposta_bairro, reverse("estoque:pedido_detalhe", args=[pedido_outro.id]))
         self.assertContains(resposta_bairro, "Centro")
 
         resposta_cidade = self.client.get(reverse("estoque:pedidos"), {"localidade": "Caucaia"}, secure=True)
         self.assertEqual(resposta_cidade.status_code, 200)
-        self.assertContains(resposta_cidade, f"#{pedido_outro.id}")
-        self.assertNotContains(resposta_cidade, f"#{pedido_centro.id}")
+        self.assertContains(resposta_cidade, reverse("estoque:pedido_detalhe", args=[pedido_outro.id]))
+        self.assertNotContains(resposta_cidade, reverse("estoque:pedido_detalhe", args=[pedido_centro.id]))
 
     def test_lista_de_pedidos_mantem_filtros_atuais_com_localidade(self):
         from .models import Pedido

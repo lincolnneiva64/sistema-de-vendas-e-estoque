@@ -148,7 +148,7 @@
     <header class="funcionarios-header">
       <div>
         <h1 class="funcionarios-title">Funcionarios</h1>
-        <p class="funcionarios-subtitle">Cadastro de funcionarios e habilitacao para receber checklist de entregas.</p>
+        <p class="funcionarios-subtitle">Cadastro de funcionarios, operadores do sistema e checklist de entregas.</p>
       </div>
       <div class="funcionarios-header-actions">
         <a href="{% url 'estoque:home' %}" class="funcionarios-btn funcionarios-btn-secondary">Voltar ao painel</a>
@@ -189,6 +189,7 @@
                   <th>Nome</th>
                   <th>WhatsApp</th>
                   <th>Status</th>
+                  <th>Operador</th>
                   <th>Checklist</th>
                   <th>Acoes</th>
                 </tr>
@@ -211,6 +212,13 @@
                         <span class="status-pill status-ativo">Ativo</span>
                       {% else %}
                         <span class="status-pill status-inativo">Inativo</span>
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if funcionario.ativo and funcionario.pode_operar_sistema %}
+                        <span class="status-pill status-sim">Sim</span>
+                      {% else %}
+                        <span class="status-pill status-nao">Nao</span>
                       {% endif %}
                     </td>
                     <td>
@@ -252,7 +260,7 @@
               {% if funcionario_selecionado %}Editar funcionario{% else %}Novo funcionario{% endif %}
             </h2>
             <span class="funcionarios-count">
-              {% if funcionario_selecionado %}{{ funcionario_selecionado.nome }} selecionado{% else %}{{ funcionarios_habilitados }} habilitado(s) para checklist{% endif %}
+              {% if funcionario_selecionado %}{{ funcionario_selecionado.nome }} selecionado{% else %}{{ funcionarios_operadores }} operador(es) do sistema{% endif %}
             </span>
           </div>
         </div>
@@ -283,6 +291,18 @@
             </div>
             <div class="funcionarios-boolean-control" role="group" aria-label="Pode receber checklist">
               {{ form.pode_receber_checklist }}
+              <button type="button" class="funcionarios-toggle-btn sim" data-boolean-value="1">Sim</button>
+              <button type="button" class="funcionarios-toggle-btn nao" data-boolean-value="0">Nao</button>
+            </div>
+          </div>
+
+          <div class="funcionarios-boolean" data-boolean-field="id_pode_operar_sistema">
+            <div>
+              <div class="funcionarios-boolean-title">Operador do sistema?</div>
+              <span class="funcionarios-boolean-text">Somente funcionarios ativos e marcados como Sim aparecem em Pedidos.</span>
+            </div>
+            <div class="funcionarios-boolean-control" role="group" aria-label="Operador do sistema">
+              {{ form.pode_operar_sistema }}
               <button type="button" class="funcionarios-toggle-btn sim" data-boolean-value="1">Sim</button>
               <button type="button" class="funcionarios-toggle-btn nao" data-boolean-value="0">Nao</button>
             </div>
@@ -327,6 +347,7 @@
     const whatsapp = document.getElementById("id_telefone_whatsapp");
     const ativo = document.getElementById("id_ativo");
     const podeReceberChecklist = document.getElementById("id_pode_receber_checklist");
+    const podeOperarSistema = document.getElementById("id_pode_operar_sistema");
 
     function normalizarTexto(texto) {
       return String(texto || "")
@@ -418,6 +439,10 @@
         if (checkbox === ativo && !checkbox.checked && podeReceberChecklist) {
           podeReceberChecklist.checked = false;
           podeReceberChecklist.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        if (checkbox === ativo && !checkbox.checked && podeOperarSistema) {
+          podeOperarSistema.checked = false;
+          podeOperarSistema.dispatchEvent(new Event("change", { bubbles: true }));
         }
         atualizarBooleano(container);
       });

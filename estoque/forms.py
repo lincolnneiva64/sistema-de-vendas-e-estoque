@@ -612,6 +612,7 @@ class FuncionarioForm(forms.ModelForm):
             "nome",
             "telefone_whatsapp",
             "pode_receber_checklist",
+            "pode_operar_sistema",
             "observacoes",
             "ativo",
         ]
@@ -628,6 +629,9 @@ class FuncionarioForm(forms.ModelForm):
                 "autocomplete": "off",
             }),
             "pode_receber_checklist": forms.CheckboxInput(attrs={
+                "class": "form-check-input",
+            }),
+            "pode_operar_sistema": forms.CheckboxInput(attrs={
                 "class": "form-check-input",
             }),
             "observacoes": forms.Textarea(attrs={
@@ -658,6 +662,7 @@ class FuncionarioForm(forms.ModelForm):
         cleaned_data = super().clean()
         telefone = Funcionario.normalizar_whatsapp(cleaned_data.get("telefone_whatsapp"))
         pode_receber_checklist = cleaned_data.get("pode_receber_checklist")
+        pode_operar_sistema = cleaned_data.get("pode_operar_sistema")
         ativo = cleaned_data.get("ativo")
 
         if pode_receber_checklist and not telefone:
@@ -668,6 +673,8 @@ class FuncionarioForm(forms.ModelForm):
 
         if pode_receber_checklist and ativo is False:
             cleaned_data["pode_receber_checklist"] = False
+        if pode_operar_sistema and ativo is False:
+            cleaned_data["pode_operar_sistema"] = False
 
         return cleaned_data
 

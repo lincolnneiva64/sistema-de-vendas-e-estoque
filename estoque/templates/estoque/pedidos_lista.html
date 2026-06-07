@@ -671,7 +671,7 @@
                                     {% endif %}
                                 </td>
                                 <td class="total" data-label="Total">R$ {{ pedido.total|floatformat:"2" }}</td>
-                                <td class="pedido-operador col-operador" data-label="Operador">{{ pedido.operador|default:"-" }}</td>
+                                <td class="pedido-operador col-operador" data-label="Operador">{{ pedido.operador|default:"Sem operador" }}</td>
                                 <td class="col-acoes" data-label="Acao">
                                     <a href="{% url 'estoque:pedido_detalhe' pedido.id %}" class="link-pedido">Ver</a>
                                 </td>

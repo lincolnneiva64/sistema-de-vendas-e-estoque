@@ -243,12 +243,13 @@ class Funcionario(models.Model):
     telefone_whatsapp_normalizado = models.CharField(max_length=20, blank=True, null=True)
     ativo = models.BooleanField(default=True)
     pode_receber_checklist = models.BooleanField(default=False)
+    pode_operar_sistema = models.BooleanField(default=False)
     observacoes = models.TextField(blank=True, null=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["-ativo", "-pode_receber_checklist", "nome"]
+        ordering = ["-ativo", "-pode_operar_sistema", "-pode_receber_checklist", "nome"]
         verbose_name = "Funcionario"
         verbose_name_plural = "Funcionarios"
 
@@ -262,6 +263,10 @@ class Funcionario(models.Model):
     @classmethod
     def habilitados_para_checklist(cls):
         return cls.objects.filter(ativo=True, pode_receber_checklist=True).order_by("nome")
+
+    @classmethod
+    def operadores_do_sistema(cls):
+        return cls.objects.filter(ativo=True, pode_operar_sistema=True).order_by("nome")
 
     def clean(self):
         telefone_normalizado = self.normalizar_whatsapp(self.telefone_whatsapp)
@@ -286,6 +291,7 @@ class Funcionario(models.Model):
 
         if not self.ativo:
             self.pode_receber_checklist = False
+            self.pode_operar_sistema = False
 
         self.full_clean()
         super().save(*args, **kwargs)

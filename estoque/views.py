@@ -1601,6 +1601,7 @@ def funcionarios(request):
 
     funcionarios_qs = Funcionario.objects.all().order_by(
         "-ativo",
+        "-pode_operar_sistema",
         "-pode_receber_checklist",
         "nome",
     )
@@ -1622,8 +1623,10 @@ def funcionarios(request):
             funcionario.ativo = request.POST.get("ativo") == "1"
             if not funcionario.ativo:
                 funcionario.pode_receber_checklist = False
+                funcionario.pode_operar_sistema = False
             funcionario.save(update_fields=[
                 "ativo",
+                "pode_operar_sistema",
                 "pode_receber_checklist",
                 "telefone_whatsapp_normalizado",
                 "atualizado_em",
@@ -1655,12 +1658,17 @@ def funcionarios(request):
             form = FuncionarioForm(initial={
                 "ativo": True,
                 "pode_receber_checklist": False,
+                "pode_operar_sistema": False,
             })
 
     funcionarios_lista = list(funcionarios_qs)
     funcionarios_habilitados = sum(
         1 for funcionario in funcionarios_lista
         if funcionario.ativo and funcionario.pode_receber_checklist
+    )
+    funcionarios_operadores = sum(
+        1 for funcionario in funcionarios_lista
+        if funcionario.ativo and funcionario.pode_operar_sistema
     )
 
     return render(
@@ -1673,6 +1681,7 @@ def funcionarios(request):
             "termo": termo,
             "total_funcionarios": len(funcionarios_lista),
             "funcionarios_habilitados": funcionarios_habilitados,
+            "funcionarios_operadores": funcionarios_operadores,
         },
     )
 
@@ -8115,11 +8124,20 @@ def _decimal_pedido(valor, casas, padrao="0"):
     return decimal.quantize(quantizador)
 
 
+def _operadores_pedido_queryset():
+    return Funcionario.objects.filter(
+        ativo=True,
+        pode_operar_sistema=True,
+    ).only("id", "nome").order_by("nome")
+
+
 def _validar_dados_pedido_post(request):
     data_pedido_str = request.POST.get("data_pedido", "")
     cliente_id = request.POST.get("cliente_id", "")
     data_prevista_entrega_str = request.POST.get("data_prevista_entrega", "")
-    operador = request.POST.get("operador", "").strip()
+    operador, resposta_operador = _operador_pedido_por_post(request)
+    if resposta_operador:
+        return None, resposta_operador
     observacao = request.POST.get("observacao", "").strip()
 
     if not data_pedido_str:
@@ -8165,6 +8183,24 @@ def _validar_dados_pedido_post(request):
         "observacao": observacao,
         "itens": itens,
     }, None
+
+
+def _operador_pedido_por_post(request):
+    operador = request.POST.get("operador", "").strip()
+    if not operador:
+        return "", None
+
+    if not operador.isdigit():
+        return operador, None
+
+    funcionario = _operadores_pedido_queryset().filter(pk=int(operador)).first()
+    if not funcionario:
+        return "", JsonResponse({
+            "sucesso": False,
+            "mensagem": "Operador invalido. Selecione um funcionario ativo marcado como operador do sistema.",
+        }, status=400)
+
+    return funcionario.nome, None
 
 
 def _item_pedido_inicial(item):
@@ -8327,7 +8363,9 @@ def pedido_criar(request):
             data_pedido_str = request.POST.get("data_pedido", "")
             cliente_id = request.POST.get("cliente_id", "")
             data_prevista_entrega_str = request.POST.get("data_prevista_entrega", "")
-            operador = request.POST.get("operador", "").strip()
+            operador, resposta_operador = _operador_pedido_por_post(request)
+            if resposta_operador:
+                return resposta_operador
             observacao = request.POST.get("observacao", "").strip()
             
             # Validar dados obrigatórios
@@ -8436,10 +8474,12 @@ def pedido_criar(request):
     # GET: mostrar formulário de criação
     produtos = Produto.objects.filter(excluido=False).order_by("nome")
     clientes = Cliente.objects.filter(ativo=True).order_by("nome")
-    
+    operadores_pedido = list(_operadores_pedido_queryset())
+
     return render(request, "estoque/pedido_criar.html", {
         "produtos": produtos,
         "clientes": clientes,
+        "operadores_pedido": operadores_pedido,
     })
 
 
@@ -8543,10 +8583,16 @@ def pedido_editar(request, pk):
 
     produtos = Produto.objects.filter(excluido=False).order_by("nome")
     clientes = Cliente.objects.filter(ativo=True).order_by("nome")
+    operadores_pedido = list(_operadores_pedido_queryset())
+    operador_atual_habilitado = bool(
+        pedido.operador and any(funcionario.nome == pedido.operador for funcionario in operadores_pedido)
+    )
 
     return render(request, "estoque/pedido_criar.html", {
         "produtos": produtos,
         "clientes": clientes,
+        "operadores_pedido": operadores_pedido,
+        "operador_atual_habilitado": operador_atual_habilitado,
         "pedido": pedido,
         "pedido_modo_edicao": True,
         "pedido_itens_iniciais": [_item_pedido_inicial(item) for item in itens_editaveis],
