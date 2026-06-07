@@ -66,6 +66,13 @@
             background-color: #15803d;
             transform: translateY(-1px);
         }
+
+        .btn-criar:active,
+        .btn-filtrar:active,
+        .btn-limpar:active,
+        .link-pedido:active {
+            transform: translateY(1px) scale(0.99);
+        }
         
         .filtros {
             background: white;
@@ -380,8 +387,42 @@
         }
 
         @media (max-width: 620px) {
+            .container {
+                padding: 10px;
+            }
+
+            .header {
+                padding: 14px;
+                border-radius: 10px;
+            }
+
+            .header h1 {
+                font-size: 24px;
+            }
+
             .filtros-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .filtros {
+                padding: 12px;
+                border-radius: 10px;
+            }
+
+            .filtros-grid select,
+            .filtros-grid input,
+            .btn-criar,
+            .btn-filtrar,
+            .btn-limpar,
+            .link-pedido {
+                min-height: 48px;
+                font-size: 16px;
+            }
+
+            .filtros-botoes {
+                align-items: stretch;
+                flex-direction: column;
+                gap: 8px;
             }
 
             .filtros-botoes,
@@ -389,6 +430,125 @@
             .btn-filtrar,
             .btn-limpar {
                 width: 100%;
+            }
+
+            .tabela-container {
+                overflow: visible;
+                border: 0;
+                background: transparent;
+                box-shadow: none;
+            }
+
+            .tabela,
+            .tabela tbody,
+            .tabela tr,
+            .tabela td {
+                display: block;
+                width: 100%;
+            }
+
+            .tabela {
+                min-width: 0;
+                border-collapse: separate;
+                table-layout: auto;
+            }
+
+            .tabela thead {
+                display: none;
+            }
+
+            .tabela tbody {
+                display: grid;
+                gap: 12px;
+            }
+
+            .tabela tbody tr {
+                border: 1px solid #d8e2ef;
+                border-left: 6px solid #16a34a;
+                border-radius: 10px;
+                background: #ffffff;
+                padding: 12px;
+                box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+            }
+
+            .tabela tbody tr:hover {
+                background: #ffffff;
+            }
+
+            .tabela td {
+                border-bottom: 1px solid #edf1f6;
+                padding: 8px 0;
+                text-align: left;
+            }
+
+            .tabela td:last-child {
+                border-bottom: 0;
+                padding-bottom: 0;
+            }
+
+            .tabela td::before {
+                content: attr(data-label);
+                display: block;
+                margin-bottom: 4px;
+                color: #64748b;
+                font-size: 11px;
+                font-weight: 900;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+            }
+
+            .tabela .col-id {
+                padding-bottom: 10px;
+                border-bottom-color: #bbf7d0;
+            }
+
+            .tabela .col-id::before {
+                color: #166534;
+            }
+
+            .pedido-id {
+                font-size: 20px;
+            }
+
+            .pedido-cliente {
+                font-size: 16px;
+                line-height: 1.25;
+            }
+
+            .pedido-data,
+            .pedido-entrega,
+            .pedido-localidade,
+            .pedido-operador,
+            .total {
+                text-align: left;
+                white-space: normal;
+            }
+
+            .status-badge {
+                min-width: 0;
+                width: 100%;
+                min-height: 38px;
+                border-radius: 8px;
+                font-size: 13px;
+            }
+
+            .link-pedido {
+                width: 100%;
+                border-color: #2563eb;
+                background: #2563eb;
+                color: #ffffff;
+                font-weight: 900;
+            }
+
+            .link-pedido:hover {
+                background: #1d4ed8;
+            }
+
+            .sem-pedidos {
+                padding: 26px 14px;
+                border: 1px solid #e1e7ef;
+                border-radius: 10px;
+                background: #ffffff;
             }
         }
     </style>
@@ -476,16 +636,16 @@
                     <tbody>
                         {% for pedido in pedidos %}
                             <tr>
-                                <td class="col-id"><span class="pedido-id">#{{ pedido.id }}</span></td>
-                                <td class="pedido-data">{{ pedido.data_pedido|date:"d/m/Y" }}</td>
-                                <td class="pedido-cliente col-cliente">
+                                <td class="col-id" data-label="Pedido"><span class="pedido-id">#{{ pedido.id }}</span></td>
+                                <td class="pedido-data" data-label="Data">{{ pedido.data_pedido|date:"d/m/Y" }}</td>
+                                <td class="pedido-cliente col-cliente" data-label="Cliente">
                                     {% if pedido.cliente %}
                                         {{ pedido.cliente.nome }}
                                     {% else %}
                                         <em>Não informado</em>
                                     {% endif %}
                                 </td>
-                                <td class="pedido-localidade col-localidade">
+                                <td class="pedido-localidade col-localidade" data-label="Rota/Bairro/Cidade">
                                     {% if pedido.cliente %}
                                         {% if pedido.cliente.bairro %}
                                             {{ pedido.cliente.bairro }}
@@ -498,21 +658,21 @@
                                         -
                                     {% endif %}
                                 </td>
-                                <td class="col-status">
+                                <td class="col-status" data-label="Status">
                                     <span class="status-badge status-{% if pedido.status == 'aberto' %}aberto{% elif pedido.status == 'cancelado' %}cancelado{% elif pedido.status == 'parcial' %}parcial{% else %}convertido{% endif %}">
                                         {{ pedido.get_status_display }}
                                     </span>
                                 </td>
-                                <td class="pedido-entrega">
+                                <td class="pedido-entrega" data-label="Entrega prevista">
                                     {% if pedido.data_prevista_entrega %}
                                         {{ pedido.data_prevista_entrega|date:"d/m/Y" }}
                                     {% else %}
                                         -
                                     {% endif %}
                                 </td>
-                                <td class="total">R$ {{ pedido.total|floatformat:"2" }}</td>
-                                <td class="pedido-operador col-operador">{{ pedido.operador|default:"-" }}</td>
-                                <td class="col-acoes">
+                                <td class="total" data-label="Total">R$ {{ pedido.total|floatformat:"2" }}</td>
+                                <td class="pedido-operador col-operador" data-label="Operador">{{ pedido.operador|default:"-" }}</td>
+                                <td class="col-acoes" data-label="Acao">
                                     <a href="{% url 'estoque:pedido_detalhe' pedido.id %}" class="link-pedido">Ver</a>
                                 </td>
                             </tr>
