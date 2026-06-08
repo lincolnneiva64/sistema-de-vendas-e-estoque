@@ -1487,6 +1487,102 @@
                 gap: 7px;
             }
         }
+
+        .modal-confirmacao-saida {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 999;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-confirmacao-saida.visivel {
+            display: flex;
+        }
+
+        .modal-confirmacao-saida-content {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 360px;
+            width: calc(100% - 32px);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(40px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal-confirmacao-saida-titulo {
+            font-size: 18px;
+            font-weight: 800;
+            color: #123c26;
+            margin-bottom: 12px;
+            line-height: 1.3;
+        }
+
+        .modal-confirmacao-saida-mensagem {
+            font-size: 14px;
+            color: #476154;
+            margin-bottom: 24px;
+            line-height: 1.4;
+        }
+
+        .modal-confirmacao-saida-acoes {
+            display: flex;
+            gap: 10px;
+            flex-direction: column;
+        }
+
+        .modal-confirmacao-saida-btn {
+            min-height: 44px;
+            border: 1px solid #b7d8c0;
+            border-radius: 6px;
+            padding: 10px 16px;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+        }
+
+        .modal-confirmacao-saida-btn-continuar {
+            background: #ffffff;
+            color: #14532d;
+            border-color: #8bc59d;
+        }
+
+        .modal-confirmacao-saida-btn-continuar:hover {
+            background: #f4fff7;
+            box-shadow: 0 5px 12px rgba(20, 83, 45, 0.13);
+        }
+
+        .modal-confirmacao-saida-btn-sair {
+            background: #fee2e2;
+            color: #991b1b;
+            border-color: #fecaca;
+        }
+
+        .modal-confirmacao-saida-btn-sair:hover {
+            background: #fecaca;
+        }
+
+        .modal-confirmacao-saida-btn:active {
+            transform: translateY(1px) scale(0.99);
+        }
     </style>
 </head>
 <body>
@@ -1517,6 +1613,17 @@
         </div>
 
         <div id="mensagem-tela" class="mensagem-tela" aria-live="polite"></div>
+
+        <div id="modal-confirmacao-saida" class="modal-confirmacao-saida">
+            <div class="modal-confirmacao-saida-content">
+                <div class="modal-confirmacao-saida-titulo">Sair sem salvar?</div>
+                <div class="modal-confirmacao-saida-mensagem">Os dados digitados que ainda não foram salvos serão perdidos.</div>
+                <div class="modal-confirmacao-saida-acoes">
+                    <button type="button" class="modal-confirmacao-saida-btn modal-confirmacao-saida-btn-continuar" id="modal-continuar-editando">Continuar editando</button>
+                    <button type="button" class="modal-confirmacao-saida-btn modal-confirmacao-saida-btn-sair" id="modal-sair-sem-salvar">Sair sem salvar</button>
+                </div>
+            </div>
+        </div>
 
         <form method="POST" id="form-pedido">
             {% csrf_token %}
@@ -3197,10 +3304,49 @@
         avancarComEnter(dataPrevistaEntrega, operadorPedido);
         avancarComEnter(operadorPedido, produtoBusca);
 
+        const modalConfirmacaoSaida = document.getElementById("modal-confirmacao-saida");
+        const btnModalContinuar = document.getElementById("modal-continuar-editando");
+        const btnModalSair = document.getElementById("modal-sair-sem-salvar");
+        let urlSaidaPendente = null;
+
+        function isMobilePedido() {
+            return window.matchMedia("(max-width: 768px)").matches;
+        }
+
+        function mostrarModalConfirmacaoSaida(urlDestino) {
+            urlSaidaPendente = urlDestino;
+            if (modalConfirmacaoSaida) {
+                modalConfirmacaoSaida.classList.add("visivel");
+            }
+        }
+
+        function fecharModalConfirmacaoSaida() {
+            urlSaidaPendente = null;
+            if (modalConfirmacaoSaida) {
+                modalConfirmacaoSaida.classList.remove("visivel");
+            }
+        }
+
+        btnModalContinuar?.addEventListener("click", () => {
+            fecharModalConfirmacaoSaida();
+        });
+
+        btnModalSair?.addEventListener("click", () => {
+            if (urlSaidaPendente) {
+                window.location.href = urlSaidaPendente;
+            }
+        });
+
         document.getElementById("btn-cancelar-form")?.addEventListener("click", (event) => {
-            const confirmarSaida = confirm("Sair sem salvar o pedido? Dados digitados que ainda nao foram salvos serao perdidos.");
-            if (!confirmarSaida) {
+            if (isMobilePedido()) {
                 event.preventDefault();
+                const hrefAtual = event.currentTarget.getAttribute("href");
+                mostrarModalConfirmacaoSaida(hrefAtual);
+            } else {
+                const confirmarSaida = confirm("Sair sem salvar o pedido? Dados digitados que ainda nao foram salvos serao perdidos.");
+                if (!confirmarSaida) {
+                    event.preventDefault();
+                }
             }
         });
 
