@@ -2249,6 +2249,61 @@
             mensagemTela.textContent = "";
         }
 
+        function validacaoVisualMobilePedidoAtiva() {
+            return window.matchMedia("(max-width: 768px)").matches;
+        }
+
+        function atualizarValidacaoNativaPedido() {
+            if (validacaoVisualMobilePedidoAtiva()) {
+                formPedido.setAttribute("novalidate", "novalidate");
+            } else {
+                formPedido.removeAttribute("novalidate");
+            }
+        }
+
+        function marcarCampoPedidoInvalido(campo, mensagem) {
+            if (!campo) return;
+            mostrarMensagem("erro", mensagem);
+            if (validacaoVisualMobilePedidoAtiva()) {
+                campo.classList.add("campo-invalido");
+                campo.scrollIntoView({ behavior: "smooth", block: "center" });
+                window.setTimeout(() => {
+                    campo.focus({ preventScroll: true });
+                    if (typeof campo.select === "function" && campo.tagName !== "SELECT") campo.select();
+                }, 140);
+                return;
+            }
+            campo.focus();
+            if (typeof campo.select === "function" && campo.tagName !== "SELECT") campo.select();
+        }
+
+        function validarCamposNativosMobilePedido() {
+            if (!validacaoVisualMobilePedidoAtiva()) return true;
+
+            if (!dataPedido.value) {
+                marcarCampoPedidoInvalido(dataPedido, "Informe a data do pedido.");
+                return false;
+            }
+
+            if (!clientePedido.value) {
+                focarClienteObrigatorio();
+                return false;
+            }
+
+            return true;
+        }
+
+        function limparErroMobileAoEditar(campo) {
+            if (!campo) return;
+            const limpar = () => {
+                if (!validacaoVisualMobilePedidoAtiva()) return;
+                campo.classList.remove("campo-invalido");
+                if (mensagemTela.classList.contains("erro")) limparMensagem();
+            };
+            campo.addEventListener("input", limpar);
+            campo.addEventListener("change", limpar);
+        }
+
         function atualizarEspacoRodape() {
             const altura = rodapePedido ? Math.ceil(rodapePedido.getBoundingClientRect().height) : 76;
             document.body.style.setProperty("--rodape-pedido-altura", `${altura}px`);
@@ -2668,9 +2723,7 @@
             const unidade = itemUnidade.value.trim();
 
             if (!produto) {
-                mostrarMensagem("erro", "Selecione um produto cadastrado para o pedido.");
-                produtoBusca.focus();
-                produtoBusca.select();
+                marcarCampoPedidoInvalido(produtoBusca, "Selecione um produto cadastrado para o pedido.");
                 return;
             }
 
@@ -2681,16 +2734,17 @@
             }
 
             if (!quantidadePedidoValida(quantidade)) {
-                mostrarMensagem("erro", `Informe uma quantidade entre 0,001 e ${formatarQuantidadeCampo(quantidadeMaximaPedido)}.`);
-                itemQuantidade.focus();
-                itemQuantidade.select();
+                marcarCampoPedidoInvalido(itemQuantidade, `Informe uma quantidade entre 0,001 e ${formatarQuantidadeCampo(quantidadeMaximaPedido)}.`);
+                return;
+            }
+
+            if (validacaoVisualMobilePedidoAtiva() && !unidade) {
+                marcarCampoPedidoInvalido(itemUnidade, "Informe a unidade do item.");
                 return;
             }
 
             if (!Number.isFinite(precoUnitario) || precoUnitario <= 0) {
-                mostrarMensagem("erro", "Informe um preco maior que zero.");
-                itemPreco.focus();
-                itemPreco.select();
+                marcarCampoPedidoInvalido(itemPreco, "Informe um preco maior que zero.");
                 return;
             }
 
@@ -2981,6 +3035,8 @@
             }
         });
 
+        [dataPedido, produtoBusca, itemQuantidade, itemUnidade, itemPreco].forEach(limparErroMobileAoEditar);
+
         btnAdicionar.addEventListener("click", adicionarItem);
 
         btnSugestoesToggle.addEventListener("click", () => {
@@ -3198,6 +3254,10 @@
             if (salvamentoEmAndamento) return;
             limparMensagem();
 
+            if (!validarCamposNativosMobilePedido()) {
+                return;
+            }
+
             if (!validarClienteObrigatorio()) {
                 return;
             }
@@ -3252,6 +3312,7 @@
             });
         });
 
+        atualizarValidacaoNativaPedido();
         atualizarContextoProduto(null);
         atualizarTabela();
         prepararBuscaClienteInicial();
@@ -3259,6 +3320,7 @@
         prepararSugestoesClienteInicial();
         atualizarEspacoRodape();
         window.addEventListener("resize", () => {
+            atualizarValidacaoNativaPedido();
             atualizarEspacoRodape();
             atualizarAlvoLabelCliente();
         });
