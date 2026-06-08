@@ -338,7 +338,7 @@
             right: 0;
             z-index: 40;
             display: none;
-            max-height: min(246px, calc(100vh - var(--rodape-pedido-altura) - 210px));
+            max-height: 246px;
             overflow-y: auto;
             border: 1px solid #91c99f;
             border-radius: 8px;
@@ -609,12 +609,13 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 4px;
+            gap: 6px;
             white-space: nowrap;
         }
 
         .btn-sugestao-qtd {
-            width: 28px;
+            width: 34px;
+            min-width: 34px;
             min-height: 30px;
             border: 1px solid #b7d8c0;
             border-radius: 6px;
@@ -836,6 +837,27 @@
             font-size: 12px;
             font-weight: 850;
             line-height: 1;
+        }
+
+        .produto-lancamento-info {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            margin-left: 8px;
+            color: #7a4b00;
+            font-size: 12px;
+            font-weight: 850;
+        }
+
+        .produto-lancamento-info.visivel {
+            display: inline-flex;
+        }
+
+        .produto-label-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 19px;
         }
 
         .item-total {
@@ -1084,7 +1106,7 @@
             }
 
             .produto-sugestoes {
-                max-height: min(58vh, 360px);
+                max-height: 260px;
             }
 
             .produto-sugestao {
@@ -1596,7 +1618,12 @@
 
                 <div class="lancamento-grid">
                     <div class="form-group">
-                        <label for="produto-busca" class="campo-obrigatorio">Produto</label>
+                        <div class="produto-label-row">
+                            <label for="produto-busca" class="campo-obrigatorio">Produto</label>
+                            <span id="produto-estoque-badge-wrap" class="produto-lancamento-info">
+                                Estoque <span id="produto-estoque-badge" class="item-estoque-badge">0</span>
+                            </span>
+                        </div>
                         <div class="produto-busca-wrap">
                             <input id="produto-busca" name="produto_busca" autocomplete="off" placeholder="Digite ou selecione o produto">
                             <div class="produto-sugestoes" id="produto-sugestoes"></div>
@@ -1606,7 +1633,7 @@
 
                     <div class="form-group">
                         <label for="item-quantidade" class="campo-obrigatorio">Quantidade</label>
-                        <input id="item-quantidade" type="number" min="0" step="0.001" placeholder="Qtd">
+                        <input id="item-quantidade" type="text" inputmode="decimal" autocomplete="off" placeholder="Qtd">
                     </div>
 
                     <div class="form-group">
@@ -1616,7 +1643,7 @@
 
                     <div class="form-group">
                         <label for="item-preco" class="campo-obrigatorio">Preco</label>
-                        <input id="item-preco" type="number" min="0" step="0.01" placeholder="0,00">
+                        <input id="item-preco" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00">
                     </div>
 
                     <button type="button" class="btn btn-adicionar" id="btn-adicionar-item">Adicionar item</button>
@@ -1751,6 +1778,8 @@
         const produtoBusca = document.getElementById("produto-busca");
         const produtoSugestoes = document.getElementById("produto-sugestoes");
         const produtoId = document.getElementById("produto-id");
+        const produtoEstoqueBadgeWrap = document.getElementById("produto-estoque-badge-wrap");
+        const produtoEstoqueBadge = document.getElementById("produto-estoque-badge");
         const itemQuantidade = document.getElementById("item-quantidade");
         const itemUnidade = document.getElementById("item-unidade");
         const itemPreco = document.getElementById("item-preco");
@@ -1778,9 +1807,14 @@
         let clientesBuscaLista = [];
         let clienteBuscaAtivo = -1;
         let clienteBuscaRequisicao = 0;
+        const quantidadeMaximaPedido = 999;
 
         function normalizarTexto(valor) {
-            return String(valor || "").trim().toLowerCase();
+            return String(valor || "")
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .trim()
+                .toLowerCase();
         }
 
         function campoClienteDigitavelVisivel() {
@@ -2047,6 +2081,36 @@
             return Number(valor || 0).toFixed(3).replace(/\.?0+$/, "").replace(".", ",") || "0";
         }
 
+        function formatarQuantidadeCampo(valor) {
+            return String(formatarQuantidadeSugestao(valor));
+        }
+
+        function formatarPrecoCampo(valor) {
+            return Number(valor || 0).toFixed(2).replace(".", ",");
+        }
+
+        function numeroDecimalPedido(valor) {
+            let texto = String(valor ?? "").trim().replace("R$", "").replace(/\s/g, "");
+            if (!texto) return NaN;
+            if (texto.includes(",") && texto.includes(".")) {
+                texto = texto.replace(/\./g, "").replace(",", ".");
+            } else {
+                texto = texto.replace(",", ".");
+            }
+            return Number(texto);
+        }
+
+        function quantidadePedidoValida(quantidade) {
+            return Number.isFinite(quantidade) && quantidade > 0 && quantidade <= quantidadeMaximaPedido;
+        }
+
+        function ajustarQuantidadeInput(campo, direcao) {
+            const atual = numeroDecimalPedido(campo.value);
+            const base = quantidadePedidoValida(atual) ? atual : 0;
+            const proxima = Math.max(1, Math.min(quantidadeMaximaPedido, Math.trunc(base) + direcao));
+            campo.value = formatarQuantidadeCampo(proxima);
+        }
+
         function indiceSugestaoPorProdutoId(produtoId) {
             return sugestoesClienteLista.findIndex((sugestao) => String(sugestao.produto_id) === String(produtoId));
         }
@@ -2241,17 +2305,42 @@
                 || null;
         }
 
+        function localizarProdutoExato(valor) {
+            const termo = normalizarTexto(valor);
+            if (!termo) return null;
+            return produtos.find((produto) => normalizarTexto(produto.nome) === termo) || null;
+        }
+
+        function produtoPorId(id) {
+            return produtos.find((produto) => String(produto.id) === String(id)) || null;
+        }
+
         function filtrarProdutos(valor) {
             const termo = normalizarTexto(valor);
-            if (!termo) return produtos.slice(0, 6);
+            if (!termo) return produtos;
 
             const exatos = produtos.filter((produto) => normalizarTexto(produto.nome).startsWith(termo));
+            const palavraInicial = produtos.filter((produto) => {
+                const nome = normalizarTexto(produto.nome);
+                return !nome.startsWith(termo) && nome.split(/\s+/).some((parte) => parte.startsWith(termo));
+            });
             const parciais = produtos.filter((produto) => {
                 const nome = normalizarTexto(produto.nome);
-                return !nome.startsWith(termo) && nome.includes(termo);
+                return !nome.startsWith(termo)
+                    && !nome.split(/\s+/).some((parte) => parte.startsWith(termo))
+                    && nome.includes(termo);
             });
 
-            return exatos.concat(parciais).slice(0, 6);
+            const correspondentes = exatos.concat(palavraInicial, parciais);
+            if (!correspondentes.length) return [];
+
+            const idsCorrespondentes = new Set(correspondentes.map((produto) => String(produto.id)));
+            const ultimoIndexCorrespondente = Math.max(...correspondentes.map((produto) => indiceProduto(produto)));
+            const continuacaoOrdenada = produtos
+                .slice(ultimoIndexCorrespondente + 1)
+                .filter((produto) => !idsCorrespondentes.has(String(produto.id)));
+
+            return correspondentes.concat(continuacaoOrdenada);
         }
 
         function produtoCombinaComTermo(produto, termo) {
@@ -2306,9 +2395,13 @@
             sugestaoAtiva = -1;
         }
 
-        function renderizarSugestoes() {
+        function renderizarSugestoes(opcoes = {}) {
+            const produtoAtivoId = produtosSugeridos[sugestaoAtiva]?.id;
             produtosSugeridos = filtrarProdutos(produtoBusca.value);
-            sugestaoAtiva = produtosSugeridos.length ? 0 : -1;
+            const novoIndexAtivo = produtosSugeridos.findIndex((produto) => String(produto.id) === String(produtoAtivoId));
+            sugestaoAtiva = opcoes.resetarAtivo
+                ? (produtosSugeridos.length ? 0 : -1)
+                : (novoIndexAtivo !== -1 ? novoIndexAtivo : (produtosSugeridos.length ? 0 : -1));
             produtoSugestoes.innerHTML = "";
 
             if (!produtosSugeridos.length) {
@@ -2321,6 +2414,7 @@
                 btn.type = "button";
                 btn.className = "produto-sugestao" + (index === sugestaoAtiva ? " ativo" : "");
                 btn.dataset.index = index;
+                btn.dataset.produtoId = produto.id;
                 btn.innerHTML = `
                     <span class="produto-sugestao-nome">${escaparHtml(produto.nome)}</span>
                     <span class="produto-sugestao-meta">Estoque ref.: ${produto.estoque} | ${escaparHtml(produto.unidade || "sem unidade")} | ${escaparHtml(produto.categoria || "sem categoria")}</span>
@@ -2332,13 +2426,30 @@
             manterLancamentoVisivel();
         }
 
+        function rolarSugestaoAtivaParaVisivel(btn) {
+            if (!btn) return;
+            const topo = btn.offsetTop;
+            const base = topo + btn.offsetHeight;
+            if (topo < produtoSugestoes.scrollTop) {
+                produtoSugestoes.scrollTop = topo;
+            } else if (base > produtoSugestoes.scrollTop + produtoSugestoes.clientHeight) {
+                produtoSugestoes.scrollTop = base - produtoSugestoes.clientHeight;
+            }
+        }
+
         function marcarSugestaoAtiva(novoIndex) {
             if (!produtosSugeridos.length) return;
-            sugestaoAtiva = (novoIndex + produtosSugeridos.length) % produtosSugeridos.length;
+            sugestaoAtiva = Math.max(0, Math.min(novoIndex, produtosSugeridos.length - 1));
+            const produto = produtosSugeridos[sugestaoAtiva];
+            if (produto) {
+                produtoSelecionado = produto;
+                produtoId.value = produto.id;
+                atualizarContextoProduto(produto);
+            }
 
             produtoSugestoes.querySelectorAll(".produto-sugestao").forEach((btn, index) => {
                 btn.classList.toggle("ativo", index === sugestaoAtiva);
-                if (index === sugestaoAtiva) btn.scrollIntoView({ block: "nearest" });
+                if (index === sugestaoAtiva) rolarSugestaoAtivaParaVisivel(btn);
             });
         }
 
@@ -2350,7 +2461,7 @@
             produtoBusca.value = produto.nome;
             produtoId.value = produto.id;
             itemUnidade.value = produto.unidade || "";
-            itemPreco.value = produto.preco > 0 ? produto.preco.toFixed(2) : "";
+            itemPreco.value = produto.preco > 0 ? formatarPrecoCampo(produto.preco) : "";
             atualizarContextoProduto(produto);
             fecharSugestoes();
             return true;
@@ -2364,6 +2475,10 @@
             const avisoEl = document.getElementById("ctx-aviso");
 
             avisoBox.classList.remove("aviso");
+            if (produtoEstoqueBadgeWrap && produtoEstoqueBadge) {
+                produtoEstoqueBadgeWrap.classList.toggle("visivel", Boolean(produto));
+                produtoEstoqueBadge.textContent = produto ? formatarEstoqueItem(produto.estoque) : "0";
+            }
 
             if (!produto) {
                 estoqueEl.textContent = "Selecione";
@@ -2389,7 +2504,7 @@
         }
 
         function selecionarProdutoPeloTexto() {
-            produtoSelecionado = localizarProduto(produtoBusca.value);
+            produtoSelecionado = produtoPorId(produtoId.value) || localizarProdutoExato(produtoBusca.value);
             produtoId.value = produtoSelecionado ? produtoSelecionado.id : "";
             atualizarContextoProduto(produtoSelecionado);
 
@@ -2397,7 +2512,7 @@
                 produtoBusca.value = produtoSelecionado.nome;
                 produtoId.value = produtoSelecionado.id;
                 if (!itemUnidade.value) itemUnidade.value = produtoSelecionado.unidade || "";
-                if (!Number(itemPreco.value) && produtoSelecionado.preco > 0) itemPreco.value = produtoSelecionado.preco.toFixed(2);
+                if (!numeroDecimalPedido(itemPreco.value) && produtoSelecionado.preco > 0) itemPreco.value = formatarPrecoCampo(produtoSelecionado.preco);
                 fecharSugestoes();
             }
 
@@ -2491,8 +2606,8 @@
         function adicionarItem() {
             limparMensagem();
             const produto = selecionarProdutoPeloTexto();
-            const quantidade = Number(String(itemQuantidade.value).replace(",", "."));
-            const precoUnitario = Number(String(itemPreco.value).replace(",", "."));
+            const quantidade = numeroDecimalPedido(itemQuantidade.value);
+            const precoUnitario = numeroDecimalPedido(itemPreco.value);
             const unidade = itemUnidade.value.trim();
 
             if (!produto) {
@@ -2508,14 +2623,14 @@
                 return;
             }
 
-            if (!quantidade || quantidade <= 0) {
-                mostrarMensagem("erro", "Informe uma quantidade maior que zero.");
+            if (!quantidadePedidoValida(quantidade)) {
+                mostrarMensagem("erro", `Informe uma quantidade entre 0,001 e ${formatarQuantidadeCampo(quantidadeMaximaPedido)}.`);
                 itemQuantidade.focus();
                 itemQuantidade.select();
                 return;
             }
 
-            if (!precoUnitario || precoUnitario <= 0) {
+            if (!Number.isFinite(precoUnitario) || precoUnitario <= 0) {
                 mostrarMensagem("erro", "Informe um preco maior que zero.");
                 itemPreco.focus();
                 itemPreco.select();
@@ -2576,14 +2691,20 @@
             }
         }
 
-        function atualizarCampoItem(index, campo, valor) {
+        function atualizarCampoItem(index, campo, valor, opcoes = {}) {
             if (!itens[index]) return;
 
             if (campo === "quantidade") {
-                const quantidade = Math.max(0, Number(String(valor).replace(",", ".")) || 0);
+                const quantidade = numeroDecimalPedido(valor);
+                if (!quantidadePedidoValida(quantidade)) {
+                    if (opcoes.mostrarErro !== false) {
+                        mostrarMensagem("erro", `Informe uma quantidade entre 0,001 e ${formatarQuantidadeCampo(quantidadeMaximaPedido)}.`);
+                    }
+                    return false;
+                }
                 itens[index].quantidade = quantidade.toFixed(3);
             } else if (campo === "preco_unitario") {
-                const preco = Math.max(0, Number(String(valor).replace(",", ".")) || 0);
+                const preco = Math.max(0, numeroDecimalPedido(valor) || 0);
                 itens[index].preco_unitario = preco.toFixed(2);
             } else if (campo === "unidade") {
                 itens[index].unidade = String(valor || "").trim();
@@ -2595,11 +2716,34 @@
                 const quantidade = Number(itens[index].quantidade) || 0;
                 const preco = Number(itens[index].preco_unitario) || 0;
                 itens[index].valor_total = (quantidade * preco).toFixed(2);
-                atualizarTabela();
-                return;
+                if (opcoes.renderizar !== false) atualizarTabela();
+                else itensJson.value = JSON.stringify(itens);
+                return true;
             }
 
             itensJson.value = JSON.stringify(itens);
+            return true;
+        }
+
+        function sincronizarInputsItensAntesSalvar() {
+            const inputs = Array.from(tbodyItens.querySelectorAll("input[data-campo-item]"));
+            for (const input of inputs) {
+                input.classList.remove("campo-invalido");
+                const ok = atualizarCampoItem(
+                    Number(input.dataset.index),
+                    input.dataset.campoItem,
+                    input.value,
+                    { renderizar: false }
+                );
+                if (ok === false) {
+                    input.classList.add("campo-invalido");
+                    input.focus();
+                    input.select?.();
+                    return false;
+                }
+            }
+            itensJson.value = JSON.stringify(itens);
+            return true;
         }
 
         function atualizarTabela() {
@@ -2626,9 +2770,9 @@
                         <span class="item-produto">${escaparHtml(item.produto_nome)}</span>
                     </td>
                     <td class="itens-col-estoque" data-label="Estoque"><span class="item-estoque-badge">${escaparHtml(formatarEstoqueItem(item.estoque_no_momento))}</span></td>
-                    <td class="itens-col-qtd" data-label="Quantidade"><input type="number" min="0" step="0.001" value="${escaparHtml(item.quantidade)}" aria-label="Quantidade do item" data-index="${index}" data-campo-item="quantidade"></td>
+                    <td class="itens-col-qtd" data-label="Quantidade"><input type="text" inputmode="decimal" autocomplete="off" value="${escaparHtml(formatarQuantidadeCampo(item.quantidade))}" aria-label="Quantidade do item" data-index="${index}" data-campo-item="quantidade"></td>
                     <td class="itens-col-un" data-label="Unidade"><input type="text" maxlength="20" value="${escaparHtml(item.unidade || "")}" aria-label="Unidade do item" data-index="${index}" data-campo-item="unidade"></td>
-                    <td class="itens-col-preco" data-label="Preco unitario"><input type="number" min="0" step="0.01" value="${escaparHtml(item.preco_unitario)}" aria-label="Preco unitario do item" data-index="${index}" data-campo-item="preco_unitario"></td>
+                    <td class="itens-col-preco" data-label="Preco unitario"><input type="text" inputmode="decimal" autocomplete="off" value="${escaparHtml(formatarPrecoCampo(item.preco_unitario))}" aria-label="Preco unitario do item" data-index="${index}" data-campo-item="preco_unitario"></td>
                     <td class="itens-col-total" data-label="Total"><span class="item-total">${formatarMoeda(item.valor_total)}</span></td>
                     <td class="itens-col-obs" data-label="Observacao"><input type="text" value="${escaparHtml(item.observacao || "")}" placeholder="obs" aria-label="Observacao do item" data-index="${index}" data-campo-item="observacao"></td>
                     <td class="itens-col-acao" data-label="Acao"><button type="button" class="btn btn-remover${index === remocaoPendente ? " confirmar" : ""}" data-remover="${index}">${index === remocaoPendente ? "Confirmar" : "Remover"}</button></td>
@@ -2648,10 +2792,10 @@
             produtoBusca.classList.remove("campo-invalido");
             abrirSugestoesNoFoco = true;
             termoSequenciaProdutos = normalizarTexto(produtoBusca.value);
-            produtoSelecionado = localizarProduto(produtoBusca.value);
+            produtoSelecionado = localizarProdutoExato(produtoBusca.value);
             produtoId.value = produtoSelecionado ? produtoSelecionado.id : "";
             atualizarContextoProduto(produtoSelecionado);
-            renderizarSugestoes();
+            renderizarSugestoes({ resetarAtivo: true });
         });
 
         produtoBusca.addEventListener("focus", () => {
@@ -2691,7 +2835,7 @@
             if (event.key === "Enter") {
                 event.preventDefault();
                 const sugestao = produtosSugeridos[sugestaoAtiva];
-                const produto = sugestao || localizarProduto(produtoBusca.value);
+                const produto = sugestao || produtoPorId(produtoId.value) || localizarProdutoExato(produtoBusca.value);
 
                 if (!produto) {
                     mostrarMensagem("erro", "Produto nao encontrado no cadastro.");
@@ -2716,7 +2860,8 @@
             const btn = event.target.closest(".produto-sugestao");
             if (!btn) return;
 
-            const produto = produtosSugeridos[Number(btn.dataset.index)];
+            const produto = produtoPorId(btn.dataset.produtoId)
+                || produtosSugeridos[Number(btn.dataset.index)];
             if (produto && bloquearProdutoDuplicadoNoProduto(produto)) {
                 return;
             }
@@ -2733,6 +2878,18 @@
                 event.preventDefault();
                 itemUnidade.focus();
                 itemUnidade.select();
+                return;
+            }
+            if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                event.preventDefault();
+                ajustarQuantidadeInput(itemQuantidade, event.key === "ArrowUp" ? 1 : -1);
+            }
+        });
+
+        itemQuantidade.addEventListener("blur", () => {
+            const quantidade = numeroDecimalPedido(itemQuantidade.value);
+            if (quantidadePedidoValida(quantidade)) {
+                itemQuantidade.value = formatarQuantidadeCampo(quantidade);
             }
         });
 
@@ -2748,6 +2905,13 @@
             if (event.key === "Enter") {
                 event.preventDefault();
                 adicionarItem();
+            }
+        });
+
+        itemPreco.addEventListener("blur", () => {
+            const preco = numeroDecimalPedido(itemPreco.value);
+            if (Number.isFinite(preco) && preco > 0) {
+                itemPreco.value = formatarPrecoCampo(preco);
             }
         });
 
@@ -2933,19 +3097,33 @@
         tbodyItens.addEventListener("input", (event) => {
             if (event.target.matches("input[data-campo-item]")) {
                 const campo = event.target.dataset.campoItem;
+                event.target.classList.remove("campo-invalido");
                 if (campo === "observacao" || campo === "unidade") {
                     atualizarCampoItem(Number(event.target.dataset.index), campo, event.target.value);
                 }
             }
         });
 
+        tbodyItens.addEventListener("keydown", (event) => {
+            if (
+                event.target.matches('input[data-campo-item="quantidade"]')
+                && (event.key === "ArrowUp" || event.key === "ArrowDown")
+            ) {
+                event.preventDefault();
+                ajustarQuantidadeInput(event.target, event.key === "ArrowUp" ? 1 : -1);
+            }
+        });
+
         tbodyItens.addEventListener("change", (event) => {
             if (event.target.matches("input[data-campo-item]")) {
-                atualizarCampoItem(
+                const ok = atualizarCampoItem(
                     Number(event.target.dataset.index),
                     event.target.dataset.campoItem,
                     event.target.value
                 );
+                if (ok === false) {
+                    event.target.classList.add("campo-invalido");
+                }
             }
         });
 
@@ -2962,6 +3140,10 @@
                 mostrarMensagem("erro", "Adicione pelo menos um item ao pedido.");
                 focarSemSelecionar(produtoBusca);
                 manterLancamentoVisivel();
+                return;
+            }
+
+            if (!sincronizarInputsItensAntesSalvar()) {
                 return;
             }
 

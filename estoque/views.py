@@ -8719,6 +8719,9 @@ def pedido_detalhe(request, pk):
         total_exibido = pedido.total
         titulo_itens = "Itens do Pedido"
         rotulo_total = "Total do Pedido"
+
+    for item in itens_exibidos:
+        item.quantidade_formatada = _formatar_decimal_pedido(item.quantidade)
     
     return render(request, "estoque/pedido_detalhe.html", {
         "pedido": pedido,

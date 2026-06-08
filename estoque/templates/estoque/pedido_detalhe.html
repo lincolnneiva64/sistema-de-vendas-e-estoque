@@ -614,7 +614,7 @@
                                         <em>Produto não identificado</em>
                                     {% endif %}
                                 </td>
-                                <td data-label="Quantidade">{{ item.quantidade|floatformat:"3" }}</td>
+                                <td data-label="Quantidade">{{ item.quantidade_formatada }}</td>
                                 <td data-label="Unidade">{{ item.unidade|default:"-" }}</td>
                                 <td data-label="Preco unit.">R$ {{ item.preco_unitario|floatformat:"2" }}</td>
                                 <td data-label="Total"><strong>R$ {{ item.valor_total|floatformat:"2" }}</strong></td>

@@ -7714,6 +7714,58 @@ class PedidoTests(TestCase):
         self.assertEqual(item_editado.observacao, "Qtd e preco alterados")
         self.assertTrue(pedido.itens.filter(produto=produto_novo, quantidade=Decimal("2.000")).exists())
 
+    def test_editar_pedido_existente_substitui_quantidade_corrigida(self):
+        pedido = self._criar_pedido_com_item(quantidade=Decimal("5000.003"), total=Decimal("500000.30"))
+        item = pedido.itens.get()
+
+        resposta = self._post_editar_pedido(
+            pedido,
+            [
+                {
+                    "item_id": item.id,
+                    "produto_id": self.produto.id,
+                    "produto_nome": self.produto.nome,
+                    "quantidade": "5",
+                    "unidade": "Un",
+                    "preco_unitario": "100.00",
+                    "valor_total": "500.00",
+                    "observacao": "Quantidade corrigida",
+                },
+            ],
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["sucesso"])
+        pedido.refresh_from_db()
+        item_corrigido = pedido.itens.get(produto=self.produto)
+        self.assertEqual(item_corrigido.quantidade, Decimal("5.000"))
+        self.assertEqual(item_corrigido.valor_total, Decimal("500.00"))
+        self.assertEqual(pedido.total, Decimal("500.00"))
+
+        resposta_decimal = self._post_editar_pedido(
+            pedido,
+            [
+                {
+                    "item_id": item_corrigido.id,
+                    "produto_id": self.produto.id,
+                    "produto_nome": self.produto.nome,
+                    "quantidade": "2,5",
+                    "unidade": "Un",
+                    "preco_unitario": "100.00",
+                    "valor_total": "250.00",
+                    "observacao": "Quantidade decimal corrigida",
+                },
+            ],
+        )
+
+        self.assertEqual(resposta_decimal.status_code, 200)
+        self.assertTrue(resposta_decimal.json()["sucesso"])
+        pedido.refresh_from_db()
+        item_decimal = pedido.itens.get(produto=self.produto)
+        self.assertEqual(item_decimal.quantidade, Decimal("2.500"))
+        self.assertEqual(item_decimal.valor_total, Decimal("250.00"))
+        self.assertEqual(pedido.total, Decimal("250.00"))
+
     def test_editar_pedido_convertido_total_bloqueia(self):
         from .models import Pedido
 
@@ -8064,7 +8116,8 @@ class PedidoTests(TestCase):
         resposta_detalhe = self.client.get(reverse("estoque:pedido_detalhe", args=[pedido.id]), secure=True)
         self.assertContains(resposta_detalhe, "Itens pendentes do pedido")
         self.assertContains(resposta_detalhe, "Produto Teste")
-        self.assertContains(resposta_detalhe, "1.000")
+        self.assertContains(resposta_detalhe, 'data-label="Quantidade">1</td>')
+        self.assertNotContains(resposta_detalhe, "1.000")
         self.assertContains(resposta_detalhe, "R$ 100.00")
 
     def test_venda_de_pedido_parcial_exibe_aviso_na_nota_e_whatsapp(self):
@@ -8261,7 +8314,8 @@ class PedidoTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "Itens pendentes do pedido")
         self.assertContains(resposta, "Produto Pendente Pedido Parcial")
-        self.assertContains(resposta, "3.000")
+        self.assertContains(resposta, 'data-label="Quantidade">3</td>')
+        self.assertNotContains(resposta, "3.000")
         self.assertContains(resposta, "R$ 31.50")
         self.assertNotContains(resposta, "Produto Vendido Pedido Parcial")
         self.assertContains(resposta, "Enviar pend")
@@ -8487,12 +8541,31 @@ class PedidoTests(TestCase):
             valor_total=100.00,
             estoque_no_momento=50,
         )
+        produto_decimal = Produto.objects.create(
+            nome="Produto Quantidade Decimal Pedido",
+            preco_compra=Decimal("5.00"),
+            preco_venda=Decimal("12.00"),
+            preco_vista=Decimal("12.00"),
+            preco_prazo=Decimal("12.00"),
+            quantidade=5,
+        )
+        ItemPedido.objects.create(
+            pedido=pedido,
+            produto=produto_decimal,
+            quantidade=Decimal("2.500"),
+            unidade="Un",
+            preco_unitario=Decimal("12.00"),
+            valor_total=Decimal("30.00"),
+            estoque_no_momento=5,
+        )
         
         url = reverse("estoque:pedido_detalhe", args=[pedido.id])
         resposta = self.client.get(url, secure=True)
         
         self.assertEqual(resposta.status_code, 200)
         self.assertIn("pedido", resposta.context)
+        self.assertContains(resposta, 'data-label="Quantidade">1</td>')
+        self.assertContains(resposta, 'data-label="Quantidade">2,5</td>')
 
     def test_pedido_com_produto_sem_estoque_pode_ser_gravado(self):
         """Pedido com produto sem estoque suficiente deve poder ser gravado (apenas aviso)"""
