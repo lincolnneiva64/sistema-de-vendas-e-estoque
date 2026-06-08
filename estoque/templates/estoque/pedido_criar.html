@@ -203,6 +203,63 @@
             min-height: 15px;
         }
 
+        .operador-mobile-trigger {
+            display: none;
+            width: 100%;
+            min-height: 44px;
+            border: 1px solid #b8d5c0;
+            border-radius: 6px;
+            background: #fbfffc;
+            padding: 9px 11px;
+            color: #10251a;
+            font-family: inherit;
+            font-size: 16px;
+            font-weight: 650;
+            text-align: left;
+            cursor: pointer;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+        }
+
+        .operador-mobile-trigger:focus {
+            outline: none;
+            border-color: #16a34a;
+            background: #ffffff;
+            box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.16);
+        }
+
+        .operador-modal-lista {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .operador-modal-opcao {
+            width: 100%;
+            min-height: 46px;
+            border: 1px solid #b7d8c0;
+            border-radius: 6px;
+            background: #ffffff;
+            padding: 10px 12px;
+            color: #10251a;
+            font-family: inherit;
+            font-size: 15px;
+            font-weight: 800;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .operador-modal-opcao:hover,
+        .operador-modal-opcao.selecionado {
+            border-color: #16a34a;
+            background: #dcfce7;
+            color: #14532d;
+        }
+
+        .operador-modal-opcao:active {
+            transform: translateY(1px) scale(0.99);
+        }
+
         label {
             color: #183a28;
             font-size: 13px;
@@ -1026,6 +1083,24 @@
                 clip-path: inset(50%);
             }
 
+            .operador-group select {
+                position: absolute !important;
+                width: 1px !important;
+                height: 1px !important;
+                min-height: 1px !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: 0 !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                clip: rect(0 0 0 0);
+                clip-path: inset(50%);
+            }
+
+            .operador-mobile-trigger {
+                display: block;
+            }
+
             .cliente-sugestao {
                 min-height: 52px;
                 padding: 11px 12px;
@@ -1580,6 +1655,17 @@
             background: #fecaca;
         }
 
+        .modal-confirmacao-saida-btn-enviar {
+            background: #14532d;
+            color: #ffffff;
+            border-color: #14532d;
+        }
+
+        .modal-confirmacao-saida-btn-enviar:hover {
+            background: #0f3f22;
+            box-shadow: 0 5px 12px rgba(20, 83, 45, 0.2);
+        }
+
         .modal-confirmacao-saida-btn:active {
             transform: translateY(1px) scale(0.99);
         }
@@ -1625,6 +1711,28 @@
             </div>
         </div>
 
+        <div id="modal-confirmacao-generica" class="modal-confirmacao-saida" data-protecao-texto="Salvar este pedido e abrir o envio para venda? Deseja limpar as sugestoes carregadas? Deseja ocultar as sugestoes deste pedido? Sair sem salvar o pedido?">
+            <div class="modal-confirmacao-saida-content">
+                <div class="modal-confirmacao-saida-titulo" id="modal-generico-titulo">Confirmar?</div>
+                <div class="modal-confirmacao-saida-mensagem" id="modal-generico-mensagem">Confirme para continuar.</div>
+                <div class="modal-confirmacao-saida-acoes">
+                    <button type="button" class="modal-confirmacao-saida-btn modal-confirmacao-saida-btn-continuar" id="modal-generico-cancelar">Continuar editando</button>
+                    <button type="button" class="modal-confirmacao-saida-btn modal-confirmacao-saida-btn-enviar" id="modal-generico-confirmar">Confirmar</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="modal-operador-mobile" class="modal-confirmacao-saida">
+            <div class="modal-confirmacao-saida-content">
+                <div class="modal-confirmacao-saida-titulo">Escolher operador</div>
+                <div class="modal-confirmacao-saida-mensagem">Selecione o operador responsavel por este pedido.</div>
+                <div class="operador-modal-lista" id="operador-mobile-lista"></div>
+                <div class="modal-confirmacao-saida-acoes">
+                    <button type="button" class="modal-confirmacao-saida-btn modal-confirmacao-saida-btn-continuar" id="modal-operador-fechar">Continuar editando</button>
+                </div>
+            </div>
+        </div>
+
         <form method="POST" id="form-pedido">
             {% csrf_token %}
 
@@ -1660,7 +1768,7 @@
                     </div>
 
                     <div class="form-group operador-group">
-                        <label for="operador">Operador</label>
+                        <label for="operador" id="operador-label">Operador</label>
                         <select id="operador" name="operador">
                             <option value="">Sem operador</option>
                             {% for funcionario in operadores_pedido %}
@@ -1670,6 +1778,7 @@
                                 <option value="{{ pedido.operador }}" selected>{{ pedido.operador }} (operador atual)</option>
                             {% endif %}
                         </select>
+                        <button type="button" class="operador-mobile-trigger" id="operador-mobile-trigger" aria-haspopup="dialog" aria-controls="modal-operador-mobile">Sem operador</button>
                         <span class="campo-ajuda operador-ajuda">Apenas funcionarios ativos marcados como operadores aparecem aqui.</span>
                     </div>
 
@@ -1827,9 +1936,9 @@
                     </div>
                     <div class="acoes">
                         <a href="{% if pedido_modo_edicao %}{% url 'estoque:pedido_detalhe' pedido.id %}{% else %}{% url 'estoque:pedidos' %}{% endif %}" class="btn-cancelar" id="btn-cancelar-form">Cancelar</a>
-                        <button type="submit" class="btn btn-salvar" id="btn-salvar">{% if pedido_modo_edicao %}Salvar Alteracoes{% else %}Salvar Pedido{% endif %}</button>
+                        <button type="submit" class="btn btn-salvar" id="btn-salvar" name="acao_pedido" value="salvar_pedido" data-proxima-acao="">{% if pedido_modo_edicao %}Salvar Alteracoes{% else %}Salvar Pedido{% endif %}</button>
                         {% if not pedido_modo_edicao %}
-                            <button type="submit" class="btn btn-salvar-venda" id="btn-salvar-venda" data-proxima-acao="enviar_venda">Salvar e Enviar para Venda</button>
+                            <button type="submit" class="btn btn-salvar-venda" id="btn-salvar-venda" name="acao_pedido" value="enviar_venda" data-proxima-acao="enviar_venda">Salvar e Enviar para Venda</button>
                         {% endif %}
                     </div>
                 </div>
@@ -1886,6 +1995,11 @@
         const clienteSugestoes = document.getElementById("cliente-sugestoes");
         const dataPrevistaEntrega = document.getElementById("data_prevista_entrega");
         const operadorPedido = document.getElementById("operador");
+        const operadorLabel = document.getElementById("operador-label");
+        const operadorMobileTrigger = document.getElementById("operador-mobile-trigger");
+        const modalOperadorMobile = document.getElementById("modal-operador-mobile");
+        const operadorMobileLista = document.getElementById("operador-mobile-lista");
+        const btnModalOperadorFechar = document.getElementById("modal-operador-fechar");
         const sugestoesClienteCard = document.getElementById("sugestoes-cliente-card");
         const sugestoesClienteVazio = document.getElementById("sugestoes-cliente-vazio");
         const sugestoesClienteWrap = document.getElementById("sugestoes-cliente-wrap");
@@ -2261,7 +2375,8 @@
             inputQtd.value = formatarQuantidadeSugestao(proximaQuantidade);
         }
 
-        function mostrarItemPedidoAdicionado(index) {
+        function mostrarItemPedidoAdicionado(index, opcoes = {}) {
+            if (opcoes.rolar === false) return;
             manterTelaNasSugestoes = false;
             atualizarEspacoRodape();
             const rolarParaItem = () => {
@@ -2343,7 +2458,7 @@
             atualizarTabela();
             removerSugestaoClientePorProdutoId(produtoIdReal);
             mostrarMensagem("sucesso", "Sugestao adicionada ao pedido.");
-            mostrarItemPedidoAdicionado(indexAdicionado);
+            mostrarItemPedidoAdicionado(indexAdicionado, { rolar: false });
         }
 
         function mostrarMensagem(tipo, texto) {
@@ -3158,22 +3273,44 @@
             carregarSugestoesCliente();
         });
 
-        btnSugestoesSem.addEventListener("click", () => {
-            if (sugestoesClienteLista.length && !confirm("Deseja ocultar as sugestoes deste pedido? Os itens ja lancados serao preservados.")) {
-                return;
-            }
+        function marcarPedidoSemSugestao() {
             sugestoesClienteAtivas = false;
             atualizarModoSugestoesCliente();
             limparSugestoesClienteVisualmente("Pedido sem sugestao. Continue lancando os produtos manualmente.");
             focarSemSelecionar(produtoBusca);
+        }
+
+        function limparSugestoesCarregadas() {
+            limparSugestoesClienteVisualmente("Sugestoes limpas. Continue lancando os produtos manualmente.");
+            focarSemSelecionar(produtoBusca);
+        }
+
+        btnSugestoesSem.addEventListener("click", () => {
+            if (sugestoesClienteLista.length) {
+                mostrarConfirmacaoGenerica({
+                    titulo: "Ocultar sugest\u00f5es?",
+                    mensagem: "As sugest\u00f5es carregadas ser\u00e3o ocultadas, mas os itens j\u00e1 lan\u00e7ados no pedido ser\u00e3o preservados.",
+                    textoCancelar: "Continuar editando",
+                    textoConfirmar: "Ocultar sugest\u00f5es",
+                    aoConfirmar: marcarPedidoSemSugestao
+                });
+                return;
+            }
+            marcarPedidoSemSugestao();
         });
 
         btnSugestoesLimpar.addEventListener("click", () => {
-            if (sugestoesClienteLista.length && !confirm("Deseja limpar as sugestoes carregadas? Os itens ja lancados serao preservados.")) {
+            if (sugestoesClienteLista.length) {
+                mostrarConfirmacaoGenerica({
+                    titulo: "Limpar sugest\u00f5es?",
+                    mensagem: "As sugest\u00f5es carregadas ser\u00e3o removidas, mas os itens j\u00e1 lan\u00e7ados no pedido ser\u00e3o preservados.",
+                    textoCancelar: "Continuar editando",
+                    textoConfirmar: "Limpar sugest\u00f5es",
+                    aoConfirmar: limparSugestoesCarregadas
+                });
                 return;
             }
-            limparSugestoesClienteVisualmente("Sugestoes limpas. Continue lancando os produtos manualmente.");
-            focarSemSelecionar(produtoBusca);
+            limparSugestoesCarregadas();
         });
 
         sugestoesClienteTbody.addEventListener("click", (event) => {
@@ -3286,6 +3423,57 @@
             }
         }
 
+        function operadorMobileAtivo() {
+            return Boolean(operadorMobileTrigger && window.getComputedStyle(operadorMobileTrigger).display !== "none");
+        }
+
+        function textoOperadorSelecionado() {
+            const option = operadorPedido.options[operadorPedido.selectedIndex];
+            return option ? option.textContent.trim() : "Sem operador";
+        }
+
+        function atualizarOperadorMobileTexto() {
+            if (!operadorMobileTrigger) return;
+            operadorMobileTrigger.textContent = textoOperadorSelecionado();
+        }
+
+        function fecharModalOperadorMobile() {
+            if (modalOperadorMobile) {
+                modalOperadorMobile.classList.remove("visivel");
+            }
+        }
+
+        function selecionarOperadorMobile(valor) {
+            operadorPedido.value = valor;
+            operadorPedidoConfirmado = true;
+            operadorPedido.dispatchEvent(new Event("change", { bubbles: true }));
+            fecharModalOperadorMobile();
+            window.setTimeout(() => operadorMobileTrigger?.focus({ preventScroll: true }), 0);
+        }
+
+        function renderizarOperadoresMobile() {
+            if (!operadorMobileLista) return;
+            operadorMobileLista.innerHTML = "";
+            Array.from(operadorPedido.options).forEach((option) => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "operador-modal-opcao" + (option.selected ? " selecionado" : "");
+                btn.dataset.valorOperador = option.value;
+                btn.textContent = option.textContent.trim() || "Sem operador";
+                btn.addEventListener("click", () => selecionarOperadorMobile(option.value));
+                operadorMobileLista.appendChild(btn);
+            });
+        }
+
+        function abrirModalOperadorMobile() {
+            if (!modalOperadorMobile || !operadorMobileAtivo()) return;
+            renderizarOperadoresMobile();
+            modalOperadorMobile.classList.add("visivel");
+            const selecionado = operadorMobileLista?.querySelector(".operador-modal-opcao.selecionado")
+                || operadorMobileLista?.querySelector(".operador-modal-opcao");
+            window.setTimeout(() => selecionado?.focus({ preventScroll: true }), 0);
+        }
+
         function avancarComEnter(origem, destino, antesDeAvancar) {
             if (!origem || !destino) return;
             origem.addEventListener("keydown", (event) => {
@@ -3294,7 +3482,9 @@
                 event.stopPropagation();
                 if (antesDeAvancar && !antesDeAvancar()) return;
                 if (origem === operadorPedido) operadorPedidoConfirmado = true;
-                const destinoReal = destino === clientePedido && campoClienteDigitavelVisivel() ? clienteBusca : destino;
+                const destinoReal = destino === clientePedido && campoClienteDigitavelVisivel()
+                    ? clienteBusca
+                    : (destino === operadorPedido && operadorMobileAtivo() ? operadorMobileTrigger : destino);
                 window.setTimeout(() => focarCampoPedido(destinoReal), 0);
             });
         }
@@ -3304,10 +3494,37 @@
         avancarComEnter(dataPrevistaEntrega, operadorPedido);
         avancarComEnter(operadorPedido, produtoBusca);
 
+        operadorLabel?.addEventListener("click", (event) => {
+            if (!operadorMobileAtivo()) return;
+            event.preventDefault();
+            abrirModalOperadorMobile();
+        });
+        operadorMobileTrigger?.addEventListener("click", abrirModalOperadorMobile);
+        operadorMobileTrigger?.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                abrirModalOperadorMobile();
+            }
+        });
+        btnModalOperadorFechar?.addEventListener("click", () => {
+            fecharModalOperadorMobile();
+            operadorMobileTrigger?.focus({ preventScroll: true });
+        });
+        operadorPedido.addEventListener("change", atualizarOperadorMobileTexto);
+
         const modalConfirmacaoSaida = document.getElementById("modal-confirmacao-saida");
         const btnModalContinuar = document.getElementById("modal-continuar-editando");
         const btnModalSair = document.getElementById("modal-sair-sem-salvar");
+        const modalConfirmacaoGenerica = document.getElementById("modal-confirmacao-generica");
+        const modalGenericoTitulo = document.getElementById("modal-generico-titulo");
+        const modalGenericoMensagem = document.getElementById("modal-generico-mensagem");
+        const btnModalGenericoCancelar = document.getElementById("modal-generico-cancelar");
+        const btnModalGenericoConfirmar = document.getElementById("modal-generico-confirmar");
         let urlSaidaPendente = null;
+        let acaoConfirmacaoGenerica = null;
+        let acaoCancelamentoGenerica = null;
+        let botaoSalvamentoAcionado = btnSalvar;
+        let momentoBotaoSalvamentoAcionado = 0;
 
         function isMobilePedido() {
             return window.matchMedia("(max-width: 768px)").matches;
@@ -3327,6 +3544,26 @@
             }
         }
 
+        function mostrarConfirmacaoGenerica(opcoes) {
+            if (!modalConfirmacaoGenerica) return;
+            modalGenericoTitulo.textContent = opcoes.titulo || "Confirmar?";
+            modalGenericoMensagem.textContent = opcoes.mensagem || "Confirme para continuar.";
+            btnModalGenericoCancelar.textContent = opcoes.textoCancelar || "Cancelar";
+            btnModalGenericoConfirmar.textContent = opcoes.textoConfirmar || "Confirmar";
+            acaoConfirmacaoGenerica = typeof opcoes.aoConfirmar === "function" ? opcoes.aoConfirmar : null;
+            acaoCancelamentoGenerica = typeof opcoes.aoCancelar === "function" ? opcoes.aoCancelar : null;
+            modalConfirmacaoGenerica.classList.add("visivel");
+            window.setTimeout(() => btnModalGenericoCancelar.focus({ preventScroll: true }), 0);
+        }
+
+        function fecharConfirmacaoGenerica() {
+            acaoConfirmacaoGenerica = null;
+            acaoCancelamentoGenerica = null;
+            if (modalConfirmacaoGenerica) {
+                modalConfirmacaoGenerica.classList.remove("visivel");
+            }
+        }
+
         btnModalContinuar?.addEventListener("click", () => {
             fecharModalConfirmacaoSaida();
         });
@@ -3337,17 +3574,31 @@
             }
         });
 
+        btnModalGenericoCancelar?.addEventListener("click", () => {
+            const acaoCancelar = acaoCancelamentoGenerica;
+            fecharConfirmacaoGenerica();
+            if (acaoCancelar) acaoCancelar();
+        });
+
+        btnModalGenericoConfirmar?.addEventListener("click", () => {
+            const acaoConfirmar = acaoConfirmacaoGenerica;
+            fecharConfirmacaoGenerica();
+            if (acaoConfirmar) acaoConfirmar();
+        });
+
         document.getElementById("btn-cancelar-form")?.addEventListener("click", (event) => {
-            if (isMobilePedido()) {
-                event.preventDefault();
-                const hrefAtual = event.currentTarget.getAttribute("href");
-                mostrarModalConfirmacaoSaida(hrefAtual);
-            } else {
-                const confirmarSaida = confirm("Sair sem salvar o pedido? Dados digitados que ainda nao foram salvos serao perdidos.");
-                if (!confirmarSaida) {
-                    event.preventDefault();
+            event.preventDefault();
+            const hrefAtual = event.currentTarget.getAttribute("href");
+            if (isMobilePedido()) mostrarModalConfirmacaoSaida(hrefAtual);
+            else mostrarConfirmacaoGenerica({
+                titulo: "Sair sem salvar?",
+                mensagem: "Os dados digitados que ainda n\u00e3o foram salvos ser\u00e3o perdidos.",
+                textoCancelar: "Continuar editando",
+                textoConfirmar: "Sair sem salvar",
+                aoConfirmar: () => {
+                    window.location.href = hrefAtual;
                 }
-            }
+            });
         });
 
         tbodyItens.addEventListener("click", (event) => {
@@ -3395,10 +3646,31 @@
             }
         });
 
-        formPedido.addEventListener("submit", function(event) {
-            event.preventDefault();
+        function resolverBotaoSalvamento(event) {
+            const submitter = event?.submitter;
+            if (submitter && formPedido.contains(submitter)) return submitter;
+            const elementoAtivo = document.activeElement;
+            if (elementoAtivo && elementoAtivo.type === "submit" && formPedido.contains(elementoAtivo)) return elementoAtivo;
+            if (
+                botaoSalvamentoAcionado
+                && formPedido.contains(botaoSalvamentoAcionado)
+                && Date.now() - momentoBotaoSalvamentoAcionado < 1200
+            ) {
+                return botaoSalvamentoAcionado;
+            }
+            return btnSalvar;
+        }
+
+        function deveEnviarParaVenda(botaoAcionado) {
+            return Boolean(btnSalvarVenda && botaoAcionado === btnSalvarVenda);
+        }
+
+        function enviarPedido(botaoAcionado, opcoes = {}) {
             if (salvamentoEmAndamento) return;
             limparMensagem();
+
+            const enviarParaVenda = deveEnviarParaVenda(botaoAcionado);
+            proximaAcao.value = enviarParaVenda ? "enviar_venda" : "";
 
             if (!validarCamposNativosMobilePedido()) {
                 return;
@@ -3419,13 +3691,29 @@
                 return;
             }
 
-            const botaoAcionado = event.submitter || btnSalvar;
-            proximaAcao.value = botaoAcionado?.dataset?.proximaAcao || "";
-            if (proximaAcao.value === "enviar_venda" && !confirm("Salvar este pedido e abrir o envio para venda? Confira os dados antes de continuar.")) {
-                proximaAcao.value = "";
+            if (enviarParaVenda && !opcoes.vendaConfirmada) {
+                mostrarConfirmacaoGenerica({
+                    titulo: "Enviar para venda?",
+                    mensagem: "Salvar este pedido e abrir a venda para confer\u00eancia? Confira os dados antes de continuar.",
+                    textoCancelar: "Continuar editando",
+                    textoConfirmar: "Salvar e enviar para venda",
+                    aoCancelar: () => {
+                        proximaAcao.value = "";
+                        botaoSalvamentoAcionado = btnSalvar;
+                        momentoBotaoSalvamentoAcionado = 0;
+                    },
+                    aoConfirmar: () => {
+                        enviarPedido(btnSalvarVenda, { vendaConfirmada: true });
+                    }
+                });
                 return;
             }
-            const formData = new FormData(this);
+
+            if (!enviarParaVenda) {
+                proximaAcao.value = "";
+            }
+
+            const formData = new FormData(formPedido);
             salvamentoEmAndamento = true;
             prepararBotoesSalvamento(botaoAcionado);
 
@@ -3456,6 +3744,23 @@
                 salvamentoEmAndamento = false;
                 restaurarBotoesSalvamento();
             });
+        }
+
+        btnSalvar.addEventListener("click", () => {
+            botaoSalvamentoAcionado = btnSalvar;
+            momentoBotaoSalvamentoAcionado = Date.now();
+            proximaAcao.value = "";
+        });
+
+        btnSalvarVenda?.addEventListener("click", () => {
+            botaoSalvamentoAcionado = btnSalvarVenda;
+            momentoBotaoSalvamentoAcionado = Date.now();
+            proximaAcao.value = "enviar_venda";
+        });
+
+        formPedido.addEventListener("submit", function(event) {
+            event.preventDefault();
+            enviarPedido(resolverBotaoSalvamento(event));
         });
 
         atualizarValidacaoNativaPedido();
@@ -3463,12 +3768,14 @@
         atualizarTabela();
         prepararBuscaClienteInicial();
         atualizarAlvoLabelCliente();
+        atualizarOperadorMobileTexto();
         prepararSugestoesClienteInicial();
         atualizarEspacoRodape();
         window.addEventListener("resize", () => {
             atualizarValidacaoNativaPedido();
             atualizarEspacoRodape();
             atualizarAlvoLabelCliente();
+            atualizarOperadorMobileTexto();
         });
         window.addEventListener("load", () => {
             atualizarEspacoRodape();
