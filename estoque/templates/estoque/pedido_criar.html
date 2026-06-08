@@ -730,6 +730,8 @@
         .tabela-wrap {
             max-height: min(52vh, 520px);
             overflow: auto;
+            padding-bottom: calc(var(--rodape-pedido-altura) + 14px);
+            scroll-padding-bottom: calc(var(--rodape-pedido-altura) + 14px);
             border: 1px solid #d5eadb;
             border-radius: 8px;
             background: #ffffff;
@@ -1738,7 +1740,17 @@
                 estoqueMinimo: Number("{{ produto.estoque_minimo|default:0 }}".replace(",", ".")) || 0,
                 categoria: "{{ produto.categoria|default:''|escapejs }}",
                 unidade: "{{ produto.unidade_venda_1|default:produto.unidade_compra|default:''|escapejs }}",
-                preco: Number("{{ produto.preco_venda|default:0 }}".replace(",", ".")) || 0
+                preco: Number("{{ produto.preco_venda|default:0 }}".replace(",", ".")) || 0,
+                unidades: [
+                    {
+                        nome: "{{ produto.unidade_venda_1|default:produto.unidade_compra|default:''|escapejs }}",
+                        preco: Number("{{ produto.preco_venda_1|default:produto.preco_venda|default:0 }}".replace(",", ".")) || Number("{{ produto.preco_venda|default:0 }}".replace(",", ".")) || 0
+                    }{% if produto.unidade_venda_2 %},
+                    {
+                        nome: "{{ produto.unidade_venda_2|escapejs }}",
+                        preco: Number("{{ produto.preco_venda_2|default:0 }}".replace(",", ".")) || Number("{{ produto.preco_vista_fracionado|default:0 }}".replace(",", ".")) || Number("{{ produto.preco_prazo_fracionado|default:0 }}".replace(",", ".")) || 0
+                    }{% endif %}
+                ].filter((unidade, index, lista) => unidade.nome && lista.findIndex((item) => item.nome === unidade.nome) === index)
             }{% if not forloop.last %},{% endif %}
             {% endfor %}
         ];
@@ -2145,13 +2157,25 @@
         function mostrarItemPedidoAdicionado(index) {
             manterTelaNasSugestoes = false;
             atualizarEspacoRodape();
-            if (window.matchMedia("(max-width: 620px)").matches) {
-                return;
-            }
-            window.requestAnimationFrame(() => {
+            const rolarParaItem = () => {
                 const linha = tbodyItens.querySelector(`[data-index="${index}"]`);
-                const destino = linha || tabelaWrap;
-                if (destino) destino.scrollIntoView({ behavior: "smooth", block: "center" });
+                if (tabelaWrap && tabelaWrap.scrollHeight > tabelaWrap.clientHeight) {
+                    const ultimaLinha = tabelaWrap.querySelector("tbody tr:last-child");
+                    tabelaWrap.scrollTop = tabelaWrap.scrollHeight;
+                    if (ultimaLinha) {
+                        const destino = ultimaLinha.offsetTop + ultimaLinha.offsetHeight - tabelaWrap.clientHeight + 12;
+                        tabelaWrap.scrollTop = Math.max(tabelaWrap.scrollTop, destino);
+                    }
+                    return;
+                }
+                if (linha) linha.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            };
+            window.requestAnimationFrame(() => {
+                rolarParaItem();
+                window.requestAnimationFrame(rolarParaItem);
+                window.setTimeout(rolarParaItem, 50);
+                window.setTimeout(rolarParaItem, 150);
+                window.setTimeout(rolarParaItem, 300);
             });
         }
 
@@ -2315,6 +2339,35 @@
             return produtos.find((produto) => String(produto.id) === String(id)) || null;
         }
 
+        function unidadesDoProduto(produto) {
+            if (!produto) return [];
+            const opcoes = Array.isArray(produto.unidades) ? produto.unidades : [];
+            if (opcoes.length) return opcoes;
+            return produto.unidade ? [{ nome: produto.unidade, preco: produto.preco || 0 }] : [];
+        }
+
+        function aplicarUnidadeProduto(produto, unidadeOpcao) {
+            if (!produto || !unidadeOpcao) return false;
+            itemUnidade.value = unidadeOpcao.nome || "";
+            if (Number(unidadeOpcao.preco) > 0) {
+                itemPreco.value = formatarPrecoCampo(unidadeOpcao.preco);
+            }
+            const unidadeEl = document.getElementById("ctx-unidade");
+            if (unidadeEl) unidadeEl.textContent = itemUnidade.value || "-";
+            return true;
+        }
+
+        function alternarUnidadeProduto(direcao) {
+            const produto = produtoSelecionado || produtoPorId(produtoId.value);
+            const opcoes = unidadesDoProduto(produto);
+            if (opcoes.length <= 1) return false;
+
+            const unidadeAtual = normalizarTexto(itemUnidade.value);
+            const indexAtual = opcoes.findIndex((opcao) => normalizarTexto(opcao.nome) === unidadeAtual);
+            const proximoIndex = (indexAtual + direcao + opcoes.length) % opcoes.length;
+            return aplicarUnidadeProduto(produto, opcoes[proximoIndex]);
+        }
+
         function filtrarProdutos(valor) {
             const termo = normalizarTexto(valor);
             if (!termo) return produtos;
@@ -2460,8 +2513,8 @@
             produtoSelecionado = produto;
             produtoBusca.value = produto.nome;
             produtoId.value = produto.id;
-            itemUnidade.value = produto.unidade || "";
-            itemPreco.value = produto.preco > 0 ? formatarPrecoCampo(produto.preco) : "";
+            const unidadePadrao = unidadesDoProduto(produto)[0] || { nome: produto.unidade || "", preco: produto.preco || 0 };
+            aplicarUnidadeProduto(produto, unidadePadrao);
             atualizarContextoProduto(produto);
             fecharSugestoes();
             return true;
@@ -2490,7 +2543,7 @@
 
             estoqueEl.textContent = produto.estoque;
             categoriaEl.textContent = produto.categoria || "-";
-            unidadeEl.textContent = produto.unidade || "-";
+            unidadeEl.textContent = itemUnidade.value || produto.unidade || "-";
 
             if (produto.estoque <= 0) {
                 avisoBox.classList.add("aviso");
@@ -2511,8 +2564,12 @@
             if (produtoSelecionado) {
                 produtoBusca.value = produtoSelecionado.nome;
                 produtoId.value = produtoSelecionado.id;
-                if (!itemUnidade.value) itemUnidade.value = produtoSelecionado.unidade || "";
-                if (!numeroDecimalPedido(itemPreco.value) && produtoSelecionado.preco > 0) itemPreco.value = formatarPrecoCampo(produtoSelecionado.preco);
+                if (!itemUnidade.value) {
+                    const unidadePadrao = unidadesDoProduto(produtoSelecionado)[0] || { nome: produtoSelecionado.unidade || "", preco: produtoSelecionado.preco || 0 };
+                    aplicarUnidadeProduto(produtoSelecionado, unidadePadrao);
+                } else if (!numeroDecimalPedido(itemPreco.value) && produtoSelecionado.preco > 0) {
+                    itemPreco.value = formatarPrecoCampo(produtoSelecionado.preco);
+                }
                 fecharSugestoes();
             }
 
@@ -2653,10 +2710,12 @@
             btnAdicionar.classList.add("click-feedback");
             window.setTimeout(() => btnAdicionar.classList.remove("click-feedback"), 130);
 
+            const indexAdicionado = itens.length - 1;
             atualizarTabela();
             prepararProximoProduto(produto);
             mostrarMensagem("sucesso", "Item adicionado ao pedido.");
             manterLancamentoVisivel();
+            mostrarItemPedidoAdicionado(indexAdicionado);
         }
 
         function removerItem(index) {
@@ -2894,6 +2953,13 @@
         });
 
         itemUnidade.addEventListener("keydown", (event) => {
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                if (alternarUnidadeProduto(event.key === "ArrowDown" ? 1 : -1)) {
+                    event.preventDefault();
+                    itemUnidade.select();
+                }
+                return;
+            }
             if (event.key === "Enter") {
                 event.preventDefault();
                 itemPreco.focus();
