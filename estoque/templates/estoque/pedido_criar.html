@@ -260,6 +260,36 @@
             transform: translateY(1px) scale(0.99);
         }
 
+        .unidade-mobile-trigger {
+            display: none;
+            width: 100%;
+            min-height: 44px;
+            border: 1px solid #b8d5c0;
+            border-radius: 6px;
+            background: #fbfffc;
+            padding: 9px 11px;
+            color: #10251a;
+            font-family: inherit;
+            font-size: 16px;
+            font-weight: 650;
+            text-align: left;
+            cursor: pointer;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+        }
+
+        .unidade-mobile-trigger:focus {
+            outline: none;
+            border-color: #16a34a;
+            background: #ffffff;
+            box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.16);
+        }
+
+        .unidade-mobile-trigger:disabled {
+            cursor: default;
+            color: #476154;
+            background: #f6fff8;
+        }
+
         label {
             color: #183a28;
             font-size: 13px;
@@ -1101,6 +1131,24 @@
                 display: block;
             }
 
+            #item-unidade {
+                position: absolute !important;
+                width: 1px !important;
+                height: 1px !important;
+                min-height: 1px !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: 0 !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                clip: rect(0 0 0 0);
+                clip-path: inset(50%);
+            }
+
+            .unidade-mobile-trigger {
+                display: block;
+            }
+
             .cliente-sugestao {
                 min-height: 52px;
                 padding: 11px 12px;
@@ -1733,6 +1781,17 @@
             </div>
         </div>
 
+        <div id="modal-unidade-mobile" class="modal-confirmacao-saida">
+            <div class="modal-confirmacao-saida-content">
+                <div class="modal-confirmacao-saida-titulo">Escolher unidade</div>
+                <div class="modal-confirmacao-saida-mensagem" id="modal-unidade-mensagem">Selecione a unidade deste item.</div>
+                <div class="operador-modal-lista" id="unidade-mobile-lista"></div>
+                <div class="modal-confirmacao-saida-acoes">
+                    <button type="button" class="modal-confirmacao-saida-btn modal-confirmacao-saida-btn-continuar" id="modal-unidade-fechar">Continuar editando</button>
+                </div>
+            </div>
+        </div>
+
         <form method="POST" id="form-pedido">
             {% csrf_token %}
 
@@ -1855,8 +1914,9 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="item-unidade">Unidade</label>
+                        <label for="item-unidade" id="item-unidade-label">Unidade</label>
                         <input id="item-unidade" type="text" maxlength="20" placeholder="un">
+                        <button type="button" class="unidade-mobile-trigger" id="item-unidade-mobile-trigger" aria-haspopup="dialog" aria-controls="modal-unidade-mobile">Selecione</button>
                     </div>
 
                     <div class="form-group">
@@ -2015,6 +2075,12 @@
         const produtoEstoqueBadge = document.getElementById("produto-estoque-badge");
         const itemQuantidade = document.getElementById("item-quantidade");
         const itemUnidade = document.getElementById("item-unidade");
+        const itemUnidadeLabel = document.getElementById("item-unidade-label");
+        const itemUnidadeMobileTrigger = document.getElementById("item-unidade-mobile-trigger");
+        const modalUnidadeMobile = document.getElementById("modal-unidade-mobile");
+        const modalUnidadeMensagem = document.getElementById("modal-unidade-mensagem");
+        const unidadeMobileLista = document.getElementById("unidade-mobile-lista");
+        const btnModalUnidadeFechar = document.getElementById("modal-unidade-fechar");
         const itemPreco = document.getElementById("item-preco");
         const btnAdicionar = document.getElementById("btn-adicionar-item");
         const mensagemTela = document.getElementById("mensagem-tela");
@@ -2631,7 +2697,20 @@
             }
             const unidadeEl = document.getElementById("ctx-unidade");
             if (unidadeEl) unidadeEl.textContent = itemUnidade.value || "-";
+            atualizarUnidadeMobileTexto();
             return true;
+        }
+
+        function aplicarUnidadeCompativelComProduto(produto) {
+            const opcoes = unidadesDoProduto(produto);
+            if (!opcoes.length) {
+                itemUnidade.value = "";
+                atualizarUnidadeMobileTexto();
+                return false;
+            }
+            const unidadeAtual = normalizarTexto(itemUnidade.value);
+            const unidadeCompativel = opcoes.find((opcao) => normalizarTexto(opcao.nome) === unidadeAtual) || opcoes[0];
+            return aplicarUnidadeProduto(produto, unidadeCompativel);
         }
 
         function alternarUnidadeProduto(direcao) {
@@ -2643,6 +2722,122 @@
             const indexAtual = opcoes.findIndex((opcao) => normalizarTexto(opcao.nome) === unidadeAtual);
             const proximoIndex = (indexAtual + direcao + opcoes.length) % opcoes.length;
             return aplicarUnidadeProduto(produto, opcoes[proximoIndex]);
+        }
+
+        function unidadeMobileAtiva() {
+            return Boolean(itemUnidadeMobileTrigger && window.getComputedStyle(itemUnidadeMobileTrigger).display !== "none");
+        }
+
+        function produtoLancamentoAtual() {
+            return produtoSelecionado || produtoPorId(produtoId.value) || localizarProdutoExato(produtoBusca.value);
+        }
+
+        function atualizarUnidadeMobileTexto() {
+            if (!itemUnidadeMobileTrigger) return;
+            const produto = produtoLancamentoAtual();
+            const opcoes = unidadesDoProduto(produto);
+            itemUnidadeMobileTrigger.textContent = itemUnidade.value || (opcoes.length ? "Selecione" : "Sem unidade");
+            itemUnidadeMobileTrigger.disabled = !produto || opcoes.length <= 1;
+        }
+
+        function fecharModalUnidadeMobile() {
+            if (modalUnidadeMobile) {
+                modalUnidadeMobile.classList.remove("visivel");
+            }
+        }
+
+        function textoOpcaoUnidade(opcao) {
+            const nome = String(opcao.nome || "").trim() || "Sem unidade";
+            return Number(opcao.preco) > 0 ? `${nome} - ${formatarMoeda(opcao.preco)}` : nome;
+        }
+
+        function aplicarUnidadeAoItemExistente(index, unidadeOpcao) {
+            const item = itens[index];
+            if (!item || !unidadeOpcao) return;
+
+            item.unidade = unidadeOpcao.nome || "";
+            if (Number(unidadeOpcao.preco) > 0) {
+                item.preco_unitario = Number(unidadeOpcao.preco).toFixed(2);
+            }
+            const quantidade = Number(item.quantidade) || 0;
+            const preco = Number(item.preco_unitario) || 0;
+            item.valor_total = (quantidade * preco).toFixed(2);
+            atualizarTabela();
+        }
+
+        function selecionarUnidadeMobile(contexto, unidadeOpcao) {
+            if (!unidadeOpcao) return;
+            if (contexto.tipo === "item") {
+                aplicarUnidadeAoItemExistente(contexto.index, unidadeOpcao);
+            } else {
+                aplicarUnidadeProduto(contexto.produto, unidadeOpcao);
+                itemUnidade.classList.remove("campo-invalido");
+            }
+            fecharModalUnidadeMobile();
+            window.setTimeout(() => {
+                if (contexto.tipo === "item") {
+                    return;
+                } else {
+                    itemPreco.focus({ preventScroll: true });
+                    itemPreco.select?.();
+                }
+            }, 0);
+        }
+
+        function abrirModalUnidadeMobile(contexto = {}) {
+            if (!modalUnidadeMobile || !unidadeMobileAtiva()) return false;
+            const produto = contexto.produto || produtoLancamentoAtual();
+            if (!produto) return false;
+            const opcoes = unidadesDoProduto(produto);
+            if (opcoes.length <= 1) {
+                if (opcoes.length && contexto.tipo !== "item") aplicarUnidadeProduto(produto, opcoes[0]);
+                if (contexto.tipo !== "item") {
+                    itemPreco.focus({ preventScroll: true });
+                    itemPreco.select?.();
+                }
+                return false;
+            }
+
+            const contextoFinal = {
+                tipo: contexto.tipo || "lancamento",
+                index: Number(contexto.index),
+                produto: produto
+            };
+            const unidadeAtual = contexto.valorAtual !== undefined
+                ? normalizarTexto(contexto.valorAtual)
+                : normalizarTexto(itemUnidade.value);
+
+            modalUnidadeMensagem.textContent = produto
+                ? `Selecione a unidade de ${produto.nome}.`
+                : "Selecione a unidade deste item.";
+            unidadeMobileLista.innerHTML = "";
+            opcoes.forEach((opcao) => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "operador-modal-opcao" + (normalizarTexto(opcao.nome) === unidadeAtual ? " selecionado" : "");
+                btn.textContent = textoOpcaoUnidade(opcao);
+                btn.addEventListener("click", () => selecionarUnidadeMobile(contextoFinal, opcao));
+                unidadeMobileLista.appendChild(btn);
+            });
+
+            modalUnidadeMobile.classList.add("visivel");
+            const selecionado = unidadeMobileLista.querySelector(".operador-modal-opcao.selecionado")
+                || unidadeMobileLista.querySelector(".operador-modal-opcao");
+            window.setTimeout(() => selecionado?.focus({ preventScroll: true }), 0);
+            return true;
+        }
+
+        function abrirModalUnidadeItemExistente(input) {
+            if (!input || !unidadeMobileAtiva()) return false;
+            const index = Number(input.dataset.index);
+            const item = itens[index];
+            const produto = item ? produtoPorId(item.produto_id) : null;
+            return abrirModalUnidadeMobile({
+                tipo: "item",
+                index: index,
+                produto: produto,
+                valorAtual: input.value
+            });
         }
 
         function filtrarProdutos(valor) {
@@ -2815,6 +3010,7 @@
                 categoriaEl.textContent = "-";
                 unidadeEl.textContent = "-";
                 avisoEl.textContent = "Nao baixa estoque";
+                atualizarUnidadeMobileTexto();
                 return;
             }
 
@@ -2841,12 +3037,7 @@
             if (produtoSelecionado) {
                 produtoBusca.value = produtoSelecionado.nome;
                 produtoId.value = produtoSelecionado.id;
-                if (!itemUnidade.value) {
-                    const unidadePadrao = unidadesDoProduto(produtoSelecionado)[0] || { nome: produtoSelecionado.unidade || "", preco: produtoSelecionado.preco || 0 };
-                    aplicarUnidadeProduto(produtoSelecionado, unidadePadrao);
-                } else if (!numeroDecimalPedido(itemPreco.value) && produtoSelecionado.preco > 0) {
-                    itemPreco.value = formatarPrecoCampo(produtoSelecionado.preco);
-                }
+                aplicarUnidadeCompativelComProduto(produtoSelecionado);
                 fecharSugestoes();
             }
 
@@ -2862,6 +3053,7 @@
             produtoSelecionado = null;
             abrirSugestoesNoFoco = false;
             atualizarContextoProduto(null);
+            atualizarUnidadeMobileTexto();
             fecharSugestoes();
             if (typeof produtoBusca.setSelectionRange === "function") {
                 produtoBusca.setSelectionRange(0, 0);
@@ -2872,6 +3064,7 @@
             itemQuantidade.value = "";
             itemUnidade.value = "";
             itemPreco.value = "";
+            atualizarUnidadeMobileTexto();
         }
 
         function prepararProximoProduto(produtoAtual, opcoes) {
@@ -3130,6 +3323,7 @@
             produtoSelecionado = localizarProdutoExato(produtoBusca.value);
             produtoId.value = produtoSelecionado ? produtoSelecionado.id : "";
             atualizarContextoProduto(produtoSelecionado);
+            if (produtoSelecionado) aplicarUnidadeCompativelComProduto(produtoSelecionado);
             renderizarSugestoes({ resetarAtivo: true });
         });
 
@@ -3211,6 +3405,12 @@
         itemQuantidade.addEventListener("keydown", (event) => {
             if (event.key === "Enter") {
                 event.preventDefault();
+                if (unidadeMobileAtiva()) {
+                    if (abrirModalUnidadeMobile()) return;
+                    itemPreco.focus({ preventScroll: true });
+                    itemPreco.select?.();
+                    return;
+                }
                 itemUnidade.focus();
                 itemUnidade.select();
                 return;
@@ -3227,6 +3427,33 @@
                 itemQuantidade.value = formatarQuantidadeCampo(quantidade);
             }
         });
+
+        itemUnidadeLabel?.addEventListener("click", (event) => {
+            if (!unidadeMobileAtiva()) return;
+            event.preventDefault();
+            if (!abrirModalUnidadeMobile()) {
+                itemPreco.focus({ preventScroll: true });
+                itemPreco.select?.();
+            }
+        });
+
+        itemUnidadeMobileTrigger?.addEventListener("click", () => {
+            abrirModalUnidadeMobile();
+        });
+
+        itemUnidadeMobileTrigger?.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                abrirModalUnidadeMobile();
+            }
+        });
+
+        btnModalUnidadeFechar?.addEventListener("click", () => {
+            fecharModalUnidadeMobile();
+            itemUnidadeMobileTrigger?.focus({ preventScroll: true });
+        });
+
+        itemUnidade.addEventListener("input", atualizarUnidadeMobileTexto);
 
         itemUnidade.addEventListener("keydown", (event) => {
             if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -3599,6 +3826,23 @@
                     window.location.href = hrefAtual;
                 }
             });
+        });
+
+        tbodyItens.addEventListener("pointerdown", (event) => {
+            const inputUnidade = event.target.closest('input[data-campo-item="unidade"]');
+            if (inputUnidade && unidadeMobileAtiva() && abrirModalUnidadeItemExistente(inputUnidade)) {
+                event.preventDefault();
+            }
+        });
+
+        tbodyItens.addEventListener("focusin", (event) => {
+            if (
+                event.target.matches('input[data-campo-item="unidade"]')
+                && unidadeMobileAtiva()
+                && abrirModalUnidadeItemExistente(event.target)
+            ) {
+                event.target.blur();
+            }
         });
 
         tbodyItens.addEventListener("click", (event) => {
