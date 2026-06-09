@@ -629,6 +629,9 @@ select.campo-obrigatorio-piscando:focus,
 
 <form method="post" class="row g-1" id="form-produto">
   {% csrf_token %}
+  {% if retorno_url %}
+  <input type="hidden" name="next" value="{{ retorno_url }}">
+  {% endif %}
 <div class="col-12">
     
     
@@ -969,7 +972,7 @@ select.campo-obrigatorio-piscando:focus,
 
         <div class="acoes-flutuantes-botoes">
 
-    <a href="{% url 'estoque:home' %}" class="btn-cancelar"><u>C</u>ancelar</a>
+    <a href="{% if retorno_url %}{{ retorno_url }}{% else %}{% url 'estoque:home' %}{% endif %}" class="btn-cancelar"><u>C</u>ancelar</a>
         
     
 <button type="button" onclick="limparFormulario()" class="btn-cancelar btn-limpar">

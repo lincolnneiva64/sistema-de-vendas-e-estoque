@@ -2003,6 +2003,9 @@ def produto_detalhe(request, pk):
     return render(request, "estoque/produto_detalhe.html", {"produto": produto})
 def produto_editar(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
+    retorno_url = request.GET.get("next") or request.POST.get("next") or ""
+    if not url_has_allowed_host_and_scheme(retorno_url, allowed_hosts={request.get_host()}):
+        retorno_url = ""
 
     if request.method == "POST":
         form = ProdutoForm(request.POST, instance=produto)
@@ -2015,7 +2018,7 @@ def produto_editar(request, pk):
     else:
         form = ProdutoForm(instance=produto)
 
-    return render(request, "estoque/cadastrar_produto.html", {"form": form})
+    return render(request, "estoque/cadastrar_produto.html", {"form": form, "retorno_url": retorno_url})
 def produto_excluir(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
     produto.excluido = True
