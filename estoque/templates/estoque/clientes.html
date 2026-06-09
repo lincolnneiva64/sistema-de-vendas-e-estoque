@@ -247,6 +247,96 @@
     margin-top: 8px;
   }
 
+  .clientes-status-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(15, 23, 42, 0.52);
+  }
+  .clientes-status-modal-backdrop.aberto {
+    display: flex;
+  }
+  .clientes-status-modal {
+    width: min(420px, 100%);
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.30);
+    padding: 18px;
+  }
+  .clientes-status-modal-titulo {
+    margin: 0 0 8px;
+    color: #111827;
+    font-size: 1.08rem;
+    font-weight: 900;
+  }
+  .clientes-status-modal-texto {
+    margin: 0;
+    color: #475569;
+    font-size: 0.95rem;
+    font-weight: 650;
+    line-height: 1.45;
+  }
+  .clientes-status-modal-alerta {
+    margin-top: 12px;
+    border: 1px solid #fed7aa;
+    border-radius: 12px;
+    background: #fff7ed;
+    color: #9a3412;
+    padding: 10px 12px;
+    font-size: 0.88rem;
+    font-weight: 750;
+    line-height: 1.35;
+  }
+  .clientes-status-modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 16px;
+  }
+  .clientes-status-modal-btn {
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    min-height: 42px;
+    padding: 9px 13px;
+    font-size: 0.9rem;
+    font-weight: 850;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+  .clientes-status-modal-btn:active {
+    transform: translateY(1px);
+    box-shadow: none;
+  }
+  .clientes-status-modal-btn.cancelar {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-color: #93c5fd;
+  }
+  .clientes-status-modal-btn.confirmar {
+    background: #dc2626;
+    color: #fff;
+    border-color: #dc2626;
+    box-shadow: 0 8px 18px rgba(220, 38, 38, 0.18);
+  }
+  .clientes-status-modal-btn.confirmar.ativar {
+    background: #16a34a;
+    border-color: #16a34a;
+    box-shadow: 0 8px 18px rgba(22, 163, 74, 0.18);
+  }
+  @media (max-width: 760px) {
+    .clientes-status-modal-actions {
+      flex-direction: column-reverse;
+    }
+    .clientes-status-modal-btn {
+      width: 100%;
+    }
+  }
+
 </style>
 
 <div class="clientes-page">
@@ -479,7 +569,22 @@
       </form>
 
       {% if cliente_selecionado %}
-        <form method="post" id="formAlternarStatusCliente" class="status-form-action">
+        
+<div class="clientes-status-modal-backdrop" id="modalStatusCliente" aria-hidden="true">
+  <div class="clientes-status-modal" role="dialog" aria-modal="true" aria-labelledby="modalStatusClienteTitulo">
+    <h3 class="clientes-status-modal-titulo" id="modalStatusClienteTitulo">Confirmar alteracao</h3>
+    <p class="clientes-status-modal-texto" id="modalStatusClienteTexto">Confirmar esta alteracao no cliente?</p>
+    <div class="clientes-status-modal-alerta" id="modalStatusClienteAlerta">
+      O cadastro nao sera apagado. Esta acao apenas altera se o cliente fica ativo ou inativo.
+    </div>
+    <div class="clientes-status-modal-actions">
+      <button type="button" class="clientes-status-modal-btn cancelar" id="btnCancelarStatusCliente">Cancelar</button>
+      <button type="button" class="clientes-status-modal-btn confirmar" id="btnConfirmarStatusCliente">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<form method="post" id="formAlternarStatusCliente" class="status-form-action">
           {% csrf_token %}
           <input type="hidden" name="acao" value="alternar_status">
           <input type="hidden" name="cliente_id" value="{{ cliente_selecionado.id }}">
@@ -955,14 +1060,60 @@
     });
   });
 
+    const modalStatusCliente = document.getElementById("modalStatusCliente");
+    const modalStatusClienteTexto = document.getElementById("modalStatusClienteTexto");
+    const btnCancelarStatusCliente = document.getElementById("btnCancelarStatusCliente");
+    const btnConfirmarStatusCliente = document.getElementById("btnConfirmarStatusCliente");
+    const formAlternarStatusCliente = document.getElementById("formAlternarStatusCliente");
+
+    let botaoStatusPendente = null;
+
+    function fecharModalStatusCliente() {
+      if (!modalStatusCliente) return;
+      modalStatusCliente.classList.remove("aberto");
+      modalStatusCliente.setAttribute("aria-hidden", "true");
+      botaoStatusPendente = null;
+    }
+
     document.querySelectorAll(".btn-confirmar-status-cliente").forEach(function (botao) {
       botao.addEventListener("click", function (evento) {
+        evento.preventDefault();
+        botaoStatusPendente = botao;
         const mensagem = botao.dataset.mensagem || "Confirmar esta alteracao no cliente?";
-        if (!window.confirm(mensagem)) {
-          evento.preventDefault();
+        if (modalStatusClienteTexto) {
+          modalStatusClienteTexto.textContent = mensagem;
+        }
+        if (btnConfirmarStatusCliente) {
+          const textoBotao = botao.textContent.trim() || "Confirmar";
+          btnConfirmarStatusCliente.textContent = textoBotao;
+          btnConfirmarStatusCliente.classList.toggle("ativar", botao.classList.contains("ativar"));
+        }
+        if (modalStatusCliente) {
+          modalStatusCliente.classList.add("aberto");
+          modalStatusCliente.setAttribute("aria-hidden", "false");
         }
       });
     });
+
+    if (btnCancelarStatusCliente) {
+      btnCancelarStatusCliente.addEventListener("click", fecharModalStatusCliente);
+    }
+
+    if (modalStatusCliente) {
+      modalStatusCliente.addEventListener("click", function (evento) {
+        if (evento.target === modalStatusCliente) {
+          fecharModalStatusCliente();
+        }
+      });
+    }
+
+    if (btnConfirmarStatusCliente) {
+      btnConfirmarStatusCliente.addEventListener("click", function () {
+        if (formAlternarStatusCliente && botaoStatusPendente) {
+          formAlternarStatusCliente.submit();
+        }
+      });
+    }
 
 </script>
 {% endblock %}
