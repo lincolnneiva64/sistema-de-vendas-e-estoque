@@ -282,6 +282,116 @@ select.campo-obrigatorio-piscando:focus,
     box-shadow: 0 0 0 0.18rem rgba(37, 99, 235, 0.22);
 }
 
+.produto-mobile-select-trigger {
+    display: none;
+    width: 100%;
+    min-height: 48px;
+    border: 2px solid #b6bec8;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 10px 12px;
+    color: #212529;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    text-align: left;
+}
+
+.produto-mobile-select-trigger:focus {
+    outline: none;
+    border-color: #7aa7ff;
+    box-shadow: 0 0 0 0.18rem rgba(13, 110, 253, 0.18);
+}
+
+.produto-mobile-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.52);
+}
+
+.produto-mobile-modal.visivel {
+    display: flex;
+}
+
+.produto-mobile-modal-content {
+    width: calc(100% - 32px);
+    max-width: 380px;
+    max-height: calc(100vh - 56px);
+    overflow: hidden;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.3);
+}
+
+.produto-mobile-modal-header {
+    padding: 18px 18px 10px;
+}
+
+.produto-mobile-modal-title {
+    color: #164173;
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1.25;
+}
+
+.produto-mobile-modal-message {
+    margin-top: 6px;
+    color: #475569;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.produto-mobile-modal-lista {
+    display: flex;
+    max-height: min(58vh, 420px);
+    overflow-y: auto;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 18px 16px;
+}
+
+.produto-mobile-modal-opcao {
+    width: 100%;
+    min-height: 46px;
+    border: 1px solid #b7c6dc;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 10px 12px;
+    color: #172033;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 750;
+    text-align: left;
+}
+
+.produto-mobile-modal-opcao.selecionado,
+.produto-mobile-modal-opcao:hover {
+    border-color: #2563eb;
+    background: #dbeafe;
+    color: #164173;
+}
+
+.produto-mobile-modal-actions {
+    padding: 0 18px 18px;
+}
+
+.produto-mobile-modal-cancelar {
+    width: 100%;
+    min-height: 46px;
+    border: 1px solid #7ea6d9;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #164173;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 800;
+}
+
 .btn-gerenciar-unidades{
     border: 1px solid #7ea6d9;
     background: #dbeafe;
@@ -357,7 +467,7 @@ select.campo-obrigatorio-piscando:focus,
     main.container {
         padding-left: 10px;
         padding-right: 10px;
-        padding-bottom: 180px !important;
+        padding-bottom: 320px !important;
     }
 
     .card-form-padrao {
@@ -454,11 +564,50 @@ select.campo-obrigatorio-piscando:focus,
         min-height: 44px;
         font-size: 0.95rem;
     }
+
+    .produto-mobile-select-real {
+        position: absolute !important;
+        width: 1px !important;
+        height: 1px !important;
+        min-height: 1px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+    }
+
+    .produto-mobile-select-trigger {
+        display: block;
+    }
+
+    #bloco-percentual-vista-fracionado,
+    #bloco-preco-vista-fracionado,
+    #bloco-percentual-prazo-fracionado,
+    #bloco-preco-prazo-fracionado,
+    #preco_prazo_fracionado {
+        scroll-margin-bottom: 260px;
+    }
 }
 </style>
 
 
 <body class="bg-light">
+
+<div class="produto-mobile-modal" id="produto-mobile-select-modal">
+    <div class="produto-mobile-modal-content">
+        <div class="produto-mobile-modal-header">
+            <div class="produto-mobile-modal-title" id="produto-mobile-select-titulo">Selecionar</div>
+            <div class="produto-mobile-modal-message" id="produto-mobile-select-mensagem">Escolha uma opcao.</div>
+        </div>
+        <div class="produto-mobile-modal-lista" id="produto-mobile-select-lista"></div>
+        <div class="produto-mobile-modal-actions">
+            <button type="button" class="produto-mobile-modal-cancelar" id="produto-mobile-select-cancelar">Continuar editando</button>
+        </div>
+    </div>
+</div>
 
   <nav class="navbar navbar-expand-lg bg-white border-bottom">
     <div class="container">
@@ -851,6 +1000,7 @@ select.campo-obrigatorio-piscando:focus,
 
     form.querySelectorAll("select").forEach(select => {
         select.selectedIndex = 0;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
     const primeiroCampo = form.querySelector('input:not([type="hidden"])');
@@ -887,22 +1037,25 @@ document.addEventListener("DOMContentLoaded", function () {
     const formProduto = document.getElementById("form-produto");
     if (!formProduto) return [];
 
-    return Array.from(formProduto.querySelectorAll('input:not([type="hidden"]), select'))
+    return Array.from(formProduto.querySelectorAll('input:not([type="hidden"]), select, .produto-mobile-select-trigger'))
         .filter((campo) => {
             const estilo = window.getComputedStyle(campo);
+            const selectMobileEscondido = campo.matches?.("select.produto-mobile-select-real") && isProdutoMobileSelectAtivo();
             return (
                 campo.offsetParent !== null &&
                 estilo.display !== "none" &&
                 estilo.visibility !== "hidden" &&
                 !campo.disabled &&
-                campo.id !== "id_criar_mais_produtos"
+                campo.id !== "id_criar_mais_produtos" &&
+                !selectMobileEscondido
             );
         });
 }
 
 const form = document.getElementById("form-produto");
+prepararSelectsMobileProduto();
 const campos = Array.from(
-    form?.querySelectorAll("input, select, textarea") || []
+    form?.querySelectorAll("input, select, textarea, .produto-mobile-select-trigger") || []
 ).filter(campo => campo.type !== "hidden" && campo.id !== "id_criar_mais_produtos");
     const campoNome = campos[0];
     const campoPrecoCompra = document.getElementById("id_preco_compra");
@@ -928,6 +1081,99 @@ const criarMaisProdutos = document.getElementById("id_criar_mais_produtos");
 if (criarMaisProdutos?.checked) {
     setTimeout(() => campoNome?.focus(), 80);
 }
+
+    function isProdutoMobileSelectAtivo() {
+        return window.matchMedia("(max-width: 575.98px)").matches;
+    }
+
+    function labelDoSelectProduto(select) {
+        const grupo = select.closest(".form-campo, .col-12, .col-md-4, .col-md-3") || select.parentElement;
+        const label = grupo?.querySelector(".form-label");
+        return label?.textContent?.trim() || "Selecionar";
+    }
+
+    function textoSelectProduto(select) {
+        const option = select.options[select.selectedIndex];
+        return option?.textContent?.trim() || "Selecione";
+    }
+
+    function atualizarTriggerSelectProduto(select) {
+        const trigger = document.querySelector(`[data-produto-select-trigger="${select.id}"]`);
+        if (!trigger) return;
+        trigger.textContent = textoSelectProduto(select);
+        trigger.classList.toggle("campo-obrigatorio-piscando", select.classList.contains("campo-obrigatorio-piscando"));
+    }
+
+    function fecharSelectMobileProduto() {
+        document.getElementById("produto-mobile-select-modal")?.classList.remove("visivel");
+    }
+
+    function abrirSelectMobileProduto(select) {
+        if (!select || !isProdutoMobileSelectAtivo()) return false;
+        const modal = document.getElementById("produto-mobile-select-modal");
+        const titulo = document.getElementById("produto-mobile-select-titulo");
+        const mensagem = document.getElementById("produto-mobile-select-mensagem");
+        const lista = document.getElementById("produto-mobile-select-lista");
+        if (!modal || !titulo || !mensagem || !lista) return false;
+
+        titulo.textContent = labelDoSelectProduto(select);
+        mensagem.textContent = "Escolha uma opcao para este campo.";
+        lista.innerHTML = "";
+
+        Array.from(select.options).forEach((option) => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "produto-mobile-modal-opcao" + (option.selected ? " selecionado" : "");
+            btn.textContent = option.textContent.trim() || "Selecione";
+            btn.addEventListener("click", () => {
+                select.value = option.value;
+                select.dispatchEvent(new Event("change", { bubbles: true }));
+                atualizarTriggerSelectProduto(select);
+                fecharSelectMobileProduto();
+                const trigger = document.querySelector(`[data-produto-select-trigger="${select.id}"]`);
+                window.setTimeout(() => trigger?.focus({ preventScroll: true }), 0);
+            });
+            lista.appendChild(btn);
+        });
+
+        modal.classList.add("visivel");
+        const selecionado = lista.querySelector(".produto-mobile-modal-opcao.selecionado")
+            || lista.querySelector(".produto-mobile-modal-opcao");
+        window.setTimeout(() => selecionado?.focus({ preventScroll: true }), 0);
+        return true;
+    }
+
+    function prepararSelectsMobileProduto() {
+        if (!form) return;
+        const selects = Array.from(form.querySelectorAll("select"))
+            .filter((select) => select.id && !select.closest(".d-none"));
+
+        selects.forEach((select) => {
+            if (select.dataset.mobileSelectPreparado === "1") return;
+            select.dataset.mobileSelectPreparado = "1";
+            select.classList.add("produto-mobile-select-real");
+
+            const trigger = document.createElement("button");
+            trigger.type = "button";
+            trigger.className = "produto-mobile-select-trigger";
+            trigger.dataset.produtoSelectTrigger = select.id;
+            trigger.setAttribute("aria-haspopup", "dialog");
+            trigger.setAttribute("aria-controls", "produto-mobile-select-modal");
+            trigger.addEventListener("click", () => abrirSelectMobileProduto(select));
+            trigger.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    abrirSelectMobileProduto(select);
+                }
+            });
+            select.insertAdjacentElement("afterend", trigger);
+            select.addEventListener("change", () => atualizarTriggerSelectProduto(select));
+            atualizarTriggerSelectProduto(select);
+        });
+
+        document.getElementById("produto-mobile-select-cancelar")?.addEventListener("click", fecharSelectMobileProduto);
+    }
     function numero(valor) {
         if (!valor) return 0;
         return parseFloat(String(valor).replace(",", ".")) || 0;
