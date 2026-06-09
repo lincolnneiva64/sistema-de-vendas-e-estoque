@@ -12,7 +12,7 @@
   .clientes-subtitle { margin: 4px 0 0; color: #64748b; font-weight: 500; font-size: 0.92rem; }
   .clientes-header-summary {
     display: inline-flex; align-items: center; gap: 5px; margin-top: 8px;
-    color: #1d4ed8; background: #eff6ff; border: 1px solid #bfdbfe;
+    color: #1e40af; background: #eff6ff; border: 1px solid #bfdbfe;
     border-radius: 999px; padding: 5px 10px; font-size: 0.84rem;
     font-weight: 850; white-space: nowrap;
   }
@@ -66,6 +66,17 @@
     vertical-align: middle; font-size: 0.84rem;
   }
   .clientes-row:hover td { background: #f8fbff; }
+  .clientes-row.cliente-salvo-destaque {
+    background: #fff !important;
+    border-color: #2563eb !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.34), 0 12px 26px rgba(37, 99, 235, 0.20) !important;
+  }
+  .clientes-row.cliente-salvo-destaque td {
+    background: transparent !important;
+  }
+  .clientes-row.cliente-salvo-destaque .cliente-nome {
+    color: #1e40af;
+  }
   .cliente-nome { font-weight: 850; color: #172033; font-size: 0.9rem; }
   .cliente-apelido { color: #64748b; font-size: 0.76rem; font-weight: 700; margin-top: 2px; }
   .cliente-muted { color: #64748b; font-size: 0.8rem; font-weight: 650; }
@@ -76,7 +87,7 @@
   }
   .status-ativo { background: #dcfce7; color: #166534; }
   .status-inativo { background: #f1f5f9; color: #64748b; }
-  .status-liberado { background: #dbeafe; color: #1d4ed8; }
+  .status-liberado { background: #93c5fd; color: #1e40af; }
   .status-atencao { background: #fef3c7; color: #92400e; }
   .status-bloqueado { background: #fee2e2; color: #991b1b; }
   .clientes-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
@@ -91,7 +102,7 @@
   }
   .status-action-btn:active,
   .clientes-action-link:active { transform: translateY(1px); box-shadow: none; }
-  .clientes-action-link { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+  .clientes-action-link { border-color: #93c5fd; background: #eff6ff; color: #1e40af; }
   .status-action-btn.ativar { border-color: #86efac; color: #166534; background: #f0fdf4; }
   .status-action-btn.desativar { border-color: #fecaca; color: #991b1b; background: #fff7ed; }
   .status-action-btn.excluir { border-color: #ef4444; color: #fff; background: #dc2626; }
@@ -120,7 +131,7 @@
     transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
   }
   .clientes-modal-btn:active { transform: translateY(1px); box-shadow: none; }
-  .clientes-modal-btn.cancelar { background: #eff6ff; color: #1d4ed8; border-color: #93c5fd; }
+  .clientes-modal-btn.cancelar { background: #eff6ff; color: #1e40af; border-color: #93c5fd; }
   .clientes-modal-btn.confirmar { background: #dc2626; color: #fff; border-color: #ef4444; }
   .clientes-empty {
     padding: 22px 16px; color: #64748b; text-align: center;
@@ -138,6 +149,111 @@
     .clientes-modal { padding: 14px; }
     .clientes-modal-actions { justify-content: stretch; }
     .clientes-modal-btn { flex: 1 1 auto; }
+    .clientes-table-wrap { overflow-x: visible; }
+    .clientes-table {
+      min-width: 0;
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0 10px;
+    }
+    .clientes-table thead { display: none; }
+    .clientes-table tbody,
+    .clientes-table tr,
+    .clientes-table td { display: block; }
+    .clientes-row {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+      padding: 12px;
+      margin: 0 0 10px;
+    }
+    .clientes-row:hover td { background: transparent; }
+    .clientes-table td {
+      border-bottom: 0;
+      padding: 3px 0;
+      font-size: 0.92rem;
+    }
+    .clientes-table td:nth-child(2),
+    .clientes-table td:nth-child(5),
+    .clientes-table td:nth-child(6),
+    .clientes-table td:nth-child(7),
+    .clientes-table td:nth-child(8) {
+      display: none;
+    }
+    .cliente-nome {
+      font-size: 1.02rem;
+      line-height: 1.25;
+    }
+    .cliente-apelido {
+      font-size: 0.86rem;
+      line-height: 1.25;
+      margin-top: 4px;
+    }
+    .clientes-table td:nth-child(3),
+    .clientes-table td:nth-child(4) {
+      color: #475569;
+      font-size: 0.88rem;
+      font-weight: 750;
+      margin-top: 7px;
+      line-height: 1.3;
+    }
+    .clientes-table td:nth-child(3)::before {
+      content: "WhatsApp";
+      display: block;
+      color: #94a3b8;
+      font-size: 0.7rem;
+      font-weight: 850;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 2px;
+    }
+    .clientes-table td:nth-child(4)::before {
+      content: "Bairro/Cidade";
+      display: block;
+      color: #94a3b8;
+      font-size: 0.7rem;
+      font-weight: 850;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 2px;
+    }
+    .clientes-table td:nth-child(9) {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #edf1f6;
+      position: relative;
+      z-index: 1;
+    }
+    .clientes-actions {
+      display: block;
+    }
+    .clientes-actions .status-action-form {
+      display: none;
+    }
+    .clientes-action-link {
+      width: 100%;
+      min-height: 44px;
+      border-radius: 14px;
+      font-size: 0.96rem;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #bfdbfe;
+      border-color: #2563eb;
+      color: #1e40af;
+      box-shadow: inset 0 -2px 0 rgba(37, 99, 235, 0.32), 0 4px 12px rgba(37, 99, 235, 0.18);
+      position: relative;
+      z-index: 2;
+      pointer-events: auto;
+      cursor: pointer;
+    }
+    .clientes-action-link:active {
+      transform: translateY(2px);
+      background: #93c5fd;
+      box-shadow: inset 0 2px 0 rgba(37, 99, 235, 0.28);
+    }
   }
 </style>
 
@@ -197,7 +313,7 @@
             <tbody>
               {% for cliente in clientes %}
                 <tr
-                  class="clientes-row"
+                  class="clientes-row {% if cliente_salvo_id == cliente.id|stringformat:'s' %}cliente-salvo-destaque{% endif %}"
                   data-cliente-search="{{ cliente.nome|lower }} {{ cliente.apelido_nome_conhecido|default:''|lower }} {{ cliente.cpf_cnpj|default:''|lower }} {{ cliente.whatsapp|default:''|lower }} {{ cliente.whatsapp_normalizado|default:''|lower }} {{ cliente.bairro|default:''|lower }} {{ cliente.cidade|default:''|lower }}"
                 >
                   <td>
@@ -237,7 +353,7 @@
                   </td>
                   <td>
                     <div class="clientes-actions">
-                      <a class="clientes-action-link" href="/estoque/clientes/?cliente={{ cliente.id }}">Editar</a>
+                      <a class="clientes-action-link" href="/estoque/clientes/?cliente={{ cliente.id }}&origem=consulta">Editar</a>
                       {% if cliente.pode_excluir %}
                         <form method="post" class="status-action-form form-excluir-cliente">
                           {% csrf_token %}
@@ -304,6 +420,15 @@
     const btnConfirmarExclusao = document.getElementById("btnConfirmarExclusaoCliente");
     let formExclusaoSelecionado = null;
     const chaveScrollExclusao = "clientesConsultaScrollY";
+    const clienteSalvoDestacado = document.querySelector(".cliente-salvo-destaque");
+    if (clienteSalvoDestacado) {
+      setTimeout(function () {
+        clienteSalvoDestacado.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 180);
+      setTimeout(function () {
+        clienteSalvoDestacado.classList.remove("cliente-salvo-destaque");
+      }, 5200);
+    }
 
     const scrollSalvo = sessionStorage.getItem(chaveScrollExclusao);
     if (scrollSalvo !== null) {

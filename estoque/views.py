@@ -1476,9 +1476,7 @@ def clientes(request):
                 request.session.modified = True
 
             messages.success(request, f'Cliente "{cliente.nome}" salvo com sucesso.')
-            if cliente_id:
-                return redirect(f"{clientes_url}?cliente={cliente.id}")
-            return redirect(clientes_url)
+            return redirect(f"/estoque/clientes/consulta/?cliente_salvo={cliente.id}")
         messages.error(request, "Revise os campos destacados para salvar o cliente.")
     else:
         cliente_id = request.GET.get("cliente")
@@ -1561,6 +1559,7 @@ def clientes_consulta(request):
             "clientes": clientes_lista,
             "termo": termo,
             "total_clientes": len(clientes_lista),
+            "cliente_salvo_id": request.GET.get("cliente_salvo", ""),
         },
     )
 

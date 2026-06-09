@@ -243,7 +243,11 @@
       </div>
       <div class="clientes-header-actions">
         <a href="/estoque/" class="clientes-btn clientes-btn-secondary">Voltar ao painel</a>
-        <a href="/estoque/clientes/consulta/" class="clientes-btn clientes-btn-primary">Consultar clientes</a>
+        {% if cliente_selecionado and request.GET.origem == "consulta" %}
+          <a href="/estoque/clientes/consulta/?cliente_salvo={{ cliente_selecionado.id }}" class="clientes-btn clientes-btn-primary">Consultar clientes</a>
+        {% else %}
+          <a href="/estoque/clientes/consulta/" class="clientes-btn clientes-btn-primary">Consultar clientes</a>
+        {% endif %}
       </div>
     </header>
 
@@ -440,7 +444,11 @@
         {% endif %}
 
         <div class="clientes-form-actions">
-          <a href="/estoque/clientes/" class="clientes-btn clientes-btn-secondary">Novo / Limpar</a>
+          {% if cliente_selecionado and request.GET.origem == "consulta" %}
+              <a href="/estoque/clientes/consulta/?cliente_salvo={{ cliente_selecionado.id }}" class="clientes-btn clientes-btn-secondary">Voltar sem salvar</a>
+            {% else %}
+              <a href="/estoque/clientes/" class="clientes-btn clientes-btn-secondary">Novo / Limpar</a>
+            {% endif %}
           <button type="submit" class="clientes-btn clientes-btn-primary" id="btnSalvarCliente">Salvar cliente</button>
         </div>
       </form>
