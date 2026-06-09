@@ -335,7 +335,7 @@
         }
 
         .col-data {
-            width: 100px;
+            width: 150px;
         }
 
         .col-cliente {
@@ -623,7 +623,7 @@
                     <thead>
                         <tr>
                             <th class="col-id">ID</th>
-                            <th class="col-data">Data</th>
+                            <th class="col-data">Criado em</th>
                             <th class="col-cliente">Cliente</th>
                             <th class="col-localidade">Rota/Bairro</th>
                             <th class="col-status">Status</th>
@@ -637,7 +637,7 @@
                         {% for pedido in pedidos %}
                             <tr>
                                 <td class="col-id" data-label="Pedido"><span class="pedido-id">#{{ pedido.id }}</span></td>
-                                <td class="pedido-data" data-label="Data">{{ pedido.data_pedido|date:"d/m/Y" }}</td>
+                                <td class="pedido-data" data-label="Criado em">{{ pedido.criado_em|date:"d/m/Y H:i" }}</td>
                                 <td class="pedido-cliente col-cliente" data-label="Cliente">
                                     {% if pedido.cliente %}
                                         {{ pedido.cliente.nome }}
