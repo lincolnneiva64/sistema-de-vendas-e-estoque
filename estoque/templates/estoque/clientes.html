@@ -232,6 +232,21 @@
     .clientes-money-prefix { font-size: 0.92rem; }
     .clientes-alert { border-radius: 10px; line-height: 1.35; }
   }
+
+  .clientes-acoes-perigosas {
+    margin: 12px 14px 18px;
+    border-color: #fecaca;
+    background: #fff7ed;
+  }
+  .clientes-acoes-perigosas summary {
+    color: #991b1b;
+  }
+  .clientes-acoes-perigosas .status-form-btn {
+    width: 100%;
+    min-height: 42px;
+    margin-top: 8px;
+  }
+
 </style>
 
 <div class="clientes-page">
@@ -272,13 +287,6 @@
             {% else %}
               <span class="status-pill status-inativo">Inativo</span>
             {% endif %}
-            <button
-              type="submit"
-              form="formAlternarStatusCliente"
-              class="status-form-btn {% if cliente_selecionado.ativo %}desativar{% else %}ativar{% endif %}"
-            >
-              {% if cliente_selecionado.ativo %}Desativar{% else %}Ativar{% endif %}
-            </button>
           {% else %}
             <span class="status-pill status-ativo">Ativo</span>
           {% endif %}
@@ -451,6 +459,23 @@
             {% endif %}
           <button type="submit" class="clientes-btn clientes-btn-primary" id="btnSalvarCliente">Salvar cliente</button>
         </div>
+
+        {% if cliente_selecionado %}
+          <details class="clientes-details clientes-acoes-perigosas">
+            <summary>Acoes do cliente</summary>
+            <p class="clientes-help">
+              Use esta area apenas quando precisar ativar ou desativar o cliente. O cadastro nao sera apagado.
+            </p>
+            <button
+              type="submit"
+              form="formAlternarStatusCliente"
+              class="status-form-btn {% if cliente_selecionado.ativo %}desativar{% else %}ativar{% endif %} btn-confirmar-status-cliente"
+              data-mensagem="{% if cliente_selecionado.ativo %}Deseja mesmo desativar este cliente? Ele deixara de aparecer nas buscas principais.{% else %}Deseja mesmo ativar este cliente novamente?{% endif %}"
+            >
+              {% if cliente_selecionado.ativo %}Desativar cliente{% else %}Ativar cliente{% endif %}
+            </button>
+          </details>
+        {% endif %}
       </form>
 
       {% if cliente_selecionado %}
@@ -929,5 +954,15 @@
       }
     });
   });
+
+    document.querySelectorAll(".btn-confirmar-status-cliente").forEach(function (botao) {
+      botao.addEventListener("click", function (evento) {
+        const mensagem = botao.dataset.mensagem || "Confirmar esta alteracao no cliente?";
+        if (!window.confirm(mensagem)) {
+          evento.preventDefault();
+        }
+      });
+    });
+
 </script>
 {% endblock %}
