@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta charset="UTF-8">
     <title>Vendas - Layout Teste</title>
     {% csrf_token %}
@@ -1044,7 +1045,13 @@ td:first-child {
                 <option>À vista</option>
                 <option selected>A prazo</option>
             </select>
-            <input type="text" id="operadorVenda" placeholder="Operador">
+            <select id="operadorVenda" title="Operador">
+    {% for operador in operadores_venda %}
+        <option value="{{ operador.nome }}" {% if forloop.first %}selected{% endif %}>{{ operador.nome }}</option>
+    {% empty %}
+        <option value="">Operador</option>
+    {% endfor %}
+</select>
         </div>
 
         <div class="vendas-ambiente-inline">
@@ -1104,7 +1111,604 @@ td:first-child {
                     max-width: 100%;
                 }
             }
-        </style>
+        
+/* ===== MOBILE VENDAS LIMPO - CHATGPT 2026-06-10 ===== */
+@media (max-width: 980px) {
+    body {
+        padding: 6px;
+        overflow-x: hidden;
+    }
+
+    #layout-vendas,
+    .bloco-venda,
+    .bloco-lancamento {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+        overflow-x: hidden;
+    }
+
+    .bloco-venda,
+    .bloco-lancamento {
+        padding: 10px;
+        border-radius: 14px;
+    }
+
+    .topo-venda {
+        display: block;
+        margin-bottom: 8px;
+    }
+
+    .topo-venda h2 {
+        font-size: 30px;
+        margin-bottom: 10px;
+    }
+
+    .cliente-resumo.visivel {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 7px;
+        padding: 7px;
+    }
+
+    .cliente-resumo-item {
+        min-height: 44px;
+        padding: 8px 9px;
+    }
+
+    .cliente-resumo-label {
+        font-size: 10px;
+    }
+
+    .cliente-resumo-valor {
+        font-size: 14px;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        line-height: 1.25;
+    }
+
+    .cliente-financeiro {
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+
+    .cliente-financeiro-linha {
+        font-size: 12px;
+        padding: 5px 7px;
+        white-space: normal;
+        line-height: 1.2;
+    }
+
+    .linha.linha-cabecalho-venda {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 8px;
+        align-items: stretch;
+        margin-bottom: 8px;
+    }
+
+    .linha.linha-cabecalho-venda .cliente-autocomplete-wrap {
+        grid-column: 1 / -1;
+        order: -1;
+    }
+
+    input,
+    select {
+        width: 100%;
+        min-width: 0;
+        height: 48px;
+        font-size: 15px;
+        border-radius: 10px;
+        box-sizing: border-box;
+    }
+
+    #clienteBusca {
+        height: 52px;
+        font-size: 17px;
+    }
+
+    .vendas-ambiente-inline {
+        position: static !important;
+        display: block;
+        margin: 8px 0 10px !important;
+        pointer-events: auto;
+    }
+
+    .vendas-ambiente-inline .ambiente-sistema {
+        width: 100%;
+        max-width: 100%;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 6px;
+        padding: 7px;
+        overflow: hidden;
+        background: #f8fbff;
+        border: 1px solid #bfdbfe;
+        border-radius: 12px;
+        box-sizing: border-box;
+    }
+
+    .vendas-ambiente-inline .ambiente-sistema__grupo {
+        display: contents;
+    }
+
+    .vendas-ambiente-inline .ambiente-sistema__ambiente,
+    .vendas-ambiente-inline .ambiente-sistema__btn {
+        width: 100%;
+        max-width: 100%;
+        min-height: 38px;
+        justify-content: center;
+        text-align: center;
+        white-space: normal;
+        font-size: 11px;
+        line-height: 1.12;
+        padding: 6px;
+        box-sizing: border-box;
+    }
+
+    #msgEdicao:not(.visivel) {
+        display: none !important;
+    }
+
+    .linha:not(.linha-cabecalho-venda) {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+        gap: 8px;
+        margin-top: 8px;
+        margin-bottom: 10px;
+    }
+
+    .linha:not(.linha-cabecalho-venda) .produto-autocomplete-wrap {
+        grid-column: 1 / -1;
+    }
+
+    #produtoBusca {
+        width: 100%;
+        height: 54px;
+        font-size: 17px;
+    }
+
+    #quantidade,
+    #unidade,
+    #preco {
+        width: 100%;
+        min-width: 0;
+        height: 50px;
+        font-size: 16px;
+        text-align: center;
+    }
+
+    .barra-acoes-venda {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        margin-top: 10px;
+        padding-top: 8px;
+        overflow-x: hidden;
+    }
+
+    .acoes-venda-grupo,
+    .acoes-venda-grupo.direita {
+        width: 100%;
+        max-width: 100%;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 8px;
+        margin-left: 0;
+        box-sizing: border-box;
+    }
+
+    .acao-venda-btn {
+        width: 100%;
+        max-width: 100%;
+        min-height: 44px;
+        height: auto;
+        padding: 9px 7px;
+        font-size: 13px;
+        line-height: 1.15;
+        text-align: center;
+        white-space: normal;
+        box-sizing: border-box;
+    }
+
+    #btnGravarVenda,
+    #btnNovaVenda {
+        grid-column: 1 / -1;
+    }
+
+    #btnGravarVenda {
+        min-height: 52px;
+        font-size: 17px;
+        border-radius: 12px;
+        background: #16a34a;
+        border-color: #15803d;
+        box-shadow: 0 8px 18px rgba(22, 163, 74, 0.28);
+    }
+
+    .grade-itens {
+        margin-top: 12px;
+        min-height: 240px;
+        max-height: 45vh;
+    }
+
+    .bloco-itens-scroll {
+        max-height: calc(45vh - 42px);
+    }
+}
+/* ===== FIM MOBILE VENDAS LIMPO - CHATGPT 2026-06-10 ===== */
+
+/* ===== ESCONDE AMBIENTE NO MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
+@media (max-width: 980px) {
+    .vendas-ambiente-inline {
+        display: none !important;
+    }
+}
+/* ===== FIM ESCONDE AMBIENTE NO MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
+
+/* ===== SELECTS BONITOS MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
+.mobile-select-bonito-btn {
+    display: none;
+}
+
+.mobile-select-overlay {
+    display: none;
+}
+
+@media (max-width: 980px) {
+    select.mobile-select-original {
+        display: none !important;
+    }
+
+    .mobile-select-bonito-btn {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        min-width: 0;
+        height: 50px;
+        padding: 0 14px;
+        border: 3px solid #64748b;
+        border-radius: 12px;
+        background: #ffffff;
+        color: #0f172a;
+        font-size: 17px;
+        font-weight: 800;
+        box-sizing: border-box;
+        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+    }
+
+    .mobile-select-bonito-btn:active {
+        transform: scale(0.985);
+        background: #eff6ff;
+    }
+
+    .mobile-select-bonito-seta {
+        font-size: 18px;
+        opacity: 0.75;
+        margin-left: 8px;
+    }
+
+    .mobile-select-overlay.visivel {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        padding: 16px;
+        background: rgba(15, 23, 42, 0.48);
+        box-sizing: border-box;
+    }
+
+    .mobile-select-card {
+        width: 100%;
+        max-width: 520px;
+        max-height: 78vh;
+        overflow: hidden;
+        border-radius: 22px;
+        background: #f8fafc;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
+        border: 1px solid #dbeafe;
+    }
+
+    .mobile-select-titulo {
+        padding: 16px 18px;
+        background: #eaf4ff;
+        color: #0f172a;
+        font-size: 20px;
+        font-weight: 900;
+        border-bottom: 1px solid #dbeafe;
+    }
+
+    .mobile-select-lista {
+        max-height: 58vh;
+        overflow-y: auto;
+        padding: 8px;
+    }
+
+    .mobile-select-opcao {
+        width: 100%;
+        min-height: 58px;
+        margin-bottom: 8px;
+        padding: 12px 14px;
+        border: 2px solid #dbeafe;
+        border-radius: 16px;
+        background: #ffffff;
+        color: #0f172a;
+        font-size: 19px;
+        font-weight: 800;
+        text-align: left;
+        box-sizing: border-box;
+    }
+
+    .mobile-select-opcao.selecionada {
+        border-color: #2563eb;
+        background: #dbeafe;
+        color: #102a5c;
+    }
+
+    .mobile-select-opcao:active {
+        transform: scale(0.99);
+        background: #bfdbfe;
+    }
+
+    .mobile-select-cancelar {
+        width: calc(100% - 16px);
+        min-height: 52px;
+        margin: 0 8px 10px;
+        border: 2px solid #cbd5e1;
+        border-radius: 16px;
+        background: #ffffff;
+        color: #334155;
+        font-size: 17px;
+        font-weight: 900;
+    }
+}
+/* ===== FIM SELECTS BONITOS MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
+
+/* ===== REFINO VISUAL MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
+@media (max-width: 980px) {
+    body {
+        background: #f8fbff;
+    }
+
+    .bloco-venda,
+    .bloco-lancamento {
+        background: linear-gradient(180deg, #eaf4ff 0%, #f7fbff 100%);
+        border: 2px solid #93c5fd;
+        box-shadow: 0 8px 22px rgba(37, 99, 235, 0.10);
+    }
+
+    .topo-venda h2 {
+        color: #0f172a;
+        text-shadow: 0 1px 0 rgba(255,255,255,0.7);
+    }
+
+    .cliente-resumo.visivel {
+        background: #f1f8ff;
+        border: 1px solid #bfdbfe;
+        border-radius: 16px;
+    }
+
+    .cliente-resumo-item {
+        background: #ffffff;
+        border: 1px solid #cfe4ff;
+        border-radius: 14px;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+    }
+
+    .cliente-resumo-label {
+        color: #475569;
+        font-weight: 900;
+    }
+
+    .cliente-resumo-valor,
+    .cliente-financeiro-linha {
+        color: #0f172a;
+    }
+
+    input,
+    select,
+    .mobile-select-bonito-btn {
+        border: 3px solid #64748b;
+        background: #ffffff;
+        color: #0f172a;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+    }
+
+    input:focus,
+    select:focus,
+    .mobile-select-bonito-btn:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.18);
+        outline: none;
+    }
+
+    #produtoBusca {
+        background: #ffffff;
+    }
+
+    .barra-acoes-venda {
+        border-top: 2px solid #bfdbfe;
+        padding-top: 12px;
+    }
+
+    .acao-venda-btn {
+        border-radius: 14px;
+        border-width: 2px;
+        font-weight: 900;
+        box-shadow: 0 4px 10px rgba(37, 99, 235, 0.12);
+    }
+
+    .acao-venda-btn.secundaria {
+        background: linear-gradient(180deg, #dbeafe 0%, #93c5fd 100%);
+        color: #102a5c;
+        border-color: #2563eb;
+    }
+
+    .acao-venda-btn.secundaria:active {
+        transform: scale(0.985);
+        background: #bfdbfe;
+    }
+
+    #btnGravarVenda {
+        background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
+        border-color: #166534;
+        color: #ffffff;
+        box-shadow: 0 8px 18px rgba(21, 128, 61, 0.28);
+    }
+
+    #btnNovaVenda {
+        background: #fff7ed;
+        color: #7c2d12;
+        border-color: #fb923c;
+    }
+
+    .pix-alerta,
+    .acao-venda-btn.pix-alerta {
+        background: linear-gradient(180deg, #fee2e2 0%, #fecaca 100%);
+        color: #7f1d1d;
+        border-color: #ef4444;
+    }
+
+    .mobile-select-card {
+        background: #f8fbff;
+        border: 2px solid #93c5fd;
+    }
+
+    .mobile-select-titulo {
+        background: linear-gradient(180deg, #dbeafe 0%, #eff6ff 100%);
+        color: #0f172a;
+    }
+
+    .mobile-select-opcao {
+        border-color: #bfdbfe;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+    }
+
+    .mobile-select-opcao.selecionada {
+        background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%);
+        border-color: #2563eb;
+    }
+}
+/* ===== FIM REFINO VISUAL MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
+
+
+
+
+
+
+
+
+
+/* ===== CORES MOBILE VENDAS CREME FORTE - CHATGPT 2026-06-10 ===== */
+@media (max-width: 980px) {
+    body {
+        background: #fff6cf;
+    }
+
+    .bloco-venda,
+    .bloco-lancamento {
+        background: linear-gradient(180deg, #dceeff 0%, #eef7ff 18%, #fff3c8 100%);
+        border-color: #5aa7f2;
+        box-shadow: 0 10px 24px rgba(37, 99, 235, 0.16);
+    }
+
+    .cliente-resumo.visivel {
+        background: #fff3c8;
+        border-color: #9cc9f5;
+    }
+
+    .cliente-resumo-item {
+        background: #ffffff;
+        border-color: #d5dde7;
+    }
+
+    .cliente-resumo-item:nth-child(2),
+    .cliente-resumo-item:nth-child(3) {
+        background: #fff7df;
+        border-color: #dfc06b;
+    }
+
+    input,
+    select,
+    .mobile-select-bonito-btn {
+        background: #ffffff;
+        border-color: #627487;
+        color: #0f172a;
+        box-shadow: 0 3px 8px rgba(15, 23, 42, 0.07);
+    }
+
+    input:focus,
+    select:focus,
+    .mobile-select-bonito-btn:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.18);
+        outline: none;
+    }
+
+    .barra-acoes-venda {
+        border-top-color: #d9b94f;
+    }
+
+    .acao-venda-btn.secundaria {
+        background: linear-gradient(180deg, #dcecff 0%, #9fcaff 100%);
+        border-color: #2563eb;
+        color: #16346b;
+        box-shadow: 0 5px 12px rgba(37, 99, 235, 0.15);
+    }
+
+    #btnGravarVenda {
+        background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
+        border-color: #166534;
+        color: #ffffff;
+        box-shadow: 0 8px 18px rgba(21, 128, 61, 0.28);
+    }
+
+    #btnNovaVenda {
+        background: linear-gradient(180deg, #fff2c7 0%, #f2d078 100%);
+        border-color: #d99a13;
+        color: #7c2d12;
+    }
+
+    .acao-venda-btn.pix-alerta,
+    .pix-alerta {
+        background: linear-gradient(180deg, #fee2e2 0%, #fecaca 100%);
+        color: #7f1d1d;
+        border-color: #ef4444;
+    }
+
+    .estoque-preview {
+        background: #ffeaa3;
+        border-color: #d99a13;
+        color: #7a4a00;
+        font-weight: 900;
+    }
+
+    .historico-produto-cliente {
+        background: #fff7df;
+        border-color: #dfc06b;
+        color: #5b6470;
+        font-weight: 800;
+    }
+
+    .produto-sugestoes,
+    .cliente-sugestoes {
+        background: #ffffff;
+        border-color: #2563eb;
+        box-shadow: 0 10px 22px rgba(15, 23, 42, 0.18);
+    }
+
+    .produto-sugestao-item.ativo,
+    .cliente-sugestao-item.ativo {
+        background: linear-gradient(90deg, #2563eb 0%, #1d4ed8 100%);
+        color: #ffffff;
+    }
+}
+/* ===== FIM CORES MOBILE VENDAS CREME FORTE - CHATGPT 2026-06-10 ===== */
+</style>
 
         <div id="msgEdicao" class="msg-edicao">Modo edição ativado</div>
         <div class="linha">
@@ -1121,6 +1725,7 @@ td:first-child {
     value="{{ produto.nome }}"
     data-produto-id="{{ produto.id }}"
     data-unidade="{{ produto.unidade_venda_1|default_if_none:'' }}"
+    data-unidade1="{{ produto.unidade_venda_1|default_if_none:'' }}"
     data-preco="{{ produto.preco_venda|default_if_none:'' }}"
     data-estoque="{{ produto.quantidade|default_if_none:0 }}"
     data-fracionado="{{ produto.vende_fracionado|yesno:'true,false' }}"
@@ -1824,7 +2429,7 @@ function fecharPreviewCobranca() {
     cobrancaVisualUrl = "";
 }
 
-function preencherResumoCliente(cliente) {
+function preencherResumoCliente(cliente, carregarDetalheCompleto = false) {
     clienteSelecionado = cliente;
     clienteResumoSuspenso = false;
     clienteId.value = cliente.id || "";
@@ -1835,6 +2440,10 @@ function preencherResumoCliente(cliente) {
     atualizarHistoricoProdutoCliente();
     clienteSugestoesBox.style.display = "none";
     clienteIndexAtivo = -1;
+
+    if (carregarDetalheCompleto) {
+        atualizarClienteSelecionadoDoServidor(cliente);
+    }
 }
 
 function clienteSelecionadoValido() {
@@ -1927,7 +2536,17 @@ function prioridadeClienteAutocomplete(cliente, termo) {
 }
 
 function ordenarClientesAutocomplete(clientes, termo) {
-    return (clientes || []).slice().sort((a, b) => {
+    const busca = normalizarTextoCliente(termo);
+    let lista = (clientes || []).slice();
+
+    if (busca.length >= 2) {
+        const fortes = lista.filter((cliente) => prioridadeClienteAutocomplete(cliente, termo) <= 1);
+        if (fortes.length) {
+            lista = fortes;
+        }
+    }
+
+    return lista.sort((a, b) => {
         const prioridadeA = prioridadeClienteAutocomplete(a, termo);
         const prioridadeB = prioridadeClienteAutocomplete(b, termo);
         if (prioridadeA !== prioridadeB) {
@@ -1967,10 +2586,17 @@ function renderizarSugestoesClientes() {
             clienteIndexAtivo = index;
             renderizarSugestoesClientes();
         });
-        item.addEventListener("mousedown", (e) => {
+        const tocarClienteSugestao = (e) => {
             e.preventDefault();
-            preencherResumoCliente(cliente);
-        });
+            e.stopPropagation();
+            preencherResumoCliente(cliente, true);
+            clienteSugestoesBox.style.display = "none";
+        };
+
+        item.addEventListener("pointerdown", tocarClienteSugestao);
+        item.addEventListener("mousedown", tocarClienteSugestao);
+        item.addEventListener("touchstart", tocarClienteSugestao, { passive: false });
+        item.addEventListener("click", tocarClienteSugestao);
 
         clienteSugestoesBox.appendChild(item);
     });
@@ -1980,7 +2606,9 @@ function renderizarSugestoesClientes() {
     const clientePreviewFinanceiro = clientesSugestoes[
         clienteIndexAtivo >= 0 ? clienteIndexAtivo : 0
     ];
-    if (clientePreviewFinanceiro?.id) {
+    const mobileClienteBusca = window.matchMedia && window.matchMedia("(max-width: 980px)").matches;
+
+    if (!mobileClienteBusca && clientePreviewFinanceiro?.id) {
         clienteSelecionado = clientePreviewFinanceiro;
         clienteResumoSuspenso = false;
         clienteId.value = clientePreviewFinanceiro.id || "";
@@ -2082,9 +2710,7 @@ clienteBusca.addEventListener("input", () => {
 
 clienteBusca.addEventListener("click", () => {
     const texto = clienteBusca.value.trim();
-    if (texto) {
-        buscarClientes(texto);
-    }
+    buscarClientes(texto);
 });
 
 clienteBusca.addEventListener("blur", () => {
@@ -3169,7 +3795,16 @@ if (fracionadoSug && unidadeFracSug) {
         estoquePreview.style.display = "inline-block";
     });
 
-    div.addEventListener("mousedown", () => selecionarProduto(opt));
+    const tocarProdutoSugestao = (evento) => {
+        evento.preventDefault();
+        evento.stopPropagation();
+        selecionarProduto(opt);
+    };
+
+    div.addEventListener("pointerdown", tocarProdutoSugestao);
+    div.addEventListener("mousedown", tocarProdutoSugestao);
+    div.addEventListener("touchstart", tocarProdutoSugestao, { passive: false });
+    div.addEventListener("click", tocarProdutoSugestao);
 
     sugestoesBox.appendChild(div);
 });
@@ -3377,6 +4012,173 @@ document.addEventListener("click", (e) => {
 atualizarTotalGeral();
 
 });
+</script>
+
+<script>
+/* ===== JS SELECTS BONITOS MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
+(function () {
+    function ehMobileVenda() {
+        return window.matchMedia && window.matchMedia("(max-width: 980px)").matches;
+    }
+
+    function textoSelecionado(select) {
+        if (!select) return "";
+        const option = select.options[select.selectedIndex];
+        if (!option) return "";
+
+        const texto = option.textContent.trim();
+
+        if (select.id === "operadorVenda") {
+            if (texto === "Lincoln Albuquerque Neiva") return "Lincoln Neiva";
+            if (texto === "Roseli Da Costa Gama") return "Roseli Gama";
+        }
+
+        return texto;
+    }
+
+    function tituloDoSelect(select) {
+        if (!select) return "Selecionar";
+        if (select.id === "tipoVenda") return "Forma de pagamento";
+        if (select.id === "operadorVenda") return "Operador";
+        if (select.id === "unidade") return "Unidade";
+        return select.getAttribute("title") || "Selecionar";
+    }
+
+    function criarBotaoParaSelect(select) {
+        if (!select || select.dataset.mobileSelectBonito === "1") return;
+
+        select.dataset.mobileSelectBonito = "1";
+        select.classList.add("mobile-select-original");
+
+        const botao = document.createElement("button");
+        botao.type = "button";
+        botao.className = "mobile-select-bonito-btn";
+        botao.dataset.selectId = select.id;
+        botao.innerHTML = '<span class="mobile-select-bonito-texto"></span><span class="mobile-select-bonito-seta">⌄</span>';
+
+        select.insertAdjacentElement("afterend", botao);
+
+        function atualizarBotao() {
+            const texto = textoSelecionado(select) || select.getAttribute("placeholder") || tituloDoSelect(select);
+            const span = botao.querySelector(".mobile-select-bonito-texto");
+            if (span) span.textContent = texto;
+        }
+
+        botao.addEventListener("click", function () {
+            if (!ehMobileVenda()) return;
+            abrirModalSelect(select, atualizarBotao);
+        });
+
+        select.addEventListener("change", atualizarBotao);
+        atualizarBotao();
+    }
+
+    function abrirModalSelect(select, aoSelecionar) {
+        if (!select) return;
+
+        let overlay = document.getElementById("mobileSelectOverlayVenda");
+        if (!overlay) {
+            overlay = document.createElement("div");
+            overlay.id = "mobileSelectOverlayVenda";
+            overlay.className = "mobile-select-overlay";
+            document.body.appendChild(overlay);
+        }
+
+        const valorAtual = select.value;
+        const opcoes = Array.from(select.options).filter(function (option) {
+            return option.value !== "";
+        });
+
+        overlay.innerHTML = "";
+
+        const card = document.createElement("div");
+        card.className = "mobile-select-card";
+
+        const titulo = document.createElement("div");
+        titulo.className = "mobile-select-titulo";
+        titulo.textContent = tituloDoSelect(select);
+
+        const lista = document.createElement("div");
+        lista.className = "mobile-select-lista";
+
+        opcoes.forEach(function (option) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "mobile-select-opcao" + (option.value === valorAtual ? " selecionada" : "");
+            btn.textContent = option.textContent.trim();
+
+            btn.addEventListener("click", function () {
+                select.value = option.value;
+                select.dispatchEvent(new Event("change", { bubbles: true }));
+                if (aoSelecionar) aoSelecionar();
+                fecharModalSelect();
+            });
+
+            lista.appendChild(btn);
+        });
+
+        const cancelar = document.createElement("button");
+        cancelar.type = "button";
+        cancelar.className = "mobile-select-cancelar";
+        cancelar.textContent = "Cancelar";
+        cancelar.addEventListener("click", fecharModalSelect);
+
+        card.appendChild(titulo);
+        card.appendChild(lista);
+        card.appendChild(cancelar);
+        overlay.appendChild(card);
+
+        overlay.classList.add("visivel");
+
+        overlay.addEventListener("click", function fecharFora(event) {
+            if (event.target === overlay) {
+                fecharModalSelect();
+                overlay.removeEventListener("click", fecharFora);
+            }
+        });
+    }
+
+    function fecharModalSelect() {
+        const overlay = document.getElementById("mobileSelectOverlayVenda");
+        if (overlay) {
+            overlay.classList.remove("visivel");
+            overlay.innerHTML = "";
+        }
+    }
+
+    function iniciarSelectsBonitos() {
+        ["tipoVenda", "operadorVenda", "unidade"].forEach(function (id) {
+            criarBotaoParaSelect(document.getElementById(id));
+        });
+    }
+
+    document.addEventListener("DOMContentLoaded", iniciarSelectsBonitos);
+    window.addEventListener("load", iniciarSelectsBonitos);
+
+    window.atualizarSelectsBonitosVenda = function () {
+        ["tipoVenda", "operadorVenda", "unidade"].forEach(function (id) {
+            const select = document.getElementById(id);
+            if (!select) return;
+            const botao = document.querySelector('.mobile-select-bonito-btn[data-select-id="' + id + '"]');
+            if (!botao) {
+                criarBotaoParaSelect(select);
+                return;
+            }
+            const span = botao.querySelector(".mobile-select-bonito-texto");
+            if (span) span.textContent = textoSelecionado(select) || tituloDoSelect(select);
+        });
+    };
+
+    document.addEventListener("change", function (event) {
+        if (event.target && ["tipoVenda", "operadorVenda", "unidade"].includes(event.target.id)) {
+            setTimeout(function () {
+                if (window.atualizarSelectsBonitosVenda) {
+                    window.atualizarSelectsBonitosVenda();
+                }
+            }, 0);
+        }
+    });
+})();
 </script>
 </body>
 </html>

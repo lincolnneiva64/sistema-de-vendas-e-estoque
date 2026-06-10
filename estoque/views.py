@@ -1800,7 +1800,34 @@ def clientes_autocomplete(request):
 
     clientes = []
     for cliente in clientes_qs[:limite]:
-        dados_cliente = _resumo_cliente_venda(cliente, hoje)
+        if contexto == "venda_detalhe" or cliente_id.isdigit():
+            dados_cliente = _resumo_cliente_venda(cliente, hoje)
+        else:
+            dados_cliente = {
+                "id": cliente.id,
+                "nome": cliente.nome,
+                "prazo": cliente.prazo_padrao_dias or 0,
+                "limite": str(cliente.limite_credito or Decimal("0.00")),
+                "status": cliente.status_credito,
+                "status_label": cliente.get_status_credito_display() if hasattr(cliente, "get_status_credito_display") else cliente.status_credito,
+                "whatsapp": cliente.whatsapp or "",
+                "financeiro": {
+                    "credito_disponivel": "0.00",
+                    "contas_abertas_qtd": 0,
+                    "contas_abertas_total": "0.00",
+                    "contas_vencidas_qtd": 0,
+                    "contas_vencidas_total": "0.00",
+                },
+                "whatsapp_cobranca": {
+                    "tem_whatsapp": bool(cliente.whatsapp),
+                    "url": "",
+                    "numero": cliente.whatsapp or "",
+                    "mensagem": "",
+                    "maior_atraso_dias": 0,
+                    "contas": [],
+                    "visual_url": "",
+                },
+            }
         dados_cliente["documento"] = cliente.cpf_cnpj or ""
         dados_cliente["telefone"] = cliente.whatsapp or cliente.telefone_alternativo or ""
         clientes.append(dados_cliente)
@@ -2110,8 +2137,10 @@ def vendas(request):
                 f"Venda preparada a partir do Pedido #{pedido.id}. "
                 "Confira os itens antes de gravar."
             )
+    operadores_venda = Funcionario.objects.filter(ativo=True, pode_operar_sistema=True).order_by('nome')
     return render(request, 'estoque/vendas_layout_teste.html', {
         'produtos': produtos,
+        'operadores_venda': operadores_venda,
         'cliente_inicial': cliente_inicial,
         'pedido_importado': pedido_importado,
         'pedido_importado_aviso': pedido_importado_aviso,
