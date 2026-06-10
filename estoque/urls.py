@@ -24,6 +24,7 @@ urlpatterns = [
     path("vendas/cliente-produto-historico/", views.vendas_cliente_produto_historico, name="vendas_cliente_produto_historico"),
     path("vendas/gravar/", views.gravar_venda, name="gravar_venda"),
     path("contas-a-receber/", views.contas_receber, name="contas_receber"),
+    path("receber-cliente/", views.receber_cliente_escolher, name="receber_cliente_escolher"),
     path("central-pix/", views.central_pix, name="central_pix"),
     path("pix/enviar/", views.pix_enviar_inteligente, name="pix_enviar_inteligente"),
     path("central-pix/enviar-comprovante/", views.central_pix_enviar_comprovante, name="central_pix_enviar_comprovante"),

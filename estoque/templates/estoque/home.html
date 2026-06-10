@@ -659,7 +659,7 @@ align-items: center;
             Vendas
           </a>
           <a
-            href="{% url 'estoque:contas_receber' %}"
+            href="{% url 'estoque:receber_cliente_escolher' %}"
             class="btn-acao-principal-painel"
           >
             Receber Cliente
@@ -1057,7 +1057,7 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
     <a href="{% url 'estoque:vendas' %}" class="btn-tarja btn-tarja-vendas">
       Vendas
     </a>
-    <a href="{% url 'estoque:contas_receber' %}" class="btn-tarja btn-tarja-vendas">
+    <a href="{% url 'estoque:receber_cliente_escolher' %}" class="btn-tarja btn-tarja-vendas">
       Receber Cliente
     </a>
     <a href="{% url 'estoque:lixeira' %}" class="btn-tarja btn-tarja-secundario">

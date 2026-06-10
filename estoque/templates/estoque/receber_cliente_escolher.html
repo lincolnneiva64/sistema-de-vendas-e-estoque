@@ -1,0 +1,292 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Receber Cliente{% endblock %}
+{% block content %}
+<style>
+  .receber-escolher-shell {
+    max-width: 920px;
+    margin: 48px auto;
+    padding: 0 18px;
+    font-family: Arial, sans-serif;
+  }
+  .receber-escolher-card {
+    background: #fff7d6;
+    border: 1px solid #f3d46a;
+    border-radius: 18px;
+    padding: 26px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.10);
+  }
+  .receber-escolher-topo {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 22px;
+  }
+  .receber-escolher-title {
+    margin: 0;
+    font-size: 30px;
+    color: #0f172a;
+    font-weight: 900;
+  }
+  .receber-escolher-subtitle {
+    margin: 6px 0 0;
+    color: #64748b;
+    font-weight: 700;
+  }
+  .receber-escolher-voltar {
+    text-decoration: none;
+    background: #eaf2ff;
+    border: 1px solid #93c5fd;
+    color: #0f3f85;
+    font-weight: 900;
+    border-radius: 10px;
+    padding: 12px 18px;
+  }
+  .receber-escolher-label {
+    display: block;
+    font-weight: 900;
+    color: #475569;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    font-size: 13px;
+  }
+  .receber-escolher-wrap {
+    position: relative;
+  }
+  .receber-escolher-input {
+    width: 100%;
+    box-sizing: border-box;
+    height: 58px;
+    border-radius: 12px;
+    border: 2px solid #93c5fd;
+    padding: 0 16px;
+    font-size: 20px;
+    font-weight: 800;
+    outline: none;
+  }
+  .receber-escolher-sugestoes {
+    display: none;
+    position: absolute;
+    z-index: 50;
+    top: 66px;
+    left: 0;
+    right: 0;
+    max-height: 430px;
+    overflow-y: auto;
+    background: #fff;
+    border: 2px solid #2563eb;
+    border-radius: 14px;
+    box-shadow: 0 18px 38px rgba(15, 23, 42, 0.18);
+  }
+  .receber-escolher-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px;
+    font-size: 18px;
+    font-weight: 900;
+    cursor: pointer;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .receber-escolher-item:hover,
+  .receber-escolher-item.ativo {
+    background: #2563eb;
+    color: #fff;
+  }
+  .receber-escolher-meta {
+    font-size: 14px;
+    opacity: 0.85;
+  }
+  .receber-escolher-aviso {
+    margin-top: 18px;
+    color: #92400e;
+    font-weight: 800;
+  }
+</style>
+
+<div class="receber-escolher-shell">
+  <section class="receber-escolher-card">
+    <header class="receber-escolher-topo">
+      <div>
+        <h1 class="receber-escolher-title">Receber Cliente</h1>
+        <p class="receber-escolher-subtitle">Escolha o cliente para abrir direto a tela de recebimento.</p>
+      </div>
+      <a href="{{ retorno_url }}" class="receber-escolher-voltar">Voltar</a>
+    </header>
+
+    <label for="clienteBuscaReceber" class="receber-escolher-label">Cliente</label>
+    <div class="receber-escolher-wrap">
+      <input id="clienteBuscaReceber" class="receber-escolher-input" type="text" autocomplete="off" placeholder="Digite nome, apelido ou WhatsApp">
+      <div id="clienteSugestoesReceber" class="receber-escolher-sugestoes"></div>
+    </div>
+
+    <div class="receber-escolher-aviso">Ao selecionar o cliente, o sistema abre a tela completa de recebimento dele.</div>
+  </section>
+</div>
+
+<script>
+(function () {
+  const input = document.getElementById("clienteBuscaReceber");
+  const box = document.getElementById("clienteSugestoesReceber");
+  const clientesUrl = "{% url 'estoque:clientes_autocomplete' %}";
+  const receberUrlBase = "{% url 'estoque:receber_cliente' 0 %}";
+  const retornoUrl = "{{ retorno_url|escapejs }}";
+  let clientes = [];
+  let timer = null;
+  let indiceAtivo = -1;
+  let ultimoTermo = "";
+
+  function abrirRecebimento(cliente) {
+    if (!cliente || !cliente.id) return;
+    const url = receberUrlBase.replace("/cliente/0/", "/cliente/" + encodeURIComponent(cliente.id) + "/")
+      + "?next=" + encodeURIComponent(retornoUrl);
+    window.location.href = url;
+  }
+
+  function normalizarTexto(valor) {
+    return String(valor || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
+  function iniciais(nome) {
+    return normalizarTexto(nome)
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((parte) => parte[0])
+      .join("");
+  }
+
+  function prioridadeCliente(cliente, termo) {
+    const busca = normalizarTexto(termo);
+    const nome = normalizarTexto(cliente.nome);
+    const telefone = normalizarTexto(cliente.whatsapp || cliente.telefone || "");
+
+    if (!busca) return 9;
+    if (nome.startsWith(busca)) return 0;
+    if (nome.includes(busca)) return 1;
+    if (telefone.includes(busca)) return 2;
+    return 9;
+  }
+
+  function ordenarClientes(lista, termo) {
+    const busca = normalizarTexto(termo);
+    const todos = (lista || []).slice();
+
+    const comecoNome = todos.filter((cliente) =>
+      normalizarTexto(cliente.nome).startsWith(busca)
+    );
+
+    const base = comecoNome.length
+      ? comecoNome
+      : todos.filter((cliente) => prioridadeCliente(cliente, termo) < 9);
+
+    return base.sort((a, b) =>
+      normalizarTexto(a.nome).localeCompare(
+        normalizarTexto(b.nome),
+        "pt-BR"
+      )
+    );
+  }
+
+  function rolarItemAtivoParaVisivel() {
+    const item = box.querySelector(".receber-escolher-item.ativo");
+    if (!item) return;
+    item.scrollIntoView({ block: "nearest" });
+  }
+
+  function renderizar() {
+    box.innerHTML = "";
+
+    if (!clientes.length) {
+      box.style.display = "none";
+      indiceAtivo = -1;
+      return;
+    }
+
+    clientes.forEach((cliente, index) => {
+      const item = document.createElement("div");
+      item.className = "receber-escolher-item" + (index === indiceAtivo ? " ativo" : "");
+      item.innerHTML = `<span>${cliente.nome || ""}</span><span class="receber-escolher-meta">${cliente.whatsapp || cliente.telefone || ""}</span>`;
+
+      item.addEventListener("mouseenter", () => {
+        indiceAtivo = index;
+        renderizar();
+      });
+
+      item.addEventListener("click", () => abrirRecebimento(cliente));
+      box.appendChild(item);
+    });
+
+    box.style.display = "block";
+    rolarItemAtivoParaVisivel();
+  }
+
+  function buscarClientes() {
+    const termo = input.value.trim();
+    ultimoTermo = termo;
+
+    if (termo.length < 2) {
+      clientes = [];
+      renderizar();
+      return;
+    }
+
+    fetch(clientesUrl + "?contexto=receber_rapido&q=" + encodeURIComponent(termo), {
+      headers: { "X-Requested-With": "XMLHttpRequest" }
+    })
+      .then((resposta) => resposta.ok ? resposta.json() : Promise.reject())
+      .then((dados) => {
+        if (input.value.trim() !== ultimoTermo) return;
+        clientes = ordenarClientes(dados.clientes || [], termo);
+        indiceAtivo = clientes.length ? 0 : -1;
+        renderizar();
+      })
+      .catch(() => {
+        clientes = [];
+        indiceAtivo = -1;
+        renderizar();
+      });
+  }
+
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(buscarClientes, 120);
+  });
+
+  input.addEventListener("keydown", (event) => {
+    if (!clientes.length) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      indiceAtivo = Math.min(indiceAtivo + 1, clientes.length - 1);
+      renderizar();
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      indiceAtivo = Math.max(indiceAtivo - 1, 0);
+      renderizar();
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      abrirRecebimento(clientes[indiceAtivo >= 0 ? indiceAtivo : 0]);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      clientes = [];
+      indiceAtivo = -1;
+      renderizar();
+    }
+  });
+
+  setTimeout(() => input.focus(), 100);
+})();
+</script>
+{% endblock %}

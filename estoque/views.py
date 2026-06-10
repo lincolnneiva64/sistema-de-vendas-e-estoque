@@ -1799,8 +1799,10 @@ def clientes_autocomplete(request):
     limite = 12 if contexto == "pix_detalhe" else 12
 
     clientes = []
+    calcular_financeiro_completo = contexto in {"venda", "venda_detalhe"}
+
     for cliente in clientes_qs[:limite]:
-        if contexto == "venda_detalhe" or cliente_id.isdigit():
+        if calcular_financeiro_completo:
             dados_cliente = _resumo_cliente_venda(cliente, hoje)
         else:
             dados_cliente = {
@@ -1828,6 +1830,7 @@ def clientes_autocomplete(request):
                     "visual_url": "",
                 },
             }
+
         dados_cliente["documento"] = cliente.cpf_cnpj or ""
         dados_cliente["telefone"] = cliente.whatsapp or cliente.telefone_alternativo or ""
         clientes.append(dados_cliente)
@@ -3291,6 +3294,28 @@ def central_pix_analisar_comprovante(request):
             else ""
         ),
     })
+
+
+
+@ensure_csrf_cookie
+def receber_cliente_escolher(request):
+    cliente_id = request.GET.get("cliente_id", "").strip()
+    retorno_url = _url_retorno_segura(request) or reverse("estoque:home")
+
+    if cliente_id.isdigit():
+        cliente = Cliente.objects.filter(pk=cliente_id, ativo=True).first()
+        if cliente:
+            url = reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id})
+            return redirect(f"{url}?{urlencode({'next': retorno_url})}")
+        messages.warning(request, "Cliente nao encontrado ou inativo.")
+
+    return render(
+        request,
+        "estoque/receber_cliente_escolher.html",
+        {
+            "retorno_url": retorno_url,
+        },
+    )
 
 
 @ensure_csrf_cookie

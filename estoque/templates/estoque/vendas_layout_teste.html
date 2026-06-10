@@ -2860,7 +2860,7 @@ async function buscarClientes(texto) {
     }
 
     clienteBuscaAbortController = new AbortController();
-    const params = new URLSearchParams({ q: termoSolicitado });
+    const params = new URLSearchParams({ q: termoSolicitado, contexto: "venda" });
 
     try {
         const resposta = await fetch(clientesAutocompleteUrl + "?" + params.toString(), {
@@ -2887,7 +2887,7 @@ async function atualizarClienteSelecionadoDoServidor(clienteBase) {
     if (!clienteBase?.id) return;
 
     const clienteIdSolicitado = String(clienteBase.id);
-    const params = new URLSearchParams({ cliente_id: clienteIdSolicitado });
+    const params = new URLSearchParams({ cliente_id: clienteIdSolicitado, contexto: "venda" });
     try {
         const resposta = await fetch(clientesAutocompleteUrl + "?" + params.toString(), {
             headers: { "X-Requested-With": "XMLHttpRequest" }
@@ -3653,10 +3653,15 @@ btnConsultarVendas.addEventListener("click", () => {
 });
 
 btnContasReceberVenda?.addEventListener("click", (event) => {
-    if (!clienteSelecionadoValido()) return;
-    const cliente = clienteSelecionado;
-
     event.preventDefault();
+
+    if (!clienteSelecionadoValido()) {
+        mostrarToastVenda("Escolha um cliente antes de receber.");
+        clienteBusca?.focus();
+        return;
+    }
+
+    const cliente = clienteSelecionado;
     window.location.href = montarLinkReceberCliente(cliente);
 });
 
