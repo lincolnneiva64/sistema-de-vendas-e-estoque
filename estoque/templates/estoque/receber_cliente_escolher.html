@@ -2,105 +2,227 @@
 {% block title %}Receber Cliente{% endblock %}
 {% block content %}
 <style>
+  html,
+  body,
+  main,
+  .content,
+  .container {
+    background: #fff6d8 !important;
+  }
+
+  body {
+    background: #fff6d8 !important;
+  }
+
   .receber-escolher-shell {
-    max-width: 920px;
-    margin: 48px auto;
+    max-width: 940px;
+    margin: 28px auto 0;
     padding: 0 18px;
     font-family: Arial, sans-serif;
   }
+
   .receber-escolher-card {
-    background: #fff7d6;
-    border: 1px solid #f3d46a;
-    border-radius: 18px;
-    padding: 26px;
-    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.10);
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
   }
+
   .receber-escolher-topo {
     display: flex;
     justify-content: space-between;
+    align-items: flex-start;
     gap: 16px;
-    align-items: center;
-    margin-bottom: 22px;
+    margin-bottom: 16px;
   }
+
   .receber-escolher-title {
     margin: 0;
-    font-size: 30px;
-    color: #0f172a;
+    color: #071f49;
+    font-size: 26px;
+    line-height: 1.15;
     font-weight: 900;
   }
+
   .receber-escolher-subtitle {
     margin: 6px 0 0;
-    color: #64748b;
+    color: #5e7290;
+    font-size: 15px;
+    line-height: 1.35;
     font-weight: 700;
   }
+
   .receber-escolher-voltar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 86px;
+    height: 46px;
+    padding: 0 16px;
+    border-radius: 12px;
+    border: 1px solid #b8cff2;
+    background: #eef5ff;
+    color: #123d7c;
     text-decoration: none;
-    background: #eaf2ff;
-    border: 1px solid #93c5fd;
-    color: #0f3f85;
+    font-size: 15px;
     font-weight: 900;
-    border-radius: 10px;
-    padding: 12px 18px;
   }
-  .receber-escolher-label {
-    display: block;
-    font-weight: 900;
-    color: #475569;
-    margin-bottom: 8px;
-    text-transform: uppercase;
-    font-size: 13px;
+
+  .receber-escolher-voltar:hover {
+    background: #e4efff;
   }
+
   .receber-escolher-wrap {
     position: relative;
+    background: #ffffff;
+    border: 1px solid #d7e1ee;
+    border-radius: 14px;
+    padding: 14px;
+    box-shadow: 0 8px 20px rgba(15, 35, 69, 0.04);
   }
+
+  .receber-escolher-label {
+    display: block;
+    margin: 0 0 8px;
+    color: #526782;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
   .receber-escolher-input {
     width: 100%;
-    box-sizing: border-box;
-    height: 58px;
-    border-radius: 12px;
-    border: 2px solid #93c5fd;
-    padding: 0 16px;
-    font-size: 20px;
-    font-weight: 800;
+    height: 52px;
+    border-radius: 10px;
+    border: 1.5px solid #c9d7e8;
+    background: #ffffff;
+    color: #111827;
+    font-size: 17px;
+    font-weight: 700;
+    padding: 0 14px;
     outline: none;
   }
+
+  .receber-escolher-input::placeholder {
+    color: #7b8798;
+    font-weight: 700;
+  }
+
+  .receber-escolher-input:focus {
+    border-color: #6fa3ff;
+    box-shadow: 0 0 0 3px rgba(111, 163, 255, 0.12);
+  }
+
   .receber-escolher-sugestoes {
     display: none;
     position: absolute;
     z-index: 50;
-    top: 66px;
-    left: 0;
-    right: 0;
-    max-height: 430px;
+    top: 82px;
+    left: 14px;
+    right: 14px;
+    max-height: 330px;
     overflow-y: auto;
-    background: #fff;
-    border: 2px solid #2563eb;
-    border-radius: 14px;
-    box-shadow: 0 18px 38px rgba(15, 23, 42, 0.18);
+    background: #ffffff;
+    border: 1px solid #bfd5fb;
+    border-radius: 12px;
+    box-shadow: 0 12px 24px rgba(15, 35, 69, 0.12);
   }
+
+  .receber-escolher-sugestoes::-webkit-scrollbar {
+    width: 9px;
+  }
+
+  .receber-escolher-sugestoes::-webkit-scrollbar-thumb {
+    background: #c7d6ee;
+    border-radius: 999px;
+  }
+
   .receber-escolher-item {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
-    padding: 16px 18px;
-    font-size: 18px;
-    font-weight: 900;
+    align-items: center;
+    gap: 14px;
+    padding: 13px 16px;
+    font-size: 16px;
+    font-weight: 800;
+    color: #172033;
     cursor: pointer;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid #edf2f7;
   }
-  .receber-escolher-item:hover,
+
+  .receber-escolher-item:last-child {
+    border-bottom: 0;
+  }
+
+  .receber-escolher-item:hover {
+    background: #f4f8ff;
+  }
+
   .receber-escolher-item.ativo {
     background: #2563eb;
-    color: #fff;
+    color: #ffffff;
   }
+
   .receber-escolher-meta {
-    font-size: 14px;
-    opacity: 0.85;
-  }
-  .receber-escolher-aviso {
-    margin-top: 18px;
-    color: #92400e;
+    color: #66758a;
+    font-size: 13px;
     font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .receber-escolher-item.ativo .receber-escolher-meta {
+    color: rgba(255,255,255,0.92);
+  }
+
+  .receber-escolher-aviso {
+    margin: 12px 0 0;
+    color: #99520e;
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1.35;
+  }
+
+  @media (max-width: 700px) {
+    .receber-escolher-shell {
+      margin-top: 18px;
+      padding: 0 12px;
+    }
+
+    .receber-escolher-topo {
+      margin-bottom: 12px;
+    }
+
+    .receber-escolher-title {
+      font-size: 24px;
+    }
+
+    .receber-escolher-subtitle {
+      font-size: 14px;
+    }
+
+    .receber-escolher-voltar {
+      min-width: 78px;
+      height: 42px;
+      font-size: 14px;
+    }
+
+    .receber-escolher-wrap {
+      padding: 12px;
+      border-radius: 12px;
+    }
+
+    .receber-escolher-input {
+      height: 50px;
+      font-size: 16px;
+    }
+
+    .receber-escolher-sugestoes {
+      top: 78px;
+      left: 12px;
+      right: 12px;
+    }
   }
 </style>
 
@@ -130,7 +252,7 @@
   const box = document.getElementById("clienteSugestoesReceber");
   const clientesUrl = "{% url 'estoque:clientes_autocomplete' %}";
   const receberUrlBase = "{% url 'estoque:receber_cliente' 0 %}";
-  const retornoUrl = "{{ retorno_url|escapejs }}";
+  const retornoUrl = "{% url 'estoque:receber_cliente_escolher' %}";
   let clientes = [];
   let timer = null;
   let indiceAtivo = -1;

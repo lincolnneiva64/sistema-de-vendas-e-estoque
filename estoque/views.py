@@ -3301,12 +3301,13 @@ def central_pix_analisar_comprovante(request):
 def receber_cliente_escolher(request):
     cliente_id = request.GET.get("cliente_id", "").strip()
     retorno_url = _url_retorno_segura(request) or reverse("estoque:home")
+    retorno_recebimento_url = reverse("estoque:receber_cliente_escolher")
 
     if cliente_id.isdigit():
         cliente = Cliente.objects.filter(pk=cliente_id, ativo=True).first()
         if cliente:
             url = reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id})
-            return redirect(f"{url}?{urlencode({'next': retorno_url})}")
+            return redirect(f"{url}?{urlencode({'next': retorno_recebimento_url})}")
         messages.warning(request, "Cliente nao encontrado ou inativo.")
 
     return render(
