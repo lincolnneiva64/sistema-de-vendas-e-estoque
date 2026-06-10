@@ -3310,11 +3310,48 @@ def receber_cliente_escolher(request):
             return redirect(f"{url}?{urlencode({'next': retorno_recebimento_url})}")
         messages.warning(request, "Cliente nao encontrado ou inativo.")
 
+    hoje = timezone.localdate()
+    formas_pagamento = (
+        "Dinheiro",
+        "PIX",
+        "Cartao de debito",
+        "Cartao de credito",
+        "Transferencia",
+        "Outro",
+    )
+    valores = {
+        "data_recebimento": hoje.isoformat(),
+        "valor": "",
+        "forma_pagamento": "Dinheiro",
+        "destino_diferenca": "troco",
+    }
+
     return render(
         request,
-        "estoque/receber_cliente_escolher.html",
+        "estoque/receber_cliente.html",
         {
+            "cliente": None,
+            "contas": [],
+            "contas_preview": [],
+            "total_contas": 0,
+            "total_em_aberto": Decimal("0.00"),
+            "credito_disponivel": Decimal("0.00"),
+            "creditos_disponiveis": [],
+            "saldo_resultante_credito": Decimal("0.00"),
+            "formas_pagamento": formas_pagamento,
+            "valores": valores,
+            "pagamentos_hoje_preview": [],
+            "pagamentos_recentes": [],
+            "feedback_recebimento": None,
+            "contas_atualizadas_ids": [],
+            "contas_atualizadas_feedback": {},
+            "hoje_iso": hoje.isoformat(),
             "retorno_url": retorno_url,
+            "tem_pix_em_atencao": _tem_pix_em_atencao(),
+            "pix_recebido_escolhido": None,
+            "pix_detalhe_url": "",
+            "pix_trocar_cliente_url": "",
+            "pix_remover_cliente_url": "",
         },
     )
 
