@@ -1708,6 +1708,166 @@ td:first-child {
     }
 }
 /* ===== FIM CORES MOBILE VENDAS CREME FORTE - CHATGPT 2026-06-10 ===== */
+
+
+
+
+
+/* ===== BOTAO ADICIONAR ITEM CENTRALIZADO - CHATGPT 2026-06-10 ===== */
+@media (max-width: 980px) {
+    #btnAdicionarItemVenda {
+        grid-column: 1 / -1;
+        justify-self: center;
+        width: 46%;
+        min-width: 165px;
+        max-width: 230px;
+        min-height: 54px;
+        margin: 6px auto 16px auto;
+        display: block;
+        border-radius: 18px;
+        background: linear-gradient(180deg, #facc15 0%, #eab308 100%);
+        border: 2px solid #a16207;
+        color: #422006;
+        font-weight: 900;
+        box-shadow: 0 6px 14px rgba(234, 179, 8, 0.24);
+    }
+
+    #btnAdicionarItemVenda:active {
+        transform: scale(0.985);
+        background: #fbbf24;
+    }
+}
+/* ===== FIM BOTAO ADICIONAR ITEM CENTRALIZADO - CHATGPT 2026-06-10 ===== */
+
+/* ===== ITENS LANCADOS MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
+@media (max-width: 980px) {
+    #btnAdicionarItemVenda {
+        grid-column: 1 / -1;
+        justify-self: center;
+        width: 42%;
+        min-width: 150px;
+        max-width: 210px;
+        min-height: 52px;
+        margin: 6px auto 12px auto;
+        display: block;
+        border-radius: 18px;
+        background: linear-gradient(180deg, #facc15 0%, #eab308 100%);
+        border: 2px solid #a16207;
+        color: #422006;
+        font-weight: 900;
+        box-shadow: 0 6px 14px rgba(234, 179, 8, 0.24);
+    }
+
+    .itens-lancados-mobile {
+        grid-column: 1 / -1;
+        width: 100%;
+        margin: 2px 0 14px 0;
+        padding: 10px;
+        border-radius: 16px;
+        border: 2px solid #d9b94f;
+        background: linear-gradient(180deg, #fffaf0 0%, #fff3c8 100%);
+        box-shadow: 0 6px 14px rgba(120, 76, 20, 0.10);
+    }
+
+    .itens-lancados-mobile-titulo {
+        margin-bottom: 8px;
+        color: #5f3b00;
+        font-size: 18px;
+        font-weight: 900;
+    }
+
+    .itens-lancados-mobile-lista {
+        display: grid;
+        gap: 8px;
+    }
+
+    .item-lancado-mobile-card {
+        padding: 10px;
+        border-radius: 14px;
+        border: 1px solid #e0c36f;
+        background: #ffffff;
+        color: #0f172a;
+        box-shadow: 0 3px 8px rgba(15, 23, 42, 0.06);
+    }
+
+    .item-lancado-mobile-produto {
+        font-size: 17px;
+        font-weight: 900;
+        line-height: 1.2;
+    }
+
+    .item-lancado-mobile-meta {
+        margin-top: 5px;
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        color: #475569;
+        font-size: 14px;
+        font-weight: 850;
+    }
+
+    .item-lancado-mobile-total {
+        color: #166534;
+        font-weight: 950;
+    }
+}
+/* ===== FIM ITENS LANCADOS MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
+
+/* ===== ROLAGEM LISTA PRODUTOS MOBILE - CHATGPT 2026-06-10 ===== */
+@media (max-width: 980px) {
+    .produto-sugestoes {
+        max-height: 280px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-y;
+    }
+
+    .produto-sugestao-item {
+        touch-action: pan-y;
+    }
+}
+/* ===== FIM ROLAGEM LISTA PRODUTOS MOBILE - CHATGPT 2026-06-10 ===== */
+
+/* ===== TOTAL ITENS LANCADOS MOBILE - CHATGPT 2026-06-10 ===== */
+@media (max-width: 980px) {
+    .itens-lancados-mobile-resumo {
+        margin-top: 10px;
+        padding: 10px 12px;
+        border-top: 3px solid #d6b94a;
+        background: linear-gradient(180deg, #fff7d6 0%, #f3df92 100%);
+        border-radius: 0 0 16px 16px;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+    }
+
+    .itens-lancados-mobile-resumo-linha {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        padding: 5px 0;
+        font-size: 15px;
+        font-weight: 900;
+        color: #5b3a00;
+    }
+
+    .itens-lancados-mobile-resumo-linha strong {
+        color: #166534;
+        font-size: 18px;
+        white-space: nowrap;
+    }
+
+    .itens-lancados-mobile-resumo-linha.total {
+        margin-top: 4px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(91, 58, 0, 0.25);
+        font-size: 17px;
+    }
+
+    .itens-lancados-mobile-resumo-linha.total strong {
+        font-size: 22px;
+    }
+}
+/* ===== FIM TOTAL ITENS LANCADOS MOBILE - CHATGPT 2026-06-10 ===== */
 </style>
 
         <div id="msgEdicao" class="msg-edicao">Modo edição ativado</div>
@@ -1747,6 +1907,21 @@ td:first-child {
 
         <div class="barra-acoes-venda" aria-label="Acoes da venda">
             <div class="acoes-venda-grupo">
+            <button type="button" id="btnAdicionarItemVenda" class="acao-venda-btn adicionar-item">Adicionar Item</button>
+            <div id="itensLancadosMobile" class="itens-lancados-mobile" style="display:none;">
+                <div class="itens-lancados-mobile-titulo">Itens lançados</div>
+                <div id="itensLancadosMobileLista" class="itens-lancados-mobile-lista"></div>
+<div id="itensLancadosMobileResumo" class="itens-lancados-mobile-resumo">
+    <div class="itens-lancados-mobile-resumo-linha">
+        <span>Subtotal</span>
+        <strong id="itensLancadosMobileSubtotal">R$ 0,00</strong>
+    </div>
+    <div class="itens-lancados-mobile-resumo-linha total">
+        <span>Total da venda</span>
+        <strong id="itensLancadosMobileTotal">R$ 0,00</strong>
+    </div>
+</div>
+            </div>
             <button type="button" id="btnGravarVenda" class="acao-venda-btn primaria">Gravar Venda</button>
             <button type="button" id="btnVisualizarVenda" class="acao-venda-btn secundaria">Visualizar Venda</button>
             <button type="button" id="btnLimparCabecalho" class="acao-venda-btn secundaria">Limpar Cabeçalho</button>
@@ -1994,6 +2169,7 @@ let clienteIndexAtivo = -1;
 let clienteSelecionado = null;
 let clienteResumoSuspenso = false;
 let clienteBuscaAbortController = null;
+let ultimoProdutoLancadoVenda = "";
 let historicoProdutoAbortController = null;
 let vendaGravadaId = null;
 let vendaGravadaUrl = "";
@@ -2776,7 +2952,7 @@ clienteBusca.addEventListener("keydown", (e) => {
         return;
     }
 
-    unidade.value = optionSelecionada.dataset.unidade || "";
+    unidade.value = optionSelecionada.dataset.unidade1 || optionSelecionada.dataset.unidade || "";
     preco.value = optionSelecionada.dataset.preco || "";
     atualizarHistoricoProdutoCliente();
 });
@@ -3127,6 +3303,212 @@ function coletarDadosVenda() {
     };
 }
 
+
+
+/* ===== JS ITENS LANCADOS MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
+const itensLancadosMobile = document.getElementById("itensLancadosMobile");
+const itensLancadosMobileLista = document.getElementById("itensLancadosMobileLista");
+const itensLancadosMobileSubtotal = document.getElementById("itensLancadosMobileSubtotal");
+const itensLancadosMobileTotal = document.getElementById("itensLancadosMobileTotal");
+
+function atualizarItensLancadosMobile() {
+    if (!itensLancadosMobile || !itensLancadosMobileLista || !tabelaBody) return;
+
+    const linhas = Array.from(tabelaBody.querySelectorAll("tr"));
+
+    if (!linhas.length) {
+        itensLancadosMobile.style.display = "none";
+        itensLancadosMobileLista.innerHTML = "";
+        if (itensLancadosMobileSubtotal) itensLancadosMobileSubtotal.textContent = "R$ 0,00";
+        if (itensLancadosMobileTotal) itensLancadosMobileTotal.textContent = "R$ 0,00";
+        return;
+    }
+
+    itensLancadosMobileLista.innerHTML = "";
+    let totalMobile = 0;
+
+    linhas.forEach((tr) => {
+        const produtoTxt = tr.children[0]?.textContent?.trim() || "";
+        const qtdTxt = tr.children[1]?.textContent?.trim() || "";
+        const unidadeTxt = tr.children[2]?.textContent?.trim() || "";
+        const precoTxt = tr.children[3]?.textContent?.trim() || "";
+        const totalTxt = tr.children[4]?.textContent?.trim() || "";
+
+        const totalNumero = parseFloat(normalizarNumeroVenda(totalTxt));
+        if (!isNaN(totalNumero)) {
+            totalMobile += totalNumero;
+        }
+
+        const card = document.createElement("div");
+        card.className = "item-lancado-mobile-card";
+        card.innerHTML = `
+            <div class="item-lancado-mobile-produto">${produtoTxt}</div>
+            <div class="item-lancado-mobile-info">
+                <span>${qtdTxt} ${unidadeTxt} x ${precoTxt}</span>
+                <span class="item-lancado-mobile-total">${totalTxt}</span>
+            </div>
+        `;
+
+        itensLancadosMobileLista.appendChild(card);
+    });
+
+    const totalFormatadoMobile = "R$ " + totalMobile.toFixed(2);
+
+    if (itensLancadosMobileSubtotal) {
+        itensLancadosMobileSubtotal.textContent = totalFormatadoMobile;
+    }
+
+    if (itensLancadosMobileTotal) {
+        itensLancadosMobileTotal.textContent = totalFormatadoMobile;
+    }
+
+    itensLancadosMobile.style.display = "block";
+}
+
+if (tabelaBody) {
+    const observadorItensMobile = new MutationObserver(atualizarItensLancadosMobile);
+    observadorItensMobile.observe(tabelaBody, { childList: true, subtree: true });
+    atualizarItensLancadosMobile();
+}
+/* ===== FIM JS ITENS LANCADOS MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
+/* ===== JS ADICIONAR ITEM VENDA MOBILE - CHATGPT 2026-06-10 ===== */
+const btnAdicionarItemVenda = document.getElementById("btnAdicionarItemVenda");
+
+
+/* ===== PROXIMO PRODUTO AUTOMATICO AO ADICIONAR - CHATGPT 2026-06-10 ===== */
+function preencherProximoProdutoDepoisDeAdicionar(produtoValorAtual, produtoNomeAtual) {
+    const opcoes = Array.from(produto.options).filter((opt) => opt.value && opt.textContent.trim());
+
+    if (!opcoes.length) return false;
+
+    const valorAtual = String(produtoValorAtual || "").trim();
+    const nomeAtual = normalizarTextoCliente(produtoNomeAtual || "");
+
+    let indiceAtual = opcoes.findIndex((opt) => String(opt.value || "").trim() === valorAtual);
+
+    if (indiceAtual < 0 && nomeAtual) {
+        indiceAtual = opcoes.findIndex((opt) => normalizarTextoCliente(opt.textContent || "") === nomeAtual);
+    }
+
+    if (indiceAtual < 0) return false;
+
+    const proximoIndice = indiceAtual + 1;
+
+    if (proximoIndice >= opcoes.length) return false;
+
+    const proximoOpt = opcoes[proximoIndice];
+
+    selecionarProduto(proximoOpt);
+
+    quantidade.value = "";
+    quantidade.focus();
+    quantidade.select();
+
+    return true;
+}
+/* ===== FIM PROXIMO PRODUTO AUTOMATICO AO ADICIONAR - CHATGPT 2026-06-10 ===== */
+function adicionarItemVendaAtual() {
+    const produtoNome = (produtoBusca.value || "").trim();
+    const produtoValor = (produto.value || "").trim();
+    const qtdTexto = (quantidade.value || "").trim();
+    const unidadeTexto = (unidade.value || "").trim();
+    const precoTexto = (preco.value || "").trim();
+
+    if (!produtoNome || !produtoValor) {
+        mostrarToastVenda("Selecione um produto antes de adicionar.");
+        focarProximoCampo(produtoBusca);
+        return false;
+    }
+
+    if (!qtdTexto || !quantidadeInformadaValida()) {
+        mostrarToastVenda("Informe a quantidade antes de adicionar.");
+        focarProximoCampo(quantidade);
+        return false;
+    }
+
+    if (!unidadeTexto) {
+        mostrarToastVenda("Selecione a unidade antes de adicionar.");
+        focarProximoCampo(unidade);
+        return false;
+    }
+
+    if (!precoTexto) {
+        mostrarToastVenda("Informe o preço antes de adicionar.");
+        focarProximoCampo(preco);
+        return false;
+    }
+
+    const qtdNumero = parseFloat(normalizarNumeroVenda(qtdTexto));
+    const precoNumero = parseFloat(normalizarNumeroVenda(precoTexto));
+
+    if (isNaN(qtdNumero) || qtdNumero <= 0) {
+        mostrarToastVenda("Quantidade invalida.");
+        focarProximoCampo(quantidade);
+        return false;
+    }
+
+    if (isNaN(precoNumero) || precoNumero <= 0) {
+        mostrarToastVenda("Preço invalido.");
+        focarProximoCampo(preco);
+        return false;
+    }
+
+    const item = {
+        produto_id: produtoValor,
+        produto_nome: produtoNome,
+        quantidade: qtdNumero.toFixed(2),
+        unidade: unidadeTexto,
+        preco_unitario: precoNumero.toFixed(2),
+        valor_total: (qtdNumero * precoNumero).toFixed(2),
+    };
+
+    const novaLinha = criarLinhaItemVenda(item);
+    tabelaBody.appendChild(novaLinha);
+    ultimoProdutoLancadoVenda = produtoNome;
+    atualizarTotalGeral();
+
+    if (typeof scrollLinhaDentroDaLista === "function") {
+        scrollLinhaDentroDaLista(novaLinha, "smooth");
+    }
+
+    const preencheuProximo = preencherProximoProdutoDepoisDeAdicionar(produtoValor, produtoNome);
+
+    if (!preencheuProximo) {
+        produto.value = "";
+        produtoBusca.value = "";
+        quantidade.value = "";
+        unidade.value = "";
+        preco.value = "";
+
+        estoquePreview.style.display = "none";
+        historicoProdutoCliente.textContent = "";
+
+        focarProximoCampo(produtoBusca);
+    }
+
+    atualizarItensLancadosMobile();
+
+    if (itensLancadosMobile) {
+        itensLancadosMobile.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+
+    mostrarToastVenda("Item adicionado na venda.");
+    return true;
+}
+
+if (btnAdicionarItemVenda) {
+    btnAdicionarItemVenda.addEventListener("click", () => {
+        adicionarItemVendaAtual();
+    });
+}
+
+preco.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+        e.preventDefault();
+        adicionarItemVendaAtual();
+    }
+});
+/* ===== FIM JS ADICIONAR ITEM VENDA MOBILE - CHATGPT 2026-06-10 ===== */
 async function gravarVendaAtual() {
     const dadosVenda = coletarDadosVenda();
 
@@ -3795,16 +4177,58 @@ if (fracionadoSug && unidadeFracSug) {
         estoquePreview.style.display = "inline-block";
     });
 
-    const tocarProdutoSugestao = (evento) => {
+    let produtoToqueX = 0;
+    let produtoToqueY = 0;
+    let produtoToqueMoveu = false;
+    let produtoToqueSelecionou = false;
+
+    div.addEventListener("touchstart", (evento) => {
+        const toque = evento.touches && evento.touches[0];
+        if (!toque) return;
+        produtoToqueX = toque.clientX;
+        produtoToqueY = toque.clientY;
+        produtoToqueMoveu = false;
+    }, { passive: true });
+
+    div.addEventListener("touchmove", (evento) => {
+        const toque = evento.touches && evento.touches[0];
+        if (!toque) return;
+
+        const dx = Math.abs(toque.clientX - produtoToqueX);
+        const dy = Math.abs(toque.clientY - produtoToqueY);
+
+        if (dx > 10 || dy > 10) {
+            produtoToqueMoveu = true;
+        }
+    }, { passive: true });
+
+    div.addEventListener("touchend", (evento) => {
+        if (produtoToqueMoveu) return;
+
+        evento.preventDefault();
+        evento.stopPropagation();
+
+        produtoToqueSelecionou = true;
+        selecionarProduto(opt);
+
+        setTimeout(() => {
+            produtoToqueSelecionou = false;
+        }, 400);
+    }, { passive: false });
+
+    div.addEventListener("mousedown", (evento) => {
         evento.preventDefault();
         evento.stopPropagation();
         selecionarProduto(opt);
-    };
+    });
 
-    div.addEventListener("pointerdown", tocarProdutoSugestao);
-    div.addEventListener("mousedown", tocarProdutoSugestao);
-    div.addEventListener("touchstart", tocarProdutoSugestao, { passive: false });
-    div.addEventListener("click", tocarProdutoSugestao);
+    div.addEventListener("click", (evento) => {
+        if (produtoToqueSelecionou) return;
+
+        evento.preventDefault();
+        evento.stopPropagation();
+        selecionarProduto(opt);
+    });
 
     sugestoesBox.appendChild(div);
 });
@@ -3824,7 +4248,7 @@ produtoBusca.value = opt.value;
 
 unidade.innerHTML = "";
 
-const unidade1 = opt.dataset.unidade || "";
+const unidade1 = opt.dataset.unidade1 || opt.dataset.unidade || "";
 const unidade2 = opt.dataset.unidade2 || "";
 const fracionado = opt.dataset.fracionado === "true";
 
@@ -3837,6 +4261,9 @@ if (fracionado && unidade2) {
 }
 
 unidade.value = unidade1;
+if (unidade1) {
+    unidade.dispatchEvent(new Event("change"));
+}
 const estoqueBaseSelecionado = parseFloat(opt.dataset.estoque || "0");
 const fatorSelecionado = parseFloat(opt.dataset.fator || "0");
 const unidadeBaseSelecionada = opt.dataset.unidade1 || "";
@@ -3870,7 +4297,7 @@ unidade.addEventListener("change", () => {
 
     if (!opt) return;
 
-    const unidade1 = opt.dataset.unidade || "";
+    const unidade1 = opt.dataset.unidade1 || opt.dataset.unidade || "";
     const unidade2 = opt.dataset.unidade2 || "";
     const fracionado = opt.dataset.fracionado === "true";
     const fator = parseFloat(opt.dataset.fator || "0");
@@ -3899,6 +4326,45 @@ let precoFracionado = opt.dataset.preco2 || "";
         preco.value = precoFracionado;
     }
 });
+
+/* ===== ROLAR PARA ULTIMO PRODUTO LANCADO - CHATGPT 2026-06-10 ===== */
+function rolarParaUltimoProdutoLancado() {
+    if (!ultimoProdutoLancadoVenda || !sugestoesBox) return;
+
+    const alvo = normalizarTextoCliente(ultimoProdutoLancadoVenda);
+    const itens = Array.from(sugestoesBox.querySelectorAll(".produto-sugestao-item"));
+
+    if (!itens.length) return;
+
+    let encontrado = -1;
+
+    for (let i = 0; i < itens.length; i++) {
+        const texto = normalizarTextoCliente(itens[i].textContent || "");
+        if (texto.includes(alvo)) {
+            encontrado = i;
+            break;
+        }
+    }
+
+    if (encontrado < 0) return;
+
+    const proximoIndex = Math.min(encontrado + 1, itens.length - 1);
+    const itemParaMostrar = itens[proximoIndex] || itens[encontrado];
+
+    itemParaMostrar.scrollIntoView({
+        block: "center",
+        behavior: "auto"
+    });
+
+    itens.forEach(item => item.classList.remove("ativo"));
+    itemParaMostrar.classList.add("ativo");
+    indexAtivo = proximoIndex;
+
+    setTimeout(() => {
+        itemParaMostrar.click();
+    }, 80);
+}
+/* ===== FIM ROLAR PARA ULTIMO PRODUTO LANCADO - CHATGPT 2026-06-10 ===== */
 produtoBusca.addEventListener("input", () => {
     autocompleteAberto = true;
 
@@ -3919,6 +4385,10 @@ produtoBusca.addEventListener("click", () => {
 
     filtrarProdutos(texto);
     renderSugestoes();
+
+    if (!texto && ultimoProdutoLancadoVenda) {
+        setTimeout(rolarParaUltimoProdutoLancado, 80);
+    }
 });
 //produtoBusca.addEventListener("focus", () => {
 //    autocompleteAberto = true;
