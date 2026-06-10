@@ -1,6 +1,7 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-br">
 <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta charset="UTF-8">
     <title>Venda #{{ venda.id }}</title>
     <style>
@@ -1181,6 +1182,409 @@
             box-shadow: 0 1px 0 #1e40af, 0 4px 9px rgba(37, 99, 235, 0.16);
             filter: brightness(0.96);
         }
+    
+        /* MOBILE - Nota de venda em card grande para envio ao cliente */
+        @media screen and (max-width: 600px) {
+            body {
+                background: #eef4ff;
+            }
+
+            .pagina {
+                width: 100%;
+                max-width: none;
+                margin: 0;
+                padding: 0;
+            }
+
+            .nota-duas-vias {
+                display: block;
+            }
+
+            .nota-copia {
+                width: 100%;
+                border: 0;
+                border-radius: 0;
+                box-shadow: none;
+                background: transparent;
+            }
+
+            .nota-copia + .nota-copia {
+                display: none;
+            }
+
+            .cabecalho {
+                display: block;
+                padding: 14px 12px 10px;
+                background: #eff6ff;
+            }
+
+            .cabecalho h1 {
+                font-size: 26px;
+                line-height: 1.05;
+                color: #0f172a;
+            }
+
+            .cabecalho > div:first-child > div:first-child {
+                font-size: 12px !important;
+                letter-spacing: 0.08em !important;
+            }
+
+            .cabecalho > div:first-child > div:last-child {
+                font-size: 15px !important;
+                margin-top: 5px !important;
+                font-weight: 800;
+                color: #1d4ed8 !important;
+            }
+
+            .acoes {
+                margin-top: 12px;
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 8px;
+            }
+
+            .acoes button,
+            .acoes a {
+                width: 100%;
+                height: auto;
+                min-height: 42px;
+                padding: 10px 8px;
+                border-radius: 12px;
+                font-size: 12px;
+                line-height: 1.15;
+                text-align: center;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                white-space: normal;
+            }
+
+            .conteudo {
+                padding: 10px 9px 18px;
+            }
+
+            .venda-nota-corpo {
+                margin-top: 10px;
+                padding: 16px 13px;
+                border: 1px solid #dbeafe;
+                border-radius: 20px;
+                background: #ffffff;
+                box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+            }
+
+            .venda-nota-corpo .dados {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 9px;
+                margin-bottom: 12px;
+            }
+
+            .venda-nota-corpo .campo {
+                padding: 10px 11px;
+                border: 1px solid #e2e8f0;
+                border-radius: 14px;
+                background: #f8fafc;
+            }
+
+            .venda-nota-corpo .label {
+                font-size: 11px;
+                letter-spacing: 0.04em;
+                margin-bottom: 4px;
+                color: #64748b;
+            }
+
+            .venda-nota-corpo .valor {
+                font-size: 17px;
+                line-height: 1.25;
+                font-weight: 900;
+                color: #0f172a;
+                word-break: break-word;
+            }
+
+            .venda-nota-corpo .campo:first-child .valor,
+            .venda-nota-corpo .campo:last-child .valor {
+                color: #166534;
+                font-size: 20px;
+            }
+
+            .conta-receber-info {
+                margin: 12px 0;
+                padding: 12px;
+                border-radius: 14px;
+                font-size: 14px;
+                line-height: 1.35;
+            }
+
+            .tabela-itens-principais,
+            .tabela-itens-principais thead,
+            .tabela-itens-principais tbody,
+            .tabela-itens-principais tr,
+            .tabela-itens-principais th,
+            .tabela-itens-principais td {
+                display: block;
+                width: 100%;
+            }
+
+            .tabela-itens-principais {
+                border: 0;
+                background: transparent;
+            }
+
+            .tabela-itens-principais colgroup,
+            .tabela-itens-principais thead {
+                display: none;
+            }
+
+            .tabela-itens-principais tr {
+                margin-bottom: 10px;
+                padding: 12px;
+                border: 1px solid #dbeafe;
+                border-radius: 16px;
+                background: #f8fbff;
+                box-shadow: 0 3px 10px rgba(15, 23, 42, 0.06);
+            }
+
+            .tabela-itens-principais td {
+                border: 0;
+                padding: 3px 0;
+                font-size: 14px;
+                line-height: 1.25;
+                color: #0f172a;
+            }
+
+            .tabela-itens-principais td:first-child {
+                font-size: 16px;
+                font-weight: 900;
+                margin-bottom: 6px;
+            }
+
+            .tabela-itens-principais td.numero {
+                text-align: left;
+                font-weight: 850;
+                color: #334155;
+            }
+
+            .tabela-itens-principais td:nth-child(2)::before {
+                content: "Qtd: ";
+                color: #64748b;
+                font-weight: 800;
+            }
+
+            .tabela-itens-principais td:nth-child(3)::before {
+                content: "Unidade: ";
+                color: #64748b;
+                font-weight: 800;
+            }
+
+            .tabela-itens-principais td:nth-child(4)::before {
+                content: "Preço: ";
+                color: #64748b;
+                font-weight: 800;
+            }
+
+            .tabela-itens-principais td:nth-child(5)::before {
+                content: "Subtotal: ";
+                color: #64748b;
+                font-weight: 800;
+            }
+
+            .tabela-itens-principais td:nth-child(5) {
+                margin-top: 5px;
+                padding-top: 7px;
+                border-top: 1px dashed #bfdbfe;
+                color: #166534;
+                font-size: 16px;
+                font-weight: 950;
+            }
+
+            .total {
+                justify-content: space-between;
+                align-items: center;
+                gap: 10px;
+                margin-top: 14px;
+                padding: 14px 12px;
+                border: 0;
+                border-radius: 16px;
+                background: #dcfce7;
+                color: #166534;
+                font-size: 18px;
+            }
+
+            .total span:last-child {
+                font-size: 24px;
+                font-weight: 950;
+                white-space: nowrap;
+            }
+
+            .historico,
+            .comunicacao {
+                padding: 0 2px;
+            }
+        }
+    
+        /* CORRECAO MOBILE - compacta botoes e prioriza a nota */
+        @media screen and (max-width: 600px) {
+            .cabecalho {
+                padding: 10px 8px 8px !important;
+            }
+
+            .cabecalho h1 {
+                font-size: 24px !important;
+                line-height: 1.05 !important;
+            }
+
+            .cabecalho > div:first-child > div:first-child {
+                font-size: 11px !important;
+            }
+
+            .cabecalho > div:first-child > div:last-child {
+                font-size: 14px !important;
+                margin-top: 3px !important;
+            }
+
+            .acoes {
+                margin-top: 8px !important;
+                display: flex !important;
+                flex-wrap: nowrap !important;
+                gap: 6px !important;
+                overflow-x: auto !important;
+                padding-bottom: 5px !important;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .acoes button,
+            .acoes a {
+                width: auto !important;
+                min-width: max-content !important;
+                min-height: 30px !important;
+                height: 30px !important;
+                padding: 0 9px !important;
+                border-radius: 8px !important;
+                font-size: 10px !important;
+                line-height: 28px !important;
+                white-space: nowrap !important;
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                flex: 0 0 auto !important;
+            }
+
+            .conteudo {
+                padding: 8px 6px 14px !important;
+            }
+
+            .whatsapp-status,
+            .edit-review-whatsapp,
+            .entrega-section {
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+            }
+
+            .edit-review-whatsapp {
+                padding: 9px !important;
+                font-size: 12px !important;
+            }
+
+            .edit-review-whatsapp-flow {
+                display: flex !important;
+                flex-wrap: wrap !important;
+                gap: 6px !important;
+            }
+
+            .edit-review-whatsapp-flow a,
+            .edit-review-whatsapp-flow button {
+                min-height: 32px !important;
+                font-size: 11px !important;
+                padding: 6px 8px !important;
+                border-radius: 8px !important;
+            }
+
+            .venda-nota-corpo {
+                margin-top: 8px !important;
+            }
+        }
+    
+        /* CORRECAO MOBILE - nota aparece primeiro e mais compacta */
+        @media screen and (max-width: 600px) {
+            .conteudo {
+                display: flex !important;
+                flex-direction: column !important;
+            }
+
+            .venda-nota-corpo {
+                order: -20 !important;
+                margin-top: 8px !important;
+                padding: 13px 10px !important;
+            }
+
+            .whatsapp-status,
+            .edit-review-whatsapp,
+            .entrega-section,
+            .historico,
+            .comunicacao {
+                order: 20 !important;
+            }
+
+            .venda-nota-corpo .dados {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 8px !important;
+            }
+
+            .venda-nota-corpo .campo {
+                padding: 8px 9px !important;
+                border-radius: 13px !important;
+            }
+
+            .venda-nota-corpo .campo:nth-child(1),
+            .venda-nota-corpo .campo:nth-child(2) {
+                grid-column: 1 / -1 !important;
+            }
+
+            .venda-nota-corpo .label {
+                font-size: 10px !important;
+                margin-bottom: 3px !important;
+            }
+
+            .venda-nota-corpo .valor {
+                font-size: 15px !important;
+            }
+
+            .venda-nota-corpo .campo:first-child .valor,
+            .venda-nota-corpo .campo:last-child .valor {
+                font-size: 18px !important;
+            }
+
+            .tabela-itens-principais tr {
+                margin-bottom: 8px !important;
+                padding: 10px !important;
+                border-radius: 14px !important;
+            }
+
+            .tabela-itens-principais td {
+                font-size: 13px !important;
+                padding: 2px 0 !important;
+            }
+
+            .tabela-itens-principais td:first-child {
+                font-size: 15px !important;
+                margin-bottom: 4px !important;
+            }
+
+            .tabela-itens-principais td:nth-child(5) {
+                font-size: 15px !important;
+                padding-top: 5px !important;
+            }
+
+            .total {
+                padding: 12px 10px !important;
+                font-size: 16px !important;
+                border-radius: 15px !important;
+            }
+
+            .total span:last-child {
+                font-size: 23px !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1199,7 +1603,7 @@
                             <a href="{% url 'estoque:pendencias_entrega' %}">Voltar para pendencias de entrega</a>
                         {% else %}
                         {% if request.GET.origem == "pendencias" %}
-                            <a href="{% url 'estoque:pendencias_entrega' %}">Voltar para pendências de entrega</a>
+                            <a href="{% url 'estoque:pendencias_entrega' %}">Voltar para pendÃªncias de entrega</a>
                         {% endif %}
                         {% if retorno_url %}
                             <a href="{{ retorno_url }}">Voltar para Contas a Receber</a>
@@ -1219,7 +1623,7 @@
                         <a href="{% url 'estoque:venda_ajuste_item_quitado' venda.id %}" class="ajuste-quitado-acao">Resolver item nao entregue/nao aceito</a>
                         {% else %}
                         <a href="{% url 'estoque:venda_editar_revisao' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}" class="editar-nota-acao">Editar nota</a>
-                        <a href="{% url 'estoque:venda_editar_cabecalho' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}" class="editar-nota-acao">Editar cabeçalho</a>
+                        <a href="{% url 'estoque:venda_editar_cabecalho' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}" class="editar-nota-acao">Editar cabeÃ§alho</a>
                         <a href="{% url 'estoque:venda_adicionar_produto_item' venda.id %}{% if itens_adicionados_param or retorno_querystring %}?{% if itens_adicionados_param %}itens_adicionados={{ itens_adicionados_param }}{% if retorno_querystring %}&{% endif %}{% endif %}{% if retorno_querystring %}{{ retorno_querystring }}{% endif %}{% endif %}" class="editar-nota-acao">Adicionar produto</a>
                         {% endif %}
                         <a href="{% url 'estoque:venda_cancelar' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}" class="cancelar-venda-acao">Cancelar venda</a>
@@ -1361,7 +1765,7 @@
                                 {% if entrega_info.rota.status != entrega_info.rota.STATUS_CONCLUIDA %}
                                     <div class="entrega-send" data-rota-id="{{ entrega_info.rota.id }}" data-checklist-url="{{ entrega_info.checklist_url }}">
                                         <select class="entrega-send-select">
-                                            <option value="">Enviar para funcionário</option>
+                                            <option value="">Enviar para funcionÃ¡rio</option>
                                             {% for funcionario in funcionarios_habilitados %}
                                                 <option value="{{ funcionario.telefone_whatsapp_normalizado|default:funcionario.telefone_whatsapp }}" data-name="{{ funcionario.nome }}">
                                                     {{ funcionario.nome }}
@@ -1371,7 +1775,7 @@
                                         <button type="button" class="entrega-send-btn primary">Enviar checklist pelo WhatsApp</button>
                                     </div>
                                     {% if not funcionarios_habilitados %}
-                                        <p class="entrega-feedback warning">Nenhum funcionário habilitado para receber checklist.</p>
+                                        <p class="entrega-feedback warning">Nenhum funcionÃ¡rio habilitado para receber checklist.</p>
                                     {% endif %}
                                     <p class="entrega-send-feedback" aria-live="polite"></p>
                                 {% endif %}
@@ -1430,7 +1834,7 @@
                                 Status: {{ item_removido.get_status_display }}.
                                 {% if item_removido.contexto_desfazer.permitido %}
                                     <br>
-                                    <a href="{% url 'estoque:venda_desfazer_remocao_item' venda.id item_removido.id %}">Desfazer remoção</a>
+                                    <a href="{% url 'estoque:venda_desfazer_remocao_item' venda.id item_removido.id %}">Desfazer remoÃ§Ã£o</a>
                                 {% elif item_removido.contexto_desfazer.motivo %}
                                     <br>
                                     {{ item_removido.contexto_desfazer.motivo }}
@@ -1444,7 +1848,7 @@
                     <div class="venda-nota-corpo">
                     <div class="dados" id="dados-da-nota">
                         <div class="campo">
-                            <span class="label">Nº da venda</span>
+                            <span class="label">NÂº da venda</span>
                             <span class="valor">#{{ venda.id }}</span>
                         </div>
                         <div class="campo">
@@ -1667,7 +2071,7 @@
                 <section class="conteudo">
                     <div class="dados">
                         <div class="campo">
-                            <span class="label">Nº da venda</span>
+                            <span class="label">NÂº da venda</span>
                             <span class="valor">#{{ venda.id }}</span>
                         </div>
                         <div class="campo">
@@ -2046,7 +2450,7 @@
             });
         }
 
-        // Funcionalidade de envio de checklist para funcionário
+        // Funcionalidade de envio de checklist para funcionÃ¡rio
         (function () {
             function normalizarWhatsapp(valor) {
                 var digitos = String(valor || "").replace(/\D/g, "");
@@ -2082,7 +2486,7 @@
                 var telefone = normalizarWhatsapp(select.value);
 
                 if (!nomeFuncionario || !telefone) {
-                    mostrarFeedback('Selecione um funcionário habilitado.', 'warning');
+                    mostrarFeedback('Selecione um funcionÃ¡rio habilitado.', 'warning');
                     select.focus();
                     return;
                 }
@@ -2103,3 +2507,7 @@
     </script>
 </body>
 </html>
+
+
+
+
