@@ -653,10 +653,16 @@ align-items: center;
             Pedidos
           </a>
           <a
+            href="{% url 'estoque:vendas' %}"
+            class="btn-acao-principal-painel"
+          >
+            Vendas
+          </a>
+          <a
             href="{% url 'estoque:contas_receber' %}"
             class="btn-acao-principal-painel"
           >
-            Contas a Receber
+            Receber Cliente
           </a>
           <a
             id="btnNovoProduto"
@@ -1050,6 +1056,9 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
   <div class="tarja-grupo">
     <a href="{% url 'estoque:vendas' %}" class="btn-tarja btn-tarja-vendas">
       Vendas
+    </a>
+    <a href="{% url 'estoque:contas_receber' %}" class="btn-tarja btn-tarja-vendas">
+      Receber Cliente
     </a>
     <a href="{% url 'estoque:lixeira' %}" class="btn-tarja btn-tarja-secundario">
       Ver Lixeira
