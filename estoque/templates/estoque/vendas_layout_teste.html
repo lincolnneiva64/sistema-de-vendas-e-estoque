@@ -3428,6 +3428,21 @@ if (tabelaBody) {
 /* ===== JS ADICIONAR ITEM VENDA MOBILE - CHATGPT 2026-06-10 ===== */
 const btnAdicionarItemVenda = document.getElementById("btnAdicionarItemVenda");
 
+function fecharTecladoVendaMobile() {
+    if (typeof ehMobileVenda === "function" && !ehMobileVenda()) return;
+
+    const ativo = document.activeElement;
+    if (ativo && typeof ativo.blur === "function") {
+        ativo.blur();
+    }
+
+    setTimeout(() => {
+        const atual = document.activeElement;
+        if (atual && ["INPUT", "TEXTAREA", "SELECT"].includes(atual.tagName)) {
+            atual.blur();
+        }
+    }, 80);
+}
 
 /* ===== PROXIMO PRODUTO AUTOMATICO AO ADICIONAR - CHATGPT 2026-06-10 ===== */
 function preencherProximoProdutoDepoisDeAdicionar(produtoValorAtual, produtoNomeAtual) {
@@ -3552,14 +3567,22 @@ function adicionarItemVendaAtual() {
 
 if (btnAdicionarItemVenda) {
     btnAdicionarItemVenda.addEventListener("click", () => {
-        adicionarItemVendaAtual();
+        const adicionou = adicionarItemVendaAtual();
+
+        if (adicionou) {
+            fecharTecladoVendaMobile();
+        }
     });
 }
 
 preco.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
         e.preventDefault();
-        adicionarItemVendaAtual();
+        const adicionou = adicionarItemVendaAtual();
+
+        if (adicionou) {
+            fecharTecladoVendaMobile();
+        }
     }
 });
 /* ===== FIM JS ADICIONAR ITEM VENDA MOBILE - CHATGPT 2026-06-10 ===== */
