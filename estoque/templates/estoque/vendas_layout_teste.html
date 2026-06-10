@@ -1827,6 +1827,23 @@ td:first-child {
     }
 }
 /* ===== FIM ROLAGEM LISTA PRODUTOS MOBILE - CHATGPT 2026-06-10 ===== */
+/* ===== ROLAGEM LISTA CLIENTES MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
+@media (max-width: 980px) {
+    .cliente-sugestoes {
+        max-height: 280px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+        touch-action: pan-y;
+    }
+
+    .cliente-sugestao-item {
+        touch-action: pan-y;
+    }
+}
+/* ===== FIM ROLAGEM LISTA CLIENTES MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
+
+
 
 /* ===== TOTAL ITENS LANCADOS MOBILE - CHATGPT 2026-06-10 ===== */
 @media (max-width: 980px) {
@@ -2762,17 +2779,54 @@ function renderizarSugestoesClientes() {
             clienteIndexAtivo = index;
             renderizarSugestoesClientes();
         });
-        const tocarClienteSugestao = (e) => {
+        let clienteToqueX = 0;
+        let clienteToqueY = 0;
+        let clienteToqueMoveu = false;
+        let clienteToqueSelecionou = false;
+
+        const selecionarClienteSugestao = (e) => {
             e.preventDefault();
             e.stopPropagation();
             preencherResumoCliente(cliente, true);
             clienteSugestoesBox.style.display = "none";
         };
 
-        item.addEventListener("pointerdown", tocarClienteSugestao);
-        item.addEventListener("mousedown", tocarClienteSugestao);
-        item.addEventListener("touchstart", tocarClienteSugestao, { passive: false });
-        item.addEventListener("click", tocarClienteSugestao);
+        item.addEventListener("touchstart", (evento) => {
+            const toque = evento.touches && evento.touches[0];
+            if (!toque) return;
+            clienteToqueX = toque.clientX;
+            clienteToqueY = toque.clientY;
+            clienteToqueMoveu = false;
+            clienteToqueSelecionou = false;
+        }, { passive: true });
+
+        item.addEventListener("touchmove", (evento) => {
+            const toque = evento.touches && evento.touches[0];
+            if (!toque) return;
+
+            const dx = Math.abs(toque.clientX - clienteToqueX);
+            const dy = Math.abs(toque.clientY - clienteToqueY);
+
+            if (dx > 8 || dy > 8) {
+                clienteToqueMoveu = true;
+            }
+        }, { passive: true });
+
+        item.addEventListener("touchend", (evento) => {
+            if (clienteToqueMoveu) return;
+
+            clienteToqueSelecionou = true;
+            selecionarClienteSugestao(evento);
+        });
+
+        item.addEventListener("click", (evento) => {
+            if (clienteToqueSelecionou) {
+                clienteToqueSelecionou = false;
+                return;
+            }
+
+            selecionarClienteSugestao(evento);
+        });
 
         clienteSugestoesBox.appendChild(item);
     });
