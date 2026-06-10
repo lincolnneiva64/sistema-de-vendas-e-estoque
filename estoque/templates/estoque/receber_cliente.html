@@ -817,7 +817,14 @@
     if (!cliente || !cliente.id) return;
     const url = receberUrlBase.replace("/cliente/0/", "/cliente/" + encodeURIComponent(cliente.id) + "/")
       + "?next=" + encodeURIComponent(retornoUrl);
-    window.location.href = url;
+    input.value = cliente.nome || "";
+    clientes = [];
+    indiceAtivo = -1;
+    box.style.display = "none";
+
+    setTimeout(() => {
+      window.location.href = url;
+    }, 280);
   }
 
   function normalizarTexto(valor) {
@@ -880,7 +887,32 @@
         renderizar();
       });
 
-      item.addEventListener("click", () => abrirRecebimento(cliente));
+      let toqueInicioX = 0;
+      let toqueInicioY = 0;
+
+      function selecionarClienteSugestao(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        abrirRecebimento(cliente);
+      }
+
+      item.addEventListener("touchstart", (event) => {
+        const toque = event.touches && event.touches[0];
+        if (!toque) return;
+        toqueInicioX = toque.clientX;
+        toqueInicioY = toque.clientY;
+      }, { passive: true });
+
+      item.addEventListener("touchend", (event) => {
+        const toque = event.changedTouches && event.changedTouches[0];
+        if (!toque) return;
+        const moveuX = Math.abs(toque.clientX - toqueInicioX);
+        const moveuY = Math.abs(toque.clientY - toqueInicioY);
+        if (moveuX > 10 || moveuY > 10) return;
+        selecionarClienteSugestao(event);
+      }, { passive: false });
+
+      item.addEventListener("click", selecionarClienteSugestao);
       box.appendChild(item);
     });
 
@@ -892,11 +924,8 @@
     const termo = input.value.trim();
     ultimoTermo = termo;
 
-    if (termo.length < 2) {
-      clientes = [];
-      renderizar();
-      return;
-    }
+    // No celular, ao tocar no campo vazio, tambem abre a lista inicial de clientes,
+    // igual ao autocomplete usado na venda.
 
     fetch(clientesUrl + "?contexto=receber_rapido&q=" + encodeURIComponent(termo), {
       headers: { "X-Requested-With": "XMLHttpRequest" }
@@ -918,6 +947,16 @@
   input.addEventListener("input", () => {
     clearTimeout(timer);
     timer = setTimeout(buscarClientes, 120);
+  });
+
+  input.addEventListener("focus", () => {
+    clearTimeout(timer);
+    timer = setTimeout(buscarClientes, 80);
+  });
+
+  input.addEventListener("click", () => {
+    clearTimeout(timer);
+    timer = setTimeout(buscarClientes, 80);
   });
 
   input.addEventListener("keydown", (event) => {
