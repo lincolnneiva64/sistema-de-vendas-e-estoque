@@ -641,6 +641,12 @@ align-items: center;
             Funcionarios
           </a>
           <a
+            href="{% url 'estoque:fornecedores' %}"
+            class="btn-acao-principal-painel"
+          >
+            Fornecedores
+          </a>
+          <a
             href="{% url 'estoque:entregas_dia' %}"
             class="btn-acao-principal-painel"
           >
@@ -1051,6 +1057,9 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
     </a>
     <a href="{% url 'estoque:funcionarios' %}" class="btn-acao-principal-painel">
       Funcionarios
+    </a>
+    <a href="{% url 'estoque:fornecedores' %}" class="btn-acao-principal-painel">
+      Fornecedores
     </a>
   </div>
   <div class="tarja-grupo">
