@@ -153,6 +153,35 @@
     width: 100%; border: 1.5px solid #d3dbe8; border-radius: 8px;
     padding: 8px 10px; color: #172033; font: inherit; font-weight: 750;
   }
+  #valorRecebidoCliente {
+    min-height: 70px;
+    border: 3px solid #16a34a;
+    border-radius: 18px;
+    background: #ecfdf3;
+    color: #14532d;
+    font-size: 1.35rem;
+    font-weight: 950;
+    box-shadow: 0 10px 24px rgba(22, 163, 74, 0.16);
+  }
+  #valorRecebidoCliente:focus {
+    outline: none;
+    border-color: #15803d;
+    background: #dcfce7;
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.22), 0 10px 24px rgba(22, 163, 74, 0.16);
+  }
+  .rc-valor-recebido-destaque {
+    background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
+    border: 1.5px solid #bbf7d0;
+    border-radius: 18px;
+    padding: 10px;
+    margin-bottom: 6px;
+  }
+  .rc-compartilhar-imagem-btn {
+    border-color: #86efac;
+    background: #16a34a;
+    color: #fff;
+    box-shadow: 0 8px 16px rgba(21, 128, 61, 0.18);
+  }
   .rc-forma-pagamento-btn {
     display: block; width: 100%; min-height: 58px; border: 2px solid #1d4ed8;
     border-radius: 16px; background: #f8fbff; color: #172033;
@@ -707,8 +736,16 @@
                 >
                   Ver comprovante visual
                 </a>
+                <button
+                  type="button"
+                  class="rc-btn rc-compartilhar-imagem-btn"
+                  id="btn-compartilhar-comprovante-imagem"
+                  data-comprovante-url="{{ feedback_recebimento.comprovante_imagem_url }}"
+                >
+                  Compartilhar imagem no WhatsApp
+                </button>
                 <p class="rc-comprovante-orientacao">
-                  Para enviar a imagem: abra o comprovante, copie a imagem e cole no WhatsApp.
+                  Use o botão Compartilhar imagem no WhatsApp para enviar só a imagem, sem colar o link.
                 </p>
               {% endif %}
               {% if feedback_recebimento.whatsapp_confirmacao.tem_whatsapp %}
@@ -1217,6 +1254,7 @@
     atualizarBotaoFormaPagamento();
     const btnWhatsappConfirmacao = document.getElementById("btn-enviar-confirmacao-whatsapp");
     const btnVerComprovanteVisual = document.getElementById("btn-ver-comprovante-visual");
+    const btnCompartilharComprovanteImagem = document.getElementById("btn-compartilhar-comprovante-imagem");
     const btnVoltarTelaVenda = document.getElementById("btn-voltar-tela-venda");
     const contas = JSON.parse(document.getElementById("contasPreviewCliente")?.textContent || "[]");
     const pagamentosHoje = JSON.parse(document.getElementById("pagamentosHojeCliente")?.textContent || "[]");
@@ -1236,7 +1274,34 @@
       elemento?.scrollIntoView({ behavior: comportamento, block: "start" });
     }
 
-    const botoesConfirmacao = [btnVerComprovanteVisual, btnWhatsappConfirmacao, btnVoltarTelaVenda].filter(Boolean);
+    async function compartilharComprovanteImagem() {
+      const url = btnCompartilharComprovanteImagem?.dataset.comprovanteUrl;
+      if (!url) return;
+
+      try {
+        const resposta = await fetch(url, { cache: "no-store" });
+        if (!resposta.ok) throw new Error("Imagem nao carregada");
+        const blob = await resposta.blob();
+        const arquivo = new File([blob], "comprovante-pagamento.png", { type: blob.type || "image/png" });
+
+        if (navigator.canShare && navigator.canShare({ files: [arquivo] })) {
+          await navigator.share({
+            files: [arquivo],
+            title: "Comprovante de pagamento",
+            text: ""
+          });
+          return;
+        }
+      } catch (erro) {
+        console.warn("Compartilhamento direto indisponivel", erro);
+      }
+
+      window.open(url, "_blank", "noopener");
+    }
+
+    btnCompartilharComprovanteImagem?.addEventListener("click", compartilharComprovanteImagem);
+
+    const botoesConfirmacao = [btnVerComprovanteVisual, btnCompartilharComprovanteImagem, btnWhatsappConfirmacao, btnVoltarTelaVenda].filter(Boolean);
     botoesConfirmacao.forEach(function (botao, indice, botoes) {
       botao?.addEventListener("keydown", function (event) {
         if (event.key === "ArrowRight" || event.key === "ArrowDown") {

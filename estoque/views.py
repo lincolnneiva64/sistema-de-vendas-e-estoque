@@ -1985,7 +1985,7 @@ def _montar_whatsapp_confirmacao_recebimento(cliente, dados):
     return {
         "tem_whatsapp": bool(numero),
         "numero": numero,
-        "url": f"https://web.whatsapp.com/send?phone={numero}&text={quote(mensagem)}" if numero else "",
+        "url": f"https://wa.me/{numero}?text={quote(mensagem)}" if numero else "",
         "mensagem": mensagem,
     }
 
