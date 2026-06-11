@@ -1,0 +1,341 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Fornecedores
+
+
+
+
+
+{% endblock %}
+{% block content %}
+<style>
+  .fornecedores-page { color: #172033; padding: 18px 0 120px; }
+  .fornecedores-shell { max-width: 1320px; margin: 0 auto; padding: 0 18px; }
+  .fornecedores-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 12px; margin-bottom: 12px;
+  }
+  .fornecedores-title { margin: 0; font-size: 1.55rem; font-weight: 800; color: #111827; }
+  .fornecedores-subtitle { margin: 4px 0 0; color: #64748b; font-weight: 500; font-size: 0.92rem; }
+  .fornecedores-header-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+  .fornecedores-btn {
+    border: 0; border-radius: 9px; padding: 8px 13px; font-weight: 700;
+    font-size: 0.9rem; text-decoration: none; display: inline-flex;
+    align-items: center; justify-content: center; min-height: 38px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+  .fornecedores-btn:hover { transform: translateY(-1px); }
+  .fornecedores-btn-primary { background: #2563eb; color: #fff; box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24); }
+  .fornecedores-btn-secondary {
+    background: #dbeafe; color: #164173; border: 1px solid #7ea6d9;
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.07);
+  }
+  .fornecedores-search {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 12px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.055);
+    padding: 10px; margin-bottom: 12px;
+  }
+  .fornecedores-search form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; }
+  .fornecedores-search input {
+    width: 100%; border: 1.5px solid #d3dbe8; border-radius: 9px;
+    padding: 10px 12px; background: #fff; color: #172033; font-weight: 600;
+    outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .fornecedores-search input:focus,
+  .fornecedores-field input:focus,
+  .fornecedores-field textarea:focus {
+    border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.13);
+  }
+  .fornecedores-grid {
+    display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.85fr);
+    gap: 14px; align-items: start;
+  }
+  .fornecedores-panel {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 14px;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06); overflow: hidden;
+  }
+  .fornecedores-panel-head {
+    padding: 12px 16px; border-bottom: 1px solid #edf1f6;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .fornecedores-panel-title { margin: 0; font-size: 0.98rem; font-weight: 800; color: #111827; }
+  .fornecedores-count { color: #64748b; font-size: 0.84rem; font-weight: 700; white-space: nowrap; }
+  .fornecedores-table-wrap { overflow-x: auto; }
+  .fornecedores-table { width: 100%; border-collapse: collapse; min-width: 760px; }
+  .fornecedores-table th {
+    background: #f8fafc; color: #64748b; font-size: 0.7rem;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    padding: 9px 11px; border-bottom: 1px solid #edf1f6; text-align: left;
+  }
+  .fornecedores-table td {
+    padding: 9px 11px; border-bottom: 1px solid #f0f3f8;
+    vertical-align: middle; font-size: 0.84rem;
+  }
+  .fornecedores-row:hover td { background: #f8fbff; }
+  .fornecedores-row.selecionado td { background: #eff6ff; border-bottom-color: #dbeafe; }
+  .fornecedor-nome { font-weight: 850; color: #172033; font-size: 0.9rem; }
+  .fornecedor-muted { color: #64748b; font-size: 0.8rem; font-weight: 650; }
+  .status-pill {
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 999px; padding: 4px 8px; font-size: 0.72rem;
+    font-weight: 800; white-space: nowrap;
+  }
+  .status-ativo { background: #dcfce7; color: #166534; }
+  .status-inativo { background: #f1f5f9; color: #64748b; }
+  .fornecedores-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .status-action-form { margin: 0; }
+  .status-action-btn,
+  .fornecedores-action-link {
+    border: 1px solid #cbd5e1; border-radius: 8px; background: #fff;
+    color: #334155; padding: 5px 9px; font-size: 0.76rem;
+    font-weight: 800; text-decoration: none; display: inline-flex;
+    align-items: center; justify-content: center; min-width: 62px;
+  }
+  .fornecedores-action-link { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+  .status-action-btn.ativar { border-color: #86efac; color: #166534; background: #f0fdf4; }
+  .status-action-btn.desativar { border-color: #fecaca; color: #991b1b; background: #fff7ed; }
+  .fornecedores-form { padding: 14px 16px 16px; }
+  .fornecedores-field { margin-bottom: 10px; min-width: 0; }
+  .fornecedores-field label {
+    display: block; color: #334155; font-size: 0.8rem;
+    font-weight: 800; margin-bottom: 4px;
+  }
+  .fornecedores-field input,
+  .fornecedores-field textarea {
+    width: 100%; border: 1.5px solid #d3dbe8; border-radius: 9px;
+    padding: 9px 11px; background: #fff; color: #172033; font-weight: 500;
+    outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .fornecedores-field textarea { min-height: 82px; resize: vertical; }
+  .fornecedores-boolean {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+    gap: 12px; border: 1px solid #e1e7ef; border-radius: 10px;
+    padding: 10px 11px; background: #f8fafc; margin-bottom: 10px;
+  }
+  .fornecedores-alert { border-radius: 13px; padding: 10px 12px; margin-bottom: 10px; font-weight: 750; }
+  .fornecedores-alert.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
+  .fornecedores-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+  .fornecedores-empty { padding: 22px 16px; color: #64748b; text-align: center; font-weight: 700; font-size: 0.9rem; }
+  .fornecedores-form-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; padding-top: 4px; }
+  @media (max-width: 920px) {
+    .fornecedores-header { align-items: stretch; flex-direction: column; }
+    .fornecedores-header-actions { justify-content: flex-start; }
+    .fornecedores-search form,
+    .fornecedores-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 760px) {
+    .fornecedores-search form { grid-template-columns: 1fr; }
+    .fornecedores-boolean { grid-template-columns: 1fr; }
+    .fornecedores-table { min-width: 0; }
+    .fornecedores-table thead { display: none; }
+    .fornecedores-table,
+    .fornecedores-table tbody,
+    .fornecedores-table tr,
+    .fornecedores-table td { display: block; width: 100%; }
+    .fornecedores-table tr {
+      border-bottom: 1px solid #e5e7eb;
+      padding: 10px 12px;
+    }
+    .fornecedores-table td {
+      border: 0;
+      padding: 5px 0;
+    }
+  }
+</style>
+
+<div class="fornecedores-page">
+  <div class="fornecedores-shell">
+    <header class="fornecedores-header">
+      <div>
+        <h1 class="fornecedores-title">Fornecedores</h1>
+        <p class="fornecedores-subtitle">Cadastro de fornecedores para compras, contas a pagar e historico de produtos.</p>
+      </div>
+      <div class="fornecedores-header-actions">
+        <a href="{% url 'estoque:home' %}" class="fornecedores-btn fornecedores-btn-secondary">Voltar ao painel</a>
+        <a href="{% url 'estoque:fornecedores' %}" class="fornecedores-btn fornecedores-btn-primary">Novo fornecedor</a>
+      </div>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="fornecedores-alert {% if message.tags == 'error' %}error{% else %}success{% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <section class="fornecedores-search" aria-label="Busca de fornecedores">
+      <form method="get">
+        <input type="text" name="q" value="{{ termo }}" placeholder="Buscar por nome, fantasia, WhatsApp, cidade, bairro ou observacao" autocomplete="off">
+        <button type="submit" class="fornecedores-btn fornecedores-btn-primary">Buscar</button>
+        <a href="{% url 'estoque:fornecedores' %}" class="fornecedores-btn fornecedores-btn-secondary">Limpar</a>
+      </form>
+    </section>
+
+    <main class="fornecedores-grid">
+      <section class="fornecedores-panel">
+        <div class="fornecedores-panel-head">
+          <h2 class="fornecedores-panel-title">Fornecedores cadastrados</h2>
+          <span class="fornecedores-count">{{ total_fornecedores }} fornecedor(es) - {{ fornecedores_ativos }} ativo(s)</span>
+        </div>
+
+        {% if fornecedores %}
+          <div class="fornecedores-table-wrap">
+            <table class="fornecedores-table">
+              <thead>
+                <tr>
+                  <th>Fornecedor</th>
+                  <th>WhatsApp</th>
+                  <th>Localidade</th>
+                  <th>Status</th>
+                  <th>Compras</th>
+                  <th>Produtos</th>
+                  <th>Acoes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for fornecedor in fornecedores %}
+                  <tr class="fornecedores-row {% if fornecedor_selecionado and fornecedor.id == fornecedor_selecionado.id %}selecionado{% elif request.GET.fornecedor_salvo and fornecedor.id|stringformat:'s' == request.GET.fornecedor_salvo %}selecionado{% endif %}">
+                    <td>
+                      <div class="fornecedor-nome">{{ fornecedor.nome }}</div>
+                      {% if fornecedor.nome_fantasia %}
+                        <div class="fornecedor-muted">{{ fornecedor.nome_fantasia }}</div>
+                      {% endif %}
+                      {% if fornecedor.observacao %}
+                        <div class="fornecedor-muted">{{ fornecedor.observacao|truncatechars:70 }}</div>
+                      {% endif %}
+                    </td>
+                    <td class="fornecedor-muted">{{ fornecedor.telefone_whatsapp|default:"-" }}</td>
+                    <td class="fornecedor-muted">
+                      {% if fornecedor.bairro or fornecedor.cidade %}
+                        {{ fornecedor.bairro|default:"" }}{% if fornecedor.bairro and fornecedor.cidade %} - {% endif %}{{ fornecedor.cidade|default:"" }}
+                      {% else %}
+                        -
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if fornecedor.ativo %}
+                        <span class="status-pill status-ativo">Ativo</span>
+                      {% else %}
+                        <span class="status-pill status-inativo">Inativo</span>
+                      {% endif %}
+                    </td>
+                    <td class="fornecedor-muted">{{ fornecedor.total_compras }}</td>
+                    <td class="fornecedor-muted">{{ fornecedor.total_produtos }}</td>
+                    <td>
+                      <div class="fornecedores-actions">
+                        <a class="fornecedores-action-link" href="{% url 'estoque:fornecedores' %}?fornecedor={{ fornecedor.id }}{% if termo %}&q={{ termo|urlencode }}{% endif %}">Editar</a>
+                        <form method="post" class="status-action-form">
+                          {% csrf_token %}
+                          <input type="hidden" name="acao" value="alternar_status">
+                          <input type="hidden" name="fornecedor_id" value="{{ fornecedor.id }}">
+                          <input type="hidden" name="ativo" value="{% if fornecedor.ativo %}0{% else %}1{% endif %}">
+                          <button type="submit" class="status-action-btn {% if fornecedor.ativo %}desativar{% else %}ativar{% endif %}">
+                            {% if fornecedor.ativo %}Desativar{% else %}Ativar{% endif %}
+                          </button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="fornecedores-empty">Nenhum fornecedor encontrado.</div>
+        {% endif %}
+      </section>
+
+      <aside class="fornecedores-panel">
+        <div class="fornecedores-panel-head">
+          <h2 class="fornecedores-panel-title">
+            {% if fornecedor_selecionado %}Editar fornecedor{% else %}Novo fornecedor{% endif %}
+          </h2>
+        </div>
+
+        <form method="post" class="fornecedores-form">
+          {% csrf_token %}
+          {% if fornecedor_selecionado %}
+            <input type="hidden" name="fornecedor_id" value="{{ fornecedor_selecionado.id }}">
+          {% endif %}
+
+          <div class="fornecedores-field">
+            <label for="{{ form.nome.id_for_label }}">Nome</label>
+            {{ form.nome }}
+            {% for error in form.nome.errors %}<div class="fornecedores-alert error">{{ error }}</div>{% endfor %}
+          </div>
+
+          <div class="fornecedores-field">
+            <label for="{{ form.nome_fantasia.id_for_label }}">Nome fantasia / apelido</label>
+            {{ form.nome_fantasia }}
+          </div>
+
+          <div class="fornecedores-field">
+            <label for="{{ form.telefone_whatsapp.id_for_label }}">WhatsApp</label>
+            {{ form.telefone_whatsapp }}
+          </div>
+
+          <div class="fornecedores-field">
+            <label for="{{ form.cidade.id_for_label }}">Cidade</label>
+            {{ form.cidade }}
+          </div>
+
+          <div class="fornecedores-field">
+            <label for="{{ form.bairro.id_for_label }}">Bairro</label>
+            {{ form.bairro }}
+          </div>
+
+          <div class="fornecedores-field">
+            <label for="{{ form.observacao.id_for_label }}">Observacao</label>
+            {{ form.observacao }}
+          </div>
+
+          <div class="fornecedores-boolean">
+            <strong>Fornecedor ativo</strong>
+            {{ form.ativo }}
+          </div>
+
+          <div class="fornecedores-form-actions">
+            <a href="{% url 'estoque:fornecedores' %}" class="fornecedores-btn fornecedores-btn-secondary">Cancelar</a>
+            <button type="submit" class="fornecedores-btn fornecedores-btn-primary">Salvar fornecedor</button>
+          </div>
+        </form>
+      </aside>
+    </main>
+  </div>
+</div>
+
+
+
+
+
+
+
+<script>
+(function() {
+  const form = document.querySelector(".fornecedores-form");
+  if (!form) return;
+
+  const campos = Array.from(form.querySelectorAll("input:not([type='hidden']):not([type='checkbox']), textarea"));
+
+  campos.forEach((campo, index) => {
+    campo.addEventListener("keydown", function(event) {
+      if (event.key !== "Enter") return;
+
+      event.preventDefault();
+
+      const proximo = campos[index + 1];
+      if (proximo) {
+        proximo.focus();
+        if (typeof proximo.select === "function") {
+          proximo.select();
+        }
+      } else {
+        const botaoSalvar = form.querySelector("button[type='submit']");
+        if (botaoSalvar) botaoSalvar.focus();
+      }
+    });
+  });
+})();
+</script>
+
+{% endblock %}

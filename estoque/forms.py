@@ -4,7 +4,7 @@ from django import forms
 
 from django.utils import timezone
 
-from .models import Categoria, Cliente, Funcionario, PixRecebido, Produto, Unidade
+from .models import Categoria, Cliente, Fornecedor, Funcionario, PixRecebido, Produto, Unidade
 from .utils import normalize_category_name, normalize_product_name
 
 
@@ -850,3 +850,83 @@ class PixRecebidoCorrecaoForm(forms.Form):
         if valor_decimal < Decimal("0.00"):
             raise forms.ValidationError("Informe um valor de Pix valido.")
         return valor_decimal
+
+class FornecedorForm(forms.ModelForm):
+    class Meta:
+        model = Fornecedor
+        fields = [
+            "nome",
+            "nome_fantasia",
+            "telefone_whatsapp",
+            "cidade",
+            "bairro",
+            "observacao",
+            "ativo",
+        ]
+        widgets = {
+            "nome": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Nome do fornecedor",
+                "autocomplete": "off",
+                "autofocus": True,
+            }),
+            "nome_fantasia": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Nome fantasia / apelido",
+                "autocomplete": "off",
+            }),
+            "telefone_whatsapp": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "(00) 00000-0000",
+                "autocomplete": "off",
+            }),
+            "cidade": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Cidade",
+                "autocomplete": "off",
+            }),
+            "bairro": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Bairro",
+                "autocomplete": "off",
+            }),
+            "observacao": forms.Textarea(attrs={
+                "class": "form-control",
+                "placeholder": "Observacoes sobre o fornecedor",
+                "rows": 3,
+            }),
+            "ativo": forms.CheckboxInput(attrs={
+                "class": "form-check-input",
+            }),
+        }
+
+    @staticmethod
+    def _nome_proprio(valor):
+        valor = (valor or "").strip()
+        if not valor:
+            return valor
+        return " ".join(parte[:1].upper() + parte[1:].lower() for parte in valor.split())
+
+    def clean_nome(self):
+        nome = self._nome_proprio(self.cleaned_data.get("nome"))
+        if not nome:
+            return nome
+
+        duplicados = Fornecedor.objects.filter(nome__iexact=nome)
+        if self.instance and self.instance.pk:
+            duplicados = duplicados.exclude(pk=self.instance.pk)
+
+        if duplicados.exists():
+            raise forms.ValidationError("Ja existe um fornecedor cadastrado com esse nome.")
+
+        return nome
+
+    def clean_nome_fantasia(self):
+        return self._nome_proprio(self.cleaned_data.get("nome_fantasia"))
+
+    def clean_cidade(self):
+        return self._nome_proprio(self.cleaned_data.get("cidade"))
+
+    def clean_bairro(self):
+        return self._nome_proprio(self.cleaned_data.get("bairro"))
+

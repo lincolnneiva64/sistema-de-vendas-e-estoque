@@ -22,8 +22,8 @@ from urllib.parse import quote, urlencode
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count
-from .forms import CategoriaForm, ClienteForm, FuncionarioForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, ItemVendaRemovido, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
+from .forms import CategoriaForm, ClienteForm, FornecedorForm, FuncionarioForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, Funcionario, ItemVenda, ItemVendaRemovido, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -1591,6 +1591,78 @@ def verificar_cliente_duplicado(request):
         "cliente": duplicado.nome,
         "mensagem": f'Ja existe um cliente parecido cadastrado: "{duplicado.nome}". Verifique antes de cadastrar novamente.',
     })
+
+
+
+def fornecedores(request):
+    termo = request.GET.get("q", "").strip()
+    fornecedor_selecionado = None
+    fornecedores_url = reverse("estoque:fornecedores")
+
+    fornecedores_qs = Fornecedor.objects.annotate(
+        total_compras=Count("compras"),
+        total_produtos=Count("produtos_fornecedor"),
+    ).order_by("-ativo", "nome", "id")
+
+    if termo:
+        fornecedores_qs = fornecedores_qs.filter(
+            Q(nome__icontains=termo) |
+            Q(nome_fantasia__icontains=termo) |
+            Q(telefone_whatsapp__icontains=termo) |
+            Q(cidade__icontains=termo) |
+            Q(bairro__icontains=termo) |
+            Q(observacao__icontains=termo)
+        )
+
+    if request.method == "POST":
+        acao = request.POST.get("acao")
+        fornecedor_id = request.POST.get("fornecedor_id")
+
+        if acao == "alternar_status" and fornecedor_id:
+            fornecedor = get_object_or_404(Fornecedor, pk=fornecedor_id)
+            fornecedor.ativo = request.POST.get("ativo") == "1"
+            fornecedor.save(update_fields=["ativo", "atualizado_em"])
+            status = "ativado" if fornecedor.ativo else "desativado"
+            messages.success(request, f'Fornecedor "{fornecedor.nome}" {status} com sucesso.')
+            params = {"fornecedor": fornecedor.id}
+            if termo:
+                params["q"] = termo
+            return redirect(f"{fornecedores_url}?{urlencode(params)}")
+
+        if fornecedor_id:
+            fornecedor_selecionado = get_object_or_404(Fornecedor, pk=fornecedor_id)
+            form = FornecedorForm(request.POST, instance=fornecedor_selecionado)
+        else:
+            form = FornecedorForm(request.POST)
+
+        if form.is_valid():
+            fornecedor = form.save()
+            messages.success(request, f'Fornecedor "{fornecedor.nome}" salvo com sucesso.')
+            return redirect(f"{fornecedores_url}?fornecedor_salvo={fornecedor.id}")
+        messages.error(request, "Revise os campos destacados para salvar o fornecedor.")
+    else:
+        fornecedor_id = request.GET.get("fornecedor")
+        if fornecedor_id:
+            fornecedor_selecionado = get_object_or_404(Fornecedor, pk=fornecedor_id)
+            form = FornecedorForm(instance=fornecedor_selecionado)
+        else:
+            form = FornecedorForm(initial={"ativo": True})
+
+    fornecedores_lista = list(fornecedores_qs)
+    fornecedores_ativos = sum(1 for fornecedor in fornecedores_lista if fornecedor.ativo)
+
+    return render(
+        request,
+        "estoque/fornecedores.html",
+        {
+            "form": form,
+            "fornecedores": fornecedores_lista,
+            "fornecedor_selecionado": fornecedor_selecionado,
+            "termo": termo,
+            "total_fornecedores": len(fornecedores_lista),
+            "fornecedores_ativos": fornecedores_ativos,
+        },
+    )
 
 
 def funcionarios(request):
