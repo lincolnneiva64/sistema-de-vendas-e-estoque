@@ -1,0 +1,314 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Nova Compra{% endblock %}
+{% block content %}
+<style>
+  .compras-page { max-width: 1180px; margin: 22px auto 90px; padding: 0 16px; color: #172033; }
+  .compras-header { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; margin-bottom:14px; }
+  .compras-title { margin:0; font-size:1.55rem; font-weight:850; }
+  .compras-subtitle { margin:4px 0 0; color:#64748b; font-weight:650; }
+  .compras-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+  .compras-btn { border:0; border-radius:9px; padding:9px 14px; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; min-height:40px; cursor:pointer; }
+  .compras-btn-primary { background:#2563eb; color:#fff; }
+  .compras-btn-secondary { background:#dbeafe; color:#164173; border:1px solid #7ea6d9; }
+  .compras-card { background:#fff; border:1px solid #e1e7ef; border-radius:14px; box-shadow:0 14px 30px rgba(15,23,42,.06); margin-bottom:14px; overflow:hidden; }
+  .compras-card-head { padding:12px 16px; border-bottom:1px solid #edf1f6; font-weight:850; }
+  .compras-card-body { padding:14px 16px; }
+  .compras-grid { display:grid; grid-template-columns: 1.2fr .6fr .7fr; gap:10px; }
+  .compras-field label { display:block; font-weight:850; font-size:.82rem; margin-bottom:4px; color:#334155; }
+  .compras-field input, .compras-field select, .compras-field textarea {
+    width:100%; border:1.5px solid #d3dbe8; border-radius:9px; padding:9px 11px; font-weight:600; outline:none;
+  }
+  .compras-field textarea { min-height:72px; resize:vertical; }
+  .compras-table { width:100%; border-collapse:collapse; }
+  .compras-table th { text-align:left; font-size:.72rem; color:#64748b; text-transform:uppercase; background:#f8fafc; padding:9px; border-bottom:1px solid #edf1f6; }
+  .compras-table td { padding:8px; border-bottom:1px solid #f0f3f8; vertical-align:top; }
+  .compras-table select, .compras-table input { width:100%; border:1.5px solid #d3dbe8; border-radius:8px; padding:8px; font-weight:650; }
+  .col-produto { min-width:320px; }
+  .col-pequena { width:120px; }
+  .col-total { width:130px; font-weight:850; }
+  .compras-total { display:flex; justify-content:flex-end; font-size:1.15rem; font-weight:900; padding:12px 16px; background:#f8fafc; }
+  .compras-alert { border-radius:12px; padding:10px 12px; margin-bottom:12px; font-weight:750; }
+  .compras-alert.success { background:#ecfdf3; border:1px solid #b7e4c7; color:#166534; }
+  .compras-alert.error { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
+  @media (max-width: 820px) {
+    .compras-header { flex-direction:column; align-items:stretch; }
+    .compras-actions { justify-content:flex-start; }
+    .compras-grid { grid-template-columns:1fr; }
+    .compras-table { min-width:760px; }
+    .compras-table-wrap { overflow-x:auto; }
+  }
+</style>
+
+<div class="compras-page">
+  <header class="compras-header">
+    <div>
+      <h1 class="compras-title">Nova Compra</h1>
+      <p class="compras-subtitle">Primeira etapa: grava a compra e os itens, ainda sem mexer no estoque.</p>
+    </div>
+    <div class="compras-actions">
+      <a href="{% url 'estoque:home' %}" class="compras-btn compras-btn-secondary">Voltar ao painel</a>
+      <a href="{% url 'estoque:fornecedores' %}" class="compras-btn compras-btn-secondary">Fornecedores</a>
+    </div>
+  </header>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="compras-alert {% if message.tags == 'error' %}error{% else %}success{% endif %}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post" id="formCompra">
+    {% csrf_token %}
+
+    <section class="compras-card">
+      <div class="compras-card-head">Dados da compra</div>
+      <div class="compras-card-body">
+        <div class="compras-grid">
+          <div class="compras-field">
+            <label>Fornecedor</label>
+            <select name="fornecedor_id" required>
+              <option value="">Selecione...</option>
+              {% for fornecedor in fornecedores %}
+                <option value="{{ fornecedor.id }}">{{ fornecedor.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="compras-field">
+            <label>Data da compra</label>
+            <input type="date" name="data_compra" value="{{ hoje|date:'Y-m-d' }}" required>
+          </div>
+          <div class="compras-field">
+            <label>Tipo de pagamento</label>
+            <select name="tipo_pagamento">
+              <option value="">Selecione...</option>
+              <option value="avista">A vista</option>
+              <option value="aprazo" selected>A prazo</option>
+              <option value="pix">Pix</option>
+              <option value="dinheiro">Dinheiro</option>
+              <option value="cartao">Cartao</option>
+            </select>
+          </div>
+        </div>
+        <div class="compras-field" style="margin-top:10px;">
+          <label>Observacao</label>
+          <textarea name="observacao" placeholder="Observacao opcional"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="compras-card">
+      <div class="compras-card-head">Itens da compra</div>
+      <div class="compras-table-wrap">
+        <table class="compras-table" id="tabelaItensCompra">
+          <thead>
+            <tr>
+              <th class="col-produto">Produto</th>
+              <th class="col-pequena">Quantidade</th>
+              <th class="col-pequena">Unidade</th>
+              <th class="col-pequena">Preco</th>
+              <th class="col-total">Total</th>
+              <th class="col-pequena">Acao</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="linha-item">
+              <td>
+                <select name="produto_id[]" required>
+                  <option value="">Selecione...</option>
+                  {% for produto in produtos %}
+                    <option value="{{ produto.id }}" data-unidade="{{ produto.unidade_compra|default:'' }}" data-preco="{{ produto.preco_compra|default:'' }}">{{ produto.nome }}</option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td><input type="text" name="quantidade[]" inputmode="decimal" value="1"></td>
+              <td><input type="text" name="unidade[]" placeholder="UN"></td>
+              <td><input type="text" name="preco_unitario[]" inputmode="decimal" placeholder="0,00"></td>
+              <td class="valor-total-item">R$ 0,00</td>
+              <td><button type="button" class="compras-btn compras-btn-secondary btn-remover">Remover</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="compras-total">Total: <span id="totalCompra" style="margin-left:8px;">R$ 0,00</span></div>
+      <div class="compras-card-body">
+        <button type="button" id="btnAdicionarItem" class="compras-btn compras-btn-secondary">+ Adicionar item</button>
+      </div>
+    </section>
+
+    <div class="compras-actions">
+      <a href="{% url 'estoque:home' %}" class="compras-btn compras-btn-secondary">Cancelar</a>
+      <button type="submit" class="compras-btn compras-btn-primary">Salvar compra</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(function() {
+  const tabela = document.getElementById("tabelaItensCompra");
+  const totalCompra = document.getElementById("totalCompra");
+  const btnAdicionar = document.getElementById("btnAdicionarItem");
+
+  function moeda(valor) {
+    return "R$ " + Number(valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function numero(valor) {
+    return Number(String(valor || "0").replace(/\./g, "").replace(",", ".")) || 0;
+  }
+
+  function recalcular() {
+    let total = 0;
+    tabela.querySelectorAll(".linha-item").forEach((linha) => {
+      const quantidade = numero(linha.querySelector('[name="quantidade[]"]').value);
+      const preco = numero(linha.querySelector('[name="preco_unitario[]"]').value);
+      const subtotal = quantidade * preco;
+      total += subtotal;
+      linha.querySelector(".valor-total-item").textContent = moeda(subtotal);
+    });
+    totalCompra.textContent = moeda(total);
+  }
+
+  function focarCampo(campo) {
+    if (!campo) return;
+    campo.focus();
+    if (typeof campo.select === "function") {
+      campo.select();
+    }
+  }
+
+  function ligarLinha(linha) {
+    const produto = linha.querySelector('[name="produto_id[]"]');
+    const unidade = linha.querySelector('[name="unidade[]"]');
+    const preco = linha.querySelector('[name="preco_unitario[]"]');
+
+    produto.addEventListener("change", function() {
+      const opt = produto.options[produto.selectedIndex];
+      if (opt) {
+        if (!unidade.value) unidade.value = opt.dataset.unidade || "";
+        if (!preco.value) preco.value = String(opt.dataset.preco || "").replace(".", ",");
+      }
+      recalcular();
+    });
+
+    linha.querySelectorAll("input, select").forEach((campo) => {
+      campo.addEventListener("input", recalcular);
+      campo.addEventListener("change", recalcular);
+
+      if (campo.tagName === "INPUT") {
+        campo.addEventListener("focus", function() {
+          campo.select();
+        });
+      }
+
+      campo.addEventListener("keydown", function(event) {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        const campos = Array.from(document.querySelectorAll("#formCompra input, #formCompra select, #formCompra textarea, #btnAdicionarItem, button[type='submit']"))
+          .filter((el) => !el.classList.contains("btn-remover"));
+        const atual = campos.indexOf(campo);
+        const proximo = campos[atual + 1];
+        focarCampo(proximo);
+      });
+    });
+
+    linha.querySelector(".btn-remover").addEventListener("click", function() {
+      const linhas = tabela.querySelectorAll(".linha-item");
+      if (linhas.length <= 1) {
+        linha.querySelectorAll("input").forEach((input) => input.value = "");
+        produto.value = "";
+      } else {
+        linha.remove();
+      }
+      recalcular();
+    });
+  }
+
+  btnAdicionar.addEventListener("click", function() {
+    const primeira = tabela.querySelector(".linha-item");
+    const nova = primeira.cloneNode(true);
+
+    nova.querySelector('[name="produto_id[]"]').value = "";
+    nova.querySelector('[name="quantidade[]"]').value = "1";
+    nova.querySelector('[name="unidade[]"]').value = "";
+    nova.querySelector('[name="preco_unitario[]"]').value = "";
+    nova.querySelector(".valor-total-item").textContent = "R$ 0,00";
+
+    tabela.querySelector("tbody").appendChild(nova);
+    ligarLinha(nova);
+    recalcular();
+    focarCampo(nova.querySelector('[name="produto_id[]"]'));
+  });
+
+  btnAdicionar.addEventListener("keydown", function(event) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    btnAdicionar.click();
+  });
+
+  tabela.querySelectorAll(".linha-item").forEach(ligarLinha);
+  recalcular();
+})();
+</script>
+
+<script>
+(function() {
+  const form = document.getElementById("formCompra");
+  if (!form) return;
+
+  const fornecedor = form.querySelector('[name="fornecedor_id"]');
+  const dataCompra = form.querySelector('[name="data_compra"]');
+  const tipoPagamento = form.querySelector('[name="tipo_pagamento"]');
+  const observacao = form.querySelector('[name="observacao"]');
+  const primeiroProduto = form.querySelector('[name="produto_id[]"]');
+
+  function focar(campo) {
+    if (!campo) return;
+    setTimeout(function() {
+      campo.focus();
+      if (typeof campo.select === "function") {
+        campo.select();
+      }
+    }, 80);
+  }
+
+  if (fornecedor) {
+    fornecedor.addEventListener("change", function() {
+      focar(dataCompra);
+    });
+  }
+
+  if (dataCompra) {
+    dataCompra.addEventListener("keydown", function(event) {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      focar(tipoPagamento);
+    });
+  }
+
+  if (tipoPagamento) {
+    tipoPagamento.addEventListener("change", function() {
+      focar(primeiroProduto || observacao);
+    });
+
+    tipoPagamento.addEventListener("keydown", function(event) {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      focar(primeiroProduto || observacao);
+    });
+  }
+
+  if (observacao) {
+    observacao.addEventListener("keydown", function(event) {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      focar(primeiroProduto);
+    });
+  }
+
+  window.addEventListener("load", function() {
+    focar(fornecedor);
+  });
+})();
+</script>
+
+{% endblock %}

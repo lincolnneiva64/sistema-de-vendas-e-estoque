@@ -23,7 +23,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count
 from .forms import CategoriaForm, ClienteForm, FornecedorForm, FuncionarioForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, Funcionario, ItemVenda, ItemVendaRemovido, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, Funcionario, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -1592,6 +1592,128 @@ def verificar_cliente_duplicado(request):
         "mensagem": f'Ja existe um cliente parecido cadastrado: "{duplicado.nome}". Verifique antes de cadastrar novamente.',
     })
 
+
+
+
+def _decimal_compra(valor, casas=2, padrao="0"):
+    texto = str(valor or "").strip().replace(".", "").replace(",", ".")
+    if not texto:
+        texto = padrao
+    try:
+        return Decimal(texto).quantize(Decimal("1").scaleb(-casas))
+    except (InvalidOperation, ValueError):
+        raise ValueError("Valor numerico invalido.")
+
+
+def compras_nova(request):
+    fornecedores = Fornecedor.objects.filter(ativo=True).order_by("nome", "id")
+    produtos = Produto.objects.filter(excluido=False).order_by("nome")
+
+    if request.method == "POST":
+        fornecedor_id = request.POST.get("fornecedor_id")
+        data_compra = parse_date(request.POST.get("data_compra") or "")
+        tipo_pagamento = (request.POST.get("tipo_pagamento") or "").strip()
+        observacao = (request.POST.get("observacao") or "").strip()
+
+        produto_ids = request.POST.getlist("produto_id[]")
+        quantidades = request.POST.getlist("quantidade[]")
+        unidades = request.POST.getlist("unidade[]")
+        precos = request.POST.getlist("preco_unitario[]")
+
+        fornecedor = Fornecedor.objects.filter(pk=fornecedor_id, ativo=True).first()
+        if not fornecedor:
+            messages.error(request, "Selecione um fornecedor ativo.")
+            return redirect("estoque:compras_nova")
+
+        if not data_compra:
+            messages.error(request, "Informe uma data valida para a compra.")
+            return redirect("estoque:compras_nova")
+
+        itens_validos = []
+        try:
+            for indice, produto_id in enumerate(produto_ids):
+                produto_id = str(produto_id or "").strip()
+                if not produto_id:
+                    continue
+
+                produto = Produto.objects.filter(pk=produto_id, excluido=False).first()
+                if not produto:
+                    raise ValueError("Produto informado nao foi encontrado.")
+
+                quantidade = _decimal_compra(quantidades[indice] if indice < len(quantidades) else "", casas=3)
+                preco_unitario = _decimal_compra(precos[indice] if indice < len(precos) else "", casas=2)
+                unidade = (unidades[indice] if indice < len(unidades) else "").strip()
+
+                if quantidade <= 0:
+                    raise ValueError(f"Informe quantidade maior que zero para {produto.nome}.")
+                if preco_unitario < 0:
+                    raise ValueError(f"Informe preco valido para {produto.nome}.")
+
+                valor_total = (quantidade * preco_unitario).quantize(Decimal("0.01"))
+                itens_validos.append({
+                    "produto": produto,
+                    "quantidade": quantidade,
+                    "unidade": unidade,
+                    "preco_unitario": preco_unitario,
+                    "valor_total": valor_total,
+                })
+        except (ValueError, IndexError) as exc:
+            messages.error(request, str(exc))
+            return redirect("estoque:compras_nova")
+
+        if not itens_validos:
+            messages.error(request, "Inclua pelo menos um item na compra.")
+            return redirect("estoque:compras_nova")
+
+        total = sum((item["valor_total"] for item in itens_validos), Decimal("0.00")).quantize(Decimal("0.01"))
+
+        with transaction.atomic():
+            compra = Compra.objects.create(
+                fornecedor=fornecedor,
+                data_compra=data_compra,
+                tipo_pagamento=tipo_pagamento,
+                total=total,
+                observacao=observacao,
+                status=Compra.STATUS_ABERTA,
+            )
+
+            for item in itens_validos:
+                ItemCompra.objects.create(
+                    compra=compra,
+                    produto=item["produto"],
+                    quantidade=item["quantidade"],
+                    unidade=item["unidade"],
+                    preco_unitario=item["preco_unitario"],
+                    valor_total=item["valor_total"],
+                )
+
+        messages.success(request, f"Compra #{compra.id} salva com sucesso.")
+        return redirect("estoque:compras_detalhe", pk=compra.pk)
+
+    return render(
+        request,
+        "estoque/compras_nova.html",
+        {
+            "fornecedores": fornecedores,
+            "produtos": produtos,
+            "hoje": timezone.localdate(),
+        },
+    )
+
+
+def compras_detalhe(request, pk):
+    compra = get_object_or_404(
+        Compra.objects.select_related("fornecedor").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+    return render(
+        request,
+        "estoque/compras_detalhe.html",
+        {
+            "compra": compra,
+            "itens": compra.itens.all(),
+        },
+    )
 
 
 def fornecedores(request):
