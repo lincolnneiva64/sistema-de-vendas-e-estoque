@@ -153,6 +153,53 @@
     width: 100%; border: 1.5px solid #d3dbe8; border-radius: 8px;
     padding: 8px 10px; color: #172033; font: inherit; font-weight: 750;
   }
+  .rc-forma-pagamento-btn {
+    display: block; width: 100%; min-height: 58px; border: 2px solid #1d4ed8;
+    border-radius: 16px; background: #f8fbff; color: #172033;
+    padding: 0 14px; text-align: left; font: inherit; font-size: 1rem; font-weight: 900;
+  }
+  #formaPagamentoCliente {
+    position: absolute !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    width: 1px !important;
+    height: 1px !important;
+    left: -9999px !important;
+  }
+  .rc-forma-pagamento-btn:active { transform: translateY(1px); filter: brightness(0.98); }
+  .rc-forma-modal-overlay {
+    position: fixed; inset: 0; z-index: 10020; display: none;
+    align-items: flex-end; justify-content: center;
+    background: rgba(15, 23, 42, 0.55); padding: 14px;
+  }
+  .rc-forma-modal-overlay.visivel { display: flex; }
+  .rc-forma-modal {
+    width: min(520px, 100%); background: #ffffff; border-radius: 24px 24px 18px 18px;
+    border: 1px solid #e2e8f0; box-shadow: 0 -16px 42px rgba(15, 23, 42, 0.24);
+    overflow: hidden;
+  }
+  .rc-forma-modal-head {
+    padding: 16px 18px; border-bottom: 1px solid #edf1f6;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .rc-forma-modal-title { margin: 0; color: #111827; font-size: 1.05rem; font-weight: 950; }
+  .rc-forma-modal-close {
+    border: 1px solid #cbd5e1; background: #f8fafc; color: #0f172a;
+    border-radius: 999px; width: 40px; height: 40px; font-size: 1.2rem; font-weight: 950;
+  }
+  .rc-forma-modal-lista { display: grid; gap: 8px; padding: 14px; }
+  .rc-forma-modal-opcao {
+    border: 1.5px solid #dbe4f0; border-radius: 16px; background: #f8fafc;
+    color: #172033; min-height: 58px; padding: 0 14px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    font: inherit; font-size: 1rem; font-weight: 950; text-align: left;
+  }
+  .rc-forma-modal-opcao.selecionada {
+    border-color: #16a34a; background: #ecfdf3; color: #166534;
+    box-shadow: inset 4px 0 0 #22c55e;
+  }
+  .rc-forma-modal-opcao:active { transform: translateY(1px); filter: brightness(0.98); }
+  .rc-forma-modal-check { font-size: 1.05rem; font-weight: 950; }
   .rc-feedback-campo {
     margin: 6px 0 0; border: 1px solid #86efac; border-radius: 8px; background: #f0fdf4;
     color: #166534; padding: 6px 8px; font-size: 0.78rem; font-weight: 880; line-height: 1.28;
@@ -238,6 +285,37 @@
   .rc-row-prevista-quitada td { background: #ecfdf3; }
   .rc-row-prevista-parcial td { background: #fff7ed; }
   .rc-row-prevista-neutra td { background: #f8fafc; }
+  .rc-contas-mobile-lista { display: none; }
+  .rc-conta-mobile-card {
+    border: 1px solid #e1e7ef; border-radius: 14px; background: #ffffff;
+    margin: 9px 10px; padding: 12px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  }
+  .rc-conta-mobile-card.rc-row-prevista-quitada { background: #ecfdf3; border-color: #bbf7d0; }
+  .rc-conta-mobile-card.rc-row-prevista-parcial { background: #fff7ed; border-color: #fed7aa; }
+  .rc-conta-mobile-card.rc-row-prevista-neutra { background: #f8fafc; }
+  .rc-conta-mobile-card.rc-row-atualizada-agora { border-color: #86efac; box-shadow: inset 4px 0 0 #22c55e, 0 8px 20px rgba(15, 23, 42, 0.06); }
+  .rc-conta-mobile-topo {
+    display: flex; justify-content: space-between; gap: 10px; align-items: flex-start;
+    border-bottom: 1px solid #edf1f6; padding-bottom: 8px; margin-bottom: 9px;
+  }
+  .rc-conta-mobile-numero { color: #1d4ed8; font-size: 1.08rem; font-weight: 950; }
+  .rc-conta-mobile-venda { color: #475569; font-size: 0.82rem; font-weight: 900; text-align: right; }
+  .rc-conta-mobile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .rc-conta-mobile-campo {
+    border: 1px solid #edf1f6; border-radius: 10px; background: rgba(255,255,255,0.78);
+    padding: 8px 9px;
+  }
+  .rc-conta-mobile-label {
+    display: block; color: #64748b; font-size: 0.66rem; font-weight: 950; text-transform: uppercase;
+  }
+  .rc-conta-mobile-valor {
+    display: block; margin-top: 3px; color: #172033; font-size: 0.9rem; font-weight: 900;
+  }
+  .rc-conta-mobile-valor.dinheiro { color: #166534; }
+  .rc-conta-mobile-preview {
+    margin-top: 10px; border-top: 1px solid #edf1f6; padding-top: 9px;
+    color: #172033; font-size: 0.92rem; font-weight: 900; line-height: 1.38;
+  }
   .rc-row-atualizada-agora td { background: #ecfdf3; }
   .rc-row-atualizada-agora td:first-child { box-shadow: inset 3px 0 0 #22c55e; }
   .rc-pill {
@@ -304,14 +382,23 @@
     }
     .receber-cliente-page .rc-card { padding: 6px 8px; }
     .receber-cliente-page .rc-form { padding: 8px 9px; gap: 7px; }
+    .receber-cliente-page #formaPagamentoCliente {
+      position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px;
+    }
+    .receber-cliente-page .rc-forma-pagamento-btn {
+      display: block;
+    }
     .receber-cliente-page .rc-panel-head { padding: 7px 10px; }
     .receber-cliente-page .rc-distribuicao {
       grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 7px;
     }
     .receber-cliente-page .rc-note { display: none; }
     .receber-cliente-page .rc-pos-confirmacao-direita .rc-panel { margin-bottom: 0; }
-    .receber-cliente-page .rc-pos-confirmacao-direita .rc-table {
-      min-width: 640px;
+    .receber-cliente-page .rc-pos-confirmacao-direita .rc-table-wrap {
+      display: none;
+    }
+    .receber-cliente-page .rc-contas-mobile-lista {
+      display: block;
     }
     .receber-cliente-page .rc-pos-confirmacao-direita .rc-table th:nth-child(3),
     .receber-cliente-page .rc-pos-confirmacao-direita .rc-table td:nth-child(3),
@@ -537,6 +624,9 @@
                     <option value="{{ forma }}" {% if valores.forma_pagamento == forma %}selected{% endif %}>{{ forma }}</option>
                   {% endfor %}
                 </select>
+                <button type="button" id="btnFormaPagamentoCliente" class="rc-forma-pagamento-btn" aria-haspopup="dialog">
+                  <span id="textoFormaPagamentoCliente">Dinheiro</span>
+                </button>
               </div>
               {% if credito_disponivel > 0 %}
                 <div class="rc-credito-futuro">
@@ -729,6 +819,47 @@
                 </tbody>
               </table>
             </div>
+            <div class="rc-contas-mobile-lista" aria-label="Contas abertas em cards">
+              {% for conta in contas %}
+                <article id="contaPreviewMobile{{ conta.id }}" class="rc-conta-mobile-card rc-row-prevista-neutra {% if conta.id in contas_atualizadas_ids %}rc-row-atualizada-agora{% endif %}">
+                  <div class="rc-conta-mobile-topo">
+                    <div>
+                      <span class="rc-conta-mobile-numero">Conta #{{ conta.id }}</span>
+                    </div>
+                    <div class="rc-conta-mobile-venda">Venda #{{ conta.venda_id }}</div>
+                  </div>
+                  <div class="rc-conta-mobile-grid">
+                    <div class="rc-conta-mobile-campo">
+                      <span class="rc-conta-mobile-label">Data da venda</span>
+                      <span class="rc-conta-mobile-valor">{{ conta.data_emissao|date:"d/m/Y" }}</span>
+                    </div>
+                    <div class="rc-conta-mobile-campo">
+                      <span class="rc-conta-mobile-label">Vencimento</span>
+                      <span class="rc-conta-mobile-valor">{{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</span>
+                    </div>
+                    <div class="rc-conta-mobile-campo">
+                      <span class="rc-conta-mobile-label">Original</span>
+                      <span class="rc-conta-mobile-valor dinheiro">R$ {{ conta.valor_original|floatformat:2 }}</span>
+                    </div>
+                    <div class="rc-conta-mobile-campo">
+                      <span class="rc-conta-mobile-label">Em aberto</span>
+                      <span class="rc-conta-mobile-valor dinheiro">R$ {{ conta.valor_em_aberto|floatformat:2 }}</span>
+                    </div>
+                    <div class="rc-conta-mobile-campo">
+                      <span class="rc-conta-mobile-label">Status</span>
+                      <span class="rc-conta-mobile-valor">{{ conta.get_status_display }}</span>
+                    </div>
+                  </div>
+                  <div class="rc-conta-mobile-preview" id="previewContaMobile{{ conta.id }}">
+                    {% if conta.id in contas_atualizadas_ids %}
+                      <span class="rc-pill atualizada">Atualizada agora</span><br>
+                    {% endif %}
+                    <span class="rc-pill">Nao atingida</span><br>
+                    Saldo continua R$ {{ conta.valor_em_aberto|floatformat:2 }}
+                  </div>
+                </article>
+              {% endfor %}
+            </div>
           {% else %}
             <div class="rc-empty">Nenhuma conta aberta para este cliente.</div>
           {% endif %}
@@ -783,6 +914,23 @@
     </div>
   </div>
 </div>
+<div id="formaPagamentoModalOverlay" class="rc-forma-modal-overlay" aria-hidden="true">
+  <div class="rc-forma-modal" role="dialog" aria-modal="true" aria-labelledby="formaPagamentoModalTitle">
+    <div class="rc-forma-modal-head">
+      <h2 id="formaPagamentoModalTitle" class="rc-forma-modal-title">Forma de pagamento</h2>
+      <button type="button" id="formaPagamentoModalFechar" class="rc-forma-modal-close" aria-label="Fechar">×</button>
+    </div>
+    <div class="rc-forma-modal-lista">
+      {% for forma in formas_pagamento %}
+        <button type="button" class="rc-forma-modal-opcao" data-forma-pagamento="{{ forma }}">
+          <span>{{ forma }}</span>
+          <span class="rc-forma-modal-check" aria-hidden="true"></span>
+        </button>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
 <div id="receberClienteModalOverlay" class="rc-modal-overlay" aria-hidden="true">
   <div class="rc-modal" role="dialog" aria-modal="true" aria-labelledby="receberClienteModalTitle" aria-describedby="receberClienteModalText">
     <h2 id="receberClienteModalTitle" class="rc-modal-title"></h2>
@@ -995,6 +1143,11 @@
     const valor = document.getElementById("valorRecebidoCliente");
     const dataRecebimento = document.getElementById("dataRecebimentoCliente");
     const forma = document.getElementById("formaPagamentoCliente");
+    const btnFormaPagamento = document.getElementById("btnFormaPagamentoCliente");
+    const textoFormaPagamento = document.getElementById("textoFormaPagamentoCliente");
+    const formaModalOverlay = document.getElementById("formaPagamentoModalOverlay");
+    const formaModalFechar = document.getElementById("formaPagamentoModalFechar");
+    const formaModalOpcoes = Array.from(document.querySelectorAll("[data-forma-pagamento]"));
     const confirmar = document.getElementById("btnConfirmarRecebimentoCliente");
     const resumo = document.getElementById("resumoPreviaCliente");
     const sobraBox = document.getElementById("sobraRecebimentoCliente");
@@ -1017,6 +1170,51 @@
     if (!form) {
       return;
     }
+
+    function atualizarBotaoFormaPagamento() {
+      if (!forma || !textoFormaPagamento) return;
+      textoFormaPagamento.textContent = forma.value || "Dinheiro";
+      formaModalOpcoes.forEach(function (botao) {
+        const selecionada = botao.dataset.formaPagamento === forma.value;
+        botao.classList.toggle("selecionada", selecionada);
+        const check = botao.querySelector(".rc-forma-modal-check");
+        if (check) check.textContent = selecionada ? "✓" : "";
+      });
+    }
+
+    function abrirModalFormaPagamento() {
+      atualizarBotaoFormaPagamento();
+      formaModalOverlay?.classList.add("visivel");
+      formaModalOverlay?.setAttribute("aria-hidden", "false");
+    }
+
+    function fecharModalFormaPagamento() {
+      formaModalOverlay?.classList.remove("visivel");
+      formaModalOverlay?.setAttribute("aria-hidden", "true");
+      btnFormaPagamento?.focus();
+    }
+
+    btnFormaPagamento?.addEventListener("click", abrirModalFormaPagamento);
+    formaModalFechar?.addEventListener("click", fecharModalFormaPagamento);
+    formaModalOverlay?.addEventListener("click", function (event) {
+      if (event.target === formaModalOverlay) fecharModalFormaPagamento();
+    });
+    formaModalOpcoes.forEach(function (botao) {
+      botao.addEventListener("click", function () {
+        if (!forma) return;
+        forma.value = botao.dataset.formaPagamento || forma.value;
+        forma.dispatchEvent(new Event("change", { bubbles: true }));
+        atualizarBotaoFormaPagamento();
+        fecharModalFormaPagamento();
+      });
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && formaModalOverlay?.classList.contains("visivel")) {
+        fecharModalFormaPagamento();
+      }
+    });
+    forma?.addEventListener("change", atualizarBotaoFormaPagamento);
+    atualizarBotaoFormaPagamento();
     const btnWhatsappConfirmacao = document.getElementById("btn-enviar-confirmacao-whatsapp");
     const btnVerComprovanteVisual = document.getElementById("btn-ver-comprovante-visual");
     const btnVoltarTelaVenda = document.getElementById("btn-voltar-tela-venda");
@@ -1187,13 +1385,22 @@
     function atualizarLinha(conta, classe, html) {
       const linha = document.getElementById("contaPreview" + conta.id);
       const celula = document.getElementById("previewConta" + conta.id);
+      const cardMobile = document.getElementById("contaPreviewMobile" + conta.id);
+      const celulaMobile = document.getElementById("previewContaMobile" + conta.id);
+      const detalheAtualizacao = detalheContaAtualizada(conta);
       if (linha) {
         linha.classList.remove("rc-row-prevista-quitada", "rc-row-prevista-parcial", "rc-row-prevista-neutra");
         linha.classList.add(classe);
       }
+      if (cardMobile) {
+        cardMobile.classList.remove("rc-row-prevista-quitada", "rc-row-prevista-parcial", "rc-row-prevista-neutra");
+        cardMobile.classList.add(classe);
+      }
       if (celula) {
-        const detalheAtualizacao = detalheContaAtualizada(conta);
         celula.innerHTML = detalheAtualizacao || html;
+      }
+      if (celulaMobile) {
+        celulaMobile.innerHTML = detalheAtualizacao || html;
       }
     }
 
