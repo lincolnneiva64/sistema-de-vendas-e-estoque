@@ -768,6 +768,177 @@ class ItemPedido(models.Model):
         return f"{nome_produto} - Pedido #{self.pedido_id}"
 
 
+class Fornecedor(models.Model):
+    nome = models.CharField(max_length=140)
+    nome_fantasia = models.CharField(max_length=140, blank=True, null=True)
+    telefone_whatsapp = models.CharField(max_length=30, blank=True, null=True)
+    cidade = models.CharField(max_length=80, blank=True, null=True)
+    bairro = models.CharField(max_length=80, blank=True, null=True)
+    observacao = models.TextField(blank=True, null=True)
+    ativo = models.BooleanField(default=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["nome", "id"]
+
+    def __str__(self):
+        return self.nome
+
+
+class ProdutoFornecedor(models.Model):
+    produto = models.ForeignKey(
+        Produto,
+        on_delete=models.CASCADE,
+        related_name="fornecedores_produto",
+    )
+    fornecedor = models.ForeignKey(
+        Fornecedor,
+        on_delete=models.CASCADE,
+        related_name="produtos_fornecedor",
+    )
+    codigo_produto_fornecedor = models.CharField(max_length=80, blank=True, null=True)
+    ultimo_preco_compra = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
+    ultima_compra_em = models.DateField(blank=True, null=True)
+    observacao = models.TextField(blank=True, null=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["fornecedor__nome", "produto__nome", "id"]
+        unique_together = ("produto", "fornecedor")
+
+    def __str__(self):
+        return f"{self.produto} - {self.fornecedor}"
+
+
+class Compra(models.Model):
+    STATUS_ABERTA = "aberta"
+    STATUS_CANCELADA = "cancelada"
+    STATUS_FINALIZADA = "finalizada"
+    STATUS_CHOICES = [
+        (STATUS_ABERTA, "Aberta"),
+        (STATUS_CANCELADA, "Cancelada"),
+        (STATUS_FINALIZADA, "Finalizada"),
+    ]
+
+    fornecedor = models.ForeignKey(
+        Fornecedor,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="compras",
+    )
+    data_compra = models.DateField()
+    data_vencimento = models.DateField(blank=True, null=True)
+    tipo_pagamento = models.CharField(max_length=40, blank=True)
+    operador = models.CharField(max_length=120, blank=True)
+    total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ABERTA)
+    observacao = models.TextField(blank=True, null=True)
+    cancelada = models.BooleanField(default=False)
+    cancelada_em = models.DateTimeField(blank=True, null=True)
+    motivo_cancelamento = models.TextField(blank=True)
+    estoque_entrada_realizada = models.BooleanField(default=False)
+    estoque_entrada_realizada_em = models.DateTimeField(blank=True, null=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-id"]
+
+    def __str__(self):
+        fornecedor_nome = self.fornecedor.nome if self.fornecedor else "Fornecedor nao informado"
+        return f"Compra #{self.id} - {fornecedor_nome}"
+
+
+class ItemCompra(models.Model):
+    compra = models.ForeignKey(
+        Compra,
+        on_delete=models.CASCADE,
+        related_name="itens",
+    )
+    produto = models.ForeignKey(
+        Produto,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="itens_compra",
+    )
+    quantidade = models.DecimalField(max_digits=12, decimal_places=3)
+    unidade = models.CharField(max_length=20, blank=True)
+    preco_unitario = models.DecimalField(max_digits=12, decimal_places=2)
+    valor_total = models.DecimalField(max_digits=12, decimal_places=2)
+    observacao = models.TextField(blank=True, null=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        nome_produto = self.produto.nome if self.produto else "Produto nao identificado"
+        return f"{nome_produto} - Compra #{self.compra_id}"
+
+
+class ContaPagar(models.Model):
+    STATUS_ABERTA = "aberta"
+    STATUS_PARCIAL = "parcial"
+    STATUS_PAGA = "paga"
+    STATUS_CANCELADA = "cancelada"
+    STATUS_CHOICES = [
+        (STATUS_ABERTA, "Aberta"),
+        (STATUS_PARCIAL, "Parcial"),
+        (STATUS_PAGA, "Paga"),
+        (STATUS_CANCELADA, "Cancelada"),
+    ]
+
+    compra = models.OneToOneField(
+        Compra,
+        on_delete=models.CASCADE,
+        related_name="conta_pagar",
+    )
+    fornecedor = models.ForeignKey(
+        Fornecedor,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="contas_pagar",
+    )
+    data_emissao = models.DateField()
+    data_vencimento = models.DateField(blank=True, null=True)
+    valor_original = models.DecimalField(max_digits=12, decimal_places=2)
+    valor_em_aberto = models.DecimalField(max_digits=12, decimal_places=2)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ABERTA)
+    observacao = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["data_vencimento", "id"]
+
+    def __str__(self):
+        return f"Conta a pagar - Compra #{self.compra_id}"
+
+
+class PagamentoContaPagar(models.Model):
+    conta = models.ForeignKey(
+        ContaPagar,
+        on_delete=models.CASCADE,
+        related_name="pagamentos",
+    )
+    data_pagamento = models.DateField()
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+    forma_pagamento = models.CharField(max_length=80, blank=True)
+    observacao = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-data_pagamento", "-id"]
+
+    def __str__(self):
+        return f"Pagamento R$ {self.valor} - Conta #{self.conta_id}"
+
+
 class EntregaRota(models.Model):
     TIPO_UNITARIA = "unitaria"
     TIPO_ROTA = "rota"
