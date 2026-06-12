@@ -173,14 +173,29 @@
     text-align: center;
     white-space: normal;
     box-shadow: none;
+    touch-action: manipulation;
+    transition: transform 0.08s ease, box-shadow 0.12s ease, filter 0.12s ease;
   }
 
-  #btnNovoProduto {
+  .produtos-topo-acoes .btn-acao-principal-painel:active,
+  .tarja-acoes .btn-acao-principal-painel:active,
+  .btn-tarja:active {
+    transform: scale(0.97);
+    filter: brightness(0.96);
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.16);
+  }
+
+  #btnPedidosPainel {
     grid-column: 1 / -1;
-    order: -1;
+    order: -2;
     min-height: 48px;
     font-size: 1rem;
     box-shadow: 0 10px 24px rgba(13, 110, 253, 0.24);
+  }
+
+  #btnReceberClientePainel {
+    grid-column: 2;
+    order: -1;
   }
 
   .produtos-resumo,
@@ -576,6 +591,8 @@
     font-size: 0.82rem;
     white-space: normal;
     text-align: center;
+    touch-action: manipulation;
+    transition: transform 0.08s ease, box-shadow 0.12s ease, filter 0.12s ease;
   }
 }
 </style>
@@ -654,6 +671,7 @@ align-items: center;
           </a>
           <a
             href="{% url 'estoque:pedidos' %}"
+            id="btnPedidosPainel"
             class="btn-acao-principal-painel"
           >
             Pedidos
@@ -666,6 +684,7 @@ align-items: center;
           </a>
           <a
             href="{% url 'estoque:receber_cliente_escolher' %}"
+            id="btnReceberClientePainel"
             class="btn-acao-principal-painel"
           >
             Receber Cliente
