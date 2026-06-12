@@ -187,15 +187,55 @@
 
   #btnPedidosPainel {
     grid-column: 1 / -1;
-    order: -2;
+    order: 1;
     min-height: 48px;
     font-size: 1rem;
     box-shadow: 0 10px 24px rgba(13, 110, 253, 0.24);
   }
 
+  #btnClientesPainel {
+    grid-column: 1;
+    order: 2;
+  }
+
   #btnReceberClientePainel {
     grid-column: 2;
-    order: -1;
+    order: 2;
+  }
+
+  #btnEntregasPainel {
+    grid-column: 1;
+    order: 3;
+  }
+
+  #btnVendasPainel {
+    grid-column: 2;
+    order: 3;
+  }
+
+  #btnFornecedoresPainel {
+    grid-column: 1;
+    order: 4;
+  }
+
+  #btnNovoProduto {
+    grid-column: 2;
+    order: 4;
+  }
+
+  #btnFuncionariosPainel {
+    grid-column: 1;
+    order: 5;
+  }
+
+  #btnCategoriasPainel {
+    grid-column: 2;
+    order: 5;
+  }
+
+  #btnUnidadesPainel {
+    grid-column: 1;
+    order: 6;
   }
 
   .produtos-resumo,
@@ -635,36 +675,42 @@ align-items: center;
         <div class="produtos-topo-acoes" style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
           <a
             href="{% url 'estoque:unidades_produto' %}"
+            id="btnUnidadesPainel"
             class="btn-acao-principal-painel"
           >
             Unidades
           </a>
           <a
             href="{% url 'estoque:categorias_produto' %}"
+            id="btnCategoriasPainel"
             class="btn-acao-principal-painel"
           >
             Categorias
           </a>
           <a
             href="/estoque/clientes/consulta/"
+            id="btnClientesPainel"
             class="btn-acao-principal-painel"
           >
             Clientes
           </a>
           <a
             href="{% url 'estoque:funcionarios' %}"
+            id="btnFuncionariosPainel"
             class="btn-acao-principal-painel"
           >
             Funcionarios
           </a>
           <a
             href="{% url 'estoque:fornecedores' %}"
+            id="btnFornecedoresPainel"
             class="btn-acao-principal-painel"
           >
             Fornecedores
           </a>
           <a
             href="{% url 'estoque:entregas_dia' %}"
+            id="btnEntregasPainel"
             class="btn-acao-principal-painel"
           >
             Entregas
@@ -678,6 +724,7 @@ align-items: center;
           </a>
           <a
             href="{% url 'estoque:vendas' %}"
+            id="btnVendasPainel"
             class="btn-acao-principal-painel"
           >
             Vendas
