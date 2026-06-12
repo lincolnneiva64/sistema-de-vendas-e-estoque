@@ -282,8 +282,12 @@
     padding: 10px; border: 1px solid #dbe7f3; border-radius: 11px; background: #ffffff;
     margin-bottom: 10px;
   }
+  .fornecedor-contato-card[hidden] { display: none !important; }
   .fornecedor-contato-card-vazio { color: #991b1b; font-weight: 800; background: #fef2f2; }
   .fornecedor-contato-card:last-child { margin-bottom: 0; }
+  .fornecedor-contato-card-title {
+    margin: 0 0 9px; color: #172033; font-size: 0.86rem; font-weight: 900;
+  }
   .fornecedor-contato-grid { display: grid; grid-template-columns: 1fr 0.9fr 0.9fr; gap: 8px; }
   .fornecedor-contato-flags {
     display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center; margin-top: 8px;
@@ -293,6 +297,12 @@
     border: 1px solid #e1e7ef; border-radius: 9px; padding: 8px 10px; background: #f8fafc;
     color: #334155; font-size: 0.78rem; font-weight: 850;
   }
+  .fornecedor-contato-add {
+    width: 100%; min-height: 38px; border: 1px dashed #93c5fd; border-radius: 9px;
+    background: #eff6ff; color: #1d4ed8; font-size: 0.82rem; font-weight: 900;
+    margin: 0 0 10px; cursor: pointer;
+  }
+  .fornecedor-contato-add:hover { background: #dbeafe; }
   @media (max-width: 920px) {
     .fornecedores-header { align-items: stretch; flex-direction: column; }
     .fornecedores-header-actions { justify-content: flex-start; }
@@ -515,8 +525,11 @@
               <div class="fornecedores-alert error">{{ contatos_formset.non_form_errors|join:", " }}</div>
             {% endif %}
             {% for contato_form in contatos_formset.forms %}
-              <div class="fornecedor-contato-card">
+              <div class="fornecedor-contato-card" data-contato-card data-contato-index="{{ forloop.counter }}" data-contato-preenchido="{% if contato_form.instance.pk or contato_form.nome.value or contato_form.cargo.value or contato_form.telefone_whatsapp.value or contato_form.observacao.value %}1{% else %}0{% endif %}">
                 {% for hidden in contato_form.hidden_fields %}{{ hidden }}{% endfor %}
+                <h4 class="fornecedor-contato-card-title">
+                  {% if forloop.first %}Contato principal{% else %}Contato {{ forloop.counter }}{% endif %}
+                </h4>
                 {% if contato_form.non_field_errors %}
                   <div class="fornecedores-alert error">{{ contato_form.non_field_errors|join:", " }}</div>
                 {% endif %}
@@ -556,6 +569,11 @@
                   {% endif %}
                 </div>
               </div>
+              {% if forloop.counter < contatos_formset.forms|length %}
+                <button type="button" class="fornecedor-contato-add" data-contato-add="{{ forloop.counter|add:'1' }}" hidden>
+                  + Adicionar contato {{ forloop.counter|add:'1' }}
+                </button>
+              {% endif %}
             {% empty %}
               <div class="fornecedor-contato-card fornecedor-contato-card-vazio">
                 Nenhum bloco de contato foi carregado. Recarregue a pagina antes de salvar.
@@ -609,6 +627,46 @@
       }
     });
   });
+
+  const contatoCards = Array.from(form.querySelectorAll("[data-contato-card]"));
+  const botoesAdicionarContato = Array.from(form.querySelectorAll("[data-contato-add]"));
+
+  function contatoTemDados(card) {
+    if (card.dataset.contatoPreenchido === "1") return true;
+    const camposContato = Array.from(card.querySelectorAll("input:not([type='hidden']):not([type='checkbox']), textarea"));
+    return camposContato.some((campo) => campo.value.trim());
+  }
+
+  function atualizarBotoesContato() {
+    botoesAdicionarContato.forEach((botao) => {
+      const indiceAlvo = Number(botao.dataset.contatoAdd);
+      const cardAlvo = contatoCards.find((card) => Number(card.dataset.contatoIndex) === indiceAlvo);
+      const cardAnterior = contatoCards.find((card) => Number(card.dataset.contatoIndex) === indiceAlvo - 1);
+      botao.hidden = !cardAlvo || !cardAlvo.hidden || Boolean(cardAnterior?.hidden);
+    });
+  }
+
+  contatoCards.forEach((card, index) => {
+    if (index === 0 || contatoTemDados(card)) {
+      card.hidden = false;
+    } else {
+      card.hidden = true;
+    }
+  });
+
+  botoesAdicionarContato.forEach((botao) => {
+    botao.addEventListener("click", () => {
+      const indiceAlvo = Number(botao.dataset.contatoAdd);
+      const cardAlvo = contatoCards.find((card) => Number(card.dataset.contatoIndex) === indiceAlvo);
+      if (!cardAlvo) return;
+      cardAlvo.hidden = false;
+      atualizarBotoesContato();
+      const primeiroCampo = cardAlvo.querySelector("input:not([type='hidden']):not([type='checkbox']), textarea");
+      if (primeiroCampo) primeiroCampo.focus();
+    });
+  });
+
+  atualizarBotoesContato();
 })();
 </script>
 
