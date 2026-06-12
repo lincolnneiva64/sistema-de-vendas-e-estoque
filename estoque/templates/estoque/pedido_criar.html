@@ -3649,26 +3649,50 @@
         }
 
         if (clienteSugestoes) {
-            let clienteSugestaoSelecionadaPorPonteiro = false;
+            let clienteToqueX = 0;
+            let clienteToqueY = 0;
+            let clienteToqueMoveu = false;
+            let clienteToqueSelecionou = false;
 
             function selecionarClienteSugestaoEvento(event) {
                 event.preventDefault();
+                event.stopPropagation();
                 const btn = event.target.closest(".cliente-sugestao");
                 if (!btn) return;
                 selecionarClienteBusca(clientesBuscaLista[Number(btn.dataset.index)]);
                 dataPrevistaEntrega.focus({ preventScroll: true });
             }
 
-            clienteSugestoes.addEventListener("pointerdown", (event) => {
-                clienteSugestaoSelecionadaPorPonteiro = true;
-                selecionarClienteSugestaoEvento(event);
-                window.setTimeout(() => {
-                    clienteSugestaoSelecionadaPorPonteiro = false;
-                }, 0);
-            });
+            clienteSugestoes.addEventListener("touchstart", (event) => {
+                const toque = event.touches && event.touches[0];
+                if (!toque || !event.target.closest(".cliente-sugestao")) return;
+                clienteToqueX = toque.clientX;
+                clienteToqueY = toque.clientY;
+                clienteToqueMoveu = false;
+                clienteToqueSelecionou = false;
+            }, { passive: true });
 
-            clienteSugestoes.addEventListener("mousedown", (event) => {
-                if (clienteSugestaoSelecionadaPorPonteiro) return;
+            clienteSugestoes.addEventListener("touchmove", (event) => {
+                const toque = event.touches && event.touches[0];
+                if (!toque) return;
+                const dx = Math.abs(toque.clientX - clienteToqueX);
+                const dy = Math.abs(toque.clientY - clienteToqueY);
+                if (dx > 8 || dy > 8) {
+                    clienteToqueMoveu = true;
+                }
+            }, { passive: true });
+
+            clienteSugestoes.addEventListener("touchend", (event) => {
+                if (clienteToqueMoveu || !event.target.closest(".cliente-sugestao")) return;
+                clienteToqueSelecionou = true;
+                selecionarClienteSugestaoEvento(event);
+            }, { passive: false });
+
+            clienteSugestoes.addEventListener("click", (event) => {
+                if (clienteToqueSelecionou) {
+                    clienteToqueSelecionou = false;
+                    return;
+                }
                 selecionarClienteSugestaoEvento(event);
             });
         }
