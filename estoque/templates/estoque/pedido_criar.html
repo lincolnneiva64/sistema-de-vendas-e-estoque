@@ -1099,6 +1099,14 @@
                 display: block;
             }
 
+            .cliente-busca-wrap.cliente-selecionado #cliente-busca {
+                border-color: #16a34a;
+                background: #ecfdf3;
+                color: #14532d;
+                font-weight: 850;
+                box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.16), 0 8px 18px rgba(21, 128, 61, 0.12);
+            }
+
             .cliente-select-mobile {
                 position: absolute !important;
                 width: 1px !important;
@@ -2130,6 +2138,13 @@
             return option && option.value ? option.textContent.trim() : "";
         }
 
+        function atualizarDestaqueClienteSelecionado() {
+            if (!clienteBusca) return;
+            const wrap = clienteBusca.closest(".cliente-busca-wrap");
+            if (!wrap) return;
+            wrap.classList.toggle("cliente-selecionado", Boolean(clientePedido.value));
+        }
+
         function fecharSugestoesClientes() {
             if (!clienteSugestoes) return;
             clienteSugestoes.classList.remove("aberto");
@@ -2196,6 +2211,7 @@
                 clienteBusca.classList.remove("campo-invalido");
             }
             clientePedido.classList.remove("campo-invalido");
+            atualizarDestaqueClienteSelecionado();
             fecharSugestoesClientes();
             clientePedido.dispatchEvent(new Event("change", { bubbles: true }));
         }
@@ -2226,6 +2242,7 @@
         function prepararBuscaClienteInicial() {
             if (!clienteBusca) return;
             clienteBusca.value = nomeClienteSelecionado();
+            atualizarDestaqueClienteSelecionado();
         }
 
         function formatarMoeda(valor) {
@@ -3587,6 +3604,7 @@
             } else if (clienteBusca) {
                 clienteBusca.value = "";
             }
+            atualizarDestaqueClienteSelecionado();
             carregarSugestoesCliente();
         });
 
@@ -3597,6 +3615,7 @@
                 if (clienteBusca.value.trim() !== nomeClienteSelecionado()) {
                     clientePedido.value = "";
                 }
+                atualizarDestaqueClienteSelecionado();
                 buscarClientesPedido(clienteBusca.value);
             });
 
