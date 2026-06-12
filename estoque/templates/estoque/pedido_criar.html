@@ -2160,6 +2160,25 @@
             });
 
             clienteSugestoes.classList.add("aberto");
+            manterBuscaClienteVisivel();
+        }
+
+        function manterBuscaClienteVisivel() {
+            if (!campoClienteDigitavelVisivel() || !clienteBusca) return;
+            window.requestAnimationFrame(() => {
+                const wrap = clienteBusca.closest(".cliente-busca-wrap") || clienteBusca;
+                const alvo = clienteSugestoes?.classList.contains("aberto") ? clienteSugestoes : wrap;
+                const rectCampo = wrap.getBoundingClientRect();
+                const rectAlvo = alvo.getBoundingClientRect();
+                const limiteInferior = window.innerHeight - 18;
+                const baseVisivel = Math.max(rectCampo.bottom, Math.min(rectAlvo.bottom, rectCampo.bottom + 320));
+                const precisaRolar = rectCampo.top < 72 || baseVisivel > limiteInferior;
+
+                if (precisaRolar) {
+                    const destino = window.scrollY + rectCampo.top - 84;
+                    window.scrollTo({ top: Math.max(destino, 0), behavior: "smooth" });
+                }
+            });
         }
 
         function selecionarClienteBusca(cliente) {
@@ -2186,11 +2205,6 @@
             clienteBuscaRequisicao += 1;
             const requisicaoAtual = clienteBuscaRequisicao;
             const texto = String(termo || "").trim();
-
-            if (!texto) {
-                fecharSugestoesClientes();
-                return;
-            }
 
             const url = new URL(clientesAutocompleteUrl, window.location.origin);
             url.searchParams.set("q", texto);
@@ -3587,7 +3601,15 @@
             });
 
             clienteBusca.addEventListener("focus", () => {
-                if (clienteBusca.value.trim()) buscarClientesPedido(clienteBusca.value);
+                buscarClientesPedido(clienteBusca.value);
+                manterBuscaClienteVisivel();
+                window.setTimeout(manterBuscaClienteVisivel, 180);
+            });
+
+            clienteBusca.addEventListener("click", () => {
+                buscarClientesPedido(clienteBusca.value);
+                manterBuscaClienteVisivel();
+                window.setTimeout(manterBuscaClienteVisivel, 180);
             });
 
             clienteBusca.addEventListener("keydown", (event) => {
@@ -3627,12 +3649,27 @@
         }
 
         if (clienteSugestoes) {
-            clienteSugestoes.addEventListener("mousedown", (event) => {
+            let clienteSugestaoSelecionadaPorPonteiro = false;
+
+            function selecionarClienteSugestaoEvento(event) {
                 event.preventDefault();
                 const btn = event.target.closest(".cliente-sugestao");
                 if (!btn) return;
                 selecionarClienteBusca(clientesBuscaLista[Number(btn.dataset.index)]);
-                dataPrevistaEntrega.focus();
+                dataPrevistaEntrega.focus({ preventScroll: true });
+            }
+
+            clienteSugestoes.addEventListener("pointerdown", (event) => {
+                clienteSugestaoSelecionadaPorPonteiro = true;
+                selecionarClienteSugestaoEvento(event);
+                window.setTimeout(() => {
+                    clienteSugestaoSelecionadaPorPonteiro = false;
+                }, 0);
+            });
+
+            clienteSugestoes.addEventListener("mousedown", (event) => {
+                if (clienteSugestaoSelecionadaPorPonteiro) return;
+                selecionarClienteSugestaoEvento(event);
             });
         }
 
