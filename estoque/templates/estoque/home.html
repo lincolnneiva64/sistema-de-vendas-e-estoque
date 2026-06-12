@@ -158,6 +158,13 @@
   .produtos-topo-acoes {
     display: grid !important;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "pedidos pedidos"
+      "clientes receber"
+      "entregas vendas"
+      "fornecedores novo"
+      "funcionarios categorias"
+      "unidades .";
     gap: 8px !important;
     justify-content: stretch !important;
   }
@@ -186,56 +193,50 @@
   }
 
   #btnPedidosPainel {
-    grid-column: 1 / -1;
-    order: 1;
+    grid-area: pedidos;
     min-height: 48px;
     font-size: 1rem;
     box-shadow: 0 10px 24px rgba(13, 110, 253, 0.24);
   }
 
   #btnClientesPainel {
-    grid-column: 1;
-    order: 2;
+    grid-area: clientes;
   }
 
   #btnReceberClientePainel {
-    grid-column: 2;
-    order: 2;
+    grid-area: receber;
   }
 
   #btnEntregasPainel {
-    grid-column: 1;
-    order: 3;
+    grid-area: entregas;
   }
 
   #btnVendasPainel {
-    grid-column: 2;
-    order: 3;
+    grid-area: vendas;
   }
 
   #btnFornecedoresPainel {
-    grid-column: 1;
-    order: 4;
+    grid-area: fornecedores;
   }
 
   #btnNovoProduto {
-    grid-column: 2;
-    order: 4;
+    grid-area: novo;
   }
 
   #btnFuncionariosPainel {
-    grid-column: 1;
-    order: 5;
+    grid-area: funcionarios;
   }
 
   #btnCategoriasPainel {
-    grid-column: 2;
-    order: 5;
+    grid-area: categorias;
   }
 
   #btnUnidadesPainel {
-    grid-column: 1;
-    order: 6;
+    grid-area: unidades;
+  }
+
+  .novo-produto-prefixo {
+    display: none;
   }
 
   .produtos-resumo,
@@ -741,7 +742,7 @@ align-items: center;
             href="{% url 'estoque:cadastrar_produto' %}"
             class="btn-acao-principal-painel"
           >
-            + Novo Produto
+            <span class="novo-produto-prefixo">+ </span>Novo Produto
           </a>
         </div>
     </div>
