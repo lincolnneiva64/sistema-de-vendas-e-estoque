@@ -4,7 +4,7 @@ from django import forms
 
 from django.utils import timezone
 
-from .models import Categoria, Cliente, Fornecedor, Funcionario, PixRecebido, Produto, Unidade
+from .models import Categoria, Cliente, Fornecedor, FornecedorContato, Funcionario, PixRecebido, Produto, Unidade
 from .utils import normalize_category_name, normalize_product_name
 
 
@@ -929,4 +929,69 @@ class FornecedorForm(forms.ModelForm):
 
     def clean_bairro(self):
         return self._nome_proprio(self.cleaned_data.get("bairro"))
+
+
+class FornecedorContatoForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.instance.pk:
+            self.fields["ativo"].initial = True
+
+    class Meta:
+        model = FornecedorContato
+        fields = [
+            "nome",
+            "cargo",
+            "telefone_whatsapp",
+            "principal",
+            "ativo",
+            "observacao",
+        ]
+        widgets = {
+            "nome": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Nome do responsavel",
+                "autocomplete": "off",
+            }),
+            "cargo": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Vendedor, financeiro, entrega...",
+                "autocomplete": "off",
+            }),
+            "telefone_whatsapp": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "(00) 00000-0000",
+                "autocomplete": "off",
+            }),
+            "principal": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "ativo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "observacao": forms.Textarea(attrs={
+                "class": "form-control",
+                "placeholder": "Observacao do contato",
+                "rows": 2,
+            }),
+        }
+
+    @staticmethod
+    def _limpar_texto(valor):
+        valor = (valor or "").strip()
+        return " ".join(valor.split()) or None
+
+    def clean_nome(self):
+        return self._limpar_texto(self.cleaned_data.get("nome"))
+
+    def clean_cargo(self):
+        return self._limpar_texto(self.cleaned_data.get("cargo"))
+
+    def clean_telefone_whatsapp(self):
+        return self._limpar_texto(self.cleaned_data.get("telefone_whatsapp"))
+
+
+FornecedorContatoFormSet = forms.inlineformset_factory(
+    Fornecedor,
+    FornecedorContato,
+    form=FornecedorContatoForm,
+    extra=3,
+    can_delete=True,
+)
 

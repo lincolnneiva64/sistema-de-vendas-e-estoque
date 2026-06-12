@@ -786,6 +786,62 @@ class Fornecedor(models.Model):
         return self.nome
 
 
+class FornecedorContato(models.Model):
+    fornecedor = models.ForeignKey(
+        Fornecedor,
+        on_delete=models.CASCADE,
+        related_name="contatos",
+    )
+    nome = models.CharField(max_length=140)
+    cargo = models.CharField(max_length=80, blank=True, null=True)
+    telefone_whatsapp = models.CharField(max_length=30, blank=True, null=True)
+    telefone_whatsapp_normalizado = models.CharField(max_length=20, blank=True, null=True)
+    principal = models.BooleanField(default=False)
+    ativo = models.BooleanField(default=True)
+    observacao = models.TextField(blank=True, null=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-principal", "-ativo", "nome", "id"]
+
+    def __str__(self):
+        return f"{self.nome} - {self.fornecedor}"
+
+    @staticmethod
+    def normalizar_whatsapp(valor):
+        return "".join(caractere for caractere in str(valor or "") if caractere.isdigit())
+
+    @property
+    def whatsapp_url(self):
+        numero = self.telefone_whatsapp_normalizado or self.normalizar_whatsapp(self.telefone_whatsapp)
+        return f"https://web.whatsapp.com/send?phone={numero}" if numero else ""
+
+    def save(self, *args, **kwargs):
+        for campo in ["nome", "cargo", "telefone_whatsapp"]:
+            valor = getattr(self, campo, None)
+            if isinstance(valor, str):
+                valor_limpo = " ".join(valor.strip().split())
+                setattr(self, campo, valor_limpo or None)
+
+        if isinstance(self.observacao, str):
+            observacao = self.observacao.strip()
+            self.observacao = observacao or None
+
+        self.telefone_whatsapp_normalizado = self.normalizar_whatsapp(self.telefone_whatsapp)
+        if not self.telefone_whatsapp_normalizado:
+            self.telefone_whatsapp_normalizado = None
+
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+        if self.principal:
+            FornecedorContato.objects.filter(
+                fornecedor=self.fornecedor,
+                principal=True,
+            ).exclude(pk=self.pk).update(principal=False)
+
+
 class ProdutoFornecedor(models.Model):
     produto = models.ForeignKey(
         Produto,

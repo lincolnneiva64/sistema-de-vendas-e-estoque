@@ -76,7 +76,7 @@
   }
 
   .fornecedores-table td:nth-child(2)::before {
-    content: "WhatsApp: ";
+    content: "Contatos: ";
     font-weight: 850;
     color: #334155;
   }
@@ -205,6 +205,29 @@
   .fornecedores-row.selecionado td { background: #eff6ff; border-bottom-color: #dbeafe; }
   .fornecedor-nome { font-weight: 850; color: #172033; font-size: 0.9rem; }
   .fornecedor-muted { color: #64748b; font-size: 0.8rem; font-weight: 650; }
+  .fornecedor-contatos-lista { display: grid; gap: 6px; min-width: 190px; }
+  .fornecedor-contato-item {
+    display: grid; gap: 3px; padding: 7px 8px; border: 1px solid #e1e7ef;
+    border-radius: 9px; background: #f8fafc;
+  }
+  .fornecedor-contato-topo { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .fornecedor-contato-nome { color: #172033; font-size: 0.82rem; font-weight: 850; }
+  .fornecedor-contato-cargo { color: #64748b; font-size: 0.74rem; font-weight: 750; }
+  .fornecedor-contato-whatsapp {
+    width: fit-content; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 999px; padding: 3px 8px; background: #dcfce7; color: #166534;
+    font-size: 0.74rem; font-weight: 850; text-decoration: none;
+  }
+  .fornecedor-contato-whatsapp:hover { color: #14532d; filter: brightness(0.97); }
+  .fornecedor-contato-principal {
+    border-radius: 999px; padding: 2px 6px; background: #dbeafe; color: #1d4ed8;
+    font-size: 0.68rem; font-weight: 900;
+  }
+  .fornecedor-contato-inativo {
+    border-radius: 999px; padding: 2px 6px; background: #f1f5f9; color: #64748b;
+    font-size: 0.68rem; font-weight: 900;
+  }
+  .fornecedor-contato-vazio { color: #94a3b8; font-weight: 750; }
   .status-pill {
     display: inline-flex; align-items: center; justify-content: center;
     border-radius: 999px; padding: 4px 8px; font-size: 0.72rem;
@@ -247,6 +270,26 @@
   .fornecedores-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
   .fornecedores-empty { padding: 22px 16px; color: #64748b; text-align: center; font-weight: 700; font-size: 0.9rem; }
   .fornecedores-form-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; padding-top: 4px; }
+  .fornecedor-contatos-section {
+    margin: 12px 0; padding: 12px; border: 1px solid #e1e7ef;
+    border-radius: 12px; background: #f8fafc;
+  }
+  .fornecedor-contatos-title { margin: 0 0 4px; color: #172033; font-size: 0.95rem; font-weight: 900; }
+  .fornecedor-contatos-note { margin: 0 0 10px; color: #64748b; font-size: 0.78rem; font-weight: 650; }
+  .fornecedor-contato-card {
+    padding: 10px; border: 1px solid #dbe7f3; border-radius: 11px; background: #ffffff;
+    margin-bottom: 10px;
+  }
+  .fornecedor-contato-card:last-child { margin-bottom: 0; }
+  .fornecedor-contato-grid { display: grid; grid-template-columns: 1fr 0.9fr 0.9fr; gap: 8px; }
+  .fornecedor-contato-flags {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center; margin-top: 8px;
+  }
+  .fornecedor-contato-check {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    border: 1px solid #e1e7ef; border-radius: 9px; padding: 8px 10px; background: #f8fafc;
+    color: #334155; font-size: 0.78rem; font-weight: 850;
+  }
   @media (max-width: 920px) {
     .fornecedores-header { align-items: stretch; flex-direction: column; }
     .fornecedores-header-actions { justify-content: flex-start; }
@@ -270,6 +313,9 @@
       border: 0;
       padding: 5px 0;
     }
+    .fornecedor-contato-grid,
+    .fornecedor-contato-flags { grid-template-columns: 1fr; }
+    .fornecedor-contato-card { padding: 11px; }
   }
 </style>
 
@@ -315,7 +361,7 @@
               <thead>
                 <tr>
                   <th>Fornecedor</th>
-                  <th>WhatsApp</th>
+                  <th>Contatos</th>
                   <th>Localidade</th>
                   <th>Status</th>
                   <th>Compras</th>
@@ -335,7 +381,39 @@
                         <div class="fornecedor-muted">{{ fornecedor.observacao|truncatechars:70 }}</div>
                       {% endif %}
                     </td>
-                    <td class="fornecedor-muted">{{ fornecedor.telefone_whatsapp|default:"-" }}</td>
+                    <td class="fornecedor-muted fornecedores-contatos-cell">
+                      <div class="fornecedor-contatos-lista">
+                        {% for contato in fornecedor.contatos.all %}
+                          <div class="fornecedor-contato-item">
+                            <div class="fornecedor-contato-topo">
+                              <span class="fornecedor-contato-nome">{{ contato.nome }}</span>
+                              {% if contato.principal %}<span class="fornecedor-contato-principal">Principal</span>{% endif %}
+                              {% if not contato.ativo %}<span class="fornecedor-contato-inativo">Inativo</span>{% endif %}
+                            </div>
+                            {% if contato.cargo %}<span class="fornecedor-contato-cargo">{{ contato.cargo }}</span>{% endif %}
+                            {% if contato.telefone_whatsapp %}
+                              {% if contato.whatsapp_url %}
+                                <a class="fornecedor-contato-whatsapp" href="{{ contato.whatsapp_url }}" target="_blank" rel="noopener">{{ contato.telefone_whatsapp }}</a>
+                              {% else %}
+                                <span class="fornecedor-contato-whatsapp">{{ contato.telefone_whatsapp }}</span>
+                              {% endif %}
+                            {% endif %}
+                          </div>
+                        {% empty %}
+                          {% if fornecedor.telefone_whatsapp %}
+                            <div class="fornecedor-contato-item">
+                              <div class="fornecedor-contato-topo">
+                                <span class="fornecedor-contato-nome">Contato principal</span>
+                                <span class="fornecedor-contato-principal">Cadastro antigo</span>
+                              </div>
+                              <span class="fornecedor-contato-whatsapp">{{ fornecedor.telefone_whatsapp }}</span>
+                            </div>
+                          {% else %}
+                            <span class="fornecedor-contato-vazio">Sem contatos</span>
+                          {% endif %}
+                        {% endfor %}
+                      </div>
+                    </td>
                     <td class="fornecedor-muted">
                       {% if fornecedor.bairro or fornecedor.cidade %}
                         {{ fornecedor.bairro|default:"" }}{% if fornecedor.bairro and fornecedor.cidade %} - {% endif %}{{ fornecedor.cidade|default:"" }}
@@ -404,6 +482,58 @@
             <label for="{{ form.telefone_whatsapp.id_for_label }}">WhatsApp</label>
             {{ form.telefone_whatsapp }}
           </div>
+
+          <section class="fornecedor-contatos-section">
+            <h3 class="fornecedor-contatos-title">Contatos do fornecedor</h3>
+            <p class="fornecedor-contatos-note">Cadastre responsaveis diferentes, como vendedor, financeiro ou entrega.</p>
+            {{ contatos_formset.management_form }}
+            {% if contatos_formset.non_form_errors %}
+              <div class="fornecedores-alert error">{{ contatos_formset.non_form_errors|join:", " }}</div>
+            {% endif %}
+            {% for contato_form in contatos_formset.forms %}
+              <div class="fornecedor-contato-card">
+                {% for hidden in contato_form.hidden_fields %}{{ hidden }}{% endfor %}
+                {% if contato_form.non_field_errors %}
+                  <div class="fornecedores-alert error">{{ contato_form.non_field_errors|join:", " }}</div>
+                {% endif %}
+                <div class="fornecedor-contato-grid">
+                  <div class="fornecedores-field">
+                    <label for="{{ contato_form.nome.id_for_label }}">Nome do responsavel</label>
+                    {{ contato_form.nome }}
+                    {% for error in contato_form.nome.errors %}<div class="fornecedores-alert error">{{ error }}</div>{% endfor %}
+                  </div>
+                  <div class="fornecedores-field">
+                    <label for="{{ contato_form.cargo.id_for_label }}">Cargo / funcao</label>
+                    {{ contato_form.cargo }}
+                  </div>
+                  <div class="fornecedores-field">
+                    <label for="{{ contato_form.telefone_whatsapp.id_for_label }}">WhatsApp</label>
+                    {{ contato_form.telefone_whatsapp }}
+                  </div>
+                </div>
+                <div class="fornecedores-field">
+                  <label for="{{ contato_form.observacao.id_for_label }}">Observacao</label>
+                  {{ contato_form.observacao }}
+                </div>
+                <div class="fornecedor-contato-flags">
+                  <label class="fornecedor-contato-check" for="{{ contato_form.principal.id_for_label }}">
+                    <span>Contato principal</span>
+                    {{ contato_form.principal }}
+                  </label>
+                  <label class="fornecedor-contato-check" for="{{ contato_form.ativo.id_for_label }}">
+                    <span>Contato ativo</span>
+                    {{ contato_form.ativo }}
+                  </label>
+                  {% if contato_form.DELETE %}
+                    <label class="fornecedor-contato-check" for="{{ contato_form.DELETE.id_for_label }}">
+                      <span>Remover contato</span>
+                      {{ contato_form.DELETE }}
+                    </label>
+                  {% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </section>
 
           <div class="fornecedores-field">
             <label for="{{ form.cidade.id_for_label }}">Cidade</label>
@@ -540,7 +670,7 @@
   }
 
   .fornecedores-table td:nth-child(2)::before {
-    content: "WhatsApp: ";
+    content: "Contatos: ";
     font-weight: 850;
     color: #334155;
   }

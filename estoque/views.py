@@ -17,13 +17,13 @@ from datetime import date, timedelta
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q, Sum, Max
+from django.db.models import Q, Sum, Max, Prefetch
 from urllib.parse import quote, urlencode
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count
-from .forms import CategoriaForm, ClienteForm, FornecedorForm, FuncionarioForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, Funcionario, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
+from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -1721,9 +1721,11 @@ def fornecedores(request):
     fornecedor_selecionado = None
     fornecedores_url = reverse("estoque:fornecedores")
 
-    fornecedores_qs = Fornecedor.objects.annotate(
-        total_compras=Count("compras"),
-        total_produtos=Count("produtos_fornecedor"),
+    fornecedores_qs = Fornecedor.objects.prefetch_related(
+        Prefetch("contatos", queryset=FornecedorContato.objects.all())
+    ).annotate(
+        total_compras=Count("compras", distinct=True),
+        total_produtos=Count("produtos_fornecedor", distinct=True),
     ).order_by("-ativo", "nome", "id")
 
     if termo:
@@ -1733,8 +1735,12 @@ def fornecedores(request):
             Q(telefone_whatsapp__icontains=termo) |
             Q(cidade__icontains=termo) |
             Q(bairro__icontains=termo) |
-            Q(observacao__icontains=termo)
-        )
+            Q(observacao__icontains=termo) |
+            Q(contatos__nome__icontains=termo) |
+            Q(contatos__cargo__icontains=termo) |
+            Q(contatos__telefone_whatsapp__icontains=termo) |
+            Q(contatos__telefone_whatsapp_normalizado__icontains=termo)
+        ).distinct()
 
     if request.method == "POST":
         acao = request.POST.get("acao")
@@ -1754,11 +1760,15 @@ def fornecedores(request):
         if fornecedor_id:
             fornecedor_selecionado = get_object_or_404(Fornecedor, pk=fornecedor_id)
             form = FornecedorForm(request.POST, instance=fornecedor_selecionado)
+            contatos_formset = FornecedorContatoFormSet(request.POST, instance=fornecedor_selecionado, prefix="contatos")
         else:
             form = FornecedorForm(request.POST)
+            contatos_formset = FornecedorContatoFormSet(request.POST, instance=Fornecedor(), prefix="contatos")
 
-        if form.is_valid():
+        if form.is_valid() and contatos_formset.is_valid():
             fornecedor = form.save()
+            contatos_formset.instance = fornecedor
+            contatos_formset.save()
             messages.success(request, f'Fornecedor "{fornecedor.nome}" salvo com sucesso.')
             return redirect(f"{fornecedores_url}?fornecedor_salvo={fornecedor.id}")
         messages.error(request, "Revise os campos destacados para salvar o fornecedor.")
@@ -1767,8 +1777,10 @@ def fornecedores(request):
         if fornecedor_id:
             fornecedor_selecionado = get_object_or_404(Fornecedor, pk=fornecedor_id)
             form = FornecedorForm(instance=fornecedor_selecionado)
+            contatos_formset = FornecedorContatoFormSet(instance=fornecedor_selecionado, prefix="contatos")
         else:
             form = FornecedorForm(initial={"ativo": True})
+            contatos_formset = FornecedorContatoFormSet(instance=Fornecedor(), prefix="contatos")
 
     fornecedores_lista = list(fornecedores_qs)
     fornecedores_ativos = sum(1 for fornecedor in fornecedores_lista if fornecedor.ativo)
@@ -1778,6 +1790,7 @@ def fornecedores(request):
         "estoque/fornecedores.html",
         {
             "form": form,
+            "contatos_formset": contatos_formset,
             "fornecedores": fornecedores_lista,
             "fornecedor_selecionado": fornecedor_selecionado,
             "termo": termo,
