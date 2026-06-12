@@ -285,6 +285,7 @@
   .fornecedor-contato-card[hidden] { display: none !important; }
   .fornecedor-contato-card-vazio { color: #991b1b; font-weight: 800; background: #fef2f2; }
   .fornecedor-contato-card:last-child { margin-bottom: 0; }
+  .fornecedor-contato-delete-campo { display: none !important; }
   .fornecedor-contato-card-title {
     margin: 0 0 9px; color: #172033; font-size: 0.86rem; font-weight: 900;
   }
@@ -303,6 +304,12 @@
     margin: 0 0 10px; cursor: pointer;
   }
   .fornecedor-contato-add:hover { background: #dbeafe; }
+  .fornecedor-contato-ocultar {
+    width: 100%; min-height: 36px; border: 1px solid #cbd5e1; border-radius: 9px;
+    background: #ffffff; color: #475569; font-size: 0.78rem; font-weight: 850;
+    margin-top: 8px; cursor: pointer;
+  }
+  .fornecedor-contato-ocultar:hover { background: #f8fafc; }
   @media (max-width: 920px) {
     .fornecedores-header { align-items: stretch; flex-direction: column; }
     .fornecedores-header-actions { justify-content: flex-start; }
@@ -525,8 +532,12 @@
               <div class="fornecedores-alert error">{{ contatos_formset.non_form_errors|join:", " }}</div>
             {% endif %}
             {% for contato_form in contatos_formset.forms %}
+              <button type="button" class="fornecedor-contato-add" data-contato-add="{{ forloop.counter }}" hidden>
+                + Adicionar {% if forloop.first %}contato principal{% else %}contato {{ forloop.counter }}{% endif %}
+              </button>
               <div class="fornecedor-contato-card" data-contato-card data-contato-index="{{ forloop.counter }}" data-contato-preenchido="{% if contato_form.instance.pk or contato_form.nome.value or contato_form.cargo.value or contato_form.telefone_whatsapp.value or contato_form.observacao.value %}1{% else %}0{% endif %}">
                 {% for hidden in contato_form.hidden_fields %}{{ hidden }}{% endfor %}
+                {% if contato_form.DELETE %}<span class="fornecedor-contato-delete-campo">{{ contato_form.DELETE }}</span>{% endif %}
                 <h4 class="fornecedor-contato-card-title">
                   {% if forloop.first %}Contato principal{% else %}Contato {{ forloop.counter }}{% endif %}
                 </h4>
@@ -561,19 +572,9 @@
                     <span>Ativo</span>
                     {{ contato_form.ativo }}
                   </label>
-                  {% if contato_form.DELETE %}
-                    <label class="fornecedor-contato-check" for="{{ contato_form.DELETE.id_for_label }}">
-                      <span>Remover</span>
-                      {{ contato_form.DELETE }}
-                    </label>
-                  {% endif %}
                 </div>
+                <button type="button" class="fornecedor-contato-ocultar" data-contato-ocultar>Ocultar contato</button>
               </div>
-              {% if forloop.counter < contatos_formset.forms|length %}
-                <button type="button" class="fornecedor-contato-add" data-contato-add="{{ forloop.counter|add:'1' }}" hidden>
-                  + Adicionar contato {{ forloop.counter|add:'1' }}
-                </button>
-              {% endif %}
             {% empty %}
               <div class="fornecedor-contato-card fornecedor-contato-card-vazio">
                 Nenhum bloco de contato foi carregado. Recarregue a pagina antes de salvar.
@@ -642,15 +643,16 @@
       const indiceAlvo = Number(botao.dataset.contatoAdd);
       const cardAlvo = contatoCards.find((card) => Number(card.dataset.contatoIndex) === indiceAlvo);
       const cardAnterior = contatoCards.find((card) => Number(card.dataset.contatoIndex) === indiceAlvo - 1);
-      botao.hidden = !cardAlvo || !cardAlvo.hidden || Boolean(cardAnterior?.hidden);
+      const podeMostrar = indiceAlvo === 1 || Boolean(cardAnterior && !cardAnterior.hidden);
+      botao.hidden = !cardAlvo || !cardAlvo.hidden || !podeMostrar;
     });
   }
 
   contatoCards.forEach((card, index) => {
-    if (index === 0 || contatoTemDados(card)) {
-      card.hidden = false;
-    } else {
-      card.hidden = true;
+    card.hidden = !contatoTemDados(card);
+    if (card.hidden) {
+      const ativo = card.querySelector("input[name$='-ativo']");
+      if (ativo) ativo.checked = false;
     }
   });
 
@@ -660,9 +662,23 @@
       const cardAlvo = contatoCards.find((card) => Number(card.dataset.contatoIndex) === indiceAlvo);
       if (!cardAlvo) return;
       cardAlvo.hidden = false;
+      const ativo = cardAlvo.querySelector("input[name$='-ativo']");
+      if (ativo) ativo.checked = true;
       atualizarBotoesContato();
       const primeiroCampo = cardAlvo.querySelector("input:not([type='hidden']):not([type='checkbox']), textarea");
       if (primeiroCampo) primeiroCampo.focus();
+    });
+  });
+
+  contatoCards.forEach((card) => {
+    const botaoOcultar = card.querySelector("[data-contato-ocultar]");
+    botaoOcultar?.addEventListener("click", () => {
+      const ativo = card.querySelector("input[name$='-ativo']");
+      const deleteField = card.querySelector("input[name$='-DELETE']");
+      if (ativo) ativo.checked = false;
+      if (deleteField) deleteField.checked = false;
+      card.hidden = true;
+      atualizarBotoesContato();
     });
   });
 
