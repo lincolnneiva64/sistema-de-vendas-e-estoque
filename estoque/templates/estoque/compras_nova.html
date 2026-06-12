@@ -23,6 +23,8 @@
   .compras-table th { text-align:left; font-size:.72rem; color:#64748b; text-transform:uppercase; background:#f8fafc; padding:9px; border-bottom:1px solid #edf1f6; }
   .compras-table td { padding:8px; border-bottom:1px solid #f0f3f8; vertical-align:top; }
   .compras-table select, .compras-table input { width:100%; border:1.5px solid #d3dbe8; border-radius:8px; padding:8px; font-weight:650; }
+  .compras-table select[name="produto_id[]"] { font-size:.88rem; font-weight:600; line-height:1.25; }
+  .compras-table select[name="produto_id[]"] option { font-size:.88rem; font-weight:500; }
   .col-produto { min-width:320px; }
   .col-pequena { width:120px; }
   .col-total { width:130px; font-weight:850; }
@@ -36,6 +38,7 @@
     .compras-grid { grid-template-columns:1fr; }
     .compras-table { min-width:760px; }
     .compras-table-wrap { overflow-x:auto; }
+    .compras-table select[name="produto_id[]"] { font-size:.84rem; }
   }
 </style>
 
@@ -116,13 +119,13 @@
                 <select name="produto_id[]" required>
                   <option value="">Selecione...</option>
                   {% for produto in produtos %}
-                    <option value="{{ produto.id }}" data-unidade="{{ produto.unidade_compra|default:'' }}" data-preco="{{ produto.preco_compra|default:'' }}">{{ produto.nome }}</option>
+                    <option value="{{ produto.id }}" data-unidade="{{ produto.unidade_compra|default:'' }}" data-preco-compra="{{ produto.preco_compra|default:0|floatformat:2 }}">{{ produto.nome }}</option>
                   {% endfor %}
                 </select>
               </td>
               <td><input type="text" name="quantidade[]" inputmode="decimal" value="1"></td>
               <td><input type="text" name="unidade[]" placeholder="UN"></td>
-              <td><input type="text" name="preco_unitario[]" inputmode="decimal" placeholder="0,00"></td>
+              <td><input type="text" name="preco_unitario[]" inputmode="decimal" value="0,00" placeholder="0,00"></td>
               <td class="valor-total-item">R$ 0,00</td>
               <td><button type="button" class="compras-btn compras-btn-secondary btn-remover">Remover</button></td>
             </tr>
@@ -153,7 +156,27 @@
   }
 
   function numero(valor) {
-    return Number(String(valor || "0").replace(/\./g, "").replace(",", ".")) || 0;
+    let texto = String(valor || "0").trim();
+    if (!texto) return 0;
+
+    if (texto.includes(",")) {
+      texto = texto.replace(/\./g, "").replace(",", ".");
+    } else {
+      const partes = texto.split(".");
+      if (partes.length > 2) {
+        const ultimaParte = partes[partes.length - 1];
+        texto = ultimaParte.length <= 2
+          ? partes.slice(0, -1).join("") + "." + ultimaParte
+          : partes.join("");
+      }
+    }
+
+    texto = texto.replace(/[^\d.-]/g, "");
+    return Number(texto) || 0;
+  }
+
+  function precoCampo(valor) {
+    return numero(valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   function recalcular() {
@@ -185,7 +208,7 @@
       const opt = produto.options[produto.selectedIndex];
       if (opt) {
         if (!unidade.value) unidade.value = opt.dataset.unidade || "";
-        if (!preco.value) preco.value = String(opt.dataset.preco || "").replace(".", ",");
+        preco.value = precoCampo(opt.dataset.precoCompra || "0");
       }
       recalcular();
     });
@@ -230,7 +253,7 @@
     nova.querySelector('[name="produto_id[]"]').value = "";
     nova.querySelector('[name="quantidade[]"]').value = "1";
     nova.querySelector('[name="unidade[]"]').value = "";
-    nova.querySelector('[name="preco_unitario[]"]').value = "";
+    nova.querySelector('[name="preco_unitario[]"]').value = "0,00";
     nova.querySelector(".valor-total-item").textContent = "R$ 0,00";
 
     tabela.querySelector("tbody").appendChild(nova);
@@ -286,10 +309,6 @@
   }
 
   if (tipoPagamento) {
-    tipoPagamento.addEventListener("change", function() {
-      focar(primeiroProduto || observacao);
-    });
-
     tipoPagamento.addEventListener("keydown", function(event) {
       if (event.key !== "Enter") return;
       event.preventDefault();

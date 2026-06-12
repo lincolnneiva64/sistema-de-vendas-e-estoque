@@ -1605,6 +1605,23 @@ def _decimal_compra(valor, casas=2, padrao="0"):
         raise ValueError("Valor numerico invalido.")
 
 
+def compras_lista(request):
+    termo = request.GET.get("q", "").strip()
+    compras = Compra.objects.select_related("fornecedor").order_by("-data_compra", "-id")
+
+    if termo:
+        compras = compras.filter(fornecedor__nome__icontains=termo)
+
+    return render(
+        request,
+        "estoque/compras_lista.html",
+        {
+            "compras": compras,
+            "termo": termo,
+        },
+    )
+
+
 def compras_nova(request):
     fornecedores = Fornecedor.objects.filter(ativo=True).order_by("nome", "id")
     produtos = Produto.objects.filter(excluido=False).order_by("nome")

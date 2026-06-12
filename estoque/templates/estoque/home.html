@@ -164,7 +164,7 @@
       "entregas vendas"
       "fornecedores novo"
       "funcionarios categorias"
-      "unidades .";
+      "unidades compras";
     gap: 8px !important;
     justify-content: stretch !important;
   }
@@ -233,6 +233,10 @@
 
   #btnUnidadesPainel {
     grid-area: unidades;
+  }
+
+  #btnComprasPainel {
+    grid-area: compras;
   }
 
   .novo-produto-prefixo {
@@ -738,6 +742,13 @@ align-items: center;
             Receber Cliente
           </a>
           <a
+            href="{% url 'estoque:compras_lista' %}"
+            id="btnComprasPainel"
+            class="btn-acao-principal-painel"
+          >
+            Compras
+          </a>
+          <a
             id="btnNovoProduto"
             href="{% url 'estoque:cadastrar_produto' %}"
             class="btn-acao-principal-painel"
@@ -1127,6 +1138,9 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
     </a>
     <a href="{% url 'estoque:fornecedores' %}" class="btn-acao-principal-painel">
       Fornecedores
+    </a>
+    <a href="{% url 'estoque:compras_lista' %}" class="btn-acao-principal-painel">
+      Compras
     </a>
   </div>
   <div class="tarja-grupo">

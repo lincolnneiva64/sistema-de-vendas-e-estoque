@@ -1,0 +1,128 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Compras{% endblock %}
+{% block content %}
+<style>
+  .compras-lista-page { max-width: 1120px; margin: 22px auto 90px; padding: 0 16px; color: #172033; }
+  .compras-lista-header { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; margin-bottom:14px; }
+  .compras-lista-title { margin:0; font-size:1.55rem; font-weight:850; }
+  .compras-lista-subtitle { margin:4px 0 0; color:#64748b; font-weight:650; }
+  .compras-lista-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+  .compras-lista-btn { border:0; border-radius:9px; padding:9px 14px; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; min-height:40px; cursor:pointer; }
+  .compras-lista-btn-primary { background:#2563eb; color:#fff; }
+  .compras-lista-btn-secondary { background:#dbeafe; color:#164173; border:1px solid #7ea6d9; }
+  .compras-lista-card { background:#fff; border:1px solid #e1e7ef; border-radius:14px; box-shadow:0 14px 30px rgba(15,23,42,.06); margin-bottom:14px; overflow:hidden; }
+  .compras-lista-busca { padding:14px 16px; display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; }
+  .compras-lista-field { flex:1 1 260px; }
+  .compras-lista-field label { display:block; font-weight:850; font-size:.82rem; margin-bottom:4px; color:#334155; }
+  .compras-lista-field input { width:100%; border:1.5px solid #d3dbe8; border-radius:9px; padding:9px 11px; font-weight:600; outline:none; }
+  .compras-lista-table { width:100%; border-collapse:collapse; }
+  .compras-lista-table th { text-align:left; font-size:.72rem; color:#64748b; text-transform:uppercase; background:#f8fafc; padding:10px; border-bottom:1px solid #edf1f6; }
+  .compras-lista-table td { padding:10px; border-bottom:1px solid #f0f3f8; vertical-align:middle; }
+  .compras-lista-numero { font-weight:900; color:#0f172a; }
+  .compras-lista-status { display:inline-flex; border-radius:999px; padding:4px 9px; background:#eef6ff; color:#164173; font-weight:850; font-size:.82rem; }
+  .compras-lista-total { font-weight:900; color:#166534; }
+  .compras-lista-mobile { display:none; }
+  .compras-lista-mobile-card { background:#fff; border:1px solid #e1e7ef; border-radius:12px; box-shadow:0 10px 22px rgba(15,23,42,.07); padding:12px; margin-bottom:10px; }
+  .compras-lista-mobile-top { display:flex; justify-content:space-between; gap:8px; align-items:flex-start; margin-bottom:8px; }
+  .compras-lista-mobile-numero { font-weight:900; font-size:1.05rem; }
+  .compras-lista-mobile-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+  .compras-lista-mobile-label { display:block; color:#64748b; font-size:.75rem; font-weight:800; text-transform:uppercase; }
+  .compras-lista-mobile-value { display:block; font-weight:850; color:#172033; }
+  .compras-lista-empty { padding:26px 16px; text-align:center; color:#64748b; font-weight:750; }
+
+  @media (max-width: 760px) {
+    .compras-lista-page { margin-top: 14px; padding: 0 10px 80px; }
+    .compras-lista-header { flex-direction:column; align-items:stretch; }
+    .compras-lista-actions { justify-content:stretch; }
+    .compras-lista-btn { flex:1 1 auto; }
+    .compras-lista-desktop { display:none; }
+    .compras-lista-mobile { display:block; }
+    .compras-lista-busca { padding:12px; align-items:stretch; }
+  }
+</style>
+
+<div class="compras-lista-page">
+  <header class="compras-lista-header">
+    <div>
+      <h1 class="compras-lista-title">Compras</h1>
+      <p class="compras-lista-subtitle">Listagem inicial das compras registradas.</p>
+    </div>
+    <div class="compras-lista-actions">
+      <a href="{% url 'estoque:compras_nova' %}" class="compras-lista-btn compras-lista-btn-primary">Nova compra</a>
+      <a href="{% url 'estoque:home' %}" class="compras-lista-btn compras-lista-btn-secondary">Painel</a>
+    </div>
+  </header>
+
+  <section class="compras-lista-card">
+    <form method="get" class="compras-lista-busca">
+      <div class="compras-lista-field">
+        <label for="buscaFornecedor">Buscar por fornecedor</label>
+        <input id="buscaFornecedor" type="search" name="q" value="{{ termo }}" placeholder="Nome do fornecedor">
+      </div>
+      <button type="submit" class="compras-lista-btn compras-lista-btn-primary">Buscar</button>
+      {% if termo %}
+        <a href="{% url 'estoque:compras_lista' %}" class="compras-lista-btn compras-lista-btn-secondary">Limpar</a>
+      {% endif %}
+    </form>
+  </section>
+
+  <section class="compras-lista-card compras-lista-desktop">
+    <table class="compras-lista-table">
+      <thead>
+        <tr>
+          <th>Compra</th>
+          <th>Fornecedor</th>
+          <th>Data</th>
+          <th>Status</th>
+          <th>Total</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for compra in compras %}
+          <tr>
+            <td class="compras-lista-numero">#{{ compra.id }}</td>
+            <td>{{ compra.fornecedor.nome|default:"Fornecedor nao informado" }}</td>
+            <td>{{ compra.data_compra|date:"d/m/Y" }}</td>
+            <td><span class="compras-lista-status">{{ compra.get_status_display }}</span></td>
+            <td class="compras-lista-total">R$ {{ compra.total|floatformat:2 }}</td>
+            <td><a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-secondary">Ver detalhe</a></td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="compras-lista-empty">Nenhuma compra encontrada.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="compras-lista-mobile">
+    {% for compra in compras %}
+      <article class="compras-lista-mobile-card">
+        <div class="compras-lista-mobile-top">
+          <span class="compras-lista-mobile-numero">Compra #{{ compra.id }}</span>
+          <span class="compras-lista-status">{{ compra.get_status_display }}</span>
+        </div>
+        <div class="compras-lista-mobile-grid">
+          <div>
+            <span class="compras-lista-mobile-label">Fornecedor</span>
+            <span class="compras-lista-mobile-value">{{ compra.fornecedor.nome|default:"Fornecedor nao informado" }}</span>
+          </div>
+          <div>
+            <span class="compras-lista-mobile-label">Data</span>
+            <span class="compras-lista-mobile-value">{{ compra.data_compra|date:"d/m/Y" }}</span>
+          </div>
+          <div>
+            <span class="compras-lista-mobile-label">Total</span>
+            <span class="compras-lista-mobile-value compras-lista-total">R$ {{ compra.total|floatformat:2 }}</span>
+          </div>
+        </div>
+        <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-secondary">Ver detalhe</a>
+      </article>
+    {% empty %}
+      <div class="compras-lista-mobile-card compras-lista-empty">Nenhuma compra encontrada.</div>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}
