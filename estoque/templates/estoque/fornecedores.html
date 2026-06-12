@@ -184,6 +184,7 @@
     background: #fff; border: 1px solid #e1e7ef; border-radius: 14px;
     box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06); overflow: hidden;
   }
+  .fornecedores-panel[hidden] { display: none !important; }
   .fornecedores-panel-head {
     padding: 12px 16px; border-bottom: 1px solid #edf1f6;
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -354,7 +355,7 @@
       </div>
       <div class="fornecedores-header-actions">
         <a href="{% url 'estoque:home' %}" class="fornecedores-btn fornecedores-btn-secondary">Voltar ao painel</a>
-        <a href="{% url 'estoque:fornecedores' %}" class="fornecedores-btn fornecedores-btn-primary">Novo fornecedor</a>
+        <a href="{% url 'estoque:fornecedores' %}" class="fornecedores-btn fornecedores-btn-primary" id="btnNovoFornecedor">Novo fornecedor</a>
       </div>
     </header>
 
@@ -480,7 +481,7 @@
         {% endif %}
       </section>
 
-      <aside class="fornecedores-panel">
+      <aside class="fornecedores-panel" id="fornecedorFormularioPainel" {% if not fornecedor_selecionado and not form.errors and not contatos_formset.errors %}hidden{% endif %}>
         <div class="fornecedores-panel-head">
           <h2 class="fornecedores-panel-title">
             {% if fornecedor_selecionado %}Editar fornecedor{% else %}Novo fornecedor{% endif %}
@@ -588,7 +589,7 @@
           </div>
 
           <div class="fornecedores-form-actions">
-            <a href="{% url 'estoque:fornecedores' %}" class="fornecedores-btn fornecedores-btn-secondary">Cancelar</a>
+            <a href="{% url 'estoque:fornecedores' %}" class="fornecedores-btn fornecedores-btn-secondary" id="btnCancelarFornecedor">Cancelar</a>
             <button type="submit" class="fornecedores-btn fornecedores-btn-primary">Salvar fornecedor</button>
           </div>
         </form>
@@ -607,6 +608,32 @@
 (function() {
   const form = document.querySelector(".fornecedores-form");
   if (!form) return;
+  const painelFormulario = document.getElementById("fornecedorFormularioPainel");
+  const btnNovoFornecedor = document.getElementById("btnNovoFornecedor");
+  const btnCancelarFornecedor = document.getElementById("btnCancelarFornecedor");
+
+  function abrirFormularioFornecedor() {
+    if (!painelFormulario) return;
+    painelFormulario.hidden = false;
+    window.setTimeout(() => {
+      painelFormulario.scrollIntoView({ behavior: "smooth", block: "start" });
+      const primeiroCampo = form.querySelector("input:not([type='hidden']):not([type='checkbox']), textarea");
+      if (primeiroCampo) primeiroCampo.focus();
+    }, 40);
+  }
+
+  btnNovoFornecedor?.addEventListener("click", function(event) {
+    if (!painelFormulario || !painelFormulario.hidden) return;
+    event.preventDefault();
+    abrirFormularioFornecedor();
+  });
+
+  btnCancelarFornecedor?.addEventListener("click", function(event) {
+    if (!painelFormulario || form.querySelector("input[name='fornecedor_id']")) return;
+    event.preventDefault();
+    painelFormulario.hidden = true;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
 
   const campos = Array.from(form.querySelectorAll("input:not([type='hidden']):not([type='checkbox']), textarea"));
 
