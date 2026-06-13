@@ -54,6 +54,12 @@
   }
   .produto-sugestao:hover,
   .produto-sugestao.ativa { background:#eef6ff; }
+  .fornecedor-sugestoes .produto-sugestao.ativa {
+    background:#2563eb;
+    color:#fff;
+    font-weight:850;
+    box-shadow:inset 4px 0 0 #1d4ed8;
+  }
   .produto-sugestao-vazia { padding:9px 10px; color:#64748b; font-size:.84rem; font-weight:650; }
   .col-produto { min-width:320px; }
   .col-pequena { width:120px; }
@@ -99,12 +105,16 @@
         <div class="compras-grid">
           <div class="compras-field">
             <label>Fornecedor</label>
-            <select name="fornecedor_id" required>
-              <option value="">Selecione...</option>
-              {% for fornecedor in fornecedores %}
-                <option value="{{ fornecedor.id }}">{{ fornecedor.nome }}</option>
-              {% endfor %}
-            </select>
+            <div class="produto-autocomplete fornecedor-autocomplete">
+              <input type="text" name="fornecedor_busca" class="produto-busca fornecedor-busca" autocomplete="off" placeholder="Digite o fornecedor" required>
+              <select name="fornecedor_id" class="produto-select-real fornecedor-select-real" tabindex="-1" aria-hidden="true" required>
+                <option value="">Selecione...</option>
+                {% for fornecedor in fornecedores %}
+                  <option value="{{ fornecedor.id }}">{{ fornecedor.nome }}</option>
+                {% endfor %}
+              </select>
+              <div class="produto-sugestoes fornecedor-sugestoes"></div>
+            </div>
           </div>
           <div class="compras-field">
             <label>Data da compra</label>
@@ -599,10 +609,13 @@
   if (!form) return;
 
   const fornecedor = form.querySelector('[name="fornecedor_id"]');
+  const fornecedorBusca = form.querySelector('[name="fornecedor_busca"]');
+  const fornecedorSugestoes = form.querySelector(".fornecedor-sugestoes");
   const dataCompra = form.querySelector('[name="data_compra"]');
   const tipoPagamento = form.querySelector('[name="tipo_pagamento"]');
   const observacao = form.querySelector('[name="observacao"]');
   const primeiroProduto = form.querySelector('[name="produto_busca[]"]');
+  let fornecedorAtivo = -1;
 
   function focar(campo) {
     if (!campo) return;
@@ -614,9 +627,153 @@
     }, 80);
   }
 
-  if (fornecedor) {
-    fornecedor.addEventListener("change", function() {
-      focar(dataCompra);
+  function opcoesFornecedor() {
+    if (!fornecedor) return [];
+    return Array.from(fornecedor.options).filter((opt) => opt.value);
+  }
+
+  function fecharSugestoesFornecedor() {
+    if (!fornecedorSugestoes) return;
+    fornecedorSugestoes.classList.remove("aberta");
+    fornecedorSugestoes.innerHTML = "";
+    fornecedorAtivo = -1;
+  }
+
+  function destacarFornecedor(indice) {
+    const botoes = Array.from(fornecedorSugestoes.querySelectorAll("button"));
+    if (!botoes.length) {
+      fornecedorAtivo = -1;
+      return;
+    }
+
+    fornecedorAtivo = Math.max(0, Math.min(indice, botoes.length - 1));
+
+    botoes.forEach(function(botao, atual) {
+      botao.classList.toggle("ativa", atual === fornecedorAtivo);
+    });
+
+    botoes[fornecedorAtivo].scrollIntoView({ block: "nearest" });
+  }
+
+  function sugestoesFornecedorAbertas() {
+    return fornecedorSugestoes && fornecedorSugestoes.classList.contains("aberta");
+  }
+
+  function selecionarFornecedor(opt) {
+    if (!opt) return;
+    fornecedor.value = opt.value;
+    fornecedorBusca.value = opt.textContent.trim();
+    fecharSugestoesFornecedor();
+    focar(dataCompra);
+  }
+
+  function mostrarSugestoesFornecedor(mostrarTodos) {
+    if (!fornecedorBusca || !fornecedorSugestoes) return;
+
+    const termo = fornecedorBusca.value.trim().toLowerCase();
+    fornecedorSugestoes.innerHTML = "";
+
+    const opcoes = opcoesFornecedor().filter(function(opt) {
+      if (mostrarTodos) return true;
+
+      const nome = opt.textContent.trim().toLowerCase();
+      return !termo || nome.includes(termo);
+    });
+
+    opcoes.forEach(function(opt) {
+      const botao = document.createElement("button");
+      botao.type = "button";
+      botao.className = "produto-sugestao";
+      botao.dataset.fornecedorId = opt.value;
+      botao.textContent = opt.textContent.trim();
+
+      botao.addEventListener("mousedown", function(event) {
+        event.preventDefault();
+        selecionarFornecedor(opt);
+      });
+
+      fornecedorSugestoes.appendChild(botao);
+    });
+
+    if (!opcoes.length) {
+      fecharSugestoesFornecedor();
+      return;
+    }
+
+    fornecedorSugestoes.classList.add("aberta");
+
+    const indiceAtual = opcoes.findIndex(function(opt) {
+      return opt.value === fornecedor.value;
+    });
+
+    destacarFornecedor(indiceAtual >= 0 ? indiceAtual : 0);
+  }
+
+  function selecionarPrimeiroFornecedor() {
+    const primeira = opcoesFornecedor()[0];
+    if (!primeira || !fornecedorBusca) return;
+
+    fornecedor.value = primeira.value;
+    fornecedorBusca.value = primeira.textContent.trim();
+  }
+
+  if (fornecedorBusca) {
+    fornecedorBusca.addEventListener("focus", function() {
+      mostrarSugestoesFornecedor(true);
+    });
+
+    fornecedorBusca.addEventListener("input", function() {
+      fornecedor.value = "";
+      mostrarSugestoesFornecedor();
+    });
+
+    fornecedorBusca.addEventListener("keydown", function(event) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        if (!sugestoesFornecedorAbertas()) {
+          mostrarSugestoesFornecedor(true);
+          return;
+        }
+        destacarFornecedor(fornecedorAtivo + 1);
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        if (!sugestoesFornecedorAbertas()) {
+          mostrarSugestoesFornecedor(true);
+          return;
+        }
+        destacarFornecedor(fornecedorAtivo - 1);
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+
+        const botoes = Array.from(fornecedorSugestoes.querySelectorAll("button"));
+        const botao = botoes[fornecedorAtivo] || botoes[0];
+
+        if (botao) {
+          const opt = opcoesFornecedor().find(function(opcao) {
+            return opcao.value === botao.dataset.fornecedorId;
+          });
+          selecionarFornecedor(opt);
+          return;
+        }
+
+        focar(dataCompra);
+      }
+
+      if (event.key === "Escape") {
+        fecharSugestoesFornecedor();
+      }
+    });
+
+    document.addEventListener("click", function(event) {
+      if (!event.target.closest(".fornecedor-autocomplete")) {
+        fecharSugestoesFornecedor();
+      }
     });
   }
 
@@ -645,7 +802,11 @@
   }
 
   window.addEventListener("load", function() {
-    focar(fornecedor);
+    selecionarPrimeiroFornecedor();
+    setTimeout(function() {
+      focar(fornecedorBusca);
+      mostrarSugestoesFornecedor(true);
+    }, 150);
   });
 })();
 </script>
