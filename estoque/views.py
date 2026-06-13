@@ -1596,9 +1596,19 @@ def verificar_cliente_duplicado(request):
 
 
 def _decimal_compra(valor, casas=2, padrao="0"):
-    texto = str(valor or "").strip().replace(".", "").replace(",", ".")
+    texto = str(valor or "").strip()
     if not texto:
         texto = padrao
+    if "," in texto:
+        texto = texto.replace(".", "").replace(",", ".")
+    else:
+        partes = texto.split(".")
+        if len(partes) > 2:
+            ultima_parte = partes[-1]
+            if len(ultima_parte) <= casas:
+                texto = "".join(partes[:-1]) + "." + ultima_parte
+            else:
+                texto = "".join(partes)
     try:
         return Decimal(texto).quantize(Decimal("1").scaleb(-casas))
     except (InvalidOperation, ValueError):
@@ -1630,12 +1640,14 @@ def compras_nova(request):
         fornecedor_id = request.POST.get("fornecedor_id")
         data_compra = parse_date(request.POST.get("data_compra") or "")
         tipo_pagamento = (request.POST.get("tipo_pagamento") or "").strip()
+        data_vencimento = parse_date(request.POST.get("data_vencimento") or "")
         observacao = (request.POST.get("observacao") or "").strip()
 
         produto_ids = request.POST.getlist("produto_id[]")
         quantidades = request.POST.getlist("quantidade[]")
         unidades = request.POST.getlist("unidade[]")
         precos = request.POST.getlist("preco_unitario[]")
+        observacoes_itens = request.POST.getlist("observacao_item[]")
 
         fornecedor = Fornecedor.objects.filter(pk=fornecedor_id, ativo=True).first()
         if not fornecedor:
@@ -1673,6 +1685,7 @@ def compras_nova(request):
                     "unidade": unidade,
                     "preco_unitario": preco_unitario,
                     "valor_total": valor_total,
+                    "observacao": (observacoes_itens[indice] if indice < len(observacoes_itens) else "").strip(),
                 })
         except (ValueError, IndexError) as exc:
             messages.error(request, str(exc))
@@ -1688,6 +1701,7 @@ def compras_nova(request):
             compra = Compra.objects.create(
                 fornecedor=fornecedor,
                 data_compra=data_compra,
+                data_vencimento=data_vencimento if tipo_pagamento in {"aprazo", "a prazo", "prazo"} else None,
                 tipo_pagamento=tipo_pagamento,
                 total=total,
                 observacao=observacao,
@@ -1702,10 +1716,11 @@ def compras_nova(request):
                     unidade=item["unidade"],
                     preco_unitario=item["preco_unitario"],
                     valor_total=item["valor_total"],
+                    observacao=item["observacao"] or None,
                 )
 
         messages.success(request, f"Compra #{compra.id} salva com sucesso.")
-        return redirect("estoque:compras_detalhe", pk=compra.pk)
+        return redirect("estoque:compras_lista")
 
     return render(
         request,

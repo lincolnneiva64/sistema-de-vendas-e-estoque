@@ -23,8 +23,38 @@
   .compras-table th { text-align:left; font-size:.72rem; color:#64748b; text-transform:uppercase; background:#f8fafc; padding:9px; border-bottom:1px solid #edf1f6; }
   .compras-table td { padding:8px; border-bottom:1px solid #f0f3f8; vertical-align:top; }
   .compras-table select, .compras-table input { width:100%; border:1.5px solid #d3dbe8; border-radius:8px; padding:8px; font-weight:650; }
-  .compras-table select[name="produto_id[]"] { font-size:.88rem; font-weight:600; line-height:1.25; }
-  .compras-table select[name="produto_id[]"] option { font-size:.88rem; font-weight:500; }
+  .produto-autocomplete { position:relative; }
+  .produto-select-real { display:none; }
+  .produto-busca { font-size:.88rem; font-weight:600; line-height:1.25; }
+  .produto-sugestoes {
+    position:absolute;
+    top:calc(100% + 4px);
+    left:0;
+    right:0;
+    z-index:20;
+    display:none;
+    max-height:220px;
+    overflow-y:auto;
+    border:1px solid #cbd5e1;
+    border-radius:10px;
+    background:#fff;
+    box-shadow:0 14px 30px rgba(15,23,42,.16);
+  }
+  .produto-sugestoes.aberta { display:block; }
+  .produto-sugestao {
+    width:100%;
+    border:0;
+    background:#fff;
+    padding:9px 10px;
+    text-align:left;
+    font-size:.86rem;
+    font-weight:650;
+    color:#172033;
+    cursor:pointer;
+  }
+  .produto-sugestao:hover,
+  .produto-sugestao.ativa { background:#eef6ff; }
+  .produto-sugestao-vazia { padding:9px 10px; color:#64748b; font-size:.84rem; font-weight:650; }
   .col-produto { min-width:320px; }
   .col-pequena { width:120px; }
   .col-total { width:130px; font-weight:850; }
@@ -38,7 +68,7 @@
     .compras-grid { grid-template-columns:1fr; }
     .compras-table { min-width:760px; }
     .compras-table-wrap { overflow-x:auto; }
-    .compras-table select[name="produto_id[]"] { font-size:.84rem; }
+    .produto-busca { font-size:.84rem; }
   }
 </style>
 
@@ -116,12 +146,16 @@
           <tbody>
             <tr class="linha-item">
               <td>
-                <select name="produto_id[]" required>
-                  <option value="">Selecione...</option>
-                  {% for produto in produtos %}
-                    <option value="{{ produto.id }}" data-unidade="{{ produto.unidade_compra|default:'' }}" data-preco-compra="{{ produto.preco_compra|default:0|floatformat:2 }}">{{ produto.nome }}</option>
-                  {% endfor %}
-                </select>
+                <div class="produto-autocomplete">
+                  <input type="text" name="produto_busca[]" class="produto-busca" autocomplete="off" placeholder="Digite o produto">
+                  <select name="produto_id[]" class="produto-select-real" tabindex="-1" aria-hidden="true">
+                    <option value="">Selecione...</option>
+                    {% for produto in produtos %}
+                      <option value="{{ produto.id }}" data-unidade="{{ produto.unidade_compra|default:'' }}" data-preco-compra="{{ produto.preco_compra|default:0|floatformat:2 }}">{{ produto.nome }}</option>
+                    {% endfor %}
+                  </select>
+                  <div class="produto-sugestoes"></div>
+                </div>
               </td>
               <td><input type="text" name="quantidade[]" inputmode="decimal" value="1"></td>
               <td><input type="text" name="unidade[]" placeholder="UN"></td>
@@ -179,6 +213,19 @@
     return numero(valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
+  function normalizarBusca(valor) {
+    return String(valor || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
+  function opcoesProduto(linha) {
+    const produto = linha.querySelector('[name="produto_id[]"]');
+    return Array.from(produto.options).filter((opt) => opt.value);
+  }
+
   function recalcular() {
     let total = 0;
     tabela.querySelectorAll(".linha-item").forEach((linha) => {
@@ -199,18 +246,236 @@
     }
   }
 
-  function ligarLinha(linha) {
+  function pararEvento(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") {
+      event.stopImmediatePropagation();
+    }
+  }
+
+  function linhaSemProduto(linha) {
     const produto = linha.querySelector('[name="produto_id[]"]');
+    return !produto || !produto.value;
+  }
+
+  function fecharSugestoes(linha) {
+    const sugestoes = linha.querySelector(".produto-sugestoes");
+    sugestoes.classList.remove("aberta");
+    sugestoes.innerHTML = "";
+    linha.dataset.sugestaoAtiva = "-1";
+  }
+
+  function selecionarProduto(linha, opt) {
+    const produto = linha.querySelector('[name="produto_id[]"]');
+    const produtoBusca = linha.querySelector('[name="produto_busca[]"]');
     const unidade = linha.querySelector('[name="unidade[]"]');
     const preco = linha.querySelector('[name="preco_unitario[]"]');
 
-    produto.addEventListener("change", function() {
-      const opt = produto.options[produto.selectedIndex];
-      if (opt) {
-        if (!unidade.value) unidade.value = opt.dataset.unidade || "";
-        preco.value = precoCampo(opt.dataset.precoCompra || "0");
+    produto.value = opt.value;
+    produtoBusca.value = opt.textContent.trim();
+    unidade.value = opt.dataset.unidade || "";
+    preco.value = precoCampo(opt.dataset.precoCompra || "0");
+    fecharSugestoes(linha);
+    recalcular();
+  }
+
+  function opcaoPorId(linha, produtoId) {
+    return opcoesProduto(linha).find((opt) => opt.value === String(produtoId)) || null;
+  }
+
+  function botoesSugestao(linha) {
+    return Array.from(linha.querySelectorAll(".produto-sugestao"));
+  }
+
+  function definirSugestaoAtiva(linha, indice) {
+    const botoes = botoesSugestao(linha);
+    if (!botoes.length) {
+      linha.dataset.sugestaoAtiva = "-1";
+      return;
+    }
+
+    const total = botoes.length;
+    const novoIndice = ((indice % total) + total) % total;
+    linha.dataset.sugestaoAtiva = String(novoIndice);
+    botoes.forEach((botao, atual) => {
+      botao.classList.toggle("ativa", atual === novoIndice);
+    });
+    botoes[novoIndice].scrollIntoView({ block: "nearest" });
+  }
+
+  function sugestaoAtiva(linha) {
+    const botoes = botoesSugestao(linha);
+    const indice = Number(linha.dataset.sugestaoAtiva || "-1");
+    if (indice < 0 || indice >= botoes.length) {
+      return null;
+    }
+    const botao = botoes[indice];
+    return botao ? opcaoPorId(linha, botao.dataset.produtoId) : null;
+  }
+
+  function selecionarSugestaoComToque(linha, opt) {
+    if (!opt) return;
+    selecionarProduto(linha, opt);
+  }
+
+  function mostrarSugestoes(linha, mostrarTodos = false) {
+    const produtoBusca = linha.querySelector('[name="produto_busca[]"]');
+    const sugestoes = linha.querySelector(".produto-sugestoes");
+    const termo = normalizarBusca(produtoBusca.value);
+
+    if (!termo && !mostrarTodos) {
+      fecharSugestoes(linha);
+      return;
+    }
+
+    const encontradas = opcoesProduto(linha)
+      .filter((opt) => !termo || normalizarBusca(opt.textContent).includes(termo))
+      .slice(0, 10);
+
+    sugestoes.innerHTML = "";
+    if (!encontradas.length) {
+      sugestoes.innerHTML = '<div class="produto-sugestao-vazia">Nenhum produto encontrado</div>';
+      sugestoes.classList.add("aberta");
+      return;
+    }
+
+    encontradas.forEach((opt, indice) => {
+      const botao = document.createElement("button");
+      botao.type = "button";
+      botao.className = "produto-sugestao";
+      botao.dataset.produtoId = opt.value;
+      botao.textContent = opt.textContent.trim();
+      let toque = null;
+
+      botao.addEventListener("pointerdown", function(event) {
+        toque = { x: event.clientX, y: event.clientY, arrastou: false };
+        if (event.pointerType === "mouse") {
+          event.preventDefault();
+        }
+      });
+
+      botao.addEventListener("pointermove", function(event) {
+        if (!toque) return;
+        const dx = Math.abs(event.clientX - toque.x);
+        const dy = Math.abs(event.clientY - toque.y);
+        if (dx > 8 || dy > 8) {
+          toque.arrastou = true;
+        }
+      });
+
+      botao.addEventListener("pointerup", function(event) {
+        if (!toque) return;
+        const foiToque = !toque.arrastou;
+        toque = null;
+        if (!foiToque) return;
+        event.preventDefault();
+        botao.dataset.selecionadoPointer = "1";
+        selecionarSugestaoComToque(linha, opt);
+      });
+
+      botao.addEventListener("click", function(event) {
+        event.preventDefault();
+        if (botao.dataset.selecionadoPointer === "1") {
+          botao.dataset.selecionadoPointer = "";
+          return;
+        }
+        selecionarSugestaoComToque(linha, opt);
+      });
+      sugestoes.appendChild(botao);
+    });
+    linha.dataset.sugestaoAtiva = "-1";
+    sugestoes.classList.add("aberta");
+  }
+
+  function produtoSelecionadoValido(linha) {
+    const produto = linha.querySelector('[name="produto_id[]"]');
+    return Boolean(produto.value && opcaoPorId(linha, produto.value));
+  }
+
+  function limparLinhaItem(linha) {
+    const produto = linha.querySelector('[name="produto_id[]"]');
+    produto.value = "";
+    produto.selectedIndex = 0;
+    linha.querySelector('[name="produto_busca[]"]').value = "";
+    linha.querySelector('[name="quantidade[]"]').value = "1";
+    linha.querySelector('[name="unidade[]"]').value = "";
+    linha.querySelector('[name="preco_unitario[]"]').value = "0,00";
+    linha.querySelector(".valor-total-item").textContent = "R$ 0,00";
+    fecharSugestoes(linha);
+  }
+
+  function proximaLinhaVazia(linha) {
+    let proxima = linha.nextElementSibling;
+    while (proxima && !proxima.classList.contains("linha-item")) {
+      proxima = proxima.nextElementSibling;
+    }
+    return proxima && linhaSemProduto(proxima) ? proxima : null;
+  }
+
+  function criarLinhaItem() {
+    const primeira = tabela.querySelector(".linha-item");
+    const nova = primeira.cloneNode(true);
+
+    delete nova.dataset.linhaLigada;
+    delete nova.dataset.sugestaoAtiva;
+    limparLinhaItem(nova);
+
+    tabela.querySelector("tbody").appendChild(nova);
+    ligarLinha(nova);
+    recalcular();
+    return nova;
+  }
+
+  function focarProximaLinha(linha) {
+    const produtoBusca = linha.querySelector('[name="produto_busca[]"]');
+    if (!produtoSelecionadoValido(linha)) {
+      mostrarSugestoes(linha);
+      focarCampo(produtoBusca);
+      return;
+    }
+
+    const linhaDestino = proximaLinhaVazia(linha) || criarLinhaItem();
+    if (linhaSemProduto(linhaDestino)) {
+      limparLinhaItem(linhaDestino);
+    }
+    const produtoDestino = linhaDestino.querySelector('[name="produto_busca[]"]');
+    focarCampo(produtoDestino);
+  }
+
+  function ligarLinha(linha) {
+    if (linha.dataset.linhaLigada === "1") return;
+    linha.dataset.linhaLigada = "1";
+
+    const produto = linha.querySelector('[name="produto_id[]"]');
+    const produtoBusca = linha.querySelector('[name="produto_busca[]"]');
+    const quantidade = linha.querySelector('[name="quantidade[]"]');
+    const unidade = linha.querySelector('[name="unidade[]"]');
+    const preco = linha.querySelector('[name="preco_unitario[]"]');
+
+    produtoBusca.addEventListener("focus", function() {
+      produtoBusca.select();
+      fecharSugestoes(linha);
+    });
+
+    produtoBusca.addEventListener("input", function() {
+      produto.value = "";
+      produto.selectedIndex = 0;
+      unidade.value = "";
+      preco.value = "0,00";
+      if (produtoBusca.value.trim()) {
+        mostrarSugestoes(linha);
+        definirSugestaoAtiva(linha, 0);
+      } else {
+        fecharSugestoes(linha);
       }
       recalcular();
+    });
+
+    produtoBusca.addEventListener("blur", function() {
+      setTimeout(function() {
+        fecharSugestoes(linha);
+      }, 120);
     });
 
     linha.querySelectorAll("input, select").forEach((campo) => {
@@ -222,23 +487,89 @@
           campo.select();
         });
       }
+    });
 
-      campo.addEventListener("keydown", function(event) {
-        if (event.key !== "Enter") return;
-        event.preventDefault();
-        const campos = Array.from(document.querySelectorAll("#formCompra input, #formCompra select, #formCompra textarea, #btnAdicionarItem, button[type='submit']"))
-          .filter((el) => !el.classList.contains("btn-remover"));
-        const atual = campos.indexOf(campo);
-        const proximo = campos[atual + 1];
-        focarCampo(proximo);
-      });
+    produtoBusca.addEventListener("keydown", function(event) {
+      if (event.key === "Escape") {
+        pararEvento(event);
+        fecharSugestoes(linha);
+        return;
+      }
+
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        pararEvento(event);
+
+        const sugestoesBox = linha.querySelector(".produto-sugestoes");
+        if (!sugestoesBox.classList.contains("aberta")) {
+          mostrarSugestoes(linha, true);
+          definirSugestaoAtiva(linha, 0);
+          return;
+        }
+
+        const atual = Number(linha.dataset.sugestaoAtiva || "-1");
+        const proximo = event.key === "ArrowDown" ? atual + 1 : atual - 1;
+        definirSugestaoAtiva(linha, proximo);
+        return;
+      }
+
+      if (event.key !== "Enter") return;
+      pararEvento(event);
+
+      const sugestoesBox = linha.querySelector(".produto-sugestoes");
+      const listaAberta = sugestoesBox.classList.contains("aberta");
+      const opt = sugestaoAtiva(linha);
+
+      if (listaAberta && opt) {
+        selecionarProduto(linha, opt);
+        setTimeout(function() {
+          focarCampo(quantidade);
+        }, 0);
+        return;
+      }
+
+      if (!listaAberta && produtoSelecionadoValido(linha)) {
+        fecharSugestoes(linha);
+        focarCampo(quantidade);
+        return;
+      }
+
+      if (!listaAberta && produtoBusca.value.trim()) {
+        mostrarSugestoes(linha);
+        definirSugestaoAtiva(linha, 0);
+        return;
+      }
+
+      if (!listaAberta && !produtoBusca.value.trim()) {
+        mostrarSugestoes(linha, true);
+        definirSugestaoAtiva(linha, 0);
+        return;
+      }
+
+      focarCampo(produtoBusca);
+    });
+
+    quantidade.addEventListener("keydown", function(event) {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      focarCampo(unidade);
+    });
+
+    unidade.addEventListener("keydown", function(event) {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      focarCampo(preco);
+    });
+
+    preco.addEventListener("keydown", function(event) {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      focarProximaLinha(linha);
     });
 
     linha.querySelector(".btn-remover").addEventListener("click", function() {
       const linhas = tabela.querySelectorAll(".linha-item");
       if (linhas.length <= 1) {
-        linha.querySelectorAll("input").forEach((input) => input.value = "");
-        produto.value = "";
+        limparLinhaItem(linha);
       } else {
         linha.remove();
       }
@@ -247,19 +578,8 @@
   }
 
   btnAdicionar.addEventListener("click", function() {
-    const primeira = tabela.querySelector(".linha-item");
-    const nova = primeira.cloneNode(true);
-
-    nova.querySelector('[name="produto_id[]"]').value = "";
-    nova.querySelector('[name="quantidade[]"]').value = "1";
-    nova.querySelector('[name="unidade[]"]').value = "";
-    nova.querySelector('[name="preco_unitario[]"]').value = "0,00";
-    nova.querySelector(".valor-total-item").textContent = "R$ 0,00";
-
-    tabela.querySelector("tbody").appendChild(nova);
-    ligarLinha(nova);
-    recalcular();
-    focarCampo(nova.querySelector('[name="produto_id[]"]'));
+    const nova = criarLinhaItem();
+    focarCampo(nova.querySelector('[name="produto_busca[]"]'));
   });
 
   btnAdicionar.addEventListener("keydown", function(event) {
@@ -282,7 +602,7 @@
   const dataCompra = form.querySelector('[name="data_compra"]');
   const tipoPagamento = form.querySelector('[name="tipo_pagamento"]');
   const observacao = form.querySelector('[name="observacao"]');
-  const primeiroProduto = form.querySelector('[name="produto_id[]"]');
+  const primeiroProduto = form.querySelector('[name="produto_busca[]"]');
 
   function focar(campo) {
     if (!campo) return;
