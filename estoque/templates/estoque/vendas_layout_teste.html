@@ -1042,8 +1042,9 @@ td:first-child {
             </div>
             <input type="date" id="vencimentoVenda" title="Vencimento">
             <select id="tipoVenda">
+                <option value="" selected>Tipo</option>
                 <option>À vista</option>
-                <option selected>A prazo</option>
+                <option>A prazo</option>
             </select>
             <select id="operadorVenda" title="Operador">
     {% for operador in operadores_venda %}
@@ -2339,6 +2340,12 @@ function atualizarPrazoEVencimentoCliente() {
     const prazo = parseInt(clienteSelecionado.prazo || "0", 10);
     clienteResumoPrazo.textContent = prazo ? prazo + " dias" : "Sem prazo definido";
     vencimentoVenda.value = calcularVencimentoCliente();
+
+    if (prazo > 0) {
+        tipoVenda.value = "A prazo";
+    } else if (!tipoVenda.value) {
+        tipoVenda.value = "À vista";
+    }
 }
 
 function criarLinhaFinanceira(classe, texto, link, acao) {
@@ -2652,14 +2659,15 @@ if (clienteInicialVenda && clienteInicialVenda.id) {
     preencherResumoCliente(clienteInicialVenda);
     atualizarClienteSelecionadoDoServidor(clienteInicialVenda);
 } else {
-    const clienteCache = recuperarClienteSelecionadoCache();
-    if (clienteCache?.id) {
-        preencherResumoCliente(clienteCache);
-        atualizarClienteSelecionadoDoServidor(clienteCache);
-    }
+    limparClienteSelecionado();
+    tipoVenda.value = "";
 }
 
-window.addEventListener("pageshow", reidratarClienteSelecionado);
+window.addEventListener("pageshow", function () {
+    if (clienteInicialVenda && clienteInicialVenda.id) {
+        reidratarClienteSelecionado();
+    }
+});
 
 function atualizarCabecalhoCliente(cliente) {
     clienteResumoNome.textContent = cliente.nome || "-";
@@ -2849,12 +2857,55 @@ function renderizarSugestoesClientes() {
 
     const itemAtivoCliente = clienteSugestoesBox.querySelector(".cliente-sugestao-item.ativo");
     if (itemAtivoCliente) {
-        itemAtivoCliente.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        itemAtivoCliente.scrollIntoView({ block: "nearest", behavior: "auto" });
     }
 }
 
-async function buscarClientes(texto) {
+let clienteBuscaTimer = null;
+const clienteBuscaCache = new Map();
+
+function filtrarClientesCache(texto) {
+    const termo = normalizarTextoCliente(texto);
+    const listaCompleta = clienteBuscaCache.get("") || [];
+
+    if (!termo) {
+        return listaCompleta;
+    }
+
+    return listaCompleta.filter((cliente) => {
+        const nome = normalizarTextoCliente(cliente.nome);
+        const palavras = nome.split(/\s+/).filter(Boolean);
+        return nome.includes(termo)
+            || palavras.some((palavra) => palavra.startsWith(termo))
+            || iniciaisCliente(cliente.nome).startsWith(termo);
+    });
+}
+
+function renderizarClientesDoCache(texto) {
+    const termo = texto.trim();
+    const cacheExato = clienteBuscaCache.get(normalizarTextoCliente(termo));
+    const listaCache = cacheExato || filtrarClientesCache(termo);
+
+    if (!listaCache || !listaCache.length) {
+        return false;
+    }
+
+    clientesSugestoes = ordenarClientesAutocomplete(listaCache, termo).slice(0, 30);
+    clienteIndexAtivo = clientesSugestoes.length ? 0 : -1;
+    renderizarSugestoesClientes();
+    return true;
+}
+
+async function buscarClientes(texto, opcoes = {}) {
     const termoSolicitado = texto.trim();
+    const termoNormalizado = normalizarTextoCliente(termoSolicitado);
+
+    if (!opcoes.forcarServidor && renderizarClientesDoCache(termoSolicitado)) {
+        if (termoSolicitado) {
+            return;
+        }
+    }
+
     if (clienteBuscaAbortController) {
         clienteBuscaAbortController.abort();
     }
@@ -2868,10 +2919,19 @@ async function buscarClientes(texto) {
             headers: { "X-Requested-With": "XMLHttpRequest" }
         });
         const dados = await resposta.json();
-        if (normalizarTextoCliente(clienteBusca.value) !== normalizarTextoCliente(termoSolicitado)) {
+
+        if (normalizarTextoCliente(clienteBusca.value) !== termoNormalizado) {
             return;
         }
-        clientesSugestoes = ordenarClientesAutocomplete(dados.clientes || [], termoSolicitado);
+
+        const listaServidor = dados.clientes || [];
+        clienteBuscaCache.set(termoNormalizado, listaServidor);
+
+        if (!termoSolicitado && listaServidor.length) {
+            clienteBuscaCache.set("", listaServidor);
+        }
+
+        clientesSugestoes = ordenarClientesAutocomplete(listaServidor, termoSolicitado).slice(0, 30);
         clienteIndexAtivo = clientesSugestoes.length ? 0 : -1;
         renderizarSugestoesClientes();
     } catch (erro) {
@@ -2923,18 +2983,36 @@ clienteBusca.addEventListener("input", () => {
             ativarResumoClienteSelecionado();
         } else {
             suspenderResumoClienteSelecionado();
+            clienteId.value = "";
         }
     }
 
-    clientesSugestoes = [];
-    clienteIndexAtivo = -1;
-    clienteSugestoesBox.innerHTML = "";
-    clienteSugestoesBox.style.display = "none";
+    if (clienteBuscaTimer) {
+        clearTimeout(clienteBuscaTimer);
+    }
 
     if (!texto) {
+        clientesSugestoes = [];
+        clienteIndexAtivo = -1;
+        clienteSugestoesBox.innerHTML = "";
+        clienteSugestoesBox.style.display = "none";
         return;
     }
 
+    if (!renderizarClientesDoCache(texto)) {
+        clientesSugestoes = [];
+        clienteIndexAtivo = -1;
+        clienteSugestoesBox.innerHTML = "";
+        clienteSugestoesBox.style.display = "none";
+    }
+
+    clienteBuscaTimer = setTimeout(() => {
+        buscarClientes(texto, { forcarServidor: true });
+    }, 80);
+});
+
+clienteBusca.addEventListener("focus", () => {
+    const texto = clienteBusca.value.trim();
     buscarClientes(texto);
 });
 
