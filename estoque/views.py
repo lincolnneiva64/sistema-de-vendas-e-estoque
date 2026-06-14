@@ -1774,6 +1774,7 @@ def compras_detalhe(request, pk):
         {
             "compra": compra,
             "itens": compra.itens.all(),
+            "conta_pagar": getattr(compra, "conta_pagar", None),
         },
     )
 

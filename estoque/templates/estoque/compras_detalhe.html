@@ -258,6 +258,26 @@
     </div>
   </section>
 
+
+  <section class="nota-compra-card">
+    <div class="nota-compra-card-titulo">Financeiro</div>
+
+    {% if conta_pagar %}
+      <div class="nota-compra-dados">
+        <div><strong>Conta a pagar</strong>{{ conta_pagar.get_status_display }}</div>
+        <div><strong>Valor original</strong>R$ {{ conta_pagar.valor_original }}</div>
+        <div><strong>Valor em aberto</strong>R$ {{ conta_pagar.valor_em_aberto }}</div>
+        <div><strong>Vencimento</strong>{{ conta_pagar.data_vencimento|date:"d/m/Y"|default:"-" }}</div>
+        <div><strong>Fornecedor</strong>{{ conta_pagar.fornecedor.nome|default:"-" }}</div>
+        <div><strong>Emissão</strong>{{ conta_pagar.data_emissao|date:"d/m/Y" }}</div>
+      </div>
+    {% else %}
+      <div style="padding:7px 10px; color:#475569; font-weight:800;">
+        Compra à vista. Nenhuma conta a pagar foi gerada.
+      </div>
+    {% endif %}
+  </section>
+
   <section class="nota-compra-card">
     <div class="nota-compra-card-titulo">Itens</div>
 
