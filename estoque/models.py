@@ -770,12 +770,18 @@ class ItemPedido(models.Model):
 
 class Fornecedor(models.Model):
     FORMA_AVISTA = "avista"
+    FORMA_PIX = "pix"
+    FORMA_DINHEIRO = "dinheiro"
+    FORMA_DEBITO = "debito"
     FORMA_APRAZO = "aprazo"
     FORMA_CARTAO = "cartao"
     FORMA_PAGAMENTO_CHOICES = [
         (FORMA_AVISTA, "À vista"),
-        (FORMA_APRAZO, "A prazo / boleto"),
+        (FORMA_PIX, "Pix"),
+        (FORMA_DINHEIRO, "Dinheiro"),
+        (FORMA_DEBITO, "Cartão de débito"),
         (FORMA_CARTAO, "Cartão de crédito"),
+        (FORMA_APRAZO, "Boleto / a prazo"),
     ]
 
     nome = models.CharField(max_length=140)
@@ -783,6 +789,11 @@ class Fornecedor(models.Model):
     telefone_whatsapp = models.CharField(max_length=30, blank=True, null=True)
     cidade = models.CharField(max_length=80, blank=True, null=True)
     bairro = models.CharField(max_length=80, blank=True, null=True)
+    aceita_pix = models.BooleanField(default=True)
+    aceita_dinheiro = models.BooleanField(default=True)
+    aceita_cartao_debito = models.BooleanField(default=True)
+    aceita_cartao_credito = models.BooleanField(default=True)
+    aceita_boleto = models.BooleanField(default=False)
     forma_pagamento_padrao = models.CharField(max_length=20, choices=FORMA_PAGAMENTO_CHOICES, default=FORMA_AVISTA)
     prazos_pagamento_padrao = models.CharField(max_length=120, blank=True, null=True, help_text="Exemplo: 7, 14, 21")
     dia_vencimento_cartao = models.PositiveSmallIntegerField(blank=True, null=True)
