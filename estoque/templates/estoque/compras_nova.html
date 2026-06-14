@@ -417,7 +417,7 @@
     }
 
     const encontradas = opcoesProduto(linha)
-      .filter((opt) => !termo || normalizarBusca(opt.textContent).includes(termo))
+      .filter((opt) => mostrarTodos || !termo || normalizarBusca(opt.textContent).includes(termo))
       .slice(0, 10);
 
     sugestoes.innerHTML = "";
