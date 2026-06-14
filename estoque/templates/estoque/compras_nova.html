@@ -71,7 +71,12 @@
     cursor:pointer;
   }
   .produto-sugestao:hover,
-  .produto-sugestao.ativa { background:#eef6ff; }
+  .produto-sugestao.ativa {
+    background:#dbeafe;
+    color:#0f172a;
+    font-weight:900;
+    box-shadow:inset 5px 0 0 #2563eb;
+  }
   .fornecedor-sugestoes .produto-sugestao.ativa {
     background:#2563eb;
     color:#fff;
@@ -368,6 +373,7 @@
     const botoes = botoesSugestao(linha);
     if (!botoes.length) {
       linha.dataset.sugestaoAtiva = "-1";
+      atualizarEstoquePreviewCompra(linha, null);
       return;
     }
 
@@ -377,6 +383,11 @@
     botoes.forEach((botao, atual) => {
       botao.classList.toggle("ativa", atual === novoIndice);
     });
+
+    const botaoAtivo = botoes[novoIndice];
+    const optAtiva = botaoAtivo ? opcaoPorId(linha, botaoAtivo.dataset.produtoId) : null;
+    atualizarEstoquePreviewCompra(linha, optAtiva);
+
     botoes[novoIndice].scrollIntoView({ block: "nearest" });
   }
 
@@ -425,6 +436,10 @@
       botao.className = "produto-sugestao";
       botao.dataset.produtoId = opt.value;
       botao.textContent = opt.textContent.trim();
+
+      botao.addEventListener("mouseenter", () => {
+        atualizarEstoquePreviewCompra(linha, opt);
+      });
       let toque = null;
 
       botao.addEventListener("pointerdown", function(event) {
