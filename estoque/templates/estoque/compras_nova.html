@@ -79,6 +79,27 @@
     box-shadow:inset 4px 0 0 #1d4ed8;
   }
   .produto-sugestao-vazia { padding:9px 10px; color:#64748b; font-size:.84rem; font-weight:650; }
+  .produto-estoque-compra {
+    display:inline-flex;
+    align-items:center;
+    gap:7px;
+    margin:0 0 6px 2px;
+    font-size:.82rem;
+    font-weight:800;
+    color:#7c4a03;
+  }
+  .produto-estoque-compra span {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-width:30px;
+    padding:2px 8px;
+    border-radius:999px;
+    background:#fff7db;
+    border:1px solid #f2b84b;
+    color:#7c4a03;
+    font-weight:900;
+  }
   .col-produto { min-width:320px; }
   .col-pequena { width:120px; }
   .col-total { width:130px; font-weight:850; }
@@ -175,11 +196,12 @@
             <tr class="linha-item">
               <td>
                 <div class="produto-autocomplete">
+                  <div class="produto-estoque-compra">Estoque <span class="produto-estoque-valor">-</span></div>
                   <input type="text" name="produto_busca[]" class="produto-busca" autocomplete="off" placeholder="Digite o produto">
                   <select name="produto_id[]" class="produto-select-real" tabindex="-1" aria-hidden="true">
                     <option value="">Selecione...</option>
                     {% for produto in produtos %}
-                      <option value="{{ produto.id }}" data-unidade="{{ produto.unidade_compra|default:'' }}" data-preco-compra="{{ produto.preco_compra|default:0|floatformat:2 }}">{{ produto.nome }}</option>
+                      <option value="{{ produto.id }}" data-unidade="{{ produto.unidade_compra|default:'' }}" data-preco-compra="{{ produto.preco_compra|default:0|floatformat:2 }}" data-estoque="{{ produto.quantidade|default:0 }}">{{ produto.nome }}</option>
                     {% endfor %}
                   </select>
                   <div class="produto-sugestoes"></div>
@@ -299,11 +321,16 @@
     const produtoBusca = linha.querySelector('[name="produto_busca[]"]');
     const unidade = linha.querySelector('[name="unidade[]"]');
     const preco = linha.querySelector('[name="preco_unitario[]"]');
+    const estoqueValor = linha.querySelector(".produto-estoque-valor");
 
     produto.value = opt.value;
     produtoBusca.value = opt.textContent.trim();
     unidade.value = opt.dataset.unidade || "";
     preco.value = precoCampo(opt.dataset.precoCompra || "0");
+
+    if (estoqueValor) {
+      estoqueValor.textContent = opt.dataset.estoque || "0";
+    }
     fecharSugestoes(linha);
     recalcular();
   }
@@ -436,6 +463,10 @@
     produto.value = "";
     produto.selectedIndex = 0;
     linha.querySelector('[name="produto_busca[]"]').value = "";
+    const estoqueValor = linha.querySelector(".produto-estoque-valor");
+    if (estoqueValor) {
+      estoqueValor.textContent = "-";
+    }
     linha.querySelector('[name="quantidade[]"]').value = "1";
     linha.querySelector('[name="unidade[]"]').value = "";
     linha.querySelector('[name="preco_unitario[]"]').value = "0,00";
@@ -524,6 +555,10 @@
       produto.selectedIndex = 0;
       unidade.value = "";
       preco.value = "0,00";
+      const estoqueValor = linha.querySelector(".produto-estoque-valor");
+      if (estoqueValor) {
+        estoqueValor.textContent = "-";
+      }
       if (produtoBusca.value.trim()) {
         mostrarSugestoes(linha);
         definirSugestaoAtiva(linha, 0);
