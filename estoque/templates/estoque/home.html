@@ -683,6 +683,56 @@
     }
 }
 
+
+/* Reforço visual apenas no mobile - cards de produtos */
+@media (max-width: 768px) {
+    .produto-card h3,
+    .produto-card .produto-nome,
+    .card-produto h3,
+    .card-produto .produto-nome,
+    .produto-mobile-card h3,
+    .produto-mobile-card .produto-nome {
+        font-size: 22px !important;
+        font-weight: 800 !important;
+        line-height: 1.2 !important;
+        color: #111827 !important;
+    }
+
+    .produto-card .produto-categoria-inline,
+    .produto-card .categoria,
+    .produto-card .produto-categoria,
+    .card-produto .produto-categoria-inline,
+    .card-produto .categoria,
+    .card-produto .produto-categoria,
+    .produto-mobile-card .produto-categoria-inline,
+    .produto-mobile-card .categoria,
+    .produto-mobile-card .produto-categoria {
+        font-size: 18px !important;
+        font-weight: 800 !important;
+        line-height: 1.25 !important;
+        color: #4b5563 !important;
+        margin-top: 5px !important;
+    }
+}
+
+
+/* Ajuste fino da categoria nos cards mobile */
+@media (max-width: 768px) {
+    .produto-card .produto-categoria-inline,
+    .produto-card .categoria,
+    .produto-card .produto-categoria,
+    .card-produto .produto-categoria-inline,
+    .card-produto .categoria,
+    .card-produto .produto-categoria,
+    .produto-mobile-card .produto-categoria-inline,
+    .produto-mobile-card .categoria,
+    .produto-mobile-card .produto-categoria {
+        font-size: 19px !important;
+        font-weight: 900 !important;
+        color: #374151 !important;
+    }
+}
+
 </style>
 <div class="container mt-4 produtos-mobile-page">
   {% if messages %}
