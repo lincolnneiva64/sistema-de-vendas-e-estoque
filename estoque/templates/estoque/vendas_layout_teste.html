@@ -2863,6 +2863,18 @@ function renderizarSugestoesClientes() {
 
 let clienteBuscaTimer = null;
 const clienteBuscaCache = new Map();
+let clientesVendaPrecarregados = false;
+
+function precarregarClientesVendaMobile() {
+    if (clientesVendaPrecarregados) return;
+    clientesVendaPrecarregados = true;
+
+    window.setTimeout(() => {
+        if (!clienteBuscaCache.has("")) {
+            buscarClientes("", { forcarServidor: true });
+        }
+    }, 300);
+}
 
 function filtrarClientesCache(texto) {
     const termo = normalizarTextoCliente(texto);
@@ -2901,9 +2913,7 @@ async function buscarClientes(texto, opcoes = {}) {
     const termoNormalizado = normalizarTextoCliente(termoSolicitado);
 
     if (!opcoes.forcarServidor && renderizarClientesDoCache(termoSolicitado)) {
-        if (termoSolicitado) {
-            return;
-        }
+        return;
     }
 
     if (clienteBuscaAbortController) {
@@ -2974,6 +2984,8 @@ function reidratarClienteSelecionado() {
     }
     atualizarClienteSelecionadoDoServidor(clienteBase);
 }
+
+precarregarClientesVendaMobile();
 
 clienteBusca.addEventListener("input", () => {
     const texto = clienteBusca.value.trim();
@@ -4813,4 +4825,7 @@ atualizarTotalGeral();
 </script>
 </body>
 </html>
+
+
+
 
