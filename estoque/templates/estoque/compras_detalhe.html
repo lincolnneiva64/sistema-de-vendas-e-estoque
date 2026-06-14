@@ -1,62 +1,297 @@
-{% extends 'estoque/base.html' %}
+﻿{% extends 'estoque/base.html' %}
 {% block title %}Compra #{{ compra.id }}{% endblock %}
+
 {% block content %}
-<div style="max-width: 980px; margin: 24px auto 90px; padding: 0 16px; color: #172033;">
-  <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-end; margin-bottom:14px;">
+<style>
+  .nota-compra-wrap {
+    max-width: 820px;
+    margin: 6px auto 70px;
+    padding: 0 12px;
+    color: #172033;
+  }
+
+  .nota-compra-topo {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+
+  .nota-compra-topo h1 {
+    margin: 0;
+    font-size: 1.45rem;
+    font-weight: 900;
+    letter-spacing: -0.04em;
+  }
+
+  .nota-compra-subtitulo {
+    margin: 2px 0 0;
+    color: #64748b;
+    font-size: .68rem;
+    font-weight: 700;
+  }
+
+  .nota-compra-acoes {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .nota-compra-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 850;
+    border: 1px solid #7ea6d9;
+  }
+
+  .nota-compra-btn.primario {
+    background: #2563eb;
+    color: #fff;
+    border-color: #2563eb;
+  }
+
+  .nota-compra-btn.secundario {
+    background: #dbeafe;
+    color: #164173;
+  }
+
+  .nota-compra-card {
+    background: #fff;
+    border: 1px solid #dbe4ef;
+    border-radius: 10px;
+    box-shadow: 0 6px 14px rgba(15,23,42,.05);
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+
+  .nota-compra-card-titulo {
+    padding: 6px 10px;
+    border-bottom: 1px solid #edf1f6;
+    font-weight: 900;
+    background: #f8fafc;
+  }
+
+  .nota-compra-dados {
+    padding: 4px 8px;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 4px 10px;
+    font-size: .8rem;
+  }
+
+  .nota-compra-dados strong {
+    display: block;
+    margin-bottom: 2px;
+    font-size: .7rem;
+    color: #334155;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+  }
+
+  .nota-compra-tabela {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .68rem;
+  }
+
+  .nota-compra-tabela th {
+    background: #f8fafc;
+    color: #334155;
+    text-align: left;
+    padding: 5px 8px;
+    font-size: .7rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+  }
+
+  .nota-compra-tabela td {
+    padding: 4px 8px;
+    border-top: 1px solid #edf1f6;
+    vertical-align: middle;
+    font-weight: 700;
+    color: #172033;
+  }
+
+  .nota-compra-tabela .numero {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .nota-compra-total {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    align-items: center;
+    padding: 7px 10px;
+    background: #f8fafc;
+    border-top: 1px solid #dbe4ef;
+    font-size: .98rem;
+    font-weight: 950;
+    color: #172033;
+  }
+
+  .nota-compra-total span {
+    color: #047857;
+    font-size: 1rem;
+  }
+
+  @media (max-width: 760px) {
+    .nota-compra-wrap {
+      margin-top: 10px;
+      padding: 0 8px;
+    }
+
+    .nota-compra-topo {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .nota-compra-topo h1 {
+      font-size: 1.55rem;
+    }
+
+    .nota-compra-acoes {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .nota-compra-dados {
+      grid-template-columns: 1fr 1fr;
+      font-size: .9rem;
+    }
+
+    .nota-compra-card {
+      border-radius: 12px;
+    }
+
+    .nota-compra-tabela {
+      font-size: .68rem;
+    }
+
+    .nota-compra-tabela th,
+    .nota-compra-tabela td {
+      padding: 6px 7px;
+    }
+
+    .nota-compra-tabela th:nth-child(3),
+    .nota-compra-tabela td:nth-child(3) {
+      display: none;
+    }
+  }
+
+  /* Reforço final da leitura da nota */
+  .nota-compra-card,
+  .nota-compra-dados,
+  .nota-compra-tabela {
+    color: #0f172a;
+  }
+
+  .nota-compra-dados div {
+    font-weight: 750;
+  }
+
+  .nota-compra-dados strong,
+  .nota-compra-tabela th,
+  .nota-compra-card-titulo {
+    color: #0f172a;
+    font-weight: 950;
+  }
+
+  .nota-compra-tabela td {
+    color: #0f172a;
+    font-weight: 750;
+  }
+
+  .nota-compra-tabela .numero {
+    font-weight: 850;
+  }
+
+  .nota-compra-total {
+    color: #0f172a;
+    font-weight: 950;
+  }
+
+  .nota-compra-total span {
+    color: #047857;
+    font-weight: 950;
+  }
+
+</style>
+
+<div class="nota-compra-wrap">
+  <div class="nota-compra-topo">
     <div>
-      <h1 style="margin:0; font-weight:850;">Compra #{{ compra.id }}</h1>
-      <p style="margin:4px 0 0; color:#64748b; font-weight:650;">Detalhe da compra registrada.</p>
+      <h1>Compra #{{ compra.id }}</h1>
+      <p class="nota-compra-subtitulo">Nota de compra registrada.</p>
     </div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <a href="{% url 'estoque:compras_nova' %}" style="background:#2563eb; color:#fff; padding:9px 14px; border-radius:9px; text-decoration:none; font-weight:800;">Nova compra</a>
-      <a href="{% url 'estoque:home' %}" style="background:#dbeafe; color:#164173; padding:9px 14px; border-radius:9px; text-decoration:none; font-weight:800; border:1px solid #7ea6d9;">Painel</a>
+
+    <div class="nota-compra-acoes">
+      <a class="nota-compra-btn primario" href="{% url 'estoque:compras_nova' %}">Nova compra</a>
+      <a class="nota-compra-btn secundario" href="{% url 'estoque:compras_lista' %}">Compras</a>
+      <a class="nota-compra-btn secundario" href="{% url 'estoque:home' %}">Painel</a>
     </div>
   </div>
 
   {% if messages %}
     {% for message in messages %}
-      <div style="background:#ecfdf3; border:1px solid #b7e4c7; color:#166534; border-radius:12px; padding:10px 12px; margin-bottom:12px; font-weight:750;">{{ message }}</div>
+      <div style="background:#ecfdf3; border:1px solid #b7e4c7; color:#166534; border-radius:12px; padding:9px 12px; margin-bottom:10px; font-weight:800;">{{ message }}</div>
     {% endfor %}
   {% endif %}
 
-  <section style="background:#fff; border:1px solid #e1e7ef; border-radius:14px; box-shadow:0 14px 30px rgba(15,23,42,.06); margin-bottom:14px; overflow:hidden;">
-    <div style="padding:12px 16px; border-bottom:1px solid #edf1f6; font-weight:850;">Dados</div>
-    <div style="padding:14px 16px; display:grid; grid-template-columns: repeat(3, 1fr); gap:12px;">
-      <div><strong>Fornecedor</strong><br>{{ compra.fornecedor.nome|default:"-" }}</div>
-      <div><strong>Data</strong><br>{{ compra.data_compra|date:"d/m/Y" }}</div>
-      <div><strong>Pagamento</strong><br>{{ compra.tipo_pagamento|default:"-" }}</div>
-      <div><strong>Status</strong><br>{{ compra.get_status_display }}</div>
-      <div><strong>Total</strong><br>R$ {{ compra.total }}</div>
-      <div><strong>Estoque</strong><br>{% if compra.estoque_entrada_realizada %}Entrada realizada{% else %}Ainda nao entrou no estoque{% endif %}</div>
+  <section class="nota-compra-card">
+    <div class="nota-compra-card-titulo">Dados da compra</div>
+    <div class="nota-compra-dados">
+      <div><strong>Fornecedor</strong>{{ compra.fornecedor.nome|default:"-" }}</div>
+      <div><strong>Data</strong>{{ compra.data_compra|date:"d/m/Y" }}</div>
+      <div><strong>Pagamento</strong>{{ compra.tipo_pagamento|default:"-" }}</div>
+      <div><strong>Status</strong>{{ compra.get_status_display }}</div>
+      <div><strong>Estoque</strong>{% if compra.estoque_entrada_realizada %}Entrada realizada{% else %}Ainda não entrou{% endif %}</div>
+      <div><strong>Vencimento</strong>{{ compra.data_vencimento|date:"d/m/Y"|default:"-" }}</div>
     </div>
   </section>
 
-  <section style="background:#fff; border:1px solid #e1e7ef; border-radius:14px; box-shadow:0 14px 30px rgba(15,23,42,.06); overflow:hidden;">
-    <div style="padding:12px 16px; border-bottom:1px solid #edf1f6; font-weight:850;">Itens</div>
-    <table style="width:100%; border-collapse:collapse;">
+  <section class="nota-compra-card">
+    <div class="nota-compra-card-titulo">Itens</div>
+
+    <table class="nota-compra-tabela">
       <thead>
-        <tr style="background:#f8fafc;">
-          <th style="text-align:left; padding:10px;">Produto</th>
-          <th style="text-align:left; padding:10px;">Quantidade</th>
-          <th style="text-align:left; padding:10px;">Unidade</th>
-          <th style="text-align:left; padding:10px;">Preco</th>
-          <th style="text-align:left; padding:10px;">Total</th>
+        <tr>
+          <th>Produto</th>
+          <th class="numero">Qtd.</th>
+          <th>Unid.</th>
+          <th class="numero">Preço</th>
+          <th class="numero">Total</th>
         </tr>
       </thead>
       <tbody>
         {% for item in itens %}
           <tr>
-            <td style="padding:10px; border-top:1px solid #edf1f6;">{{ item.produto.nome|default:"Produto nao identificado" }}</td>
-            <td style="padding:10px; border-top:1px solid #edf1f6;">{{ item.quantidade }}</td>
-            <td style="padding:10px; border-top:1px solid #edf1f6;">{{ item.unidade|default:"-" }}</td>
-            <td style="padding:10px; border-top:1px solid #edf1f6;">R$ {{ item.preco_unitario }}</td>
-            <td style="padding:10px; border-top:1px solid #edf1f6;">R$ {{ item.valor_total }}</td>
+            <td>{{ item.produto.nome|default:"Produto não identificado" }}</td>
+            <td class="numero">{{ item.quantidade }}</td>
+            <td>{{ item.unidade|default:"-" }}</td>
+            <td class="numero">R$ {{ item.preco_unitario }}</td>
+            <td class="numero">R$ {{ item.valor_total }}</td>
           </tr>
         {% empty %}
-          <tr><td colspan="5" style="padding:18px; text-align:center; color:#64748b;">Nenhum item.</td></tr>
+          <tr>
+            <td colspan="5" style="padding:16px; text-align:center; color:#64748b;">Nenhum item.</td>
+          </tr>
         {% endfor %}
       </tbody>
     </table>
+
+    <div class="nota-compra-total">
+      Total da compra:
+      <span>R$ {{ compra.total }}</span>
+    </div>
   </section>
 </div>
 {% endblock %}

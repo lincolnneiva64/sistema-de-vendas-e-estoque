@@ -23,7 +23,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -1640,6 +1640,15 @@ def compras_nova(request):
         fornecedor_id = request.POST.get("fornecedor_id")
         data_compra = parse_date(request.POST.get("data_compra") or "")
         tipo_pagamento = (request.POST.get("tipo_pagamento") or "").strip()
+        tipo_pagamento_normalizado = (
+            tipo_pagamento.lower()
+            .replace("à", "a")
+            .replace("á", "a")
+            .replace(" ", "")
+            .replace("_", "")
+            .replace("-", "")
+        )
+        compra_a_prazo = tipo_pagamento_normalizado in {"aprazo", "prazo"}
         data_vencimento = parse_date(request.POST.get("data_vencimento") or "")
         observacao = (request.POST.get("observacao") or "").strip()
 
@@ -1701,7 +1710,7 @@ def compras_nova(request):
             compra = Compra.objects.create(
                 fornecedor=fornecedor,
                 data_compra=data_compra,
-                data_vencimento=data_vencimento if tipo_pagamento in {"aprazo", "a prazo", "prazo"} else None,
+                data_vencimento=data_vencimento if compra_a_prazo else None,
                 tipo_pagamento=tipo_pagamento,
                 total=total,
                 observacao=observacao,
@@ -1717,6 +1726,27 @@ def compras_nova(request):
                     preco_unitario=item["preco_unitario"],
                     valor_total=item["valor_total"],
                     observacao=item["observacao"] or None,
+                )
+
+                produto = Produto.objects.select_for_update().get(pk=item["produto"].pk)
+                produto.quantidade = (produto.quantidade or 0) + int(item["quantidade"])
+                produto.save(update_fields=["quantidade", "atualizado_em"])
+
+            compra.estoque_entrada_realizada = True
+            compra.estoque_entrada_realizada_em = timezone.now()
+            compra.status = Compra.STATUS_FINALIZADA
+            compra.save(update_fields=["estoque_entrada_realizada", "estoque_entrada_realizada_em", "status", "atualizado_em"])
+
+            if compra_a_prazo:
+                ContaPagar.objects.create(
+                    compra=compra,
+                    fornecedor=fornecedor,
+                    data_emissao=data_compra,
+                    data_vencimento=data_vencimento,
+                    valor_original=total,
+                    valor_em_aberto=total,
+                    status=ContaPagar.STATUS_ABERTA,
+                    observacao=observacao or "",
                 )
 
         messages.success(request, f"Compra #{compra.id} salva com sucesso.")
