@@ -640,6 +640,49 @@
     transition: transform 0.08s ease, box-shadow 0.12s ease, filter 0.12s ease;
   }
 }
+
+/* Categoria discreta dentro da coluna Produto */
+.produto-categoria-inline {
+    margin-top: 4px;
+    font-size: 13px;
+    line-height: 1.2;
+    color: #667085;
+    font-weight: 600;
+}
+
+@media (max-width: 768px) {
+    .produto-categoria-inline {
+        font-size: 12px;
+    }
+}
+
+
+/* Reforço visual do produto e categoria na lista */
+.tabela-produtos-estoque td:nth-child(1) {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.produto-categoria-inline {
+    margin-top: 5px;
+    font-size: 15px;
+    line-height: 1.25;
+    color: #475467;
+    font-weight: 700;
+}
+
+@media (max-width: 768px) {
+    .tabela-produtos-estoque td:nth-child(1) {
+        font-size: 18px;
+        font-weight: 700;
+    }
+
+    .produto-categoria-inline {
+        font-size: 14px;
+        font-weight: 700;
+    }
+}
+
 </style>
 <div class="container mt-4 produtos-mobile-page">
   {% if messages %}
@@ -813,7 +856,8 @@ align-items: center;
     <tbody>
       {% for produto in produtos %}
       <tr id="produto-{{ produto.id }}" data-produto-id="{{ produto.id }}" data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}" class="linha-produto {% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}" style="transition: all 0.15s ease;">
-    <td class="produto-card-nome">{{ produto.nome|default:"Produto sem nome" }}</td>
+    <td class="produto-card-nome">{{ produto.nome|default:"Produto sem nome" }}
+                                <div class="produto-categoria-inline">{% if produto.categoria %}{{ produto.categoria }}{% else %}Sem categoria{% endif %}</div></td>
         <td class="td-quantidade">
   <div class="qtd-wrap">
     <span class="qtd-num produto-card-valor">{{ produto.quantidade|default:"0" }}</span>
