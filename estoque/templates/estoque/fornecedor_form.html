@@ -58,6 +58,84 @@ document.addEventListener("keydown", function(event) {
 }, true);
 </script>
 
+
+<script>
+(function() {
+  document.querySelectorAll("[data-contato-add]").forEach(function(botao) {
+    botao.addEventListener("click", function() {
+      const indice = botao.getAttribute("data-contato-add");
+      const card = document.querySelector('[data-contato-card][data-contato-index="' + indice + '"]');
+      if (!card) return;
+
+      card.hidden = false;
+      botao.hidden = true;
+
+      const primeiroCampo = card.querySelector("input:not([type='hidden']):not([type='checkbox']), textarea, select");
+      if (primeiroCampo) {
+        primeiroCampo.focus();
+        if (typeof primeiroCampo.select === "function") primeiroCampo.select();
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-contato-ocultar]").forEach(function(botao) {
+    botao.addEventListener("click", function() {
+      const card = botao.closest("[data-contato-card]");
+      if (!card) return;
+
+      const indice = card.getAttribute("data-contato-index");
+      const add = document.querySelector('[data-contato-add="' + indice + '"]');
+
+      card.hidden = true;
+      if (add) add.hidden = false;
+    });
+  });
+})();
+</script>
+
+
+<script>
+document.addEventListener("click", function(event) {
+  const botaoAdicionar = event.target.closest("[data-contato-add]");
+  if (botaoAdicionar) {
+    event.preventDefault();
+
+    const indice = botaoAdicionar.getAttribute("data-contato-add");
+    const card = document.querySelector('[data-contato-card][data-contato-index="' + indice + '"]');
+
+    if (!card) {
+      alert("Bloco do contato não encontrado.");
+      return;
+    }
+
+    card.hidden = false;
+    botaoAdicionar.hidden = true;
+
+    const primeiroCampo = card.querySelector("input:not([type='hidden']):not([type='checkbox']), textarea, select");
+    if (primeiroCampo) {
+      primeiroCampo.focus();
+      if (typeof primeiroCampo.select === "function") primeiroCampo.select();
+    }
+
+    return;
+  }
+
+  const botaoOcultar = event.target.closest("[data-contato-ocultar]");
+  if (botaoOcultar) {
+    event.preventDefault();
+
+    const card = botaoOcultar.closest("[data-contato-card]");
+    if (!card) return;
+
+    const indice = card.getAttribute("data-contato-index");
+    const botaoAdicionarRelacionado = document.querySelector('[data-contato-add="' + indice + '"]');
+
+    card.hidden = true;
+    if (botaoAdicionarRelacionado) botaoAdicionarRelacionado.hidden = false;
+  }
+});
+</script>
+
 {% endblock %}
 
 {% block content %}
@@ -147,10 +225,44 @@ function fornecedorEnterAvanca(event) {
   .fornecedor-section-title { margin: 0 0 5px; color: #172033; font-size: 1rem; font-weight: 950; }
   .fornecedor-section-note { margin: 0 0 12px; color: #64748b; font-size: 0.8rem; font-weight: 700; }
   .fornecedor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .fornecedor-contato-card {
-    padding: 12px; border: 1px solid #dbe7f3; border-radius: 11px;
-    background: #ffffff; margin-bottom: 10px;
+  .fornecedor-contato-add {
+    width: 100%; min-height: 40px; border: 1px dashed #93c5fd;
+    border-radius: 10px; background: #eff6ff; color: #1d4ed8;
+    font-size: 0.86rem; font-weight: 950; margin: 0 0 10px; cursor: pointer;
   }
+  .fornecedor-contato-add:hover { background: #dbeafe; }
+  .fornecedor-contato-details {
+    border: 1px solid #dbe7f3;
+    border-radius: 11px;
+    background: #ffffff;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .fornecedor-contato-details summary {
+    cursor: pointer;
+    padding: 13px 14px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-weight: 950;
+    border-bottom: 1px solid #dbe7f3;
+  }
+  .fornecedor-contato-details:not([open]) summary {
+    border-bottom: 0;
+  }
+  .fornecedor-contato-card {
+    padding: 12px;
+    background: #ffffff;
+  }
+  .fornecedor-contato-card[hidden],
+  .fornecedor-contato-add[hidden] {
+    display: none !important;
+  }
+  .fornecedor-contato-ocultar {
+    width: 100%; min-height: 36px; border: 1px solid #cbd5e1;
+    border-radius: 9px; background: #ffffff; color: #475569;
+    font-size: 0.8rem; font-weight: 900; margin-top: 10px; cursor: pointer;
+  }
+  .fornecedor-contato-ocultar:hover { background: #f8fafc; }
   .fornecedor-contato-card-title { margin: 0 0 10px; font-weight: 950; font-size: 0.9rem; }
   .fornecedor-check {
     display: flex; justify-content: space-between; align-items: center; gap: 10px;
@@ -272,45 +384,57 @@ function fornecedorEnterAvanca(event) {
         {{ contatos_formset.management_form }}
 
         {% for contato_form in contatos_formset.forms %}
-          <div class="fornecedor-contato-card">
-            {% for hidden in contato_form.hidden_fields %}{{ hidden }}{% endfor %}
-            {% if contato_form.DELETE %}<span style="display:none;">{{ contato_form.DELETE }}</span>{% endif %}
-
-            <h4 class="fornecedor-contato-card-title">
+          <details
+            class="fornecedor-contato-details"
+            {% if contato_form.instance.pk or contato_form.nome.value or contato_form.cargo.value or contato_form.telefone_whatsapp.value or contato_form.observacao.value or contato_form.errors %}open{% endif %}
+          >
+            <summary>
               {% if forloop.first %}Contato principal{% else %}Contato {{ forloop.counter }}{% endif %}
-            </h4>
+              {% if contato_form.instance.pk or contato_form.nome.value or contato_form.cargo.value or contato_form.telefone_whatsapp.value %}
+                - preenchido
+              {% endif %}
+            </summary>
 
-            <div class="fornecedor-grid">
-              <div class="fornecedores-field">
-                <label for="{{ contato_form.nome.id_for_label }}">Nome do responsável / vendedor</label>
-                {{ contato_form.nome }}
+            <div class="fornecedor-contato-card">
+              {% for hidden in contato_form.hidden_fields %}{{ hidden }}{% endfor %}
+              {% if contato_form.DELETE %}<span style="display:none;">{{ contato_form.DELETE }}</span>{% endif %}
+
+              <div class="fornecedor-grid">
+                <div class="fornecedores-field">
+                  <label for="{{ contato_form.nome.id_for_label }}">Nome do responsável / vendedor</label>
+                  {{ contato_form.nome }}
+                </div>
+                <div class="fornecedores-field">
+                  <label for="{{ contato_form.cargo.id_for_label }}">Cargo / função</label>
+                  {{ contato_form.cargo }}
+                </div>
+                <div class="fornecedores-field">
+                  <label for="{{ contato_form.telefone_whatsapp.id_for_label }}">WhatsApp</label>
+                  {{ contato_form.telefone_whatsapp }}
+                </div>
               </div>
+
               <div class="fornecedores-field">
-                <label for="{{ contato_form.cargo.id_for_label }}">Cargo / função</label>
-                {{ contato_form.cargo }}
+                <label for="{{ contato_form.observacao.id_for_label }}">Observação</label>
+                {{ contato_form.observacao }}
               </div>
-              <div class="fornecedores-field">
-                <label for="{{ contato_form.telefone_whatsapp.id_for_label }}">WhatsApp</label>
-                {{ contato_form.telefone_whatsapp }}
+
+              <p class="fornecedor-section-note" style="margin-top: 8px;">
+                Contato principal = preferido para compras. Contato ativo = ainda está em uso.
+              </p>
+
+              <div class="fornecedor-grid">
+                <label class="fornecedor-check" for="{{ contato_form.principal.id_for_label }}">
+                  <span>Contato principal?</span>
+                  {{ contato_form.principal }}
+                </label>
+                <label class="fornecedor-check" for="{{ contato_form.ativo.id_for_label }}">
+                  <span>Contato ativo?</span>
+                  {{ contato_form.ativo }}
+                </label>
               </div>
             </div>
-
-            <div class="fornecedores-field">
-              <label for="{{ contato_form.observacao.id_for_label }}">Observação</label>
-              {{ contato_form.observacao }}
-            </div>
-
-            <div class="fornecedor-grid">
-              <label class="fornecedor-check" for="{{ contato_form.principal.id_for_label }}">
-                <span>Principal</span>
-                {{ contato_form.principal }}
-              </label>
-              <label class="fornecedor-check" for="{{ contato_form.ativo.id_for_label }}">
-                <span>Ativo</span>
-                {{ contato_form.ativo }}
-              </label>
-            </div>
-          </div>
+          </details>
         {% endfor %}
       </section>
 
