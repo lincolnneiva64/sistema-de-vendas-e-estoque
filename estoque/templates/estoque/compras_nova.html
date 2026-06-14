@@ -1,4 +1,4 @@
-{% extends 'estoque/base.html' %}
+﻿{% extends 'estoque/base.html' %}
 {% block title %}Nova Compra{% endblock %}
 {% block content %}
 <style>
@@ -23,6 +23,24 @@
   .compras-table th { text-align:left; font-size:.72rem; color:#64748b; text-transform:uppercase; background:#f8fafc; padding:9px; border-bottom:1px solid #edf1f6; }
   .compras-table td { padding:8px; border-bottom:1px solid #f0f3f8; vertical-align:top; }
   .compras-table select, .compras-table input { width:100%; border:1.5px solid #d3dbe8; border-radius:8px; padding:8px; font-weight:650; }
+
+  .compras-field input:focus,
+  .compras-field select:focus,
+  .compras-field textarea:focus,
+  .compras-table input:focus,
+  .compras-table select:focus,
+  .produto-busca:focus {
+    outline: 3px solid #2563eb;
+    outline-offset: 2px;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, .16);
+    background: #ffffff;
+  }
+
+  .compras-field select:focus,
+  .compras-table select:focus {
+    background-color: #eef6ff;
+  }
   .produto-autocomplete { position:relative; }
   .produto-select-real { display:none; }
   .produto-busca { font-size:.88rem; font-weight:600; line-height:1.25; }
@@ -812,3 +830,4 @@
 </script>
 
 {% endblock %}
+
