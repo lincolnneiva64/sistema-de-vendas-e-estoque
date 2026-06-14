@@ -462,12 +462,10 @@
                       {% endif %}
                     </td>
                     <td class="fornecedor-muted">
-                      {% if fornecedor.forma_pagamento_padrao == "aprazo" %}
-                        A prazo{% if fornecedor.prazos_pagamento_padrao %}: {{ fornecedor.prazos_pagamento_padrao }} dias{% endif %}
-                      {% elif fornecedor.forma_pagamento_padrao == "cartao" %}
-                        Cartão{% if fornecedor.dia_vencimento_cartao %}: vence dia {{ fornecedor.dia_vencimento_cartao }}{% endif %}
+                      {% if fornecedor.prazos_pagamento_padrao %}
+                        Boleto/prazo: {{ fornecedor.prazos_pagamento_padrao }} dias
                       {% else %}
-                        À vista
+                        Sem prazo/boleto cadastrado
                       {% endif %}
                     </td>
                     <td class="fornecedor-muted">{{ fornecedor.total_compras }}</td>

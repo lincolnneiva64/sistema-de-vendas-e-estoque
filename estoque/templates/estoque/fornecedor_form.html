@@ -358,16 +358,11 @@ function fornecedorEnterAvanca(event) {
 
         <div class="fornecedor-grid">
           <div class="fornecedores-field">
-            <label for="{{ form.forma_pagamento_padrao.id_for_label }}">Forma padrão</label>
-            {{ form.forma_pagamento_padrao }}
-          </div>
-          <div class="fornecedores-field">
-            <label for="{{ form.prazos_pagamento_padrao.id_for_label }}">Dias das parcelas</label>
+            <label for="{{ form.prazos_pagamento_padrao.id_for_label }}">Dias do boleto / prazo</label>
             {{ form.prazos_pagamento_padrao }}
-          </div>
-          <div class="fornecedores-field">
-            <label for="{{ form.dia_vencimento_cartao.id_for_label }}">Dia venc. cartão</label>
-            {{ form.dia_vencimento_cartao }}
+            <p class="fornecedor-section-note" style="margin-top: 8px;">
+              Preencha somente quando esse fornecedor vender no boleto ou a prazo. Ex.: 7, 14, 21
+            </p>
           </div>
         </div>
       </section>

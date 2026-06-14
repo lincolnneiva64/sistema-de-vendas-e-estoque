@@ -860,9 +860,7 @@ class FornecedorForm(forms.ModelForm):
             "telefone_whatsapp",
             "cidade",
             "bairro",
-            "forma_pagamento_padrao",
             "prazos_pagamento_padrao",
-            "dia_vencimento_cartao",
             "observacao",
             "ativo",
         ]
@@ -898,24 +896,11 @@ class FornecedorForm(forms.ModelForm):
                 "autocomplete": "off",
                 "onkeydown": "return fornecedorEnterAvanca(event);",
             }),
-
-            "forma_pagamento_padrao": forms.Select(attrs={
-                "class": "form-select",
-                "onkeydown": "return fornecedorEnterAvanca(event);",
-            }),
             "prazos_pagamento_padrao": forms.TextInput(attrs={
                 "class": "form-control",
                 "placeholder": "Ex.: 7, 14, 21",
                 "autocomplete": "off",
                 "onkeydown": "return fornecedorEnterAvanca(event);",
-            }),
-            "dia_vencimento_cartao": forms.NumberInput(attrs={
-                "class": "form-control",
-                "min": "1",
-                "max": "31",
-                "step": "1",
-                "onkeydown": "return fornecedorEnterAvanca(event);",
-                "placeholder": "Ex.: 10",
             }),
             "observacao": forms.Textarea(attrs={
                 "class": "form-control",
@@ -985,6 +970,8 @@ class FornecedorForm(forms.ModelForm):
         if dia < 1 or dia > 31:
             raise forms.ValidationError("Informe um dia entre 1 e 31.")
         return dia
+
+
 
 class FornecedorContatoForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
