@@ -871,47 +871,56 @@ class FornecedorForm(forms.ModelForm):
                 "class": "form-control",
                 "placeholder": "Nome do fornecedor",
                 "autocomplete": "off",
+                "onkeydown": "return fornecedorEnterAvanca(event);",
                 "autofocus": True,
             }),
             "nome_fantasia": forms.TextInput(attrs={
                 "class": "form-control",
                 "placeholder": "Nome fantasia / apelido",
                 "autocomplete": "off",
+                "onkeydown": "return fornecedorEnterAvanca(event);",
             }),
             "telefone_whatsapp": forms.TextInput(attrs={
                 "class": "form-control",
                 "placeholder": "(00) 00000-0000",
                 "autocomplete": "off",
+                "onkeydown": "return fornecedorEnterAvanca(event);",
             }),
             "cidade": forms.TextInput(attrs={
                 "class": "form-control",
                 "placeholder": "Cidade",
                 "autocomplete": "off",
+                "onkeydown": "return fornecedorEnterAvanca(event);",
             }),
             "bairro": forms.TextInput(attrs={
                 "class": "form-control",
                 "placeholder": "Bairro",
                 "autocomplete": "off",
+                "onkeydown": "return fornecedorEnterAvanca(event);",
             }),
 
             "forma_pagamento_padrao": forms.Select(attrs={
                 "class": "form-select",
+                "onkeydown": "return fornecedorEnterAvanca(event);",
             }),
             "prazos_pagamento_padrao": forms.TextInput(attrs={
                 "class": "form-control",
                 "placeholder": "Ex.: 7, 14, 21",
                 "autocomplete": "off",
+                "onkeydown": "return fornecedorEnterAvanca(event);",
             }),
             "dia_vencimento_cartao": forms.NumberInput(attrs={
                 "class": "form-control",
                 "min": "1",
                 "max": "31",
                 "step": "1",
+                "onkeydown": "return fornecedorEnterAvanca(event);",
                 "placeholder": "Ex.: 10",
             }),
             "observacao": forms.Textarea(attrs={
                 "class": "form-control",
                 "placeholder": "Observacoes sobre o fornecedor",
+                "onkeydown": "return fornecedorEnterAvanca(event);",
                 "rows": 3,
             }),
             "ativo": forms.CheckboxInput(attrs={

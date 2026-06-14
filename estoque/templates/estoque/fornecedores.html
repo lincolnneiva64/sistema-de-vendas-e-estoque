@@ -183,8 +183,7 @@
     border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.13);
   }
   .fornecedores-grid {
-    display: grid; grid-template-columns: minmax(0, 2.25fr) minmax(360px, 0.75fr);
-    gap: 14px; align-items: start;
+    display: block;
   }
   .fornecedores-panel {
     background: #fff; border: 1px solid #e1e7ef; border-radius: 14px;
@@ -361,7 +360,7 @@
       </div>
       <div class="fornecedores-header-actions">
         <a href="{% url 'estoque:home' %}" class="fornecedores-btn fornecedores-btn-secondary">Voltar ao painel</a>
-        <a href="{% url 'estoque:fornecedores' %}" class="fornecedores-btn fornecedores-btn-primary" id="btnNovoFornecedor">Novo fornecedor</a>
+        <a href="{% url 'estoque:fornecedor_novo' %}" class="fornecedores-btn fornecedores-btn-primary" id="btnNovoFornecedor">Novo fornecedor</a>
       </div>
     </header>
 
@@ -475,7 +474,7 @@
                     <td class="fornecedor-muted">{{ fornecedor.total_produtos }}</td>
                     <td>
                       <div class="fornecedores-actions">
-                        <a class="fornecedores-action-link" href="{% url 'estoque:fornecedores' %}?fornecedor={{ fornecedor.id }}{% if termo %}&q={{ termo|urlencode }}{% endif %}">Editar</a>
+                        <a class="fornecedores-action-link" href="{% url 'estoque:fornecedor_editar' fornecedor.id %}">Editar</a>
                         <form method="post" class="status-action-form">
                           {% csrf_token %}
                           <input type="hidden" name="acao" value="alternar_status">
@@ -496,174 +495,6 @@
           <div class="fornecedores-empty">Nenhum fornecedor encontrado.</div>
         {% endif %}
       </section>
-
-      <aside class="fornecedores-panel" id="fornecedorFormularioPainel" {% if not fornecedor_selecionado and not form.errors and not contatos_formset.errors %}hidden{% endif %}>
-        <div class="fornecedores-panel-head">
-          <h2 class="fornecedores-panel-title">
-            {% if fornecedor_selecionado %}Editar fornecedor{% else %}Novo fornecedor{% endif %}
-          </h2>
-        </div>
-
-        <form method="post" class="fornecedores-form">
-          {% csrf_token %}
-          {% if fornecedor_selecionado %}
-            <input type="hidden" name="fornecedor_id" value="{{ fornecedor_selecionado.id }}">
-          {% endif %}
-
-          {% if form.errors %}
-            <div class="fornecedores-alert error">
-              Erros do fornecedor:
-              {% for field in form %}
-                {% for error in field.errors %}
-                  <br>{{ field.label }}: {{ error }}
-                {% endfor %}
-              {% endfor %}
-              {% for error in form.non_field_errors %}
-                <br>{{ error }}
-              {% endfor %}
-            </div>
-          {% endif %}
-
-          {% if contatos_formset.errors %}
-            <div class="fornecedores-alert error">
-              Erros nos contatos:
-              {% for contato_form in contatos_formset.forms %}
-                {% for field in contato_form %}
-                  {% for error in field.errors %}
-                    <br>{{ field.label }}: {{ error }}
-                  {% endfor %}
-                {% endfor %}
-                {% for error in contato_form.non_field_errors %}
-                  <br>{{ error }}
-                {% endfor %}
-              {% endfor %}
-            </div>
-          {% endif %}
-
-          <div class="fornecedores-field">
-            <label for="{{ form.nome.id_for_label }}">Nome</label>
-            {{ form.nome }}
-            {% for error in form.nome.errors %}<div class="fornecedores-alert error">{{ error }}</div>{% endfor %}
-          </div>
-
-          <div class="fornecedores-field">
-            <label for="{{ form.nome_fantasia.id_for_label }}">Nome fantasia / apelido</label>
-            {{ form.nome_fantasia }}
-          </div>
-
-          <div class="fornecedores-field">
-            <label for="{{ form.telefone_whatsapp.id_for_label }}">WhatsApp</label>
-            {{ form.telefone_whatsapp }}
-          </div>
-
-          <div class="fornecedores-field">
-            <label for="{{ form.cidade.id_for_label }}">Cidade</label>
-            {{ form.cidade }}
-          </div>
-
-          <div class="fornecedores-field">
-            <label for="{{ form.bairro.id_for_label }}">Bairro</label>
-            {{ form.bairro }}
-          </div>
-
-          <section class="fornecedor-contatos-section" aria-labelledby="fornecedor-financeiro-title">
-            <h3 class="fornecedor-contatos-title" id="fornecedor-financeiro-title">Financeiro do fornecedor</h3>
-            <p class="fornecedor-contatos-note">Defina o padrão que será puxado automaticamente na compra. Pode ser alterado na hora de salvar.</p>
-
-            <div class="fornecedor-contato-grid">
-              <div class="fornecedores-field">
-                <label for="{{ form.forma_pagamento_padrao.id_for_label }}">Forma padrão</label>
-                {{ form.forma_pagamento_padrao }}
-              </div>
-
-              <div class="fornecedores-field">
-                <label for="{{ form.prazos_pagamento_padrao.id_for_label }}">Dias das parcelas</label>
-                {{ form.prazos_pagamento_padrao }}
-                {% for error in form.prazos_pagamento_padrao.errors %}<div class="fornecedores-alert error">{{ error }}</div>{% endfor %}
-              </div>
-
-              <div class="fornecedores-field">
-                <label for="{{ form.dia_vencimento_cartao.id_for_label }}">Dia venc. cartão</label>
-                {{ form.dia_vencimento_cartao }}
-                {% for error in form.dia_vencimento_cartao.errors %}<div class="fornecedores-alert error">{{ error }}</div>{% endfor %}
-              </div>
-            </div>
-          </section>
-
-          <div class="fornecedores-field">
-            <label for="{{ form.observacao.id_for_label }}">Observacao</label>
-            {{ form.observacao }}
-          </div>
-
-          <section class="fornecedor-contatos-section" aria-labelledby="fornecedor-contatos-title">
-            <h3 class="fornecedor-contatos-title" id="fornecedor-contatos-title">Contatos do fornecedor</h3>
-            <p class="fornecedor-contatos-note">Cadastre responsaveis diferentes, como vendedor, financeiro ou entrega.</p>
-            {{ contatos_formset.management_form }}
-            {% if contatos_formset.non_form_errors %}
-              <div class="fornecedores-alert error">{{ contatos_formset.non_form_errors|join:", " }}</div>
-            {% endif %}
-            {% for contato_form in contatos_formset.forms %}
-              <button type="button" class="fornecedor-contato-add" data-contato-add="{{ forloop.counter }}" hidden>
-                + Adicionar {% if forloop.first %}contato principal{% else %}contato {{ forloop.counter }}{% endif %}
-              </button>
-              <div class="fornecedor-contato-card" data-contato-card data-contato-index="{{ forloop.counter }}" data-contato-preenchido="{% if contato_form.instance.pk or contato_form.nome.value or contato_form.cargo.value or contato_form.telefone_whatsapp.value or contato_form.observacao.value %}1{% else %}0{% endif %}">
-                {% for hidden in contato_form.hidden_fields %}{{ hidden }}{% endfor %}
-                {% if contato_form.DELETE %}<span class="fornecedor-contato-delete-campo">{{ contato_form.DELETE }}</span>{% endif %}
-                <h4 class="fornecedor-contato-card-title">
-                  {% if forloop.first %}Contato principal{% else %}Contato {{ forloop.counter }}{% endif %}
-                </h4>
-                {% if contato_form.non_field_errors %}
-                  <div class="fornecedores-alert error">{{ contato_form.non_field_errors|join:", " }}</div>
-                {% endif %}
-                <div class="fornecedor-contato-grid">
-                  <div class="fornecedores-field">
-                    <label for="{{ contato_form.nome.id_for_label }}">Nome do responsavel / vendedor</label>
-                    {{ contato_form.nome }}
-                    {% for error in contato_form.nome.errors %}<div class="fornecedores-alert error">{{ error }}</div>{% endfor %}
-                  </div>
-                  <div class="fornecedores-field">
-                    <label for="{{ contato_form.cargo.id_for_label }}">Cargo / funcao</label>
-                    {{ contato_form.cargo }}
-                  </div>
-                  <div class="fornecedores-field">
-                    <label for="{{ contato_form.telefone_whatsapp.id_for_label }}">WhatsApp</label>
-                    {{ contato_form.telefone_whatsapp }}
-                  </div>
-                </div>
-                <div class="fornecedores-field">
-                  <label for="{{ contato_form.observacao.id_for_label }}">Observacao</label>
-                  {{ contato_form.observacao }}
-                </div>
-                <div class="fornecedor-contato-flags">
-                  <label class="fornecedor-contato-check" for="{{ contato_form.principal.id_for_label }}">
-                    <span>Principal</span>
-                    {{ contato_form.principal }}
-                  </label>
-                  <label class="fornecedor-contato-check" for="{{ contato_form.ativo.id_for_label }}">
-                    <span>Ativo</span>
-                    {{ contato_form.ativo }}
-                  </label>
-                </div>
-                <button type="button" class="fornecedor-contato-ocultar" data-contato-ocultar>Ocultar contato</button>
-              </div>
-            {% empty %}
-              <div class="fornecedor-contato-card fornecedor-contato-card-vazio">
-                Nenhum bloco de contato foi carregado. Recarregue a pagina antes de salvar.
-              </div>
-            {% endfor %}
-          </section>
-
-          <div class="fornecedores-boolean">
-            <strong>Fornecedor ativo</strong>
-            {{ form.ativo }}
-          </div>
-
-          <div class="fornecedores-form-actions">
-            <a href="{% url 'estoque:fornecedores' %}" class="fornecedores-btn fornecedores-btn-secondary" id="btnCancelarFornecedor">Cancelar</a>
-            <button type="submit" class="fornecedores-btn fornecedores-btn-primary">Salvar fornecedor</button>
-          </div>
-        </form>
-      </aside>
     </main>
   </div>
 </div>
@@ -674,114 +505,7 @@
 
 
 
-<script>
-(function() {
-  const form = document.querySelector(".fornecedores-form");
-  if (!form) return;
-  const painelFormulario = document.getElementById("fornecedorFormularioPainel");
-  const btnNovoFornecedor = document.getElementById("btnNovoFornecedor");
-  const btnCancelarFornecedor = document.getElementById("btnCancelarFornecedor");
 
-  function abrirFormularioFornecedor() {
-    if (!painelFormulario) return;
-    painelFormulario.hidden = false;
-    window.setTimeout(() => {
-      painelFormulario.scrollIntoView({ behavior: "smooth", block: "start" });
-      const primeiroCampo = form.querySelector("input:not([type='hidden']):not([type='checkbox']), textarea");
-      if (primeiroCampo) primeiroCampo.focus();
-    }, 40);
-  }
-
-  btnNovoFornecedor?.addEventListener("click", function(event) {
-    if (!painelFormulario || !painelFormulario.hidden) return;
-    event.preventDefault();
-    abrirFormularioFornecedor();
-  });
-
-  btnCancelarFornecedor?.addEventListener("click", function(event) {
-    if (!painelFormulario || form.querySelector("input[name='fornecedor_id']")) return;
-    event.preventDefault();
-    painelFormulario.hidden = true;
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  });
-
-  const campos = Array.from(form.querySelectorAll("input:not([type='hidden']):not([type='checkbox']), textarea"));
-
-  campos.forEach((campo, index) => {
-    campo.addEventListener("keydown", function(event) {
-      if (event.key !== "Enter") return;
-
-      event.preventDefault();
-
-      const proximo = campos[index + 1];
-      if (proximo) {
-        proximo.focus();
-        if (typeof proximo.select === "function") {
-          proximo.select();
-        }
-      } else {
-        const botaoSalvar = form.querySelector("button[type='submit']");
-        if (botaoSalvar) botaoSalvar.focus();
-      }
-    });
-  });
-
-  const contatoCards = Array.from(form.querySelectorAll("[data-contato-card]"));
-  const botoesAdicionarContato = Array.from(form.querySelectorAll("[data-contato-add]"));
-
-  function contatoTemDados(card) {
-    if (card.dataset.contatoPreenchido === "1") return true;
-    const camposContato = Array.from(card.querySelectorAll("input:not([type='hidden']):not([type='checkbox']), textarea"));
-    return camposContato.some((campo) => campo.value.trim());
-  }
-
-  function atualizarBotoesContato() {
-    botoesAdicionarContato.forEach((botao) => {
-      const indiceAlvo = Number(botao.dataset.contatoAdd);
-      const cardAlvo = contatoCards.find((card) => Number(card.dataset.contatoIndex) === indiceAlvo);
-      const cardAnterior = contatoCards.find((card) => Number(card.dataset.contatoIndex) === indiceAlvo - 1);
-      const podeMostrar = indiceAlvo === 1 || Boolean(cardAnterior && !cardAnterior.hidden);
-      botao.hidden = !cardAlvo || !cardAlvo.hidden || !podeMostrar;
-    });
-  }
-
-  contatoCards.forEach((card, index) => {
-    card.hidden = !contatoTemDados(card);
-    if (card.hidden) {
-      const ativo = card.querySelector("input[name$='-ativo']");
-      if (ativo) ativo.checked = false;
-    }
-  });
-
-  botoesAdicionarContato.forEach((botao) => {
-    botao.addEventListener("click", () => {
-      const indiceAlvo = Number(botao.dataset.contatoAdd);
-      const cardAlvo = contatoCards.find((card) => Number(card.dataset.contatoIndex) === indiceAlvo);
-      if (!cardAlvo) return;
-      cardAlvo.hidden = false;
-      const ativo = cardAlvo.querySelector("input[name$='-ativo']");
-      if (ativo) ativo.checked = true;
-      atualizarBotoesContato();
-      const primeiroCampo = cardAlvo.querySelector("input:not([type='hidden']):not([type='checkbox']), textarea");
-      if (primeiroCampo) primeiroCampo.focus();
-    });
-  });
-
-  contatoCards.forEach((card) => {
-    const botaoOcultar = card.querySelector("[data-contato-ocultar]");
-    botaoOcultar?.addEventListener("click", () => {
-      const ativo = card.querySelector("input[name$='-ativo']");
-      const deleteField = card.querySelector("input[name$='-DELETE']");
-      if (ativo) ativo.checked = false;
-      if (deleteField) deleteField.checked = false;
-      card.hidden = true;
-      atualizarBotoesContato();
-    });
-  });
-
-  atualizarBotoesContato();
-})();
-</script>
 
 
 

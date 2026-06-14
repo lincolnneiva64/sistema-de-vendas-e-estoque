@@ -1,0 +1,329 @@
+{% extends 'estoque/base.html' %}
+
+{% block title %}{{ titulo_formulario }}
+
+
+
+<script>
+document.addEventListener("keydown", function(event) {
+  if (event.key !== "Enter") return;
+
+  const campoAtual = event.target;
+  const form = campoAtual.closest("form.fornecedor-form-card");
+  if (!form) return;
+
+  if (
+    campoAtual.tagName !== "INPUT" &&
+    campoAtual.tagName !== "SELECT" &&
+    campoAtual.tagName !== "TEXTAREA"
+  ) {
+    return;
+  }
+
+  if (
+    campoAtual.type === "hidden" ||
+    campoAtual.type === "checkbox" ||
+    campoAtual.type === "submit" ||
+    campoAtual.disabled
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  const campos = Array.from(form.querySelectorAll("input, select, textarea"))
+    .filter(function(campo) {
+      return (
+        !campo.disabled &&
+        campo.type !== "hidden" &&
+        campo.type !== "checkbox" &&
+        campo.type !== "submit" &&
+        campo.offsetParent !== null
+      );
+    });
+
+  const indiceAtual = campos.indexOf(campoAtual);
+  const proximoCampo = campos[indiceAtual + 1];
+
+  if (proximoCampo) {
+    proximoCampo.focus();
+    if (typeof proximoCampo.select === "function") {
+      proximoCampo.select();
+    }
+  } else {
+    const botaoSalvar = form.querySelector("button[type='submit']");
+    if (botaoSalvar) botaoSalvar.focus();
+  }
+}, true);
+</script>
+
+{% endblock %}
+
+{% block content %}
+
+<script>
+function fornecedorEnterAvanca(event) {
+  if (event.key !== "Enter") return true;
+
+  var campoAtual = event.target;
+  var form = campoAtual.closest("form");
+  if (!form) return true;
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  var campos = Array.from(form.querySelectorAll("input, select, textarea")).filter(function(campo) {
+    return (
+      !campo.disabled &&
+      campo.type !== "hidden" &&
+      campo.type !== "checkbox" &&
+      campo.type !== "submit" &&
+      campo.offsetParent !== null
+    );
+  });
+
+  var indice = campos.indexOf(campoAtual);
+  var proximo = campos[indice + 1];
+
+  if (proximo) {
+    proximo.focus();
+    if (typeof proximo.select === "function") {
+      proximo.select();
+    }
+  } else {
+    var botao = form.querySelector("button[type='submit']");
+    if (botao) botao.focus();
+  }
+
+  return false;
+}
+</script>
+
+
+
+
+<style>
+  .fornecedor-form-page { padding: 18px 0 120px; color: #172033; }
+  .fornecedor-form-shell { max-width: 980px; margin: 0 auto; padding: 0 18px; }
+  .fornecedor-form-header {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 12px; margin-bottom: 14px;
+  }
+  .fornecedor-form-title { margin: 0; font-size: 1.55rem; font-weight: 900; color: #111827; }
+  .fornecedor-form-card {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 14px;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06); padding: 16px;
+  }
+  .fornecedores-btn {
+    border: 0; border-radius: 9px; padding: 9px 14px; font-weight: 850;
+    font-size: 0.9rem; text-decoration: none; display: inline-flex;
+    align-items: center; justify-content: center; min-height: 40px;
+  }
+  .fornecedores-btn-primary { background: #2563eb; color: #fff; }
+  .fornecedores-btn-secondary { background: #dbeafe; color: #164173; border: 1px solid #7ea6d9; }
+  .fornecedores-field { margin-bottom: 11px; min-width: 0; }
+  .fornecedores-field label {
+    display: block; color: #334155; font-size: 0.82rem;
+    font-weight: 900; margin-bottom: 5px;
+  }
+  .fornecedores-field input,
+  .fornecedores-field textarea,
+  .fornecedores-field select {
+    width: 100%; border: 1.5px solid #d3dbe8; border-radius: 9px;
+    padding: 10px 12px; background: #fff; color: #172033; font-weight: 650;
+    outline: none;
+  }
+  .fornecedores-field textarea { min-height: 82px; resize: vertical; }
+  .fornecedores-alert {
+    border-radius: 13px; padding: 10px 12px; margin-bottom: 12px; font-weight: 800;
+  }
+  .fornecedores-alert.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
+  .fornecedores-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+  .fornecedor-section {
+    margin: 16px 0; padding: 14px; border: 1px solid #bfdbfe;
+    border-left: 5px solid #2563eb; border-radius: 13px; background: #f8fafc;
+  }
+  .fornecedor-section-title { margin: 0 0 5px; color: #172033; font-size: 1rem; font-weight: 950; }
+  .fornecedor-section-note { margin: 0 0 12px; color: #64748b; font-size: 0.8rem; font-weight: 700; }
+  .fornecedor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .fornecedor-contato-card {
+    padding: 12px; border: 1px solid #dbe7f3; border-radius: 11px;
+    background: #ffffff; margin-bottom: 10px;
+  }
+  .fornecedor-contato-card-title { margin: 0 0 10px; font-weight: 950; font-size: 0.9rem; }
+  .fornecedor-check {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    border: 1px solid #e1e7ef; border-radius: 9px; padding: 9px 11px; background: #fff;
+    font-weight: 850;
+  }
+  .fornecedores-form-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  @media (max-width: 760px) {
+    .fornecedor-form-header { flex-direction: column; align-items: stretch; }
+    .fornecedor-grid { grid-template-columns: 1fr; }
+    .fornecedores-form-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  }
+</style>
+
+<div class="fornecedor-form-page">
+  <div class="fornecedor-form-shell">
+    <header class="fornecedor-form-header">
+      <h1 class="fornecedor-form-title">{{ titulo_formulario }}</h1>
+      <a href="{% url 'estoque:fornecedores' %}" class="fornecedores-btn fornecedores-btn-secondary">Voltar para fornecedores</a>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="fornecedores-alert {% if message.tags == 'error' %}error{% else %}success{% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <form method="post" class="fornecedor-form-card">
+      {% csrf_token %}
+
+      {% if form.errors %}
+        <div class="fornecedores-alert error">
+          Erros do fornecedor:
+          {% for field in form %}
+            {% for error in field.errors %}
+              <br>{{ field.label }}: {{ error }}
+            {% endfor %}
+          {% endfor %}
+          {% for error in form.non_field_errors %}
+            <br>{{ error }}
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if contatos_formset.errors %}
+        <div class="fornecedores-alert error">
+          Erros nos contatos:
+          {% for contato_form in contatos_formset.forms %}
+            {% for field in contato_form %}
+              {% for error in field.errors %}
+                <br>{{ field.label }}: {{ error }}
+              {% endfor %}
+            {% endfor %}
+            {% for error in contato_form.non_field_errors %}
+              <br>{{ error }}
+            {% endfor %}
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="fornecedor-grid">
+        <div class="fornecedores-field">
+          <label for="{{ form.nome.id_for_label }}">Nome</label>
+          {{ form.nome }}
+        </div>
+        <div class="fornecedores-field">
+          <label for="{{ form.nome_fantasia.id_for_label }}">Nome fantasia / apelido</label>
+          {{ form.nome_fantasia }}
+        </div>
+      </div>
+
+      <div class="fornecedor-grid">
+        <div class="fornecedores-field">
+          <label for="{{ form.telefone_whatsapp.id_for_label }}">WhatsApp</label>
+          {{ form.telefone_whatsapp }}
+        </div>
+        <div class="fornecedores-field">
+          <label for="{{ form.cidade.id_for_label }}">Cidade</label>
+          {{ form.cidade }}
+        </div>
+      </div>
+
+      <div class="fornecedores-field">
+        <label for="{{ form.bairro.id_for_label }}">Bairro</label>
+        {{ form.bairro }}
+      </div>
+
+      <section class="fornecedor-section">
+        <h3 class="fornecedor-section-title">Financeiro do fornecedor</h3>
+        <p class="fornecedor-section-note">Defina o padrão que será puxado automaticamente na compra. Pode ser alterado na hora de salvar.</p>
+
+        <div class="fornecedor-grid">
+          <div class="fornecedores-field">
+            <label for="{{ form.forma_pagamento_padrao.id_for_label }}">Forma padrão</label>
+            {{ form.forma_pagamento_padrao }}
+          </div>
+          <div class="fornecedores-field">
+            <label for="{{ form.prazos_pagamento_padrao.id_for_label }}">Dias das parcelas</label>
+            {{ form.prazos_pagamento_padrao }}
+          </div>
+          <div class="fornecedores-field">
+            <label for="{{ form.dia_vencimento_cartao.id_for_label }}">Dia venc. cartão</label>
+            {{ form.dia_vencimento_cartao }}
+          </div>
+        </div>
+      </section>
+
+      <div class="fornecedores-field">
+        <label for="{{ form.observacao.id_for_label }}">Observação</label>
+        {{ form.observacao }}
+      </div>
+
+      <section class="fornecedor-section">
+        <h3 class="fornecedor-section-title">Contatos do fornecedor</h3>
+        <p class="fornecedor-section-note">Cadastre responsáveis diferentes, como vendedor, financeiro ou entrega.</p>
+
+        {{ contatos_formset.management_form }}
+
+        {% for contato_form in contatos_formset.forms %}
+          <div class="fornecedor-contato-card">
+            {% for hidden in contato_form.hidden_fields %}{{ hidden }}{% endfor %}
+            {% if contato_form.DELETE %}<span style="display:none;">{{ contato_form.DELETE }}</span>{% endif %}
+
+            <h4 class="fornecedor-contato-card-title">
+              {% if forloop.first %}Contato principal{% else %}Contato {{ forloop.counter }}{% endif %}
+            </h4>
+
+            <div class="fornecedor-grid">
+              <div class="fornecedores-field">
+                <label for="{{ contato_form.nome.id_for_label }}">Nome do responsável / vendedor</label>
+                {{ contato_form.nome }}
+              </div>
+              <div class="fornecedores-field">
+                <label for="{{ contato_form.cargo.id_for_label }}">Cargo / função</label>
+                {{ contato_form.cargo }}
+              </div>
+              <div class="fornecedores-field">
+                <label for="{{ contato_form.telefone_whatsapp.id_for_label }}">WhatsApp</label>
+                {{ contato_form.telefone_whatsapp }}
+              </div>
+            </div>
+
+            <div class="fornecedores-field">
+              <label for="{{ contato_form.observacao.id_for_label }}">Observação</label>
+              {{ contato_form.observacao }}
+            </div>
+
+            <div class="fornecedor-grid">
+              <label class="fornecedor-check" for="{{ contato_form.principal.id_for_label }}">
+                <span>Principal</span>
+                {{ contato_form.principal }}
+              </label>
+              <label class="fornecedor-check" for="{{ contato_form.ativo.id_for_label }}">
+                <span>Ativo</span>
+                {{ contato_form.ativo }}
+              </label>
+            </div>
+          </div>
+        {% endfor %}
+      </section>
+
+      <label class="fornecedor-check" for="{{ form.ativo.id_for_label }}">
+        <span>Fornecedor ativo</span>
+        {{ form.ativo }}
+      </label>
+
+      <div class="fornecedores-form-actions">
+        <a href="{% url 'estoque:fornecedores' %}" class="fornecedores-btn fornecedores-btn-secondary">Cancelar</a>
+        <button type="submit" class="fornecedores-btn fornecedores-btn-primary">Salvar fornecedor</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

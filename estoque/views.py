@@ -1876,6 +1876,86 @@ def fornecedores(request):
     )
 
 
+
+def _limpar_contatos_vazios_fornecedor(post_data):
+    total_contatos = int(post_data.get("contatos-TOTAL_FORMS") or 0)
+    for indice in range(total_contatos):
+        prefixo = f"contatos-{indice}"
+        contato_id = (post_data.get(f"{prefixo}-id") or "").strip()
+        nome = (post_data.get(f"{prefixo}-nome") or "").strip()
+        cargo = (post_data.get(f"{prefixo}-cargo") or "").strip()
+        telefone = (post_data.get(f"{prefixo}-telefone_whatsapp") or "").strip()
+        observacao_contato = (post_data.get(f"{prefixo}-observacao") or "").strip()
+
+        if not contato_id and not nome and not cargo and not telefone and not observacao_contato:
+            post_data[f"{prefixo}-DELETE"] = "on"
+
+    return post_data
+
+
+def fornecedor_novo(request):
+    if request.method == "POST":
+        post_data = _limpar_contatos_vazios_fornecedor(request.POST.copy())
+        form = FornecedorForm(post_data)
+        fornecedor_base = Fornecedor()
+        contatos_formset = FornecedorContatoFormSet(post_data, instance=fornecedor_base, prefix="contatos")
+
+        if form.is_valid() and contatos_formset.is_valid():
+            fornecedor = form.save()
+            contatos_formset.instance = fornecedor
+            contatos_formset.save()
+            messages.success(request, f'Fornecedor "{fornecedor.nome}" salvo com sucesso.')
+            return redirect(f"{reverse('estoque:fornecedores')}?fornecedor_salvo={fornecedor.id}")
+
+        messages.error(request, "Revise os campos destacados para salvar o fornecedor.")
+    else:
+        form = FornecedorForm(initial={"ativo": True})
+        contatos_formset = FornecedorContatoFormSet(instance=Fornecedor(), prefix="contatos")
+
+    return render(
+        request,
+        "estoque/fornecedor_form.html",
+        {
+            "form": form,
+            "contatos_formset": contatos_formset,
+            "fornecedor": None,
+            "titulo_formulario": "Novo fornecedor",
+        },
+    )
+
+
+def fornecedor_editar(request, pk):
+    fornecedor = get_object_or_404(Fornecedor, pk=pk)
+
+    if request.method == "POST":
+        post_data = _limpar_contatos_vazios_fornecedor(request.POST.copy())
+        form = FornecedorForm(post_data, instance=fornecedor)
+        contatos_formset = FornecedorContatoFormSet(post_data, instance=fornecedor, prefix="contatos")
+
+        if form.is_valid() and contatos_formset.is_valid():
+            fornecedor = form.save()
+            contatos_formset.instance = fornecedor
+            contatos_formset.save()
+            messages.success(request, f'Fornecedor "{fornecedor.nome}" salvo com sucesso.')
+            return redirect(f"{reverse('estoque:fornecedores')}?fornecedor_salvo={fornecedor.id}")
+
+        messages.error(request, "Revise os campos destacados para salvar o fornecedor.")
+    else:
+        form = FornecedorForm(instance=fornecedor)
+        contatos_formset = FornecedorContatoFormSet(instance=fornecedor, prefix="contatos")
+
+    return render(
+        request,
+        "estoque/fornecedor_form.html",
+        {
+            "form": form,
+            "contatos_formset": contatos_formset,
+            "fornecedor": fornecedor,
+            "titulo_formulario": "Editar fornecedor",
+        },
+    )
+
+
 def funcionarios(request):
     termo = request.GET.get("q", "").strip()
     funcionario_selecionado = None
