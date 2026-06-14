@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-br">
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -3414,6 +3414,7 @@ function normalizarNumeroVenda(valor) {
 
 function coletarItensVenda() {
     return Array.from(tabelaBody.querySelectorAll("tr")).map((tr) => ({
+        produto_id: tr.dataset.produtoId || "",
         produto_nome: tr.children[0].textContent.trim(),
         quantidade: normalizarNumeroVenda(tr.children[1].textContent),
         unidade: tr.children[2].textContent.trim(),
@@ -4812,3 +4813,4 @@ atualizarTotalGeral();
 </script>
 </body>
 </html>
+
