@@ -508,8 +508,14 @@
       if (produtoBusca.value.trim()) {
         fecharSugestoes(linha);
       } else {
-        mostrarSugestoes(linha, true);
-        definirSugestaoAtiva(linha, 0);
+        const primeiraOpcao = opcoesProduto(linha)[0];
+        if (primeiraOpcao) {
+          selecionarProduto(linha, primeiraOpcao);
+          produtoBusca.select();
+        } else {
+          mostrarSugestoes(linha, true);
+          definirSugestaoAtiva(linha, 0);
+        }
       }
     });
 
