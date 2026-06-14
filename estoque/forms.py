@@ -4,7 +4,7 @@ from django import forms
 
 from django.utils import timezone
 
-from .models import Categoria, Cliente, Fornecedor, FornecedorContato, Funcionario, PixRecebido, Produto, Unidade
+from .models import Categoria, Cliente, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, PixRecebido, Produto, Unidade
 from .utils import normalize_category_name, normalize_product_name
 
 
@@ -851,6 +851,114 @@ class PixRecebidoCorrecaoForm(forms.Form):
             raise forms.ValidationError("Informe um valor de Pix valido.")
         return valor_decimal
 
+class MeioPagamentoForm(forms.ModelForm):
+    class Meta:
+        model = MeioPagamento
+        fields = [
+            "nome",
+            "tipo",
+            "banco_ou_pessoa",
+            "final_cartao",
+            "dia_vencimento_cartao",
+            "principal",
+            "ativo",
+            "observacao",
+        ]
+        widgets = {
+            "nome": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Ex.: Cartão Lincoln Nubank",
+                "autocomplete": "off",
+                "onkeydown": "return cartaoEnterAvanca(event);",
+            }),
+            "tipo": forms.Select(attrs={
+                "class": "form-select",
+                "autofocus": True,
+                "onkeydown": "return cartaoEnterAvanca(event);",
+            }),
+            "banco_ou_pessoa": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Ex.: Nubank, Banco do Brasil",
+                "autocomplete": "off",
+                "onkeydown": "return cartaoEnterAvanca(event);",
+            }),
+            "final_cartao": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Só os 4 últimos números",
+                "autocomplete": "off",
+                "maxlength": "4",
+                "inputmode": "numeric",
+                "onkeydown": "return cartaoEnterAvanca(event);",
+            }),
+            "dia_vencimento_cartao": forms.NumberInput(attrs={
+                "class": "form-control",
+                "placeholder": "Ex.: 10",
+                "min": "1",
+                "max": "31",
+                "onkeydown": "return cartaoEnterAvanca(event);",
+            }),
+            "principal": forms.CheckboxInput(attrs={
+                "class": "form-check-input",
+            }),
+            "ativo": forms.CheckboxInput(attrs={
+                "class": "form-check-input",
+            }),
+            "observacao": forms.Textarea(attrs={
+                "class": "form-control",
+                "placeholder": "Observação opcional",
+                "rows": 3,
+            }),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["tipo"].initial = MeioPagamento.TIPO_CREDITO
+        self.fields["tipo"].choices = MeioPagamento.TIPO_CHOICES
+        self.fields["tipo"].widget.choices = MeioPagamento.TIPO_CHOICES
+
+    @staticmethod
+    def _nome_proprio(valor):
+        valor = " ".join(str(valor or "").strip().split())
+        if not valor:
+            return valor
+        return " ".join(parte[:1].upper() + parte[1:].lower() for parte in valor.split())
+
+    def clean_nome(self):
+        nome = self._nome_proprio(self.cleaned_data.get("nome"))
+        if not nome:
+            raise forms.ValidationError("Informe o nome do meio de pagamento.")
+
+        duplicados = MeioPagamento.objects.filter(nome__iexact=nome)
+        if self.instance and self.instance.pk:
+            duplicados = duplicados.exclude(pk=self.instance.pk)
+
+        if duplicados.exists():
+            raise forms.ValidationError("Já existe um meio de pagamento com esse nome.")
+
+        return nome
+
+    def clean_banco_ou_pessoa(self):
+        return self._nome_proprio(self.cleaned_data.get("banco_ou_pessoa")) or None
+
+
+    def clean_final_cartao(self):
+        final = "".join(caractere for caractere in str(self.cleaned_data.get("final_cartao") or "") if caractere.isdigit())
+        if final and len(final) != 4:
+            raise forms.ValidationError("Informe somente os 4 últimos números do cartão.")
+        return final or None
+
+    def clean(self):
+        cleaned_data = super().clean()
+        tipo = cleaned_data.get("tipo")
+        dia = cleaned_data.get("dia_vencimento_cartao")
+
+        if dia and (dia < 1 or dia > 31):
+            raise forms.ValidationError("O dia de vencimento do cartão deve ser entre 1 e 31.")
+
+        return cleaned_data
+
+
+
 class FornecedorForm(forms.ModelForm):
     class Meta:
         model = Fornecedor
@@ -912,6 +1020,12 @@ class FornecedorForm(forms.ModelForm):
                 "class": "form-check-input",
             }),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["tipo"].initial = MeioPagamento.TIPO_CREDITO
+        self.fields["tipo"].choices = MeioPagamento.TIPO_CHOICES
+        self.fields["tipo"].widget.choices = MeioPagamento.TIPO_CHOICES
 
     @staticmethod
     def _nome_proprio(valor):

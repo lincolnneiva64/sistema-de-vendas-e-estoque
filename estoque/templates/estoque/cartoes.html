@@ -1,0 +1,430 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Cartões</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{% static 'estoque/home.css' %}">
+  <style>
+    body {
+      background: #f5f7fb;
+      color: #172033;
+      font-family: Arial, sans-serif;
+      margin: 0;
+    }
+
+    .meios-page {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px 16px 40px;
+    }
+
+    .meios-topo {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+
+    .meios-topo h1 {
+      margin: 0;
+      font-size: 30px;
+      font-weight: 900;
+    }
+
+    .meios-btn {
+      border: 1px solid #9fc5ff;
+      background: #eaf3ff;
+      color: #143c73;
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-weight: 800;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .meios-card {
+      background: #fff;
+      border: 1px solid #d7dfef;
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+      margin-bottom: 18px;
+    }
+
+    .meios-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .meios-field label {
+      display: block;
+      font-size: 14px;
+      font-weight: 800;
+      color: #334155;
+      margin-bottom: 6px;
+    }
+
+    .meios-field input,
+    .meios-field select,
+    .meios-field textarea {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #d1d5db;
+      border-radius: 12px;
+      padding: 13px 14px;
+      min-height: 52px;
+      font-size: 16px;
+      font-weight: 700;
+      background: #fff;
+    }
+
+    .meios-checks {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .meios-check {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      border: 1px solid #d7dfef;
+      border-radius: 12px;
+      padding: 13px 14px;
+      font-weight: 800;
+      background: #f8fbff;
+    }
+
+    .meios-check input {
+      width: 18px;
+      height: 18px;
+    }
+
+    .meios-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    .meios-primary {
+      border: 0;
+      background: #2563eb;
+      color: #fff;
+      border-radius: 12px;
+      padding: 13px 18px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .meios-lista {
+      display: grid;
+      gap: 10px;
+    }
+
+    .meio-item {
+      border: 1px solid #d7dfef;
+      border-radius: 14px;
+      padding: 14px;
+      background: #fff;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .meio-nome {
+      font-weight: 900;
+      font-size: 18px;
+      margin-bottom: 4px;
+    }
+
+    .meio-meta {
+      color: #475569;
+      font-weight: 700;
+      line-height: 1.5;
+    }
+
+    .meio-badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 4px 8px;
+      background: #eaf3ff;
+      color: #1d4ed8;
+      font-size: 12px;
+      font-weight: 900;
+      margin-left: 6px;
+    }
+
+    .meio-inativo {
+      opacity: 0.58;
+    }
+
+    .meios-search {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .meios-search input {
+      flex: 1;
+      border: 1px solid #d1d5db;
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .meios-erros {
+      background: #fff1f2;
+      border: 1px solid #fecdd3;
+      color: #9f1239;
+      border-radius: 12px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      font-weight: 800;
+    }
+
+    @media (max-width: 720px) {
+      .meios-page {
+        padding: 16px 10px 30px;
+      }
+
+      .meios-grid,
+      .meios-checks {
+        grid-template-columns: 1fr;
+      }
+
+      .meio-item {
+        grid-template-columns: 1fr;
+      }
+
+      .meios-topo h1 {
+        font-size: 25px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="meios-page">
+    <div class="meios-topo">
+      <h1>Cartões</h1>
+      <a class="meios-btn" href="{% url 'estoque:home' %}">Voltar ao painel</a>
+    </div>
+
+    <section class="meios-card">
+      <h2 style="margin-top: 0;">Cartões cadastrados</h2>
+
+      <div class="meios-lista">
+        {% for meio in meios %}
+          <div class="meio-item {% if not meio.ativo %}meio-inativo{% endif %}">
+            <div>
+              <div class="meio-nome">
+                {{ meio.nome }}
+                {% if meio.principal %}<span class="meio-badge">Principal</span>{% endif %}
+                {% if not meio.ativo %}<span class="meio-badge">Inativo</span>{% endif %}
+              </div>
+              <div class="meio-meta">
+                Tipo: {{ meio.get_tipo_display }}
+                {% if meio.banco_ou_pessoa %}<br>Banco: {{ meio.banco_ou_pessoa }}{% endif %}
+                {% if meio.final_cartao %}<br>Final: {{ meio.final_cartao }}{% endif %}
+                {% if meio.dia_vencimento_cartao %}
+                  <br>Vencimento da fatura: dia {{ meio.dia_vencimento_cartao }}
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="meios-actions">
+              <a class="meios-btn" href="{% url 'estoque:cartoes' %}?meio={{ meio.id }}">Editar</a>
+            </div>
+          </div>
+        {% empty %}
+          <p>Nenhum cartão cadastrado.</p>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="meios-card">
+      <h2 style="margin-top: 0;">{% if meio_selecionado %}Editar cartão{% else %}Novo cartão{% endif %}</h2>
+
+      {% if form.errors %}
+        <div class="meios-erros">
+          Revise os campos destacados antes de salvar.
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <form method="post">
+        {% csrf_token %}
+        {% if meio_selecionado %}
+          <input type="hidden" name="meio_id" value="{{ meio_selecionado.id }}">
+        {% endif %}
+
+        <div class="meios-grid">
+          <div class="meios-field">
+            <label for="{{ form.tipo.id_for_label }}">Tipo de cartão</label>
+            {{ form.tipo }}
+            {{ form.tipo.errors }}
+          </div>
+
+          <div class="meios-field">
+            <label for="{{ form.nome.id_for_label }}">Nome do cartão</label>
+            {{ form.nome }}
+            {{ form.nome.errors }}
+          </div>
+
+          <div class="meios-field">
+            <label for="{{ form.banco_ou_pessoa.id_for_label }}">Banco</label>
+            {{ form.banco_ou_pessoa }}
+            {{ form.banco_ou_pessoa.errors }}
+          </div>
+
+          <div class="meios-field">
+            <label for="{{ form.final_cartao.id_for_label }}">Final do cartão</label>
+            {{ form.final_cartao }}
+            {{ form.final_cartao.errors }}
+          </div>
+
+          <div class="meios-field">
+            <label for="{{ form.dia_vencimento_cartao.id_for_label }}">Dia venc. fatura</label>
+            {{ form.dia_vencimento_cartao }}
+            {{ form.dia_vencimento_cartao.errors }}
+          </div>
+        </div>
+
+        <div class="meios-checks">
+          <label class="meios-check" for="{{ form.principal.id_for_label }}">
+            <span>Principal?</span>
+            {{ form.principal }}
+          </label>
+
+          <label class="meios-check" for="{{ form.ativo.id_for_label }}">
+            <span>Ativo?</span>
+            {{ form.ativo }}
+          </label>
+        </div>
+
+        <div class="meios-field" style="margin-top: 12px;">
+          <label for="{{ form.observacao.id_for_label }}">Observação</label>
+          {{ form.observacao }}
+          {{ form.observacao.errors }}
+        </div>
+
+        <div class="meios-actions">
+          {% if meio_selecionado %}
+            <a class="meios-btn" href="{% url 'estoque:cartoes' %}">Novo</a>
+          {% endif %}
+          <button class="meios-primary" type="submit">Salvar</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="meios-card">
+      <form class="meios-search" method="get">
+        <input type="search" name="q" value="{{ termo }}" placeholder="Buscar cartão">
+        <button class="meios-btn" type="submit">Buscar</button>
+      </form>
+
+      <p style="font-weight: 800; color: #475569;">
+        Total: {{ total_meios }} | Ativos: {{ meios_ativos }}
+      </p>
+
+      <div class="meios-lista">
+        {% for meio in meios %}
+          <div class="meio-item {% if not meio.ativo %}meio-inativo{% endif %}">
+            <div>
+              <div class="meio-nome">
+                {{ meio.nome }}
+                {% if meio.principal %}<span class="meio-badge">Principal</span>{% endif %}
+                {% if not meio.ativo %}<span class="meio-badge">Inativo</span>{% endif %}
+              </div>
+              <div class="meio-meta">
+                Tipo: {{ meio.get_tipo_display }}
+                {% if meio.banco_ou_pessoa %}<br>Banco: {{ meio.banco_ou_pessoa }}{% endif %}
+                {% if meio.final_cartao %}<br>Final: {{ meio.final_cartao }}{% endif %}
+                {% if meio.dia_vencimento_cartao %}
+                  <br>Vencimento da fatura: dia {{ meio.dia_vencimento_cartao }}
+                {% endif %}
+                {% if meio.observacao %}<br>{{ meio.observacao }}{% endif %}
+              </div>
+            </div>
+
+            <div class="meios-actions">
+              <a class="meios-btn" href="{% url 'estoque:cartoes' %}?meio={{ meio.id }}">Editar</a>
+
+              <form method="post" style="display:inline;">
+                {% csrf_token %}
+                <input type="hidden" name="acao" value="alternar_status">
+                <input type="hidden" name="meio_id" value="{{ meio.id }}">
+                <input type="hidden" name="ativo" value="{% if meio.ativo %}0{% else %}1{% endif %}">
+                <button class="meios-btn" type="submit">
+                  {% if meio.ativo %}Desativar{% else %}Ativar{% endif %}
+                </button>
+              </form>
+            </div>
+          </div>
+        {% empty %}
+          <p>Nenhum cartão cadastrado.</p>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+
+  <script>
+    function cartaoEnterAvanca(event) {
+      if (event.key !== "Enter") return true;
+
+      const alvo = event.target;
+      const tag = (alvo.tagName || "").toLowerCase();
+
+      if (tag === "textarea") return true;
+
+      event.preventDefault();
+
+      const campos = Array.from(document.querySelectorAll(
+        "input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])"
+      )).filter(function (campo) {
+        return campo.offsetParent !== null;
+      });
+
+      const indice = campos.indexOf(alvo);
+      const proximo = campos[indice + 1];
+
+      if (proximo) {
+        proximo.focus();
+        if (proximo.select && proximo.tagName.toLowerCase() !== "select") {
+          proximo.select();
+        }
+      }
+
+      return false;
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+      const tipo = document.getElementById("id_tipo");
+      const dia = document.getElementById("id_dia_vencimento_cartao");
+
+      function ajustarDiaCartao() {
+        if (!tipo || !dia) return;
+        const campo = dia.closest(".meios-field");
+        const ehCredito = tipo.value === "credito";
+        if (campo) campo.style.display = "";
+        dia.required = false;
+      }
+
+      if (tipo) {
+        tipo.addEventListener("change", ajustarDiaCartao);
+        ajustarDiaCartao();
+      }
+    });
+  </script>
+</body>
+</html>

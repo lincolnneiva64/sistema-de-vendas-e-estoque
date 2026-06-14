@@ -22,8 +22,8 @@ from urllib.parse import quote, urlencode
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count
-from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
+from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -1872,6 +1872,80 @@ def fornecedores(request):
             "termo": termo,
             "total_fornecedores": len(fornecedores_lista),
             "fornecedores_ativos": fornecedores_ativos,
+        },
+    )
+
+
+
+def meios_pagamento(request):
+    termo = request.GET.get("q", "").strip()
+    meio_selecionado = None
+    meios_url = reverse("estoque:cartoes")
+
+    meios_qs = MeioPagamento.objects.all().order_by(
+        "-ativo",
+        "tipo",
+        "-principal",
+        "nome",
+        "id",
+    )
+
+    if termo:
+        meios_qs = meios_qs.filter(
+            Q(nome__icontains=termo) |
+            Q(tipo__icontains=termo) |
+            Q(banco_ou_pessoa__icontains=termo) |
+            Q(observacao__icontains=termo)
+        )
+
+    if request.method == "POST":
+        acao = request.POST.get("acao")
+        meio_id = request.POST.get("meio_id")
+
+        if acao == "alternar_status" and meio_id:
+            meio = get_object_or_404(MeioPagamento, pk=meio_id)
+            meio.ativo = request.POST.get("ativo") == "1"
+            meio.save(update_fields=["ativo", "atualizado_em"])
+            status = "ativado" if meio.ativo else "desativado"
+            messages.success(request, f'Cartão "{meio.nome}" {status} com sucesso.')
+            return redirect(f"{meios_url}?meio={meio.id}")
+
+        if meio_id:
+            meio_selecionado = get_object_or_404(MeioPagamento, pk=meio_id)
+            form = MeioPagamentoForm(request.POST, instance=meio_selecionado)
+        else:
+            form = MeioPagamentoForm(request.POST)
+
+        if form.is_valid():
+            meio = form.save()
+            messages.success(request, f'Cartão "{meio.nome}" salvo com sucesso.')
+            return redirect(f"{meios_url}?meio={meio.id}")
+
+        messages.error(request, "Revise os campos destacados para salvar o meio de pagamento.")
+    else:
+        meio_id = request.GET.get("meio")
+        if meio_id:
+            meio_selecionado = get_object_or_404(MeioPagamento, pk=meio_id)
+            form = MeioPagamentoForm(instance=meio_selecionado)
+        else:
+            form = MeioPagamentoForm(initial={
+                "ativo": True,
+                "principal": False,
+            })
+
+    meios_lista = list(meios_qs)
+    meios_ativos = sum(1 for meio in meios_lista if meio.ativo)
+
+    return render(
+        request,
+        "estoque/cartoes.html",
+        {
+            "form": form,
+            "meios": meios_lista,
+            "meio_selecionado": meio_selecionado,
+            "termo": termo,
+            "total_meios": len(meios_lista),
+            "meios_ativos": meios_ativos,
         },
     )
 

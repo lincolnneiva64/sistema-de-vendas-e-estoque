@@ -865,6 +865,61 @@ class FornecedorContato(models.Model):
             ).exclude(pk=self.pk).update(principal=False)
 
 
+class MeioPagamento(models.Model):
+    TIPO_DEBITO = "debito"
+    TIPO_CREDITO = "credito"
+    TIPO_OUTRO = "outro"
+
+    TIPO_CHOICES = [
+        (TIPO_CREDITO, "Cartão de crédito"),
+        (TIPO_DEBITO, "Cartão de débito"),
+        (TIPO_OUTRO, "Outro cartão"),
+    ]
+
+    nome = models.CharField(max_length=120)
+    tipo = models.CharField(max_length=30, choices=TIPO_CHOICES)
+    banco_ou_pessoa = models.CharField(max_length=120, blank=True, null=True)
+    dono_titular = models.CharField(max_length=120, blank=True, null=True)
+    final_cartao = models.CharField(max_length=4, blank=True, null=True)
+    dia_vencimento_cartao = models.PositiveSmallIntegerField(blank=True, null=True)
+    principal = models.BooleanField(default=False)
+    ativo = models.BooleanField(default=True)
+    observacao = models.TextField(blank=True, null=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-ativo", "tipo", "-principal", "nome", "id"]
+
+    def __str__(self):
+        return self.nome
+
+    @staticmethod
+    def _nome_proprio(valor):
+        valor = " ".join(str(valor or "").strip().split())
+        if not valor:
+            return valor
+        return " ".join(parte[:1].upper() + parte[1:].lower() for parte in valor.split())
+
+    def save(self, *args, **kwargs):
+        self.nome = self._nome_proprio(self.nome)
+        self.banco_ou_pessoa = self._nome_proprio(self.banco_ou_pessoa) or None
+        self.dono_titular = self._nome_proprio(self.dono_titular) or None
+        self.final_cartao = "".join(caractere for caractere in str(self.final_cartao or "") if caractere.isdigit())[-4:] or None
+
+        if self.tipo != self.TIPO_CREDITO:
+            self.dia_vencimento_cartao = None
+
+        super().save(*args, **kwargs)
+
+        if self.principal:
+            MeioPagamento.objects.filter(
+                tipo=self.tipo,
+                principal=True,
+            ).exclude(pk=self.pk).update(principal=False)
+
+
+
 class ProdutoFornecedor(models.Model):
     produto = models.ForeignKey(
         Produto,
