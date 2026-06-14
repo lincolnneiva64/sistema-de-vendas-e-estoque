@@ -860,6 +860,9 @@ class FornecedorForm(forms.ModelForm):
             "telefone_whatsapp",
             "cidade",
             "bairro",
+            "forma_pagamento_padrao",
+            "prazos_pagamento_padrao",
+            "dia_vencimento_cartao",
             "observacao",
             "ativo",
         ]
@@ -889,6 +892,22 @@ class FornecedorForm(forms.ModelForm):
                 "class": "form-control",
                 "placeholder": "Bairro",
                 "autocomplete": "off",
+            }),
+
+            "forma_pagamento_padrao": forms.Select(attrs={
+                "class": "form-select",
+            }),
+            "prazos_pagamento_padrao": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Ex.: 7, 14, 21",
+                "autocomplete": "off",
+            }),
+            "dia_vencimento_cartao": forms.NumberInput(attrs={
+                "class": "form-control",
+                "min": "1",
+                "max": "31",
+                "step": "1",
+                "placeholder": "Ex.: 10",
             }),
             "observacao": forms.Textarea(attrs={
                 "class": "form-control",
@@ -930,6 +949,33 @@ class FornecedorForm(forms.ModelForm):
     def clean_bairro(self):
         return self._nome_proprio(self.cleaned_data.get("bairro"))
 
+
+
+    def clean_prazos_pagamento_padrao(self):
+        valor = (self.cleaned_data.get("prazos_pagamento_padrao") or "").strip()
+        if not valor:
+            return None
+
+        partes = [parte.strip() for parte in valor.replace(";", ",").split(",") if parte.strip()]
+        dias = []
+        for parte in partes:
+            if not parte.isdigit():
+                raise forms.ValidationError("Informe apenas dias separados por virgula. Exemplo: 7, 14, 21")
+            dia = int(parte)
+            if dia <= 0:
+                raise forms.ValidationError("Os dias de prazo devem ser maiores que zero.")
+            dias.append(str(dia))
+
+        return ", ".join(dias)
+
+
+    def clean_dia_vencimento_cartao(self):
+        dia = self.cleaned_data.get("dia_vencimento_cartao")
+        if dia in (None, ""):
+            return None
+        if dia < 1 or dia > 31:
+            raise forms.ValidationError("Informe um dia entre 1 e 31.")
+        return dia
 
 class FornecedorContatoForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):

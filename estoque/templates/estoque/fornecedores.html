@@ -94,12 +94,18 @@
   }
 
   .fornecedores-table td:nth-child(5)::before {
-    content: "Compras: ";
+    content: "Financeiro: ";
     font-weight: 850;
     color: #334155;
   }
 
   .fornecedores-table td:nth-child(6)::before {
+    content: "Compras: ";
+    font-weight: 850;
+    color: #334155;
+  }
+
+  .fornecedores-table td:nth-child(7)::before {
     content: "Produtos: ";
     font-weight: 850;
     color: #334155;
@@ -140,7 +146,7 @@
 {% block content %}
 <style>
   .fornecedores-page { color: #172033; padding: 18px 0 120px; }
-  .fornecedores-shell { max-width: 1320px; margin: 0 auto; padding: 0 18px; }
+  .fornecedores-shell { max-width: 1620px; margin: 0 auto; padding: 0 18px; }
   .fornecedores-header {
     display: flex; align-items: flex-end; justify-content: space-between;
     gap: 12px; margin-bottom: 12px;
@@ -177,7 +183,7 @@
     border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.13);
   }
   .fornecedores-grid {
-    display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.85fr);
+    display: grid; grid-template-columns: minmax(0, 2.25fr) minmax(360px, 0.75fr);
     gap: 14px; align-items: start;
   }
   .fornecedores-panel {
@@ -192,15 +198,15 @@
   .fornecedores-panel-title { margin: 0; font-size: 0.98rem; font-weight: 800; color: #111827; }
   .fornecedores-count { color: #64748b; font-size: 0.84rem; font-weight: 700; white-space: nowrap; }
   .fornecedores-table-wrap { overflow-x: auto; }
-  .fornecedores-table { width: 100%; border-collapse: collapse; min-width: 760px; }
+  .fornecedores-table { width: 100%; border-collapse: collapse; min-width: 980px; }
   .fornecedores-table th {
-    background: #f8fafc; color: #64748b; font-size: 0.7rem;
+    background: #f8fafc; color: #64748b; font-size: 0.66rem;
     letter-spacing: 0.04em; text-transform: uppercase;
     padding: 9px 11px; border-bottom: 1px solid #edf1f6; text-align: left;
   }
   .fornecedores-table td {
-    padding: 9px 11px; border-bottom: 1px solid #f0f3f8;
-    vertical-align: middle; font-size: 0.84rem;
+    padding: 8px 9px; border-bottom: 1px solid #f0f3f8;
+    vertical-align: middle; font-size: 0.82rem;
   }
   .fornecedores-row:hover td { background: #f8fbff; }
   .fornecedores-row.selecionado td { background: #eff6ff; border-bottom-color: #dbeafe; }
@@ -236,7 +242,7 @@
   }
   .status-ativo { background: #dcfce7; color: #166534; }
   .status-inativo { background: #f1f5f9; color: #64748b; }
-  .fornecedores-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .fornecedores-actions { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
   .status-action-form { margin: 0; }
   .status-action-btn,
   .fornecedores-action-link {
@@ -391,6 +397,7 @@
                   <th>Contatos</th>
                   <th>Localidade</th>
                   <th>Status</th>
+                  <th>Financeiro</th>
                   <th>Compras</th>
                   <th>Produtos</th>
                   <th>Acoes</th>
@@ -455,6 +462,15 @@
                         <span class="status-pill status-inativo">Inativo</span>
                       {% endif %}
                     </td>
+                    <td class="fornecedor-muted">
+                      {% if fornecedor.forma_pagamento_padrao == "aprazo" %}
+                        A prazo{% if fornecedor.prazos_pagamento_padrao %}: {{ fornecedor.prazos_pagamento_padrao }} dias{% endif %}
+                      {% elif fornecedor.forma_pagamento_padrao == "cartao" %}
+                        Cartão{% if fornecedor.dia_vencimento_cartao %}: vence dia {{ fornecedor.dia_vencimento_cartao }}{% endif %}
+                      {% else %}
+                        À vista
+                      {% endif %}
+                    </td>
                     <td class="fornecedor-muted">{{ fornecedor.total_compras }}</td>
                     <td class="fornecedor-muted">{{ fornecedor.total_produtos }}</td>
                     <td>
@@ -494,6 +510,36 @@
             <input type="hidden" name="fornecedor_id" value="{{ fornecedor_selecionado.id }}">
           {% endif %}
 
+          {% if form.errors %}
+            <div class="fornecedores-alert error">
+              Erros do fornecedor:
+              {% for field in form %}
+                {% for error in field.errors %}
+                  <br>{{ field.label }}: {{ error }}
+                {% endfor %}
+              {% endfor %}
+              {% for error in form.non_field_errors %}
+                <br>{{ error }}
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          {% if contatos_formset.errors %}
+            <div class="fornecedores-alert error">
+              Erros nos contatos:
+              {% for contato_form in contatos_formset.forms %}
+                {% for field in contato_form %}
+                  {% for error in field.errors %}
+                    <br>{{ field.label }}: {{ error }}
+                  {% endfor %}
+                {% endfor %}
+                {% for error in contato_form.non_field_errors %}
+                  <br>{{ error }}
+                {% endfor %}
+              {% endfor %}
+            </div>
+          {% endif %}
+
           <div class="fornecedores-field">
             <label for="{{ form.nome.id_for_label }}">Nome</label>
             {{ form.nome }}
@@ -519,6 +565,30 @@
             <label for="{{ form.bairro.id_for_label }}">Bairro</label>
             {{ form.bairro }}
           </div>
+
+          <section class="fornecedor-contatos-section" aria-labelledby="fornecedor-financeiro-title">
+            <h3 class="fornecedor-contatos-title" id="fornecedor-financeiro-title">Financeiro do fornecedor</h3>
+            <p class="fornecedor-contatos-note">Defina o padrão que será puxado automaticamente na compra. Pode ser alterado na hora de salvar.</p>
+
+            <div class="fornecedor-contato-grid">
+              <div class="fornecedores-field">
+                <label for="{{ form.forma_pagamento_padrao.id_for_label }}">Forma padrão</label>
+                {{ form.forma_pagamento_padrao }}
+              </div>
+
+              <div class="fornecedores-field">
+                <label for="{{ form.prazos_pagamento_padrao.id_for_label }}">Dias das parcelas</label>
+                {{ form.prazos_pagamento_padrao }}
+                {% for error in form.prazos_pagamento_padrao.errors %}<div class="fornecedores-alert error">{{ error }}</div>{% endfor %}
+              </div>
+
+              <div class="fornecedores-field">
+                <label for="{{ form.dia_vencimento_cartao.id_for_label }}">Dia venc. cartão</label>
+                {{ form.dia_vencimento_cartao }}
+                {% for error in form.dia_vencimento_cartao.errors %}<div class="fornecedores-alert error">{{ error }}</div>{% endfor %}
+              </div>
+            </div>
+          </section>
 
           <div class="fornecedores-field">
             <label for="{{ form.observacao.id_for_label }}">Observacao</label>
@@ -802,12 +872,18 @@
   }
 
   .fornecedores-table td:nth-child(5)::before {
-    content: "Compras: ";
+    content: "Financeiro: ";
     font-weight: 850;
     color: #334155;
   }
 
   .fornecedores-table td:nth-child(6)::before {
+    content: "Compras: ";
+    font-weight: 850;
+    color: #334155;
+  }
+
+  .fornecedores-table td:nth-child(7)::before {
     content: "Produtos: ";
     font-weight: 850;
     color: #334155;

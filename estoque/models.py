@@ -769,11 +769,23 @@ class ItemPedido(models.Model):
 
 
 class Fornecedor(models.Model):
+    FORMA_AVISTA = "avista"
+    FORMA_APRAZO = "aprazo"
+    FORMA_CARTAO = "cartao"
+    FORMA_PAGAMENTO_CHOICES = [
+        (FORMA_AVISTA, "À vista"),
+        (FORMA_APRAZO, "A prazo / boleto"),
+        (FORMA_CARTAO, "Cartão de crédito"),
+    ]
+
     nome = models.CharField(max_length=140)
     nome_fantasia = models.CharField(max_length=140, blank=True, null=True)
     telefone_whatsapp = models.CharField(max_length=30, blank=True, null=True)
     cidade = models.CharField(max_length=80, blank=True, null=True)
     bairro = models.CharField(max_length=80, blank=True, null=True)
+    forma_pagamento_padrao = models.CharField(max_length=20, choices=FORMA_PAGAMENTO_CHOICES, default=FORMA_AVISTA)
+    prazos_pagamento_padrao = models.CharField(max_length=120, blank=True, null=True, help_text="Exemplo: 7, 14, 21")
+    dia_vencimento_cartao = models.PositiveSmallIntegerField(blank=True, null=True)
     observacao = models.TextField(blank=True, null=True)
     ativo = models.BooleanField(default=True)
     criado_em = models.DateTimeField(auto_now_add=True)

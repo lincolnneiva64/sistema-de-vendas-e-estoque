@@ -1820,13 +1820,26 @@ def fornecedores(request):
                 params["q"] = termo
             return redirect(f"{fornecedores_url}?{urlencode(params)}")
 
+        post_data = request.POST.copy()
+        total_contatos = int(post_data.get("contatos-TOTAL_FORMS") or 0)
+        for indice in range(total_contatos):
+            prefixo = f"contatos-{indice}"
+            contato_id = (post_data.get(f"{prefixo}-id") or "").strip()
+            nome = (post_data.get(f"{prefixo}-nome") or "").strip()
+            cargo = (post_data.get(f"{prefixo}-cargo") or "").strip()
+            telefone = (post_data.get(f"{prefixo}-telefone_whatsapp") or "").strip()
+            observacao_contato = (post_data.get(f"{prefixo}-observacao") or "").strip()
+
+            if not contato_id and not nome and not cargo and not telefone and not observacao_contato:
+                post_data[f"{prefixo}-DELETE"] = "on"
+
         if fornecedor_id:
             fornecedor_selecionado = get_object_or_404(Fornecedor, pk=fornecedor_id)
-            form = FornecedorForm(request.POST, instance=fornecedor_selecionado)
-            contatos_formset = FornecedorContatoFormSet(request.POST, instance=fornecedor_selecionado, prefix="contatos")
+            form = FornecedorForm(post_data, instance=fornecedor_selecionado)
+            contatos_formset = FornecedorContatoFormSet(post_data, instance=fornecedor_selecionado, prefix="contatos")
         else:
-            form = FornecedorForm(request.POST)
-            contatos_formset = FornecedorContatoFormSet(request.POST, instance=Fornecedor(), prefix="contatos")
+            form = FornecedorForm(post_data)
+            contatos_formset = FornecedorContatoFormSet(post_data, instance=Fornecedor(), prefix="contatos")
 
         if form.is_valid() and contatos_formset.is_valid():
             fornecedor = form.save()
