@@ -349,6 +349,17 @@
     return opcoes[proximoIndice] || null;
   }
 
+  function atualizarEstoquePreviewCompra(linha, opt) {
+    const estoqueValor = linha.querySelector(".produto-estoque-valor");
+    if (!estoqueValor) return;
+
+    if (opt) {
+      estoqueValor.textContent = opt.dataset.estoque || "0";
+    } else {
+      estoqueValor.textContent = "-";
+    }
+  }
+
   function botoesSugestao(linha) {
     return Array.from(linha.querySelectorAll(".produto-sugestao"));
   }
@@ -399,6 +410,9 @@
       .slice(0, 10);
 
     sugestoes.innerHTML = "";
+
+    atualizarEstoquePreviewCompra(linha, encontradas[0] || null);
+
     if (!encontradas.length) {
       sugestoes.innerHTML = '<div class="produto-sugestao-vazia">Nenhum produto encontrado</div>';
       sugestoes.classList.add("aberta");
