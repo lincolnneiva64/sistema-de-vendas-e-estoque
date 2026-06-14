@@ -312,6 +312,16 @@
     return opcoesProduto(linha).find((opt) => opt.value === String(produtoId)) || null;
   }
 
+  function proximaOpcaoProduto(linha, produtoIdAtual) {
+    const opcoes = opcoesProduto(linha);
+    if (!opcoes.length) return null;
+
+    const indiceAtual = opcoes.findIndex((opt) => opt.value === String(produtoIdAtual || ""));
+    const proximoIndice = indiceAtual >= 0 ? indiceAtual + 1 : 0;
+
+    return opcoes[proximoIndice] || null;
+  }
+
   function botoesSugestao(linha) {
     return Array.from(linha.querySelectorAll(".produto-sugestao"));
   }
@@ -457,18 +467,29 @@
 
   function focarProximaLinha(linha) {
     const produtoBusca = linha.querySelector('[name="produto_busca[]"]');
+    const produtoAtual = linha.querySelector('[name="produto_id[]"]');
+
     if (!produtoSelecionadoValido(linha)) {
-      mostrarSugestoes(linha);
+      mostrarSugestoes(linha, true);
+      definirSugestaoAtiva(linha, 0);
       focarCampo(produtoBusca);
       return;
     }
 
     const linhaDestino = proximaLinhaVazia(linha) || criarLinhaItem();
+
     if (linhaSemProduto(linhaDestino)) {
       limparLinhaItem(linhaDestino);
+
+      const proximaOpcao = proximaOpcaoProduto(linhaDestino, produtoAtual ? produtoAtual.value : "");
+      if (proximaOpcao) {
+        selecionarProduto(linhaDestino, proximaOpcao);
+      }
     }
+
     const produtoDestino = linhaDestino.querySelector('[name="produto_busca[]"]');
     focarCampo(produtoDestino);
+    produtoDestino.select();
   }
 
   function ligarLinha(linha) {
@@ -483,7 +504,13 @@
 
     produtoBusca.addEventListener("focus", function() {
       produtoBusca.select();
-      fecharSugestoes(linha);
+
+      if (produtoBusca.value.trim()) {
+        fecharSugestoes(linha);
+      } else {
+        mostrarSugestoes(linha, true);
+        definirSugestaoAtiva(linha, 0);
+      }
     });
 
     produtoBusca.addEventListener("input", function() {
