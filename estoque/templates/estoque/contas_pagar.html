@@ -1,0 +1,177 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Contas a pagar{% endblock %}
+{% block content %}
+<style>
+  .contas-pagar-page { max-width:1120px; margin:18px auto 90px; padding:0 14px; color:#172033; }
+  .contas-pagar-header { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; margin-bottom:12px; }
+  .contas-pagar-title { margin:0; font-size:1.55rem; font-weight:900; }
+  .contas-pagar-subtitle { margin:3px 0 0; color:#64748b; font-weight:700; }
+  .contas-pagar-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+  .contas-pagar-btn { border:0; border-radius:9px; padding:9px 14px; font-weight:850; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; min-height:40px; cursor:pointer; transition:transform .08s ease, filter .08s ease, box-shadow .08s ease; }
+  .contas-pagar-btn:active { transform:scale(.96); filter:brightness(.92); box-shadow:inset 0 3px 8px rgba(15,23,42,.22); }
+  .contas-pagar-btn-primary { background:#2563eb; color:#fff; }
+  .contas-pagar-btn-secondary { background:#dbeafe; color:#164173; border:1px solid #7ea6d9; }
+  .contas-pagar-btn-success { background:#dcfce7; color:#166534; border:1px solid #86efac; }
+  .contas-pagar-card { background:#fff; border:1px solid #e1e7ef; border-radius:14px; box-shadow:0 14px 30px rgba(15,23,42,.06); margin-bottom:12px; overflow:hidden; }
+  .contas-pagar-resumo { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .contas-pagar-resumo-item { background:#fffbeb; border:1.5px solid #f59e0b; border-radius:12px; padding:12px; }
+  .contas-pagar-resumo-label { display:block; color:#92400e; font-size:.78rem; font-weight:900; text-transform:uppercase; }
+  .contas-pagar-resumo-valor { display:block; margin-top:4px; font-size:1.2rem; font-weight:950; color:#172033; }
+  .contas-pagar-filtros { padding:14px 16px; display:grid; grid-template-columns:1.4fr .7fr auto auto; gap:8px; align-items:end; }
+  .contas-pagar-field label { display:block; font-weight:850; font-size:.82rem; margin-bottom:4px; color:#334155; }
+  .contas-pagar-field input, .contas-pagar-field select { width:100%; border:1.5px solid #d3dbe8; border-radius:9px; padding:9px 11px; font-weight:750; outline:none; min-height:40px; }
+  .contas-pagar-table { width:100%; border-collapse:collapse; }
+  .contas-pagar-table th { text-align:left; font-size:.72rem; color:#64748b; text-transform:uppercase; background:#f8fafc; padding:10px; border-bottom:1px solid #edf1f6; }
+  .contas-pagar-table td { padding:10px; border-bottom:1px solid #f0f3f8; vertical-align:middle; font-weight:750; }
+  .contas-pagar-status { display:inline-flex; border-radius:999px; padding:4px 9px; background:#eef6ff; color:#164173; font-weight:900; font-size:.8rem; }
+  .contas-pagar-valor { font-weight:950; color:#166534; white-space:nowrap; }
+  .contas-pagar-atrasada { background:#fff7ed; }
+  .contas-pagar-mobile { display:none; }
+  .contas-pagar-mobile-card { background:#fff; border:1px solid #e1e7ef; border-radius:12px; box-shadow:0 10px 22px rgba(15,23,42,.07); padding:12px; margin-bottom:10px; }
+  .contas-pagar-mobile-top { display:flex; justify-content:space-between; gap:8px; align-items:flex-start; margin-bottom:8px; }
+  .contas-pagar-mobile-title { font-weight:950; font-size:1rem; }
+  .contas-pagar-mobile-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+  .contas-pagar-mobile-label { display:block; color:#64748b; font-size:.74rem; font-weight:900; text-transform:uppercase; }
+  .contas-pagar-mobile-value { display:block; font-weight:850; color:#172033; }
+  .contas-pagar-empty { padding:24px 14px; text-align:center; color:#64748b; font-weight:800; }
+
+  @media (max-width:760px) {
+    .contas-pagar-page { margin-top:14px; padding:0 10px 80px; }
+    .contas-pagar-header { flex-direction:column; align-items:stretch; }
+    .contas-pagar-actions { justify-content:stretch; }
+    .contas-pagar-btn { flex:1 1 auto; }
+    .contas-pagar-resumo { grid-template-columns:1fr; }
+    .contas-pagar-filtros { grid-template-columns:1fr; padding:12px; }
+    .contas-pagar-desktop { display:none; }
+    .contas-pagar-mobile { display:block; }
+  }
+</style>
+
+<div class="contas-pagar-page">
+  <header class="contas-pagar-header">
+    <div>
+      <h1 class="contas-pagar-title">Contas a pagar</h1>
+      <p class="contas-pagar-subtitle">Visão geral das dívidas com fornecedores.</p>
+    </div>
+    <div class="contas-pagar-actions">
+      <a href="{% url 'estoque:compras_nova' %}" class="contas-pagar-btn contas-pagar-btn-primary">Nova compra</a>
+      <a href="{% url 'estoque:compras_lista' %}" class="contas-pagar-btn contas-pagar-btn-secondary">Compras</a>
+      <a href="{% url 'estoque:home' %}" class="contas-pagar-btn contas-pagar-btn-secondary">Painel</a>
+    </div>
+  </header>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div style="border-radius:12px; padding:9px 12px; margin-bottom:10px; font-weight:800; background:#ecfdf3; border:1px solid #b7e4c7; color:#166534;">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <section class="contas-pagar-resumo" style="margin-bottom:12px;">
+    <div class="contas-pagar-resumo-item">
+      <span class="contas-pagar-resumo-label">Total em aberto</span>
+      <span class="contas-pagar-resumo-valor">R$ {{ total_aberto|floatformat:2 }}</span>
+    </div>
+    <div class="contas-pagar-resumo-item">
+      <span class="contas-pagar-resumo-label">Total listado</span>
+      <span class="contas-pagar-resumo-valor">R$ {{ total_original|floatformat:2 }}</span>
+    </div>
+  </section>
+
+  <section class="contas-pagar-card">
+    <form method="get" class="contas-pagar-filtros">
+      <div class="contas-pagar-field">
+        <label>Buscar fornecedor ou compra</label>
+        <input type="search" name="q" value="{{ termo }}" placeholder="Fornecedor, compra ou observação">
+      </div>
+      <div class="contas-pagar-field">
+        <label>Status</label>
+        <select name="status">
+          <option value="abertas" {% if status == "abertas" %}selected{% endif %}>Abertas</option>
+          <option value="todas" {% if status == "todas" %}selected{% endif %}>Todas</option>
+          {% for valor, texto in status_choices %}
+            <option value="{{ valor }}" {% if status == valor %}selected{% endif %}>{{ texto }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="contas-pagar-btn contas-pagar-btn-primary">Buscar</button>
+      {% if termo or status != "abertas" %}
+        <a href="{% url 'estoque:contas_pagar' %}" class="contas-pagar-btn contas-pagar-btn-secondary">Limpar</a>
+      {% endif %}
+    </form>
+  </section>
+
+  <section class="contas-pagar-card contas-pagar-desktop">
+    <table class="contas-pagar-table">
+      <thead>
+        <tr>
+          <th>Fornecedor</th>
+          <th>Compra</th>
+          <th>Vencimento</th>
+          <th>Status</th>
+          <th>Original</th>
+          <th>Aberto</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for conta in contas %}
+          <tr>
+            <td>{{ conta.fornecedor.nome|default:"Fornecedor não informado" }}</td>
+            <td><a href="{% url 'estoque:compras_detalhe' conta.compra.pk %}" class="contas-pagar-btn contas-pagar-btn-secondary">#{{ conta.compra.id }}</a></td>
+            <td>{{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</td>
+            <td><span class="contas-pagar-status">{{ conta.get_status_display }}</span></td>
+            <td class="contas-pagar-valor">R$ {{ conta.valor_original|floatformat:2 }}</td>
+            <td class="contas-pagar-valor">R$ {{ conta.valor_em_aberto|floatformat:2 }}</td>
+            <td>
+              {% if conta.status != "paga" and conta.status != "cancelada" %}
+                <a href="{% url 'estoque:conta_pagar_baixar' conta.pk %}" class="contas-pagar-btn contas-pagar-btn-success">Baixar</a>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="7" class="contas-pagar-empty">Nenhuma conta encontrada.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="contas-pagar-mobile">
+    {% for conta in contas %}
+      <article class="contas-pagar-mobile-card">
+        <div class="contas-pagar-mobile-top">
+          <span class="contas-pagar-mobile-title">{{ conta.fornecedor.nome|default:"Fornecedor não informado" }}</span>
+          <span class="contas-pagar-status">{{ conta.get_status_display }}</span>
+        </div>
+        <div class="contas-pagar-mobile-grid">
+          <div>
+            <span class="contas-pagar-mobile-label">Compra</span>
+            <span class="contas-pagar-mobile-value">#{{ conta.compra.id }}</span>
+          </div>
+          <div>
+            <span class="contas-pagar-mobile-label">Vencimento</span>
+            <span class="contas-pagar-mobile-value">{{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</span>
+          </div>
+          <div>
+            <span class="contas-pagar-mobile-label">Original</span>
+            <span class="contas-pagar-mobile-value contas-pagar-valor">R$ {{ conta.valor_original|floatformat:2 }}</span>
+          </div>
+          <div>
+            <span class="contas-pagar-mobile-label">Aberto</span>
+            <span class="contas-pagar-mobile-value contas-pagar-valor">R$ {{ conta.valor_em_aberto|floatformat:2 }}</span>
+          </div>
+        </div>
+        <div class="contas-pagar-actions">
+          <a href="{% url 'estoque:compras_detalhe' conta.compra.pk %}" class="contas-pagar-btn contas-pagar-btn-secondary">Ver compra</a>
+          {% if conta.status != "paga" and conta.status != "cancelada" %}
+            <a href="{% url 'estoque:conta_pagar_baixar' conta.pk %}" class="contas-pagar-btn contas-pagar-btn-success">Baixar</a>
+          {% endif %}
+        </div>
+      </article>
+    {% empty %}
+      <div class="contas-pagar-mobile-card contas-pagar-empty">Nenhuma conta encontrada.</div>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}

@@ -1687,13 +1687,47 @@ def fornecedor_contas_pagar_abertas(request, fornecedor_id):
     })
 
 
+
+def contas_pagar_abertas_geral(request):
+    contas = (
+        ContaPagar.objects
+        .select_related("compra", "fornecedor")
+        .filter(valor_em_aberto__gt=0)
+        .exclude(status__in=[ContaPagar.STATUS_PAGA, ContaPagar.STATUS_CANCELADA])
+        .order_by("data_vencimento", "fornecedor__nome", "id")
+    )
+
+    total_aberto = sum((conta.valor_em_aberto for conta in contas), Decimal("0.00"))
+
+    contas_payload = []
+    for conta in contas:
+        contas_payload.append({
+            "id": conta.id,
+            "compra_id": conta.compra_id,
+            "fornecedor_id": conta.fornecedor_id,
+            "fornecedor": conta.fornecedor.nome if conta.fornecedor else "Fornecedor nao informado",
+            "data_vencimento": conta.data_vencimento.strftime("%d/%m/%Y") if conta.data_vencimento else "-",
+            "valor_original": str(conta.valor_original.quantize(Decimal("0.01"))),
+            "valor_em_aberto": str(conta.valor_em_aberto.quantize(Decimal("0.01"))),
+            "status": conta.status,
+            "status_texto": conta.get_status_display(),
+        })
+
+    return JsonResponse({
+        "ok": True,
+        "total_aberto": str(total_aberto.quantize(Decimal("0.01"))),
+        "quantidade": len(contas_payload),
+        "contas": contas_payload,
+    })
+
+
 def conta_pagar_baixar(request, pk):
     if request.method != "POST":
         return JsonResponse({"ok": False, "erro": "Metodo nao permitido."}, status=405)
 
     with transaction.atomic():
         conta = get_object_or_404(
-            ContaPagar.objects.select_for_update().select_related("fornecedor", "compra"),
+            ContaPagar.objects.select_for_update(),
             pk=pk,
         )
 
@@ -9434,3 +9468,42 @@ def pedido_detalhe(request, pk):
         "pedido_editado": request.GET.get("pedido_editado") == "1",
         "pedido_cancelado": request.GET.get("pedido_cancelado") == "1",
     })
+
+
+def contas_pagar(request):
+    termo = request.GET.get("q", "").strip()
+    status = request.GET.get("status", "abertas").strip()
+
+    contas_base = ContaPagar.objects.select_related("fornecedor", "compra").order_by("data_vencimento", "id")
+
+    if termo:
+        contas_base = contas_base.filter(
+            Q(fornecedor__nome__icontains=termo)
+            | Q(compra__id__icontains=termo)
+            | Q(observacao__icontains=termo)
+        )
+
+    if status == "abertas":
+        contas = contas_base.filter(status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL])
+    elif status in {ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL, ContaPagar.STATUS_PAGA, ContaPagar.STATUS_CANCELADA}:
+        contas = contas_base.filter(status=status)
+    else:
+        status = "todas"
+        contas = contas_base
+
+    contas_abertas = contas.filter(status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL])
+    total_aberto = contas_abertas.aggregate(total=Sum("valor_em_aberto")).get("total") or Decimal("0.00")
+    total_original = contas.aggregate(total=Sum("valor_original")).get("total") or Decimal("0.00")
+
+    return render(
+        request,
+        "estoque/contas_pagar.html",
+        {
+            "contas": contas,
+            "termo": termo,
+            "status": status,
+            "total_aberto": total_aberto,
+            "total_original": total_original,
+            "status_choices": ContaPagar.STATUS_CHOICES,
+        },
+    )
