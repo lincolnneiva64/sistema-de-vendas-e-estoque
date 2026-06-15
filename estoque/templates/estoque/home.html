@@ -733,6 +733,102 @@
     }
 }
 
+
+  .produtos-busca-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.8fr);
+    gap: 10px;
+    align-items: end;
+  }
+
+  .label-filtro-produto {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    color: #495057;
+    margin-bottom: 4px;
+  }
+
+  #filtroCategoriaProduto {
+    min-height: 50px;
+    border: 1px solid #cbd8e6;
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  @media (max-width: 640px) {
+    .produtos-busca-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+
+  /* reforço visual dos campos de filtro */
+  #buscarProduto,
+  #filtroCategoriaProduto {
+    min-height: 58px !important;
+    background: #ffffff !important;
+    border: 2px solid #b8c4d3 !important;
+    border-radius: 14px !important;
+    padding: 12px 16px !important;
+    font-size: 16px !important;
+    color: #1f2937 !important;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06) !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+
+  #buscarProduto::placeholder,
+  #filtroCategoriaProduto::placeholder {
+    color: #6b7280 !important;
+    opacity: 1 !important;
+  }
+
+  #buscarProduto:hover,
+  #filtroCategoriaProduto:hover {
+    border-color: #94a3b8 !important;
+    background: #ffffff !important;
+  }
+
+  #buscarProduto:focus,
+  #filtroCategoriaProduto:focus {
+    background: #ffffff !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.18) !important;
+    outline: none !important;
+  }
+
+  .label-filtro-produto {
+    color: #334155 !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    margin-bottom: 6px !important;
+  }
+
+
+  /* ajuste fino dos campos de filtro */
+  #buscarProduto,
+  #filtroCategoriaProduto {
+    min-height: 48px !important;
+    height: 48px !important;
+    border: 2px solid #9aa9bb !important;
+    border-radius: 13px !important;
+    padding: 9px 14px !important;
+    font-size: 16px !important;
+    box-shadow: 0 1px 5px rgba(15, 23, 42, 0.05) !important;
+  }
+
+  #buscarProduto:focus,
+  #filtroCategoriaProduto:focus {
+    border-color: #2563eb !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16) !important;
+  }
+
+  .label-filtro-produto {
+    margin-bottom: 5px !important;
+  }
+
 </style>
 <div class="container mt-4 produtos-mobile-page">
   {% if messages %}
@@ -881,13 +977,38 @@ align-items: center;
   
 <div class="fade-wrapper produtos-busca" id="fadeWrapper">
   <div class="container" style="margin:10px auto; max-width:720px;">
-  <input 
-    type="text"
-    id="buscarProduto"
-    class="form-control"
-    placeholder="Buscar produto..."
-  >
-</div>
+    <div class="produtos-busca-grid">
+      <div>
+        <label for="buscarProduto" class="label-filtro-produto">Produto</label>
+        <input 
+          type="text"
+          id="buscarProduto"
+          class="form-control"
+          placeholder="Buscar produto..."
+        >
+      </div>
+
+      <div>
+        <label for="filtroCategoriaProduto" class="label-filtro-produto">Categoria</label>
+        <input
+          type="text"
+          id="filtroCategoriaProduto"
+          class="form-control"
+          list="listaCategoriasProduto"
+          placeholder="Todas as categorias"
+          autocomplete="off"
+        >
+        <datalist id="listaCategoriasProduto">
+          <option value="Sem categoria"></option>
+          {% for categoria in categorias_ativas %}
+            <option value="{{ categoria.nome }}"></option>
+          {% endfor %}
+        </datalist>
+      </div>
+    </div>
+
+    <div id="contadorFiltroCategoria" style="font-size: 12px; color: #6c757d; font-weight: 600; margin-top: 6px;"></div>
+  </div>
 </div>
 <div class="produtos-tabela-card" style="max-width: 720px; margin: 0 auto 90px auto; background: #fff; border: 1px solid #e9ecef; border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); overflow: hidden;">
   <table class="table table-hover mx-auto align-middle produtos-tabela" style="width: auto;">
@@ -905,7 +1026,7 @@ align-items: center;
 
     <tbody>
       {% for produto in produtos %}
-      <tr id="produto-{{ produto.id }}" data-produto-id="{{ produto.id }}" data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}" class="linha-produto {% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}" style="transition: all 0.15s ease;">
+      <tr id="produto-{{ produto.id }}" data-produto-id="{{ produto.id }}" data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}" data-categoria="{% if produto.categoria %}{{ produto.categoria|lower }}{% else %}__sem_categoria__{% endif %}" class="linha-produto {% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}" style="transition: all 0.15s ease;">
     <td class="produto-card-nome">{{ produto.nome|default:"Produto sem nome" }}
                                 <div class="produto-categoria-inline">{% if produto.categoria %}{{ produto.categoria }}{% else %}Sem categoria{% endif %}</div></td>
         <td class="td-quantidade">
@@ -1111,29 +1232,46 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
       .replace(/[\u0300-\u036f]/g, '');
   }
 
-  busca.addEventListener("keyup", function() {
+  const filtroCategoriaProduto = document.getElementById("filtroCategoriaProduto");
+  const contadorFiltroCategoria = document.getElementById("contadorFiltroCategoria");
+
+  function aplicarFiltrosProduto() {
     const termo = normalizarTexto(busca.value.trim());
+    const categoriaSelecionadaRaw = filtroCategoriaProduto ? filtroCategoriaProduto.value.trim() : "";
+    const categoriaSelecionada = categoriaSelecionadaRaw.toLowerCase() === "sem categoria" ? "__sem_categoria__" : normalizarTexto(categoriaSelecionadaRaw);
     let totalVisivel = 0;
 
     linhas.forEach(function(linha) {
       const nome = linha.children[0].textContent.trim();
-      const nomNormalizado = normalizarTexto(nome);
+      const nomeNormalizado = normalizarTexto(nome);
+      const categoriaLinhaRaw = linha.dataset.categoria || "__sem_categoria__";
+      const categoriaLinha = categoriaLinhaRaw === "__sem_categoria__" ? "__sem_categoria__" : normalizarTexto(categoriaLinhaRaw);
 
-      // Se houver termo de busca, filtrar por qualquer palavra que contenha o termo
-      if (termo === "" || nomNormalizado.includes(termo)) {
+      const passaBusca = termo === "" || nomeNormalizado.includes(termo);
+      const passaCategoria = categoriaSelecionada === "" || categoriaLinha.includes(categoriaSelecionada);
+
+      if (passaBusca && passaCategoria) {
         linha.style.display = "";
         totalVisivel++;
       } else {
         linha.style.display = "none";
+        linha.classList.remove("linha-selecionada");
       }
     });
 
-    // Mostrar/esconder mensagem de nenhum resultado
-    const msgNenhumResultado = document.getElementById('msgNenhumResultado');
-    if (totalVisivel === 0 && termo !== "") {
+    if (contadorFiltroCategoria) {
+      if (categoriaSelecionada || termo) {
+        contadorFiltroCategoria.textContent = totalVisivel + " produto(s) encontrado(s)";
+      } else {
+        contadorFiltroCategoria.textContent = "";
+      }
+    }
+
+    const msgNenhumResultado = document.getElementById("msgNenhumResultado");
+    if (totalVisivel === 0 && (termo !== "" || categoriaSelecionada !== "")) {
       if (!msgNenhumResultado) {
-        const mensagem = document.createElement('div');
-        mensagem.id = 'msgNenhumResultado';
+        const mensagem = document.createElement("div");
+        mensagem.id = "msgNenhumResultado";
         mensagem.style.cssText = `
           text-align: center;
           padding: 40px 20px;
@@ -1141,17 +1279,25 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
           font-size: 16px;
           font-weight: 500;
         `;
-        mensagem.textContent = 'Nenhum produto encontrado';
-        const tabela = document.querySelector('table');
+        mensagem.textContent = "Nenhum produto encontrado";
+        const tabela = document.querySelector("table");
         tabela.parentNode.insertBefore(mensagem, tabela.nextSibling);
+      } else {
+        msgNenhumResultado.style.display = "block";
       }
-      msgNenhumResultado.style.display = 'block';
     } else {
       if (msgNenhumResultado) {
-        msgNenhumResultado.style.display = 'none';
+        msgNenhumResultado.style.display = "none";
       }
     }
-  });
+  }
+
+  busca.addEventListener("keyup", aplicarFiltrosProduto);
+
+  if (filtroCategoriaProduto) {
+    filtroCategoriaProduto.addEventListener("input", aplicarFiltrosProduto);
+    filtroCategoriaProduto.addEventListener("change", aplicarFiltrosProduto);
+  }
 
   function centralizarProdutoDestacado(linhaDestacada) {
     requestAnimationFrame(function() {

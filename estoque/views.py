@@ -1183,6 +1183,8 @@ def home(request):
     lucro_bruto = total_faturamento - total_investido
     margem_percent = (lucro_bruto / total_faturamento * 100) if total_faturamento else 0
 
+    categorias_ativas = Categoria.objects.filter(ativa=True).order_by("nome")
+
     return render(
         request,
         "estoque/home.html",
@@ -1192,6 +1194,7 @@ def home(request):
             "form": form,
             "q": q,
             "filtro": filtro,
+            "categorias_ativas": categorias_ativas,
             "total_produtos": total_produtos,
             "zerado_count": zerado_count,
             "criticos_count": criticos_count,
