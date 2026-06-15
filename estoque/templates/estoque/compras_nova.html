@@ -1309,10 +1309,32 @@
         return;
       }
 
+      const produtoAtual = linhaAtual.querySelector('[name="produto_id[]"]');
+      const produtoAtualId = produtoAtual ? produtoAtual.value : "";
+
       publicarLinhaMobile(linhaAtual);
+
       const nova = criarLinhaItem();
-      moverLinhaParaFormularioMobile(nova);
-      focarCampo(nova.querySelector('[name="produto_busca[]"]'));
+
+      if (nova) {
+        const proximaOpcao = proximaOpcaoProduto(nova, produtoAtualId);
+        if (proximaOpcao) {
+          selecionarProduto(nova, proximaOpcao);
+        }
+
+        moverLinhaParaFormularioMobile(nova);
+        focarCampo(nova.querySelector('[name="produto_busca[]"]'));
+
+        if (compraMobile()) {
+          mostrarSugestoes(nova, true);
+          const botoes = botoesSugestao(nova);
+          const indiceProximo = botoes.findIndex(function(botao) {
+            return botao.dataset.produtoId === String(proximaOpcao ? proximaOpcao.value : "");
+          });
+          definirSugestaoAtiva(nova, indiceProximo >= 0 ? indiceProximo : 0);
+        }
+      }
+
       recalcular();
       return;
     }
