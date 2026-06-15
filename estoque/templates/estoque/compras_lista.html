@@ -7,11 +7,58 @@
   .compras-lista-title { margin:0; font-size:1.55rem; font-weight:850; }
   .compras-lista-subtitle { margin:4px 0 0; color:#64748b; font-weight:650; }
   .compras-lista-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
-  .compras-lista-btn { border:0; border-radius:9px; padding:9px 14px; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; min-height:40px; cursor:pointer; }
+  .compras-lista-btn { border:0; border-radius:9px; padding:9px 14px; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; min-height:40px; cursor:pointer; transition:transform .08s ease, filter .08s ease, box-shadow .08s ease; }
+  .compras-lista-btn:active { transform:scale(.96); filter:brightness(.92); box-shadow:inset 0 3px 8px rgba(15,23,42,.22); }
+  .compras-lista-btn:focus-visible { outline:3px solid #2563eb; outline-offset:2px; }
   .compras-lista-btn-primary { background:#2563eb; color:#fff; }
   .compras-lista-btn-secondary { background:#dbeafe; color:#164173; border:1px solid #7ea6d9; }
+  .compras-lista-btn-danger { background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; }
+  .compras-lista-btn-danger:hover { background:#fecaca; }
+  .compras-lista-acoes-linha { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .compras-lista-modal {
+    position:fixed;
+    inset:0;
+    z-index:3000;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:16px;
+    background:rgba(15,23,42,.48);
+  }
+  .compras-lista-modal.aberto { display:flex; }
+  .compras-lista-modal-caixa {
+    width:min(360px, 90vw);
+    background:#fff;
+    border-radius:14px;
+    box-shadow:0 24px 70px rgba(15,23,42,.28);
+    overflow:hidden;
+  }
+  .compras-lista-modal-topo {
+    padding:12px 14px;
+    border-bottom:1px solid #e5e7eb;
+    background:#fff7ed;
+  }
+  .compras-lista-modal-topo h2 {
+    margin:0;
+    color:#9a3412;
+    font-size:1.02rem;
+    font-weight:950;
+  }
+  .compras-lista-modal-corpo {
+    padding:12px 14px;
+    color:#172033;
+    font-weight:750;
+    line-height:1.45;
+  }
+.compras-lista-modal-acoes {
+    display:flex;
+    justify-content:flex-end;
+    gap:10px;
+    padding:10px 14px 14px;
+    background:#f8fafc;
+  }
   .compras-lista-card { background:#fff; border:1px solid #e1e7ef; border-radius:14px; box-shadow:0 14px 30px rgba(15,23,42,.06); margin-bottom:14px; overflow:hidden; }
-  .compras-lista-alert { border-radius:12px; padding:10px 12px; margin-bottom:12px; font-weight:750; }
+  .compras-lista-alert { border-radius:12px; padding:8px 10px; margin-bottom:12px; font-weight:750; }
   .compras-lista-alert.success { background:#ecfdf3; border:1px solid #b7e4c7; color:#166534; }
   .compras-lista-alert.error { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
   .compras-lista-busca { padding:14px 16px; display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; }
@@ -95,7 +142,19 @@
             <td>{{ compra.data_compra|date:"d/m/Y" }}</td>
             <td><span class="compras-lista-status">{{ compra.get_status_display }}</span></td>
             <td class="compras-lista-total">R$ {{ compra.total|floatformat:2 }}</td>
-            <td><a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-secondary">Ver detalhe</a></td>
+            <td>
+              <div class="compras-lista-acoes-linha">
+          <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-secondary">Ver detalhe</a>
+          <button type="button"
+                  class="compras-lista-btn compras-lista-btn-danger btnAbrirModalExcluirCompra"
+                  data-url="{% url 'estoque:compra_excluir' compra.pk %}"
+                  data-compra="#{{ compra.id }}"
+                  data-fornecedor="{{ compra.fornecedor.nome|default:'Fornecedor nao informado' }}"
+                  data-total="R$ {{ compra.total|floatformat:2 }}">
+            Excluir
+          </button>
+        </div>
+            </td>
           </tr>
         {% empty %}
           <tr>
@@ -127,11 +186,87 @@
             <span class="compras-lista-mobile-value compras-lista-total">R$ {{ compra.total|floatformat:2 }}</span>
           </div>
         </div>
-        <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-secondary">Ver detalhe</a>
+        <div class="compras-lista-acoes-linha">
+          <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-secondary">Ver detalhe</a>
+          <button type="button"
+                  class="compras-lista-btn compras-lista-btn-danger btnAbrirModalExcluirCompra"
+                  data-url="{% url 'estoque:compra_excluir' compra.pk %}"
+                  data-compra="#{{ compra.id }}"
+                  data-fornecedor="{{ compra.fornecedor.nome|default:'Fornecedor nao informado' }}"
+                  data-total="R$ {{ compra.total|floatformat:2 }}">
+            Excluir
+          </button>
+        </div>
       </article>
     {% empty %}
       <div class="compras-lista-mobile-card compras-lista-empty">Nenhuma compra encontrada.</div>
     {% endfor %}
   </section>
 </div>
+
+<div id="modalExcluirCompraLista" class="compras-lista-modal">
+  <div class="compras-lista-modal-caixa">
+    <div class="compras-lista-modal-topo">
+      <h2>Excluir compra?</h2>
+    </div>
+    <div class="compras-lista-modal-corpo">
+      <div id="textoModalExcluirCompraLista">Confirme a exclusão desta compra.</div>
+</div>
+    <div class="compras-lista-modal-acoes">
+      <button type="button" class="compras-lista-btn compras-lista-btn-secondary" id="btnCancelarExcluirCompraLista">Cancelar</button>
+      <form method="post" id="formExcluirCompraLista" style="margin:0;">
+        {% csrf_token %}
+        <button type="submit" class="compras-lista-btn compras-lista-btn-danger" id="btnConfirmarExcluirCompraLista">Excluir compra</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const modal = document.getElementById("modalExcluirCompraLista");
+  const form = document.getElementById("formExcluirCompraLista");
+  const texto = document.getElementById("textoModalExcluirCompraLista");
+  const cancelar = document.getElementById("btnCancelarExcluirCompraLista");
+  const confirmar = document.getElementById("btnConfirmarExcluirCompraLista");
+
+  if (!modal || !form) return;
+
+  function abrir(botao) {
+    form.action = botao.dataset.url || "";
+    if (texto) {
+      texto.innerHTML = `
+        <strong>${botao.dataset.compra || "Compra"}</strong><br>
+        Fornecedor: <strong>${botao.dataset.fornecedor || "-"}</strong><br>
+        Total: <strong>${botao.dataset.total || "-"}</strong>
+      `;
+    }
+    modal.classList.add("aberto");
+  }
+
+  function fechar() {
+    modal.classList.remove("aberto");
+    form.action = "";
+  }
+
+  document.querySelectorAll(".btnAbrirModalExcluirCompra").forEach(function(botao) {
+    botao.addEventListener("click", function() {
+      abrir(botao);
+    });
+  });
+
+  if (cancelar) cancelar.addEventListener("click", fechar);
+
+  modal.addEventListener("click", function(event) {
+    if (event.target === modal) fechar();
+  });
+
+  form.addEventListener("submit", function() {
+    if (confirmar) {
+      confirmar.disabled = true;
+      confirmar.textContent = "Excluindo...";
+    }
+  });
+})();
+</script>
 {% endblock %}

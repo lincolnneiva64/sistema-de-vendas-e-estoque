@@ -1865,6 +1865,49 @@ def compras_detalhe(request, pk):
     )
 
 
+
+
+def compra_excluir(request, pk):
+    if request.method != "POST":
+        return redirect("estoque:compras_detalhe", pk=pk)
+
+    with transaction.atomic():
+        compra = get_object_or_404(
+            Compra.objects.select_for_update().prefetch_related("itens__produto"),
+            pk=pk,
+        )
+
+        conta = getattr(compra, "conta_pagar", None)
+
+        if conta and conta.pagamentos.exists():
+            messages.error(
+                request,
+                "Esta compra nao pode ser excluida porque ja existe pagamento/baixa na conta a pagar."
+            )
+            return redirect("estoque:compras_detalhe", pk=compra.pk)
+
+        if compra.estoque_entrada_realizada:
+            for item in compra.itens.select_related("produto").all():
+                produto = item.produto
+                if not produto:
+                    continue
+
+                quantidade_atual = produto.quantidade or 0
+                quantidade_estorno = int(item.quantidade or 0)
+                novo_estoque = quantidade_atual - quantidade_estorno
+
+                if novo_estoque < 0:
+                    novo_estoque = 0
+
+                produto.quantidade = novo_estoque
+                produto.save(update_fields=["quantidade", "atualizado_em"])
+
+        numero_compra = compra.pk
+        compra.delete()
+
+    messages.success(request, f"Compra #{numero_compra} excluida e estoque estornado com sucesso.")
+    return redirect("estoque:compras_lista")
+
 def fornecedores(request):
     termo = request.GET.get("q", "").strip()
     fornecedor_selecionado = None

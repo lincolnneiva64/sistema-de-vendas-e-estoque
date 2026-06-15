@@ -48,6 +48,18 @@
     text-decoration: none;
     font-weight: 850;
     border: 1px solid #7ea6d9;
+    transition:transform .08s ease, filter .08s ease, box-shadow .08s ease;
+  }
+
+  .nota-compra-btn:active {
+    transform:scale(.96);
+    filter:brightness(.92);
+    box-shadow:inset 0 3px 8px rgba(15,23,42,.22);
+  }
+
+  .nota-compra-btn:focus-visible {
+    outline:3px solid #2563eb;
+    outline-offset:2px;
   }
 
   .nota-compra-btn.primario {
@@ -59,6 +71,67 @@
   .nota-compra-btn.secundario {
     background: #dbeafe;
     color: #164173;
+  }
+
+  .nota-compra-btn.perigo {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #fca5a5;
+    cursor: pointer;
+  }
+
+  .nota-compra-form-excluir {
+    margin: 0;
+  }
+
+  .nota-compra-modal {
+    position:fixed;
+    inset:0;
+    z-index:3000;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:16px;
+    background:rgba(15,23,42,.48);
+  }
+
+  .nota-compra-modal.aberto {
+    display:flex;
+  }
+
+  .nota-compra-modal-caixa {
+    width:min(360px, 90vw);
+    background:#fff;
+    border-radius:14px;
+    box-shadow:0 24px 70px rgba(15,23,42,.28);
+    overflow:hidden;
+  }
+
+  .nota-compra-modal-topo {
+    padding:12px 14px;
+    border-bottom:1px solid #e5e7eb;
+    background:#fff7ed;
+  }
+
+  .nota-compra-modal-topo h2 {
+    margin:0;
+    color:#9a3412;
+    font-size:1.02rem;
+    font-weight:950;
+  }
+
+  .nota-compra-modal-corpo {
+    padding:12px 14px;
+    color:#172033;
+    font-weight:750;
+    line-height:1.45;
+  }
+.nota-compra-modal-acoes {
+    display:flex;
+    justify-content:flex-end;
+    gap:10px;
+    padding:10px 14px 14px;
+    background:#f8fafc;
   }
 
   .nota-compra-card {
@@ -236,6 +309,7 @@
     <div class="nota-compra-acoes">
       <a class="nota-compra-btn primario" href="{% url 'estoque:compras_nova' %}">Nova compra</a>
       <a class="nota-compra-btn secundario" href="{% url 'estoque:compras_lista' %}">Compras</a>
+      <button type="button" class="nota-compra-btn perigo" id="btnAbrirModalExcluirCompraDetalhe">Excluir</button>
       <a class="nota-compra-btn secundario" href="{% url 'estoque:home' %}">Painel</a>
     </div>
   </div>
@@ -314,4 +388,58 @@
     </div>
   </section>
 </div>
+
+<div id="modalExcluirCompraDetalhe" class="nota-compra-modal">
+  <div class="nota-compra-modal-caixa">
+    <div class="nota-compra-modal-topo">
+      <h2>Excluir compra #{{ compra.id }}?</h2>
+    </div>
+    <div class="nota-compra-modal-corpo">
+      Fornecedor: <strong>{{ compra.fornecedor.nome|default:"Fornecedor nao informado" }}</strong><br>
+      Total: <strong>R$ {{ compra.total }}</strong>
+</div>
+    <div class="nota-compra-modal-acoes">
+      <button type="button" class="nota-compra-btn secundario" id="btnCancelarExcluirCompraDetalhe">Cancelar</button>
+      <form method="post" action="{% url 'estoque:compra_excluir' compra.id %}" style="margin:0;" id="formExcluirCompraDetalhe">
+        {% csrf_token %}
+        <button type="submit" class="nota-compra-btn perigo" id="btnConfirmarExcluirCompraDetalhe">Excluir compra</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const abrir = document.getElementById("btnAbrirModalExcluirCompraDetalhe");
+  const modal = document.getElementById("modalExcluirCompraDetalhe");
+  const cancelar = document.getElementById("btnCancelarExcluirCompraDetalhe");
+  const form = document.getElementById("formExcluirCompraDetalhe");
+  const confirmar = document.getElementById("btnConfirmarExcluirCompraDetalhe");
+
+  if (!abrir || !modal) return;
+
+  abrir.addEventListener("click", function() {
+    modal.classList.add("aberto");
+  });
+
+  function fechar() {
+    modal.classList.remove("aberto");
+  }
+
+  if (cancelar) cancelar.addEventListener("click", fechar);
+
+  modal.addEventListener("click", function(event) {
+    if (event.target === modal) fechar();
+  });
+
+  if (form) {
+    form.addEventListener("submit", function() {
+      if (confirmar) {
+        confirmar.disabled = true;
+        confirmar.textContent = "Excluindo...";
+      }
+    });
+  }
+})();
+</script>
 {% endblock %}
