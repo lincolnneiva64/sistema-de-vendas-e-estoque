@@ -271,6 +271,28 @@
   .compras-alert { border-radius:12px; padding:10px 12px; margin-bottom:12px; font-weight:750; }
   .compras-alert.success { background:#ecfdf3; border:1px solid #b7e4c7; color:#166534; }
   .compras-alert.error { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
+  .pagamento-opcoes-mobile {
+    display:none;
+    gap:8px;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    margin-top:6px;
+  }
+  .pagamento-opcao-mobile {
+    border:1.5px solid #7ea6d9;
+    background:#dbeafe;
+    color:#164173;
+    border-radius:10px;
+    padding:10px 8px;
+    font-weight:900;
+    min-height:44px;
+    cursor:pointer;
+  }
+  .pagamento-opcao-mobile.ativa {
+    background:#2563eb;
+    color:#fff;
+    border-color:#2563eb;
+    box-shadow:0 6px 14px rgba(37,99,235,.22);
+  }
   @media (max-width: 820px) {
     .compras-header { flex-direction:column; align-items:stretch; }
     .compras-actions { justify-content:flex-start; }
@@ -278,6 +300,9 @@
     .compras-table { min-width:760px; }
     .compras-table-wrap { overflow-x:auto; }
     .produto-busca { font-size:.84rem; }
+    .pagamento-select-real { display:none !important; }
+    .pagamento-opcoes-mobile { display:grid; }
+    .linha-item:not(.linha-item-ativa) .produto-historico-compra { display:none !important; }
   }
 </style>
 
@@ -1006,6 +1031,7 @@
   const fornecedorSugestoes = form.querySelector(".fornecedor-sugestoes");
   const dataCompra = form.querySelector('[name="data_compra"]');
   const tipoPagamento = form.querySelector('[name="tipo_pagamento"]');
+  const pagamentoBotoes = Array.from(form.querySelectorAll(".pagamento-opcao-mobile"));
   const observacao = form.querySelector('[name="observacao"]');
   const campoVencimento = document.getElementById("campoVencimentoCompra");
   const dataVencimento = document.getElementById("dataVencimentoCompra");
@@ -1036,7 +1062,22 @@
       campoVencimento.classList.toggle("oculto", !prazo);
     }
 
-    if (dataVencimento) {
+    if (pagamentoBotoes.length && tipoPagamento) {
+    pagamentoBotoes.forEach(function(botao) {
+      botao.addEventListener("click", function() {
+        tipoPagamento.value = botao.dataset.pagamento || "";
+        tipoPagamento.dispatchEvent(new Event("change", { bubbles:true }));
+
+        if (pagamentoAPrazo()) {
+          focar(dataVencimento);
+        } else {
+          focar(primeiroProduto || observacao);
+        }
+      });
+    });
+  }
+
+  if (dataVencimento) {
       dataVencimento.required = prazo;
       if (prazo && !dataVencimento.value && dataCompra) {
         dataVencimento.value = dataCompra.value;
@@ -1229,7 +1270,10 @@
   }
 
   if (tipoPagamento) {
-    tipoPagamento.addEventListener("change", atualizarVencimentoCompra);
+    tipoPagamento.addEventListener("change", function() {
+      atualizarVencimentoCompra();
+      atualizarBotoesPagamento();
+    });
 
     tipoPagamento.addEventListener("keydown", function(event) {
       if (event.key !== "Enter") return;
@@ -1240,6 +1284,21 @@
       } else {
         focar(primeiroProduto || observacao);
       }
+    });
+  }
+
+  if (pagamentoBotoes.length && tipoPagamento) {
+    pagamentoBotoes.forEach(function(botao) {
+      botao.addEventListener("click", function() {
+        tipoPagamento.value = botao.dataset.pagamento || "";
+        tipoPagamento.dispatchEvent(new Event("change", { bubbles:true }));
+
+        if (pagamentoAPrazo()) {
+          focar(dataVencimento);
+        } else {
+          focar(primeiroProduto || observacao);
+        }
+      });
     });
   }
 
@@ -1439,4 +1498,5 @@
 </script>
 
 {% endblock %}
+
 
