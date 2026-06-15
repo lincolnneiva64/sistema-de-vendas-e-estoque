@@ -978,8 +978,14 @@
       let toque = null;
 
       botao.addEventListener("pointerdown", function(event) {
-        toque = { x: event.clientX, y: event.clientY, arrastou: false };
+        toque = {
+          x: event.clientX,
+          y: event.clientY,
+          tempo: Date.now(),
+          arrastou: false
+        };
         botao.dataset.selecionadoPointer = "";
+
         if (event.pointerType === "mouse") {
           event.preventDefault();
         }
@@ -987,9 +993,11 @@
 
       botao.addEventListener("pointermove", function(event) {
         if (!toque) return;
+
         const dx = Math.abs(event.clientX - toque.x);
         const dy = Math.abs(event.clientY - toque.y);
-        if (dx > 18 || dy > 18) {
+
+        if (dx > 10 || dy > 10) {
           toque.arrastou = true;
         }
       });
@@ -1000,30 +1008,31 @@
 
       botao.addEventListener("pointerup", function(event) {
         if (!toque) return;
-        const foiToque = !toque.arrastou;
+
+        const dx = Math.abs(event.clientX - toque.x);
+        const dy = Math.abs(event.clientY - toque.y);
+        const demorou = Date.now() - toque.tempo > 700;
+        const foiToque = !toque.arrastou && dx <= 10 && dy <= 10 && !demorou;
+
         toque = null;
+
         if (!foiToque) return;
+
         event.preventDefault();
         event.stopPropagation();
         botao.dataset.selecionadoPointer = "1";
         selecionarSugestaoComToque(linha, opt);
       });
 
-      botao.addEventListener("touchend", function(event) {
-        if (botao.dataset.selecionadoPointer === "1") return;
-        event.preventDefault();
-        event.stopPropagation();
-        botao.dataset.selecionadoPointer = "1";
-        selecionarSugestaoComToque(linha, opt);
-      }, { passive:false });
-
       botao.addEventListener("click", function(event) {
         event.preventDefault();
         event.stopPropagation();
+
         if (botao.dataset.selecionadoPointer === "1") {
           botao.dataset.selecionadoPointer = "";
           return;
         }
+
         selecionarSugestaoComToque(linha, opt);
       });
       sugestoes.appendChild(botao);
