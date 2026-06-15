@@ -903,6 +903,27 @@
     }
   }
 
+
+  /* contador do filtro mais visível */
+  #contadorFiltroCategoria {
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    color: #334155 !important;
+    margin-top: 10px !important;
+    margin-bottom: 6px !important;
+    letter-spacing: 0.1px;
+  }
+
+  @media (max-width: 768px) {
+    #contadorFiltroCategoria {
+      font-size: 16px !important;
+      font-weight: 800 !important;
+      color: #374151 !important;
+      margin-top: 10px !important;
+      margin-bottom: 8px !important;
+    }
+  }
+
 </style>
 <div class="container mt-4 produtos-mobile-page">
   {% if messages %}
@@ -1073,8 +1094,7 @@ align-items: center;
           autocomplete="off"
         >
         <datalist id="listaCategoriasProduto">
-          <option value="Sem categoria"></option>
-          {% for categoria in categorias_ativas %}
+                    {% for categoria in categorias_ativas %}
             <option value="{{ categoria.nome }}"></option>
           {% endfor %}
         </datalist>
@@ -1090,9 +1110,6 @@ align-items: center;
         <div id="categoriasMobileSugestoes" class="categorias-mobile-sugestoes">
           <button type="button" class="categoria-mobile-card" data-value="" data-label="Todas as categorias">
             Todas
-          </button>
-          <button type="button" class="categoria-mobile-card" data-value="__sem_categoria__" data-label="Sem categoria">
-            Sem categoria
           </button>
           {% for categoria in categorias_ativas %}
             <button type="button" class="categoria-mobile-card" data-value="{{ categoria.nome|lower }}" data-label="{{ categoria.nome }}">
