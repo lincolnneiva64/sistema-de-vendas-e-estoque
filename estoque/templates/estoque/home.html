@@ -862,6 +862,47 @@
     }
   }
 
+
+  /* cards digitáveis de categoria só no celular */
+  .categorias-mobile-sugestoes {
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    .categorias-mobile-sugestoes {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 8px 2px 2px 2px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+
+    .categorias-mobile-sugestoes::-webkit-scrollbar {
+      display: none;
+    }
+
+    .categoria-mobile-card {
+      flex: 0 0 auto;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #1f2937;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 14px;
+      font-weight: 700;
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+      white-space: nowrap;
+    }
+
+    .categoria-mobile-card:active,
+    .categoria-mobile-card.categoria-mobile-ativa {
+      border-color: #2563eb;
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+  }
+
 </style>
 <div class="container mt-4 produtos-mobile-page">
   {% if messages %}
@@ -1038,13 +1079,27 @@ align-items: center;
           {% endfor %}
         </datalist>
 
-        <select id="filtroCategoriaProdutoMobile" class="form-select filtro-categoria-mobile-select" aria-label="Categoria no celular">
-          <option value="">Todas as categorias</option>
-          <option value="__sem_categoria__">Sem categoria</option>
+        <input
+          type="text"
+          id="filtroCategoriaProdutoMobile"
+          class="form-control filtro-categoria-mobile-select"
+          placeholder="Todas as categorias"
+          autocomplete="off"
+        >
+
+        <div id="categoriasMobileSugestoes" class="categorias-mobile-sugestoes">
+          <button type="button" class="categoria-mobile-card" data-value="" data-label="Todas as categorias">
+            Todas
+          </button>
+          <button type="button" class="categoria-mobile-card" data-value="__sem_categoria__" data-label="Sem categoria">
+            Sem categoria
+          </button>
           {% for categoria in categorias_ativas %}
-            <option value="{{ categoria.nome|lower }}">{{ categoria.nome }}</option>
+            <button type="button" class="categoria-mobile-card" data-value="{{ categoria.nome|lower }}" data-label="{{ categoria.nome }}">
+              {{ categoria.nome }}
+            </button>
           {% endfor %}
-        </select>
+        </div>
       </div>
     </div>
 
@@ -1342,8 +1397,66 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
   }
 
   if (filtroCategoriaProdutoMobile) {
+    filtroCategoriaProdutoMobile.addEventListener("input", aplicarFiltrosProduto);
     filtroCategoriaProdutoMobile.addEventListener("change", aplicarFiltrosProduto);
   }
+
+  function inicializarCategoriasMobileBonitas() {
+    const sugestoesMobile = document.getElementById("categoriasMobileSugestoes");
+    const campoMobile = document.getElementById("filtroCategoriaProdutoMobile");
+
+    if (!sugestoesMobile || !campoMobile) return;
+
+    const cards = sugestoesMobile.querySelectorAll(".categoria-mobile-card");
+
+    function atualizarCardsMobile() {
+      const termo = normalizarTexto(campoMobile.value.trim());
+
+      cards.forEach(function(card) {
+        const label = card.dataset.label || card.textContent || "";
+        const labelNormalizado = normalizarTexto(label);
+
+        if (termo === "" || labelNormalizado.includes(termo)) {
+          card.style.display = "";
+        } else {
+          card.style.display = "none";
+        }
+
+        const valorAtual = normalizarTexto(campoMobile.value.trim());
+        const valorCard = normalizarTexto(card.dataset.label || "");
+        card.classList.toggle("categoria-mobile-ativa", valorAtual !== "" && valorAtual === valorCard);
+      });
+    }
+
+    campoMobile.addEventListener("input", function() {
+      atualizarCardsMobile();
+      aplicarFiltrosProduto();
+    });
+
+    campoMobile.addEventListener("focus", atualizarCardsMobile);
+
+    cards.forEach(function(card) {
+      card.addEventListener("click", function() {
+        const valor = card.dataset.value || "";
+        const label = card.dataset.label || "";
+
+        if (valor === "") {
+          campoMobile.value = "";
+        } else if (valor === "__sem_categoria__") {
+          campoMobile.value = "Sem categoria";
+        } else {
+          campoMobile.value = label;
+        }
+
+        atualizarCardsMobile();
+        aplicarFiltrosProduto();
+      });
+    });
+
+    atualizarCardsMobile();
+  }
+
+  inicializarCategoriasMobileBonitas();
 
   function centralizarProdutoDestacado(linhaDestacada) {
     requestAnimationFrame(function() {
