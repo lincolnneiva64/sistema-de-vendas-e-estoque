@@ -1505,6 +1505,7 @@ def clientes(request):
 
 def clientes_consulta(request):
     termo = request.GET.get("q", "").strip()
+    localidade = request.GET.get("localidade", "").strip()
     clientes_url = "/estoque/clientes/consulta/"
 
     if request.method == "POST":
@@ -1513,6 +1514,8 @@ def clientes_consulta(request):
         params = {}
         if termo:
             params["q"] = termo
+        if localidade:
+            params["localidade"] = localidade
         destino = clientes_url
         if params:
             destino = f"{destino}?{urlencode(params)}"
@@ -1546,9 +1549,13 @@ def clientes_consulta(request):
             Q(apelido_nome_conhecido__icontains=termo) |
             Q(cpf_cnpj__icontains=termo) |
             Q(whatsapp__icontains=termo) |
-            Q(whatsapp_normalizado__icontains=termo) |
-            Q(bairro__icontains=termo) |
-            Q(cidade__icontains=termo)
+            Q(whatsapp_normalizado__icontains=termo)
+        )
+
+    if localidade:
+        clientes_qs = clientes_qs.filter(
+            Q(bairro__icontains=localidade) |
+            Q(cidade__icontains=localidade)
         )
 
     clientes_lista = list(clientes_qs)
@@ -1561,6 +1568,7 @@ def clientes_consulta(request):
         {
             "clientes": clientes_lista,
             "termo": termo,
+            "localidade": localidade,
             "total_clientes": len(clientes_lista),
             "cliente_salvo_id": request.GET.get("cliente_salvo", ""),
         },
