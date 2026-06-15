@@ -336,6 +336,28 @@
     }
   }
 
+
+  /* reforça os rótulos do card mobile de clientes */
+  @media (max-width: 768px) {
+    .clientes-table td:nth-child(2)::before,
+    .clientes-table td:nth-child(3)::before,
+    .clientes-table td:nth-child(4)::before {
+      color: #64748b !important;
+      font-size: 14px !important;
+      font-weight: 900 !important;
+      letter-spacing: 0.06em !important;
+      text-transform: uppercase !important;
+      margin-bottom: 6px !important;
+    }
+
+    .clientes-table td:nth-child(2),
+    .clientes-table td:nth-child(3),
+    .clientes-table td:nth-child(4) {
+      color: #334155 !important;
+      font-weight: 700 !important;
+    }
+  }
+
 </style>
 
 <div class="clientes-page">
