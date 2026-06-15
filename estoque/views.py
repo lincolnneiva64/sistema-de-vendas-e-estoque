@@ -23,7 +23,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PagamentoContaPagar, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -1821,6 +1821,15 @@ def compras_nova(request):
                 produto = Produto.objects.select_for_update().get(pk=item["produto"].pk)
                 produto.quantidade = (produto.quantidade or 0) + int(item["quantidade"])
                 produto.save(update_fields=["quantidade", "atualizado_em"])
+
+                ProdutoFornecedor.objects.update_or_create(
+                    produto=produto,
+                    fornecedor=fornecedor,
+                    defaults={
+                        "ultimo_preco_compra": item["preco_unitario"],
+                        "ultima_compra_em": data_compra,
+                    },
+                )
 
             compra.estoque_entrada_realizada = True
             compra.estoque_entrada_realizada_em = timezone.now()
