@@ -922,8 +922,14 @@
   }
 
   function selecionarSugestaoComToque(linha, opt) {
-    if (!opt) return;
+    if (!opt || !linha) return;
+
     selecionarProduto(linha, opt);
+
+    const quantidade = linha.querySelector('[name="quantidade[]"]');
+    setTimeout(function() {
+      focarCampo(quantidade);
+    }, 80);
   }
 
   function ajustarProdutoNaTelaMobile(linha) {
@@ -973,6 +979,7 @@
 
       botao.addEventListener("pointerdown", function(event) {
         toque = { x: event.clientX, y: event.clientY, arrastou: false };
+        botao.dataset.selecionadoPointer = "";
         if (event.pointerType === "mouse") {
           event.preventDefault();
         }
@@ -982,9 +989,13 @@
         if (!toque) return;
         const dx = Math.abs(event.clientX - toque.x);
         const dy = Math.abs(event.clientY - toque.y);
-        if (dx > 8 || dy > 8) {
+        if (dx > 18 || dy > 18) {
           toque.arrastou = true;
         }
+      });
+
+      botao.addEventListener("pointercancel", function() {
+        toque = null;
       });
 
       botao.addEventListener("pointerup", function(event) {
@@ -993,12 +1004,22 @@
         toque = null;
         if (!foiToque) return;
         event.preventDefault();
+        event.stopPropagation();
         botao.dataset.selecionadoPointer = "1";
         selecionarSugestaoComToque(linha, opt);
       });
 
+      botao.addEventListener("touchend", function(event) {
+        if (botao.dataset.selecionadoPointer === "1") return;
+        event.preventDefault();
+        event.stopPropagation();
+        botao.dataset.selecionadoPointer = "1";
+        selecionarSugestaoComToque(linha, opt);
+      }, { passive:false });
+
       botao.addEventListener("click", function(event) {
         event.preventDefault();
+        event.stopPropagation();
         if (botao.dataset.selecionadoPointer === "1") {
           botao.dataset.selecionadoPointer = "";
           return;
