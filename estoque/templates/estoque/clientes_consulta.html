@@ -313,6 +313,29 @@
     }
   }
 
+
+  /* CPF/CNPJ visível no card mobile de clientes */
+  @media (max-width: 768px) {
+    .clientes-table td:nth-child(2) {
+      display: block !important;
+      color: #475569 !important;
+      font-size: 18px !important;
+      font-weight: 800 !important;
+      margin-top: 12px !important;
+    }
+
+    .clientes-table td:nth-child(2)::before {
+      content: "CPF/CNPJ";
+      display: block;
+      color: #94a3b8;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+  }
+
 </style>
 
 <div class="clientes-page">
@@ -482,6 +505,7 @@
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     const busca = document.getElementById("buscaClientes");
+    const buscaLocalidade = document.getElementById("buscaLocalidadeClientes");
     const linhas = Array.from(document.querySelectorAll("[data-cliente-search]"));
     const contador = document.getElementById("contadorClientes");
     const semResultado = document.getElementById("semClientesFiltrados");
@@ -517,12 +541,16 @@
     }
 
     function filtrarClientes() {
-      const termo = normalizarTexto(busca?.value.trim());
+      const termoCliente = normalizarTexto(busca?.value.trim());
+      const termoLocalidade = normalizarTexto(buscaLocalidade?.value.trim());
       let totalVisivel = 0;
 
       linhas.forEach(function (linha) {
         const texto = normalizarTexto(linha.dataset.clienteSearch);
-        const visivel = termo === "" || texto.includes(termo);
+        const encontrouCliente = termoCliente === "" || texto.includes(termoCliente);
+        const encontrouLocalidade = termoLocalidade === "" || texto.includes(termoLocalidade);
+        const visivel = encontrouCliente && encontrouLocalidade;
+
         linha.style.display = visivel ? "" : "none";
         if (visivel) totalVisivel += 1;
       });
@@ -532,6 +560,7 @@
     }
 
     busca?.addEventListener("input", filtrarClientes);
+    buscaLocalidade?.addEventListener("input", filtrarClientes);
     filtrarClientes();
 
     function fecharModalExclusao() {
