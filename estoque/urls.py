@@ -26,6 +26,7 @@ urlpatterns = [
     path("contas-pagar/<int:pk>/baixar/", views.conta_pagar_baixar, name="conta_pagar_baixar"),
     path("compras/<int:pk>/", views.compras_detalhe, name="compras_detalhe"),
     path("compras/<int:pk>/excluir/", views.compra_excluir, name="compra_excluir"),
+    path("produtos/<int:produto_id>/ultimas-compras/", views.produto_ultimas_compras, name="produto_ultimas_compras"),
     path("verificar-produto/", views.verificar_produto, name="verificar_produto"),
     path("produto/<int:pk>/", views.produto_detalhe, name="produto_detalhe"),
     path("produto/<int:pk>/editar/", views.produto_editar, name="produto_editar"),

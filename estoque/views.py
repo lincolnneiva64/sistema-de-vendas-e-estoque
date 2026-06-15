@@ -1641,6 +1641,33 @@ def _conta_pagar_payload(conta):
     }
 
 
+
+
+def produto_ultimas_compras(request, produto_id):
+    itens = (
+        ItemCompra.objects
+        .select_related("compra", "compra__fornecedor", "produto")
+        .filter(produto_id=produto_id)
+        .order_by("-compra__data_compra", "-compra_id", "-id")[:3]
+    )
+
+    compras = []
+    for item in itens:
+        compra = item.compra
+        fornecedor = compra.fornecedor.nome if compra and compra.fornecedor else "Fornecedor nao informado"
+        compras.append({
+            "compra_id": compra.id if compra else "",
+            "data": compra.data_compra.strftime("%d/%m/%Y") if compra and compra.data_compra else "",
+            "fornecedor": fornecedor,
+            "quantidade": str(item.quantidade),
+            "unidade": item.unidade or "",
+            "preco": str(item.preco_unitario),
+            "total": str(item.valor_total),
+        })
+
+    return JsonResponse({"compras": compras})
+
+
 def fornecedor_contas_pagar_abertas(request, fornecedor_id):
     contas = (
         ContaPagar.objects

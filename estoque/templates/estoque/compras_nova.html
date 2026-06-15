@@ -2,10 +2,10 @@
 {% block title %}Nova Compra{% endblock %}
 {% block content %}
 <style>
-  .compras-page { max-width: 1180px; margin: 22px auto 90px; padding: 0 16px; color: #172033; }
-  .compras-header { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; margin-bottom:14px; }
-  .compras-title { margin:0; font-size:1.55rem; font-weight:850; }
-  .compras-subtitle { margin:4px 0 0; color:#64748b; font-weight:650; }
+  .compras-page { max-width: 1180px; margin: 10px auto 70px; padding: 0 14px; color: #172033; }
+  .compras-header { display:flex; justify-content:space-between; align-items:flex-end; gap:10px; margin-bottom:8px; }
+  .compras-title { margin:0; font-size:1.38rem; font-weight:850; }
+  .compras-subtitle { margin:2px 0 0; color:#64748b; font-weight:650; font-size:.92rem; }
   .compras-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
   .compras-btn { border:0; border-radius:9px; padding:9px 14px; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; min-height:40px; cursor:pointer; transition:transform .08s ease, filter .08s ease, box-shadow .08s ease; }
   .compras-btn:active { transform:scale(.96); filter:brightness(.92); box-shadow:inset 0 3px 8px rgba(15,23,42,.22); }
@@ -13,15 +13,15 @@
   .compras-btn-primary { background:#2563eb; color:#fff; }
   .compras-btn:disabled { opacity:.65; cursor:not-allowed; filter:grayscale(.2); transform:none; }
   .compras-btn-secondary { background:#dbeafe; color:#164173; border:1px solid #7ea6d9; }
-  .compras-card { background:#fff; border:1px solid #e1e7ef; border-radius:14px; box-shadow:0 14px 30px rgba(15,23,42,.06); margin-bottom:14px; overflow:hidden; }
-  .compras-card-head { padding:12px 16px; border-bottom:1px solid #edf1f6; font-weight:850; }
-  .compras-card-body { padding:14px 16px; }
+  .compras-card { background:#fff; border:1px solid #e1e7ef; border-radius:14px; box-shadow:0 10px 22px rgba(15,23,42,.05); margin-bottom:10px; overflow:hidden; }
+  .compras-card-head { padding:9px 14px; border-bottom:1px solid #edf1f6; font-weight:850; }
+  .compras-card-body { padding:10px 14px; }
   .compras-grid { display:grid; grid-template-columns: 1.2fr .55fr .65fr .55fr; gap:10px; }
   .compras-field label { display:block; font-weight:850; font-size:.82rem; margin-bottom:4px; color:#334155; }
   .compras-field input, .compras-field select, .compras-field textarea {
     width:100%; border:1.5px solid #d3dbe8; border-radius:9px; padding:9px 11px; font-weight:600; outline:none;
   }
-  .compras-field textarea { min-height:72px; resize:vertical; }
+  .compras-field textarea { min-height:52px; resize:vertical; }
   .compras-prazo-info {
     display:none;
     margin-top:8px;
@@ -38,6 +38,13 @@
   .compras-table { width:100%; border-collapse:collapse; }
   .compras-table th { text-align:left; font-size:.72rem; color:#64748b; text-transform:uppercase; background:#f8fafc; padding:9px; border-bottom:1px solid #edf1f6; }
   .compras-table td { padding:8px; border-bottom:1px solid #f0f3f8; vertical-align:top; }
+  .linha-item td { vertical-align:top; }
+  .linha-item td:first-child {
+    padding-top: 8px;
+  }
+  .linha-item td:nth-child(n+2) {
+    padding-top: 34px;
+  }
   .compras-table select, .compras-table input { width:100%; border:1.5px solid #d3dbe8; border-radius:8px; padding:8px; font-weight:650; }
 
   .compras-field input:focus,
@@ -222,6 +229,41 @@
     color:#7c4a03;
     font-weight:900;
   }
+  .produto-historico-compra {
+    display:none;
+    margin-top:6px;
+    border:1px solid #bfdbfe;
+    background:#eff6ff;
+    color:#0f172a;
+    border-radius:10px;
+    padding:7px 9px;
+    font-size:.74rem;
+    font-weight:750;
+  }
+  .produto-historico-compra.visivel { display:block; }
+  .produto-historico-titulo {
+    color:#164173;
+    font-weight:950;
+    margin-bottom:4px;
+  }
+  .produto-historico-item {
+    display:grid;
+    grid-template-columns:.72fr 1.1fr .68fr .72fr;
+    gap:5px;
+    padding:4px 0;
+    border-top:1px solid #dbeafe;
+    align-items:center;
+  }
+  .produto-historico-item:first-of-type { border-top:0; }
+  .produto-historico-preco {
+    color:#047857;
+    font-weight:950;
+    text-align:right;
+  }
+  .produto-historico-vazio {
+    color:#64748b;
+    font-weight:800;
+  }
   .col-produto { min-width:320px; }
   .col-pequena { width:120px; }
   .col-total { width:130px; font-weight:850; }
@@ -336,6 +378,7 @@
                     {% endfor %}
                   </select>
                   <div class="produto-sugestoes"></div>
+                  <div class="produto-historico-compra"></div>
                 </div>
               </td>
               <td><input type="text" name="quantidade[]" inputmode="decimal" value="1"></td>
@@ -478,6 +521,7 @@
     }
     fecharSugestoes(linha);
     recalcular();
+    carregarUltimasComprasProduto(linha, opt.value);
   }
 
   function opcaoPorId(linha, produtoId) {
@@ -492,6 +536,82 @@
     const proximoIndice = indiceAtual >= 0 ? indiceAtual + 1 : 0;
 
     return opcoes[proximoIndice] || null;
+  }
+
+  function formatarMoedaHistorico(valor) {
+    return "R$ " + Number(valor || 0).toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function rolarParaHistoricoProduto(linha) {
+    const box = linha.querySelector(".produto-historico-compra");
+    if (!box) return;
+
+    setTimeout(function() {
+      box.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+      });
+    }, 120);
+  }
+
+  function renderizarHistoricoProduto(linha, compras) {
+    const box = linha.querySelector(".produto-historico-compra");
+    if (!box) return;
+
+    if (!compras || !compras.length) {
+      box.innerHTML = '<div class="produto-historico-titulo">Últimas compras</div><div class="produto-historico-vazio">Sem compras anteriores deste produto.</div>';
+      box.classList.add("visivel");
+      rolarParaHistoricoProduto(linha);
+      return;
+    }
+
+    box.innerHTML = '<div class="produto-historico-titulo">Últimas 3 compras deste produto</div>' + compras.map(function(compra) {
+      return `
+        <div class="produto-historico-item">
+          <div>${compra.data || "-"}</div>
+          <div>${compra.fornecedor || "-"}</div>
+          <div>${compra.quantidade || "-"} ${compra.unidade || ""}</div>
+          <div class="produto-historico-preco">${formatarMoedaHistorico(compra.preco)}</div>
+        </div>
+      `;
+    }).join("");
+
+    box.classList.add("visivel");
+    rolarParaHistoricoProduto(linha);
+  }
+
+  function limparHistoricoProduto(linha) {
+    const box = linha.querySelector(".produto-historico-compra");
+    if (!box) return;
+    box.classList.remove("visivel");
+    box.innerHTML = "";
+  }
+
+  async function carregarUltimasComprasProduto(linha, produtoId) {
+    if (!produtoId) {
+      limparHistoricoProduto(linha);
+      return;
+    }
+
+    const box = linha.querySelector(".produto-historico-compra");
+    if (box) {
+      box.innerHTML = '<div class="produto-historico-titulo">Últimas compras</div><div class="produto-historico-vazio">Carregando...</div>';
+      box.classList.add("visivel");
+    }
+
+    try {
+      const resposta = await fetch(`/produtos/${produtoId}/ultimas-compras/`, {
+        headers: { "X-Requested-With": "XMLHttpRequest" }
+      });
+      const dados = await resposta.json();
+      renderizarHistoricoProduto(linha, dados.compras || []);
+    } catch (erro) {
+      limparHistoricoProduto(linha);
+      console.error("Erro ao carregar últimas compras do produto.", erro);
+    }
   }
 
   function atualizarEstoquePreviewCompra(linha, opt) {
@@ -640,6 +760,7 @@
     linha.querySelector('[name="unidade[]"]').value = "";
     linha.querySelector('[name="preco_unitario[]"]').value = "0,00";
     linha.querySelector(".valor-total-item").textContent = "R$ 0,00";
+    limparHistoricoProduto(linha);
     fecharSugestoes(linha);
   }
 
@@ -728,6 +849,7 @@
       if (estoqueValor) {
         estoqueValor.textContent = "-";
       }
+      limparHistoricoProduto(linha);
       if (produtoBusca.value.trim()) {
         mostrarSugestoes(linha);
         definirSugestaoAtiva(linha, 0);
