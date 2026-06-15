@@ -1,4 +1,4 @@
-﻿{% extends 'estoque/base.html' %}
+{% extends 'estoque/base.html' %}
 {% block title %}Nova Compra{% endblock %}
 {% block content %}
 <style>
@@ -304,6 +304,17 @@
     .pagamento-opcoes-mobile { display:grid; }
     .linha-item:not(.linha-item-ativa) .produto-historico-compra { display:none !important; }
     .campo-observacao-compra { display:none !important; }
+    .linha-item-ativa .produto-autocomplete { position:relative; }
+    .linha-item-ativa .produto-sugestoes.aberta {
+      position:absolute;
+      top:calc(100% + 6px);
+      left:0;
+      right:0;
+      z-index:5000;
+      max-height:260px;
+      overflow-y:auto;
+      -webkit-overflow-scrolling:touch;
+    }
   }
 </style>
 
@@ -370,7 +381,7 @@
             <input type="date" name="data_vencimento" id="dataVencimentoCompra" value="{{ hoje|date:'Y-m-d' }}">
           </div>
         </div>
-        <div class="compras-field" style="margin-top:10px;">
+        <div class="compras-field campo-observacao-compra" style="margin-top:10px;">
           <label>Observacao</label>
           <textarea name="observacao" placeholder="Observacao opcional"></textarea>
         </div>
@@ -692,7 +703,16 @@
     selecionarProduto(linha, opt);
   }
 
+  function ajustarProdutoNaTelaMobile(linha) {
+    if (!compraMobile() || !linha) return;
+
+    setTimeout(function() {
+      linha.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  }
+
   function mostrarSugestoes(linha, mostrarTodos = false) {
+    ajustarProdutoNaTelaMobile(linha);
     const produtoBusca = linha.querySelector('[name="produto_busca[]"]');
     const sugestoes = linha.querySelector(".produto-sugestoes");
     const termo = normalizarBusca(produtoBusca.value);
@@ -852,19 +872,30 @@
     const preco = linha.querySelector('[name="preco_unitario[]"]');
 
     produtoBusca.addEventListener("focus", function() {
+      marcarLinhaAtiva(linha);
+
       if (!compraMobile()) {
         produtoBusca.select();
       }
 
       if (produtoBusca.value.trim()) {
-        fecharSugestoes(linha);
+        if (compraMobile()) {
+          mostrarSugestoes(linha, true);
+          definirSugestaoAtiva(linha, 0);
+        } else {
+          fecharSugestoes(linha);
+        }
       } else {
         const primeiraOpcao = opcoesProduto(linha)[0];
         if (primeiraOpcao) {
           selecionarProduto(linha, primeiraOpcao);
-          if (!compraMobile()) {
-        produtoBusca.select();
-      }
+
+          if (compraMobile()) {
+            mostrarSugestoes(linha, true);
+            definirSugestaoAtiva(linha, 0);
+          } else {
+            produtoBusca.select();
+          }
         } else {
           mostrarSugestoes(linha, true);
           definirSugestaoAtiva(linha, 0);
