@@ -2222,7 +2222,7 @@
 
 <script id="scriptContasPagarSeguroFinal">
 (function() {
-  let todasAsContas = [];
+  var contas = [];
 
   function moeda(valor) {
     return "R$ " + Number(valor || 0).toLocaleString("pt-BR", {
@@ -2232,9 +2232,9 @@
   }
 
   function numero(valor) {
-    let texto = String(valor || "").trim();
+    var texto = String(valor || "").trim();
     if (!texto) return 0;
-    if (texto.includes(",")) texto = texto.replace(/\./g, "").replace(",", ".");
+    if (texto.indexOf(",") >= 0) texto = texto.replace(/\./g, "").replace(",", ".");
     texto = texto.replace(/[^\d.-]/g, "");
     return Number(texto) || 0;
   }
@@ -2248,12 +2248,12 @@
   }
 
   function csrfToken() {
-    const campo = document.querySelector('[name="csrfmiddlewaretoken"]');
+    var campo = document.querySelector('[name="csrfmiddlewaretoken"]');
     return campo ? campo.value : "";
   }
 
   function garantirModal() {
-    let modal = document.getElementById("modalContasPagarSeguroCompra");
+    var modal = document.getElementById("modalContasPagarSeguroCompra");
     if (modal) return modal;
 
     modal = document.createElement("div");
@@ -2275,7 +2275,11 @@
         '</div>' +
         '<div style="padding:12px 14px; border-bottom:1px solid #e5e7eb;">' +
           '<label style="display:block; font-size:.82rem; font-weight:900; color:#334155; margin-bottom:5px;">Buscar fornecedor ou compra</label>' +
-          '<input id="buscaContasPagarSeguroCompra" type="text" placeholder="Digite Assai, Cervejaria, #10..." style="width:100%; border:1.5px solid #cbd5e1; border-radius:10px; padding:11px 12px; font-weight:850; font-size:1rem;">' +
+          '<div style="display:flex; gap:8px; align-items:center;">' +
+            '<input id="buscaContasPagarSeguroCompra" type="text" placeholder="Digite Assai, Cervejaria, #10..." style="width:100%; border:1.5px solid #cbd5e1; border-radius:10px; padding:11px 12px; font-weight:850; font-size:1rem;">' +
+            '<button type="button" id="limparFiltroContasPagarSeguroCompra" class="compras-btn compras-btn-secondary" style="white-space:nowrap;">Limpar</button>' +
+          '</div>' +
+          '<div id="resumoFiltroContasPagarSeguroCompra" style="margin-top:10px;"></div>' +
         '</div>' +
         '<div id="listaContasPagarSeguroCompra" style="padding:12px 14px;">Carregando...</div>' +
       '</div>';
@@ -2290,65 +2294,122 @@
       if (event.target === modal) modal.style.display = "none";
     });
 
-    document.getElementById("buscaContasPagarSeguroCompra").addEventListener("input", function() {
-      renderizarContas(this.value);
-    });
+    var campoBuscaContas = document.getElementById("buscaContasPagarSeguroCompra");
+    var botaoLimparFiltroContas = document.getElementById("limparFiltroContasPagarSeguroCompra");
+
+    if (campoBuscaContas) {
+      ["input", "keyup", "change", "search"].forEach(function(eventoNome) {
+        campoBuscaContas.addEventListener(eventoNome, function() {
+          renderizarContas();
+        });
+      });
+    }
+
+    if (botaoLimparFiltroContas) {
+      botaoLimparFiltroContas.addEventListener("click", function() {
+        if (campoBuscaContas) {
+          campoBuscaContas.value = "";
+          campoBuscaContas.focus();
+        }
+        renderizarContas();
+      });
+    }
 
     return modal;
+  }
+
+  function contasFiltradas() {
+    var campo = document.getElementById("buscaContasPagarSeguroCompra");
+    var termo = normalizar(campo ? campo.value : "");
+
+    return contas.filter(function(conta) {
+      var texto = normalizar(
+        (conta.fornecedor || "") +
+        " compra #" + (conta.compra_id || "") +
+        " #" + (conta.compra_id || "") +
+        " " + (conta.status_texto || "")
+      );
+      return !termo || texto.indexOf(termo) >= 0;
+    });
+  }
+
+  function atualizarResumoFiltro(filtradas) {
+    var resumo = document.getElementById("resumoFiltroContasPagarSeguroCompra");
+    if (!resumo) return;
+
+    var qtd = filtradas.length;
+    var totalOriginal = 0;
+    var totalAberto = 0;
+
+    filtradas.forEach(function(conta) {
+      totalOriginal += numero(conta.valor_original);
+      totalAberto += numero(conta.valor_em_aberto);
+    });
+
+    var totalPago = Math.max(totalOriginal - totalAberto, 0);
+
+    resumo.innerHTML =
+      '<div style="padding:12px; border:1.5px solid #cbd5e1; border-radius:12px; background:#f8fafc; font-weight:850;">' +
+        '<div style="font-size:.95rem; font-weight:950; color:#78350f; margin-bottom:8px;">Resumo do filtro</div>' +
+        '<div style="display:grid; grid-template-columns:repeat(4,minmax(110px,1fr)); gap:8px;">' +
+          '<div style="background:white; border:1px solid #e2e8f0; border-radius:10px; padding:9px;"><div style="font-size:.78rem; color:#64748b;">Notas abertas</div><strong>' + qtd + '</strong></div>' +
+          '<div style="background:white; border:1px solid #e2e8f0; border-radius:10px; padding:9px;"><div style="font-size:.78rem; color:#64748b;">Total das notas</div><strong>' + moeda(totalOriginal) + '</strong></div>' +
+          '<div style="background:white; border:1px solid #e2e8f0; border-radius:10px; padding:9px;"><div style="font-size:.78rem; color:#64748b;">Já pago</div><strong style="color:#166534;">' + moeda(totalPago) + '</strong></div>' +
+          '<div style="background:white; border:1px solid #e2e8f0; border-radius:10px; padding:9px;"><div style="font-size:.78rem; color:#64748b;">Falta pagar</div><strong style="color:#92400e;">' + moeda(totalAberto) + '</strong></div>' +
+        '</div>' +
+      '</div>';
   }
 
   async function carregarContas() {
     garantirModal();
 
-    const lista = document.getElementById("listaContasPagarSeguroCompra");
+    var lista = document.getElementById("listaContasPagarSeguroCompra");
     if (lista) lista.innerHTML = '<div style="padding:12px; font-weight:850; color:#64748b;">Carregando contas...</div>';
 
     try {
-      const resposta = await fetch("/contas-a-pagar/abertas/", {
+      var resposta = await fetch("/contas-a-pagar/abertas/", {
         headers: { "X-Requested-With": "XMLHttpRequest" }
       });
-      const dados = await resposta.json();
 
-      const resumo = document.getElementById("resumoContasPagarGeralCompra");
-      const valorResumo = document.getElementById("valorContasPagarGeralCompra");
+      var dados = await resposta.json();
 
-      if (resumo) resumo.textContent = (dados.quantidade || 0) + " conta(s) em aberto de todos os fornecedores";
-      if (valorResumo) valorResumo.textContent = moeda(dados.total_aberto || 0);
+      var resumoTopo = document.getElementById("resumoContasPagarGeralCompra");
+      var valorTopo = document.getElementById("valorContasPagarGeralCompra");
+
+      if (resumoTopo) resumoTopo.textContent = (dados.quantidade || 0) + " conta(s) em aberto de todos os fornecedores";
+      if (valorTopo) valorTopo.textContent = moeda(dados.total_aberto || 0);
 
       if (!dados.ok) {
-        lista.innerHTML = '<div style="padding:12px; font-weight:850;">Não foi possível carregar as contas.</div>';
+        if (lista) lista.innerHTML = '<div style="padding:12px; font-weight:850;">Não foi possível carregar as contas.</div>';
         return;
       }
 
-      todasAsContas = dados.contas || [];
-      renderizarContas(document.getElementById("buscaContasPagarSeguroCompra")?.value || "");
+      contas = dados.contas || [];
+      renderizarContas();
     } catch (erro) {
       console.error("Erro ao carregar contas:", erro);
       if (lista) lista.innerHTML = '<div style="padding:12px; font-weight:850;">Erro ao carregar contas.</div>';
     }
   }
 
-  function renderizarContas(termo) {
-    const lista = document.getElementById("listaContasPagarSeguroCompra");
+  function renderizarContas() {
+    var lista = document.getElementById("listaContasPagarSeguroCompra");
     if (!lista) return;
 
-    const busca = normalizar(termo);
-    const contas = todasAsContas.filter(function(conta) {
-      const texto = normalizar((conta.fornecedor || "") + " compra #" + (conta.compra_id || "") + " " + (conta.status_texto || ""));
-      return !busca || texto.includes(busca);
-    });
+    var filtradas = contasFiltradas();
+    atualizarResumoFiltro(filtradas);
 
-    if (!contas.length) {
+    if (!filtradas.length) {
       lista.innerHTML = '<div style="padding:12px; font-weight:850; color:#64748b;">Nenhuma conta encontrada.</div>';
       return;
     }
 
     lista.innerHTML = "";
 
-    contas.forEach(function(conta) {
-      const valorAberto = Number(conta.valor_em_aberto || 0);
+    filtradas.forEach(function(conta) {
+      var valorAberto = Number(conta.valor_em_aberto || 0);
 
-      const card = document.createElement("div");
+      var card = document.createElement("div");
       card.dataset.contaId = conta.id;
       card.dataset.aberto = String(valorAberto);
       card.style.border = "1px solid #e2e8f0";
@@ -2384,11 +2445,11 @@
   }
 
   function prepararBaixa(card) {
-    const campo = card.querySelector(".valorBaixaSeguraContaPagar");
-    const aberto = Number(card.dataset.aberto || 0);
-    const pagando = numero(campo ? campo.value : "");
-    const sobra = Math.max(aberto - pagando, 0);
-    const status = sobra <= 0 ? "Quitada" : "Parcial";
+    var campo = card.querySelector(".valorBaixaSeguraContaPagar");
+    var aberto = Number(card.dataset.aberto || 0);
+    var pagando = numero(campo ? campo.value : "");
+    var sobra = Math.max(aberto - pagando, 0);
+    var status = sobra <= 0 ? "Quitada" : "Parcial";
 
     if (!pagando || pagando <= 0) {
       alert("Informe um valor maior que zero.");
@@ -2402,7 +2463,7 @@
       return;
     }
 
-    const resumo = card.querySelector(".resumoBaixaSeguraContaPagar");
+    var resumo = card.querySelector(".resumoBaixaSeguraContaPagar");
     resumo.innerHTML =
       '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">' +
         '<div>Aberto:<br><strong style="color:#172033;">' + moeda(aberto) + '</strong></div>' +
@@ -2426,11 +2487,11 @@
   }
 
   async function confirmarBaixa(card) {
-    const campo = card.querySelector(".valorBaixaSeguraContaPagar");
-    const forma = card.querySelector(".formaBaixaSeguraContaPagar");
-    const botao = card.querySelector(".confirmarBaixaSeguraContaPagar");
-    const aberto = Number(card.dataset.aberto || 0);
-    const pagando = numero(campo ? campo.value : "");
+    var campo = card.querySelector(".valorBaixaSeguraContaPagar");
+    var forma = card.querySelector(".formaBaixaSeguraContaPagar");
+    var botao = card.querySelector(".confirmarBaixaSeguraContaPagar");
+    var aberto = Number(card.dataset.aberto || 0);
+    var pagando = numero(campo ? campo.value : "");
 
     if (!pagando || pagando <= 0 || pagando > aberto) {
       alert("Confira o valor antes de confirmar.");
@@ -2440,13 +2501,13 @@
     botao.disabled = true;
     botao.textContent = "Baixando...";
 
-    const dados = new FormData();
+    var dados = new FormData();
     dados.append("valor", String(pagando).replace(".", ","));
     dados.append("forma_pagamento", forma ? forma.value : "");
     dados.append("observacao", "Baixa confirmada pela Nova Compra.");
 
     try {
-      const resposta = await fetch("/contas-pagar/" + card.dataset.contaId + "/baixar/", {
+      var resposta = await fetch("/contas-pagar/" + card.dataset.contaId + "/baixar/", {
         method: "POST",
         headers: {
           "X-CSRFToken": csrfToken(),
@@ -2454,7 +2515,8 @@
         },
         body: dados
       });
-      const retorno = await resposta.json();
+
+      var retorno = await resposta.json();
 
       if (!retorno.ok) {
         alert(retorno.erro || "Não foi possível baixar.");
@@ -2473,7 +2535,7 @@
   }
 
   document.addEventListener("click", function(event) {
-    const abrir = event.target.closest("#abrirContasPagarGeralCompra");
+    var abrir = event.target.closest("#abrirContasPagarGeralCompra");
     if (abrir) {
       event.preventDefault();
       event.stopPropagation();
@@ -2482,29 +2544,29 @@
       return;
     }
 
-    const preparar = event.target.closest(".prepararBaixaSeguraContaPagar");
+    var preparar = event.target.closest(".prepararBaixaSeguraContaPagar");
     if (preparar) {
       event.preventDefault();
       event.stopPropagation();
-      const card = preparar.closest("[data-conta-id]");
+      var card = preparar.closest("[data-conta-id]");
       if (card) prepararBaixa(card);
       return;
     }
 
-    const confirmar = event.target.closest(".confirmarBaixaSeguraContaPagar");
+    var confirmar = event.target.closest(".confirmarBaixaSeguraContaPagar");
     if (confirmar) {
       event.preventDefault();
       event.stopPropagation();
-      const card = confirmar.closest("[data-conta-id]");
-      if (card) confirmarBaixa(card);
+      var card2 = confirmar.closest("[data-conta-id]");
+      if (card2) confirmarBaixa(card2);
       return;
     }
 
-    const cancelar = event.target.closest(".cancelarBaixaSeguraContaPagar");
+    var cancelar = event.target.closest(".cancelarBaixaSeguraContaPagar");
     if (cancelar) {
       event.preventDefault();
-      const card = cancelar.closest("[data-conta-id]");
-      const resumo = card ? card.querySelector(".resumoBaixaSeguraContaPagar") : null;
+      var card3 = cancelar.closest("[data-conta-id]");
+      var resumo = card3 ? card3.querySelector(".resumoBaixaSeguraContaPagar") : null;
       if (resumo) resumo.style.display = "none";
     }
   }, true);
