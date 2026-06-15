@@ -23,7 +23,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PagamentoContaPagar, PixRecebido, Produto, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -1625,6 +1625,81 @@ def _decimal_compra(valor, casas=2, padrao="0"):
     except (InvalidOperation, ValueError):
         raise ValueError("Valor numerico invalido.")
 
+
+
+
+def _conta_pagar_payload(conta):
+    return {
+        "id": conta.id,
+        "compra_id": conta.compra_id,
+        "data_emissao": conta.data_emissao.strftime("%d/%m/%Y") if conta.data_emissao else "",
+        "data_vencimento": conta.data_vencimento.strftime("%d/%m/%Y") if conta.data_vencimento else "",
+        "valor_original": str(conta.valor_original),
+        "valor_em_aberto": str(conta.valor_em_aberto),
+        "status": conta.get_status_display(),
+        "observacao": conta.observacao or "",
+    }
+
+
+def fornecedor_contas_pagar_abertas(request, fornecedor_id):
+    contas = (
+        ContaPagar.objects
+        .select_related("compra", "fornecedor")
+        .filter(fornecedor_id=fornecedor_id, valor_em_aberto__gt=0)
+        .exclude(status__in=[ContaPagar.STATUS_PAGA, ContaPagar.STATUS_CANCELADA])
+        .order_by("data_vencimento", "id")
+    )
+
+    total_aberto = sum((conta.valor_em_aberto for conta in contas), Decimal("0.00"))
+
+    return JsonResponse({
+        "fornecedor_id": fornecedor_id,
+        "total_aberto": str(total_aberto.quantize(Decimal("0.01"))),
+        "quantidade": contas.count(),
+        "contas": [_conta_pagar_payload(conta) for conta in contas],
+    })
+
+
+def conta_pagar_baixar(request, pk):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "erro": "Metodo nao permitido."}, status=405)
+
+    with transaction.atomic():
+        conta = get_object_or_404(
+            ContaPagar.objects.select_for_update().select_related("fornecedor", "compra"),
+            pk=pk,
+        )
+
+        if conta.status in [ContaPagar.STATUS_PAGA, ContaPagar.STATUS_CANCELADA] or conta.valor_em_aberto <= 0:
+            return JsonResponse({"ok": False, "erro": "Esta conta nao esta em aberto."}, status=400)
+
+        valor = _decimal_compra(request.POST.get("valor"), casas=2)
+        forma_pagamento = (request.POST.get("forma_pagamento") or "").strip()
+        observacao = (request.POST.get("observacao") or "").strip()
+
+        if valor <= 0:
+            return JsonResponse({"ok": False, "erro": "Informe um valor maior que zero."}, status=400)
+
+        if valor > conta.valor_em_aberto:
+            valor = conta.valor_em_aberto
+
+        PagamentoContaPagar.objects.create(
+            conta=conta,
+            data_pagamento=timezone.localdate(),
+            valor=valor,
+            forma_pagamento=forma_pagamento,
+            observacao=observacao,
+        )
+
+        conta.valor_em_aberto = (conta.valor_em_aberto - valor).quantize(Decimal("0.01"))
+        conta.status = ContaPagar.STATUS_PAGA if conta.valor_em_aberto <= 0 else ContaPagar.STATUS_PARCIAL
+        conta.save(update_fields=["valor_em_aberto", "status", "atualizado_em"])
+
+    return JsonResponse({
+        "ok": True,
+        "fornecedor_id": conta.fornecedor_id,
+        "conta": _conta_pagar_payload(conta),
+    })
 
 def compras_lista(request):
     termo = request.GET.get("q", "").strip()

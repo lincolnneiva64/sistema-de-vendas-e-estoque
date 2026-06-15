@@ -84,6 +84,107 @@
     box-shadow:inset 4px 0 0 #1d4ed8;
   }
   .produto-sugestao-vazia { padding:9px 10px; color:#64748b; font-size:.84rem; font-weight:650; }
+
+  .fornecedor-financeiro-aviso {
+    display:none;
+    margin-top:10px;
+    border:1.5px solid #f59e0b;
+    background:#fffbeb;
+    color:#78350f;
+    border-radius:12px;
+    padding:10px 12px;
+    font-weight:850;
+    cursor:pointer;
+    width:100%;
+    text-align:left;
+  }
+
+  .fornecedor-financeiro-aviso.visivel {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+  }
+
+  .fornecedor-financeiro-aviso strong {
+    font-size:1rem;
+  }
+
+  .fornecedor-financeiro-modal {
+    position:fixed;
+    inset:0;
+    background:rgba(15,23,42,.48);
+    z-index:2000;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:16px;
+  }
+
+  .fornecedor-financeiro-modal.aberto {
+    display:flex;
+  }
+
+  .fornecedor-financeiro-caixa {
+    width:min(720px, 100%);
+    max-height:88vh;
+    overflow:auto;
+    background:#fff;
+    border-radius:16px;
+    box-shadow:0 24px 70px rgba(15,23,42,.28);
+  }
+
+  .fornecedor-financeiro-topo {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+    padding:14px 16px;
+    border-bottom:1px solid #e5e7eb;
+  }
+
+  .fornecedor-financeiro-topo h2 {
+    margin:0;
+    font-size:1.15rem;
+    font-weight:900;
+  }
+
+  .fornecedor-financeiro-corpo {
+    padding:14px 16px;
+  }
+
+  .conta-pagar-card {
+    border:1px solid #e2e8f0;
+    border-radius:12px;
+    padding:12px;
+    margin-bottom:10px;
+    background:#f8fafc;
+  }
+
+  .conta-pagar-linha {
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    flex-wrap:wrap;
+    font-weight:800;
+  }
+
+  .conta-pagar-baixa {
+    display:grid;
+    grid-template-columns:1fr 1fr auto;
+    gap:8px;
+    margin-top:10px;
+    align-items:end;
+  }
+
+  .conta-pagar-baixa input {
+    border:1.5px solid #cbd5e1;
+    border-radius:9px;
+    padding:9px 10px;
+    font-weight:750;
+    width:100%;
+  }
+
   .produto-estoque-compra {
     display:inline-flex;
     align-items:center;
@@ -159,6 +260,10 @@
               </select>
               <div class="produto-sugestoes fornecedor-sugestoes"></div>
             </div>
+            <button type="button" id="avisoContasPagarFornecedor" class="fornecedor-financeiro-aviso">
+              <span>⚠️ Contas em aberto</span>
+              <strong id="resumoContasPagarFornecedor">R$ 0,00</strong>
+            </button>
           </div>
           <div class="compras-field">
             <label>Data da compra</label>
@@ -228,10 +333,22 @@
     </section>
 
     <div class="compras-actions">
-      <a href="{% url 'estoque:home' %}" class="compras-btn compras-btn-secondary">Cancelar</a>
+      <a href="{% url 'estoque:compras_lista' %}" class="compras-btn compras-btn-secondary">Cancelar</a>
       <button type="submit" class="compras-btn compras-btn-primary">Salvar compra</button>
     </div>
   </form>
+</div>
+
+<div id="modalContasPagarFornecedor" class="fornecedor-financeiro-modal">
+  <div class="fornecedor-financeiro-caixa">
+    <div class="fornecedor-financeiro-topo">
+      <h2>Contas a pagar do fornecedor</h2>
+      <button type="button" class="compras-btn compras-btn-secondary" id="fecharModalContasPagar">Fechar</button>
+    </div>
+    <div class="fornecedor-financeiro-corpo">
+      <div id="listaContasPagarFornecedor"></div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -731,6 +848,7 @@
   const observacao = form.querySelector('[name="observacao"]');
   const primeiroProduto = form.querySelector('[name="produto_busca[]"]');
   let fornecedorAtivo = -1;
+  let bloquearAberturaInicialFornecedor = false;
 
   function focar(campo) {
     if (!campo) return;
@@ -779,7 +897,22 @@
     fornecedor.value = opt.value;
     fornecedorBusca.value = opt.textContent.trim();
     fecharSugestoesFornecedor();
+    if (window.atualizarContasPagarFornecedor) {
+      window.atualizarContasPagarFornecedor(opt.value);
+    }
     focar(dataCompra);
+  }
+
+  function selecionarPrimeiroFornecedor() {
+    const primeira = opcoesFornecedor()[0];
+    if (!primeira || !fornecedorBusca) return;
+
+    fornecedor.value = primeira.value;
+    fornecedorBusca.value = primeira.textContent.trim();
+
+    if (window.atualizarContasPagarFornecedor) {
+      window.atualizarContasPagarFornecedor(primeira.value);
+    }
   }
 
   function mostrarSugestoesFornecedor(mostrarTodos) {
@@ -824,21 +957,21 @@
     destacarFornecedor(indiceAtual >= 0 ? indiceAtual : 0);
   }
 
-  function selecionarPrimeiroFornecedor() {
-    const primeira = opcoesFornecedor()[0];
-    if (!primeira || !fornecedorBusca) return;
-
-    fornecedor.value = primeira.value;
-    fornecedorBusca.value = primeira.textContent.trim();
-  }
-
   if (fornecedorBusca) {
     fornecedorBusca.addEventListener("focus", function() {
+      if (bloquearAberturaInicialFornecedor) {
+        bloquearAberturaInicialFornecedor = false;
+        fecharSugestoesFornecedor();
+        return;
+      }
       mostrarSugestoesFornecedor(true);
     });
 
     fornecedorBusca.addEventListener("input", function() {
       fornecedor.value = "";
+      if (window.atualizarContasPagarFornecedor) {
+        window.atualizarContasPagarFornecedor("");
+      }
       mostrarSugestoesFornecedor();
     });
 
@@ -918,11 +1051,171 @@
 
   window.addEventListener("load", function() {
     selecionarPrimeiroFornecedor();
+    fecharSugestoesFornecedor();
+
     setTimeout(function() {
+      bloquearAberturaInicialFornecedor = true;
       focar(fornecedorBusca);
-      mostrarSugestoesFornecedor(true);
+      fecharSugestoesFornecedor();
     }, 150);
   });
+})();
+</script>
+
+
+<script>
+(function() {
+  const aviso = document.getElementById("avisoContasPagarFornecedor");
+  const resumo = document.getElementById("resumoContasPagarFornecedor");
+  const modal = document.getElementById("modalContasPagarFornecedor");
+  const lista = document.getElementById("listaContasPagarFornecedor");
+  const fechar = document.getElementById("fecharModalContasPagar");
+  const csrf = document.querySelector('[name="csrfmiddlewaretoken"]');
+
+  let contasAtuais = [];
+  let fornecedorAtual = "";
+
+  function moeda(valor) {
+    return "R$ " + Number(valor || 0).toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function esconderAviso() {
+    contasAtuais = [];
+    if (aviso) aviso.classList.remove("visivel");
+    if (resumo) resumo.textContent = "R$ 0,00";
+    if (lista) lista.innerHTML = "";
+  }
+
+  function abrirModal() {
+    if (!modal) return;
+    renderizarContas();
+    modal.classList.add("aberto");
+  }
+
+  function fecharModal() {
+    if (!modal) return;
+    modal.classList.remove("aberto");
+  }
+
+  function renderizarContas() {
+    if (!lista) return;
+
+    if (!contasAtuais.length) {
+      lista.innerHTML = '<div class="compras-alert success">Nenhuma conta em aberto para este fornecedor.</div>';
+      return;
+    }
+
+    lista.innerHTML = contasAtuais.map(function(conta) {
+      return `
+        <div class="conta-pagar-card" data-conta-id="${conta.id}">
+          <div class="conta-pagar-linha">
+            <span>Compra #${conta.compra_id}</span>
+            <span>Vencimento: ${conta.data_vencimento || "-"}</span>
+          </div>
+          <div class="conta-pagar-linha" style="margin-top:6px;">
+            <span>Aberto: ${moeda(conta.valor_em_aberto)}</span>
+            <span>Status: ${conta.status}</span>
+          </div>
+          ${conta.observacao ? `<div style="margin-top:6px;color:#475569;font-weight:700;">${conta.observacao}</div>` : ""}
+          <div class="conta-pagar-baixa">
+            <input type="text" inputmode="decimal" class="valor-baixa-conta" value="${String(conta.valor_em_aberto).replace(".", ",")}" aria-label="Valor da baixa">
+            <input type="text" class="forma-baixa-conta" placeholder="Forma: pix, dinheiro...">
+            <button type="button" class="compras-btn compras-btn-primary btn-baixar-conta">Baixar</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    lista.querySelectorAll(".btn-baixar-conta").forEach(function(botao) {
+      botao.addEventListener("click", function() {
+        const card = botao.closest(".conta-pagar-card");
+        baixarConta(card);
+      });
+    });
+  }
+
+  function atualizarResumo(total) {
+    if (!aviso || !resumo) return;
+
+    if (!contasAtuais.length) {
+      esconderAviso();
+      return;
+    }
+
+    aviso.classList.add("visivel");
+    resumo.textContent = `${contasAtuais.length} conta(s) - ${moeda(total)}`;
+  }
+
+  async function carregarContas(fornecedorId) {
+    fornecedorAtual = fornecedorId || "";
+
+    if (!fornecedorAtual) {
+      esconderAviso();
+      return;
+    }
+
+    try {
+      const resposta = await fetch(`/fornecedores/${fornecedorAtual}/contas-pagar-abertas/`, {
+        headers: { "X-Requested-With": "XMLHttpRequest" }
+      });
+      const dados = await resposta.json();
+
+      contasAtuais = dados.contas || [];
+      atualizarResumo(dados.total_aberto || 0);
+
+      if (modal && modal.classList.contains("aberto")) {
+        renderizarContas();
+      }
+    } catch (erro) {
+      esconderAviso();
+      console.error("Erro ao carregar contas a pagar do fornecedor.", erro);
+    }
+  }
+
+  async function baixarConta(card) {
+    if (!card) return;
+
+    const contaId = card.dataset.contaId;
+    const valor = card.querySelector(".valor-baixa-conta").value;
+    const forma = card.querySelector(".forma-baixa-conta").value;
+
+    const dados = new FormData();
+    dados.append("valor", valor);
+    dados.append("forma_pagamento", forma);
+    dados.append("observacao", "Baixa pela tela Nova Compra");
+
+    const resposta = await fetch(`/contas-pagar/${contaId}/baixar/`, {
+      method: "POST",
+      headers: {
+        "X-CSRFToken": csrf ? csrf.value : "",
+        "X-Requested-With": "XMLHttpRequest"
+      },
+      body: dados
+    });
+
+    const retorno = await resposta.json();
+
+    if (!retorno.ok) {
+      alert(retorno.erro || "Nao foi possivel baixar a conta.");
+      return;
+    }
+
+    await carregarContas(fornecedorAtual);
+  }
+
+  if (aviso) aviso.addEventListener("click", abrirModal);
+  if (fechar) fechar.addEventListener("click", fecharModal);
+
+  if (modal) {
+    modal.addEventListener("click", function(event) {
+      if (event.target === modal) fecharModal();
+    });
+  }
+
+  window.atualizarContasPagarFornecedor = carregarContas;
 })();
 </script>
 
