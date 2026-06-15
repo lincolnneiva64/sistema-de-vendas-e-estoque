@@ -1753,6 +1753,10 @@ def compras_nova(request):
             messages.error(request, "Informe uma data valida para a compra.")
             return redirect("estoque:compras_nova")
 
+        if compra_a_prazo and not data_vencimento:
+            messages.error(request, "Informe o vencimento da compra a prazo.")
+            return redirect("estoque:compras_nova")
+
         itens_validos = []
         try:
             for indice, produto_id in enumerate(produto_ids):

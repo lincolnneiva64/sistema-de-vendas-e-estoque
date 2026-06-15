@@ -16,12 +16,25 @@
   .compras-card { background:#fff; border:1px solid #e1e7ef; border-radius:14px; box-shadow:0 14px 30px rgba(15,23,42,.06); margin-bottom:14px; overflow:hidden; }
   .compras-card-head { padding:12px 16px; border-bottom:1px solid #edf1f6; font-weight:850; }
   .compras-card-body { padding:14px 16px; }
-  .compras-grid { display:grid; grid-template-columns: 1.2fr .6fr .7fr; gap:10px; }
+  .compras-grid { display:grid; grid-template-columns: 1.2fr .55fr .65fr .55fr; gap:10px; }
   .compras-field label { display:block; font-weight:850; font-size:.82rem; margin-bottom:4px; color:#334155; }
   .compras-field input, .compras-field select, .compras-field textarea {
     width:100%; border:1.5px solid #d3dbe8; border-radius:9px; padding:9px 11px; font-weight:600; outline:none;
   }
   .compras-field textarea { min-height:72px; resize:vertical; }
+  .compras-prazo-info {
+    display:none;
+    margin-top:8px;
+    padding:9px 11px;
+    border-radius:10px;
+    border:1px solid #bfdbfe;
+    background:#eff6ff;
+    color:#164173;
+    font-weight:800;
+    font-size:.86rem;
+  }
+  .compras-prazo-info.visivel { display:block; }
+  .compras-field.oculto { display:none; }
   .compras-table { width:100%; border-collapse:collapse; }
   .compras-table th { text-align:left; font-size:.72rem; color:#64748b; text-transform:uppercase; background:#f8fafc; padding:9px; border-bottom:1px solid #edf1f6; }
   .compras-table td { padding:8px; border-bottom:1px solid #f0f3f8; vertical-align:top; }
@@ -275,7 +288,7 @@
           </div>
           <div class="compras-field">
             <label>Tipo de pagamento</label>
-            <select name="tipo_pagamento">
+            <select name="tipo_pagamento" id="tipoPagamentoCompra">
               <option value="">Selecione...</option>
               <option value="avista">A vista</option>
               <option value="aprazo" selected>A prazo</option>
@@ -283,6 +296,10 @@
               <option value="dinheiro">Dinheiro</option>
               <option value="cartao">Cartao</option>
             </select>
+          </div>
+          <div class="compras-field" id="campoVencimentoCompra">
+            <label>Vencimento</label>
+            <input type="date" name="data_vencimento" id="dataVencimentoCompra" value="{{ hoje|date:'Y-m-d' }}">
           </div>
         </div>
         <div class="compras-field" style="margin-top:10px;">
@@ -868,9 +885,12 @@
   const dataCompra = form.querySelector('[name="data_compra"]');
   const tipoPagamento = form.querySelector('[name="tipo_pagamento"]');
   const observacao = form.querySelector('[name="observacao"]');
+  const campoVencimento = document.getElementById("campoVencimentoCompra");
+  const dataVencimento = document.getElementById("dataVencimentoCompra");
   const primeiroProduto = form.querySelector('[name="produto_busca[]"]');
   let fornecedorAtivo = -1;
   let bloquearAberturaInicialFornecedor = false;
+  let vencimentoAlteradoManualmente = false;
 
   function focar(campo) {
     if (!campo) return;
@@ -880,6 +900,31 @@
         campo.select();
       }
     }, 80);
+  }
+
+  function pagamentoAPrazo() {
+    const valor = String(tipoPagamento ? tipoPagamento.value : "").toLowerCase().replace(/\s/g, "");
+    return valor === "aprazo" || valor === "prazo";
+  }
+
+  function atualizarVencimentoCompra() {
+    const prazo = pagamentoAPrazo();
+
+    if (campoVencimento) {
+      campoVencimento.classList.toggle("oculto", !prazo);
+    }
+
+    if (dataVencimento) {
+      dataVencimento.required = prazo;
+      if (prazo && !dataVencimento.value && dataCompra) {
+        dataVencimento.value = dataCompra.value;
+      }
+
+      if (!prazo) {
+        dataVencimento.value = "";
+        vencimentoAlteradoManualmente = false;
+      }
+    }
   }
 
   function opcoesFornecedor() {
@@ -1048,6 +1093,12 @@
   }
 
   if (dataCompra) {
+    dataCompra.addEventListener("change", function() {
+      if (dataVencimento && pagamentoAPrazo() && !vencimentoAlteradoManualmente) {
+        dataVencimento.value = dataCompra.value;
+      }
+    });
+
     dataCompra.addEventListener("keydown", function(event) {
       if (event.key !== "Enter") return;
       event.preventDefault();
@@ -1056,7 +1107,30 @@
   }
 
   if (tipoPagamento) {
+    tipoPagamento.addEventListener("change", atualizarVencimentoCompra);
+
     tipoPagamento.addEventListener("keydown", function(event) {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+
+      if (pagamentoAPrazo()) {
+        focar(dataVencimento);
+      } else {
+        focar(primeiroProduto || observacao);
+      }
+    });
+  }
+
+  if (dataVencimento) {
+    dataVencimento.addEventListener("input", function() {
+      vencimentoAlteradoManualmente = true;
+    });
+
+    dataVencimento.addEventListener("change", function() {
+      vencimentoAlteradoManualmente = true;
+    });
+
+    dataVencimento.addEventListener("keydown", function(event) {
       if (event.key !== "Enter") return;
       event.preventDefault();
       focar(primeiroProduto || observacao);
@@ -1072,6 +1146,7 @@
   }
 
   window.addEventListener("load", function() {
+    atualizarVencimentoCompra();
     selecionarPrimeiroFornecedor();
     fecharSugestoesFornecedor();
 
