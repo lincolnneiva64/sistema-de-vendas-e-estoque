@@ -303,6 +303,7 @@
     .pagamento-select-real { display:none !important; }
     .pagamento-opcoes-mobile { display:grid; }
     .linha-item:not(.linha-item-ativa) .produto-historico-compra { display:none !important; }
+    .campo-observacao-compra { display:none !important; }
   }
 </style>
 
@@ -835,7 +836,9 @@
 
     const produtoDestino = linhaDestino.querySelector('[name="produto_busca[]"]');
     focarCampo(produtoDestino);
-    produtoDestino.select();
+    if (!compraMobile()) {
+      produtoDestino.select();
+    }
   }
 
   function ligarLinha(linha) {
@@ -849,7 +852,9 @@
     const preco = linha.querySelector('[name="preco_unitario[]"]');
 
     produtoBusca.addEventListener("focus", function() {
-      produtoBusca.select();
+      if (!compraMobile()) {
+        produtoBusca.select();
+      }
 
       if (produtoBusca.value.trim()) {
         fecharSugestoes(linha);
@@ -857,7 +862,9 @@
         const primeiraOpcao = opcoesProduto(linha)[0];
         if (primeiraOpcao) {
           selecionarProduto(linha, primeiraOpcao);
-          produtoBusca.select();
+          if (!compraMobile()) {
+        produtoBusca.select();
+      }
         } else {
           mostrarSugestoes(linha, true);
           definirSugestaoAtiva(linha, 0);
@@ -1498,5 +1505,6 @@
 </script>
 
 {% endblock %}
+
 
 
