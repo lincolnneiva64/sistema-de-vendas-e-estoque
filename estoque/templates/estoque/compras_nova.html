@@ -2254,7 +2254,10 @@
           </div>
           ${conta.observacao ? `<div style="margin-top:6px;color:#475569;font-weight:700;">${escapeHtml(conta.observacao)}</div>` : ""}
           <div class="conta-pagar-baixa">
-            <input type="text" inputmode="decimal" class="valorBaixaSeguraContaPagar" value="${String(conta.valor_em_aberto).replace(".", ",")}" aria-label="Valor da baixa">
+            <div>
+              <input type="text" inputmode="decimal" class="valorBaixaSeguraContaPagar" value="${String(conta.valor_em_aberto).replace(".", ",")}" data-valor-original="${Number(conta.valor_em_aberto || 0)}" aria-label="Valor da baixa">
+              <button type="button" class="compras-btn compras-btn-secondary restaurarValorBaixaSeguraContaPagar" style="margin-top:6px; min-height:32px; padding:6px 9px; font-size:.78rem;">Restaurar valor</button>
+            </div>
             <input type="text" class="formaBaixaSeguraContaPagar" value="Pix" placeholder="Forma: pix, dinheiro...">
             <button type="button" class="compras-btn compras-btn-primary prepararBaixaSeguraContaPagar">Preparar baixa</button>
           </div>
@@ -2361,6 +2364,36 @@
   function csrfToken() {
     var campo = document.querySelector('[name="csrfmiddlewaretoken"]');
     return campo ? campo.value : "";
+  }
+
+  function formatarValorCampo(valor) {
+    return moeda(valor).replace("R$ ", "");
+  }
+
+  function valorOriginalDaBaixa(card, campo) {
+    return Number(
+      (campo && campo.dataset.valorOriginal) ||
+      (card && card.dataset.aberto) ||
+      0
+    );
+  }
+
+  function restaurarValorBaixa(card) {
+    var campo = card ? card.querySelector(".valorBaixaSeguraContaPagar") : null;
+    if (!campo) return;
+    campo.value = formatarValorCampo(valorOriginalDaBaixa(card, campo));
+  }
+
+  function resumoEstaAberto(card) {
+    var resumo = card ? card.querySelector(".resumoBaixaSeguraContaPagar") : null;
+    return resumo && resumo.style.display !== "none";
+  }
+
+  function limparResumoBaixa(card) {
+    var resumo = card ? card.querySelector(".resumoBaixaSeguraContaPagar") : null;
+    if (!resumo) return;
+    resumo.innerHTML = "";
+    resumo.style.display = "none";
   }
 
   function garantirModal() {
@@ -2541,7 +2574,8 @@
         '<div style="display:grid; grid-template-columns:1fr 1fr auto; gap:8px; margin-top:10px; align-items:end;">' +
           '<div>' +
             '<label style="display:block; font-size:.78rem; font-weight:900; color:#334155; margin-bottom:4px;">Valor a pagar</label>' +
-            '<input type="text" inputmode="decimal" class="valorBaixaSeguraContaPagar" value="' + moeda(valorAberto).replace("R$ ", "") + '" style="border:1.5px solid #cbd5e1; border-radius:9px; padding:9px 10px; font-weight:800; width:100%;">' +
+            '<input type="text" inputmode="decimal" class="valorBaixaSeguraContaPagar" value="' + moeda(valorAberto).replace("R$ ", "") + '" data-valor-original="' + valorAberto + '" style="border:1.5px solid #cbd5e1; border-radius:9px; padding:9px 10px; font-weight:800; width:100%;">' +
+            '<button type="button" class="compras-btn compras-btn-secondary restaurarValorBaixaSeguraContaPagar" style="margin-top:6px; min-height:32px; padding:6px 9px; font-size:.78rem;">Restaurar valor</button>' +
           '</div>' +
           '<div>' +
             '<label style="display:block; font-size:.78rem; font-weight:900; color:#334155; margin-bottom:4px;">Forma</label>' +
@@ -2555,20 +2589,27 @@
     });
   }
 
-  function prepararBaixa(card) {
+  function prepararBaixa(card, focarCampo) {
     var campo = card.querySelector(".valorBaixaSeguraContaPagar");
-    var aberto = Number(card.dataset.aberto || 0);
+    var aberto = valorOriginalDaBaixa(card, campo);
+
+    if (campo && !String(campo.value || "").trim()) {
+      restaurarValorBaixa(card);
+    }
+
     var pagando = numero(campo ? campo.value : "");
     var sobra = Math.max(aberto - pagando, 0);
     var status = sobra <= 0 ? "Quitada" : "Parcial";
 
     if (!pagando || pagando <= 0) {
+      limparResumoBaixa(card);
       alert("Informe um valor maior que zero.");
       if (campo) campo.focus();
       return;
     }
 
     if (pagando > aberto) {
+      limparResumoBaixa(card);
       alert("O valor informado é maior que o saldo aberto.");
       if (campo) campo.focus();
       return;
@@ -2589,12 +2630,14 @@
 
     resumo.style.display = "block";
 
-    setTimeout(function() {
-      if (campo) {
-        campo.focus();
-        campo.select();
-      }
-    }, 80);
+    if (focarCampo !== false) {
+      setTimeout(function() {
+        if (campo) {
+          campo.focus();
+          campo.select();
+        }
+      }, 80);
+    }
   }
 
   async function confirmarBaixa(card) {
@@ -2658,6 +2701,20 @@
       return;
     }
 
+    var restaurar = event.target.closest(".restaurarValorBaixaSeguraContaPagar");
+    if (restaurar) {
+      event.preventDefault();
+      event.stopPropagation();
+      var cardRestaurar = restaurar.closest("[data-conta-id]");
+      if (cardRestaurar) {
+        restaurarValorBaixa(cardRestaurar);
+        if (resumoEstaAberto(cardRestaurar)) prepararBaixa(cardRestaurar, false);
+        var campoRestaurado = cardRestaurar.querySelector(".valorBaixaSeguraContaPagar");
+        if (campoRestaurado) campoRestaurado.focus();
+      }
+      return;
+    }
+
     var preparar = event.target.closest(".prepararBaixaSeguraContaPagar");
     if (preparar) {
       event.preventDefault();
@@ -2682,6 +2739,42 @@
       var card3 = cancelar.closest("[data-conta-id]");
       var resumo = card3 ? card3.querySelector(".resumoBaixaSeguraContaPagar") : null;
       if (resumo) resumo.style.display = "none";
+    }
+  }, true);
+
+  document.addEventListener("input", function(event) {
+    var campo = event.target.closest(".valorBaixaSeguraContaPagar");
+    if (!campo) return;
+
+    var card = campo.closest("[data-conta-id]");
+    if (!card) return;
+
+    if (!String(campo.value || "").trim()) {
+      limparResumoBaixa(card);
+      return;
+    }
+
+    if (resumoEstaAberto(card)) {
+      var pagando = numero(campo.value);
+      var aberto = valorOriginalDaBaixa(card, campo);
+      if (!pagando || pagando <= 0 || pagando > aberto) {
+        limparResumoBaixa(card);
+        return;
+      }
+      prepararBaixa(card, false);
+    }
+  }, true);
+
+  document.addEventListener("focusout", function(event) {
+    var campo = event.target.closest(".valorBaixaSeguraContaPagar");
+    if (!campo) return;
+
+    var card = campo.closest("[data-conta-id]");
+    if (!card) return;
+
+    if (!String(campo.value || "").trim()) {
+      restaurarValorBaixa(card);
+      if (resumoEstaAberto(card)) prepararBaixa(card, false);
     }
   }, true);
 
