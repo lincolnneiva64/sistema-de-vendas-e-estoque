@@ -5,9 +5,9 @@
 {% block content %}
 <style>
   .financeiro-page {
-    max-width: 1180px;
-    margin: 8px auto 40px;
-    padding: 0 12px;
+    max-width: 1240px;
+    margin: 4px auto 28px;
+    padding: 0 8px;
     color: #172033;
   }
 
@@ -15,52 +15,52 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    gap: 10px;
-    margin-bottom: 8px;
+    gap: 7px;
+    margin-bottom: 5px;
   }
 
   .financeiro-title {
     margin: 0;
-    font-size: 1.25rem;
+    font-size: 1.12rem;
     font-weight: 950;
   }
 
   .financeiro-subtitle {
-    margin: 2px 0 0;
+    margin: 1px 0 0;
     color: #64748b;
     font-weight: 700;
-    font-size: .88rem;
+    font-size: .78rem;
   }
 
   .financeiro-actions {
     display: flex;
-    gap: 6px;
+    gap: 5px;
     flex-wrap: wrap;
     justify-content: flex-end;
   }
 
   .financeiro-btn {
-    min-height: 32px;
+    min-height: 28px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border: 1px solid #bfdbfe;
     border-radius: 7px;
-    padding: 6px 10px;
+    padding: 4px 8px;
     background: #eff6ff;
     color: #164173;
     text-decoration: none;
-    font-size: .82rem;
+    font-size: .76rem;
     font-weight: 850;
   }
 
   .financeiro-section {
-    margin-top: 9px;
+    margin-top: 6px;
   }
 
   .financeiro-section h2 {
-    margin: 0 0 5px;
-    font-size: .9rem;
+    margin: 0 0 3px;
+    font-size: .82rem;
     font-weight: 950;
     color: #334155;
   }
@@ -68,7 +68,7 @@
   .financeiro-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 7px;
+    gap: 5px;
   }
 
   .financeiro-grid.quatro {
@@ -82,11 +82,11 @@
   .financeiro-card {
     border: 1px solid #e2e8f0;
     border-left: 4px solid #2563eb;
-    border-radius: 7px;
-    min-height: 72px;
-    padding: 9px 11px;
+    border-radius: 6px;
+    min-height: 58px;
+    padding: 6px 9px;
     background: #fff;
-    box-shadow: 0 5px 12px rgba(15, 23, 42, .045);
+    box-shadow: 0 3px 8px rgba(15, 23, 42, .035);
   }
 
   .financeiro-card.positivo { border-left-color: #16a34a; }
@@ -99,15 +99,15 @@
 
   .financeiro-label {
     color: #64748b;
-    font-size: .76rem;
+    font-size: .7rem;
     font-weight: 850;
-    line-height: 1.18;
+    line-height: 1.12;
   }
 
   .financeiro-value {
-    margin-top: 4px;
+    margin-top: 3px;
     color: #172033;
-    font-size: 1.12rem;
+    font-size: 1rem;
     font-weight: 950;
     line-height: 1.1;
   }
@@ -124,14 +124,14 @@
   }
 
   .financeiro-note {
-    margin-top: 7px;
-    padding: 7px 9px;
+    margin-top: 5px;
+    padding: 5px 7px;
     border: 1px solid #dbeafe;
     border-radius: 8px;
     background: #eff6ff;
     color: #334155;
     font-weight: 750;
-    font-size: .82rem;
+    font-size: .74rem;
   }
 
   @media (max-width: 860px) {
@@ -156,8 +156,8 @@
       grid-template-columns: 1fr;
     }
     .financeiro-card {
-      min-height: 66px;
-      padding: 9px 10px;
+      min-height: 60px;
+      padding: 8px 9px;
     }
     .financeiro-btn {
       width: 100%;
