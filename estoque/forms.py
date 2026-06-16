@@ -912,9 +912,12 @@ class MeioPagamentoForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["tipo"].initial = MeioPagamento.TIPO_CREDITO
-        self.fields["tipo"].choices = MeioPagamento.TIPO_CHOICES
-        self.fields["tipo"].widget.choices = MeioPagamento.TIPO_CHOICES
+        if "tipo" in self.fields:
+            self.fields["tipo"].initial = MeioPagamento.TIPO_CREDITO
+        if "tipo" in self.fields:
+            self.fields["tipo"].choices = MeioPagamento.TIPO_CHOICES
+        if "tipo" in self.fields:
+            self.fields["tipo"].widget.choices = MeioPagamento.TIPO_CHOICES
 
     @staticmethod
     def _nome_proprio(valor):
@@ -1023,9 +1026,12 @@ class FornecedorForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["tipo"].initial = MeioPagamento.TIPO_CREDITO
-        self.fields["tipo"].choices = MeioPagamento.TIPO_CHOICES
-        self.fields["tipo"].widget.choices = MeioPagamento.TIPO_CHOICES
+        if "tipo" in self.fields:
+            self.fields["tipo"].initial = MeioPagamento.TIPO_CREDITO
+        if "tipo" in self.fields:
+            self.fields["tipo"].choices = MeioPagamento.TIPO_CHOICES
+        if "tipo" in self.fields:
+            self.fields["tipo"].widget.choices = MeioPagamento.TIPO_CHOICES
 
     @staticmethod
     def _nome_proprio(valor):
@@ -1150,4 +1156,7 @@ FornecedorContatoFormSet = forms.inlineformset_factory(
     extra=3,
     can_delete=True,
 )
+
+
+
 
