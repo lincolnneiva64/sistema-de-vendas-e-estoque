@@ -1682,6 +1682,19 @@ def _conta_pagar_payload(conta):
     }
 
 
+def _pagamento_conta_pagar_payload(pagamento):
+    conta = pagamento.conta
+    return {
+        "id": pagamento.id,
+        "conta_id": pagamento.conta_id,
+        "compra_id": conta.compra_id if conta else "",
+        "data_pagamento": pagamento.data_pagamento.strftime("%d/%m/%Y") if pagamento.data_pagamento else "",
+        "valor": str(pagamento.valor),
+        "forma_pagamento": pagamento.forma_pagamento or "",
+        "observacao": pagamento.observacao or "",
+    }
+
+
 
 
 def produto_ultimas_compras(request, produto_id):
@@ -1710,21 +1723,70 @@ def produto_ultimas_compras(request, produto_id):
 
 
 def fornecedor_contas_pagar_abertas(request, fornecedor_id):
-    contas = (
+    fornecedor = (
+        Fornecedor.objects
+        .filter(pk=fornecedor_id)
+        .values("id", "nome")
+        .first()
+    )
+
+    contas = list(
         ContaPagar.objects
-        .select_related("compra", "fornecedor")
         .filter(fornecedor_id=fornecedor_id, valor_em_aberto__gt=0)
         .exclude(status__in=[ContaPagar.STATUS_PAGA, ContaPagar.STATUS_CANCELADA])
+        .only(
+            "id",
+            "compra_id",
+            "fornecedor_id",
+            "data_emissao",
+            "data_vencimento",
+            "valor_original",
+            "valor_em_aberto",
+            "status",
+            "observacao",
+        )
         .order_by("data_vencimento", "id")
     )
 
     total_aberto = sum((conta.valor_em_aberto for conta in contas), Decimal("0.00"))
+    hoje = timezone.localdate()
+    contas_vencidas = [
+        conta
+        for conta in contas
+        if conta.data_vencimento and conta.data_vencimento < hoje
+    ]
+    total_vencido = sum((conta.valor_em_aberto for conta in contas_vencidas), Decimal("0.00"))
+
+    pagamentos_recentes = list(
+        PagamentoContaPagar.objects
+        .select_related("conta")
+        .filter(conta__fornecedor_id=fornecedor_id)
+        .only(
+            "id",
+            "conta_id",
+            "data_pagamento",
+            "valor",
+            "forma_pagamento",
+            "observacao",
+            "conta__id",
+            "conta__compra_id",
+        )
+        .order_by("-data_pagamento", "-id")[:5]
+    )
 
     return JsonResponse({
         "fornecedor_id": fornecedor_id,
+        "fornecedor_nome": fornecedor["nome"] if fornecedor else "",
         "total_aberto": str(total_aberto.quantize(Decimal("0.01"))),
-        "quantidade": contas.count(),
+        "total_vencido": str(total_vencido.quantize(Decimal("0.01"))),
+        "quantidade": len(contas),
+        "quantidade_vencidas": len(contas_vencidas),
+        "proxima_conta": _conta_pagar_payload(contas[0]) if contas else None,
         "contas": [_conta_pagar_payload(conta) for conta in contas],
+        "pagamentos_recentes": [
+            _pagamento_conta_pagar_payload(pagamento)
+            for pagamento in pagamentos_recentes
+        ],
     })
 
 

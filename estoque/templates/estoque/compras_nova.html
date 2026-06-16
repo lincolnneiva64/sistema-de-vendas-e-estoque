@@ -314,13 +314,33 @@
 
   .fornecedor-financeiro-aviso.visivel {
     display:flex;
-    align-items:center;
+    align-items:flex-start;
     justify-content:space-between;
     gap:10px;
   }
 
+  .fornecedor-financeiro-texto {
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    min-width:0;
+  }
+
+  .fornecedor-financeiro-texto span {
+    font-weight:950;
+    color:#78350f;
+  }
+
+  .fornecedor-financeiro-texto small {
+    color:#92400e;
+    font-weight:750;
+    line-height:1.3;
+  }
+
   .fornecedor-financeiro-aviso strong {
     font-size:1rem;
+    white-space:nowrap;
+    color:#166534;
   }
 
   .fornecedor-financeiro-modal {
@@ -396,6 +416,58 @@
     padding:9px 10px;
     font-weight:750;
     width:100%;
+  }
+
+  .fornecedor-financeiro-resumo {
+    border:1px solid #fde68a;
+    border-radius:12px;
+    padding:12px;
+    margin-bottom:10px;
+    background:#fffbeb;
+    color:#78350f;
+    font-weight:850;
+  }
+
+  .fornecedor-financeiro-resumo strong {
+    display:block;
+    color:#172033;
+    font-size:1rem;
+    margin-bottom:6px;
+  }
+
+  .fornecedor-financeiro-historico {
+    border-top:1px solid #e5e7eb;
+    margin-top:14px;
+    padding-top:12px;
+  }
+
+  .fornecedor-financeiro-historico h3 {
+    margin:0 0 8px;
+    font-size:1rem;
+    font-weight:950;
+    color:#172033;
+  }
+
+  .fornecedor-historico-item {
+    border:1px solid #e2e8f0;
+    border-radius:10px;
+    padding:10px;
+    margin-bottom:8px;
+    background:#fff;
+  }
+
+  .fornecedor-historico-linha {
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    flex-wrap:wrap;
+    font-weight:850;
+  }
+
+  .fornecedor-historico-obs {
+    margin-top:5px;
+    color:#64748b;
+    font-weight:750;
   }
 
   .produto-estoque-compra {
@@ -827,7 +899,10 @@
               <div class="produto-sugestoes fornecedor-sugestoes"></div>
             </div>
             <button type="button" id="avisoContasPagarFornecedor" class="fornecedor-financeiro-aviso">
-              <span>⚠️ Contas em aberto</span>
+              <span class="fornecedor-financeiro-texto">
+                <span id="tituloContasPagarFornecedor">Contas do fornecedor</span>
+                <small id="detalheContasPagarFornecedor">Selecione um fornecedor para ver o resumo.</small>
+              </span>
               <strong id="resumoContasPagarFornecedor">R$ 0,00</strong>
             </button>
           </div>
@@ -2067,6 +2142,8 @@
 <script>
 (function() {
   const aviso = document.getElementById("avisoContasPagarFornecedor");
+  const titulo = document.getElementById("tituloContasPagarFornecedor");
+  const detalhe = document.getElementById("detalheContasPagarFornecedor");
   const resumo = document.getElementById("resumoContasPagarFornecedor");
   const modal = document.getElementById("modalContasPagarFornecedor");
   const lista = document.getElementById("listaContasPagarFornecedor");
@@ -2074,6 +2151,7 @@
   const csrf = document.querySelector('[name="csrfmiddlewaretoken"]');
 
   let contasAtuais = [];
+  let dadosFornecedorAtual = null;
   let fornecedorAtual = "";
 
   function moeda(valor) {
@@ -2083,9 +2161,21 @@
     });
   }
 
+  function escapeHtml(texto) {
+    return String(texto || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
   function esconderAviso() {
     contasAtuais = [];
+    dadosFornecedorAtual = null;
     if (aviso) aviso.classList.remove("visivel");
+    if (titulo) titulo.textContent = "Contas do fornecedor";
+    if (detalhe) detalhe.textContent = "Selecione um fornecedor para ver o resumo.";
     if (resumo) resumo.textContent = "R$ 0,00";
     if (lista) lista.innerHTML = "";
   }
@@ -2104,23 +2194,66 @@
   function renderizarContas() {
     if (!lista) return;
 
+    const dados = dadosFornecedorAtual || {};
+    const nomeFornecedor = dados.fornecedor_nome || "Fornecedor selecionado";
+    const totalAberto = Number(dados.total_aberto || 0);
+    const totalVencido = Number(dados.total_vencido || 0);
+    const proxima = dados.proxima_conta;
+    const pagamentos = dados.pagamentos_recentes || [];
+
+    const resumoHtml = `
+      <div class="fornecedor-financeiro-resumo">
+        <strong>${escapeHtml(nomeFornecedor)}</strong>
+        <div>${contasAtuais.length} conta(s) em aberto - ${moeda(totalAberto)}</div>
+        ${totalVencido > 0 ? `<div>Vencido: ${moeda(totalVencido)}</div>` : ""}
+        ${proxima ? `<div>Proxima conta: compra #${escapeHtml(proxima.compra_id || "-")} em ${escapeHtml(proxima.data_vencimento || "-")}</div>` : '<div>Nenhuma conta em aberto para este fornecedor.</div>'}
+      </div>
+    `;
+
+    const historicoHtml = pagamentos.length
+      ? `
+        <div class="fornecedor-financeiro-historico">
+          <h3>Historico recente de pagamentos</h3>
+          ${pagamentos.map(function(pagamento) {
+            return `
+              <div class="fornecedor-historico-item">
+                <div class="fornecedor-historico-linha">
+                  <span>${escapeHtml(pagamento.data_pagamento || "-")} - ${moeda(pagamento.valor)}</span>
+                  <span>Compra #${escapeHtml(pagamento.compra_id || "-")} / Conta #${escapeHtml(pagamento.conta_id || "-")}</span>
+                </div>
+                <div class="fornecedor-historico-linha" style="margin-top:5px;">
+                  <span>Forma: ${escapeHtml(pagamento.forma_pagamento || "Nao informada")}</span>
+                </div>
+                ${pagamento.observacao ? `<div class="fornecedor-historico-obs">${escapeHtml(pagamento.observacao)}</div>` : ""}
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `
+      : `
+        <div class="fornecedor-financeiro-historico">
+          <h3>Historico recente de pagamentos</h3>
+          <div class="compras-alert success">Nenhum pagamento registrado para este fornecedor.</div>
+        </div>
+      `;
+
     if (!contasAtuais.length) {
-      lista.innerHTML = '<div class="compras-alert success">Nenhuma conta em aberto para este fornecedor.</div>';
+      lista.innerHTML = resumoHtml + historicoHtml;
       return;
     }
 
-    lista.innerHTML = contasAtuais.map(function(conta) {
+    const contasHtml = contasAtuais.map(function(conta) {
       return `
         <div class="conta-pagar-card" data-conta-id="${conta.id}">
           <div class="conta-pagar-linha">
-            <span>Compra #${conta.compra_id}</span>
-            <span>Vencimento: ${conta.data_vencimento || "-"}</span>
+            <span>Compra #${escapeHtml(conta.compra_id || "-")}</span>
+            <span>Vencimento: ${escapeHtml(conta.data_vencimento || "-")}</span>
           </div>
           <div class="conta-pagar-linha" style="margin-top:6px;">
             <span>Aberto: ${moeda(conta.valor_em_aberto)}</span>
-            <span>Status: ${conta.status}</span>
+            <span>Status: ${escapeHtml(conta.status)}</span>
           </div>
-          ${conta.observacao ? `<div style="margin-top:6px;color:#475569;font-weight:700;">${conta.observacao}</div>` : ""}
+          ${conta.observacao ? `<div style="margin-top:6px;color:#475569;font-weight:700;">${escapeHtml(conta.observacao)}</div>` : ""}
           <div class="conta-pagar-baixa">
             <input type="text" inputmode="decimal" class="valor-baixa-conta" value="${String(conta.valor_em_aberto).replace(".", ",")}" aria-label="Valor da baixa">
             <input type="text" class="forma-baixa-conta" placeholder="Forma: pix, dinheiro...">
@@ -2130,6 +2263,8 @@
       `;
     }).join("");
 
+    lista.innerHTML = resumoHtml + contasHtml + historicoHtml;
+
     lista.querySelectorAll(".btn-baixar-conta").forEach(function(botao) {
       botao.addEventListener("click", function() {
         const card = botao.closest(".conta-pagar-card");
@@ -2138,16 +2273,26 @@
     });
   }
 
-  function atualizarResumo(total) {
+  function atualizarResumo(dados) {
     if (!aviso || !resumo) return;
+    const totalAberto = Number(dados.total_aberto || 0);
+    const totalVencido = Number(dados.total_vencido || 0);
+    const proxima = dados.proxima_conta;
+    const nomeFornecedor = dados.fornecedor_nome || "Fornecedor selecionado";
+
+    aviso.classList.add("visivel");
+    if (titulo) titulo.textContent = nomeFornecedor;
+    resumo.textContent = moeda(totalAberto);
 
     if (!contasAtuais.length) {
-      esconderAviso();
+      if (detalhe) detalhe.textContent = "Nenhuma conta em aberto para este fornecedor.";
       return;
     }
 
-    aviso.classList.add("visivel");
-    resumo.textContent = `${contasAtuais.length} conta(s) - ${moeda(total)}`;
+    const partes = [`${contasAtuais.length} conta(s) em aberto`];
+    if (totalVencido > 0) partes.push(`vencido: ${moeda(totalVencido)}`);
+    if (proxima) partes.push(`proxima: ${proxima.data_vencimento || "-"}`);
+    if (detalhe) detalhe.textContent = partes.join(" | ");
   }
 
   async function carregarContas(fornecedorId) {
@@ -2165,7 +2310,8 @@
       const dados = await resposta.json();
 
       contasAtuais = dados.contas || [];
-      atualizarResumo(dados.total_aberto || 0);
+      dadosFornecedorAtual = dados;
+      atualizarResumo(dados);
 
       if (modal && modal.classList.contains("aberto")) {
         renderizarContas();
