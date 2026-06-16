@@ -161,6 +161,7 @@
     grid-template-areas:
       "pedidos pedidos"
       "financeiro financeiro"
+      "despesa despesa"
       "receber clientes"
       "compras fornecedores"
       "entregas vendas"
@@ -202,6 +203,10 @@
 
   #btnFinanceiroPainel {
     grid-area: financeiro;
+  }
+
+  #btnDespesaDiariaPainel {
+    grid-area: despesa;
   }
 
   #btnClientesPainel {
@@ -1022,6 +1027,13 @@ align-items: center;
             class="btn-acao-principal-painel"
           >
             Central Financeira
+          </a>
+          <a
+            href="{% url 'estoque:despesas_diarias' %}"
+            id="btnDespesaDiariaPainel"
+            class="btn-acao-principal-painel"
+          >
+            Despesa Diaria
           </a>
           <a
             href="{% url 'estoque:vendas' %}"

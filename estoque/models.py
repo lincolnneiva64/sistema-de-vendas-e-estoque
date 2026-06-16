@@ -1074,6 +1074,60 @@ class PagamentoContaPagar(models.Model):
         return f"Pagamento R$ {self.valor} - Conta #{self.conta_id}"
 
 
+class DespesaDiaria(models.Model):
+    CATEGORIA_GASOLINA = "gasolina"
+    CATEGORIA_ALIMENTACAO = "alimentacao"
+    CATEGORIA_GELO = "gelo"
+    CATEGORIA_ESTACIONAMENTO = "estacionamento"
+    CATEGORIA_FRETE_ENTREGA = "frete_entrega"
+    CATEGORIA_AJUDANTE_DIARIA = "ajudante_diaria"
+    CATEGORIA_MANUTENCAO = "manutencao"
+    CATEGORIA_MATERIAL_APOIO = "material_apoio"
+    CATEGORIA_COMPRA_EMERGENCIAL = "compra_emergencial"
+    CATEGORIA_OUTROS = "outros"
+    CATEGORIA_CHOICES = [
+        (CATEGORIA_GASOLINA, "Gasolina"),
+        (CATEGORIA_ALIMENTACAO, "Lanche / Alimentacao"),
+        (CATEGORIA_GELO, "Gelo"),
+        (CATEGORIA_ESTACIONAMENTO, "Estacionamento"),
+        (CATEGORIA_FRETE_ENTREGA, "Frete / Entrega"),
+        (CATEGORIA_AJUDANTE_DIARIA, "Ajudante / Diaria"),
+        (CATEGORIA_MANUTENCAO, "Manutencao"),
+        (CATEGORIA_MATERIAL_APOIO, "Material de apoio"),
+        (CATEGORIA_COMPRA_EMERGENCIAL, "Compra emergencial"),
+        (CATEGORIA_OUTROS, "Outros"),
+    ]
+
+    FORMA_PIX = "Pix"
+    FORMA_DINHEIRO = "Dinheiro"
+    FORMA_CARTAO = "Cartao"
+    FORMA_BOLETO = "Boleto"
+    FORMA_TRANSFERENCIA = "Transferencia"
+    FORMA_OUTRO = "Outro"
+    FORMA_PAGAMENTO_CHOICES = [
+        (FORMA_PIX, "Pix"),
+        (FORMA_DINHEIRO, "Dinheiro"),
+        (FORMA_CARTAO, "Cartao"),
+        (FORMA_BOLETO, "Boleto"),
+        (FORMA_TRANSFERENCIA, "Transferencia"),
+        (FORMA_OUTRO, "Outro"),
+    ]
+
+    data_hora = models.DateTimeField(default=timezone.now)
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+    categoria = models.CharField(max_length=40, choices=CATEGORIA_CHOICES)
+    forma_pagamento = models.CharField(max_length=40, choices=FORMA_PAGAMENTO_CHOICES, default=FORMA_PIX)
+    observacao = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-data_hora", "-id"]
+
+    def __str__(self):
+        return f"{self.get_categoria_display()} - R$ {self.valor}"
+
+
 class EntregaRota(models.Model):
     TIPO_UNITARIA = "unitaria"
     TIPO_ROTA = "rota"

@@ -175,6 +175,7 @@
       <a class="financeiro-btn" href="{% url 'estoque:home' %}">Voltar / Painel</a>
       <a class="financeiro-btn" href="{% url 'estoque:contas_receber' %}">Contas a receber</a>
       <a class="financeiro-btn" href="{% url 'estoque:contas_pagar' %}">Contas a pagar</a>
+      <a class="financeiro-btn" href="{% url 'estoque:despesas_diarias' %}">Despesa Diaria</a>
       <a class="financeiro-btn" href="{% url 'estoque:compras_lista' %}">Compras</a>
       <a class="financeiro-btn" href="{% url 'estoque:vendas' %}">Vendas</a>
     </nav>
@@ -211,6 +212,15 @@
     <h2>Atrasados</h2>
     <div class="financeiro-grid quatro">
       {% for card in atrasados_cards %}
+        {% include "estoque/includes/painel_financeiro_card.html" with card=card %}
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="financeiro-section">
+    <h2>Despesas</h2>
+    <div class="financeiro-grid">
+      {% for card in despesas_cards %}
         {% include "estoque/includes/painel_financeiro_card.html" with card=card %}
       {% endfor %}
     </div>

@@ -24,7 +24,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -1297,6 +1297,21 @@ def painel_financeiro(request):
         .exclude(status=Compra.STATUS_CANCELADA)
         .aggregate(total=Sum("total"))["total"]
     )
+    despesas_hoje = dinheiro(
+        DespesaDiaria.objects
+        .filter(data_hora__date=hoje)
+        .aggregate(total=Sum("valor"))["total"]
+    )
+    despesas_7 = dinheiro(
+        DespesaDiaria.objects
+        .filter(data_hora__date__range=(hoje - timedelta(days=6), hoje))
+        .aggregate(total=Sum("valor"))["total"]
+    )
+    despesas_mes = dinheiro(
+        DespesaDiaria.objects
+        .filter(data_hora__date__gte=inicio_mes, data_hora__date__lte=hoje)
+        .aggregate(total=Sum("valor"))["total"]
+    )
 
     valor_estoque_expr = ExpressionWrapper(
         Coalesce(F("quantidade"), 0) * Coalesce(F("preco_compra"), Decimal("0.00")),
@@ -1325,6 +1340,7 @@ def painel_financeiro(request):
                 {"titulo": "Total a receber hoje", "valor": receber_hoje, "tipo": "positivo"},
                 {"titulo": "Total a pagar hoje", "valor": pagar_hoje, "tipo": "negativo"},
                 {"titulo": "Saldo previsto do dia", "valor": receber_hoje - pagar_hoje, "tipo": "saldo"},
+                {"titulo": "Saldo do dia apos despesas", "valor": receber_hoje - pagar_hoje - despesas_hoje, "tipo": "saldo"},
             ],
             "sete_dias_cards": [
                 {"titulo": "A receber nos proximos 7 dias", "valor": receber_7, "tipo": "positivo"},
@@ -1346,12 +1362,88 @@ def painel_financeiro(request):
                 {"titulo": "Total vendido no mes", "valor": vendas_mes, "tipo": "positivo"},
                 {"titulo": "Total comprado no mes", "valor": compras_mes, "tipo": "negativo"},
                 {"titulo": "Vendas menos compras", "valor": vendas_mes - compras_mes, "tipo": "saldo"},
+                {"titulo": "Vendas menos compras e despesas", "valor": vendas_mes - compras_mes - despesas_mes, "tipo": "saldo"},
+            ],
+            "despesas_cards": [
+                {"titulo": "Despesas de hoje", "valor": despesas_hoje, "tipo": "negativo"},
+                {"titulo": "Despesas dos ultimos 7 dias", "valor": despesas_7, "tipo": "negativo"},
+                {"titulo": "Despesas do mes atual", "valor": despesas_mes, "tipo": "negativo"},
             ],
             "estoque_cards": [
                 {"titulo": "Valor estimado total em estoque", "valor": valor_estoque, "tipo": "neutro"},
                 {"titulo": "Produtos com estoque baixo", "valor": estoque_baixo_qtd, "tipo": "quantidade", "moeda": False},
             ],
             "campo_estoque_usado": "quantidade atual x preco_compra",
+        },
+    )
+
+
+def despesas_diarias(request):
+    hoje = timezone.localdate()
+    inicio_mes = hoje.replace(day=1)
+
+    if request.method == "POST":
+        acao = request.POST.get("acao")
+        if acao == "excluir":
+            despesa = get_object_or_404(DespesaDiaria, pk=request.POST.get("despesa_id"))
+            despesa.delete()
+            messages.success(request, "Despesa excluida.")
+            return redirect("estoque:despesas_diarias")
+
+        try:
+            valor = _decimal_compra(request.POST.get("valor"), casas=2)
+        except ValueError:
+            messages.error(request, "Informe um valor valido.")
+            return redirect("estoque:despesas_diarias")
+
+        categoria = request.POST.get("categoria")
+        forma_pagamento = request.POST.get("forma_pagamento") or DespesaDiaria.FORMA_PIX
+        observacao = (request.POST.get("observacao") or "").strip()
+
+        categorias_validas = {opcao[0] for opcao in DespesaDiaria.CATEGORIA_CHOICES}
+        formas_validas = {opcao[0] for opcao in DespesaDiaria.FORMA_PAGAMENTO_CHOICES}
+
+        if valor <= 0:
+            messages.error(request, "Informe um valor maior que zero.")
+            return redirect("estoque:despesas_diarias")
+
+        if categoria not in categorias_validas:
+            messages.error(request, "Escolha uma categoria valida.")
+            return redirect("estoque:despesas_diarias")
+
+        if forma_pagamento not in formas_validas:
+            forma_pagamento = DespesaDiaria.FORMA_OUTRO
+
+        DespesaDiaria.objects.create(
+            valor=valor,
+            categoria=categoria,
+            forma_pagamento=forma_pagamento,
+            observacao=observacao,
+        )
+        messages.success(request, "Despesa salva com sucesso.")
+        return redirect("estoque:despesas_diarias")
+
+    despesas_hoje = DespesaDiaria.objects.filter(data_hora__date=hoje).order_by("-data_hora", "-id")
+    resumo_hoje = despesas_hoje.aggregate(total=Sum("valor"), quantidade=Count("id"))
+    total_mes = (
+        DespesaDiaria.objects
+        .filter(data_hora__date__gte=inicio_mes, data_hora__date__lte=hoje)
+        .aggregate(total=Sum("valor"))["total"]
+        or Decimal("0.00")
+    )
+
+    return render(
+        request,
+        "estoque/despesas_diarias.html",
+        {
+            "hoje": hoje,
+            "despesas_hoje": despesas_hoje,
+            "total_hoje": resumo_hoje["total"] or Decimal("0.00"),
+            "quantidade_hoje": resumo_hoje["quantidade"] or 0,
+            "total_mes": total_mes,
+            "categorias": DespesaDiaria.CATEGORIA_CHOICES,
+            "formas_pagamento": DespesaDiaria.FORMA_PAGAMENTO_CHOICES,
+            "forma_padrao": DespesaDiaria.FORMA_PIX,
         },
     )
 

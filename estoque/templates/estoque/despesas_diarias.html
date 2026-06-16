@@ -1,0 +1,350 @@
+{% extends 'estoque/base.html' %}
+
+{% block title %}Despesa Diaria{% endblock %}
+
+{% block content %}
+<style>
+  .despesa-page {
+    max-width: 760px;
+    margin: 8px auto 60px;
+    padding: 0 12px;
+    color: #172033;
+  }
+
+  .despesa-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .despesa-title {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 950;
+  }
+
+  .despesa-subtitle {
+    margin: 2px 0 0;
+    color: #64748b;
+    font-size: .86rem;
+    font-weight: 750;
+  }
+
+  .despesa-actions {
+    display: flex;
+    gap: 7px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .despesa-btn {
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    background: #2563eb;
+    color: #fff;
+    font-weight: 900;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .despesa-btn-secondary {
+    background: #dbeafe;
+    color: #164173;
+    border: 1px solid #93c5fd;
+  }
+
+  .despesa-form,
+  .despesa-resumo,
+  .despesa-lista {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 6px 14px rgba(15, 23, 42, .055);
+    margin-bottom: 10px;
+  }
+
+  .despesa-form {
+    padding: 12px;
+  }
+
+  .despesa-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 9px;
+  }
+
+  .despesa-field label {
+    display: block;
+    margin-bottom: 4px;
+    color: #334155;
+    font-size: .8rem;
+    font-weight: 900;
+  }
+
+  .despesa-field input,
+  .despesa-field select,
+  .despesa-field textarea {
+    width: 100%;
+    min-height: 44px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 9px;
+    padding: 10px 11px;
+    font-size: 16px;
+    font-weight: 800;
+    outline: none;
+  }
+
+  .despesa-field textarea {
+    min-height: 70px;
+    resize: vertical;
+  }
+
+  .despesa-field-full {
+    grid-column: 1 / -1;
+  }
+
+  .despesa-submit {
+    width: 100%;
+    min-height: 50px;
+    margin-top: 10px;
+    font-size: 1rem;
+  }
+
+  .despesa-resumo {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    overflow: hidden;
+  }
+
+  .despesa-resumo-card {
+    padding: 10px;
+    border-right: 1px solid #e2e8f0;
+  }
+
+  .despesa-resumo-card:last-child {
+    border-right: 0;
+  }
+
+  .despesa-resumo-label {
+    color: #64748b;
+    font-size: .75rem;
+    font-weight: 850;
+  }
+
+  .despesa-resumo-valor {
+    margin-top: 3px;
+    color: #991b1b;
+    font-size: 1.05rem;
+    font-weight: 950;
+  }
+
+  .despesa-lista {
+    padding: 10px;
+  }
+
+  .despesa-lista h2 {
+    margin: 0 0 8px;
+    font-size: .98rem;
+    font-weight: 950;
+  }
+
+  .despesa-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    padding: 10px 0;
+    border-top: 1px solid #e2e8f0;
+  }
+
+  .despesa-item:first-of-type {
+    border-top: 0;
+  }
+
+  .despesa-item-main strong {
+    display: block;
+    font-size: .98rem;
+  }
+
+  .despesa-item-meta {
+    margin-top: 3px;
+    color: #64748b;
+    font-size: .8rem;
+    font-weight: 750;
+  }
+
+  .despesa-item-valor {
+    color: #991b1b;
+    font-weight: 950;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .despesa-delete {
+    margin-top: 5px;
+    border: 1px solid #fecaca;
+    border-radius: 7px;
+    padding: 5px 8px;
+    background: #fef2f2;
+    color: #991b1b;
+    font-size: .78rem;
+    font-weight: 900;
+    cursor: pointer;
+  }
+
+  .despesa-alert {
+    margin-bottom: 9px;
+    padding: 9px 10px;
+    border-radius: 8px;
+    background: #ecfdf5;
+    color: #166534;
+    font-weight: 850;
+  }
+
+  .despesa-alert.error {
+    background: #fef2f2;
+    color: #991b1b;
+  }
+
+  .despesa-vazia {
+    padding: 12px 0;
+    color: #64748b;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  @media (max-width: 620px) {
+    .despesa-header {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .despesa-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      justify-content: stretch;
+    }
+    .despesa-grid,
+    .despesa-resumo {
+      grid-template-columns: 1fr;
+    }
+    .despesa-resumo-card {
+      border-right: 0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .despesa-resumo-card:last-child {
+      border-bottom: 0;
+    }
+  }
+</style>
+
+<main class="despesa-page">
+  <header class="despesa-header">
+    <div>
+      <h1 class="despesa-title">Despesa Diaria</h1>
+      <p class="despesa-subtitle">Lancamento rapido para gastos do dia a dia.</p>
+    </div>
+    <nav class="despesa-actions">
+      <a class="despesa-btn despesa-btn-secondary" href="{% url 'estoque:home' %}">Voltar / Painel</a>
+      <a class="despesa-btn despesa-btn-secondary" href="{% url 'estoque:painel_financeiro' %}">Central Financeira</a>
+    </nav>
+  </header>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="despesa-alert {% if message.tags == 'error' %}error{% endif %}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <section class="despesa-form">
+    <form method="post" id="formDespesaDiaria">
+      {% csrf_token %}
+      <div class="despesa-grid">
+        <div class="despesa-field">
+          <label for="valorDespesaDiaria">Valor</label>
+          <input id="valorDespesaDiaria" name="valor" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" required>
+        </div>
+        <div class="despesa-field">
+          <label for="categoriaDespesaDiaria">Categoria</label>
+          <select id="categoriaDespesaDiaria" name="categoria" required>
+            {% for valor, texto in categorias %}
+              <option value="{{ valor }}">{{ texto }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="despesa-field">
+          <label for="formaDespesaDiaria">Forma de pagamento</label>
+          <select id="formaDespesaDiaria" name="forma_pagamento">
+            {% for valor, texto in formas_pagamento %}
+              <option value="{{ valor }}" {% if valor == forma_padrao %}selected{% endif %}>{{ texto }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="despesa-field despesa-field-full">
+          <label for="observacaoDespesaDiaria">Observacao opcional</label>
+          <textarea id="observacaoDespesaDiaria" name="observacao" placeholder="Ex.: gasolina da entrega, lanche na rua..."></textarea>
+        </div>
+      </div>
+      <button class="despesa-btn despesa-submit" type="submit">Salvar despesa</button>
+    </form>
+  </section>
+
+  <section class="despesa-resumo" aria-label="Resumo das despesas">
+    <div class="despesa-resumo-card">
+      <div class="despesa-resumo-label">Total de hoje</div>
+      <div class="despesa-resumo-valor">R$ {{ total_hoje|floatformat:2 }}</div>
+    </div>
+    <div class="despesa-resumo-card">
+      <div class="despesa-resumo-label">Lancamentos hoje</div>
+      <div class="despesa-resumo-valor">{{ quantidade_hoje }}</div>
+    </div>
+    <div class="despesa-resumo-card">
+      <div class="despesa-resumo-label">Total do mes</div>
+      <div class="despesa-resumo-valor">R$ {{ total_mes|floatformat:2 }}</div>
+    </div>
+  </section>
+
+  <section class="despesa-lista">
+    <h2>Despesas de {{ hoje|date:"d/m/Y" }}</h2>
+    {% for despesa in despesas_hoje %}
+      <article class="despesa-item">
+        <div class="despesa-item-main">
+          <strong>{{ despesa.get_categoria_display }}</strong>
+          <div class="despesa-item-meta">{{ despesa.data_hora|date:"H:i" }} · {{ despesa.get_forma_pagamento_display }}</div>
+          {% if despesa.observacao %}
+            <div class="despesa-item-meta">{{ despesa.observacao }}</div>
+          {% endif %}
+        </div>
+        <div>
+          <div class="despesa-item-valor">R$ {{ despesa.valor|floatformat:2 }}</div>
+          <form method="post" onsubmit="return confirm('Excluir esta despesa?');">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="excluir">
+            <input type="hidden" name="despesa_id" value="{{ despesa.id }}">
+            <button class="despesa-delete" type="submit">Excluir</button>
+          </form>
+        </div>
+      </article>
+    {% empty %}
+      <div class="despesa-vazia">Nenhuma despesa lancada hoje.</div>
+    {% endfor %}
+  </section>
+</main>
+
+<script>
+(function() {
+  const valor = document.getElementById("valorDespesaDiaria");
+  window.addEventListener("load", function() {
+    if (!valor) return;
+    valor.focus();
+    valor.select();
+  });
+})();
+</script>
+{% endblock %}
