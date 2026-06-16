@@ -162,6 +162,7 @@
                   data-fornecedor="{{ conta.fornecedor.nome|default:'Fornecedor nao informado' }}"
                   data-compra="{{ conta.compra.id }}"
                   data-vencimento="{{ conta.data_vencimento|date:'d/m/Y'|default:'-' }}"
+                  data-vencimento-iso="{{ conta.data_vencimento|date:'Y-m-d' }}"
                   data-original="{{ conta.valor_original|floatformat:2 }}"
                   data-aberto="{{ conta.valor_em_aberto|floatformat:2 }}"
                 >Baixar</button>
@@ -184,6 +185,12 @@
                           <span class="contas-pagar-historico-label">Valor</span>
                           <span class="contas-pagar-historico-valor">R$ {{ pagamento.valor|floatformat:2 }}</span>
                         </div>
+                        {% if pagamento.juros_bancarios %}
+                          <div>
+                            <span class="contas-pagar-historico-label">Juros</span>
+                            <span class="contas-pagar-historico-valor">R$ {{ pagamento.juros_bancarios|floatformat:2 }}</span>
+                          </div>
+                        {% endif %}
                         <div>
                           <span class="contas-pagar-historico-label">Forma</span>
                           <span class="contas-pagar-historico-valor">{{ pagamento.forma_pagamento|default:"-" }}</span>
@@ -243,6 +250,7 @@
               data-fornecedor="{{ conta.fornecedor.nome|default:'Fornecedor nao informado' }}"
               data-compra="{{ conta.compra.id }}"
               data-vencimento="{{ conta.data_vencimento|date:'d/m/Y'|default:'-' }}"
+              data-vencimento-iso="{{ conta.data_vencimento|date:'Y-m-d' }}"
               data-original="{{ conta.valor_original|floatformat:2 }}"
               data-aberto="{{ conta.valor_em_aberto|floatformat:2 }}"
             >Baixar</button>
@@ -262,6 +270,12 @@
                     <span class="contas-pagar-historico-label">Valor</span>
                     <span class="contas-pagar-historico-valor">R$ {{ pagamento.valor|floatformat:2 }}</span>
                   </div>
+                  {% if pagamento.juros_bancarios %}
+                    <div>
+                      <span class="contas-pagar-historico-label">Juros</span>
+                      <span class="contas-pagar-historico-valor">R$ {{ pagamento.juros_bancarios|floatformat:2 }}</span>
+                    </div>
+                  {% endif %}
                   <div>
                     <span class="contas-pagar-historico-label">Forma</span>
                     <span class="contas-pagar-historico-valor">{{ pagamento.forma_pagamento|default:"-" }}</span>
@@ -315,8 +329,17 @@
         </div>
         <div class="contas-pagar-modal-form">
           <div>
-            <label for="valorPagoContaPagar">Valor pago</label>
-            <input id="valorPagoContaPagar" name="valor" type="text" inputmode="decimal" autocomplete="off">
+            <label for="valorPagoContaPagar">Valor aplicado na conta</label>
+            <input id="valorPagoContaPagar" name="valor_pago" type="text" inputmode="decimal" autocomplete="off">
+          </div>
+          <div>
+            <label for="jurosBancariosContaPagar">Juros bancarios</label>
+            <input id="jurosBancariosContaPagar" name="juros_bancarios" type="text" inputmode="decimal" autocomplete="off" value="0,00">
+          </div>
+          <div>
+            <label for="dataPagamentoContaPagar">Data do pagamento</label>
+            <input id="dataPagamentoContaPagar" name="data_pagamento" type="date">
+            <small id="avisoAtrasoContaPagar" style="display:none; margin-top:5px; color:#92400e; font-weight:800;">Pagamento apos o vencimento. Informe os juros bancarios conforme banco/boleto.</small>
           </div>
           <div>
             <label for="formaPagamentoContaPagar">Forma de pagamento</label>
@@ -345,10 +368,27 @@
   const confirmar = document.getElementById("confirmarBaixaContaPagar");
   const feedback = document.getElementById("contasPagarFeedback");
   const valorPago = document.getElementById("valorPagoContaPagar");
+  const jurosBancarios = document.getElementById("jurosBancariosContaPagar");
+  const dataPagamento = document.getElementById("dataPagamentoContaPagar");
+  const avisoAtraso = document.getElementById("avisoAtrasoContaPagar");
   const formaPagamento = document.getElementById("formaPagamentoContaPagar");
   const observacao = document.getElementById("observacaoContaPagar");
   let urlBaixaAtual = "";
+  let vencimentoIsoAtual = "";
   let focoAnterior = null;
+
+  function hojeISO() {
+    const hoje = new Date();
+    const offset = hoje.getTimezoneOffset() * 60000;
+    return new Date(hoje.getTime() - offset).toISOString().slice(0, 10);
+  }
+
+  function atualizarAvisoAtraso() {
+    if (!avisoAtraso || !dataPagamento) return;
+    avisoAtraso.style.display = vencimentoIsoAtual && dataPagamento.value && dataPagamento.value > vencimentoIsoAtual
+      ? "block"
+      : "none";
+  }
 
   function mostrarFeedback(tipo, texto) {
     if (!feedback) return;
@@ -358,6 +398,7 @@
 
   function abrirModal(botao) {
     urlBaixaAtual = botao.dataset.url || "";
+    vencimentoIsoAtual = botao.dataset.vencimentoIso || "";
     focoAnterior = document.activeElement;
     document.getElementById("baixaContaFornecedor").textContent = botao.dataset.fornecedor || "-";
     document.getElementById("baixaContaCompra").textContent = "#" + (botao.dataset.compra || "-");
@@ -365,8 +406,11 @@
     document.getElementById("baixaContaOriginal").textContent = "R$ " + (botao.dataset.original || "0,00");
     document.getElementById("baixaContaAberto").textContent = "R$ " + (botao.dataset.aberto || "0,00");
     if (valorPago) valorPago.value = botao.dataset.aberto || "";
+    if (jurosBancarios) jurosBancarios.value = "0,00";
+    if (dataPagamento) dataPagamento.value = hojeISO();
     if (formaPagamento && !formaPagamento.value) formaPagamento.value = "Pix";
     if (observacao) observacao.value = "";
+    atualizarAvisoAtraso();
     modal?.classList.add("aberto");
     modal?.setAttribute("aria-hidden", "false");
     window.setTimeout(function () {
@@ -379,8 +423,17 @@
     modal?.classList.remove("aberto");
     modal?.setAttribute("aria-hidden", "true");
     urlBaixaAtual = "";
+    vencimentoIsoAtual = "";
     focoAnterior?.focus();
   }
+
+  dataPagamento?.addEventListener("change", atualizarAvisoAtraso);
+  jurosBancarios?.addEventListener("blur", function () {
+    if (!jurosBancarios.value.trim()) jurosBancarios.value = "0,00";
+  });
+  valorPago?.addEventListener("blur", function () {
+    if (!valorPago.value.trim()) valorPago.value = document.getElementById("baixaContaAberto").textContent.replace("R$ ", "");
+  });
 
   document.addEventListener("click", function (event) {
     const botao = event.target.closest(".btnAbrirBaixaContaPagar");

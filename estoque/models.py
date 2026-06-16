@@ -1062,6 +1062,7 @@ class PagamentoContaPagar(models.Model):
     )
     data_pagamento = models.DateField()
     valor = models.DecimalField(max_digits=12, decimal_places=2)
+    juros_bancarios = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     forma_pagamento = models.CharField(max_length=80, blank=True)
     observacao = models.TextField(blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)

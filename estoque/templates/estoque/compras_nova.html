@@ -450,6 +450,16 @@
     white-space:nowrap;
   }
 
+  .baixa-segura-atraso {
+    margin-top:10px;
+    padding:9px 10px;
+    border:1.5px solid #f59e0b;
+    border-radius:10px;
+    background:#fffbeb;
+    color:#78350f;
+    font-weight:850;
+  }
+
   .fornecedor-financeiro-resumo {
     border:1px solid #fde68a;
     border-radius:12px;
@@ -2204,6 +2214,12 @@
     });
   }
 
+  function hojeISO() {
+    const hoje = new Date();
+    const offset = hoje.getTimezoneOffset() * 60000;
+    return new Date(hoje.getTime() - offset).toISOString().slice(0, 10);
+  }
+
   function escapeHtml(texto) {
     return String(texto || "")
       .replace(/&/g, "&amp;")
@@ -2266,6 +2282,7 @@
                 </div>
                 <div class="fornecedor-historico-linha" style="margin-top:5px;">
                   <span>Forma: ${escapeHtml(pagamento.forma_pagamento || "Nao informada")}</span>
+                  ${Number(pagamento.juros_bancarios || 0) > 0 ? `<span>Juros: ${moeda(pagamento.juros_bancarios)} | Total pago: ${moeda(pagamento.total_pago)}</span>` : ""}
                 </div>
                 ${pagamento.observacao ? `<div class="fornecedor-historico-obs">${escapeHtml(pagamento.observacao)}</div>` : ""}
               </div>
@@ -2287,7 +2304,7 @@
 
     const contasHtml = contasAtuais.map(function(conta) {
       return `
-        <div class="conta-pagar-card" data-conta-id="${conta.id}" data-aberto="${Number(conta.valor_em_aberto || 0)}">
+        <div class="conta-pagar-card" data-conta-id="${conta.id}" data-aberto="${Number(conta.valor_em_aberto || 0)}" data-vencimento="${escapeHtml(conta.data_vencimento || "-")}" data-vencimento-iso="${escapeHtml(conta.data_vencimento_iso || "")}">
           <div class="conta-pagar-linha">
             <span>Compra #${escapeHtml(conta.compra_id || "-")}</span>
             <span>Vencimento: ${escapeHtml(conta.data_vencimento || "-")}</span>
@@ -2299,9 +2316,17 @@
           ${conta.observacao ? `<div style="margin-top:6px;color:#475569;font-weight:700;">${escapeHtml(conta.observacao)}</div>` : ""}
           <div class="conta-pagar-baixa">
             <div class="baixa-segura-campo">
-              <label>Valor a pagar</label>
+              <label>Valor aplicado na conta</label>
               <input type="text" inputmode="decimal" class="valorBaixaSeguraContaPagar" value="${String(conta.valor_em_aberto).replace(".", ",")}" data-valor-original="${Number(conta.valor_em_aberto || 0)}" aria-label="Valor da baixa">
               <button type="button" class="compras-btn compras-btn-secondary restaurarValorBaixaSeguraContaPagar">Restaurar valor</button>
+            </div>
+            <div class="baixa-segura-campo">
+              <label>Juros bancarios</label>
+              <input type="text" inputmode="decimal" class="jurosBancariosBaixaSeguraContaPagar" value="0,00" aria-label="Juros bancarios">
+            </div>
+            <div class="baixa-segura-campo">
+              <label>Data do pagamento</label>
+              <input type="date" class="dataPagamentoBaixaSeguraContaPagar" value="${hojeISO()}">
             </div>
             <div class="baixa-segura-campo">
               <label>Forma</label>
@@ -2416,6 +2441,26 @@
 
   function formatarValorCampo(valor) {
     return moeda(valor).replace("R$ ", "");
+  }
+
+  function hojeISO() {
+    var hoje = new Date();
+    var offset = hoje.getTimezoneOffset() * 60000;
+    return new Date(hoje.getTime() - offset).toISOString().slice(0, 10);
+  }
+
+  function dataBR(iso) {
+    if (!iso) return "-";
+    var partes = String(iso).split("-");
+    if (partes.length !== 3) return iso;
+    return partes[2] + "/" + partes[1] + "/" + partes[0];
+  }
+
+  function pagamentoAposVencimento(card) {
+    var vencimento = card ? card.dataset.vencimentoIso : "";
+    var campoData = card ? card.querySelector(".dataPagamentoBaixaSeguraContaPagar") : null;
+    var pagamento = campoData ? campoData.value : "";
+    return Boolean(vencimento && pagamento && pagamento > vencimento);
   }
 
   function valorOriginalDaBaixa(card, campo) {
@@ -2604,6 +2649,8 @@
       var card = document.createElement("div");
       card.dataset.contaId = conta.id;
       card.dataset.aberto = String(valorAberto);
+      card.dataset.vencimento = conta.data_vencimento || "-";
+      card.dataset.vencimentoIso = conta.data_vencimento_iso || "";
       card.style.border = "1px solid #e2e8f0";
       card.style.borderRadius = "12px";
       card.style.padding = "12px";
@@ -2621,9 +2668,17 @@
         '</div>' +
         '<div class="conta-pagar-baixa">' +
           '<div class="baixa-segura-campo">' +
-            '<label>Valor a pagar</label>' +
+            '<label>Valor aplicado na conta</label>' +
             '<input type="text" inputmode="decimal" class="valorBaixaSeguraContaPagar" value="' + moeda(valorAberto).replace("R$ ", "") + '" data-valor-original="' + valorAberto + '">' +
             '<button type="button" class="compras-btn compras-btn-secondary restaurarValorBaixaSeguraContaPagar">Restaurar valor</button>' +
+          '</div>' +
+          '<div class="baixa-segura-campo">' +
+            '<label>Juros bancarios</label>' +
+            '<input type="text" inputmode="decimal" class="jurosBancariosBaixaSeguraContaPagar" value="0,00">' +
+          '</div>' +
+          '<div class="baixa-segura-campo">' +
+            '<label>Data do pagamento</label>' +
+            '<input type="date" class="dataPagamentoBaixaSeguraContaPagar" value="' + hojeISO() + '">' +
           '</div>' +
           '<div class="baixa-segura-campo">' +
             '<label>Forma</label>' +
@@ -2639,20 +2694,42 @@
 
   function prepararBaixa(card, focarCampo) {
     var campo = card.querySelector(".valorBaixaSeguraContaPagar");
+    var campoJuros = card.querySelector(".jurosBancariosBaixaSeguraContaPagar");
+    var campoData = card.querySelector(".dataPagamentoBaixaSeguraContaPagar");
     var aberto = valorOriginalDaBaixa(card, campo);
 
     if (campo && !String(campo.value || "").trim()) {
       restaurarValorBaixa(card);
     }
 
+    if (campoJuros && !String(campoJuros.value || "").trim()) {
+      campoJuros.value = "0,00";
+    }
+
+    if (campoData && !campoData.value) {
+      campoData.value = hojeISO();
+    }
+
     var pagando = numero(campo ? campo.value : "");
+    var juros = numero(campoJuros ? campoJuros.value : "");
+    var totalPago = pagando + juros;
     var sobra = Math.max(aberto - pagando, 0);
     var status = sobra <= 0 ? "Quitada" : "Parcial";
+    var vencimentoTexto = card.dataset.vencimento || "-";
+    var dataPagamentoTexto = dataBR(campoData ? campoData.value : "");
+    var atrasado = pagamentoAposVencimento(card);
 
     if (!pagando || pagando <= 0) {
       limparResumoBaixa(card);
       alert("Informe um valor maior que zero.");
       if (campo) campo.focus();
+      return;
+    }
+
+    if (juros < 0) {
+      limparResumoBaixa(card);
+      alert("Juros bancarios nao podem ser negativos.");
+      if (campoJuros) campoJuros.focus();
       return;
     }
 
@@ -2666,11 +2743,16 @@
     var resumo = card.querySelector(".resumoBaixaSeguraContaPagar");
     resumo.innerHTML =
       '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">' +
+        '<div>Vencimento:<br><strong style="color:#172033;">' + vencimentoTexto + '</strong></div>' +
+        '<div>Data do pagamento:<br><strong style="color:#172033;">' + dataPagamentoTexto + '</strong></div>' +
         '<div>Aberto:<br><strong style="color:#172033;">' + moeda(aberto) + '</strong></div>' +
-        '<div>Pagando agora:<br><strong style="color:#166534;">' + moeda(pagando) + '</strong></div>' +
+        '<div>Pagando na conta:<br><strong style="color:#166534;">' + moeda(pagando) + '</strong></div>' +
+        '<div>Juros bancarios:<br><strong style="color:#92400e;">' + moeda(juros) + '</strong></div>' +
+        '<div>Total pago:<br><strong style="color:#166534;">' + moeda(totalPago) + '</strong></div>' +
         '<div>Vai sobrar:<br><strong style="color:#172033;">' + moeda(sobra) + '</strong></div>' +
         '<div>Status depois:<br><strong style="color:' + (sobra <= 0 ? "#166534" : "#92400e") + ';">' + status + '</strong></div>' +
       '</div>' +
+      (atrasado ? '<div class="baixa-segura-atraso">Pagamento apos o vencimento. Informe os juros bancarios exatamente como apareceram no banco ou boleto.</div>' : '') +
       '<div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">' +
         '<button type="button" class="compras-btn compras-btn-primary confirmarBaixaSeguraContaPagar">Confirmar baixa</button>' +
         '<button type="button" class="compras-btn compras-btn-secondary cancelarBaixaSeguraContaPagar">Cancelar</button>' +
@@ -2690,21 +2772,36 @@
 
   async function confirmarBaixa(card) {
     var campo = card.querySelector(".valorBaixaSeguraContaPagar");
+    var jurosCampo = card.querySelector(".jurosBancariosBaixaSeguraContaPagar");
+    var dataCampo = card.querySelector(".dataPagamentoBaixaSeguraContaPagar");
     var forma = card.querySelector(".formaBaixaSeguraContaPagar");
     var botao = card.querySelector(".confirmarBaixaSeguraContaPagar");
     var aberto = Number(card.dataset.aberto || 0);
     var pagando = numero(campo ? campo.value : "");
+    var juros = numero(jurosCampo ? jurosCampo.value : "");
 
     if (!pagando || pagando <= 0 || pagando > aberto) {
       alert("Confira o valor antes de confirmar.");
       return;
     }
 
+    if (juros < 0) {
+      alert("Juros bancarios nao podem ser negativos.");
+      if (jurosCampo) jurosCampo.focus();
+      return;
+    }
+
+    if (dataCampo && !dataCampo.value) {
+      dataCampo.value = hojeISO();
+    }
+
     botao.disabled = true;
     botao.textContent = "Baixando...";
 
     var dados = new FormData();
-    dados.append("valor", String(pagando).replace(".", ","));
+    dados.append("valor_pago", String(pagando).replace(".", ","));
+    dados.append("juros_bancarios", String(juros).replace(".", ","));
+    dados.append("data_pagamento", dataCampo ? dataCampo.value : hojeISO());
     dados.append("forma_pagamento", forma ? forma.value : "");
     dados.append("observacao", "Baixa confirmada pela Nova Compra.");
 
@@ -2791,21 +2888,24 @@
   }, true);
 
   document.addEventListener("input", function(event) {
-    var campo = event.target.closest(".valorBaixaSeguraContaPagar");
+    var campo = event.target.closest(".valorBaixaSeguraContaPagar, .jurosBancariosBaixaSeguraContaPagar, .dataPagamentoBaixaSeguraContaPagar");
     if (!campo) return;
 
     var card = campo.closest("[data-conta-id]");
     if (!card) return;
 
-    if (!String(campo.value || "").trim()) {
+    if (campo.classList.contains("valorBaixaSeguraContaPagar") && !String(campo.value || "").trim()) {
       limparResumoBaixa(card);
       return;
     }
 
     if (resumoEstaAberto(card)) {
-      var pagando = numero(campo.value);
-      var aberto = valorOriginalDaBaixa(card, campo);
-      if (!pagando || pagando <= 0 || pagando > aberto) {
+      var campoValor = card.querySelector(".valorBaixaSeguraContaPagar");
+      var campoJuros = card.querySelector(".jurosBancariosBaixaSeguraContaPagar");
+      var pagando = numero(campoValor ? campoValor.value : "");
+      var juros = numero(campoJuros ? campoJuros.value : "");
+      var aberto = valorOriginalDaBaixa(card, campoValor);
+      if (!pagando || pagando <= 0 || pagando > aberto || juros < 0) {
         limparResumoBaixa(card);
         return;
       }
@@ -2814,14 +2914,20 @@
   }, true);
 
   document.addEventListener("focusout", function(event) {
-    var campo = event.target.closest(".valorBaixaSeguraContaPagar");
+    var campo = event.target.closest(".valorBaixaSeguraContaPagar, .jurosBancariosBaixaSeguraContaPagar, .dataPagamentoBaixaSeguraContaPagar");
     if (!campo) return;
 
     var card = campo.closest("[data-conta-id]");
     if (!card) return;
 
     if (!String(campo.value || "").trim()) {
-      restaurarValorBaixa(card);
+      if (campo.classList.contains("jurosBancariosBaixaSeguraContaPagar")) {
+        campo.value = "0,00";
+      } else if (campo.classList.contains("dataPagamentoBaixaSeguraContaPagar")) {
+        campo.value = hojeISO();
+      } else {
+        restaurarValorBaixa(card);
+      }
       if (resumoEstaAberto(card)) prepararBaixa(card, false);
     }
   }, true);

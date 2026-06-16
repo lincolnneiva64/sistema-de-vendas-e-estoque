@@ -407,6 +407,12 @@
                   <span class="nota-compra-historico-label">Valor</span>
                   <span class="nota-compra-historico-valor">R$ {{ pagamento.valor|floatformat:2 }}</span>
                 </div>
+                {% if pagamento.juros_bancarios %}
+                  <div>
+                    <span class="nota-compra-historico-label">Juros</span>
+                    <span class="nota-compra-historico-valor">R$ {{ pagamento.juros_bancarios|floatformat:2 }}</span>
+                  </div>
+                {% endif %}
                 <div>
                   <span class="nota-compra-historico-label">Forma</span>
                   <span class="nota-compra-historico-valor">{{ pagamento.forma_pagamento|default:"-" }}</span>

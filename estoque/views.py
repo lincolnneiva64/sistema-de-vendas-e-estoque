@@ -1674,6 +1674,7 @@ def _conta_pagar_payload(conta):
         "id": conta.id,
         "compra_id": conta.compra_id,
         "data_emissao": conta.data_emissao.strftime("%d/%m/%Y") if conta.data_emissao else "",
+        "data_vencimento_iso": conta.data_vencimento.isoformat() if conta.data_vencimento else "",
         "data_vencimento": conta.data_vencimento.strftime("%d/%m/%Y") if conta.data_vencimento else "",
         "valor_original": str(conta.valor_original),
         "valor_em_aberto": str(conta.valor_em_aberto),
@@ -1690,6 +1691,8 @@ def _pagamento_conta_pagar_payload(pagamento):
         "compra_id": conta.compra_id if conta else "",
         "data_pagamento": pagamento.data_pagamento.strftime("%d/%m/%Y") if pagamento.data_pagamento else "",
         "valor": str(pagamento.valor),
+        "juros_bancarios": str(pagamento.juros_bancarios),
+        "total_pago": str((pagamento.valor + pagamento.juros_bancarios).quantize(Decimal("0.01"))),
         "forma_pagamento": pagamento.forma_pagamento or "",
         "observacao": pagamento.observacao or "",
     }
@@ -1766,6 +1769,7 @@ def fornecedor_contas_pagar_abertas(request, fornecedor_id):
             "conta_id",
             "data_pagamento",
             "valor",
+            "juros_bancarios",
             "forma_pagamento",
             "observacao",
             "conta__id",
@@ -1809,6 +1813,7 @@ def contas_pagar_abertas_geral(request):
             "compra_id": conta.compra_id,
             "fornecedor_id": conta.fornecedor_id,
             "fornecedor": conta.fornecedor.nome if conta.fornecedor else "Fornecedor nao informado",
+            "data_vencimento_iso": conta.data_vencimento.isoformat() if conta.data_vencimento else "",
             "data_vencimento": conta.data_vencimento.strftime("%d/%m/%Y") if conta.data_vencimento else "-",
             "valor_original": str(conta.valor_original.quantize(Decimal("0.01"))),
             "valor_em_aberto": str(conta.valor_em_aberto.quantize(Decimal("0.01"))),
@@ -1837,20 +1842,30 @@ def conta_pagar_baixar(request, pk):
         if conta.status in [ContaPagar.STATUS_PAGA, ContaPagar.STATUS_CANCELADA] or conta.valor_em_aberto <= 0:
             return JsonResponse({"ok": False, "erro": "Esta conta nao esta em aberto."}, status=400)
 
-        valor = _decimal_compra(request.POST.get("valor"), casas=2)
+        try:
+            valor = _decimal_compra(request.POST.get("valor_pago") or request.POST.get("valor"), casas=2)
+            juros_bancarios = _decimal_compra(request.POST.get("juros_bancarios"), casas=2)
+        except ValueError:
+            return JsonResponse({"ok": False, "erro": "Informe valores validos para a baixa."}, status=400)
+
+        data_pagamento = parse_date(request.POST.get("data_pagamento") or "") or timezone.localdate()
         forma_pagamento = (request.POST.get("forma_pagamento") or "").strip()
         observacao = (request.POST.get("observacao") or "").strip()
 
         if valor <= 0:
             return JsonResponse({"ok": False, "erro": "Informe um valor maior que zero."}, status=400)
 
+        if juros_bancarios < 0:
+            return JsonResponse({"ok": False, "erro": "Juros bancarios nao podem ser negativos."}, status=400)
+
         if valor > conta.valor_em_aberto:
             valor = conta.valor_em_aberto
 
         PagamentoContaPagar.objects.create(
             conta=conta,
-            data_pagamento=timezone.localdate(),
+            data_pagamento=data_pagamento,
             valor=valor,
+            juros_bancarios=juros_bancarios,
             forma_pagamento=forma_pagamento,
             observacao=observacao,
         )
