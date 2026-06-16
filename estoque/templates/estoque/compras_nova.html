@@ -2540,6 +2540,40 @@
     }, 0);
   }
 
+  function encontrarContainerRolavelBaixa(card) {
+    var atual = card ? card.parentElement : null;
+    while (atual && atual !== document.body) {
+      var estilo = window.getComputedStyle ? window.getComputedStyle(atual) : null;
+      var overflowY = estilo ? estilo.overflowY : "";
+      var podeRolar = /(auto|scroll)/.test(overflowY) && atual.scrollHeight > atual.clientHeight;
+      if (podeRolar) return atual;
+      atual = atual.parentElement;
+    }
+    return null;
+  }
+
+  function rolarCardBaixaParaVisao(card) {
+    if (!card) return;
+
+    var container = encontrarContainerRolavelBaixa(card);
+    if (!container) {
+      if (typeof card.scrollIntoView === "function") {
+        card.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      return;
+    }
+
+    var margemSuperior = 18;
+    var cardRect = card.getBoundingClientRect();
+    var containerRect = container.getBoundingClientRect();
+    var destino = container.scrollTop + (cardRect.top - containerRect.top) - margemSuperior;
+
+    container.scrollTo({
+      top: Math.max(destino, 0),
+      behavior: "smooth"
+    });
+  }
+
   function atualizarPreviewBaixa(card) {
     var preview = card ? card.querySelector(".baixa-segura-preview") : null;
     if (!preview) return;
@@ -2835,9 +2869,7 @@
       '</div>';
 
     resumo.style.display = "block";
-    if (typeof card.scrollIntoView === "function") {
-      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
+    rolarCardBaixaParaVisao(card);
 
     if (focarCampo !== false) {
       setTimeout(function() {
