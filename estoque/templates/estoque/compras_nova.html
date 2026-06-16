@@ -2148,7 +2148,6 @@
   const modal = document.getElementById("modalContasPagarFornecedor");
   const lista = document.getElementById("listaContasPagarFornecedor");
   const fechar = document.getElementById("fecharModalContasPagar");
-  const csrf = document.querySelector('[name="csrfmiddlewaretoken"]');
 
   let contasAtuais = [];
   let dadosFornecedorAtual = null;
@@ -2244,7 +2243,7 @@
 
     const contasHtml = contasAtuais.map(function(conta) {
       return `
-        <div class="conta-pagar-card" data-conta-id="${conta.id}">
+        <div class="conta-pagar-card" data-conta-id="${conta.id}" data-aberto="${Number(conta.valor_em_aberto || 0)}">
           <div class="conta-pagar-linha">
             <span>Compra #${escapeHtml(conta.compra_id || "-")}</span>
             <span>Vencimento: ${escapeHtml(conta.data_vencimento || "-")}</span>
@@ -2255,22 +2254,16 @@
           </div>
           ${conta.observacao ? `<div style="margin-top:6px;color:#475569;font-weight:700;">${escapeHtml(conta.observacao)}</div>` : ""}
           <div class="conta-pagar-baixa">
-            <input type="text" inputmode="decimal" class="valor-baixa-conta" value="${String(conta.valor_em_aberto).replace(".", ",")}" aria-label="Valor da baixa">
-            <input type="text" class="forma-baixa-conta" placeholder="Forma: pix, dinheiro...">
-            <button type="button" class="compras-btn compras-btn-primary btn-baixar-conta">Baixar</button>
+            <input type="text" inputmode="decimal" class="valorBaixaSeguraContaPagar" value="${String(conta.valor_em_aberto).replace(".", ",")}" aria-label="Valor da baixa">
+            <input type="text" class="formaBaixaSeguraContaPagar" value="Pix" placeholder="Forma: pix, dinheiro...">
+            <button type="button" class="compras-btn compras-btn-primary prepararBaixaSeguraContaPagar">Preparar baixa</button>
           </div>
+          <div class="resumoBaixaSeguraContaPagar" style="display:none; margin-top:12px; padding:12px; border:1.5px solid #f59e0b; border-radius:12px; background:#fffbeb; font-weight:850; color:#78350f;"></div>
         </div>
       `;
     }).join("");
 
     lista.innerHTML = resumoHtml + contasHtml + historicoHtml;
-
-    lista.querySelectorAll(".btn-baixar-conta").forEach(function(botao) {
-      botao.addEventListener("click", function() {
-        const card = botao.closest(".conta-pagar-card");
-        baixarConta(card);
-      });
-    });
   }
 
   function atualizarResumo(dados) {
@@ -2322,37 +2315,6 @@
     }
   }
 
-  async function baixarConta(card) {
-    if (!card) return;
-
-    const contaId = card.dataset.contaId;
-    const valor = card.querySelector(".valor-baixa-conta").value;
-    const forma = card.querySelector(".forma-baixa-conta").value;
-
-    const dados = new FormData();
-    dados.append("valor", valor);
-    dados.append("forma_pagamento", forma);
-    dados.append("observacao", "Baixa pela tela Nova Compra");
-
-    const resposta = await fetch(`/contas-pagar/${contaId}/baixar/`, {
-      method: "POST",
-      headers: {
-        "X-CSRFToken": csrf ? csrf.value : "",
-        "X-Requested-With": "XMLHttpRequest"
-      },
-      body: dados
-    });
-
-    const retorno = await resposta.json();
-
-    if (!retorno.ok) {
-      alert(retorno.erro || "Nao foi possivel baixar a conta.");
-      return;
-    }
-
-    await carregarContas(fornecedorAtual);
-  }
-
   if (aviso) aviso.addEventListener("click", abrirModal);
   if (fechar) fechar.addEventListener("click", fecharModal);
 
@@ -2362,6 +2324,9 @@
     });
   }
 
+  window.carregarContasFornecedorSelecionadoCompra = function() {
+    return carregarContas(fornecedorAtual);
+  };
   window.atualizarContasPagarFornecedor = carregarContas;
 })();
 </script>
@@ -2672,6 +2637,9 @@
       }
 
       await carregarContas();
+      if (typeof window.carregarContasFornecedorSelecionadoCompra === "function") {
+        await window.carregarContasFornecedorSelecionadoCompra();
+      }
     } catch (erro) {
       console.error("Erro ao baixar:", erro);
       alert("Erro ao baixar.");
