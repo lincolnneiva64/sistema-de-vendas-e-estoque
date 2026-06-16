@@ -404,10 +404,10 @@
 
   .conta-pagar-baixa {
     display:grid;
-    grid-template-columns:1fr 1fr auto;
-    gap:8px;
-    margin-top:10px;
-    align-items:end;
+    grid-template-columns:minmax(150px, 1fr) minmax(150px, 1fr) auto;
+    gap:10px;
+    margin-top:12px;
+    align-items:start;
   }
 
   .conta-pagar-baixa input {
@@ -416,6 +416,38 @@
     padding:9px 10px;
     font-weight:750;
     width:100%;
+  }
+
+  .baixa-segura-campo {
+    min-width:0;
+  }
+
+  .baixa-segura-campo label {
+    display:block;
+    font-size:.78rem;
+    font-weight:900;
+    color:#334155;
+    margin-bottom:4px;
+  }
+
+  .baixa-segura-campo input {
+    min-height:40px;
+  }
+
+  .restaurarValorBaixaSeguraContaPagar {
+    margin-top:6px;
+    min-height:30px;
+    padding:5px 9px;
+    font-size:.76rem;
+    line-height:1;
+    width:auto;
+  }
+
+  .prepararBaixaSeguraContaPagar {
+    align-self:start;
+    margin-top:22px;
+    min-height:40px;
+    white-space:nowrap;
   }
 
   .fornecedor-financeiro-resumo {
@@ -655,6 +687,18 @@
     }
     .conta-pagar-geral-baixa {
       grid-template-columns:1fr;
+    }
+    .conta-pagar-baixa {
+      grid-template-columns:1fr;
+      gap:9px;
+    }
+    .prepararBaixaSeguraContaPagar {
+      margin-top:0;
+      width:100%;
+    }
+    .restaurarValorBaixaSeguraContaPagar {
+      width:auto;
+      max-width:max-content;
     }
   }
   .compras-mobile-add-card { display:none; }
@@ -2254,11 +2298,15 @@
           </div>
           ${conta.observacao ? `<div style="margin-top:6px;color:#475569;font-weight:700;">${escapeHtml(conta.observacao)}</div>` : ""}
           <div class="conta-pagar-baixa">
-            <div>
+            <div class="baixa-segura-campo">
+              <label>Valor a pagar</label>
               <input type="text" inputmode="decimal" class="valorBaixaSeguraContaPagar" value="${String(conta.valor_em_aberto).replace(".", ",")}" data-valor-original="${Number(conta.valor_em_aberto || 0)}" aria-label="Valor da baixa">
-              <button type="button" class="compras-btn compras-btn-secondary restaurarValorBaixaSeguraContaPagar" style="margin-top:6px; min-height:32px; padding:6px 9px; font-size:.78rem;">Restaurar valor</button>
+              <button type="button" class="compras-btn compras-btn-secondary restaurarValorBaixaSeguraContaPagar">Restaurar valor</button>
             </div>
-            <input type="text" class="formaBaixaSeguraContaPagar" value="Pix" placeholder="Forma: pix, dinheiro...">
+            <div class="baixa-segura-campo">
+              <label>Forma</label>
+              <input type="text" class="formaBaixaSeguraContaPagar" value="Pix" placeholder="Forma: pix, dinheiro...">
+            </div>
             <button type="button" class="compras-btn compras-btn-primary prepararBaixaSeguraContaPagar">Preparar baixa</button>
           </div>
           <div class="resumoBaixaSeguraContaPagar" style="display:none; margin-top:12px; padding:12px; border:1.5px solid #f59e0b; border-radius:12px; background:#fffbeb; font-weight:850; color:#78350f;"></div>
@@ -2571,15 +2619,15 @@
           '</div>' +
           '<div style="font-weight:950; color:#166534;">' + moeda(valorAberto) + '</div>' +
         '</div>' +
-        '<div style="display:grid; grid-template-columns:1fr 1fr auto; gap:8px; margin-top:10px; align-items:end;">' +
-          '<div>' +
-            '<label style="display:block; font-size:.78rem; font-weight:900; color:#334155; margin-bottom:4px;">Valor a pagar</label>' +
-            '<input type="text" inputmode="decimal" class="valorBaixaSeguraContaPagar" value="' + moeda(valorAberto).replace("R$ ", "") + '" data-valor-original="' + valorAberto + '" style="border:1.5px solid #cbd5e1; border-radius:9px; padding:9px 10px; font-weight:800; width:100%;">' +
-            '<button type="button" class="compras-btn compras-btn-secondary restaurarValorBaixaSeguraContaPagar" style="margin-top:6px; min-height:32px; padding:6px 9px; font-size:.78rem;">Restaurar valor</button>' +
+        '<div class="conta-pagar-baixa">' +
+          '<div class="baixa-segura-campo">' +
+            '<label>Valor a pagar</label>' +
+            '<input type="text" inputmode="decimal" class="valorBaixaSeguraContaPagar" value="' + moeda(valorAberto).replace("R$ ", "") + '" data-valor-original="' + valorAberto + '">' +
+            '<button type="button" class="compras-btn compras-btn-secondary restaurarValorBaixaSeguraContaPagar">Restaurar valor</button>' +
           '</div>' +
-          '<div>' +
-            '<label style="display:block; font-size:.78rem; font-weight:900; color:#334155; margin-bottom:4px;">Forma</label>' +
-            '<input type="text" class="formaBaixaSeguraContaPagar" value="Pix" style="border:1.5px solid #cbd5e1; border-radius:9px; padding:9px 10px; font-weight:800; width:100%;">' +
+          '<div class="baixa-segura-campo">' +
+            '<label>Forma</label>' +
+            '<input type="text" class="formaBaixaSeguraContaPagar" value="Pix">' +
           '</div>' +
           '<button type="button" class="compras-btn compras-btn-primary prepararBaixaSeguraContaPagar">Preparar baixa</button>' +
         '</div>' +
