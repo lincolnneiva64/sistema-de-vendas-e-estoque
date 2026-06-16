@@ -664,7 +664,16 @@
         {% endif %}
       </div>
       <div class="rc-cliente-busca-wrap">
-        <input id="clienteBuscaReceberDireto" class="rc-cliente-busca-input" type="text" autocomplete="off" autofocus placeholder="{% if cliente %}Trocar cliente{% else %}Digite o nome do cliente{% endif %}">
+        <input
+          id="clienteBuscaReceberDireto"
+          class="rc-cliente-busca-input"
+          type="text"
+          autocomplete="off"
+          autofocus
+          value="{% if cliente %}{{ cliente.nome }}{% endif %}"
+          placeholder="{% if cliente %}Trocar cliente{% else %}Digite o nome do cliente{% endif %}"
+          data-cliente-selecionado="{% if cliente %}true{% else %}false{% endif %}"
+        >
         <div id="clienteSugestoesReceberDireto" class="rc-cliente-sugestoes"></div>
       </div>
     </section>
@@ -1066,29 +1075,44 @@
   let timer = null;
   let indiceAtivo = -1;
   let ultimoTermo = "";
+  let buscaId = 0;
+  let clienteSelecionado = input.dataset.clienteSelecionado === "true";
+  let selecionandoCliente = false;
   const textoInicialBusca = input.getAttribute("placeholder") || "";
-  let textoInicialSelecionado = false;
+  let textoInicialSelecionado = !clienteSelecionado && !input.value;
 
   function usandoTextoInicial() {
-    return textoInicialSelecionado && input.value === textoInicialBusca;
+    return !clienteSelecionado && textoInicialSelecionado && input.value === textoInicialBusca;
   }
 
   function termoBuscaAtual() {
     return usandoTextoInicial() ? "" : input.value.trim();
   }
 
-  function abrirRecebimento(cliente) {
+  function fecharSugestoes() {
+    clientes = [];
+    indiceAtivo = -1;
+    box.innerHTML = "";
+    box.style.display = "none";
+  }
+
+  function confirmarCliente(cliente, event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
     if (!cliente || !cliente.id) return;
+    selecionandoCliente = true;
+    clienteSelecionado = true;
+    textoInicialSelecionado = false;
+    buscaId += 1;
+    clearTimeout(timer);
     const url = receberUrlBase.replace("/cliente/0/", "/cliente/" + encodeURIComponent(cliente.id) + "/")
       + "?next=" + encodeURIComponent(retornoUrl);
     input.value = cliente.nome || "";
-    clientes = [];
-    indiceAtivo = -1;
-    box.style.display = "none";
-
-    setTimeout(() => {
-      window.location.href = url;
-    }, 280);
+    input.dataset.clienteSelecionado = "true";
+    fecharSugestoes();
+    window.location.href = url;
   }
 
   function normalizarTexto(valor) {
@@ -1136,8 +1160,7 @@
     box.innerHTML = "";
 
     if (!clientes.length) {
-      box.style.display = "none";
-      indiceAtivo = -1;
+      fecharSugestoes();
       return;
     }
 
@@ -1154,12 +1177,6 @@
       let toqueInicioX = 0;
       let toqueInicioY = 0;
 
-      function selecionarClienteSugestao(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        abrirRecebimento(cliente);
-      }
-
       item.addEventListener("touchstart", (event) => {
         const toque = event.touches && event.touches[0];
         if (!toque) return;
@@ -1173,10 +1190,10 @@
         const moveuX = Math.abs(toque.clientX - toqueInicioX);
         const moveuY = Math.abs(toque.clientY - toqueInicioY);
         if (moveuX > 10 || moveuY > 10) return;
-        selecionarClienteSugestao(event);
+        confirmarCliente(cliente, event);
       }, { passive: false });
 
-      item.addEventListener("click", selecionarClienteSugestao);
+      item.addEventListener("click", (event) => confirmarCliente(cliente, event));
       box.appendChild(item);
     });
 
@@ -1185,33 +1202,39 @@
   }
 
   function buscarClientes(selecionarPrimeiro) {
+    if (selecionandoCliente) return;
     const termo = termoBuscaAtual();
     ultimoTermo = termo;
+    const idBuscaAtual = ++buscaId;
 
     fetch(clientesUrl + "?contexto=receber_rapido&q=" + encodeURIComponent(termo), {
       headers: { "X-Requested-With": "XMLHttpRequest" }
     })
       .then((resposta) => resposta.ok ? resposta.json() : Promise.reject())
       .then((dados) => {
+        if (selecionandoCliente || idBuscaAtual !== buscaId) return;
         if (termoBuscaAtual() !== ultimoTermo) return;
         clientes = ordenarClientes(dados.clientes || [], termo);
-        indiceAtivo = selecionarPrimeiro && clientes.length ? 0 : -1;
+        indiceAtivo = clientes.length ? 0 : -1;
         renderizar();
       })
       .catch(() => {
+        if (selecionandoCliente || idBuscaAtual !== buscaId) return;
         clientes = [];
-      indiceAtivo = -1;
+        indiceAtivo = -1;
         renderizar();
       });
   }
 
   input.addEventListener("input", () => {
+    if (selecionandoCliente) return;
+    clienteSelecionado = false;
+    input.dataset.clienteSelecionado = "false";
     textoInicialSelecionado = false;
+    buscaId += 1;
     clearTimeout(timer);
     if (!input.value.trim()) {
-      clientes = [];
-      indiceAtivo = -1;
-      renderizar();
+      fecharSugestoes();
       return;
     }
     timer = setTimeout(() => buscarClientes(false), 120);
@@ -1220,6 +1243,11 @@
 
 
   input.addEventListener("keydown", (event) => {
+    if (selecionandoCliente) {
+      event.preventDefault();
+      return;
+    }
+
     if (usandoTextoInicial() && (event.key.length === 1 || event.key === "Backspace" || event.key === "Delete")) {
       input.select();
     }
@@ -1244,16 +1272,15 @@
     } else if (event.key === "Enter") {
       event.preventDefault();
       if (indiceAtivo >= 0 && clientes[indiceAtivo]) {
-        abrirRecebimento(clientes[indiceAtivo]);
+        confirmarCliente(clientes[indiceAtivo], event);
       }
     } else if (event.key === "Escape") {
-      clientes = [];
-      renderizar();
+      fecharSugestoes();
     }
   });
 
   window.addEventListener("load", () => {
-    if (textoInicialBusca && !input.value) {
+    if (!clienteSelecionado && textoInicialBusca && !input.value) {
       input.value = textoInicialBusca;
       textoInicialSelecionado = true;
     }
