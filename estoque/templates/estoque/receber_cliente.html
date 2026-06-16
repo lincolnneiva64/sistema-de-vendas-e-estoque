@@ -1066,6 +1066,16 @@
   let timer = null;
   let indiceAtivo = -1;
   let ultimoTermo = "";
+  const textoInicialBusca = input.getAttribute("placeholder") || "";
+  let textoInicialSelecionado = false;
+
+  function usandoTextoInicial() {
+    return textoInicialSelecionado && input.value === textoInicialBusca;
+  }
+
+  function termoBuscaAtual() {
+    return usandoTextoInicial() ? "" : input.value.trim();
+  }
 
   function abrirRecebimento(cliente) {
     if (!cliente || !cliente.id) return;
@@ -1174,21 +1184,18 @@
     rolarItemAtivoParaVisivel();
   }
 
-  function buscarClientes() {
-    const termo = input.value.trim();
+  function buscarClientes(selecionarPrimeiro) {
+    const termo = termoBuscaAtual();
     ultimoTermo = termo;
-
-    // No celular, ao tocar no campo vazio, tambem abre a lista inicial de clientes,
-    // igual ao autocomplete usado na venda.
 
     fetch(clientesUrl + "?contexto=receber_rapido&q=" + encodeURIComponent(termo), {
       headers: { "X-Requested-With": "XMLHttpRequest" }
     })
       .then((resposta) => resposta.ok ? resposta.json() : Promise.reject())
       .then((dados) => {
-        if (input.value.trim() !== ultimoTermo) return;
+        if (termoBuscaAtual() !== ultimoTermo) return;
         clientes = ordenarClientes(dados.clientes || [], termo);
-        indiceAtivo = clientes.length ? 0 : -1;
+        indiceAtivo = selecionarPrimeiro && clientes.length ? 0 : -1;
         renderizar();
       })
       .catch(() => {
@@ -1199,20 +1206,38 @@
   }
 
   input.addEventListener("input", () => {
+    textoInicialSelecionado = false;
     clearTimeout(timer);
-    timer = setTimeout(buscarClientes, 120);
+    if (!input.value.trim()) {
+      clientes = [];
+      indiceAtivo = -1;
+      renderizar();
+      return;
+    }
+    timer = setTimeout(() => buscarClientes(false), 120);
   });
 
 
 
   input.addEventListener("keydown", (event) => {
-    if (!clientes.length) return;
+    if (usandoTextoInicial() && (event.key.length === 1 || event.key === "Backspace" || event.key === "Delete")) {
+      input.select();
+    }
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
+      if (!clientes.length || box.style.display === "none") {
+        buscarClientes(true);
+        return;
+      }
       indiceAtivo = Math.min(indiceAtivo + 1, clientes.length - 1);
       renderizar();
-    } else if (event.key === "ArrowUp") {
+      return;
+    }
+
+    if (!clientes.length) return;
+
+    if (event.key === "ArrowUp") {
       event.preventDefault();
       indiceAtivo = Math.max(indiceAtivo - 1, 0);
       renderizar();
@@ -1225,6 +1250,15 @@
       clientes = [];
       renderizar();
     }
+  });
+
+  window.addEventListener("load", () => {
+    if (textoInicialBusca && !input.value) {
+      input.value = textoInicialBusca;
+      textoInicialSelecionado = true;
+    }
+    input.focus({ preventScroll: true });
+    input.select();
   });
 
   document.addEventListener("click", (event) => {
