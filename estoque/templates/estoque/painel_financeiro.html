@@ -39,6 +39,22 @@
     justify-content: flex-end;
   }
 
+  .financeiro-nav-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 3px;
+  }
+
+  .financeiro-modulos-label {
+    color: #64748b;
+    font-size: .67rem;
+    font-weight: 900;
+    letter-spacing: 0;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
   .financeiro-btn {
     min-height: 28px;
     display: inline-flex;
@@ -142,6 +158,9 @@
     .financeiro-actions {
       justify-content: flex-start;
     }
+    .financeiro-nav-stack {
+      align-items: flex-start;
+    }
     .financeiro-grid,
     .financeiro-grid.quatro,
     .financeiro-grid.duas {
@@ -162,6 +181,10 @@
     .financeiro-btn {
       width: 100%;
     }
+    .financeiro-nav-stack,
+    .financeiro-actions {
+      width: 100%;
+    }
   }
 </style>
 
@@ -171,14 +194,17 @@
       <h1 class="financeiro-title">Painel Financeiro Geral</h1>
       <p class="financeiro-subtitle">Visao consolidada em {{ hoje|date:"d/m/Y" }}. Contas em aberto e parciais.</p>
     </div>
-    <nav class="financeiro-actions" aria-label="Navegacao do painel financeiro">
+    <div class="financeiro-nav-stack">
       <a class="financeiro-btn" href="{% url 'estoque:home' %}">Voltar / Painel</a>
-      <a class="financeiro-btn" href="{% url 'estoque:contas_receber' %}">Contas a receber</a>
-      <a class="financeiro-btn" href="{% url 'estoque:contas_pagar' %}">Contas a pagar</a>
-      <a class="financeiro-btn" href="{% url 'estoque:despesas_diarias' %}">Despesa Diaria</a>
-      <a class="financeiro-btn" href="{% url 'estoque:compras_lista' %}">Compras</a>
-      <a class="financeiro-btn" href="{% url 'estoque:vendas' %}">Vendas</a>
-    </nav>
+      <span class="financeiro-modulos-label">Modulos financeiros</span>
+      <nav class="financeiro-actions" aria-label="Modulos financeiros">
+        <a class="financeiro-btn" href="{% url 'estoque:despesas_diarias' %}">Despesa Diaria</a>
+        <a class="financeiro-btn" href="{% url 'estoque:contas_receber' %}">Contas a receber</a>
+        <a class="financeiro-btn" href="{% url 'estoque:contas_pagar' %}">Contas a pagar</a>
+        <a class="financeiro-btn" href="{% url 'estoque:compras_lista' %}">Compras</a>
+        <a class="financeiro-btn" href="{% url 'estoque:vendas' %}">Vendas</a>
+      </nav>
+    </div>
   </header>
 
   <section class="financeiro-section">
