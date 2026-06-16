@@ -462,6 +462,42 @@ def _valor_total_recebimento_cliente(recebimento):
         return (recebimento.valor or Decimal("0.00")).quantize(Decimal("0.01"))
 
 
+def _contas_receber_abertas_cliente_qs(cliente_id, hoje, bloquear=False):
+    qs = ContaReceber.objects
+    if bloquear:
+        qs = qs.select_for_update()
+    return (
+        qs.filter(
+            cliente_id=cliente_id,
+            status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+            valor_em_aberto__gt=Decimal("0.00"),
+        )
+        .only(
+            "id",
+            "venda_id",
+            "cliente_id",
+            "data_emissao",
+            "data_vencimento",
+            "valor_original",
+            "valor_em_aberto",
+            "status",
+        )
+        .annotate(
+            ordem_vencida=Case(
+                When(data_vencimento__lt=hoje, then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            ),
+            ordem_sem_vencimento=Case(
+                When(data_vencimento__isnull=True, then=Value(1)),
+                default=Value(0),
+                output_field=IntegerField(),
+            ),
+        )
+        .order_by("ordem_vencida", "ordem_sem_vencimento", "data_vencimento", "data_emissao", "id")
+    )
+
+
 def textos_parecidos_cliente(valor_a, valor_b, minimo=0.88):
     texto_a = normalizar_texto_cliente(valor_a)
     texto_b = normalizar_texto_cliente(valor_b)
@@ -4030,22 +4066,7 @@ def receber_cliente(request, cliente_id):
         "Outro",
     )
 
-    contas = list(
-        ContaReceber.objects.select_related("venda")
-        .filter(
-            cliente=cliente,
-            status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
-            valor_em_aberto__gt=Decimal("0.00"),
-        )
-    )
-    contas.sort(
-        key=lambda conta: (
-            0 if conta.data_vencimento and conta.data_vencimento < hoje else 1,
-            conta.data_vencimento or date.max,
-            conta.data_emissao or date.max,
-            conta.id,
-        )
-    )
+    contas = list(_contas_receber_abertas_cliente_qs(cliente.id, hoje))
 
     total_em_aberto = sum((conta.valor_em_aberto or Decimal("0.00") for conta in contas), Decimal("0.00"))
     valores = {
@@ -4105,12 +4126,16 @@ def receber_cliente(request, cliente_id):
     )
     creditos_disponiveis = []
     creditos_qs = (
-        CreditoCliente.objects.select_related(
-            "origem_conta_receber",
-            "origem_conta_receber__venda",
-            "origem_recebimento",
+        CreditoCliente.objects.select_related("origem_conta_receber")
+        .filter(cliente_id=cliente.id, valor__gt=Decimal("0.00"))
+        .only(
+            "id",
+            "criado_em",
+            "valor",
+            "observacao",
+            "origem_conta_receber_id",
+            "origem_conta_receber__venda_id",
         )
-        .filter(cliente=cliente, valor__gt=Decimal("0.00"))
         .order_by("-criado_em", "-id")
     )
     credito_restante_para_exibir = credito_disponivel
@@ -4118,7 +4143,6 @@ def receber_cliente(request, cliente_id):
         if credito_restante_para_exibir <= Decimal("0.00"):
             break
         conta_origem = credito.origem_conta_receber
-        venda_origem = conta_origem.venda if conta_origem else None
         valor_credito_original = (credito.valor or Decimal("0.00")).quantize(Decimal("0.01"))
         valor_credito = min(valor_credito_original, credito_restante_para_exibir).quantize(Decimal("0.01"))
         credito_restante_para_exibir = (credito_restante_para_exibir - valor_credito).quantize(Decimal("0.01"))
@@ -4127,7 +4151,7 @@ def receber_cliente(request, cliente_id):
             "criado_em": credito.criado_em,
             "valor": valor_credito,
             "conta_id": credito.origem_conta_receber_id,
-            "venda_id": venda_origem.id if venda_origem else None,
+            "venda_id": conta_origem.venda_id if conta_origem else None,
             "motivo": credito.observacao or "Credito gerado para o cliente.",
             "saldo_resultante": max(
                 (total_em_aberto - valor_credito).quantize(Decimal("0.01")),
@@ -4137,14 +4161,24 @@ def receber_cliente(request, cliente_id):
     pagamentos_hoje_preview = [
         float(valor or Decimal("0.00"))
         for valor in RecebimentoContaReceber.objects.filter(
-            conta__cliente=cliente,
+            conta__cliente_id=cliente.id,
             criado_em__date=hoje,
         ).values_list("valor", flat=True)
     ]
     limite_recente = timezone.now() - timedelta(hours=72)
     recebimentos_recentes = (
-        RecebimentoContaReceber.objects.select_related("conta", "conta__venda")
-        .filter(conta__cliente=cliente, criado_em__gte=limite_recente)
+        RecebimentoContaReceber.objects.select_related("conta")
+        .filter(conta__cliente_id=cliente.id, criado_em__gte=limite_recente)
+        .only(
+            "id",
+            "conta_id",
+            "data_recebimento",
+            "valor",
+            "forma_pagamento",
+            "observacao",
+            "criado_em",
+            "conta__venda_id",
+        )
         .order_by("-criado_em", "-id")[:8]
     )
     pagamentos_recentes = []
@@ -4193,21 +4227,7 @@ def receber_cliente(request, cliente_id):
                     try:
                         with transaction.atomic():
                             contas_atualizadas = list(
-                                ContaReceber.objects.select_for_update()
-                                .select_related("venda")
-                                .filter(
-                                    cliente=cliente,
-                                    status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
-                                    valor_em_aberto__gt=Decimal("0.00"),
-                                )
-                            )
-                            contas_atualizadas.sort(
-                                key=lambda conta: (
-                                    0 if conta.data_vencimento and conta.data_vencimento < hoje else 1,
-                                    conta.data_vencimento or date.max,
-                                    conta.data_emissao or date.max,
-                                    conta.id,
-                                )
+                                _contas_receber_abertas_cliente_qs(cliente.id, hoje, bloquear=True)
                             )
                             if not contas_atualizadas:
                                 raise RecebimentoContaErro("Nao ha contas abertas para receber deste cliente.")
@@ -4302,10 +4322,11 @@ def receber_cliente(request, cliente_id):
                         contas_abertas_confirmacao = []
                         contas_abertas_atuais = (
                             ContaReceber.objects.filter(
-                                cliente=cliente,
+                                cliente_id=cliente.id,
                                 status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
                                 valor_em_aberto__gt=Decimal("0.00"),
                             )
+                            .only("id", "venda_id", "data_emissao", "valor_original", "valor_em_aberto")
                             .order_by("data_emissao", "id")
                         )
                         for conta_aberta in contas_abertas_atuais:
