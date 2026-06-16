@@ -563,6 +563,54 @@
     }
   }
 
+  .rc-resumo-geral-receber {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0 0 12px;
+  }
+  .rc-resumo-geral-card {
+    background: #ffffff;
+    border: 1px solid rgba(20, 42, 83, 0.14);
+    border-radius: 16px;
+    padding: 12px 14px;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07);
+  }
+  .rc-resumo-geral-label {
+    display: block;
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 950;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .rc-resumo-geral-valor {
+    display: block;
+    margin-top: 5px;
+    color: #172033;
+    font-size: 1.16rem;
+    font-weight: 950;
+    line-height: 1.1;
+  }
+  .rc-resumo-geral-valor.dinheiro {
+    color: #15803d;
+  }
+  .rc-resumo-geral-valor.vencido {
+    color: #b91c1c;
+  }
+  @media (max-width: 700px) {
+    .rc-resumo-geral-receber {
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .rc-resumo-geral-card {
+      padding: 10px 11px;
+      border-radius: 14px;
+    }
+    .rc-resumo-geral-valor {
+      font-size: 1rem;
+    }
+  }
 </style>
 
 <div class="receber-cliente-page {% if feedback_recebimento %}recebimento-confirmado{% endif %}">
@@ -577,6 +625,27 @@
         <a href="{{ retorno_url }}" class="rc-btn">Voltar</a>
       </div>
     </header>
+
+    {% if not cliente and resumo_receber %}
+      <section class="rc-resumo-geral-receber" aria-label="Resumo geral de contas a receber">
+        <div class="rc-resumo-geral-card">
+          <span class="rc-resumo-geral-label">Clientes devendo</span>
+          <span class="rc-resumo-geral-valor">{{ resumo_receber.clientes_devendo }}</span>
+        </div>
+        <div class="rc-resumo-geral-card">
+          <span class="rc-resumo-geral-label">Contas em aberto</span>
+          <span class="rc-resumo-geral-valor">{{ resumo_receber.contas_abertas }}</span>
+        </div>
+        <div class="rc-resumo-geral-card">
+          <span class="rc-resumo-geral-label">Total a receber</span>
+          <span class="rc-resumo-geral-valor dinheiro">R$ {{ resumo_receber.total_a_receber|floatformat:2 }}</span>
+        </div>
+        <div class="rc-resumo-geral-card">
+          <span class="rc-resumo-geral-label">Total vencido</span>
+          <span class="rc-resumo-geral-valor vencido">R$ {{ resumo_receber.total_vencido|floatformat:2 }}</span>
+        </div>
+      </section>
+    {% endif %}
 
     {% if messages %}
       {% for message in messages %}
@@ -595,7 +664,7 @@
         {% endif %}
       </div>
       <div class="rc-cliente-busca-wrap">
-        <input id="clienteBuscaReceberDireto" class="rc-cliente-busca-input" type="text" autocomplete="off" placeholder="{% if cliente %}Trocar cliente{% else %}Digite o nome do cliente{% endif %}">
+        <input id="clienteBuscaReceberDireto" class="rc-cliente-busca-input" type="text" autocomplete="off" autofocus placeholder="{% if cliente %}Trocar cliente{% else %}Digite o nome do cliente{% endif %}">
         <div id="clienteSugestoesReceberDireto" class="rc-cliente-sugestoes"></div>
       </div>
     </section>
@@ -1134,15 +1203,7 @@
     timer = setTimeout(buscarClientes, 120);
   });
 
-  input.addEventListener("focus", () => {
-    clearTimeout(timer);
-    timer = setTimeout(buscarClientes, 80);
-  });
 
-  input.addEventListener("click", () => {
-    clearTimeout(timer);
-    timer = setTimeout(buscarClientes, 80);
-  });
 
   input.addEventListener("keydown", (event) => {
     if (!clientes.length) return;
@@ -1716,3 +1777,8 @@
   });
 </script>
 {% endblock %}
+
+
+
+
+

@@ -3951,6 +3951,19 @@ def receber_cliente_escolher(request):
         messages.warning(request, "Cliente nao encontrado ou inativo.")
 
     hoje = timezone.localdate()
+    contas_abertas_resumo = ContaReceber.objects.filter(
+        status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+        valor_em_aberto__gt=0,
+    )
+    resumo_receber = {
+        "clientes_devendo": contas_abertas_resumo.values("cliente_id").distinct().count(),
+        "contas_abertas": contas_abertas_resumo.count(),
+        "total_a_receber": contas_abertas_resumo.aggregate(total=Sum("valor_em_aberto")).get("total") or Decimal("0.00"),
+        "total_vencido": contas_abertas_resumo.filter(
+            data_vencimento__lt=hoje
+        ).aggregate(total=Sum("valor_em_aberto")).get("total") or Decimal("0.00"),
+    }
+
     formas_pagamento = (
         "Dinheiro",
         "PIX",
@@ -3971,6 +3984,7 @@ def receber_cliente_escolher(request):
         "estoque/receber_cliente.html",
         {
             "cliente": None,
+            "resumo_receber": resumo_receber,
             "contas": [],
             "contas_preview": [],
             "total_contas": 0,
@@ -9507,3 +9521,5 @@ def contas_pagar(request):
             "status_choices": ContaPagar.STATUS_CHOICES,
         },
     )
+
+
