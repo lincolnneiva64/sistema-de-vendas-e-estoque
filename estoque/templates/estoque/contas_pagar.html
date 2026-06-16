@@ -54,6 +54,13 @@
   .contas-pagar-modal-form input, .contas-pagar-modal-form textarea { width:100%; border:1.5px solid #d3dbe8; border-radius:9px; padding:9px 11px; font-weight:750; outline:none; }
   .contas-pagar-modal-form textarea { resize:vertical; min-height:70px; }
   .contas-pagar-modal-acoes { display:flex; justify-content:flex-end; gap:8px; padding:12px 16px 16px; background:#f8fafc; }
+  .contas-pagar-historico-row td { background:#f8fafc; padding:0 10px 10px; }
+  .contas-pagar-historico { border:1px solid #dbeafe; border-radius:10px; background:#eff6ff; padding:9px 10px; color:#172033; }
+  .contas-pagar-historico-title { margin:0 0 6px; font-size:.82rem; font-weight:950; color:#164173; text-transform:uppercase; }
+  .contas-pagar-historico-lista { display:grid; gap:6px; }
+  .contas-pagar-historico-item { display:grid; grid-template-columns:.75fr .7fr .9fr 1.4fr; gap:8px; align-items:start; padding:7px 8px; border-radius:8px; background:#fff; border:1px solid #dbeafe; font-size:.84rem; }
+  .contas-pagar-historico-label { display:block; color:#64748b; font-size:.68rem; font-weight:900; text-transform:uppercase; }
+  .contas-pagar-historico-valor { font-weight:900; color:#172033; }
 
   @media (max-width:760px) {
     .contas-pagar-page { margin-top:14px; padding:0 10px 80px; }
@@ -66,6 +73,7 @@
     .contas-pagar-mobile { display:block; }
     .contas-pagar-modal-resumo { grid-template-columns:1fr; }
     .contas-pagar-modal-acoes { flex-direction:column; }
+    .contas-pagar-historico-item { grid-template-columns:1fr 1fr; }
   }
 </style>
 
@@ -160,6 +168,37 @@
               {% endif %}
             </td>
           </tr>
+          {% if conta.pagamentos.all %}
+            <tr class="contas-pagar-historico-row">
+              <td colspan="7">
+                <div class="contas-pagar-historico">
+                  <p class="contas-pagar-historico-title">Historico de pagamentos</p>
+                  <div class="contas-pagar-historico-lista">
+                    {% for pagamento in conta.pagamentos.all %}
+                      <div class="contas-pagar-historico-item">
+                        <div>
+                          <span class="contas-pagar-historico-label">Data</span>
+                          <span class="contas-pagar-historico-valor">{{ pagamento.data_pagamento|date:"d/m/Y" }}</span>
+                        </div>
+                        <div>
+                          <span class="contas-pagar-historico-label">Valor</span>
+                          <span class="contas-pagar-historico-valor">R$ {{ pagamento.valor|floatformat:2 }}</span>
+                        </div>
+                        <div>
+                          <span class="contas-pagar-historico-label">Forma</span>
+                          <span class="contas-pagar-historico-valor">{{ pagamento.forma_pagamento|default:"-" }}</span>
+                        </div>
+                        <div>
+                          <span class="contas-pagar-historico-label">Observacao</span>
+                          <span class="contas-pagar-historico-valor">{{ pagamento.observacao|default:"-" }}</span>
+                        </div>
+                      </div>
+                    {% endfor %}
+                  </div>
+                </div>
+              </td>
+            </tr>
+          {% endif %}
         {% empty %}
           <tr>
             <td colspan="7" class="contas-pagar-empty">Nenhuma conta encontrada.</td>
@@ -209,6 +248,33 @@
             >Baixar</button>
           {% endif %}
         </div>
+        {% if conta.pagamentos.all %}
+          <div class="contas-pagar-historico" style="margin-top:10px;">
+            <p class="contas-pagar-historico-title">Historico de pagamentos</p>
+            <div class="contas-pagar-historico-lista">
+              {% for pagamento in conta.pagamentos.all %}
+                <div class="contas-pagar-historico-item">
+                  <div>
+                    <span class="contas-pagar-historico-label">Data</span>
+                    <span class="contas-pagar-historico-valor">{{ pagamento.data_pagamento|date:"d/m/Y" }}</span>
+                  </div>
+                  <div>
+                    <span class="contas-pagar-historico-label">Valor</span>
+                    <span class="contas-pagar-historico-valor">R$ {{ pagamento.valor|floatformat:2 }}</span>
+                  </div>
+                  <div>
+                    <span class="contas-pagar-historico-label">Forma</span>
+                    <span class="contas-pagar-historico-valor">{{ pagamento.forma_pagamento|default:"-" }}</span>
+                  </div>
+                  <div>
+                    <span class="contas-pagar-historico-label">Observacao</span>
+                    <span class="contas-pagar-historico-valor">{{ pagamento.observacao|default:"-" }}</span>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
       </article>
     {% empty %}
       <div class="contas-pagar-mobile-card contas-pagar-empty">Nenhuma conta encontrada.</div>

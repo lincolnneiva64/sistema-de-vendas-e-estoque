@@ -297,6 +297,54 @@
     font-weight: 950;
   }
 
+  .nota-compra-historico-pagamentos {
+    padding: 0 8px 8px;
+  }
+
+  .nota-compra-historico-titulo {
+    margin: 4px 0 6px;
+    font-size: .78rem;
+    font-weight: 950;
+    color: #164173;
+    text-transform: uppercase;
+  }
+
+  .nota-compra-historico-lista {
+    display: grid;
+    gap: 6px;
+  }
+
+  .nota-compra-historico-item {
+    display: grid;
+    grid-template-columns: .75fr .7fr .9fr 1.4fr;
+    gap: 8px;
+    align-items: start;
+    padding: 7px 8px;
+    border: 1px solid #dbeafe;
+    border-radius: 8px;
+    background: #eff6ff;
+    font-size: .8rem;
+  }
+
+  .nota-compra-historico-label {
+    display: block;
+    color: #64748b;
+    font-size: .67rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .nota-compra-historico-valor {
+    font-weight: 900;
+    color: #172033;
+  }
+
+  @media (max-width: 760px) {
+    .nota-compra-historico-item {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
 </style>
 
 <div class="nota-compra-wrap">
@@ -344,6 +392,35 @@
         <div><strong>Vencimento</strong>{{ conta_pagar.data_vencimento|date:"d/m/Y"|default:"-" }}</div>
         <div><strong>Fornecedor</strong>{{ conta_pagar.fornecedor.nome|default:"-" }}</div>
         <div><strong>Emissão</strong>{{ conta_pagar.data_emissao|date:"d/m/Y" }}</div>
+      </div>
+      <div class="nota-compra-historico-pagamentos">
+        <p class="nota-compra-historico-titulo">Historico de pagamentos</p>
+        {% if conta_pagar.pagamentos.all %}
+          <div class="nota-compra-historico-lista">
+            {% for pagamento in conta_pagar.pagamentos.all %}
+              <div class="nota-compra-historico-item">
+                <div>
+                  <span class="nota-compra-historico-label">Data</span>
+                  <span class="nota-compra-historico-valor">{{ pagamento.data_pagamento|date:"d/m/Y" }}</span>
+                </div>
+                <div>
+                  <span class="nota-compra-historico-label">Valor</span>
+                  <span class="nota-compra-historico-valor">R$ {{ pagamento.valor|floatformat:2 }}</span>
+                </div>
+                <div>
+                  <span class="nota-compra-historico-label">Forma</span>
+                  <span class="nota-compra-historico-valor">{{ pagamento.forma_pagamento|default:"-" }}</span>
+                </div>
+                <div>
+                  <span class="nota-compra-historico-label">Observacao</span>
+                  <span class="nota-compra-historico-valor">{{ pagamento.observacao|default:"-" }}</span>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div style="color:#64748b; font-weight:800; padding:6px 0;">Nenhum pagamento registrado.</div>
+        {% endif %}
       </div>
     {% else %}
       <div style="padding:7px 10px; color:#475569; font-weight:800;">

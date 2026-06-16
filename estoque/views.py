@@ -1966,7 +1966,10 @@ def compras_nova(request):
 
 def compras_detalhe(request, pk):
     compra = get_object_or_404(
-        Compra.objects.select_related("fornecedor").prefetch_related("itens__produto"),
+        Compra.objects.select_related("fornecedor").prefetch_related(
+            "itens__produto",
+            Prefetch("conta_pagar__pagamentos", queryset=PagamentoContaPagar.objects.order_by("-data_pagamento", "-id")),
+        ),
         pk=pk,
     )
     return render(
@@ -9519,7 +9522,12 @@ def contas_pagar(request):
     termo = request.GET.get("q", "").strip()
     status = request.GET.get("status", "abertas").strip()
 
-    contas_base = ContaPagar.objects.select_related("fornecedor", "compra").order_by("data_vencimento", "id")
+    contas_base = (
+        ContaPagar.objects
+        .select_related("fornecedor", "compra")
+        .prefetch_related(Prefetch("pagamentos", queryset=PagamentoContaPagar.objects.order_by("-data_pagamento", "-id")))
+        .order_by("data_vencimento", "id")
+    )
 
     if termo:
         contas_base = contas_base.filter(
