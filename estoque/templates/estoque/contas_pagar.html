@@ -34,6 +34,26 @@
   .contas-pagar-mobile-label { display:block; color:#64748b; font-size:.74rem; font-weight:900; text-transform:uppercase; }
   .contas-pagar-mobile-value { display:block; font-weight:850; color:#172033; }
   .contas-pagar-empty { padding:24px 14px; text-align:center; color:#64748b; font-weight:800; }
+  .contas-pagar-alerta { display:none; border-radius:12px; padding:9px 12px; margin-bottom:10px; font-weight:850; }
+  .contas-pagar-alerta.visivel { display:block; }
+  .contas-pagar-alerta.sucesso { background:#ecfdf3; border:1px solid #b7e4c7; color:#166534; }
+  .contas-pagar-alerta.erro { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
+  .contas-pagar-modal { position:fixed; inset:0; z-index:3000; display:none; align-items:center; justify-content:center; padding:16px; background:rgba(15,23,42,.48); }
+  .contas-pagar-modal.aberto { display:flex; }
+  .contas-pagar-modal-caixa { width:min(520px, 100%); max-height:90vh; overflow:auto; background:#fff; border-radius:14px; box-shadow:0 24px 70px rgba(15,23,42,.28); }
+  .contas-pagar-modal-topo { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:13px 16px; border-bottom:1px solid #e5e7eb; background:#fffbeb; }
+  .contas-pagar-modal-topo h2 { margin:0; font-size:1.12rem; font-weight:950; color:#78350f; }
+  .contas-pagar-modal-fechar { border:0; background:#fff7ed; color:#78350f; font-size:1.35rem; font-weight:900; cursor:pointer; border-radius:8px; width:36px; height:36px; }
+  .contas-pagar-modal-corpo { padding:14px 16px; }
+  .contas-pagar-modal-resumo { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-bottom:12px; }
+  .contas-pagar-modal-info { border:1px solid #e2e8f0; border-radius:10px; padding:9px 10px; background:#f8fafc; }
+  .contas-pagar-modal-label { display:block; color:#64748b; font-size:.72rem; font-weight:900; text-transform:uppercase; }
+  .contas-pagar-modal-valor { display:block; margin-top:3px; color:#172033; font-weight:900; }
+  .contas-pagar-modal-form { display:grid; gap:10px; }
+  .contas-pagar-modal-form label { display:block; font-weight:850; font-size:.82rem; color:#334155; margin-bottom:4px; }
+  .contas-pagar-modal-form input, .contas-pagar-modal-form textarea { width:100%; border:1.5px solid #d3dbe8; border-radius:9px; padding:9px 11px; font-weight:750; outline:none; }
+  .contas-pagar-modal-form textarea { resize:vertical; min-height:70px; }
+  .contas-pagar-modal-acoes { display:flex; justify-content:flex-end; gap:8px; padding:12px 16px 16px; background:#f8fafc; }
 
   @media (max-width:760px) {
     .contas-pagar-page { margin-top:14px; padding:0 10px 80px; }
@@ -44,6 +64,8 @@
     .contas-pagar-filtros { grid-template-columns:1fr; padding:12px; }
     .contas-pagar-desktop { display:none; }
     .contas-pagar-mobile { display:block; }
+    .contas-pagar-modal-resumo { grid-template-columns:1fr; }
+    .contas-pagar-modal-acoes { flex-direction:column; }
   }
 </style>
 
@@ -65,6 +87,7 @@
       <div style="border-radius:12px; padding:9px 12px; margin-bottom:10px; font-weight:800; background:#ecfdf3; border:1px solid #b7e4c7; color:#166534;">{{ message }}</div>
     {% endfor %}
   {% endif %}
+  <div id="contasPagarFeedback" class="contas-pagar-alerta" role="alert" aria-live="polite"></div>
 
   <section class="contas-pagar-resumo" style="margin-bottom:12px;">
     <div class="contas-pagar-resumo-item">
@@ -115,7 +138,7 @@
       </thead>
       <tbody>
         {% for conta in contas %}
-          <tr>
+          <tr data-conta-pagar-id="{{ conta.pk }}">
             <td>{{ conta.fornecedor.nome|default:"Fornecedor não informado" }}</td>
             <td><a href="{% url 'estoque:compras_detalhe' conta.compra.pk %}" class="contas-pagar-btn contas-pagar-btn-secondary">#{{ conta.compra.id }}</a></td>
             <td>{{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</td>
@@ -124,7 +147,16 @@
             <td class="contas-pagar-valor">R$ {{ conta.valor_em_aberto|floatformat:2 }}</td>
             <td>
               {% if conta.status != "paga" and conta.status != "cancelada" %}
-                <a href="{% url 'estoque:conta_pagar_baixar' conta.pk %}" class="contas-pagar-btn contas-pagar-btn-success">Baixar</a>
+                <button
+                  type="button"
+                  class="contas-pagar-btn contas-pagar-btn-success btnAbrirBaixaContaPagar"
+                  data-url="{% url 'estoque:conta_pagar_baixar' conta.pk %}"
+                  data-fornecedor="{{ conta.fornecedor.nome|default:'Fornecedor nao informado' }}"
+                  data-compra="{{ conta.compra.id }}"
+                  data-vencimento="{{ conta.data_vencimento|date:'d/m/Y'|default:'-' }}"
+                  data-original="{{ conta.valor_original|floatformat:2 }}"
+                  data-aberto="{{ conta.valor_em_aberto|floatformat:2 }}"
+                >Baixar</button>
               {% endif %}
             </td>
           </tr>
@@ -139,7 +171,7 @@
 
   <section class="contas-pagar-mobile">
     {% for conta in contas %}
-      <article class="contas-pagar-mobile-card">
+      <article class="contas-pagar-mobile-card" data-conta-pagar-id="{{ conta.pk }}">
         <div class="contas-pagar-mobile-top">
           <span class="contas-pagar-mobile-title">{{ conta.fornecedor.nome|default:"Fornecedor não informado" }}</span>
           <span class="contas-pagar-status">{{ conta.get_status_display }}</span>
@@ -165,7 +197,16 @@
         <div class="contas-pagar-actions">
           <a href="{% url 'estoque:compras_detalhe' conta.compra.pk %}" class="contas-pagar-btn contas-pagar-btn-secondary">Ver compra</a>
           {% if conta.status != "paga" and conta.status != "cancelada" %}
-            <a href="{% url 'estoque:conta_pagar_baixar' conta.pk %}" class="contas-pagar-btn contas-pagar-btn-success">Baixar</a>
+            <button
+              type="button"
+              class="contas-pagar-btn contas-pagar-btn-success btnAbrirBaixaContaPagar"
+              data-url="{% url 'estoque:conta_pagar_baixar' conta.pk %}"
+              data-fornecedor="{{ conta.fornecedor.nome|default:'Fornecedor nao informado' }}"
+              data-compra="{{ conta.compra.id }}"
+              data-vencimento="{{ conta.data_vencimento|date:'d/m/Y'|default:'-' }}"
+              data-original="{{ conta.valor_original|floatformat:2 }}"
+              data-aberto="{{ conta.valor_em_aberto|floatformat:2 }}"
+            >Baixar</button>
           {% endif %}
         </div>
       </article>
@@ -174,4 +215,162 @@
     {% endfor %}
   </section>
 </div>
+
+<div id="modalBaixaContaPagar" class="contas-pagar-modal" aria-hidden="true">
+  <div class="contas-pagar-modal-caixa" role="dialog" aria-modal="true" aria-labelledby="modalBaixaContaPagarTitulo">
+    <div class="contas-pagar-modal-topo">
+      <h2 id="modalBaixaContaPagarTitulo">Baixar conta a pagar</h2>
+      <button type="button" id="fecharModalBaixaContaPagar" class="contas-pagar-modal-fechar" aria-label="Fechar">x</button>
+    </div>
+    <form id="formBaixaContaPagar">
+      {% csrf_token %}
+      <div class="contas-pagar-modal-corpo">
+        <div class="contas-pagar-modal-resumo">
+          <div class="contas-pagar-modal-info">
+            <span class="contas-pagar-modal-label">Fornecedor</span>
+            <span class="contas-pagar-modal-valor" id="baixaContaFornecedor">-</span>
+          </div>
+          <div class="contas-pagar-modal-info">
+            <span class="contas-pagar-modal-label">Compra</span>
+            <span class="contas-pagar-modal-valor" id="baixaContaCompra">-</span>
+          </div>
+          <div class="contas-pagar-modal-info">
+            <span class="contas-pagar-modal-label">Vencimento</span>
+            <span class="contas-pagar-modal-valor" id="baixaContaVencimento">-</span>
+          </div>
+          <div class="contas-pagar-modal-info">
+            <span class="contas-pagar-modal-label">Valor original</span>
+            <span class="contas-pagar-modal-valor" id="baixaContaOriginal">R$ 0,00</span>
+          </div>
+          <div class="contas-pagar-modal-info">
+            <span class="contas-pagar-modal-label">Valor em aberto</span>
+            <span class="contas-pagar-modal-valor" id="baixaContaAberto">R$ 0,00</span>
+          </div>
+        </div>
+        <div class="contas-pagar-modal-form">
+          <div>
+            <label for="valorPagoContaPagar">Valor pago</label>
+            <input id="valorPagoContaPagar" name="valor" type="text" inputmode="decimal" autocomplete="off">
+          </div>
+          <div>
+            <label for="formaPagamentoContaPagar">Forma de pagamento</label>
+            <input id="formaPagamentoContaPagar" name="forma_pagamento" type="text" autocomplete="off" value="Pix" placeholder="Pix, dinheiro, cartao">
+          </div>
+          <div>
+            <label for="observacaoContaPagar">Observacao</label>
+            <textarea id="observacaoContaPagar" name="observacao" placeholder="Opcional"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="contas-pagar-modal-acoes">
+        <button type="button" id="cancelarBaixaContaPagar" class="contas-pagar-btn contas-pagar-btn-secondary">Cancelar</button>
+        <button type="submit" id="confirmarBaixaContaPagar" class="contas-pagar-btn contas-pagar-btn-primary">Confirmar baixa</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  const modal = document.getElementById("modalBaixaContaPagar");
+  const form = document.getElementById("formBaixaContaPagar");
+  const fechar = document.getElementById("fecharModalBaixaContaPagar");
+  const cancelar = document.getElementById("cancelarBaixaContaPagar");
+  const confirmar = document.getElementById("confirmarBaixaContaPagar");
+  const feedback = document.getElementById("contasPagarFeedback");
+  const valorPago = document.getElementById("valorPagoContaPagar");
+  const formaPagamento = document.getElementById("formaPagamentoContaPagar");
+  const observacao = document.getElementById("observacaoContaPagar");
+  let urlBaixaAtual = "";
+  let focoAnterior = null;
+
+  function mostrarFeedback(tipo, texto) {
+    if (!feedback) return;
+    feedback.textContent = texto;
+    feedback.className = "contas-pagar-alerta visivel " + tipo;
+  }
+
+  function abrirModal(botao) {
+    urlBaixaAtual = botao.dataset.url || "";
+    focoAnterior = document.activeElement;
+    document.getElementById("baixaContaFornecedor").textContent = botao.dataset.fornecedor || "-";
+    document.getElementById("baixaContaCompra").textContent = "#" + (botao.dataset.compra || "-");
+    document.getElementById("baixaContaVencimento").textContent = botao.dataset.vencimento || "-";
+    document.getElementById("baixaContaOriginal").textContent = "R$ " + (botao.dataset.original || "0,00");
+    document.getElementById("baixaContaAberto").textContent = "R$ " + (botao.dataset.aberto || "0,00");
+    if (valorPago) valorPago.value = botao.dataset.aberto || "";
+    if (formaPagamento && !formaPagamento.value) formaPagamento.value = "Pix";
+    if (observacao) observacao.value = "";
+    modal?.classList.add("aberto");
+    modal?.setAttribute("aria-hidden", "false");
+    window.setTimeout(function () {
+      valorPago?.focus();
+      valorPago?.select();
+    }, 0);
+  }
+
+  function fecharModal() {
+    modal?.classList.remove("aberto");
+    modal?.setAttribute("aria-hidden", "true");
+    urlBaixaAtual = "";
+    focoAnterior?.focus();
+  }
+
+  document.addEventListener("click", function (event) {
+    const botao = event.target.closest(".btnAbrirBaixaContaPagar");
+    if (botao) {
+      abrirModal(botao);
+      return;
+    }
+    if (event.target === modal) {
+      fecharModal();
+    }
+  });
+
+  fechar?.addEventListener("click", fecharModal);
+  cancelar?.addEventListener("click", fecharModal);
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && modal?.classList.contains("aberto")) {
+      fecharModal();
+    }
+  });
+
+  form?.addEventListener("submit", async function (event) {
+    event.preventDefault();
+    if (!urlBaixaAtual) return;
+    if (confirmar) {
+      confirmar.disabled = true;
+      confirmar.textContent = "Baixando...";
+    }
+
+    const dados = new FormData(form);
+    try {
+      const resposta = await fetch(urlBaixaAtual, {
+        method: "POST",
+        headers: {
+          "X-CSRFToken": form.querySelector("[name='csrfmiddlewaretoken']")?.value || "",
+          "X-Requested-With": "XMLHttpRequest"
+        },
+        body: dados
+      });
+      const retorno = await resposta.json();
+      if (!resposta.ok || !retorno.ok) {
+        throw new Error(retorno.erro || "Nao foi possivel baixar a conta.");
+      }
+      mostrarFeedback("sucesso", "Baixa registrada com sucesso.");
+      fecharModal();
+      window.setTimeout(function () {
+        window.location.reload();
+      }, 450);
+    } catch (erro) {
+      mostrarFeedback("erro", erro.message || "Erro ao baixar a conta.");
+    } finally {
+      if (confirmar) {
+        confirmar.disabled = false;
+        confirmar.textContent = "Confirmar baixa";
+      }
+    }
+  });
+})();
+</script>
 {% endblock %}
