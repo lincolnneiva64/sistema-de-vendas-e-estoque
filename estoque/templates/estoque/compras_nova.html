@@ -359,8 +359,8 @@
   }
 
   .fornecedor-financeiro-caixa {
-    width:min(720px, 100%);
-    max-height:88vh;
+    width:min(1040px, 100%);
+    max-height:94vh;
     overflow:auto;
     background:#fff;
     border-radius:16px;
@@ -404,7 +404,7 @@
 
   .conta-pagar-baixa {
     display:grid;
-    grid-template-columns:minmax(150px, 1fr) minmax(150px, 1fr) auto;
+    grid-template-columns:minmax(145px, 1fr) minmax(150px, .9fr) minmax(130px, .8fr) minmax(140px, .9fr) auto;
     gap:10px;
     margin-top:12px;
     align-items:start;
@@ -2354,12 +2354,12 @@
               <button type="button" class="compras-btn compras-btn-secondary restaurarValorBaixaSeguraContaPagar">Restaurar valor</button>
             </div>
             <div class="baixa-segura-campo">
-              <label>Juros bancarios</label>
-              <input type="text" inputmode="decimal" class="jurosBancariosBaixaSeguraContaPagar" value="0,00" aria-label="Juros bancarios">
-            </div>
-            <div class="baixa-segura-campo">
               <label>Data do pagamento</label>
               <input type="date" class="dataPagamentoBaixaSeguraContaPagar" value="${hojeISO()}">
+            </div>
+            <div class="baixa-segura-campo">
+              <label>Juros bancarios</label>
+              <input type="text" inputmode="decimal" class="jurosBancariosBaixaSeguraContaPagar" value="0,00" aria-label="Juros bancarios">
             </div>
             <div class="baixa-segura-campo">
               <label>Forma</label>
@@ -2528,6 +2528,18 @@
     resumo.style.display = "none";
   }
 
+  function focarSelecionandoBaixa(campo) {
+    if (!campo) return;
+    campo.focus();
+    setTimeout(function() {
+      if (typeof campo.select === "function") {
+        try {
+          campo.select();
+        } catch (erro) {}
+      }
+    }, 0);
+  }
+
   function atualizarPreviewBaixa(card) {
     var preview = card ? card.querySelector(".baixa-segura-preview") : null;
     if (!preview) return;
@@ -2567,7 +2579,7 @@
     modal.style.padding = "12px";
 
     modal.innerHTML =
-      '<div style="width:min(820px,100%); max-height:90vh; overflow:auto; background:#fff; border-radius:16px; box-shadow:0 24px 70px rgba(15,23,42,.28);">' +
+      '<div style="width:min(1120px,100%); max-height:94vh; overflow:auto; background:#fff; border-radius:16px; box-shadow:0 24px 70px rgba(15,23,42,.28);">' +
         '<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid #e5e7eb; background:#fffbeb;">' +
           '<h2 style="margin:0; font-size:1.1rem; font-weight:950; color:#78350f;">Contas a pagar geral</h2>' +
           '<button type="button" id="fecharContasPagarSeguroCompra" class="compras-btn compras-btn-secondary">Fechar</button>' +
@@ -2735,12 +2747,12 @@
             '<button type="button" class="compras-btn compras-btn-secondary restaurarValorBaixaSeguraContaPagar">Restaurar valor</button>' +
           '</div>' +
           '<div class="baixa-segura-campo">' +
-            '<label>Juros bancarios</label>' +
-            '<input type="text" inputmode="decimal" class="jurosBancariosBaixaSeguraContaPagar" value="0,00">' +
-          '</div>' +
-          '<div class="baixa-segura-campo">' +
             '<label>Data do pagamento</label>' +
             '<input type="date" class="dataPagamentoBaixaSeguraContaPagar" value="' + hojeISO() + '">' +
+          '</div>' +
+          '<div class="baixa-segura-campo">' +
+            '<label>Juros bancarios</label>' +
+            '<input type="text" inputmode="decimal" class="jurosBancariosBaixaSeguraContaPagar" value="0,00">' +
           '</div>' +
           '<div class="baixa-segura-campo">' +
             '<label>Forma</label>' +
@@ -2786,21 +2798,21 @@
     if (!pagando || pagando <= 0) {
       limparResumoBaixa(card);
       alert("Informe um valor maior que zero.");
-      if (campo) campo.focus();
+      if (campo) focarSelecionandoBaixa(campo);
       return;
     }
 
     if (juros < 0) {
       limparResumoBaixa(card);
       alert("Juros bancarios nao podem ser negativos.");
-      if (campoJuros) campoJuros.focus();
+      if (campoJuros) focarSelecionandoBaixa(campoJuros);
       return;
     }
 
     if (pagando > aberto) {
       limparResumoBaixa(card);
       alert("O valor informado é maior que o saldo aberto.");
-      if (campo) campo.focus();
+      if (campo) focarSelecionandoBaixa(campo);
       return;
     }
 
@@ -2823,12 +2835,14 @@
       '</div>';
 
     resumo.style.display = "block";
+    if (typeof card.scrollIntoView === "function") {
+      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
 
     if (focarCampo !== false) {
       setTimeout(function() {
         if (campo) {
-          campo.focus();
-          campo.select();
+          focarSelecionandoBaixa(campo);
         }
       }, 80);
     }
@@ -2851,7 +2865,7 @@
 
     if (juros < 0) {
       alert("Juros bancarios nao podem ser negativos.");
-      if (jurosCampo) jurosCampo.focus();
+      if (jurosCampo) focarSelecionandoBaixa(jurosCampo);
       return;
     }
 
@@ -2920,7 +2934,7 @@
         atualizarPreviewBaixa(cardRestaurar);
         if (resumoEstaAberto(cardRestaurar)) prepararBaixa(cardRestaurar, false);
         var campoRestaurado = cardRestaurar.querySelector(".valorBaixaSeguraContaPagar");
-        if (campoRestaurado) campoRestaurado.focus();
+        if (campoRestaurado) focarSelecionandoBaixa(campoRestaurado);
       }
       return;
     }
@@ -2999,6 +3013,18 @@
     }
   }, true);
 
+  document.addEventListener("focusin", function(event) {
+    var campo = event.target.closest(".valorBaixaSeguraContaPagar, .jurosBancariosBaixaSeguraContaPagar, .formaBaixaSeguraContaPagar, .dataPagamentoBaixaSeguraContaPagar");
+    if (!campo) return;
+    setTimeout(function() {
+      if (typeof campo.select === "function") {
+        try {
+          campo.select();
+        } catch (erro) {}
+      }
+    }, 0);
+  }, true);
+
   document.addEventListener("keydown", function(event) {
     if (event.key !== "Enter") return;
 
@@ -3011,20 +3037,20 @@
     event.preventDefault();
 
     if (campo.classList.contains("valorBaixaSeguraContaPagar")) {
-      var jurosCampo = card.querySelector(".jurosBancariosBaixaSeguraContaPagar");
-      if (jurosCampo) jurosCampo.focus();
-      return;
-    }
-
-    if (campo.classList.contains("jurosBancariosBaixaSeguraContaPagar")) {
-      var dataCampo = card.querySelector(".dataPagamentoBaixaSeguraContaPagar");
-      if (dataCampo) dataCampo.focus();
+      var dataCampoDestino = card.querySelector(".dataPagamentoBaixaSeguraContaPagar");
+      if (dataCampoDestino) focarSelecionandoBaixa(dataCampoDestino);
       return;
     }
 
     if (campo.classList.contains("dataPagamentoBaixaSeguraContaPagar")) {
+      var jurosCampo = card.querySelector(".jurosBancariosBaixaSeguraContaPagar");
+      if (jurosCampo) focarSelecionandoBaixa(jurosCampo);
+      return;
+    }
+
+    if (campo.classList.contains("jurosBancariosBaixaSeguraContaPagar")) {
       var formaCampo = card.querySelector(".formaBaixaSeguraContaPagar");
-      if (formaCampo) formaCampo.focus();
+      if (formaCampo) focarSelecionandoBaixa(formaCampo);
       return;
     }
 
