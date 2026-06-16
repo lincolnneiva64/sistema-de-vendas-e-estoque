@@ -450,16 +450,21 @@ def normalizar_documento_cliente(valor):
 
 
 def _valor_total_recebimento_cliente(recebimento):
-    observacao = recebimento.observacao or ""
+    if isinstance(recebimento, dict):
+        valor_recebimento = recebimento.get("valor") or Decimal("0.00")
+        observacao = recebimento.get("observacao") or ""
+    else:
+        valor_recebimento = recebimento.valor or Decimal("0.00")
+        observacao = recebimento.observacao or ""
     if "Total recebido:" not in observacao:
-        return (recebimento.valor or Decimal("0.00")).quantize(Decimal("0.01"))
+        return valor_recebimento.quantize(Decimal("0.01"))
 
     trecho_total = observacao.split("Total recebido:", 1)[1]
     trecho_total = trecho_total.split("Aplicado nesta conta:", 1)[0].strip().rstrip(".")
     try:
-        return _decimal_do_front(trecho_total or recebimento.valor, "0.01")
+        return _decimal_do_front(trecho_total or valor_recebimento, "0.01")
     except ValueError:
-        return (recebimento.valor or Decimal("0.00")).quantize(Decimal("0.01"))
+        return valor_recebimento.quantize(Decimal("0.01"))
 
 
 def _contas_receber_abertas_cliente_qs(cliente_id, hoje, bloquear=False):
@@ -4048,7 +4053,16 @@ def receber_cliente_escolher(request):
 
 @ensure_csrf_cookie
 def receber_cliente(request, cliente_id):
-    cliente = get_object_or_404(Cliente, pk=cliente_id)
+    cliente = get_object_or_404(
+        Cliente.objects.only(
+            "id",
+            "nome",
+            "whatsapp",
+            "whatsapp_normalizado",
+            "prazo_padrao_dias",
+        ),
+        pk=cliente_id,
+    )
     feedback_recebimento = request.session.pop("receber_cliente_feedback", None)
     retorno_url = _url_retorno_segura(request)
     contas_url = reverse("estoque:contas_receber")
@@ -4113,22 +4127,10 @@ def receber_cliente(request, cliente_id):
             )
     if feedback_recebimento and total_em_aberto <= Decimal("0.00"):
         valores["valor"] = ""
-    credito_disponivel = (
-        CreditoCliente.objects.filter(cliente=cliente)
-        .aggregate(total=Sum("valor"))
-        .get("total")
-        or Decimal("0.00")
-    ).quantize(Decimal("0.01"))
-    credito_disponivel = max(credito_disponivel, Decimal("0.00"))
-    saldo_resultante_credito = max(
-        (total_em_aberto - credito_disponivel).quantize(Decimal("0.01")),
-        Decimal("0.00"),
-    )
-    creditos_disponiveis = []
-    creditos_qs = (
-        CreditoCliente.objects.select_related("origem_conta_receber")
-        .filter(cliente_id=cliente.id, valor__gt=Decimal("0.00"))
-        .only(
+    creditos_rows = list(
+        CreditoCliente.objects.filter(cliente_id=cliente.id)
+        .exclude(valor=Decimal("0.00"))
+        .values(
             "id",
             "criado_em",
             "valor",
@@ -4138,21 +4140,31 @@ def receber_cliente(request, cliente_id):
         )
         .order_by("-criado_em", "-id")
     )
+    credito_disponivel = (
+        sum((credito["valor"] or Decimal("0.00") for credito in creditos_rows), Decimal("0.00"))
+    ).quantize(Decimal("0.01"))
+    credito_disponivel = max(credito_disponivel, Decimal("0.00"))
+    saldo_resultante_credito = max(
+        (total_em_aberto - credito_disponivel).quantize(Decimal("0.01")),
+        Decimal("0.00"),
+    )
+    creditos_disponiveis = []
     credito_restante_para_exibir = credito_disponivel
-    for credito in creditos_qs:
+    for credito in creditos_rows:
         if credito_restante_para_exibir <= Decimal("0.00"):
             break
-        conta_origem = credito.origem_conta_receber
-        valor_credito_original = (credito.valor or Decimal("0.00")).quantize(Decimal("0.01"))
+        valor_credito_original = (credito["valor"] or Decimal("0.00")).quantize(Decimal("0.01"))
+        if valor_credito_original <= Decimal("0.00"):
+            continue
         valor_credito = min(valor_credito_original, credito_restante_para_exibir).quantize(Decimal("0.01"))
         credito_restante_para_exibir = (credito_restante_para_exibir - valor_credito).quantize(Decimal("0.01"))
         creditos_disponiveis.append({
-            "id": credito.id,
-            "criado_em": credito.criado_em,
+            "id": credito["id"],
+            "criado_em": credito["criado_em"],
             "valor": valor_credito,
-            "conta_id": credito.origem_conta_receber_id,
-            "venda_id": conta_origem.venda_id if conta_origem else None,
-            "motivo": credito.observacao or "Credito gerado para o cliente.",
+            "conta_id": credito["origem_conta_receber_id"],
+            "venda_id": credito["origem_conta_receber__venda_id"],
+            "motivo": credito["observacao"] or "Credito gerado para o cliente.",
             "saldo_resultante": max(
                 (total_em_aberto - valor_credito).quantize(Decimal("0.01")),
                 Decimal("0.00"),
@@ -4167,9 +4179,8 @@ def receber_cliente(request, cliente_id):
     ]
     limite_recente = timezone.now() - timedelta(hours=72)
     recebimentos_recentes = (
-        RecebimentoContaReceber.objects.select_related("conta")
-        .filter(conta__cliente_id=cliente.id, criado_em__gte=limite_recente)
-        .only(
+        RecebimentoContaReceber.objects.filter(conta__cliente_id=cliente.id, criado_em__gte=limite_recente)
+        .values(
             "id",
             "conta_id",
             "data_recebimento",
@@ -4186,16 +4197,16 @@ def receber_cliente(request, cliente_id):
         valor_total_recebido = _valor_total_recebimento_cliente(recebimento)
         pagamentos_recentes.append(
             {
-                "criado_em": recebimento.criado_em,
-                "criado_em_data": timezone.localtime(recebimento.criado_em).date().isoformat(),
-                "data_recebimento": recebimento.data_recebimento.isoformat() if recebimento.data_recebimento else "",
+                "criado_em": recebimento["criado_em"],
+                "criado_em_data": timezone.localtime(recebimento["criado_em"]).date().isoformat(),
+                "data_recebimento": recebimento["data_recebimento"].isoformat() if recebimento["data_recebimento"] else "",
                 "valor": valor_total_recebido,
                 "valor_numero": float(valor_total_recebido or Decimal("0.00")),
-                "valor_aplicado": recebimento.valor,
-                "forma_pagamento": recebimento.forma_pagamento,
-                "conta_id": recebimento.conta_id,
-                "venda_id": recebimento.conta.venda_id if recebimento.conta_id else "",
-                "observacao": recebimento.observacao,
+                "valor_aplicado": recebimento["valor"],
+                "forma_pagamento": recebimento["forma_pagamento"],
+                "conta_id": recebimento["conta_id"],
+                "venda_id": recebimento["conta__venda_id"] if recebimento["conta_id"] else "",
+                "observacao": recebimento["observacao"],
             }
         )
 
@@ -4394,43 +4405,42 @@ def receber_cliente(request, cliente_id):
         }
         for conta in contas
     ]
+    tem_pix_em_atencao = _tem_pix_em_atencao()
 
-    return render(
-        request,
-        "estoque/receber_cliente.html",
-        {
-            "cliente": cliente,
-            "contas": contas,
-            "contas_preview": contas_preview,
-            "total_contas": len(contas),
-            "total_em_aberto": total_em_aberto,
-            "credito_disponivel": credito_disponivel,
-            "creditos_disponiveis": creditos_disponiveis,
-            "saldo_resultante_credito": saldo_resultante_credito,
-            "formas_pagamento": formas_pagamento,
-            "valores": valores,
-            "pagamentos_hoje_preview": pagamentos_hoje_preview,
-            "pagamentos_recentes": pagamentos_recentes,
-            "feedback_recebimento": feedback_recebimento,
-            "contas_atualizadas_ids": (
-                feedback_recebimento.get("contas_atualizadas_ids", [])
-                if feedback_recebimento
-                else []
-            ),
-            "contas_atualizadas_feedback": (
-                feedback_recebimento.get("contas_atualizadas", {})
-                if feedback_recebimento
-                else {}
-            ),
-            "hoje_iso": hoje.isoformat(),
-            "retorno_url": destino_retorno,
-            "tem_pix_em_atencao": _tem_pix_em_atencao(),
-            "pix_recebido_escolhido": pix_recebido_escolhido,
-            "pix_detalhe_url": pix_detalhe_url,
-            "pix_trocar_cliente_url": pix_trocar_cliente_url,
-            "pix_remover_cliente_url": pix_remover_cliente_url,
-        },
-    )
+    contexto = {
+        "cliente": cliente,
+        "contas": contas,
+        "contas_preview": contas_preview,
+        "total_contas": len(contas),
+        "total_em_aberto": total_em_aberto,
+        "credito_disponivel": credito_disponivel,
+        "creditos_disponiveis": creditos_disponiveis,
+        "saldo_resultante_credito": saldo_resultante_credito,
+        "formas_pagamento": formas_pagamento,
+        "valores": valores,
+        "pagamentos_hoje_preview": pagamentos_hoje_preview,
+        "pagamentos_recentes": pagamentos_recentes,
+        "feedback_recebimento": feedback_recebimento,
+        "contas_atualizadas_ids": (
+            feedback_recebimento.get("contas_atualizadas_ids", [])
+            if feedback_recebimento
+            else []
+        ),
+        "contas_atualizadas_feedback": (
+            feedback_recebimento.get("contas_atualizadas", {})
+            if feedback_recebimento
+            else {}
+        ),
+        "hoje_iso": hoje.isoformat(),
+        "retorno_url": destino_retorno,
+        "tem_pix_em_atencao": tem_pix_em_atencao,
+        "pix_recebido_escolhido": pix_recebido_escolhido,
+        "pix_detalhe_url": pix_detalhe_url,
+        "pix_trocar_cliente_url": pix_trocar_cliente_url,
+        "pix_remover_cliente_url": pix_remover_cliente_url,
+    }
+    response = render(request, "estoque/receber_cliente.html", contexto)
+    return response
 
 
 def receber_cliente_comprovante_imagem(request, cliente_id, token):

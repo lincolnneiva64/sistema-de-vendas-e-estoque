@@ -542,6 +542,20 @@
     padding: 16px;
     font-weight: 800;
   }
+  .rc-carregando-cliente {
+    display: none;
+    margin: 0 0 10px;
+    padding: 9px 12px;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    background: #eff6ff;
+    color: #1e3a8a;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .rc-carregando-cliente.visivel {
+    display: block;
+  }
   @media (max-width: 700px) {
     .rc-cliente-busca-card {
       padding: 12px;
@@ -677,6 +691,7 @@
         <div id="clienteSugestoesReceberDireto" class="rc-cliente-sugestoes"></div>
       </div>
     </section>
+    <div id="receberClienteCarregando" class="rc-carregando-cliente" role="status" aria-live="polite">Carregando contas...</div>
 
     <div class="rc-pos-confirmacao-layout">
       <div class="rc-pos-confirmacao-esquerda">
@@ -699,7 +714,7 @@
           </div>
         </section>
 
-        <form method="post" id="formReceberCliente">
+        <form method="post" id="formReceberCliente" {% if cliente %}action="{% url 'estoque:receber_cliente' cliente.id %}{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}"{% endif %}>
           {% csrf_token %}
           {% if pix_recebido_escolhido %}
             <input type="hidden" name="pix_recebido" value="{{ pix_recebido_escolhido.id }}">
@@ -1103,7 +1118,71 @@
     autoSelecaoTimer = null;
   }
 
-  function confirmarCliente(cliente, event) {
+  function exibirCarregamentoCliente(visivel) {
+    const carregando = document.getElementById("receberClienteCarregando");
+    carregando?.classList.toggle("visivel", Boolean(visivel));
+  }
+
+  function substituirElementoPorSeletor(documentoNovo, seletor) {
+    const atual = document.querySelector(seletor);
+    const novo = documentoNovo.querySelector(seletor);
+    if (atual && novo) {
+      atual.replaceWith(novo);
+    }
+  }
+
+  function substituirJsonScript(documentoNovo, id) {
+    const atual = document.getElementById(id);
+    const novo = documentoNovo.getElementById(id);
+    if (atual && novo) {
+      atual.replaceWith(novo);
+    }
+  }
+
+  function atualizarClienteSelecionadoTopo(cliente) {
+    const topo = document.querySelector(".rc-cliente-busca-topo");
+    if (!topo) return;
+    let atual = topo.querySelector(".rc-cliente-busca-atual");
+    if (!atual) {
+      atual = document.createElement("div");
+      atual.className = "rc-cliente-busca-atual";
+      topo.appendChild(atual);
+    }
+    atual.textContent = "Selecionado: " + (cliente.nome || "");
+  }
+
+  async function carregarClienteParcial(cliente, url) {
+    exibirCarregamentoCliente(true);
+    const resposta = await fetch(url, {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+      credentials: "same-origin"
+    });
+    if (!resposta.ok) throw new Error("Falha ao carregar cliente");
+    const html = await resposta.text();
+    const documentoNovo = new DOMParser().parseFromString(html, "text/html");
+    if (!documentoNovo.querySelector(".rc-pos-confirmacao-layout")) {
+      throw new Error("Resposta sem area de recebimento");
+    }
+
+    document.querySelector(".rc-resumo-geral-receber")?.remove();
+    substituirElementoPorSeletor(documentoNovo, ".rc-pos-confirmacao-layout");
+    [
+      "contasPreviewCliente",
+      "pagamentosHojeCliente",
+      "pagamentosRecentesCliente",
+      "contasAtualizadasCliente",
+      "contasAtualizadasFeedbackCliente"
+    ].forEach((id) => substituirJsonScript(documentoNovo, id));
+
+    atualizarClienteSelecionadoTopo(cliente);
+    input.value = cliente.nome || "";
+    input.placeholder = "Trocar cliente";
+    input.dataset.clienteSelecionado = "true";
+    window.history.replaceState({}, "", url);
+    window.initReceberClienteFinanceiro?.();
+  }
+
+  async function confirmarCliente(cliente, event) {
     if (event) {
       event.preventDefault();
       event.stopPropagation();
@@ -1120,7 +1199,15 @@
     input.value = cliente.nome || "";
     input.dataset.clienteSelecionado = "true";
     fecharSugestoes();
-    window.location.href = url;
+    try {
+      await carregarClienteParcial(cliente, url);
+      selecionandoCliente = false;
+    } catch (erro) {
+      console.warn("Carregamento parcial indisponivel; usando redirecionamento completo.", erro);
+      window.location.href = url;
+    } finally {
+      exibirCarregamentoCliente(false);
+    }
   }
 
   function normalizarTexto(valor) {
@@ -1327,7 +1414,14 @@
 </script>
 
 <script>
-  document.addEventListener("DOMContentLoaded", function () {
+(function () {
+  function initReceberClienteFinanceiro() {
+    if (window.receberClienteFinanceiroAbort) {
+      window.receberClienteFinanceiroAbort.abort();
+    }
+    const controller = new AbortController();
+    window.receberClienteFinanceiroAbort = controller;
+    const listenerOptions = { signal: controller.signal };
     const form = document.getElementById("formReceberCliente");
     const valor = document.getElementById("valorRecebidoCliente");
     const dataRecebimento = document.getElementById("dataRecebimentoCliente");
@@ -1383,11 +1477,11 @@
       btnFormaPagamento?.focus();
     }
 
-    btnFormaPagamento?.addEventListener("click", abrirModalFormaPagamento);
-    formaModalFechar?.addEventListener("click", fecharModalFormaPagamento);
+    btnFormaPagamento?.addEventListener("click", abrirModalFormaPagamento, listenerOptions);
+    formaModalFechar?.addEventListener("click", fecharModalFormaPagamento, listenerOptions);
     formaModalOverlay?.addEventListener("click", function (event) {
       if (event.target === formaModalOverlay) fecharModalFormaPagamento();
-    });
+    }, listenerOptions);
     formaModalOpcoes.forEach(function (botao) {
       botao.addEventListener("click", function () {
         if (!forma) return;
@@ -1395,14 +1489,14 @@
         forma.dispatchEvent(new Event("change", { bubbles: true }));
         atualizarBotaoFormaPagamento();
         fecharModalFormaPagamento();
-      });
+      }, listenerOptions);
     });
     document.addEventListener("keydown", function (event) {
       if (event.key === "Escape" && formaModalOverlay?.classList.contains("visivel")) {
         fecharModalFormaPagamento();
       }
-    });
-    forma?.addEventListener("change", atualizarBotaoFormaPagamento);
+    }, listenerOptions);
+    forma?.addEventListener("change", atualizarBotaoFormaPagamento, listenerOptions);
     atualizarBotaoFormaPagamento();
     const btnWhatsappConfirmacao = document.getElementById("btn-enviar-confirmacao-whatsapp");
     const btnVerComprovanteVisual = document.getElementById("btn-ver-comprovante-visual");
@@ -1451,7 +1545,7 @@
       window.open(url, "_blank", "noopener");
     }
 
-    btnCompartilharComprovanteImagem?.addEventListener("click", compartilharComprovanteImagem);
+    btnCompartilharComprovanteImagem?.addEventListener("click", compartilharComprovanteImagem, listenerOptions);
 
     const botoesConfirmacao = [btnVerComprovanteVisual, btnCompartilharComprovanteImagem, btnWhatsappConfirmacao, btnVoltarTelaVenda].filter(Boolean);
     botoesConfirmacao.forEach(function (botao, indice, botoes) {
@@ -1465,7 +1559,7 @@
           event.preventDefault();
           botoes[(indice - 1 + botoes.length) % botoes.length]?.focus();
         }
-      });
+      }, listenerOptions);
     });
 
     function fecharModalReceber(resultado) {
@@ -1512,15 +1606,15 @@
       modalSecondary.style.display = opcoes.aviso ? "none" : "";
       modalOverlay.classList.add("visivel");
       modalOverlay.setAttribute("aria-hidden", "false");
-      document.addEventListener("keydown", tratarTeclaModalReceber);
+      document.addEventListener("keydown", tratarTeclaModalReceber, listenerOptions);
       return new Promise((resolve) => {
         resolverModalReceber = resolve;
         window.setTimeout(() => modalPrimary.focus(), 0);
       });
     }
 
-    modalPrimary?.addEventListener("click", () => fecharModalReceber(true));
-    modalSecondary?.addEventListener("click", () => fecharModalReceber(false));
+    modalPrimary?.addEventListener("click", () => fecharModalReceber(true), listenerOptions);
+    modalSecondary?.addEventListener("click", () => fecharModalReceber(false), listenerOptions);
 
     function numeroDigitado(texto) {
       let valorTexto = String(texto || "").trim().replace("R$", "").replace(/\s/g, "");
@@ -1538,6 +1632,11 @@
         style: "currency",
         currency: "BRL"
       }).format(Number(numero || 0));
+    }
+
+    function nomeClienteAtual() {
+      const valorResumo = document.querySelector(".rc-summary .rc-card:first-child .rc-value");
+      return (valorResumo?.textContent || "o cliente selecionado").trim() || "o cliente selecionado";
     }
 
     function limparDestaqueDuplicidade() {
@@ -1731,7 +1830,7 @@
       disponiveis[proximo].label.focus();
     }
 
-    valor?.addEventListener("input", calcularPrevia);
+    valor?.addEventListener("input", calcularPrevia, listenerOptions);
     valor?.addEventListener("keydown", function (event) {
       if (event.key !== "Enter") return;
       event.preventDefault();
@@ -1741,12 +1840,12 @@
       } else {
         forma?.focus();
       }
-    });
+    }, listenerOptions);
     dataRecebimento?.addEventListener("keydown", function (event) {
       if (event.key !== "Enter") return;
       event.preventDefault();
       forma?.focus();
-    });
+    }, listenerOptions);
     forma?.addEventListener("keydown", function (event) {
       if (event.key !== "Enter") return;
       event.preventDefault();
@@ -1759,7 +1858,7 @@
           confirmar?.focus();
         }
       }, 0);
-    });
+    }, listenerOptions);
     labelsSobra.forEach(function (label, indice) {
       if (!label) return;
       label.addEventListener("keydown", function (event) {
@@ -1788,7 +1887,7 @@
           event.preventDefault();
           labelsSobra[0].focus();
         }
-      });
+      }, listenerOptions);
     });
     form?.addEventListener("keydown", function (event) {
       if (event.key !== "Enter") return;
@@ -1796,7 +1895,7 @@
       if (["INPUT", "SELECT", "LABEL"].includes(event.target?.tagName || "")) {
         event.preventDefault();
       }
-    });
+    }, listenerOptions);
     form?.addEventListener("submit", async function (event) {
       if (form.dataset.confirmado === "1") return;
 
@@ -1834,7 +1933,7 @@
         return;
       }
       const mensagem = "Confirmar recebimento de " + moeda(recebido)
-        + " para {% if cliente %}{{ cliente.nome|escapejs }}{% else %}o cliente selecionado{% endif %}? O valor sera aplicado nas contas conforme a previa.";
+        + " para " + nomeClienteAtual() + "? O valor sera aplicado nas contas conforme a previa.";
       const possivelDuplicidade = pagamentosHoje.some(function (valorPago) {
         const numeroPago = Number(valorPago);
         return Number.isFinite(numeroPago) && Math.abs(numeroPago - recebido) <= 0.01;
@@ -1852,7 +1951,7 @@
 
       form.dataset.confirmado = "1";
       form.requestSubmit();
-    });
+    }, listenerOptions);
     calcularPrevia();
     window.setTimeout(function () {
       if (recebimentoConfirmado) {
@@ -1865,7 +1964,11 @@
       valor?.focus();
       valor?.select();
     }, 0);
-  });
+  }
+
+  window.initReceberClienteFinanceiro = initReceberClienteFinanceiro;
+  document.addEventListener("DOMContentLoaded", initReceberClienteFinanceiro);
+})();
 </script>
 {% endblock %}
 
