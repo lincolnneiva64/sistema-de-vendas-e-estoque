@@ -18,10 +18,11 @@ from datetime import date, timedelta
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Q, Sum, Max, Prefetch
+from django.db.models.functions import Coalesce
 from urllib.parse import quote, urlencode
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
-from django.db.models import Case, When, Value, IntegerField, F, Count
+from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
 from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
@@ -1247,6 +1248,113 @@ def home(request):
             "margem_percent": margem_percent,
         }
     )
+
+
+def painel_financeiro(request):
+    hoje = timezone.localdate()
+    fim_7 = hoje + timedelta(days=7)
+    fim_30 = hoje + timedelta(days=30)
+    inicio_mes = hoje.replace(day=1)
+
+    def dinheiro(valor):
+        return valor or Decimal("0.00")
+
+    contas_receber_abertas = ContaReceber.objects.filter(
+        status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+        valor_em_aberto__gt=0,
+    )
+    contas_pagar_abertas = ContaPagar.objects.filter(
+        status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL],
+        valor_em_aberto__gt=0,
+    )
+
+    receber_hoje = dinheiro(contas_receber_abertas.filter(data_vencimento=hoje).aggregate(total=Sum("valor_em_aberto"))["total"])
+    pagar_hoje = dinheiro(contas_pagar_abertas.filter(data_vencimento=hoje).aggregate(total=Sum("valor_em_aberto"))["total"])
+
+    receber_7 = dinheiro(contas_receber_abertas.filter(data_vencimento__range=(hoje, fim_7)).aggregate(total=Sum("valor_em_aberto"))["total"])
+    pagar_7 = dinheiro(contas_pagar_abertas.filter(data_vencimento__range=(hoje, fim_7)).aggregate(total=Sum("valor_em_aberto"))["total"])
+
+    receber_30 = dinheiro(contas_receber_abertas.filter(data_vencimento__range=(hoje, fim_30)).aggregate(total=Sum("valor_em_aberto"))["total"])
+    pagar_30 = dinheiro(contas_pagar_abertas.filter(data_vencimento__range=(hoje, fim_30)).aggregate(total=Sum("valor_em_aberto"))["total"])
+
+    clientes_vencidos = contas_receber_abertas.filter(data_vencimento__lt=hoje).aggregate(
+        total=Sum("valor_em_aberto"),
+        quantidade=Count("id"),
+    )
+    fornecedores_vencidos = contas_pagar_abertas.filter(data_vencimento__lt=hoje).aggregate(
+        total=Sum("valor_em_aberto"),
+        quantidade=Count("id"),
+    )
+
+    vendas_mes = dinheiro(
+        Venda.objects
+        .filter(data_venda__gte=inicio_mes, data_venda__lte=hoje, cancelada=False)
+        .aggregate(total=Sum("total"))["total"]
+    )
+    compras_mes = dinheiro(
+        Compra.objects
+        .filter(data_compra__gte=inicio_mes, data_compra__lte=hoje, cancelada=False)
+        .exclude(status=Compra.STATUS_CANCELADA)
+        .aggregate(total=Sum("total"))["total"]
+    )
+
+    valor_estoque_expr = ExpressionWrapper(
+        Coalesce(F("quantidade"), 0) * Coalesce(F("preco_compra"), Decimal("0.00")),
+        output_field=DecimalField(max_digits=14, decimal_places=2),
+    )
+    valor_estoque = dinheiro(
+        Produto.objects
+        .filter(excluido=False)
+        .aggregate(total=Sum(valor_estoque_expr))["total"]
+    )
+    estoque_baixo_qtd = Produto.objects.filter(
+        excluido=False,
+        estoque_minimo__isnull=False,
+        quantidade__isnull=False,
+        quantidade__lte=F("estoque_minimo"),
+    ).count()
+
+    return render(
+        request,
+        "estoque/painel_financeiro.html",
+        {
+            "hoje": hoje,
+            "fim_7": fim_7,
+            "fim_30": fim_30,
+            "hoje_cards": [
+                {"titulo": "Total a receber hoje", "valor": receber_hoje, "tipo": "positivo"},
+                {"titulo": "Total a pagar hoje", "valor": pagar_hoje, "tipo": "negativo"},
+                {"titulo": "Saldo previsto do dia", "valor": receber_hoje - pagar_hoje, "tipo": "saldo"},
+            ],
+            "sete_dias_cards": [
+                {"titulo": "A receber nos proximos 7 dias", "valor": receber_7, "tipo": "positivo"},
+                {"titulo": "A pagar nos proximos 7 dias", "valor": pagar_7, "tipo": "negativo"},
+                {"titulo": "Saldo previsto em 7 dias", "valor": receber_7 - pagar_7, "tipo": "saldo"},
+            ],
+            "trinta_dias_cards": [
+                {"titulo": "A receber nos proximos 30 dias", "valor": receber_30, "tipo": "positivo"},
+                {"titulo": "A pagar nos proximos 30 dias", "valor": pagar_30, "tipo": "negativo"},
+                {"titulo": "Saldo previsto em 30 dias", "valor": receber_30 - pagar_30, "tipo": "saldo"},
+            ],
+            "atrasados_cards": [
+                {"titulo": "Clientes vencidos", "valor": dinheiro(clientes_vencidos["total"]), "tipo": "vencido"},
+                {"titulo": "Contas de clientes vencidas", "valor": clientes_vencidos["quantidade"] or 0, "tipo": "quantidade", "moeda": False},
+                {"titulo": "Fornecedores vencidos", "valor": dinheiro(fornecedores_vencidos["total"]), "tipo": "vencido"},
+                {"titulo": "Contas de fornecedores vencidas", "valor": fornecedores_vencidos["quantidade"] or 0, "tipo": "quantidade", "moeda": False},
+            ],
+            "mes_cards": [
+                {"titulo": "Total vendido no mes", "valor": vendas_mes, "tipo": "positivo"},
+                {"titulo": "Total comprado no mes", "valor": compras_mes, "tipo": "negativo"},
+                {"titulo": "Vendas menos compras", "valor": vendas_mes - compras_mes, "tipo": "saldo"},
+            ],
+            "estoque_cards": [
+                {"titulo": "Valor estimado total em estoque", "valor": valor_estoque, "tipo": "neutro"},
+                {"titulo": "Produtos com estoque baixo", "valor": estoque_baixo_qtd, "tipo": "quantidade", "moeda": False},
+            ],
+            "campo_estoque_usado": "quantidade atual x preco_compra",
+        },
+    )
+
 
 def cadastrar_produto(request):
     criar_mais_produtos = request.GET.get("criar_mais_produtos") == "1"

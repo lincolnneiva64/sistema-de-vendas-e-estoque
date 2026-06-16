@@ -1,0 +1,10 @@
+<article class="financeiro-card {{ card.tipo }} {% if card.tipo == 'saldo' %}{% if card.valor < 0 %}valor-negativo{% else %}valor-positivo{% endif %}{% endif %}">
+  <div class="financeiro-label">{{ card.titulo }}</div>
+  <div class="financeiro-value">
+    {% if card.moeda == False %}
+      {{ card.valor }}
+    {% else %}
+      R$ {{ card.valor|floatformat:2 }}
+    {% endif %}
+  </div>
+</article>

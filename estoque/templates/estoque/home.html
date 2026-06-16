@@ -160,6 +160,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-areas:
       "pedidos pedidos"
+      "financeiro financeiro"
       "receber clientes"
       "compras fornecedores"
       "entregas vendas"
@@ -197,6 +198,10 @@
     min-height: 48px;
     font-size: 1rem;
     box-shadow: 0 10px 24px rgba(13, 110, 253, 0.24);
+  }
+
+  #btnFinanceiroPainel {
+    grid-area: financeiro;
   }
 
   #btnClientesPainel {
@@ -1010,6 +1015,13 @@ align-items: center;
             class="btn-acao-principal-painel"
           >
             Pedidos
+          </a>
+          <a
+            href="{% url 'estoque:painel_financeiro' %}"
+            id="btnFinanceiroPainel"
+            class="btn-acao-principal-painel"
+          >
+            Financeiro
           </a>
           <a
             href="{% url 'estoque:vendas' %}"
