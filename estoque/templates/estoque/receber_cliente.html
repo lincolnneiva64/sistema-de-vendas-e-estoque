@@ -1071,8 +1071,10 @@
   const clientesUrl = "{% url 'estoque:clientes_autocomplete' %}";
   const receberUrlBase = "{% url 'estoque:receber_cliente' 0 %}";
   const retornoUrl = "{% url 'estoque:receber_cliente_escolher' %}";
+  const atrasoAutoSelecaoCliente = 450;
   let clientes = [];
   let timer = null;
+  let autoSelecaoTimer = null;
   let indiceAtivo = -1;
   let ultimoTermo = "";
   let buscaId = 0;
@@ -1096,6 +1098,11 @@
     box.style.display = "none";
   }
 
+  function cancelarAutoSelecao() {
+    clearTimeout(autoSelecaoTimer);
+    autoSelecaoTimer = null;
+  }
+
   function confirmarCliente(cliente, event) {
     if (event) {
       event.preventDefault();
@@ -1107,6 +1114,7 @@
     textoInicialSelecionado = false;
     buscaId += 1;
     clearTimeout(timer);
+    cancelarAutoSelecao();
     const url = receberUrlBase.replace("/cliente/0/", "/cliente/" + encodeURIComponent(cliente.id) + "/")
       + "?next=" + encodeURIComponent(retornoUrl);
     input.value = cliente.nome || "";
@@ -1201,7 +1209,18 @@
     rolarItemAtivoParaVisivel();
   }
 
-  function buscarClientes(selecionarPrimeiro) {
+  function agendarAutoSelecao(cliente, termo, idBuscaAtual) {
+    cancelarAutoSelecao();
+    if (clienteSelecionado || selecionandoCliente || !cliente || !termo) return;
+    autoSelecaoTimer = setTimeout(() => {
+      autoSelecaoTimer = null;
+      if (clienteSelecionado || selecionandoCliente || idBuscaAtual !== buscaId) return;
+      if (termoBuscaAtual() !== termo || clientes.length !== 1 || clientes[0]?.id !== cliente.id) return;
+      confirmarCliente(cliente);
+    }, atrasoAutoSelecaoCliente);
+  }
+
+  function buscarClientes(selecionarPrimeiro, permitirAutoSelecao) {
     if (selecionandoCliente) return;
     const termo = termoBuscaAtual();
     ultimoTermo = termo;
@@ -1217,9 +1236,15 @@
         clientes = ordenarClientes(dados.clientes || [], termo);
         indiceAtivo = clientes.length ? 0 : -1;
         renderizar();
+        if (permitirAutoSelecao && clientes.length === 1) {
+          agendarAutoSelecao(clientes[0], termo, idBuscaAtual);
+        } else {
+          cancelarAutoSelecao();
+        }
       })
       .catch(() => {
         if (selecionandoCliente || idBuscaAtual !== buscaId) return;
+        cancelarAutoSelecao();
         clientes = [];
         indiceAtivo = -1;
         renderizar();
@@ -1233,11 +1258,12 @@
     textoInicialSelecionado = false;
     buscaId += 1;
     clearTimeout(timer);
+    cancelarAutoSelecao();
     if (!input.value.trim()) {
       fecharSugestoes();
       return;
     }
-    timer = setTimeout(() => buscarClientes(false), 120);
+    timer = setTimeout(() => buscarClientes(false, true), 120);
   });
 
 
@@ -1254,8 +1280,9 @@
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
+      cancelarAutoSelecao();
       if (!clientes.length || box.style.display === "none") {
-        buscarClientes(true);
+        buscarClientes(true, false);
         return;
       }
       indiceAtivo = Math.min(indiceAtivo + 1, clientes.length - 1);
@@ -1267,14 +1294,17 @@
 
     if (event.key === "ArrowUp") {
       event.preventDefault();
+      cancelarAutoSelecao();
       indiceAtivo = Math.max(indiceAtivo - 1, 0);
       renderizar();
     } else if (event.key === "Enter") {
       event.preventDefault();
+      cancelarAutoSelecao();
       if (indiceAtivo >= 0 && clientes[indiceAtivo]) {
         confirmarCliente(clientes[indiceAtivo], event);
       }
     } else if (event.key === "Escape") {
+      cancelarAutoSelecao();
       fecharSugestoes();
     }
   });
