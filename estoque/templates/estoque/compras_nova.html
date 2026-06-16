@@ -410,12 +410,14 @@
     align-items:start;
   }
 
-  .conta-pagar-baixa input {
+  .conta-pagar-baixa input,
+  .conta-pagar-baixa select {
     border:1.5px solid #cbd5e1;
     border-radius:9px;
     padding:9px 10px;
     font-weight:750;
     width:100%;
+    background:#fff;
   }
 
   .baixa-segura-campo {
@@ -430,7 +432,8 @@
     margin-bottom:4px;
   }
 
-  .baixa-segura-campo input {
+  .baixa-segura-campo input,
+  .baixa-segura-campo select {
     min-height:40px;
   }
 
@@ -2363,7 +2366,14 @@
             </div>
             <div class="baixa-segura-campo">
               <label>Forma</label>
-              <input type="text" class="formaBaixaSeguraContaPagar" value="Pix" placeholder="Forma: pix, dinheiro...">
+              <select class="formaBaixaSeguraContaPagar">
+                <option value="Pix" selected>Pix</option>
+                <option value="Dinheiro">Dinheiro</option>
+                <option value="Cartao">Cart&atilde;o</option>
+                <option value="Boleto">Boleto</option>
+                <option value="Transferencia">Transfer&ecirc;ncia</option>
+                <option value="Outro">Outro</option>
+              </select>
             </div>
             <button type="button" class="compras-btn compras-btn-primary prepararBaixaSeguraContaPagar">Preparar baixa</button>
           </div>
@@ -2802,7 +2812,14 @@
           '</div>' +
           '<div class="baixa-segura-campo">' +
             '<label>Forma</label>' +
-            '<input type="text" class="formaBaixaSeguraContaPagar" value="Pix">' +
+            '<select class="formaBaixaSeguraContaPagar">' +
+              '<option value="Pix" selected>Pix</option>' +
+              '<option value="Dinheiro">Dinheiro</option>' +
+              '<option value="Cartao">Cart&atilde;o</option>' +
+              '<option value="Boleto">Boleto</option>' +
+              '<option value="Transferencia">Transfer&ecirc;ncia</option>' +
+              '<option value="Outro">Outro</option>' +
+            '</select>' +
           '</div>' +
           '<button type="button" class="compras-btn compras-btn-primary prepararBaixaSeguraContaPagar">Preparar baixa</button>' +
         '</div>' +
