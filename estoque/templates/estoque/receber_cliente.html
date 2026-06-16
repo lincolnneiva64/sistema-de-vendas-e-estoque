@@ -1180,6 +1180,8 @@
     input.dataset.clienteSelecionado = "true";
     window.history.replaceState({}, "", url);
     window.initReceberClienteFinanceiro?.();
+    input.focus({ preventScroll: true });
+    input.select();
   }
 
   async function confirmarCliente(cliente, event) {
@@ -1377,6 +1379,17 @@
       return;
     }
 
+    if (event.key === "Enter") {
+      event.preventDefault();
+      cancelarAutoSelecao();
+      if (indiceAtivo >= 0 && clientes[indiceAtivo]) {
+        confirmarCliente(clientes[indiceAtivo], event);
+      } else if (clienteSelecionado) {
+        document.getElementById("valorRecebidoCliente")?.focus();
+      }
+      return;
+    }
+
     if (!clientes.length) return;
 
     if (event.key === "ArrowUp") {
@@ -1384,12 +1397,6 @@
       cancelarAutoSelecao();
       indiceAtivo = Math.max(indiceAtivo - 1, 0);
       renderizar();
-    } else if (event.key === "Enter") {
-      event.preventDefault();
-      cancelarAutoSelecao();
-      if (indiceAtivo >= 0 && clientes[indiceAtivo]) {
-        confirmarCliente(clientes[indiceAtivo], event);
-      }
     } else if (event.key === "Escape") {
       cancelarAutoSelecao();
       fecharSugestoes();
@@ -1954,6 +1961,10 @@
     }, listenerOptions);
     calcularPrevia();
     window.setTimeout(function () {
+      const clienteBusca = document.getElementById("clienteBuscaReceberDireto");
+      if (clienteBusca && document.activeElement === clienteBusca) {
+        return;
+      }
       if (recebimentoConfirmado) {
         rolarParaAreaRecebimento(recebimentoConfirmado);
         window.setTimeout(function () {
