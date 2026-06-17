@@ -1338,6 +1338,66 @@ def _contas_financeiras_com_saldo():
     return contas
 
 
+def _texto_sem_acentos(texto):
+    return "".join(
+        char for char in unicodedata.normalize("NFKD", str(texto or ""))
+        if not unicodedata.combining(char)
+    )
+
+
+def _conta_financeira_recebimento_por_forma(forma_pagamento):
+    _garantir_contas_financeiras_padrao()
+    forma = _texto_sem_acentos(forma_pagamento).lower().strip()
+    forma_compacta = re.sub(r"\s+", "", forma)
+    if any(termo in forma_compacta for termo in {"dinheiro", "especie"}):
+        return ContaFinanceira.objects.filter(
+            ativo=True,
+            tipo=ContaFinanceira.TIPO_CAIXA,
+            nome__in=["Caixa em espécie", "Caixa em especie"],
+        ).order_by("id").first()
+    # Cartao pode ganhar controle proprio em etapa futura.
+    if any(
+        termo in forma_compacta
+        for termo in {
+            "pix",
+            "banco",
+            "transferencia",
+            "boleto",
+            "deposito",
+            "cartao",
+            "debito",
+            "credito",
+        }
+    ):
+        return ContaFinanceira.objects.filter(
+            ativo=True,
+            tipo=ContaFinanceira.TIPO_BANCO,
+            nome="Banco/Pix",
+        ).order_by("id").first()
+    return ContaFinanceira.objects.filter(
+        ativo=True,
+        tipo=ContaFinanceira.TIPO_BANCO,
+        nome="Banco/Pix",
+    ).order_by("id").first()
+
+
+def _registrar_movimento_recebimento_cliente(cliente, valor_recebido, data_recebimento, forma_pagamento):
+    valor = _financeiro_dinheiro(valor_recebido).quantize(Decimal("0.01"))
+    if valor <= Decimal("0.00"):
+        return None
+    conta_financeira = _conta_financeira_recebimento_por_forma(forma_pagamento)
+    if not conta_financeira:
+        return None
+    return MovimentoFinanceiro.objects.create(
+        conta=conta_financeira,
+        tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+        valor=valor,
+        data=data_recebimento or timezone.localdate(),
+        descricao=f"Recebimento de cliente: {getattr(cliente, 'nome', '') or 'Cliente nao informado'}",
+        origem="recebimento_cliente",
+    )
+
+
 def painel_financeiro(request):
     hoje = timezone.localdate()
     fim_7 = hoje + timedelta(days=7)
@@ -5101,6 +5161,12 @@ def receber_cliente(request, cliente_id):
                                     contas_atualizadas_ids,
                                     valor_recebido,
                                 )
+                            _registrar_movimento_recebimento_cliente(
+                                cliente,
+                                valor_recebido,
+                                data_recebimento,
+                                valores["forma_pagamento"],
+                            )
                     except RecebimentoContaErro as exc:
                         messages.warning(request, str(exc))
                     else:
@@ -5597,6 +5663,12 @@ def conta_receber_receber(request, pk):
                                     [conta_atual.id],
                                     valor_recebido,
                                 )
+                            _registrar_movimento_recebimento_cliente(
+                                conta_atual.cliente or conta.cliente,
+                                valor_recebido,
+                                data_recebimento,
+                                valores["forma_pagamento"],
+                            )
                         except RecebimentoContaErro as exc:
                             transaction.set_rollback(True)
                             messages.warning(request, str(exc))
