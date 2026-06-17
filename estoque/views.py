@@ -1420,6 +1420,29 @@ def _registrar_movimento_despesa_diaria(despesa):
     )
 
 
+def _registrar_movimento_conta_pagar_fornecedor(conta, valor_pago, data_pagamento, forma_pagamento):
+    valor = _financeiro_dinheiro(valor_pago).quantize(Decimal("0.01"))
+    if valor <= Decimal("0.00"):
+        return None
+    conta_financeira = _conta_financeira_por_forma_pagamento(forma_pagamento)
+    if not conta_financeira:
+        return None
+    fornecedor_nome = conta.fornecedor.nome if conta.fornecedor else ""
+    descricao = (
+        f"Pagamento de fornecedor: {fornecedor_nome}"
+        if fornecedor_nome
+        else "Pagamento de conta a pagar"
+    )
+    return MovimentoFinanceiro.objects.create(
+        conta=conta_financeira,
+        tipo=MovimentoFinanceiro.TIPO_SAIDA,
+        valor=valor,
+        data=data_pagamento or timezone.localdate(),
+        descricao=descricao,
+        origem="conta_pagar_fornecedor",
+    )
+
+
 def painel_financeiro(request):
     hoje = timezone.localdate()
     fim_7 = hoje + timedelta(days=7)
@@ -2661,6 +2684,12 @@ def conta_pagar_baixar(request, pk):
         conta.valor_em_aberto = (conta.valor_em_aberto - valor).quantize(Decimal("0.01"))
         conta.status = ContaPagar.STATUS_PAGA if conta.valor_em_aberto <= 0 else ContaPagar.STATUS_PARCIAL
         conta.save(update_fields=["valor_em_aberto", "status", "atualizado_em"])
+        _registrar_movimento_conta_pagar_fornecedor(
+            conta,
+            valor,
+            data_pagamento,
+            forma_pagamento,
+        )
 
     return JsonResponse({
         "ok": True,
