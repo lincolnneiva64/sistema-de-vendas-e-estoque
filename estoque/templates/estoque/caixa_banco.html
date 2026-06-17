@@ -822,8 +822,8 @@
 
   <section class="caixa-forms caixa-forms-single" aria-label="Conferencia e Ajuste de Saldo">
     <article class="caixa-form-card">
-      <h2 class="caixa-form-title">Conferencia / Ajuste de saldo</h2>
-      <p class="caixa-form-help">Use para informar o saldo inicial real ou corrigir quando o saldo do caixa, reserva ou banco nao bater com o sistema.</p>
+      <h2 class="caixa-form-title">Informar / Corrigir saldo real</h2>
+      <p class="caixa-form-help">Use para colocar o saldo inicial real ou corrigir o valor contado no caixa, na sangria/reserva ou no banco.</p>
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="acao" value="ajuste_saldo">
