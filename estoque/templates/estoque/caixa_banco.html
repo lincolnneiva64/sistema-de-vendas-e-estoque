@@ -549,24 +549,24 @@
     </article>
 
     <article class="caixa-form-card">
-      <h2 class="caixa-form-title">Depositar reserva no banco</h2>
-      <p class="caixa-form-help">Use quando levar dinheiro da reserva para o banco.</p>
-      <div class="caixa-flow">Sangria / Reserva -> Banco/Pix</div>
+      <h2 class="caixa-form-title">Pagar com reserva / Saida da sangria</h2>
+      <p class="caixa-form-help">Use quando o dinheiro da reserva for usado para pagar algo e sair definitivamente da empresa.</p>
+      <div class="caixa-flow">Sangria / Reserva -> Pagamento/Saida</div>
       <form method="post">
         {% csrf_token %}
-        <input type="hidden" name="acao" value="depositar_reserva_banco">
+        <input type="hidden" name="acao" value="pagar_com_reserva">
         <div class="caixa-form-grid">
           <div class="caixa-field">
-            <label for="depositoValor">Valor</label>
-            <input id="depositoValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
+            <label for="reservaSaidaValor">Valor</label>
+            <input id="reservaSaidaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
           </div>
           <div class="caixa-field">
-            <label for="depositoDescricao">Descricao opcional</label>
-            <input id="depositoDescricao" name="descricao" type="text" placeholder="Deposito da reserva no banco">
+            <label for="reservaSaidaDescricao">Descricao recomendada</label>
+            <input id="reservaSaidaDescricao" name="descricao" type="text" placeholder="Pagamento/retirada usando reserva">
           </div>
           <div class="caixa-field full">
-            <label for="depositoOperador">Operador / responsavel</label>
-            <select id="depositoOperador" name="operador" required>
+            <label for="reservaSaidaOperador">Operador / responsavel</label>
+            <select id="reservaSaidaOperador" name="operador" required>
               <option value="">Selecione o operador</option>
               {% for operador in operadores_caixa %}
                 <option value="{{ operador.id }}">{{ operador.nome }}</option>
@@ -575,7 +575,7 @@
           </div>
         </div>
         <div class="caixa-form-actions">
-          <button class="caixa-btn caixa-btn-primary" type="submit">Depositar no banco</button>
+          <button class="caixa-btn caixa-btn-danger" type="submit">Pagar com reserva</button>
         </div>
       </form>
     </article>
@@ -613,24 +613,24 @@
     </article>
 
     <article class="caixa-form-card">
-      <h2 class="caixa-form-title">Pagar com reserva / Saida da sangria</h2>
-      <p class="caixa-form-help">Use quando o dinheiro da reserva for usado para pagar algo e sair definitivamente da empresa.</p>
-      <div class="caixa-flow">Sangria / Reserva -> Pagamento/Saida</div>
+      <h2 class="caixa-form-title">Depositar reserva no banco</h2>
+      <p class="caixa-form-help">Use quando levar dinheiro da reserva para o banco.</p>
+      <div class="caixa-flow">Sangria / Reserva -> Banco/Pix</div>
       <form method="post">
         {% csrf_token %}
-        <input type="hidden" name="acao" value="pagar_com_reserva">
+        <input type="hidden" name="acao" value="depositar_reserva_banco">
         <div class="caixa-form-grid">
           <div class="caixa-field">
-            <label for="reservaSaidaValor">Valor</label>
-            <input id="reservaSaidaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
+            <label for="depositoValor">Valor</label>
+            <input id="depositoValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
           </div>
           <div class="caixa-field">
-            <label for="reservaSaidaDescricao">Descricao recomendada</label>
-            <input id="reservaSaidaDescricao" name="descricao" type="text" placeholder="Pagamento/retirada usando reserva">
+            <label for="depositoDescricao">Descricao opcional</label>
+            <input id="depositoDescricao" name="descricao" type="text" placeholder="Deposito da reserva no banco">
           </div>
           <div class="caixa-field full">
-            <label for="reservaSaidaOperador">Operador / responsavel</label>
-            <select id="reservaSaidaOperador" name="operador" required>
+            <label for="depositoOperador">Operador / responsavel</label>
+            <select id="depositoOperador" name="operador" required>
               <option value="">Selecione o operador</option>
               {% for operador in operadores_caixa %}
                 <option value="{{ operador.id }}">{{ operador.nome }}</option>
@@ -639,7 +639,7 @@
           </div>
         </div>
         <div class="caixa-form-actions">
-          <button class="caixa-btn caixa-btn-danger" type="submit">Pagar com reserva</button>
+          <button class="caixa-btn caixa-btn-primary" type="submit">Depositar no banco</button>
         </div>
       </form>
     </article>
