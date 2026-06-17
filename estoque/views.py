@@ -1250,6 +1250,93 @@ def home(request):
     )
 
 
+def _financeiro_dinheiro(valor):
+    return valor or Decimal("0.00")
+
+
+def _financeiro_moeda_br(valor):
+    return f"R$ {_financeiro_dinheiro(valor):.2f}".replace(".", ",")
+
+
+def _parse_decimal_financeiro(valor):
+    texto = str(valor or "").strip()
+    if not texto:
+        return None
+    texto = texto.replace("R$", "").replace(" ", "")
+    if "," in texto:
+        texto = texto.replace(".", "").replace(",", ".")
+    try:
+        return Decimal(texto).quantize(Decimal("0.01"))
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _garantir_contas_financeiras_padrao():
+    contas_padrao = [
+        ("Caixa em espécie", ContaFinanceira.TIPO_CAIXA, ["Caixa em espécie", "Caixa em especie"]),
+        ("Banco/Pix", ContaFinanceira.TIPO_BANCO, ["Banco/Pix"]),
+    ]
+    for nome, tipo, aliases in contas_padrao:
+        conta = ContaFinanceira.objects.filter(nome__in=aliases, tipo=tipo).order_by("id").first()
+        if conta:
+            campos_atualizados = []
+            if conta.nome != nome:
+                conta.nome = nome
+                campos_atualizados.append("nome")
+            if not conta.ativo:
+                conta.ativo = True
+                campos_atualizados.append("ativo")
+            if campos_atualizados:
+                conta.save(update_fields=[*campos_atualizados, "atualizado_em"])
+            continue
+        ContaFinanceira.objects.create(nome=nome, tipo=tipo, saldo_inicial=Decimal("0.00"), ativo=True)
+
+
+def _saldo_conta_financeira(conta):
+    saldo_inicial = _financeiro_dinheiro(conta.saldo_inicial)
+    entradas = _financeiro_dinheiro(
+        MovimentoFinanceiro.objects
+        .filter(conta=conta, tipo=MovimentoFinanceiro.TIPO_ENTRADA)
+        .aggregate(total=Sum("valor"))["total"]
+    )
+    ajustes = _financeiro_dinheiro(
+        MovimentoFinanceiro.objects
+        .filter(conta=conta, tipo=MovimentoFinanceiro.TIPO_AJUSTE)
+        .aggregate(total=Sum("valor"))["total"]
+    )
+    saidas = _financeiro_dinheiro(
+        MovimentoFinanceiro.objects
+        .filter(conta=conta, tipo=MovimentoFinanceiro.TIPO_SAIDA)
+        .aggregate(total=Sum("valor"))["total"]
+    )
+    transferencias_enviadas = _financeiro_dinheiro(
+        MovimentoFinanceiro.objects
+        .filter(conta=conta, tipo=MovimentoFinanceiro.TIPO_TRANSFERENCIA)
+        .aggregate(total=Sum("valor"))["total"]
+    )
+    transferencias_recebidas = _financeiro_dinheiro(
+        MovimentoFinanceiro.objects
+        .filter(conta_destino=conta, tipo=MovimentoFinanceiro.TIPO_TRANSFERENCIA)
+        .aggregate(total=Sum("valor"))["total"]
+    )
+    return saldo_inicial + entradas + ajustes - saidas - transferencias_enviadas + transferencias_recebidas
+
+
+def _saldo_contas_financeiras(tipo_conta):
+    total = Decimal("0.00")
+    for conta in ContaFinanceira.objects.filter(ativo=True, tipo=tipo_conta):
+        total += _saldo_conta_financeira(conta)
+    return total
+
+
+def _contas_financeiras_com_saldo():
+    contas = list(ContaFinanceira.objects.filter(ativo=True).order_by("tipo", "nome", "id"))
+    for conta in contas:
+        conta.saldo_atual = _saldo_conta_financeira(conta)
+        conta.saldo_atual_texto = _financeiro_moeda_br(conta.saldo_atual)
+    return contas
+
+
 def painel_financeiro(request):
     hoje = timezone.localdate()
     fim_7 = hoje + timedelta(days=7)
@@ -1386,7 +1473,7 @@ def painel_financeiro(request):
             "fim_7": fim_7,
             "fim_30": fim_30,
             "caixa_banco_cards": [
-                {"titulo": "Caixa em especie", "valor": saldo_caixa, "valor_texto": moeda_br(saldo_caixa), "tipo": "neutro"},
+                {"titulo": "Caixa em espécie", "valor": saldo_caixa, "valor_texto": moeda_br(saldo_caixa), "tipo": "neutro"},
                 {"titulo": "Banco/Pix", "valor": saldo_banco, "valor_texto": moeda_br(saldo_banco), "tipo": "neutro"},
                 {"titulo": "Total disponivel", "valor": total_disponivel, "valor_texto": moeda_br(total_disponivel), "tipo": "destaque"},
                 {
@@ -1434,6 +1521,113 @@ def painel_financeiro(request):
                 {"titulo": "Produtos com estoque baixo", "valor": estoque_baixo_qtd, "tipo": "quantidade", "moeda": False},
             ],
             "campo_estoque_usado": "quantidade atual x preco_compra",
+        },
+    )
+
+
+def caixa_banco(request):
+    _garantir_contas_financeiras_padrao()
+
+    if request.method == "POST":
+        acao = request.POST.get("acao", "").strip()
+
+        if acao == "ajustar_saldo":
+            conta = ContaFinanceira.objects.filter(pk=request.POST.get("conta"), ativo=True).first()
+            novo_saldo = _parse_decimal_financeiro(request.POST.get("novo_saldo"))
+            descricao = request.POST.get("descricao", "").strip() or "Ajuste manual de saldo"
+
+            if not conta or novo_saldo is None:
+                messages.error(request, "Informe um valor valido.")
+                return redirect("estoque:caixa_banco")
+
+            saldo_atual = _saldo_conta_financeira(conta)
+            diferenca = (novo_saldo - saldo_atual).quantize(Decimal("0.01"))
+            MovimentoFinanceiro.objects.create(
+                conta=conta,
+                tipo=MovimentoFinanceiro.TIPO_AJUSTE,
+                valor=diferenca,
+                data=timezone.localdate(),
+                descricao=descricao,
+                origem="caixa_banco_manual",
+            )
+            messages.success(request, "Saldo ajustado com sucesso.")
+            return redirect("estoque:caixa_banco")
+
+        if acao in {"entrada", "saida"}:
+            conta = ContaFinanceira.objects.filter(pk=request.POST.get("conta"), ativo=True).first()
+            valor = _parse_decimal_financeiro(request.POST.get("valor"))
+            descricao = request.POST.get("descricao", "").strip()
+
+            if not conta or valor is None or valor <= 0:
+                messages.error(request, "Informe um valor valido.")
+                return redirect("estoque:caixa_banco")
+
+            MovimentoFinanceiro.objects.create(
+                conta=conta,
+                tipo=MovimentoFinanceiro.TIPO_ENTRADA if acao == "entrada" else MovimentoFinanceiro.TIPO_SAIDA,
+                valor=valor,
+                data=timezone.localdate(),
+                descricao=descricao,
+                origem="caixa_banco_manual",
+            )
+            if acao == "entrada":
+                messages.success(request, "Entrada lancada com sucesso.")
+            else:
+                messages.success(request, "Saida lancada com sucesso.")
+            return redirect("estoque:caixa_banco")
+
+        if acao == "transferencia":
+            conta_origem = ContaFinanceira.objects.filter(pk=request.POST.get("conta_origem"), ativo=True).first()
+            conta_destino = ContaFinanceira.objects.filter(pk=request.POST.get("conta_destino"), ativo=True).first()
+            valor = _parse_decimal_financeiro(request.POST.get("valor"))
+            descricao = request.POST.get("descricao", "").strip() or "Transferencia entre contas"
+
+            if not conta_origem or not conta_destino or valor is None or valor <= 0:
+                messages.error(request, "Informe um valor valido.")
+                return redirect("estoque:caixa_banco")
+            if conta_origem.pk == conta_destino.pk:
+                messages.error(request, "Origem e destino nao podem ser iguais.")
+                return redirect("estoque:caixa_banco")
+
+            MovimentoFinanceiro.objects.create(
+                conta=conta_origem,
+                conta_destino=conta_destino,
+                tipo=MovimentoFinanceiro.TIPO_TRANSFERENCIA,
+                valor=valor,
+                data=timezone.localdate(),
+                descricao=descricao,
+                origem="caixa_banco_manual",
+            )
+            messages.success(request, "Transferencia realizada com sucesso.")
+            return redirect("estoque:caixa_banco")
+
+        messages.error(request, "Acao invalida.")
+        return redirect("estoque:caixa_banco")
+
+    contas = _contas_financeiras_com_saldo()
+    saldo_caixa = _saldo_contas_financeiras(ContaFinanceira.TIPO_CAIXA)
+    saldo_banco = _saldo_contas_financeiras(ContaFinanceira.TIPO_BANCO)
+    total_disponivel = saldo_caixa + saldo_banco
+    movimentos = list(
+        MovimentoFinanceiro.objects
+        .select_related("conta", "conta_destino")
+        .order_by("-data", "-id")[:40]
+    )
+    for movimento in movimentos:
+        movimento.valor_texto = _financeiro_moeda_br(movimento.valor)
+
+    return render(
+        request,
+        "estoque/caixa_banco.html",
+        {
+            "contas": contas,
+            "saldo_caixa": saldo_caixa,
+            "saldo_caixa_texto": _financeiro_moeda_br(saldo_caixa),
+            "saldo_banco": saldo_banco,
+            "saldo_banco_texto": _financeiro_moeda_br(saldo_banco),
+            "total_disponivel": total_disponivel,
+            "total_disponivel_texto": _financeiro_moeda_br(total_disponivel),
+            "movimentos": movimentos,
         },
     )
 
