@@ -32,6 +32,13 @@
     font-weight: 700;
   }
 
+  .nota-compra-financeiro-nota {
+    margin: 4px 0 0;
+    color: #164173;
+    font-size: .74rem;
+    font-weight: 850;
+  }
+
   .nota-compra-acoes {
     display: flex;
     gap: 8px;
@@ -352,11 +359,15 @@
     <div>
       <h1>Compra #{{ compra.id }}</h1>
       <p class="nota-compra-subtitulo">Nota de compra registrada.</p>
+      <p class="nota-compra-financeiro-nota">Compra à vista sai do Caixa/Banco. Compra a prazo gera Conta a Pagar.</p>
     </div>
 
     <div class="nota-compra-acoes">
       <a class="nota-compra-btn primario" href="{% url 'estoque:compras_nova' %}">Nova compra</a>
       <a class="nota-compra-btn secundario" href="{% url 'estoque:compras_lista' %}">Compras</a>
+      <a class="nota-compra-btn secundario" href="{% url 'estoque:contas_pagar' %}">Contas a pagar</a>
+      <a class="nota-compra-btn secundario" href="{% url 'estoque:caixa_banco' %}">Caixa e Banco</a>
+      <a class="nota-compra-btn secundario" href="{% url 'estoque:painel_financeiro' %}">Central Financeira</a>
       <button type="button" class="nota-compra-btn perigo" id="btnAbrirModalExcluirCompraDetalhe">Excluir</button>
       <a class="nota-compra-btn secundario" href="{% url 'estoque:home' %}">Painel</a>
     </div>
