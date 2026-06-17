@@ -1477,17 +1477,28 @@ def _descricao_compra_a_vista(compra, conta=None, complemento=""):
 
 def _movimentos_financeiros_compra(compra):
     fornecedor_nome = compra.fornecedor.nome if compra.fornecedor else ""
-    filtros = Q(origem__in=["compra_a_vista", "compra_correcao_item", "compra_correcao_origem"]) & (
+    filtros_por_id = Q(origem__in=["compra_a_vista", "compra_correcao_item", "compra_correcao_origem"]) & (
         Q(descricao__icontains=f"Compra #{compra.id}") |
         Q(descricao__icontains=f"Compra {compra.id}")
     )
-    if fornecedor_nome:
-        filtros |= Q(
+    movimentos_por_id = MovimentoFinanceiro.objects.select_related("conta", "conta_destino").filter(filtros_por_id)
+    if movimentos_por_id.exists():
+        return movimentos_por_id.order_by("id")
+
+    if not fornecedor_nome:
+        return movimentos_por_id.order_by("id")
+
+    # Compatibilidade com compras antigas gravadas antes de a descricao conter o id.
+    return (
+        MovimentoFinanceiro.objects
+        .select_related("conta", "conta_destino")
+        .filter(
             origem="compra_a_vista",
             data=compra.data_compra,
             descricao__icontains=fornecedor_nome,
         )
-    return MovimentoFinanceiro.objects.select_related("conta", "conta_destino").filter(filtros).order_by("id")
+        .order_by("id")
+    )
 
 
 def _alocacao_financeira_compra(compra):
