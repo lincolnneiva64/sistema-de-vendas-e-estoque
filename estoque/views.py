@@ -1454,6 +1454,69 @@ def _registrar_movimento_compra_a_vista(compra):
     )
 
 
+def _venda_pagamento_imediato(tipo_pagamento):
+    forma = normalizar_texto_cliente(tipo_pagamento)
+    forma_compacta = re.sub(r"\s+", "", forma)
+    if forma in {"a prazo", "carteira", "fiado"} or forma_compacta in {"aprazo"}:
+        return False
+    return forma in {
+        "a vista",
+        "dinheiro",
+        "especie",
+        "pix",
+        "banco",
+        "transferencia",
+        "cartao",
+        "debito",
+        "credito",
+        "boleto",
+        "deposito",
+    } or forma_compacta in {"avista"}
+
+
+def _conta_financeira_venda_a_vista(tipo_pagamento):
+    forma = normalizar_texto_cliente(tipo_pagamento)
+    forma_compacta = re.sub(r"\s+", "", forma)
+    if forma in {"a vista", "dinheiro", "especie"} or forma_compacta in {"avista"}:
+        return _conta_financeira_padrao("caixa")
+    return _conta_financeira_por_forma_pagamento(tipo_pagamento)
+
+
+def _registrar_movimento_venda_a_vista(venda):
+    if not _venda_pagamento_imediato(venda.tipo_pagamento):
+        return None
+
+    valor = _financeiro_dinheiro(venda.total).quantize(Decimal("0.01"))
+    if valor <= Decimal("0.00"):
+        return None
+
+    descricao_base = f"Venda a vista #{venda.id}"
+    if venda.cliente:
+        descricao_base = f"{descricao_base} - {venda.cliente.nome}"
+
+    movimento_existente = MovimentoFinanceiro.objects.filter(
+        tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+        origem="venda",
+        descricao__startswith=f"Venda a vista #{venda.id}",
+    ).first()
+    if movimento_existente:
+        return movimento_existente
+
+    conta_financeira = _conta_financeira_venda_a_vista(venda.tipo_pagamento)
+    if not conta_financeira:
+        return None
+
+    return MovimentoFinanceiro.objects.create(
+        conta=conta_financeira,
+        tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+        valor=valor,
+        data=venda.data_venda or timezone.localdate(),
+        descricao=descricao_base[:255],
+        operador=venda.operador or "",
+        origem="venda",
+    )
+
+
 def _registrar_movimento_conta_pagar_fornecedor(conta, valor_pago, data_pagamento, forma_pagamento):
     valor = _financeiro_dinheiro(valor_pago).quantize(Decimal("0.01"))
     if valor <= Decimal("0.00"):
@@ -7198,6 +7261,7 @@ def gravar_venda(request):
                 usuario=venda.operador,
             )
             _sincronizar_conta_receber(venda, "venda gravada")
+            _registrar_movimento_venda_a_vista(venda)
 
             if pedido_origem:
                 if pedido_pendencias_estoque:
