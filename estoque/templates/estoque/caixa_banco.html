@@ -152,6 +152,65 @@
     margin-bottom: 12px;
   }
 
+  .caixa-forms-single {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .caixa-sangria-panel {
+    margin-bottom: 12px;
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    background: #fffbeb;
+    box-shadow: 0 10px 22px rgba(146, 64, 14, .07);
+    overflow: hidden;
+  }
+
+  .caixa-sangria-head {
+    padding: 13px 14px;
+    border-bottom: 1px solid #fde68a;
+    background: #fff7d6;
+  }
+
+  .caixa-sangria-title {
+    margin: 0;
+    color: #713f12;
+    font-size: 1.08rem;
+    font-weight: 950;
+  }
+
+  .caixa-sangria-subtitle {
+    margin: 4px 0 0;
+    color: #854d0e;
+    font-size: .86rem;
+    font-weight: 780;
+    line-height: 1.35;
+  }
+
+  .caixa-sangria-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .caixa-sangria-panel .caixa-form-card {
+    border-color: #f3d579;
+    box-shadow: none;
+  }
+
+  .caixa-flow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 10px;
+    border-radius: 999px;
+    padding: 5px 9px;
+    background: #fef3c7;
+    color: #713f12;
+    font-size: .78rem;
+    font-weight: 950;
+  }
+
   .caixa-form-card {
     padding: 12px;
   }
@@ -329,7 +388,8 @@
       justify-content: flex-start;
     }
     .caixa-summary,
-    .caixa-forms {
+    .caixa-forms,
+    .caixa-sangria-grid {
       grid-template-columns: 1fr;
     }
     .caixa-form-grid {
@@ -382,7 +442,7 @@
   <header class="caixa-header">
     <div>
       <h1 class="caixa-title">Caixa e Banco</h1>
-      <p class="caixa-subtitle">Use Receber cliente, Despesa Diária, Contas a pagar e Compras para os movimentos normais. Use esta tela para troco, sangria, depósito, reserva e conferência.</p>
+      <p class="caixa-subtitle">Use Receber cliente, Despesa Diaria, Contas a pagar e Compras para os movimentos normais. Use esta tela para troco, sangria, deposito, reserva e conferencia.</p>
     </div>
     <nav class="caixa-actions" aria-label="Navegacao de Caixa e Banco">
       <a class="caixa-btn" href="{% url 'estoque:painel_financeiro' %}">Voltar para Central Financeira</a>
@@ -398,11 +458,11 @@
 
   <section class="caixa-summary" aria-label="Resumo de Caixa e Banco">
     <article class="caixa-card">
-      <div class="caixa-label">Caixa em espécie</div>
+      <div class="caixa-label">Caixa em especie</div>
       <div class="caixa-value">{{ saldo_caixa_especie_texto }}</div>
     </article>
     <article class="caixa-card reserva">
-      <div class="caixa-label">Sangria / Reserva em mãos</div>
+      <div class="caixa-label">Sangria / Reserva em maos</div>
       <div class="caixa-value">{{ saldo_reserva_texto }}</div>
     </article>
     <article class="caixa-card">
@@ -410,17 +470,17 @@
       <div class="caixa-value">{{ saldo_banco_texto }}</div>
     </article>
     <article class="caixa-card total">
-      <div class="caixa-label">Total disponível</div>
+      <div class="caixa-label">Total disponivel</div>
       <div class="caixa-value">{{ total_disponivel_texto }}</div>
     </article>
   </section>
 
   <p class="caixa-reserva-help">Use a sangria quando retirar dinheiro do caixa para guardar como reserva. Esse dinheiro continua sendo da empresa e pode depois ser depositado no banco, voltar para o caixa ou ser usado para pagar alguma despesa/compra.</p>
 
-  <section class="caixa-forms" aria-label="Acoes de Caixa e Banco">
+  <section class="caixa-forms caixa-forms-single" aria-label="Abertura de Caixa">
     <article class="caixa-form-card">
       <h2 class="caixa-form-title">Abrir caixa / Troco inicial</h2>
-      <p class="caixa-form-help">Use no começo do dia para informar quanto ficará no caixa para troco.</p>
+      <p class="caixa-form-help">Use no comeco do dia para informar quanto ficara no caixa para troco.</p>
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="acao" value="abrir_caixa">
@@ -430,11 +490,11 @@
             <input id="aberturaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
           </div>
           <div class="caixa-field">
-            <label for="aberturaDescricao">Descrição opcional</label>
+            <label for="aberturaDescricao">Descricao opcional</label>
             <input id="aberturaDescricao" name="descricao" type="text" placeholder="Troco inicial / abertura de caixa">
           </div>
           <div class="caixa-field full">
-            <label for="aberturaOperador">Operador / responsável</label>
+            <label for="aberturaOperador">Operador / responsavel</label>
             <select id="aberturaOperador" name="operador" required>
               <option value="">Selecione o operador</option>
               {% for operador in operadores_caixa %}
@@ -448,10 +508,18 @@
         </div>
       </form>
     </article>
+  </section>
 
+  <section class="caixa-sangria-panel" aria-label="Sangria e Reserva em maos">
+    <div class="caixa-sangria-head">
+      <h2 class="caixa-sangria-title">Sangria / Reserva em maos</h2>
+      <p class="caixa-sangria-subtitle">Controle o dinheiro retirado do caixa e ainda disponivel para deposito, reforco ou pagamento.</p>
+    </div>
+    <div class="caixa-sangria-grid">
     <article class="caixa-form-card">
-      <h2 class="caixa-form-title">Fazer sangria</h2>
-      <p class="caixa-form-help">Use quando retirar dinheiro do caixa para guardar como reserva.</p>
+      <h2 class="caixa-form-title">Fazer sangria / Guardar na reserva</h2>
+      <p class="caixa-form-help">Use quando retirar dinheiro do caixa da frente para guardar separado.</p>
+      <div class="caixa-flow">Caixa em especie -> Sangria / Reserva</div>
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="acao" value="fazer_sangria">
@@ -461,7 +529,7 @@
             <input id="sangriaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
           </div>
           <div class="caixa-field">
-            <label for="sangriaOperador">Operador / responsável</label>
+            <label for="sangriaOperador">Operador / responsavel</label>
             <select id="sangriaOperador" name="operador" required>
               <option value="">Selecione o operador</option>
               {% for operador in operadores_caixa %}
@@ -470,8 +538,8 @@
             </select>
           </div>
           <div class="caixa-field full">
-            <label for="sangriaDescricao">Descrição opcional</label>
-            <input id="sangriaDescricao" name="descricao" type="text" placeholder="Sangria para reserva em mãos">
+            <label for="sangriaDescricao">Descricao opcional</label>
+            <input id="sangriaDescricao" name="descricao" type="text" placeholder="Sangria para reserva em maos">
           </div>
         </div>
         <div class="caixa-form-actions">
@@ -482,7 +550,8 @@
 
     <article class="caixa-form-card">
       <h2 class="caixa-form-title">Depositar reserva no banco</h2>
-      <p class="caixa-form-help">Use quando o dinheiro separado na sangria for depositado no banco.</p>
+      <p class="caixa-form-help">Use quando levar dinheiro da reserva para o banco.</p>
+      <div class="caixa-flow">Sangria / Reserva -> Banco/Pix</div>
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="acao" value="depositar_reserva_banco">
@@ -492,11 +561,11 @@
             <input id="depositoValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
           </div>
           <div class="caixa-field">
-            <label for="depositoDescricao">Descrição opcional</label>
-            <input id="depositoDescricao" name="descricao" type="text" placeholder="Depósito da reserva no banco">
+            <label for="depositoDescricao">Descricao opcional</label>
+            <input id="depositoDescricao" name="descricao" type="text" placeholder="Deposito da reserva no banco">
           </div>
           <div class="caixa-field full">
-            <label for="depositoOperador">Operador / responsável</label>
+            <label for="depositoOperador">Operador / responsavel</label>
             <select id="depositoOperador" name="operador" required>
               <option value="">Selecione o operador</option>
               {% for operador in operadores_caixa %}
@@ -506,14 +575,15 @@
           </div>
         </div>
         <div class="caixa-form-actions">
-          <button class="caixa-btn caixa-btn-primary" type="submit">Depositar</button>
+          <button class="caixa-btn caixa-btn-primary" type="submit">Depositar no banco</button>
         </div>
       </form>
     </article>
 
     <article class="caixa-form-card">
-      <h2 class="caixa-form-title">Reforçar caixa com reserva</h2>
-      <p class="caixa-form-help">Use quando precisar devolver dinheiro da reserva para o caixa, por exemplo para troco.</p>
+      <h2 class="caixa-form-title">Reforcar caixa com reserva</h2>
+      <p class="caixa-form-help">Use quando devolver dinheiro da reserva para o caixa, por exemplo para troco.</p>
+      <div class="caixa-flow">Sangria / Reserva -> Caixa em especie</div>
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="acao" value="reforcar_caixa_reserva">
@@ -523,11 +593,11 @@
             <input id="reforcoValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
           </div>
           <div class="caixa-field">
-            <label for="reforcoDescricao">Descrição opcional</label>
-            <input id="reforcoDescricao" name="descricao" type="text" placeholder="Reforço de caixa com reserva">
+            <label for="reforcoDescricao">Descricao opcional</label>
+            <input id="reforcoDescricao" name="descricao" type="text" placeholder="Reforco de caixa com reserva">
           </div>
           <div class="caixa-field full">
-            <label for="reforcoOperador">Operador / responsável</label>
+            <label for="reforcoOperador">Operador / responsavel</label>
             <select id="reforcoOperador" name="operador" required>
               <option value="">Selecione o operador</option>
               {% for operador in operadores_caixa %}
@@ -537,14 +607,15 @@
           </div>
         </div>
         <div class="caixa-form-actions">
-          <button class="caixa-btn caixa-btn-primary" type="submit">Reforçar caixa</button>
+          <button class="caixa-btn caixa-btn-primary" type="submit">Reforcar caixa</button>
         </div>
       </form>
     </article>
 
     <article class="caixa-form-card">
-      <h2 class="caixa-form-title">Pagar com reserva / retirada definitiva</h2>
+      <h2 class="caixa-form-title">Pagar com reserva / Saida da sangria</h2>
       <p class="caixa-form-help">Use quando o dinheiro da reserva for usado para pagar algo e sair definitivamente da empresa.</p>
+      <div class="caixa-flow">Sangria / Reserva -> Pagamento/Saida</div>
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="acao" value="pagar_com_reserva">
@@ -554,11 +625,11 @@
             <input id="reservaSaidaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
           </div>
           <div class="caixa-field">
-            <label for="reservaSaidaDescricao">Descrição recomendada</label>
+            <label for="reservaSaidaDescricao">Descricao recomendada</label>
             <input id="reservaSaidaDescricao" name="descricao" type="text" placeholder="Pagamento/retirada usando reserva">
           </div>
           <div class="caixa-field full">
-            <label for="reservaSaidaOperador">Operador / responsável</label>
+            <label for="reservaSaidaOperador">Operador / responsavel</label>
             <select id="reservaSaidaOperador" name="operador" required>
               <option value="">Selecione o operador</option>
               {% for operador in operadores_caixa %}
@@ -568,133 +639,17 @@
           </div>
         </div>
         <div class="caixa-form-actions">
-          <button class="caixa-btn caixa-btn-danger" type="submit">Registrar saída</button>
+          <button class="caixa-btn caixa-btn-danger" type="submit">Pagar com reserva</button>
         </div>
       </form>
     </article>
-
-    <article class="caixa-form-card">
-      <h2 class="caixa-form-title">Entrada avulsa</h2>
-      <p class="caixa-form-help">Use apenas para dinheiro novo que não veio de cliente, compra, empréstimo cadastrado ou outro módulo.</p>
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="acao" value="entrada_avulsa">
-        <div class="caixa-form-grid">
-          <div class="caixa-field">
-            <label for="entradaConta">Conta</label>
-            <select id="entradaConta" name="conta" required>
-              {% for conta in contas %}
-                <option value="{{ conta.id }}">{{ conta.nome }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="caixa-field">
-            <label for="entradaValor">Valor</label>
-            <input id="entradaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
-          </div>
-          <div class="caixa-field full">
-            <label for="entradaDescricao">Descrição</label>
-            <input id="entradaDescricao" name="descricao" type="text" placeholder="Entrada avulsa">
-          </div>
-          <div class="caixa-field full">
-            <label for="entradaOperador">Operador / responsável</label>
-            <select id="entradaOperador" name="operador" required>
-              <option value="">Selecione o operador</option>
-              {% for operador in operadores_caixa %}
-                <option value="{{ operador.id }}">{{ operador.nome }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-        <div class="caixa-form-actions">
-          <button class="caixa-btn caixa-btn-success" type="submit">Lançar entrada</button>
-        </div>
-      </form>
-    </article>
-
-    <article class="caixa-form-card">
-      <h2 class="caixa-form-title">Saída avulsa</h2>
-      <p class="caixa-form-help">Use apenas para saída que não está em despesas, contas a pagar, compras ou dívidas.</p>
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="acao" value="saida_avulsa">
-        <div class="caixa-form-grid">
-          <div class="caixa-field">
-            <label for="saidaConta">Conta</label>
-            <select id="saidaConta" name="conta" required>
-              {% for conta in contas %}
-                <option value="{{ conta.id }}">{{ conta.nome }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="caixa-field">
-            <label for="saidaValor">Valor</label>
-            <input id="saidaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
-          </div>
-          <div class="caixa-field full">
-            <label for="saidaDescricao">Descrição</label>
-            <input id="saidaDescricao" name="descricao" type="text" placeholder="Saída avulsa">
-          </div>
-          <div class="caixa-field full">
-            <label for="saidaOperador">Operador / responsável</label>
-            <select id="saidaOperador" name="operador" required>
-              <option value="">Selecione o operador</option>
-              {% for operador in operadores_caixa %}
-                <option value="{{ operador.id }}">{{ operador.nome }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-        <div class="caixa-form-actions">
-          <button class="caixa-btn caixa-btn-danger" type="submit">Lançar saída</button>
-        </div>
-      </form>
-    </article>
-
-    <article class="caixa-form-card">
-      <h2 class="caixa-form-title">Conferência / Ajuste de saldo</h2>
-      <p class="caixa-form-help">Use quando o saldo real do caixa, reserva ou banco não bater com o sistema.</p>
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="acao" value="ajuste_saldo">
-        <div class="caixa-form-grid">
-          <div class="caixa-field">
-            <label for="ajusteConta">Conta</label>
-            <select id="ajusteConta" name="conta" required>
-              {% for conta in contas %}
-                <option value="{{ conta.id }}">{{ conta.nome }} - {{ conta.saldo_atual_texto }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="caixa-field">
-            <label for="ajusteNovoSaldo">Novo saldo</label>
-            <input id="ajusteNovoSaldo" name="novo_saldo" type="text" inputmode="decimal" placeholder="0,00" required>
-          </div>
-          <div class="caixa-field full">
-            <label for="ajusteDescricao">Descrição opcional</label>
-            <input id="ajusteDescricao" name="descricao" type="text" placeholder="Conferência / ajuste de saldo">
-          </div>
-          <div class="caixa-field full">
-            <label for="ajusteOperador">Operador / responsável</label>
-            <select id="ajusteOperador" name="operador" required>
-              <option value="">Selecione o operador</option>
-              {% for operador in operadores_caixa %}
-                <option value="{{ operador.id }}">{{ operador.nome }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-        <div class="caixa-form-actions">
-          <button class="caixa-btn caixa-btn-primary" type="submit">Ajustar saldo</button>
-        </div>
-      </form>
-    </article>
+    </div>
   </section>
 
   <section class="caixa-history caixa-reserva-section">
     <div class="caixa-history-head">
-      <h2 class="caixa-history-title">Extrato da Sangria / Reserva em mãos</h2>
-      <p class="caixa-history-subtitle">Acompanhe o dinheiro retirado do caixa e ainda disponível como reserva.</p>
+      <h2 class="caixa-history-title">Extrato da Sangria / Reserva em maos</h2>
+      <p class="caixa-history-subtitle">Acompanhe o dinheiro retirado do caixa e ainda disponivel como reserva.</p>
     </div>
 
     <section class="caixa-summary" aria-label="Resumo da Sangria e Reserva">
@@ -707,11 +662,11 @@
         <div class="caixa-value">{{ entradas_reserva_hoje_texto }}</div>
       </article>
       <article class="caixa-card">
-        <div class="caixa-label">Saídas da reserva hoje</div>
+        <div class="caixa-label">Saidas da reserva hoje</div>
         <div class="caixa-value">{{ saidas_reserva_hoje_texto }}</div>
       </article>
       <article class="caixa-card">
-        <div class="caixa-label">Depósitos no banco hoje</div>
+        <div class="caixa-label">Depositos no banco hoje</div>
         <div class="caixa-value">{{ depositos_reserva_banco_hoje_texto }}</div>
       </article>
     </section>
@@ -725,7 +680,7 @@
             <th>Valor</th>
             <th>Origem</th>
             <th>Destino</th>
-            <th>Descrição</th>
+            <th>Descricao</th>
             <th>Operador</th>
           </tr>
         </thead>
@@ -774,7 +729,7 @@
               <span class="caixa-mobile-value">{{ movimento.operador_texto }}</span>
             </div>
             <div class="caixa-field full">
-              <span class="caixa-mobile-label">Descrição</span>
+              <span class="caixa-mobile-label">Descricao</span>
               <span class="caixa-mobile-value">{{ movimento.descricao|default:"-" }}</span>
             </div>
           </div>
@@ -785,9 +740,130 @@
     </div>
   </section>
 
+  <section class="caixa-forms" aria-label="Entradas e Saidas Avulsas">
+    <article class="caixa-form-card">
+      <h2 class="caixa-form-title">Entrada avulsa</h2>
+      <p class="caixa-form-help">Use apenas para dinheiro novo que nao veio de cliente, compra, emprestimo cadastrado ou outro modulo.</p>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="entrada_avulsa">
+        <div class="caixa-form-grid">
+          <div class="caixa-field">
+            <label for="entradaConta">Conta</label>
+            <select id="entradaConta" name="conta" required>
+              {% for conta in contas %}
+                <option value="{{ conta.id }}">{{ conta.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="caixa-field">
+            <label for="entradaValor">Valor</label>
+            <input id="entradaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
+          </div>
+          <div class="caixa-field full">
+            <label for="entradaDescricao">Descricao</label>
+            <input id="entradaDescricao" name="descricao" type="text" placeholder="Entrada avulsa">
+          </div>
+          <div class="caixa-field full">
+            <label for="entradaOperador">Operador / responsavel</label>
+            <select id="entradaOperador" name="operador" required>
+              <option value="">Selecione o operador</option>
+              {% for operador in operadores_caixa %}
+                <option value="{{ operador.id }}">{{ operador.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="caixa-form-actions">
+          <button class="caixa-btn caixa-btn-success" type="submit">Lancar entrada</button>
+        </div>
+      </form>
+    </article>
+
+    <article class="caixa-form-card">
+      <h2 class="caixa-form-title">Saida avulsa</h2>
+      <p class="caixa-form-help">Use apenas para saida que nao esta em despesas, contas a pagar, compras ou dividas.</p>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="saida_avulsa">
+        <div class="caixa-form-grid">
+          <div class="caixa-field">
+            <label for="saidaConta">Conta</label>
+            <select id="saidaConta" name="conta" required>
+              {% for conta in contas %}
+                <option value="{{ conta.id }}">{{ conta.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="caixa-field">
+            <label for="saidaValor">Valor</label>
+            <input id="saidaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
+          </div>
+          <div class="caixa-field full">
+            <label for="saidaDescricao">Descricao</label>
+            <input id="saidaDescricao" name="descricao" type="text" placeholder="Saida avulsa">
+          </div>
+          <div class="caixa-field full">
+            <label for="saidaOperador">Operador / responsavel</label>
+            <select id="saidaOperador" name="operador" required>
+              <option value="">Selecione o operador</option>
+              {% for operador in operadores_caixa %}
+                <option value="{{ operador.id }}">{{ operador.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="caixa-form-actions">
+          <button class="caixa-btn caixa-btn-danger" type="submit">Lancar saida</button>
+        </div>
+      </form>
+    </article>
+  </section>
+
+  <section class="caixa-forms caixa-forms-single" aria-label="Conferencia e Ajuste de Saldo">
+    <article class="caixa-form-card">
+      <h2 class="caixa-form-title">Conferencia / Ajuste de saldo</h2>
+      <p class="caixa-form-help">Use quando o saldo real do caixa, reserva ou banco nao bater com o sistema.</p>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="ajuste_saldo">
+        <div class="caixa-form-grid">
+          <div class="caixa-field">
+            <label for="ajusteConta">Conta</label>
+            <select id="ajusteConta" name="conta" required>
+              {% for conta in contas %}
+                <option value="{{ conta.id }}">{{ conta.nome }} - {{ conta.saldo_atual_texto }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="caixa-field">
+            <label for="ajusteNovoSaldo">Novo saldo</label>
+            <input id="ajusteNovoSaldo" name="novo_saldo" type="text" inputmode="decimal" placeholder="0,00" required>
+          </div>
+          <div class="caixa-field full">
+            <label for="ajusteDescricao">Descricao opcional</label>
+            <input id="ajusteDescricao" name="descricao" type="text" placeholder="Conferencia / ajuste de saldo">
+          </div>
+          <div class="caixa-field full">
+            <label for="ajusteOperador">Operador / responsavel</label>
+            <select id="ajusteOperador" name="operador" required>
+              <option value="">Selecione o operador</option>
+              {% for operador in operadores_caixa %}
+                <option value="{{ operador.id }}">{{ operador.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="caixa-form-actions">
+          <button class="caixa-btn caixa-btn-primary" type="submit">Ajustar saldo</button>
+        </div>
+      </form>
+    </article>
+  </section>
+
   <section class="caixa-history">
     <div class="caixa-history-head">
-      <h2 class="caixa-history-title">Histórico</h2>
+      <h2 class="caixa-history-title">Historico</h2>
     </div>
 
     <div class="caixa-table-wrap">
@@ -801,7 +877,7 @@
             <th>Conta destino</th>
             <th>Origem</th>
             <th>Operador</th>
-            <th>Descrição</th>
+            <th>Descricao</th>
           </tr>
         </thead>
         <tbody>
@@ -854,7 +930,7 @@
               <span class="caixa-mobile-value">{{ movimento.operador_texto }}</span>
             </div>
             <div class="caixa-field full">
-              <span class="caixa-mobile-label">Descrição</span>
+              <span class="caixa-mobile-label">Descricao</span>
               <span class="caixa-mobile-value">{{ movimento.descricao|default:"-" }}</span>
             </div>
           </div>
