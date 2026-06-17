@@ -26,10 +26,12 @@
   }
 
   .caixa-subtitle {
-    margin: 3px 0 0;
-    color: #64748b;
-    font-size: .88rem;
+    max-width: 780px;
+    margin: 4px 0 0;
+    color: #475569;
+    font-size: .9rem;
     font-weight: 750;
+    line-height: 1.4;
   }
 
   .caixa-actions,
@@ -41,7 +43,7 @@
   }
 
   .caixa-btn {
-    min-height: 40px;
+    min-height: 42px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -76,7 +78,7 @@
 
   .caixa-summary {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
     margin-bottom: 12px;
   }
@@ -91,9 +93,14 @@
   }
 
   .caixa-card {
-    min-height: 78px;
+    min-height: 82px;
     padding: 12px 14px;
     border-left: 5px solid #2563eb;
+  }
+
+  .caixa-card.reserva {
+    border-left-color: #ca8a04;
+    background: #fffbeb;
   }
 
   .caixa-card.total {
@@ -111,7 +118,7 @@
   .caixa-value {
     margin-top: 6px;
     color: #172033;
-    font-size: 1.2rem;
+    font-size: 1.15rem;
     font-weight: 950;
   }
 
@@ -150,10 +157,18 @@
   }
 
   .caixa-form-title {
-    margin: 0 0 9px;
+    margin: 0 0 4px;
     color: #111827;
     font-size: 1rem;
     font-weight: 950;
+  }
+
+  .caixa-form-help {
+    margin: 0 0 10px;
+    color: #64748b;
+    font-size: .82rem;
+    font-weight: 750;
+    line-height: 1.35;
   }
 
   .caixa-form-grid {
@@ -198,9 +213,6 @@
   }
 
   .caixa-history-head {
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
     padding: 11px 14px;
     border-bottom: 1px solid #edf1f6;
     background: #f8fafc;
@@ -218,8 +230,8 @@
 
   .caixa-table {
     width: 100%;
+    min-width: 920px;
     border-collapse: collapse;
-    min-width: 860px;
   }
 
   .caixa-table th {
@@ -282,6 +294,9 @@
   }
 
   @media (max-width: 820px) {
+    .caixa-page {
+      padding: 0 10px;
+    }
     .caixa-header {
       align-items: stretch;
       flex-direction: column;
@@ -343,7 +358,7 @@
   <header class="caixa-header">
     <div>
       <h1 class="caixa-title">Caixa e Banco</h1>
-      <p class="caixa-subtitle">Saldos e movimentos manuais sem integracao automatica com outros modulos.</p>
+      <p class="caixa-subtitle">Use Receber cliente, Despesa Diária, Contas a pagar e Compras para os movimentos normais. Use esta tela para troco, sangria, depósito, reserva e conferência.</p>
     </div>
     <nav class="caixa-actions" aria-label="Navegacao de Caixa e Banco">
       <a class="caixa-btn" href="{% url 'estoque:painel_financeiro' %}">Voltar para Central Financeira</a>
@@ -360,53 +375,143 @@
   <section class="caixa-summary" aria-label="Resumo de Caixa e Banco">
     <article class="caixa-card">
       <div class="caixa-label">Caixa em espécie</div>
-      <div class="caixa-value">{{ saldo_caixa_texto }}</div>
+      <div class="caixa-value">{{ saldo_caixa_especie_texto }}</div>
+    </article>
+    <article class="caixa-card reserva">
+      <div class="caixa-label">Sangria / Reserva em mãos</div>
+      <div class="caixa-value">{{ saldo_reserva_texto }}</div>
     </article>
     <article class="caixa-card">
       <div class="caixa-label">Banco/Pix</div>
       <div class="caixa-value">{{ saldo_banco_texto }}</div>
     </article>
     <article class="caixa-card total">
-      <div class="caixa-label">Total disponivel</div>
+      <div class="caixa-label">Total disponível</div>
       <div class="caixa-value">{{ total_disponivel_texto }}</div>
     </article>
   </section>
 
   <section class="caixa-forms" aria-label="Acoes de Caixa e Banco">
     <article class="caixa-form-card">
-      <h2 class="caixa-form-title">Ajustar saldo</h2>
+      <h2 class="caixa-form-title">Abrir caixa / Troco inicial</h2>
+      <p class="caixa-form-help">Use no começo do dia para informar quanto ficará no caixa para troco.</p>
       <form method="post">
         {% csrf_token %}
-        <input type="hidden" name="acao" value="ajustar_saldo">
+        <input type="hidden" name="acao" value="abrir_caixa">
         <div class="caixa-form-grid">
           <div class="caixa-field">
-            <label for="ajusteConta">Conta</label>
-            <select id="ajusteConta" name="conta" required>
-              {% for conta in contas %}
-                <option value="{{ conta.id }}">{{ conta.nome }} - {{ conta.saldo_atual_texto }}</option>
-              {% endfor %}
-            </select>
+            <label for="aberturaValor">Valor do caixa/troco inicial</label>
+            <input id="aberturaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
           </div>
           <div class="caixa-field">
-            <label for="ajusteNovoSaldo">Novo saldo</label>
-            <input id="ajusteNovoSaldo" name="novo_saldo" type="text" inputmode="decimal" placeholder="0,00" required>
-          </div>
-          <div class="caixa-field full">
-            <label for="ajusteDescricao">Descricao</label>
-            <input id="ajusteDescricao" name="descricao" type="text" placeholder="Ajuste manual de saldo">
+            <label for="aberturaDescricao">Descrição opcional</label>
+            <input id="aberturaDescricao" name="descricao" type="text" placeholder="Troco inicial / abertura de caixa">
           </div>
         </div>
         <div class="caixa-form-actions">
-          <button class="caixa-btn caixa-btn-primary" type="submit">Ajustar saldo</button>
+          <button class="caixa-btn caixa-btn-primary" type="submit">Ajustar caixa</button>
         </div>
       </form>
     </article>
 
     <article class="caixa-form-card">
-      <h2 class="caixa-form-title">Entrada</h2>
+      <h2 class="caixa-form-title">Fazer sangria</h2>
+      <p class="caixa-form-help">Use quando retirar dinheiro do caixa para guardar como reserva.</p>
       <form method="post">
         {% csrf_token %}
-        <input type="hidden" name="acao" value="entrada">
+        <input type="hidden" name="acao" value="fazer_sangria">
+        <div class="caixa-form-grid">
+          <div class="caixa-field">
+            <label for="sangriaValor">Valor</label>
+            <input id="sangriaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
+          </div>
+          <div class="caixa-field">
+            <label for="sangriaOperador">Operador/responsável</label>
+            <input id="sangriaOperador" name="operador" type="text" placeholder="Opcional">
+          </div>
+          <div class="caixa-field full">
+            <label for="sangriaDescricao">Descrição opcional</label>
+            <input id="sangriaDescricao" name="descricao" type="text" placeholder="Sangria para reserva em mãos">
+          </div>
+        </div>
+        <div class="caixa-form-actions">
+          <button class="caixa-btn caixa-btn-primary" type="submit">Fazer sangria</button>
+        </div>
+      </form>
+    </article>
+
+    <article class="caixa-form-card">
+      <h2 class="caixa-form-title">Depositar reserva no banco</h2>
+      <p class="caixa-form-help">Use quando o dinheiro separado na sangria for depositado no banco.</p>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="depositar_reserva_banco">
+        <div class="caixa-form-grid">
+          <div class="caixa-field">
+            <label for="depositoValor">Valor</label>
+            <input id="depositoValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
+          </div>
+          <div class="caixa-field">
+            <label for="depositoDescricao">Descrição opcional</label>
+            <input id="depositoDescricao" name="descricao" type="text" placeholder="Depósito da reserva no banco">
+          </div>
+        </div>
+        <div class="caixa-form-actions">
+          <button class="caixa-btn caixa-btn-primary" type="submit">Depositar</button>
+        </div>
+      </form>
+    </article>
+
+    <article class="caixa-form-card">
+      <h2 class="caixa-form-title">Reforçar caixa com reserva</h2>
+      <p class="caixa-form-help">Use quando precisar devolver dinheiro da reserva para o caixa, por exemplo para troco.</p>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="reforcar_caixa_reserva">
+        <div class="caixa-form-grid">
+          <div class="caixa-field">
+            <label for="reforcoValor">Valor</label>
+            <input id="reforcoValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
+          </div>
+          <div class="caixa-field">
+            <label for="reforcoDescricao">Descrição opcional</label>
+            <input id="reforcoDescricao" name="descricao" type="text" placeholder="Reforço de caixa com reserva">
+          </div>
+        </div>
+        <div class="caixa-form-actions">
+          <button class="caixa-btn caixa-btn-primary" type="submit">Reforçar caixa</button>
+        </div>
+      </form>
+    </article>
+
+    <article class="caixa-form-card">
+      <h2 class="caixa-form-title">Pagar com reserva / retirada definitiva</h2>
+      <p class="caixa-form-help">Use quando o dinheiro da reserva for usado para pagar alguma compra, conta ou retirada que sai da empresa.</p>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="pagar_com_reserva">
+        <div class="caixa-form-grid">
+          <div class="caixa-field">
+            <label for="reservaSaidaValor">Valor</label>
+            <input id="reservaSaidaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
+          </div>
+          <div class="caixa-field">
+            <label for="reservaSaidaDescricao">Descrição recomendada</label>
+            <input id="reservaSaidaDescricao" name="descricao" type="text" placeholder="Pagamento/retirada usando reserva">
+          </div>
+        </div>
+        <div class="caixa-form-actions">
+          <button class="caixa-btn caixa-btn-danger" type="submit">Registrar saída</button>
+        </div>
+      </form>
+    </article>
+
+    <article class="caixa-form-card">
+      <h2 class="caixa-form-title">Entrada avulsa</h2>
+      <p class="caixa-form-help">Use apenas para dinheiro novo que não veio de cliente, compra, empréstimo cadastrado ou outro módulo.</p>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="entrada_avulsa">
         <div class="caixa-form-grid">
           <div class="caixa-field">
             <label for="entradaConta">Conta</label>
@@ -421,8 +526,8 @@
             <input id="entradaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
           </div>
           <div class="caixa-field full">
-            <label for="entradaDescricao">Descricao</label>
-            <input id="entradaDescricao" name="descricao" type="text" placeholder="Entrada manual">
+            <label for="entradaDescricao">Descrição</label>
+            <input id="entradaDescricao" name="descricao" type="text" placeholder="Entrada avulsa">
           </div>
         </div>
         <div class="caixa-form-actions">
@@ -432,10 +537,11 @@
     </article>
 
     <article class="caixa-form-card">
-      <h2 class="caixa-form-title">Saída</h2>
+      <h2 class="caixa-form-title">Saída avulsa</h2>
+      <p class="caixa-form-help">Use apenas para saída que não está em despesas, contas a pagar, compras ou dívidas.</p>
       <form method="post">
         {% csrf_token %}
-        <input type="hidden" name="acao" value="saida">
+        <input type="hidden" name="acao" value="saida_avulsa">
         <div class="caixa-form-grid">
           <div class="caixa-field">
             <label for="saidaConta">Conta</label>
@@ -450,8 +556,8 @@
             <input id="saidaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
           </div>
           <div class="caixa-field full">
-            <label for="saidaDescricao">Descricao</label>
-            <input id="saidaDescricao" name="descricao" type="text" placeholder="Saida manual">
+            <label for="saidaDescricao">Descrição</label>
+            <input id="saidaDescricao" name="descricao" type="text" placeholder="Saída avulsa">
           </div>
         </div>
         <div class="caixa-form-actions">
@@ -461,38 +567,31 @@
     </article>
 
     <article class="caixa-form-card">
-      <h2 class="caixa-form-title">Transferência</h2>
+      <h2 class="caixa-form-title">Conferência / Ajuste de saldo</h2>
+      <p class="caixa-form-help">Use quando o saldo real do caixa, reserva ou banco não bater com o sistema.</p>
       <form method="post">
         {% csrf_token %}
-        <input type="hidden" name="acao" value="transferencia">
+        <input type="hidden" name="acao" value="ajuste_saldo">
         <div class="caixa-form-grid">
           <div class="caixa-field">
-            <label for="transferenciaOrigem">Origem</label>
-            <select id="transferenciaOrigem" name="conta_origem" required>
+            <label for="ajusteConta">Conta</label>
+            <select id="ajusteConta" name="conta" required>
               {% for conta in contas %}
-                <option value="{{ conta.id }}">{{ conta.nome }}</option>
+                <option value="{{ conta.id }}">{{ conta.nome }} - {{ conta.saldo_atual_texto }}</option>
               {% endfor %}
             </select>
           </div>
           <div class="caixa-field">
-            <label for="transferenciaDestino">Destino</label>
-            <select id="transferenciaDestino" name="conta_destino" required>
-              {% for conta in contas %}
-                <option value="{{ conta.id }}">{{ conta.nome }}</option>
-              {% endfor %}
-            </select>
+            <label for="ajusteNovoSaldo">Novo saldo</label>
+            <input id="ajusteNovoSaldo" name="novo_saldo" type="text" inputmode="decimal" placeholder="0,00" required>
           </div>
-          <div class="caixa-field">
-            <label for="transferenciaValor">Valor</label>
-            <input id="transferenciaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
-          </div>
-          <div class="caixa-field">
-            <label for="transferenciaDescricao">Descricao</label>
-            <input id="transferenciaDescricao" name="descricao" type="text" placeholder="Transferencia entre contas">
+          <div class="caixa-field full">
+            <label for="ajusteDescricao">Descrição opcional</label>
+            <input id="ajusteDescricao" name="descricao" type="text" placeholder="Conferência / ajuste de saldo">
           </div>
         </div>
         <div class="caixa-form-actions">
-          <button class="caixa-btn caixa-btn-primary" type="submit">Transferir</button>
+          <button class="caixa-btn caixa-btn-primary" type="submit">Ajustar saldo</button>
         </div>
       </form>
     </article>
@@ -500,7 +599,7 @@
 
   <section class="caixa-history">
     <div class="caixa-history-head">
-      <h2 class="caixa-history-title">Historico</h2>
+      <h2 class="caixa-history-title">Histórico</h2>
     </div>
 
     <div class="caixa-table-wrap">
@@ -512,7 +611,8 @@
             <th>Tipo</th>
             <th>Valor</th>
             <th>Conta destino</th>
-            <th>Descricao</th>
+            <th>Origem</th>
+            <th>Descrição</th>
           </tr>
         </thead>
         <tbody>
@@ -523,11 +623,12 @@
               <td><span class="caixa-tipo {{ movimento.tipo }}">{{ movimento.get_tipo_display }}</span></td>
               <td class="caixa-valor">{{ movimento.valor_texto }}</td>
               <td>{{ movimento.conta_destino.nome|default:"-" }}</td>
+              <td>{{ movimento.origem|default:"-" }}</td>
               <td>{{ movimento.descricao|default:"-" }}</td>
             </tr>
           {% empty %}
             <tr>
-              <td colspan="6" class="caixa-empty">Nenhum movimento financeiro registrado.</td>
+              <td colspan="7" class="caixa-empty">Nenhum movimento financeiro registrado.</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -555,7 +656,11 @@
               <span class="caixa-mobile-value">{{ movimento.conta_destino.nome|default:"-" }}</span>
             </div>
             <div>
-              <span class="caixa-mobile-label">Descricao</span>
+              <span class="caixa-mobile-label">Origem</span>
+              <span class="caixa-mobile-value">{{ movimento.origem|default:"-" }}</span>
+            </div>
+            <div class="caixa-field full">
+              <span class="caixa-mobile-label">Descrição</span>
               <span class="caixa-mobile-value">{{ movimento.descricao|default:"-" }}</span>
             </div>
           </div>
