@@ -434,8 +434,13 @@
             <input id="aberturaDescricao" name="descricao" type="text" placeholder="Troco inicial / abertura de caixa">
           </div>
           <div class="caixa-field full">
-            <label for="aberturaOperador">Operador / responsavel</label>
-            <input id="aberturaOperador" name="operador" type="text" maxlength="120" placeholder="Ex.: Lincoln, Camila, Entregador...">
+            <label for="aberturaOperador">Operador / responsável</label>
+            <select id="aberturaOperador" name="operador" required>
+              <option value="">Selecione o operador</option>
+              {% for operador in operadores_caixa %}
+                <option value="{{ operador.id }}">{{ operador.nome }}</option>
+              {% endfor %}
+            </select>
           </div>
         </div>
         <div class="caixa-form-actions">
@@ -456,8 +461,13 @@
             <input id="sangriaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
           </div>
           <div class="caixa-field">
-            <label for="sangriaOperador">Operador/responsável</label>
-            <input id="sangriaOperador" name="operador" type="text" maxlength="120" placeholder="Ex.: Lincoln, Camila, Entregador...">
+            <label for="sangriaOperador">Operador / responsável</label>
+            <select id="sangriaOperador" name="operador" required>
+              <option value="">Selecione o operador</option>
+              {% for operador in operadores_caixa %}
+                <option value="{{ operador.id }}">{{ operador.nome }}</option>
+              {% endfor %}
+            </select>
           </div>
           <div class="caixa-field full">
             <label for="sangriaDescricao">Descrição opcional</label>
@@ -486,8 +496,13 @@
             <input id="depositoDescricao" name="descricao" type="text" placeholder="Depósito da reserva no banco">
           </div>
           <div class="caixa-field full">
-            <label for="depositoOperador">Operador / responsavel</label>
-            <input id="depositoOperador" name="operador" type="text" maxlength="120" placeholder="Ex.: Lincoln, Camila, Entregador...">
+            <label for="depositoOperador">Operador / responsável</label>
+            <select id="depositoOperador" name="operador" required>
+              <option value="">Selecione o operador</option>
+              {% for operador in operadores_caixa %}
+                <option value="{{ operador.id }}">{{ operador.nome }}</option>
+              {% endfor %}
+            </select>
           </div>
         </div>
         <div class="caixa-form-actions">
@@ -512,8 +527,13 @@
             <input id="reforcoDescricao" name="descricao" type="text" placeholder="Reforço de caixa com reserva">
           </div>
           <div class="caixa-field full">
-            <label for="reforcoOperador">Operador / responsavel</label>
-            <input id="reforcoOperador" name="operador" type="text" maxlength="120" placeholder="Ex.: Lincoln, Camila, Entregador...">
+            <label for="reforcoOperador">Operador / responsável</label>
+            <select id="reforcoOperador" name="operador" required>
+              <option value="">Selecione o operador</option>
+              {% for operador in operadores_caixa %}
+                <option value="{{ operador.id }}">{{ operador.nome }}</option>
+              {% endfor %}
+            </select>
           </div>
         </div>
         <div class="caixa-form-actions">
@@ -538,8 +558,13 @@
             <input id="reservaSaidaDescricao" name="descricao" type="text" placeholder="Pagamento/retirada usando reserva">
           </div>
           <div class="caixa-field full">
-            <label for="reservaSaidaOperador">Operador / responsavel</label>
-            <input id="reservaSaidaOperador" name="operador" type="text" maxlength="120" placeholder="Ex.: Lincoln, Camila, Entregador...">
+            <label for="reservaSaidaOperador">Operador / responsável</label>
+            <select id="reservaSaidaOperador" name="operador" required>
+              <option value="">Selecione o operador</option>
+              {% for operador in operadores_caixa %}
+                <option value="{{ operador.id }}">{{ operador.nome }}</option>
+              {% endfor %}
+            </select>
           </div>
         </div>
         <div class="caixa-form-actions">
@@ -572,8 +597,13 @@
             <input id="entradaDescricao" name="descricao" type="text" placeholder="Entrada avulsa">
           </div>
           <div class="caixa-field full">
-            <label for="entradaOperador">Operador / responsavel</label>
-            <input id="entradaOperador" name="operador" type="text" maxlength="120" placeholder="Ex.: Lincoln, Camila, Entregador...">
+            <label for="entradaOperador">Operador / responsável</label>
+            <select id="entradaOperador" name="operador" required>
+              <option value="">Selecione o operador</option>
+              {% for operador in operadores_caixa %}
+                <option value="{{ operador.id }}">{{ operador.nome }}</option>
+              {% endfor %}
+            </select>
           </div>
         </div>
         <div class="caixa-form-actions">
@@ -606,8 +636,13 @@
             <input id="saidaDescricao" name="descricao" type="text" placeholder="Saída avulsa">
           </div>
           <div class="caixa-field full">
-            <label for="saidaOperador">Operador / responsavel</label>
-            <input id="saidaOperador" name="operador" type="text" maxlength="120" placeholder="Ex.: Lincoln, Camila, Entregador...">
+            <label for="saidaOperador">Operador / responsável</label>
+            <select id="saidaOperador" name="operador" required>
+              <option value="">Selecione o operador</option>
+              {% for operador in operadores_caixa %}
+                <option value="{{ operador.id }}">{{ operador.nome }}</option>
+              {% endfor %}
+            </select>
           </div>
         </div>
         <div class="caixa-form-actions">
@@ -640,8 +675,13 @@
             <input id="ajusteDescricao" name="descricao" type="text" placeholder="Conferência / ajuste de saldo">
           </div>
           <div class="caixa-field full">
-            <label for="ajusteOperador">Operador / responsavel</label>
-            <input id="ajusteOperador" name="operador" type="text" maxlength="120" placeholder="Ex.: Lincoln, Camila, Entregador...">
+            <label for="ajusteOperador">Operador / responsável</label>
+            <select id="ajusteOperador" name="operador" required>
+              <option value="">Selecione o operador</option>
+              {% for operador in operadores_caixa %}
+                <option value="{{ operador.id }}">{{ operador.nome }}</option>
+              {% endfor %}
+            </select>
           </div>
         </div>
         <div class="caixa-form-actions">

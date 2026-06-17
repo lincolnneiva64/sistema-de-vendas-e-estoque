@@ -1678,9 +1678,15 @@ def caixa_banco(request):
     conta_caixa = _conta_financeira_padrao("caixa")
     conta_reserva = _conta_financeira_padrao("reserva")
     conta_banco = _conta_financeira_padrao("banco")
+    operadores_caixa = list(Funcionario.operadores_do_caixa().only("id", "nome"))
+    operadores_caixa_por_id = {str(funcionario.id): funcionario for funcionario in operadores_caixa}
 
     def operador_post():
-        return request.POST.get("operador", "").strip()[:120]
+        funcionario = operadores_caixa_por_id.get(request.POST.get("operador", "").strip())
+        if not funcionario:
+            messages.error(request, "Selecione um operador autorizado para movimentar Caixa/Banco.")
+            return None
+        return funcionario.nome
 
     def criar_ajuste_para_saldo(conta, novo_saldo, descricao, origem, operador=""):
         saldo_atual = _saldo_conta_financeira(conta)
@@ -1726,6 +1732,8 @@ def caixa_banco(request):
         if acao in {"abrir_caixa", "ajustar_saldo", "ajuste_saldo"}:
             conta = ContaFinanceira.objects.filter(pk=request.POST.get("conta"), ativo=True).first()
             operador = operador_post()
+            if operador is None:
+                return redirect("estoque:caixa_banco")
             if acao == "abrir_caixa":
                 conta = conta_caixa
                 novo_saldo = _parse_decimal_financeiro(request.POST.get("valor") or request.POST.get("novo_saldo"))
@@ -1750,6 +1758,8 @@ def caixa_banco(request):
 
         if acao in {"fazer_sangria", "depositar_reserva_banco", "reforcar_caixa_reserva", "transferencia"}:
             operador = operador_post()
+            if operador is None:
+                return redirect("estoque:caixa_banco")
             if acao == "fazer_sangria":
                 conta_origem = conta_caixa
                 conta_destino = conta_reserva
@@ -1781,6 +1791,8 @@ def caixa_banco(request):
         if acao in {"entrada", "saida", "entrada_avulsa", "saida_avulsa", "pagar_com_reserva"}:
             conta = ContaFinanceira.objects.filter(pk=request.POST.get("conta"), ativo=True).first()
             operador = operador_post()
+            if operador is None:
+                return redirect("estoque:caixa_banco")
             if acao == "pagar_com_reserva":
                 conta = conta_reserva
             valor = _parse_decimal_financeiro(request.POST.get("valor"))
@@ -1837,7 +1849,7 @@ def caixa_banco(request):
     )
     for movimento in movimentos:
         movimento.valor_texto = _financeiro_moeda_br(movimento.valor)
-        movimento.operador_texto = movimento.operador or "nao informado"
+        movimento.operador_texto = movimento.operador or "não informado"
 
     hoje = timezone.localdate()
     if conta_reserva:
@@ -1883,7 +1895,7 @@ def caixa_banco(request):
     movimentos_reserva = list(movimentos_reserva_qs.order_by("-data", "-id")[:20])
     for movimento in movimentos_reserva:
         movimento.valor_texto = _financeiro_moeda_br(movimento.valor)
-        movimento.operador_texto = movimento.operador or "nao informado"
+        movimento.operador_texto = movimento.operador or "não informado"
 
     return render(
         request,
@@ -1904,6 +1916,7 @@ def caixa_banco(request):
             "total_disponivel": total_disponivel,
             "total_disponivel_texto": _financeiro_moeda_br(total_disponivel),
             "movimentos": movimentos,
+            "operadores_caixa": operadores_caixa,
             "entradas_reserva_hoje_texto": _financeiro_moeda_br(entradas_reserva_hoje),
             "saidas_reserva_hoje_texto": _financeiro_moeda_br(saidas_reserva_hoje),
             "depositos_reserva_banco_hoje_texto": _financeiro_moeda_br(depositos_reserva_banco_hoje),
@@ -3380,6 +3393,7 @@ def funcionarios(request):
             funcionario.save(update_fields=[
                 "ativo",
                 "pode_operar_sistema",
+                "pode_operar_caixa",
                 "pode_receber_checklist",
                 "telefone_whatsapp_normalizado",
                 "atualizado_em",
@@ -3412,6 +3426,7 @@ def funcionarios(request):
                 "ativo": True,
                 "pode_receber_checklist": False,
                 "pode_operar_sistema": False,
+                "pode_operar_caixa": False,
             })
 
     funcionarios_lista = list(funcionarios_qs)
@@ -3422,6 +3437,10 @@ def funcionarios(request):
     funcionarios_operadores = sum(
         1 for funcionario in funcionarios_lista
         if funcionario.ativo and funcionario.pode_operar_sistema
+    )
+    funcionarios_operadores_caixa = sum(
+        1 for funcionario in funcionarios_lista
+        if funcionario.ativo and funcionario.pode_operar_caixa
     )
 
     return render(
@@ -3435,6 +3454,7 @@ def funcionarios(request):
             "total_funcionarios": len(funcionarios_lista),
             "funcionarios_habilitados": funcionarios_habilitados,
             "funcionarios_operadores": funcionarios_operadores,
+            "funcionarios_operadores_caixa": funcionarios_operadores_caixa,
         },
     )
 

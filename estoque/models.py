@@ -246,6 +246,7 @@ class Funcionario(models.Model):
     ativo = models.BooleanField(default=True)
     pode_receber_checklist = models.BooleanField(default=False)
     pode_operar_sistema = models.BooleanField(default=False)
+    pode_operar_caixa = models.BooleanField(default=False)
     observacoes = models.TextField(blank=True, null=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
@@ -269,6 +270,10 @@ class Funcionario(models.Model):
     @classmethod
     def operadores_do_sistema(cls):
         return cls.objects.filter(ativo=True, pode_operar_sistema=True).order_by("nome")
+
+    @classmethod
+    def operadores_do_caixa(cls):
+        return cls.objects.filter(ativo=True, pode_operar_caixa=True).order_by("nome")
 
     def clean(self):
         telefone_normalizado = self.normalizar_whatsapp(self.telefone_whatsapp)
@@ -294,6 +299,7 @@ class Funcionario(models.Model):
         if not self.ativo:
             self.pode_receber_checklist = False
             self.pode_operar_sistema = False
+            self.pode_operar_caixa = False
 
         self.full_clean()
         super().save(*args, **kwargs)

@@ -190,6 +190,7 @@
                   <th>WhatsApp</th>
                   <th>Status</th>
                   <th>Operador</th>
+                  <th>Caixa/Banco</th>
                   <th>Checklist</th>
                   <th>Acoes</th>
                 </tr>
@@ -216,6 +217,13 @@
                     </td>
                     <td>
                       {% if funcionario.ativo and funcionario.pode_operar_sistema %}
+                        <span class="status-pill status-sim">Sim</span>
+                      {% else %}
+                        <span class="status-pill status-nao">Nao</span>
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if funcionario.ativo and funcionario.pode_operar_caixa %}
                         <span class="status-pill status-sim">Sim</span>
                       {% else %}
                         <span class="status-pill status-nao">Nao</span>
@@ -260,7 +268,7 @@
               {% if funcionario_selecionado %}Editar funcionario{% else %}Novo funcionario{% endif %}
             </h2>
             <span class="funcionarios-count">
-              {% if funcionario_selecionado %}{{ funcionario_selecionado.nome }} selecionado{% else %}{{ funcionarios_operadores }} operador(es) do sistema{% endif %}
+              {% if funcionario_selecionado %}{{ funcionario_selecionado.nome }} selecionado{% else %}{{ funcionarios_operadores_caixa }} operador(es) de caixa{% endif %}
             </span>
           </div>
         </div>
@@ -308,6 +316,18 @@
             </div>
           </div>
 
+          <div class="funcionarios-boolean" data-boolean-field="id_pode_operar_caixa">
+            <div>
+              <div class="funcionarios-boolean-title">Pode operar Caixa/Banco?</div>
+              <span class="funcionarios-boolean-text">Somente funcionarios ativos e marcados como Sim aparecem nas acoes manuais de Caixa e Banco.</span>
+            </div>
+            <div class="funcionarios-boolean-control" role="group" aria-label="Pode operar Caixa e Banco">
+              {{ form.pode_operar_caixa }}
+              <button type="button" class="funcionarios-toggle-btn sim" data-boolean-value="1">Sim</button>
+              <button type="button" class="funcionarios-toggle-btn nao" data-boolean-value="0">Nao</button>
+            </div>
+          </div>
+
           <div class="funcionarios-field">
             <label for="{{ form.observacoes.id_for_label }}">Observacoes</label>
             {{ form.observacoes }}
@@ -348,6 +368,7 @@
     const ativo = document.getElementById("id_ativo");
     const podeReceberChecklist = document.getElementById("id_pode_receber_checklist");
     const podeOperarSistema = document.getElementById("id_pode_operar_sistema");
+    const podeOperarCaixa = document.getElementById("id_pode_operar_caixa");
 
     function normalizarTexto(texto) {
       return String(texto || "")
@@ -443,6 +464,10 @@
         if (checkbox === ativo && !checkbox.checked && podeOperarSistema) {
           podeOperarSistema.checked = false;
           podeOperarSistema.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        if (checkbox === ativo && !checkbox.checked && podeOperarCaixa) {
+          podeOperarCaixa.checked = false;
+          podeOperarCaixa.dispatchEvent(new Event("change", { bubbles: true }));
         }
         atualizarBooleano(container);
       });
