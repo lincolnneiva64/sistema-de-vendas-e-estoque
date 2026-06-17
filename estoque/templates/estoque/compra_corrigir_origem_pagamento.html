@@ -1,0 +1,100 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Corrigir origem da Compra #{{ compra.id }}{% endblock %}
+
+{% block content %}
+<style>
+  .origem-wrap { max-width: 860px; margin: 10px auto 70px; padding: 0 12px; color: #172033; }
+  .origem-topo { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
+  .origem-topo h1 { margin: 0; font-size: 1.35rem; font-weight: 950; }
+  .origem-sub { margin: 4px 0 0; color: #64748b; font-weight: 750; }
+  .origem-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+  .origem-btn {
+    display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 12px;
+    border-radius: 8px; border: 1px solid #7ea6d9; background: #dbeafe; color: #164173; text-decoration: none;
+    font-weight: 900; cursor: pointer;
+  }
+  .origem-btn.primario { background: #2563eb; color: #fff; border-color: #2563eb; }
+  .origem-card { background: #fff; border: 1px solid #dbe4ef; border-radius: 10px; overflow: hidden; margin-bottom: 10px; }
+  .origem-card h2 { margin: 0; padding: 10px 12px; background: #f8fafc; border-bottom: 1px solid #edf1f6; font-size: 1rem; font-weight: 950; }
+  .origem-dados { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 10px 12px; font-weight: 800; }
+  .origem-dados strong { display: block; color: #475569; font-size: .72rem; text-transform: uppercase; }
+  .origem-aviso { margin: 0 0 10px; padding: 10px 12px; border: 1px solid #facc15; background: #fef9c3; border-radius: 10px; color: #713f12; font-weight: 850; }
+  .origem-form { padding: 12px; display: grid; gap: 10px; }
+  .origem-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .origem-field label { display: block; margin-bottom: 4px; font-weight: 950; }
+  .origem-field input { width: 100%; min-height: 42px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; font-size: 1rem; font-weight: 850; }
+  .origem-total { padding: 9px 12px; background: #f8fafc; border: 1px solid #dbe4ef; border-radius: 8px; font-weight: 950; }
+  @media (max-width: 760px) {
+    .origem-topo { flex-direction: column; }
+    .origem-acoes, .origem-btn { width: 100%; }
+    .origem-dados, .origem-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="origem-wrap">
+  <div class="origem-topo">
+    <div>
+      <h1>Corrigir origem do pagamento</h1>
+      <p class="origem-sub">Compra #{{ compra.id }} - {{ compra.fornecedor.nome|default:"Fornecedor nao informado" }}</p>
+    </div>
+    <div class="origem-acoes">
+      <a class="origem-btn" href="{% url 'estoque:compras_detalhe' compra.id %}">Voltar para compra</a>
+      <a class="origem-btn" href="{% url 'estoque:caixa_banco' %}">Caixa e Banco</a>
+    </div>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="origem-aviso">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <p class="origem-aviso">
+    Esta correcao nao lanca uma nova compra. Ela cria movimentos compensatorios para reorganizar de qual conta saiu o dinheiro, mantendo o historico.
+  </p>
+
+  <section class="origem-card">
+    <h2>Resumo atual</h2>
+    <div class="origem-dados">
+      <div><strong>Total atual</strong>R$ {{ compra.total|floatformat:2 }}</div>
+      <div><strong>Caixa atual</strong>R$ {{ alocacao_atual.caixa|floatformat:2 }}</div>
+      <div><strong>Reserva atual</strong>R$ {{ alocacao_atual.reserva|floatformat:2 }}</div>
+      <div><strong>Banco/Pix atual</strong>R$ {{ alocacao_atual.banco|floatformat:2 }}</div>
+    </div>
+  </section>
+
+  <section class="origem-card">
+    <h2>Valores corretos</h2>
+    <form method="post" class="origem-form">
+      {% csrf_token %}
+      <div class="origem-grid">
+        <div class="origem-field">
+          <label>Caixa em especie</label>
+          <input type="text" name="origem_caixa" inputmode="decimal" value="{{ alocacao_atual.caixa|floatformat:2 }}">
+        </div>
+        <div class="origem-field">
+          <label>Sangria / Reserva em maos</label>
+          <input type="text" name="origem_reserva" inputmode="decimal" value="{{ alocacao_atual.reserva|floatformat:2 }}">
+        </div>
+        <div class="origem-field">
+          <label>Banco/Pix</label>
+          <input type="text" name="origem_banco" inputmode="decimal" value="{{ alocacao_atual.banco|floatformat:2 }}">
+        </div>
+      </div>
+      <div class="origem-total">A soma precisa bater com o total da compra: R$ {{ compra.total|floatformat:2 }}.</div>
+      <button type="submit" class="origem-btn primario">Salvar correcao de origem</button>
+    </form>
+  </section>
+
+  <section class="origem-card">
+    <h2>Movimentos financeiros encontrados</h2>
+    <div class="origem-dados">
+      {% for movimento in movimentos_financeiros %}
+        <div><strong>{{ movimento.conta.nome }}</strong>{{ movimento.get_tipo_display }} - R$ {{ movimento.valor|floatformat:2 }}</div>
+      {% empty %}
+        <div>Nenhum movimento financeiro vinculado pela descricao/origem.</div>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

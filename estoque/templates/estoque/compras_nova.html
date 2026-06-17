@@ -225,6 +225,10 @@
   }
   .compras-prazo-info.visivel { display:block; }
   .compras-field.oculto { display:none; }
+  .compras-origem-dinheiro { display:none; }
+  .compras-origem-dinheiro.visivel { display:block; }
+  .compras-origem-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; }
+  .compras-origem-nota { margin:8px 0 0; color:#164173; font-weight:850; font-size:.86rem; }
   .compras-table { width:100%; border-collapse:collapse; }
   .compras-table th { text-align:left; font-size:.72rem; color:#64748b; text-transform:uppercase; background:#f8fafc; padding:9px; border-bottom:1px solid #edf1f6; }
   .compras-table td { padding:8px; border-bottom:1px solid #f0f3f8; vertical-align:top; }
@@ -922,6 +926,7 @@
     }
     .compras-table-wrap { overflow:visible; }
     .produto-busca { font-size:.84rem; }
+    .compras-origem-grid { grid-template-columns:1fr; }
     .pagamento-select-real { display:none !important; }
     .pagamento-opcoes-mobile { display:grid; }
     .campo-observacao-compra { display:none !important; }
@@ -1026,6 +1031,27 @@
           <label>Observacao</label>
           <textarea name="observacao" placeholder="Observacao opcional"></textarea>
         </div>
+      </div>
+    </section>
+
+    <section class="compras-card compras-origem-dinheiro" id="origemDinheiroCompra">
+      <div class="compras-card-head">De onde saiu o dinheiro?</div>
+      <div class="compras-card-body">
+        <div class="compras-origem-grid">
+          <div class="compras-field">
+            <label>Caixa em especie</label>
+            <input type="text" name="origem_caixa" id="origemCaixaCompra" inputmode="decimal" value="0,00">
+          </div>
+          <div class="compras-field">
+            <label>Sangria / Reserva em maos</label>
+            <input type="text" name="origem_reserva" id="origemReservaCompra" inputmode="decimal" value="0,00">
+          </div>
+          <div class="compras-field">
+            <label>Banco/Pix</label>
+            <input type="text" name="origem_banco" id="origemBancoCompra" inputmode="decimal" value="0,00">
+          </div>
+        </div>
+        <p class="compras-origem-nota">A soma precisa bater com o total da compra.</p>
       </div>
     </section>
 
@@ -1135,6 +1161,11 @@
   const addMobileTbody = document.getElementById("tbodyAdicionarProdutoMobile");
   const acoesItensCompra = document.getElementById("acoesItensCompra");
   const acoesAdicionarMobile = document.getElementById("acoesAdicionarProdutoMobile");
+  const tipoPagamentoCompra = document.getElementById("tipoPagamentoCompra");
+  const origemDinheiroCompra = document.getElementById("origemDinheiroCompra");
+  const origemCaixaCompra = document.getElementById("origemCaixaCompra");
+  const origemReservaCompra = document.getElementById("origemReservaCompra");
+  const origemBancoCompra = document.getElementById("origemBancoCompra");
   const mobileQuery = window.matchMedia("(max-width: 820px)");
 
   function compraMobile() {
@@ -1238,6 +1269,20 @@
 
   function precoCampo(valor) {
     return numero(valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function compraAPrazo() {
+    const valor = String(tipoPagamentoCompra ? tipoPagamentoCompra.value : "").toLowerCase().replace(/\s/g, "");
+    return valor === "aprazo" || valor === "prazo";
+  }
+
+  function compraAVista() {
+    return tipoPagamentoCompra && tipoPagamentoCompra.value && !compraAPrazo();
+  }
+
+  function atualizarOrigemDinheiroCompra() {
+    if (!origemDinheiroCompra) return;
+    origemDinheiroCompra.classList.toggle("visivel", compraAVista());
   }
 
   function normalizarBusca(valor) {
@@ -1888,6 +1933,20 @@
         return;
       }
 
+      if (compraAVista()) {
+        const total = Math.round(numero(totalCompra ? totalCompra.textContent : "0") * 100);
+        const soma = Math.round((
+          numero(origemCaixaCompra ? origemCaixaCompra.value : "0") +
+          numero(origemReservaCompra ? origemReservaCompra.value : "0") +
+          numero(origemBancoCompra ? origemBancoCompra.value : "0")
+        ) * 100);
+        if (total <= 0 || soma !== total) {
+          event.preventDefault();
+          alert("A soma de Caixa, Sangria/Reserva e Banco/Pix precisa bater com o total da compra.");
+          return;
+        }
+      }
+
       formCompra.dataset.enviando = "1";
 
       if (compraMobile()) {
@@ -1905,6 +1964,10 @@
   }
 
   tabela.querySelectorAll(".linha-item").forEach(ligarLinha);
+  if (tipoPagamentoCompra) {
+    tipoPagamentoCompra.addEventListener("change", atualizarOrigemDinheiroCompra);
+  }
+  atualizarOrigemDinheiroCompra();
   organizarLayoutMobileCompra();
   if (typeof mobileQuery.addEventListener === "function") {
     mobileQuery.addEventListener("change", organizarLayoutMobileCompra);

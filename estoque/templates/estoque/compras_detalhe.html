@@ -368,6 +368,10 @@
       <a class="nota-compra-btn secundario" href="{% url 'estoque:contas_pagar' %}">Contas a pagar</a>
       <a class="nota-compra-btn secundario" href="{% url 'estoque:caixa_banco' %}">Caixa e Banco</a>
       <a class="nota-compra-btn secundario" href="{% url 'estoque:painel_financeiro' %}">Central Financeira</a>
+      <a class="nota-compra-btn secundario" href="{% url 'estoque:compra_corrigir_itens' compra.id %}">Corrigir itens</a>
+      {% if compra_a_vista %}
+        <a class="nota-compra-btn secundario" href="{% url 'estoque:compra_corrigir_origem_pagamento' compra.id %}">Corrigir origem</a>
+      {% endif %}
       <button type="button" class="nota-compra-btn perigo" id="btnAbrirModalExcluirCompraDetalhe">Excluir</button>
       <a class="nota-compra-btn secundario" href="{% url 'estoque:home' %}">Painel</a>
     </div>
@@ -442,6 +446,12 @@
     {% else %}
       <div style="padding:7px 10px; color:#475569; font-weight:800;">
         Compra à vista. Nenhuma conta a pagar foi gerada.
+      </div>
+      <div class="nota-compra-dados">
+        <div><strong>Caixa</strong>R$ {{ alocacao_financeira.caixa|floatformat:2 }}</div>
+        <div><strong>Sangria/Reserva</strong>R$ {{ alocacao_financeira.reserva|floatformat:2 }}</div>
+        <div><strong>Banco/Pix</strong>R$ {{ alocacao_financeira.banco|floatformat:2 }}</div>
+        <div><strong>Movimentos</strong>{{ movimentos_financeiros|length }}</div>
       </div>
     {% endif %}
   </section>
