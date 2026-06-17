@@ -1927,23 +1927,6 @@ td:first-child {
         <div class="barra-acoes-venda" aria-label="Acoes da venda">
             <div class="acoes-venda-grupo">
             <button type="button" id="btnAdicionarItemVenda" class="acao-venda-btn adicionar-item">Adicionar Item</button>
-            <div id="itensLancadosMobile" class="itens-lancados-mobile" style="display:none;">
-                <div class="itens-lancados-mobile-titulo">Itens lançados</div>
-<div id="itensLancadosMobileResumo" class="itens-lancados-mobile-resumo">
-    <div class="itens-lancados-mobile-resumo-linha">
-        <span>Itens</span>
-        <strong id="itensLancadosMobileLista">0</strong>
-    </div>
-    <div class="itens-lancados-mobile-resumo-linha">
-        <span>Subtotal</span>
-        <strong id="itensLancadosMobileSubtotal">R$ 0,00</strong>
-    </div>
-    <div class="itens-lancados-mobile-resumo-linha total">
-        <span>Total da venda</span>
-        <strong id="itensLancadosMobileTotal">R$ 0,00</strong>
-    </div>
-</div>
-            </div>
             <button type="button" id="btnGravarVenda" class="acao-venda-btn primaria">Gravar Venda</button>
             <button type="button" id="btnVisualizarVenda" class="acao-venda-btn secundaria">Visualizar Venda</button>
             <button type="button" id="btnLimparCabecalho" class="acao-venda-btn secundaria">Limpar Cabeçalho</button>
@@ -2270,12 +2253,9 @@ function renderizarHistoricoProdutoCliente(historico) {
         historicoProdutoCliente.classList.add("sem-historico");
         return;
     }
-    const quantidadeHistorico = formatarQuantidadeHistoricoProduto(historico.quantidade);
-    const unidadeHistorico = historico.unidade ? " " + historico.unidade : "";
     const precoHistorico = formatarMoedaCliente(historico.preco_unitario);
     historicoProdutoCliente.textContent =
-        `Último preço do cliente: ${precoHistorico} em ${formatarDataHistoricoProduto(historico.data_venda)} ` +
-        `(${quantidadeHistorico}${unidadeHistorico})`;
+        `Último preço do cliente: ${precoHistorico} em ${formatarDataHistoricoProduto(historico.data_venda)}`;
 }
 
 function atualizarHistoricoProdutoCliente() {
@@ -3481,57 +3461,6 @@ function coletarDadosVenda() {
 
 
 
-/* ===== JS ITENS LANCADOS MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
-const itensLancadosMobile = document.getElementById("itensLancadosMobile");
-const itensLancadosMobileLista = document.getElementById("itensLancadosMobileLista");
-const itensLancadosMobileSubtotal = document.getElementById("itensLancadosMobileSubtotal");
-const itensLancadosMobileTotal = document.getElementById("itensLancadosMobileTotal");
-
-function atualizarItensLancadosMobile() {
-    if (!itensLancadosMobile || !itensLancadosMobileLista || !tabelaBody) return;
-
-    const linhas = Array.from(tabelaBody.querySelectorAll("tr"));
-
-    if (!linhas.length) {
-        itensLancadosMobile.style.display = "none";
-        itensLancadosMobileLista.textContent = "0";
-        if (itensLancadosMobileSubtotal) itensLancadosMobileSubtotal.textContent = "R$ 0,00";
-        if (itensLancadosMobileTotal) itensLancadosMobileTotal.textContent = "R$ 0,00";
-        return;
-    }
-
-    let totalMobile = 0;
-
-    linhas.forEach((tr) => {
-        const totalTxt = tr.children[4]?.textContent?.trim() || "";
-
-        const totalNumero = parseFloat(normalizarNumeroVenda(totalTxt));
-        if (!isNaN(totalNumero)) {
-            totalMobile += totalNumero;
-        }
-    });
-
-    const totalFormatadoMobile = formatarMoedaCliente(totalMobile);
-
-    itensLancadosMobileLista.textContent = String(linhas.length);
-
-    if (itensLancadosMobileSubtotal) {
-        itensLancadosMobileSubtotal.textContent = totalFormatadoMobile;
-    }
-
-    if (itensLancadosMobileTotal) {
-        itensLancadosMobileTotal.textContent = totalFormatadoMobile;
-    }
-
-    itensLancadosMobile.style.display = "block";
-}
-
-if (tabelaBody) {
-    const observadorItensMobile = new MutationObserver(atualizarItensLancadosMobile);
-    observadorItensMobile.observe(tabelaBody, { childList: true, subtree: true });
-    atualizarItensLancadosMobile();
-}
-/* ===== FIM JS ITENS LANCADOS MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
 /* ===== JS ADICIONAR ITEM VENDA MOBILE - CHATGPT 2026-06-10 ===== */
 const btnAdicionarItemVenda = document.getElementById("btnAdicionarItemVenda");
 
@@ -3552,6 +3481,12 @@ function fecharTecladoVendaMobile() {
 }
 
 /* ===== PROXIMO PRODUTO AUTOMATICO AO ADICIONAR - CHATGPT 2026-06-10 ===== */
+function selecionarTextoProdutoBuscaSugerido() {
+    if (!produtoBusca) return;
+    produtoBusca.focus();
+    produtoBusca.setSelectionRange(0, produtoBusca.value.length);
+}
+
 function preencherProximoProdutoDepoisDeAdicionar(produtoValorAtual, produtoNomeAtual) {
     const opcoes = Array.from(produto.options).filter((opt) => opt.value && opt.textContent.trim());
 
@@ -3577,10 +3512,8 @@ function preencherProximoProdutoDepoisDeAdicionar(produtoValorAtual, produtoNome
     selecionarProduto(proximoOpt);
 
     quantidade.value = "";
-    setTimeout(() => {
-        produtoBusca.focus();
-        produtoBusca.select();
-    }, 30);
+    setTimeout(selecionarTextoProdutoBuscaSugerido, 100);
+    setTimeout(selecionarTextoProdutoBuscaSugerido, 180);
 
     return true;
 }
@@ -3664,12 +3597,6 @@ function adicionarItemVendaAtual() {
         historicoProdutoCliente.textContent = "";
 
         focarProximoCampo(produtoBusca);
-    }
-
-    atualizarItensLancadosMobile();
-
-    if (itensLancadosMobile) {
-        itensLancadosMobile.scrollIntoView({ block: "center", behavior: "smooth" });
     }
 
     mostrarToastVenda("Item adicionado na venda.");
