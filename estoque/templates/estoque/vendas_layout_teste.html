@@ -57,17 +57,17 @@
 }
     .historico-produto-cliente {
     margin-top: 6px;
-    font-size: 12.5px;
-    font-weight: 800;
+    font-size: 11.5px;
+    font-weight: 700;
     line-height: 1.25;
-    color: #1e3a8a;
+    color: #475569;
     display: none;
     width: fit-content;
     max-width: 100%;
-    padding: 6px 10px;
-    border-radius: 8px;
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
     overflow-wrap: anywhere;
 }
 .historico-produto-cliente.sem-historico {
@@ -1929,8 +1929,11 @@ td:first-child {
             <button type="button" id="btnAdicionarItemVenda" class="acao-venda-btn adicionar-item">Adicionar Item</button>
             <div id="itensLancadosMobile" class="itens-lancados-mobile" style="display:none;">
                 <div class="itens-lancados-mobile-titulo">Itens lançados</div>
-                <div id="itensLancadosMobileLista" class="itens-lancados-mobile-lista"></div>
 <div id="itensLancadosMobileResumo" class="itens-lancados-mobile-resumo">
+    <div class="itens-lancados-mobile-resumo-linha">
+        <span>Itens</span>
+        <strong id="itensLancadosMobileLista">0</strong>
+    </div>
     <div class="itens-lancados-mobile-resumo-linha">
         <span>Subtotal</span>
         <strong id="itensLancadosMobileSubtotal">R$ 0,00</strong>
@@ -2271,8 +2274,8 @@ function renderizarHistoricoProdutoCliente(historico) {
     const unidadeHistorico = historico.unidade ? " " + historico.unidade : "";
     const precoHistorico = formatarMoedaCliente(historico.preco_unitario);
     historicoProdutoCliente.textContent =
-        `Última compra deste cliente: Venda #${historico.venda_id} em ${formatarDataHistoricoProduto(historico.data_venda)} - ` +
-        `${quantidadeHistorico}${unidadeHistorico} - ${precoHistorico}`;
+        `Último preço do cliente: ${precoHistorico} em ${formatarDataHistoricoProduto(historico.data_venda)} ` +
+        `(${quantidadeHistorico}${unidadeHistorico})`;
 }
 
 function atualizarHistoricoProdutoCliente() {
@@ -3491,41 +3494,26 @@ function atualizarItensLancadosMobile() {
 
     if (!linhas.length) {
         itensLancadosMobile.style.display = "none";
-        itensLancadosMobileLista.innerHTML = "";
+        itensLancadosMobileLista.textContent = "0";
         if (itensLancadosMobileSubtotal) itensLancadosMobileSubtotal.textContent = "R$ 0,00";
         if (itensLancadosMobileTotal) itensLancadosMobileTotal.textContent = "R$ 0,00";
         return;
     }
 
-    itensLancadosMobileLista.innerHTML = "";
     let totalMobile = 0;
 
     linhas.forEach((tr) => {
-        const produtoTxt = tr.children[0]?.textContent?.trim() || "";
-        const qtdTxt = tr.children[1]?.textContent?.trim() || "";
-        const unidadeTxt = tr.children[2]?.textContent?.trim() || "";
-        const precoTxt = tr.children[3]?.textContent?.trim() || "";
         const totalTxt = tr.children[4]?.textContent?.trim() || "";
 
         const totalNumero = parseFloat(normalizarNumeroVenda(totalTxt));
         if (!isNaN(totalNumero)) {
             totalMobile += totalNumero;
         }
-
-        const card = document.createElement("div");
-        card.className = "item-lancado-mobile-card";
-        card.innerHTML = `
-            <div class="item-lancado-mobile-produto">${produtoTxt}</div>
-            <div class="item-lancado-mobile-info">
-                <span>${qtdTxt} ${unidadeTxt} x ${precoTxt}</span>
-                <span class="item-lancado-mobile-total">${totalTxt}</span>
-            </div>
-        `;
-
-        itensLancadosMobileLista.appendChild(card);
     });
 
-    const totalFormatadoMobile = "R$ " + totalMobile.toFixed(2);
+    const totalFormatadoMobile = formatarMoedaCliente(totalMobile);
+
+    itensLancadosMobileLista.textContent = String(linhas.length);
 
     if (itensLancadosMobileSubtotal) {
         itensLancadosMobileSubtotal.textContent = totalFormatadoMobile;
@@ -3589,8 +3577,10 @@ function preencherProximoProdutoDepoisDeAdicionar(produtoValorAtual, produtoNome
     selecionarProduto(proximoOpt);
 
     quantidade.value = "";
-    quantidade.focus();
-    quantidade.select();
+    setTimeout(() => {
+        produtoBusca.focus();
+        produtoBusca.select();
+    }, 30);
 
     return true;
 }
