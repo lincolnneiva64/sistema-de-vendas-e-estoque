@@ -1143,6 +1143,60 @@ class MovimentoFinanceiro(models.Model):
         return f"{self.get_tipo_display()} R$ {self.valor} - {self.conta}"
 
 
+class EmprestimoRapido(models.Model):
+    STATUS_ABERTO = "aberto"
+    STATUS_QUITADO = "quitado"
+    STATUS_CHOICES = [
+        (STATUS_ABERTO, "Aberto"),
+        (STATUS_QUITADO, "Quitado"),
+    ]
+
+    pessoa_nome = models.CharField(max_length=150)
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+    data_emprestimo = models.DateField()
+    previsao_devolucao = models.DateField(blank=True, null=True)
+    conta_saida = models.ForeignKey(
+        ContaFinanceira,
+        on_delete=models.PROTECT,
+        related_name="emprestimos_rapidos_saida",
+    )
+    observacao = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ABERTO)
+    data_quitacao = models.DateField(blank=True, null=True)
+    conta_entrada_quitacao = models.ForeignKey(
+        ContaFinanceira,
+        on_delete=models.PROTECT,
+        blank=True,
+        null=True,
+        related_name="emprestimos_rapidos_quitacao",
+    )
+    valor_devolvido = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
+    observacao_quitacao = models.TextField(blank=True)
+    operador = models.CharField(max_length=120, blank=True)
+    operador_quitacao = models.CharField(max_length=120, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["status", "-data_emprestimo", "-id"]
+
+    def clean(self):
+        if self.valor is not None and self.valor <= 0:
+            raise ValidationError("O valor do emprestimo deve ser maior que zero.")
+        if self.valor_devolvido is not None and self.valor_devolvido < 0:
+            raise ValidationError("O valor devolvido nao pode ser negativo.")
+        if self.status == self.STATUS_QUITADO:
+            if not self.data_quitacao:
+                raise ValidationError("Informe a data de quitacao.")
+            if not self.conta_entrada_quitacao_id:
+                raise ValidationError("Informe a conta de entrada da devolucao.")
+            if self.valor_devolvido != self.valor:
+                raise ValidationError("Na primeira versao, a devolucao deve ser igual ao valor emprestado.")
+
+    def __str__(self):
+        return f"{self.pessoa_nome} - R$ {self.valor} - {self.get_status_display()}"
+
+
 class EmprestimoDivida(models.Model):
     TIPO_EMPRESTIMO_RECEBIDO = "emprestimo_recebido"
     TIPO_DIVIDA_AVULSA = "divida_avulsa"

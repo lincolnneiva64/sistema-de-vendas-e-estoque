@@ -1,0 +1,196 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Emprestimos rapidos{% endblock %}
+
+{% block content %}
+<style>
+  .er-page { max-width: 1180px; margin: 10px auto 70px; padding: 0 14px; color: #172033; }
+  .er-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 12px; }
+  .er-title { margin: 0; font-size: 1.45rem; font-weight: 950; }
+  .er-subtitle { margin: 4px 0 0; color: #475569; font-weight: 750; line-height: 1.35; }
+  .er-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .er-btn { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #7ea6d9; border-radius: 9px; padding: 8px 13px; background: #dbeafe; color: #164173; font: inherit; font-weight: 900; text-decoration: none; cursor: pointer; }
+  .er-btn-primary { border-color: #1d4ed8; background: #2563eb; color: #fff; }
+  .er-btn-success { border-color: #16a34a; background: #16a34a; color: #fff; }
+  .er-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .er-card, .er-form-card, .er-history { border: 1px solid #e1e7ef; border-radius: 10px; background: #fff; box-shadow: 0 10px 22px rgba(15,23,42,.05); }
+  .er-card { padding: 12px 14px; border-left: 5px solid #2563eb; }
+  .er-card.aberto { border-left-color: #ca8a04; background: #fffbeb; }
+  .er-card.quitado { border-left-color: #16a34a; background: #f0fdf4; }
+  .er-label { color: #64748b; font-size: .76rem; font-weight: 900; text-transform: uppercase; }
+  .er-value { margin-top: 6px; color: #172033; font-size: 1.15rem; font-weight: 950; }
+  .er-alert { margin-bottom: 10px; border-radius: 10px; padding: 9px 11px; font-weight: 850; }
+  .er-alert.success { border: 1px solid #b7e4c7; background: #ecfdf3; color: #166534; }
+  .er-alert.error { border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; }
+  .er-grid { display: grid; grid-template-columns: .85fr 1.15fr; gap: 10px; align-items: start; }
+  .er-form-card { padding: 12px; }
+  .er-form-title { margin: 0 0 4px; font-size: 1.02rem; font-weight: 950; }
+  .er-form-subtitle { margin: 0 0 10px; color: #64748b; font-size: .84rem; font-weight: 750; }
+  .er-field { margin-bottom: 9px; }
+  .er-field label { display: block; margin-bottom: 4px; color: #334155; font-size: .82rem; font-weight: 900; }
+  .er-field input, .er-field select, .er-field textarea { width: 100%; min-height: 40px; border: 1.5px solid #cbd5e1; border-radius: 9px; padding: 8px 10px; font: inherit; font-weight: 750; box-sizing: border-box; }
+  .er-field textarea { min-height: 68px; resize: vertical; }
+  .er-history { overflow: hidden; }
+  .er-history-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 11px 12px; border-bottom: 1px solid #e1e7ef; background: #f8fafc; }
+  .er-history-title { margin: 0; font-size: 1rem; font-weight: 950; }
+  .er-list { display: grid; gap: 8px; padding: 10px; }
+  .er-item { border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; padding: 10px; }
+  .er-item-top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+  .er-item-name { font-weight: 950; color: #0f172a; }
+  .er-status { border-radius: 999px; padding: 4px 8px; font-size: .75rem; font-weight: 950; background: #fffbeb; color: #92400e; }
+  .er-status.quitado { background: #dcfce7; color: #166534; }
+  .er-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 8px; color: #334155; font-size: .85rem; font-weight: 750; }
+  .er-meta strong { display: block; color: #64748b; font-size: .68rem; text-transform: uppercase; }
+  .er-quitacao { margin-top: 10px; border-top: 1px solid #e2e8f0; padding-top: 10px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; align-items: end; }
+  .er-empty { padding: 20px; color: #64748b; font-weight: 850; text-align: center; }
+  @media (max-width: 900px) {
+    .er-header { flex-direction: column; align-items: stretch; }
+    .er-actions { justify-content: stretch; }
+    .er-actions .er-btn { flex: 1; }
+    .er-summary, .er-grid, .er-meta, .er-quitacao { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="er-page">
+  <header class="er-header">
+    <div>
+      <h1 class="er-title">Emprestimos rapidos</h1>
+      <p class="er-subtitle">Registre dinheiro emprestado temporariamente e a devolucao sem transformar em despesa definitiva.</p>
+    </div>
+    <div class="er-actions">
+      <a class="er-btn" href="{% url 'estoque:caixa_banco' %}">Caixa e Banco</a>
+      <a class="er-btn" href="{% url 'estoque:painel_financeiro' %}">Central Financeira</a>
+    </div>
+  </header>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="er-alert {% if message.tags == 'error' %}error{% else %}success{% endif %}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <section class="er-summary">
+    <div class="er-card aberto"><div class="er-label">Total em aberto</div><div class="er-value">R$ {{ total_aberto|floatformat:2 }}</div></div>
+    <div class="er-card"><div class="er-label">Em aberto</div><div class="er-value">{{ quantidade_abertos }}</div></div>
+    <div class="er-card quitado"><div class="er-label">Quitado hoje</div><div class="er-value">R$ {{ total_quitado_hoje|floatformat:2 }}</div></div>
+  </section>
+
+  <div class="er-grid">
+    <section class="er-form-card">
+      <h2 class="er-form-title">Emprestar dinheiro</h2>
+      <p class="er-form-subtitle">Cria uma saida rastreavel no Caixa/Banco e deixa o valor em aberto.</p>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="criar">
+        <div class="er-field">
+          <label>Pessoa</label>
+          <input type="text" name="pessoa_nome" required autocomplete="off">
+        </div>
+        <div class="er-field">
+          <label>Valor</label>
+          <input type="text" name="valor" inputmode="decimal" required placeholder="0,00">
+        </div>
+        <div class="er-field">
+          <label>Saiu de</label>
+          <select name="conta_saida" required>
+            <option value="">Selecione...</option>
+            <option value="caixa">Caixa em especie</option>
+            <option value="reserva">Sangria / Reserva em maos</option>
+            <option value="banco">Banco/Pix</option>
+          </select>
+        </div>
+        <div class="er-field">
+          <label>Data do emprestimo</label>
+          <input type="date" name="data_emprestimo" value="{{ hoje|date:'Y-m-d' }}">
+        </div>
+        <div class="er-field">
+          <label>Previsao de devolucao</label>
+          <input type="date" name="previsao_devolucao">
+        </div>
+        <div class="er-field">
+          <label>Operador / responsavel</label>
+          <select name="operador" required>
+            <option value="">Selecione...</option>
+            {% for operador in operadores_caixa %}
+              <option value="{{ operador.id }}">{{ operador.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="er-field">
+          <label>Observacao</label>
+          <textarea name="observacao" placeholder="Ex.: Emprestimo via Pix as 13:25"></textarea>
+        </div>
+        <button type="submit" class="er-btn er-btn-primary">Salvar emprestimo</button>
+      </form>
+    </section>
+
+    <section class="er-history">
+      <div class="er-history-head">
+        <h2 class="er-history-title">Lista de emprestimos</h2>
+      </div>
+      <div class="er-list">
+        {% for emprestimo in emprestimos %}
+          <article class="er-item">
+            <div class="er-item-top">
+              <div>
+                <div class="er-item-name">#{{ emprestimo.id }} - {{ emprestimo.pessoa_nome }}</div>
+                {% if emprestimo.observacao %}<div style="color:#64748b; font-weight:750; margin-top:3px;">{{ emprestimo.observacao }}</div>{% endif %}
+              </div>
+              <span class="er-status {% if emprestimo.status == 'quitado' %}quitado{% endif %}">{{ emprestimo.get_status_display }}</span>
+            </div>
+            <div class="er-meta">
+              <div><strong>Valor</strong>R$ {{ emprestimo.valor|floatformat:2 }}</div>
+              <div><strong>Saida</strong>{{ emprestimo.conta_saida.nome }}</div>
+              <div><strong>Data</strong>{{ emprestimo.data_emprestimo|date:"d/m/Y" }}</div>
+              <div><strong>Previsao</strong>{{ emprestimo.previsao_devolucao|date:"d/m/Y"|default:"-" }}</div>
+              <div><strong>Operador</strong>{{ emprestimo.operador|default:"-" }}</div>
+              {% if emprestimo.status == 'quitado' %}
+                <div><strong>Devolucao</strong>{{ emprestimo.data_quitacao|date:"d/m/Y" }} - {{ emprestimo.conta_entrada_quitacao.nome }}</div>
+              {% endif %}
+            </div>
+            {% if emprestimo.status == 'aberto' %}
+              <form method="post" class="er-quitacao">
+                {% csrf_token %}
+                <input type="hidden" name="acao" value="quitar">
+                <input type="hidden" name="emprestimo_id" value="{{ emprestimo.id }}">
+                <div class="er-field">
+                  <label>Valor devolvido</label>
+                  <input type="text" name="valor_devolvido" inputmode="decimal" value="{{ emprestimo.valor|floatformat:2 }}" required>
+                </div>
+                <div class="er-field">
+                  <label>Entrou em</label>
+                  <select name="conta_entrada_quitacao" required>
+                    <option value="">Selecione...</option>
+                    <option value="caixa">Caixa em especie</option>
+                    <option value="reserva">Sangria / Reserva em maos</option>
+                    <option value="banco" {% if emprestimo.conta_saida_chave == 'banco' %}selected{% endif %}>Banco/Pix</option>
+                  </select>
+                </div>
+                <div class="er-field">
+                  <label>Data</label>
+                  <input type="date" name="data_quitacao" value="{{ hoje|date:'Y-m-d' }}">
+                </div>
+                <div class="er-field">
+                  <label>Operador</label>
+                  <select name="operador" required>
+                    <option value="">Selecione...</option>
+                    {% for operador in operadores_caixa %}
+                      <option value="{{ operador.id }}">{{ operador.nome }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="er-field">
+                  <label>Observacao</label>
+                  <input type="text" name="observacao_quitacao" placeholder="Opcional">
+                </div>
+                <button type="submit" class="er-btn er-btn-success">Receber devolucao</button>
+              </form>
+            {% endif %}
+          </article>
+        {% empty %}
+          <div class="er-empty">Nenhum emprestimo rapido registrado.</div>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

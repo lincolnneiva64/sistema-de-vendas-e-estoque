@@ -472,6 +472,7 @@
       <p class="caixa-subtitle">Use Receber cliente, Despesa Diaria, Contas a pagar e Compras para os movimentos normais. Use esta tela para troco, sangria, deposito, reserva e conferencia.</p>
     </div>
     <nav class="caixa-actions" aria-label="Navegacao de Caixa e Banco">
+      <a class="caixa-btn" href="{% url 'estoque:emprestimos_rapidos' %}">Emprestimos rapidos</a>
       <a class="caixa-btn" href="{% url 'estoque:painel_financeiro' %}">Voltar para Central Financeira</a>
       <a class="caixa-btn" href="{% url 'estoque:home' %}">Home</a>
     </nav>
@@ -500,6 +501,15 @@
       <div class="caixa-label">Total disponivel</div>
       <div class="caixa-value">{{ total_disponivel_texto }}</div>
     </article>
+  </section>
+
+  <section class="caixa-form-card" style="margin-bottom:12px;">
+    <h2 class="caixa-form-title">Emprestimo rapido / Vale temporario</h2>
+    <p class="caixa-form-help">Dinheiro emprestado temporariamente para terceiro, com devolucao rastreavel no Caixa/Banco.</p>
+    <div class="caixa-form-actions" style="justify-content:space-between; align-items:center;">
+      <strong>{{ emprestimos_rapidos_abertos_qtd }} aberto(s) - {{ emprestimos_rapidos_total_aberto_texto }}</strong>
+      <a class="caixa-btn caixa-btn-primary" href="{% url 'estoque:emprestimos_rapidos' %}">Emprestar dinheiro / ver abertos</a>
+    </div>
   </section>
 
   <p class="caixa-reserva-help">Use a sangria quando retirar dinheiro do caixa para guardar como reserva. Esse dinheiro continua sendo da empresa e pode depois ser depositado no banco, voltar para o caixa ou ser usado para pagar alguma despesa/compra.</p>

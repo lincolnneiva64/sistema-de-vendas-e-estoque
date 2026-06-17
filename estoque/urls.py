@@ -48,6 +48,7 @@ urlpatterns = [
     path("contas-a-receber/", views.contas_receber, name="contas_receber"),
     path("contas-a-pagar/", views.contas_pagar, name="contas_pagar"),
     path("contas-a-pagar/abertas/", views.contas_pagar_abertas_geral, name="contas_pagar_abertas_geral"),
+    path("emprestimos-rapidos/", views.emprestimos_rapidos, name="emprestimos_rapidos"),
     path("emprestimos-dividas/", views.emprestimos_dividas, name="emprestimos_dividas"),
     path("emprestimos-dividas/nova/", views.emprestimo_divida_nova, name="emprestimo_divida_nova"),
     path("emprestimos-dividas/<int:pk>/", views.emprestimo_divida_detalhe, name="emprestimo_divida_detalhe"),

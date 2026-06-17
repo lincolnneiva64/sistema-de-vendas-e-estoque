@@ -25,7 +25,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PagamentoContaPagar, PagamentoEmprestimoDivida, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PagamentoContaPagar, PagamentoEmprestimoDivida, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -2169,6 +2169,10 @@ def caixa_banco(request):
         ).aggregate(total=Sum("valor"))["total"]
     )
     movimentos_reserva = list(movimentos_reserva_qs.order_by("-data", "-id")[:20])
+    emprestimos_rapidos_abertos = EmprestimoRapido.objects.filter(status=EmprestimoRapido.STATUS_ABERTO)
+    emprestimos_rapidos_total_aberto = _financeiro_dinheiro(
+        emprestimos_rapidos_abertos.aggregate(total=Sum("valor"))["total"]
+    )
     for movimento in movimentos_reserva:
         movimento.valor_texto = _financeiro_moeda_br(movimento.valor)
         movimento.operador_texto = movimento.operador or "não informado"
@@ -2197,6 +2201,8 @@ def caixa_banco(request):
             "saidas_reserva_hoje_texto": _financeiro_moeda_br(saidas_reserva_hoje),
             "depositos_reserva_banco_hoje_texto": _financeiro_moeda_br(depositos_reserva_banco_hoje),
             "movimentos_reserva": movimentos_reserva,
+            "emprestimos_rapidos_abertos_qtd": emprestimos_rapidos_abertos.count(),
+            "emprestimos_rapidos_total_aberto_texto": _financeiro_moeda_br(emprestimos_rapidos_total_aberto),
         },
     )
 
@@ -2222,6 +2228,188 @@ def caixa_banco_editar_descricao_movimento(request, movimento_id):
         {
             "movimento": movimento,
             "retorno_url": retorno_url,
+        },
+    )
+
+
+def _conta_financeira_por_chave(chave):
+    chave = (chave or "").strip().lower()
+    if chave not in {"caixa", "reserva", "banco"}:
+        return None
+    return _conta_financeira_padrao(chave)
+
+
+def _contas_emprestimo_rapido():
+    return {
+        "caixa": _conta_financeira_padrao("caixa"),
+        "reserva": _conta_financeira_padrao("reserva"),
+        "banco": _conta_financeira_padrao("banco"),
+    }
+
+
+def _conta_chave(conta):
+    if not conta:
+        return ""
+    nome_normalizado = normalizar_texto_cliente(conta.nome)
+    if "reserva" in nome_normalizado or "sangria" in nome_normalizado:
+        return "reserva"
+    if "banco" in nome_normalizado or "pix" in nome_normalizado:
+        return "banco"
+    return "caixa"
+
+
+def _emprestimo_rapido_descricao(emprestimo, acao, conta):
+    pessoa = emprestimo.pessoa_nome or "Pessoa nao informada"
+    if acao == "saida":
+        return f"Emprestimo rapido #{emprestimo.id} para {pessoa} - saida via {conta.nome}"[:255]
+    return f"Devolucao de emprestimo rapido #{emprestimo.id} de {pessoa} - entrada via {conta.nome}"[:255]
+
+
+def emprestimos_rapidos(request):
+    _garantir_contas_financeiras_padrao()
+    contas = _contas_emprestimo_rapido()
+    operadores_caixa = list(Funcionario.operadores_do_caixa().only("id", "nome"))
+    operadores_caixa_por_id = {str(funcionario.id): funcionario for funcionario in operadores_caixa}
+
+    def operador_post():
+        funcionario = operadores_caixa_por_id.get(request.POST.get("operador", "").strip())
+        if not funcionario:
+            messages.error(request, "Selecione um operador autorizado para movimentar Caixa/Banco.")
+            return None
+        return funcionario.nome
+
+    if request.method == "POST":
+        acao = request.POST.get("acao", "").strip()
+
+        if acao == "criar":
+            pessoa_nome = (request.POST.get("pessoa_nome") or "").strip()
+            valor = _parse_decimal_financeiro(request.POST.get("valor"))
+            data_emprestimo = parse_date(request.POST.get("data_emprestimo") or "") or timezone.localdate()
+            previsao_devolucao = parse_date(request.POST.get("previsao_devolucao") or "")
+            conta_saida = _conta_financeira_por_chave(request.POST.get("conta_saida"))
+            observacao = (request.POST.get("observacao") or "").strip()
+            operador = operador_post()
+            if operador is None:
+                return redirect("estoque:emprestimos_rapidos")
+            if not pessoa_nome:
+                messages.error(request, "Informe a pessoa que recebeu o emprestimo.")
+                return redirect("estoque:emprestimos_rapidos")
+            if valor is None or valor <= 0:
+                messages.error(request, "Informe um valor maior que zero.")
+                return redirect("estoque:emprestimos_rapidos")
+            if not conta_saida:
+                messages.error(request, "Selecione a conta de saida.")
+                return redirect("estoque:emprestimos_rapidos")
+            if _saldo_conta_financeira(conta_saida) < valor:
+                messages.error(request, f"Saldo insuficiente em {conta_saida.nome}.")
+                return redirect("estoque:emprestimos_rapidos")
+
+            with transaction.atomic():
+                emprestimo = EmprestimoRapido.objects.create(
+                    pessoa_nome=pessoa_nome,
+                    valor=valor,
+                    data_emprestimo=data_emprestimo,
+                    previsao_devolucao=previsao_devolucao,
+                    conta_saida=conta_saida,
+                    observacao=observacao,
+                    operador=operador,
+                )
+                MovimentoFinanceiro.objects.create(
+                    conta=conta_saida,
+                    tipo=MovimentoFinanceiro.TIPO_SAIDA,
+                    valor=valor,
+                    data=data_emprestimo,
+                    descricao=_emprestimo_rapido_descricao(emprestimo, "saida", conta_saida),
+                    operador=operador,
+                    origem="emprestimo_rapido",
+                )
+            messages.success(request, f"Emprestimo rapido #{emprestimo.id} registrado com sucesso.")
+            return redirect("estoque:emprestimos_rapidos")
+
+        if acao == "quitar":
+            operador = operador_post()
+            if operador is None:
+                return redirect("estoque:emprestimos_rapidos")
+            valor_devolvido = _parse_decimal_financeiro(request.POST.get("valor_devolvido"))
+            data_quitacao = parse_date(request.POST.get("data_quitacao") or "") or timezone.localdate()
+            conta_entrada = _conta_financeira_por_chave(request.POST.get("conta_entrada_quitacao"))
+            observacao_quitacao = (request.POST.get("observacao_quitacao") or "").strip()
+
+            with transaction.atomic():
+                emprestimo = get_object_or_404(
+                    EmprestimoRapido.objects.select_for_update(),
+                    pk=request.POST.get("emprestimo_id"),
+                )
+                if emprestimo.status == EmprestimoRapido.STATUS_QUITADO:
+                    messages.error(request, "Este emprestimo rapido ja foi quitado.")
+                    return redirect("estoque:emprestimos_rapidos")
+                if valor_devolvido is None or valor_devolvido <= 0:
+                    messages.error(request, "Informe um valor devolvido maior que zero.")
+                    return redirect("estoque:emprestimos_rapidos")
+                if valor_devolvido != emprestimo.valor:
+                    messages.error(request, "Nesta primeira versao, a devolucao precisa ser igual ao valor emprestado.")
+                    return redirect("estoque:emprestimos_rapidos")
+                if not conta_entrada:
+                    messages.error(request, "Selecione a conta de entrada da devolucao.")
+                    return redirect("estoque:emprestimos_rapidos")
+
+                MovimentoFinanceiro.objects.create(
+                    conta=conta_entrada,
+                    tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+                    valor=valor_devolvido,
+                    data=data_quitacao,
+                    descricao=_emprestimo_rapido_descricao(emprestimo, "entrada", conta_entrada),
+                    operador=operador,
+                    origem="emprestimo_rapido",
+                )
+                emprestimo.status = EmprestimoRapido.STATUS_QUITADO
+                emprestimo.data_quitacao = data_quitacao
+                emprestimo.conta_entrada_quitacao = conta_entrada
+                emprestimo.valor_devolvido = valor_devolvido
+                emprestimo.observacao_quitacao = observacao_quitacao
+                emprestimo.operador_quitacao = operador
+                emprestimo.save(update_fields=[
+                    "status",
+                    "data_quitacao",
+                    "conta_entrada_quitacao",
+                    "valor_devolvido",
+                    "observacao_quitacao",
+                    "operador_quitacao",
+                    "atualizado_em",
+                ])
+            messages.success(request, f"Devolucao do emprestimo rapido #{emprestimo.id} registrada com sucesso.")
+            return redirect("estoque:emprestimos_rapidos")
+
+    hoje = timezone.localdate()
+    emprestimos = (
+        EmprestimoRapido.objects
+        .select_related("conta_saida", "conta_entrada_quitacao")
+        .order_by("status", "-data_emprestimo", "-id")
+    )
+    total_aberto = _financeiro_dinheiro(
+        emprestimos.filter(status=EmprestimoRapido.STATUS_ABERTO).aggregate(total=Sum("valor"))["total"]
+    )
+    total_quitado_hoje = _financeiro_dinheiro(
+        emprestimos
+        .filter(status=EmprestimoRapido.STATUS_QUITADO, data_quitacao=hoje)
+        .aggregate(total=Sum("valor_devolvido"))["total"]
+    )
+    quantidade_abertos = emprestimos.filter(status=EmprestimoRapido.STATUS_ABERTO).count()
+
+    for emprestimo in emprestimos:
+        emprestimo.conta_saida_chave = _conta_chave(emprestimo.conta_saida)
+
+    return render(
+        request,
+        "estoque/emprestimos_rapidos.html",
+        {
+            "emprestimos": emprestimos,
+            "contas": contas,
+            "operadores_caixa": operadores_caixa,
+            "hoje": hoje,
+            "total_aberto": total_aberto,
+            "total_quitado_hoje": total_quitado_hoje,
+            "quantidade_abertos": quantidade_abertos,
         },
     )
 
