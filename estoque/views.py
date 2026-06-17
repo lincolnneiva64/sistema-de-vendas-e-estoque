@@ -1618,39 +1618,116 @@ def _conta_financeira_venda_a_vista(tipo_pagamento):
     return _conta_financeira_por_forma_pagamento(tipo_pagamento)
 
 
-def _registrar_movimento_venda_a_vista(venda):
+def _descricao_venda_a_vista(venda, conta=None):
+    cliente_nome = venda.cliente.nome if venda.cliente else "Cliente nao informado"
+    descricao = f"Venda a vista #{venda.id} - {cliente_nome}"
+    if conta:
+        if conta.nome == "Banco/Pix":
+            descricao = f"{descricao} - Banco/Pix"
+        else:
+            descricao = f"{descricao} - Dinheiro/Caixa"
+    return descricao[:255]
+
+
+def _movimentos_financeiros_venda(venda):
+    return (
+        MovimentoFinanceiro.objects
+        .select_related("conta", "conta_destino")
+        .filter(
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            origem="venda",
+            descricao__startswith=f"Venda a vista #{venda.id}",
+        )
+        .order_by("id")
+    )
+
+
+def _alocacao_financeira_venda(venda):
+    contas = {
+        "caixa": _conta_financeira_padrao("caixa"),
+        "banco": _conta_financeira_padrao("banco"),
+    }
+    alocacao = {chave: Decimal("0.00") for chave in contas}
+    conta_para_chave = {conta.pk: chave for chave, conta in contas.items() if conta}
+
+    for movimento in _movimentos_financeiros_venda(venda):
+        chave = conta_para_chave.get(movimento.conta_id)
+        if not chave:
+            continue
+        alocacao[chave] += _financeiro_dinheiro(movimento.valor).quantize(Decimal("0.01"))
+
+    return alocacao
+
+
+def _valores_origem_venda_post(dados):
+    origem = dados.get("origem_recebimento") or {}
+    valores = {
+        "caixa": (_parse_decimal_financeiro(origem.get("caixa")) or Decimal("0.00")).quantize(Decimal("0.01")),
+        "banco": (_parse_decimal_financeiro(origem.get("banco")) or Decimal("0.00")).quantize(Decimal("0.01")),
+    }
+    if any(valor < Decimal("0.00") for valor in valores.values()):
+        raise ValueError("Os valores de origem do recebimento nao podem ser negativos.")
+    if not any(valor > Decimal("0.00") for valor in valores.values()):
+        raise ValueError("Informe pelo menos uma origem do recebimento com valor maior que zero.")
+    return valores
+
+
+def _validar_origem_venda_a_vista(valores, total):
+    total = _financeiro_dinheiro(total).quantize(Decimal("0.01"))
+    soma = sum(valores.values(), Decimal("0.00")).quantize(Decimal("0.01"))
+    if soma != total:
+        raise ValueError(
+            f"A soma das origens precisa bater com o total da venda. Soma: {_financeiro_moeda_br(soma)}. Total: {_financeiro_moeda_br(total)}."
+        )
+
+
+def _registrar_movimentos_venda_a_vista(venda, valores_origem=None):
     if not _venda_pagamento_imediato(venda.tipo_pagamento):
-        return None
+        return []
 
     valor = _financeiro_dinheiro(venda.total).quantize(Decimal("0.01"))
     if valor <= Decimal("0.00"):
-        return None
+        return []
 
-    descricao_base = f"Venda a vista #{venda.id}"
-    if venda.cliente:
-        descricao_base = f"{descricao_base} - {venda.cliente.nome}"
+    movimentos_existentes = list(_movimentos_financeiros_venda(venda))
+    if movimentos_existentes:
+        return movimentos_existentes
 
-    movimento_existente = MovimentoFinanceiro.objects.filter(
-        tipo=MovimentoFinanceiro.TIPO_ENTRADA,
-        origem="venda",
-        descricao__startswith=f"Venda a vista #{venda.id}",
-    ).first()
-    if movimento_existente:
-        return movimento_existente
+    contas = {
+        "caixa": _conta_financeira_padrao("caixa"),
+        "banco": _conta_financeira_padrao("banco"),
+    }
+    if valores_origem is None:
+        conta = _conta_financeira_venda_a_vista(venda.tipo_pagamento)
+        chave = "banco"
+        if conta and contas["caixa"] and conta.pk == contas["caixa"].pk:
+            chave = "caixa"
+        valores_origem = {"caixa": Decimal("0.00"), "banco": Decimal("0.00")}
+        valores_origem[chave] = valor
 
-    conta_financeira = _conta_financeira_venda_a_vista(venda.tipo_pagamento)
-    if not conta_financeira:
-        return None
+    movimentos = []
+    for chave, valor_origem in valores_origem.items():
+        valor_origem = _financeiro_dinheiro(valor_origem).quantize(Decimal("0.01"))
+        if valor_origem <= Decimal("0.00"):
+            continue
+        conta_financeira = contas.get(chave)
+        if not conta_financeira:
+            continue
+        movimentos.append(MovimentoFinanceiro.objects.create(
+            conta=conta_financeira,
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            valor=valor_origem,
+            data=venda.data_venda or timezone.localdate(),
+            descricao=_descricao_venda_a_vista(venda, conta_financeira),
+            operador=venda.operador or "",
+            origem="venda",
+        ))
+    return movimentos
 
-    return MovimentoFinanceiro.objects.create(
-        conta=conta_financeira,
-        tipo=MovimentoFinanceiro.TIPO_ENTRADA,
-        valor=valor,
-        data=venda.data_venda or timezone.localdate(),
-        descricao=descricao_base[:255],
-        operador=venda.operador or "",
-        origem="venda",
-    )
+
+def _registrar_movimento_venda_a_vista(venda):
+    movimentos = _registrar_movimentos_venda_a_vista(venda)
+    return movimentos[0] if movimentos else None
 
 
 def _registrar_movimento_conta_pagar_fornecedor(conta, valor_pago, data_pagamento, forma_pagamento):
@@ -7466,6 +7543,15 @@ def gravar_venda(request):
             "valor_total": valor_total,
         })
 
+    tipo_pagamento_venda = str(dados.get("tipo_pagamento") or "").strip()
+    valores_origem_venda = None
+    if _venda_pagamento_imediato(tipo_pagamento_venda):
+        try:
+            valores_origem_venda = _valores_origem_venda_post(dados)
+            _validar_origem_venda_a_vista(valores_origem_venda, total_calculado.quantize(Decimal("0.01")))
+        except ValueError as exc:
+            return JsonResponse({"sucesso": False, "mensagem": str(exc)}, status=400)
+
     pedido_pendencias_estoque = []
     try:
         with transaction.atomic():
@@ -7586,7 +7672,7 @@ def gravar_venda(request):
                 cliente=cliente,
                 data_venda=data_venda,
                 data_vencimento=data_vencimento,
-                tipo_pagamento=str(dados.get("tipo_pagamento") or "").strip(),
+                tipo_pagamento=tipo_pagamento_venda,
                 operador=str(dados.get("operador") or "").strip(),
                 total=total_venda.quantize(Decimal("0.01")),
             )
@@ -7604,7 +7690,12 @@ def gravar_venda(request):
                 usuario=venda.operador,
             )
             _sincronizar_conta_receber(venda, "venda gravada")
-            _registrar_movimento_venda_a_vista(venda)
+            if _venda_pagamento_imediato(venda.tipo_pagamento):
+                if valores_origem_venda is None:
+                    _registrar_movimento_venda_a_vista(venda)
+                else:
+                    _validar_origem_venda_a_vista(valores_origem_venda, venda.total)
+                    _registrar_movimentos_venda_a_vista(venda, valores_origem_venda)
 
             if pedido_origem:
                 if pedido_pendencias_estoque:
@@ -7804,6 +7895,9 @@ def venda_detalhe(request, pk):
             "contexto_venda_quitada": contexto_venda_quitada,
             "ajustes_itens_quitados_pendentes": ajustes_itens_quitados_pendentes,
             "venda_a_prazo": _venda_a_prazo(venda),
+            "venda_a_vista": _venda_pagamento_imediato(venda.tipo_pagamento),
+            "alocacao_financeira_venda": _alocacao_financeira_venda(venda),
+            "movimentos_financeiros_venda": _movimentos_financeiros_venda(venda),
             "retorno_url": retorno_url,
             "retorno_querystring": _querystring_retorno(retorno_url),
             "modo_pendencia_resolvida": modo_pendencia_resolvida,

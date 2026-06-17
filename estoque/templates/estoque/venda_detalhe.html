@@ -1886,6 +1886,13 @@
                             <div class="conta-receber-info">
                                 Venda a vista: nao gera conta a receber.
                             </div>
+                            {% if venda_a_vista %}
+                                <div class="conta-receber-info">
+                                    Caixa: R$ {{ alocacao_financeira_venda.caixa|floatformat:2 }} -
+                                    Banco/Pix: R$ {{ alocacao_financeira_venda.banco|floatformat:2 }} -
+                                    Movimentos: {{ movimentos_financeiros_venda|length }}
+                                </div>
+                            {% endif %}
                         {% endif %}
                     {% endif %}
 
@@ -2095,6 +2102,13 @@
                             <span class="valor">R$ {{ venda.total|floatformat:2 }}</span>
                         </div>
                     </div>
+                    {% if venda_a_vista %}
+                        <div class="conta-receber-info">
+                            Caixa: R$ {{ alocacao_financeira_venda.caixa|floatformat:2 }} -
+                            Banco/Pix: R$ {{ alocacao_financeira_venda.banco|floatformat:2 }} -
+                            Movimentos: {{ movimentos_financeiros_venda|length }}
+                        </div>
+                    {% endif %}
 
                     <table class="tabela-itens-principais">
                         <colgroup>

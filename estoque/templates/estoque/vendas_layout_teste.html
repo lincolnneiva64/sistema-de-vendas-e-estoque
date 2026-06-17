@@ -746,6 +746,70 @@ select {
     outline-offset: 2px;
     box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.18);
 }
+.venda-fechamento-card {
+    width: min(560px, calc(100vw - 32px));
+}
+.venda-fechamento-titulo {
+    margin: 0 0 8px;
+    color: #0f172a;
+    font-size: 18px;
+    font-weight: 950;
+}
+.venda-fechamento-total {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    background: #eff6ff;
+    color: #164173;
+    font-weight: 950;
+}
+.venda-fechamento-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+.venda-fechamento-campo label {
+    display: block;
+    margin-bottom: 5px;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 900;
+}
+.venda-fechamento-campo input {
+    width: 100%;
+    min-height: 44px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 9px 11px;
+    color: #0f172a;
+    font-size: 18px;
+    font-weight: 900;
+    box-sizing: border-box;
+}
+.venda-fechamento-nota {
+    margin: 9px 0 0;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 800;
+}
+.venda-fechamento-erro {
+    display: none;
+    margin-top: 10px;
+    padding: 9px 11px;
+    border: 1px solid #fca5a5;
+    border-radius: 10px;
+    background: #fee2e2;
+    color: #991b1b;
+    font-size: 13px;
+    font-weight: 900;
+}
+.venda-fechamento-erro.visivel {
+    display: block;
+}
 .cobranca-preview-card {
     width: min(620px, calc(100vw - 32px));
     max-height: calc(100vh - 40px);
@@ -914,6 +978,21 @@ select {
         bottom: -12px;
         margin: 0 -12px -12px;
         padding: 9px 12px;
+    }
+    .venda-fechamento-card {
+        width: calc(100vw - 18px);
+        padding: 14px;
+    }
+    .venda-fechamento-grid {
+        grid-template-columns: 1fr;
+    }
+    .venda-fechamento-card .venda-confirmacao-acoes {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+    .venda-fechamento-card .venda-confirmacao-acoes button {
+        width: 100%;
+        min-height: 40px;
     }
 }
 .produto-sugestao-item strong {
@@ -2032,6 +2111,31 @@ td:first-child {
         </div>
     </div>
 </div>
+<div id="vendaFechamentoOverlay" class="venda-confirmacao-overlay" aria-hidden="true">
+    <div class="venda-confirmacao-card venda-fechamento-card" role="dialog" aria-modal="true" aria-labelledby="vendaFechamentoTitulo">
+        <h3 id="vendaFechamentoTitulo" class="venda-fechamento-titulo">De onde veio o recebimento?</h3>
+        <div class="venda-fechamento-total">
+            <span>Total da venda</span>
+            <strong id="vendaFechamentoTotal">R$ 0,00</strong>
+        </div>
+        <div class="venda-fechamento-grid">
+            <div class="venda-fechamento-campo">
+                <label for="vendaOrigemCaixa">Dinheiro / Caixa em especie</label>
+                <input type="text" id="vendaOrigemCaixa" inputmode="decimal" value="0,00" autocomplete="off">
+            </div>
+            <div class="venda-fechamento-campo">
+                <label for="vendaOrigemBanco">Pix / Banco</label>
+                <input type="text" id="vendaOrigemBanco" inputmode="decimal" value="0,00" autocomplete="off">
+            </div>
+        </div>
+        <p class="venda-fechamento-nota">A soma precisa bater com o total da venda. Campos vazios contam como zero.</p>
+        <div id="vendaFechamentoErro" class="venda-fechamento-erro"></div>
+        <div class="venda-confirmacao-acoes">
+            <button type="button" id="btnVoltarEditarVendaFechamento" class="venda-cancelar-btn">Voltar para editar venda</button>
+            <button type="button" id="btnConfirmarFechamentoVenda" class="venda-confirmar-btn">Confirmar e finalizar venda</button>
+        </div>
+    </div>
+</div>
 <div id="cobrancaPreviewOverlay" class="venda-confirmacao-overlay" aria-hidden="true">
     <div class="venda-confirmacao-card cobranca-preview-card" role="dialog" aria-modal="true" aria-labelledby="cobrancaPreviewTitulo">
         <h3 id="cobrancaPreviewTitulo" class="cobranca-preview-titulo">Cobrança do cliente</h3>
@@ -2138,6 +2242,13 @@ const vendaConfirmacaoOverlay = document.getElementById("vendaConfirmacaoOverlay
 const vendaConfirmacaoTexto = document.getElementById("vendaConfirmacaoTexto");
 const btnCancelarConfirmacaoVenda = document.getElementById("btnCancelarConfirmacaoVenda");
 const btnConfirmarConfirmacaoVenda = document.getElementById("btnConfirmarConfirmacaoVenda");
+const vendaFechamentoOverlay = document.getElementById("vendaFechamentoOverlay");
+const vendaFechamentoTotal = document.getElementById("vendaFechamentoTotal");
+const vendaOrigemCaixa = document.getElementById("vendaOrigemCaixa");
+const vendaOrigemBanco = document.getElementById("vendaOrigemBanco");
+const vendaFechamentoErro = document.getElementById("vendaFechamentoErro");
+const btnVoltarEditarVendaFechamento = document.getElementById("btnVoltarEditarVendaFechamento");
+const btnConfirmarFechamentoVenda = document.getElementById("btnConfirmarFechamentoVenda");
 const cobrancaPreviewOverlay = document.getElementById("cobrancaPreviewOverlay");
 const cobrancaPreviewCliente = document.getElementById("cobrancaPreviewCliente");
 const cobrancaPreviewWhatsapp = document.getElementById("cobrancaPreviewWhatsapp");
@@ -3314,6 +3425,7 @@ function limparVendaAposGravacao() {
     limparItensVenda();
     limparCabecalhoVenda(true);
     limparPedidoImportadoVenda();
+    limparFechamentoVenda();
     atualizarTotalGeral();
 }
 
@@ -3457,6 +3569,103 @@ function coletarDadosVenda() {
         total: normalizarNumeroVenda(document.getElementById("totalGeral").textContent),
         itens: coletarItensVenda(),
     };
+}
+
+function pagamentoVendaAVista() {
+    const valor = normalizarTextoCliente(tipoVenda ? tipoVenda.value : "").replace(/\s/g, "");
+    return valor === "avista" || valor === "dinheiro" || valor === "especie" || valor === "pix" || valor === "banco" || valor === "transferencia" || valor === "cartao" || valor === "debito" || valor === "credito" || valor === "boleto" || valor === "deposito";
+}
+
+function moedaVenda(valor) {
+    return "R$ " + Number(valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatarCampoDinheiroVenda(campo) {
+    if (!campo) return;
+    const numero = parseFloat(normalizarNumeroVenda(campo.value || "0"));
+    campo.value = Number.isFinite(numero)
+        ? numero.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : "0,00";
+}
+
+function focarSelecionandoVenda(campo) {
+    if (!campo) return;
+    setTimeout(() => {
+        campo.focus();
+        if (typeof campo.setSelectionRange === "function") {
+            campo.setSelectionRange(0, campo.value.length);
+        } else if (typeof campo.select === "function") {
+            campo.select();
+        }
+    }, 80);
+}
+
+function mostrarErroFechamentoVenda(mensagem) {
+    if (!vendaFechamentoErro) return;
+    vendaFechamentoErro.textContent = mensagem || "";
+    vendaFechamentoErro.classList.toggle("visivel", Boolean(mensagem));
+}
+
+function validarFechamentoVenda(dadosVenda) {
+    const total = Math.round(parseFloat(dadosVenda.total || "0") * 100);
+    const caixa = Math.round(parseFloat(normalizarNumeroVenda(vendaOrigemCaixa ? vendaOrigemCaixa.value : "0")) * 100);
+    const banco = Math.round(parseFloat(normalizarNumeroVenda(vendaOrigemBanco ? vendaOrigemBanco.value : "0")) * 100);
+    const soma = caixa + banco;
+
+    if (caixa < 0 || banco < 0) {
+        return "Os valores de recebimento nao podem ser negativos.";
+    }
+    if (total <= 0) {
+        return "Inclua itens na venda antes de finalizar.";
+    }
+    if (soma !== total) {
+        return "A soma das origens precisa bater com o total da venda. Soma: " + moedaVenda(soma / 100) + ". Total: " + moedaVenda(total / 100) + ".";
+    }
+    return "";
+}
+
+function abrirFechamentoVenda(dadosVenda) {
+    if (!vendaFechamentoOverlay) return;
+    const totalNumero = parseFloat(dadosVenda.total || "0");
+    if (vendaFechamentoTotal) vendaFechamentoTotal.textContent = moedaVenda(totalNumero);
+    const pagamento = normalizarTextoCliente(tipoVenda ? tipoVenda.value : "").replace(/\s/g, "");
+    const caixaAtual = parseFloat(normalizarNumeroVenda(vendaOrigemCaixa ? vendaOrigemCaixa.value : "0"));
+    const bancoAtual = parseFloat(normalizarNumeroVenda(vendaOrigemBanco ? vendaOrigemBanco.value : "0"));
+    if ((caixaAtual || 0) === 0 && (bancoAtual || 0) === 0) {
+        if (["pix", "banco", "transferencia", "cartao", "debito", "credito", "boleto", "deposito"].includes(pagamento)) {
+            if (vendaOrigemCaixa) vendaOrigemCaixa.value = "0,00";
+            if (vendaOrigemBanco) vendaOrigemBanco.value = moedaVenda(totalNumero).replace("R$ ", "");
+        } else {
+            if (vendaOrigemCaixa) vendaOrigemCaixa.value = moedaVenda(totalNumero).replace("R$ ", "");
+            if (vendaOrigemBanco) vendaOrigemBanco.value = "0,00";
+        }
+    }
+    mostrarErroFechamentoVenda("");
+    vendaFechamentoOverlay.classList.add("visivel");
+    vendaFechamentoOverlay.setAttribute("aria-hidden", "false");
+    focarSelecionandoVenda(vendaOrigemCaixa);
+}
+
+function fecharFechamentoVenda() {
+    if (!vendaFechamentoOverlay) return;
+    vendaFechamentoOverlay.classList.remove("visivel");
+    vendaFechamentoOverlay.setAttribute("aria-hidden", "true");
+    mostrarErroFechamentoVenda("");
+    focarProximoCampo(btnGravarVenda);
+}
+
+function anexarOrigemRecebimentoVenda(dadosVenda) {
+    dadosVenda.origem_recebimento = {
+        caixa: vendaOrigemCaixa ? vendaOrigemCaixa.value : "0,00",
+        banco: vendaOrigemBanco ? vendaOrigemBanco.value : "0,00",
+    };
+    return dadosVenda;
+}
+
+function limparFechamentoVenda() {
+    if (vendaOrigemCaixa) vendaOrigemCaixa.value = "0,00";
+    if (vendaOrigemBanco) vendaOrigemBanco.value = "0,00";
+    mostrarErroFechamentoVenda("");
 }
 
 
@@ -3624,12 +3833,17 @@ preco.addEventListener("keydown", (e) => {
     }
 });
 /* ===== FIM JS ADICIONAR ITEM VENDA MOBILE - CHATGPT 2026-06-10 ===== */
-async function gravarVendaAtual() {
-    const dadosVenda = coletarDadosVenda();
+async function gravarVendaAtual(dadosVendaConfirmados) {
+    const dadosVenda = dadosVendaConfirmados || coletarDadosVenda();
 
     if (!dadosVenda.itens.length) {
         mostrarToastVenda("Inclua pelo menos 1 item antes de gravar a venda.");
         focarProximoCampo(produtoBusca);
+        return;
+    }
+
+    if (!dadosVendaConfirmados && pagamentoVendaAVista()) {
+        abrirFechamentoVenda(dadosVenda);
         return;
     }
 
@@ -3669,6 +3883,38 @@ async function gravarVendaAtual() {
         btnGravarVenda.textContent = "Gravar Venda";
     }
 }
+
+[vendaOrigemCaixa, vendaOrigemBanco].forEach((campo, indice, campos) => {
+    if (!campo) return;
+    campo.addEventListener("focus", () => focarSelecionandoVenda(campo));
+    campo.addEventListener("blur", () => formatarCampoDinheiroVenda(campo));
+    campo.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        const proximo = campos[indice + 1];
+        if (proximo) {
+            focarSelecionandoVenda(proximo);
+        } else if (btnConfirmarFechamentoVenda) {
+            btnConfirmarFechamentoVenda.focus();
+        }
+    });
+});
+
+btnVoltarEditarVendaFechamento?.addEventListener("click", fecharFechamentoVenda);
+
+btnConfirmarFechamentoVenda?.addEventListener("click", () => {
+    const dadosVenda = coletarDadosVenda();
+    formatarCampoDinheiroVenda(vendaOrigemCaixa);
+    formatarCampoDinheiroVenda(vendaOrigemBanco);
+    const erro = validarFechamentoVenda(dadosVenda);
+    if (erro) {
+        mostrarErroFechamentoVenda(erro);
+        focarSelecionandoVenda(vendaOrigemCaixa);
+        return;
+    }
+    fecharFechamentoVenda();
+    gravarVendaAtual(anexarOrigemRecebimentoVenda(dadosVenda));
+});
 
 btnGravarVenda.addEventListener("click", (e) => {
     e.stopImmediatePropagation();
