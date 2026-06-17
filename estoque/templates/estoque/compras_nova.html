@@ -1351,6 +1351,14 @@
     campo.value = precoCampo(campo.value || "0");
   }
 
+  function preencherRestanteReservaCompra() {
+    if (!origemCaixaCompra || !origemReservaCompra) return;
+    const total = Math.round(numero(totalFechamentoCompra ? totalFechamentoCompra.textContent : "0") * 100);
+    const caixa = Math.round(numero(origemCaixaCompra.value || "0") * 100);
+    const restante = Math.max(total - caixa, 0);
+    origemReservaCompra.value = (restante / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
   function mostrarErroOrigem(mensagem) {
     if (!erroOrigemDinheiroCompra) return;
     erroOrigemDinheiroCompra.textContent = mensagem || "";
@@ -2087,10 +2095,17 @@
     });
     campo.addEventListener("blur", function() {
       formatarCampoDinheiro(campo);
+      if (campo === origemCaixaCompra) {
+        preencherRestanteReservaCompra();
+      }
     });
     campo.addEventListener("keydown", function(event) {
       if (event.key !== "Enter") return;
       event.preventDefault();
+      formatarCampoDinheiro(campo);
+      if (campo === origemCaixaCompra) {
+        preencherRestanteReservaCompra();
+      }
       const proximo = campos[indice + 1];
       if (proximo) {
         focarSelecionando(proximo);

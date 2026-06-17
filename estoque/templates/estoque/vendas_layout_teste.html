@@ -3588,6 +3588,14 @@ function formatarCampoDinheiroVenda(campo) {
         : "0,00";
 }
 
+function preencherRestanteBancoVenda() {
+    if (!vendaOrigemCaixa || !vendaOrigemBanco) return;
+    const total = Math.round(parseFloat(normalizarNumeroVenda(vendaFechamentoTotal ? vendaFechamentoTotal.textContent : "0")) * 100);
+    const caixa = Math.round(parseFloat(normalizarNumeroVenda(vendaOrigemCaixa.value || "0")) * 100);
+    const restante = Math.max(total - caixa, 0);
+    vendaOrigemBanco.value = (restante / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function focarSelecionandoVenda(campo) {
     if (!campo) return;
     setTimeout(() => {
@@ -3887,10 +3895,19 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
 [vendaOrigemCaixa, vendaOrigemBanco].forEach((campo, indice, campos) => {
     if (!campo) return;
     campo.addEventListener("focus", () => focarSelecionandoVenda(campo));
-    campo.addEventListener("blur", () => formatarCampoDinheiroVenda(campo));
+    campo.addEventListener("blur", () => {
+        formatarCampoDinheiroVenda(campo);
+        if (campo === vendaOrigemCaixa) {
+            preencherRestanteBancoVenda();
+        }
+    });
     campo.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") return;
         event.preventDefault();
+        formatarCampoDinheiroVenda(campo);
+        if (campo === vendaOrigemCaixa) {
+            preencherRestanteBancoVenda();
+        }
         const proximo = campos[indice + 1];
         if (proximo) {
             focarSelecionandoVenda(proximo);
