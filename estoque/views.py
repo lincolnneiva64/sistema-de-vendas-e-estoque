@@ -6293,7 +6293,7 @@ def revisar_remocao_pendencia_da_nota(request, checklist_id):
             )
             estoque_devolvido = False
             if item_venda.produto_id:
-                _devolver_estoque_produto(item_venda.produto_id, quantidade, produto_nome)
+                _devolver_estoque_produto(item_venda.produto_id, quantidade, produto_nome, unidade)
                 estoque_devolvido = True
             item_venda.delete()
             resolver_entregas_sem_pendencias_ativas(rota_item_ids_afetados)
@@ -6736,28 +6736,116 @@ def _quantidade_estoque_inteira(quantidade, produto_nome):
     return int(quantidade_decimal)
 
 
-def _baixar_estoque_produto(produto_id, quantidade, produto_nome=None):
+def _normalizar_unidade_estoque(unidade):
+    return str(unidade or "").strip().upper()
+
+
+def _quantidade_estoque_para_unidade_base(produto, quantidade, unidade=None):
+    quantidade_decimal = Decimal(quantidade or "0").quantize(Decimal("0.001"))
+    unidade_recebida = _normalizar_unidade_estoque(unidade)
+    unidade_base = produto.unidade_venda_1 or produto.unidade_compra or ""
+    unidade_base_norm = _normalizar_unidade_estoque(unidade_base)
+    unidade_fracionada = produto.unidade_venda_2 or ""
+    unidade_fracionada_norm = _normalizar_unidade_estoque(unidade_fracionada)
+    fator = Decimal(produto.fator_conversao or 0)
+
+    if unidade_recebida and unidade_base_norm and unidade_recebida == unidade_base_norm:
+        return quantidade_decimal, unidade_base
+
+    if (
+        unidade_recebida
+        and produto.vende_fracionado
+        and unidade_fracionada_norm
+        and unidade_recebida == unidade_fracionada_norm
+    ):
+        if fator <= 0:
+            raise ValueError(f"Fator de conversao invalido para {produto.nome}.")
+        return (quantidade_decimal / fator).quantize(Decimal("0.001")), unidade_base
+
+    if not unidade_recebida:
+        return quantidade_decimal, unidade_base
+
+    unidades_validas = [u for u in [unidade_base, unidade_fracionada if produto.vende_fracionado else ""] if u]
+    raise ValueError(
+        f"Unidade {unidade} nao confere com o cadastro de {produto.nome}. "
+        f"Use: {', '.join(unidades_validas) or 'unidade cadastrada'}."
+    )
+
+
+def _estoque_disponivel_na_unidade(produto, unidade=None):
+    estoque_base = Decimal(produto.quantidade or 0)
+    unidade_recebida = _normalizar_unidade_estoque(unidade)
+    unidade_fracionada_norm = _normalizar_unidade_estoque(produto.unidade_venda_2)
+    fator = Decimal(produto.fator_conversao or 0)
+
+    if (
+        unidade_recebida
+        and produto.vende_fracionado
+        and unidade_fracionada_norm
+        and unidade_recebida == unidade_fracionada_norm
+        and fator > 0
+    ):
+        return (estoque_base * fator).quantize(Decimal("0.001"))
+
+    return estoque_base.quantize(Decimal("0.001"))
+
+
+def _mensagem_estoque_insuficiente(produto, quantidade, unidade, estoque_disponivel):
+    unidade_texto = str(unidade or produto.unidade_venda_1 or produto.unidade_compra or "").strip()
+    unidade_sufixo = f" {unidade_texto}" if unidade_texto else ""
+    return (
+        f"Estoque insuficiente para {produto.nome}. "
+        f"Solicitado: {_formatar_quantidade(quantidade)}{unidade_sufixo}. "
+        f"Disponivel: {_formatar_quantidade(estoque_disponivel)}{unidade_sufixo}."
+    )
+
+
+def _baixar_estoque_produto(produto_id, quantidade, produto_nome=None, unidade=None):
     produto = Produto.objects.select_for_update().get(pk=produto_id)
     nome = produto_nome or produto.nome
-    quantidade_movimento = _quantidade_estoque_inteira(quantidade, nome)
+    quantidade_base, unidade_base = _quantidade_estoque_para_unidade_base(produto, quantidade, unidade)
+    quantidade_movimento = _quantidade_estoque_inteira(quantidade_base, nome)
     estoque_atual = produto.quantidade or 0
+    estoque_disponivel_unidade = _estoque_disponivel_na_unidade(produto, unidade)
+    print(
+        "[venda estoque]",
+        f"produto={produto.nome}",
+        f"id={produto.pk}",
+        f"unidade_recebida={unidade or ''}",
+        f"quantidade_recebida={quantidade}",
+        f"estoque_base={estoque_atual} {unidade_base or ''}".strip(),
+        f"quantidade_base_comparada={quantidade_base} {unidade_base or ''}".strip(),
+        f"estoque_comparacao={estoque_disponivel_unidade} {unidade or unidade_base or ''}".strip(),
+    )
     if estoque_atual < quantidade_movimento:
+        print(
+            "[venda estoque bloqueio]",
+            f"motivo=estoque_insuficiente produto={produto.nome} id={produto.pk}",
+        )
         raise ValueError(
-            f"Estoque insuficiente para {nome}. "
-            f"Disponivel: {estoque_atual}; necessario: {quantidade_movimento}."
+            _mensagem_estoque_insuficiente(produto, quantidade, unidade, estoque_disponivel_unidade)
         )
     produto.quantidade = estoque_atual - quantidade_movimento
     Produto.objects.filter(pk=produto.pk).update(
         quantidade=produto.quantidade,
         atualizado_em=timezone.now(),
     )
+    print(
+        "[venda estoque baixa]",
+        f"produto={produto.nome}",
+        f"id={produto.pk}",
+        f"antes={estoque_atual}",
+        f"baixado={quantidade_movimento}",
+        f"depois={produto.quantidade}",
+    )
     return estoque_atual, produto.quantidade
 
 
-def _devolver_estoque_produto(produto_id, quantidade, produto_nome=None):
+def _devolver_estoque_produto(produto_id, quantidade, produto_nome=None, unidade=None):
     produto = Produto.objects.select_for_update().get(pk=produto_id)
     nome = produto_nome or produto.nome
-    quantidade_movimento = _quantidade_estoque_inteira(quantidade, nome)
+    quantidade_base, _unidade_base = _quantidade_estoque_para_unidade_base(produto, quantidade, unidade)
+    quantidade_movimento = _quantidade_estoque_inteira(quantidade_base, nome)
     estoque_atual = produto.quantidade or 0
     produto.quantidade = estoque_atual + quantidade_movimento
     Produto.objects.filter(pk=produto.pk).update(
@@ -6768,16 +6856,22 @@ def _devolver_estoque_produto(produto_id, quantidade, produto_nome=None):
 
 
 def _baixar_estoque_movimentos(movimentos):
-    agregados = {}
-    for produto, quantidade in movimentos:
+    movimentos_normalizados = []
+    for movimento in movimentos:
+        if len(movimento) == 2:
+            produto, quantidade = movimento
+            unidade = None
+        else:
+            produto, quantidade, unidade = movimento
         if not produto:
             raise ValueError("Produto informado nao foi encontrado no estoque.")
-        produto_id = produto.pk
-        nome, total = agregados.get(produto_id, (produto.nome, Decimal("0.000")))
-        agregados[produto_id] = (nome, total + Decimal(quantidade or "0"))
+        movimentos_normalizados.append((produto.pk, produto.nome, quantidade, unidade))
 
-    for produto_id, (produto_nome, quantidade_total) in sorted(agregados.items()):
-        _baixar_estoque_produto(produto_id, quantidade_total, produto_nome)
+    for produto_id, produto_nome, quantidade, unidade in sorted(
+        movimentos_normalizados,
+        key=lambda movimento: (movimento[0], movimento[1]),
+    ):
+        _baixar_estoque_produto(produto_id, quantidade, produto_nome, unidade)
 
 
 def _atualizar_saldo_pendente_pedido(pedido, itens_vendidos):
@@ -6821,6 +6915,7 @@ def _devolver_estoque_item_removido(item_removido):
         item_removido.produto_id,
         item_removido.quantidade_snapshot,
         item_removido.produto_nome_snapshot,
+        item_removido.unidade_snapshot,
     )
     item_removido.estoque_devolvido = True
     item_removido.estoque_devolvido_em = timezone.now()
@@ -6837,7 +6932,7 @@ def _devolver_estoque_cancelamento_venda(venda):
         if not item.produto_id:
             continue
         produto_nome = item.produto.nome if item.produto else "Produto nao identificado"
-        _devolver_estoque_produto(item.produto_id, item.quantidade, produto_nome)
+        _devolver_estoque_produto(item.produto_id, item.quantidade, produto_nome, item.unidade)
         devolvidos.append(f"{produto_nome}: {_formatar_quantidade(item.quantidade)} {item.unidade or ''}".strip())
 
     venda.estoque_devolvido_cancelamento = True
@@ -6897,6 +6992,7 @@ def gravar_venda(request):
 
     for item in itens:
         produto_nome = str(item.get("produto_nome") or "").strip()
+        produto_id = str(item.get("produto_id") or "").strip()
         unidade = str(item.get("unidade") or "").strip()
 
         if not produto_nome:
@@ -6921,12 +7017,26 @@ def gravar_venda(request):
             )
 
         valor_total = (quantidade * preco_unitario).quantize(Decimal("0.01"))
-        produto = Produto.objects.filter(nome__iexact=produto_nome, excluido=False).first()
+        produto = None
+        if produto_id.isdigit():
+            produto = Produto.objects.filter(pk=int(produto_id), excluido=False).first()
+        if not produto:
+            produto = Produto.objects.filter(nome__iexact=produto_nome, excluido=False).first()
         if not produto:
             return JsonResponse(
                 {"sucesso": False, "mensagem": f'Produto "{produto_nome}" nao foi encontrado no estoque.'},
                 status=400,
             )
+        print(
+            "[venda item recebido]",
+            f"produto_nome={produto_nome}",
+            f"produto_id_recebido={produto_id or '(vazio)'}",
+            f"produto_resolvido_id={produto.pk}",
+            f"produto_resolvido_nome={produto.nome}",
+            f"unidade={unidade}",
+            f"quantidade={quantidade}",
+            f"estoque_cadastro={produto.quantidade}",
+        )
         total_calculado += valor_total
         itens_validados.append({
             "produto": produto,
@@ -6963,13 +7073,30 @@ def gravar_venda(request):
                 total_venda = Decimal("0.00")
                 for item in itens_validados:
                     produto_bloqueado = Produto.objects.select_for_update().get(pk=item["produto"].pk)
-                    quantidade_necessaria = _quantidade_estoque_inteira(item["quantidade"], produto_bloqueado.nome)
+                    quantidade_base, _unidade_base = _quantidade_estoque_para_unidade_base(
+                        produto_bloqueado,
+                        item["quantidade"],
+                        item["unidade"],
+                    )
+                    quantidade_necessaria = _quantidade_estoque_inteira(quantidade_base, produto_bloqueado.nome)
                     estoque_disponivel = max(produto_bloqueado.quantidade or 0, 0)
                     quantidade_vendida_int = min(quantidade_necessaria, estoque_disponivel)
                     quantidade_pendente_int = quantidade_necessaria - quantidade_vendida_int
 
                     if quantidade_vendida_int > 0:
-                        quantidade_vendida = Decimal(quantidade_vendida_int).quantize(Decimal("0.001"))
+                        if (
+                            item["unidade"]
+                            and produto_bloqueado.vende_fracionado
+                            and _normalizar_unidade_estoque(item["unidade"])
+                            == _normalizar_unidade_estoque(produto_bloqueado.unidade_venda_2)
+                            and Decimal(produto_bloqueado.fator_conversao or 0) > 0
+                        ):
+                            quantidade_vendida = (
+                                Decimal(quantidade_vendida_int)
+                                * Decimal(produto_bloqueado.fator_conversao or 0)
+                            ).quantize(Decimal("0.001"))
+                        else:
+                            quantidade_vendida = Decimal(quantidade_vendida_int).quantize(Decimal("0.001"))
                         valor_total_vendido = (quantidade_vendida * item["preco_unitario"]).quantize(Decimal("0.01"))
                         itens_para_venda.append({
                             "produto": produto_bloqueado,
@@ -6986,7 +7113,19 @@ def gravar_venda(request):
                         )
 
                     if quantidade_pendente_int > 0:
-                        quantidade_pendente = Decimal(quantidade_pendente_int).quantize(Decimal("0.001"))
+                        if (
+                            item["unidade"]
+                            and produto_bloqueado.vende_fracionado
+                            and _normalizar_unidade_estoque(item["unidade"])
+                            == _normalizar_unidade_estoque(produto_bloqueado.unidade_venda_2)
+                            and Decimal(produto_bloqueado.fator_conversao or 0) > 0
+                        ):
+                            quantidade_pendente = (
+                                Decimal(quantidade_pendente_int)
+                                * Decimal(produto_bloqueado.fator_conversao or 0)
+                            ).quantize(Decimal("0.001"))
+                        else:
+                            quantidade_pendente = Decimal(quantidade_pendente_int).quantize(Decimal("0.001"))
                         pendencia = f"{produto_bloqueado.nome}: {_formatar_quantidade(quantidade_pendente)}"
                         if item["unidade"]:
                             pendencia = f"{pendencia} {item['unidade']}"
@@ -7006,7 +7145,7 @@ def gravar_venda(request):
                     )
             else:
                 _baixar_estoque_movimentos(
-                    (item["produto"], item["quantidade"])
+                    (item["produto"], item["quantidade"], item["unidade"])
                     for item in itens_para_venda
                 )
 

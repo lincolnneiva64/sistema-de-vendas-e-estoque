@@ -3571,11 +3571,13 @@ function preencherProximoProdutoDepoisDeAdicionar(produtoValorAtual, produtoNome
 function adicionarItemVendaAtual() {
     const produtoNome = (produtoBusca.value || "").trim();
     const produtoValor = (produto.value || "").trim();
+    const produtoOption = Array.from(produto.options).find((opt) => (opt.value || "").trim() === produtoValor);
+    const produtoId = produtoOption?.dataset?.produtoId || "";
     const qtdTexto = (quantidade.value || "").trim();
     const unidadeTexto = (unidade.value || "").trim();
     const precoTexto = (preco.value || "").trim();
 
-    if (!produtoNome || !produtoValor) {
+    if (!produtoNome || !produtoValor || !produtoId) {
         mostrarToastVenda("Selecione um produto antes de adicionar.");
         focarProximoCampo(produtoBusca);
         return false;
@@ -3615,7 +3617,7 @@ function adicionarItemVendaAtual() {
     }
 
     const item = {
-        produto_id: produtoValor,
+        produto_id: produtoId,
         produto_nome: produtoNome,
         quantidade: qtdNumero.toFixed(2),
         unidade: unidadeTexto,
