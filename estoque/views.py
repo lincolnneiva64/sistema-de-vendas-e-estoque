@@ -16,6 +16,7 @@ from pathlib import Path
 from datetime import date, timedelta
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q, Sum, Max, Prefetch
 from django.db.models.functions import Coalesce
@@ -24,7 +25,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PagamentoContaPagar, PagamentoEmprestimoDivida, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -1628,6 +1629,213 @@ def caixa_banco(request):
             "total_disponivel": total_disponivel,
             "total_disponivel_texto": _financeiro_moeda_br(total_disponivel),
             "movimentos": movimentos,
+        },
+    )
+
+
+def _parse_int_opcional(valor):
+    texto = str(valor or "").strip()
+    if not texto:
+        return None
+    try:
+        numero = int(texto)
+    except ValueError:
+        return None
+    return numero if numero > 0 else None
+
+
+def _emprestimo_divida_post_data(request):
+    valor_original = _parse_decimal_financeiro(request.POST.get("valor_original"))
+    saldo_devedor = _parse_decimal_financeiro(request.POST.get("saldo_devedor"))
+    valor_parcela = _parse_decimal_financeiro(request.POST.get("valor_parcela"))
+    data_contratacao = parse_date(request.POST.get("data_contratacao") or "")
+    data_vencimento = parse_date(request.POST.get("data_vencimento") or "")
+    return {
+        "tipo": request.POST.get("tipo") or EmprestimoDivida.TIPO_EMPRESTIMO_RECEBIDO,
+        "credor": request.POST.get("credor", "").strip(),
+        "descricao": request.POST.get("descricao", "").strip(),
+        "valor_original": valor_original,
+        "saldo_devedor": saldo_devedor if saldo_devedor is not None else valor_original,
+        "data_contratacao": data_contratacao,
+        "data_vencimento": data_vencimento,
+        "quantidade_parcelas": _parse_int_opcional(request.POST.get("quantidade_parcelas")),
+        "valor_parcela": valor_parcela,
+        "observacao": request.POST.get("observacao", "").strip(),
+    }
+
+
+def _preparar_divida_template(divida):
+    divida.valor_original_texto = _financeiro_moeda_br(divida.valor_original)
+    divida.saldo_devedor_texto = _financeiro_moeda_br(divida.saldo_devedor)
+    if divida.valor_parcela is not None:
+        divida.valor_parcela_texto = _financeiro_moeda_br(divida.valor_parcela)
+    else:
+        divida.valor_parcela_texto = "-"
+    return divida
+
+
+def _preparar_pagamento_template(pagamento):
+    pagamento.valor_texto = _financeiro_moeda_br(pagamento.valor)
+    return pagamento
+
+
+def emprestimos_dividas(request):
+    hoje = timezone.localdate()
+    fim_7 = hoje + timedelta(days=7)
+    dividas_base = EmprestimoDivida.objects.all()
+    dividas_abertas_base = dividas_base.filter(
+        status__in=[EmprestimoDivida.STATUS_ABERTO, EmprestimoDivida.STATUS_PARCIAL],
+        saldo_devedor__gt=0,
+    )
+
+    total_aberto = _financeiro_dinheiro(dividas_abertas_base.aggregate(total=Sum("saldo_devedor"))["total"])
+    total_vencido = _financeiro_dinheiro(
+        dividas_abertas_base
+        .filter(data_vencimento__lt=hoje)
+        .aggregate(total=Sum("saldo_devedor"))["total"]
+    )
+    total_7 = _financeiro_dinheiro(
+        dividas_abertas_base
+        .filter(data_vencimento__range=(hoje, fim_7))
+        .aggregate(total=Sum("saldo_devedor"))["total"]
+    )
+    quantidade_abertas = dividas_abertas_base.count()
+
+    dividas = dividas_base
+    status = request.GET.get("status", "abertas")
+    credor = request.GET.get("credor", "").strip()
+    vencidas = request.GET.get("vencidas") == "1"
+
+    if status == "abertas":
+        dividas = dividas.filter(status__in=[EmprestimoDivida.STATUS_ABERTO, EmprestimoDivida.STATUS_PARCIAL])
+    elif status and status != "todas":
+        dividas = dividas.filter(status=status)
+    if credor:
+        dividas = dividas.filter(credor__icontains=credor)
+    if vencidas:
+        dividas = dividas.filter(
+            status__in=[EmprestimoDivida.STATUS_ABERTO, EmprestimoDivida.STATUS_PARCIAL],
+            data_vencimento__lt=hoje,
+        )
+
+    dividas = list(
+        dividas.annotate(
+            prioridade=Case(
+                When(status__in=[EmprestimoDivida.STATUS_ABERTO, EmprestimoDivida.STATUS_PARCIAL], data_vencimento__lt=hoje, then=Value(0)),
+                When(status__in=[EmprestimoDivida.STATUS_ABERTO, EmprestimoDivida.STATUS_PARCIAL], then=Value(1)),
+                default=Value(2),
+                output_field=IntegerField(),
+            )
+        )
+        .order_by("prioridade", "data_vencimento", "credor", "id")
+    )
+    dividas = [_preparar_divida_template(divida) for divida in dividas]
+
+    return render(
+        request,
+        "estoque/emprestimos_dividas.html",
+        {
+            "dividas": dividas,
+            "status": status,
+            "credor": credor,
+            "vencidas": vencidas,
+            "status_choices": EmprestimoDivida.STATUS_CHOICES,
+            "total_aberto_texto": _financeiro_moeda_br(total_aberto),
+            "total_vencido_texto": _financeiro_moeda_br(total_vencido),
+            "total_7_texto": _financeiro_moeda_br(total_7),
+            "quantidade_abertas": quantidade_abertas,
+        },
+    )
+
+
+def emprestimo_divida_nova(request):
+    hoje = timezone.localdate()
+    if request.method == "POST":
+        dados = _emprestimo_divida_post_data(request)
+        if not dados["credor"]:
+            messages.error(request, "Informe o credor.")
+        elif dados["valor_original"] is None or dados["valor_original"] <= 0:
+            messages.error(request, "Informe um valor original valido.")
+        elif not dados["data_contratacao"]:
+            messages.error(request, "Informe uma data de contratacao valida.")
+        else:
+            try:
+                divida = EmprestimoDivida.objects.create(**dados)
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+            else:
+                messages.success(request, "Divida cadastrada com sucesso.")
+                return redirect("estoque:emprestimo_divida_detalhe", pk=divida.pk)
+
+    return render(
+        request,
+        "estoque/emprestimo_divida_form.html",
+        {
+            "tipo_choices": EmprestimoDivida.TIPO_CHOICES,
+            "hoje": hoje,
+        },
+    )
+
+
+def emprestimo_divida_detalhe(request, pk):
+    divida = _preparar_divida_template(get_object_or_404(EmprestimoDivida, pk=pk))
+    pagamentos = [
+        _preparar_pagamento_template(pagamento)
+        for pagamento in divida.pagamentos.all()
+    ]
+    return render(
+        request,
+        "estoque/emprestimo_divida_detalhe.html",
+        {
+            "divida": divida,
+            "pagamentos": pagamentos,
+        },
+    )
+
+
+def emprestimo_divida_baixar(request, pk):
+    divida = get_object_or_404(EmprestimoDivida, pk=pk)
+    if request.method == "POST":
+        valor = _parse_decimal_financeiro(request.POST.get("valor"))
+        data_pagamento = parse_date(request.POST.get("data_pagamento") or "")
+        forma_pagamento = request.POST.get("forma_pagamento", "").strip()
+        observacao = request.POST.get("observacao", "").strip()
+
+        if valor is None or valor <= 0:
+            messages.error(request, "Informe um valor valido.")
+        elif not data_pagamento:
+            messages.error(request, "Informe uma data de pagamento valida.")
+        elif valor > divida.saldo_devedor:
+            messages.error(request, "O valor da baixa nao pode ser maior que o saldo devedor.")
+        else:
+            try:
+                with transaction.atomic():
+                    divida = EmprestimoDivida.objects.select_for_update().get(pk=pk)
+                    if valor > divida.saldo_devedor:
+                        raise ValidationError("O valor da baixa nao pode ser maior que o saldo devedor.")
+                    PagamentoEmprestimoDivida.objects.create(
+                        divida=divida,
+                        valor=valor,
+                        data_pagamento=data_pagamento,
+                        forma_pagamento=forma_pagamento,
+                        observacao=observacao,
+                    )
+                    divida.saldo_devedor = (divida.saldo_devedor - valor).quantize(Decimal("0.01"))
+                    divida.atualizar_status_por_saldo()
+                    divida.save(update_fields=["saldo_devedor", "status", "atualizado_em"])
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+            else:
+                messages.success(request, "Baixa registrada com sucesso.")
+                return redirect("estoque:emprestimo_divida_detalhe", pk=divida.pk)
+
+    divida = _preparar_divida_template(divida)
+    return render(
+        request,
+        "estoque/emprestimo_divida_baixar.html",
+        {
+            "divida": divida,
+            "hoje": timezone.localdate(),
         },
     )
 

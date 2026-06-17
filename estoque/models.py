@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -1132,6 +1134,101 @@ class MovimentoFinanceiro(models.Model):
 
     def __str__(self):
         return f"{self.get_tipo_display()} R$ {self.valor} - {self.conta}"
+
+
+class EmprestimoDivida(models.Model):
+    TIPO_EMPRESTIMO_RECEBIDO = "emprestimo_recebido"
+    TIPO_DIVIDA_AVULSA = "divida_avulsa"
+    TIPO_FINANCIAMENTO = "financiamento"
+    TIPO_OUTRO = "outro"
+    TIPO_CHOICES = [
+        (TIPO_EMPRESTIMO_RECEBIDO, "Emprestimo recebido"),
+        (TIPO_DIVIDA_AVULSA, "Divida avulsa"),
+        (TIPO_FINANCIAMENTO, "Financiamento"),
+        (TIPO_OUTRO, "Outro"),
+    ]
+
+    STATUS_ABERTO = "aberto"
+    STATUS_PARCIAL = "parcial"
+    STATUS_QUITADO = "quitado"
+    STATUS_CANCELADO = "cancelado"
+    STATUS_CHOICES = [
+        (STATUS_ABERTO, "Aberto"),
+        (STATUS_PARCIAL, "Parcial"),
+        (STATUS_QUITADO, "Quitado"),
+        (STATUS_CANCELADO, "Cancelado"),
+    ]
+
+    tipo = models.CharField(max_length=30, choices=TIPO_CHOICES)
+    credor = models.CharField(max_length=150)
+    descricao = models.CharField(max_length=255, blank=True)
+    valor_original = models.DecimalField(max_digits=12, decimal_places=2)
+    saldo_devedor = models.DecimalField(max_digits=12, decimal_places=2, blank=True)
+    data_contratacao = models.DateField()
+    data_vencimento = models.DateField(blank=True, null=True)
+    quantidade_parcelas = models.PositiveIntegerField(blank=True, null=True)
+    valor_parcela = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ABERTO)
+    observacao = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["status", "data_vencimento", "id"]
+
+    def clean(self):
+        if self.valor_original is not None and self.valor_original < 0:
+            raise ValidationError("O valor original nao pode ser negativo.")
+        if self.saldo_devedor is not None and self.saldo_devedor < 0:
+            raise ValidationError("O saldo devedor nao pode ser negativo.")
+        if self.valor_parcela is not None and self.valor_parcela < 0:
+            raise ValidationError("O valor da parcela nao pode ser negativo.")
+
+    def atualizar_status_por_saldo(self):
+        if self.status == self.STATUS_CANCELADO:
+            return
+        if self.saldo_devedor <= 0:
+            self.saldo_devedor = Decimal("0.00")
+            self.status = self.STATUS_QUITADO
+        elif self.saldo_devedor < self.valor_original:
+            self.status = self.STATUS_PARCIAL
+        else:
+            self.status = self.STATUS_ABERTO
+
+    def save(self, *args, **kwargs):
+        if self.saldo_devedor is None:
+            self.saldo_devedor = self.valor_original
+        self.atualizar_status_por_saldo()
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.credor} - R$ {self.valor_original} - {self.get_status_display()}"
+
+
+class PagamentoEmprestimoDivida(models.Model):
+    divida = models.ForeignKey(
+        EmprestimoDivida,
+        on_delete=models.PROTECT,
+        related_name="pagamentos",
+    )
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+    data_pagamento = models.DateField()
+    forma_pagamento = models.CharField(max_length=50, blank=True)
+    observacao = models.CharField(max_length=255, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-data_pagamento", "-id"]
+
+    def clean(self):
+        if self.valor is not None and self.valor <= 0:
+            raise ValidationError("O valor do pagamento deve ser maior que zero.")
+        if self.divida_id and self.valor is not None and self.valor > self.divida.saldo_devedor:
+            raise ValidationError("O valor da baixa nao pode ser maior que o saldo devedor.")
+
+    def __str__(self):
+        return f"Pagamento R$ {self.valor} - {self.divida}"
 
 
 class DespesaDiaria(models.Model):

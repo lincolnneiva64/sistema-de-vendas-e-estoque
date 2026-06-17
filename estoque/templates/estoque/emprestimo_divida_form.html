@@ -1,0 +1,104 @@
+{% extends 'estoque/base.html' %}
+
+{% block title %}Nova Dívida / Empréstimo{% endblock %}
+
+{% block content %}
+<style>
+  .edf-page { max-width: 920px; margin: 12px auto 70px; padding: 0 14px; color: #172033; }
+  .edf-header, .edf-card { border: 1px solid #e1e7ef; border-radius: 10px; background: #fff; box-shadow: 0 8px 18px rgba(15,23,42,.04); }
+  .edf-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; padding: 14px 16px; }
+  .edf-title { margin: 0; font-size: 1.32rem; font-weight: 950; }
+  .edf-subtitle { margin: 4px 0 0; color: #64748b; font-weight: 750; }
+  .edf-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .edf-btn { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #bfdbfe; border-radius: 8px; padding: 8px 12px; background: #eff6ff; color: #164173; font: inherit; font-weight: 900; text-decoration: none; cursor: pointer; }
+  .edf-btn-primary { border-color: #1d4ed8; background: #2563eb; color: #fff; }
+  .edf-card { padding: 14px; }
+  .edf-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .edf-field.full { grid-column: 1 / -1; }
+  .edf-field label { display: block; margin-bottom: 4px; color: #334155; font-size: .78rem; font-weight: 900; }
+  .edf-field input, .edf-field select, .edf-field textarea { width: 100%; min-height: 44px; border: 1.5px solid #cbd5e1; border-radius: 9px; padding: 9px 11px; color: #172033; font: inherit; font-size: 16px; font-weight: 800; }
+  .edf-field textarea { min-height: 90px; resize: vertical; }
+  .edf-form-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .edf-alert { margin-bottom: 10px; border-radius: 10px; padding: 9px 11px; font-weight: 850; border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; }
+  @media (max-width: 720px) {
+    .edf-header { flex-direction: column; }
+    .edf-actions { justify-content: flex-start; }
+    .edf-grid { grid-template-columns: 1fr; }
+    .edf-btn, .edf-actions, .edf-form-actions { width: 100%; }
+  }
+</style>
+
+<main class="edf-page">
+  <header class="edf-header">
+    <div>
+      <h1 class="edf-title">Nova dívida / empréstimo</h1>
+      <p class="edf-subtitle">Cadastre compromissos financeiros fora das compras de fornecedor.</p>
+    </div>
+    <nav class="edf-actions">
+      <a class="edf-btn" href="{% url 'estoque:emprestimos_dividas' %}">Voltar para lista</a>
+      <a class="edf-btn" href="{% url 'estoque:painel_financeiro' %}">Central Financeira</a>
+    </nav>
+  </header>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="edf-alert">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <section class="edf-card">
+    <form method="post">
+      {% csrf_token %}
+      <div class="edf-grid">
+        <div class="edf-field">
+          <label for="tipo">Tipo</label>
+          <select id="tipo" name="tipo" required>
+            {% for valor, texto in tipo_choices %}
+              <option value="{{ valor }}">{{ texto }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="edf-field">
+          <label for="credor">Credor</label>
+          <input id="credor" name="credor" type="text" maxlength="150" required>
+        </div>
+        <div class="edf-field full">
+          <label for="descricao">Descrição</label>
+          <input id="descricao" name="descricao" type="text" maxlength="255">
+        </div>
+        <div class="edf-field">
+          <label for="valor_original">Valor original</label>
+          <input id="valor_original" name="valor_original" type="text" inputmode="decimal" placeholder="0,00" required>
+        </div>
+        <div class="edf-field">
+          <label for="saldo_devedor">Saldo devedor opcional</label>
+          <input id="saldo_devedor" name="saldo_devedor" type="text" inputmode="decimal" placeholder="Deixe vazio para usar o valor original">
+        </div>
+        <div class="edf-field">
+          <label for="data_contratacao">Data contratação</label>
+          <input id="data_contratacao" name="data_contratacao" type="date" value="{{ hoje|date:'Y-m-d' }}" required>
+        </div>
+        <div class="edf-field">
+          <label for="data_vencimento">Data vencimento</label>
+          <input id="data_vencimento" name="data_vencimento" type="date">
+        </div>
+        <div class="edf-field">
+          <label for="quantidade_parcelas">Quantidade parcelas</label>
+          <input id="quantidade_parcelas" name="quantidade_parcelas" type="number" min="1">
+        </div>
+        <div class="edf-field">
+          <label for="valor_parcela">Valor parcela</label>
+          <input id="valor_parcela" name="valor_parcela" type="text" inputmode="decimal" placeholder="0,00">
+        </div>
+        <div class="edf-field full">
+          <label for="observacao">Observação</label>
+          <textarea id="observacao" name="observacao"></textarea>
+        </div>
+      </div>
+      <div class="edf-form-actions">
+        <button class="edf-btn edf-btn-primary" type="submit">Salvar dívida</button>
+      </div>
+    </form>
+  </section>
+</main>
+{% endblock %}

@@ -1,0 +1,91 @@
+{% extends 'estoque/base.html' %}
+
+{% block title %}Detalhe da Dívida{% endblock %}
+
+{% block content %}
+<style>
+  .edd-page { max-width: 1040px; margin: 12px auto 70px; padding: 0 14px; color: #172033; }
+  .edd-header, .edd-card, .edd-panel { border: 1px solid #e1e7ef; border-radius: 10px; background: #fff; box-shadow: 0 8px 18px rgba(15,23,42,.04); }
+  .edd-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; padding: 14px 16px; }
+  .edd-title { margin: 0; font-size: 1.32rem; font-weight: 950; }
+  .edd-subtitle { margin: 4px 0 0; color: #64748b; font-weight: 750; }
+  .edd-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .edd-btn { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #bfdbfe; border-radius: 8px; padding: 8px 12px; background: #eff6ff; color: #164173; font: inherit; font-weight: 900; text-decoration: none; cursor: pointer; }
+  .edd-btn-success { border-color: #16a34a; background: #ecfdf3; color: #166534; }
+  .edd-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .edd-card { padding: 10px 12px; border-left: 4px solid #2563eb; }
+  .edd-label { color: #64748b; font-size: .72rem; font-weight: 900; text-transform: uppercase; }
+  .edd-value { margin-top: 5px; font-weight: 950; }
+  .edd-panel { overflow: hidden; }
+  .edd-panel h2 { margin: 0; padding: 11px 14px; border-bottom: 1px solid #edf1f6; background: #f8fafc; font-size: 1rem; font-weight: 950; }
+  .edd-table { width: 100%; border-collapse: collapse; }
+  .edd-table th { padding: 10px; border-bottom: 1px solid #edf1f6; color: #64748b; font-size: .72rem; font-weight: 950; text-align: left; text-transform: uppercase; }
+  .edd-table td { padding: 10px; border-bottom: 1px solid #f0f3f8; font-weight: 750; }
+  .edd-empty { padding: 20px 14px; color: #64748b; font-weight: 800; text-align: center; }
+  .edd-alert { margin-bottom: 10px; border-radius: 10px; padding: 9px 11px; font-weight: 850; }
+  .edd-alert.success { border: 1px solid #b7e4c7; background: #ecfdf3; color: #166534; }
+  .edd-alert.error { border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; }
+  @media (max-width: 780px) {
+    .edd-header { flex-direction: column; }
+    .edd-actions { justify-content: flex-start; }
+    .edd-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .edd-btn, .edd-actions { width: 100%; }
+    .edd-table, .edd-table thead, .edd-table tbody, .edd-table tr, .edd-table td { display: block; width: 100%; }
+    .edd-table thead { display: none; }
+    .edd-table tr { border-bottom: 1px solid #edf1f6; padding: 8px 0; }
+  }
+  @media (max-width: 520px) { .edd-grid { grid-template-columns: 1fr; } }
+</style>
+
+<main class="edd-page">
+  <header class="edd-header">
+    <div>
+      <h1 class="edd-title">{{ divida.credor }}</h1>
+      <p class="edd-subtitle">{{ divida.get_tipo_display }}{% if divida.descricao %} · {{ divida.descricao }}{% endif %}</p>
+    </div>
+    <nav class="edd-actions">
+      <a class="edd-btn" href="{% url 'estoque:emprestimos_dividas' %}">Voltar para lista</a>
+      <a class="edd-btn" href="{% url 'estoque:painel_financeiro' %}">Central Financeira</a>
+      {% if divida.status != "quitado" and divida.status != "cancelado" %}
+        <a class="edd-btn edd-btn-success" href="{% url 'estoque:emprestimo_divida_baixar' divida.id %}">Baixar</a>
+      {% endif %}
+    </nav>
+  </header>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="edd-alert {% if message.tags == 'error' %}error{% else %}success{% endif %}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <section class="edd-grid">
+    <article class="edd-card"><div class="edd-label">Valor original</div><div class="edd-value">{{ divida.valor_original_texto }}</div></article>
+    <article class="edd-card"><div class="edd-label">Saldo devedor</div><div class="edd-value">{{ divida.saldo_devedor_texto }}</div></article>
+    <article class="edd-card"><div class="edd-label">Status</div><div class="edd-value">{{ divida.get_status_display }}</div></article>
+    <article class="edd-card"><div class="edd-label">Vencimento</div><div class="edd-value">{{ divida.data_vencimento|date:"d/m/Y"|default:"-" }}</div></article>
+    <article class="edd-card"><div class="edd-label">Contratação</div><div class="edd-value">{{ divida.data_contratacao|date:"d/m/Y" }}</div></article>
+    <article class="edd-card"><div class="edd-label">Parcelas</div><div class="edd-value">{{ divida.quantidade_parcelas|default:"-" }}</div></article>
+    <article class="edd-card"><div class="edd-label">Valor parcela</div><div class="edd-value">{{ divida.valor_parcela_texto }}</div></article>
+    <article class="edd-card"><div class="edd-label">Observação</div><div class="edd-value">{{ divida.observacao|default:"-" }}</div></article>
+  </section>
+
+  <section class="edd-panel">
+    <h2>Pagamentos / baixas</h2>
+    <table class="edd-table">
+      <thead><tr><th>Data</th><th>Valor</th><th>Forma</th><th>Observação</th></tr></thead>
+      <tbody>
+        {% for pagamento in pagamentos %}
+          <tr>
+            <td>{{ pagamento.data_pagamento|date:"d/m/Y" }}</td>
+            <td>{{ pagamento.valor_texto }}</td>
+            <td>{{ pagamento.forma_pagamento|default:"-" }}</td>
+            <td>{{ pagamento.observacao|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="edd-empty">Nenhuma baixa registrada.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</main>
+{% endblock %}

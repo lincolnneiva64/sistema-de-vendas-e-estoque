@@ -1,0 +1,76 @@
+{% extends 'estoque/base.html' %}
+
+{% block title %}Baixar Dívida{% endblock %}
+
+{% block content %}
+<style>
+  .edb-page { max-width: 760px; margin: 12px auto 70px; padding: 0 14px; color: #172033; }
+  .edb-header, .edb-card { border: 1px solid #e1e7ef; border-radius: 10px; background: #fff; box-shadow: 0 8px 18px rgba(15,23,42,.04); }
+  .edb-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; padding: 14px 16px; }
+  .edb-title { margin: 0; font-size: 1.28rem; font-weight: 950; }
+  .edb-subtitle { margin: 4px 0 0; color: #64748b; font-weight: 750; }
+  .edb-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .edb-btn { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #bfdbfe; border-radius: 8px; padding: 8px 12px; background: #eff6ff; color: #164173; font: inherit; font-weight: 900; text-decoration: none; cursor: pointer; }
+  .edb-btn-success { border-color: #16a34a; background: #16a34a; color: #fff; }
+  .edb-card { padding: 14px; }
+  .edb-resumo { margin-bottom: 12px; border: 1px solid #dbeafe; border-radius: 9px; padding: 10px 12px; background: #eff6ff; font-weight: 850; color: #164173; }
+  .edb-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .edb-field.full { grid-column: 1 / -1; }
+  .edb-field label { display: block; margin-bottom: 4px; color: #334155; font-size: .78rem; font-weight: 900; }
+  .edb-field input { width: 100%; min-height: 44px; border: 1.5px solid #cbd5e1; border-radius: 9px; padding: 9px 11px; font: inherit; font-size: 16px; font-weight: 800; }
+  .edb-form-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .edb-alert { margin-bottom: 10px; border-radius: 10px; padding: 9px 11px; font-weight: 850; border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; }
+  @media (max-width: 680px) {
+    .edb-header { flex-direction: column; }
+    .edb-grid { grid-template-columns: 1fr; }
+    .edb-btn, .edb-actions, .edb-form-actions { width: 100%; }
+  }
+</style>
+
+<main class="edb-page">
+  <header class="edb-header">
+    <div>
+      <h1 class="edb-title">Baixar dívida</h1>
+      <p class="edb-subtitle">{{ divida.credor }} · saldo {{ divida.saldo_devedor_texto }}</p>
+    </div>
+    <nav class="edb-actions">
+      <a class="edb-btn" href="{% url 'estoque:emprestimo_divida_detalhe' divida.id %}">Voltar ao detalhe</a>
+      <a class="edb-btn" href="{% url 'estoque:painel_financeiro' %}">Central Financeira</a>
+    </nav>
+  </header>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="edb-alert">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <section class="edb-card">
+    <div class="edb-resumo">Esta baixa reduz apenas o saldo da dívida. Não lança saída em Caixa/Banco nesta etapa.</div>
+    <form method="post">
+      {% csrf_token %}
+      <div class="edb-grid">
+        <div class="edb-field">
+          <label for="valor">Valor</label>
+          <input id="valor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
+        </div>
+        <div class="edb-field">
+          <label for="data_pagamento">Data pagamento</label>
+          <input id="data_pagamento" name="data_pagamento" type="date" value="{{ hoje|date:'Y-m-d' }}" required>
+        </div>
+        <div class="edb-field">
+          <label for="forma_pagamento">Forma pagamento</label>
+          <input id="forma_pagamento" name="forma_pagamento" type="text" maxlength="50" placeholder="Pix, dinheiro, banco">
+        </div>
+        <div class="edb-field">
+          <label for="observacao">Observação</label>
+          <input id="observacao" name="observacao" type="text" maxlength="255">
+        </div>
+      </div>
+      <div class="edb-form-actions">
+        <button class="edb-btn edb-btn-success" type="submit">Confirmar baixa</button>
+      </div>
+    </form>
+  </section>
+</main>
+{% endblock %}
