@@ -1345,7 +1345,7 @@ def _texto_sem_acentos(texto):
     )
 
 
-def _conta_financeira_recebimento_por_forma(forma_pagamento):
+def _conta_financeira_por_forma_pagamento(forma_pagamento):
     _garantir_contas_financeiras_padrao()
     forma = _texto_sem_acentos(forma_pagamento).lower().strip()
     forma_compacta = re.sub(r"\s+", "", forma)
@@ -1385,7 +1385,7 @@ def _registrar_movimento_recebimento_cliente(cliente, valor_recebido, data_receb
     valor = _financeiro_dinheiro(valor_recebido).quantize(Decimal("0.01"))
     if valor <= Decimal("0.00"):
         return None
-    conta_financeira = _conta_financeira_recebimento_por_forma(forma_pagamento)
+    conta_financeira = _conta_financeira_por_forma_pagamento(forma_pagamento)
     if not conta_financeira:
         return None
     return MovimentoFinanceiro.objects.create(
@@ -1395,6 +1395,28 @@ def _registrar_movimento_recebimento_cliente(cliente, valor_recebido, data_receb
         data=data_recebimento or timezone.localdate(),
         descricao=f"Recebimento de cliente: {getattr(cliente, 'nome', '') or 'Cliente nao informado'}",
         origem="recebimento_cliente",
+    )
+
+
+def _registrar_movimento_despesa_diaria(despesa):
+    valor = _financeiro_dinheiro(despesa.valor).quantize(Decimal("0.01"))
+    if valor <= Decimal("0.00"):
+        return None
+    conta_financeira = _conta_financeira_por_forma_pagamento(despesa.forma_pagamento)
+    if not conta_financeira:
+        return None
+    descricao = f"Despesa diaria: {despesa.get_categoria_display()}"
+    observacao = (despesa.observacao or "").strip()
+    if observacao:
+        descricao = f"{descricao} - {observacao[:80]}"
+    data_despesa = timezone.localtime(despesa.data_hora).date() if despesa.data_hora else timezone.localdate()
+    return MovimentoFinanceiro.objects.create(
+        conta=conta_financeira,
+        tipo=MovimentoFinanceiro.TIPO_SAIDA,
+        valor=valor,
+        data=data_despesa,
+        descricao=descricao,
+        origem="despesa_diaria",
     )
 
 
@@ -1978,12 +2000,14 @@ def despesas_diarias(request):
         if forma_pagamento not in formas_validas:
             forma_pagamento = DespesaDiaria.FORMA_OUTRO
 
-        DespesaDiaria.objects.create(
-            valor=valor,
-            categoria=categoria,
-            forma_pagamento=forma_pagamento,
-            observacao=observacao,
-        )
+        with transaction.atomic():
+            despesa = DespesaDiaria.objects.create(
+                valor=valor,
+                categoria=categoria,
+                forma_pagamento=forma_pagamento,
+                observacao=observacao,
+            )
+            _registrar_movimento_despesa_diaria(despesa)
         messages.success(request, "Despesa salva com sucesso.")
         return redirect("estoque:despesas_diarias")
 
