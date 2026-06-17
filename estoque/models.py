@@ -32,7 +32,7 @@ class Produto(models.Model):
     permitir_prejuizo = models.BooleanField(default=False)
     motivo_prejuizo = models.CharField(max_length=200, blank=True, null=True)
 
-    quantidade = models.IntegerField(blank=True, null=True)
+    quantidade = models.DecimalField(max_digits=12, decimal_places=3, blank=True, null=True)
     estoque_minimo = models.PositiveIntegerField(blank=True, null=True)
     fornecedor = models.CharField(max_length=120, blank=True, null=True)
     excluido = models.BooleanField(default=False)

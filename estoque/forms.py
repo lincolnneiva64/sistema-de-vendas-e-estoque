@@ -178,7 +178,7 @@ class ProdutoForm(forms.ModelForm):
             "quantidade": forms.NumberInput(
                 attrs={
                     "class": "form-control",
-                    "step": "1",
+                    "step": "0.001",
                     "min": "0",
                 }
             ),

@@ -1,4 +1,5 @@
 ﻿<!DOCTYPE html>
+{% load l10n %}
 <html lang="pt-br">
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1905,7 +1906,7 @@ td:first-child {
     data-unidade="{{ produto.unidade_venda_1|default_if_none:'' }}"
     data-unidade1="{{ produto.unidade_venda_1|default_if_none:'' }}"
     data-preco="{{ produto.preco_venda|default_if_none:'' }}"
-    data-estoque="{{ produto.quantidade|default_if_none:0 }}"
+    data-estoque="{{ produto.quantidade|default_if_none:0|unlocalize }}"
     data-fracionado="{{ produto.vende_fracionado|yesno:'true,false' }}"
     data-unidade2="{{ produto.unidade_venda_2|default_if_none:'' }}"
     data-fator="{{ produto.fator_conversao|default_if_none:'' }}"
@@ -3134,12 +3135,11 @@ const unidade2Edicao = optionEdicao.dataset.unidade2 || "";
 const fracionadoEdicao = optionEdicao.dataset.fracionado === "true";
 const fatorEdicao = parseFloat(optionEdicao.dataset.fator || "0");
 const estoqueBaseEdicao = parseFloat(optionEdicao.dataset.estoque || "0");
-const estoqueConvertidoEdicao = fatorEdicao > 0 ? estoqueBaseEdicao * fatorEdicao : estoqueBaseEdicao;
 
 if (fracionadoEdicao && unidade2Edicao) {
-    estoquePreview.innerText = `Estoque: ${estoqueBaseEdicao} ${unidade1Edicao} | ${estoqueConvertidoEdicao} ${unidade2Edicao}`;
+    estoquePreview.innerText = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBaseEdicao, unidade1Edicao, fatorEdicao, unidade2Edicao, fracionadoEdicao)}`;
 } else {
-    estoquePreview.innerText = `Estoque: ${estoqueBaseEdicao} ${unidade1Edicao}`;
+    estoquePreview.innerText = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBaseEdicao, unidade1Edicao, fatorEdicao, unidade2Edicao, fracionadoEdicao)}`;
 }
     estoquePreview.style.display = "inline-block";
 } else {
@@ -3423,6 +3423,33 @@ function normalizarNumeroVenda(valor) {
     }
 
     return texto.replace(",", ".");
+}
+
+function formatarNumeroEstoqueVenda(valor) {
+    const numero = Number(valor || 0);
+    if (!Number.isFinite(numero)) return "0";
+    return numero.toFixed(3).replace(/\.?0+$/, "");
+}
+
+function formatarEstoqueProdutoVenda(estoqueBase, unidadeBase, fator, unidadeFracionada, fracionado) {
+    const estoque = Number(estoqueBase || 0);
+    const fatorConversao = Number(fator || 0);
+    const unidade1 = unidadeBase || "";
+    const unidade2 = unidadeFracionada || "";
+
+    if (!fracionado || !unidade2 || fatorConversao <= 0) {
+        return `${formatarNumeroEstoqueVenda(estoque)} ${unidade1}`.trim();
+    }
+
+    const baseInteira = Math.trunc(estoque);
+    const fracaoBase = Math.max(estoque - baseInteira, 0);
+    const fracaoConvertida = Number((fracaoBase * fatorConversao).toFixed(3));
+
+    if (fracaoConvertida > 0) {
+        return `${formatarNumeroEstoqueVenda(baseInteira)} ${unidade1} | ${formatarNumeroEstoqueVenda(fracaoConvertida)} ${unidade2}`.trim();
+    }
+
+    return `${formatarNumeroEstoqueVenda(estoque)} ${unidade1}`.trim();
 }
 
 function coletarItensVenda() {
@@ -4343,12 +4370,11 @@ const unidadeFracSug = opt.dataset.unidade2 || "";
 const fracionadoSug = opt.dataset.fracionado === "true";
 const fatorSug = parseFloat(opt.dataset.fator || "0");
 const estoqueBaseSug = parseFloat(opt.dataset.estoque || "0");
-const estoqueConvertidoSug = fatorSug > 0 ? estoqueBaseSug * fatorSug : estoqueBaseSug;
 
 if (fracionadoSug && unidadeFracSug) {
-    estoquePreview.textContent = `Estoque: ${estoqueBaseSug} ${unidadeBaseSug} | ${estoqueConvertidoSug} ${unidadeFracSug}`;
+    estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBaseSug, unidadeBaseSug, fatorSug, unidadeFracSug, fracionadoSug)}`;
 } else {
-    estoquePreview.textContent = `Estoque: ${estoqueBaseSug} ${unidadeBaseSug}`;
+    estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBaseSug, unidadeBaseSug, fatorSug, unidadeFracSug, fracionadoSug)}`;
 }
         estoquePreview.style.display = "inline-block";
     });
@@ -4445,13 +4471,11 @@ const fatorSelecionado = parseFloat(opt.dataset.fator || "0");
 const unidadeBaseSelecionada = opt.dataset.unidade1 || "";
 const unidadeFracSelecionada = opt.dataset.unidade2 || "";
 const fracionadoSelecionado = opt.dataset.fracionado === "true";
-const estoqueConvertidoSelecionado =
-    fatorSelecionado > 0 ? estoqueBaseSelecionado * fatorSelecionado : estoqueBaseSelecionado;
 
 if (fracionadoSelecionado && unidadeFracSelecionada) {
-    estoquePreview.textContent = `Estoque: ${estoqueBaseSelecionado} ${unidadeBaseSelecionada} | ${estoqueConvertidoSelecionado} ${unidadeFracSelecionada}`;
+    estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBaseSelecionado, unidadeBaseSelecionada, fatorSelecionado, unidadeFracSelecionada, fracionadoSelecionado)}`;
 } else {
-    estoquePreview.textContent = `Estoque: ${estoqueBaseSelecionado} ${unidadeBaseSelecionada}`;
+    estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBaseSelecionado, unidadeBaseSelecionada, fatorSelecionado, unidadeFracSelecionada, fracionadoSelecionado)}`;
 }
 estoquePreview.style.display = "inline-block";
 
@@ -4483,22 +4507,16 @@ let precoFracionado = opt.dataset.preco2 || "";
 
     if (unidade.value === unidade1) {
         if (fracionado && unidade2) {
-    estoquePreview.textContent = `Estoque: ${estoqueBase} ${unidade1} | ${estoqueBase * (fator > 0 ? fator : 1)} ${unidade2}`;
+    estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBase, unidade1, fator, unidade2, fracionado)}`;
 } else {
-    estoquePreview.textContent = `Estoque: ${estoqueBase} ${unidade1}`;
+    estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBase, unidade1, fator, unidade2, fracionado)}`;
 }
         preco.value = precoBase;
         return;
     }
 
     if (fracionado && unidade.value === unidade2) {
-        let estoqueConvertido = estoqueBase;
-
-        if (fator > 0) {
-            estoqueConvertido = estoqueBase * fator;
-        }
-
-        estoquePreview.textContent = `Estoque: ${estoqueBase} ${unidade1} | ${estoqueConvertido} ${unidade2}`;
+        estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBase, unidade1, fator, unidade2, fracionado)}`;
         preco.value = precoFracionado;
     }
 });

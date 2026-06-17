@@ -6726,14 +6726,20 @@ def _ids_itens_adicionados_param(request):
     return list(dict.fromkeys(ids))
 
 
-def _quantidade_estoque_inteira(quantidade, produto_nome):
+def _quantidade_decimal_estoque(quantidade):
+    return Decimal(quantidade or "0").quantize(Decimal("0.001"))
+
+
+def _quantidade_estoque_inteira(quantidade, produto_nome, unidade=None):
     quantidade_decimal = Decimal(quantidade or "0").quantize(Decimal("0.001"))
     if quantidade_decimal != quantidade_decimal.to_integral_value():
+        unidade_texto = str(unidade or "").strip()
+        unidade_sufixo = f" em {unidade_texto}" if unidade_texto else ""
         raise ValueError(
-            f"Estoque de {produto_nome} esta cadastrado em quantidade inteira. "
-            "Informe uma quantidade inteira para movimentar este produto."
+            f"Produto {produto_nome} nao permite venda fracionada. "
+            f"Informe quantidade inteira{unidade_sufixo}."
         )
-    return int(quantidade_decimal)
+    return quantidade_decimal
 
 
 def _normalizar_unidade_estoque(unidade):
@@ -6804,8 +6810,12 @@ def _baixar_estoque_produto(produto_id, quantidade, produto_nome=None, unidade=N
     produto = Produto.objects.select_for_update().get(pk=produto_id)
     nome = produto_nome or produto.nome
     quantidade_base, unidade_base = _quantidade_estoque_para_unidade_base(produto, quantidade, unidade)
-    quantidade_movimento = _quantidade_estoque_inteira(quantidade_base, nome)
-    estoque_atual = produto.quantidade or 0
+    quantidade_movimento = (
+        quantidade_base
+        if produto.vende_fracionado
+        else _quantidade_estoque_inteira(quantidade_base, nome, unidade_base)
+    )
+    estoque_atual = _quantidade_decimal_estoque(produto.quantidade)
     estoque_disponivel_unidade = _estoque_disponivel_na_unidade(produto, unidade)
     print(
         "[venda estoque]",
@@ -6825,7 +6835,7 @@ def _baixar_estoque_produto(produto_id, quantidade, produto_nome=None, unidade=N
         raise ValueError(
             _mensagem_estoque_insuficiente(produto, quantidade, unidade, estoque_disponivel_unidade)
         )
-    produto.quantidade = estoque_atual - quantidade_movimento
+    produto.quantidade = (estoque_atual - quantidade_movimento).quantize(Decimal("0.001"))
     Produto.objects.filter(pk=produto.pk).update(
         quantidade=produto.quantidade,
         atualizado_em=timezone.now(),
@@ -6845,9 +6855,13 @@ def _devolver_estoque_produto(produto_id, quantidade, produto_nome=None, unidade
     produto = Produto.objects.select_for_update().get(pk=produto_id)
     nome = produto_nome or produto.nome
     quantidade_base, _unidade_base = _quantidade_estoque_para_unidade_base(produto, quantidade, unidade)
-    quantidade_movimento = _quantidade_estoque_inteira(quantidade_base, nome)
-    estoque_atual = produto.quantidade or 0
-    produto.quantidade = estoque_atual + quantidade_movimento
+    quantidade_movimento = (
+        quantidade_base
+        if produto.vende_fracionado
+        else _quantidade_estoque_inteira(quantidade_base, nome, _unidade_base)
+    )
+    estoque_atual = _quantidade_decimal_estoque(produto.quantidade)
+    produto.quantidade = (estoque_atual + quantidade_movimento).quantize(Decimal("0.001"))
     Produto.objects.filter(pk=produto.pk).update(
         quantidade=produto.quantidade,
         atualizado_em=timezone.now(),
@@ -7078,12 +7092,23 @@ def gravar_venda(request):
                         item["quantidade"],
                         item["unidade"],
                     )
-                    quantidade_necessaria = _quantidade_estoque_inteira(quantidade_base, produto_bloqueado.nome)
-                    estoque_disponivel = max(produto_bloqueado.quantidade or 0, 0)
-                    quantidade_vendida_int = min(quantidade_necessaria, estoque_disponivel)
-                    quantidade_pendente_int = quantidade_necessaria - quantidade_vendida_int
+                    quantidade_necessaria = (
+                        quantidade_base
+                        if produto_bloqueado.vende_fracionado
+                        else _quantidade_estoque_inteira(
+                            quantidade_base,
+                            produto_bloqueado.nome,
+                            _unidade_base,
+                        )
+                    )
+                    estoque_disponivel = max(
+                        _quantidade_decimal_estoque(produto_bloqueado.quantidade),
+                        Decimal("0.000"),
+                    )
+                    quantidade_vendida_base = min(quantidade_necessaria, estoque_disponivel)
+                    quantidade_pendente_base = quantidade_necessaria - quantidade_vendida_base
 
-                    if quantidade_vendida_int > 0:
+                    if quantidade_vendida_base > 0:
                         if (
                             item["unidade"]
                             and produto_bloqueado.vende_fracionado
@@ -7092,11 +7117,11 @@ def gravar_venda(request):
                             and Decimal(produto_bloqueado.fator_conversao or 0) > 0
                         ):
                             quantidade_vendida = (
-                                Decimal(quantidade_vendida_int)
+                                quantidade_vendida_base
                                 * Decimal(produto_bloqueado.fator_conversao or 0)
                             ).quantize(Decimal("0.001"))
                         else:
-                            quantidade_vendida = Decimal(quantidade_vendida_int).quantize(Decimal("0.001"))
+                            quantidade_vendida = quantidade_vendida_base.quantize(Decimal("0.001"))
                         valor_total_vendido = (quantidade_vendida * item["preco_unitario"]).quantize(Decimal("0.01"))
                         itens_para_venda.append({
                             "produto": produto_bloqueado,
@@ -7106,13 +7131,15 @@ def gravar_venda(request):
                             "valor_total": valor_total_vendido,
                         })
                         total_venda += valor_total_vendido
-                        produto_bloqueado.quantidade = estoque_disponivel - quantidade_vendida_int
+                        produto_bloqueado.quantidade = (
+                            estoque_disponivel - quantidade_vendida_base
+                        ).quantize(Decimal("0.001"))
                         Produto.objects.filter(pk=produto_bloqueado.pk).update(
                             quantidade=produto_bloqueado.quantidade,
                             atualizado_em=timezone.now(),
                         )
 
-                    if quantidade_pendente_int > 0:
+                    if quantidade_pendente_base > 0:
                         if (
                             item["unidade"]
                             and produto_bloqueado.vende_fracionado
@@ -7121,11 +7148,11 @@ def gravar_venda(request):
                             and Decimal(produto_bloqueado.fator_conversao or 0) > 0
                         ):
                             quantidade_pendente = (
-                                Decimal(quantidade_pendente_int)
+                                quantidade_pendente_base
                                 * Decimal(produto_bloqueado.fator_conversao or 0)
                             ).quantize(Decimal("0.001"))
                         else:
-                            quantidade_pendente = Decimal(quantidade_pendente_int).quantize(Decimal("0.001"))
+                            quantidade_pendente = quantidade_pendente_base.quantize(Decimal("0.001"))
                         pendencia = f"{produto_bloqueado.nome}: {_formatar_quantidade(quantidade_pendente)}"
                         if item["unidade"]:
                             pendencia = f"{pendencia} {item['unidade']}"
