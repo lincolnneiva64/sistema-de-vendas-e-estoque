@@ -1420,6 +1420,29 @@ def _registrar_movimento_despesa_diaria(despesa):
     )
 
 
+def _registrar_movimento_compra_a_vista(compra):
+    valor = _financeiro_dinheiro(compra.total).quantize(Decimal("0.01"))
+    if valor <= Decimal("0.00"):
+        return None
+    conta_financeira = _conta_financeira_por_forma_pagamento(compra.tipo_pagamento)
+    if not conta_financeira:
+        return None
+    fornecedor_nome = compra.fornecedor.nome if compra.fornecedor else ""
+    descricao = (
+        f"Compra à vista: {fornecedor_nome}"
+        if fornecedor_nome
+        else "Compra à vista"
+    )
+    return MovimentoFinanceiro.objects.create(
+        conta=conta_financeira,
+        tipo=MovimentoFinanceiro.TIPO_SAIDA,
+        valor=valor,
+        data=compra.data_compra or timezone.localdate(),
+        descricao=descricao,
+        origem="compra_a_vista",
+    )
+
+
 def _registrar_movimento_conta_pagar_fornecedor(conta, valor_pago, data_pagamento, forma_pagamento):
     valor = _financeiro_dinheiro(valor_pago).quantize(Decimal("0.01"))
     if valor <= Decimal("0.00"):
@@ -2843,6 +2866,8 @@ def compras_nova(request):
                     status=ContaPagar.STATUS_ABERTA,
                     observacao=observacao or "",
                 )
+            else:
+                _registrar_movimento_compra_a_vista(compra)
 
         messages.success(request, f"Compra #{compra.id} salva com sucesso.")
         return redirect("estoque:compras_lista")

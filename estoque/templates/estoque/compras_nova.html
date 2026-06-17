@@ -1005,12 +1005,15 @@
             <label>Tipo de pagamento</label>
             <select name="tipo_pagamento" id="tipoPagamentoCompra">
               <option value="">Selecione...</option>
-              <option value="avista">A vista</option>
+              <option value="avista">A vista (Banco/Pix)</option>
               <option value="aprazo" selected>A prazo</option>
               <option value="pix">Pix</option>
               <option value="dinheiro">Dinheiro</option>
+              <option value="banco">Banco/Transferencia</option>
+              <option value="boleto">Boleto</option>
               <option value="cartao">Cartao</option>
             </select>
+            <small style="display:block; margin-top:5px; color:#164173; font-weight:800;">Compras à vista serão lançadas automaticamente em Caixa/Banco conforme a forma de pagamento. Compras a prazo só sairão do caixa quando a conta for paga.</small>
           </div>
           <div class="compras-field" id="campoVencimentoCompra">
             <label>Vencimento</label>
