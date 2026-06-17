@@ -24,7 +24,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -1259,6 +1259,9 @@ def painel_financeiro(request):
     def dinheiro(valor):
         return valor or Decimal("0.00")
 
+    def moeda_br(valor):
+        return f"R$ {dinheiro(valor):.2f}".replace(".", ",")
+
     contas_receber_abertas = ContaReceber.objects.filter(
         status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
         valor_em_aberto__gt=0,
@@ -1270,6 +1273,52 @@ def painel_financeiro(request):
 
     receber_hoje = dinheiro(contas_receber_abertas.filter(data_vencimento=hoje).aggregate(total=Sum("valor_em_aberto"))["total"])
     pagar_hoje = dinheiro(contas_pagar_abertas.filter(data_vencimento=hoje).aggregate(total=Sum("valor_em_aberto"))["total"])
+
+    def saldo_contas_financeiras(tipo_conta):
+        contas = ContaFinanceira.objects.filter(ativo=True, tipo=tipo_conta)
+        contas_ids = list(contas.values_list("id", flat=True))
+        saldo_inicial = dinheiro(contas.aggregate(total=Sum("saldo_inicial"))["total"])
+        if not contas_ids:
+            return saldo_inicial
+
+        entradas = dinheiro(
+            MovimentoFinanceiro.objects
+            .filter(conta_id__in=contas_ids, tipo=MovimentoFinanceiro.TIPO_ENTRADA)
+            .aggregate(total=Sum("valor"))["total"]
+        )
+        ajustes = dinheiro(
+            MovimentoFinanceiro.objects
+            .filter(conta_id__in=contas_ids, tipo=MovimentoFinanceiro.TIPO_AJUSTE)
+            .aggregate(total=Sum("valor"))["total"]
+        )
+        saidas = dinheiro(
+            MovimentoFinanceiro.objects
+            .filter(conta_id__in=contas_ids, tipo=MovimentoFinanceiro.TIPO_SAIDA)
+            .aggregate(total=Sum("valor"))["total"]
+        )
+        transferencias_enviadas = dinheiro(
+            MovimentoFinanceiro.objects
+            .filter(conta_id__in=contas_ids, tipo=MovimentoFinanceiro.TIPO_TRANSFERENCIA)
+            .aggregate(total=Sum("valor"))["total"]
+        )
+        transferencias_recebidas = dinheiro(
+            MovimentoFinanceiro.objects
+            .filter(conta_destino_id__in=contas_ids, tipo=MovimentoFinanceiro.TIPO_TRANSFERENCIA)
+            .aggregate(total=Sum("valor"))["total"]
+        )
+        return saldo_inicial + entradas + ajustes - saidas - transferencias_enviadas + transferencias_recebidas
+
+    saldo_caixa = saldo_contas_financeiras(ContaFinanceira.TIPO_CAIXA)
+    saldo_banco = saldo_contas_financeiras(ContaFinanceira.TIPO_BANCO)
+    total_disponivel = saldo_caixa + saldo_banco
+    total_a_pagar_hoje_banco = pagar_hoje
+    banco_suficiente_hoje = saldo_banco >= total_a_pagar_hoje_banco
+    falta_banco_hoje = max(total_a_pagar_hoje_banco - saldo_banco, Decimal("0.00"))
+    if banco_suficiente_hoje:
+        situacao_banco_hoje = "Banco suficiente para os compromissos de hoje."
+    else:
+        valor_faltante = f"{falta_banco_hoje:.2f}".replace(".", ",")
+        situacao_banco_hoje = f"Banco insuficiente. Falta R$ {valor_faltante} para os compromissos de hoje."
 
     receber_7 = dinheiro(contas_receber_abertas.filter(data_vencimento__range=(hoje, fim_7)).aggregate(total=Sum("valor_em_aberto"))["total"])
     pagar_7 = dinheiro(contas_pagar_abertas.filter(data_vencimento__range=(hoje, fim_7)).aggregate(total=Sum("valor_em_aberto"))["total"])
@@ -1336,6 +1385,17 @@ def painel_financeiro(request):
             "hoje": hoje,
             "fim_7": fim_7,
             "fim_30": fim_30,
+            "caixa_banco_cards": [
+                {"titulo": "Caixa em especie", "valor": saldo_caixa, "valor_texto": moeda_br(saldo_caixa), "tipo": "neutro"},
+                {"titulo": "Banco/Pix", "valor": saldo_banco, "valor_texto": moeda_br(saldo_banco), "tipo": "neutro"},
+                {"titulo": "Total disponivel", "valor": total_disponivel, "valor_texto": moeda_br(total_disponivel), "tipo": "destaque"},
+                {
+                    "titulo": "Situacao do banco hoje",
+                    "valor": situacao_banco_hoje,
+                    "tipo": "suficiente" if banco_suficiente_hoje else "insuficiente",
+                    "moeda": False,
+                },
+            ],
             "hoje_cards": [
                 {"titulo": "Total a receber hoje", "valor": receber_hoje, "tipo": "positivo"},
                 {"titulo": "Total a pagar hoje", "valor": pagar_hoje, "tipo": "negativo"},

@@ -1074,6 +1074,66 @@ class PagamentoContaPagar(models.Model):
         return f"Pagamento R$ {self.valor} - Conta #{self.conta_id}"
 
 
+class ContaFinanceira(models.Model):
+    TIPO_CAIXA = "caixa"
+    TIPO_BANCO = "banco"
+    TIPO_CHOICES = [
+        (TIPO_CAIXA, "Caixa"),
+        (TIPO_BANCO, "Banco"),
+    ]
+
+    nome = models.CharField(max_length=100)
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
+    saldo_inicial = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    ativo = models.BooleanField(default=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["tipo", "nome"]
+
+    def __str__(self):
+        return self.nome
+
+
+class MovimentoFinanceiro(models.Model):
+    TIPO_ENTRADA = "entrada"
+    TIPO_SAIDA = "saida"
+    TIPO_TRANSFERENCIA = "transferencia"
+    TIPO_AJUSTE = "ajuste"
+    TIPO_CHOICES = [
+        (TIPO_ENTRADA, "Entrada"),
+        (TIPO_SAIDA, "Saida"),
+        (TIPO_TRANSFERENCIA, "Transferencia"),
+        (TIPO_AJUSTE, "Ajuste"),
+    ]
+
+    conta = models.ForeignKey(
+        ContaFinanceira,
+        on_delete=models.PROTECT,
+        related_name="movimentos",
+    )
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+    data = models.DateField()
+    descricao = models.CharField(max_length=255, blank=True)
+    conta_destino = models.ForeignKey(
+        ContaFinanceira,
+        on_delete=models.PROTECT,
+        blank=True,
+        null=True,
+        related_name="transferencias_recebidas",
+    )
+    origem = models.CharField(max_length=100, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-data", "-id"]
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} R$ {self.valor} - {self.conta}"
+
+
 class DespesaDiaria(models.Model):
     CATEGORIA_GASOLINA = "gasolina"
     CATEGORIA_ALIMENTACAO = "alimentacao"
