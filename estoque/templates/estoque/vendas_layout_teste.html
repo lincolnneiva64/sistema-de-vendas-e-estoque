@@ -1949,6 +1949,7 @@ td:first-child {
             <a href="{% url 'estoque:contas_receber' %}" id="btnContasReceberVenda" class="acao-venda-btn secundaria">Contas a Receber</a>
             <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="acao-venda-btn secundaria {% if tem_pix_em_atencao %}pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
             <a href="{% url 'estoque:entregas_dia' %}" class="acao-venda-btn secundaria">Ir para Entregas</a>
+            <a href="{% url 'estoque:painel_financeiro' %}" class="acao-venda-btn secundaria">Central Financeira</a>
             <a href="{% url 'estoque:home' %}" class="acao-venda-btn secundaria">Voltar para Painel</a>
             </div>
             <div class="acoes-venda-grupo direita">
