@@ -1119,6 +1119,7 @@ class MovimentoFinanceiro(models.Model):
     valor = models.DecimalField(max_digits=12, decimal_places=2)
     data = models.DateField()
     descricao = models.CharField(max_length=255, blank=True)
+    operador = models.CharField(max_length=120, blank=True)
     conta_destino = models.ForeignKey(
         ContaFinanceira,
         on_delete=models.PROTECT,

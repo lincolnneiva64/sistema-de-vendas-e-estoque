@@ -1679,15 +1679,10 @@ def caixa_banco(request):
     conta_reserva = _conta_financeira_padrao("reserva")
     conta_banco = _conta_financeira_padrao("banco")
 
-    def descricao_com_operador(descricao, operador):
-        descricao = (descricao or "").strip()
-        operador = (operador or "").strip()
-        if operador:
-            complemento = f"Responsavel: {operador}"
-            return f"{descricao} - {complemento}" if descricao else complemento
-        return descricao
+    def operador_post():
+        return request.POST.get("operador", "").strip()[:120]
 
-    def criar_ajuste_para_saldo(conta, novo_saldo, descricao, origem):
+    def criar_ajuste_para_saldo(conta, novo_saldo, descricao, origem, operador=""):
         saldo_atual = _saldo_conta_financeira(conta)
         diferenca = (novo_saldo - saldo_atual).quantize(Decimal("0.01"))
         return MovimentoFinanceiro.objects.create(
@@ -1696,10 +1691,11 @@ def caixa_banco(request):
             valor=diferenca,
             data=timezone.localdate(),
             descricao=descricao,
+            operador=operador,
             origem=origem,
         )
 
-    def criar_transferencia(conta_origem, conta_destino, valor, descricao, origem):
+    def criar_transferencia(conta_origem, conta_destino, valor, descricao, origem, operador=""):
         if not conta_origem or not conta_destino:
             messages.error(request, "Conta financeira nao encontrada.")
             return False
@@ -1719,6 +1715,7 @@ def caixa_banco(request):
             valor=valor,
             data=timezone.localdate(),
             descricao=descricao,
+            operador=operador,
             origem=origem,
         )
         return True
@@ -1728,6 +1725,7 @@ def caixa_banco(request):
 
         if acao in {"abrir_caixa", "ajustar_saldo", "ajuste_saldo"}:
             conta = ContaFinanceira.objects.filter(pk=request.POST.get("conta"), ativo=True).first()
+            operador = operador_post()
             if acao == "abrir_caixa":
                 conta = conta_caixa
                 novo_saldo = _parse_decimal_financeiro(request.POST.get("valor") or request.POST.get("novo_saldo"))
@@ -1743,7 +1741,7 @@ def caixa_banco(request):
                 return redirect("estoque:caixa_banco")
 
             with transaction.atomic():
-                criar_ajuste_para_saldo(conta, novo_saldo, descricao, origem)
+                criar_ajuste_para_saldo(conta, novo_saldo, descricao, origem, operador)
             if acao == "abrir_caixa":
                 messages.success(request, "Caixa aberto / troco inicial ajustado com sucesso.")
             else:
@@ -1751,11 +1749,11 @@ def caixa_banco(request):
             return redirect("estoque:caixa_banco")
 
         if acao in {"fazer_sangria", "depositar_reserva_banco", "reforcar_caixa_reserva", "transferencia"}:
+            operador = operador_post()
             if acao == "fazer_sangria":
                 conta_origem = conta_caixa
                 conta_destino = conta_reserva
                 descricao = request.POST.get("descricao", "").strip() or "Sangria para reserva em mãos"
-                descricao = descricao_com_operador(descricao, request.POST.get("operador"))
                 origem = "sangria_reserva"
             elif acao == "depositar_reserva_banco":
                 conta_origem = conta_reserva
@@ -1775,13 +1773,14 @@ def caixa_banco(request):
             valor = _parse_decimal_financeiro(request.POST.get("valor"))
 
             with transaction.atomic():
-                if not criar_transferencia(conta_origem, conta_destino, valor, descricao, origem):
+                if not criar_transferencia(conta_origem, conta_destino, valor, descricao, origem, operador):
                     return redirect("estoque:caixa_banco")
             messages.success(request, "Transferencia registrada com sucesso.")
             return redirect("estoque:caixa_banco")
 
         if acao in {"entrada", "saida", "entrada_avulsa", "saida_avulsa", "pagar_com_reserva"}:
             conta = ContaFinanceira.objects.filter(pk=request.POST.get("conta"), ativo=True).first()
+            operador = operador_post()
             if acao == "pagar_com_reserva":
                 conta = conta_reserva
             valor = _parse_decimal_financeiro(request.POST.get("valor"))
@@ -1816,6 +1815,7 @@ def caixa_banco(request):
                     valor=valor,
                     data=timezone.localdate(),
                     descricao=descricao,
+                    operador=operador,
                     origem=origem,
                 )
             messages.success(request, "Movimento registrado com sucesso.")
@@ -1837,6 +1837,53 @@ def caixa_banco(request):
     )
     for movimento in movimentos:
         movimento.valor_texto = _financeiro_moeda_br(movimento.valor)
+        movimento.operador_texto = movimento.operador or "nao informado"
+
+    hoje = timezone.localdate()
+    if conta_reserva:
+        movimentos_reserva_qs = MovimentoFinanceiro.objects.select_related("conta", "conta_destino").filter(
+            Q(conta=conta_reserva) | Q(conta_destino=conta_reserva)
+        )
+    else:
+        movimentos_reserva_qs = MovimentoFinanceiro.objects.none()
+    entradas_reserva_hoje = _financeiro_dinheiro(
+        movimentos_reserva_qs.filter(
+            Q(data=hoje, tipo=MovimentoFinanceiro.TIPO_ENTRADA, conta=conta_reserva) |
+            Q(data=hoje, tipo=MovimentoFinanceiro.TIPO_TRANSFERENCIA, conta_destino=conta_reserva) |
+            Q(data=hoje, tipo=MovimentoFinanceiro.TIPO_AJUSTE, conta=conta_reserva, valor__gt=0)
+        ).aggregate(total=Sum("valor"))["total"]
+    )
+    saidas_reserva_diretas = _financeiro_dinheiro(
+        movimentos_reserva_qs.filter(
+            Q(data=hoje, tipo=MovimentoFinanceiro.TIPO_SAIDA, conta=conta_reserva) |
+            Q(data=hoje, tipo=MovimentoFinanceiro.TIPO_TRANSFERENCIA, conta=conta_reserva)
+        ).exclude(
+            tipo=MovimentoFinanceiro.TIPO_TRANSFERENCIA,
+            conta=conta_reserva,
+            conta_destino=conta_banco,
+        ).aggregate(total=Sum("valor"))["total"]
+    )
+    ajustes_reserva_negativos = _financeiro_dinheiro(
+        movimentos_reserva_qs.filter(
+            data=hoje,
+            tipo=MovimentoFinanceiro.TIPO_AJUSTE,
+            conta=conta_reserva,
+            valor__lt=0,
+        ).aggregate(total=Sum("valor"))["total"]
+    )
+    saidas_reserva_hoje = saidas_reserva_diretas + abs(ajustes_reserva_negativos)
+    depositos_reserva_banco_hoje = _financeiro_dinheiro(
+        movimentos_reserva_qs.filter(
+            data=hoje,
+            tipo=MovimentoFinanceiro.TIPO_TRANSFERENCIA,
+            conta=conta_reserva,
+            conta_destino=conta_banco,
+        ).aggregate(total=Sum("valor"))["total"]
+    )
+    movimentos_reserva = list(movimentos_reserva_qs.order_by("-data", "-id")[:20])
+    for movimento in movimentos_reserva:
+        movimento.valor_texto = _financeiro_moeda_br(movimento.valor)
+        movimento.operador_texto = movimento.operador or "nao informado"
 
     return render(
         request,
@@ -1857,6 +1904,10 @@ def caixa_banco(request):
             "total_disponivel": total_disponivel,
             "total_disponivel_texto": _financeiro_moeda_br(total_disponivel),
             "movimentos": movimentos,
+            "entradas_reserva_hoje_texto": _financeiro_moeda_br(entradas_reserva_hoje),
+            "saidas_reserva_hoje_texto": _financeiro_moeda_br(saidas_reserva_hoje),
+            "depositos_reserva_banco_hoje_texto": _financeiro_moeda_br(depositos_reserva_banco_hoje),
+            "movimentos_reserva": movimentos_reserva,
         },
     )
 
