@@ -3580,9 +3580,28 @@ function moedaVenda(valor) {
     return "R$ " + Number(valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function numeroMoedaVenda(valor) {
+    let texto = String(valor || "0").trim().replace("R$", "").replace(/\s/g, "");
+    if (!texto) return 0;
+    if (texto.includes(",")) {
+        texto = texto.replace(/\./g, "").replace(",", ".");
+    } else {
+        const partes = texto.split(".");
+        if (partes.length > 2) {
+            const ultimaParte = partes[partes.length - 1];
+            texto = ultimaParte.length <= 2
+                ? partes.slice(0, -1).join("") + "." + ultimaParte
+                : partes.join("");
+        }
+    }
+    texto = texto.replace(/[^\d.-]/g, "");
+    const numero = Number(texto);
+    return Number.isFinite(numero) ? numero : 0;
+}
+
 function formatarCampoDinheiroVenda(campo) {
     if (!campo) return;
-    const numero = parseFloat(normalizarNumeroVenda(campo.value || "0"));
+    const numero = numeroMoedaVenda(campo.value || "0");
     campo.value = Number.isFinite(numero)
         ? numero.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         : "0,00";
@@ -3590,8 +3609,8 @@ function formatarCampoDinheiroVenda(campo) {
 
 function preencherRestanteBancoVenda() {
     if (!vendaOrigemCaixa || !vendaOrigemBanco) return;
-    const total = Math.round(parseFloat(normalizarNumeroVenda(vendaFechamentoTotal ? vendaFechamentoTotal.textContent : "0")) * 100);
-    const caixa = Math.round(parseFloat(normalizarNumeroVenda(vendaOrigemCaixa.value || "0")) * 100);
+    const total = Math.round(numeroMoedaVenda(vendaFechamentoTotal ? vendaFechamentoTotal.textContent : "0") * 100);
+    const caixa = Math.round(numeroMoedaVenda(vendaOrigemCaixa.value || "0") * 100);
     const restante = Math.max(total - caixa, 0);
     vendaOrigemBanco.value = (restante / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -3895,6 +3914,10 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
 [vendaOrigemCaixa, vendaOrigemBanco].forEach((campo, indice, campos) => {
     if (!campo) return;
     campo.addEventListener("focus", () => focarSelecionandoVenda(campo));
+    if (campo === vendaOrigemCaixa) {
+        campo.addEventListener("input", preencherRestanteBancoVenda);
+        campo.addEventListener("change", preencherRestanteBancoVenda);
+    }
     campo.addEventListener("blur", () => {
         formatarCampoDinheiroVenda(campo);
         if (campo === vendaOrigemCaixa) {
