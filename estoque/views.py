@@ -1988,6 +1988,31 @@ def caixa_banco(request):
     )
 
 
+def caixa_banco_editar_descricao_movimento(request, movimento_id):
+    movimento = get_object_or_404(
+        MovimentoFinanceiro.objects.select_related("conta", "conta_destino"),
+        pk=movimento_id,
+    )
+    retorno_url = reverse("estoque:caixa_banco")
+
+    if request.method == "POST":
+        movimento.descricao = request.POST.get("descricao", "").strip()
+        movimento.save(update_fields=["descricao"])
+        messages.success(request, "Descricao do movimento atualizada com sucesso.")
+        return redirect(retorno_url)
+
+    movimento.valor_texto = _financeiro_moeda_br(movimento.valor)
+    movimento.operador_texto = movimento.operador or "nao informado"
+    return render(
+        request,
+        "estoque/caixa_banco_editar_descricao.html",
+        {
+            "movimento": movimento,
+            "retorno_url": retorno_url,
+        },
+    )
+
+
 def _parse_int_opcional(valor):
     texto = str(valor or "").strip()
     if not texto:

@@ -7,6 +7,11 @@ urlpatterns = [
     path("", views.home, name="home"),
     path("painel-financeiro/", views.painel_financeiro, name="painel_financeiro"),
     path("caixa-banco/", views.caixa_banco, name="caixa_banco"),
+    path(
+        "caixa-banco/movimentos/<int:movimento_id>/editar-descricao/",
+        views.caixa_banco_editar_descricao_movimento,
+        name="caixa_banco_editar_descricao_movimento",
+    ),
     path("despesas-diarias/", views.despesas_diarias, name="despesas_diarias"),
     path("cadastrar/", views.cadastrar_produto, name="cadastrar_produto"),
     path("cadastrar-unidade/", views.cadastrar_unidade, name="cadastrar_unidade"),

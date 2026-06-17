@@ -365,6 +365,28 @@
     font-weight: 950;
   }
 
+  .caixa-link-discreto {
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 6px 9px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: .78rem;
+    font-weight: 900;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .caixa-link-discreto:hover {
+    border-color: #93c5fd;
+    color: #1d4ed8;
+    background: #eff6ff;
+  }
+
   .caixa-mobile-history {
     display: none;
   }
@@ -434,6 +456,11 @@
       display: block;
       margin-top: 2px;
       font-weight: 850;
+    }
+    .caixa-link-discreto {
+      width: 100%;
+      min-height: 40px;
+      margin-top: 6px;
     }
   }
 </style>
@@ -682,6 +709,7 @@
             <th>Destino</th>
             <th>Descricao</th>
             <th>Operador</th>
+            <th>Acao</th>
           </tr>
         </thead>
         <tbody>
@@ -694,10 +722,13 @@
               <td>{{ movimento.conta_destino.nome|default:"-" }}</td>
               <td>{{ movimento.descricao|default:"-" }}</td>
               <td>Operador: {{ movimento.operador_texto }}</td>
+              <td>
+                <a class="caixa-link-discreto" href="{% url 'estoque:caixa_banco_editar_descricao_movimento' movimento.id %}">Editar descricao</a>
+              </td>
             </tr>
           {% empty %}
             <tr>
-              <td colspan="7" class="caixa-empty">Nenhum movimento da reserva registrado.</td>
+              <td colspan="8" class="caixa-empty">Nenhum movimento da reserva registrado.</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -731,6 +762,9 @@
             <div class="caixa-field full">
               <span class="caixa-mobile-label">Descricao</span>
               <span class="caixa-mobile-value">{{ movimento.descricao|default:"-" }}</span>
+            </div>
+            <div class="caixa-field full">
+              <a class="caixa-link-discreto" href="{% url 'estoque:caixa_banco_editar_descricao_movimento' movimento.id %}">Editar descricao</a>
             </div>
           </div>
         </article>
@@ -878,6 +912,7 @@
             <th>Origem</th>
             <th>Operador</th>
             <th>Descricao</th>
+            <th>Acao</th>
           </tr>
         </thead>
         <tbody>
@@ -891,10 +926,13 @@
               <td>{{ movimento.origem|default:"-" }}</td>
               <td>Operador: {{ movimento.operador_texto }}</td>
               <td>{{ movimento.descricao|default:"-" }}</td>
+              <td>
+                <a class="caixa-link-discreto" href="{% url 'estoque:caixa_banco_editar_descricao_movimento' movimento.id %}">Editar descricao</a>
+              </td>
             </tr>
           {% empty %}
             <tr>
-              <td colspan="8" class="caixa-empty">Nenhum movimento financeiro registrado.</td>
+              <td colspan="9" class="caixa-empty">Nenhum movimento financeiro registrado.</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -932,6 +970,9 @@
             <div class="caixa-field full">
               <span class="caixa-mobile-label">Descricao</span>
               <span class="caixa-mobile-value">{{ movimento.descricao|default:"-" }}</span>
+            </div>
+            <div class="caixa-field full">
+              <a class="caixa-link-discreto" href="{% url 'estoque:caixa_banco_editar_descricao_movimento' movimento.id %}">Editar descricao</a>
             </div>
           </div>
         </article>
