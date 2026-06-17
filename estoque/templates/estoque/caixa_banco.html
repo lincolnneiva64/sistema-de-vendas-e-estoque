@@ -487,7 +487,7 @@
         <div class="caixa-form-grid">
           <div class="caixa-field">
             <label for="aberturaValor">Valor do caixa/troco inicial</label>
-            <input id="aberturaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
+            <input id="aberturaValor" name="valor" type="text" inputmode="decimal" placeholder="R$ 0,00" data-money-input required>
           </div>
           <div class="caixa-field">
             <label for="aberturaDescricao">Descricao opcional</label>
@@ -526,7 +526,7 @@
         <div class="caixa-form-grid">
           <div class="caixa-field">
             <label for="sangriaValor">Valor</label>
-            <input id="sangriaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
+            <input id="sangriaValor" name="valor" type="text" inputmode="decimal" placeholder="R$ 0,00" data-money-input required>
           </div>
           <div class="caixa-field">
             <label for="sangriaOperador">Operador / responsavel</label>
@@ -558,7 +558,7 @@
         <div class="caixa-form-grid">
           <div class="caixa-field">
             <label for="reservaSaidaValor">Valor</label>
-            <input id="reservaSaidaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
+            <input id="reservaSaidaValor" name="valor" type="text" inputmode="decimal" placeholder="R$ 0,00" data-money-input required>
           </div>
           <div class="caixa-field">
             <label for="reservaSaidaDescricao">Descricao recomendada</label>
@@ -590,7 +590,7 @@
         <div class="caixa-form-grid">
           <div class="caixa-field">
             <label for="reforcoValor">Valor</label>
-            <input id="reforcoValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
+            <input id="reforcoValor" name="valor" type="text" inputmode="decimal" placeholder="R$ 0,00" data-money-input required>
           </div>
           <div class="caixa-field">
             <label for="reforcoDescricao">Descricao opcional</label>
@@ -622,7 +622,7 @@
         <div class="caixa-form-grid">
           <div class="caixa-field">
             <label for="depositoValor">Valor</label>
-            <input id="depositoValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
+            <input id="depositoValor" name="valor" type="text" inputmode="decimal" placeholder="R$ 0,00" data-money-input required>
           </div>
           <div class="caixa-field">
             <label for="depositoDescricao">Descricao opcional</label>
@@ -758,7 +758,7 @@
           </div>
           <div class="caixa-field">
             <label for="entradaValor">Valor</label>
-            <input id="entradaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
+            <input id="entradaValor" name="valor" type="text" inputmode="decimal" placeholder="R$ 0,00" data-money-input required>
           </div>
           <div class="caixa-field full">
             <label for="entradaDescricao">Descricao</label>
@@ -797,7 +797,7 @@
           </div>
           <div class="caixa-field">
             <label for="saidaValor">Valor</label>
-            <input id="saidaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
+            <input id="saidaValor" name="valor" type="text" inputmode="decimal" placeholder="R$ 0,00" data-money-input required>
           </div>
           <div class="caixa-field full">
             <label for="saidaDescricao">Descricao</label>
@@ -823,7 +823,7 @@
   <section class="caixa-forms caixa-forms-single" aria-label="Conferencia e Ajuste de Saldo">
     <article class="caixa-form-card">
       <h2 class="caixa-form-title">Conferencia / Ajuste de saldo</h2>
-      <p class="caixa-form-help">Use quando o saldo real do caixa, reserva ou banco nao bater com o sistema.</p>
+      <p class="caixa-form-help">Use para informar o saldo inicial real ou corrigir quando o saldo do caixa, reserva ou banco nao bater com o sistema.</p>
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="acao" value="ajuste_saldo">
@@ -838,11 +838,11 @@
           </div>
           <div class="caixa-field">
             <label for="ajusteNovoSaldo">Novo saldo</label>
-            <input id="ajusteNovoSaldo" name="novo_saldo" type="text" inputmode="decimal" placeholder="0,00" required>
+            <input id="ajusteNovoSaldo" name="novo_saldo" type="text" inputmode="decimal" placeholder="R$ 0,00" data-money-input required>
           </div>
           <div class="caixa-field full">
             <label for="ajusteDescricao">Descricao opcional</label>
-            <input id="ajusteDescricao" name="descricao" type="text" placeholder="Conferencia / ajuste de saldo">
+            <input id="ajusteDescricao" name="descricao" type="text" placeholder="Ex: saldo inicial real conferido">
           </div>
           <div class="caixa-field full">
             <label for="ajusteOperador">Operador / responsavel</label>
@@ -941,4 +941,73 @@
     </div>
   </section>
 </main>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const moneyInputs = Array.from(document.querySelectorAll("[data-money-input]"));
+
+    function parseMoneyValue(value) {
+      let text = String(value || "")
+        .replace("R$", "")
+        .replace(/\s/g, "")
+        .trim();
+
+      if (!text) return null;
+
+      if (text.includes(",")) {
+        text = text.replace(/\./g, "").replace(",", ".");
+      }
+
+      const number = Number(text);
+      return Number.isFinite(number) ? number : null;
+    }
+
+    function formatMoneyValue(value) {
+      const number = parseMoneyValue(value);
+      if (number === null) return "";
+
+      return number.toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    }
+
+    function normalizeMoneyValue(value) {
+      const number = parseMoneyValue(value);
+      if (number === null) return "";
+
+      return number.toFixed(2).replace(".", ",");
+    }
+
+    moneyInputs.forEach(function (input) {
+      input.addEventListener("blur", function () {
+        input.value = formatMoneyValue(input.value);
+      });
+
+      input.addEventListener("focus", function () {
+        input.value = normalizeMoneyValue(input.value);
+        input.select();
+      });
+    });
+
+    document.querySelectorAll(".caixa-page form").forEach(function (form) {
+      form.addEventListener("submit", function (event) {
+        if (!form.checkValidity()) return;
+
+        form.querySelectorAll("[data-money-input]").forEach(function (input) {
+          input.value = normalizeMoneyValue(input.value);
+        });
+
+        const submitButton = event.submitter || form.querySelector('button[type="submit"]');
+        if (!submitButton || submitButton.disabled) return;
+
+        submitButton.dataset.originalText = submitButton.textContent;
+        submitButton.textContent = "Salvando...";
+        submitButton.disabled = true;
+      });
+    });
+  });
+</script>
 {% endblock %}
