@@ -25,6 +25,7 @@
   .edd-alert { margin-bottom: 10px; border-radius: 10px; padding: 9px 11px; font-weight: 850; }
   .edd-alert.success { border: 1px solid #b7e4c7; background: #ecfdf3; color: #166534; }
   .edd-alert.error { border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; }
+  .edd-note { margin-bottom: 12px; border: 1px solid #dbeafe; border-radius: 10px; padding: 10px 12px; background: #eff6ff; color: #164173; font-weight: 850; line-height: 1.32; }
   @media (max-width: 780px) {
     .edd-header { flex-direction: column; }
     .edd-actions { justify-content: flex-start; }
@@ -68,6 +69,8 @@
     <article class="edd-card"><div class="edd-label">Valor parcela</div><div class="edd-value">{{ divida.valor_parcela_texto }}</div></article>
     <article class="edd-card"><div class="edd-label">Observação</div><div class="edd-value">{{ divida.observacao|default:"-" }}</div></article>
   </section>
+
+  <div class="edd-note">Esta tela controla a dívida. Os movimentos de Caixa/Banco relacionados aparecem no histórico do Caixa e Banco.</div>
 
   <section class="edd-panel">
     <h2>Pagamentos / baixas</h2>

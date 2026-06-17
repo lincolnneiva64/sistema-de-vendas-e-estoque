@@ -15,6 +15,11 @@
   .edf-card { padding: 14px; }
   .edf-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .edf-field.full { grid-column: 1 / -1; }
+  .edf-financeiro { grid-column: 1 / -1; border: 1px solid #dbeafe; border-radius: 10px; padding: 12px; background: #eff6ff; }
+  .edf-financeiro-title { margin: 0 0 4px; color: #164173; font-size: .98rem; font-weight: 950; }
+  .edf-financeiro-text { margin: 0 0 10px; color: #334155; font-size: .84rem; font-weight: 750; line-height: 1.32; }
+  .edf-check { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: #164173; font-weight: 900; }
+  .edf-check input { width: 18px; height: 18px; }
   .edf-field label { display: block; margin-bottom: 4px; color: #334155; font-size: .78rem; font-weight: 900; }
   .edf-field input, .edf-field select, .edf-field textarea { width: 100%; min-height: 44px; border: 1.5px solid #cbd5e1; border-radius: 9px; padding: 9px 11px; color: #172033; font: inherit; font-size: 16px; font-weight: 800; }
   .edf-field textarea { min-height: 90px; resize: vertical; }
@@ -94,6 +99,29 @@
           <label for="observacao">Observação</label>
           <textarea id="observacao" name="observacao"></textarea>
         </div>
+        <section class="edf-financeiro">
+          <h2 class="edf-financeiro-title">Entrada no Caixa/Banco</h2>
+          <p class="edf-financeiro-text">Use esta opção quando o valor do empréstimo entrou no caixa ou na conta bancária. Para dívida avulsa, financiamento ou outro, marque apenas se o dinheiro entrou no caixa ou banco agora.</p>
+          <label class="edf-check">
+            <input type="checkbox" name="lancar_entrada_financeira">
+            Lançar entrada no Caixa/Banco
+          </label>
+          <div class="edf-grid">
+            <div class="edf-field">
+              <label for="conta_entrada">Conta onde entrou</label>
+              <select id="conta_entrada" name="conta_entrada">
+                <option value="">Selecione</option>
+                {% for conta in contas_financeiras %}
+                  <option value="{{ conta.id }}">{{ conta.nome }} - {{ conta.saldo_atual_texto }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="edf-field">
+              <label for="valor_entrada">Valor que entrou</label>
+              <input id="valor_entrada" name="valor_entrada" type="text" inputmode="decimal" placeholder="Vazio usa o valor original">
+            </div>
+          </div>
+        </section>
       </div>
       <div class="edf-form-actions">
         <button class="edf-btn edf-btn-primary" type="submit">Salvar dívida</button>

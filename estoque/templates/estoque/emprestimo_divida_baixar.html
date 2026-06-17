@@ -16,8 +16,13 @@
   .edb-resumo { margin-bottom: 12px; border: 1px solid #dbeafe; border-radius: 9px; padding: 10px 12px; background: #eff6ff; font-weight: 850; color: #164173; }
   .edb-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .edb-field.full { grid-column: 1 / -1; }
+  .edb-financeiro { grid-column: 1 / -1; border: 1px solid #dbeafe; border-radius: 10px; padding: 12px; background: #eff6ff; }
+  .edb-financeiro-title { margin: 0 0 4px; color: #164173; font-size: .98rem; font-weight: 950; }
+  .edb-financeiro-text { margin: 0 0 10px; color: #334155; font-size: .84rem; font-weight: 750; line-height: 1.32; }
+  .edb-check { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: #164173; font-weight: 900; }
+  .edb-check input { width: 18px; height: 18px; }
   .edb-field label { display: block; margin-bottom: 4px; color: #334155; font-size: .78rem; font-weight: 900; }
-  .edb-field input { width: 100%; min-height: 44px; border: 1.5px solid #cbd5e1; border-radius: 9px; padding: 9px 11px; font: inherit; font-size: 16px; font-weight: 800; }
+  .edb-field input, .edb-field select { width: 100%; min-height: 44px; border: 1.5px solid #cbd5e1; border-radius: 9px; padding: 9px 11px; font: inherit; font-size: 16px; font-weight: 800; }
   .edb-form-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
   .edb-alert { margin-bottom: 10px; border-radius: 10px; padding: 9px 11px; font-weight: 850; border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; }
   @media (max-width: 680px) {
@@ -46,7 +51,7 @@
   {% endif %}
 
   <section class="edb-card">
-    <div class="edb-resumo">Esta baixa reduz apenas o saldo da dívida. Não lança saída em Caixa/Banco nesta etapa.</div>
+    <div class="edb-resumo">Esta baixa reduz o saldo da dívida. Marque a saída financeira somente se este pagamento saiu do Caixa/Banco agora.</div>
     <form method="post">
       {% csrf_token %}
       <div class="edb-grid">
@@ -66,6 +71,23 @@
           <label for="observacao">Observação</label>
           <input id="observacao" name="observacao" type="text" maxlength="255">
         </div>
+        <section class="edb-financeiro">
+          <h2 class="edb-financeiro-title">Saída do Caixa/Banco</h2>
+          <p class="edb-financeiro-text">Use esta opção quando este pagamento saiu do caixa ou banco.</p>
+          <label class="edb-check">
+            <input type="checkbox" name="lancar_saida_financeira">
+            Lançar saída no Caixa/Banco
+          </label>
+          <div class="edb-field">
+            <label for="conta_saida">Conta de onde saiu o dinheiro</label>
+            <select id="conta_saida" name="conta_saida">
+              <option value="">Selecione</option>
+              {% for conta in contas_financeiras %}
+                <option value="{{ conta.id }}">{{ conta.nome }} - {{ conta.saldo_atual_texto }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </section>
       </div>
       <div class="edb-form-actions">
         <button class="edb-btn edb-btn-success" type="submit">Confirmar baixa</button>

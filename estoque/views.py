@@ -1749,18 +1749,42 @@ def emprestimos_dividas(request):
 
 
 def emprestimo_divida_nova(request):
+    _garantir_contas_financeiras_padrao()
+    contas_financeiras = _contas_financeiras_com_saldo()
     hoje = timezone.localdate()
     if request.method == "POST":
         dados = _emprestimo_divida_post_data(request)
+        lancar_entrada = request.POST.get("lancar_entrada_financeira") == "on"
+        conta_entrada = None
+        valor_entrada = None
+        if lancar_entrada:
+            conta_entrada = ContaFinanceira.objects.filter(pk=request.POST.get("conta_entrada"), ativo=True).first()
+            valor_entrada = _parse_decimal_financeiro(request.POST.get("valor_entrada"))
+            if valor_entrada is None:
+                valor_entrada = dados["valor_original"]
         if not dados["credor"]:
             messages.error(request, "Informe o credor.")
         elif dados["valor_original"] is None or dados["valor_original"] <= 0:
             messages.error(request, "Informe um valor original valido.")
         elif not dados["data_contratacao"]:
             messages.error(request, "Informe uma data de contratacao valida.")
+        elif lancar_entrada and not conta_entrada:
+            messages.error(request, "Escolha a conta onde o dinheiro entrou.")
+        elif lancar_entrada and (valor_entrada is None or valor_entrada <= 0):
+            messages.error(request, "Informe um valor de entrada valido.")
         else:
             try:
-                divida = EmprestimoDivida.objects.create(**dados)
+                with transaction.atomic():
+                    divida = EmprestimoDivida.objects.create(**dados)
+                    if lancar_entrada:
+                        MovimentoFinanceiro.objects.create(
+                            conta=conta_entrada,
+                            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+                            valor=valor_entrada,
+                            data=dados["data_contratacao"],
+                            descricao=f"Entrada referente a emprestimo/divida: {divida.credor}",
+                            origem="emprestimo_divida",
+                        )
             except ValidationError as exc:
                 messages.error(request, "; ".join(exc.messages))
             else:
@@ -1772,6 +1796,7 @@ def emprestimo_divida_nova(request):
         "estoque/emprestimo_divida_form.html",
         {
             "tipo_choices": EmprestimoDivida.TIPO_CHOICES,
+            "contas_financeiras": contas_financeiras,
             "hoje": hoje,
         },
     )
@@ -1794,12 +1819,17 @@ def emprestimo_divida_detalhe(request, pk):
 
 
 def emprestimo_divida_baixar(request, pk):
+    _garantir_contas_financeiras_padrao()
     divida = get_object_or_404(EmprestimoDivida, pk=pk)
     if request.method == "POST":
         valor = _parse_decimal_financeiro(request.POST.get("valor"))
         data_pagamento = parse_date(request.POST.get("data_pagamento") or "")
         forma_pagamento = request.POST.get("forma_pagamento", "").strip()
         observacao = request.POST.get("observacao", "").strip()
+        lancar_saida = request.POST.get("lancar_saida_financeira") == "on"
+        conta_saida = None
+        if lancar_saida:
+            conta_saida = ContaFinanceira.objects.filter(pk=request.POST.get("conta_saida"), ativo=True).first()
 
         if valor is None or valor <= 0:
             messages.error(request, "Informe um valor valido.")
@@ -1807,6 +1837,8 @@ def emprestimo_divida_baixar(request, pk):
             messages.error(request, "Informe uma data de pagamento valida.")
         elif valor > divida.saldo_devedor:
             messages.error(request, "O valor da baixa nao pode ser maior que o saldo devedor.")
+        elif lancar_saida and not conta_saida:
+            messages.error(request, "Escolha a conta de onde saiu o dinheiro.")
         else:
             try:
                 with transaction.atomic():
@@ -1820,6 +1852,15 @@ def emprestimo_divida_baixar(request, pk):
                         forma_pagamento=forma_pagamento,
                         observacao=observacao,
                     )
+                    if lancar_saida:
+                        MovimentoFinanceiro.objects.create(
+                            conta=conta_saida,
+                            tipo=MovimentoFinanceiro.TIPO_SAIDA,
+                            valor=valor,
+                            data=data_pagamento,
+                            descricao=f"Pagamento de emprestimo/divida: {divida.credor}",
+                            origem="pagamento_emprestimo_divida",
+                        )
                     divida.saldo_devedor = (divida.saldo_devedor - valor).quantize(Decimal("0.01"))
                     divida.atualizar_status_por_saldo()
                     divida.save(update_fields=["saldo_devedor", "status", "atualizado_em"])
@@ -1835,6 +1876,7 @@ def emprestimo_divida_baixar(request, pk):
         "estoque/emprestimo_divida_baixar.html",
         {
             "divida": divida,
+            "contas_financeiras": _contas_financeiras_com_saldo(),
             "hoje": timezone.localdate(),
         },
     )
