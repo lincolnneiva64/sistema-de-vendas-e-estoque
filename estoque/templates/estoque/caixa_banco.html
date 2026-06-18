@@ -1374,6 +1374,59 @@
     const operationButtons = Array.from(document.querySelectorAll("[data-caixa-op]"));
     const operationPanels = Array.from(document.querySelectorAll("[data-caixa-op-panel]"));
     const closeOperationButtons = Array.from(document.querySelectorAll("[data-caixa-close]"));
+    const ajusteConta = document.getElementById("ajusteConta");
+    const ajusteDescricao = document.getElementById("ajusteDescricao");
+    let ajusteDescricaoAutomatica = "";
+
+    function formatCurrentDateTime() {
+      const now = new Date();
+      const pad = function (value) {
+        return String(value).padStart(2, "0");
+      };
+
+      return [
+        pad(now.getDate()),
+        pad(now.getMonth() + 1),
+        now.getFullYear(),
+      ].join("/") + " " + [
+        pad(now.getHours()),
+        pad(now.getMinutes()),
+      ].join(":");
+    }
+
+    function normalizeAccountText(text) {
+      return String(text || "")
+        .split(" - ")[0]
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+    }
+
+    function getAjusteDescricaoPrefix() {
+      const selectedOption = ajusteConta ? ajusteConta.options[ajusteConta.selectedIndex] : null;
+      const accountText = normalizeAccountText(selectedOption ? selectedOption.textContent : "");
+
+      if (accountText.includes("sangria") || accountText.includes("reserva")) {
+        return "Conferi o dinheiro da sangria";
+      }
+
+      if (accountText.includes("banco") || accountText.includes("pix")) {
+        return "Conferi o saldo do banco/Pix";
+      }
+
+      return "Conferi o dinheiro do caixa";
+    }
+
+    function updateAjusteDescricao(force) {
+      if (!ajusteDescricao || !ajusteConta) return;
+
+      const currentValue = ajusteDescricao.value.trim();
+      const canUpdate = force || !currentValue || currentValue === ajusteDescricaoAutomatica;
+      if (!canUpdate) return;
+
+      ajusteDescricaoAutomatica = getAjusteDescricaoPrefix() + " - " + formatCurrentDateTime();
+      ajusteDescricao.value = ajusteDescricaoAutomatica;
+    }
 
     function activateOperation(operation) {
       operationButtons.forEach(function (button) {
@@ -1385,6 +1438,10 @@
       operationPanels.forEach(function (panel) {
         panel.classList.toggle("ativa", panel.dataset.caixaOpPanel === operation);
       });
+
+      if (operation === "corrigir-saldo") {
+        updateAjusteDescricao(false);
+      }
     }
 
     function closeOperations() {
@@ -1412,6 +1469,12 @@
     closeOperationButtons.forEach(function (button) {
       button.addEventListener("click", closeOperations);
     });
+
+    if (ajusteConta && ajusteDescricao) {
+      ajusteConta.addEventListener("change", function () {
+        updateAjusteDescricao(false);
+      });
+    }
 
     function parseMoneyValue(value) {
       let text = String(value || "")
