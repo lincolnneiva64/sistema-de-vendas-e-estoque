@@ -232,9 +232,28 @@
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+    margin: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
     padding: 12px;
-    border-bottom: 1px solid #edf1f6;
-    background: #fff;
+    background: #f8fafc;
+  }
+
+  .caixa-operacoes-card-title {
+    width: 100%;
+    margin: 0;
+    color: #111827;
+    font-size: .94rem;
+    font-weight: 950;
+  }
+
+  .caixa-operacoes-card-help {
+    width: 100%;
+    margin: -2px 0 2px;
+    color: #64748b;
+    font-size: .8rem;
+    font-weight: 750;
+    line-height: 1.35;
   }
 
   .caixa-operacao-btn {
@@ -258,7 +277,13 @@
 
   .caixa-operacao-form {
     display: none;
+    margin: 0 12px 12px;
+    border: 1px solid #dbe4ef;
+    border-left: 5px solid #2563eb;
+    border-radius: 10px;
     padding: 12px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, .04);
   }
 
   .caixa-operacao-form.ativa {
@@ -332,6 +357,12 @@
   .caixa-form-actions {
     justify-content: flex-start;
     margin-top: 10px;
+  }
+
+  .caixa-form-actions .caixa-btn-secondary {
+    border-color: #cbd5e1;
+    background: #fff;
+    color: #334155;
   }
 
   .caixa-history {
@@ -812,7 +843,9 @@
       <p class="caixa-movimentacoes-subtitle">Escolha uma operação para ver apenas o formulário necessário. Transferências movem dinheiro entre contas; ajustes diretos corrigem somente a conta selecionada.</p>
     </div>
     <div class="caixa-operacoes" role="tablist" aria-label="Tipo de operacao">
-      <button class="caixa-operacao-btn ativa" type="button" data-caixa-op="sangria">Fazer sangria</button>
+      <h3 class="caixa-operacoes-card-title">Escolha a operação</h3>
+      <p class="caixa-operacoes-card-help">Nenhum formulário abre automaticamente. Toque em uma opção para abrir, toque de novo para fechar.</p>
+      <button class="caixa-operacao-btn" type="button" data-caixa-op="sangria">Fazer sangria</button>
       <button class="caixa-operacao-btn" type="button" data-caixa-op="reforco">Reforçar caixa com reserva</button>
       <button class="caixa-operacao-btn" type="button" data-caixa-op="deposito">Depositar reserva no banco</button>
       <button class="caixa-operacao-btn" type="button" data-caixa-op="pagar-reserva">Pagar com reserva</button>
@@ -823,7 +856,7 @@
       <button class="caixa-operacao-btn" type="button" data-caixa-op="abrir-caixa">Abrir caixa / Troco inicial</button>
     </div>
 
-    <article class="caixa-operacao-form ativa" data-caixa-op-panel="sangria">
+    <article class="caixa-operacao-form" data-caixa-op-panel="sangria">
       <h2 class="caixa-form-title">Fazer sangria / Guardar na reserva</h2>
       <p class="caixa-form-help">Transferência interna: retira dinheiro do caixa da frente e guarda na Sangria/Reserva.</p>
       <div class="caixa-flow">Caixa em espécie -> Sangria / Reserva</div>
@@ -851,6 +884,7 @@
         </div>
         <div class="caixa-form-actions">
           <button class="caixa-btn caixa-btn-primary" type="submit">Fazer sangria</button>
+          <button class="caixa-btn caixa-btn-secondary" type="button" data-caixa-close>Fechar</button>
         </div>
       </form>
     </article>
@@ -883,6 +917,7 @@
         </div>
         <div class="caixa-form-actions">
           <button class="caixa-btn caixa-btn-primary" type="submit">Reforçar caixa</button>
+          <button class="caixa-btn caixa-btn-secondary" type="button" data-caixa-close>Fechar</button>
         </div>
       </form>
     </article>
@@ -915,6 +950,7 @@
         </div>
         <div class="caixa-form-actions">
           <button class="caixa-btn caixa-btn-primary" type="submit">Depositar no banco</button>
+          <button class="caixa-btn caixa-btn-secondary" type="button" data-caixa-close>Fechar</button>
         </div>
       </form>
     </article>
@@ -947,6 +983,7 @@
         </div>
         <div class="caixa-form-actions">
           <button class="caixa-btn caixa-btn-danger" type="submit">Pagar com reserva</button>
+          <button class="caixa-btn caixa-btn-secondary" type="button" data-caixa-close>Fechar</button>
         </div>
       </form>
     </article>
@@ -986,6 +1023,7 @@
         </div>
         <div class="caixa-form-actions">
           <button class="caixa-btn caixa-btn-success" type="submit">Lançar entrada</button>
+          <button class="caixa-btn caixa-btn-secondary" type="button" data-caixa-close>Fechar</button>
         </div>
       </form>
     </article>
@@ -1025,6 +1063,7 @@
         </div>
         <div class="caixa-form-actions">
           <button class="caixa-btn caixa-btn-danger" type="submit">Lançar saída</button>
+          <button class="caixa-btn caixa-btn-secondary" type="button" data-caixa-close>Fechar</button>
         </div>
       </form>
     </article>
@@ -1057,6 +1096,7 @@
         </div>
         <div class="caixa-form-actions">
           <button class="caixa-btn caixa-btn-primary" type="submit">Ajustar Banco/Pix</button>
+          <button class="caixa-btn caixa-btn-secondary" type="button" data-caixa-close>Fechar</button>
         </div>
       </form>
     </article>
@@ -1096,6 +1136,7 @@
         </div>
         <div class="caixa-form-actions">
           <button class="caixa-btn caixa-btn-primary" type="submit">Ajustar saldo</button>
+          <button class="caixa-btn caixa-btn-secondary" type="button" data-caixa-close>Fechar</button>
         </div>
       </form>
     </article>
@@ -1127,6 +1168,7 @@
         </div>
         <div class="caixa-form-actions">
           <button class="caixa-btn caixa-btn-primary" type="submit">Ajustar caixa</button>
+          <button class="caixa-btn caixa-btn-secondary" type="button" data-caixa-close>Fechar</button>
         </div>
       </form>
     </article>
@@ -1326,6 +1368,7 @@
     const moneyInputs = Array.from(document.querySelectorAll("[data-money-input]"));
     const operationButtons = Array.from(document.querySelectorAll("[data-caixa-op]"));
     const operationPanels = Array.from(document.querySelectorAll("[data-caixa-op-panel]"));
+    const closeOperationButtons = Array.from(document.querySelectorAll("[data-caixa-close]"));
 
     function activateOperation(operation) {
       operationButtons.forEach(function (button) {
@@ -1339,10 +1382,30 @@
       });
     }
 
+    function closeOperations() {
+      operationButtons.forEach(function (button) {
+        button.classList.remove("ativa");
+        button.setAttribute("aria-selected", "false");
+      });
+
+      operationPanels.forEach(function (panel) {
+        panel.classList.remove("ativa");
+      });
+    }
+
     operationButtons.forEach(function (button) {
       button.addEventListener("click", function () {
-        activateOperation(button.dataset.caixaOp);
+        const operation = button.dataset.caixaOp;
+        if (button.classList.contains("ativa")) {
+          closeOperations();
+          return;
+        }
+        activateOperation(operation);
       });
+    });
+
+    closeOperationButtons.forEach(function (button) {
+      button.addEventListener("click", closeOperations);
     });
 
     function parseMoneyValue(value) {
