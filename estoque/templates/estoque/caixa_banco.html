@@ -262,20 +262,21 @@
     border: 1.5px solid #7ea6d9;
     border-radius: 8px;
     padding: 8px 11px;
-    background: #fff;
-    color: #164173;
+    background: #fff8df;
+    color: #12376a;
     font: inherit;
     font-size: .82rem;
     font-weight: 900;
     cursor: pointer;
-    box-shadow: 0 2px 7px rgba(37, 99, 235, .08);
+    box-shadow: 0 2px 8px rgba(37, 99, 235, .11);
     text-align: left;
   }
 
   .caixa-operacao-btn:hover {
     border-color: #2563eb;
-    background: #dbeafe;
-    color: #12376a;
+    background: #fef3c7;
+    color: #0f2f5f;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, .15);
   }
 
   .caixa-operacao-btn.ativa {
@@ -293,7 +294,7 @@
   .caixa-operacao-sub {
     display: block;
     margin-top: 3px;
-    color: #64748b;
+    color: #475569;
     font-size: .72rem;
     font-weight: 850;
     line-height: 1.15;
@@ -873,15 +874,14 @@
     <div class="caixa-operacoes" role="tablist" aria-label="Tipo de operacao">
       <h3 class="caixa-operacoes-card-title">Escolha a operação</h3>
       <p class="caixa-operacoes-card-help">Nenhum formulário abre automaticamente. Toque em uma opção para abrir, toque de novo para fechar.</p>
+      <button class="caixa-operacao-btn" type="button" data-caixa-op="abrir-caixa"><span class="caixa-operacao-main">Abrir caixa / Troco inicial</span><span class="caixa-operacao-sub">Somente Caixa</span></button>
       <button class="caixa-operacao-btn" type="button" data-caixa-op="sangria"><span class="caixa-operacao-main">Sangria: guardar dinheiro</span><span class="caixa-operacao-sub">Caixa -> Sangria</span></button>
       <button class="caixa-operacao-btn" type="button" data-caixa-op="reforco"><span class="caixa-operacao-main">Sangria: reforçar caixa</span><span class="caixa-operacao-sub">Sangria -> Caixa</span></button>
-      <button class="caixa-operacao-btn" type="button" data-caixa-op="deposito"><span class="caixa-operacao-main">Sangria: depositar no banco</span><span class="caixa-operacao-sub">Sangria -> Banco</span></button>
       <button class="caixa-operacao-btn" type="button" data-caixa-op="pagar-reserva"><span class="caixa-operacao-main">Sangria: pagar despesa</span><span class="caixa-operacao-sub">Sangria -> Saída</span></button>
-      <button class="caixa-operacao-btn" type="button" data-caixa-op="entrada"><span class="caixa-operacao-main">Entrada avulsa: dinheiro novo</span><span class="caixa-operacao-sub">Entrada sem venda/cliente</span></button>
-      <button class="caixa-operacao-btn" type="button" data-caixa-op="saida"><span class="caixa-operacao-main">Saída avulsa: retirada</span><span class="caixa-operacao-sub">Saída sem compra/despesa</span></button>
-      <button class="caixa-operacao-btn" type="button" data-caixa-op="ajuste-banco"><span class="caixa-operacao-main">Ajuste Banco/Pix</span><span class="caixa-operacao-sub">Somente Banco/Pix</span></button>
-      <button class="caixa-operacao-btn" type="button" data-caixa-op="corrigir-saldo"><span class="caixa-operacao-main">Corrigir saldo real</span><span class="caixa-operacao-sub">Ajuste por conta</span></button>
-      <button class="caixa-operacao-btn" type="button" data-caixa-op="abrir-caixa"><span class="caixa-operacao-main">Abrir caixa / Troco inicial</span><span class="caixa-operacao-sub">Somente Caixa</span></button>
+      <button class="caixa-operacao-btn" type="button" data-caixa-op="deposito"><span class="caixa-operacao-main">Sangria: depositar no banco</span><span class="caixa-operacao-sub">Sangria -> Banco</span></button>
+      <button class="caixa-operacao-btn" type="button" data-caixa-op="corrigir-saldo"><span class="caixa-operacao-main">Corrigir saldo real</span><span class="caixa-operacao-sub">Caixa • Sangria • Banco/Pix</span></button>
+      <button class="caixa-operacao-btn" type="button" data-caixa-op="entrada"><span class="caixa-operacao-main">Entrada avulsa: dinheiro sem origem</span><span class="caixa-operacao-sub">Só use se não for venda, cliente ou empréstimo</span></button>
+      <button class="caixa-operacao-btn" type="button" data-caixa-op="saida"><span class="caixa-operacao-main">Saída avulsa: retirada sem módulo</span><span class="caixa-operacao-sub">Só use se não for compra, despesa, conta ou dívida</span></button>
     </div>
 
     <article class="caixa-operacao-form" data-caixa-op-panel="sangria">
@@ -1018,7 +1018,7 @@
 
     <article class="caixa-operacao-form" data-caixa-op-panel="entrada">
       <h2 class="caixa-form-title">Entrada avulsa</h2>
-      <p class="caixa-form-help">Entrada direta: use apenas para dinheiro novo que não veio de cliente, compra, empréstimo cadastrado ou outro módulo.</p>
+      <p class="caixa-form-help">Entrada direta: use apenas para dinheiro que não veio de venda, recebimento de cliente, compra, empréstimo cadastrado ou outro módulo.</p>
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="acao" value="entrada_avulsa">
@@ -1058,7 +1058,7 @@
 
     <article class="caixa-operacao-form" data-caixa-op-panel="saida">
       <h2 class="caixa-form-title">Saída avulsa</h2>
-      <p class="caixa-form-help">Saída direta: use apenas para saída que não está em despesas, contas a pagar, compras ou dívidas.</p>
+      <p class="caixa-form-help">Saída direta: use apenas para saída que não está em despesas, contas a pagar, compras, dívidas ou outro módulo.</p>
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="acao" value="saida_avulsa">
@@ -1091,39 +1091,6 @@
         </div>
         <div class="caixa-form-actions">
           <button class="caixa-btn caixa-btn-danger" type="submit">Lançar saída</button>
-          <button class="caixa-btn caixa-btn-secondary" type="button" data-caixa-close>Fechar</button>
-        </div>
-      </form>
-    </article>
-
-    <article class="caixa-operacao-form" data-caixa-op-panel="ajuste-banco">
-      <h2 class="caixa-form-title">Ajuste Banco/Pix</h2>
-      <p class="caixa-form-help">Ajuste direto: altera somente Banco/Pix. Valor positivo entra no Banco/Pix; valor negativo sai do Banco/Pix.</p>
-      <div class="caixa-flow">Banco/Pix</div>
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="acao" value="ajuste_banco_pix">
-        <div class="caixa-form-grid">
-          <div class="caixa-field">
-            <label for="ajusteBancoValor">Valor</label>
-            <input id="ajusteBancoValor" name="valor" type="text" inputmode="decimal" placeholder="R$ 0,00" data-money-input required>
-          </div>
-          <div class="caixa-field">
-            <label for="ajusteBancoOperador">Operador / responsavel</label>
-            <select id="ajusteBancoOperador" name="operador" required>
-              <option value="">Selecione o operador</option>
-              {% for operador in operadores_caixa %}
-                <option value="{{ operador.id }}">{{ operador.nome }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="caixa-field full">
-            <label for="ajusteBancoDescricao">Descricao</label>
-            <input id="ajusteBancoDescricao" name="descricao" type="text" placeholder="Conferencia saldo real Banco/Pix">
-          </div>
-        </div>
-        <div class="caixa-form-actions">
-          <button class="caixa-btn caixa-btn-primary" type="submit">Ajustar Banco/Pix</button>
           <button class="caixa-btn caixa-btn-secondary" type="button" data-caixa-close>Fechar</button>
         </div>
       </form>
