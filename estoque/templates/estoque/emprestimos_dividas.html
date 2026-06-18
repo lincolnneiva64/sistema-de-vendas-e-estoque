@@ -13,10 +13,14 @@
   .ed-btn-primary { border-color: #1d4ed8; background: #2563eb; color: #fff; }
   .ed-btn-success { border-color: #16a34a; background: #ecfdf3; color: #166534; }
   .ed-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .ed-summary-general { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .ed-card, .ed-panel { border: 1px solid #e1e7ef; border-radius: 10px; background: #fff; box-shadow: 0 8px 18px rgba(15,23,42,.04); }
   .ed-card { min-height: 76px; padding: 10px 12px; border-left: 4px solid #2563eb; }
   .ed-card.danger { border-left-color: #dc2626; background: #fff7ed; }
-  .ed-card.success { border-left-color: #16a34a; background: #f0fdf4; }
+  .ed-card.success, .ed-card.receivable { border-left-color: #16a34a; background: #f0fdf4; }
+  .ed-card.payable { border-left-color: #ca8a04; background: #fffbeb; }
+  .ed-card.net { border-left-color: #0f766e; background: #ecfeff; }
+  .ed-card.net.negative { border-left-color: #dc2626; background: #fef2f2; }
   .ed-label { color: #64748b; font-size: .76rem; font-weight: 900; text-transform: uppercase; }
   .ed-value { margin-top: 6px; font-size: 1.08rem; font-weight: 950; color: #172033; }
   .ed-filter { padding: 12px; margin-bottom: 12px; }
@@ -27,25 +31,29 @@
   .ed-alert { margin-bottom: 10px; border-radius: 10px; padding: 9px 11px; font-weight: 850; }
   .ed-alert.success { border: 1px solid #b7e4c7; background: #ecfdf3; color: #166534; }
   .ed-alert.error { border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; }
-  .ed-panel { overflow: hidden; }
-  .ed-panel-head { padding: 11px 14px; border-bottom: 1px solid #edf1f6; background: #f8fafc; }
+  .ed-panel { overflow: hidden; margin-bottom: 12px; }
+  .ed-panel-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 11px 14px; border-bottom: 1px solid #edf1f6; background: #f8fafc; }
   .ed-panel-title { margin: 0; font-size: 1rem; font-weight: 950; }
+  .ed-panel-count { color: #64748b; font-size: .78rem; font-weight: 900; text-transform: uppercase; }
   .ed-table-wrap { overflow-x: auto; }
   .ed-table { width: 100%; min-width: 940px; border-collapse: collapse; }
   .ed-table th { padding: 10px; border-bottom: 1px solid #edf1f6; background: #f8fafc; color: #64748b; font-size: .72rem; font-weight: 950; text-align: left; text-transform: uppercase; }
   .ed-table td { padding: 10px; border-bottom: 1px solid #f0f3f8; font-weight: 750; vertical-align: middle; }
   .ed-status { display: inline-flex; border-radius: 999px; padding: 4px 9px; background: #eff6ff; color: #1d4ed8; font-size: .78rem; font-weight: 950; }
+  .ed-status.aberto { background: #fffbeb; color: #92400e; }
   .ed-status.parcial { background: #fffbeb; color: #92400e; }
   .ed-status.quitado { background: #ecfdf3; color: #166534; }
   .ed-status.cancelado { background: #fef2f2; color: #991b1b; }
   .ed-money { white-space: nowrap; font-weight: 950; color: #166534; }
+  .ed-money-payable { color: #92400e; }
+  .ed-note { max-width: 280px; color: #64748b; font-size: .82rem; line-height: 1.28; }
   .ed-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
   .ed-mobile { display: none; }
   .ed-empty { padding: 20px 14px; color: #64748b; font-weight: 800; text-align: center; }
   @media (max-width: 840px) {
-    .ed-header { flex-direction: column; }
+    .ed-header, .ed-panel-head { flex-direction: column; align-items: stretch; }
     .ed-actions { justify-content: flex-start; }
-    .ed-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ed-summary, .ed-summary-general { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .ed-filter form { grid-template-columns: 1fr; }
     .ed-table-wrap { display: none; }
     .ed-mobile { display: grid; gap: 9px; padding: 10px; }
@@ -56,8 +64,10 @@
     .ed-mobile-value { display: block; margin-top: 2px; font-weight: 850; }
   }
   @media (max-width: 560px) {
-    .ed-summary { grid-template-columns: 1fr; }
+    .ed-summary, .ed-summary-general { grid-template-columns: 1fr; }
     .ed-btn, .ed-actions { width: 100%; }
+    .ed-mobile-top { flex-direction: column; }
+    .ed-mobile-grid { grid-template-columns: 1fr; }
   }
 </style>
 
@@ -65,11 +75,12 @@
   <header class="ed-header">
     <div>
       <h1 class="ed-title">Empréstimos e Dívidas</h1>
-      <p class="ed-subtitle">Controle de dinheiro emprestado, dívidas avulsas e compromissos fora das compras de fornecedor.</p>
+      <p class="ed-subtitle">Visão separada entre valores a receber e valores a pagar/devolver.</p>
     </div>
     <nav class="ed-actions" aria-label="Ações de empréstimos e dívidas">
       <a class="ed-btn" href="{% url 'estoque:painel_financeiro' %}">Voltar para Central Financeira</a>
       <a class="ed-btn" href="{% url 'estoque:caixa_banco' %}">Caixa e Banco</a>
+      <a class="ed-btn" href="{% url 'estoque:emprestimos_rapidos' %}">Empréstimos rápidos</a>
       <a class="ed-btn ed-btn-primary" href="{% url 'estoque:emprestimo_divida_nova' %}">Nova dívida / empréstimo</a>
     </nav>
   </header>
@@ -80,8 +91,63 @@
     {% endfor %}
   {% endif %}
 
-  <section class="ed-summary" aria-label="Resumo de dívidas">
-    <article class="ed-card"><div class="ed-label">Total em aberto</div><div class="ed-value">{{ total_aberto_texto }}</div></article>
+  <section class="ed-summary ed-summary-general" aria-label="Resumo geral de empréstimos">
+    <article class="ed-card receivable"><div class="ed-label">A receber</div><div class="ed-value">{{ total_a_receber_texto }}</div></article>
+    <article class="ed-card payable"><div class="ed-label">A pagar/devolver</div><div class="ed-value">{{ total_a_pagar_texto }}</div></article>
+    <article class="ed-card net {% if saldo_liquido_emprestimos < 0 %}negative{% endif %}"><div class="ed-label">Saldo líquido</div><div class="ed-value">{{ saldo_liquido_emprestimos_texto }}</div></article>
+  </section>
+
+  <section class="ed-panel">
+    <div class="ed-panel-head">
+      <h2 class="ed-panel-title">Empréstimos a receber</h2>
+      <span class="ed-panel-count">{{ quantidade_a_receber }} em aberto</span>
+    </div>
+    <div class="ed-table-wrap">
+      <table class="ed-table">
+        <thead>
+          <tr>
+            <th>Pessoa</th><th>Valor</th><th>Data</th><th>Conta de saída</th><th>Status</th><th>Observação</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for emprestimo in emprestimos_rapidos_abertos %}
+            <tr>
+              <td>{{ emprestimo.pessoa_nome }}</td>
+              <td class="ed-money">{{ emprestimo.valor_texto }}</td>
+              <td>{{ emprestimo.data_emprestimo|date:"d/m/Y" }}</td>
+              <td>{{ emprestimo.conta_saida.nome }}</td>
+              <td><span class="ed-status {{ emprestimo.status }}">{{ emprestimo.get_status_display }}</span></td>
+              <td><div class="ed-note">{{ emprestimo.observacao|default:"-" }}</div></td>
+              <td><a class="ed-btn ed-btn-success" href="{% url 'estoque:emprestimos_rapidos' %}">Receber devolução</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7" class="ed-empty">Nenhum empréstimo a receber em aberto.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="ed-mobile">
+      {% for emprestimo in emprestimos_rapidos_abertos %}
+        <article class="ed-mobile-card">
+          <div class="ed-mobile-top"><strong>{{ emprestimo.pessoa_nome }}</strong><span class="ed-status {{ emprestimo.status }}">{{ emprestimo.get_status_display }}</span></div>
+          <div class="ed-mobile-grid">
+            <div><span class="ed-mobile-label">Valor</span><span class="ed-mobile-value ed-money">{{ emprestimo.valor_texto }}</span></div>
+            <div><span class="ed-mobile-label">Data</span><span class="ed-mobile-value">{{ emprestimo.data_emprestimo|date:"d/m/Y" }}</span></div>
+            <div><span class="ed-mobile-label">Conta de saída</span><span class="ed-mobile-value">{{ emprestimo.conta_saida.nome }}</span></div>
+            <div><span class="ed-mobile-label">Observação</span><span class="ed-mobile-value">{{ emprestimo.observacao|default:"-" }}</span></div>
+          </div>
+          <div class="ed-row-actions">
+            <a class="ed-btn ed-btn-success" href="{% url 'estoque:emprestimos_rapidos' %}">Receber devolução</a>
+          </div>
+        </article>
+      {% empty %}
+        <div class="ed-empty">Nenhum empréstimo a receber em aberto.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="ed-summary" aria-label="Resumo de dívidas e empréstimos recebidos">
+    <article class="ed-card payable"><div class="ed-label">Total em aberto</div><div class="ed-value">{{ total_aberto_texto }}</div></article>
     <article class="ed-card danger"><div class="ed-label">Total vencido</div><div class="ed-value">{{ total_vencido_texto }}</div></article>
     <article class="ed-card"><div class="ed-label">Próximos 7 dias</div><div class="ed-value">{{ total_7_texto }}</div></article>
     <article class="ed-card success"><div class="ed-label">Dívidas abertas</div><div class="ed-value">{{ quantidade_abertas }}</div></article>
@@ -109,7 +175,10 @@
   </section>
 
   <section class="ed-panel">
-    <div class="ed-panel-head"><h2 class="ed-panel-title">Dívidas cadastradas</h2></div>
+    <div class="ed-panel-head">
+      <h2 class="ed-panel-title">Dívidas e empréstimos recebidos a devolver</h2>
+      <span class="ed-panel-count">{{ quantidade_abertas }} abertas</span>
+    </div>
     <div class="ed-table-wrap">
       <table class="ed-table">
         <thead>
@@ -124,8 +193,8 @@
               <td>{{ divida.get_tipo_display }}</td>
               <td>{{ divida.data_vencimento|date:"d/m/Y"|default:"-" }}</td>
               <td><span class="ed-status {{ divida.status }}">{{ divida.get_status_display }}</span></td>
-              <td class="ed-money">{{ divida.valor_original_texto }}</td>
-              <td class="ed-money">{{ divida.saldo_devedor_texto }}</td>
+              <td class="ed-money ed-money-payable">{{ divida.valor_original_texto }}</td>
+              <td class="ed-money ed-money-payable">{{ divida.saldo_devedor_texto }}</td>
               <td>
                 <div class="ed-row-actions">
                   <a class="ed-btn" href="{% url 'estoque:emprestimo_divida_detalhe' divida.id %}">Ver detalhes</a>
@@ -148,8 +217,8 @@
           <div class="ed-mobile-grid">
             <div><span class="ed-mobile-label">Tipo</span><span class="ed-mobile-value">{{ divida.get_tipo_display }}</span></div>
             <div><span class="ed-mobile-label">Vencimento</span><span class="ed-mobile-value">{{ divida.data_vencimento|date:"d/m/Y"|default:"-" }}</span></div>
-            <div><span class="ed-mobile-label">Original</span><span class="ed-mobile-value ed-money">{{ divida.valor_original_texto }}</span></div>
-            <div><span class="ed-mobile-label">Saldo</span><span class="ed-mobile-value ed-money">{{ divida.saldo_devedor_texto }}</span></div>
+            <div><span class="ed-mobile-label">Original</span><span class="ed-mobile-value ed-money ed-money-payable">{{ divida.valor_original_texto }}</span></div>
+            <div><span class="ed-mobile-label">Saldo</span><span class="ed-mobile-value ed-money ed-money-payable">{{ divida.saldo_devedor_texto }}</span></div>
           </div>
           <div class="ed-row-actions">
             <a class="ed-btn" href="{% url 'estoque:emprestimo_divida_detalhe' divida.id %}">Ver detalhes</a>

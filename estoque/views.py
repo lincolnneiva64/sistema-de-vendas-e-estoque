@@ -2482,6 +2482,20 @@ def _preparar_pagamento_template(pagamento):
 def emprestimos_dividas(request):
     hoje = timezone.localdate()
     fim_7 = hoje + timedelta(days=7)
+    emprestimos_rapidos_abertos = (
+        EmprestimoRapido.objects
+        .select_related("conta_saida")
+        .filter(status=EmprestimoRapido.STATUS_ABERTO)
+        .order_by("-data_emprestimo", "-id")
+    )
+    total_a_receber = _financeiro_dinheiro(
+        emprestimos_rapidos_abertos.aggregate(total=Sum("valor"))["total"]
+    )
+    quantidade_a_receber = emprestimos_rapidos_abertos.count()
+    emprestimos_rapidos_abertos = list(emprestimos_rapidos_abertos)
+    for emprestimo in emprestimos_rapidos_abertos:
+        emprestimo.valor_texto = _financeiro_moeda_br(emprestimo.valor)
+
     dividas_base = EmprestimoDivida.objects.all()
     dividas_abertas_base = dividas_base.filter(
         status__in=[EmprestimoDivida.STATUS_ABERTO, EmprestimoDivida.STATUS_PARCIAL],
@@ -2500,6 +2514,7 @@ def emprestimos_dividas(request):
         .aggregate(total=Sum("saldo_devedor"))["total"]
     )
     quantidade_abertas = dividas_abertas_base.count()
+    saldo_liquido_emprestimos = total_a_receber - total_aberto
 
     dividas = dividas_base
     status = request.GET.get("status", "abertas")
@@ -2540,6 +2555,12 @@ def emprestimos_dividas(request):
             "credor": credor,
             "vencidas": vencidas,
             "status_choices": EmprestimoDivida.STATUS_CHOICES,
+            "emprestimos_rapidos_abertos": emprestimos_rapidos_abertos,
+            "total_a_receber_texto": _financeiro_moeda_br(total_a_receber),
+            "quantidade_a_receber": quantidade_a_receber,
+            "total_a_pagar_texto": _financeiro_moeda_br(total_aberto),
+            "saldo_liquido_emprestimos": saldo_liquido_emprestimos,
+            "saldo_liquido_emprestimos_texto": _financeiro_moeda_br(saldo_liquido_emprestimos),
             "total_aberto_texto": _financeiro_moeda_br(total_aberto),
             "total_vencido_texto": _financeiro_moeda_br(total_vencido),
             "total_7_texto": _financeiro_moeda_br(total_7),
