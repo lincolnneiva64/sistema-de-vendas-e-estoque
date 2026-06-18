@@ -2032,6 +2032,32 @@ def caixa_banco(request):
                 messages.success(request, "Conferencia / ajuste de saldo registrado com sucesso.")
             return redirect("estoque:caixa_banco")
 
+        if acao == "ajuste_banco_pix":
+            operador = operador_post()
+            if operador is None:
+                return redirect("estoque:caixa_banco")
+            valor = _parse_decimal_financeiro(request.POST.get("valor"))
+            descricao = request.POST.get("descricao", "").strip() or "Conferencia / ajuste Banco/Pix"
+            if not conta_banco:
+                messages.error(request, "Conta Banco/Pix nao encontrada.")
+                return redirect("estoque:caixa_banco")
+            if valor is None or valor == 0:
+                messages.error(request, "Informe um valor diferente de zero para ajustar Banco/Pix.")
+                return redirect("estoque:caixa_banco")
+
+            with transaction.atomic():
+                MovimentoFinanceiro.objects.create(
+                    conta=conta_banco,
+                    tipo=MovimentoFinanceiro.TIPO_AJUSTE,
+                    valor=valor,
+                    data=timezone.localdate(),
+                    descricao=descricao,
+                    operador=operador,
+                    origem="ajuste_banco_pix_conferencia",
+                )
+            messages.success(request, "Ajuste Banco/Pix registrado com sucesso.")
+            return redirect("estoque:caixa_banco")
+
         if acao in {"fazer_sangria", "depositar_reserva_banco", "reforcar_caixa_reserva", "transferencia"}:
             operador = operador_post()
             if operador is None:

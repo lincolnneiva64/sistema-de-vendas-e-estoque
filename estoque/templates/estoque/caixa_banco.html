@@ -1085,6 +1085,37 @@
 
   <section class="caixa-forms caixa-forms-single" aria-label="Conferencia e Ajuste de Saldo">
     <article class="caixa-form-card">
+      <h2 class="caixa-form-title">Ajuste Banco/Pix</h2>
+      <p class="caixa-form-help">Use para ajustar somente o saldo do Banco/Pix conferido no app do banco. Valor positivo entra no Banco/Pix; valor negativo sai do Banco/Pix.</p>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="ajuste_banco_pix">
+        <div class="caixa-form-grid">
+          <div class="caixa-field">
+            <label for="ajusteBancoValor">Valor</label>
+            <input id="ajusteBancoValor" name="valor" type="text" inputmode="decimal" placeholder="R$ 0,00" data-money-input required>
+          </div>
+          <div class="caixa-field">
+            <label for="ajusteBancoOperador">Operador / responsavel</label>
+            <select id="ajusteBancoOperador" name="operador" required>
+              <option value="">Selecione o operador</option>
+              {% for operador in operadores_caixa %}
+                <option value="{{ operador.id }}">{{ operador.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="caixa-field full">
+            <label for="ajusteBancoDescricao">Descricao</label>
+            <input id="ajusteBancoDescricao" name="descricao" type="text" placeholder="Conferencia saldo real Banco/Pix">
+          </div>
+        </div>
+        <div class="caixa-form-actions">
+          <button class="caixa-btn caixa-btn-primary" type="submit">Ajustar Banco/Pix</button>
+        </div>
+      </form>
+    </article>
+
+    <article class="caixa-form-card">
       <h2 class="caixa-form-title">Informar / Corrigir saldo real</h2>
       <p class="caixa-form-help">Use para colocar o saldo inicial real ou corrigir o valor contado no caixa, na sangria/reserva ou no banco.</p>
       <form method="post">
