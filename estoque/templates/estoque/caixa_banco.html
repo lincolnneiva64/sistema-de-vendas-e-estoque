@@ -496,6 +496,50 @@
     align-items: end;
   }
 
+  .caixa-emprestimo-resumo {
+    margin-bottom: 12px;
+    border: 1px solid #bfdbfe;
+    border-left: 5px solid #2563eb;
+    border-radius: 10px;
+    padding: 12px;
+    background: #eff6ff;
+  }
+
+  .caixa-emprestimo-resumo.com-aberto {
+    border-color: #f59e0b;
+    border-left-color: #d97706;
+    background: #fffbeb;
+  }
+
+  .caixa-emprestimo-alerta {
+    margin: 8px 0 0;
+    border: 1px solid #facc15;
+    border-radius: 9px;
+    padding: 8px 10px;
+    background: #fef3c7;
+    color: #713f12;
+    font-weight: 950;
+  }
+
+  .caixa-emprestimo-resumo-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .caixa-emprestimo-resumo-item {
+    border: 1px solid #dbeafe;
+    border-radius: 9px;
+    padding: 8px 10px;
+    background: #fff;
+  }
+
+  .caixa-emprestimo-resumo-item.destaque {
+    border-color: #99f6e4;
+    background: #f0fdfa;
+  }
+
   @media (max-width: 820px) {
     .caixa-page {
       padding: 0 10px;
@@ -532,7 +576,8 @@
     }
     .caixa-modal-body,
     .caixa-emprestimo-meta,
-    .caixa-emprestimo-quitacao {
+    .caixa-emprestimo-quitacao,
+    .caixa-emprestimo-resumo-grid {
       grid-template-columns: 1fr;
     }
     .caixa-table-wrap {
@@ -617,11 +662,28 @@
     </article>
   </section>
 
-  <section class="caixa-form-card" style="margin-bottom:12px;">
+  <section class="caixa-emprestimo-resumo {% if emprestimos_rapidos_total_aberto > 0 %}com-aberto{% endif %}">
     <h2 class="caixa-form-title">Emprestimo rapido / Vale temporario</h2>
-    <p class="caixa-form-help">Dinheiro emprestado temporariamente para terceiro, com devolucao rastreavel no Caixa/Banco.</p>
-    <div class="caixa-form-actions" style="justify-content:space-between; align-items:center;">
-      <strong>{{ emprestimos_rapidos_abertos_qtd }} aberto(s) - {{ emprestimos_rapidos_total_aberto_texto }}</strong>
+    <p class="caixa-form-help">Valor temporariamente emprestado a terceiro. Nao entra no Total disponivel ate voltar para Caixa/Banco.</p>
+    {% if emprestimos_rapidos_total_aberto > 0 %}
+      <div class="caixa-emprestimo-alerta">Existe dinheiro emprestado a receber: {{ emprestimos_rapidos_total_aberto_texto }} em aberto.</div>
+    {% endif %}
+    <div class="caixa-emprestimo-resumo-grid">
+      <div class="caixa-emprestimo-resumo-item">
+        <div class="caixa-label">Total disponivel agora</div>
+        <div class="caixa-value">{{ total_disponivel_texto }}</div>
+      </div>
+      <div class="caixa-emprestimo-resumo-item">
+        <div class="caixa-label">Emprestimos em aberto</div>
+        <div class="caixa-value">{{ emprestimos_rapidos_total_aberto_texto }}</div>
+        <div class="caixa-form-help" style="margin-top:4px;">{{ emprestimos_rapidos_abertos_qtd }} aberto(s)</div>
+      </div>
+      <div class="caixa-emprestimo-resumo-item destaque">
+        <div class="caixa-label">Total considerando retorno</div>
+        <div class="caixa-value">{{ total_considerando_retorno_texto }}</div>
+      </div>
+    </div>
+    <div class="caixa-form-actions" style="justify-content:flex-end; align-items:center; margin-top:10px;">
       <button class="caixa-btn caixa-btn-primary" type="button" id="abrirEmprestimosRapidos">Emprestar dinheiro / Ver abertos</button>
     </div>
   </section>

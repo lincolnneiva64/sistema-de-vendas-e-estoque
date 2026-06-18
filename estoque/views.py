@@ -2173,6 +2173,7 @@ def caixa_banco(request):
     emprestimos_rapidos_total_aberto = _financeiro_dinheiro(
         emprestimos_rapidos_abertos.aggregate(total=Sum("valor"))["total"]
     )
+    total_considerando_retorno = total_disponivel + emprestimos_rapidos_total_aberto
     emprestimos_rapidos_abertos_lista = list(
         emprestimos_rapidos_abertos.select_related("conta_saida").order_by("-data_emprestimo", "-id")
     )
@@ -2207,7 +2208,9 @@ def caixa_banco(request):
             "depositos_reserva_banco_hoje_texto": _financeiro_moeda_br(depositos_reserva_banco_hoje),
             "movimentos_reserva": movimentos_reserva,
             "emprestimos_rapidos_abertos_qtd": emprestimos_rapidos_abertos.count(),
+            "emprestimos_rapidos_total_aberto": emprestimos_rapidos_total_aberto,
             "emprestimos_rapidos_total_aberto_texto": _financeiro_moeda_br(emprestimos_rapidos_total_aberto),
+            "total_considerando_retorno_texto": _financeiro_moeda_br(total_considerando_retorno),
             "emprestimos_rapidos_abertos_lista": emprestimos_rapidos_abertos_lista,
             "hoje": hoje,
         },
