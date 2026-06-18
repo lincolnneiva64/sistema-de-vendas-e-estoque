@@ -2173,12 +2173,14 @@ def caixa_banco(request):
     emprestimos_rapidos_total_aberto = _financeiro_dinheiro(
         emprestimos_rapidos_abertos.aggregate(total=Sum("valor"))["total"]
     )
-    total_considerando_retorno = total_disponivel + emprestimos_rapidos_total_aberto
-    emprestimos_rapidos_abertos_lista = list(
-        emprestimos_rapidos_abertos.select_related("conta_saida").order_by("-data_emprestimo", "-id")
+    dividas_a_devolver = EmprestimoDivida.objects.filter(
+        status__in=[EmprestimoDivida.STATUS_ABERTO, EmprestimoDivida.STATUS_PARCIAL],
+        saldo_devedor__gt=0,
     )
-    for emprestimo in emprestimos_rapidos_abertos_lista:
-        emprestimo.conta_saida_chave = _conta_chave(emprestimo.conta_saida)
+    dividas_a_devolver_total = _financeiro_dinheiro(
+        dividas_a_devolver.aggregate(total=Sum("saldo_devedor"))["total"]
+    )
+    total_considerando_retorno = total_disponivel + emprestimos_rapidos_total_aberto
     for movimento in movimentos_reserva:
         movimento.valor_texto = _financeiro_moeda_br(movimento.valor)
         movimento.operador_texto = movimento.operador or "não informado"
@@ -2210,8 +2212,10 @@ def caixa_banco(request):
             "emprestimos_rapidos_abertos_qtd": emprestimos_rapidos_abertos.count(),
             "emprestimos_rapidos_total_aberto": emprestimos_rapidos_total_aberto,
             "emprestimos_rapidos_total_aberto_texto": _financeiro_moeda_br(emprestimos_rapidos_total_aberto),
+            "dividas_a_devolver_qtd": dividas_a_devolver.count(),
+            "dividas_a_devolver_total": dividas_a_devolver_total,
+            "dividas_a_devolver_total_texto": _financeiro_moeda_br(dividas_a_devolver_total),
             "total_considerando_retorno_texto": _financeiro_moeda_br(total_considerando_retorno),
-            "emprestimos_rapidos_abertos_lista": emprestimos_rapidos_abertos_lista,
             "hoje": hoje,
         },
     )
