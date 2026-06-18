@@ -300,7 +300,7 @@
           <textarea id="observacaoDespesaDiaria" name="observacao" placeholder="Ex.: gasolina da entrega, lanche na rua..."></textarea>
         </div>
       </div>
-      <button class="despesa-btn despesa-submit" type="button" id="btnSalvarDespesaDiaria">Lançar despesa</button>
+      <button class="despesa-btn despesa-submit" type="submit" id="btnSalvarDespesaDiaria">Lançar despesa</button>
     </form>
   </section>
 
@@ -364,6 +364,7 @@
   const form = document.getElementById("formDespesaDiaria");
   const acao = document.getElementById("acaoDespesaDiaria");
   const btnSalvar = document.getElementById("btnSalvarDespesaDiaria");
+  let envioEmAndamento = false;
   const campos = [
     document.getElementById("valorDespesaDiaria"),
     document.getElementById("categoriaDespesaDiaria"),
@@ -412,14 +413,36 @@
     }
   }
 
-  function enviarDespesa() {
-    if (btnSalvar.disabled) {
-      return;
+  function prepararEnvioDespesa() {
+    if (envioEmAndamento) {
+      return false;
     }
 
+    if (form.reportValidity && !form.reportValidity()) {
+      return false;
+    }
+
+    envioEmAndamento = true;
     acao.value = "salvar_despesa";
     btnSalvar.disabled = true;
     btnSalvar.textContent = "Salvando...";
+    return true;
+  }
+
+  function enviarDespesa() {
+    if (envioEmAndamento) {
+      return;
+    }
+
+    if (form.requestSubmit) {
+      form.requestSubmit(btnSalvar);
+      return;
+    }
+
+    if (!prepararEnvioDespesa()) {
+      return;
+    }
+
     form.submit();
   }
 
@@ -438,8 +461,16 @@
     focoProximo(event.target);
   }, true);
 
-  btnSalvar.addEventListener("click", function () {
-    enviarDespesa();
+  form.addEventListener("submit", function (event) {
+    if (!prepararEnvioDespesa()) {
+      event.preventDefault();
+    }
+  });
+
+  btnSalvar.addEventListener("click", function (event) {
+    if (envioEmAndamento) {
+      event.preventDefault();
+    }
   });
 })();
 </script>
