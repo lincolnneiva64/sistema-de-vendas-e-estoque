@@ -259,6 +259,37 @@
     color:#164173;
     font-weight:950;
   }
+  .compras-origem-resumo {
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    gap:8px;
+    margin:0 0 10px;
+  }
+  .compras-origem-resumo-item {
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    padding:9px 11px;
+    border:1px solid #e2e8f0;
+    border-radius:10px;
+    background:#f8fafc;
+    color:#334155;
+    font-weight:900;
+  }
+  .compras-origem-resumo-item strong {
+    color:#172033;
+    white-space:nowrap;
+  }
+  .compras-origem-resumo-item.ok {
+    border-color:#86efac;
+    background:#f0fdf4;
+    color:#166534;
+  }
+  .compras-origem-resumo-item.alerta {
+    border-color:#fca5a5;
+    background:#fef2f2;
+    color:#991b1b;
+  }
   .compras-origem-erro {
     display:none;
     margin-top:10px;
@@ -974,6 +1005,7 @@
     }
     .compras-table-wrap { overflow:visible; }
     .produto-busca { font-size:.84rem; }
+    .compras-origem-resumo { grid-template-columns:1fr; }
     .compras-origem-grid { grid-template-columns:1fr; }
     .compras-origem-acoes { display:grid; grid-template-columns:1fr; }
     .compras-origem-caixa { width:100%; }
@@ -1092,6 +1124,16 @@
             <span>Total da compra</span>
             <strong id="totalFechamentoCompra">R$ 0,00</strong>
           </div>
+          <div class="compras-origem-resumo" aria-live="polite">
+            <div class="compras-origem-resumo-item" id="resumoOrigemInformadoCompra">
+              <span>Ja informado</span>
+              <strong id="valorOrigemInformadoCompra">R$ 0,00</strong>
+            </div>
+            <div class="compras-origem-resumo-item" id="resumoOrigemDiferencaCompra">
+              <span id="labelOrigemDiferencaCompra">Falta</span>
+              <strong id="valorOrigemDiferencaCompra">R$ 0,00</strong>
+            </div>
+          </div>
           <div class="compras-origem-grid">
             <div class="compras-field">
               <label>Caixa em especie</label>
@@ -1183,7 +1225,7 @@
 
     <div class="compras-actions">
       <a href="{% url 'estoque:compras_lista' %}" class="compras-btn compras-btn-secondary">Cancelar</a>
-      <button type="submit" class="compras-btn compras-btn-primary" id="btnSalvarCompra">Salvar compra</button>
+      <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">Salvar compra</button>
     </div>
   </form>
 </div>
@@ -1228,11 +1270,16 @@
   const origemReservaCompra = document.getElementById("origemReservaCompra");
   const origemBancoCompra = document.getElementById("origemBancoCompra");
   const totalFechamentoCompra = document.getElementById("totalFechamentoCompra");
+  const valorOrigemInformadoCompra = document.getElementById("valorOrigemInformadoCompra");
+  const labelOrigemDiferencaCompra = document.getElementById("labelOrigemDiferencaCompra");
+  const valorOrigemDiferencaCompra = document.getElementById("valorOrigemDiferencaCompra");
+  const resumoOrigemDiferencaCompra = document.getElementById("resumoOrigemDiferencaCompra");
   const erroOrigemDinheiroCompra = document.getElementById("erroOrigemDinheiroCompra");
   const btnVoltarEditarCompra = document.getElementById("btnVoltarEditarCompra");
   const btnConfirmarFechamentoCompra = document.getElementById("btnConfirmarFechamentoCompra");
   const mobileQuery = window.matchMedia("(max-width: 820px)");
   let fechamentoOrigemConfirmado = false;
+  let envioAcionadoPeloBotao = false;
 
   function compraMobile() {
     return mobileQuery.matches;
@@ -1359,6 +1406,65 @@
     origemReservaCompra.value = (restante / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
+  function centavosCampoOrigem(campo) {
+    const textoOriginal = String(campo && campo.value != null ? campo.value : "").trim();
+    if (!textoOriginal) {
+      return { valor: 0, invalido: false };
+    }
+
+    const texto = textoOriginal.replace(/\s/g, "").replace(/^R\$/i, "");
+    if (!/\d/.test(texto) || texto.includes("-") || /[^\d.,]/.test(texto)) {
+      return { valor: 0, invalido: true };
+    }
+
+    const valor = numero(textoOriginal);
+    if (!Number.isFinite(valor) || valor < 0) {
+      return { valor: 0, invalido: true };
+    }
+
+    return { valor: Math.round(valor * 100), invalido: false };
+  }
+
+  function estadoOrigemDinheiroCompra() {
+    const total = Math.round(numero(totalCompra ? totalCompra.textContent : "0") * 100);
+    const campos = [origemCaixaCompra, origemReservaCompra, origemBancoCompra].map(centavosCampoOrigem);
+    const invalido = campos.some(function(item) { return item.invalido; });
+    const soma = campos.reduce(function(totalAtual, item) { return totalAtual + item.valor; }, 0);
+
+    return {
+      total: total,
+      soma: soma,
+      diferenca: total - soma,
+      invalido: invalido,
+      temValor: campos.some(function(item) { return item.valor > 0; })
+    };
+  }
+
+  function atualizarResumoOrigemDinheiroCompra() {
+    const estado = estadoOrigemDinheiroCompra();
+
+    if (totalFechamentoCompra) {
+      totalFechamentoCompra.textContent = moeda(estado.total / 100);
+    }
+    if (valorOrigemInformadoCompra) {
+      valorOrigemInformadoCompra.textContent = moeda(estado.soma / 100);
+    }
+    if (labelOrigemDiferencaCompra && valorOrigemDiferencaCompra) {
+      const excedeu = estado.diferenca < 0;
+      labelOrigemDiferencaCompra.textContent = excedeu ? "Excedeu" : "Falta";
+      valorOrigemDiferencaCompra.textContent = moeda(Math.abs(estado.diferenca) / 100);
+    }
+    if (resumoOrigemDiferencaCompra) {
+      resumoOrigemDiferencaCompra.classList.toggle("ok", !estado.invalido && estado.total > 0 && estado.temValor && estado.diferenca === 0);
+      resumoOrigemDiferencaCompra.classList.toggle("alerta", estado.invalido || estado.diferenca < 0);
+    }
+    if (btnConfirmarFechamentoCompra) {
+      btnConfirmarFechamentoCompra.disabled = estado.invalido || estado.total <= 0 || !estado.temValor || estado.diferenca !== 0;
+    }
+
+    return estado;
+  }
+
   function mostrarErroOrigem(mensagem) {
     if (!erroOrigemDinheiroCompra) return;
     erroOrigemDinheiroCompra.textContent = mensagem || "";
@@ -1383,6 +1489,7 @@
       totalFechamentoCompra.textContent = totalCompra.textContent;
     }
     mostrarErroOrigem("");
+    atualizarResumoOrigemDinheiroCompra();
     origemDinheiroCompra.classList.add("visivel");
     origemDinheiroCompra.setAttribute("aria-hidden", "false");
     focarSelecionando(origemCaixaCompra);
@@ -1393,6 +1500,7 @@
     origemDinheiroCompra.classList.remove("visivel");
     origemDinheiroCompra.setAttribute("aria-hidden", "true");
     fechamentoOrigemConfirmado = false;
+    envioAcionadoPeloBotao = false;
     if (btnSalvarCompra) {
       btnSalvarCompra.disabled = false;
       btnSalvarCompra.textContent = "Salvar compra";
@@ -1402,17 +1510,18 @@
   }
 
   function validarOrigemDinheiroCompra() {
-    const total = Math.round(numero(totalCompra ? totalCompra.textContent : "0") * 100);
-    const soma = Math.round((
-      numero(origemCaixaCompra ? origemCaixaCompra.value : "0") +
-      numero(origemReservaCompra ? origemReservaCompra.value : "0") +
-      numero(origemBancoCompra ? origemBancoCompra.value : "0")
-    ) * 100);
-    if (total <= 0) {
+    const estado = atualizarResumoOrigemDinheiroCompra();
+    if (estado.invalido) {
+      return "Informe apenas valores validos e positivos nas origens do dinheiro.";
+    }
+    if (estado.total <= 0) {
       return "Inclua itens na compra antes de finalizar.";
     }
-    if (soma !== total) {
-      return "A soma das origens precisa bater com o total da compra. Soma: " + moeda(soma / 100) + ". Total: " + moeda(total / 100) + ".";
+    if (!estado.temValor) {
+      return "Informe pelo menos uma origem do dinheiro com valor maior que zero.";
+    }
+    if (estado.diferenca !== 0) {
+      return "A soma das origens precisa bater com o total da compra. Soma: " + moeda(estado.soma / 100) + ". Total: " + moeda(estado.total / 100) + ".";
     }
     return "";
   }
@@ -1442,6 +1551,9 @@
       linha.querySelector(".valor-total-item").textContent = moeda(subtotal);
     });
     totalCompra.textContent = moeda(total);
+    if (origemDinheiroCompra && origemDinheiroCompra.classList.contains("visivel")) {
+      atualizarResumoOrigemDinheiroCompra();
+    }
   }
 
   function focarCampo(campo) {
@@ -2058,15 +2170,35 @@
     btnAdicionar.click();
   });
 
+  if (btnSalvarCompra && formCompra) {
+    btnSalvarCompra.addEventListener("click", function() {
+      envioAcionadoPeloBotao = true;
+      formCompra.requestSubmit ? formCompra.requestSubmit() : formCompra.submit();
+    });
+  }
+
   if (formCompra) {
+    formCompra.addEventListener("keydown", function(event) {
+      if (event.key !== "Enter" || event.defaultPrevented) return;
+      const campo = event.target.closest("input, select, textarea");
+      if (!campo) return;
+      event.preventDefault();
+    });
+
     formCompra.addEventListener("submit", function(event) {
       if (formCompra.dataset.enviando === "1") {
         event.preventDefault();
         return;
       }
 
+      if (!envioAcionadoPeloBotao && !fechamentoOrigemConfirmado) {
+        event.preventDefault();
+        return;
+      }
+
       if (compraAVista() && !fechamentoOrigemConfirmado) {
         event.preventDefault();
+        envioAcionadoPeloBotao = false;
         abrirOrigemDinheiroCompra();
         return;
       }
@@ -2093,11 +2225,16 @@
     campo.addEventListener("focus", function() {
       focarSelecionando(campo);
     });
+    campo.addEventListener("input", function() {
+      mostrarErroOrigem("");
+      atualizarResumoOrigemDinheiroCompra();
+    });
     campo.addEventListener("blur", function() {
       formatarCampoDinheiro(campo);
       if (campo === origemCaixaCompra) {
         preencherRestanteReservaCompra();
       }
+      atualizarResumoOrigemDinheiroCompra();
     });
     campo.addEventListener("keydown", function(event) {
       if (event.key !== "Enter") return;
@@ -2106,11 +2243,14 @@
       if (campo === origemCaixaCompra) {
         preencherRestanteReservaCompra();
       }
+      const estado = atualizarResumoOrigemDinheiroCompra();
       const proximo = campos[indice + 1];
       if (proximo) {
         focarSelecionando(proximo);
-      } else if (btnConfirmarFechamentoCompra) {
+      } else if (btnConfirmarFechamentoCompra && !btnConfirmarFechamentoCompra.disabled && !estado.invalido && estado.diferenca === 0) {
         btnConfirmarFechamentoCompra.focus();
+      } else {
+        mostrarErroOrigem(validarOrigemDinheiroCompra());
       }
     });
   });
@@ -2121,6 +2261,7 @@
 
   if (btnConfirmarFechamentoCompra && formCompra) {
     btnConfirmarFechamentoCompra.addEventListener("click", function() {
+      if (btnConfirmarFechamentoCompra.disabled) return;
       [origemCaixaCompra, origemReservaCompra, origemBancoCompra].forEach(formatarCampoDinheiro);
       const erro = validarOrigemDinheiroCompra();
       if (erro) {
@@ -2129,6 +2270,7 @@
         return;
       }
       fechamentoOrigemConfirmado = true;
+      envioAcionadoPeloBotao = false;
       formCompra.requestSubmit ? formCompra.requestSubmit() : formCompra.submit();
     });
   }

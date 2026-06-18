@@ -1431,29 +1431,6 @@ def _registrar_movimento_despesa_diaria(despesa):
     )
 
 
-def _registrar_movimento_compra_a_vista(compra):
-    valor = _financeiro_dinheiro(compra.total).quantize(Decimal("0.01"))
-    if valor <= Decimal("0.00"):
-        return None
-    conta_financeira = _conta_financeira_por_forma_pagamento(compra.tipo_pagamento)
-    if not conta_financeira:
-        return None
-    fornecedor_nome = compra.fornecedor.nome if compra.fornecedor else ""
-    descricao = (
-        f"Compra à vista: {fornecedor_nome}"
-        if fornecedor_nome
-        else "Compra à vista"
-    )
-    return MovimentoFinanceiro.objects.create(
-        conta=conta_financeira,
-        tipo=MovimentoFinanceiro.TIPO_SAIDA,
-        valor=valor,
-        data=compra.data_compra or timezone.localdate(),
-        descricao=descricao,
-        origem="compra_a_vista",
-    )
-
-
 def _compra_pagamento_a_prazo(tipo_pagamento):
     forma = normalizar_texto_cliente(tipo_pagamento)
     forma_compacta = re.sub(r"\s+", "", forma)
@@ -1476,20 +1453,35 @@ def _descricao_compra_a_vista(compra, conta=None, complemento=""):
 
 
 def _movimentos_financeiros_compra(compra):
+    movimentos_vinculados = list(
+        MovimentoFinanceiro.objects
+        .select_related("conta", "conta_destino")
+        .filter(compra=compra)
+        .order_by("id")
+    )
+    movimentos_por_id = {movimento.id: movimento for movimento in movimentos_vinculados}
+
     fornecedor_nome = compra.fornecedor.nome if compra.fornecedor else ""
     filtros_por_id = Q(origem__in=["compra_a_vista", "compra_correcao_item", "compra_correcao_origem"]) & (
         Q(descricao__icontains=f"Compra #{compra.id}") |
         Q(descricao__icontains=f"Compra {compra.id}")
     )
-    movimentos_por_id = MovimentoFinanceiro.objects.select_related("conta", "conta_destino").filter(filtros_por_id)
-    if movimentos_por_id.exists():
-        return movimentos_por_id.order_by("id")
+    movimentos_legados_por_id = list(
+        MovimentoFinanceiro.objects
+        .select_related("conta", "conta_destino")
+        .filter(filtros_por_id)
+        .order_by("id")
+    )
+    for movimento in movimentos_legados_por_id:
+        movimentos_por_id.setdefault(movimento.id, movimento)
+    if movimentos_por_id:
+        return sorted(movimentos_por_id.values(), key=lambda movimento: movimento.id)
 
     if not fornecedor_nome:
-        return movimentos_por_id.order_by("id")
+        return []
 
     # Compatibilidade com compras antigas gravadas antes de a descricao conter o id.
-    return (
+    movimentos_legados_por_fornecedor = list(
         MovimentoFinanceiro.objects
         .select_related("conta", "conta_destino")
         .filter(
@@ -1499,6 +1491,9 @@ def _movimentos_financeiros_compra(compra):
         )
         .order_by("id")
     )
+    for movimento in movimentos_legados_por_fornecedor:
+        movimentos_por_id.setdefault(movimento.id, movimento)
+    return sorted(movimentos_por_id.values(), key=lambda movimento: movimento.id)
 
 
 def _alocacao_financeira_compra(compra):
@@ -1550,6 +1545,10 @@ def _registrar_movimentos_compra_a_vista(compra, valores_origem=None):
     if total <= Decimal("0.00"):
         return []
 
+    movimentos_existentes = list(_movimentos_financeiros_compra(compra))
+    if movimentos_existentes:
+        return movimentos_existentes
+
     contas = {
         "caixa": _conta_financeira_padrao("caixa"),
         "reserva": _conta_financeira_padrao("reserva"),
@@ -1581,6 +1580,7 @@ def _registrar_movimentos_compra_a_vista(compra, valores_origem=None):
             descricao=_descricao_compra_a_vista(compra, conta_financeira),
             operador=compra.operador or "",
             origem="compra_a_vista",
+            compra=compra,
         ))
     return movimentos
 
@@ -3734,6 +3734,7 @@ def compra_corrigir_itens(request, pk):
                         descricao=f"Correcao item Compra #{compra.id} - {produto_nome}"[:255],
                         operador=compra.operador or "",
                         origem="compra_correcao_item",
+                        compra=compra,
                     )
 
             _registrar_observacao_compra(
@@ -3799,6 +3800,7 @@ def compra_corrigir_origem_pagamento(request, pk):
                     descricao=_descricao_compra_a_vista(compra, conta, "correcao de origem"),
                     operador=compra.operador or "",
                     origem="compra_correcao_origem",
+                    compra=compra,
                 )
                 movimentos_criados += 1
 

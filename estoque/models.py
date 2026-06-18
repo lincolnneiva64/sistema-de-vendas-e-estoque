@@ -1134,6 +1134,13 @@ class MovimentoFinanceiro(models.Model):
         related_name="transferencias_recebidas",
     )
     origem = models.CharField(max_length=100, blank=True)
+    compra = models.ForeignKey(
+        Compra,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="movimentos_financeiros",
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:

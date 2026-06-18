@@ -445,7 +445,11 @@
       </div>
     {% else %}
       <div style="padding:7px 10px; color:#475569; font-weight:800;">
-        Compra à vista. Nenhuma conta a pagar foi gerada.
+        {% if movimentos_financeiros|length > 1 %}
+          Compra à vista com pagamento dividido. Nenhuma conta a pagar foi gerada.
+        {% else %}
+          Compra à vista. Nenhuma conta a pagar foi gerada.
+        {% endif %}
       </div>
       <div class="nota-compra-dados">
         <div><strong>Caixa</strong>R$ {{ alocacao_financeira.caixa|floatformat:2 }}</div>
@@ -453,6 +457,37 @@
         <div><strong>Banco/Pix</strong>R$ {{ alocacao_financeira.banco|floatformat:2 }}</div>
         <div><strong>Movimentos</strong>{{ movimentos_financeiros|length }}</div>
       </div>
+      {% if movimentos_financeiros %}
+        <div class="nota-compra-historico-pagamentos">
+          <p class="nota-compra-historico-titulo">Detalhamento do pagamento</p>
+          <div class="nota-compra-historico-lista">
+            {% for movimento in movimentos_financeiros %}
+              <div class="nota-compra-historico-item">
+                <div>
+                  <span class="nota-compra-historico-label">Data</span>
+                  <span class="nota-compra-historico-valor">{{ movimento.data|date:"d/m/Y" }}</span>
+                </div>
+                <div>
+                  <span class="nota-compra-historico-label">Conta</span>
+                  <span class="nota-compra-historico-valor">{{ movimento.conta.nome }}</span>
+                </div>
+                <div>
+                  <span class="nota-compra-historico-label">Tipo</span>
+                  <span class="nota-compra-historico-valor">{{ movimento.get_tipo_display }}</span>
+                </div>
+                <div>
+                  <span class="nota-compra-historico-label">Valor</span>
+                  <span class="nota-compra-historico-valor">R$ {{ movimento.valor|floatformat:2 }}</span>
+                </div>
+                <div>
+                  <span class="nota-compra-historico-label">Descricao</span>
+                  <span class="nota-compra-historico-valor">{{ movimento.descricao|default:"-" }}</span>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
     {% endif %}
   </section>
 
