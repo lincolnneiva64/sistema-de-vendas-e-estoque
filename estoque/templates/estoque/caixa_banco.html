@@ -676,7 +676,7 @@
     border: 1px solid #dbeafe;
     border-left: 5px solid #2563eb;
     border-radius: 10px;
-    padding: 10px 12px;
+    padding: 8px 10px;
     background: #f8fbff;
   }
 
@@ -687,9 +687,9 @@
   }
 
   .caixa-avisos-titulo {
-    margin: 0 0 6px;
+    margin: 0 0 4px;
     color: #172033;
-    font-size: .92rem;
+    font-size: .86rem;
     font-weight: 950;
   }
 
@@ -705,19 +705,26 @@
   .caixa-aviso-chip {
     display: inline-flex;
     align-items: center;
-    min-height: 32px;
+    min-height: 28px;
     border: 1px solid #e2e8f0;
     border-radius: 999px;
-    padding: 5px 10px;
+    padding: 4px 8px;
     background: #fff;
     color: #334155;
-    font-size: .82rem;
+    font-size: .78rem;
     font-weight: 900;
   }
 
   .caixa-aviso-chip strong {
     margin-right: 4px;
     color: #111827;
+  }
+
+  .caixa-avisos-btn {
+    min-height: 34px;
+    padding: 6px 10px;
+    font-size: .8rem;
+    white-space: nowrap;
   }
 
   @media (max-width: 820px) {
@@ -747,6 +754,9 @@
     .caixa-avisos-financeiros {
       align-items: stretch;
       flex-direction: column;
+    }
+    .caixa-avisos-btn {
+      width: 100%;
     }
     .caixa-form-grid {
       grid-template-columns: 1fr;
@@ -863,7 +873,7 @@
         <li class="caixa-aviso-chip"><strong>{{ total_considerando_retorno_texto }}</strong> total considerando retorno</li>
       </ul>
     </div>
-    <a class="caixa-btn caixa-btn-primary" href="{% url 'estoque:emprestimos_dividas' %}">Ver Emprestimos/Dividas</a>
+    <a class="caixa-btn caixa-btn-primary caixa-avisos-btn" href="{% url 'estoque:emprestimos_dividas' %}">Ver Emprestimos/Dividas</a>
   </section>
 
   <section class="caixa-movimentacoes-panel" aria-label="Movimentacoes e ajustes">
