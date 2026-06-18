@@ -1285,8 +1285,6 @@ class PagamentoEmprestimoDivida(models.Model):
     def clean(self):
         if self.valor is not None and self.valor <= 0:
             raise ValidationError("O valor do pagamento deve ser maior que zero.")
-        if self.divida_id and self.valor is not None and self.valor > self.divida.saldo_devedor:
-            raise ValidationError("O valor da baixa nao pode ser maior que o saldo devedor.")
 
     def __str__(self):
         return f"Pagamento R$ {self.valor} - {self.divida}"

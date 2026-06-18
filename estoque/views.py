@@ -2618,7 +2618,12 @@ def emprestimo_divida_baixar(request, pk):
     _garantir_contas_financeiras_padrao()
     divida = get_object_or_404(EmprestimoDivida, pk=pk)
     if request.method == "POST":
-        valor = _parse_decimal_financeiro(request.POST.get("valor"))
+        valor_principal = _parse_decimal_financeiro(
+            request.POST.get("valor_principal") or request.POST.get("valor")
+        )
+        juros_acrescimo = _parse_decimal_financeiro(request.POST.get("juros_acrescimo"))
+        if juros_acrescimo is None:
+            juros_acrescimo = Decimal("0.00")
         data_pagamento = parse_date(request.POST.get("data_pagamento") or "")
         forma_pagamento = request.POST.get("forma_pagamento", "").strip()
         observacao = request.POST.get("observacao", "").strip()
@@ -2627,37 +2632,54 @@ def emprestimo_divida_baixar(request, pk):
         if lancar_saida:
             conta_saida = ContaFinanceira.objects.filter(pk=request.POST.get("conta_saida"), ativo=True).first()
 
-        if valor is None or valor <= 0:
-            messages.error(request, "Informe um valor valido.")
+        if valor_principal is None or valor_principal <= 0:
+            messages.error(request, "Informe um valor principal valido.")
+        elif juros_acrescimo < 0:
+            messages.error(request, "Juros/acrescimo nao pode ser negativo.")
         elif not data_pagamento:
             messages.error(request, "Informe uma data de pagamento valida.")
-        elif valor > divida.saldo_devedor:
-            messages.error(request, "O valor da baixa nao pode ser maior que o saldo devedor.")
+        elif valor_principal > divida.saldo_devedor:
+            messages.error(request, "O valor principal da baixa nao pode ser maior que o saldo devedor.")
         elif lancar_saida and not conta_saida:
             messages.error(request, "Escolha a conta de onde saiu o dinheiro.")
         else:
             try:
                 with transaction.atomic():
                     divida = EmprestimoDivida.objects.select_for_update().get(pk=pk)
-                    if valor > divida.saldo_devedor:
-                        raise ValidationError("O valor da baixa nao pode ser maior que o saldo devedor.")
+                    if valor_principal > divida.saldo_devedor:
+                        raise ValidationError("O valor principal da baixa nao pode ser maior que o saldo devedor.")
+                    valor_total_pago = (valor_principal + juros_acrescimo).quantize(Decimal("0.01"))
+                    principal_texto = _financeiro_moeda_br(valor_principal)
+                    juros_texto = _financeiro_moeda_br(juros_acrescimo)
+                    total_texto = _financeiro_moeda_br(valor_total_pago)
+                    descricao_movimento = (
+                        f"Pagamento/devolucao de divida rapida para {divida.credor} - "
+                        f"principal {principal_texto} + juros {juros_texto}"
+                    )
+                    observacao_pagamento = (
+                        f"Principal {principal_texto}; juros/acrescimo {juros_texto}; "
+                        f"total pago {total_texto}."
+                    )
+                    if observacao:
+                        observacao_pagamento = f"{observacao_pagamento} {observacao}"
+                    observacao_pagamento = observacao_pagamento[:255]
                     PagamentoEmprestimoDivida.objects.create(
                         divida=divida,
-                        valor=valor,
+                        valor=valor_total_pago,
                         data_pagamento=data_pagamento,
                         forma_pagamento=forma_pagamento,
-                        observacao=observacao,
+                        observacao=observacao_pagamento,
                     )
                     if lancar_saida:
                         MovimentoFinanceiro.objects.create(
                             conta=conta_saida,
                             tipo=MovimentoFinanceiro.TIPO_SAIDA,
-                            valor=valor,
+                            valor=valor_total_pago,
                             data=data_pagamento,
-                            descricao=f"Pagamento de emprestimo/divida: {divida.credor}",
+                            descricao=descricao_movimento,
                             origem="pagamento_emprestimo_divida",
                         )
-                    divida.saldo_devedor = (divida.saldo_devedor - valor).quantize(Decimal("0.01"))
+                    divida.saldo_devedor = (divida.saldo_devedor - valor_principal).quantize(Decimal("0.01"))
                     divida.atualizar_status_por_saldo()
                     divida.save(update_fields=["saldo_devedor", "status", "atualizado_em"])
             except ValidationError as exc:

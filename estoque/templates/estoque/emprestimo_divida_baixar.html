@@ -51,13 +51,21 @@
   {% endif %}
 
   <section class="edb-card">
-    <div class="edb-resumo">Esta baixa reduz o saldo da dívida. Marque a saída financeira somente se este pagamento saiu do Caixa/Banco agora.</div>
+    <div class="edb-resumo">Esta baixa reduz o saldo da divida pelo valor principal. Juros/acrescimo entram no total pago e na saida financeira.</div>
     <form method="post">
       {% csrf_token %}
       <div class="edb-grid">
         <div class="edb-field">
-          <label for="valor">Valor</label>
-          <input id="valor" name="valor" type="text" inputmode="decimal" placeholder="0,00" required>
+          <label for="valor_principal">Valor principal da divida</label>
+          <input id="valor_principal" name="valor_principal" type="text" inputmode="decimal" value="{{ divida.saldo_devedor }}" placeholder="0,00" required>
+        </div>
+        <div class="edb-field">
+          <label for="juros_acrescimo">Juros/acrescimo</label>
+          <input id="juros_acrescimo" name="juros_acrescimo" type="text" inputmode="decimal" value="0,00" placeholder="0,00">
+        </div>
+        <div class="edb-field">
+          <label for="total_pago">Total a pagar/devolver</label>
+          <input id="total_pago" name="total_pago" type="text" inputmode="decimal" value="{{ divida.saldo_devedor }}" readonly>
         </div>
         <div class="edb-field">
           <label for="data_pagamento">Data pagamento</label>
@@ -95,4 +103,53 @@
     </form>
   </section>
 </main>
+<script>
+  (function() {
+    const principalInput = document.getElementById('valor_principal');
+    const jurosInput = document.getElementById('juros_acrescimo');
+    const totalInput = document.getElementById('total_pago');
+    if (!principalInput || !jurosInput || !totalInput) return;
+
+    function parseMoney(value) {
+      let normalized = String(value || '')
+        .replace(/\s/g, '')
+        .replace(/[R$]/g, '');
+      if (normalized.includes(',')) {
+        normalized = normalized.replace(/\./g, '').replace(',', '.');
+      }
+      const parsed = Number.parseFloat(normalized);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function formatMoney(value) {
+      return value.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+
+    function atualizarTotal() {
+      const principal = parseMoney(principalInput.value);
+      const juros = parseMoney(jurosInput.value);
+      totalInput.value = formatMoney(Math.max(0, principal + juros));
+    }
+
+    function selecionarCampo(event) {
+      event.currentTarget.select();
+    }
+
+    principalInput.addEventListener('input', atualizarTotal);
+    jurosInput.addEventListener('input', atualizarTotal);
+    principalInput.addEventListener('change', atualizarTotal);
+    jurosInput.addEventListener('change', atualizarTotal);
+    principalInput.addEventListener('focus', selecionarCampo);
+    jurosInput.addEventListener('focus', selecionarCampo);
+    atualizarTotal();
+
+    setTimeout(function() {
+      principalInput.focus();
+      principalInput.select();
+    }, 80);
+  })();
+</script>
 {% endblock %}
