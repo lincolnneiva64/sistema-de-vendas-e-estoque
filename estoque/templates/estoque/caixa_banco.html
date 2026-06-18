@@ -383,6 +383,18 @@
     outline: none;
   }
 
+  .caixa-field input:focus,
+  .caixa-field select:focus {
+    border-color: #2563eb;
+    background: #eff6ff;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, .18);
+  }
+
+  .caixa-form-actions .caixa-btn:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, .5);
+    outline-offset: 2px;
+  }
+
   .caixa-form-actions {
     justify-content: flex-start;
     margin-top: 10px;
@@ -1377,6 +1389,7 @@
     const ajusteConta = document.getElementById("ajusteConta");
     const ajusteDescricao = document.getElementById("ajusteDescricao");
     let ajusteDescricaoAutomatica = "";
+    const focusableFieldSelector = "input:not([type='hidden']), select, textarea, button[type='submit']";
 
     function formatCurrentDateTime() {
       const now = new Date();
@@ -1428,7 +1441,61 @@
       ajusteDescricao.value = ajusteDescricaoAutomatica;
     }
 
+    function setPanelEnabled(panel, enabled) {
+      panel.querySelectorAll("input, select, textarea, button").forEach(function (control) {
+        control.disabled = !enabled;
+      });
+    }
+
+    function selectMoneyInput(input) {
+      if (!input) return;
+
+      if (!input.value.trim()) {
+        input.value = "R$ 0,00";
+      } else {
+        input.value = formatMoneyValue(input.value);
+      }
+
+      input.focus();
+      input.select();
+    }
+
+    function focusFirstMoneyInput(panel) {
+      const moneyInput = panel.querySelector("[data-money-input]");
+      if (!moneyInput) return;
+
+      window.setTimeout(function () {
+        selectMoneyInput(moneyInput);
+      }, 0);
+    }
+
+    function getUsefulFields(form) {
+      return Array.from(form.querySelectorAll(focusableFieldSelector)).filter(function (field) {
+        return !field.disabled && field.offsetParent !== null;
+      });
+    }
+
+    function focusNextField(form, currentField) {
+      const fields = getUsefulFields(form);
+      const currentIndex = fields.indexOf(currentField);
+      const nextField = fields[currentIndex + 1];
+
+      if (!nextField) return;
+
+      if (nextField.matches("[data-money-input]")) {
+        selectMoneyInput(nextField);
+        return;
+      }
+
+      nextField.focus();
+      if (nextField.select && nextField.tagName === "INPUT") {
+        nextField.select();
+      }
+    }
+
     function activateOperation(operation) {
+      let activePanel = null;
+
       operationButtons.forEach(function (button) {
         const isActive = button.dataset.caixaOp === operation;
         button.classList.toggle("ativa", isActive);
@@ -1436,11 +1503,20 @@
       });
 
       operationPanels.forEach(function (panel) {
-        panel.classList.toggle("ativa", panel.dataset.caixaOpPanel === operation);
+        const isActive = panel.dataset.caixaOpPanel === operation;
+        panel.classList.toggle("ativa", isActive);
+        setPanelEnabled(panel, isActive);
+        if (isActive) {
+          activePanel = panel;
+        }
       });
 
       if (operation === "corrigir-saldo") {
         updateAjusteDescricao(false);
+      }
+
+      if (activePanel) {
+        focusFirstMoneyInput(activePanel);
       }
     }
 
@@ -1452,6 +1528,7 @@
 
       operationPanels.forEach(function (panel) {
         panel.classList.remove("ativa");
+        setPanelEnabled(panel, false);
       });
     }
 
@@ -1517,12 +1594,24 @@
       });
 
       input.addEventListener("focus", function () {
-        input.value = normalizeMoneyValue(input.value);
-        input.select();
+        selectMoneyInput(input);
       });
     });
 
+    closeOperations();
+
     document.querySelectorAll(".caixa-page form").forEach(function (form) {
+      form.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter") return;
+
+        const target = event.target;
+        if (target && target.matches("textarea")) return;
+        if (target && target.matches('button[type="submit"]')) return;
+
+        event.preventDefault();
+        focusNextField(form, target);
+      });
+
       form.addEventListener("submit", function (event) {
         if (!form.checkValidity()) return;
 
