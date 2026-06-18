@@ -2763,6 +2763,9 @@ def despesas_diarias(request):
             messages.success(request, "Despesa excluida.")
             return redirect("estoque:despesas_diarias")
 
+        if acao != "salvar_despesa":
+            return redirect("estoque:despesas_diarias")
+
         try:
             valor = _decimal_compra(request.POST.get("valor"), casas=2)
         except ValueError:
