@@ -1114,6 +1114,54 @@ td:first-child {
     position: relative;
 }
 
+.bloco-lancamento {
+    padding-top: 8px;
+    padding-bottom: 8px;
+}
+
+.bloco-lancamento .topo-venda {
+    margin-bottom: 4px;
+}
+
+.bloco-lancamento .linha {
+    margin-bottom: 4px;
+}
+
+.bloco-lancamento .linha-cabecalho-venda {
+    margin-bottom: 4px;
+}
+
+.bloco-lancamento .linha:not(.linha-cabecalho-venda) {
+    margin-top: 0;
+    margin-bottom: 4px;
+}
+
+.bloco-lancamento .barra-acoes-venda {
+    margin-top: 4px;
+    padding-top: 5px;
+}
+
+@media (max-width: 980px) {
+    .bloco-lancamento {
+        padding: 8px;
+    }
+
+    .bloco-lancamento .topo-venda {
+        margin-bottom: 5px;
+    }
+
+    .bloco-lancamento .linha.linha-cabecalho-venda,
+    .bloco-lancamento .linha:not(.linha-cabecalho-venda) {
+        margin-top: 0;
+        margin-bottom: 6px;
+    }
+
+    .bloco-lancamento .barra-acoes-venda {
+        margin-top: 4px;
+        padding-top: 6px;
+    }
+}
+
 
 </style>
 </head>
@@ -1932,6 +1980,28 @@ td:first-child {
     }
 }
 /* ===== FIM TOTAL ITENS LANCADOS MOBILE - CHATGPT 2026-06-10 ===== */
+
+/* Compacta a passagem entre cabecalho da venda e lancamento de produto. */
+.bloco-lancamento .linha-cabecalho-venda {
+    margin-bottom: 0 !important;
+}
+
+.bloco-lancamento .linha-cabecalho-venda ~ .linha:not(.linha-cabecalho-venda) {
+    margin-top: -14px !important;
+    margin-bottom: 4px !important;
+}
+
+.bloco-lancamento .barra-acoes-venda {
+    margin-top: 3px !important;
+    padding-top: 5px !important;
+}
+
+@media (max-width: 980px) {
+    .bloco-lancamento .linha-cabecalho-venda ~ .linha:not(.linha-cabecalho-venda) {
+        margin-top: -4px !important;
+        margin-bottom: 6px !important;
+    }
+}
 </style>
 
         <div id="msgEdicao" class="msg-edicao">Modo edição ativado</div>
