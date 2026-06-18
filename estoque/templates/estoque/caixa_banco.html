@@ -398,6 +398,104 @@
     text-align: center;
   }
 
+  .caixa-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15, 23, 42, .48);
+  }
+
+  .caixa-modal-overlay.visivel {
+    display: flex;
+  }
+
+  .caixa-modal-card {
+    width: min(980px, 96vw);
+    max-height: 92vh;
+    overflow: auto;
+    border: 1px solid #dbe4ef;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 24px 70px rgba(15, 23, 42, .28);
+  }
+
+  .caixa-modal-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+  }
+
+  .caixa-modal-title {
+    margin: 0;
+    color: #111827;
+    font-size: 1.08rem;
+    font-weight: 950;
+  }
+
+  .caixa-modal-body {
+    display: grid;
+    grid-template-columns: .8fr 1.2fr;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .caixa-emprestimo-lista {
+    display: grid;
+    gap: 8px;
+  }
+
+  .caixa-emprestimo-item {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px;
+    background: #fff;
+  }
+
+  .caixa-emprestimo-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-weight: 950;
+  }
+
+  .caixa-emprestimo-meta {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+    color: #334155;
+    font-size: .84rem;
+    font-weight: 750;
+  }
+
+  .caixa-emprestimo-meta strong {
+    display: block;
+    color: #64748b;
+    font-size: .68rem;
+    text-transform: uppercase;
+  }
+
+  .caixa-emprestimo-quitacao {
+    margin-top: 9px;
+    padding-top: 9px;
+    border-top: 1px solid #e2e8f0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    align-items: end;
+  }
+
   @media (max-width: 820px) {
     .caixa-page {
       padding: 0 10px;
@@ -419,6 +517,23 @@
     }
     .caixa-btn {
       flex: 1 1 auto;
+    }
+    .caixa-modal-overlay {
+      padding: 8px;
+      align-items: stretch;
+    }
+    .caixa-modal-card {
+      width: 100%;
+      max-height: 96vh;
+    }
+    .caixa-modal-head {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .caixa-modal-body,
+    .caixa-emprestimo-meta,
+    .caixa-emprestimo-quitacao {
+      grid-template-columns: 1fr;
     }
     .caixa-table-wrap {
       display: none;
@@ -472,7 +587,6 @@
       <p class="caixa-subtitle">Use Receber cliente, Despesa Diaria, Contas a pagar e Compras para os movimentos normais. Use esta tela para troco, sangria, deposito, reserva e conferencia.</p>
     </div>
     <nav class="caixa-actions" aria-label="Navegacao de Caixa e Banco">
-      <a class="caixa-btn" href="{% url 'estoque:emprestimos_rapidos' %}">Emprestimos rapidos</a>
       <a class="caixa-btn" href="{% url 'estoque:painel_financeiro' %}">Voltar para Central Financeira</a>
       <a class="caixa-btn" href="{% url 'estoque:home' %}">Home</a>
     </nav>
@@ -508,9 +622,133 @@
     <p class="caixa-form-help">Dinheiro emprestado temporariamente para terceiro, com devolucao rastreavel no Caixa/Banco.</p>
     <div class="caixa-form-actions" style="justify-content:space-between; align-items:center;">
       <strong>{{ emprestimos_rapidos_abertos_qtd }} aberto(s) - {{ emprestimos_rapidos_total_aberto_texto }}</strong>
-      <a class="caixa-btn caixa-btn-primary" href="{% url 'estoque:emprestimos_rapidos' %}">Emprestar dinheiro / ver abertos</a>
+      <button class="caixa-btn caixa-btn-primary" type="button" id="abrirEmprestimosRapidos">Emprestar dinheiro / Ver abertos</button>
     </div>
   </section>
+
+  <div class="caixa-modal-overlay" id="modalEmprestimosRapidos" aria-hidden="true">
+    <div class="caixa-modal-card" role="dialog" aria-modal="true" aria-labelledby="tituloModalEmprestimosRapidos">
+      <div class="caixa-modal-head">
+        <div>
+          <h2 class="caixa-modal-title" id="tituloModalEmprestimosRapidos">Emprestimo rapido / Vale temporario</h2>
+          <p class="caixa-form-help" style="margin:4px 0 0;">{{ emprestimos_rapidos_abertos_qtd }} aberto(s) - {{ emprestimos_rapidos_total_aberto_texto }}</p>
+        </div>
+        <button class="caixa-btn" type="button" id="fecharEmprestimosRapidos">Fechar</button>
+      </div>
+      <div class="caixa-modal-body">
+        <article class="caixa-form-card">
+          <h3 class="caixa-form-title">Emprestar dinheiro</h3>
+          <p class="caixa-form-help">Cria uma saida rastreavel e deixa o valor em aberto para devolucao.</p>
+          <form method="post" action="{% url 'estoque:emprestimos_rapidos' %}">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="criar">
+            <input type="hidden" name="next" value="caixa_banco">
+            <div class="caixa-form-grid">
+              <div class="caixa-field">
+                <label>Pessoa</label>
+                <input type="text" name="pessoa_nome" autocomplete="off" required>
+              </div>
+              <div class="caixa-field">
+                <label>Valor</label>
+                <input type="text" name="valor" inputmode="decimal" placeholder="R$ 0,00" data-money-input required>
+              </div>
+              <div class="caixa-field">
+                <label>Saiu de</label>
+                <select name="conta_saida" required>
+                  <option value="">Selecione...</option>
+                  <option value="caixa">Caixa em especie</option>
+                  <option value="reserva">Sangria / Reserva em maos</option>
+                  <option value="banco">Banco/Pix</option>
+                </select>
+              </div>
+              <div class="caixa-field">
+                <label>Data</label>
+                <input type="date" name="data_emprestimo" value="{{ hoje|date:'Y-m-d' }}">
+              </div>
+              <div class="caixa-field">
+                <label>Previsao</label>
+                <input type="date" name="previsao_devolucao">
+              </div>
+              <div class="caixa-field">
+                <label>Operador</label>
+                <select name="operador" required>
+                  <option value="">Selecione...</option>
+                  {% for operador in operadores_caixa %}
+                    <option value="{{ operador.id }}">{{ operador.nome }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="caixa-field full">
+                <label>Observacao</label>
+                <input type="text" name="observacao" placeholder="Ex.: Emprestimo via Pix as 13:25">
+              </div>
+            </div>
+            <div class="caixa-form-actions">
+              <button class="caixa-btn caixa-btn-primary" type="submit">Salvar emprestimo</button>
+            </div>
+          </form>
+        </article>
+
+        <section class="caixa-form-card">
+          <h3 class="caixa-form-title">Emprestimos em aberto</h3>
+          <div class="caixa-emprestimo-lista">
+            {% for emprestimo in emprestimos_rapidos_abertos_lista %}
+              <article class="caixa-emprestimo-item">
+                <div class="caixa-emprestimo-top">
+                  <span>#{{ emprestimo.id }} - {{ emprestimo.pessoa_nome }}</span>
+                  <span>{{ emprestimo.valor|floatformat:2 }}</span>
+                </div>
+                <div class="caixa-emprestimo-meta">
+                  <div><strong>Saida</strong>{{ emprestimo.conta_saida.nome }}</div>
+                  <div><strong>Data</strong>{{ emprestimo.data_emprestimo|date:"d/m/Y" }}</div>
+                  <div><strong>Previsao</strong>{{ emprestimo.previsao_devolucao|date:"d/m/Y"|default:"-" }}</div>
+                </div>
+                <form method="post" action="{% url 'estoque:emprestimos_rapidos' %}" class="caixa-emprestimo-quitacao">
+                  {% csrf_token %}
+                  <input type="hidden" name="acao" value="quitar">
+                  <input type="hidden" name="next" value="caixa_banco">
+                  <input type="hidden" name="emprestimo_id" value="{{ emprestimo.id }}">
+                  <div class="caixa-field">
+                    <label>Valor devolvido</label>
+                    <input type="text" name="valor_devolvido" inputmode="decimal" value="{{ emprestimo.valor|floatformat:2 }}" data-money-input required>
+                  </div>
+                  <div class="caixa-field">
+                    <label>Entrou em</label>
+                    <select name="conta_entrada_quitacao" required>
+                      <option value="">Selecione...</option>
+                      <option value="caixa">Caixa em especie</option>
+                      <option value="reserva">Sangria / Reserva em maos</option>
+                      <option value="banco" {% if emprestimo.conta_saida_chave == 'banco' %}selected{% endif %}>Banco/Pix</option>
+                    </select>
+                  </div>
+                  <div class="caixa-field">
+                    <label>Data</label>
+                    <input type="date" name="data_quitacao" value="{{ hoje|date:'Y-m-d' }}">
+                  </div>
+                  <div class="caixa-field">
+                    <label>Operador</label>
+                    <select name="operador" required>
+                      <option value="">Selecione...</option>
+                      {% for operador in operadores_caixa %}
+                        <option value="{{ operador.id }}">{{ operador.nome }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="caixa-field full">
+                    <label>Observacao</label>
+                    <input type="text" name="observacao_quitacao" placeholder="Opcional">
+                  </div>
+                  <button class="caixa-btn caixa-btn-success" type="submit">Receber devolucao</button>
+                </form>
+              </article>
+            {% empty %}
+              <div class="caixa-empty">Nenhum emprestimo rapido em aberto.</div>
+            {% endfor %}
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
 
   <p class="caixa-reserva-help">Use a sangria quando retirar dinheiro do caixa para guardar como reserva. Esse dinheiro continua sendo da empresa e pode depois ser depositado no banco, voltar para o caixa ou ser usado para pagar alguma despesa/compra.</p>
 
@@ -996,6 +1234,43 @@
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     const moneyInputs = Array.from(document.querySelectorAll("[data-money-input]"));
+    const abrirEmprestimos = document.getElementById("abrirEmprestimosRapidos");
+    const fecharEmprestimos = document.getElementById("fecharEmprestimosRapidos");
+    const modalEmprestimos = document.getElementById("modalEmprestimosRapidos");
+
+    function abrirModalEmprestimos() {
+      if (!modalEmprestimos) return;
+      modalEmprestimos.classList.add("visivel");
+      modalEmprestimos.setAttribute("aria-hidden", "false");
+      const primeiroCampo = modalEmprestimos.querySelector('form input:not([type="hidden"]), form select, form button');
+      if (primeiroCampo) {
+        setTimeout(function () { primeiroCampo.focus(); }, 80);
+      }
+    }
+
+    function fecharModalEmprestimos() {
+      if (!modalEmprestimos) return;
+      modalEmprestimos.classList.remove("visivel");
+      modalEmprestimos.setAttribute("aria-hidden", "true");
+      if (abrirEmprestimos) abrirEmprestimos.focus();
+    }
+
+    if (abrirEmprestimos) {
+      abrirEmprestimos.addEventListener("click", abrirModalEmprestimos);
+    }
+    if (fecharEmprestimos) {
+      fecharEmprestimos.addEventListener("click", fecharModalEmprestimos);
+    }
+    if (modalEmprestimos) {
+      modalEmprestimos.addEventListener("click", function (event) {
+        if (event.target === modalEmprestimos) fecharModalEmprestimos();
+      });
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" && modalEmprestimos.classList.contains("visivel")) {
+          fecharModalEmprestimos();
+        }
+      });
+    }
 
     function parseMoneyValue(value) {
       let text = String(value || "")
