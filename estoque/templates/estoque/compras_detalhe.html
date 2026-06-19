@@ -346,8 +346,117 @@
     color: #172033;
   }
 
+  .nota-compra-resumo-pagamento {
+    padding: 10px;
+  }
+
+  .nota-compra-resumo-pagamento h3 {
+    margin: 0;
+    color: #0f172a;
+    font-size: .94rem;
+    font-weight: 950;
+  }
+
+  .nota-compra-resumo-pagamento-subtitulo {
+    margin: 2px 0 9px;
+    color: #64748b;
+    font-size: .76rem;
+    font-weight: 750;
+  }
+
+  .nota-compra-resumo-valores {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .nota-compra-resumo-valor {
+    padding: 7px 8px;
+    border: 1px solid #dbeafe;
+    border-radius: 8px;
+    background: #f8fafc;
+  }
+
+  .nota-compra-resumo-valor span {
+    display: block;
+    color: #64748b;
+    font-size: .65rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .nota-compra-resumo-valor strong {
+    display: block;
+    margin-top: 2px;
+    color: #164173;
+    font-size: .88rem;
+    font-weight: 950;
+    white-space: nowrap;
+  }
+
+  .nota-compra-resumo-valor.total {
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+  }
+
+  .nota-compra-resumo-valor.total strong {
+    color: #166534;
+  }
+
+  .nota-compra-resumo-confirmacao {
+    margin: 8px 0 0;
+    color: #166534;
+    font-size: .72rem;
+    font-weight: 800;
+  }
+
+  .nota-compra-lancamentos {
+    margin-top: 8px;
+    border-top: 1px solid #edf1f6;
+    padding-top: 7px;
+  }
+
+  .nota-compra-lancamentos summary {
+    width: fit-content;
+    color: #164173;
+    font-size: .72rem;
+    font-weight: 900;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .nota-compra-lancamentos-tabela {
+    width: 100%;
+    margin-top: 6px;
+    border-collapse: collapse;
+    font-size: .72rem;
+  }
+
+  .nota-compra-lancamentos-tabela th,
+  .nota-compra-lancamentos-tabela td {
+    padding: 5px 7px;
+    border-top: 1px solid #edf1f6;
+    text-align: left;
+  }
+
+  .nota-compra-lancamentos-tabela th {
+    color: #64748b;
+    font-size: .64rem;
+    text-transform: uppercase;
+  }
+
+  .nota-compra-lancamentos-tabela td:last-child,
+  .nota-compra-lancamentos-tabela th:last-child {
+    text-align: right;
+    white-space: nowrap;
+  }
+
   @media (max-width: 760px) {
     .nota-compra-historico-item {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .nota-compra-resumo-valores {
       grid-template-columns: 1fr 1fr;
     }
   }
@@ -444,50 +553,30 @@
         {% endif %}
       </div>
     {% else %}
-      <div style="padding:7px 10px; color:#475569; font-weight:800;">
-        {% if movimentos_financeiros|length > 1 %}
-          Compra à vista com pagamento dividido. Nenhuma conta a pagar foi gerada.
-        {% else %}
-          Compra à vista. Nenhuma conta a pagar foi gerada.
+      <div class="nota-compra-resumo-pagamento">
+        <h3>Resumo do pagamento</h3>
+        <p class="nota-compra-resumo-pagamento-subtitulo">Compra à vista paga no fechamento. Nenhuma conta a pagar foi gerada.</p>
+        <div class="nota-compra-resumo-valores">
+          <div class="nota-compra-resumo-valor"><span>Caixa</span><strong>R$ {{ alocacao_financeira.caixa|floatformat:2 }}</strong></div>
+          <div class="nota-compra-resumo-valor"><span>Sangria / Reserva</span><strong>R$ {{ alocacao_financeira.reserva|floatformat:2 }}</strong></div>
+          <div class="nota-compra-resumo-valor"><span>Banco / Pix</span><strong>R$ {{ alocacao_financeira.banco|floatformat:2 }}</strong></div>
+          <div class="nota-compra-resumo-valor total"><span>Total pago</span><strong>R$ {{ compra.total|floatformat:2 }}</strong></div>
+        </div>
+        <p class="nota-compra-resumo-confirmacao">Pagamento registrado automaticamente no financeiro.</p>
+        {% if movimentos_financeiros %}
+          <details class="nota-compra-lancamentos">
+            <summary>Mostrar lançamentos financeiros ({{ movimentos_financeiros|length }})</summary>
+            <table class="nota-compra-lancamentos-tabela">
+              <thead><tr><th>Conta</th><th>Tipo</th><th>Valor</th></tr></thead>
+              <tbody>
+            {% for movimento in movimentos_financeiros %}
+                <tr><td>{{ movimento.conta.nome }}</td><td>{{ movimento.get_tipo_display }}</td><td>R$ {{ movimento.valor|floatformat:2 }}</td></tr>
+            {% endfor %}
+              </tbody>
+            </table>
+          </details>
         {% endif %}
       </div>
-      <div class="nota-compra-dados">
-        <div><strong>Caixa</strong>R$ {{ alocacao_financeira.caixa|floatformat:2 }}</div>
-        <div><strong>Sangria/Reserva</strong>R$ {{ alocacao_financeira.reserva|floatformat:2 }}</div>
-        <div><strong>Banco/Pix</strong>R$ {{ alocacao_financeira.banco|floatformat:2 }}</div>
-        <div><strong>Movimentos</strong>{{ movimentos_financeiros|length }}</div>
-      </div>
-      {% if movimentos_financeiros %}
-        <div class="nota-compra-historico-pagamentos">
-          <p class="nota-compra-historico-titulo">Detalhamento do pagamento</p>
-          <div class="nota-compra-historico-lista">
-            {% for movimento in movimentos_financeiros %}
-              <div class="nota-compra-historico-item">
-                <div>
-                  <span class="nota-compra-historico-label">Data</span>
-                  <span class="nota-compra-historico-valor">{{ movimento.data|date:"d/m/Y" }}</span>
-                </div>
-                <div>
-                  <span class="nota-compra-historico-label">Conta</span>
-                  <span class="nota-compra-historico-valor">{{ movimento.conta.nome }}</span>
-                </div>
-                <div>
-                  <span class="nota-compra-historico-label">Tipo</span>
-                  <span class="nota-compra-historico-valor">{{ movimento.get_tipo_display }}</span>
-                </div>
-                <div>
-                  <span class="nota-compra-historico-label">Valor</span>
-                  <span class="nota-compra-historico-valor">R$ {{ movimento.valor|floatformat:2 }}</span>
-                </div>
-                <div>
-                  <span class="nota-compra-historico-label">Descricao</span>
-                  <span class="nota-compra-historico-valor">{{ movimento.descricao|default:"-" }}</span>
-                </div>
-              </div>
-            {% endfor %}
-          </div>
-        </div>
-      {% endif %}
     {% endif %}
   </section>
 

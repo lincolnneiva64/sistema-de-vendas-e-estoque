@@ -78,6 +78,20 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertTrue(all(f"Pagamento da compra #{compra.id}" in movimento.descricao for movimento in movimentos))
         self.assertContains(resposta, "Compra fechada e valores lançados no financeiro com sucesso.")
 
+    def test_detalhe_exibe_resumo_financeiro_compacto_e_lancamentos_fechados(self):
+        self.client.post(self.url, self.dados(), secure=True)
+        compra = Compra.objects.get()
+
+        resposta = self.client.get(f"/estoque/compras/{compra.id}/", secure=True)
+
+        self.assertContains(resposta, "Resumo do pagamento")
+        self.assertContains(resposta, "Compra à vista paga no fechamento. Nenhuma conta a pagar foi gerada.")
+        self.assertContains(resposta, "Total pago")
+        self.assertEqual(resposta.context["compra"].total, Decimal("1000.00"))
+        self.assertContains(resposta, "Mostrar lançamentos financeiros (3)")
+        self.assertContains(resposta, '<details class="nota-compra-lancamentos">')
+        self.assertNotContains(resposta, "Detalhamento do pagamento")
+
     def test_fecha_com_os_rateios_visiveis_de_1173_83(self):
         casos = [
             {
