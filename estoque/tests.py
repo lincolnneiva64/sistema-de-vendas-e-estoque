@@ -18,7 +18,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Cliente, Compra, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, Funcionario, ItemVenda, ItemVendaRemovido, MovimentoFinanceiro, PixRecebido, Produto, RecebimentoContaReceber, Venda
+from .models import AjusteItemVendaQuitada, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, Funcionario, ItemCompra, ItemVenda, ItemVendaRemovido, MovimentoFinanceiro, PixRecebido, Produto, RecebimentoContaReceber, Venda
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
 from . import views
 
@@ -219,6 +219,124 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
         self.assertEqual(self.produto.quantidade, Decimal("10.000"))
         self.assertContains(resposta, "Não foi possível fechar a compra. Nenhum valor foi lançado no financeiro.")
+
+
+class CorrecaoItensCompraTests(TestCase):
+    def setUp(self):
+        self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Correcao")
+        self.produto_a = self.criar_produto("Produto A", "20.000")
+        self.produto_b = self.criar_produto("Produto B", "12.000")
+        self.produto_c = self.criar_produto("Produto C", "3.000")
+        self.compra = Compra.objects.create(
+            fornecedor=self.fornecedor,
+            data_compra=timezone.localdate(),
+            tipo_pagamento="avista",
+            total=Decimal("110.00"),
+            status=Compra.STATUS_FINALIZADA,
+            estoque_entrada_realizada=True,
+        )
+        self.item_a = ItemCompra.objects.create(
+            compra=self.compra, produto=self.produto_a, quantidade=Decimal("10.000"),
+            unidade="UN", preco_unitario=Decimal("10.00"), valor_total=Decimal("100.00"),
+        )
+        self.item_b = ItemCompra.objects.create(
+            compra=self.compra, produto=self.produto_b, quantidade=Decimal("2.000"),
+            unidade="UN", preco_unitario=Decimal("5.00"), valor_total=Decimal("10.00"),
+        )
+        self.conta_pagar = ContaPagar.objects.create(
+            compra=self.compra, fornecedor=self.fornecedor, data_emissao=timezone.localdate(),
+            valor_original=Decimal("110.00"), valor_em_aberto=Decimal("110.00"),
+        )
+        self.movimento = MovimentoFinanceiro.objects.create(
+            conta=views._conta_financeira_padrao("caixa"),
+            tipo=MovimentoFinanceiro.TIPO_SAIDA,
+            valor=Decimal("110.00"),
+            data=timezone.localdate(),
+            origem="compra_a_vista",
+            compra=self.compra,
+        )
+        self.url = f"/estoque/compras/{self.compra.id}/corrigir-itens/"
+
+    def criar_produto(self, nome, quantidade):
+        return Produto.objects.create(
+            nome=nome, preco_compra=Decimal("2.00"), preco_vista=Decimal("3.00"),
+            preco_prazo=Decimal("4.00"), quantidade=Decimal(quantidade), unidade_compra="UN",
+        )
+
+    def dados(self, **alteracoes):
+        dados = {
+            "item_id[]": [str(self.item_a.id), str(self.item_b.id)],
+            "quantidade[]": ["10", "2"],
+            "preco_unitario[]": ["10,00", "5,00"],
+            "novo_produto_id[]": [""],
+            "nova_quantidade[]": [""],
+            "novo_preco_unitario[]": [""],
+        }
+        dados.update(alteracoes)
+        return dados
+
+    def assert_financeiro_inalterado(self):
+        self.conta_pagar.refresh_from_db()
+        self.movimento.refresh_from_db()
+        self.assertEqual(self.conta_pagar.valor_original, Decimal("110.00"))
+        self.assertEqual(self.conta_pagar.valor_em_aberto, Decimal("110.00"))
+        self.assertEqual(self.movimento.valor, Decimal("110.00"))
+        self.assertEqual(self.compra.movimentos_financeiros.count(), 1)
+
+    def test_diminuir_quantidade_reduz_estoque_pela_diferenca(self):
+        self.client.post(self.url, self.dados(**{"quantidade[]": ["7", "2"]}), secure=True)
+        self.produto_a.refresh_from_db(); self.compra.refresh_from_db(); self.item_a.refresh_from_db()
+        self.assertEqual(self.produto_a.quantidade, Decimal("17.000"))
+        self.assertEqual(self.item_a.quantidade, Decimal("7.000"))
+        self.assertEqual(self.compra.total, Decimal("80.00"))
+        self.assertIn("Total anterior R$ 110,00", self.compra.observacao)
+        self.assertIn("Financeiro nao alterado", self.compra.observacao)
+        detalhe = self.client.get(f"/estoque/compras/{self.compra.id}/", secure=True)
+        self.assertContains(detalhe, "Observações e histórico")
+        self.assert_financeiro_inalterado()
+
+    def test_aumentar_quantidade_aumenta_estoque_pela_diferenca(self):
+        self.client.post(self.url, self.dados(**{"quantidade[]": ["15", "2"]}), secure=True)
+        self.produto_a.refresh_from_db(); self.compra.refresh_from_db()
+        self.assertEqual(self.produto_a.quantidade, Decimal("25.000"))
+        self.assertEqual(self.compra.total, Decimal("160.00"))
+        self.assert_financeiro_inalterado()
+
+    def test_alterar_preco_recalcula_total_sem_alterar_estoque(self):
+        self.client.post(self.url, self.dados(**{"preco_unitario[]": ["12,00", "5,00"]}), secure=True)
+        self.produto_a.refresh_from_db(); self.compra.refresh_from_db()
+        self.assertEqual(self.produto_a.quantidade, Decimal("20.000"))
+        self.assertEqual(self.compra.total, Decimal("130.00"))
+        self.assert_financeiro_inalterado()
+
+    def test_remover_item_desfaz_sua_entrada_no_estoque(self):
+        self.client.post(self.url, self.dados(**{"remover_item[]": [str(self.item_a.id)]}), secure=True)
+        self.produto_a.refresh_from_db(); self.compra.refresh_from_db()
+        self.assertFalse(ItemCompra.objects.filter(pk=self.item_a.id).exists())
+        self.assertEqual(self.produto_a.quantidade, Decimal("10.000"))
+        self.assertEqual(self.compra.total, Decimal("10.00"))
+        self.assert_financeiro_inalterado()
+
+    def test_adicionar_item_aumenta_estoque(self):
+        self.client.post(self.url, self.dados(**{
+            "novo_produto_id[]": [str(self.produto_c.id)],
+            "nova_quantidade[]": ["5"],
+            "novo_preco_unitario[]": ["4,00"],
+        }), secure=True)
+        self.produto_c.refresh_from_db(); self.compra.refresh_from_db()
+        novo = self.compra.itens.get(produto=self.produto_c)
+        self.assertEqual(self.produto_c.quantidade, Decimal("8.000"))
+        self.assertEqual(novo.valor_total, Decimal("20.00"))
+        self.assertEqual(self.compra.total, Decimal("130.00"))
+        self.assert_financeiro_inalterado()
+
+    def test_compra_antiga_e_tela_de_correcao_continuam_abrindo(self):
+        detalhe = self.client.get(f"/estoque/compras/{self.compra.id}/", secure=True)
+        correcao = self.client.get(self.url, secure=True)
+        self.assertEqual(detalhe.status_code, 200)
+        self.assertContains(correcao, "Salvar correção dos itens")
+        self.assertContains(correcao, "Novo total")
+        self.assertContains(correcao, "Caixa/Banco e Conta a Pagar não serão alterados")
 
 
 class FuncionarioTests(TestCase):

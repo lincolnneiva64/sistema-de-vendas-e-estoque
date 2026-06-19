@@ -240,6 +240,21 @@
     letter-spacing: .02em;
   }
 
+  .nota-compra-observacao {
+    margin: 0;
+    padding: 7px 10px;
+    border-top: 1px solid #edf1f6;
+    color: #475569;
+    font-size: .76rem;
+    line-height: 1.45;
+    white-space: pre-line;
+  }
+
+  .nota-compra-observacao strong {
+    color: #0f172a;
+    font-weight: 950;
+  }
+
   .nota-compra-tabela {
     width: 100%;
     border-collapse: collapse;
@@ -592,6 +607,7 @@
       <div><strong>Estoque</strong>{% if compra.estoque_entrada_realizada %}Entrada realizada{% else %}Ainda não entrou{% endif %}</div>
       <div><strong>Vencimento</strong>{{ compra.data_vencimento|date:"d/m/Y"|default:"-" }}</div>
     </div>
+    {% if compra.observacao %}<p class="nota-compra-observacao"><strong>Observações e histórico</strong><br>{{ compra.observacao }}</p>{% endif %}
   </section>
 
 

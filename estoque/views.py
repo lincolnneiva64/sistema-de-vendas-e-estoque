@@ -3721,14 +3721,6 @@ def _registrar_observacao_compra(compra, texto):
     compra.save(update_fields=["observacao", "atualizado_em"])
 
 
-def _conta_para_correcao_item_compra(compra):
-    alocacao = _alocacao_financeira_compra(compra)
-    chave = max(alocacao, key=lambda item: alocacao[item])
-    if alocacao.get(chave, Decimal("0.00")) > Decimal("0.00"):
-        return _conta_financeira_padrao(chave)
-    return _conta_financeira_por_forma_pagamento(compra.tipo_pagamento)
-
-
 def compra_corrigir_itens(request, pk):
     compra = get_object_or_404(
         Compra.objects.select_related("fornecedor").prefetch_related("itens__produto"),
@@ -3736,69 +3728,149 @@ def compra_corrigir_itens(request, pk):
     )
 
     if request.method == "POST":
-        item_id = request.POST.get("item_id")
-        confirmar = request.POST.get("confirmar") == "1"
-        item = get_object_or_404(ItemCompra.objects.select_related("produto", "compra"), pk=item_id, compra=compra)
-
-        if not confirmar:
-            messages.error(request, "Confirme a correcao antes de aplicar.")
+        try:
+            ids_postados = [int(valor) for valor in request.POST.getlist("item_id[]")]
+            quantidades = request.POST.getlist("quantidade[]")
+            precos = request.POST.getlist("preco_unitario[]")
+            ids_remover = {int(valor) for valor in request.POST.getlist("remover_item[]")}
+            novos_produtos = request.POST.getlist("novo_produto_id[]")
+            novas_quantidades = request.POST.getlist("nova_quantidade[]")
+            novos_precos = request.POST.getlist("novo_preco_unitario[]")
+        except (TypeError, ValueError):
+            messages.error(request, "Os itens informados para correcao sao invalidos.")
             return redirect("estoque:compra_corrigir_itens", pk=compra.pk)
 
-        with transaction.atomic():
-            compra = Compra.objects.select_for_update().get(pk=compra.pk)
-            item = ItemCompra.objects.select_for_update().get(pk=item.pk, compra=compra)
-            valor_ajuste = _financeiro_dinheiro(item.valor_total).quantize(Decimal("0.01"))
-            quantidade_ajuste = item.quantidade or Decimal("0.000")
-            produto_nome = item.produto.nome if item.produto else "Produto nao identificado"
-
-            if item.produto and compra.estoque_entrada_realizada:
-                produto = Produto.objects.select_for_update().get(pk=item.produto_id)
-                estoque_atual = produto.quantidade or Decimal("0.000")
-                novo_estoque = estoque_atual - quantidade_ajuste
-                if novo_estoque < Decimal("0.000"):
-                    messages.error(
-                        request,
-                        f"Nao foi possivel estornar {produto_nome}: o estoque ficaria negativo."
-                    )
-                    return redirect("estoque:compra_corrigir_itens", pk=compra.pk)
-                produto.quantidade = novo_estoque
-                produto.save(update_fields=["quantidade", "atualizado_em"])
-
-            compra.total = (_financeiro_dinheiro(compra.total) - valor_ajuste).quantize(Decimal("0.01"))
-            compra.save(update_fields=["total", "atualizado_em"])
-
-            conta_pagar = getattr(compra, "conta_pagar", None)
-            if conta_pagar:
-                conta_pagar.valor_original = max(
-                    Decimal("0.00"),
-                    (_financeiro_dinheiro(conta_pagar.valor_original) - valor_ajuste).quantize(Decimal("0.01")),
+        try:
+            with transaction.atomic():
+                compra = Compra.objects.select_for_update().get(pk=compra.pk)
+                itens_atuais = list(
+                    ItemCompra.objects.select_for_update()
+                    .filter(compra=compra)
+                    .order_by("id")
                 )
-                conta_pagar.valor_em_aberto = max(
-                    Decimal("0.00"),
-                    (_financeiro_dinheiro(conta_pagar.valor_em_aberto) - valor_ajuste).quantize(Decimal("0.01")),
-                )
-                conta_pagar.save(update_fields=["valor_original", "valor_em_aberto", "atualizado_em"])
-            elif _compra_pagamento_imediato(compra.tipo_pagamento) and valor_ajuste > Decimal("0.00"):
-                conta = _conta_para_correcao_item_compra(compra)
-                if conta:
-                    MovimentoFinanceiro.objects.create(
-                        conta=conta,
-                        tipo=MovimentoFinanceiro.TIPO_ENTRADA,
-                        valor=valor_ajuste,
-                        data=timezone.localdate(),
-                        descricao=f"Correcao item Compra #{compra.id} - {produto_nome}"[:255],
-                        operador=compra.operador or "",
-                        origem="compra_correcao_item",
+                itens_por_id = {item.id: item for item in itens_atuais}
+                if set(ids_postados) != set(itens_por_id):
+                    raise ValueError("A lista de itens mudou. Recarregue a pagina antes de corrigir.")
+                if len(quantidades) != len(ids_postados) or len(precos) != len(ids_postados):
+                    raise ValueError("Preencha quantidade e preco de todos os itens.")
+
+                planos_existentes = []
+                deltas_estoque = {}
+                novo_total = Decimal("0.00")
+                rastros = []
+
+                for indice, item_id in enumerate(ids_postados):
+                    item = itens_por_id[item_id]
+                    quantidade_antiga = item.quantidade or Decimal("0.000")
+                    remover = item_id in ids_remover
+                    quantidade_nova = Decimal("0.000") if remover else _decimal_compra(quantidades[indice], casas=3)
+                    preco_novo = _decimal_compra(precos[indice], casas=2)
+                    if quantidade_nova < Decimal("0.000") or preco_novo < Decimal("0.00"):
+                        raise ValueError("Quantidade e preco nao podem ser negativos.")
+                    if quantidade_nova == Decimal("0.000"):
+                        remover = True
+
+                    subtotal = (quantidade_nova * preco_novo).quantize(Decimal("0.01"))
+                    novo_total += subtotal
+                    if item.produto_id and compra.estoque_entrada_realizada:
+                        deltas_estoque[item.produto_id] = (
+                            deltas_estoque.get(item.produto_id, Decimal("0.000"))
+                            + quantidade_nova
+                            - quantidade_antiga
+                        )
+                    planos_existentes.append((item, remover, quantidade_nova, preco_novo, subtotal))
+                    nome = item.produto.nome if item.produto else "Produto nao identificado"
+                    if remover:
+                        rastros.append(f"removido {nome} ({quantidade_antiga})")
+                    elif quantidade_nova != quantidade_antiga or preco_novo != item.preco_unitario:
+                        rastros.append(
+                            f"alterado {nome}: qtd {quantidade_antiga} -> {quantidade_nova}; "
+                            f"preco {_financeiro_moeda_br(item.preco_unitario)} -> {_financeiro_moeda_br(preco_novo)}"
+                        )
+
+                planos_novos = []
+                for indice, produto_id_texto in enumerate(novos_produtos):
+                    produto_id_texto = str(produto_id_texto or "").strip()
+                    quantidade_texto = novas_quantidades[indice] if indice < len(novas_quantidades) else ""
+                    preco_texto = novos_precos[indice] if indice < len(novos_precos) else ""
+                    if not produto_id_texto and not str(quantidade_texto).strip() and not str(preco_texto).strip():
+                        continue
+                    if not produto_id_texto:
+                        raise ValueError("Selecione o produto do novo item.")
+                    produto = Produto.objects.filter(pk=produto_id_texto, excluido=False).first()
+                    if not produto:
+                        raise ValueError("Um dos novos produtos nao foi encontrado.")
+                    quantidade = _decimal_compra(quantidade_texto, casas=3)
+                    preco = _decimal_compra(preco_texto, casas=2)
+                    if quantidade <= Decimal("0.000"):
+                        raise ValueError(f"Informe quantidade maior que zero para {produto.nome}.")
+                    if preco < Decimal("0.00"):
+                        raise ValueError(f"O preco de {produto.nome} nao pode ser negativo.")
+                    subtotal = (quantidade * preco).quantize(Decimal("0.01"))
+                    novo_total += subtotal
+                    if compra.estoque_entrada_realizada:
+                        deltas_estoque[produto.id] = deltas_estoque.get(produto.id, Decimal("0.000")) + quantidade
+                    planos_novos.append((produto, quantidade, preco, subtotal))
+                    rastros.append(f"adicionado {produto.nome} ({quantidade}) por {_financeiro_moeda_br(subtotal)}")
+
+                if not any(not plano[1] for plano in planos_existentes) and not planos_novos:
+                    raise ValueError("A compra precisa permanecer com pelo menos um item.")
+
+                produtos_bloqueados = {
+                    produto.id: produto
+                    for produto in Produto.objects.select_for_update().filter(pk__in=deltas_estoque)
+                }
+                for produto_id, delta in deltas_estoque.items():
+                    produto = produtos_bloqueados[produto_id]
+                    estoque_novo = (produto.quantidade or Decimal("0.000")) + delta
+                    if estoque_novo < Decimal("0.000"):
+                        raise ValueError(f"A correcao deixaria o estoque de {produto.nome} negativo.")
+                    produto.quantidade = estoque_novo
+                    produto.save(update_fields=["quantidade", "atualizado_em"])
+
+                for item, remover, quantidade, preco, subtotal in planos_existentes:
+                    if remover:
+                        item.delete()
+                    else:
+                        item.quantidade = quantidade
+                        item.preco_unitario = preco
+                        item.valor_total = subtotal
+                        item.save(update_fields=["quantidade", "preco_unitario", "valor_total"])
+
+                for produto, quantidade, preco, subtotal in planos_novos:
+                    ItemCompra.objects.create(
                         compra=compra,
+                        produto=produto,
+                        quantidade=quantidade,
+                        unidade=produto.unidade_compra or "",
+                        preco_unitario=preco,
+                        valor_total=subtotal,
                     )
 
-            _registrar_observacao_compra(
-                compra,
-                f"Item estornado/removido: {produto_nome}; quantidade {quantidade_ajuste}; valor {_financeiro_moeda_br(valor_ajuste)}.",
-            )
-            item.delete()
+                total_anterior = _financeiro_dinheiro(compra.total).quantize(Decimal("0.01"))
+                novo_total = novo_total.quantize(Decimal("0.01"))
+                diferenca = (novo_total - total_anterior).quantize(Decimal("0.01"))
+                compra.total = novo_total
+                compra.save(update_fields=["total", "atualizado_em"])
+                resumo_rastro = "; ".join(rastros) or "itens conferidos sem mudanca"
+                _registrar_observacao_compra(
+                    compra,
+                    "Correcao de itens: " + resumo_rastro + ". "
+                    f"Total anterior {_financeiro_moeda_br(total_anterior)}; "
+                    f"novo total {_financeiro_moeda_br(novo_total)}; "
+                    f"diferenca {_financeiro_moeda_br(diferenca)}. "
+                    "Financeiro nao alterado; conferir em etapa separada.",
+                )
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect("estoque:compra_corrigir_itens", pk=compra.pk)
 
-        messages.success(request, f"Item {produto_nome} estornado da Compra #{compra.pk}.")
+        messages.success(
+            request,
+            f"Itens corrigidos. Total anterior: {_financeiro_moeda_br(total_anterior)}. "
+            f"Novo total: {_financeiro_moeda_br(novo_total)}. Diferenca: {_financeiro_moeda_br(diferenca)}. "
+            "Nenhum ajuste financeiro foi realizado.",
+        )
         return redirect("estoque:compras_detalhe", pk=compra.pk)
 
     itens = compra.itens.select_related("produto").all()
@@ -3808,7 +3880,7 @@ def compra_corrigir_itens(request, pk):
         {
             "compra": compra,
             "itens": itens,
-            "movimentos_financeiros": _movimentos_financeiros_compra(compra),
+            "produtos": Produto.objects.filter(excluido=False).order_by("nome"),
         },
     )
 
