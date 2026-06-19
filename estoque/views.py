@@ -4024,21 +4024,23 @@ def compra_corrigir_origem_pagamento(request, pk):
             compra = Compra.objects.select_for_update().get(pk=compra.pk)
             alocacao_atual = _alocacao_financeira_compra(compra)
             movimentos_criados = 0
+            diferencas = {}
             for chave, valor_correto in valores.items():
                 valor_atual = alocacao_atual.get(chave, Decimal("0.00")).quantize(Decimal("0.01"))
                 diferenca = (valor_correto - valor_atual).quantize(Decimal("0.01"))
+                diferencas[chave] = diferenca
                 if diferenca == Decimal("0.00"):
                     continue
                 conta = contas.get(chave)
                 if not conta:
-                    continue
+                    raise ValueError(f"Conta financeira {chave} nao encontrada para aplicar a correcao.")
                 tipo = MovimentoFinanceiro.TIPO_SAIDA if diferenca > 0 else MovimentoFinanceiro.TIPO_ENTRADA
                 MovimentoFinanceiro.objects.create(
                     conta=conta,
                     tipo=tipo,
                     valor=abs(diferenca),
                     data=timezone.localdate(),
-                    descricao=_descricao_compra_a_vista(compra, conta, "correcao de origem"),
+                    descricao=f"Correcao de origem da compra #{compra.id} - {conta.nome}"[:255],
                     operador=compra.operador or "",
                     origem="compra_correcao_origem",
                     compra=compra,
@@ -4046,12 +4048,22 @@ def compra_corrigir_origem_pagamento(request, pk):
                 movimentos_criados += 1
 
             if movimentos_criados:
+                operador = (compra.operador or "Operador nao informado").strip()
                 _registrar_observacao_compra(
                     compra,
-                    "Origem do pagamento corrigida: "
+                    f"Correcao de origem do dinheiro por {operador}. "
+                    "Origem anterior: "
+                    f"Caixa {_financeiro_moeda_br(alocacao_atual['caixa'])}; "
+                    f"Reserva {_financeiro_moeda_br(alocacao_atual['reserva'])}; "
+                    f"Banco/Pix {_financeiro_moeda_br(alocacao_atual['banco'])}. "
+                    "Nova origem: "
                     f"Caixa {_financeiro_moeda_br(valores['caixa'])}; "
                     f"Reserva {_financeiro_moeda_br(valores['reserva'])}; "
-                    f"Banco/Pix {_financeiro_moeda_br(valores['banco'])}.",
+                    f"Banco/Pix {_financeiro_moeda_br(valores['banco'])}. "
+                    "Diferencas lancadas: "
+                    f"Caixa {_financeiro_moeda_br(diferencas['caixa'])}; "
+                    f"Reserva {_financeiro_moeda_br(diferencas['reserva'])}; "
+                    f"Banco/Pix {_financeiro_moeda_br(diferencas['banco'])}.",
                 )
 
         if movimentos_criados:

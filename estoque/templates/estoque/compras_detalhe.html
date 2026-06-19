@@ -628,6 +628,10 @@
   <section class="nota-compra-card">
     <div class="nota-compra-card-titulo">Financeiro</div>
 
+    {% if aviso_financeiro_avista %}
+      <div class="nota-compra-alerta-financeiro">O total da compra e as origens do dinheiro estão diferentes. Para compra à vista, use “Corrigir origem”; esta etapa não altera Conta a Pagar.</div>
+    {% endif %}
+
     {% if conta_pagar %}
       {% if correcao_financeira.divergente %}
         <div class="nota-compra-alerta-financeiro">
@@ -694,7 +698,6 @@
           <div class="nota-compra-resumo-valor total"><span>Total pago</span><strong>R$ {{ compra.total|floatformat:2 }}</strong></div>
         </div>
         <p class="nota-compra-resumo-confirmacao">Pagamento registrado automaticamente no financeiro.</p>
-        {% if aviso_financeiro_avista %}<div class="nota-compra-alerta-financeiro">O total da compra e as origens do dinheiro estão diferentes. Para compra à vista, use “Corrigir origem”; esta etapa não altera Conta a Pagar.</div>{% endif %}
         {% if movimentos_financeiros %}
           <details class="nota-compra-lancamentos">
             <summary>Mostrar lançamentos financeiros ({{ movimentos_financeiros|length }})</summary>

@@ -439,6 +439,106 @@ class CorrecaoFinanceiroCompraTests(TestCase):
         self.assert_estoque_itens_caixa_inalterados()
 
 
+class CorrecaoOrigemCompraTests(TestCase):
+    def setUp(self):
+        self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Origem")
+        self.produto = Produto.objects.create(
+            nome="Produto Origem", preco_compra=Decimal("80.00"),
+            preco_vista=Decimal("100.00"), preco_prazo=Decimal("110.00"),
+            quantidade=Decimal("15.000"), unidade_compra="UN",
+        )
+        self.compra = Compra.objects.create(
+            fornecedor=self.fornecedor, data_compra=timezone.localdate(),
+            tipo_pagamento="avista", total=Decimal("500.00"),
+            status=Compra.STATUS_FINALIZADA, estoque_entrada_realizada=True,
+            operador="Operador Origem",
+        )
+        self.item = ItemCompra.objects.create(
+            compra=self.compra, produto=self.produto, quantidade=Decimal("5.000"),
+            unidade="UN", preco_unitario=Decimal("100.00"), valor_total=Decimal("500.00"),
+        )
+        self.conta_caixa = views._conta_financeira_padrao("caixa")
+        self.conta_reserva = views._conta_financeira_padrao("reserva")
+        self.conta_banco = views._conta_financeira_padrao("banco")
+        self.movimento_original = MovimentoFinanceiro.objects.create(
+            conta=self.conta_caixa, tipo=MovimentoFinanceiro.TIPO_SAIDA,
+            valor=Decimal("500.00"), data=timezone.localdate(),
+            descricao=f"Pagamento da compra #{self.compra.id}",
+            origem="compra_a_vista", compra=self.compra,
+        )
+        self.conta_pagar = ContaPagar.objects.create(
+            compra=self.compra, fornecedor=self.fornecedor, data_emissao=timezone.localdate(),
+            valor_original=Decimal("500.00"), valor_em_aberto=Decimal("500.00"),
+        )
+        self.url = f"/estoque/compras/{self.compra.id}/corrigir-origem-pagamento/"
+
+    def dados(self, caixa, reserva, banco):
+        return {"origem_caixa": caixa, "origem_reserva": reserva, "origem_banco": banco}
+
+    def assert_dados_compra_inalterados(self):
+        self.produto.refresh_from_db(); self.item.refresh_from_db(); self.conta_pagar.refresh_from_db()
+        self.assertEqual(self.produto.quantidade, Decimal("15.000"))
+        self.assertEqual(self.item.quantidade, Decimal("5.000"))
+        self.assertEqual(self.item.valor_total, Decimal("500.00"))
+        self.assertEqual(self.conta_pagar.valor_original, Decimal("500.00"))
+        self.assertEqual(self.conta_pagar.valor_em_aberto, Decimal("500.00"))
+
+    def test_compra_a_vista_abre_tela_com_distribuicao_atual(self):
+        resposta = self.client.get(self.url, secure=True)
+        detalhe = self.client.get(f"/estoque/compras/{self.compra.id}/", secure=True)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Corrigir origem do dinheiro")
+        self.assertContains(resposta, "Caixa atual")
+        self.assertContains(resposta, "Tudo distribuído")
+        self.assertContains(detalhe, "Corrigir origem")
+
+    def test_detalhe_orienta_corrigir_origem_apos_mudanca_do_total(self):
+        self.compra.total = Decimal("400.00")
+        self.compra.save(update_fields=["total"])
+        resposta = self.client.get(f"/estoque/compras/{self.compra.id}/", secure=True)
+        self.assertContains(resposta, "O total da compra e as origens do dinheiro estão diferentes.")
+        self.assertContains(resposta, "Corrigir origem")
+
+    def test_soma_menor_que_total_bloqueia(self):
+        resposta = self.client.post(self.url, self.dados("100", "100", "100"), follow=True, secure=True)
+        self.assertEqual(self.compra.movimentos_financeiros.count(), 1)
+        self.assertContains(resposta, "Distribua o total da compra entre Caixa, Sangria e Banco/Pix.")
+        self.assert_dados_compra_inalterados()
+
+    def test_soma_maior_que_total_bloqueia(self):
+        self.client.post(self.url, self.dados("300", "200", "100"), secure=True)
+        self.assertEqual(self.compra.movimentos_financeiros.count(), 1)
+        self.assert_dados_compra_inalterados()
+
+    def test_soma_correta_cria_ajustes_e_corrige_saldos(self):
+        resposta = self.client.post(self.url, self.dados("100", "200", "200"), follow=True, secure=True)
+        self.compra.refresh_from_db()
+        movimentos = self.compra.movimentos_financeiros.order_by("id")
+        self.assertEqual(movimentos.count(), 4)
+        ajustes = movimentos.filter(origem="compra_correcao_origem")
+        self.assertEqual(ajustes.count(), 3)
+        self.assertEqual(views._saldo_conta_financeira(self.conta_caixa), Decimal("-100.00"))
+        self.assertEqual(views._saldo_conta_financeira(self.conta_reserva), Decimal("-200.00"))
+        self.assertEqual(views._saldo_conta_financeira(self.conta_banco), Decimal("-200.00"))
+        self.assertEqual(views._alocacao_financeira_compra(self.compra), {
+            "caixa": Decimal("100.00"), "reserva": Decimal("200.00"), "banco": Decimal("200.00"),
+        })
+        self.assertTrue(all("Correcao de origem da compra" in movimento.descricao for movimento in ajustes))
+        self.assertIn("Origem anterior", self.compra.observacao)
+        self.assertIn("Nova origem", self.compra.observacao)
+        self.assertIn("Operador Origem", self.compra.observacao)
+        self.assertContains(resposta, "Origem do pagamento corrigida")
+        self.assert_dados_compra_inalterados()
+
+    def test_compra_a_prazo_nao_permite_corrigir_origem(self):
+        self.compra.tipo_pagamento = "aprazo"
+        self.compra.save(update_fields=["tipo_pagamento"])
+        resposta = self.client.get(self.url, follow=True, secure=True)
+        self.assertContains(resposta, "se aplica apenas a compra a vista")
+        self.assertEqual(self.compra.movimentos_financeiros.count(), 1)
+        self.assert_dados_compra_inalterados()
+
+
 class FuncionarioTests(TestCase):
     def test_exige_whatsapp_para_receber_checklist(self):
         funcionario = Funcionario(

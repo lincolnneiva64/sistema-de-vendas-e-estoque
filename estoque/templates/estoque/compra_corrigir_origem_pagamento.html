@@ -24,17 +24,20 @@
   .origem-field label { display: block; margin-bottom: 4px; font-weight: 950; }
   .origem-field input { width: 100%; min-height: 42px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; font-size: 1rem; font-weight: 850; }
   .origem-total { padding: 9px 12px; background: #f8fafc; border: 1px solid #dbe4ef; border-radius: 8px; font-weight: 950; }
+  .origem-resumo { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .origem-total.ok { border-color:#86efac; background:#f0fdf4; color:#166534; }
+  .origem-total.alerta { border-color:#fca5a5; background:#fef2f2; color:#991b1b; }
   @media (max-width: 760px) {
     .origem-topo { flex-direction: column; }
     .origem-acoes, .origem-btn { width: 100%; }
-    .origem-dados, .origem-grid { grid-template-columns: 1fr; }
+    .origem-dados, .origem-grid, .origem-resumo { grid-template-columns: 1fr; }
   }
 </style>
 
 <div class="origem-wrap">
   <div class="origem-topo">
     <div>
-      <h1>Corrigir origem do pagamento</h1>
+      <h1>Corrigir origem do dinheiro</h1>
       <p class="origem-sub">Compra #{{ compra.id }} - {{ compra.fornecedor.nome|default:"Fornecedor nao informado" }}</p>
     </div>
     <div class="origem-acoes">
@@ -65,24 +68,27 @@
 
   <section class="origem-card">
     <h2>Valores corretos</h2>
-    <form method="post" class="origem-form">
+    <form method="post" class="origem-form" id="formCorrigirOrigemCompra">
       {% csrf_token %}
       <div class="origem-grid">
         <div class="origem-field">
           <label>Caixa em especie</label>
-          <input type="text" name="origem_caixa" inputmode="decimal" value="{{ alocacao_atual.caixa|floatformat:2 }}">
+          <input type="text" id="origemCaixaCorrecao" name="origem_caixa" inputmode="decimal" value="{{ alocacao_atual.caixa|floatformat:2 }}">
         </div>
         <div class="origem-field">
           <label>Sangria / Reserva em maos</label>
-          <input type="text" name="origem_reserva" inputmode="decimal" value="{{ alocacao_atual.reserva|floatformat:2 }}">
+          <input type="text" id="origemReservaCorrecao" name="origem_reserva" inputmode="decimal" value="{{ alocacao_atual.reserva|floatformat:2 }}">
         </div>
         <div class="origem-field">
           <label>Banco/Pix</label>
-          <input type="text" name="origem_banco" inputmode="decimal" value="{{ alocacao_atual.banco|floatformat:2 }}">
+          <input type="text" id="origemBancoCorrecao" name="origem_banco" inputmode="decimal" value="{{ alocacao_atual.banco|floatformat:2 }}">
         </div>
       </div>
-      <div class="origem-total">A soma precisa bater com o total da compra: R$ {{ compra.total|floatformat:2 }}.</div>
-      <button type="submit" class="origem-btn primario">Salvar correcao de origem</button>
+      <div class="origem-resumo">
+        <div class="origem-total">Total da compra: <span id="totalOrigemCorrecao" data-total="{{ compra.total|stringformat:'f' }}">R$ {{ compra.total|floatformat:2 }}</span></div>
+        <div class="origem-total" id="resumoOrigemCorrecao" aria-live="polite"><span id="labelOrigemCorrecao">Falta distribuir</span>: <strong id="valorOrigemCorrecao">R$ 0,00</strong></div>
+      </div>
+      <button type="submit" class="origem-btn primario" id="btnSalvarOrigemCorrecao">Salvar correção de origem</button>
     </form>
   </section>
 
@@ -97,4 +103,33 @@
     </div>
   </section>
 </div>
+<script>
+(function() {
+  const form=document.getElementById("formCorrigirOrigemCompra");
+  const campos=[document.getElementById("origemCaixaCorrecao"),document.getElementById("origemReservaCorrecao"),document.getElementById("origemBancoCorrecao")];
+  const totalEl=document.getElementById("totalOrigemCorrecao");
+  const resumo=document.getElementById("resumoOrigemCorrecao");
+  const label=document.getElementById("labelOrigemCorrecao");
+  const valorEl=document.getElementById("valorOrigemCorrecao");
+  const salvar=document.getElementById("btnSalvarOrigemCorrecao");
+  if(!form)return;
+  function numero(valor){let texto=String(valor||"0").trim();if(!texto)return 0;if(texto.includes(","))texto=texto.replace(/\./g,"").replace(",", ".");texto=texto.replace(/[^\d.-]/g,"");return Number(texto)||0;}
+  function moeda(valor){return "R$ "+Number(valor||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});}
+  function atualizar(){
+    const total=numero(totalEl?.dataset.total);
+    const soma=campos.reduce((acumulado,campo)=>acumulado+numero(campo?.value),0);
+    const diferenca=Math.round((total-soma)*100)/100;
+    const excedeu=diferenca<0;
+    const correto=Math.abs(diferenca)<0.001;
+    if(label)label.textContent=excedeu?"Excedeu":(correto?"Tudo distribuído":"Falta distribuir");
+    if(valorEl)valorEl.textContent=moeda(Math.abs(diferenca));
+    resumo?.classList.toggle("ok",correto);
+    resumo?.classList.toggle("alerta",!correto);
+    if(salvar)salvar.disabled=!correto;
+  }
+  campos.forEach(campo=>campo?.addEventListener("input",atualizar));
+  form.addEventListener("submit",function(){if(salvar){salvar.disabled=true;salvar.textContent="Salvando correção...";}});
+  atualizar();
+})();
+</script>
 {% endblock %}
