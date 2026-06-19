@@ -262,7 +262,7 @@
   .compras-origem-nota { margin:8px 0 0; color:#164173; font-weight:850; font-size:.86rem; }
   .compras-origem-total {
     display:grid;
-    grid-template-columns:repeat(3, minmax(0, 1fr));
+    grid-template-columns:repeat(2, minmax(0, 1fr));
     gap:12px;
     margin-bottom:10px;
     padding:10px 12px;
@@ -1115,10 +1115,6 @@
               <span>Total da compra</span>
               <strong id="totalFechamentoCompra">R$ 0,00</strong>
             </div>
-            <div class="compras-origem-total-item">
-              <span>Já distribuído</span>
-              <strong id="valorOrigemDistribuidoCompra">R$ 0,00</strong>
-            </div>
             <div class="compras-origem-total-item" id="resumoOrigemDiferencaCompra" aria-live="polite">
               <span id="labelOrigemDiferencaCompra">Falta distribuir</span>
               <strong id="valorOrigemDiferencaCompra">R$ 0,00</strong>
@@ -1263,7 +1259,6 @@
   const origemReservaCompra = document.getElementById("origemReservaCompra");
   const origemBancoCompra = document.getElementById("origemBancoCompra");
   const totalFechamentoCompra = document.getElementById("totalFechamentoCompra");
-  const valorOrigemDistribuidoCompra = document.getElementById("valorOrigemDistribuidoCompra");
   const labelOrigemDiferencaCompra = document.getElementById("labelOrigemDiferencaCompra");
   const valorOrigemDiferencaCompra = document.getElementById("valorOrigemDiferencaCompra");
   const resumoOrigemDiferencaCompra = document.getElementById("resumoOrigemDiferencaCompra");
@@ -1466,9 +1461,6 @@
 
     if (totalFechamentoCompra) {
       totalFechamentoCompra.textContent = moeda(estado.total / 100);
-    }
-    if (valorOrigemDistribuidoCompra) {
-      valorOrigemDistribuidoCompra.textContent = moeda(estado.soma / 100);
     }
     if (labelOrigemDiferencaCompra && valorOrigemDiferencaCompra) {
       const excedeu = estado.diferenca < 0;
