@@ -18,7 +18,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, Funcionario, ItemCompra, ItemVenda, ItemVendaRemovido, MovimentoFinanceiro, PixRecebido, Produto, RecebimentoContaReceber, Venda
+from .models import AjusteItemVendaQuitada, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, Funcionario, ItemCompra, ItemVenda, ItemVendaRemovido, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, RecebimentoContaReceber, Venda
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
 from . import views
 
@@ -337,6 +337,106 @@ class CorrecaoItensCompraTests(TestCase):
         self.assertContains(correcao, "Salvar correção dos itens")
         self.assertContains(correcao, "Novo total")
         self.assertContains(correcao, "Caixa/Banco e Conta a Pagar não serão alterados")
+
+
+class CorrecaoFinanceiroCompraTests(TestCase):
+    def setUp(self):
+        self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Financeiro")
+        self.produto = Produto.objects.create(
+            nome="Produto Financeiro", preco_compra=Decimal("10.00"),
+            preco_vista=Decimal("12.00"), preco_prazo=Decimal("13.00"),
+            quantidade=Decimal("20.000"), unidade_compra="UN",
+        )
+        self.compra = Compra.objects.create(
+            fornecedor=self.fornecedor, data_compra=timezone.localdate(),
+            tipo_pagamento="aprazo", total=Decimal("433.60"),
+            status=Compra.STATUS_FINALIZADA, estoque_entrada_realizada=True,
+            operador="Operador Teste",
+        )
+        self.item = ItemCompra.objects.create(
+            compra=self.compra, produto=self.produto, quantidade=Decimal("2.000"),
+            unidade="UN", preco_unitario=Decimal("216.80"), valor_total=Decimal("433.60"),
+        )
+        self.conta = ContaPagar.objects.create(
+            compra=self.compra, fornecedor=self.fornecedor,
+            data_emissao=timezone.localdate(), valor_original=Decimal("1013.95"),
+            valor_em_aberto=Decimal("1013.95"), status=ContaPagar.STATUS_ABERTA,
+        )
+        self.url = f"/estoque/compras/{self.compra.id}/corrigir-financeiro/"
+
+    def criar_pagamento(self, valor):
+        return PagamentoContaPagar.objects.create(
+            conta=self.conta, data_pagamento=timezone.localdate(),
+            valor=Decimal(valor), forma_pagamento="Boleto",
+        )
+
+    def assert_estoque_itens_caixa_inalterados(self):
+        self.produto.refresh_from_db(); self.item.refresh_from_db()
+        self.assertEqual(self.produto.quantidade, Decimal("20.000"))
+        self.assertEqual(self.item.quantidade, Decimal("2.000"))
+        self.assertEqual(self.item.valor_total, Decimal("433.60"))
+        self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
+
+    def test_sem_pagamento_ajusta_original_e_aberto(self):
+        detalhe = self.client.get(f"/estoque/compras/{self.compra.id}/", secure=True)
+        self.assertContains(detalhe, "Esta compra foi corrigida e o financeiro ainda está diferente.")
+        self.assertContains(detalhe, "Corrigir financeiro")
+
+        resposta = self.client.post(self.url, {"confirmar": "1"}, follow=True, secure=True)
+        self.conta.refresh_from_db(); self.compra.refresh_from_db()
+        self.assertEqual(self.conta.valor_original, Decimal("433.60"))
+        self.assertEqual(self.conta.valor_em_aberto, Decimal("433.60"))
+        self.assertEqual(self.conta.status, ContaPagar.STATUS_ABERTA)
+        self.assertIn("Ajuste financeiro apos correcao de itens", self.conta.observacao)
+        self.assertIn("Operador Teste", self.conta.observacao)
+        self.assertContains(resposta, "Financeiro da compra corrigido com sucesso.")
+        self.assert_estoque_itens_caixa_inalterados()
+
+    def test_pagamento_parcial_recalcula_aberto_pelo_total_pago(self):
+        self.criar_pagamento("100.00")
+        self.conta.valor_em_aberto = Decimal("913.95")
+        self.conta.status = ContaPagar.STATUS_PARCIAL
+        self.conta.save(update_fields=["valor_em_aberto", "status"])
+
+        self.client.post(self.url, {"confirmar": "1"}, secure=True)
+        self.conta.refresh_from_db()
+        self.assertEqual(self.conta.valor_original, Decimal("433.60"))
+        self.assertEqual(self.conta.valor_em_aberto, Decimal("333.60"))
+        self.assertEqual(self.conta.status, ContaPagar.STATUS_PARCIAL)
+        self.assert_estoque_itens_caixa_inalterados()
+
+    def test_pagamento_maior_que_novo_total_bloqueia(self):
+        self.criar_pagamento("500.00")
+        self.conta.valor_em_aberto = Decimal("513.95")
+        self.conta.status = ContaPagar.STATUS_PARCIAL
+        self.conta.save(update_fields=["valor_em_aberto", "status"])
+
+        resposta = self.client.post(self.url, {"confirmar": "1"}, follow=True, secure=True)
+        self.conta.refresh_from_db()
+        self.assertEqual(self.conta.valor_original, Decimal("1013.95"))
+        self.assertEqual(self.conta.valor_em_aberto, Decimal("513.95"))
+        self.assertContains(resposta, "O total ja pago e maior que o novo total da compra.")
+        self.assert_estoque_itens_caixa_inalterados()
+
+    def test_conta_quitada_bloqueia_correcao(self):
+        self.criar_pagamento("1013.95")
+        self.conta.valor_em_aberto = Decimal("0.00")
+        self.conta.status = ContaPagar.STATUS_PAGA
+        self.conta.save(update_fields=["valor_em_aberto", "status"])
+        resposta = self.client.post(self.url, {"confirmar": "1"}, follow=True, secure=True)
+        self.conta.refresh_from_db()
+        self.assertEqual(self.conta.valor_original, Decimal("1013.95"))
+        self.assertContains(resposta, "A conta ja esta quitada")
+        self.assert_estoque_itens_caixa_inalterados()
+
+    def test_compra_a_vista_nao_pode_usar_esta_etapa(self):
+        self.compra.tipo_pagamento = "avista"
+        self.compra.save(update_fields=["tipo_pagamento"])
+        resposta = self.client.post(self.url, {"confirmar": "1"}, follow=True, secure=True)
+        self.conta.refresh_from_db()
+        self.assertEqual(self.conta.valor_original, Decimal("1013.95"))
+        self.assertContains(resposta, "Esta etapa corrige somente compras a prazo.")
+        self.assert_estoque_itens_caixa_inalterados()
 
 
 class FuncionarioTests(TestCase):

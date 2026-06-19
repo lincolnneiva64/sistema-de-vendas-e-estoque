@@ -1,0 +1,61 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Corrigir financeiro da Compra #{{ compra.id }}{% endblock %}
+
+{% block content %}
+<style>
+  .cf-wrap { max-width:720px; margin:14px auto 70px; padding:0 12px; color:#172033; }
+  .cf-topo { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; margin-bottom:10px; }
+  .cf-topo h1 { margin:0; font-size:1.35rem; font-weight:950; }
+  .cf-topo p { margin:4px 0 0; color:#64748b; font-weight:750; }
+  .cf-card { margin-bottom:10px; overflow:hidden; border:1px solid #dbe4ef; border-radius:11px; background:#fff; }
+  .cf-card h2 { margin:0; padding:10px 12px; border-bottom:1px solid #edf1f6; background:#f8fafc; font-size:1rem; font-weight:950; }
+  .cf-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:12px; }
+  .cf-valor { padding:9px; border:1px solid #dbeafe; border-radius:8px; background:#f8fafc; }
+  .cf-valor span { display:block; color:#64748b; font-size:.68rem; font-weight:900; text-transform:uppercase; }
+  .cf-valor strong { display:block; margin-top:2px; color:#164173; font-size:1rem; font-weight:950; }
+  .cf-aviso { margin:0 12px 12px; padding:10px; border:1px solid #facc15; border-radius:8px; background:#fefce8; color:#713f12; font-weight:800; }
+  .cf-acoes { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; padding:0 12px 12px; }
+  .cf-btn { display:inline-flex; align-items:center; justify-content:center; min-height:38px; padding:8px 12px; border:1px solid #7ea6d9; border-radius:8px; background:#dbeafe; color:#164173; text-decoration:none; font-weight:900; cursor:pointer; }
+  .cf-btn.primario { border-color:#2563eb; background:#2563eb; color:#fff; }
+  .cf-confirmacao { display:flex; align-items:flex-start; gap:8px; margin:0 12px 12px; color:#334155; font-weight:800; }
+  @media(max-width:640px) { .cf-topo{flex-direction:column}.cf-grid{grid-template-columns:1fr}.cf-acoes,.cf-btn{width:100%} }
+</style>
+
+<div class="cf-wrap">
+  <div class="cf-topo">
+    <div><h1>Corrigir financeiro da Compra #{{ compra.id }}</h1><p>Ajuste explícito da Conta a Pagar após correção dos itens.</p></div>
+    <a class="cf-btn" href="{% url 'estoque:compras_detalhe' compra.id %}">Voltar</a>
+  </div>
+
+  {% if messages %}{% for message in messages %}<div class="cf-aviso">{{ message }}</div>{% endfor %}{% endif %}
+  <section class="cf-card">
+    <h2>Conferência</h2>
+    <div class="cf-grid">
+      <div class="cf-valor"><span>Total da compra</span><strong>R$ {{ resumo.total_compra|floatformat:2 }}</strong></div>
+      <div class="cf-valor"><span>Valor original atual</span><strong>R$ {{ resumo.valor_original|floatformat:2 }}</strong></div>
+      <div class="cf-valor"><span>Diferença</span><strong>R$ {{ resumo.diferenca|floatformat:2 }}</strong></div>
+      <div class="cf-valor"><span>Total já pago</span><strong>R$ {{ resumo.total_pago|floatformat:2 }}</strong></div>
+      <div class="cf-valor"><span>Aberto atual</span><strong>R$ {{ resumo.valor_em_aberto|floatformat:2 }}</strong></div>
+      <div class="cf-valor"><span>Novo valor em aberto</span><strong>R$ {{ resumo.novo_valor_em_aberto|floatformat:2 }}</strong></div>
+    </div>
+    <div class="cf-aviso">Este ajuste altera somente a Conta a Pagar. Estoque, itens e Caixa/Banco permanecerão intactos.</div>
+    {% if resumo.bloqueio %}
+      <div class="cf-aviso"><strong>Correção bloqueada:</strong> {{ resumo.bloqueio }}</div>
+    {% elif resumo.divergente %}
+      <form method="post" id="formCorrigirFinanceiroCompra">
+        {% csrf_token %}
+        <label class="cf-confirmacao"><input type="checkbox" name="confirmar" value="1" required> Confirmo o ajuste da Conta a Pagar para o novo total da compra.</label>
+        <div class="cf-acoes"><a class="cf-btn" href="{% url 'estoque:compras_detalhe' compra.id %}">Cancelar</a><button class="cf-btn primario" type="submit" id="btnCorrigirFinanceiroCompra">Corrigir financeiro</button></div>
+      </form>
+    {% else %}
+      <div class="cf-aviso">A Conta a Pagar já está de acordo com o total da compra.</div>
+    {% endif %}
+  </section>
+</div>
+<script>
+document.getElementById("formCorrigirFinanceiroCompra")?.addEventListener("submit", function() {
+  const botao=document.getElementById("btnCorrigirFinanceiroCompra");
+  if(botao){botao.disabled=true;botao.textContent="Corrigindo...";}
+});
+</script>
+{% endblock %}

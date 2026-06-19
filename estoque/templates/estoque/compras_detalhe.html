@@ -255,6 +255,20 @@
     font-weight: 950;
   }
 
+  .nota-compra-alerta-financeiro {
+    margin: 9px 10px;
+    padding: 10px;
+    border: 1px solid #facc15;
+    border-radius: 9px;
+    background: #fefce8;
+    color: #713f12;
+    font-size: .78rem;
+    font-weight: 800;
+  }
+
+  .nota-compra-alerta-financeiro strong { color: #422006; }
+  .nota-compra-alerta-valores { display:flex; flex-wrap:wrap; gap:6px 16px; margin:6px 0; }
+
   .nota-compra-tabela {
     width: 100%;
     border-collapse: collapse;
@@ -615,6 +629,17 @@
     <div class="nota-compra-card-titulo">Financeiro</div>
 
     {% if conta_pagar %}
+      {% if correcao_financeira.divergente %}
+        <div class="nota-compra-alerta-financeiro">
+          <strong>Esta compra foi corrigida e o financeiro ainda está diferente.</strong>
+          <div class="nota-compra-alerta-valores">
+            <span>Total da compra: R$ {{ correcao_financeira.total_compra|floatformat:2 }}</span>
+            <span>Conta a pagar: R$ {{ correcao_financeira.valor_original|floatformat:2 }}</span>
+            <span>Diferença: R$ {{ correcao_financeira.diferenca|floatformat:2 }}</span>
+          </div>
+          {% if correcao_financeira.bloqueio %}<div>{{ correcao_financeira.bloqueio }}</div>{% else %}<a class="nota-compra-btn primario" href="{% url 'estoque:compra_corrigir_financeiro' compra.id %}">Corrigir financeiro</a>{% endif %}
+        </div>
+      {% endif %}
       <div class="nota-compra-dados">
         <div><strong>Conta a pagar</strong>{{ conta_pagar.get_status_display }}</div>
         <div><strong>Valor original</strong>R$ {{ conta_pagar.valor_original }}</div>
@@ -669,6 +694,7 @@
           <div class="nota-compra-resumo-valor total"><span>Total pago</span><strong>R$ {{ compra.total|floatformat:2 }}</strong></div>
         </div>
         <p class="nota-compra-resumo-confirmacao">Pagamento registrado automaticamente no financeiro.</p>
+        {% if aviso_financeiro_avista %}<div class="nota-compra-alerta-financeiro">O total da compra e as origens do dinheiro estão diferentes. Para compra à vista, use “Corrigir origem”; esta etapa não altera Conta a Pagar.</div>{% endif %}
         {% if movimentos_financeiros %}
           <details class="nota-compra-lancamentos">
             <summary>Mostrar lançamentos financeiros ({{ movimentos_financeiros|length }})</summary>

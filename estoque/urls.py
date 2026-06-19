@@ -34,6 +34,7 @@ urlpatterns = [
     path("contas-pagar/<int:pk>/baixar/", views.conta_pagar_baixar, name="conta_pagar_baixar"),
     path("compras/<int:pk>/", views.compras_detalhe, name="compras_detalhe"),
     path("compras/<int:pk>/corrigir-itens/", views.compra_corrigir_itens, name="compra_corrigir_itens"),
+    path("compras/<int:pk>/corrigir-financeiro/", views.compra_corrigir_financeiro, name="compra_corrigir_financeiro"),
     path("compras/<int:pk>/corrigir-origem-pagamento/", views.compra_corrigir_origem_pagamento, name="compra_corrigir_origem_pagamento"),
     path("compras/<int:pk>/excluir/", views.compra_excluir, name="compra_excluir"),
     path("produtos/<int:produto_id>/ultimas-compras/", views.produto_ultimas_compras, name="produto_ultimas_compras"),

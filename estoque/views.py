@@ -3699,16 +3699,27 @@ def compras_detalhe(request, pk):
         ),
         pk=pk,
     )
+    conta_pagar = getattr(compra, "conta_pagar", None)
+    compra_a_vista = _compra_pagamento_imediato(compra.tipo_pagamento)
+    alocacao_financeira = _alocacao_financeira_compra(compra)
+    correcao_financeira = None
+    if conta_pagar and not compra_a_vista:
+        correcao_financeira = _resumo_correcao_financeira_compra(compra, conta_pagar)
+    total_alocado = sum(alocacao_financeira.values(), Decimal("0.00")).quantize(Decimal("0.01"))
+    aviso_financeiro_avista = compra_a_vista and total_alocado != _financeiro_dinheiro(compra.total).quantize(Decimal("0.01"))
     return render(
         request,
         "estoque/compras_detalhe.html",
         {
             "compra": compra,
             "itens": compra.itens.all(),
-            "conta_pagar": getattr(compra, "conta_pagar", None),
+            "conta_pagar": conta_pagar,
             "movimentos_financeiros": _movimentos_financeiros_compra(compra),
-            "alocacao_financeira": _alocacao_financeira_compra(compra),
-            "compra_a_vista": _compra_pagamento_imediato(compra.tipo_pagamento),
+            "alocacao_financeira": alocacao_financeira,
+            "compra_a_vista": compra_a_vista,
+            "correcao_financeira": correcao_financeira,
+            "aviso_financeiro_avista": aviso_financeiro_avista,
+            "total_alocado": total_alocado,
         },
     )
 
@@ -3719,6 +3730,37 @@ def _registrar_observacao_compra(compra, texto):
     nova_linha = f"[{agora}] {texto}"
     compra.observacao = f"{observacao_atual}\n{nova_linha}".strip() if observacao_atual else nova_linha
     compra.save(update_fields=["observacao", "atualizado_em"])
+
+
+def _resumo_correcao_financeira_compra(compra, conta_pagar):
+    total_compra = _financeiro_dinheiro(compra.total).quantize(Decimal("0.01"))
+    if not conta_pagar:
+        return None
+    valor_original = _financeiro_dinheiro(conta_pagar.valor_original).quantize(Decimal("0.01"))
+    total_pago = sum(
+        (_financeiro_dinheiro(pagamento.valor) for pagamento in conta_pagar.pagamentos.all()),
+        Decimal("0.00"),
+    ).quantize(Decimal("0.01"))
+    novo_aberto = (total_compra - total_pago).quantize(Decimal("0.01"))
+    diferenca = (total_compra - valor_original).quantize(Decimal("0.01"))
+    bloqueio = ""
+    if conta_pagar.status == ContaPagar.STATUS_PAGA or conta_pagar.valor_em_aberto <= Decimal("0.00"):
+        bloqueio = "A conta ja esta quitada e exige uma correcao financeira especifica."
+    elif conta_pagar.status == ContaPagar.STATUS_CANCELADA:
+        bloqueio = "A conta esta cancelada e nao pode ser ajustada automaticamente."
+    elif novo_aberto < Decimal("0.00"):
+        bloqueio = "O total ja pago e maior que o novo total da compra. A correcao automatica foi bloqueada."
+    return {
+        "divergente": diferenca != Decimal("0.00"),
+        "total_compra": total_compra,
+        "valor_original": valor_original,
+        "valor_em_aberto": _financeiro_dinheiro(conta_pagar.valor_em_aberto).quantize(Decimal("0.01")),
+        "total_pago": total_pago,
+        "novo_valor_em_aberto": novo_aberto,
+        "diferenca": diferenca,
+        "bloqueio": bloqueio,
+        "pode_corrigir": diferenca != Decimal("0.00") and not bloqueio,
+    }
 
 
 def compra_corrigir_itens(request, pk):
@@ -3882,6 +3924,78 @@ def compra_corrigir_itens(request, pk):
             "itens": itens,
             "produtos": Produto.objects.filter(excluido=False).order_by("nome"),
         },
+    )
+
+
+def compra_corrigir_financeiro(request, pk):
+    compra = get_object_or_404(
+        Compra.objects.select_related("fornecedor").prefetch_related("conta_pagar__pagamentos"),
+        pk=pk,
+    )
+    if not _compra_pagamento_a_prazo(compra.tipo_pagamento):
+        messages.error(
+            request,
+            "Esta etapa corrige somente compras a prazo. Para compra a vista, use a correcao de origem do dinheiro.",
+        )
+        return redirect("estoque:compras_detalhe", pk=compra.pk)
+
+    conta_pagar = getattr(compra, "conta_pagar", None)
+    if not conta_pagar:
+        messages.error(request, "Esta compra nao possui Conta a Pagar vinculada.")
+        return redirect("estoque:compras_detalhe", pk=compra.pk)
+
+    resumo = _resumo_correcao_financeira_compra(compra, conta_pagar)
+    if request.method == "POST":
+        if request.POST.get("confirmar") != "1":
+            messages.error(request, "Confirme o ajuste financeiro antes de continuar.")
+            return redirect("estoque:compra_corrigir_financeiro", pk=compra.pk)
+
+        with transaction.atomic():
+            compra = Compra.objects.select_for_update().get(pk=compra.pk)
+            conta_pagar = (
+                ContaPagar.objects.select_for_update()
+                .prefetch_related("pagamentos")
+                .get(compra=compra)
+            )
+            resumo = _resumo_correcao_financeira_compra(compra, conta_pagar)
+            if not resumo["divergente"]:
+                messages.success(request, "A Conta a Pagar ja esta de acordo com o total da compra.")
+                return redirect("estoque:compras_detalhe", pk=compra.pk)
+            if resumo["bloqueio"]:
+                messages.error(request, resumo["bloqueio"])
+                return redirect("estoque:compra_corrigir_financeiro", pk=compra.pk)
+
+            valor_anterior = resumo["valor_original"]
+            aberto_anterior = resumo["valor_em_aberto"]
+            conta_pagar.valor_original = resumo["total_compra"]
+            conta_pagar.valor_em_aberto = resumo["novo_valor_em_aberto"]
+            if resumo["novo_valor_em_aberto"] <= Decimal("0.00"):
+                conta_pagar.status = ContaPagar.STATUS_PAGA
+            elif resumo["total_pago"] > Decimal("0.00"):
+                conta_pagar.status = ContaPagar.STATUS_PARCIAL
+            else:
+                conta_pagar.status = ContaPagar.STATUS_ABERTA
+
+            agora = timezone.localtime().strftime("%d/%m/%Y %H:%M")
+            operador = (compra.operador or "Operador nao informado").strip()
+            rastro = (
+                f"[{agora}] Ajuste financeiro apos correcao de itens por {operador}: "
+                f"valor original {_financeiro_moeda_br(valor_anterior)} -> {_financeiro_moeda_br(conta_pagar.valor_original)}; "
+                f"valor em aberto {_financeiro_moeda_br(aberto_anterior)} -> {_financeiro_moeda_br(conta_pagar.valor_em_aberto)}; "
+                f"total pago {_financeiro_moeda_br(resumo['total_pago'])}. Caixa/Banco nao alterado."
+            )
+            observacao_atual = (conta_pagar.observacao or "").strip()
+            conta_pagar.observacao = f"{observacao_atual}\n{rastro}".strip() if observacao_atual else rastro
+            conta_pagar.save(update_fields=["valor_original", "valor_em_aberto", "status", "observacao", "atualizado_em"])
+            _registrar_observacao_compra(compra, rastro.split("] ", 1)[-1])
+
+        messages.success(request, "Financeiro da compra corrigido com sucesso. Caixa/Banco nao foi alterado.")
+        return redirect("estoque:compras_detalhe", pk=compra.pk)
+
+    return render(
+        request,
+        "estoque/compra_corrigir_financeiro.html",
+        {"compra": compra, "conta_pagar": conta_pagar, "resumo": resumo},
     )
 
 
