@@ -994,6 +994,28 @@ class Compra(models.Model):
         fornecedor_nome = self.fornecedor.nome if self.fornecedor else "Fornecedor nao informado"
         return f"Compra #{self.id} - {fornecedor_nome}"
 
+    @property
+    def tipo_pagamento_texto(self):
+        valor = (self.tipo_pagamento or "").strip()
+        rotulos = {
+            "avista": "À vista (Dinheiro / Pix)",
+            "a vista": "À vista (Dinheiro / Pix)",
+            "à vista": "À vista (Dinheiro / Pix)",
+            "aprazo": "A prazo",
+            "a prazo": "A prazo",
+            "cartao_credito": "Cartão crédito",
+            "cartão crédito": "Cartão crédito",
+            "cartao_debito": "Cartão débito",
+            "cartão débito": "Cartão débito",
+            # Compatibilidade de leitura para compras gravadas pelo fluxo antigo.
+            "pix": "Pix",
+            "dinheiro": "Dinheiro",
+            "banco": "Banco/Transferência",
+            "boleto": "Boleto",
+            "cartao": "Cartão",
+        }
+        return rotulos.get(valor.casefold(), valor or "-")
+
 
 class ItemCompra(models.Model):
     compra = models.ForeignKey(

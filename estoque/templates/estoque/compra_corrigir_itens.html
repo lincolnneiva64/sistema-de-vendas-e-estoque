@@ -63,7 +63,7 @@
     <div class="compra-correcao-dados">
       <div><strong>Fornecedor</strong>{{ compra.fornecedor.nome|default:"-" }}</div>
       <div><strong>Data</strong>{{ compra.data_compra|date:"d/m/Y" }}</div>
-      <div><strong>Pagamento</strong>{{ compra.tipo_pagamento|default:"-" }}</div>
+      <div><strong>Pagamento</strong>{{ compra.tipo_pagamento_texto }}</div>
       <div><strong>Total atual</strong>R$ {{ compra.total|floatformat:2 }}</div>
     </div>
   </section>

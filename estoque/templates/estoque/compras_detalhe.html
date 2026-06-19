@@ -587,7 +587,7 @@
     <div class="nota-compra-dados">
       <div><strong>Fornecedor</strong>{{ compra.fornecedor.nome|default:"-" }}</div>
       <div><strong>Data</strong>{{ compra.data_compra|date:"d/m/Y" }}</div>
-      <div><strong>Pagamento</strong>{{ compra.tipo_pagamento|default:"-" }}</div>
+      <div><strong>Pagamento</strong>{{ compra.tipo_pagamento_texto }}</div>
       <div><strong>Status</strong>{{ compra.get_status_display }}</div>
       <div><strong>Estoque</strong>{% if compra.estoque_entrada_realizada %}Entrada realizada{% else %}Ainda não entrou{% endif %}</div>
       <div><strong>Vencimento</strong>{{ compra.data_vencimento|date:"d/m/Y"|default:"-" }}</div>

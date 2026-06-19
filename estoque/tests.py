@@ -53,6 +53,32 @@ class FechamentoCompraFinanceiroTests(TestCase):
         dados.update(alteracoes)
         return dados
 
+    def test_nova_compra_exibe_apenas_tipos_pagamento_simplificados(self):
+        resposta = self.client.get(self.url, secure=True)
+
+        self.assertContains(resposta, '<option value="">Selecione...</option>')
+        self.assertContains(resposta, '<option value="avista">À vista (Dinheiro / Pix)</option>')
+        self.assertContains(resposta, '<option value="aprazo" selected>A prazo</option>')
+        self.assertContains(resposta, '<option value="cartao_credito">Cartão crédito</option>')
+        self.assertContains(resposta, '<option value="cartao_debito">Cartão débito</option>')
+        for valor_antigo in ["pix", "dinheiro", "banco", "boleto", "cartao"]:
+            self.assertNotContains(resposta, f'<option value="{valor_antigo}">')
+
+    def test_rotulo_pagamento_compra_preserva_valores_antigos(self):
+        self.assertEqual(Compra(tipo_pagamento="pix").tipo_pagamento_texto, "Pix")
+        self.assertEqual(Compra(tipo_pagamento="cartao").tipo_pagamento_texto, "Cartão")
+        self.assertEqual(
+            Compra(tipo_pagamento="A vista").tipo_pagamento_texto,
+            "À vista (Dinheiro / Pix)",
+        )
+        self.assertEqual(
+            Compra(tipo_pagamento="cartao_debito").tipo_pagamento_texto,
+            "Cartão débito",
+        )
+        self.assertTrue(views._compra_pagamento_imediato("cartao_credito"))
+        self.assertTrue(views._compra_pagamento_imediato("cartao_debito"))
+        self.assertTrue(views._compra_pagamento_a_prazo("aprazo"))
+
     def test_modal_de_fechamento_tem_resumo_compacto_e_sem_usar_restante(self):
         resposta = self.client.get(self.url, secure=True)
 
