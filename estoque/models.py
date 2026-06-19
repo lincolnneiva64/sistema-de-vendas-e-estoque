@@ -983,6 +983,7 @@ class Compra(models.Model):
     motivo_cancelamento = models.TextField(blank=True)
     estoque_entrada_realizada = models.BooleanField(default=False)
     estoque_entrada_realizada_em = models.DateTimeField(blank=True, null=True)
+    fechamento_token = models.CharField(max_length=32, unique=True, blank=True, null=True, editable=False)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -1145,6 +1146,13 @@ class MovimentoFinanceiro(models.Model):
 
     class Meta:
         ordering = ["-data", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["compra", "conta", "origem"],
+                condition=models.Q(compra__isnull=False, origem="compra_a_vista"),
+                name="movimento_unico_compra_avista_conta",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.get_tipo_display()} R$ {self.valor} - {self.conta}"
