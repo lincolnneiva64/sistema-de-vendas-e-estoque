@@ -252,6 +252,13 @@
     box-shadow:0 24px 70px rgba(15,23,42,.28);
   }
   .compras-origem-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; }
+  .saldo-conta-modal {
+    display:block;
+    margin:2px 0 5px;
+    color:#64748b;
+    font-size:.72rem;
+    font-weight:800;
+  }
   .compras-origem-nota { margin:8px 0 0; color:#164173; font-weight:850; font-size:.86rem; }
   .compras-origem-total {
     display:grid;
@@ -1120,14 +1127,17 @@
           <div class="compras-origem-grid">
             <div class="compras-field">
               <label>Dinheiro do caixa</label>
+              <small class="saldo-conta-modal">Saldo atual: {{ saldo_caixa_modal|default:"R$ 0,00" }}</small>
               <input type="text" name="origem_caixa" id="origemCaixaCompra" inputmode="decimal" value="0,00" autocomplete="off">
             </div>
             <div class="compras-field">
               <label>Sangria / Reserva em mãos</label>
+              <small class="saldo-conta-modal">Saldo atual: {{ saldo_reserva_modal|default:"R$ 0,00" }}</small>
               <input type="text" name="origem_reserva" id="origemReservaCompra" inputmode="decimal" value="0,00" autocomplete="off">
             </div>
             <div class="compras-field">
               <label>Banco/Pix</label>
+              <small class="saldo-conta-modal">Saldo atual: {{ saldo_banco_modal|default:"R$ 0,00" }}</small>
               <input type="text" name="origem_banco" id="origemBancoCompra" inputmode="decimal" value="0,00" autocomplete="off">
             </div>
           </div>

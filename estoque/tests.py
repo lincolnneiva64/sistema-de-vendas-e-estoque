@@ -65,6 +65,28 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertNotContains(resposta, "Usar restante")
         self.assertContains(resposta, "Fechando compra...")
         self.assertContains(resposta, "definirEnvioModalEmAndamento(true)")
+        self.assertContains(resposta, "Saldo atual: R$ 0,00", count=3)
+
+    def test_modal_exibe_saldos_financeiros_calculados_na_renderizacao(self):
+        saldos = {
+            "caixa": Decimal("476.85"),
+            "reserva": Decimal("1800.00"),
+            "banco": Decimal("985.35"),
+        }
+        for chave, valor in saldos.items():
+            MovimentoFinanceiro.objects.create(
+                conta=views._conta_financeira_padrao(chave),
+                tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+                valor=valor,
+                data=timezone.localdate(),
+                origem="teste_saldo_modal_compra",
+            )
+
+        resposta = self.client.get(self.url, secure=True)
+
+        self.assertContains(resposta, "Saldo atual: R$ 476,85")
+        self.assertContains(resposta, "Saldo atual: R$ 1800,00")
+        self.assertContains(resposta, "Saldo atual: R$ 985,35")
 
     def test_fecha_compra_e_cria_tres_saidas(self):
         resposta = self.client.post(self.url, self.dados(), follow=True, secure=True)
@@ -91,6 +113,11 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, "Mostrar lançamentos financeiros (3)")
         self.assertContains(resposta, '<details class="nota-compra-lancamentos">')
         self.assertNotContains(resposta, "Detalhamento do pagamento")
+        self.assertContains(resposta, "☰ Ações da compra")
+        self.assertContains(resposta, 'id="painelAcoesCompraDetalhe"')
+        self.assertContains(resposta, "Corrigir itens")
+        self.assertContains(resposta, "Corrigir origem")
+        self.assertContains(resposta, ">Excluir</button>")
 
     def test_fecha_com_os_rateios_visiveis_de_1173_83(self):
         casos = [

@@ -3668,6 +3668,13 @@ def compras_nova(request):
             messages.success(request, "Compra fechada e valores lançados no financeiro com sucesso.")
         return redirect("estoque:compras_lista")
 
+    conta_caixa = _conta_financeira_padrao("caixa")
+    conta_reserva = _conta_financeira_padrao("reserva")
+    conta_banco = _conta_financeira_padrao("banco")
+    saldo_caixa = _saldo_conta_financeira(conta_caixa) if conta_caixa else Decimal("0.00")
+    saldo_reserva = _saldo_conta_financeira(conta_reserva) if conta_reserva else Decimal("0.00")
+    saldo_banco = _saldo_conta_financeira(conta_banco) if conta_banco else Decimal("0.00")
+
     return render(
         request,
         "estoque/compras_nova.html",
@@ -3676,6 +3683,9 @@ def compras_nova(request):
             "produtos": produtos,
             "hoje": timezone.localdate(),
             "fechamento_token": uuid4().hex,
+            "saldo_caixa_modal": _financeiro_moeda_br(saldo_caixa),
+            "saldo_reserva_modal": _financeiro_moeda_br(saldo_reserva),
+            "saldo_banco_modal": _financeiro_moeda_br(saldo_banco),
         },
     )
 
