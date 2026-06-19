@@ -1390,19 +1390,6 @@
     });
   }
 
-  function distribuirRestanteApos(campo) {
-    const total = Math.round(numero(totalCompra ? totalCompra.textContent : "0") * 100);
-    const caixa = centavosCampoOrigem(origemCaixaCompra);
-    const reserva = centavosCampoOrigem(origemReservaCompra);
-
-    if (campo === origemCaixaCompra && !caixa.invalido) {
-      definirCampoPorCentavos(origemReservaCompra, total - caixa.valor);
-      definirCampoPorCentavos(origemBancoCompra, 0);
-    } else if (campo === origemReservaCompra && !caixa.invalido && !reserva.invalido) {
-      definirCampoPorCentavos(origemBancoCompra, total - caixa.valor - reserva.valor);
-    }
-  }
-
   function normalizarOrigensParaEnvio() {
     const campos = [origemCaixaCompra, origemReservaCompra, origemBancoCompra];
     const valores = campos.map(centavosCampoOrigem);
@@ -1464,7 +1451,10 @@
     }
     if (labelOrigemDiferencaCompra && valorOrigemDiferencaCompra) {
       const excedeu = estado.diferenca < 0;
-      labelOrigemDiferencaCompra.textContent = excedeu ? "Excedeu" : "Falta distribuir";
+      const distribuido = !estado.invalido && estado.diferenca === 0;
+      labelOrigemDiferencaCompra.textContent = excedeu
+        ? "Excedeu"
+        : (distribuido ? "Tudo distribuído" : "Falta distribuir");
       valorOrigemDiferencaCompra.textContent = moeda(Math.abs(estado.diferenca) / 100);
     }
     if (resumoOrigemDiferencaCompra) {
@@ -1498,8 +1488,7 @@
 
   function abrirOrigemDinheiroCompra() {
     if (!origemDinheiroCompra) return;
-    const total = Math.round(numero(totalCompra ? totalCompra.textContent : "0") * 100);
-    definirCampoPorCentavos(origemCaixaCompra, total);
+    definirCampoPorCentavos(origemCaixaCompra, 0);
     definirCampoPorCentavos(origemReservaCompra, 0);
     definirCampoPorCentavos(origemBancoCompra, 0);
     mostrarErroOrigem("");
@@ -2273,7 +2262,6 @@
     });
     campo.addEventListener("input", function() {
       mostrarErroOrigem("");
-      distribuirRestanteApos(campo);
       atualizarResumoOrigemDinheiroCompra();
     });
     campo.addEventListener("blur", function() {

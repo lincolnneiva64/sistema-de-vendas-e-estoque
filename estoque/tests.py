@@ -84,6 +84,9 @@ class FechamentoCompraFinanceiroTests(TestCase):
 
         self.assertContains(resposta, "Total da compra")
         self.assertContains(resposta, "Falta distribuir")
+        self.assertContains(resposta, "Tudo distribuído")
+        self.assertContains(resposta, 'campo.addEventListener("input"')
+        self.assertNotContains(resposta, "distribuirRestanteApos")
         self.assertNotContains(resposta, 'id="valorOrigemDistribuidoCompra"')
         self.assertContains(resposta, "Distribua o total da compra entre Caixa, Sangria e Banco/Pix.")
         self.assertContains(resposta, 'id="origemCaixaCompra"')
