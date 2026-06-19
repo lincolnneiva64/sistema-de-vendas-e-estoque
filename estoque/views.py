@@ -17,7 +17,7 @@ from datetime import date, timedelta
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Q, Sum, Max, Prefetch
 from django.db.models.functions import Coalesce
 from urllib.parse import quote, urlencode
@@ -1444,7 +1444,7 @@ def _compra_pagamento_imediato(tipo_pagamento):
 
 def _descricao_compra_a_vista(compra, conta=None, complemento=""):
     fornecedor_nome = compra.fornecedor.nome if compra.fornecedor else "Fornecedor nao informado"
-    descricao = f"Compra #{compra.id} a vista - {fornecedor_nome}"
+    descricao = f"Pagamento da compra #{compra.id} - Fornecedor: {fornecedor_nome}"
     if conta:
         descricao = f"{descricao} - {conta.nome}"
     if complemento:
@@ -1476,6 +1476,12 @@ def _movimentos_financeiros_compra(compra):
         movimentos_por_id.setdefault(movimento.id, movimento)
     if movimentos_por_id:
         return sorted(movimentos_por_id.values(), key=lambda movimento: movimento.id)
+
+    # Compras criadas pelo fluxo atual sempre possuem token e movimentos ligados
+    # pela FK. O fallback por fornecedor/data existe apenas para registros legados;
+    # usá-lo aqui confundiria duas compras novas do mesmo fornecedor no mesmo dia.
+    if compra.fechamento_token:
+        return []
 
     if not fornecedor_nome:
         return []
@@ -1519,21 +1525,27 @@ def _alocacao_financeira_compra(compra):
 
 
 def _valores_origem_compra_post(request):
-    valores = {
-        "caixa": (_parse_decimal_financeiro(request.POST.get("origem_caixa")) or Decimal("0.00")).quantize(Decimal("0.01")),
-        "reserva": (_parse_decimal_financeiro(request.POST.get("origem_reserva")) or Decimal("0.00")).quantize(Decimal("0.01")),
-        "banco": (_parse_decimal_financeiro(request.POST.get("origem_banco")) or Decimal("0.00")).quantize(Decimal("0.01")),
-    }
+    valores = {}
+    for chave, campo in {
+        "caixa": "origem_caixa",
+        "reserva": "origem_reserva",
+        "banco": "origem_banco",
+    }.items():
+        texto = str(request.POST.get(campo) or "").strip()
+        valor = _parse_decimal_financeiro(texto) if texto else Decimal("0.00")
+        if valor is None:
+            raise ValueError("Informe valores monetarios validos nas origens do pagamento.")
+        valores[chave] = valor.quantize(Decimal("0.01"))
     if any(valor < Decimal("0.00") for valor in valores.values()):
         raise ValueError("Os valores de origem do dinheiro nao podem ser negativos.")
-    if not any(valor > Decimal("0.00") for valor in valores.values()):
-        raise ValueError("Informe pelo menos uma origem do dinheiro com valor maior que zero.")
     return valores
 
 
 def _validar_origem_compra_a_vista(valores, total):
     total = _financeiro_dinheiro(total).quantize(Decimal("0.01"))
     soma = sum(valores.values(), Decimal("0.00")).quantize(Decimal("0.01"))
+    if total > Decimal("0.00") and not any(valor > Decimal("0.00") for valor in valores.values()):
+        raise ValueError("Informe pelo menos uma origem do dinheiro com valor maior que zero.")
     if soma != total:
         raise ValueError(
             f"A soma das origens precisa bater com o total da compra. Soma: {_financeiro_moeda_br(soma)}. Total: {_financeiro_moeda_br(total)}."
@@ -1554,6 +1566,17 @@ def _registrar_movimentos_compra_a_vista(compra, valores_origem=None):
         "reserva": _conta_financeira_padrao("reserva"),
         "banco": _conta_financeira_padrao("banco"),
     }
+    contas_ausentes = (
+        [
+            chave
+            for chave, valor in valores_origem.items()
+            if valor > Decimal("0.00") and not contas.get(chave)
+        ]
+        if valores_origem
+        else []
+    )
+    if contas_ausentes:
+        raise ValueError("Nao foi possivel localizar todas as contas financeiras do pagamento.")
     if valores_origem is None:
         conta = _conta_financeira_por_forma_pagamento(compra.tipo_pagamento)
         chave = "banco"
@@ -3486,6 +3509,10 @@ def compras_nova(request):
     produtos = Produto.objects.filter(excluido=False).order_by("nome")
 
     if request.method == "POST":
+        fechamento_token = (request.POST.get("fechamento_token") or "").strip() or uuid4().hex
+        if Compra.objects.filter(fechamento_token=fechamento_token).exists():
+            messages.warning(request, "Esta compra ja foi fechada e lancada no financeiro.")
+            return redirect("estoque:compras_lista")
         fornecedor_id = request.POST.get("fornecedor_id")
         data_compra = parse_date(request.POST.get("data_compra") or "")
         tipo_pagamento = (request.POST.get("tipo_pagamento") or "").strip()
@@ -3568,61 +3595,77 @@ def compras_nova(request):
                 messages.error(request, str(exc))
                 return redirect("estoque:compras_nova")
 
-        with transaction.atomic():
-            compra = Compra.objects.create(
-                fornecedor=fornecedor,
-                data_compra=data_compra,
-                data_vencimento=data_vencimento if compra_a_prazo else None,
-                tipo_pagamento=tipo_pagamento,
-                total=total,
-                observacao=observacao,
-                status=Compra.STATUS_ABERTA,
-            )
-
-            for item in itens_validos:
-                ItemCompra.objects.create(
-                    compra=compra,
-                    produto=item["produto"],
-                    quantidade=item["quantidade"],
-                    unidade=item["unidade"],
-                    preco_unitario=item["preco_unitario"],
-                    valor_total=item["valor_total"],
-                    observacao=item["observacao"] or None,
-                )
-
-                produto = Produto.objects.select_for_update().get(pk=item["produto"].pk)
-                produto.quantidade = Decimal(str(produto.quantidade or "0")) + item["quantidade"]
-                produto.save(update_fields=["quantidade", "atualizado_em"])
-
-                ProdutoFornecedor.objects.update_or_create(
-                    produto=produto,
+        try:
+            with transaction.atomic():
+                compra = Compra.objects.create(
                     fornecedor=fornecedor,
-                    defaults={
-                        "ultimo_preco_compra": item["preco_unitario"],
-                        "ultima_compra_em": data_compra,
-                    },
+                    data_compra=data_compra,
+                    data_vencimento=data_vencimento if compra_a_prazo else None,
+                    tipo_pagamento=tipo_pagamento,
+                    total=total,
+                    observacao=observacao,
+                    status=Compra.STATUS_ABERTA,
+                    fechamento_token=fechamento_token,
                 )
 
-            compra.estoque_entrada_realizada = True
-            compra.estoque_entrada_realizada_em = timezone.now()
-            compra.status = Compra.STATUS_FINALIZADA
-            compra.save(update_fields=["estoque_entrada_realizada", "estoque_entrada_realizada_em", "status", "atualizado_em"])
+                for item in itens_validos:
+                    ItemCompra.objects.create(
+                        compra=compra,
+                        produto=item["produto"],
+                        quantidade=item["quantidade"],
+                        unidade=item["unidade"],
+                        preco_unitario=item["preco_unitario"],
+                        valor_total=item["valor_total"],
+                        observacao=item["observacao"] or None,
+                    )
 
-            if compra_a_prazo:
-                ContaPagar.objects.create(
-                    compra=compra,
-                    fornecedor=fornecedor,
-                    data_emissao=data_compra,
-                    data_vencimento=data_vencimento,
-                    valor_original=total,
-                    valor_em_aberto=total,
-                    status=ContaPagar.STATUS_ABERTA,
-                    observacao=observacao or "",
-                )
+                    produto = Produto.objects.select_for_update().get(pk=item["produto"].pk)
+                    produto.quantidade = Decimal(str(produto.quantidade or "0")) + item["quantidade"]
+                    produto.save(update_fields=["quantidade", "atualizado_em"])
+
+                    ProdutoFornecedor.objects.update_or_create(
+                        produto=produto,
+                        fornecedor=fornecedor,
+                        defaults={
+                            "ultimo_preco_compra": item["preco_unitario"],
+                            "ultima_compra_em": data_compra,
+                        },
+                    )
+
+                compra.estoque_entrada_realizada = True
+                compra.estoque_entrada_realizada_em = timezone.now()
+                compra.status = Compra.STATUS_FINALIZADA
+                compra.save(update_fields=["estoque_entrada_realizada", "estoque_entrada_realizada_em", "status", "atualizado_em"])
+
+                if compra_a_prazo:
+                    ContaPagar.objects.create(
+                        compra=compra,
+                        fornecedor=fornecedor,
+                        data_emissao=data_compra,
+                        data_vencimento=data_vencimento,
+                        valor_original=total,
+                        valor_em_aberto=total,
+                        status=ContaPagar.STATUS_ABERTA,
+                        observacao=observacao or "",
+                    )
+                else:
+                    _registrar_movimentos_compra_a_vista(compra, valores_origem)
+        except IntegrityError:
+            if Compra.objects.filter(fechamento_token=fechamento_token).exists():
+                messages.warning(request, "Esta compra ja foi fechada e lancada no financeiro.")
             else:
-                _registrar_movimentos_compra_a_vista(compra, valores_origem)
+                logger.exception("Falha de integridade ao fechar compra")
+                messages.error(request, "Não foi possível fechar a compra. Nenhum valor foi lançado no financeiro.")
+            return redirect("estoque:compras_lista")
+        except Exception:
+            logger.exception("Falha ao fechar compra e lancar no financeiro")
+            messages.error(request, "Não foi possível fechar a compra. Nenhum valor foi lançado no financeiro.")
+            return redirect("estoque:compras_nova")
 
-        messages.success(request, f"Compra #{compra.id} salva com sucesso.")
+        if compra_a_prazo:
+            messages.success(request, "Compra fechada e conta a pagar criada com sucesso.")
+        else:
+            messages.success(request, "Compra fechada e valores lançados no financeiro com sucesso.")
         return redirect("estoque:compras_lista")
 
     return render(
@@ -3632,6 +3675,7 @@ def compras_nova(request):
             "fornecedores": fornecedores,
             "produtos": produtos,
             "hoje": timezone.localdate(),
+            "fechamento_token": uuid4().hex,
         },
     )
 

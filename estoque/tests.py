@@ -18,9 +18,135 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Cliente, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Funcionario, ItemVenda, ItemVendaRemovido, PixRecebido, Produto, RecebimentoContaReceber, Venda
+from .models import AjusteItemVendaQuitada, Cliente, Compra, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, Funcionario, ItemVenda, ItemVendaRemovido, MovimentoFinanceiro, PixRecebido, Produto, RecebimentoContaReceber, Venda
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
 from . import views
+
+
+class FechamentoCompraFinanceiroTests(TestCase):
+    def setUp(self):
+        self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Teste")
+        self.produto = Produto.objects.create(
+            nome="Produto Compra",
+            preco_compra=Decimal("100.00"),
+            preco_vista=Decimal("150.00"),
+            preco_prazo=Decimal("160.00"),
+            quantidade=Decimal("10.000"),
+        )
+        self.url = "/estoque/compras/nova/"
+
+    def dados(self, **alteracoes):
+        dados = {
+            "fechamento_token": "a" * 32,
+            "fornecedor_id": str(self.fornecedor.id),
+            "data_compra": "2026-06-19",
+            "tipo_pagamento": "pix",
+            "produto_id[]": [str(self.produto.id)],
+            "quantidade[]": ["1"],
+            "unidade[]": ["UN"],
+            "preco_unitario[]": ["1.000,00"],
+            "observacao_item[]": [""],
+            "origem_caixa": "600,00",
+            "origem_reserva": "200,00",
+            "origem_banco": "200,00",
+        }
+        dados.update(alteracoes)
+        return dados
+
+    def test_modal_de_fechamento_tem_resumo_compacto_e_sem_usar_restante(self):
+        resposta = self.client.get(self.url, secure=True)
+
+        self.assertContains(resposta, "Total da compra")
+        self.assertContains(resposta, "Falta pagar")
+        self.assertContains(resposta, 'id="origemCaixaCompra"')
+        self.assertContains(resposta, 'id="origemReservaCompra"')
+        self.assertContains(resposta, 'id="origemBancoCompra"')
+        self.assertNotContains(resposta, "Total informado")
+        self.assertNotContains(resposta, "Usar restante")
+        self.assertContains(resposta, "Fechando compra...")
+        self.assertContains(resposta, "definirEnvioModalEmAndamento(true)")
+
+    def test_fecha_compra_e_cria_tres_saidas(self):
+        resposta = self.client.post(self.url, self.dados(), follow=True, secure=True)
+
+        self.assertEqual(Compra.objects.count(), 1)
+        compra = Compra.objects.get()
+        movimentos = list(compra.movimentos_financeiros.order_by("valor"))
+        self.assertEqual(compra.status, Compra.STATUS_FINALIZADA)
+        self.assertEqual([movimento.valor for movimento in movimentos], [Decimal("200.00"), Decimal("200.00"), Decimal("600.00")])
+        self.assertTrue(all(movimento.tipo == MovimentoFinanceiro.TIPO_SAIDA for movimento in movimentos))
+        self.assertTrue(all(f"Pagamento da compra #{compra.id}" in movimento.descricao for movimento in movimentos))
+        self.assertContains(resposta, "Compra fechada e valores lançados no financeiro com sucesso.")
+
+    def test_fecha_com_os_rateios_visiveis_de_1173_83(self):
+        casos = [
+            {
+                "token": "b" * 32,
+                "caixa": "173,83",
+                "reserva": "1.000,00",
+                "banco": "0,00",
+                "esperado": [Decimal("173.83"), Decimal("1000.00")],
+            },
+            {
+                "token": "c" * 32,
+                "caixa": "173,83",
+                "reserva": "600,00",
+                "banco": "400,00",
+                "esperado": [Decimal("173.83"), Decimal("400.00"), Decimal("600.00")],
+            },
+        ]
+
+        for caso in casos:
+            with self.subTest(caso=caso):
+                resposta = self.client.post(
+                    self.url,
+                    self.dados(
+                        fechamento_token=caso["token"],
+                        origem_caixa=caso["caixa"],
+                        origem_reserva=caso["reserva"],
+                        origem_banco=caso["banco"],
+                        **{"preco_unitario[]": ["1.173,83"]},
+                    ),
+                    secure=True,
+                )
+
+                self.assertEqual(resposta.status_code, 302)
+                compra = Compra.objects.get(fechamento_token=caso["token"])
+                valores = list(compra.movimentos_financeiros.order_by("valor").values_list("valor", flat=True))
+                self.assertEqual(valores, caso["esperado"])
+
+    def test_bloqueia_soma_menor_maior_e_valor_invalido(self):
+        casos = [
+            {"origem_banco": "199,99"},
+            {"origem_banco": "200,01"},
+            {"origem_banco": "valor-invalido"},
+            {"origem_caixa": "-600,00"},
+        ]
+        for indice, alteracoes in enumerate(casos):
+            with self.subTest(alteracoes=alteracoes):
+                alteracoes["fechamento_token"] = str(indice).zfill(32)
+                self.client.post(self.url, self.dados(**alteracoes), secure=True)
+                self.assertEqual(Compra.objects.count(), 0)
+                self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
+
+    def test_reenvio_do_mesmo_token_nao_duplica_compra_nem_movimentos(self):
+        dados = self.dados()
+        self.client.post(self.url, dados, secure=True)
+        resposta = self.client.post(self.url, dados, follow=True, secure=True)
+
+        self.assertEqual(Compra.objects.count(), 1)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="compra_a_vista").count(), 3)
+        self.assertContains(resposta, "Esta compra ja foi fechada e lancada no financeiro.")
+
+    def test_falha_financeira_desfaz_compra_itens_e_estoque(self):
+        with patch("estoque.views.MovimentoFinanceiro.objects.create", side_effect=RuntimeError("falha simulada")):
+            resposta = self.client.post(self.url, self.dados(), follow=True, secure=True)
+
+        self.produto.refresh_from_db()
+        self.assertEqual(Compra.objects.count(), 0)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
+        self.assertEqual(self.produto.quantidade, Decimal("10.000"))
+        self.assertContains(resposta, "Não foi possível fechar a compra. Nenhum valor foi lançado no financeiro.")
 
 
 class FuncionarioTests(TestCase):
