@@ -262,7 +262,7 @@
   .compras-origem-nota { margin:8px 0 0; color:#164173; font-weight:850; font-size:.86rem; }
   .compras-origem-total {
     display:grid;
-    grid-template-columns:repeat(2, minmax(0, 1fr));
+    grid-template-columns:repeat(3, minmax(0, 1fr));
     gap:12px;
     margin-bottom:10px;
     padding:10px 12px;
@@ -1119,8 +1119,12 @@
               <span>Total da compra</span>
               <strong id="totalFechamentoCompra">R$ 0,00</strong>
             </div>
+            <div class="compras-origem-total-item">
+              <span>Já distribuído</span>
+              <strong id="valorOrigemDistribuidoCompra">R$ 0,00</strong>
+            </div>
             <div class="compras-origem-total-item" id="resumoOrigemDiferencaCompra" aria-live="polite">
-              <span id="labelOrigemDiferencaCompra">Falta pagar</span>
+              <span id="labelOrigemDiferencaCompra">Falta distribuir</span>
               <strong id="valorOrigemDiferencaCompra">R$ 0,00</strong>
             </div>
           </div>
@@ -1141,7 +1145,7 @@
               <input type="text" name="origem_banco" id="origemBancoCompra" inputmode="decimal" value="0,00" autocomplete="off">
             </div>
           </div>
-          <p class="compras-origem-nota">A soma precisa bater com o total da compra. Campos vazios contam como zero.</p>
+          <p class="compras-origem-nota">Distribua o total da compra entre Caixa, Sangria e Banco/Pix. Campos vazios contam como zero.</p>
           <div class="compras-origem-erro" id="erroOrigemDinheiroCompra"></div>
           <div class="compras-origem-acoes">
             <button type="button" class="compras-btn compras-btn-secondary" id="btnVoltarEditarCompra">Voltar para editar compra</button>
@@ -1263,6 +1267,7 @@
   const origemReservaCompra = document.getElementById("origemReservaCompra");
   const origemBancoCompra = document.getElementById("origemBancoCompra");
   const totalFechamentoCompra = document.getElementById("totalFechamentoCompra");
+  const valorOrigemDistribuidoCompra = document.getElementById("valorOrigemDistribuidoCompra");
   const labelOrigemDiferencaCompra = document.getElementById("labelOrigemDiferencaCompra");
   const valorOrigemDiferencaCompra = document.getElementById("valorOrigemDiferencaCompra");
   const resumoOrigemDiferencaCompra = document.getElementById("resumoOrigemDiferencaCompra");
@@ -1466,9 +1471,12 @@
     if (totalFechamentoCompra) {
       totalFechamentoCompra.textContent = moeda(estado.total / 100);
     }
+    if (valorOrigemDistribuidoCompra) {
+      valorOrigemDistribuidoCompra.textContent = moeda(estado.soma / 100);
+    }
     if (labelOrigemDiferencaCompra && valorOrigemDiferencaCompra) {
       const excedeu = estado.diferenca < 0;
-      labelOrigemDiferencaCompra.textContent = excedeu ? "Excedente" : "Falta pagar";
+      labelOrigemDiferencaCompra.textContent = excedeu ? "Excedeu" : "Falta distribuir";
       valorOrigemDiferencaCompra.textContent = moeda(Math.abs(estado.diferenca) / 100);
     }
     if (resumoOrigemDiferencaCompra) {
@@ -1562,7 +1570,7 @@
       return "Informe pelo menos uma origem do dinheiro com valor maior que zero.";
     }
     if (estado.diferenca !== 0) {
-      return "A soma das origens precisa bater com o total da compra. Soma: " + moeda(estado.soma / 100) + ". Total: " + moeda(estado.total / 100) + ".";
+      return "Distribua o total da compra entre Caixa, Sangria e Banco/Pix. Já distribuído: " + moeda(estado.soma / 100) + ". Total: " + moeda(estado.total / 100) + ".";
     }
     return "";
   }

@@ -1548,7 +1548,8 @@ def _validar_origem_compra_a_vista(valores, total):
         raise ValueError("Informe pelo menos uma origem do dinheiro com valor maior que zero.")
     if soma != total:
         raise ValueError(
-            f"A soma das origens precisa bater com o total da compra. Soma: {_financeiro_moeda_br(soma)}. Total: {_financeiro_moeda_br(total)}."
+            "Distribua o total da compra entre Caixa, Sangria e Banco/Pix. "
+            f"Já distribuído: {_financeiro_moeda_br(soma)}. Total: {_financeiro_moeda_br(total)}."
         )
 
 

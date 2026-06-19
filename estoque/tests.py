@@ -57,7 +57,9 @@ class FechamentoCompraFinanceiroTests(TestCase):
         resposta = self.client.get(self.url, secure=True)
 
         self.assertContains(resposta, "Total da compra")
-        self.assertContains(resposta, "Falta pagar")
+        self.assertContains(resposta, "Já distribuído")
+        self.assertContains(resposta, "Falta distribuir")
+        self.assertContains(resposta, "Distribua o total da compra entre Caixa, Sangria e Banco/Pix.")
         self.assertContains(resposta, 'id="origemCaixaCompra"')
         self.assertContains(resposta, 'id="origemReservaCompra"')
         self.assertContains(resposta, 'id="origemBancoCompra"')
