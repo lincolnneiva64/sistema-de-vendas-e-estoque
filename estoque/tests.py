@@ -283,9 +283,20 @@ class CorrecaoItensCompraTests(TestCase):
         self.assertEqual(self.movimento.valor, Decimal("110.00"))
         self.assertEqual(self.compra.movimentos_financeiros.count(), 1)
 
-    def test_diminuir_quantidade_reduz_estoque_pela_diferenca(self):
-        self.client.post(self.url, self.dados(**{"quantidade[]": ["7", "2"]}), secure=True)
+    def test_compra_a_vista_total_alterado_redireciona_para_corrigir_origem(self):
+        resposta = self.client.post(
+            self.url,
+            self.dados(**{"quantidade[]": ["7", "2"]}),
+            follow=True,
+            secure=True,
+        )
         self.produto_a.refresh_from_db(); self.compra.refresh_from_db(); self.item_a.refresh_from_db()
+        self.assertTrue(resposta.redirect_chain)
+        self.assertEqual(
+            urlsplit(resposta.redirect_chain[0][0]).path,
+            reverse("estoque:compra_corrigir_origem_pagamento", kwargs={"pk": self.compra.id}),
+        )
+        self.assertContains(resposta, "Agora ajuste a origem do pagamento")
         self.assertEqual(self.produto_a.quantidade, Decimal("17.000"))
         self.assertEqual(self.item_a.quantidade, Decimal("7.000"))
         self.assertEqual(self.compra.total, Decimal("80.00"))
@@ -293,6 +304,28 @@ class CorrecaoItensCompraTests(TestCase):
         self.assertIn("Financeiro nao alterado", self.compra.observacao)
         detalhe = self.client.get(f"/estoque/compras/{self.compra.id}/", secure=True)
         self.assertContains(detalhe, "Observações e histórico")
+        self.assert_financeiro_inalterado()
+
+    def test_compra_a_prazo_total_alterado_continua_no_detalhe(self):
+        self.compra.tipo_pagamento = "aprazo"
+        self.compra.save(update_fields=["tipo_pagamento"])
+
+        resposta = self.client.post(
+            self.url,
+            self.dados(**{"quantidade[]": ["7", "2"]}),
+            follow=True,
+            secure=True,
+        )
+
+        self.compra.refresh_from_db()
+        self.produto_a.refresh_from_db()
+        self.assertTrue(resposta.redirect_chain)
+        self.assertEqual(
+            urlsplit(resposta.redirect_chain[0][0]).path,
+            reverse("estoque:compras_detalhe", kwargs={"pk": self.compra.id}),
+        )
+        self.assertEqual(self.compra.total, Decimal("80.00"))
+        self.assertEqual(self.produto_a.quantidade, Decimal("17.000"))
         self.assert_financeiro_inalterado()
 
     def test_aumentar_quantidade_aumenta_estoque_pela_diferenca(self):
