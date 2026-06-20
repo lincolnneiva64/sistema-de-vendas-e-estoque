@@ -41,6 +41,24 @@
     <div class="cf-aviso">Este ajuste altera somente a Conta a Pagar. Estoque, itens e Caixa/Banco permanecerão intactos.</div>
     {% if resumo.bloqueio %}
       <div class="cf-aviso"><strong>Correção bloqueada:</strong> {{ resumo.bloqueio }}</div>
+      {% if resumo.valor_em_aberto <= 0 %}
+        <form method="post" id="formCorrigirFinanceiroCompra">
+          {% csrf_token %}
+          <input type="hidden" name="motivo_correcao" value="erro_lancamento">
+          <div class="cf-aviso">
+            <strong>Opcao segura:</strong> tratar como erro de lancamento da nota.
+            A Conta a Pagar sera ajustada para o novo total, continuara paga e Caixa/Banco nao sera alterado.
+          </div>
+          <label class="cf-confirmacao">
+            <input type="checkbox" name="confirmar" value="1" required>
+            Confirmo que foi erro de lancamento da nota e que nao ha devolucao nem diferenca a pagar.
+          </label>
+          <div class="cf-acoes">
+            <a class="cf-btn" href="{% url 'estoque:compras_detalhe' compra.id %}">Cancelar</a>
+            <button class="cf-btn primario" type="submit" id="btnCorrigirFinanceiroCompra">Corrigir como erro de lancamento</button>
+          </div>
+        </form>
+      {% endif %}
     {% elif resumo.divergente %}
       <form method="post" id="formCorrigirFinanceiroCompra">
         {% csrf_token %}

@@ -575,7 +575,7 @@ class CorrecaoFinanceiroCompraTests(TestCase):
         self.assertContains(resposta, "O total ja pago e maior que o novo total da compra.")
         self.assert_estoque_itens_caixa_inalterados()
 
-    def test_conta_quitada_bloqueia_correcao(self):
+    def test_conta_quitada_bloqueia_correcao_sem_motivo(self):
         self.criar_pagamento("1013.95")
         self.conta.valor_em_aberto = Decimal("0.00")
         self.conta.status = ContaPagar.STATUS_PAGA
@@ -584,6 +584,30 @@ class CorrecaoFinanceiroCompraTests(TestCase):
         self.conta.refresh_from_db()
         self.assertEqual(self.conta.valor_original, Decimal("1013.95"))
         self.assertContains(resposta, "A conta ja esta quitada")
+        self.assert_estoque_itens_caixa_inalterados()
+
+    def test_conta_quitada_permite_ajustar_como_erro_de_lancamento(self):
+        self.criar_pagamento("1013.95")
+        self.conta.valor_em_aberto = Decimal("0.00")
+        self.conta.status = ContaPagar.STATUS_PAGA
+        self.conta.save(update_fields=["valor_em_aberto", "status"])
+
+        resposta_get = self.client.get(self.url, secure=True)
+        self.assertContains(resposta_get, "erro de lancamento da nota")
+
+        resposta = self.client.post(
+            self.url,
+            {"confirmar": "1", "motivo_correcao": "erro_lancamento"},
+            follow=True,
+            secure=True,
+        )
+
+        self.conta.refresh_from_db()
+        self.assertEqual(self.conta.valor_original, Decimal("433.60"))
+        self.assertEqual(self.conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(self.conta.status, ContaPagar.STATUS_PAGA)
+        self.assertIn("erro de lancamento", self.conta.observacao)
+        self.assertContains(resposta, "Financeiro ajustado como erro de lan?amento")
         self.assert_estoque_itens_caixa_inalterados()
 
     def test_compra_a_vista_nao_pode_usar_esta_etapa(self):

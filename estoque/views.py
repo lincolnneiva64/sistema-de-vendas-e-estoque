@@ -4018,9 +4018,44 @@ def compra_corrigir_financeiro(request, pk):
             if not resumo["divergente"]:
                 messages.success(request, "A Conta a Pagar ja esta de acordo com o total da compra.")
                 return redirect("estoque:compras_detalhe", pk=compra.pk)
-            if resumo["bloqueio"]:
+            motivo_correcao = (request.POST.get("motivo_correcao") or "").strip()
+            quitada_com_bloqueio = (
+                resumo["bloqueio"]
+                and (conta_pagar.status == ContaPagar.STATUS_PAGA or resumo["valor_em_aberto"] <= Decimal("0.00"))
+            )
+
+            if resumo["bloqueio"] and not (quitada_com_bloqueio and motivo_correcao == "erro_lancamento"):
                 messages.error(request, resumo["bloqueio"])
                 return redirect("estoque:compra_corrigir_financeiro", pk=compra.pk)
+
+            if quitada_com_bloqueio and motivo_correcao == "erro_lancamento":
+                valor_anterior = resumo["valor_original"]
+                aberto_anterior = resumo["valor_em_aberto"]
+                conta_pagar.valor_original = resumo["total_compra"]
+                conta_pagar.valor_em_aberto = Decimal("0.00")
+                conta_pagar.status = ContaPagar.STATUS_PAGA
+
+                agora = timezone.localtime().strftime("%d/%m/%Y %H:%M")
+                operador = (compra.operador or "Operador nao informado").strip()
+                rastro = (
+                    f"[{agora}] Ajuste financeiro por erro de lancamento apos correcao de itens por {operador}: "
+                    f"valor original {_financeiro_moeda_br(valor_anterior)} -> {_financeiro_moeda_br(conta_pagar.valor_original)}; "
+                    f"valor em aberto {_financeiro_moeda_br(aberto_anterior)} -> R$ 0,00; "
+                    f"total ja pago registrado {_financeiro_moeda_br(resumo['total_pago'])}. "
+                    "Conta mantida como paga. Caixa/Banco nao alterado."
+                )
+                observacao_atual = (conta_pagar.observacao or "").strip()
+                conta_pagar.observacao = f"{observacao_atual}\n{rastro}".strip() if observacao_atual else rastro
+                conta_pagar.save(update_fields=["valor_original", "valor_em_aberto", "status", "observacao"])
+
+                _registrar_observacao_compra(
+                    compra,
+                    "Financeiro ajustado por erro de lancamento da nota apos correcao de itens. "
+                    f"Conta a Pagar {_financeiro_moeda_br(valor_anterior)} -> {_financeiro_moeda_br(conta_pagar.valor_original)}. "
+                    "Conta mantida como paga. Caixa/Banco nao alterado.",
+                )
+                messages.success(request, "Financeiro ajustado como erro de lan?amento da nota. Caixa/Banco n?o foi alterado.")
+                return redirect("estoque:compras_detalhe", pk=compra.pk)
 
             valor_anterior = resumo["valor_original"]
             aberto_anterior = resumo["valor_em_aberto"]
