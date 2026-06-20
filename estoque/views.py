@@ -3957,6 +3957,13 @@ def compra_corrigir_itens(request, pk):
             )
             return redirect("estoque:compra_corrigir_origem_pagamento", pk=compra.pk)
 
+        if diferenca != Decimal("0.00") and _compra_pagamento_a_prazo(compra.tipo_pagamento):
+            messages.success(
+                request,
+                "Itens corrigidos. Agora ajuste a Conta a Pagar para bater com o novo total.",
+            )
+            return redirect("estoque:compra_corrigir_financeiro", pk=compra.pk)
+
         messages.success(
             request,
             f"Itens corrigidos. Total anterior: {_financeiro_moeda_br(total_anterior)}. "

@@ -391,7 +391,7 @@ class CorrecaoItensCompraTests(TestCase):
         self.assertLess(conteudo.index(titulo_financeiro), conteudo.index(titulo_historico))
         self.assert_financeiro_inalterado()
 
-    def test_compra_a_prazo_total_alterado_continua_no_detalhe(self):
+    def test_compra_a_prazo_total_alterado_redireciona_para_corrigir_financeiro(self):
         self.compra.tipo_pagamento = "aprazo"
         self.compra.save(update_fields=["tipo_pagamento"])
 
@@ -407,10 +407,10 @@ class CorrecaoItensCompraTests(TestCase):
         self.assertTrue(resposta.redirect_chain)
         self.assertEqual(
             urlsplit(resposta.redirect_chain[0][0]).path,
-            reverse("estoque:compras_detalhe", kwargs={"pk": self.compra.id}),
+            reverse("estoque:compra_corrigir_financeiro", kwargs={"pk": self.compra.id}),
         )
-        self.assertContains(resposta, "A prazo")
-        self.assertContains(resposta, "Em aberto")
+        self.assertContains(resposta, "Agora ajuste a Conta a Pagar")
+        self.assertContains(resposta, "Corrigir financeiro da Compra")
         self.assertEqual(self.compra.total, Decimal("80.00"))
         self.assertEqual(self.produto_a.quantidade, Decimal("17.000"))
         self.assert_financeiro_inalterado()
