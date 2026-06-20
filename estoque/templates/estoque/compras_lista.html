@@ -76,7 +76,13 @@
   .compras-lista-table tbody tr:hover { background:#fbfdff; }
   .compras-lista-table tbody tr:last-child td { border-bottom:0; }
   .compras-lista-numero { font-weight:900; color:#0f172a; }
-  .compras-lista-status { display:inline-flex; border-radius:999px; padding:4px 9px; background:#eef6ff; color:#164173; font-weight:850; font-size:.82rem; }
+  .compras-lista-financeiro { display:inline-flex; align-items:center; max-width:220px; border-radius:999px; padding:4px 9px; border:1px solid #bfdbfe; background:#eff6ff; color:#1e4f85; font-weight:850; font-size:.76rem; line-height:1.2; }
+  .compras-lista-financeiro.paga { background:#ecfdf3; border-color:#a7e3bd; color:#166534; }
+  .compras-lista-financeiro.pendente { background:#eff6ff; border-color:#bfdbfe; color:#1e4f85; }
+  .compras-lista-financeiro.parcial { background:#fffbeb; border-color:#fde68a; color:#854d0e; }
+  .compras-lista-financeiro.vencida { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
+  .compras-lista-financeiro.alerta { background:#fff7ed; border-color:#fed7aa; color:#9a3412; }
+  .compras-lista-financeiro.cancelada { background:#f1f5f9; border-color:#cbd5e1; color:#9f1239; }
   .compras-lista-pagamento { display:inline-flex; align-items:center; max-width:190px; border-radius:999px; padding:4px 9px; background:#eff6ff; border:1px solid #bfdbfe; color:#1e4f85; font-weight:850; font-size:.76rem; line-height:1.2; }
   .compras-lista-pagamento.prazo { background:#fffbeb; border-color:#fde68a; color:#854d0e; }
   .compras-lista-total { font-weight:900; color:#166534; }
@@ -144,7 +150,7 @@
           <th>Fornecedor</th>
           <th>Data</th>
           <th>Pagamento</th>
-          <th>Status</th>
+          <th>Financeiro</th>
           <th>Total</th>
           <th>Ações</th>
         </tr>
@@ -156,7 +162,7 @@
             <td>{{ compra.fornecedor.nome|default:"Fornecedor nao informado" }}</td>
             <td>{{ compra.data_compra|date:"d/m/Y" }}</td>
             <td><span class="compras-lista-pagamento{% if compra.tipo_pagamento_texto == 'A prazo' %} prazo{% endif %}">{{ compra.tipo_pagamento_texto|default:"-" }}</span></td>
-            <td><span class="compras-lista-status">{{ compra.get_status_display }}</span></td>
+            <td><span class="compras-lista-financeiro {{ compra.situacao_financeira_classe }}">{{ compra.situacao_financeira_texto }}</span></td>
             <td class="compras-lista-total">R$ {{ compra.total|floatformat:2 }}</td>
             <td>
               <div class="compras-lista-acoes-linha">
@@ -187,7 +193,7 @@
       <article class="compras-lista-mobile-card">
         <div class="compras-lista-mobile-top">
           <span class="compras-lista-mobile-numero">Compra #{{ compra.id }}</span>
-          <span class="compras-lista-status">{{ compra.get_status_display }}</span>
+          <span class="compras-lista-financeiro {{ compra.situacao_financeira_classe }}">{{ compra.situacao_financeira_texto }}</span>
         </div>
         <div class="compras-lista-mobile-grid">
           <div>

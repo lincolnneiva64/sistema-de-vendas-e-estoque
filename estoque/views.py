@@ -3488,12 +3488,45 @@ def conta_pagar_baixar(request, pk):
         "conta": _conta_pagar_payload(conta),
     })
 
+def _situacao_financeira_compra_lista(compra, hoje=None):
+    hoje = hoje or timezone.localdate()
+    if compra.cancelada or compra.status == Compra.STATUS_CANCELADA:
+        return "Cancelada", "cancelada"
+    if _compra_pagamento_imediato(compra.tipo_pagamento):
+        return "Nota paga", "paga"
+
+    conta_pagar = getattr(compra, "conta_pagar", None)
+    if not conta_pagar:
+        return "Financeiro não localizado", "alerta"
+    if conta_pagar.status == ContaPagar.STATUS_PAGA or conta_pagar.valor_em_aberto <= Decimal("0.00"):
+        return "Nota paga", "paga"
+    if conta_pagar.status == ContaPagar.STATUS_CANCELADA:
+        return "Conta cancelada", "cancelada"
+
+    parcial = conta_pagar.status == ContaPagar.STATUS_PARCIAL
+    vencimento = conta_pagar.data_vencimento
+    if not vencimento:
+        return ("Parcial" if parcial else "Em aberto"), ("parcial" if parcial else "pendente")
+    if vencimento < hoje:
+        prefixo = "Parcial - vencida desde" if parcial else "Vencida desde"
+        return f"{prefixo} {vencimento.strftime('%d/%m/%Y')}", "vencida"
+
+    prefixo = "Parcial - vence em" if parcial else "Vence em"
+    return f"{prefixo} {vencimento.strftime('%d/%m/%Y')}", ("parcial" if parcial else "pendente")
+
+
 def compras_lista(request):
     termo = request.GET.get("q", "").strip()
-    compras = Compra.objects.select_related("fornecedor").order_by("-data_compra", "-id")
+    compras = Compra.objects.select_related("fornecedor", "conta_pagar").order_by("-data_compra", "-id")
 
     if termo:
         compras = compras.filter(fornecedor__nome__icontains=termo)
+
+    hoje = timezone.localdate()
+    for compra in compras:
+        compra.situacao_financeira_texto, compra.situacao_financeira_classe = (
+            _situacao_financeira_compra_lista(compra, hoje)
+        )
 
     return render(
         request,

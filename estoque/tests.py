@@ -221,6 +221,67 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, "Não foi possível fechar a compra. Nenhum valor foi lançado no financeiro.")
 
 
+class ComprasListaFinanceiroTests(TestCase):
+    def test_listagem_exibe_situacao_financeira_sem_status_finalizada(self):
+        fornecedor = Fornecedor.objects.create(nome="Fornecedor Lista Financeiro")
+        hoje = timezone.localdate()
+
+        def criar_compra(tipo="aprazo", **campos):
+            return Compra.objects.create(
+                fornecedor=fornecedor,
+                data_compra=hoje,
+                tipo_pagamento=tipo,
+                total=Decimal("100.00"),
+                status=campos.pop("status", Compra.STATUS_FINALIZADA),
+                **campos,
+            )
+
+        criar_compra(tipo="avista")
+        aberta = criar_compra()
+        vencida = criar_compra()
+        parcial = criar_compra()
+        quitada = criar_compra()
+        criar_compra()  # Compra a prazo sem Conta a Pagar.
+        criar_compra(status=Compra.STATUS_CANCELADA, cancelada=True)
+
+        dados_conta = {
+            "fornecedor": fornecedor,
+            "data_emissao": hoje,
+            "valor_original": Decimal("100.00"),
+        }
+        ContaPagar.objects.create(
+            compra=aberta, data_vencimento=hoje + timedelta(days=5),
+            valor_em_aberto=Decimal("100.00"), status=ContaPagar.STATUS_ABERTA,
+            **dados_conta,
+        )
+        ContaPagar.objects.create(
+            compra=vencida, data_vencimento=hoje - timedelta(days=2),
+            valor_em_aberto=Decimal("100.00"), status=ContaPagar.STATUS_ABERTA,
+            **dados_conta,
+        )
+        ContaPagar.objects.create(
+            compra=parcial, data_vencimento=hoje + timedelta(days=3),
+            valor_em_aberto=Decimal("40.00"), status=ContaPagar.STATUS_PARCIAL,
+            **dados_conta,
+        )
+        ContaPagar.objects.create(
+            compra=quitada, data_vencimento=hoje - timedelta(days=1),
+            valor_em_aberto=Decimal("0.00"), status=ContaPagar.STATUS_PAGA,
+            **dados_conta,
+        )
+
+        resposta = self.client.get(reverse("estoque:compras_lista"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Nota paga", count=4)  # Desktop e mobile, duas compras.
+        self.assertContains(resposta, f"Vence em {(hoje + timedelta(days=5)):%d/%m/%Y}", count=2)
+        self.assertContains(resposta, f"Vencida desde {(hoje - timedelta(days=2)):%d/%m/%Y}", count=2)
+        self.assertContains(resposta, f"Parcial - vence em {(hoje + timedelta(days=3)):%d/%m/%Y}", count=2)
+        self.assertContains(resposta, "Financeiro não localizado", count=2)
+        self.assertContains(resposta, "Cancelada", count=2)
+        self.assertNotContains(resposta, ">Finalizada<")
+
+
 class CorrecaoItensCompraTests(TestCase):
     def setUp(self):
         self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Correcao")
