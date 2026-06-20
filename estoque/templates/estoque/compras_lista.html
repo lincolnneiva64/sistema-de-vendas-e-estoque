@@ -167,7 +167,7 @@
             <td>
               <div class="compras-lista-acoes-linha">
           <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-view">Ver</a>
-          <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit">Editar</a>
+          <a href="{% url 'estoque:compra_corrigir_itens' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit">Editar</a>
           <button type="button"
                   class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-danger btnAbrirModalExcluirCompra"
                   data-url="{% url 'estoque:compra_excluir' compra.pk %}"
@@ -215,7 +215,7 @@
         </div>
         <div class="compras-lista-acoes-linha">
           <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-view">Ver</a>
-          <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit">Editar</a>
+          <a href="{% url 'estoque:compra_corrigir_itens' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit">Editar</a>
           <button type="button"
                   class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-danger btnAbrirModalExcluirCompra"
                   data-url="{% url 'estoque:compra_excluir' compra.pk %}"

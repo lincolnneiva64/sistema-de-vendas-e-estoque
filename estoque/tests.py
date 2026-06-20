@@ -243,7 +243,7 @@ class ComprasListaFinanceiroTests(TestCase):
                 **campos,
             )
 
-        criar_compra(tipo="avista")
+        avista = criar_compra(tipo="avista")
         aberta = criar_compra()
         vencida = criar_compra()
         parcial = criar_compra()
@@ -287,6 +287,16 @@ class ComprasListaFinanceiroTests(TestCase):
         self.assertContains(resposta, "Financeiro não localizado", count=2)
         self.assertContains(resposta, "Cancelada", count=2)
         self.assertNotContains(resposta, ">Finalizada<")
+        self.assertContains(
+            resposta,
+            f'href="{reverse("estoque:compras_detalhe", kwargs={"pk": avista.pk})}"',
+            count=2,
+        )
+        self.assertContains(
+            resposta,
+            f'href="{reverse("estoque:compra_corrigir_itens", kwargs={"pk": avista.pk})}"',
+            count=2,
+        )
 
 
 class CorrecaoItensCompraTests(TestCase):
