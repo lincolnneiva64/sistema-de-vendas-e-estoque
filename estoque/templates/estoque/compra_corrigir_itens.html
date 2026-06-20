@@ -27,7 +27,12 @@
   .compra-correcao-itens th:nth-child(6) { width:16%; }
   .campo-quantidade-correcao { max-width:86px; }
   .campo-preco-correcao { max-width:118px; }
-  .compra-correcao-table tr.removido { opacity:.58; background:#fff1f2; }
+  .compra-correcao-table tr.removido { opacity:1; }
+  .compra-correcao-table tr.removido td { background:#ffe4e6; border-top-color:#fda4af; color:#7f1d1d; }
+  .compra-correcao-table tr.removido td:first-child { box-shadow:inset 5px 0 #dc2626; font-weight:900; text-decoration:line-through; text-decoration-thickness:1px; }
+  .compra-correcao-table tr.removido .subtotal-correcao { color:#991b1b; text-decoration:line-through; }
+  .compra-correcao-table tr.removido input[type="text"] { border-color:#f87171; background:#fff7f7; color:#7f1d1d; }
+  .compra-correcao-table tr.removido .compra-correcao-remover { padding:3px 5px; border:1px solid #ef4444; border-radius:6px; background:#fff; color:#991b1b; }
   .numero { text-align:right !important; white-space:nowrap; }
   .compra-correcao-confirmacao { display:flex; align-items:center; gap:8px; color:#7f1d1d; font-weight:850; }
   .compra-correcao-remover { display:inline-flex; align-items:center; gap:5px; color:#991b1b; font-weight:850; }
@@ -157,6 +162,16 @@
 
   function numero(valor) { let texto=String(valor||"0").trim(); if(texto.includes(",")) texto=texto.replace(/\./g,"").replace(",", "."); texto=texto.replace(/[^\d.-]/g,""); return Number(texto)||0; }
   function moeda(valor) { return "R$ "+Number(valor||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function campoNumerico(alvo) { return alvo?.matches(".campo-quantidade-correcao, .campo-preco-correcao"); }
+  function selecionarCampo(campo) {
+    if (!campo) return;
+    campo.focus();
+    campo.select();
+  }
+  function camposDeEdicao() {
+    return Array.from(form.querySelectorAll(".campo-quantidade-correcao, .campo-preco-correcao"))
+      .filter(function(campo) { return !campo.disabled; });
+  }
   function recalcular() {
     let total=0;
     form.querySelectorAll(".linha-correcao-item, .linha-novo-item-correcao").forEach(function(linha) {
@@ -174,6 +189,18 @@
   function adicionarLinha() { if(!template||!tbodyNovos)return; tbodyNovos.appendChild(template.content.cloneNode(true)); recalcular(); }
   adicionar?.addEventListener("click",adicionarLinha);
   form.addEventListener("input",recalcular);
+  form.addEventListener("focusin",function(event) {
+    if (campoNumerico(event.target)) event.target.select();
+  });
+  form.addEventListener("keydown",function(event) {
+    if (event.key !== "Enter" || !campoNumerico(event.target)) return;
+    event.preventDefault();
+    const campos=camposDeEdicao();
+    const indice=campos.indexOf(event.target);
+    const proximo=indice >= 0 ? campos[indice+1] : null;
+    if (proximo) selecionarCampo(proximo);
+    else adicionar?.focus();
+  });
   form.addEventListener("change",function(event) {
     if(event.target.matches(".campo-produto-novo-correcao")) { const opcao=event.target.selectedOptions[0]; const preco=event.target.closest("tr").querySelector(".campo-preco-correcao"); if(preco&&opcao?.dataset.preco) preco.value=numero(opcao.dataset.preco).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
     recalcular();
@@ -181,6 +208,9 @@
   form.addEventListener("click",function(event) { const botao=event.target.closest(".btn-remover-novo-item"); if(!botao)return; botao.closest("tr").remove(); recalcular(); });
   form.addEventListener("submit",function(){ if(salvar){salvar.disabled=true; salvar.textContent="Salvando correção...";} });
   recalcular();
+  window.setTimeout(function() {
+    selecionarCampo(form.querySelector(".linha-correcao-item .campo-quantidade-correcao"));
+  }, 0);
 })();
 </script>
 {% endblock %}

@@ -486,6 +486,11 @@ class CorrecaoItensCompraTests(TestCase):
         self.assertContains(correcao, "Salvar correção dos itens")
         self.assertContains(correcao, "Novo total")
         self.assertContains(correcao, "Caixa/Banco e Conta a Pagar não serão alterados")
+        self.assertContains(correcao, 'form.addEventListener("keydown"')
+        self.assertContains(correcao, 'event.key !== "Enter"')
+        self.assertContains(correcao, 'event.preventDefault()')
+        self.assertContains(correcao, '.linha-correcao-item .campo-quantidade-correcao')
+        self.assertContains(correcao, 'campo.select()')
 
 
 class CorrecaoFinanceiroCompraTests(TestCase):
