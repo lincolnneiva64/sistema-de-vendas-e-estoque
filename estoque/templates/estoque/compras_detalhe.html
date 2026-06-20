@@ -222,6 +222,32 @@
     background: #f8fafc;
   }
 
+  .nota-compra-card-itens {
+    background: #fcfffd;
+    border-color: #9fd5bd;
+    box-shadow: 0 8px 18px rgba(4, 120, 87, .09);
+  }
+
+  .nota-compra-card-itens .nota-compra-card-titulo {
+    padding: 8px 10px;
+    background: #ecfdf5;
+    border-bottom-color: #b7e4cf;
+    color: #065f46;
+    font-size: .92rem;
+  }
+
+  .nota-compra-card-itens .nota-compra-total {
+    padding: 9px 11px;
+    background: linear-gradient(90deg, #f0fdf4, #ecfdf5);
+    border-top-color: #9fd5bd;
+    font-size: 1rem;
+  }
+
+  .nota-compra-card-itens .nota-compra-total span {
+    color: #047857;
+    font-size: 1.08rem;
+  }
+
   .nota-compra-dados {
     padding: 4px 8px;
     display: grid;
@@ -359,6 +385,11 @@
 
     .nota-compra-card {
       border-radius: 12px;
+    }
+
+    .nota-compra-card-itens .nota-compra-total {
+      justify-content: space-between;
+      gap: 8px;
     }
 
     .nota-compra-tabela {
@@ -636,7 +667,7 @@
     </div>
   </section>
 
-  <section class="nota-compra-card">
+  <section class="nota-compra-card nota-compra-card-itens">
     <div class="nota-compra-card-titulo">Itens</div>
 
     <table class="nota-compra-tabela">
