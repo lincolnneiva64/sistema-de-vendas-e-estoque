@@ -3734,6 +3734,10 @@ def compras_detalhe(request, pk):
     )
     conta_pagar = getattr(compra, "conta_pagar", None)
     compra_a_vista = _compra_pagamento_imediato(compra.tipo_pagamento)
+    situacao_financeira_texto, _ = _situacao_financeira_compra_lista(compra)
+    pagamento_detalhe_texto = compra.tipo_pagamento_texto
+    if pagamento_detalhe_texto == "À vista (Dinheiro / Pix)":
+        pagamento_detalhe_texto = "À vista"
     alocacao_financeira = _alocacao_financeira_compra(compra)
     correcao_financeira = None
     if conta_pagar and not compra_a_vista:
@@ -3750,6 +3754,8 @@ def compras_detalhe(request, pk):
             "movimentos_financeiros": _movimentos_financeiros_compra(compra),
             "alocacao_financeira": alocacao_financeira,
             "compra_a_vista": compra_a_vista,
+            "pagamento_detalhe_texto": pagamento_detalhe_texto,
+            "situacao_financeira_texto": situacao_financeira_texto,
             "correcao_financeira": correcao_financeira,
             "aviso_financeiro_avista": aviso_financeiro_avista,
             "total_alocado": total_alocado,

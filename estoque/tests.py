@@ -132,11 +132,18 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, "Compra fechada e valores lançados no financeiro com sucesso.")
 
     def test_detalhe_exibe_resumo_financeiro_compacto_e_lancamentos_fechados(self):
-        self.client.post(self.url, self.dados(), secure=True)
+        self.client.post(self.url, self.dados(tipo_pagamento="avista"), secure=True)
         compra = Compra.objects.get()
 
         resposta = self.client.get(f"/estoque/compras/{compra.id}/", secure=True)
 
+        self.assertContains(resposta, "Dados da compra")
+        self.assertContains(resposta, ">À vista<")
+        self.assertContains(resposta, "Nota paga")
+        self.assertNotContains(resposta, "À vista (Dinheiro / Pix)")
+        self.assertNotContains(resposta, "Compra à vista sai do Caixa/Banco")
+        self.assertNotContains(resposta, "<strong>Status</strong>")
+        self.assertNotContains(resposta, "<strong>Estoque</strong>")
         self.assertContains(resposta, "Resumo do pagamento")
         self.assertContains(resposta, "Compra à vista paga no fechamento. Nenhuma conta a pagar foi gerada.")
         self.assertContains(resposta, "Total pago")
@@ -392,6 +399,8 @@ class CorrecaoItensCompraTests(TestCase):
             urlsplit(resposta.redirect_chain[0][0]).path,
             reverse("estoque:compras_detalhe", kwargs={"pk": self.compra.id}),
         )
+        self.assertContains(resposta, "A prazo")
+        self.assertContains(resposta, "Em aberto")
         self.assertEqual(self.compra.total, Decimal("80.00"))
         self.assertEqual(self.produto_a.quantidade, Decimal("17.000"))
         self.assert_financeiro_inalterado()

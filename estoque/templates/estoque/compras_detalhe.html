@@ -32,13 +32,6 @@
     font-weight: 700;
   }
 
-  .nota-compra-financeiro-nota {
-    margin: 4px 0 0;
-    color: #164173;
-    font-size: .74rem;
-    font-weight: 850;
-  }
-
   .nota-compra-acoes {
     position: relative;
     flex: 0 0 auto;
@@ -296,6 +289,12 @@
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: .02em;
+  }
+
+  .nota-compra-dados-principais {
+    grid-template-columns: minmax(180px, 2fr) minmax(90px, .8fr) minmax(120px, 1fr) minmax(150px, 1.2fr);
+    padding-top: 7px;
+    padding-bottom: 7px;
   }
 
   .nota-compra-observacao {
@@ -655,7 +654,6 @@
     <div>
       <h1>Compra #{{ compra.id }}</h1>
       <p class="nota-compra-subtitulo">Nota de compra registrada.</p>
-      <p class="nota-compra-financeiro-nota">Compra à vista sai do Caixa/Banco. Compra a prazo gera Conta a Pagar.</p>
     </div>
 
     <div class="nota-compra-acoes" id="acoesCompraDetalhe">
@@ -705,13 +703,11 @@
   <div class="nota-compra-corpo-principal">
     <section class="nota-compra-card">
       <div class="nota-compra-card-titulo">Dados da compra</div>
-      <div class="nota-compra-dados">
+      <div class="nota-compra-dados nota-compra-dados-principais">
         <div><strong>Fornecedor</strong>{{ compra.fornecedor.nome|default:"-" }}</div>
         <div><strong>Data</strong>{{ compra.data_compra|date:"d/m/Y" }}</div>
-        <div><strong>Pagamento</strong>{{ compra.tipo_pagamento_texto }}</div>
-        <div><strong>Status</strong>{{ compra.get_status_display }}</div>
-        <div><strong>Estoque</strong>{% if compra.estoque_entrada_realizada %}Entrada realizada{% else %}Ainda não entrou{% endif %}</div>
-        <div><strong>Vencimento</strong>{{ compra.data_vencimento|date:"d/m/Y"|default:"-" }}</div>
+        <div><strong>Pagamento</strong>{{ pagamento_detalhe_texto|default:"-" }}</div>
+        <div><strong>Vencimento</strong>{{ situacao_financeira_texto|default:"-" }}</div>
       </div>
     </section>
 
