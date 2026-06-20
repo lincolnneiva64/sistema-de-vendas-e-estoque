@@ -19,6 +19,7 @@
   .compra-correcao-table th, .compra-correcao-table td { padding:4px 6px; border-top:1px solid #edf1f6; text-align:left; vertical-align:middle; }
   .compra-correcao-table th { background:#f8fafc; color:#334155; font-size:.64rem; line-height:1.15; text-transform:uppercase; font-weight:950; }
   .compra-correcao-table input, .compra-correcao-table select { width:100%; min-height:28px; padding:3px 6px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#172033; font:inherit; font-weight:750; }
+  .compra-correcao-table input:focus, .compra-correcao-table select:focus { border-color:#2563eb; outline:2px solid rgba(37,99,235,.28); outline-offset:1px; }
   .compra-correcao-itens th:nth-child(1) { width:35%; }
   .compra-correcao-itens th:nth-child(2) { width:10%; }
   .compra-correcao-itens th:nth-child(3) { width:7%; }
@@ -163,13 +164,14 @@
   function numero(valor) { let texto=String(valor||"0").trim(); if(texto.includes(",")) texto=texto.replace(/\./g,"").replace(",", "."); texto=texto.replace(/[^\d.-]/g,""); return Number(texto)||0; }
   function moeda(valor) { return "R$ "+Number(valor||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
   function campoNumerico(alvo) { return alvo?.matches(".campo-quantidade-correcao, .campo-preco-correcao"); }
+  function campoNavegavel(alvo) { return alvo?.matches(".campo-produto-novo-correcao, .campo-quantidade-correcao, .campo-preco-correcao"); }
   function selecionarCampo(campo) {
     if (!campo) return;
     campo.focus();
-    campo.select();
+    if (campoNumerico(campo)) campo.select();
   }
   function camposDeEdicao() {
-    return Array.from(form.querySelectorAll(".campo-quantidade-correcao, .campo-preco-correcao"))
+    return Array.from(form.querySelectorAll(".campo-produto-novo-correcao, .campo-quantidade-correcao, .campo-preco-correcao"))
       .filter(function(campo) { return !campo.disabled; });
   }
   function recalcular() {
@@ -186,14 +188,19 @@
     if(novoTotalEl) novoTotalEl.textContent=moeda(total);
     if(diferencaEl) diferencaEl.textContent=moeda(total-anterior);
   }
-  function adicionarLinha() { if(!template||!tbodyNovos)return; tbodyNovos.appendChild(template.content.cloneNode(true)); recalcular(); }
+  function adicionarLinha() {
+    if(!template||!tbodyNovos)return;
+    tbodyNovos.appendChild(template.content.cloneNode(true));
+    recalcular();
+    selecionarCampo(tbodyNovos.lastElementChild?.querySelector(".campo-produto-novo-correcao"));
+  }
   adicionar?.addEventListener("click",adicionarLinha);
   form.addEventListener("input",recalcular);
   form.addEventListener("focusin",function(event) {
     if (campoNumerico(event.target)) event.target.select();
   });
   form.addEventListener("keydown",function(event) {
-    if (event.key !== "Enter" || !campoNumerico(event.target)) return;
+    if (event.key !== "Enter" || !campoNavegavel(event.target)) return;
     event.preventDefault();
     const campos=camposDeEdicao();
     const indice=campos.indexOf(event.target);

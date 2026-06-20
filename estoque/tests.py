@@ -491,6 +491,9 @@ class CorrecaoItensCompraTests(TestCase):
         self.assertContains(correcao, 'event.preventDefault()')
         self.assertContains(correcao, '.linha-correcao-item .campo-quantidade-correcao')
         self.assertContains(correcao, 'campo.select()')
+        self.assertContains(correcao, 'campoNavegavel(event.target)')
+        self.assertContains(correcao, '.campo-produto-novo-correcao, .campo-quantidade-correcao, .campo-preco-correcao')
+        self.assertContains(correcao, 'tbodyNovos.lastElementChild?.querySelector(".campo-produto-novo-correcao")')
 
 
 class CorrecaoFinanceiroCompraTests(TestCase):
