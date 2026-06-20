@@ -3,35 +3,53 @@
 
 {% block content %}
 <style>
-  .compra-correcao-wrap { max-width: 980px; margin: 10px auto 70px; padding: 0 12px; color: #172033; }
-  .compra-correcao-topo { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; margin-bottom:10px; }
-  .compra-correcao-topo h1 { margin:0; font-size:1.35rem; font-weight:950; }
-  .compra-correcao-sub { margin:4px 0 0; color:#64748b; font-weight:750; }
-  .compra-correcao-acoes { display:flex; flex-wrap:wrap; gap:8px; }
-  .compra-correcao-btn { display:inline-flex; align-items:center; justify-content:center; min-height:36px; padding:7px 11px; border-radius:8px; border:1px solid #7ea6d9; background:#dbeafe; color:#164173; text-decoration:none; font-weight:900; cursor:pointer; }
+  .compra-correcao-wrap { max-width: 1080px; margin: 4px auto 40px; padding: 0 10px; color: #172033; }
+  .compra-correcao-topo { display:flex; justify-content:space-between; gap:8px; align-items:flex-start; margin-bottom:5px; }
+  .compra-correcao-topo h1 { margin:0; font-size:1.2rem; line-height:1.15; font-weight:950; }
+  .compra-correcao-sub { margin:2px 0 0; color:#64748b; font-size:.78rem; line-height:1.2; font-weight:750; }
+  .compra-correcao-acoes { display:flex; flex-wrap:wrap; gap:5px; }
+  .compra-correcao-btn { display:inline-flex; align-items:center; justify-content:center; min-height:31px; padding:5px 9px; border-radius:7px; border:1px solid #7ea6d9; background:#dbeafe; color:#164173; text-decoration:none; font-size:.8rem; font-weight:900; cursor:pointer; }
   .compra-correcao-btn.perigo { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
-  .compra-correcao-card { background:#fff; border:1px solid #dbe4ef; border-radius:10px; overflow:hidden; margin-bottom:10px; }
-  .compra-correcao-card h2 { margin:0; padding:10px 12px; background:#f8fafc; border-bottom:1px solid #edf1f6; font-size:1rem; font-weight:950; }
-  .compra-correcao-dados { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:10px 12px; font-weight:800; }
-  .compra-correcao-dados strong { display:block; color:#475569; font-size:.72rem; text-transform:uppercase; }
-  .compra-correcao-aviso { margin:0 0 10px; padding:10px 12px; border:1px solid #facc15; background:#fef9c3; border-radius:10px; color:#713f12; font-weight:850; }
-  .compra-correcao-table { width:100%; border-collapse:collapse; font-size:.84rem; }
-  .compra-correcao-table th, .compra-correcao-table td { padding:8px 9px; border-top:1px solid #edf1f6; text-align:left; vertical-align:middle; }
-  .compra-correcao-table th { background:#f8fafc; color:#334155; font-size:.7rem; text-transform:uppercase; font-weight:950; }
-  .compra-correcao-table input, .compra-correcao-table select { width:100%; min-height:34px; padding:6px 8px; border:1px solid #cbd5e1; border-radius:7px; background:#fff; color:#172033; font:inherit; font-weight:750; }
+  .compra-correcao-card { background:#fff; border:1px solid #dbe4ef; border-radius:9px; overflow:hidden; margin-bottom:6px; }
+  .compra-correcao-card h2 { margin:0; padding:6px 9px; background:#f8fafc; border-bottom:1px solid #edf1f6; font-size:.86rem; line-height:1.15; font-weight:950; }
+  .compra-correcao-dados { display:grid; grid-template-columns:2fr .8fr 1fr 1fr; gap:5px 10px; padding:6px 9px; font-size:.8rem; font-weight:800; }
+  .compra-correcao-dados strong { display:block; margin-bottom:1px; color:#475569; font-size:.64rem; text-transform:uppercase; }
+  .compra-correcao-aviso { margin:0 0 6px; padding:6px 9px; border:1px solid #facc15; background:#fef9c3; border-radius:8px; color:#713f12; font-size:.74rem; line-height:1.25; font-weight:850; }
+  .compra-correcao-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:.78rem; }
+  .compra-correcao-table th, .compra-correcao-table td { padding:4px 6px; border-top:1px solid #edf1f6; text-align:left; vertical-align:middle; }
+  .compra-correcao-table th { background:#f8fafc; color:#334155; font-size:.64rem; line-height:1.15; text-transform:uppercase; font-weight:950; }
+  .compra-correcao-table input, .compra-correcao-table select { width:100%; min-height:28px; padding:3px 6px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#172033; font:inherit; font-weight:750; }
+  .compra-correcao-itens th:nth-child(1) { width:35%; }
+  .compra-correcao-itens th:nth-child(2) { width:10%; }
+  .compra-correcao-itens th:nth-child(3) { width:7%; }
+  .compra-correcao-itens th:nth-child(4) { width:15%; }
+  .compra-correcao-itens th:nth-child(5) { width:17%; }
+  .compra-correcao-itens th:nth-child(6) { width:16%; }
+  .campo-quantidade-correcao { max-width:86px; }
+  .campo-preco-correcao { max-width:118px; }
   .compra-correcao-table tr.removido { opacity:.58; background:#fff1f2; }
   .numero { text-align:right !important; white-space:nowrap; }
   .compra-correcao-confirmacao { display:flex; align-items:center; gap:8px; color:#7f1d1d; font-weight:850; }
   .compra-correcao-remover { display:inline-flex; align-items:center; gap:5px; color:#991b1b; font-weight:850; }
   .compra-correcao-remover input { width:auto; min-height:auto; }
-  .compra-correcao-totais { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:10px 12px; }
-  .compra-correcao-total { padding:9px; border:1px solid #dbeafe; border-radius:8px; background:#f8fafc; }
-  .compra-correcao-total span { display:block; color:#64748b; font-size:.68rem; font-weight:900; text-transform:uppercase; }
-  .compra-correcao-total strong { display:block; margin-top:2px; color:#164173; font-size:1rem; font-weight:950; }
-  .compra-correcao-rodape { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 12px; border-top:1px solid #edf1f6; }
+  .compra-correcao-adicionar-acoes { padding:5px 9px; }
+  .compra-correcao-adicionar .compra-correcao-table:has(#novosItensCorrecaoCompra:empty) { display:none; }
+  .compra-correcao-totais { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; padding:6px 9px; }
+  .compra-correcao-total { padding:6px 8px; border:1px solid #dbeafe; border-radius:7px; background:#f8fafc; }
+  .compra-correcao-total span { display:block; color:#64748b; font-size:.62rem; line-height:1.1; font-weight:900; text-transform:uppercase; }
+  .compra-correcao-total strong { display:block; margin-top:1px; color:#164173; font-size:.9rem; line-height:1.15; font-weight:950; }
+  .compra-correcao-rodape { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 9px; border-top:1px solid #edf1f6; }
   @media (max-width:760px) {
+    .compra-correcao-wrap { margin:10px auto 70px; padding:0 12px; }
     .compra-correcao-topo, .compra-correcao-rodape { flex-direction:column; align-items:stretch; }
     .compra-correcao-acoes, .compra-correcao-btn { width:100%; }
+    .compra-correcao-btn { min-height:38px; padding:7px 11px; font-size:.86rem; }
+    .compra-correcao-topo { margin-bottom:10px; }
+    .compra-correcao-topo h1 { font-size:1.35rem; }
+    .compra-correcao-sub { margin-top:4px; font-size:.86rem; }
+    .compra-correcao-card { margin-bottom:10px; }
+    .compra-correcao-card h2 { padding:9px 11px; font-size:1rem; }
+    .compra-correcao-aviso { margin-bottom:10px; padding:9px 11px; font-size:.82rem; }
     .compra-correcao-dados { grid-template-columns:1fr 1fr; }
     .compra-correcao-totais { grid-template-columns:1fr; }
     .compra-correcao-table, .compra-correcao-table tbody, .compra-correcao-table tr, .compra-correcao-table td { display:block; width:100%; }
@@ -39,6 +57,9 @@
     .compra-correcao-table tr { border-top:1px solid #dbe4ef; padding:8px; }
     .compra-correcao-table td { border:0; padding:4px 0; }
     .compra-correcao-table td::before { content:attr(data-label) ": "; color:#64748b; font-weight:900; }
+    .compra-correcao-table input, .compra-correcao-table select, .campo-quantidade-correcao, .campo-preco-correcao { width:100%; max-width:none; min-height:36px; }
+    .compra-correcao-adicionar-acoes, .compra-correcao-totais, .compra-correcao-rodape { padding:10px 12px; }
+    .compra-correcao-total { padding:9px; }
   }
 </style>
 
@@ -62,14 +83,14 @@
     <div class="compra-correcao-dados">
       <div><strong>Fornecedor</strong>{{ compra.fornecedor.nome|default:"-" }}</div>
       <div><strong>Data</strong>{{ compra.data_compra|date:"d/m/Y" }}</div>
-      <div><strong>Pagamento</strong>{{ compra.tipo_pagamento_texto }}</div>
+      <div><strong>Pagamento</strong>{% if compra.tipo_pagamento == "avista" %}À vista{% else %}{{ compra.tipo_pagamento_texto }}{% endif %}</div>
       <div><strong>Total atual</strong>R$ {{ compra.total|floatformat:2 }}</div>
     </div>
   </section>
 
   <form method="post" id="formCorrecaoItensCompra">
     {% csrf_token %}
-    <section class="compra-correcao-card">
+    <section class="compra-correcao-card compra-correcao-itens">
       <h2>Itens da compra</h2>
       <table class="compra-correcao-table">
         <thead><tr><th>Produto</th><th>Qtd.</th><th>Un.</th><th>Preço unitário</th><th class="numero">Subtotal</th><th>Remover</th></tr></thead>
@@ -88,13 +109,13 @@
       </table>
     </section>
 
-    <section class="compra-correcao-card">
+    <section class="compra-correcao-card compra-correcao-adicionar">
       <h2>Adicionar produtos</h2>
       <table class="compra-correcao-table">
         <thead><tr><th>Produto</th><th>Quantidade</th><th>Preço unitário</th><th class="numero">Subtotal</th><th></th></tr></thead>
         <tbody id="novosItensCorrecaoCompra"></tbody>
       </table>
-      <div style="padding:10px 12px;"><button type="button" class="compra-correcao-btn" id="btnAdicionarItemCorrecaoCompra">+ Adicionar produto</button></div>
+      <div class="compra-correcao-adicionar-acoes"><button type="button" class="compra-correcao-btn" id="btnAdicionarItemCorrecaoCompra">+ Adicionar produto</button></div>
     </section>
 
     <section class="compra-correcao-card">
