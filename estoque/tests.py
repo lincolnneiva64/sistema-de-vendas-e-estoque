@@ -330,6 +330,35 @@ class CorrecaoItensCompraTests(TestCase):
         self.assertEqual(self.compra.total, Decimal("130.00"))
         self.assert_financeiro_inalterado()
 
+    def test_salvar_sem_alteracao_nao_muda_dados_nem_registra_historico(self):
+        self.compra.observacao = "Historico existente."
+        self.compra.save(update_fields=["observacao"])
+
+        resposta = self.client.post(self.url, self.dados(), follow=True, secure=True)
+
+        self.compra.refresh_from_db()
+        self.produto_a.refresh_from_db()
+        self.produto_b.refresh_from_db()
+        self.item_a.refresh_from_db()
+        self.item_b.refresh_from_db()
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.redirect_chain)
+        self.assertEqual(
+            urlsplit(resposta.redirect_chain[0][0]).path,
+            reverse("estoque:compras_detalhe", kwargs={"pk": self.compra.id}),
+        )
+        self.assertContains(resposta, "Nenhuma alteração de itens foi feita.")
+        self.assertEqual(self.compra.total, Decimal("110.00"))
+        self.assertEqual(self.compra.observacao, "Historico existente.")
+        self.assertEqual(self.produto_a.quantidade, Decimal("20.000"))
+        self.assertEqual(self.produto_b.quantidade, Decimal("12.000"))
+        self.assertEqual(self.item_a.quantidade, Decimal("10.000"))
+        self.assertEqual(self.item_a.preco_unitario, Decimal("10.00"))
+        self.assertEqual(self.item_b.quantidade, Decimal("2.000"))
+        self.assertEqual(self.item_b.preco_unitario, Decimal("5.00"))
+        self.assertEqual(self.compra.itens.count(), 2)
+        self.assert_financeiro_inalterado()
+
     def test_compra_antiga_e_tela_de_correcao_continuam_abrindo(self):
         detalhe = self.client.get(f"/estoque/compras/{self.compra.id}/", secure=True)
         correcao = self.client.get(self.url, secure=True)

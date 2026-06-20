@@ -3858,6 +3858,13 @@ def compra_corrigir_itens(request, pk):
                 if not any(not plano[1] for plano in planos_existentes) and not planos_novos:
                     raise ValueError("A compra precisa permanecer com pelo menos um item.")
 
+                total_anterior = _financeiro_dinheiro(compra.total).quantize(Decimal("0.01"))
+                novo_total = novo_total.quantize(Decimal("0.01"))
+                diferenca = (novo_total - total_anterior).quantize(Decimal("0.01"))
+                if not rastros and diferenca == Decimal("0.00"):
+                    messages.info(request, "Nenhuma alteração de itens foi feita.")
+                    return redirect("estoque:compras_detalhe", pk=compra.pk)
+
                 produtos_bloqueados = {
                     produto.id: produto
                     for produto in Produto.objects.select_for_update().filter(pk__in=deltas_estoque)
@@ -3889,12 +3896,9 @@ def compra_corrigir_itens(request, pk):
                         valor_total=subtotal,
                     )
 
-                total_anterior = _financeiro_dinheiro(compra.total).quantize(Decimal("0.01"))
-                novo_total = novo_total.quantize(Decimal("0.01"))
-                diferenca = (novo_total - total_anterior).quantize(Decimal("0.01"))
                 compra.total = novo_total
                 compra.save(update_fields=["total", "atualizado_em"])
-                resumo_rastro = "; ".join(rastros) or "itens conferidos sem mudanca"
+                resumo_rastro = "; ".join(rastros)
                 _registrar_observacao_compra(
                     compra,
                     "Correcao de itens: " + resumo_rastro + ". "
