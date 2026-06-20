@@ -636,6 +636,42 @@
     </div>
   </section>
 
+  <section class="nota-compra-card">
+    <div class="nota-compra-card-titulo">Itens</div>
+
+    <table class="nota-compra-tabela">
+      <thead>
+        <tr>
+          <th>Produto</th>
+          <th class="numero">Qtd.</th>
+          <th>Unid.</th>
+          <th class="numero">Preço</th>
+          <th class="numero">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in itens %}
+          <tr>
+            <td>{{ item.produto.nome|default:"Produto não identificado" }}</td>
+            <td class="numero">{{ item.quantidade }}</td>
+            <td>{{ item.unidade|default:"-" }}</td>
+            <td class="numero">R$ {{ item.preco_unitario }}</td>
+            <td class="numero">R$ {{ item.valor_total }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="5" style="padding:16px; text-align:center; color:#64748b;">Nenhum item.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="nota-compra-total">
+      Total da compra:
+      <span>R$ {{ compra.total }}</span>
+    </div>
+  </section>
+
 
   <section class="nota-compra-card">
     <div class="nota-compra-card-titulo">Financeiro</div>
@@ -725,42 +761,6 @@
         {% endif %}
       </div>
     {% endif %}
-  </section>
-
-  <section class="nota-compra-card">
-    <div class="nota-compra-card-titulo">Itens</div>
-
-    <table class="nota-compra-tabela">
-      <thead>
-        <tr>
-          <th>Produto</th>
-          <th class="numero">Qtd.</th>
-          <th>Unid.</th>
-          <th class="numero">Preço</th>
-          <th class="numero">Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for item in itens %}
-          <tr>
-            <td>{{ item.produto.nome|default:"Produto não identificado" }}</td>
-            <td class="numero">{{ item.quantidade }}</td>
-            <td>{{ item.unidade|default:"-" }}</td>
-            <td class="numero">R$ {{ item.preco_unitario }}</td>
-            <td class="numero">R$ {{ item.valor_total }}</td>
-          </tr>
-        {% empty %}
-          <tr>
-            <td colspan="5" style="padding:16px; text-align:center; color:#64748b;">Nenhum item.</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-
-    <div class="nota-compra-total">
-      Total da compra:
-      <span>R$ {{ compra.total }}</span>
-    </div>
   </section>
 
   {% if compra.observacao %}

@@ -306,8 +306,11 @@ class CorrecaoItensCompraTests(TestCase):
         self.assertContains(detalhe, "Histórico da compra")
         self.assertContains(detalhe, "Mostrar histórico da compra")
         conteudo = detalhe.content.decode()
-        self.assertLess(conteudo.index("Financeiro"), conteudo.index("Itens"))
-        self.assertLess(conteudo.index("Itens"), conteudo.index("Histórico da compra"))
+        titulo_itens = '<div class="nota-compra-card-titulo">Itens</div>'
+        titulo_financeiro = '<div class="nota-compra-card-titulo">Financeiro</div>'
+        titulo_historico = '<div class="nota-compra-card-titulo">Histórico da compra</div>'
+        self.assertLess(conteudo.index(titulo_itens), conteudo.index(titulo_financeiro))
+        self.assertLess(conteudo.index(titulo_financeiro), conteudo.index(titulo_historico))
         self.assert_financeiro_inalterado()
 
     def test_compra_a_prazo_total_alterado_continua_no_detalhe(self):
