@@ -44,6 +44,10 @@
   .compra-correcao-total { padding:6px 8px; border:1px solid #dbeafe; border-radius:7px; background:#f8fafc; }
   .compra-correcao-total span { display:block; color:#64748b; font-size:.62rem; line-height:1.1; font-weight:900; text-transform:uppercase; }
   .compra-correcao-total strong { display:block; margin-top:1px; color:#164173; font-size:.9rem; line-height:1.15; font-weight:950; }
+  .compra-correcao-impacto { margin:0 9px 6px; padding:7px 9px; border:1px solid #bfdbfe; border-left:5px solid #2563eb; border-radius:8px; background:#eff6ff; color:#1e3a8a; font-size:.76rem; line-height:1.28; font-weight:850; }
+  .compra-correcao-impacto strong { display:block; margin-bottom:2px; color:#172554; font-size:.68rem; text-transform:uppercase; letter-spacing:.02em; }
+  .compra-correcao-impacto.sem-impacto { border-color:#bbf7d0; border-left-color:#16a34a; background:#f0fdf4; color:#166534; }
+  .compra-correcao-impacto.atencao { border-color:#fde68a; border-left-color:#d97706; background:#fffbeb; color:#92400e; }
   .compra-correcao-rodape { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 9px; border-top:1px solid #edf1f6; }
   @media (max-width:760px) {
     .compra-correcao-wrap { margin:10px auto 70px; padding:0 12px; }
@@ -131,6 +135,10 @@
         <div class="compra-correcao-total"><span>Novo total</span><strong id="novoTotalCorrecaoCompra">R$ {{ compra.total|floatformat:2 }}</strong></div>
         <div class="compra-correcao-total"><span>Diferença</span><strong id="diferencaCorrecaoCompra">R$ 0,00</strong></div>
       </div>
+      <div class="compra-correcao-impacto sem-impacto" id="impactoFinanceiroCorrecaoCompra" data-pagamento="{{ compra.tipo_pagamento|default:'' }}">
+        <strong>Impacto financeiro previsto</strong>
+        <span id="textoImpactoFinanceiroCorrecaoCompra">Sem impacto financeiro previsto.</span>
+      </div>
       <div class="compra-correcao-rodape">
         <label class="compra-correcao-confirmacao"><input type="checkbox" required> Confirmo os itens e valores corrigidos.</label>
         <button type="submit" class="compra-correcao-btn" id="btnSalvarCorrecaoItensCompra">Salvar correção dos itens</button>
@@ -158,6 +166,8 @@
   const totalAnteriorEl = document.getElementById("totalAnteriorCorrecaoCompra");
   const novoTotalEl = document.getElementById("novoTotalCorrecaoCompra");
   const diferencaEl = document.getElementById("diferencaCorrecaoCompra");
+  const impactoEl = document.getElementById("impactoFinanceiroCorrecaoCompra");
+  const textoImpactoEl = document.getElementById("textoImpactoFinanceiroCorrecaoCompra");
   const salvar = document.getElementById("btnSalvarCorrecaoItensCompra");
   if (!form) return;
 
@@ -186,7 +196,21 @@
     });
     const anterior=numero(totalAnteriorEl?.dataset.valor);
     if(novoTotalEl) novoTotalEl.textContent=moeda(total);
-    if(diferencaEl) diferencaEl.textContent=moeda(total-anterior);
+    const diferenca = total-anterior;
+    if(diferencaEl) diferencaEl.textContent=moeda(diferenca);
+    if(impactoEl&&textoImpactoEl) {
+      const mudou = Math.abs(diferenca) >= 0.005;
+      const pagamento = String(impactoEl.dataset.pagamento||"").toLowerCase();
+      impactoEl.classList.toggle("sem-impacto", !mudou);
+      impactoEl.classList.toggle("atencao", mudou);
+      if(!mudou) {
+        textoImpactoEl.textContent = "Sem impacto financeiro previsto.";
+      } else if(["avista","pix","dinheiro","banco","cartao","cartao_credito","cartao_debito"].includes(pagamento)) {
+        textoImpactoEl.textContent = "Se salvar com diferen?a, os itens e o total ser?o corrigidos. Depois ser? necess?rio conferir a origem do pagamento em Caixa, Sangria/Reserva ou Banco/Pix.";
+      } else {
+        textoImpactoEl.textContent = "Se salvar com diferen?a, os itens e o total ser?o corrigidos. Depois ser? necess?rio conferir a Conta a Pagar vinculada a esta compra.";
+      }
+    }
   }
   function adicionarLinha() {
     if(!template||!tbodyNovos)return;
