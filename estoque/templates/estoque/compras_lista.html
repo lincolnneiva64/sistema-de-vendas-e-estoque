@@ -15,7 +15,10 @@
   .compras-lista-btn-secondary { background:#dbeafe; color:#164173; border:1px solid #7ea6d9; }
   .compras-lista-btn-danger { background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; }
   .compras-lista-btn-danger:hover { background:#fecaca; }
-  .compras-lista-acoes-linha { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .compras-lista-acoes-linha { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .compras-lista-btn-compact { min-height:32px; padding:6px 9px; border-radius:8px; font-size:.76rem; }
+  .compras-lista-btn-view { background:#f8fafc; color:#334155; border:1px solid #d8e0ea; }
+  .compras-lista-btn-edit { background:#eaf2ff; color:#164173; border:1px solid #9bb9df; }
   .compras-lista-modal {
     position:fixed;
     inset:0;
@@ -67,10 +70,15 @@
   .compras-lista-field label { display:block; font-weight:850; font-size:.82rem; margin-bottom:4px; color:#334155; }
   .compras-lista-field input { width:100%; border:1.5px solid #d3dbe8; border-radius:9px; padding:9px 11px; font-weight:600; outline:none; }
   .compras-lista-table { width:100%; border-collapse:collapse; }
-  .compras-lista-table th { text-align:left; font-size:.72rem; color:#64748b; text-transform:uppercase; background:#f8fafc; padding:10px; border-bottom:1px solid #edf1f6; }
-  .compras-lista-table td { padding:10px; border-bottom:1px solid #f0f3f8; vertical-align:middle; }
+  .compras-lista-table th { text-align:left; font-size:.7rem; color:#64748b; text-transform:uppercase; letter-spacing:.025em; background:#f8fafc; padding:10px 12px; border-bottom:1px solid #e5ebf3; }
+  .compras-lista-table td { padding:11px 12px; border-bottom:1px solid #edf2f7; vertical-align:middle; }
+  .compras-lista-table tbody tr { transition:background .12s ease; }
+  .compras-lista-table tbody tr:hover { background:#fbfdff; }
+  .compras-lista-table tbody tr:last-child td { border-bottom:0; }
   .compras-lista-numero { font-weight:900; color:#0f172a; }
   .compras-lista-status { display:inline-flex; border-radius:999px; padding:4px 9px; background:#eef6ff; color:#164173; font-weight:850; font-size:.82rem; }
+  .compras-lista-pagamento { display:inline-flex; align-items:center; max-width:190px; border-radius:999px; padding:4px 9px; background:#eff6ff; border:1px solid #bfdbfe; color:#1e4f85; font-weight:850; font-size:.76rem; line-height:1.2; }
+  .compras-lista-pagamento.prazo { background:#fffbeb; border-color:#fde68a; color:#854d0e; }
   .compras-lista-total { font-weight:900; color:#166534; }
   .compras-lista-mobile { display:none; }
   .compras-lista-mobile-card { background:#fff; border:1px solid #e1e7ef; border-radius:12px; box-shadow:0 10px 22px rgba(15,23,42,.07); padding:12px; margin-bottom:10px; }
@@ -86,6 +94,7 @@
     .compras-lista-header { flex-direction:column; align-items:stretch; }
     .compras-lista-actions { justify-content:stretch; }
     .compras-lista-btn { flex:1 1 auto; }
+    .compras-lista-btn-compact { min-height:36px; }
     .compras-lista-desktop { display:none; }
     .compras-lista-mobile { display:block; }
     .compras-lista-busca { padding:12px; align-items:stretch; }
@@ -134,9 +143,10 @@
           <th>Compra</th>
           <th>Fornecedor</th>
           <th>Data</th>
+          <th>Pagamento</th>
           <th>Status</th>
           <th>Total</th>
-          <th></th>
+          <th>Ações</th>
         </tr>
       </thead>
       <tbody>
@@ -145,13 +155,15 @@
             <td class="compras-lista-numero">#{{ compra.id }}</td>
             <td>{{ compra.fornecedor.nome|default:"Fornecedor nao informado" }}</td>
             <td>{{ compra.data_compra|date:"d/m/Y" }}</td>
+            <td><span class="compras-lista-pagamento{% if compra.tipo_pagamento_texto == 'A prazo' %} prazo{% endif %}">{{ compra.tipo_pagamento_texto|default:"-" }}</span></td>
             <td><span class="compras-lista-status">{{ compra.get_status_display }}</span></td>
             <td class="compras-lista-total">R$ {{ compra.total|floatformat:2 }}</td>
             <td>
               <div class="compras-lista-acoes-linha">
-          <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-secondary">Ver detalhe</a>
+          <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-view">Ver</a>
+          <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit">Editar</a>
           <button type="button"
-                  class="compras-lista-btn compras-lista-btn-danger btnAbrirModalExcluirCompra"
+                  class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-danger btnAbrirModalExcluirCompra"
                   data-url="{% url 'estoque:compra_excluir' compra.pk %}"
                   data-compra="#{{ compra.id }}"
                   data-fornecedor="{{ compra.fornecedor.nome|default:'Fornecedor nao informado' }}"
@@ -163,7 +175,7 @@
           </tr>
         {% empty %}
           <tr>
-            <td colspan="6" class="compras-lista-empty">Nenhuma compra encontrada.</td>
+            <td colspan="7" class="compras-lista-empty">Nenhuma compra encontrada.</td>
           </tr>
         {% endfor %}
       </tbody>
@@ -187,14 +199,19 @@
             <span class="compras-lista-mobile-value">{{ compra.data_compra|date:"d/m/Y" }}</span>
           </div>
           <div>
+            <span class="compras-lista-mobile-label">Pagamento</span>
+            <span class="compras-lista-pagamento{% if compra.tipo_pagamento_texto == 'A prazo' %} prazo{% endif %}">{{ compra.tipo_pagamento_texto|default:"-" }}</span>
+          </div>
+          <div>
             <span class="compras-lista-mobile-label">Total</span>
             <span class="compras-lista-mobile-value compras-lista-total">R$ {{ compra.total|floatformat:2 }}</span>
           </div>
         </div>
         <div class="compras-lista-acoes-linha">
-          <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-secondary">Ver detalhe</a>
+          <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-view">Ver</a>
+          <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit">Editar</a>
           <button type="button"
-                  class="compras-lista-btn compras-lista-btn-danger btnAbrirModalExcluirCompra"
+                  class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-danger btnAbrirModalExcluirCompra"
                   data-url="{% url 'estoque:compra_excluir' compra.pk %}"
                   data-compra="#{{ compra.id }}"
                   data-fornecedor="{{ compra.fornecedor.nome|default:'Fornecedor nao informado' }}"
