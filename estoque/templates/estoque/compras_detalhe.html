@@ -222,11 +222,26 @@
     background: #f8fafc;
   }
 
-  .nota-compra-card-itens {
+  .nota-compra-corpo-principal {
     background: #f3fbf6;
-    border-width: 2px;
-    border-color: #78be9b;
-    box-shadow: 0 9px 20px rgba(4, 120, 87, .12);
+    border: 2px solid #78be9b;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 6px;
+    box-shadow:
+      0 0 0 1px rgba(120, 190, 155, .18),
+      0 9px 20px rgba(4, 120, 87, .12);
+  }
+
+  .nota-compra-corpo-principal > .nota-compra-card {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .nota-compra-corpo-principal > .nota-compra-card-itens {
+    border-top: 1px solid #91cfad;
   }
 
   .nota-compra-card-itens .nota-compra-card-titulo {
@@ -241,14 +256,22 @@
     background: #edf9f1;
   }
 
+  .nota-compra-card-itens .nota-compra-tabela {
+    margin: 0;
+    border-spacing: 0;
+    background: #f8fcf9;
+  }
+
   .nota-compra-card-itens .nota-compra-tabela td {
     background: rgba(255, 255, 255, .62);
   }
 
   .nota-compra-card-itens .nota-compra-total {
+    width: 100%;
+    box-sizing: border-box;
     padding: 9px 11px;
     background: linear-gradient(90deg, #e8f8ee, #dcfce7);
-    border-top-color: #78be9b;
+    border-top: 1px solid #78be9b;
     font-size: 1rem;
   }
 
@@ -664,53 +687,55 @@
     {% endfor %}
   {% endif %}
 
-  <section class="nota-compra-card">
-    <div class="nota-compra-card-titulo">Dados da compra</div>
-    <div class="nota-compra-dados">
-      <div><strong>Fornecedor</strong>{{ compra.fornecedor.nome|default:"-" }}</div>
-      <div><strong>Data</strong>{{ compra.data_compra|date:"d/m/Y" }}</div>
-      <div><strong>Pagamento</strong>{{ compra.tipo_pagamento_texto }}</div>
-      <div><strong>Status</strong>{{ compra.get_status_display }}</div>
-      <div><strong>Estoque</strong>{% if compra.estoque_entrada_realizada %}Entrada realizada{% else %}Ainda não entrou{% endif %}</div>
-      <div><strong>Vencimento</strong>{{ compra.data_vencimento|date:"d/m/Y"|default:"-" }}</div>
-    </div>
-  </section>
+  <div class="nota-compra-corpo-principal">
+    <section class="nota-compra-card">
+      <div class="nota-compra-card-titulo">Dados da compra</div>
+      <div class="nota-compra-dados">
+        <div><strong>Fornecedor</strong>{{ compra.fornecedor.nome|default:"-" }}</div>
+        <div><strong>Data</strong>{{ compra.data_compra|date:"d/m/Y" }}</div>
+        <div><strong>Pagamento</strong>{{ compra.tipo_pagamento_texto }}</div>
+        <div><strong>Status</strong>{{ compra.get_status_display }}</div>
+        <div><strong>Estoque</strong>{% if compra.estoque_entrada_realizada %}Entrada realizada{% else %}Ainda não entrou{% endif %}</div>
+        <div><strong>Vencimento</strong>{{ compra.data_vencimento|date:"d/m/Y"|default:"-" }}</div>
+      </div>
+    </section>
 
-  <section class="nota-compra-card nota-compra-card-itens">
-    <div class="nota-compra-card-titulo">Itens</div>
+    <section class="nota-compra-card nota-compra-card-itens">
+      <div class="nota-compra-card-titulo">Itens</div>
 
-    <table class="nota-compra-tabela">
-      <thead>
-        <tr>
-          <th>Produto</th>
-          <th class="numero">Qtd.</th>
-          <th>Unid.</th>
-          <th class="numero">Preço</th>
-          <th class="numero">Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for item in itens %}
+      <table class="nota-compra-tabela">
+        <thead>
           <tr>
-            <td>{{ item.produto.nome|default:"Produto não identificado" }}</td>
-            <td class="numero">{{ item.quantidade }}</td>
-            <td>{{ item.unidade|default:"-" }}</td>
-            <td class="numero">R$ {{ item.preco_unitario }}</td>
-            <td class="numero">R$ {{ item.valor_total }}</td>
+            <th>Produto</th>
+            <th class="numero">Qtd.</th>
+            <th>Unid.</th>
+            <th class="numero">Preço</th>
+            <th class="numero">Total</th>
           </tr>
-        {% empty %}
-          <tr>
-            <td colspan="5" style="padding:16px; text-align:center; color:#64748b;">Nenhum item.</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {% for item in itens %}
+            <tr>
+              <td>{{ item.produto.nome|default:"Produto não identificado" }}</td>
+              <td class="numero">{{ item.quantidade }}</td>
+              <td>{{ item.unidade|default:"-" }}</td>
+              <td class="numero">R$ {{ item.preco_unitario }}</td>
+              <td class="numero">R$ {{ item.valor_total }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5" style="padding:16px; text-align:center; color:#64748b;">Nenhum item.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
 
-    <div class="nota-compra-total">
-      Total da compra:
-      <span>R$ {{ compra.total }}</span>
-    </div>
-  </section>
+      <div class="nota-compra-total">
+        Total da compra:
+        <span>R$ {{ compra.total }}</span>
+      </div>
+    </section>
+  </div>
 
 
   <section class="nota-compra-card">
