@@ -242,7 +242,7 @@
 
   .nota-compra-observacao {
     margin: 0;
-    padding: 7px 10px;
+    padding: 9px 10px 11px;
     border-top: 1px solid #edf1f6;
     color: #475569;
     font-size: .76rem;
@@ -250,9 +250,22 @@
     white-space: pre-line;
   }
 
-  .nota-compra-observacao strong {
+  .nota-compra-historico {
+    box-shadow: none;
+    border-color: #e2e8f0;
+  }
+
+  .nota-compra-historico-detalhes summary {
+    padding: 9px 10px;
+    color: #475569;
+    font-size: .78rem;
+    font-weight: 850;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .nota-compra-historico-detalhes[open] summary {
     color: #0f172a;
-    font-weight: 950;
   }
 
   .nota-compra-alerta-financeiro {
@@ -621,7 +634,6 @@
       <div><strong>Estoque</strong>{% if compra.estoque_entrada_realizada %}Entrada realizada{% else %}Ainda não entrou{% endif %}</div>
       <div><strong>Vencimento</strong>{{ compra.data_vencimento|date:"d/m/Y"|default:"-" }}</div>
     </div>
-    {% if compra.observacao %}<p class="nota-compra-observacao"><strong>Observações e histórico</strong><br>{{ compra.observacao }}</p>{% endif %}
   </section>
 
 
@@ -750,6 +762,16 @@
       <span>R$ {{ compra.total }}</span>
     </div>
   </section>
+
+  {% if compra.observacao %}
+    <section class="nota-compra-card nota-compra-historico">
+      <div class="nota-compra-card-titulo">Histórico da compra</div>
+      <details class="nota-compra-historico-detalhes">
+        <summary>Mostrar histórico da compra</summary>
+        <div class="nota-compra-observacao">{{ compra.observacao }}</div>
+      </details>
+    </section>
+  {% endif %}
 </div>
 
 <div id="modalExcluirCompraDetalhe" class="nota-compra-modal">

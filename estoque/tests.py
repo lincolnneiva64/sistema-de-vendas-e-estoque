@@ -303,7 +303,11 @@ class CorrecaoItensCompraTests(TestCase):
         self.assertIn("Total anterior R$ 110,00", self.compra.observacao)
         self.assertIn("Financeiro nao alterado", self.compra.observacao)
         detalhe = self.client.get(f"/estoque/compras/{self.compra.id}/", secure=True)
-        self.assertContains(detalhe, "Observações e histórico")
+        self.assertContains(detalhe, "Histórico da compra")
+        self.assertContains(detalhe, "Mostrar histórico da compra")
+        conteudo = detalhe.content.decode()
+        self.assertLess(conteudo.index("Financeiro"), conteudo.index("Itens"))
+        self.assertLess(conteudo.index("Itens"), conteudo.index("Histórico da compra"))
         self.assert_financeiro_inalterado()
 
     def test_compra_a_prazo_total_alterado_continua_no_detalhe(self):
