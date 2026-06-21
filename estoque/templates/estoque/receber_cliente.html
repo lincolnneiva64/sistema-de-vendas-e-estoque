@@ -1983,6 +1983,70 @@
   document.addEventListener("DOMContentLoaded", initReceberClienteFinanceiro);
 })();
 </script>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const receberClienteFocoEnter = true;
+
+    const valorRecebido = document.querySelector(
+      'input[name="valor"], input[name="valor_recebido"], #valorRecebido, #valor_recebido'
+    );
+    const dataRecebimento = document.querySelector(
+      'input[name="data_recebimento"], #dataRecebimento, #data_recebimento'
+    );
+    const formaPagamento = document.querySelector(
+      'select[name="forma_pagamento"], #formaPagamento, #forma_pagamento'
+    );
+    const clienteBusca = document.querySelector(
+      '#clienteBusca, #cliente-busca, input[name="cliente_busca"], input[name="cliente"], input[type="search"]'
+    );
+
+    function focarSelecionando(campo) {
+      if (!campo) return;
+      campo.focus();
+      if (typeof campo.select === "function") {
+        setTimeout(function () {
+          campo.select();
+        }, 0);
+      }
+    }
+
+    function irParaCampo(event, proximoCampo, selecionar) {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      if (selecionar) {
+        focarSelecionando(proximoCampo);
+      } else if (proximoCampo) {
+        proximoCampo.focus();
+      }
+    }
+
+    if (clienteBusca && valorRecebido) {
+      clienteBusca.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter") return;
+        setTimeout(function () {
+          focarSelecionando(valorRecebido);
+        }, 80);
+      });
+    }
+
+    if (valorRecebido && dataRecebimento) {
+      valorRecebido.addEventListener("focus", function () {
+        focarSelecionando(valorRecebido);
+      });
+      valorRecebido.addEventListener("keydown", function (event) {
+        irParaCampo(event, dataRecebimento, true);
+      });
+    }
+
+    if (dataRecebimento && formaPagamento) {
+      dataRecebimento.addEventListener("keydown", function (event) {
+        irParaCampo(event, formaPagamento, false);
+      });
+    }
+  });
+</script>
+
 {% endblock %}
 
 
