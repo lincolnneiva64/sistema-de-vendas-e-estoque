@@ -8117,11 +8117,14 @@ def _quantidade_estoque_inteira(quantidade, produto_nome, unidade=None):
     quantidade_decimal = Decimal(quantidade or "0").quantize(Decimal("0.001"))
     if quantidade_decimal != quantidade_decimal.to_integral_value():
         unidade_texto = str(unidade or "").strip()
-        unidade_sufixo = f" em {unidade_texto}" if unidade_texto else ""
-        raise ValueError(
-            f"Produto {produto_nome} nao permite venda fracionada. "
-            f"Informe quantidade inteira{unidade_sufixo}."
-        )
+        unidade_normalizada = unidade_texto.upper()
+        unidades_que_podem_meio = {"PCT", "PACOTE", "FARDO", "FD", "CX", "CAIXA"}
+        if unidade_normalizada not in unidades_que_podem_meio:
+            unidade_sufixo = f" em {unidade_texto}" if unidade_texto else ""
+            raise ValueError(
+                f"Produto {produto_nome} nao permite venda fracionada. "
+                f"Informe quantidade inteira{unidade_sufixo}."
+            )
     return quantidade_decimal
 
 
