@@ -596,6 +596,7 @@ class CorrecaoFinanceiroCompraTests(TestCase):
         self.assertContains(resposta_get, "Erro de lancamento da nota")
         self.assertContains(resposta_get, "Fornecedor devolveu dinheiro")
         self.assertContains(resposta_get, "Ficar como credito com fornecedor")
+        self.assertNotContains(resposta_get, "Pagar diferenca agora")
 
         resposta = self.client.post(
             self.url,
@@ -672,6 +673,86 @@ class CorrecaoFinanceiroCompraTests(TestCase):
         self.assertIn("Credito registrado em historico", self.compra.observacao)
         self.assertContains(resposta, "credito com fornecedor registrado no historico")
         self.assert_estoque_itens_caixa_inalterados()
+
+    def test_conta_quitada_com_total_maior_mostra_opcoes_de_diferenca_a_pagar(self):
+        self.criar_pagamento("1013.95")
+        self.conta.valor_em_aberto = Decimal("0.00")
+        self.conta.status = ContaPagar.STATUS_PAGA
+        self.conta.save(update_fields=["valor_em_aberto", "status"])
+        self.compra.total = Decimal("1200.00")
+        self.compra.save(update_fields=["total"])
+
+        resposta = self.client.get(self.url, secure=True)
+
+        self.assertContains(resposta, "Faltou pagar uma diferenca")
+        self.assertContains(resposta, "Pagar diferenca agora")
+        self.assertContains(resposta, "Deixar diferenca em aberto")
+        self.assertNotContains(resposta, "Fornecedor devolveu dinheiro")
+        self.assertNotContains(resposta, "Ficar como credito com fornecedor")
+
+    def test_conta_quitada_com_total_maior_paga_diferenca_agora(self):
+        self.criar_pagamento("1013.95")
+        self.conta.valor_em_aberto = Decimal("0.00")
+        self.conta.status = ContaPagar.STATUS_PAGA
+        self.conta.save(update_fields=["valor_em_aberto", "status"])
+        self.compra.total = Decimal("1200.00")
+        self.compra.save(update_fields=["total"])
+        conta_banco = views._conta_financeira_padrao("banco")
+        MovimentoFinanceiro.objects.create(
+            conta=conta_banco,
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            valor=Decimal("500.00"),
+            data=timezone.localdate(),
+            descricao="Saldo para teste",
+            origem="teste",
+        )
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+        pagamentos_antes = PagamentoContaPagar.objects.count()
+
+        resposta = self.client.post(
+            self.url,
+            {
+                "confirmar": "1",
+                "motivo_correcao": "pagar_diferenca",
+                "conta_pagamento_diferenca": str(conta_banco.id),
+            },
+            follow=True,
+            secure=True,
+        )
+
+        self.conta.refresh_from_db()
+        self.assertEqual(self.conta.valor_original, Decimal("1200.00"))
+        self.assertEqual(self.conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(self.conta.status, ContaPagar.STATUS_PAGA)
+        self.assertEqual(PagamentoContaPagar.objects.count(), pagamentos_antes + 1)
+        movimento = MovimentoFinanceiro.objects.get(origem="compra_pagamento_diferenca")
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes + 1)
+        self.assertEqual(movimento.tipo, MovimentoFinanceiro.TIPO_SAIDA)
+        self.assertEqual(movimento.valor, Decimal("186.05"))
+        self.assertContains(resposta, "diferenca paga")
+
+    def test_conta_quitada_com_total_maior_deixa_diferenca_em_aberto(self):
+        self.criar_pagamento("1013.95")
+        self.conta.valor_em_aberto = Decimal("0.00")
+        self.conta.status = ContaPagar.STATUS_PAGA
+        self.conta.save(update_fields=["valor_em_aberto", "status"])
+        self.compra.total = Decimal("1200.00")
+        self.compra.save(update_fields=["total"])
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        resposta = self.client.post(
+            self.url,
+            {"confirmar": "1", "motivo_correcao": "deixar_em_aberto"},
+            follow=True,
+            secure=True,
+        )
+
+        self.conta.refresh_from_db()
+        self.assertEqual(self.conta.valor_original, Decimal("1200.00"))
+        self.assertEqual(self.conta.valor_em_aberto, Decimal("186.05"))
+        self.assertEqual(self.conta.status, ContaPagar.STATUS_PARCIAL)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+        self.assertContains(resposta, "diferenca deixada em aberto")
 
     def test_compra_a_vista_nao_pode_usar_esta_etapa(self):
         self.compra.tipo_pagamento = "avista"

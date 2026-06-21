@@ -4037,7 +4037,13 @@ def compra_corrigir_financeiro(request, pk):
                 and (conta_pagar.status == ContaPagar.STATUS_PAGA or resumo["valor_em_aberto"] <= Decimal("0.00"))
             )
 
-            motivos_quitada = {"erro_lancamento", "devolucao_dinheiro", "credito_fornecedor"}
+            motivos_quitada = {
+                "erro_lancamento",
+                "devolucao_dinheiro",
+                "credito_fornecedor",
+                "pagar_diferenca",
+                "deixar_em_aberto",
+            }
             if resumo["bloqueio"] and not (quitada_com_bloqueio and motivo_correcao in motivos_quitada):
                 messages.error(request, resumo["bloqueio"])
                 return redirect("estoque:compra_corrigir_financeiro", pk=compra.pk)
@@ -4045,12 +4051,26 @@ def compra_corrigir_financeiro(request, pk):
             if quitada_com_bloqueio and motivo_correcao in motivos_quitada:
                 valor_anterior = resumo["valor_original"]
                 aberto_anterior = resumo["valor_em_aberto"]
-                diferenca_pago_a_maior = (resumo["total_pago"] - resumo["total_compra"]).quantize(Decimal("0.01"))
-                if diferenca_pago_a_maior <= Decimal("0.00") and motivo_correcao in {"devolucao_dinheiro", "credito_fornecedor"}:
-                    messages.error(request, "Nao existe valor pago a maior para devolucao ou credito com fornecedor.")
+                diferenca_pago_a_maior = max(
+                    (resumo["total_pago"] - resumo["total_compra"]).quantize(Decimal("0.01")),
+                    Decimal("0.00"),
+                )
+                diferenca_a_pagar = max(
+                    (resumo["total_compra"] - resumo["total_pago"]).quantize(Decimal("0.01")),
+                    Decimal("0.00"),
+                )
+
+                if motivo_correcao in {"devolucao_dinheiro", "credito_fornecedor"} and diferenca_pago_a_maior <= Decimal("0.00"):
+                    messages.error(request, "Esta compra nao tem valor pago a maior. Use pagar diferenca, deixar em aberto ou erro de lancamento.")
+                    return redirect("estoque:compra_corrigir_financeiro", pk=compra.pk)
+
+                if motivo_correcao in {"pagar_diferenca", "deixar_em_aberto"} and diferenca_a_pagar <= Decimal("0.00"):
+                    messages.error(request, "Esta compra nao tem diferenca a pagar. Use devolucao, credito com fornecedor ou erro de lancamento.")
                     return redirect("estoque:compra_corrigir_financeiro", pk=compra.pk)
 
                 conta_devolucao = None
+                conta_pagamento_diferenca = None
+
                 if motivo_correcao == "devolucao_dinheiro":
                     conta_devolucao = ContaFinanceira.objects.filter(
                         pk=request.POST.get("conta_devolucao"),
@@ -4060,14 +4080,26 @@ def compra_corrigir_financeiro(request, pk):
                         messages.error(request, "Escolha a conta onde entrou a devolucao do fornecedor.")
                         return redirect("estoque:compra_corrigir_financeiro", pk=compra.pk)
 
+                if motivo_correcao == "pagar_diferenca":
+                    conta_pagamento_diferenca = ContaFinanceira.objects.filter(
+                        pk=request.POST.get("conta_pagamento_diferenca"),
+                        ativo=True,
+                    ).first()
+                    if not conta_pagamento_diferenca:
+                        messages.error(request, "Escolha a conta usada para pagar a diferenca.")
+                        return redirect("estoque:compra_corrigir_financeiro", pk=compra.pk)
+                    if _saldo_conta_financeira(conta_pagamento_diferenca) < diferenca_a_pagar:
+                        messages.error(request, f"Saldo insuficiente em {conta_pagamento_diferenca.nome}.")
+                        return redirect("estoque:compra_corrigir_financeiro", pk=compra.pk)
+
                 conta_pagar.valor_original = resumo["total_compra"]
-                conta_pagar.valor_em_aberto = Decimal("0.00")
-                conta_pagar.status = ContaPagar.STATUS_PAGA
 
                 agora = timezone.localtime().strftime("%d/%m/%Y %H:%M")
                 operador = (compra.operador or "Operador nao informado").strip()
 
                 if motivo_correcao == "erro_lancamento":
+                    conta_pagar.valor_em_aberto = Decimal("0.00")
+                    conta_pagar.status = ContaPagar.STATUS_PAGA
                     titulo_rastro = "Ajuste financeiro por erro de lancamento"
                     detalhe_extra = "Conta mantida como paga. Caixa/Banco nao alterado."
                     mensagem = "Financeiro ajustado como erro de lancamento da nota. Caixa/Banco nao foi alterado."
@@ -4076,7 +4108,10 @@ def compra_corrigir_financeiro(request, pk):
                         f"Conta a Pagar {_financeiro_moeda_br(valor_anterior)} -> {_financeiro_moeda_br(conta_pagar.valor_original)}. "
                         "Conta mantida como paga. Caixa/Banco nao alterado."
                     )
+
                 elif motivo_correcao == "devolucao_dinheiro":
+                    conta_pagar.valor_em_aberto = Decimal("0.00")
+                    conta_pagar.status = ContaPagar.STATUS_PAGA
                     MovimentoFinanceiro.objects.create(
                         conta=conta_devolucao,
                         tipo=MovimentoFinanceiro.TIPO_ENTRADA,
@@ -4098,7 +4133,10 @@ def compra_corrigir_financeiro(request, pk):
                         f"Conta a Pagar {_financeiro_moeda_br(valor_anterior)} -> {_financeiro_moeda_br(conta_pagar.valor_original)}. "
                         f"Devolucao registrada: {_financeiro_moeda_br(diferenca_pago_a_maior)} em {conta_devolucao.nome}."
                     )
-                else:
+
+                elif motivo_correcao == "credito_fornecedor":
+                    conta_pagar.valor_em_aberto = Decimal("0.00")
+                    conta_pagar.status = ContaPagar.STATUS_PAGA
                     titulo_rastro = "Ajuste financeiro com credito junto ao fornecedor"
                     detalhe_extra = (
                         f"Credito com fornecedor registrado em historico: {_financeiro_moeda_br(diferenca_pago_a_maior)}. "
@@ -4112,12 +4150,61 @@ def compra_corrigir_financeiro(request, pk):
                         "Caixa/Banco nao alterado."
                     )
 
+                elif motivo_correcao == "pagar_diferenca":
+                    conta_pagar.valor_em_aberto = Decimal("0.00")
+                    conta_pagar.status = ContaPagar.STATUS_PAGA
+                    PagamentoContaPagar.objects.create(
+                        conta=conta_pagar,
+                        data_pagamento=timezone.localdate(),
+                        valor=diferenca_a_pagar,
+                        forma_pagamento=conta_pagamento_diferenca.nome[:50],
+                        observacao=f"Pagamento da diferenca apos correcao da compra #{compra.id}"[:255],
+                    )
+                    MovimentoFinanceiro.objects.create(
+                        conta=conta_pagamento_diferenca,
+                        tipo=MovimentoFinanceiro.TIPO_SAIDA,
+                        valor=diferenca_a_pagar,
+                        data=timezone.localdate(),
+                        descricao=f"Pagamento de diferenca da compra #{compra.id}"[:255],
+                        operador=operador,
+                        origem="compra_pagamento_diferenca",
+                        compra=compra,
+                    )
+                    titulo_rastro = "Ajuste financeiro com pagamento da diferenca"
+                    detalhe_extra = (
+                        f"Diferenca paga agora: {_financeiro_moeda_br(diferenca_a_pagar)} "
+                        f"por {conta_pagamento_diferenca.nome}. Saida registrada no Caixa/Banco."
+                    )
+                    mensagem = "Financeiro ajustado e diferenca paga. Saida registrada no Caixa/Banco."
+                    observacao_compra = (
+                        "Financeiro ajustado com pagamento da diferenca apos correcao de itens. "
+                        f"Conta a Pagar {_financeiro_moeda_br(valor_anterior)} -> {_financeiro_moeda_br(conta_pagar.valor_original)}. "
+                        f"Diferenca paga: {_financeiro_moeda_br(diferenca_a_pagar)} por {conta_pagamento_diferenca.nome}."
+                    )
+
+                else:
+                    conta_pagar.valor_em_aberto = diferenca_a_pagar
+                    conta_pagar.status = ContaPagar.STATUS_PARCIAL if resumo["total_pago"] > Decimal("0.00") else ContaPagar.STATUS_ABERTA
+                    titulo_rastro = "Ajuste financeiro com diferenca deixada em aberto"
+                    detalhe_extra = (
+                        f"Diferenca deixada em aberto: {_financeiro_moeda_br(diferenca_a_pagar)}. "
+                        "Caixa/Banco nao alterado."
+                    )
+                    mensagem = "Financeiro ajustado e diferenca deixada em aberto para pagar depois. Caixa/Banco nao foi alterado."
+                    observacao_compra = (
+                        "Financeiro ajustado com diferenca deixada em aberto apos correcao de itens. "
+                        f"Conta a Pagar {_financeiro_moeda_br(valor_anterior)} -> {_financeiro_moeda_br(conta_pagar.valor_original)}. "
+                        f"Diferenca em aberto: {_financeiro_moeda_br(diferenca_a_pagar)}. "
+                        "Caixa/Banco nao alterado."
+                    )
+
                 rastro = (
                     f"[{agora}] {titulo_rastro} apos correcao de itens por {operador}: "
                     f"valor original {_financeiro_moeda_br(valor_anterior)} -> {_financeiro_moeda_br(conta_pagar.valor_original)}; "
-                    f"valor em aberto {_financeiro_moeda_br(aberto_anterior)} -> R$ 0,00; "
+                    f"valor em aberto {_financeiro_moeda_br(aberto_anterior)} -> {_financeiro_moeda_br(conta_pagar.valor_em_aberto)}; "
                     f"total ja pago registrado {_financeiro_moeda_br(resumo['total_pago'])}; "
-                    f"diferenca paga a maior {_financeiro_moeda_br(diferenca_pago_a_maior)}. "
+                    f"pago a maior {_financeiro_moeda_br(diferenca_pago_a_maior)}; "
+                    f"diferenca a pagar {_financeiro_moeda_br(diferenca_a_pagar)}. "
                     f"{detalhe_extra}"
                 )
                 observacao_atual = (conta_pagar.observacao or "").strip()

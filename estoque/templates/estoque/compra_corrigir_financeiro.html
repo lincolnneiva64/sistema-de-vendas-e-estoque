@@ -44,35 +44,67 @@
       {% if resumo.valor_em_aberto <= 0 %}
         <form method="post" id="formCorrigirFinanceiroCompra">
           {% csrf_token %}
-          <div class="cf-aviso">
-            <strong>Escolha o motivo da diferenca:</strong>
-            como a conta ja esta paga, o sistema precisa saber se foi erro, devolucao em dinheiro ou credito com fornecedor.
-          </div>
+          {% if resumo.novo_valor_em_aberto > 0 %}
+            <div class="cf-aviso">
+              <strong>Faltou pagar uma diferenca.</strong>
+              O novo total ficou maior que o total ja pago. Escolha como tratar o valor que falta.
+            </div>
 
-          <label class="cf-confirmacao">
-            <input type="radio" name="motivo_correcao" value="erro_lancamento" required>
-            <span><strong>Erro de lancamento da nota.</strong><br>Ajusta a Conta a Pagar para o novo total, mantem paga e Caixa/Banco nao muda.</span>
-          </label>
+            <label class="cf-confirmacao">
+              <input type="radio" name="motivo_correcao" value="erro_lancamento" required>
+              <span><strong>Erro de lancamento da nota.</strong><br>Ajusta a Conta a Pagar para o novo total, mantem paga e Caixa/Banco nao muda.</span>
+            </label>
 
-          <label class="cf-confirmacao">
-            <input type="radio" name="motivo_correcao" value="devolucao_dinheiro" required>
-            <span><strong>Fornecedor devolveu dinheiro.</strong><br>Ajusta a Conta a Pagar e registra uma entrada no Caixa/Banco no valor pago a maior.</span>
-          </label>
+            <label class="cf-confirmacao">
+              <input type="radio" name="motivo_correcao" value="pagar_diferenca" required>
+              <span><strong>Pagar diferenca agora.</strong><br>Ajusta a Conta a Pagar, registra novo pagamento e cria uma saida no Caixa/Banco.</span>
+            </label>
 
-          <div style="margin:0 12px 12px; padding-left:26px;">
-            <label style="display:block; font-weight:900; color:#334155; margin-bottom:4px;">Conta que recebeu a devolucao</label>
-            <select name="conta_devolucao" style="width:100%; min-height:38px; border:1px solid #cbd5e1; border-radius:8px; padding:7px 9px; font-weight:800;">
-              <option value="">Selecione somente se houve devolucao em dinheiro</option>
-              {% for conta in contas_financeiras %}
-                <option value="{{ conta.id }}">{{ conta.nome }} - saldo R$ {{ conta.saldo|floatformat:2 }}</option>
-              {% endfor %}
-            </select>
-          </div>
+            <div style="margin:0 12px 12px; padding-left:26px;">
+              <label style="display:block; font-weight:900; color:#334155; margin-bottom:4px;">Conta usada para pagar a diferenca</label>
+              <select name="conta_pagamento_diferenca" style="width:100%; min-height:38px; border:1px solid #cbd5e1; border-radius:8px; padding:7px 9px; font-weight:800;">
+                <option value="">Selecione somente se for pagar a diferenca agora</option>
+                {% for conta in contas_financeiras %}
+                  <option value="{{ conta.id }}">{{ conta.nome }} - saldo R$ {{ conta.saldo|floatformat:2 }}</option>
+                {% endfor %}
+              </select>
+            </div>
 
-          <label class="cf-confirmacao">
-            <input type="radio" name="motivo_correcao" value="credito_fornecedor" required>
-            <span><strong>Ficar como credito com fornecedor.</strong><br>Ajusta a Conta a Pagar, Caixa/Banco nao muda e o credito fica registrado no historico.</span>
-          </label>
+            <label class="cf-confirmacao">
+              <input type="radio" name="motivo_correcao" value="deixar_em_aberto" required>
+              <span><strong>Deixar diferenca em aberto.</strong><br>Ajusta a Conta a Pagar e deixa a diferenca para pagar depois. Caixa/Banco nao muda agora.</span>
+            </label>
+          {% else %}
+            <div class="cf-aviso">
+              <strong>Escolha o motivo da diferenca:</strong>
+              como a conta ja esta paga, o sistema precisa saber se foi erro, devolucao em dinheiro ou credito com fornecedor.
+            </div>
+
+            <label class="cf-confirmacao">
+              <input type="radio" name="motivo_correcao" value="erro_lancamento" required>
+              <span><strong>Erro de lancamento da nota.</strong><br>Ajusta a Conta a Pagar para o novo total, mantem paga e Caixa/Banco nao muda.</span>
+            </label>
+
+            <label class="cf-confirmacao">
+              <input type="radio" name="motivo_correcao" value="devolucao_dinheiro" required>
+              <span><strong>Fornecedor devolveu dinheiro.</strong><br>Ajusta a Conta a Pagar e registra uma entrada no Caixa/Banco no valor pago a maior.</span>
+            </label>
+
+            <div style="margin:0 12px 12px; padding-left:26px;">
+              <label style="display:block; font-weight:900; color:#334155; margin-bottom:4px;">Conta que recebeu a devolucao</label>
+              <select name="conta_devolucao" style="width:100%; min-height:38px; border:1px solid #cbd5e1; border-radius:8px; padding:7px 9px; font-weight:800;">
+                <option value="">Selecione somente se houve devolucao em dinheiro</option>
+                {% for conta in contas_financeiras %}
+                  <option value="{{ conta.id }}">{{ conta.nome }} - saldo R$ {{ conta.saldo|floatformat:2 }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <label class="cf-confirmacao">
+              <input type="radio" name="motivo_correcao" value="credito_fornecedor" required>
+              <span><strong>Ficar como credito com fornecedor.</strong><br>Ajusta a Conta a Pagar, Caixa/Banco nao muda e o credito fica registrado no historico.</span>
+            </label>
+          {% endif %}
 
           <label class="cf-confirmacao">
             <input type="checkbox" name="confirmar" value="1" required>
