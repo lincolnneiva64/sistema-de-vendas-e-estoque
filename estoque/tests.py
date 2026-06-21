@@ -593,7 +593,9 @@ class CorrecaoFinanceiroCompraTests(TestCase):
         self.conta.save(update_fields=["valor_em_aberto", "status"])
 
         resposta_get = self.client.get(self.url, secure=True)
-        self.assertContains(resposta_get, "erro de lancamento da nota")
+        self.assertContains(resposta_get, "Erro de lancamento da nota")
+        self.assertContains(resposta_get, "Fornecedor devolveu dinheiro")
+        self.assertContains(resposta_get, "Ficar como credito com fornecedor")
 
         resposta = self.client.post(
             self.url,
@@ -612,6 +614,63 @@ class CorrecaoFinanceiroCompraTests(TestCase):
         self.assertContains(resposta, "Os pagamentos abaixo foram preservados apenas como historico")
         self.assertContains(resposta, "Caixa/Banco nao foi alterado")
         self.assertContains(resposta, "Total dos pagamentos preservados no historico")
+        self.assert_estoque_itens_caixa_inalterados()
+
+    def test_conta_quitada_permite_ajustar_com_devolucao_do_fornecedor(self):
+        self.criar_pagamento("1013.95")
+        self.conta.valor_em_aberto = Decimal("0.00")
+        self.conta.status = ContaPagar.STATUS_PAGA
+        self.conta.save(update_fields=["valor_em_aberto", "status"])
+        conta_banco = views._conta_financeira_padrao("banco")
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        resposta = self.client.post(
+            self.url,
+            {
+                "confirmar": "1",
+                "motivo_correcao": "devolucao_dinheiro",
+                "conta_devolucao": str(conta_banco.id),
+            },
+            follow=True,
+            secure=True,
+        )
+
+        self.conta.refresh_from_db()
+        self.assertEqual(self.conta.valor_original, Decimal("433.60"))
+        self.assertEqual(self.conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(self.conta.status, ContaPagar.STATUS_PAGA)
+        movimento = MovimentoFinanceiro.objects.get(origem="compra_devolucao_fornecedor")
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes + 1)
+        self.assertEqual(movimento.tipo, MovimentoFinanceiro.TIPO_ENTRADA)
+        self.assertEqual(movimento.valor, Decimal("580.35"))
+        self.assertEqual(movimento.conta, conta_banco)
+        self.compra.refresh_from_db()
+        self.assertContains(resposta, "Financeiro ajustado com devolucao do fornecedor")
+        self.assertIn("Devolucao registrada", self.compra.observacao or "")
+
+    def test_conta_quitada_permite_registrar_credito_com_fornecedor(self):
+        self.criar_pagamento("1013.95")
+        self.conta.valor_em_aberto = Decimal("0.00")
+        self.conta.status = ContaPagar.STATUS_PAGA
+        self.conta.save(update_fields=["valor_em_aberto", "status"])
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        resposta = self.client.post(
+            self.url,
+            {"confirmar": "1", "motivo_correcao": "credito_fornecedor"},
+            follow=True,
+            secure=True,
+        )
+
+        self.conta.refresh_from_db()
+        self.compra.refresh_from_db()
+        self.assertEqual(self.conta.valor_original, Decimal("433.60"))
+        self.assertEqual(self.conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(self.conta.status, ContaPagar.STATUS_PAGA)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+        self.assertIn("credito junto ao fornecedor", self.conta.observacao)
+        self.assertIn("Credito registrado em historico", self.compra.observacao)
+        self.assertContains(resposta, "credito com fornecedor registrado no historico")
         self.assert_estoque_itens_caixa_inalterados()
 
     def test_compra_a_vista_nao_pode_usar_esta_etapa(self):

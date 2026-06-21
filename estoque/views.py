@@ -4037,37 +4037,95 @@ def compra_corrigir_financeiro(request, pk):
                 and (conta_pagar.status == ContaPagar.STATUS_PAGA or resumo["valor_em_aberto"] <= Decimal("0.00"))
             )
 
-            if resumo["bloqueio"] and not (quitada_com_bloqueio and motivo_correcao == "erro_lancamento"):
+            motivos_quitada = {"erro_lancamento", "devolucao_dinheiro", "credito_fornecedor"}
+            if resumo["bloqueio"] and not (quitada_com_bloqueio and motivo_correcao in motivos_quitada):
                 messages.error(request, resumo["bloqueio"])
                 return redirect("estoque:compra_corrigir_financeiro", pk=compra.pk)
 
-            if quitada_com_bloqueio and motivo_correcao == "erro_lancamento":
+            if quitada_com_bloqueio and motivo_correcao in motivos_quitada:
                 valor_anterior = resumo["valor_original"]
                 aberto_anterior = resumo["valor_em_aberto"]
+                diferenca_pago_a_maior = (resumo["total_pago"] - resumo["total_compra"]).quantize(Decimal("0.01"))
+                if diferenca_pago_a_maior <= Decimal("0.00") and motivo_correcao in {"devolucao_dinheiro", "credito_fornecedor"}:
+                    messages.error(request, "Nao existe valor pago a maior para devolucao ou credito com fornecedor.")
+                    return redirect("estoque:compra_corrigir_financeiro", pk=compra.pk)
+
+                conta_devolucao = None
+                if motivo_correcao == "devolucao_dinheiro":
+                    conta_devolucao = ContaFinanceira.objects.filter(
+                        pk=request.POST.get("conta_devolucao"),
+                        ativo=True,
+                    ).first()
+                    if not conta_devolucao:
+                        messages.error(request, "Escolha a conta onde entrou a devolucao do fornecedor.")
+                        return redirect("estoque:compra_corrigir_financeiro", pk=compra.pk)
+
                 conta_pagar.valor_original = resumo["total_compra"]
                 conta_pagar.valor_em_aberto = Decimal("0.00")
                 conta_pagar.status = ContaPagar.STATUS_PAGA
 
                 agora = timezone.localtime().strftime("%d/%m/%Y %H:%M")
                 operador = (compra.operador or "Operador nao informado").strip()
+
+                if motivo_correcao == "erro_lancamento":
+                    titulo_rastro = "Ajuste financeiro por erro de lancamento"
+                    detalhe_extra = "Conta mantida como paga. Caixa/Banco nao alterado."
+                    mensagem = "Financeiro ajustado como erro de lancamento da nota. Caixa/Banco nao foi alterado."
+                    observacao_compra = (
+                        "Financeiro ajustado por erro de lancamento da nota apos correcao de itens. "
+                        f"Conta a Pagar {_financeiro_moeda_br(valor_anterior)} -> {_financeiro_moeda_br(conta_pagar.valor_original)}. "
+                        "Conta mantida como paga. Caixa/Banco nao alterado."
+                    )
+                elif motivo_correcao == "devolucao_dinheiro":
+                    MovimentoFinanceiro.objects.create(
+                        conta=conta_devolucao,
+                        tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+                        valor=diferenca_pago_a_maior,
+                        data=timezone.localdate(),
+                        descricao=f"Devolucao de fornecedor referente a compra #{compra.id}"[:255],
+                        operador=operador,
+                        origem="compra_devolucao_fornecedor",
+                        compra=compra,
+                    )
+                    titulo_rastro = "Ajuste financeiro com devolucao de dinheiro do fornecedor"
+                    detalhe_extra = (
+                        f"Fornecedor devolveu {_financeiro_moeda_br(diferenca_pago_a_maior)} "
+                        f"em {conta_devolucao.nome}. Entrada registrada no Caixa/Banco."
+                    )
+                    mensagem = "Financeiro ajustado com devolucao do fornecedor. Entrada registrada no Caixa/Banco."
+                    observacao_compra = (
+                        "Financeiro ajustado com devolucao de dinheiro do fornecedor apos correcao de itens. "
+                        f"Conta a Pagar {_financeiro_moeda_br(valor_anterior)} -> {_financeiro_moeda_br(conta_pagar.valor_original)}. "
+                        f"Devolucao registrada: {_financeiro_moeda_br(diferenca_pago_a_maior)} em {conta_devolucao.nome}."
+                    )
+                else:
+                    titulo_rastro = "Ajuste financeiro com credito junto ao fornecedor"
+                    detalhe_extra = (
+                        f"Credito com fornecedor registrado em historico: {_financeiro_moeda_br(diferenca_pago_a_maior)}. "
+                        "Caixa/Banco nao alterado."
+                    )
+                    mensagem = "Financeiro ajustado e credito com fornecedor registrado no historico. Caixa/Banco nao foi alterado."
+                    observacao_compra = (
+                        "Financeiro ajustado com credito junto ao fornecedor apos correcao de itens. "
+                        f"Conta a Pagar {_financeiro_moeda_br(valor_anterior)} -> {_financeiro_moeda_br(conta_pagar.valor_original)}. "
+                        f"Credito registrado em historico: {_financeiro_moeda_br(diferenca_pago_a_maior)}. "
+                        "Caixa/Banco nao alterado."
+                    )
+
                 rastro = (
-                    f"[{agora}] Ajuste financeiro por erro de lancamento apos correcao de itens por {operador}: "
+                    f"[{agora}] {titulo_rastro} apos correcao de itens por {operador}: "
                     f"valor original {_financeiro_moeda_br(valor_anterior)} -> {_financeiro_moeda_br(conta_pagar.valor_original)}; "
                     f"valor em aberto {_financeiro_moeda_br(aberto_anterior)} -> R$ 0,00; "
-                    f"total ja pago registrado {_financeiro_moeda_br(resumo['total_pago'])}. "
-                    "Conta mantida como paga. Caixa/Banco nao alterado."
+                    f"total ja pago registrado {_financeiro_moeda_br(resumo['total_pago'])}; "
+                    f"diferenca paga a maior {_financeiro_moeda_br(diferenca_pago_a_maior)}. "
+                    f"{detalhe_extra}"
                 )
                 observacao_atual = (conta_pagar.observacao or "").strip()
                 conta_pagar.observacao = f"{observacao_atual}\n{rastro}".strip() if observacao_atual else rastro
                 conta_pagar.save(update_fields=["valor_original", "valor_em_aberto", "status", "observacao"])
 
-                _registrar_observacao_compra(
-                    compra,
-                    "Financeiro ajustado por erro de lancamento da nota apos correcao de itens. "
-                    f"Conta a Pagar {_financeiro_moeda_br(valor_anterior)} -> {_financeiro_moeda_br(conta_pagar.valor_original)}. "
-                    "Conta mantida como paga. Caixa/Banco nao alterado.",
-                )
-                messages.success(request, "Financeiro ajustado como erro de lancamento da nota. Caixa/Banco nao foi alterado.")
+                _registrar_observacao_compra(compra, observacao_compra)
+                messages.success(request, mensagem)
                 return redirect("estoque:compras_detalhe", pk=compra.pk)
 
             valor_anterior = resumo["valor_original"]
@@ -4100,7 +4158,12 @@ def compra_corrigir_financeiro(request, pk):
     return render(
         request,
         "estoque/compra_corrigir_financeiro.html",
-        {"compra": compra, "conta_pagar": conta_pagar, "resumo": resumo},
+        {
+            "compra": compra,
+            "conta_pagar": conta_pagar,
+            "resumo": resumo,
+            "contas_financeiras": _contas_financeiras_com_saldo(),
+        },
     )
 
 

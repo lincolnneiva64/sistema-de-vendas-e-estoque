@@ -44,18 +44,43 @@
       {% if resumo.valor_em_aberto <= 0 %}
         <form method="post" id="formCorrigirFinanceiroCompra">
           {% csrf_token %}
-          <input type="hidden" name="motivo_correcao" value="erro_lancamento">
           <div class="cf-aviso">
-            <strong>Opcao segura:</strong> tratar como erro de lancamento da nota.
-            A Conta a Pagar sera ajustada para o novo total, continuara paga e Caixa/Banco nao sera alterado.
+            <strong>Escolha o motivo da diferenca:</strong>
+            como a conta ja esta paga, o sistema precisa saber se foi erro, devolucao em dinheiro ou credito com fornecedor.
           </div>
+
+          <label class="cf-confirmacao">
+            <input type="radio" name="motivo_correcao" value="erro_lancamento" required>
+            <span><strong>Erro de lancamento da nota.</strong><br>Ajusta a Conta a Pagar para o novo total, mantem paga e Caixa/Banco nao muda.</span>
+          </label>
+
+          <label class="cf-confirmacao">
+            <input type="radio" name="motivo_correcao" value="devolucao_dinheiro" required>
+            <span><strong>Fornecedor devolveu dinheiro.</strong><br>Ajusta a Conta a Pagar e registra uma entrada no Caixa/Banco no valor pago a maior.</span>
+          </label>
+
+          <div style="margin:0 12px 12px; padding-left:26px;">
+            <label style="display:block; font-weight:900; color:#334155; margin-bottom:4px;">Conta que recebeu a devolucao</label>
+            <select name="conta_devolucao" style="width:100%; min-height:38px; border:1px solid #cbd5e1; border-radius:8px; padding:7px 9px; font-weight:800;">
+              <option value="">Selecione somente se houve devolucao em dinheiro</option>
+              {% for conta in contas_financeiras %}
+                <option value="{{ conta.id }}">{{ conta.nome }} - saldo R$ {{ conta.saldo|floatformat:2 }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <label class="cf-confirmacao">
+            <input type="radio" name="motivo_correcao" value="credito_fornecedor" required>
+            <span><strong>Ficar como credito com fornecedor.</strong><br>Ajusta a Conta a Pagar, Caixa/Banco nao muda e o credito fica registrado no historico.</span>
+          </label>
+
           <label class="cf-confirmacao">
             <input type="checkbox" name="confirmar" value="1" required>
-            Confirmo que foi erro de lancamento da nota e que nao ha devolucao nem diferenca a pagar.
+            Confirmo que conferi a diferenca e escolhi a opcao correta para esta compra.
           </label>
           <div class="cf-acoes">
             <a class="cf-btn" href="{% url 'estoque:compras_detalhe' compra.id %}">Cancelar</a>
-            <button class="cf-btn primario" type="submit" id="btnCorrigirFinanceiroCompra">Corrigir como erro de lancamento</button>
+            <button class="cf-btn primario" type="submit" id="btnCorrigirFinanceiroCompra">Aplicar correcao escolhida</button>
           </div>
         </form>
       {% endif %}
