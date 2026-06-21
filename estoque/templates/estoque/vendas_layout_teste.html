@@ -1208,7 +1208,7 @@ td:first-child {
             <div class="pedido-importado-aviso">
                 <span>{{ pedido_importado_aviso }}</span>
                 {% if pedido_importado %}
-                    <a href="{{ pedido_importado.detalhe_url }}" class="pedido-importado-aviso-link">Voltar ao Pedido #{{ pedido_importado.id }}</a>
+                    <a href="/receber-cliente/" class="pedido-importado-aviso-link">Voltar ao Pedido #{{ pedido_importado.id }}</a>
                 {% endif %}
             </div>
         {% endif %}
@@ -2054,7 +2054,8 @@ td:first-child {
                 <h2 class="atalhos-venda-titulo">Atalhos</h2>
                 <div class="atalhos-venda-lista">
             <a href="{% url 'estoque:pedidos' %}" class="acao-venda-btn secundaria">Pedidos</a>
-            <a href="{% url 'estoque:contas_receber' %}" id="btnContasReceberVenda" class="acao-venda-btn secundaria">Contas a Receber</a>
+        <a href="/compras/" class="acao-venda-btn secundaria">Compras</a>
+            <a href="{% url 'estoque:contas_receber' %}" id="btnContasReceberVenda" class="acao-venda-btn secundaria">Receber do cliente</a>
             <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="acao-venda-btn secundaria {% if tem_pix_em_atencao %}pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
             <a href="{% url 'estoque:entregas_dia' %}" class="acao-venda-btn secundaria">Ir para Entregas</a>
             <a href="{% url 'estoque:painel_financeiro' %}" class="acao-venda-btn secundaria">Central Financeira</a>
