@@ -4837,6 +4837,29 @@ function selecionarProduto(opt) {
 produto.value = opt.value;
 produtoBusca.value = opt.value;
 
+const estoqueProdutoSelecionado = parseFloat(String(opt.dataset.estoque || "0").replace(",", "."));
+if (!isNaN(estoqueProdutoSelecionado) && estoqueProdutoSelecionado <= 0) {
+    quantidade.value = "";
+    unidade.innerHTML = "";
+    preco.value = "";
+
+    sugestoesBox.style.display = "none";
+    autocompleteAberto = false;
+    indexAtivo = -1;
+
+    estoquePreview.textContent = "Estoque zerado";
+    estoquePreview.style.display = "inline-flex";
+
+    mostrarToastVenda("Produto com estoque zerado. Nao e possivel adicionar na venda.");
+
+    setTimeout(() => {
+        produtoBusca.focus();
+        produtoBusca.select();
+    }, 50);
+
+    return;
+}
+
 unidade.innerHTML = "";
 
 const unidade1 = opt.dataset.unidade1 || opt.dataset.unidade || "";
