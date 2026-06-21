@@ -4054,7 +4054,7 @@ def compra_corrigir_financeiro(request, pk):
                     f"Conta a Pagar {_financeiro_moeda_br(valor_anterior)} -> {_financeiro_moeda_br(conta_pagar.valor_original)}. "
                     "Conta mantida como paga. Caixa/Banco nao alterado.",
                 )
-                messages.success(request, "Financeiro ajustado como erro de lan?amento da nota. Caixa/Banco n?o foi alterado.")
+                messages.success(request, "Financeiro ajustado como erro de lancamento da nota. Caixa/Banco nao foi alterado.")
                 return redirect("estoque:compras_detalhe", pk=compra.pk)
 
             valor_anterior = resumo["valor_original"]

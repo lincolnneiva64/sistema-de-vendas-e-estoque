@@ -607,7 +607,7 @@ class CorrecaoFinanceiroCompraTests(TestCase):
         self.assertEqual(self.conta.valor_em_aberto, Decimal("0.00"))
         self.assertEqual(self.conta.status, ContaPagar.STATUS_PAGA)
         self.assertIn("erro de lancamento", self.conta.observacao)
-        self.assertContains(resposta, "Financeiro ajustado como erro de lan?amento")
+        self.assertContains(resposta, "Financeiro ajustado como erro de lancamento")
         self.assert_estoque_itens_caixa_inalterados()
 
     def test_compra_a_vista_nao_pode_usar_esta_etapa(self):
