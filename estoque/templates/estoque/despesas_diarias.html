@@ -335,6 +335,16 @@
           <div class="despesa-item-meta">Escolha Caixa, Banco/Pix ou Sangria. Esta escolha e quem manda no financeiro.</div>
         </div>
         <div class="despesa-field despesa-field-full">
+          <label for="operadorDespesaDiaria">Operador</label>
+          <select id="operadorDespesaDiaria" name="operador" required>
+            <option value="">Selecione o operador</option>
+            {% for operador in operadores_despesa_diaria %}
+              <option value="{{ operador.nome }}">{{ operador.nome }}</option>
+            {% endfor %}
+          </select>
+          <div class="despesa-item-meta">Quem esta lancando esta despesa.</div>
+        </div>
+        <div class="despesa-field despesa-field-full">
           <label for="observacaoDespesaDiaria">Observacao opcional</label>
           <textarea id="observacaoDespesaDiaria" name="observacao" placeholder="Ex.: gasolina da entrega, lanche na rua, despesa pessoal..."></textarea>
         </div>
@@ -413,7 +423,7 @@
         <div class="despesa-item-main">
           <strong>{{ despesa.get_categoria_display }}</strong>
           <div class="despesa-item-meta">
-            {{ despesa.data_hora|date:"d/m/Y H:i" }} · Saiu de: {{ despesa.conta_saida_nome }}
+            {{ despesa.data_hora|date:"d/m/Y H:i" }} · Saiu de: {{ despesa.conta_saida_nome }} · Operador: {{ despesa.operador|default:"-" }}
           </div>
           {% if despesa.observacao %}
             <div class="despesa-item-meta">{{ despesa.observacao }}</div>
@@ -505,6 +515,7 @@
     document.getElementById("valorDespesaDiaria"),
     document.getElementById("categoriaDespesaDiaria"),
     document.getElementById("contaSaidaDespesaDiaria"),
+    document.getElementById("operadorDespesaDiaria"),
     document.getElementById("observacaoDespesaDiaria"),
     btnSalvar
   ].filter(Boolean);
@@ -517,6 +528,7 @@
   const valorCampo = document.getElementById("valorDespesaDiaria");
   const categoriaCampo = document.getElementById("categoriaDespesaDiaria");
   const contaCampo = document.getElementById("contaSaidaDespesaDiaria");
+  const operadorCampo = document.getElementById("operadorDespesaDiaria");
   const observacaoCampo = document.getElementById("observacaoDespesaDiaria");
 
   function dataHojeISO() {
@@ -542,6 +554,7 @@
       }
     }
     if (observacaoCampo) observacaoCampo.value = "";
+    if (operadorCampo) operadorCampo.selectedIndex = 0;
     marcarFoco(valorCampo || dataCampo);
   }
 

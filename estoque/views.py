@@ -1432,6 +1432,7 @@ def _registrar_movimento_despesa_diaria(despesa, conta_financeira=None):
         valor=valor,
         data=data_despesa,
         descricao=_descricao_movimento_despesa_diaria(despesa),
+        operador=(despesa.operador or ""),
         origem="despesa_diaria",
     )
 
@@ -2807,6 +2808,10 @@ def despesas_diarias(request):
 
     contas_saida = ContaFinanceira.objects.filter(ativo=True).order_by("tipo", "nome")
     conta_padrao = contas_saida.filter(nome__icontains="Banco").first() or contas_saida.first()
+    operadores_despesa_diaria = Funcionario.objects.filter(
+        ativo=True,
+        pode_operar_sistema=True,
+    ).order_by("nome")
 
     if request.method == "POST":
         acao = request.POST.get("acao")
@@ -2831,6 +2836,7 @@ def despesas_diarias(request):
 
         categoria = request.POST.get("categoria")
         observacao = (request.POST.get("observacao") or "").strip()
+        operador = (request.POST.get("operador") or "").strip()
         data_lancamento = parse_date(request.POST.get("data_lancamento") or "") or hoje
         conta_saida = ContaFinanceira.objects.filter(
             pk=request.POST.get("conta_saida"),
@@ -2848,6 +2854,10 @@ def despesas_diarias(request):
 
         if categoria not in categorias_validas:
             messages.error(request, "Escolha uma categoria valida.")
+            return redirect("estoque:despesas_diarias")
+
+        if not operador:
+            messages.error(request, "Informe o operador da despesa.")
             return redirect("estoque:despesas_diarias")
 
         if not conta_saida:
@@ -2946,6 +2956,7 @@ def despesas_diarias(request):
             "forma_padrao": DespesaDiaria.FORMA_PIX,
             "contas_saida": contas_saida,
             "conta_padrao": conta_padrao,
+            "operadores_despesa_diaria": operadores_despesa_diaria,
         },
     )
 

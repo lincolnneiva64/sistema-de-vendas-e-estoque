@@ -1372,6 +1372,7 @@ class DespesaDiaria(models.Model):
     valor = models.DecimalField(max_digits=12, decimal_places=2)
     categoria = models.CharField(max_length=40, choices=CATEGORIA_CHOICES)
     forma_pagamento = models.CharField(max_length=40, choices=FORMA_PAGAMENTO_CHOICES, default=FORMA_PIX)
+    operador = models.CharField(max_length=120, blank=True)
     observacao = models.TextField(blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
