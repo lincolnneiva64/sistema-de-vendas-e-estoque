@@ -4026,6 +4026,8 @@ preco.addEventListener("keydown", (e) => {
 });
 /* ===== FIM JS ADICIONAR ITEM VENDA MOBILE - CHATGPT 2026-06-10 ===== */
 async function gravarVendaAtual(dadosVendaConfirmados) {
+    if (typeof operadorVendaObrigatorioOk === "function" && !operadorVendaObrigatorioOk()) return;
+
     const dadosVenda = dadosVendaConfirmados || coletarDadosVenda();
 
     if (!dadosVenda.itens.length) {
@@ -5256,6 +5258,639 @@ atualizarTotalGeral();
     });
 })();
 </script>
+
+<script>
+(function controleOperadorVendaPorInatividade() {
+    const TEMPO_LIMITE_MS = 10 * 60 * 1000; // 10 minutos
+    const CHAVE_ULTIMO_USO = "venda_ultimo_uso_operador";
+    const CHAVE_OPERADOR = "venda_operador_atual";
+
+    function agora() {
+        return Date.now();
+    }
+
+    function buscarCampoOperador() {
+        const selects = Array.from(document.querySelectorAll("select"));
+        return selects.find((select) => {
+            const id = (select.id || "").toLowerCase();
+            const name = (select.name || "").toLowerCase();
+            const texto = (select.closest("label, div, form")?.innerText || "").toLowerCase();
+
+            return id.includes("operador")
+                || name.includes("operador")
+                || texto.includes("operador");
+        });
+    }
+
+    function garantirOpcaoVazia(select) {
+        if (!select) return;
+
+        const primeira = select.options[0];
+
+        if (!primeira || primeira.value !== "") {
+            const opt = document.createElement("option");
+            opt.value = "";
+            opt.textContent = "Selecione o operador";
+            select.insertBefore(opt, primeira || null);
+        }
+    }
+
+    function limparOperador(select) {
+        if (!select) return;
+        select.value = "";
+        localStorage.removeItem(CHAVE_OPERADOR);
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    function salvarUso() {
+        localStorage.setItem(CHAVE_ULTIMO_USO, String(agora()));
+    }
+
+    function ultimoUsoExpirou() {
+        const ultimo = Number(localStorage.getItem(CHAVE_ULTIMO_USO) || "0");
+        if (!ultimo) return true;
+        return (agora() - ultimo) > TEMPO_LIMITE_MS;
+    }
+
+    function iniciar() {
+        const operador = buscarCampoOperador();
+        if (!operador) return;
+
+        garantirOpcaoVazia(operador);
+
+        if (ultimoUsoExpirou()) {
+            limparOperador(operador);
+        } else {
+            const salvo = localStorage.getItem(CHAVE_OPERADOR);
+            if (salvo && Array.from(operador.options).some((opt) => opt.value === salvo)) {
+                operador.value = salvo;
+            }
+        }
+
+        operador.addEventListener("change", () => {
+            if (operador.value) {
+                localStorage.setItem(CHAVE_OPERADOR, operador.value);
+                salvarUso();
+            } else {
+                localStorage.removeItem(CHAVE_OPERADOR);
+            }
+        });
+
+        ["click", "keydown", "input", "change"].forEach((evento) => {
+            document.addEventListener(evento, () => {
+                if (operador.value) salvarUso();
+            }, true);
+        });
+
+        const form = operador.closest("form") || document.querySelector("form");
+        if (form) {
+            form.addEventListener("submit", (e) => {
+                if (!operador.value) {
+                    e.preventDefault();
+                    operador.focus();
+
+                    mostrarModalOperadorObrigatorio("Operador obrigatório. Selecione o operador para continuar.");
+                } else {
+                    salvarUso();
+                    localStorage.setItem(CHAVE_OPERADOR, operador.value);
+                }
+            }, true);
+        }
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", iniciar);
+    } else {
+        iniciar();
+    }
+})();
+</script>
+
+
+<script>
+(function bloqueiaGravarVendaSemOperador() {
+    function buscarCampoOperador() {
+        const selects = Array.from(document.querySelectorAll("select"));
+        return selects.find((select) => {
+            const id = (select.id || "").toLowerCase();
+            const name = (select.name || "").toLowerCase();
+            const texto = (select.closest("label, div, form")?.innerText || "").toLowerCase();
+
+            return id.includes("operador")
+                || name.includes("operador")
+                || texto.includes("operador");
+        });
+    }
+
+    function avisarOperadorObrigatorio() {
+    mostrarModalOperadorObrigatorio("Operador obrigatório. Selecione o operador para continuar.");
+}, 1800);
+        }
+
+        mostrarModalOperadorObrigatorio("Operador obrigatório. Selecione o operador para continuar.");
+    }
+
+    function operadorEstaVazio() {
+        const operador = buscarCampoOperador();
+        return { operador, vazio: !operador || !operador.value };
+    }
+
+    function iniciarBloqueio() {
+        document.addEventListener("click", function(e) {
+            const botao = e.target.closest("button, a, input[type='button'], input[type='submit']");
+            if (!botao) return;
+
+            const textoBotao = (botao.innerText || botao.value || "").trim().toLowerCase();
+            const ehGravarVenda = textoBotao.includes("gravar venda");
+
+            if (!ehGravarVenda) return;
+
+            const resultado = operadorEstaVazio();
+
+            if (resultado.vazio) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                avisarOperadorObrigatorio(resultado.operador);
+                return false;
+            }
+        }, true);
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", iniciarBloqueio);
+    } else {
+        iniciarBloqueio();
+    }
+})();
+</script>
+
+
+<script>
+(function validacaoForteOperadorVenda() {
+    function buscarCampoOperadorVenda() {
+        const selects = Array.from(document.querySelectorAll("select"));
+
+        return selects.find((select) => {
+            const id = (select.id || "").toLowerCase();
+            const name = (select.name || "").toLowerCase();
+            const textoProximo = (select.closest("label, div, form")?.innerText || "").toLowerCase();
+
+            return id.includes("operador")
+                || name.includes("operador")
+                || textoProximo.includes("operador");
+        });
+    }
+
+    function mostrarErroOperadorVenda(operador) {
+        if (operador) {
+            operador.focus();
+            operador.style.borderColor = "#dc2626";
+            operador.style.boxShadow = "0 0 0 4px rgba(220, 38, 38, 0.22)";
+
+            setTimeout(() => {
+                operador.style.borderColor = "";
+                operador.style.boxShadow = "";
+            }, 2200);
+        }
+
+        mostrarModalOperadorObrigatorio("Operador obrigatório. Selecione o operador para continuar.");
+    }
+
+    window.operadorVendaObrigatorioOk = function operadorVendaObrigatorioOk() {
+        const operador = buscarCampoOperadorVenda();
+
+        if (!operador || !operador.value) {
+            mostrarErroOperadorVenda(operador);
+            return false;
+        }
+
+        return true;
+    };
+
+    function iniciarTravaEnterOperador() {
+        const operador = buscarCampoOperadorVenda();
+        if (!operador) return;
+
+        operador.addEventListener("keydown", function(e) {
+            if (e.key !== "Enter") return;
+
+            if (!operador.value) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                mostrarErroOperadorVenda(operador);
+                return false;
+            }
+        }, true);
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", iniciarTravaEnterOperador);
+    } else {
+        iniciarTravaEnterOperador();
+    }
+})();
+</script>
+
+
+<script>
+(function travaCampoOperadorAteSelecionar() {
+    function campoOperadorVenda() {
+        const selects = Array.from(document.querySelectorAll("select"));
+
+        return selects.find((select) => {
+            const id = (select.id || "").toLowerCase();
+            const name = (select.name || "").toLowerCase();
+            const optionsText = Array.from(select.options).map(opt => opt.textContent.toLowerCase()).join(" ");
+
+            return id.includes("operador")
+                || name.includes("operador")
+                || optionsText.includes("operador")
+                || optionsText.includes("roseli")
+                || optionsText.includes("lincoln");
+        });
+    }
+
+    function operadorVazio() {
+        const operador = campoOperadorVenda();
+        return operador && !operador.value;
+    }
+
+    function avisarEVoltarOperador() {
+        const operador = campoOperadorVenda();
+        if (!operador) return false;
+
+        operador.focus();
+        operador.style.borderColor = "#dc2626";
+        operador.style.boxShadow = "0 0 0 4px rgba(220, 38, 38, 0.25)";
+
+        setTimeout(() => {
+            operador.style.borderColor = "";
+            operador.style.boxShadow = "";
+        }, 2200);
+
+        mostrarModalOperadorObrigatorio("Operador obrigatório. Selecione o operador para continuar.");
+
+        return true;
+    }
+
+    function ehCampoDepoisDoOperador(el) {
+        if (!el) return false;
+
+        const texto = (
+            (el.placeholder || "") + " " +
+            (el.innerText || "") + " " +
+            (el.value || "") + " " +
+            (el.id || "") + " " +
+            (el.name || "")
+        ).toLowerCase();
+
+        return texto.includes("produto")
+            || texto.includes("qtd")
+            || texto.includes("quantidade")
+            || texto.includes("preço")
+            || texto.includes("preco")
+            || texto.includes("gravar venda")
+            || texto.includes("adicionar item");
+    }
+
+    function iniciar() {
+        document.addEventListener("keydown", function(e) {
+            const operador = campoOperadorVenda();
+            if (!operador) return;
+
+            if (e.key === "Enter" && document.activeElement === operador && !operador.value) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                avisarEVoltarOperador();
+                return false;
+            }
+
+            if (e.key === "Enter" && operadorVazio() && ehCampoDepoisDoOperador(document.activeElement)) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                avisarEVoltarOperador();
+                return false;
+            }
+        }, true);
+
+        document.addEventListener("focusin", function(e) {
+            const operador = campoOperadorVenda();
+            if (!operador) return;
+            if (e.target === operador) return;
+
+            if (operadorVazio() && ehCampoDepoisDoOperador(e.target)) {
+                setTimeout(() => avisarEVoltarOperador(), 0);
+            }
+        }, true);
+
+        document.addEventListener("click", function(e) {
+            if (!operadorVazio()) return;
+
+            const alvo = e.target.closest("button, a, input, select");
+            if (!alvo) return;
+
+            if (ehCampoDepoisDoOperador(alvo)) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                avisarEVoltarOperador();
+                return false;
+            }
+        }, true);
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", iniciar);
+    } else {
+        iniciar();
+    }
+})();
+</script>
+
+<style id="modal-operador-obrigatorio-style">
+    .modal-operador-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.30);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 18px;
+        z-index: 99999;
+    }
+
+    .modal-operador-backdrop.ativo {
+        display: flex;
+    }
+
+    .modal-operador-card {
+        width: min(560px, calc(100vw - 36px));
+        background: #f6eed8;
+        border: 1px solid #e0c98e;
+        border-radius: 20px;
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
+        padding: 22px 24px 18px;
+    }
+
+    .modal-operador-titulo {
+        margin: 0 0 10px 0;
+        font-size: 1.05rem;
+        font-weight: 800;
+        color: #8a4b08;
+    }
+
+    .modal-operador-texto {
+        margin: 0;
+        font-size: 1rem;
+        line-height: 1.45;
+        color: #5b3b08;
+    }
+
+    .modal-operador-acoes {
+        margin-top: 18px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+    }
+
+    .modal-operador-btn {
+        min-width: 104px;
+        border-radius: 14px;
+        border: 1px solid #2d63eb;
+        background: linear-gradient(180deg, #5ea2ff 0%, #2d63eb 100%);
+        color: #fff;
+        font-weight: 800;
+        padding: 10px 18px;
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(45, 99, 235, 0.20);
+    }
+
+    .modal-operador-btn:hover {
+        filter: brightness(1.03);
+    }
+</style>
+
+<div id="modal-operador-obrigatorio" class="modal-operador-backdrop" aria-hidden="true">
+    <div class="modal-operador-card" role="dialog" aria-modal="true" aria-labelledby="modal-operador-obrigatorio-titulo">
+        <h3 id="modal-operador-obrigatorio-titulo" class="modal-operador-titulo">Atenção</h3>
+        <p id="modal-operador-obrigatorio-texto" class="modal-operador-texto">
+            Operador obrigatório. Selecione o operador para continuar.
+        </p>
+        <div class="modal-operador-acoes">
+            <button type="button" id="modal-operador-obrigatorio-ok" class="modal-operador-btn" data-fechar-modal-operador="1">
+                OK
+            </button>
+        </div>
+    </div>
+</div>
+
+<script id="modal-operador-obrigatorio-script">
+(function () {
+    function obterCampoOperador() {
+        return document.querySelector('select[name="operador"]')
+            || document.getElementById('id_operador')
+            || document.querySelector('select[id*="operador"]');
+    }
+
+    window.mostrarModalOperadorObrigatorio = function (mensagem) {
+        const modal = document.getElementById('modal-operador-obrigatorio');
+        const texto = document.getElementById('modal-operador-obrigatorio-texto');
+        const botao = document.getElementById('modal-operador-obrigatorio-ok');
+
+        if (!modal || !texto) {
+            console.warn(mensagem || 'Operador obrigatório. Selecione o operador para continuar.');
+            return;
+        }
+
+        texto.textContent = mensagem || 'Operador obrigatório. Selecione o operador para continuar.';
+        modal.classList.add('ativo');
+        modal.setAttribute('aria-hidden', 'false');
+
+        setTimeout(function () {
+            if (botao) {
+                botao.focus();
+            }
+        }, 30);
+    };
+
+    window.fecharModalOperadorObrigatorio = function () {
+        const modal = document.getElementById('modal-operador-obrigatorio');
+        const campoOperador = obterCampoOperador();
+
+        if (modal) {
+            modal.classList.remove('ativo');
+            modal.setAttribute('aria-hidden', 'true');
+        }
+
+        setTimeout(function () {
+            if (campoOperador) {
+                campoOperador.focus();
+                if (typeof campoOperador.click === 'function') {
+                    campoOperador.click();
+                }
+            }
+        }, 30);
+    };
+
+    document.addEventListener('click', function (event) {
+        const botaoFechar = event.target.closest('[data-fechar-modal-operador="1"]');
+        const fundo = event.target.id === 'modal-operador-obrigatorio';
+
+        if (botaoFechar || fundo) {
+            event.preventDefault();
+            fecharModalOperadorObrigatorio();
+        }
+    });
+
+    document.addEventListener('keydown', function (event) {
+        const modal = document.getElementById('modal-operador-obrigatorio');
+        if (!modal || !modal.classList.contains('ativo')) {
+            return;
+        }
+
+        if (event.key === 'Enter' || event.key === 'Escape') {
+            event.preventDefault();
+            fecharModalOperadorObrigatorio();
+        }
+    });
+})();
+</script>
+
+<style id="modalOperadorPequenoPertoDoCampo">
+    #modal-operador-obrigatorio.modal-operador-backdrop {
+        background: transparent !important;
+        align-items: flex-start !important;
+        justify-content: flex-start !important;
+        padding: 0 !important;
+        pointer-events: none !important;
+    }
+
+    #modal-operador-obrigatorio.ativo {
+        display: block !important;
+    }
+
+    #modal-operador-obrigatorio .modal-operador-card {
+        position: fixed !important;
+        width: min(360px, calc(100vw - 24px)) !important;
+        padding: 12px 14px !important;
+        border-radius: 14px !important;
+        background: #fff7df !important;
+        border: 1px solid #f2c66d !important;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.20) !important;
+        pointer-events: auto !important;
+        z-index: 100000 !important;
+    }
+
+    #modal-operador-obrigatorio .modal-operador-titulo {
+        margin: 0 0 4px 0 !important;
+        font-size: 0.95rem !important;
+        color: #8a4b08 !important;
+        font-weight: 900 !important;
+    }
+
+    #modal-operador-obrigatorio .modal-operador-texto {
+        margin: 0 !important;
+        font-size: 0.92rem !important;
+        color: #5b3b08 !important;
+        line-height: 1.3 !important;
+    }
+
+    #modal-operador-obrigatorio .modal-operador-acoes {
+        margin-top: 8px !important;
+        justify-content: flex-end !important;
+    }
+
+    #modal-operador-obrigatorio .modal-operador-btn {
+        min-width: 72px !important;
+        min-height: 34px !important;
+        padding: 6px 14px !important;
+        border-radius: 10px !important;
+        font-size: 0.9rem !important;
+    }
+</style>
+
+<script>
+(function modalOperadorPequenoPertoDoCampo() {
+    function obterCampoOperador() {
+        return document.querySelector('select[name="operador"]')
+            || document.getElementById('id_operador')
+            || document.querySelector('select[id*="operador"]')
+            || Array.from(document.querySelectorAll("select")).find((select) => {
+                const texto = Array.from(select.options).map(opt => opt.textContent.toLowerCase()).join(" ");
+                return texto.includes("operador") || texto.includes("roseli") || texto.includes("lincoln");
+            });
+    }
+
+    function posicionarPertoDoOperador() {
+        const modal = document.getElementById("modal-operador-obrigatorio");
+        const card = modal ? modal.querySelector(".modal-operador-card") : null;
+        const operador = obterCampoOperador();
+
+        if (!modal || !card || !operador) return;
+
+        const rect = operador.getBoundingClientRect();
+        const largura = Math.min(360, window.innerWidth - 24);
+
+        let left = rect.left;
+        let top = rect.bottom + 8;
+
+        if (left + largura > window.innerWidth - 12) {
+            left = window.innerWidth - largura - 12;
+        }
+
+        if (left < 12) {
+            left = 12;
+        }
+
+        if (top + 150 > window.innerHeight) {
+            top = Math.max(12, rect.top - 150);
+        }
+
+        card.style.left = left + "px";
+        card.style.top = top + "px";
+    }
+
+    window.mostrarModalOperadorObrigatorio = function(mensagem) {
+        const modal = document.getElementById("modal-operador-obrigatorio");
+        const texto = document.getElementById("modal-operador-obrigatorio-texto");
+        const botao = document.getElementById("modal-operador-obrigatorio-ok");
+
+        if (!modal || !texto) return;
+
+        texto.textContent = mensagem || "Operador obrigatório. Selecione o operador para continuar.";
+        modal.classList.add("ativo");
+        modal.setAttribute("aria-hidden", "false");
+
+        posicionarPertoDoOperador();
+
+        setTimeout(function() {
+            if (botao) botao.focus();
+        }, 30);
+    };
+
+    window.fecharModalOperadorObrigatorio = function() {
+        const modal = document.getElementById("modal-operador-obrigatorio");
+        const operador = obterCampoOperador();
+
+        if (modal) {
+            modal.classList.remove("ativo");
+            modal.setAttribute("aria-hidden", "true");
+        }
+
+        setTimeout(function() {
+            if (operador) operador.focus();
+        }, 30);
+    };
+
+    window.addEventListener("resize", posicionarPertoDoOperador);
+    window.addEventListener("scroll", posicionarPertoDoOperador, true);
+})();
+</script>
+
 </body>
 </html>
 
