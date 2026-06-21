@@ -1337,6 +1337,7 @@ class DespesaDiaria(models.Model):
     CATEGORIA_MANUTENCAO = "manutencao"
     CATEGORIA_MATERIAL_APOIO = "material_apoio"
     CATEGORIA_COMPRA_EMERGENCIAL = "compra_emergencial"
+    CATEGORIA_PESSOAL = "pessoal"
     CATEGORIA_OUTROS = "outros"
     CATEGORIA_CHOICES = [
         (CATEGORIA_GASOLINA, "Gasolina"),
@@ -1348,6 +1349,7 @@ class DespesaDiaria(models.Model):
         (CATEGORIA_MANUTENCAO, "Manutencao"),
         (CATEGORIA_MATERIAL_APOIO, "Material de apoio"),
         (CATEGORIA_COMPRA_EMERGENCIAL, "Compra emergencial"),
+        (CATEGORIA_PESSOAL, "Despesa pessoal"),
         (CATEGORIA_OUTROS, "Outros"),
     ]
 

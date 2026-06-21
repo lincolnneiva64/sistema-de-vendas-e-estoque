@@ -5,7 +5,7 @@
 {% block content %}
 <style>
   .despesa-page {
-    max-width: 760px;
+    max-width: 920px;
     margin: 8px auto 60px;
     padding: 0 12px;
     color: #172033;
@@ -62,7 +62,8 @@
 
   .despesa-form,
   .despesa-resumo,
-  .despesa-lista {
+  .despesa-lista,
+  .despesa-filtros {
     border: 1px solid #e2e8f0;
     border-radius: 10px;
     background: #fff;
@@ -70,7 +71,8 @@
     margin-bottom: 10px;
   }
 
-  .despesa-form {
+  .despesa-form,
+  .despesa-filtros {
     padding: 12px;
   }
 
@@ -78,6 +80,10 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 9px;
+  }
+
+  .despesa-grid-3 {
+    grid-template-columns: 1fr 1fr 1fr;
   }
 
   .despesa-field label {
@@ -101,6 +107,32 @@
     outline: none;
   }
 
+  .despesa-money-wrap {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 9px;
+    background: #fff;
+    overflow: hidden;
+  }
+
+  .despesa-money-prefix {
+    padding-left: 11px;
+    padding-right: 4px;
+    color: #172033;
+    font-size: 16px;
+    font-weight: 950;
+    white-space: nowrap;
+  }
+
+  .despesa-money-wrap input {
+    border: 0;
+    border-radius: 0;
+    min-height: 42px;
+    padding-left: 4px;
+  }
+
   .despesa-field textarea {
     min-height: 70px;
     resize: vertical;
@@ -119,7 +151,7 @@
 
   .despesa-resumo {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0;
     overflow: hidden;
   }
@@ -220,7 +252,7 @@
     text-align: center;
   }
 
-  @media (max-width: 620px) {
+  @media (max-width: 720px) {
     .despesa-header {
       align-items: stretch;
       flex-direction: column;
@@ -231,6 +263,7 @@
       justify-content: stretch;
     }
     .despesa-grid,
+    .despesa-grid-3,
     .despesa-resumo {
       grid-template-columns: 1fr;
     }
@@ -248,14 +281,13 @@
     box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.18) !important;
     background: #eff6ff !important;
   }
-
 </style>
 
 <main class="despesa-page">
   <header class="despesa-header">
     <div>
       <h1 class="despesa-title">Despesa Diaria</h1>
-      <p class="despesa-subtitle">Lancamento rapido para gastos do dia a dia.</p>
+      <p class="despesa-subtitle">Lancamento rapido com data e de onde saiu o dinheiro.</p>
     </div>
     <nav class="despesa-actions">
       <a class="despesa-btn despesa-btn-secondary" href="{% url 'estoque:home' %}">Voltar / Painel</a>
@@ -275,8 +307,15 @@
       <input type="hidden" name="acao" id="acaoDespesaDiaria" value="">
       <div class="despesa-grid">
         <div class="despesa-field">
+          <label for="dataDespesaDiaria">Data</label>
+          <input id="dataDespesaDiaria" name="data_lancamento" type="date" value="{{ hoje|date:'Y-m-d' }}" required>
+        </div>
+        <div class="despesa-field">
           <label for="valorDespesaDiaria">Valor</label>
-          <input id="valorDespesaDiaria" name="valor" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" required>
+          <div class="despesa-money-wrap">
+            <span class="despesa-money-prefix">R$</span>
+            <input id="valorDespesaDiaria" name="valor" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" required>
+          </div>
         </div>
         <div class="despesa-field">
           <label for="categoriaDespesaDiaria">Categoria</label>
@@ -286,21 +325,24 @@
             {% endfor %}
           </select>
         </div>
-        <div class="despesa-field">
-          <label for="formaDespesaDiaria">Forma de pagamento</label>
-          <select id="formaDespesaDiaria" name="forma_pagamento">
-            {% for valor, texto in formas_pagamento %}
-              <option value="{{ valor }}" {% if valor == forma_padrao %}selected{% endif %}>{{ texto }}</option>
+        <div class="despesa-field despesa-field-full">
+          <label for="contaSaidaDespesaDiaria">De onde saiu o dinheiro</label>
+          <select id="contaSaidaDespesaDiaria" name="conta_saida" required>
+            {% for conta in contas_saida %}
+              <option value="{{ conta.id }}" {% if conta_padrao and conta.id == conta_padrao.id %}selected{% endif %}>{{ conta.nome }}</option>
             {% endfor %}
           </select>
-          <div class="despesa-item-meta">Essa despesa será lançada automaticamente em Caixa/Banco conforme a forma de pagamento.</div>
+          <div class="despesa-item-meta">Escolha Caixa, Banco/Pix ou Sangria. Esta escolha e quem manda no financeiro.</div>
         </div>
         <div class="despesa-field despesa-field-full">
           <label for="observacaoDespesaDiaria">Observacao opcional</label>
-          <textarea id="observacaoDespesaDiaria" name="observacao" placeholder="Ex.: gasolina da entrega, lanche na rua..."></textarea>
+          <textarea id="observacaoDespesaDiaria" name="observacao" placeholder="Ex.: gasolina da entrega, lanche na rua, despesa pessoal..."></textarea>
         </div>
       </div>
-      <button class="despesa-btn despesa-submit" type="submit" id="btnSalvarDespesaDiaria">Lançar despesa</button>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:10px;">
+        <button class="despesa-btn despesa-submit" type="submit" id="btnSalvarDespesaDiaria" style="margin-top:0;">Lancar despesa</button>
+        <button class="despesa-btn despesa-btn-secondary despesa-submit" type="button" id="btnLimparDespesaDiaria" style="margin-top:0;">Limpar campos</button>
+      </div>
     </form>
   </section>
 
@@ -314,25 +356,72 @@
       <div class="despesa-resumo-valor">{{ quantidade_hoje }}</div>
     </div>
     <div class="despesa-resumo-card">
+      <div class="despesa-resumo-label">Total do periodo</div>
+      <div class="despesa-resumo-valor">R$ {{ total_periodo|floatformat:2 }}</div>
+    </div>
+    <div class="despesa-resumo-card">
       <div class="despesa-resumo-label">Total do mes</div>
       <div class="despesa-resumo-valor">R$ {{ total_mes|floatformat:2 }}</div>
     </div>
   </section>
 
+  <section class="despesa-filtros" id="filtrosDespesaDiaria">
+    <form method="get" id="formFiltroDespesaDiaria">
+      <div class="despesa-grid despesa-grid-3">
+        <div class="despesa-field">
+          <label for="filtroDataInicio">Data inicial</label>
+          <input id="filtroDataInicio" name="data_inicio" type="date" value="{{ data_inicio|date:'Y-m-d' }}">
+        </div>
+        <div class="despesa-field">
+          <label for="filtroDataFim">Data final</label>
+          <input id="filtroDataFim" name="data_fim" type="date" value="{{ data_fim|date:'Y-m-d' }}">
+        </div>
+        <div class="despesa-field">
+          <label for="filtroConta">Conta de saida</label>
+          <select id="filtroConta" name="conta_saida">
+            <option value="">Todas</option>
+            {% for conta in contas_saida %}
+              <option value="{{ conta.id }}" {% if conta_filtro_id == conta.id|stringformat:'s' %}selected{% endif %}>{{ conta.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="despesa-field">
+          <label for="filtroCategoria">Categoria</label>
+          <select id="filtroCategoria" name="categoria">
+            <option value="">Todas</option>
+            {% for valor, texto in categorias %}
+              <option value="{{ valor }}" {% if categoria_filtro == valor %}selected{% endif %}>{{ texto }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="despesa-field">
+          <label>&nbsp;</label>
+          <button class="despesa-btn" type="submit">Filtrar historico</button>
+        </div>
+        <div class="despesa-field">
+          <label>&nbsp;</label>
+          <a class="despesa-btn despesa-btn-secondary" href="{% url 'estoque:despesas_diarias' %}#filtrosDespesaDiaria">Hoje</a>
+        </div>
+      </div>
+    </form>
+  </section>
+
   <section class="despesa-lista">
-    <h2>Despesas de {{ hoje|date:"d/m/Y" }}</h2>
-    {% for despesa in despesas_hoje %}
+    <h2>Historico de {{ data_inicio|date:"d/m/Y" }} ate {{ data_fim|date:"d/m/Y" }}</h2>
+    {% for despesa in despesas_periodo %}
       <article class="despesa-item">
         <div class="despesa-item-main">
           <strong>{{ despesa.get_categoria_display }}</strong>
-          <div class="despesa-item-meta">{{ despesa.data_hora|date:"H:i" }} · {{ despesa.get_forma_pagamento_display }}</div>
+          <div class="despesa-item-meta">
+            {{ despesa.data_hora|date:"d/m/Y H:i" }} · Saiu de: {{ despesa.conta_saida_nome }}
+          </div>
           {% if despesa.observacao %}
             <div class="despesa-item-meta">{{ despesa.observacao }}</div>
           {% endif %}
         </div>
         <div>
           <div class="despesa-item-valor">R$ {{ despesa.valor|floatformat:2 }}</div>
-          <form method="post" onsubmit="return confirm('Excluir esta despesa?');">
+          <form method="post" onsubmit="return confirm('Excluir esta despesa e o movimento financeiro correspondente?');">
             {% csrf_token %}
             <input type="hidden" name="acao" value="excluir">
             <input type="hidden" name="despesa_id" value="{{ despesa.id }}">
@@ -341,7 +430,7 @@
         </div>
       </article>
     {% empty %}
-      <div class="despesa-vazia">Nenhuma despesa lancada hoje.</div>
+      <div class="despesa-vazia">Nenhuma despesa encontrada neste periodo.</div>
     {% endfor %}
   </section>
 </main>
@@ -349,32 +438,111 @@
 <script>
 (function() {
   const valor = document.getElementById("valorDespesaDiaria");
+  const filtroDataInicio = document.getElementById("filtroDataInicio");
+  const areaFiltros = document.getElementById("filtrosDespesaDiaria");
+
+  function formatarMoedaCampo(campo) {
+    if (!campo) return;
+
+    let texto = (campo.value || "").trim();
+    if (!texto) return;
+
+    texto = texto.replace(/\./g, "").replace(",", ".");
+    let numero = Number(texto);
+
+    if (Number.isNaN(numero)) return;
+
+    campo.value = numero.toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
   window.addEventListener("load", function() {
+    const temFiltroNaUrl = window.location.search && window.location.search.length > 1;
+
+    if (temFiltroNaUrl && areaFiltros) {
+      areaFiltros.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+
+      setTimeout(function() {
+        if (filtroDataInicio) {
+          filtroDataInicio.focus();
+        }
+      }, 350);
+
+      return;
+    }
+
     if (!valor) return;
     valor.focus();
     valor.select();
   });
+
+  if (valor) {
+    valor.addEventListener("blur", function() {
+      formatarMoedaCampo(valor);
+    });
+
+    valor.addEventListener("change", function() {
+      formatarMoedaCampo(valor);
+    });
+  }
 })();
 </script>
-
-
 
 <script>
 (function () {
   const form = document.getElementById("formDespesaDiaria");
   const acao = document.getElementById("acaoDespesaDiaria");
   const btnSalvar = document.getElementById("btnSalvarDespesaDiaria");
+  const btnLimpar = document.getElementById("btnLimparDespesaDiaria");
   let envioEmAndamento = false;
   const campos = [
+    document.getElementById("dataDespesaDiaria"),
     document.getElementById("valorDespesaDiaria"),
     document.getElementById("categoriaDespesaDiaria"),
-    document.getElementById("formaDespesaDiaria"),
+    document.getElementById("contaSaidaDespesaDiaria"),
     document.getElementById("observacaoDespesaDiaria"),
     btnSalvar
   ].filter(Boolean);
 
   if (!form || !acao || !btnSalvar) {
     return;
+  }
+
+  const dataCampo = document.getElementById("dataDespesaDiaria");
+  const valorCampo = document.getElementById("valorDespesaDiaria");
+  const categoriaCampo = document.getElementById("categoriaDespesaDiaria");
+  const contaCampo = document.getElementById("contaSaidaDespesaDiaria");
+  const observacaoCampo = document.getElementById("observacaoDespesaDiaria");
+
+  function dataHojeISO() {
+    const hoje = new Date();
+    const ano = hoje.getFullYear();
+    const mes = String(hoje.getMonth() + 1).padStart(2, "0");
+    const dia = String(hoje.getDate()).padStart(2, "0");
+    return `${ano}-${mes}-${dia}`;
+  }
+
+  function limparCamposDespesa() {
+    if (dataCampo) dataCampo.value = dataHojeISO();
+    if (valorCampo) valorCampo.value = "";
+    if (categoriaCampo) categoriaCampo.selectedIndex = 0;
+    if (contaCampo) {
+      const padrao = Array.from(contaCampo.options).find(function (opcao) {
+        return (opcao.textContent || "").toLowerCase().includes("banco");
+      });
+      if (padrao) {
+        contaCampo.value = padrao.value;
+      } else {
+        contaCampo.selectedIndex = 0;
+      }
+    }
+    if (observacaoCampo) observacaoCampo.value = "";
+    marcarFoco(valorCampo || dataCampo);
   }
 
   function marcarFoco(campo) {
@@ -472,11 +640,53 @@
       event.preventDefault();
     }
   });
+
+  if (btnLimpar) {
+    btnLimpar.addEventListener("click", function () {
+      limparCamposDespesa();
+    });
+  }
 })();
 </script>
 
+
+<script>
+(function () {
+  const formFiltro = document.getElementById("formFiltroDespesaDiaria");
+  if (!formFiltro) return;
+
+  const camposFiltro = [
+    document.getElementById("filtroDataInicio"),
+    document.getElementById("filtroDataFim"),
+    document.getElementById("filtroConta"),
+    document.getElementById("filtroCategoria")
+  ].filter(Boolean);
+
+  let timerFiltro = null;
+
+  function aplicarFiltroAutomatico() {
+    clearTimeout(timerFiltro);
+
+    timerFiltro = setTimeout(function () {
+      const action = formFiltro.getAttribute("action") || window.location.pathname;
+      const dados = new FormData(formFiltro);
+      const params = new URLSearchParams();
+
+      dados.forEach(function (valor, chave) {
+        if (valor !== null && String(valor).trim() !== "") {
+          params.set(chave, valor);
+        }
+      });
+
+      window.location.href = action + "?" + params.toString() + "#filtrosDespesaDiaria";
+    }, 450);
+  }
+
+  camposFiltro.forEach(function (campo) {
+    campo.addEventListener("change", aplicarFiltroAutomatico);
+  });
+})();
+</script>
+
+
 {% endblock %}
-
-
-
-

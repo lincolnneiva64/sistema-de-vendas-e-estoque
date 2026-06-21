@@ -1409,25 +1409,51 @@ def _registrar_movimento_recebimento_cliente(cliente, valor_recebido, data_receb
     )
 
 
-def _registrar_movimento_despesa_diaria(despesa):
-    valor = _financeiro_dinheiro(despesa.valor).quantize(Decimal("0.01"))
-    if valor <= Decimal("0.00"):
-        return None
-    conta_financeira = _conta_financeira_por_forma_pagamento(despesa.forma_pagamento)
-    if not conta_financeira:
-        return None
+def _descricao_movimento_despesa_diaria(despesa):
     descricao = f"Despesa diaria: {despesa.get_categoria_display()}"
     observacao = (despesa.observacao or "").strip()
     if observacao:
         descricao = f"{descricao} - {observacao[:80]}"
+    return descricao
+
+
+def _registrar_movimento_despesa_diaria(despesa, conta_financeira=None):
+    valor = _financeiro_dinheiro(despesa.valor).quantize(Decimal("0.01"))
+    if valor <= Decimal("0.00"):
+        return None
+    if not conta_financeira:
+        conta_financeira = _conta_financeira_por_forma_pagamento(despesa.forma_pagamento)
+    if not conta_financeira:
+        return None
     data_despesa = timezone.localtime(despesa.data_hora).date() if despesa.data_hora else timezone.localdate()
     return MovimentoFinanceiro.objects.create(
         conta=conta_financeira,
         tipo=MovimentoFinanceiro.TIPO_SAIDA,
         valor=valor,
         data=data_despesa,
-        descricao=descricao,
+        descricao=_descricao_movimento_despesa_diaria(despesa),
         origem="despesa_diaria",
+    )
+
+
+def _movimento_despesa_diaria_correspondente(despesa):
+    if not despesa:
+        return None
+    data_despesa = timezone.localtime(despesa.data_hora).date() if despesa.data_hora else None
+    if not data_despesa:
+        return None
+    return (
+        MovimentoFinanceiro.objects
+        .filter(
+            origem="despesa_diaria",
+            tipo=MovimentoFinanceiro.TIPO_SAIDA,
+            valor=despesa.valor,
+            data=data_despesa,
+            descricao=_descricao_movimento_despesa_diaria(despesa),
+        )
+        .select_related("conta")
+        .order_by("-id")
+        .first()
     )
 
 
@@ -2779,12 +2805,19 @@ def despesas_diarias(request):
     hoje = timezone.localdate()
     inicio_mes = hoje.replace(day=1)
 
+    contas_saida = ContaFinanceira.objects.filter(ativo=True).order_by("tipo", "nome")
+    conta_padrao = contas_saida.filter(nome__icontains="Banco").first() or contas_saida.first()
+
     if request.method == "POST":
         acao = request.POST.get("acao")
         if acao == "excluir":
             despesa = get_object_or_404(DespesaDiaria, pk=request.POST.get("despesa_id"))
-            despesa.delete()
-            messages.success(request, "Despesa excluida.")
+            with transaction.atomic():
+                movimento = _movimento_despesa_diaria_correspondente(despesa)
+                if movimento:
+                    movimento.delete()
+                despesa.delete()
+            messages.success(request, "Despesa excluida junto com o movimento financeiro correspondente.")
             return redirect("estoque:despesas_diarias")
 
         if acao != "salvar_despesa":
@@ -2797,11 +2830,17 @@ def despesas_diarias(request):
             return redirect("estoque:despesas_diarias")
 
         categoria = request.POST.get("categoria")
-        forma_pagamento = request.POST.get("forma_pagamento") or DespesaDiaria.FORMA_PIX
         observacao = (request.POST.get("observacao") or "").strip()
+        data_lancamento = parse_date(request.POST.get("data_lancamento") or "") or hoje
+        conta_saida = ContaFinanceira.objects.filter(
+            pk=request.POST.get("conta_saida"),
+            ativo=True,
+        ).first()
 
         categorias_validas = {opcao[0] for opcao in DespesaDiaria.CATEGORIA_CHOICES}
-        formas_validas = {opcao[0] for opcao in DespesaDiaria.FORMA_PAGAMENTO_CHOICES}
+        forma_pagamento = DespesaDiaria.FORMA_PIX
+        if conta_saida and conta_saida.tipo == ContaFinanceira.TIPO_CAIXA:
+            forma_pagamento = DespesaDiaria.FORMA_DINHEIRO
 
         if valor <= 0:
             messages.error(request, "Informe um valor maior que zero.")
@@ -2811,22 +2850,56 @@ def despesas_diarias(request):
             messages.error(request, "Escolha uma categoria valida.")
             return redirect("estoque:despesas_diarias")
 
-        if forma_pagamento not in formas_validas:
-            forma_pagamento = DespesaDiaria.FORMA_OUTRO
+        if not conta_saida:
+            messages.error(request, "Escolha a conta de saida da despesa.")
+            return redirect("estoque:despesas_diarias")
+
+        agora = timezone.localtime()
+        data_hora = timezone.make_aware(
+            timezone.datetime(
+                data_lancamento.year,
+                data_lancamento.month,
+                data_lancamento.day,
+                agora.hour,
+                agora.minute,
+                agora.second,
+            ),
+            timezone.get_current_timezone(),
+        )
 
         with transaction.atomic():
             despesa = DespesaDiaria.objects.create(
+                data_hora=data_hora,
                 valor=valor,
                 categoria=categoria,
                 forma_pagamento=forma_pagamento,
                 observacao=observacao,
             )
-            _registrar_movimento_despesa_diaria(despesa)
+            _registrar_movimento_despesa_diaria(despesa, conta_saida)
         messages.success(request, "Despesa salva com sucesso.")
         return redirect("estoque:despesas_diarias")
 
+    data_inicio = parse_date(request.GET.get("data_inicio") or "") or hoje
+    data_fim = parse_date(request.GET.get("data_fim") or "") or hoje
+    if data_inicio > data_fim:
+        data_inicio, data_fim = data_fim, data_inicio
+
+    conta_filtro_id = request.GET.get("conta_saida") or ""
+    categoria_filtro = request.GET.get("categoria") or ""
+
+    despesas_periodo = (
+        DespesaDiaria.objects
+        .filter(data_hora__date__gte=data_inicio, data_hora__date__lte=data_fim)
+        .order_by("-data_hora", "-id")
+    )
+
+    if categoria_filtro:
+        despesas_periodo = despesas_periodo.filter(categoria=categoria_filtro)
+
     despesas_hoje = DespesaDiaria.objects.filter(data_hora__date=hoje).order_by("-data_hora", "-id")
     resumo_hoje = despesas_hoje.aggregate(total=Sum("valor"), quantidade=Count("id"))
+
+    total_periodo = despesas_periodo.aggregate(total=Sum("valor"), quantidade=Count("id"))
     total_mes = (
         DespesaDiaria.objects
         .filter(data_hora__date__gte=inicio_mes, data_hora__date__lte=hoje)
@@ -2834,18 +2907,45 @@ def despesas_diarias(request):
         or Decimal("0.00")
     )
 
+    despesas_periodo = list(despesas_periodo)
+    despesas_filtradas = []
+    conta_filtro_int = None
+    if conta_filtro_id:
+        try:
+            conta_filtro_int = int(conta_filtro_id)
+        except (TypeError, ValueError):
+            conta_filtro_int = None
+
+    for despesa in despesas_periodo:
+        movimento = _movimento_despesa_diaria_correspondente(despesa)
+        despesa.movimento_financeiro = movimento
+        despesa.conta_saida_nome = movimento.conta.nome if movimento and movimento.conta else "Nao identificada"
+        despesa.conta_saida_id = movimento.conta_id if movimento else None
+        if conta_filtro_int and despesa.conta_saida_id != conta_filtro_int:
+            continue
+        despesas_filtradas.append(despesa)
+
     return render(
         request,
         "estoque/despesas_diarias.html",
         {
             "hoje": hoje,
+            "data_inicio": data_inicio,
+            "data_fim": data_fim,
+            "conta_filtro_id": conta_filtro_id,
+            "categoria_filtro": categoria_filtro,
             "despesas_hoje": despesas_hoje,
+            "despesas_periodo": despesas_filtradas,
             "total_hoje": resumo_hoje["total"] or Decimal("0.00"),
             "quantidade_hoje": resumo_hoje["quantidade"] or 0,
+            "total_periodo": sum((d.valor for d in despesas_filtradas), Decimal("0.00")),
+            "quantidade_periodo": len(despesas_filtradas),
             "total_mes": total_mes,
             "categorias": DespesaDiaria.CATEGORIA_CHOICES,
             "formas_pagamento": DespesaDiaria.FORMA_PAGAMENTO_CHOICES,
             "forma_padrao": DespesaDiaria.FORMA_PIX,
+            "contas_saida": contas_saida,
+            "conta_padrao": conta_padrao,
         },
     )
 
