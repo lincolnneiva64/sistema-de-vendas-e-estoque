@@ -9811,6 +9811,27 @@ def venda_adicionar_produto_item(request, pk):
     itens_adicionados_ids = _ids_itens_adicionados_param(request)
     itens_adicionados_param = ",".join(str(item_id) for item_id in itens_adicionados_ids)
 
+    if request.method == "POST":
+        produto_bloqueio_id = request.POST.get("produto_id")
+        produto_bloqueio = (
+            Produto.objects
+            .filter(pk=produto_bloqueio_id, excluido=False)
+            .first()
+            if produto_bloqueio_id
+            else None
+        )
+        if produto_bloqueio:
+            try:
+                estoque_bloqueio = Decimal(str(getattr(produto_bloqueio, "quantidade", 0) or 0))
+            except Exception:
+                estoque_bloqueio = Decimal("0.00")
+            if estoque_bloqueio <= Decimal("0.00"):
+                messages.error(
+                    request,
+                    f"Produto com estoque zerado: {produto_bloqueio.nome}. A nota nao foi alterada.",
+                )
+                return redirect("estoque:venda_adicionar_produto_item", pk=venda.id)
+
     def obter_produto(produto_id):
         try:
             return produtos.get(pk=produto_id)
@@ -9949,6 +9970,7 @@ def venda_adicionar_produto_item(request, pk):
             "nome": produto.nome,
             "preco": str(preco_produto(produto)),
             "unidade": unidade_produto(produto),
+            "estoque": str(getattr(produto, "quantidade", Decimal("0.00")) or Decimal("0.00")),
         }
         for produto in produtos
     ]

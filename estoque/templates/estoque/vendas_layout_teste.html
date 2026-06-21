@@ -2321,6 +2321,115 @@ const receberClienteUrlBase = "{% url 'estoque:receber_cliente' 0 %}";
 const vendasUrl = "{% url 'estoque:vendas' %}";
 const gravarVendaUrl = "{% url 'estoque:gravar_venda' %}";
 const historicoClienteProdutoUrl = "{% url 'estoque:vendas_cliente_produto_historico' %}";
+
+// ===== BLOQUEIO PRODUTO ESTOQUE ZERADO NA VENDA NORMAL - CHATGPT 2026-06-21 =====
+function vendaProdutoSelecionadoOption() {
+    if (!produto) return null;
+
+    if (produto.selectedOptions && produto.selectedOptions.length) {
+        const selecionado = produto.selectedOptions[0];
+        if (selecionado && selecionado.value) return selecionado;
+    }
+
+    const textoBusca = normalizarTextoVendaEstoque(produtoBusca ? produtoBusca.value : "");
+    if (!textoBusca) return null;
+
+    return Array.from(produto.options || []).find(function(opcao) {
+        return opcao.value && normalizarTextoVendaEstoque(opcao.value) === textoBusca;
+    }) || null;
+}
+
+function normalizarTextoVendaEstoque(valor) {
+    return String(valor || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+}
+
+function numeroEstoqueVendaNormal(opcao) {
+    if (!opcao) return 0;
+    const bruto = String(opcao.dataset.estoque || "0").replace(",", ".");
+    const numero = Number(bruto);
+    return Number.isNaN(numero) ? 0 : numero;
+}
+
+function produtoVendaNormalEstoqueZerado() {
+    const opcao = vendaProdutoSelecionadoOption();
+    if (!opcao || !opcao.value) return false;
+    return numeroEstoqueVendaNormal(opcao) <= 0;
+}
+
+function mostrarBloqueioEstoqueZeradoVendaNormal() {
+    const opcao = vendaProdutoSelecionadoOption();
+    const nome = opcao && opcao.value ? opcao.value : "Produto";
+    if (estoquePreview) {
+        estoquePreview.textContent = "Produto com estoque zerado: " + nome;
+        estoquePreview.style.display = "inline-flex";
+        estoquePreview.style.background = "#fee2e2";
+        estoquePreview.style.borderColor = "#ef4444";
+        estoquePreview.style.color = "#991b1b";
+        estoquePreview.style.fontWeight = "950";
+    }
+    const toast = document.getElementById("vendaToast");
+    if (toast) {
+        toast.textContent = "Produto com estoque zerado. Nao e possivel adicionar na venda.";
+        toast.classList.add("visivel");
+        setTimeout(function() {
+            toast.classList.remove("visivel");
+        }, 3500);
+    }
+}
+
+function limparProdutoVendaNormalZerado() {
+    if (produto) produto.value = "";
+    if (produtoBusca) {
+        produtoBusca.value = "";
+        produtoBusca.focus();
+        produtoBusca.select();
+    }
+    if (quantidade) quantidade.value = "";
+    if (unidade) unidade.value = "";
+    if (preco) preco.value = "";
+    if (historicoProdutoCliente) historicoProdutoCliente.textContent = "";
+}
+
+function bloquearProdutoEstoqueZeradoVendaNormal(event) {
+    if (!produtoVendaNormalEstoqueZerado()) return false;
+
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === "function") {
+            event.stopImmediatePropagation();
+        }
+    }
+
+    mostrarBloqueioEstoqueZeradoVendaNormal();
+    limparProdutoVendaNormalZerado();
+    return true;
+}
+
+if (produtoBusca) {
+    produtoBusca.addEventListener("blur", function(event) {
+        setTimeout(function() {
+            bloquearProdutoEstoqueZeradoVendaNormal(event);
+        }, 80);
+    });
+}
+
+if (produto) {
+    produto.addEventListener("change", function(event) {
+        bloquearProdutoEstoqueZeradoVendaNormal(event);
+    });
+}
+
+document.addEventListener("click", function(event) {
+    const botaoAdicionar = event.target && event.target.closest ? event.target.closest("#btnAdicionarItemVenda") : null;
+    if (!botaoAdicionar) return;
+    bloquearProdutoEstoqueZeradoVendaNormal(event);
+}, true);
+// ===== FIM BLOQUEIO PRODUTO ESTOQUE ZERADO NA VENDA NORMAL =====
 const clienteInicialVenda = JSON.parse(document.getElementById("clienteInicialVenda").textContent || "null");
 let pedidoImportadoVenda = JSON.parse(document.getElementById("pedidoImportadoVenda").textContent || "null");
 const clienteResumoStorageKey = "vendas.clienteSelecionado";

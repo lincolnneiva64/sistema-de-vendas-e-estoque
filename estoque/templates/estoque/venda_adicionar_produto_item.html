@@ -403,6 +403,28 @@
       return produto && produtosExistentes.has(String(produto.id));
     }
 
+    function estoqueNumero(produto) {
+      if (!produto) return 0;
+      const numero = Number(String(produto.estoque || "0").replace(",", "."));
+      return Number.isNaN(numero) ? 0 : numero;
+    }
+
+    function produtoEstoqueZerado(produto) {
+      return produto && estoqueNumero(produto) <= 0;
+    }
+
+    function limparProdutoEscolhido() {
+      if (productIdInput) productIdInput.value = "";
+      if (priceInput) priceInput.value = "";
+      if (unitPreview) unitPreview.textContent = "-";
+    }
+
+    function mostrarAvisoProdutoZerado(produto) {
+      if (!duplicateWarning) return;
+      duplicateWarning.textContent = "Produto com estoque zerado: " + (produto && produto.nome ? produto.nome : "") + ". Nao e possivel adicionar na nota.";
+      duplicateWarning.classList.add("visible");
+    }
+
     function mostrarAvisoDuplicado() {
       if (!duplicateWarning) return;
       duplicateWarning.textContent = mensagemProdutoDuplicado;
@@ -418,10 +440,18 @@
     function selecionarProduto(produto) {
       if (!produto || !productSearch || !productIdInput) return;
       productSearch.value = produto.nome;
+
+      if (produtoEstoqueZerado(produto)) {
+        limparProdutoEscolhido();
+        fecharSugestoes();
+        mostrarAvisoProdutoZerado(produto);
+        productSearch.focus();
+        productSearch.select();
+        return;
+      }
+
       if (produtoJaExiste(produto)) {
-        productIdInput.value = "";
-        if (priceInput) priceInput.value = "";
-        if (unitPreview) unitPreview.textContent = "-";
+        limparProdutoEscolhido();
         fecharSugestoes();
         mostrarAvisoDuplicado();
         productSearch.focus();
@@ -447,7 +477,12 @@
       sugestoes.forEach((produto, index) => {
         const item = document.createElement("div");
         item.className = "add-product-suggestion" + (index === sugestaoAtiva ? " active" : "");
-        item.textContent = produto.nome;
+        item.textContent = produtoEstoqueZerado(produto) ? produto.nome + " - ESTOQUE ZERADO" : produto.nome;
+        if (produtoEstoqueZerado(produto)) {
+          item.style.color = "#991b1b";
+          item.style.fontWeight = "950";
+          item.title = "Produto com estoque zerado. Nao pode ser adicionado.";
+        }
         item.addEventListener("mouseenter", function () {
           sugestaoAtiva = index;
           renderizarSugestoes();
@@ -510,11 +545,24 @@
 
     if (form && productIdInput) {
       form.addEventListener("submit", function (event) {
+        const produtoSelecionado = produtos.find(function (produto) {
+          return String(produto.id) === String(productIdInput.value);
+        });
+
+        if (produtoEstoqueZerado(produtoSelecionado)) {
+          event.preventDefault();
+          limparProdutoEscolhido();
+          mostrarAvisoProdutoZerado(produtoSelecionado);
+          if (productSearch) {
+            productSearch.focus();
+            productSearch.select();
+          }
+          return;
+        }
+
         if (!produtosExistentes.has(String(productIdInput.value))) return;
         event.preventDefault();
-        productIdInput.value = "";
-        if (priceInput) priceInput.value = "";
-        if (unitPreview) unitPreview.textContent = "-";
+        limparProdutoEscolhido();
         mostrarAvisoDuplicado();
         if (productSearch) productSearch.focus();
       });
