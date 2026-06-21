@@ -3740,8 +3740,20 @@ def compras_detalhe(request, pk):
         pagamento_detalhe_texto = "À vista"
     alocacao_financeira = _alocacao_financeira_compra(compra)
     correcao_financeira = None
+    aviso_erro_lancamento_financeiro = None
     if conta_pagar and not compra_a_vista:
         correcao_financeira = _resumo_correcao_financeira_compra(compra, conta_pagar)
+        texto_rastro_financeiro = f"{conta_pagar.observacao or ''}\n{compra.observacao or ''}".lower()
+        if "erro de lancamento" in texto_rastro_financeiro and "caixa/banco nao alterado" in texto_rastro_financeiro:
+            total_pagamentos_historico = sum(
+                (pagamento.valor or Decimal("0.00")) for pagamento in conta_pagar.pagamentos.all()
+            ).quantize(Decimal("0.01"))
+            diferenca_historica = (total_pagamentos_historico - _financeiro_dinheiro(conta_pagar.valor_original)).quantize(Decimal("0.01"))
+            aviso_erro_lancamento_financeiro = {
+                "total_conta": _financeiro_dinheiro(conta_pagar.valor_original).quantize(Decimal("0.01")),
+                "total_pagamentos": total_pagamentos_historico,
+                "diferenca_historica": diferenca_historica,
+            }
     total_alocado = sum(alocacao_financeira.values(), Decimal("0.00")).quantize(Decimal("0.01"))
     aviso_financeiro_avista = compra_a_vista and total_alocado != _financeiro_dinheiro(compra.total).quantize(Decimal("0.01"))
     return render(
@@ -3757,6 +3769,7 @@ def compras_detalhe(request, pk):
             "pagamento_detalhe_texto": pagamento_detalhe_texto,
             "situacao_financeira_texto": situacao_financeira_texto,
             "correcao_financeira": correcao_financeira,
+            "aviso_erro_lancamento_financeiro": aviso_erro_lancamento_financeiro,
             "aviso_financeiro_avista": aviso_financeiro_avista,
             "total_alocado": total_alocado,
         },

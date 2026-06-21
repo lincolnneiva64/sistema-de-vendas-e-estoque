@@ -776,6 +776,17 @@
         <div><strong>Fornecedor</strong>{{ conta_pagar.fornecedor.nome|default:"-" }}</div>
         <div><strong>Emissão</strong>{{ conta_pagar.data_emissao|date:"d/m/Y" }}</div>
       </div>
+      {% if aviso_erro_lancamento_financeiro %}
+        <div class="nota-compra-alerta-financeiro">
+          <strong>Esta compra foi ajustada como erro de lancamento da nota.</strong>
+          <div>A Conta a Pagar foi recalculada para o novo total e permanece paga. Os pagamentos abaixo foram preservados apenas como historico. Caixa/Banco nao foi alterado.</div>
+          <div class="nota-compra-alerta-valores">
+            <span>Total atual da conta: R$ {{ aviso_erro_lancamento_financeiro.total_conta|floatformat:2 }}</span>
+            <span>Total dos pagamentos preservados no historico: R$ {{ aviso_erro_lancamento_financeiro.total_pagamentos|floatformat:2 }}</span>
+            <span>Diferenca preservada apenas como historico: R$ {{ aviso_erro_lancamento_financeiro.diferenca_historica|floatformat:2 }}</span>
+          </div>
+        </div>
+      {% endif %}
       <div class="nota-compra-historico-pagamentos">
         <p class="nota-compra-historico-titulo">Historico de pagamentos</p>
         {% if conta_pagar.pagamentos.all %}

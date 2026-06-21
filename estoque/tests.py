@@ -608,6 +608,10 @@ class CorrecaoFinanceiroCompraTests(TestCase):
         self.assertEqual(self.conta.status, ContaPagar.STATUS_PAGA)
         self.assertIn("erro de lancamento", self.conta.observacao)
         self.assertContains(resposta, "Financeiro ajustado como erro de lancamento")
+        self.assertContains(resposta, "Esta compra foi ajustada como erro de lancamento da nota")
+        self.assertContains(resposta, "Os pagamentos abaixo foram preservados apenas como historico")
+        self.assertContains(resposta, "Caixa/Banco nao foi alterado")
+        self.assertContains(resposta, "Total dos pagamentos preservados no historico")
         self.assert_estoque_itens_caixa_inalterados()
 
     def test_compra_a_vista_nao_pode_usar_esta_etapa(self):
