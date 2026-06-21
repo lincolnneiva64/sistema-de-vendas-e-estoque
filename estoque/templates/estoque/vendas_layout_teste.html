@@ -2908,7 +2908,7 @@ if (clienteInicialVenda && clienteInicialVenda.id) {
     atualizarClienteSelecionadoDoServidor(clienteInicialVenda);
 } else {
     limparClienteSelecionado();
-    tipoVenda.value = "";
+    limparTipoPagamentoVenda();
 }
 
 window.addEventListener("pageshow", function () {
@@ -3273,6 +3273,13 @@ clienteBusca.addEventListener("input", () => {
 
 clienteBusca.addEventListener("focus", () => {
     const texto = clienteBusca.value.trim();
+    if (!texto) {
+        clientesSugestoes = [];
+        clienteIndexAtivo = -1;
+        clienteSugestoesBox.innerHTML = "";
+        clienteSugestoesBox.style.display = "none";
+        return;
+    }
     buscarClientes(texto);
 });
 
@@ -3530,6 +3537,12 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
     }
 } 
 
+function limparTipoPagamentoVenda() {
+    if (!tipoVenda) return;
+    tipoVenda.value = "";
+    tipoVenda.dispatchEvent(new Event("change"));
+}
+
 function limparCamposProdutoVenda() {
     estoquePreview.innerText = "";
     estoquePreview.style.display = "none";
@@ -3550,7 +3563,7 @@ function limparCabecalhoVenda(resetarTipo = false) {
     operadorVenda.value = "";
     dataVenda.value = dataLocalHojeInput();
 
-    tipoVenda.value = pagamentoPadraoVenda;
+    limparTipoPagamentoVenda();
 
     focarProximoCampo(clienteBusca);
 }
