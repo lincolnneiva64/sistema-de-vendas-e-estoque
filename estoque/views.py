@@ -2008,10 +2008,42 @@ def caixa_banco(request):
     operadores_caixa = list(Funcionario.operadores_do_caixa().only("id", "nome"))
     operadores_caixa_por_id = {str(funcionario.id): funcionario for funcionario in operadores_caixa}
 
-    def operador_post():
+    painel_por_acao_caixa = {
+        "abrir_caixa": "abrir-caixa",
+        "ajustar_saldo": "corrigir-saldo",
+        "ajuste_saldo": "corrigir-saldo",
+        "ajuste_banco_pix": "corrigir-saldo",
+        "fazer_sangria": "sangria",
+        "depositar_reserva_banco": "deposito",
+        "reforcar_caixa_reserva": "reforco",
+        "pagar_com_reserva": "pagar-reserva",
+        "entrada": "entrada",
+        "saida": "saida",
+        "entrada_avulsa": "entrada",
+        "saida_avulsa": "saida",
+        "transferencia": "transferencia",
+    }
+
+    erro_local_caixa = request.session.pop("caixa_banco_erro_operacao", {}) if request.method == "GET" else {}
+    erro_operacao = erro_local_caixa.get("painel", "")
+    erro_operacao_texto = erro_local_caixa.get("texto", "")
+
+    def registrar_erro_caixa_local(acao_ou_painel, texto):
+        painel = painel_por_acao_caixa.get(acao_ou_painel, acao_ou_painel)
+        messages.error(request, texto)
+        if painel:
+            request.session["caixa_banco_erro_operacao"] = {
+                "painel": painel,
+                "texto": texto,
+            }
+
+    def operador_post(painel_erro=""):
         funcionario = operadores_caixa_por_id.get(request.POST.get("operador", "").strip())
         if not funcionario:
-            messages.error(request, "Selecione um operador autorizado para movimentar Caixa/Banco.")
+            registrar_erro_caixa_local(
+                painel_erro,
+                "Selecione um operador autorizado para movimentar Caixa/Banco.",
+            )
             return None
         return funcionario.nome
 
@@ -2028,18 +2060,20 @@ def caixa_banco(request):
             origem=origem,
         )
 
-    def criar_transferencia(conta_origem, conta_destino, valor, descricao, origem, operador=""):
+    def criar_transferencia(conta_origem, conta_destino, valor, descricao, origem, operador="", painel_erro=""):
         if not conta_origem or not conta_destino:
-            messages.error(request, "Conta financeira nao encontrada.")
+            registrar_erro_caixa_local(painel_erro, "Conta financeira nao encontrada.")
             return False
         if valor is None or valor <= 0:
-            messages.error(request, "Informe um valor maior que zero.")
+            registrar_erro_caixa_local(painel_erro, "Informe um valor maior que zero.")
             return False
         if conta_origem.pk == conta_destino.pk:
-            messages.error(request, "Origem e destino nao podem ser iguais.")
+            registrar_erro_caixa_local(painel_erro, "Origem e destino nao podem ser iguais.")
             return False
         if _saldo_conta_financeira(conta_origem) < valor:
-            messages.error(request, "Saldo insuficiente na conta de origem.")
+            saldo_disponivel = _saldo_conta_financeira(conta_origem)
+            texto_erro = f"Saldo insuficiente na conta de origem. Disponivel em {conta_origem.nome}: {_financeiro_moeda_br(saldo_disponivel)}."
+            registrar_erro_caixa_local(painel_erro, texto_erro)
             return False
         MovimentoFinanceiro.objects.create(
             conta=conta_origem,
@@ -2058,7 +2092,7 @@ def caixa_banco(request):
 
         if acao in {"abrir_caixa", "ajustar_saldo", "ajuste_saldo"}:
             conta = ContaFinanceira.objects.filter(pk=request.POST.get("conta"), ativo=True).first()
-            operador = operador_post()
+            operador = operador_post(painel_por_acao_caixa.get(acao, ""))
             if operador is None:
                 return redirect("estoque:caixa_banco")
             if acao == "abrir_caixa":
@@ -2072,7 +2106,7 @@ def caixa_banco(request):
                 origem = "ajuste_saldo"
 
             if not conta or novo_saldo is None or novo_saldo < 0:
-                messages.error(request, "Informe um saldo zero ou positivo.")
+                registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "Informe um saldo zero ou positivo.")
                 return redirect("estoque:caixa_banco")
 
             with transaction.atomic():
@@ -2084,16 +2118,16 @@ def caixa_banco(request):
             return redirect("estoque:caixa_banco")
 
         if acao == "ajuste_banco_pix":
-            operador = operador_post()
+            operador = operador_post(painel_por_acao_caixa.get(acao, ""))
             if operador is None:
                 return redirect("estoque:caixa_banco")
             valor = _parse_decimal_financeiro(request.POST.get("valor"))
             descricao = request.POST.get("descricao", "").strip() or "Conferencia / ajuste Banco/Pix"
             if not conta_banco:
-                messages.error(request, "Conta Banco/Pix nao encontrada.")
+                registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "Conta Banco/Pix nao encontrada.")
                 return redirect("estoque:caixa_banco")
             if valor is None or valor == 0:
-                messages.error(request, "Informe um valor diferente de zero para ajustar Banco/Pix.")
+                registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "Informe um valor diferente de zero para ajustar Banco/Pix.")
                 return redirect("estoque:caixa_banco")
 
             with transaction.atomic():
@@ -2110,7 +2144,7 @@ def caixa_banco(request):
             return redirect("estoque:caixa_banco")
 
         if acao in {"fazer_sangria", "depositar_reserva_banco", "reforcar_caixa_reserva", "transferencia"}:
-            operador = operador_post()
+            operador = operador_post(painel_por_acao_caixa.get(acao, ""))
             if operador is None:
                 return redirect("estoque:caixa_banco")
             if acao == "fazer_sangria":
@@ -2136,14 +2170,14 @@ def caixa_banco(request):
             valor = _parse_decimal_financeiro(request.POST.get("valor"))
 
             with transaction.atomic():
-                if not criar_transferencia(conta_origem, conta_destino, valor, descricao, origem, operador):
+                if not criar_transferencia(conta_origem, conta_destino, valor, descricao, origem, operador, painel_por_acao_caixa.get(acao, "transferencia")):
                     return redirect("estoque:caixa_banco")
             messages.success(request, "Transferencia registrada com sucesso.")
             return redirect("estoque:caixa_banco")
 
         if acao in {"entrada", "saida", "entrada_avulsa", "saida_avulsa", "pagar_com_reserva"}:
             conta = ContaFinanceira.objects.filter(pk=request.POST.get("conta"), ativo=True).first()
-            operador = operador_post()
+            operador = operador_post(painel_por_acao_caixa.get(acao, ""))
             if operador is None:
                 return redirect("estoque:caixa_banco")
             if acao == "pagar_com_reserva":
@@ -2167,10 +2201,12 @@ def caixa_banco(request):
                 origem = "caixa_banco_manual"
 
             if not conta or valor is None or valor <= 0:
-                messages.error(request, "Informe um valor maior que zero.")
+                registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "Informe um valor maior que zero.")
                 return redirect("estoque:caixa_banco")
             if tipo_movimento == MovimentoFinanceiro.TIPO_SAIDA and _saldo_conta_financeira(conta) < valor:
-                messages.error(request, "Saldo insuficiente na conta selecionada.")
+                saldo_disponivel = _saldo_conta_financeira(conta)
+                texto_erro = f"Saldo insuficiente na conta selecionada. Disponivel em {conta.nome}: {_financeiro_moeda_br(saldo_disponivel)}."
+                registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), texto_erro)
                 return redirect("estoque:caixa_banco")
 
             with transaction.atomic():
@@ -2269,6 +2305,8 @@ def caixa_banco(request):
             "contas": contas,
             "conta_caixa": conta_caixa,
             "conta_reserva": conta_reserva,
+            "erro_operacao": erro_operacao,
+            "erro_operacao_texto": erro_operacao_texto,
             "conta_banco": conta_banco,
             "saldo_caixa": saldo_caixa,
             "saldo_caixa_texto": _financeiro_moeda_br(saldo_caixa),

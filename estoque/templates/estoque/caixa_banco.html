@@ -319,6 +319,18 @@
     display: block;
   }
 
+  .caixa-form-error {
+    margin: 10px 0 12px;
+    padding: 10px 12px;
+    border: 1px solid #fecaca;
+    border-left: 5px solid #dc2626;
+    border-radius: 9px;
+    background: #fef2f2;
+    color: #991b1b;
+    font-weight: 900;
+    line-height: 1.35;
+  }
+
   .caixa-flow {
     display: inline-flex;
     align-items: center;
@@ -896,17 +908,20 @@
     <div class="caixa-operacoes" role="tablist" aria-label="Tipo de operacao">
       <h3 class="caixa-operacoes-card-title">Escolha a operação</h3>
       <p class="caixa-operacoes-card-help">Nenhum formulário abre automaticamente. Toque em uma opção para abrir, toque de novo para fechar.</p>
-      <button class="caixa-operacao-btn" type="button" data-caixa-op="abrir-caixa"><span class="caixa-operacao-main">Abrir caixa / Troco inicial</span><span class="caixa-operacao-sub">Somente Caixa</span></button>
-      <button class="caixa-operacao-btn" type="button" data-caixa-op="sangria"><span class="caixa-operacao-main">Sangria: guardar dinheiro</span><span class="caixa-operacao-sub">Caixa -> Sangria</span></button>
-      <button class="caixa-operacao-btn" type="button" data-caixa-op="reforco"><span class="caixa-operacao-main">Sangria: reforçar caixa</span><span class="caixa-operacao-sub">Sangria -> Caixa</span></button>
-      <button class="caixa-operacao-btn" type="button" data-caixa-op="pagar-reserva"><span class="caixa-operacao-main">Sangria: pagar despesa</span><span class="caixa-operacao-sub">Sangria -> Saída</span></button>
-      <button class="caixa-operacao-btn" type="button" data-caixa-op="deposito"><span class="caixa-operacao-main">Sangria: depositar no banco</span><span class="caixa-operacao-sub">Sangria -> Banco</span></button>
-      <button class="caixa-operacao-btn" type="button" data-caixa-op="corrigir-saldo"><span class="caixa-operacao-main">Corrigir saldo real</span><span class="caixa-operacao-sub">Caixa • Sangria • Banco/Pix</span></button>
-      <button class="caixa-operacao-btn" type="button" data-caixa-op="entrada"><span class="caixa-operacao-main">Entrada avulsa: dinheiro sem origem</span><span class="caixa-operacao-sub">Só use se não for venda, cliente ou empréstimo</span></button>
-      <button class="caixa-operacao-btn" type="button" data-caixa-op="saida"><span class="caixa-operacao-main">Saída avulsa: retirada sem módulo</span><span class="caixa-operacao-sub">Só use se não for compra, despesa, conta ou dívida</span></button>
+      <button class="caixa-operacao-btn{% if erro_operacao == "abrir-caixa" %} ativa{% endif %}" type="button" data-caixa-op="abrir-caixa"><span class="caixa-operacao-main">Abrir caixa / Troco inicial</span><span class="caixa-operacao-sub">Somente Caixa</span></button>
+      <button class="caixa-operacao-btn{% if erro_operacao == "sangria" %} ativa{% endif %}" type="button" data-caixa-op="sangria"><span class="caixa-operacao-main">Sangria: guardar dinheiro</span><span class="caixa-operacao-sub">Caixa -> Sangria</span></button>
+      <button class="caixa-operacao-btn{% if erro_operacao == "reforco" %} ativa{% endif %}" type="button" data-caixa-op="reforco"><span class="caixa-operacao-main">Sangria: reforçar caixa</span><span class="caixa-operacao-sub">Sangria -> Caixa</span></button>
+      <button class="caixa-operacao-btn{% if erro_operacao == "pagar-reserva" %} ativa{% endif %}" type="button" data-caixa-op="pagar-reserva"><span class="caixa-operacao-main">Sangria: pagar despesa</span><span class="caixa-operacao-sub">Sangria -> Saída</span></button>
+      <button class="caixa-operacao-btn{% if erro_operacao == "deposito" %} ativa{% endif %}" type="button" data-caixa-op="deposito"><span class="caixa-operacao-main">Sangria: depositar no banco</span><span class="caixa-operacao-sub">Sangria -> Banco</span></button>
+      <button class="caixa-operacao-btn{% if erro_operacao == "corrigir-saldo" %} ativa{% endif %}" type="button" data-caixa-op="corrigir-saldo"><span class="caixa-operacao-main">Corrigir saldo real</span><span class="caixa-operacao-sub">Caixa • Sangria • Banco/Pix</span></button>
+      <button class="caixa-operacao-btn{% if erro_operacao == "entrada" %} ativa{% endif %}" type="button" data-caixa-op="entrada"><span class="caixa-operacao-main">Entrada avulsa: dinheiro sem origem</span><span class="caixa-operacao-sub">Só use se não for venda, cliente ou empréstimo</span></button>
+      <button class="caixa-operacao-btn{% if erro_operacao == "saida" %} ativa{% endif %}" type="button" data-caixa-op="saida"><span class="caixa-operacao-main">Saída avulsa: retirada sem módulo</span><span class="caixa-operacao-sub">Só use se não for compra, despesa, conta ou dívida</span></button>
     </div>
 
-    <article class="caixa-operacao-form" data-caixa-op-panel="sangria">
+    <article class="caixa-operacao-form{% if erro_operacao == "sangria" %} ativa{% endif %}" data-caixa-op-panel="sangria">
+      {% if erro_operacao == "sangria" %}
+        <div class="caixa-form-error">{{ erro_operacao_texto }}</div>
+      {% endif %}
       <h2 class="caixa-form-title">Fazer sangria / Guardar na reserva</h2>
       <p class="caixa-form-help">Transferência interna: retira dinheiro do caixa da frente e guarda na Sangria/Reserva.</p>
       <div class="caixa-flow">Caixa em espécie -> Sangria / Reserva</div>
@@ -939,7 +954,10 @@
       </form>
     </article>
 
-    <article class="caixa-operacao-form" data-caixa-op-panel="reforco">
+    <article class="caixa-operacao-form{% if erro_operacao == "reforco" %} ativa{% endif %}" data-caixa-op-panel="reforco">
+      {% if erro_operacao == "reforco" %}
+        <div class="caixa-form-error">{{ erro_operacao_texto }}</div>
+      {% endif %}
       <h2 class="caixa-form-title">Reforçar caixa com reserva</h2>
       <p class="caixa-form-help">Transferência interna: devolve dinheiro da Sangria/Reserva para o Caixa em espécie.</p>
       <div class="caixa-flow">Sangria / Reserva -> Caixa em espécie</div>
@@ -972,7 +990,10 @@
       </form>
     </article>
 
-    <article class="caixa-operacao-form" data-caixa-op-panel="deposito">
+    <article class="caixa-operacao-form{% if erro_operacao == "deposito" %} ativa{% endif %}" data-caixa-op-panel="deposito">
+      {% if erro_operacao == "deposito" %}
+        <div class="caixa-form-error">{{ erro_operacao_texto }}</div>
+      {% endif %}
       <h2 class="caixa-form-title">Depositar reserva no banco</h2>
       <p class="caixa-form-help">Transferência interna: move dinheiro da Sangria/Reserva para Banco/Pix.</p>
       <div class="caixa-flow">Sangria / Reserva -> Banco/Pix</div>
@@ -1005,7 +1026,10 @@
       </form>
     </article>
 
-    <article class="caixa-operacao-form" data-caixa-op-panel="pagar-reserva">
+    <article class="caixa-operacao-form{% if erro_operacao == "pagar-reserva" %} ativa{% endif %}" data-caixa-op-panel="pagar-reserva">
+      {% if erro_operacao == "pagar-reserva" %}
+        <div class="caixa-form-error">{{ erro_operacao_texto }}</div>
+      {% endif %}
       <h2 class="caixa-form-title">Pagar com reserva / Saída da sangria</h2>
       <p class="caixa-form-help">Saída definitiva: usa dinheiro da Sangria/Reserva para pagar algo fora da empresa.</p>
       <div class="caixa-flow">Sangria / Reserva -> Pagamento/Saída</div>
@@ -1038,7 +1062,10 @@
       </form>
     </article>
 
-    <article class="caixa-operacao-form" data-caixa-op-panel="entrada">
+    <article class="caixa-operacao-form{% if erro_operacao == "entrada" %} ativa{% endif %}" data-caixa-op-panel="entrada">
+      {% if erro_operacao == "entrada" %}
+        <div class="caixa-form-error">{{ erro_operacao_texto }}</div>
+      {% endif %}
       <h2 class="caixa-form-title">Entrada avulsa</h2>
       <p class="caixa-form-help">Entrada direta: use apenas para dinheiro que não veio de venda, recebimento de cliente, compra, empréstimo cadastrado ou outro módulo.</p>
       <form method="post">
@@ -1078,7 +1105,10 @@
       </form>
     </article>
 
-    <article class="caixa-operacao-form" data-caixa-op-panel="saida">
+    <article class="caixa-operacao-form{% if erro_operacao == "saida" %} ativa{% endif %}" data-caixa-op-panel="saida">
+      {% if erro_operacao == "saida" %}
+        <div class="caixa-form-error">{{ erro_operacao_texto }}</div>
+      {% endif %}
       <h2 class="caixa-form-title">Saída avulsa</h2>
       <p class="caixa-form-help">Saída direta: use apenas para saída que não está em despesas, contas a pagar, compras, dívidas ou outro módulo.</p>
       <form method="post">
@@ -1118,7 +1148,10 @@
       </form>
     </article>
 
-    <article class="caixa-operacao-form" data-caixa-op-panel="corrigir-saldo">
+    <article class="caixa-operacao-form{% if erro_operacao == "corrigir-saldo" %} ativa{% endif %}" data-caixa-op-panel="corrigir-saldo">
+      {% if erro_operacao == "corrigir-saldo" %}
+        <div class="caixa-form-error">{{ erro_operacao_texto }}</div>
+      {% endif %}
       <h2 class="caixa-form-title">Informar / Corrigir saldo real</h2>
       <p class="caixa-form-help">Ajuste por saldo final: o sistema cria a diferença necessária para a conta escolhida chegar ao novo saldo informado.</p>
       <form method="post">
@@ -1158,7 +1191,10 @@
       </form>
     </article>
 
-    <article class="caixa-operacao-form" data-caixa-op-panel="abrir-caixa">
+    <article class="caixa-operacao-form{% if erro_operacao == "abrir-caixa" %} ativa{% endif %}" data-caixa-op-panel="abrir-caixa">
+      {% if erro_operacao == "abrir-caixa" %}
+        <div class="caixa-form-error">{{ erro_operacao_texto }}</div>
+      {% endif %}
       <h2 class="caixa-form-title">Abrir caixa / Troco inicial</h2>
       <p class="caixa-form-help">Ajuste direto no Caixa em espécie: use no começo do dia para informar quanto ficará no caixa para troco.</p>
       <form method="post">
@@ -1629,4 +1665,30 @@
     });
   });
 </script>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const caixaOperacaoErroInicial = "{{ erro_operacao|default:''|escapejs }}";
+    if (!caixaOperacaoErroInicial) return;
+
+    document.querySelectorAll(".caixa-operacao-form").forEach(function (panel) {
+      panel.classList.remove("ativa");
+    });
+    document.querySelectorAll(".caixa-operacao-btn").forEach(function (btn) {
+      btn.classList.remove("ativa");
+    });
+
+    const painel = document.querySelector('[data-caixa-op-panel="' + caixaOperacaoErroInicial + '"]');
+    const botao = document.querySelector('[data-caixa-op="' + caixaOperacaoErroInicial + '"]');
+
+    if (painel) {
+      painel.classList.add("ativa");
+      painel.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+    if (botao) {
+      botao.classList.add("ativa");
+    }
+  });
+</script>
+
 {% endblock %}
