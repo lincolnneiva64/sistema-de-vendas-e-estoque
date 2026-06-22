@@ -5356,6 +5356,31 @@ def produto_excluir_definitivo(request, pk):
         produto.delete()
 
     return redirect("estoque:lixeira")
+def _calcular_resumo_vendas(vendas):
+    total_vista = Decimal("0.00")
+    total_prazo = Decimal("0.00")
+    total_geral = Decimal("0.00")
+    quantidade = 0
+
+    for venda in vendas:
+        quantidade += 1
+        valor_venda = venda.total or Decimal("0.00")
+        total_geral += valor_venda
+
+        tipo_pagamento = (venda.tipo_pagamento or "").strip().casefold()
+        if "prazo" in tipo_pagamento:
+            total_prazo += valor_venda
+        else:
+            total_vista += valor_venda
+
+    return {
+        "vista": total_vista,
+        "prazo": total_prazo,
+        "geral": total_geral,
+        "quantidade": quantidade,
+    }
+
+
 @ensure_csrf_cookie
 def vendas(request):
     produtos = Produto.objects.filter(excluido=False).order_by('nome')
@@ -5415,6 +5440,13 @@ def vendas(request):
                 "Confira os itens antes de gravar."
             )
     operadores_venda = Funcionario.objects.filter(ativo=True, pode_operar_sistema=True).order_by('nome')
+    hoje = timezone.localdate()
+    vendas_hoje = Venda.objects.filter(
+        cancelada=False,
+        data_venda=hoje,
+    ).only("total", "tipo_pagamento")
+    resumo_vendas_hoje = _calcular_resumo_vendas(vendas_hoje)
+
     return render(request, 'estoque/vendas_layout_teste.html', {
         'produtos': produtos,
         'operadores_venda': operadores_venda,
@@ -5422,6 +5454,7 @@ def vendas(request):
         'pedido_importado': pedido_importado,
         'pedido_importado_aviso': pedido_importado_aviso,
         'tem_pix_em_atencao': _tem_pix_em_atencao(),
+        'resumo_vendas_hoje': resumo_vendas_hoje,
     })
 
 
@@ -5515,19 +5548,10 @@ def consultar_vendas(request, mostrar_canceladas=False):
 
     vendas_lista = list(vendas_qs)
 
-    total_vendas_vista = Decimal("0.00")
-    total_vendas_prazo = Decimal("0.00")
-    total_vendas_geral = Decimal("0.00")
-
-    for venda_total in vendas_lista:
-        valor_venda = venda_total.total or Decimal("0.00")
-        total_vendas_geral += valor_venda
-
-        tipo_pagamento = (venda_total.tipo_pagamento or "").strip().casefold()
-        if "prazo" in tipo_pagamento:
-            total_vendas_prazo += valor_venda
-        else:
-            total_vendas_vista += valor_venda
+    resumo_vendas_filtradas = _calcular_resumo_vendas(vendas_lista)
+    total_vendas_vista = resumo_vendas_filtradas["vista"]
+    total_vendas_prazo = resumo_vendas_filtradas["prazo"]
+    total_vendas_geral = resumo_vendas_filtradas["geral"]
 
     for venda in vendas_lista:
         venda.whatsapp_url_consulta = "" if venda.cancelada else montar_link_whatsapp_venda(venda)

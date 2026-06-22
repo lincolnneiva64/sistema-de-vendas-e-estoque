@@ -1164,6 +1164,93 @@ td:first-child {
 
 
 </style>
+
+<style>
+.resumo-vendas-hoje-compacto {
+    margin: 6px 0 8px;
+    padding: 7px 10px;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+    display: grid;
+    grid-template-columns: auto repeat(4, minmax(0, auto));
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: #334155;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.resumo-vendas-hoje-compacto .titulo {
+    font-weight: 950;
+    color: #1e3a8a;
+    text-transform: uppercase;
+    letter-spacing: 0.35px;
+}
+
+.resumo-vendas-hoje-compacto .item {
+    font-weight: 850;
+    white-space: nowrap;
+}
+
+.resumo-vendas-hoje-compacto .valor {
+    color: #166534;
+    font-weight: 950;
+}
+
+.resumo-vendas-hoje-compacto .prazo .valor {
+    color: #92400e;
+}
+
+.resumo-vendas-hoje-compacto .total .valor {
+    color: #14532d;
+}
+
+@media (max-width: 980px) {
+    .resumo-vendas-hoje-compacto {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+        font-size: 11px;
+    }
+
+    .resumo-vendas-hoje-compacto .titulo {
+        grid-column: 1 / -1;
+    }
+}
+</style>
+
+
+<style>
+.resumo-vendas-hoje-na-barra {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    display: flex !important;
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+    font-size: 13px;
+}
+
+.resumo-vendas-hoje-na-barra .titulo,
+.resumo-vendas-hoje-na-barra .item {
+    white-space: nowrap;
+}
+
+@media (max-width: 980px) {
+    .resumo-vendas-hoje-na-barra {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        gap: 6px 10px;
+        font-size: 11px;
+    }
+}
+</style>
+
 </head>
 
 <body>
@@ -2110,10 +2197,10 @@ td:first-child {
         </table>
     </div>
 </div>
-        <div id="resumoVenda" style="
+<div id="resumoVenda" style="
     margin-top: 10px;
     display: grid;
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: auto 1fr auto auto;
     align-items: center;
     gap: 14px;
     padding: 12px 14px;
@@ -2126,6 +2213,14 @@ td:first-child {
         font-weight: 800;
         color: #1e3a8a;
     ">Itens: 0</div>
+
+    <div class="resumo-vendas-hoje-compacto resumo-vendas-hoje-na-barra" aria-label="Resumo das vendas de hoje">
+        <span class="titulo">Hoje:</span>
+        <span class="item">Qtd <span class="valor">{{ resumo_vendas_hoje.quantidade }}</span></span>
+        <span class="item">A vista <span class="valor">R$ {{ resumo_vendas_hoje.vista|floatformat:2 }}</span></span>
+        <span class="item prazo">A prazo <span class="valor">R$ {{ resumo_vendas_hoje.prazo|floatformat:2 }}</span></span>
+        <span class="item total">Total <span class="valor">R$ {{ resumo_vendas_hoje.geral|floatformat:2 }}</span></span>
+    </div>
 
     <div style="
         font-size: 16px;
