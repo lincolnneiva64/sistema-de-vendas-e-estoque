@@ -1,6 +1,29 @@
 {% extends 'estoque/base.html' %}
 {% block title %}Receber do cliente{% endblock %}
 {% block content %}
+
+<aside class="rc-atalhos-lateral" id="atalhosReceberCliente" aria-label="Atalhos do receber cliente">
+  <button type="button" class="rc-atalhos-toggle" id="btnAtalhosReceberCliente" aria-expanded="false" aria-controls="atalhosReceberClientePainel">Atalhos</button>
+  <div class="rc-atalhos-painel" id="atalhosReceberClientePainel">
+    <h2 class="rc-atalhos-titulo">Atalhos</h2>
+    <div class="rc-atalhos-lista">
+      <a href="{% url 'estoque:pedidos' %}" class="rc-atalhos-btn">Pedidos</a>
+      <a href="{% url 'estoque:pedido_criar' %}" class="rc-atalhos-btn">Novo Pedido</a>
+      <a href="{% url 'estoque:vendas' %}" class="rc-atalhos-btn">Vendas</a>
+      <a href="/compras/" class="rc-atalhos-btn">Compras</a>
+      <a href="{% url 'estoque:compras_nova' %}" class="rc-atalhos-btn">Nova compra</a>
+      <a href="{% url 'estoque:contas_receber' %}" class="rc-atalhos-btn">Contas a receber</a>
+      <a href="{% url 'estoque:contas_pagar' %}" class="rc-atalhos-btn">Contas a pagar</a>
+      <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="rc-atalhos-btn {% if tem_pix_em_atencao %}pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
+      <a href="{% url 'estoque:painel_financeiro' %}" class="rc-atalhos-btn">Central Financeira</a>
+      <a href="{% url 'estoque:caixa_banco' %}" class="rc-atalhos-btn">Caixa e Banco</a>
+      <a href="{% url 'estoque:fornecedores' %}" class="rc-atalhos-btn">Fornecedores</a>
+      <a href="{% url 'estoque:despesas_diarias' %}" class="rc-atalhos-btn">Despesa Di&aacute;ria</a>
+      <a href="{% url 'estoque:home' %}" class="rc-atalhos-btn">Painel</a>
+    </div>
+  </div>
+</aside>
+
 <style>
   .receber-cliente-page { color: #172033; padding: 10px 0 24px; background: #fff7d6; }
   .receber-cliente-shell { max-width: 1180px; margin: 0 auto; padding: 0 18px; }
@@ -235,7 +258,7 @@
   }
   .rc-duplicidade-alerta {
     display: none; border: 1px solid #fbbf24; border-radius: 9px;
-    background: #fffbeb; color: #92400e; padding: 7px 9px;
+    background: #ffffff; color: #92400e; padding: 7px 9px;
     font-size: 0.8rem; font-weight: 850; line-height: 1.32;
   }
   .rc-duplicidade-alerta.visivel { display: flex; align-items: center; min-height: 38px; }
@@ -644,6 +667,113 @@
 @media (max-width: 720px) {
   #dataRecebimentoCliente {
     max-width: 100%;
+  }
+}
+
+
+/* Aba lateral de atalhos - Receber do cliente */
+.rc-atalhos-lateral {
+  position: fixed;
+  top: 28px;
+  left: auto;
+  right: -272px;
+  width: 272px;
+  z-index: 80;
+  transition: left .18s ease;
+}
+
+.rc-atalhos-lateral.aberto {
+  left: auto;
+  right: 18px;
+}
+
+.rc-atalhos-toggle {
+  position: absolute;
+  top: 0;
+  right: auto;
+  left: -88px;
+  min-width: 88px;
+  border: 1px solid #facc15;
+  border-right: 0;
+  border-radius: 14px 0 0 14px;
+  background: #fef3c7;
+  color: #854d0e;
+  font-weight: 900;
+  padding: 12px 14px;
+  cursor: pointer;
+  box-shadow: 0 12px 28px rgba(120, 53, 15, .16);
+}
+
+.rc-atalhos-painel {
+  background: #ffffff;
+  border: 1px solid #fde68a;
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 18px 42px rgba(120, 53, 15, .18);
+  max-height: calc(100vh - 70px);
+  overflow-y: auto;
+}
+
+.rc-atalhos-titulo {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+  color: #713f12;
+  font-weight: 900;
+}
+
+.rc-atalhos-lista {
+  display: grid;
+  gap: 9px;
+}
+
+.rc-atalhos-btn {
+  display: block;
+  text-decoration: none;
+  color: #1f2937;
+  background: #fff7d6;
+  border: 1px solid #f5d76e;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-weight: 900;
+  box-shadow: 0 6px 16px rgba(120, 53, 15, .08);
+}
+
+.rc-atalhos-btn:hover,
+.rc-atalhos-btn:focus {
+  background: #fef9c3;
+  border-color: #eab308;
+  color: #713f12;
+}
+
+.rc-atalhos-btn.pix-alerta {
+  background: #fff1f2;
+  border-color: #fb7185;
+  color: #991b1b;
+}
+
+@media (max-width: 700px) {
+  .rc-atalhos-lateral {
+    top: 28px;
+    left: auto;
+    right: -250px;
+    width: 250px;
+  }
+
+  .rc-atalhos-lateral.aberto {
+    left: auto;
+    right: 10px;
+  }
+
+  .rc-atalhos-toggle {
+    right: auto;
+    left: -78px;
+    min-width: 78px;
+    padding: 10px 11px;
+  }
+
+  .rc-atalhos-painel {
+    max-height: calc(100vh - 95px);
+    overflow-y: auto;
   }
 }
 
@@ -2125,6 +2255,45 @@
       });
     }
   });
+</script>
+
+
+<script>
+(function () {
+  const atalhos = document.getElementById("atalhosReceberCliente");
+  const botao = document.getElementById("btnAtalhosReceberCliente");
+
+  function alternarAtalhosReceberCliente(forcarAberto) {
+    if (!atalhos || !botao) return;
+
+    const abrir = typeof forcarAberto === "boolean"
+      ? forcarAberto
+      : !atalhos.classList.contains("aberto");
+
+    atalhos.classList.toggle("aberto", abrir);
+    botao.setAttribute("aria-expanded", abrir ? "true" : "false");
+  }
+
+  botao?.addEventListener("click", function (event) {
+    event.preventDefault();
+    event.stopPropagation();
+    alternarAtalhosReceberCliente();
+  });
+
+  atalhos?.addEventListener("click", function (event) {
+    event.stopPropagation();
+  });
+
+  document.addEventListener("click", function () {
+    alternarAtalhosReceberCliente(false);
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      alternarAtalhosReceberCliente(false);
+    }
+  });
+})();
 </script>
 
 {% endblock %}
