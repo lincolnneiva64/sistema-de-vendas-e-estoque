@@ -625,6 +625,28 @@
       font-size: 1rem;
     }
   }
+#btnFormaPagamentoCliente:focus,
+#btnFormaPagamentoCliente:focus-visible,
+#btnFormaPagamentoCliente.rc-foco-visivel {
+  outline: 4px solid #16a34a;
+  outline-offset: 4px;
+  border-color: #16a34a !important;
+  box-shadow: 0 0 0 6px rgba(22, 163, 74, 0.18) !important;
+}
+
+#dataRecebimentoCliente {
+  width: 100%;
+  max-width: 270px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+@media (max-width: 720px) {
+  #dataRecebimentoCliente {
+    max-width: 100%;
+  }
+}
+
 </style>
 
 <div class="receber-cliente-page {% if feedback_recebimento %}recebimento-confirmado{% endif %}">
@@ -1182,8 +1204,13 @@
     input.dataset.clienteSelecionado = "true";
     window.history.replaceState({}, "", url);
     window.initReceberClienteFinanceiro?.();
-    input.focus({ preventScroll: true });
-    input.select();
+    window.setTimeout(function () {
+      const valorRecebido = document.getElementById("valorRecebidoCliente");
+      if (valorRecebido) {
+        valorRecebido.focus({ preventScroll: true });
+        valorRecebido.select();
+      }
+    }, 0);
   }
 
   async function confirmarCliente(cliente, event) {
@@ -1387,7 +1414,11 @@
       if (indiceAtivo >= 0 && clientes[indiceAtivo]) {
         confirmarCliente(clientes[indiceAtivo], event);
       } else if (clienteSelecionado) {
-        document.getElementById("valorRecebidoCliente")?.focus();
+        const valorRecebido = document.getElementById("valorRecebidoCliente");
+        if (valorRecebido) {
+          valorRecebido.focus();
+          valorRecebido.select();
+        }
       }
       return;
     }
@@ -1461,6 +1492,35 @@
 
     if (!form) {
       return;
+    }
+
+    function moverFormaPagamentoPorSeta(direcao) {
+      if (!forma || !formaModalOpcoes.length) return;
+      const formas = formaModalOpcoes
+        .map(function (botao) { return botao.dataset.formaPagamento || ""; })
+        .filter(Boolean);
+      if (!formas.length) return;
+
+      let atual = formas.indexOf(forma.value || "");
+      if (atual < 0) atual = 0;
+
+      const proximo = (atual + direcao + formas.length) % formas.length;
+      forma.value = formas[proximo];
+      forma.dispatchEvent(new Event("change", { bubbles: true }));
+      atualizarBotaoFormaPagamento();
+      focarFormaPagamentoVisual();
+    }
+
+    function focarFormaPagamentoVisual() {
+      if (btnFormaPagamento) {
+        btnFormaPagamento.focus();
+        btnFormaPagamento.classList.add("rc-foco-visivel");
+        window.setTimeout(function () {
+          btnFormaPagamento.classList.remove("rc-foco-visivel");
+        }, 1200);
+      } else {
+        forma?.focus();
+      }
     }
 
     function atualizarBotaoFormaPagamento() {
@@ -1839,6 +1899,11 @@
       disponiveis[proximo].label.focus();
     }
 
+    valor?.addEventListener("focus", function () {
+      window.setTimeout(function () {
+        valor?.select();
+      }, 0);
+    }, listenerOptions);
     valor?.addEventListener("input", calcularPrevia, listenerOptions);
     valor?.addEventListener("keydown", function (event) {
       if (event.key !== "Enter") return;
@@ -1847,13 +1912,28 @@
       if (dataRecebimento) {
         dataRecebimento.focus();
       } else {
-        forma?.focus();
+        btnFormaPagamento?.focus();
       }
     }, listenerOptions);
     dataRecebimento?.addEventListener("keydown", function (event) {
       if (event.key !== "Enter") return;
       event.preventDefault();
-      forma?.focus();
+      focarFormaPagamentoVisual();
+    }, listenerOptions);
+    btnFormaPagamento?.addEventListener("keydown", function (event) {
+      if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+        event.preventDefault();
+        moverFormaPagamentoPorSeta(1);
+        return;
+      }
+      if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+        event.preventDefault();
+        moverFormaPagamentoPorSeta(-1);
+        return;
+      }
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      abrirModalFormaPagamento();
     }, listenerOptions);
     forma?.addEventListener("keydown", function (event) {
       if (event.key !== "Enter") return;
