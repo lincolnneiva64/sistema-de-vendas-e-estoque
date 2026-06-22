@@ -929,6 +929,27 @@
     }
   }
 
+
+/* Destaque persistente do produto salvo/editado */
+.produtos-tabela tr.linha-produto.linha-destacada,
+.produtos-tabela tr.linha-produto.linha-destacada:hover,
+.produtos-tabela tr.linha-produto.linha-destacada:focus,
+.produtos-tabela tr.linha-produto.linha-destacada:active {
+  background: #eff6ff !important;
+  border: 3px solid #2563eb !important;
+  border-left: 6px solid #1d4ed8 !important;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.20), 0 14px 30px rgba(37, 99, 235, 0.24) !important;
+}
+
+.produtos-tabela tr.linha-produto.linha-destacada > td,
+.produtos-tabela tr.linha-produto.linha-destacada:hover > td,
+.produtos-tabela tr.linha-produto.linha-destacada:focus > td,
+.produtos-tabela tr.linha-produto.linha-destacada:active > td {
+  background: #eff6ff !important;
+  background-color: #eff6ff !important;
+  color: #172033 !important;
+}
+
 </style>
 <div class="container mt-4 produtos-mobile-page">
   {% if messages %}
@@ -1513,10 +1534,10 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
       linhaDestacada.classList.add("linha-selecionada");
       produtoSelecionado = produtoDestacado;
       nomeProdutoSelecionado = linhaDestacada.children[0].textContent.trim();
-      // Remover destaque após 3 segundos
+      // Remover destaque apos 5 segundos
       setTimeout(function() {
         linhaDestacada.classList.remove('linha-destacada');
-      }, 3500);
+      }, 5000);
     }
   }
 
@@ -1601,7 +1622,7 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
 
       setTimeout(function () {
         alertaSucesso.style.display = "none";
-      }, 3500);
+      }, 5000);
     }
   });
 </script>
