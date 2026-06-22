@@ -219,6 +219,132 @@
     }
   }
 
+
+/* layout compras parecido com pedidos */
+.compras-lista-page {
+  max-width: 1360px;
+  margin: 18px auto 90px;
+  padding: 0 16px;
+}
+
+.compras-lista-header {
+  background: #ffffff;
+  border: 1px solid #e1e7ef;
+  border-radius: 14px;
+  box-shadow: 0 14px 30px rgba(15,23,42,.06);
+  padding: 18px 20px;
+  margin-bottom: 14px;
+}
+
+.compras-lista-title {
+  font-size: 1.62rem;
+  letter-spacing: -0.02em;
+}
+
+.compras-lista-actions {
+  margin-left: auto;
+  padding-top: 2px;
+}
+
+.compras-lista-btn-primary {
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(37,99,235,.18);
+}
+
+.compras-lista-card {
+  border-radius: 14px;
+  box-shadow: 0 14px 30px rgba(15,23,42,.06);
+}
+
+.compras-lista-busca {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto auto;
+  gap: 12px;
+  align-items: end;
+  padding: 16px 18px;
+}
+
+.compras-lista-field label {
+  font-size: .78rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.compras-lista-field input {
+  min-height: 42px;
+  border-radius: 9px;
+  font-size: .98rem;
+}
+
+.compras-lista-table th {
+  background: #0f4f75;
+  color: #ffffff;
+  font-weight: 900;
+  font-size: .72rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 11px 12px;
+}
+
+.compras-lista-table th:first-child {
+  border-top-left-radius: 12px;
+}
+
+.compras-lista-table th:last-child {
+  border-top-right-radius: 12px;
+}
+
+.compras-lista-table td {
+  padding: 12px;
+  font-size: .92rem;
+}
+
+.compras-lista-table tbody tr:hover {
+  background: #f8fbff;
+}
+
+.compras-lista-numero {
+  font-size: 1rem;
+}
+
+.compras-lista-total {
+  font-size: 1rem;
+}
+
+.compras-lista-btn-compact {
+  min-height: 34px;
+  padding: 7px 11px;
+  font-size: .78rem;
+}
+
+@media (max-width: 760px) {
+  .compras-lista-page {
+    padding: 0 10px 90px;
+  }
+
+  .compras-lista-header {
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  .compras-lista-busca {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+
+  .compras-lista-actions {
+    margin-left: 0;
+  }
+
+  .compras-lista-btn-primary,
+  .compras-lista-btn-secondary {
+    width: 100%;
+  }
+}
+/* fim layout compras parecido com pedidos */
+
 </style>
 
 <div class="compras-lista-page">
