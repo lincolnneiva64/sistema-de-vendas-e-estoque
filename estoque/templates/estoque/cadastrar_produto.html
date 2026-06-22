@@ -1598,5 +1598,87 @@ const proximo = camposVisiveis[index + 1];
 
 
 
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const camposDinheiroProduto = [
+        "id_preco_compra",
+        "id_preco_vista",
+        "id_preco_prazo",
+        "id_preco_compra_fracionado",
+        "id_preco_vista_fracionado",
+        "id_preco_prazo_fracionado"
+    ]
+    .map(function (id) {
+        return document.getElementById(id);
+    })
+    .filter(Boolean);
+
+    function normalizarValorDinheiroProduto(valor) {
+        let texto = String(valor || "").trim();
+
+        if (!texto) {
+            return "";
+        }
+
+        texto = texto
+            .replace("R$", "")
+            .replace(/\s/g, "")
+            .replace(/[^\d,.-]/g, "");
+
+        if (!texto) {
+            return "";
+        }
+
+        if (texto.includes(",") && texto.includes(".")) {
+            texto = texto.replace(/\./g, "").replace(",", ".");
+        } else {
+            texto = texto.replace(",", ".");
+        }
+
+        const numero = Number(texto);
+
+        if (!Number.isFinite(numero)) {
+            return "";
+        }
+
+        return numero.toFixed(2);
+    }
+
+    function formatarCampoDinheiroProduto(campo) {
+        if (!campo) {
+            return;
+        }
+
+        const valorFormatado = normalizarValorDinheiroProduto(campo.value);
+
+        if (valorFormatado !== "") {
+            campo.value = valorFormatado;
+        }
+    }
+
+    camposDinheiroProduto.forEach(function (campo) {
+        campo.setAttribute("inputmode", "decimal");
+        campo.setAttribute("autocomplete", "off");
+
+        campo.addEventListener("blur", function () {
+            formatarCampoDinheiroProduto(campo);
+        });
+
+        campo.addEventListener("change", function () {
+            formatarCampoDinheiroProduto(campo);
+        });
+    });
+
+    const formProduto = document.getElementById("form-produto");
+
+    if (formProduto) {
+        formProduto.addEventListener("submit", function () {
+            camposDinheiroProduto.forEach(formatarCampoDinheiroProduto);
+        });
+    }
+});
+</script>
+
 </body>
 </html>
