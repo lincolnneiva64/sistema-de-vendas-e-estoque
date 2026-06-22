@@ -191,6 +191,27 @@
 </script>
 {% endblock %}
 {% block content %}
+
+<aside class="compra-atalhos-lateral" id="atalhosCompra" aria-label="Atalhos da compra">
+  <button type="button" class="compra-atalhos-toggle" id="btnAtalhosCompra" aria-expanded="false" aria-controls="atalhosCompraPainel">Atalhos</button>
+  <div class="compra-atalhos-painel" id="atalhosCompraPainel">
+    <h2 class="compra-atalhos-titulo">Atalhos</h2>
+    <div class="compra-atalhos-lista">
+      <a href="{% url 'estoque:pedidos' %}" class="compra-atalhos-btn">Pedidos</a>
+      <a href="/compras/" class="compra-atalhos-btn">Compras</a>
+      <a href="{% url 'estoque:contas_receber' %}" class="compra-atalhos-btn">Receber do cliente</a>
+      <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="compra-atalhos-btn {% if tem_pix_em_atencao %}pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
+      <a href="{% url 'estoque:entregas_dia' %}" class="compra-atalhos-btn">Ir para Entregas</a>
+      <a href="{% url 'estoque:painel_financeiro' %}" class="compra-atalhos-btn">Central Financeira</a>
+      <a href="{% url 'estoque:caixa_banco' %}" class="compra-atalhos-btn">Caixa e Banco</a>
+      <a href="{% url 'estoque:fornecedores' %}" class="compra-atalhos-btn">Fornecedores</a>
+      <a href="{% url 'estoque:despesas_diarias' %}" class="compra-atalhos-btn">Despesa Di&aacute;ria</a>
+      <a href="{% url 'estoque:home' %}" class="compra-atalhos-btn">Painel</a>
+      <a href="{% url 'estoque:home' %}" class="compra-atalhos-btn">Voltar para Painel</a>
+    </div>
+  </div>
+</aside>
+
 <style>
   .compras-page { max-width: 1180px; margin: 10px auto 70px; padding: 0 14px; color: #172033; }
   .compras-header { display:flex; justify-content:space-between; align-items:flex-end; gap:10px; margin-bottom:8px; }
@@ -1017,6 +1038,109 @@
       -webkit-overflow-scrolling:touch;
     }
   }
+
+.compra-atalhos-lateral {
+  position: fixed;
+  top: 96px;
+  right: 0;
+  z-index: 9990;
+  display: flex;
+  align-items: flex-start;
+  transform: translateX(calc(100% - 42px));
+  transition: transform 180ms ease;
+}
+
+.compra-atalhos-lateral.aberto {
+  transform: translateX(0);
+}
+
+.compra-atalhos-toggle {
+  width: 42px;
+  min-height: 116px;
+  padding: 10px 6px;
+  border: 1px solid #2563eb;
+  border-right: 0;
+  border-radius: 12px 0 0 12px;
+  background: #2563eb;
+  color: #ffffff;
+  font-weight: 950;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.2);
+}
+
+.compra-atalhos-painel {
+  width: min(260px, calc(100vw - 48px));
+  padding: 10px;
+  border: 1px solid #bfdbfe;
+  border-right: 0;
+  border-radius: 12px 0 0 12px;
+  background: #ffffff;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.22);
+}
+
+.compra-atalhos-titulo {
+  margin: 0 0 8px;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.compra-atalhos-lista {
+  display: grid;
+  gap: 7px;
+}
+
+.compra-atalhos-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 38px;
+  padding: 10px 12px;
+  border: 1px solid #2563eb;
+  border-radius: 10px;
+  background: #bfdbfe;
+  color: #172554;
+  text-decoration: none;
+  font-weight: 900;
+  text-align: center;
+}
+
+.compra-atalhos-btn:hover,
+.compra-atalhos-btn:focus {
+  background: #dbeafe;
+  outline: 3px solid rgba(37, 99, 235, 0.25);
+}
+
+.compra-atalhos-btn.pix-alerta {
+  background: #fecaca;
+  border-color: #ef4444;
+  color: #991b1b;
+}
+
+@media (max-width: 720px) {
+  .compra-atalhos-lateral {
+    top: auto;
+    right: 8px;
+    bottom: 10px;
+    transform: translateX(calc(100% - 46px));
+  }
+
+  .compra-atalhos-toggle {
+    width: 46px;
+    min-height: 104px;
+    font-size: 12px;
+  }
+
+  .compra-atalhos-painel {
+    width: min(290px, calc(100vw - 54px));
+    max-height: min(72vh, 520px);
+    overflow-y: auto;
+  }
+}
+
 </style>
 
 <div class="compras-page">
@@ -1028,9 +1152,6 @@
     <div class="compras-actions">
       <a href="{% url 'estoque:compras_lista' %}" class="compras-btn compras-btn-secondary">Compras</a>
       <a href="{% url 'estoque:contas_pagar' %}" class="compras-btn compras-btn-secondary">Contas a pagar</a>
-      <a href="{% url 'estoque:caixa_banco' %}" class="compras-btn compras-btn-secondary">Caixa e Banco</a>
-      <a href="{% url 'estoque:painel_financeiro' %}" class="compras-btn compras-btn-secondary">Central Financeira</a>
-      <a href="{% url 'estoque:home' %}" class="compras-btn compras-btn-secondary">Painel</a>
       <a href="{% url 'estoque:fornecedores' %}" class="compras-btn compras-btn-secondary">Fornecedores</a>
     </div>
   </header>
@@ -3542,7 +3663,50 @@
 })();
 </script>
 
+
+<script>
+(function () {
+  const atalhosCompra = document.getElementById("atalhosCompra");
+  const btnAtalhosCompra = document.getElementById("btnAtalhosCompra");
+
+  function alternarAtalhosCompra(forcarAberto) {
+    if (!atalhosCompra || !btnAtalhosCompra) return;
+
+    const abrir = typeof forcarAberto === "boolean"
+      ? forcarAberto
+      : !atalhosCompra.classList.contains("aberto");
+
+    atalhosCompra.classList.toggle("aberto", abrir);
+    btnAtalhosCompra.setAttribute("aria-expanded", abrir ? "true" : "false");
+  }
+
+  btnAtalhosCompra.addEventListener("click", function (event) {
+    event.preventDefault();
+    event.stopPropagation();
+    alternarAtalhosCompra();
+  });
+
+  atalhosCompra.addEventListener("click", function (event) {
+    event.stopPropagation();
+  });
+
+  document.addEventListener("click", function () {
+    alternarAtalhosCompra(false);
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      alternarAtalhosCompra(false);
+    }
+  });
+})();
+</script>
+
 {% endblock %}
+
+
+
+
 
 
 
