@@ -10,7 +10,7 @@
       <a href="{% url 'estoque:pedidos' %}" class="compras-atalhos-btn">Pedidos</a>
       <a href="{% url 'estoque:compras_nova' %}" class="compras-atalhos-btn">Nova compra</a>
       <a href="{% url 'estoque:contas_pagar' %}" class="compras-atalhos-btn">Contas a pagar</a>
-      <a href="{% url 'estoque:contas_receber' %}" class="compras-atalhos-btn">Receber do cliente</a>
+      <a href="{% url 'estoque:receber_cliente_escolher' %}" class="compras-atalhos-btn">Receber do cliente</a>
       <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="compras-atalhos-btn {% if tem_pix_em_atencao %}pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
       <a href="{% url 'estoque:entregas_dia' %}" class="compras-atalhos-btn">Ir para Entregas</a>
       <a href="{% url 'estoque:painel_financeiro' %}" class="compras-atalhos-btn">Central Financeira</a>

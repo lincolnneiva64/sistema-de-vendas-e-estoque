@@ -1,3 +1,45 @@
+
+<style>
+/* Ajuste seguro do topo da tela Pedidos */
+.pedidos-topo-fixo {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 28px !important;
+    flex-wrap: wrap !important;
+}
+
+.pedidos-topo-fixo .novo-pedido-estavel {
+    position: static !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: none !important;
+    transition: background-color .15s ease, box-shadow .15s ease, color .15s ease !important;
+}
+
+.pedidos-topo-fixo .novo-pedido-estavel:hover,
+.pedidos-topo-fixo .novo-pedido-estavel:focus,
+.pedidos-topo-fixo .novo-pedido-estavel:active {
+    transform: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+}
+
+@media (max-width: 700px) {
+    .pedidos-topo-fixo {
+        gap: 14px !important;
+    }
+}
+</style>
+
 ﻿<!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -760,7 +802,7 @@
       <a href="{% url 'estoque:pedido_criar' %}" class="pedidos-atalhos-btn">Novo Pedido</a>
       <a href="{% url 'estoque:vendas' %}" class="pedidos-atalhos-btn">Vendas</a>
       <a href="/compras/" class="pedidos-atalhos-btn">Compras</a>
-      <a href="{% url 'estoque:contas_receber' %}" class="pedidos-atalhos-btn">Receber do cliente</a>
+      <a href="{% url 'estoque:receber_cliente_escolher' %}" class="pedidos-atalhos-btn">Receber do cliente</a>
       <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="pedidos-atalhos-btn {% if tem_pix_em_atencao %}pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
       <a href="{% url 'estoque:entregas_dia' %}" class="pedidos-atalhos-btn">Ir para Entregas</a>
       <a href="{% url 'estoque:painel_financeiro' %}" class="pedidos-atalhos-btn">Central Financeira</a>
@@ -773,9 +815,9 @@
 </aside>
 
     <div class="container">
-        <div class="header">
+        <div class="header pedidos-topo-fixo">
             <h1>Pedidos</h1>
-            <a href="{% url 'estoque:pedido_criar' %}" class="btn-criar">+ Novo Pedido</a>
+            <a href="{% url 'estoque:pedido_criar' %}" class="btn-criar novo-pedido-estavel">+ Novo Pedido</a>
         </div>
         
         <div class="filtros">

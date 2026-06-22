@@ -199,7 +199,7 @@
     <div class="compra-atalhos-lista">
       <a href="{% url 'estoque:pedidos' %}" class="compra-atalhos-btn">Pedidos</a>
       <a href="/compras/" class="compra-atalhos-btn">Compras</a>
-      <a href="{% url 'estoque:contas_receber' %}" class="compra-atalhos-btn">Receber do cliente</a>
+      <a href="{% url 'estoque:receber_cliente_escolher' %}" class="compra-atalhos-btn">Receber do cliente</a>
       <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="compra-atalhos-btn {% if tem_pix_em_atencao %}pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
       <a href="{% url 'estoque:entregas_dia' %}" class="compra-atalhos-btn">Ir para Entregas</a>
       <a href="{% url 'estoque:painel_financeiro' %}" class="compra-atalhos-btn">Central Financeira</a>

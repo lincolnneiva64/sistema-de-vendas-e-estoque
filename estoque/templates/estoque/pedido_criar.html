@@ -1842,7 +1842,7 @@
       <a href="{% url 'estoque:pedido_criar' %}" class="pedido-atalhos-btn">Novo Pedido</a>
       <a href="{% url 'estoque:vendas' %}" class="pedido-atalhos-btn">Vendas</a>
       <a href="/compras/" class="pedido-atalhos-btn">Compras</a>
-      <a href="{% url 'estoque:contas_receber' %}" class="pedido-atalhos-btn">Receber do cliente</a>
+      <a href="{% url 'estoque:receber_cliente_escolher' %}" class="pedido-atalhos-btn">Receber do cliente</a>
       <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="pedido-atalhos-btn {% if tem_pix_em_atencao %}pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
       <a href="{% url 'estoque:entregas_dia' %}" class="pedido-atalhos-btn">Ir para Entregas</a>
       <a href="{% url 'estoque:painel_financeiro' %}" class="pedido-atalhos-btn">Central Financeira</a>
