@@ -214,7 +214,7 @@
 
 <style>
   .compras-page { max-width: 1180px; margin: 10px auto 70px; padding: 0 14px; color: #172033; }
-  .compras-header { display:flex; justify-content:space-between; align-items:flex-end; gap:10px; margin-bottom:8px; }
+  .compras-header { display:flex; justify-content:flex-start; align-items:flex-start; gap:18px; margin-bottom:8px; flex-wrap:wrap; }
   .compras-title { margin:0; font-size:1.38rem; font-weight:850; }
   .compras-subtitle { margin:2px 0 0; color:#64748b; font-weight:650; font-size:.92rem; }
   .compras-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
@@ -1041,7 +1041,7 @@
 
 .compra-atalhos-lateral {
   position: fixed;
-  top: 96px;
+  top: 72px;
   right: 0;
   z-index: 9990;
   display: flex;
@@ -1089,7 +1089,7 @@
 
 .compra-atalhos-lista {
   display: grid;
-  gap: 7px;
+  gap: 6px;
 }
 
 .compra-atalhos-btn {
@@ -1097,8 +1097,8 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 38px;
-  padding: 10px 12px;
+  min-height: 36px;
+    padding: 8px 12px;
   border: 1px solid #2563eb;
   border-radius: 10px;
   background: #bfdbfe;
@@ -1124,7 +1124,7 @@
   .compra-atalhos-lateral {
     top: auto;
     right: 8px;
-    bottom: 10px;
+    bottom: 78px;
     transform: translateX(calc(100% - 46px));
   }
 
@@ -1135,10 +1135,10 @@
   }
 
   .compra-atalhos-painel {
-    width: min(290px, calc(100vw - 54px));
-    max-height: min(72vh, 520px);
-    overflow-y: auto;
-  }
+    width: min(260px, calc(100vw - 54px));
+      max-height: min(68vh, calc(100vh - 150px));
+      overflow-y: auto;
+    }
 }
 
 </style>
