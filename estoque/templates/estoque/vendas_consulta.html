@@ -700,6 +700,32 @@
       <div id="mensagemConsultaVendas" class="vendas-consulta-toast" role="status" aria-live="polite"></div>
     </section>
 
+    <section class="vendas-consulta-panel" style="margin-bottom: 14px;">
+      <div class="vendas-consulta-panel-head">
+        <h2 class="vendas-consulta-panel-title">Resumo das vendas filtradas</h2>
+        <span class="vendas-consulta-count">{{ total_vendas }} venda(s)</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 14px;">
+        <div style="border: 1px solid #dbeafe; border-radius: 12px; padding: 12px; background: #eff6ff;">
+          <div style="font-size: 12px; font-weight: 800; color: #475569; text-transform: uppercase;">A vista</div>
+          <div style="font-size: 20px; font-weight: 900; color: #166534;">R$ {{ total_vendas_vista|floatformat:2 }}</div>
+        </div>
+        <div style="border: 1px solid #fef3c7; border-radius: 12px; padding: 12px; background: #fffbeb;">
+          <div style="font-size: 12px; font-weight: 800; color: #475569; text-transform: uppercase;">A prazo</div>
+          <div style="font-size: 20px; font-weight: 900; color: #92400e;">R$ {{ total_vendas_prazo|floatformat:2 }}</div>
+        </div>
+        <div style="border: 1px solid #dcfce7; border-radius: 12px; padding: 12px; background: #f0fdf4;">
+          <div style="font-size: 12px; font-weight: 800; color: #475569; text-transform: uppercase;">Total geral</div>
+          <div style="font-size: 20px; font-weight: 900; color: #14532d;">R$ {{ total_vendas_geral|floatformat:2 }}</div>
+        </div>
+        <div style="border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; background: #f8fafc;">
+          <div style="font-size: 12px; font-weight: 800; color: #475569; text-transform: uppercase;">Quantidade</div>
+          <div style="font-size: 20px; font-weight: 900; color: #172033;">{{ total_vendas }} venda(s)</div>
+        </div>
+      </div>
+    </section>
+
     <section class="vendas-consulta-panel">
       <div class="vendas-consulta-panel-head">
         <h2 class="vendas-consulta-panel-title">{% if mostrar_canceladas %}Vendas canceladas encontradas{% else %}Vendas ativas encontradas{% endif %}</h2>

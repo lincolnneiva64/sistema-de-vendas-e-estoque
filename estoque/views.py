@@ -5514,6 +5514,21 @@ def consultar_vendas(request, mostrar_canceladas=False):
             messages.warning(request, "Numero da venda invalido. Informe apenas numeros.")
 
     vendas_lista = list(vendas_qs)
+
+    total_vendas_vista = Decimal("0.00")
+    total_vendas_prazo = Decimal("0.00")
+    total_vendas_geral = Decimal("0.00")
+
+    for venda_total in vendas_lista:
+        valor_venda = venda_total.total or Decimal("0.00")
+        total_vendas_geral += valor_venda
+
+        tipo_pagamento = (venda_total.tipo_pagamento or "").strip().casefold()
+        if "prazo" in tipo_pagamento:
+            total_vendas_prazo += valor_venda
+        else:
+            total_vendas_vista += valor_venda
+
     for venda in vendas_lista:
         venda.whatsapp_url_consulta = "" if venda.cancelada else montar_link_whatsapp_venda(venda)
         venda.whatsapp_status_selos = (
@@ -5528,6 +5543,9 @@ def consultar_vendas(request, mostrar_canceladas=False):
         {
             "vendas": vendas_lista,
             "total_vendas": len(vendas_lista),
+            "total_vendas_vista": total_vendas_vista,
+            "total_vendas_prazo": total_vendas_prazo,
+            "total_vendas_geral": total_vendas_geral,
             "data_inicial": data_inicial_texto,
             "data_final": data_final_texto,
             "cliente": cliente_texto,
