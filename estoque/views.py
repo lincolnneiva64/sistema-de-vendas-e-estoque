@@ -2999,6 +2999,21 @@ def despesas_diarias(request):
     )
 
 
+
+def _produto_existente_por_nome_normalizado(nome):
+    from .forms import normalize_product_name
+
+    nome_normalizado = normalize_product_name(nome or "").casefold()
+    if not nome_normalizado:
+        return None
+
+    produtos = Produto.objects.filter(excluido=False).only("id", "nome")
+    for produto in produtos:
+        if normalize_product_name(produto.nome).casefold() == nome_normalizado:
+            return produto
+    return None
+
+
 def cadastrar_produto(request):
     criar_mais_produtos = request.GET.get("criar_mais_produtos") == "1"
 
@@ -3012,6 +3027,20 @@ def cadastrar_produto(request):
             messages.success(request, f'Produto "{produto.nome}" cadastrado com sucesso!')
             return redirect(f"{reverse('estoque:home')}?produto_destacado={produto.id}")
         else:
+            erros_nome = [str(erro) for erro in form.errors.get("nome", [])]
+            nome_duplicado = any(
+                "existe um produto com esse nome" in erro.casefold()
+                for erro in erros_nome
+            )
+            if nome_duplicado:
+                produto_existente = _produto_existente_por_nome_normalizado(request.POST.get("nome", ""))
+                if produto_existente:
+                    messages.warning(
+                        request,
+                        f'Produto "{produto_existente.nome}" j? estava cadastrado. Ele foi destacado na lista.'
+                    )
+                    return redirect(f"{reverse('estoque:home')}?produto_destacado={produto_existente.id}")
+
             print("ERROS DO FORM:", form.errors)
             print("DADOS RECEBIDOS:", request.POST)
     else:
