@@ -345,6 +345,56 @@
 }
 /* fim layout compras parecido com pedidos */
 
+
+/* filtros reais da lista de compras */
+.compras-filtros-form {
+  grid-template-columns: 1fr;
+}
+
+.compras-filtros-grid {
+  display: grid;
+  grid-template-columns: 130px minmax(260px, 1fr) 170px 170px 180px 190px;
+  gap: 12px;
+  align-items: end;
+  width: 100%;
+}
+
+.compras-lista-field select {
+  width: 100%;
+  min-height: 42px;
+  border: 1.5px solid #d3dbe8;
+  border-radius: 9px;
+  padding: 9px 11px;
+  font-weight: 700;
+  outline: none;
+  background: #ffffff;
+  color: #172033;
+}
+
+.compras-filtros-botoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  width: 100%;
+}
+
+@media (max-width: 1100px) {
+  .compras-filtros-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .compras-filtros-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .compras-filtros-botoes {
+    flex-direction: column;
+  }
+}
+/* fim filtros reais da lista de compras */
+
 </style>
 
 <div class="compras-lista-page">
@@ -367,15 +417,57 @@
   {% endif %}
 
   <section class="compras-lista-card">
-    <form method="get" class="compras-lista-busca">
-      <div class="compras-lista-field">
-        <label for="buscaFornecedor">Buscar por fornecedor</label>
-        <input id="buscaFornecedor" type="search" name="q" value="{{ termo }}" placeholder="Nome do fornecedor">
+    <form method="get" class="compras-lista-busca compras-filtros-form" id="formFiltrosCompras">
+      <div class="compras-filtros-grid">
+        <div class="compras-lista-field">
+          <label for="filtroCompra">Compra</label>
+          <input id="filtroCompra" type="search" name="compra" value="{{ compra_filtro }}" placeholder="N? da compra">
+        </div>
+
+        <div class="compras-lista-field">
+          <label for="buscaFornecedor">Fornecedor</label>
+          <input id="buscaFornecedor" type="search" name="fornecedor" value="{{ fornecedor_filtro }}" placeholder="Nome do fornecedor">
+        </div>
+
+        <div class="compras-lista-field">
+          <label for="dataInicioCompra">Data in?cio</label>
+          <input id="dataInicioCompra" type="date" name="data_inicio" value="{{ data_inicio }}">
+        </div>
+
+        <div class="compras-lista-field">
+          <label for="dataFimCompra">Data fim</label>
+          <input id="dataFimCompra" type="date" name="data_fim" value="{{ data_fim }}">
+        </div>
+
+        <div class="compras-lista-field">
+          <label for="pagamentoCompra">Pagamento</label>
+          <select id="pagamentoCompra" name="pagamento">
+            <option value="" {% if not pagamento_filtro %}selected{% endif %}>Todos</option>
+            <option value="avista" {% if pagamento_filtro == "avista" %}selected{% endif %}>? vista</option>
+            <option value="pix_dinheiro" {% if pagamento_filtro == "pix_dinheiro" %}selected{% endif %}>Dinheiro / Pix</option>
+            <option value="prazo" {% if pagamento_filtro == "prazo" %}selected{% endif %}>A prazo</option>
+            <option value="cartao" {% if pagamento_filtro == "cartao" %}selected{% endif %}>Cart?o</option>
+          </select>
+        </div>
+
+        <div class="compras-lista-field">
+          <label for="financeiroCompra">Financeiro</label>
+          <select id="financeiroCompra" name="financeiro">
+            <option value="" {% if not financeiro_filtro %}selected{% endif %}>Todos</option>
+            <option value="paga" {% if financeiro_filtro == "paga" %}selected{% endif %}>Nota paga</option>
+            <option value="pendente" {% if financeiro_filtro == "pendente" %}selected{% endif %}>Pendente</option>
+            <option value="parcial" {% if financeiro_filtro == "parcial" %}selected{% endif %}>Parcial</option>
+            <option value="vencida" {% if financeiro_filtro == "vencida" %}selected{% endif %}>Vencida</option>
+            <option value="alerta" {% if financeiro_filtro == "alerta" %}selected{% endif %}>Alerta</option>
+            <option value="cancelada" {% if financeiro_filtro == "cancelada" %}selected{% endif %}>Cancelada</option>
+          </select>
+        </div>
       </div>
-      <button type="submit" class="compras-lista-btn compras-lista-btn-primary">Buscar</button>
-      {% if termo %}
+
+      <div class="compras-filtros-botoes">
+        <button type="submit" class="compras-lista-btn compras-lista-btn-primary">Filtrar</button>
         <a href="{% url 'estoque:compras_lista' %}" class="compras-lista-btn compras-lista-btn-secondary">Limpar</a>
-      {% endif %}
+      </div>
     </form>
   </section>
 
@@ -468,6 +560,43 @@
     {% endfor %}
   </section>
 </div>
+
+<script>
+(function() {
+  const form = document.getElementById("formFiltrosCompras");
+  if (!form) return;
+
+  const campos = [
+    document.getElementById("filtroCompra"),
+    document.getElementById("buscaFornecedor"),
+    document.getElementById("dataInicioCompra"),
+    document.getElementById("dataFimCompra"),
+    document.getElementById("pagamentoCompra"),
+    document.getElementById("financeiroCompra")
+  ].filter(Boolean);
+
+  function enviar() {
+    form.requestSubmit();
+  }
+
+  campos.forEach(function(campo, indice) {
+    if (campo.tagName === "SELECT" || campo.type === "date") {
+      campo.addEventListener("change", enviar);
+    }
+
+    campo.addEventListener("keydown", function(event) {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      const proximo = campos[indice + 1];
+      if (proximo) {
+        proximo.focus();
+      } else {
+        enviar();
+      }
+    });
+  });
+})();
+</script>
 
 <div id="modalExcluirCompraLista" class="compras-lista-modal">
   <div class="compras-lista-modal-caixa">

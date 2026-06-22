@@ -3665,27 +3665,77 @@ def _situacao_financeira_compra_lista(compra, hoje=None):
 
 
 def compras_lista(request):
-    termo = request.GET.get("q", "").strip()
+    compra_filtro = request.GET.get("compra", "").strip().lstrip("#")
+    fornecedor_filtro = request.GET.get("fornecedor", "").strip()
+    data_inicio = request.GET.get("data_inicio", "").strip()
+    data_fim = request.GET.get("data_fim", "").strip()
+    pagamento_filtro = request.GET.get("pagamento", "").strip()
+    financeiro_filtro = request.GET.get("financeiro", "").strip()
+
     compras = Compra.objects.select_related("fornecedor", "conta_pagar").order_by("-data_compra", "-id")
 
-    if termo:
-        compras = compras.filter(fornecedor__nome__icontains=termo)
+    if compra_filtro:
+        if compra_filtro.isdigit():
+            compras = compras.filter(id=int(compra_filtro))
+        else:
+            compras = compras.none()
+
+    if fornecedor_filtro:
+        compras = compras.filter(fornecedor__nome__icontains=fornecedor_filtro)
+
+    data_inicio_obj = parse_date(data_inicio) if data_inicio else None
+    data_fim_obj = parse_date(data_fim) if data_fim else None
+
+    if data_inicio_obj and data_fim_obj and data_inicio_obj > data_fim_obj:
+        data_inicio_obj, data_fim_obj = data_fim_obj, data_inicio_obj
+        data_inicio, data_fim = data_fim, data_inicio
+
+    if data_inicio_obj:
+        compras = compras.filter(data_compra__gte=data_inicio_obj)
+
+    if data_fim_obj:
+        compras = compras.filter(data_compra__lte=data_fim_obj)
+
+    if pagamento_filtro == "avista":
+        compras = [
+            compra for compra in compras
+            if _compra_pagamento_imediato(compra.tipo_pagamento)
+        ]
+    elif pagamento_filtro == "prazo":
+        compras = compras.filter(tipo_pagamento__icontains="prazo")
+    elif pagamento_filtro == "cartao":
+        compras = compras.filter(tipo_pagamento__icontains="cart")
+    elif pagamento_filtro == "pix_dinheiro":
+        compras = compras.filter(
+            Q(tipo_pagamento__icontains="pix")
+            | Q(tipo_pagamento__icontains="dinheiro")
+            | Q(tipo_pagamento__icontains="vista")
+        )
 
     hoje = timezone.localdate()
+    compras_lista_filtrada = []
     for compra in compras:
         compra.situacao_financeira_texto, compra.situacao_financeira_classe = (
             _situacao_financeira_compra_lista(compra, hoje)
         )
+        if financeiro_filtro and compra.situacao_financeira_classe != financeiro_filtro:
+            continue
+        compras_lista_filtrada.append(compra)
 
     return render(
         request,
         "estoque/compras_lista.html",
         {
-            "compras": compras,
-            "termo": termo,
+            "compras": compras_lista_filtrada,
+            "termo": fornecedor_filtro,
+            "compra_filtro": compra_filtro,
+            "fornecedor_filtro": fornecedor_filtro,
+            "data_inicio": data_inicio,
+            "data_fim": data_fim,
+            "pagamento_filtro": pagamento_filtro,
+            "financeiro_filtro": financeiro_filtro,
         },
     )
-
 
 def compras_nova(request):
     fornecedores = Fornecedor.objects.filter(ativo=True).order_by("nome", "id")
