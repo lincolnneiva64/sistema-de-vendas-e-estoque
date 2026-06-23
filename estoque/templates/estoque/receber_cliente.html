@@ -777,6 +777,29 @@
   }
 }
 
+
+/* FOCO_FORTE_CONFIRMAR_RECEBIMENTO */
+#btnConfirmarRecebimentoCliente:focus,
+#btnConfirmarRecebimentoCliente:focus-visible,
+#btnConfirmarRecebimentoCliente.rc-foco-confirmar {
+  outline: 4px solid #2563eb !important;
+  outline-offset: 4px !important;
+  border: 3px solid #052e16 !important;
+  background: #16a34a !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 14px rgba(22, 163, 74, 0.30) !important;
+  transform: translateY(-1px) !important;
+  filter: brightness(1.03) !important;
+  position: relative;
+  z-index: 20;
+}
+
+#btnConfirmarRecebimentoCliente:active {
+  transform: translateY(2px) scale(0.99) !important;
+  filter: brightness(0.92) !important;
+  box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.18) !important;
+}
+
 </style>
 
 <div class="receber-cliente-page {% if feedback_recebimento %}recebimento-confirmado{% endif %}">
@@ -2062,8 +2085,16 @@
         return;
       }
       if (event.key !== "Enter") return;
+
       event.preventDefault();
-      abrirModalFormaPagamento();
+
+      if (confirmar) {
+        confirmar.focus({ preventScroll: true });
+        confirmar.classList.add("rc-foco-confirmar");
+        window.setTimeout(function () {
+          confirmar.classList.remove("rc-foco-confirmar");
+        }, 1800);
+      }
     }, listenerOptions);
     forma?.addEventListener("keydown", function (event) {
       if (event.key !== "Enter") return;
@@ -2297,8 +2328,4 @@
 </script>
 
 {% endblock %}
-
-
-
-
 
