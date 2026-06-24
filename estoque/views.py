@@ -4043,6 +4043,163 @@ def _resumo_correcao_financeira_compra(compra, conta_pagar):
     }
 
 
+
+def _corrigir_pagamento_simples_compra(compra, novo_pagamento, movimento_financeiro_correcao=''):
+    novo_pagamento = str(novo_pagamento or "").strip()
+    if novo_pagamento not in {"A prazo", "A vista", "? vista"}:
+        return False, ""
+
+    pagamento_anterior = compra.tipo_pagamento or ""
+    anterior_prazo = _compra_pagamento_a_prazo(pagamento_anterior)
+    novo_prazo = _compra_pagamento_a_prazo(novo_pagamento)
+
+    if anterior_prazo == novo_prazo:
+        return False, ""
+
+    conta_pagar = (
+        ContaPagar.objects
+        .filter(compra=compra)
+        .prefetch_related("pagamentos")
+        .first()
+    )
+
+    if anterior_prazo and not novo_prazo:
+        tinha_pagamento = bool(conta_pagar and conta_pagar.pagamentos.exists())
+        movimento_financeiro_correcao = str(movimento_financeiro_correcao or "").strip()
+
+        conta_pagamento = None
+        if not tinha_pagamento:
+            if not movimento_financeiro_correcao:
+                raise ValueError("Escolha como tratar o financeiro antes de mudar a compra para A vista.")
+
+            if movimento_financeiro_correcao == "manter":
+                conta_pagamento = None
+            elif movimento_financeiro_correcao.startswith("pagar:"):
+                conta_ref = movimento_financeiro_correcao.split(":", 1)[1]
+                contas_padrao = {
+                    "caixa": _conta_financeira_padrao("caixa"),
+                    "banco": _conta_financeira_padrao("banco"),
+                    "reserva": _conta_financeira_padrao("reserva"),
+                }
+                conta_pagamento = contas_padrao.get(conta_ref)
+                if conta_pagamento is None and conta_ref.isdigit():
+                    conta_pagamento = ContaFinanceira.objects.filter(pk=conta_ref, ativo=True).first()
+                if not conta_pagamento:
+                    raise ValueError("Escolha uma conta valida de onde saiu o dinheiro.")
+
+                valor_compra = _financeiro_dinheiro(compra.total).quantize(Decimal("0.01"))
+                if _saldo_conta_financeira(conta_pagamento) < valor_compra:
+                    raise ValueError(f"Saldo insuficiente em {conta_pagamento.nome}.")
+            else:
+                raise ValueError("Opcao de pagamento invalida para mudar a compra para A vista.")
+
+        compra.tipo_pagamento = "A vista"
+        compra.data_vencimento = None
+        compra.save(update_fields=["tipo_pagamento", "data_vencimento", "atualizado_em"])
+
+        if conta_pagar and tinha_pagamento:
+            conta_pagar.delete()
+            return True, ""
+
+        if conta_pagar:
+            conta_pagar.delete()
+
+        if conta_pagamento:
+            MovimentoFinanceiro.objects.create(
+                conta=conta_pagamento,
+                tipo=MovimentoFinanceiro.TIPO_SAIDA,
+                valor=_financeiro_dinheiro(compra.total).quantize(Decimal("0.01")),
+                data=compra.data_compra or timezone.localdate(),
+                descricao=_descricao_compra_a_vista(compra, conta_pagamento),
+                operador=compra.operador or "",
+                origem="compra_a_vista",
+                compra=compra,
+            )
+        else:
+            _registrar_movimentos_compra_a_vista(compra)
+
+        return True, ""
+
+    if not anterior_prazo and novo_prazo:
+        movimentos = list(_movimentos_financeiros_compra(compra))
+        movimento_financeiro_correcao = str(movimento_financeiro_correcao or "").strip()
+
+        if movimentos and not movimento_financeiro_correcao:
+            raise ValueError("Escolha como tratar o dinheiro que ja saiu antes de mudar a compra para A prazo.")
+
+        conta_devolucao = None
+        if movimento_financeiro_correcao.startswith("devolver:"):
+            conta_ref = movimento_financeiro_correcao.split(":", 1)[1]
+            contas_padrao = {
+                "caixa": _conta_financeira_padrao("caixa"),
+                "banco": _conta_financeira_padrao("banco"),
+                "reserva": _conta_financeira_padrao("reserva"),
+            }
+            conta_devolucao = contas_padrao.get(conta_ref)
+            if conta_devolucao is None and conta_ref.isdigit():
+                conta_devolucao = ContaFinanceira.objects.filter(pk=conta_ref, ativo=True).first()
+            if not conta_devolucao:
+                raise ValueError("Escolha uma conta valida para devolver o dinheiro.")
+        elif movimento_financeiro_correcao not in {"", "manter"}:
+            raise ValueError("Opcao de movimento financeiro invalida.")
+
+        total_estornado = Decimal("0.00")
+        if conta_devolucao:
+            for movimento in movimentos:
+                if movimento.tipo == MovimentoFinanceiro.TIPO_SAIDA:
+                    valor_estorno = _financeiro_dinheiro(movimento.valor).quantize(Decimal("0.01"))
+                    if valor_estorno <= 0:
+                        continue
+                    MovimentoFinanceiro.objects.create(
+                        conta=conta_devolucao,
+                        tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+                        valor=valor_estorno,
+                        data=timezone.localdate(),
+                        descricao=f"Devolucao por mudanca da compra #{compra.id} para A prazo"[:255],
+                        operador=compra.operador or "",
+                        origem="compra_correcao_pagamento",
+                        compra=compra,
+                    )
+                    total_estornado += valor_estorno
+
+        compra.tipo_pagamento = "A prazo"
+        if not compra.data_vencimento:
+            compra.data_vencimento = compra.data_compra
+        compra.save(update_fields=["tipo_pagamento", "data_vencimento", "atualizado_em"])
+
+        if not conta_pagar:
+            total = _financeiro_dinheiro(compra.total).quantize(Decimal("0.01"))
+            ContaPagar.objects.create(
+                compra=compra,
+                fornecedor=compra.fornecedor,
+                data_emissao=compra.data_compra or timezone.localdate(),
+                data_vencimento=compra.data_vencimento,
+                valor_original=total,
+                valor_em_aberto=total,
+                status=ContaPagar.STATUS_ABERTA,
+                observacao="Criada automaticamente ao mudar a compra para A prazo.",
+            )
+
+        if conta_devolucao:
+            nome_conta = conta_devolucao.nome
+            nome_normalizado = nome_conta.lower()
+
+            if "caixa" in nome_normalizado:
+                destino = "no Caixa"
+            elif "banco" in nome_normalizado or "pix" in nome_normalizado:
+                destino = "no Banco/Pix"
+            elif "sangria" in nome_normalizado or "reserva" in nome_normalizado:
+                destino = "na Sangria/Reserva"
+            else:
+                destino = f"em {nome_conta}"
+
+            return True, f"Pagamento alterado para A prazo. Devolucao registrada {destino}."
+
+        return True, "Pagamento alterado para A prazo. Conta a Pagar criada."
+
+    return False, ""
+
+
 def compra_corrigir_itens(request, pk):
     compra = get_object_or_404(
         Compra.objects.select_related("fornecedor").prefetch_related("itens__produto"),
@@ -4050,6 +4207,7 @@ def compra_corrigir_itens(request, pk):
     )
 
     if request.method == "POST":
+        novo_tipo_pagamento_compra = request.POST.get("tipo_pagamento_compra", "").strip()
         try:
             ids_postados = [int(valor) for valor in request.POST.getlist("item_id[]")]
             quantidades = request.POST.getlist("quantidade[]")
@@ -4141,7 +4299,12 @@ def compra_corrigir_itens(request, pk):
                 total_anterior = _financeiro_dinheiro(compra.total).quantize(Decimal("0.01"))
                 novo_total = novo_total.quantize(Decimal("0.01"))
                 diferenca = (novo_total - total_anterior).quantize(Decimal("0.01"))
-                if not rastros and diferenca == Decimal("0.00"):
+                pagamento_vai_mudar = bool(
+                    novo_tipo_pagamento_compra
+                    and _compra_pagamento_a_prazo(compra.tipo_pagamento)
+                    != _compra_pagamento_a_prazo(novo_tipo_pagamento_compra)
+                )
+                if not rastros and diferenca == Decimal("0.00") and not pagamento_vai_mudar:
                     messages.info(request, "Nenhuma alteração de itens foi feita.")
                     return redirect("estoque:compras_detalhe", pk=compra.pk)
 
@@ -4178,15 +4341,26 @@ def compra_corrigir_itens(request, pk):
 
                 compra.total = novo_total
                 compra.save(update_fields=["total", "atualizado_em"])
-                resumo_rastro = "; ".join(rastros)
-                _registrar_observacao_compra(
+
+                movimento_financeiro_correcao = request.POST.get("movimento_financeiro_correcao", "").strip()
+                pagamento_alterado, resumo_pagamento = _corrigir_pagamento_simples_compra(
                     compra,
-                    "Correcao de itens: " + resumo_rastro + ". "
+                    novo_tipo_pagamento_compra,
+                    movimento_financeiro_correcao,
+                )
+
+                resumo_rastro = "; ".join(rastros) if rastros else "nenhuma alteracao de itens"
+                observacao_correcao = (
+                    "Correcao de itens/pagamento: " + resumo_rastro + ". "
                     f"Total anterior {_financeiro_moeda_br(total_anterior)}; "
                     f"novo total {_financeiro_moeda_br(novo_total)}; "
                     f"diferenca {_financeiro_moeda_br(diferenca)}. "
-                    "Financeiro nao alterado; conferir em etapa separada.",
+                    "Financeiro dos itens nao alterado nesta etapa."
                 )
+                if pagamento_alterado and resumo_pagamento:
+                    observacao_correcao += " " + resumo_pagamento
+
+                _registrar_observacao_compra(compra, observacao_correcao)
         except ValueError as exc:
             messages.error(request, str(exc))
             return redirect("estoque:compra_corrigir_itens", pk=compra.pk)
@@ -4205,12 +4379,26 @@ def compra_corrigir_itens(request, pk):
             )
             return redirect("estoque:compra_corrigir_financeiro", pk=compra.pk)
 
-        messages.success(
-            request,
-            f"Itens corrigidos. Total anterior: {_financeiro_moeda_br(total_anterior)}. "
-            f"Novo total: {_financeiro_moeda_br(novo_total)}. Diferenca: {_financeiro_moeda_br(diferenca)}. "
-            "Nenhum ajuste financeiro foi realizado.",
+        mudou_somente_pagamento = (
+            'pagamento_alterado' in locals()
+            and pagamento_alterado
+            and not rastros
+            and diferenca == Decimal("0.00")
         )
+
+        if mudou_somente_pagamento and 'resumo_pagamento' in locals() and resumo_pagamento:
+            mensagem_final = resumo_pagamento
+        else:
+            mensagem_final = (
+                f"Itens corrigidos. Total anterior: {_financeiro_moeda_br(total_anterior)}. "
+                f"Novo total: {_financeiro_moeda_br(novo_total)}. Diferenca: {_financeiro_moeda_br(diferenca)}."
+            )
+            if 'pagamento_alterado' in locals() and pagamento_alterado:
+                if 'resumo_pagamento' in locals() and resumo_pagamento:
+                    mensagem_final += " " + resumo_pagamento
+            else:
+                mensagem_final += " Nenhum ajuste financeiro foi realizado."
+        messages.success(request, mensagem_final)
         return redirect("estoque:compras_detalhe", pk=compra.pk)
 
     itens = compra.itens.select_related("produto").all()

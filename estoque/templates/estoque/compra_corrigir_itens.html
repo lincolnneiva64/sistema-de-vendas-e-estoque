@@ -71,6 +71,33 @@
     .compra-correcao-adicionar-acoes, .compra-correcao-totais, .compra-correcao-rodape { padding:10px 12px; }
     .compra-correcao-total { padding:9px; }
   }
+  .campo-pagamento-correcao {
+    width: auto;
+    min-width: 110px;
+    max-width: 140px;
+    min-height: 28px;
+    border: 1px solid #94a3b8;
+    border-radius: 6px;
+    padding: 2px 24px 2px 4px;
+    font-size: 1rem;
+    font-weight: 900;
+    color: #0f172a;
+    background: #fff;
+    line-height: 1.15;
+  }
+
+  #selectMovimentoFinanceiroCorrecao {
+    color: #0f172a !important;
+    background: #ffffff !important;
+    border: 1px solid #64748b !important;
+    font-weight: 900 !important;
+  }
+
+  #selectMovimentoFinanceiroCorrecao option {
+    color: #0f172a;
+    background: #ffffff;
+    font-weight: 800;
+  }
 </style>
 
 <div class="compra-correcao-wrap">
@@ -93,7 +120,24 @@
     <div class="compra-correcao-dados">
       <div><strong>Fornecedor</strong>{{ compra.fornecedor.nome|default:"-" }}</div>
       <div><strong>Data</strong>{{ compra.data_compra|date:"d/m/Y" }}</div>
-      <div><strong>Pagamento</strong>{% if compra.tipo_pagamento == "avista" %}À vista{% else %}{{ compra.tipo_pagamento_texto }}{% endif %}</div>
+      <div>
+        <strong>Pagamento</strong>
+        <select name="tipo_pagamento_compra" class="campo-pagamento-correcao" form="formCorrecaoItensCompra">
+          <option value="A prazo" {% if compra.tipo_pagamento_texto == "A prazo" %}selected{% endif %}>A prazo</option>
+          <option value="A vista" {% if compra.tipo_pagamento_texto != "A prazo" %}selected{% endif %}>&Agrave; vista</option>
+        </select>        <div id="movimentoFinanceiroCorrecaoPagamento" style="display:none; margin-top:8px;">
+          <label id="labelMovimentoFinanceiroCorrecao" style="display:block; font-weight:900; color:#334155; margin-bottom:4px;">
+            Ao alterar pagamento:
+          </label>
+          <select name="movimento_financeiro_correcao" id="selectMovimentoFinanceiroCorrecao" form="formCorrecaoItensCompra" style="width:100%; max-width:420px; min-height:38px; border:1px solid #64748b; border-radius:8px; padding:7px 9px; font-weight:800;">
+            <option value="">Escolha uma opcao</option>
+            <option value="manter">Foi so correcao, criar Conta a Pagar</option>
+            <option value="devolver:caixa">Devolver para Caixa</option>
+            <option value="devolver:banco">Devolver para Banco/Pix</option>
+            <option value="devolver:reserva">Devolver para Sangria/Reserva</option>
+          </select>
+        </div>
+      </div>
       <div><strong>Total atual</strong>R$ {{ compra.total|floatformat:2 }}</div>
     </div>
   </section>
@@ -174,14 +218,14 @@
   function numero(valor) { let texto=String(valor||"0").trim(); if(texto.includes(",")) texto=texto.replace(/\./g,"").replace(",", "."); texto=texto.replace(/[^\d.-]/g,""); return Number(texto)||0; }
   function moeda(valor) { return "R$ "+Number(valor||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
   function campoNumerico(alvo) { return alvo?.matches(".campo-quantidade-correcao, .campo-preco-correcao"); }
-  function campoNavegavel(alvo) { return alvo?.matches(".campo-produto-novo-correcao, .campo-quantidade-correcao, .campo-preco-correcao"); }
+  function campoNavegavel(alvo) { return alvo?.matches(".campo-pagamento-correcao, .campo-produto-novo-correcao, .campo-quantidade-correcao, .campo-preco-correcao"); }
   function selecionarCampo(campo) {
     if (!campo) return;
     campo.focus();
     if (campoNumerico(campo)) campo.select();
   }
   function camposDeEdicao() {
-    return Array.from(form.querySelectorAll(".campo-produto-novo-correcao, .campo-quantidade-correcao, .campo-preco-correcao"))
+    return Array.from(document.querySelectorAll(".campo-pagamento-correcao, .campo-produto-novo-correcao, .campo-quantidade-correcao, .campo-preco-correcao"))
       .filter(function(campo) { return !campo.disabled; });
   }
   function recalcular() {
@@ -244,4 +288,69 @@
   }, 0);
 })();
 </script>
+
+
+
+
+<script>
+(function() {
+  const selectPagamento = document.querySelector('select[name="tipo_pagamento_compra"]');
+  const blocoMovimento = document.getElementById("movimentoFinanceiroCorrecaoPagamento");
+  const selectMovimento = document.getElementById("selectMovimentoFinanceiroCorrecao");
+  const labelMovimento = document.getElementById("labelMovimentoFinanceiroCorrecao");
+  if (!selectPagamento || !blocoMovimento || !selectMovimento || !labelMovimento) return;
+
+  const pagamentoOriginal = selectPagamento.value;
+
+  function normalizar(valor) {
+    return (valor || "").toLowerCase().replace("?", "a").replace("?", "a");
+  }
+
+  function preencherOpcoesParaPrazo() {
+    labelMovimento.textContent = "Ao mudar para A prazo:";
+    selectMovimento.innerHTML = `
+      <option value="">Escolha uma opcao</option>
+      <option value="manter">Foi so correcao, criar Conta a Pagar</option>
+      <option value="devolver:caixa">Devolver para Caixa</option>
+      <option value="devolver:banco">Devolver para Banco/Pix</option>
+      <option value="devolver:reserva">Devolver para Sangria/Reserva</option>
+    `;
+  }
+
+  function preencherOpcoesParaVista() {
+    labelMovimento.textContent = "Ao mudar para A vista:";
+    selectMovimento.innerHTML = `
+      <option value="">Escolha uma opcao</option>
+      <option value="manter">Foi so correcao, criar Conta a Pagar</option>
+      <option value="pagar:caixa">Pagar pelo Caixa</option>
+      <option value="pagar:banco">Pagar pelo Banco/Pix</option>
+      <option value="pagar:reserva">Pagar pela Sangria/Reserva</option>
+    `;
+  }
+
+  function atualizarMovimentoFinanceiro() {
+    const atual = selectPagamento.value;
+    const mudou = atual !== pagamentoOriginal;
+    const atualNormalizado = normalizar(atual);
+
+    blocoMovimento.style.display = mudou ? "block" : "none";
+    selectMovimento.required = mudou;
+
+    if (!mudou) {
+      selectMovimento.value = "";
+      return;
+    }
+
+    if (atualNormalizado.includes("prazo")) {
+      preencherOpcoesParaPrazo();
+    } else {
+      preencherOpcoesParaVista();
+    }
+  }
+
+  selectPagamento.addEventListener("change", atualizarMovimentoFinanceiro);
+  atualizarMovimentoFinanceiro();
+})();
+</script>
+
 {% endblock %}
