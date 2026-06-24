@@ -4032,4 +4032,192 @@
 })();
 </script>
 
+
+
+
+
+
+
+<script>
+/* AUTO DISTRIBUIR RESTANTE - MODAL FINANCEIRO NOVA COMPRA */
+(function () {
+  var travado = false;
+
+  function paraNumero(valor) {
+    valor = (valor || "").toString().trim();
+
+    if (!valor) {
+      return 0;
+    }
+
+    valor = valor.replace(/[^\d,.-]/g, "");
+
+    if (valor.includes(",")) {
+      valor = valor.replace(/\./g, "").replace(",", ".");
+    }
+
+    var numero = parseFloat(valor);
+    return isNaN(numero) ? 0 : numero;
+  }
+
+  function paraMoeda(valor) {
+    valor = Math.max(0, valor || 0);
+    return valor.toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function campoVisivel(input) {
+    if (!input) return false;
+
+    var tipo = (input.type || "").toLowerCase();
+
+    if (["hidden", "checkbox", "radio", "button", "submit"].includes(tipo)) {
+      return false;
+    }
+
+    var estilo = window.getComputedStyle(input);
+
+    return estilo.display !== "none" &&
+           estilo.visibility !== "hidden" &&
+           input.offsetParent !== null;
+  }
+
+  function encontrarModalFinanceiro() {
+    var candidatos = Array.from(document.querySelectorAll("div, section, form"));
+
+    candidatos = candidatos.filter(function (el) {
+      var t = el.innerText || "";
+      return t.includes("De onde saiu o dinheiro") &&
+             t.includes("Total da compra") &&
+             t.includes("Falta distribuir") &&
+             el.querySelectorAll("input").length >= 3;
+    });
+
+    candidatos.sort(function (a, b) {
+      return (a.innerText || "").length - (b.innerText || "").length;
+    });
+
+    return candidatos[0] || null;
+  }
+
+  function pegarTotal(modal) {
+    var texto = modal.innerText || "";
+    var achou = texto.match(/Total da compra\s*R\$\s*([\d.]+,\d{2})/i);
+
+    if (!achou) {
+      return 0;
+    }
+
+    return paraNumero(achou[1]);
+  }
+
+  function pegarCampos(modal) {
+    return Array.from(modal.querySelectorAll("input"))
+      .filter(campoVisivel)
+      .slice(0, 3);
+  }
+
+  function disparar(campo) {
+    campo.dispatchEvent(new Event("input", { bubbles: true }));
+    campo.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function setarAuto(campo, valor) {
+    travado = true;
+
+    campo.value = paraMoeda(valor);
+    campo.dataset.valorAutomaticoCompra = "1";
+
+    disparar(campo);
+
+    travado = false;
+  }
+
+  function somaAntes(campos, limite) {
+    var soma = 0;
+
+    for (var i = 0; i < limite; i++) {
+      soma += paraNumero(campos[i].value);
+    }
+
+    return soma;
+  }
+
+  function recalcularDepois(campos, indice, total) {
+    if (travado) return;
+
+    var proximo = indice + 1;
+
+    if (proximo >= campos.length) {
+      return;
+    }
+
+    var restante = total - somaAntes(campos, proximo);
+
+    if (restante < 0.005) {
+      restante = 0;
+    }
+
+    setarAuto(campos[proximo], restante);
+  }
+
+  function iniciarAutoDistribuir() {
+    var modal = encontrarModalFinanceiro();
+
+    if (!modal || modal.dataset.autoDistribuirAplicado === "1") {
+      return;
+    }
+
+    var campos = pegarCampos(modal);
+    var total = pegarTotal(modal);
+
+    if (campos.length < 3 || total <= 0) {
+      return;
+    }
+
+    modal.dataset.autoDistribuirAplicado = "1";
+
+    // Ao abrir o modal, o primeiro campo j? come?a com o total da compra.
+    setarAuto(campos[0], total);
+
+    setTimeout(function () {
+      campos[0].focus();
+      campos[0].select();
+    }, 80);
+
+    campos.forEach(function (campo, indice) {
+      campo.addEventListener("focus", function () {
+        setTimeout(function () {
+          campo.select();
+        }, 30);
+      });
+
+      campo.addEventListener("input", function () {
+        if (travado) return;
+
+        campo.dataset.valorAutomaticoCompra = "0";
+        recalcularDepois(campos, indice, total);
+      });
+
+      campo.addEventListener("change", function () {
+        if (travado) return;
+
+        campo.dataset.valorAutomaticoCompra = "0";
+        recalcularDepois(campos, indice, total);
+      });
+    });
+
+    console.log("Auto distribuir restante aplicado na Nova Compra.");
+  }
+
+  window.addEventListener("load", iniciarAutoDistribuir);
+  document.addEventListener("DOMContentLoaded", iniciarAutoDistribuir);
+  document.addEventListener("click", function () {
+    setTimeout(iniciarAutoDistribuir, 100);
+  });
+})();
+</script>
+
 {% endblock %}
