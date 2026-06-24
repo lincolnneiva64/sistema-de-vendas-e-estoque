@@ -951,6 +951,36 @@
 }
 
 </style>
+
+<style>
+/* ESTOQUE FRACIONADO NA LISTA - HOME */
+.estoque-lista-duplo {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.18;
+  gap: 1px;
+}
+
+.estoque-lista-principal {
+  font-weight: 600;
+  color: inherit;
+  white-space: nowrap;
+  font-size: 1em;
+}
+
+.estoque-lista-fracionado {
+  font-weight: 600;
+  color: #047857;
+  font-size: 0.82em;
+  white-space: nowrap;
+}
+
+.estoque-lista-minimo .estoque-lista-fracionado {
+  color: #475569;
+}
+</style>
+
 <div class="container mt-4 produtos-mobile-page">
   {% if messages %}
   <div style="max-width: 720px; margin: 20px auto 18px auto; position: relative; z-index: 20;">
@@ -1177,7 +1207,14 @@ align-items: center;
                                 <div class="produto-categoria-inline">{% if produto.categoria %}{{ produto.categoria }}{% else %}Sem categoria{% endif %}</div></td>
         <td class="td-quantidade">
   <div class="qtd-wrap">
-    <span class="qtd-num produto-card-valor">{{ produto.quantidade|default:"0" }}</span>
+    {% if produto.vende_fracionado and produto.fator_conversao and produto.unidade_venda_2 %}
+      <span class="qtd-num produto-card-valor estoque-lista-duplo">
+        <span class="estoque-lista-principal">{{ produto.quantidade|floatformat:3 }} {{ produto.unidade_compra|default:"" }}</span>
+        <span class="estoque-lista-fracionado">{% widthratio produto.quantidade 1 produto.fator_conversao %} {{ produto.unidade_venda_2 }}</span>
+      </span>
+    {% else %}
+      <span class="qtd-num produto-card-valor">{{ produto.quantidade|default:"0" }}</span>
+    {% endif %}
 
     {% if produto.quantidade == 0 %}
       <span class="badge badge-zero qtd-badge">Zerado</span>
@@ -1191,7 +1228,16 @@ align-items: center;
   </div>
 </td>
 
-        <td class="text-center produto-card-minimo"><span class="produto-card-valor">{{ produto.estoque_minimo|default:"0" }}</span></td>
+        <td class="text-center produto-card-minimo">
+          {% if produto.vende_fracionado and produto.fator_conversao and produto.unidade_venda_2 %}
+            <span class="produto-card-valor estoque-lista-duplo estoque-lista-minimo">
+              <span class="estoque-lista-principal">{{ produto.estoque_minimo|floatformat:3 }} {{ produto.unidade_compra|default:"" }}</span>
+              <span class="estoque-lista-fracionado">{% widthratio produto.estoque_minimo 1 produto.fator_conversao %} {{ produto.unidade_venda_2 }}</span>
+            </span>
+          {% else %}
+            <span class="produto-card-valor">{{ produto.estoque_minimo|default:"0" }}</span>
+          {% endif %}
+        </td>
 
         <td>
           <a
