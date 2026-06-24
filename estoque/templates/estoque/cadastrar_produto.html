@@ -1682,3 +1682,541 @@ document.addEventListener("DOMContentLoaded", function () {
 
 </body>
 </html>
+
+
+<style>
+/* BLOCO ESTOQUE DUPLO ORGANIZADO - CADASTRO PRODUTO */
+.bloco-estoque-organizado {
+  margin: 14px 0 12px;
+  border: 1px solid #d7e3f5;
+  background: #f8fbff;
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.bloco-estoque-titulo {
+  font-weight: 900;
+  color: #0f3b70;
+  margin-bottom: 10px;
+  font-size: 17px;
+}
+
+.bloco-estoque-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.bloco-estoque-item {
+  min-width: 0;
+}
+
+.bloco-estoque-item label {
+  display: block;
+  font-weight: 800;
+  color: #1f2937;
+  margin-bottom: 5px;
+}
+
+.bloco-estoque-item input,
+.bloco-estoque-item select {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid #b8c2cf;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-weight: 700;
+  font-size: 16px;
+  background: #fff;
+}
+
+.bloco-estoque-item input:focus,
+.bloco-estoque-item select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.bloco-estoque-ajuda {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.campo-real-estoque-oculto {
+  display: none !important;
+}
+
+.bloco-original-movido-oculto {
+  display: none !important;
+}
+
+@media (max-width: 900px) {
+  .bloco-estoque-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+
+<script>
+/* BLOCO ESTOQUE DUPLO ORGANIZADO - CADASTRO PRODUTO */
+(function () {
+  var travadoEstoque = false;
+
+  function texto(valor) {
+    return (valor || "").toString().trim();
+  }
+
+  function numero(valor) {
+    valor = texto(valor);
+
+    if (!valor) {
+      return 0;
+    }
+
+    valor = valor.replace(/[^\d,.-]/g, "");
+
+    if (valor.includes(",")) {
+      valor = valor.replace(/\./g, "").replace(",", ".");
+    }
+
+    var n = parseFloat(valor);
+    return isNaN(n) ? 0 : n;
+  }
+
+  function formatar(valor, casas) {
+    valor = Number(valor || 0);
+
+    return valor.toLocaleString("pt-BR", {
+      minimumFractionDigits: casas,
+      maximumFractionDigits: casas
+    });
+  }
+
+  function textoSelect(select) {
+    if (!select) return "";
+
+    var op = select.options[select.selectedIndex];
+    return texto(op ? op.textContent : select.value);
+  }
+
+  function vendeFracionadoAtivo(campo) {
+    if (!campo) return false;
+
+    var valor = texto(campo.value).toLowerCase();
+    var label = textoSelect(campo).toLowerCase();
+
+    return ["sim", "true", "1", "s"].includes(valor) || label === "sim";
+  }
+
+  function disparar(campo) {
+    campo.dispatchEvent(new Event("input", { bubbles: true }));
+    campo.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function copiarSelectOriginal(selectOriginal, selectVisual) {
+    selectVisual.innerHTML = "";
+
+    Array.from(selectOriginal.options || []).forEach(function (op) {
+      var novo = document.createElement("option");
+      novo.value = op.value;
+      novo.textContent = op.textContent;
+      novo.selected = op.selected;
+      selectVisual.appendChild(novo);
+    });
+  }
+
+  function esconderBlocoOriginal(campo) {
+    var bloco = campo.closest(".col-12, .col-md-1, .col-md-2, .col-md-3, .col-md-4, .col-md-5, .col-md-6, .col-md-7, .col-md-8, .col-md-9, .col-md-10, .col-md-11, .col-md-12");
+
+    if (bloco) {
+      bloco.classList.add("bloco-original-movido-oculto");
+    }
+  }
+
+  function iniciarBlocoEstoqueOrganizado() {
+    var campoQtd = document.getElementById("id_quantidade");
+    var campoMinimo = document.getElementById("id_estoque_minimo");
+    var campoUnidadeCompra = document.getElementById("id_unidade_compra");
+    var campoVendeFracionado = document.getElementById("id_vende_fracionado");
+    var campoFator = document.getElementById("id_fator_conversao");
+    var campoUnidadeFracionada = document.getElementById("id_unidade_venda_2");
+
+    if (!campoQtd || !campoMinimo || !campoUnidadeCompra || !campoVendeFracionado || !campoFator || !campoUnidadeFracionada) {
+      return;
+    }
+
+    if (document.getElementById("bloco-estoque-organizado")) {
+      return;
+    }
+
+    var bloco = document.createElement("div");
+    bloco.id = "bloco-estoque-organizado";
+    bloco.className = "bloco-estoque-organizado";
+
+    bloco.innerHTML = `
+      <div class="bloco-estoque-titulo">Estoque e fracionamento</div>
+
+      <div class="bloco-estoque-grid">
+        <div class="bloco-estoque-item">
+          <label id="label-qtd-principal" for="qtd_principal_visual">Estoque</label>
+          <input type="text" id="qtd_principal_visual" inputmode="decimal">
+        </div>
+
+        <div class="bloco-estoque-item">
+          <label for="fator_visual">Fator de convers?o</label>
+          <input type="text" id="fator_visual" inputmode="decimal">
+        </div>
+
+        <div class="bloco-estoque-item" id="item-qtd-fracionada">
+          <label id="label-qtd-fracionada" for="qtd_fracionada_visual">Estoque fracionado</label>
+          <input type="text" id="qtd_fracionada_visual" inputmode="decimal">
+        </div>
+
+        <div class="bloco-estoque-item">
+          <label id="label-minimo-principal" for="minimo_principal_visual">Estoque m?nimo</label>
+          <input type="text" id="minimo_principal_visual" inputmode="decimal">
+        </div>
+
+        <div class="bloco-estoque-item">
+          <label for="unidade_compra_visual">Unidade de compra</label>
+          <select id="unidade_compra_visual"></select>
+        </div>
+
+        <div class="bloco-estoque-item" id="item-minimo-fracionado">
+          <label id="label-minimo-fracionado" for="minimo_fracionado_visual">M?nimo fracionado</label>
+          <input type="text" id="minimo_fracionado_visual" inputmode="decimal">
+        </div>
+
+        <div class="bloco-estoque-item">
+          <label for="vende_fracionado_visual">Vende fracionado?</label>
+          <select id="vende_fracionado_visual"></select>
+        </div>
+
+        <div class="bloco-estoque-item" id="item-unidade-fracionada">
+          <label for="unidade_fracionada_visual">Unidade fracionada</label>
+          <select id="unidade_fracionada_visual"></select>
+        </div>
+
+        <div class="bloco-estoque-item">
+          <div class="bloco-estoque-ajuda" id="ajuda-estoque-fracionado"></div>
+        </div>
+      </div>
+    `;
+
+    var referencia = campoQtd.closest(".col-12, .col-md-1, .col-md-2, .col-md-3, .col-md-4, .col-md-5, .col-md-6, .col-md-7, .col-md-8, .col-md-9, .col-md-10, .col-md-11, .col-md-12");
+
+    if (referencia) {
+      referencia.insertAdjacentElement("beforebegin", bloco);
+    } else {
+      campoQtd.insertAdjacentElement("beforebegin", bloco);
+    }
+
+    var qtdPrincipal = document.getElementById("qtd_principal_visual");
+    var qtdFracionada = document.getElementById("qtd_fracionada_visual");
+    var minimoPrincipal = document.getElementById("minimo_principal_visual");
+    var minimoFracionado = document.getElementById("minimo_fracionado_visual");
+    var fatorVisual = document.getElementById("fator_visual");
+    var unidadeCompraVisual = document.getElementById("unidade_compra_visual");
+    var vendeFracionadoVisual = document.getElementById("vende_fracionado_visual");
+    var unidadeFracionadaVisual = document.getElementById("unidade_fracionada_visual");
+
+    copiarSelectOriginal(campoUnidadeCompra, unidadeCompraVisual);
+    copiarSelectOriginal(campoVendeFracionado, vendeFracionadoVisual);
+    copiarSelectOriginal(campoUnidadeFracionada, unidadeFracionadaVisual);
+
+    campoQtd.classList.add("campo-real-estoque-oculto");
+    campoMinimo.classList.add("campo-real-estoque-oculto");
+
+    esconderBlocoOriginal(campoQtd);
+    esconderBlocoOriginal(campoMinimo);
+    esconderBlocoOriginal(campoUnidadeCompra);
+    esconderBlocoOriginal(campoVendeFracionado);
+    esconderBlocoOriginal(campoFator);
+    esconderBlocoOriginal(campoUnidadeFracionada);
+
+    function atualizarLabelsEVisibilidade() {
+      var unCompra = textoSelect(unidadeCompraVisual) || "unidade";
+      var unFrac = textoSelect(unidadeFracionadaVisual) || "fracionado";
+      var fator = numero(fatorVisual.value);
+      var fracionado = vendeFracionadoAtivo(vendeFracionadoVisual);
+
+      document.getElementById("label-qtd-principal").textContent = "Estoque em " + unCompra;
+      document.getElementById("label-qtd-fracionada").textContent = "Estoque em " + unFrac;
+      document.getElementById("label-minimo-principal").textContent = "M?nimo em " + unCompra;
+      document.getElementById("label-minimo-fracionado").textContent = "M?nimo em " + unFrac;
+
+      document.getElementById("item-qtd-fracionada").style.display = fracionado ? "" : "none";
+      document.getElementById("item-minimo-fracionado").style.display = fracionado ? "" : "none";
+      document.getElementById("item-unidade-fracionada").style.display = fracionado ? "" : "none";
+
+      var ajuda = document.getElementById("ajuda-estoque-fracionado");
+
+      if (fracionado && fator > 0) {
+        ajuda.textContent = formatar(fator, 2) + " " + unFrac + " por " + unCompra;
+      } else if (fracionado) {
+        ajuda.textContent = "Informe o fator para calcular o fracionado.";
+      } else {
+        ajuda.textContent = "";
+      }
+    }
+
+    function sincronizarSelects() {
+      campoUnidadeCompra.value = unidadeCompraVisual.value;
+      campoVendeFracionado.value = vendeFracionadoVisual.value;
+      campoUnidadeFracionada.value = unidadeFracionadaVisual.value;
+
+      disparar(campoUnidadeCompra);
+      disparar(campoVendeFracionado);
+      disparar(campoUnidadeFracionada);
+    }
+
+    function carregarDosReais() {
+      if (travadoEstoque) return;
+
+      travadoEstoque = true;
+
+      fatorVisual.value = formatar(numero(campoFator.value), 2);
+      qtdPrincipal.value = formatar(numero(campoQtd.value), 3);
+      minimoPrincipal.value = formatar(numero(campoMinimo.value), 3);
+
+      var fator = numero(fatorVisual.value);
+
+      qtdFracionada.value = fator > 0 ? formatar(numero(qtdPrincipal.value) * fator, 3) : formatar(0, 3);
+      minimoFracionado.value = fator > 0 ? formatar(numero(minimoPrincipal.value) * fator, 3) : formatar(0, 3);
+
+      atualizarLabelsEVisibilidade();
+
+      travadoEstoque = false;
+    }
+
+    function principalParaFracionado() {
+      if (travadoEstoque) return;
+
+      travadoEstoque = true;
+
+      var fator = numero(fatorVisual.value);
+
+      campoQtd.value = formatar(numero(qtdPrincipal.value), 3);
+
+      if (fator > 0) {
+        qtdFracionada.value = formatar(numero(qtdPrincipal.value) * fator, 3);
+      }
+
+      disparar(campoQtd);
+      atualizarLabelsEVisibilidade();
+
+      travadoEstoque = false;
+    }
+
+    function fracionadoParaPrincipal() {
+      if (travadoEstoque) return;
+
+      travadoEstoque = true;
+
+      var fator = numero(fatorVisual.value);
+
+      if (fator > 0) {
+        var principal = numero(qtdFracionada.value) / fator;
+
+        qtdPrincipal.value = formatar(principal, 3);
+        campoQtd.value = formatar(principal, 3);
+        disparar(campoQtd);
+      }
+
+      atualizarLabelsEVisibilidade();
+
+      travadoEstoque = false;
+    }
+
+    function minimoPrincipalParaFracionado() {
+      if (travadoEstoque) return;
+
+      travadoEstoque = true;
+
+      var fator = numero(fatorVisual.value);
+
+      campoMinimo.value = formatar(numero(minimoPrincipal.value), 3);
+
+      if (fator > 0) {
+        minimoFracionado.value = formatar(numero(minimoPrincipal.value) * fator, 3);
+      }
+
+      disparar(campoMinimo);
+      atualizarLabelsEVisibilidade();
+
+      travadoEstoque = false;
+    }
+
+    function minimoFracionadoParaPrincipal() {
+      if (travadoEstoque) return;
+
+      travadoEstoque = true;
+
+      var fator = numero(fatorVisual.value);
+
+      if (fator > 0) {
+        var minimo = numero(minimoFracionado.value) / fator;
+
+        minimoPrincipal.value = formatar(minimo, 3);
+        campoMinimo.value = formatar(minimo, 3);
+        disparar(campoMinimo);
+      }
+
+      atualizarLabelsEVisibilidade();
+
+      travadoEstoque = false;
+    }
+
+    function fatorMudou() {
+      if (travadoEstoque) return;
+
+      campoFator.value = formatar(numero(fatorVisual.value), 2);
+      disparar(campoFator);
+
+      principalParaFracionado();
+      minimoPrincipalParaFracionado();
+      atualizarLabelsEVisibilidade();
+    }
+
+    qtdPrincipal.addEventListener("input", principalParaFracionado);
+    qtdPrincipal.addEventListener("change", principalParaFracionado);
+
+    qtdFracionada.addEventListener("input", fracionadoParaPrincipal);
+    qtdFracionada.addEventListener("change", fracionadoParaPrincipal);
+
+    minimoPrincipal.addEventListener("input", minimoPrincipalParaFracionado);
+    minimoPrincipal.addEventListener("change", minimoPrincipalParaFracionado);
+
+    minimoFracionado.addEventListener("input", minimoFracionadoParaPrincipal);
+    minimoFracionado.addEventListener("change", minimoFracionadoParaPrincipal);
+
+    fatorVisual.addEventListener("input", fatorMudou);
+    fatorVisual.addEventListener("change", fatorMudou);
+
+    unidadeCompraVisual.addEventListener("change", function () {
+      sincronizarSelects();
+      atualizarLabelsEVisibilidade();
+    });
+
+    vendeFracionadoVisual.addEventListener("change", function () {
+      sincronizarSelects();
+      atualizarLabelsEVisibilidade();
+    });
+
+    unidadeFracionadaVisual.addEventListener("change", function () {
+      sincronizarSelects();
+      atualizarLabelsEVisibilidade();
+    });
+
+    [qtdPrincipal, qtdFracionada, minimoPrincipal, minimoFracionado, fatorVisual].forEach(function (campo) {
+      campo.addEventListener("focus", function () {
+        setTimeout(function () { campo.select(); }, 30);
+      });
+    });
+
+    carregarDosReais();
+  }
+
+  window.addEventListener("load", iniciarBlocoEstoqueOrganizado);
+  document.addEventListener("DOMContentLoaded", iniciarBlocoEstoqueOrganizado);
+})();
+</script>
+
+
+<script>
+/* ENTER BLOCO ESTOQUE ORGANIZADO - CADASTRO PRODUTO */
+(function () {
+  function iniciarEnterBlocoEstoque() {
+    var bloco = document.getElementById("bloco-estoque-organizado");
+
+    if (!bloco || bloco.dataset.enterAplicado === "1") {
+      return;
+    }
+
+    bloco.dataset.enterAplicado = "1";
+
+    var seletorCampos = [
+      "#qtd_principal_visual",
+      "#fator_visual",
+      "#qtd_fracionada_visual",
+      "#minimo_principal_visual",
+      "#unidade_compra_visual",
+      "#minimo_fracionado_visual",
+      "#vende_fracionado_visual",
+      "#unidade_fracionada_visual",
+      "#id_preco_compra",
+      "#id_preco_compra_fracionado",
+      "#percentual_vista",
+      "#id_preco_vista",
+      "#percentual_prazo",
+      "#id_preco_prazo",
+      "#percentual_vista_fracionado",
+      "#id_preco_vista_fracionado",
+      "#percentual_prazo_fracionado",
+      "#id_preco_prazo_fracionado"
+    ];
+
+    function campoVisivel(campo) {
+      if (!campo) return false;
+
+      var estilo = window.getComputedStyle(campo);
+
+      return estilo.display !== "none" &&
+             estilo.visibility !== "hidden" &&
+             campo.offsetParent !== null &&
+             !campo.disabled;
+    }
+
+    function camposNaOrdem() {
+      return seletorCampos
+        .map(function (seletor) {
+          return document.querySelector(seletor);
+        })
+        .filter(campoVisivel);
+    }
+
+    function selecionarCampo(campo) {
+      campo.focus();
+
+      if (campo.select && campo.tagName !== "SELECT") {
+        setTimeout(function () {
+          campo.select();
+        }, 20);
+      }
+    }
+
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key !== "Enter") {
+        return;
+      }
+
+      var alvo = ev.target;
+
+      if (!alvo || !alvo.matches("input, select")) {
+        return;
+      }
+
+      var campos = camposNaOrdem();
+      var indice = campos.indexOf(alvo);
+
+      if (indice === -1) {
+        return;
+      }
+
+      ev.preventDefault();
+
+      var proximo = campos[indice + 1];
+
+      if (proximo) {
+        selecionarCampo(proximo);
+      }
+    }, true);
+  }
+
+  window.addEventListener("load", iniciarEnterBlocoEstoque);
+  document.addEventListener("DOMContentLoaded", iniciarEnterBlocoEstoque);
+})();
+</script>
