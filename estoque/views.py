@@ -4068,41 +4068,38 @@ def _corrigir_pagamento_simples_compra(compra, novo_pagamento, movimento_finance
         movimento_financeiro_correcao = str(movimento_financeiro_correcao or "").strip()
 
         conta_pagamento = None
-        if not tinha_pagamento:
-            if not movimento_financeiro_correcao:
-                raise ValueError("Escolha como tratar o financeiro antes de mudar a compra para A vista.")
 
-            if movimento_financeiro_correcao == "manter":
-                conta_pagamento = None
-            elif movimento_financeiro_correcao.startswith("pagar:"):
-                conta_ref = movimento_financeiro_correcao.split(":", 1)[1]
-                contas_padrao = {
-                    "caixa": _conta_financeira_padrao("caixa"),
-                    "banco": _conta_financeira_padrao("banco"),
-                    "reserva": _conta_financeira_padrao("reserva"),
-                }
-                conta_pagamento = contas_padrao.get(conta_ref)
-                if conta_pagamento is None and conta_ref.isdigit():
-                    conta_pagamento = ContaFinanceira.objects.filter(pk=conta_ref, ativo=True).first()
-                if not conta_pagamento:
-                    raise ValueError("Escolha uma conta valida de onde saiu o dinheiro.")
+        if not movimento_financeiro_correcao:
+            raise ValueError("Escolha como tratar o financeiro antes de mudar a compra para A vista.")
 
-                valor_compra = _financeiro_dinheiro(compra.total).quantize(Decimal("0.01"))
-                if _saldo_conta_financeira(conta_pagamento) < valor_compra:
-                    raise ValueError(f"Saldo insuficiente em {conta_pagamento.nome}.")
-            else:
-                raise ValueError("Opcao de pagamento invalida para mudar a compra para A vista.")
+        if movimento_financeiro_correcao == "manter":
+            conta_pagamento = None
+        elif movimento_financeiro_correcao.startswith("pagar:"):
+            conta_ref = movimento_financeiro_correcao.split(":", 1)[1]
+            contas_padrao = {
+                "caixa": _conta_financeira_padrao("caixa"),
+                "banco": _conta_financeira_padrao("banco"),
+                "reserva": ContaFinanceira.objects.filter(nome__icontains="Sangria", ativo=True).first(),
+            }
+            conta_pagamento = contas_padrao.get(conta_ref)
+            if conta_pagamento is None and conta_ref.isdigit():
+                conta_pagamento = ContaFinanceira.objects.filter(pk=conta_ref, ativo=True).first()
+            if not conta_pagamento:
+                raise ValueError("Escolha uma conta valida de onde saiu o dinheiro.")
+
+            valor_compra = _financeiro_dinheiro(compra.total).quantize(Decimal("0.01"))
+            if _saldo_conta_financeira(conta_pagamento) < valor_compra:
+                raise ValueError(f"Saldo insuficiente em {conta_pagamento.nome}.")
+        else:
+            raise ValueError("Opcao de pagamento invalida para mudar a compra para A vista.")
 
         compra.tipo_pagamento = "A vista"
         compra.data_vencimento = None
         compra.save(update_fields=["tipo_pagamento", "data_vencimento", "atualizado_em"])
 
-        if conta_pagar and tinha_pagamento:
-            conta_pagar.delete()
-            return True, ""
-
         if conta_pagar:
             conta_pagar.delete()
+
 
         if conta_pagamento:
             MovimentoFinanceiro.objects.create(
@@ -4118,7 +4115,18 @@ def _corrigir_pagamento_simples_compra(compra, novo_pagamento, movimento_finance
         else:
             _registrar_movimentos_compra_a_vista(compra)
 
-        return True, ""
+        if movimento_financeiro_correcao == "manter":
+            return True, "Pagamento alterado para À vista. Foi só correção; nenhuma operação financeira foi realizada."
+        if movimento_financeiro_correcao.startswith("pagar:"):
+            conta_ref_msg = movimento_financeiro_correcao.split(":", 1)[1]
+            destinos_msg = {
+                "caixa": "Caixa",
+                "banco": "Banco/Pix",
+                "reserva": "Sangria/Reserva",
+            }
+            destino_msg = destinos_msg.get(conta_ref_msg, "financeiro")
+            return True, f"Pagamento alterado para À vista. Pagamento registrado no {destino_msg}."
+        return True, "Pagamento alterado para À vista."
 
     if not anterior_prazo and novo_prazo:
         movimentos = list(_movimentos_financeiros_compra(compra))
