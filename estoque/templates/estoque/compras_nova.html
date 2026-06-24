@@ -3754,11 +3754,282 @@
 })();
 </script>
 
+
+
+<style>
+/* MODAL MOBILE CUSTOMIZADO - NOVA COMPRA */
+@media (max-width: 980px) {
+  select.mv-select-original {
+    display: none !important;
+  }
+
+  .mv-select-botao {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #0f172a;
+    border-radius: 14px;
+    padding: 14px 16px;
+    font-size: 17px;
+    font-weight: 800;
+    text-align: left;
+    min-height: 54px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  }
+
+  .mv-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.62);
+    padding: 16px;
+  }
+
+  .mv-modal-overlay.aberto {
+    display: flex;
+  }
+
+  .mv-modal-card {
+    width: 100%;
+    max-width: 520px;
+    background: #ffffff;
+    border-radius: 24px;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.35);
+    overflow: hidden;
+    animation: mvSubirModal 0.18s ease-out;
+  }
+
+  @keyframes mvSubirModal {
+    from { transform: translateY(24px); opacity: 0.7; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  .mv-modal-topo {
+    padding: 18px 20px 12px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .mv-modal-titulo {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.2;
+    font-weight: 900;
+    color: #111827;
+  }
+
+  .mv-modal-subtitulo {
+    margin: 6px 0 0;
+    font-size: 14px;
+    color: #64748b;
+    font-weight: 700;
+  }
+
+  .mv-modal-opcoes {
+    padding: 12px;
+  }
+
+  .mv-modal-opcao {
+    width: 100%;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #111827;
+    border-radius: 16px;
+    padding: 15px 16px;
+    margin-bottom: 10px;
+    font-size: 17px;
+    font-weight: 850;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .mv-modal-opcao::after {
+    content: "";
+    width: 19px;
+    height: 19px;
+    border-radius: 999px;
+    border: 2px solid #94a3b8;
+    flex: 0 0 auto;
+  }
+
+  .mv-modal-opcao.selecionado {
+    border-color: #0f766e;
+    background: #ecfdf5;
+    color: #064e3b;
+  }
+
+  .mv-modal-opcao.selecionado::after {
+    border-color: #0f766e;
+    background: radial-gradient(circle, #0f766e 45%, transparent 48%);
+  }
+
+  .mv-modal-cancelar {
+    width: calc(100% - 24px);
+    margin: 0 12px 14px;
+    border: 0;
+    background: #e5e7eb;
+    color: #111827;
+    border-radius: 16px;
+    padding: 15px 16px;
+    font-size: 17px;
+    font-weight: 900;
+  }
+}
+
+@media (min-width: 981px) {
+  .mv-select-botao,
+  .mv-modal-overlay {
+    display: none !important;
+  }
+}
+</style>
+
+<script>
+(function () {
+  function normalizar(txt) {
+    return (txt || "")
+      .toString()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
+  function selectEhPagamentoCompra(select) {
+    var textos = Array.from(select.options || []).map(function (op) {
+      return normalizar(op.textContent);
+    }).join(" | ");
+
+    return (
+      textos.includes("a vista") &&
+      textos.includes("a prazo") &&
+      textos.includes("cartao credito") &&
+      textos.includes("cartao debito")
+    );
+  }
+
+  function textoSelecionado(select) {
+    var op = select.options[select.selectedIndex];
+    if (!op || !op.textContent.trim()) {
+      return "Selecione...";
+    }
+    return op.textContent.trim();
+  }
+
+  function criarModal() {
+    var overlay = document.createElement("div");
+    overlay.className = "mv-modal-overlay";
+    overlay.innerHTML = `
+      <div class="mv-modal-card" role="dialog" aria-modal="true">
+        <div class="mv-modal-topo">
+          <h2 class="mv-modal-titulo">Tipo de pagamento</h2>
+          <p class="mv-modal-subtitulo">Toque em uma opcao para selecionar</p>
+        </div>
+        <div class="mv-modal-opcoes"></div>
+        <button type="button" class="mv-modal-cancelar">Cancelar</button>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener("click", function (ev) {
+      if (ev.target === overlay) {
+        fecharModal(overlay);
+      }
+    });
+
+    overlay.querySelector(".mv-modal-cancelar").addEventListener("click", function () {
+      fecharModal(overlay);
+    });
+
+    return overlay;
+  }
+
+  function fecharModal(overlay) {
+    overlay.classList.remove("aberto");
+    document.body.style.overflow = "";
+  }
+
+  function abrirModal(select, botao, overlay) {
+    var lista = overlay.querySelector(".mv-modal-opcoes");
+    lista.innerHTML = "";
+
+    Array.from(select.options || []).forEach(function (opcao) {
+      var texto = (opcao.textContent || "").trim();
+
+      if (!texto) {
+        return;
+      }
+
+      var item = document.createElement("button");
+      item.type = "button";
+      item.className = "mv-modal-opcao";
+      item.textContent = texto;
+
+      if (opcao.value === select.value) {
+        item.classList.add("selecionado");
+      }
+
+      item.addEventListener("click", function () {
+        select.value = opcao.value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        botao.textContent = textoSelecionado(select);
+        fecharModal(overlay);
+      });
+
+      lista.appendChild(item);
+    });
+
+    overlay.classList.add("aberto");
+    document.body.style.overflow = "hidden";
+  }
+
+  function iniciarModalNovaCompra() {
+    if (window.innerWidth > 980) {
+      return;
+    }
+
+    var selects = Array.from(document.querySelectorAll("select")).filter(selectEhPagamentoCompra);
+
+    if (!selects.length) {
+      return;
+    }
+
+    var overlay = criarModal();
+
+    selects.forEach(function (select) {
+      if (select.dataset.mvModalAplicado === "1") {
+        return;
+      }
+
+      select.dataset.mvModalAplicado = "1";
+      select.classList.add("mv-select-original");
+
+      var botao = document.createElement("button");
+      botao.type = "button";
+      botao.className = "mv-select-botao";
+      botao.textContent = textoSelecionado(select);
+
+      select.insertAdjacentElement("afterend", botao);
+
+      botao.addEventListener("click", function () {
+        abrirModal(select, botao, overlay);
+      });
+
+      select.addEventListener("change", function () {
+        botao.textContent = textoSelecionado(select);
+      });
+    });
+  }
+
+  window.addEventListener("load", iniciarModalNovaCompra);
+  document.addEventListener("DOMContentLoaded", iniciarModalNovaCompra);
+})();
+</script>
+
 {% endblock %}
-
-
-
-
-
-
-
