@@ -354,19 +354,13 @@
 })();
 </script>
 
-{% endblock %}
 
 
 <style>
 /* MODAL MOBILE CUSTOMIZADO - CORRIGIR ITENS COMPRA */
-@media (max-width: 768px) {
+@media (max-width: 980px) {
   select.mv-select-original {
-    position: absolute !important;
-    left: -9999px !important;
-    width: 1px !important;
-    height: 1px !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
+    display: none !important;
   }
 
   .mv-select-botao {
@@ -383,18 +377,14 @@
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
   }
 
-  .mv-select-botao:active {
-    transform: scale(0.99);
-  }
-
   .mv-modal-overlay {
     position: fixed;
     inset: 0;
-    z-index: 9999;
+    z-index: 99999;
     display: none;
     align-items: flex-end;
     justify-content: center;
-    background: rgba(15, 23, 42, 0.58);
+    background: rgba(15, 23, 42, 0.62);
     padding: 16px;
   }
 
@@ -413,14 +403,8 @@
   }
 
   @keyframes mvSubirModal {
-    from {
-      transform: translateY(22px);
-      opacity: 0.7;
-    }
-    to {
-      transform: translateY(0);
-      opacity: 1;
-    }
+    from { transform: translateY(24px); opacity: 0.7; }
+    to { transform: translateY(0); opacity: 1; }
   }
 
   .mv-modal-topo {
@@ -497,7 +481,7 @@
   }
 }
 
-@media (min-width: 769px) {
+@media (min-width: 981px) {
   .mv-select-botao,
   .mv-modal-overlay {
     display: none !important;
@@ -521,13 +505,13 @@
       return normalizar(op.textContent);
     }).join(" | ");
 
-    var ehPagamento = textos.includes("a prazo") && textos.includes("a vista");
-    var ehDevolucao = textos.includes("devolver para caixa") ||
-                      textos.includes("devolver para banco") ||
-                      textos.includes("devolver para sangria") ||
-                      textos.includes("foi so correcao");
-
-    return ehPagamento || ehDevolucao;
+    return (
+      (textos.includes("a prazo") && textos.includes("a vista")) ||
+      textos.includes("devolver para caixa") ||
+      textos.includes("devolver para banco") ||
+      textos.includes("devolver para sangria") ||
+      textos.includes("foi so correcao")
+    );
   }
 
   function tituloDoSelect(select) {
@@ -621,18 +605,20 @@
     document.body.style.overflow = "hidden";
   }
 
-  function iniciar() {
-    if (window.innerWidth > 768) {
+  function iniciarModalCompra() {
+    if (window.innerWidth > 980) {
+      return;
+    }
+
+    var selects = Array.from(document.querySelectorAll("select")).filter(selectEhAlvo);
+
+    if (!selects.length) {
       return;
     }
 
     var overlay = criarModal();
 
-    document.querySelectorAll("select").forEach(function (select) {
-      if (!selectEhAlvo(select)) {
-        return;
-      }
-
+    selects.forEach(function (select) {
       if (select.dataset.mvModalAplicado === "1") {
         return;
       }
@@ -657,10 +643,9 @@
     });
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", iniciar);
-  } else {
-    iniciar();
-  }
+  window.addEventListener("load", iniciarModalCompra);
+  document.addEventListener("DOMContentLoaded", iniciarModalCompra);
 })();
 </script>
+
+{% endblock %}
