@@ -1784,6 +1784,107 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 </script>
 
+
+<script id="script-normaliza-dinheiro-produto-submit-final">
+document.addEventListener("DOMContentLoaded", function () {
+  function normalizarDecimalParaDjango(valor) {
+    let t = String(valor || "").trim();
+    if (!t) return "";
+
+    t = t.replace("R$", "").replace(/\s/g, "").replace(/[^\d,.-]/g, "");
+
+    if (t.includes(",") && t.includes(".")) {
+      t = t.replace(/\./g, "").replace(",", ".");
+    } else {
+      t = t.replace(",", ".");
+    }
+
+    const n = Number(t);
+    if (!Number.isFinite(n)) return "";
+
+    return n.toFixed(2);
+  }
+
+  const nomesDinheiro = [
+    "preco_compra",
+    "preco_compra_fracionado",
+    "preco_vista",
+    "preco_prazo",
+    "preco_vista_fracionado",
+    "preco_prazo_fracionado"
+  ];
+
+  const form = document.querySelector('form[method="post"]');
+  if (!form) return;
+
+  form.addEventListener("submit", function () {
+    nomesDinheiro.forEach(function (nome) {
+      const campo = form.querySelector('[name="' + nome + '"]');
+      if (!campo) return;
+
+      const normalizado = normalizarDecimalParaDjango(campo.value);
+      if (normalizado !== "") {
+        campo.value = normalizado;
+      }
+    });
+  });
+});
+</script>
+
+
+<script id="script-normaliza-fator-conversao-submit-final">
+document.addEventListener("DOMContentLoaded", function () {
+  function numeroBR(valor) {
+    let t = String(valor || "").trim();
+    if (!t) return 0;
+
+    t = t.replace(/\s/g, "").replace(/[^\d,.-]/g, "");
+
+    if (t.includes(",") && t.includes(".")) {
+      t = t.replace(/\./g, "").replace(",", ".");
+    } else {
+      t = t.replace(",", ".");
+    }
+
+    const n = Number(t);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function textoSelect(select) {
+    if (!select) return "";
+    const op = select.options[select.selectedIndex];
+    return String(op ? op.textContent : select.value || "").trim().toLowerCase();
+  }
+
+  function vendeFracionadoAtivo(campo) {
+    const valor = String((campo && campo.value) || "").trim().toLowerCase();
+    const label = textoSelect(campo);
+    return ["sim", "true", "1", "s"].includes(valor) || label === "sim";
+  }
+
+  const form = document.querySelector('form[method="post"]');
+  if (!form) return;
+
+  form.addEventListener("submit", function () {
+    const campoReal = document.getElementById("id_fator_conversao");
+    const campoVisual = document.getElementById("fator_visual");
+    const campoVende = document.getElementById("id_vende_fracionado") || document.getElementById("vende_fracionado_visual");
+
+    if (!campoReal) return;
+
+    let fator = numeroBR((campoVisual && campoVisual.value) || campoReal.value);
+
+    if (vendeFracionadoAtivo(campoVende) && fator <= 0) {
+      fator = 1;
+    }
+
+    if (fator > 0) {
+      campoReal.value = fator.toFixed(2);
+    }
+  });
+});
+</script>
+
 </body>
 </html>
 
