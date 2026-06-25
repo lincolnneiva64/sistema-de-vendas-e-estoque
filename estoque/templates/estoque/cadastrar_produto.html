@@ -1961,6 +1961,41 @@ document.addEventListener("DOMContentLoaded", function () {
 })();
 </script>
 
+
+
+<script id="cancelar-destaca-produto-existente">
+(function () {
+  const produtoId = "{% if produto and produto.id %}{{ produto.id }}{% elif form.instance and form.instance.id %}{{ form.instance.id }}{% endif %}";
+
+  if (!produtoId || produtoId.includes("{")) {
+    return;
+  }
+
+  const destino = "/?produto_destacado=" + encodeURIComponent(produtoId);
+
+  function ehCancelar(el) {
+    const txt = (el.textContent || el.value || "").trim().toLowerCase();
+    return txt === "cancelar" || txt.includes("cancelar");
+  }
+
+  document.querySelectorAll("a, button, input[type='button'], input[type='submit']").forEach(function (el) {
+    if (!ehCancelar(el)) {
+      return;
+    }
+
+    if (el.tagName.toLowerCase() === "a") {
+      el.setAttribute("href", destino);
+      return;
+    }
+
+    el.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      window.location.href = destino;
+    });
+  });
+})();
+</script>
+
 </body>
 </html>
 
