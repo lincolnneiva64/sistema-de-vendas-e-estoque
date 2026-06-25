@@ -1866,7 +1866,7 @@ document.addEventListener("DOMContentLoaded", function () {
         </div>
 
         <div class="bloco-estoque-item">
-          <label for="fator_visual">Fator de convers?o</label>
+          <label for="fator_visual">Fator de conversão</label>
           <input type="text" id="fator_visual" inputmode="decimal">
         </div>
 
@@ -1876,7 +1876,7 @@ document.addEventListener("DOMContentLoaded", function () {
         </div>
 
         <div class="bloco-estoque-item">
-          <label id="label-minimo-principal" for="minimo_principal_visual">Estoque m?nimo</label>
+          <label id="label-minimo-principal" for="minimo_principal_visual">Estoque mínimo</label>
           <input type="text" id="minimo_principal_visual" inputmode="decimal">
         </div>
 
@@ -1886,7 +1886,7 @@ document.addEventListener("DOMContentLoaded", function () {
         </div>
 
         <div class="bloco-estoque-item" id="item-minimo-fracionado">
-          <label id="label-minimo-fracionado" for="minimo_fracionado_visual">M?nimo fracionado</label>
+          <label id="label-minimo-fracionado" for="minimo_fracionado_visual">Mínimo fracionado</label>
           <input type="text" id="minimo_fracionado_visual" inputmode="decimal">
         </div>
 
@@ -1945,8 +1945,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
       document.getElementById("label-qtd-principal").textContent = "Estoque em " + unCompra;
       document.getElementById("label-qtd-fracionada").textContent = "Estoque em " + unFrac;
-      document.getElementById("label-minimo-principal").textContent = "M?nimo em " + unCompra;
-      document.getElementById("label-minimo-fracionado").textContent = "M?nimo em " + unFrac;
+      document.getElementById("label-minimo-principal").textContent = "Mínimo em " + unCompra;
+      document.getElementById("label-minimo-fracionado").textContent = "Mínimo em " + unFrac;
 
       document.getElementById("item-qtd-fracionada").style.display = fracionado ? "" : "none";
       document.getElementById("item-minimo-fracionado").style.display = fracionado ? "" : "none";
