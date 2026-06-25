@@ -954,55 +954,6 @@
   display: none !important;
 }
 
-#btn-topo-produtos {
-  position: sticky;
-  top: 8px;
-  z-index: 5000;
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  min-width: 84px;
-  min-height: 48px;
-  padding: 12px 16px;
-  border: 1px solid rgba(29, 78, 216, 0.38);
-  border-radius: 999px;
-  background: #0d6efd;
-  color: #ffffff;
-  font-size: 0.92rem;
-  font-weight: 900;
-  line-height: 1;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.28);
-  text-decoration: none;
-  touch-action: manipulation;
-}
-
-.topo-produtos-sticky {
-  position: sticky;
-  top: 8px;
-  z-index: 5000;
-  display: flex;
-  justify-content: flex-end;
-  max-width: 720px;
-  margin: 0 auto 10px auto;
-  padding: 4px 0;
-  pointer-events: none;
-}
-
-.topo-produtos-sticky #btn-topo-produtos {
-  pointer-events: auto;
-}
-
-#btn-topo-produtos:hover,
-#btn-topo-produtos:focus {
-  background: #0b5ed7;
-  color: #ffffff;
-}
-
-#btn-topo-produtos:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.24), 0 12px 30px rgba(15, 23, 42, 0.28);
-}
-
 </style>
 
 <style>
@@ -1238,11 +1189,6 @@ align-items: center;
 
     <div id="contadorFiltroCategoria" style="font-size: 12px; color: #6c757d; font-weight: 600; margin-top: 6px;"></div>
   </div>
-</div>
-<div class="topo-produtos-sticky">
-  <button type="button" id="btn-topo-produtos" aria-label="Voltar ao topo da lista de produtos">
-    &uarr; Topo
-  </button>
 </div>
 <div class="produtos-tabela-card" style="max-width: 720px; margin: 0 auto 90px auto; background: #fff; border: 1px solid #e9ecef; border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); overflow: hidden;">
   <table class="table table-hover mx-auto align-middle produtos-tabela" style="width: auto;">
@@ -1717,12 +1663,41 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     const alertaSucesso = document.getElementById("alertaSucesso");
-    const btnTopoProdutos = document.getElementById("btn-topo-produtos");
+    const btnTopoBase = document.getElementById("botao-voltar-topo");
 
-    if (btnTopoProdutos) {
+    if (btnTopoBase) {
+      btnTopoBase.style.display = "none";
+    }
+
+    if (!document.getElementById("btn-topo-produtos-js")) {
+      const btnTopoProdutos = document.createElement("button");
+      btnTopoProdutos.type = "button";
+      btnTopoProdutos.id = "btn-topo-produtos-js";
+      btnTopoProdutos.textContent = "\u2191 Topo";
+      btnTopoProdutos.setAttribute("aria-label", "Voltar ao topo da lista de produtos");
+
+      btnTopoProdutos.style.position = "fixed";
+      btnTopoProdutos.style.right = "16px";
+      btnTopoProdutos.style.bottom = "110px";
+      btnTopoProdutos.style.zIndex = "9999999";
+      btnTopoProdutos.style.display = "flex";
+      btnTopoProdutos.style.alignItems = "center";
+      btnTopoProdutos.style.justifyContent = "center";
+      btnTopoProdutos.style.background = "#0d6efd";
+      btnTopoProdutos.style.color = "#fff";
+      btnTopoProdutos.style.border = "none";
+      btnTopoProdutos.style.borderRadius = "999px";
+      btnTopoProdutos.style.padding = "14px 22px";
+      btnTopoProdutos.style.fontWeight = "800";
+      btnTopoProdutos.style.fontSize = "18px";
+      btnTopoProdutos.style.boxShadow = "0 10px 24px rgba(13, 110, 253, 0.35)";
+      btnTopoProdutos.style.cursor = "pointer";
+
       btnTopoProdutos.addEventListener("click", function () {
         window.scrollTo({ top: 0, behavior: "smooth" });
       });
+
+      document.body.appendChild(btnTopoProdutos);
     }
 
     if (alertaSucesso) {
