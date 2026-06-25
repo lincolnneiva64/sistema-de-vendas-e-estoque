@@ -2611,3 +2611,110 @@ document.addEventListener("DOMContentLoaded", function () {
   document.addEventListener("DOMContentLoaded", iniciarEnterBlocoEstoque);
 })();
 </script>
+
+
+<script id="script-forca-estoque-minimo-formdata-final">
+(function () {
+  function campo(id) {
+    return document.getElementById(id);
+  }
+
+  function limparNumeroParaDjango(valor) {
+    var t = String(valor || "").trim();
+    if (!t) return "";
+
+    t = t.replace("R$", "").replace(/\s/g, "").replace(/[^\d,.-]/g, "");
+
+    if (t.indexOf(",") >= 0 && t.indexOf(".") >= 0) {
+      t = t.replace(/\./g, "").replace(",", ".");
+    } else if (t.indexOf(",") >= 0) {
+      t = t.replace(",", ".");
+    }
+
+    return t;
+  }
+
+  function valor(id) {
+    var c = campo(id);
+    return c ? c.value : "";
+  }
+
+  function setCampoReal(id, valorNovo) {
+    var c = campo(id);
+    if (!c) return;
+
+    if (valorNovo !== "") {
+      c.value = valorNovo;
+      c.dispatchEvent(new Event("input", { bubbles: true }));
+      c.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }
+
+  function sincronizarEstoqueProduto() {
+    var qtdPrincipal = limparNumeroParaDjango(valor("qtd_principal_visual"));
+    var minimoPrincipal = limparNumeroParaDjango(valor("minimo_principal_visual"));
+    var fator = limparNumeroParaDjango(valor("fator_visual"));
+    var unidadeCompra = valor("unidade_compra_visual");
+    var vendeFracionado = valor("vende_fracionado_visual");
+    var unidadeFracionada = valor("unidade_fracionada_visual");
+
+    setCampoReal("id_quantidade", qtdPrincipal);
+    setCampoReal("id_estoque_minimo", minimoPrincipal);
+    setCampoReal("id_fator_conversao", fator);
+    setCampoReal("id_unidade_compra", unidadeCompra);
+    setCampoReal("id_vende_fracionado", vendeFracionado);
+    setCampoReal("id_unidade_venda_2", unidadeFracionada);
+  }
+
+  document.addEventListener("input", function (e) {
+    if (!e.target) return;
+
+    if (
+      e.target.id === "qtd_principal_visual" ||
+      e.target.id === "minimo_principal_visual" ||
+      e.target.id === "fator_visual"
+    ) {
+      sincronizarEstoqueProduto();
+    }
+  }, true);
+
+  document.addEventListener("change", function (e) {
+    if (!e.target) return;
+
+    if (
+      e.target.id === "unidade_compra_visual" ||
+      e.target.id === "vende_fracionado_visual" ||
+      e.target.id === "unidade_fracionada_visual"
+    ) {
+      sincronizarEstoqueProduto();
+    }
+  }, true);
+
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (!form || form.id !== "form-produto") return;
+    sincronizarEstoqueProduto();
+  }, true);
+
+  document.addEventListener("formdata", function (e) {
+    var form = e.target;
+    if (!form || form.id !== "form-produto") return;
+
+    sincronizarEstoqueProduto();
+
+    var qtdPrincipal = limparNumeroParaDjango(valor("qtd_principal_visual"));
+    var minimoPrincipal = limparNumeroParaDjango(valor("minimo_principal_visual"));
+    var fator = limparNumeroParaDjango(valor("fator_visual"));
+    var unidadeCompra = valor("unidade_compra_visual");
+    var vendeFracionado = valor("vende_fracionado_visual");
+    var unidadeFracionada = valor("unidade_fracionada_visual");
+
+    if (qtdPrincipal !== "") e.formData.set("quantidade", qtdPrincipal);
+    if (minimoPrincipal !== "") e.formData.set("estoque_minimo", minimoPrincipal);
+    if (fator !== "") e.formData.set("fator_conversao", fator);
+    if (unidadeCompra !== "") e.formData.set("unidade_compra", unidadeCompra);
+    if (vendeFracionado !== "") e.formData.set("vende_fracionado", vendeFracionado);
+    if (unidadeFracionada !== "") e.formData.set("unidade_venda_2", unidadeFracionada);
+  });
+})();
+</script>
