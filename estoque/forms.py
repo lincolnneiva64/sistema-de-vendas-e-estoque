@@ -238,7 +238,10 @@ class ProdutoForm(forms.ModelForm):
 
         self.fields["categoria"].choices = opcoes_categoria
         self.fields["categoria"].widget.choices = opcoes_categoria
-        self.fields["categoria"].required = False
+        self.fields["categoria"].required = True
+        self.fields["categoria"].error_messages.update({
+            "required": "Escolha uma categoria para o produto."
+        })
 
         self.fields["nome"].widget.attrs.update({"list": "lista-produtos"})
         self.fields["fator_conversao"].required = False

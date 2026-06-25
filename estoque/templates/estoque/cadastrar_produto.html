@@ -591,6 +591,45 @@ select.campo-obrigatorio-piscando:focus,
         scroll-margin-bottom: 260px;
     }
 }
+
+.alerta-erros-produto {
+    border: 2px solid #dc3545;
+    border-left: 8px solid #dc3545;
+    border-radius: 14px;
+    background: #fff5f5;
+    color: #842029;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    box-shadow: 0 8px 20px rgba(220, 53, 69, 0.12);
+    scroll-margin-top: 18px;
+}
+
+.alerta-erros-produto-titulo {
+    font-weight: 800;
+    font-size: 1.05rem;
+    margin-bottom: 6px;
+}
+
+.alerta-erros-produto-texto {
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+}
+
+.alerta-erros-produto ul {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.alerta-erros-produto li {
+    margin-bottom: 4px;
+}
+
+.campo-com-erro-produto {
+    border-color: #dc3545 !important;
+    background-color: #fff5f5 !important;
+    box-shadow: 0 0 0 0.18rem rgba(220, 53, 69, 0.18) !important;
+}
+
 </style>
 
 
@@ -632,6 +671,34 @@ select.campo-obrigatorio-piscando:focus,
   {% if retorno_url %}
   <input type="hidden" name="next" value="{{ retorno_url }}">
   {% endif %}
+
+  {% if form.errors %}
+  <div class="col-12">
+    <div class="alerta-erros-produto" id="alerta-erros-produto" tabindex="-1">
+      <div class="alerta-erros-produto-titulo">Produto n&atilde;o foi salvo.</div>
+      <div class="alerta-erros-produto-texto">
+        Corrija os campos abaixo antes de salvar novamente:
+      </div>
+
+      <ul>
+        {% for field in form %}
+          {% if field.errors %}
+            <li data-campo="{{ field.name }}">
+              <strong>{{ field.label }}:</strong> {{ field.errors|join:", " }}
+            </li>
+          {% endif %}
+        {% endfor %}
+
+        {% if form.non_field_errors %}
+          {% for erro in form.non_field_errors %}
+            <li><strong>Erro:</strong> {{ erro }}</li>
+          {% endfor %}
+        {% endif %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+
 <div class="col-12">
     
     
@@ -1882,6 +1949,47 @@ document.addEventListener("DOMContentLoaded", function () {
       campoReal.value = fator.toFixed(2);
     }
   });
+});
+</script>
+
+
+<script id="script-alerta-erros-produto">
+document.addEventListener("DOMContentLoaded", function () {
+  const alerta = document.getElementById("alerta-erros-produto");
+  if (!alerta) return;
+
+  const mapaCamposVisuais = {
+    "quantidade": "qtd_principal_visual",
+    "estoque_minimo": "minimo_principal_visual",
+    "fator_conversao": "fator_visual",
+    "unidade_compra": "unidade_compra_visual",
+    "vende_fracionado": "vende_fracionado_visual",
+    "unidade_venda_2": "unidade_fracionada_visual"
+  };
+
+  alerta.querySelectorAll("[data-campo]").forEach(function (item) {
+    const nome = item.getAttribute("data-campo");
+    if (!nome) return;
+
+    const possiveis = [
+      document.getElementById("id_" + nome),
+      document.querySelector('[name="' + nome + '"]'),
+      mapaCamposVisuais[nome] ? document.getElementById(mapaCamposVisuais[nome]) : null
+    ];
+
+    possiveis.forEach(function (campo) {
+      if (campo) {
+        campo.classList.add("campo-com-erro-produto");
+      }
+    });
+  });
+
+  setTimeout(function () {
+    alerta.scrollIntoView({ behavior: "smooth", block: "start" });
+    try {
+      alerta.focus({ preventScroll: true });
+    } catch (e) {}
+  }, 250);
 });
 </script>
 
