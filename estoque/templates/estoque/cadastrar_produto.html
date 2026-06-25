@@ -1993,6 +1993,68 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 </script>
 
+
+<script>
+(function () {
+  function campo(id) {
+    return document.getElementById(id);
+  }
+
+  function valor(id) {
+    var c = campo(id);
+    return c ? c.value : "";
+  }
+
+  function copiarValor(origemId, destinoId) {
+    var origem = campo(origemId);
+    var destino = campo(destinoId);
+    if (!origem || !destino) return;
+
+    destino.value = origem.value;
+    destino.dispatchEvent(new Event("input", { bubbles: true }));
+    destino.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function corrigirEstoqueAntesSalvar() {
+    copiarValor("qtd_principal_visual", "id_quantidade");
+    copiarValor("minimo_principal_visual", "id_estoque_minimo");
+    copiarValor("fator_visual", "id_fator_conversao");
+    copiarValor("unidade_compra_visual", "id_unidade_compra");
+    copiarValor("vende_fracionado_visual", "id_vende_fracionado");
+    copiarValor("unidade_fracionada_visual", "id_unidade_venda_2");
+
+    var qtdFrac = campo("qtd_fracionada_visual");
+    var qtdReal = campo("id_quantidade");
+    var fator = parseFloat(String(valor("id_fator_conversao")).replace(",", "."));
+
+    if (qtdFrac && qtdReal && qtdFrac.value && fator > 0) {
+      var qtdFracNum = parseFloat(String(qtdFrac.value).replace(",", "."));
+      if (!isNaN(qtdFracNum)) {
+        qtdReal.value = String(qtdFracNum / fator).replace(".", ",");
+      }
+    }
+
+    var minFrac = campo("minimo_fracionado_visual");
+    var minReal = campo("id_estoque_minimo");
+
+    if (minFrac && minReal && minFrac.value && fator > 0) {
+      var minFracNum = parseFloat(String(minFrac.value).replace(",", "."));
+      if (!isNaN(minFracNum)) {
+        minReal.value = String(minFracNum / fator).replace(".", ",");
+      }
+    }
+  }
+
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (!form || !form.querySelector("#id_quantidade")) return;
+    corrigirEstoqueAntesSalvar();
+  }, true);
+
+  window.corrigirEstoqueAntesSalvar = corrigirEstoqueAntesSalvar;
+})();
+</script>
+
 </body>
 </html>
 
