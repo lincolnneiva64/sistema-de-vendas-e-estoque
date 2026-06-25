@@ -14,18 +14,18 @@
     <style>
         .botao-voltar-topo {
             position: fixed;
-            right: max(18px, env(safe-area-inset-right));
+            right: 16px;
             bottom: calc(22px + env(safe-area-inset-bottom));
-            z-index: 1080;
+            z-index: 999999;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             gap: 6px;
             min-width: 86px;
             min-height: 46px;
-            border: 1px solid rgba(22, 101, 52, 0.28);
+            border: 1px solid rgba(29, 78, 216, 0.38);
             border-radius: 999px;
-            background: #16a34a;
+            background: #0d6efd;
             color: #ffffff;
             font-size: 0.95rem;
             font-weight: 800;
@@ -45,22 +45,25 @@
 
         .botao-voltar-topo:hover,
         .botao-voltar-topo:focus {
-            background: #15803d;
+            background: #0b5ed7;
             color: #ffffff;
         }
 
         .botao-voltar-topo:focus-visible {
             outline: none;
-            box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.24), 0 10px 26px rgba(15, 23, 42, 0.22);
+            box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.24), 0 10px 26px rgba(15, 23, 42, 0.22);
         }
 
         @media (max-width: 575.98px) {
             .botao-voltar-topo {
-                right: max(14px, env(safe-area-inset-right));
-                bottom: calc(96px + env(safe-area-inset-bottom));
+                right: 16px;
+                bottom: calc(110px + env(safe-area-inset-bottom));
                 min-width: 82px;
                 min-height: 48px;
                 font-size: 0.9rem;
+                opacity: 1;
+                pointer-events: auto;
+                transform: none;
             }
         }
     </style>
@@ -79,6 +82,7 @@
             if (!botao) return;
 
             const limiteParaExibir = 260;
+            const consultaMobile = window.matchMedia("(max-width: 575.98px)");
 
             function posicaoRolagemAtual() {
                 const elementoRolagem = document.scrollingElement || document.documentElement || document.body;
@@ -92,6 +96,11 @@
             }
 
             function atualizarBotaoTopo() {
+                if (consultaMobile.matches) {
+                    botao.classList.add("visivel");
+                    return;
+                }
+
                 botao.classList.toggle("visivel", posicaoRolagemAtual() > limiteParaExibir);
             }
 
@@ -115,6 +124,9 @@
             document.addEventListener("scroll", atualizarBotaoTopo, { passive: true, capture: true });
             document.addEventListener("touchmove", atualizarBotaoTopo, { passive: true });
             window.addEventListener("resize", atualizarBotaoTopo);
+            if (typeof consultaMobile.addEventListener === "function") {
+                consultaMobile.addEventListener("change", atualizarBotaoTopo);
+            }
             atualizarBotaoTopo();
         })();
     </script>
