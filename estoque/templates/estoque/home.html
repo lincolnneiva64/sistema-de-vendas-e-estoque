@@ -950,6 +950,50 @@
   color: #172033 !important;
 }
 
+#botao-voltar-topo {
+  display: none !important;
+}
+
+#btn-topo-produtos {
+  position: fixed !important;
+  right: 16px !important;
+  bottom: 110px !important;
+  z-index: 9999999 !important;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 84px;
+  min-height: 48px;
+  padding: 12px 16px;
+  border: 1px solid rgba(29, 78, 216, 0.38);
+  border-radius: 999px;
+  background: #0d6efd;
+  color: #ffffff;
+  font-size: 0.92rem;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.28);
+  text-decoration: none;
+  touch-action: manipulation;
+}
+
+#btn-topo-produtos:hover,
+#btn-topo-produtos:focus {
+  background: #0b5ed7;
+  color: #ffffff;
+}
+
+#btn-topo-produtos:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.24), 0 12px 30px rgba(15, 23, 42, 0.28);
+}
+
+@media (max-width: 575.98px) {
+  #btn-topo-produtos {
+    display: inline-flex !important;
+  }
+}
+
 </style>
 
 <style>
@@ -1656,9 +1700,20 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
 
 </div>
 
+<button type="button" id="btn-topo-produtos" aria-label="Voltar ao topo da lista de produtos">
+  &uarr; Topo
+</button>
+
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     const alertaSucesso = document.getElementById("alertaSucesso");
+    const btnTopoProdutos = document.getElementById("btn-topo-produtos");
+
+    if (btnTopoProdutos) {
+      btnTopoProdutos.addEventListener("click", function () {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    }
 
     if (alertaSucesso) {
       setTimeout(function () {
