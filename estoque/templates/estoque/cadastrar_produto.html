@@ -1063,6 +1063,13 @@ const campos = Array.from(
     const campoNome = campos[0];
     const campoPrecoCompra = document.getElementById("id_preco_compra");
     const campoPrecoCompraFracionado = document.getElementById("id_preco_compra_fracionado");
+
+    [campoPrecoCompra, campoPrecoCompraFracionado].forEach(function (campo) {
+        if (campo) {
+            campo.type = "text";
+            campo.setAttribute("inputmode", "decimal");
+        }
+    });
 const campoPrecoVista = document.getElementById("id_preco_vista");
     const campoPrecoPrazo = document.getElementById("id_preco_prazo");
     const campoPercentualVista = document.getElementById("percentual_vista");
@@ -1178,14 +1185,32 @@ if (criarMaisProdutos?.checked) {
         document.getElementById("produto-mobile-select-cancelar")?.addEventListener("click", fecharSelectMobileProduto);
     }
     function numero(valor) {
-        if (!valor) return 0;
-        return parseFloat(String(valor).replace(",", ".")) || 0;
+        let texto = String(valor || "").trim();
+
+        if (!texto) return 0;
+
+        texto = texto.replace("R$", "").replace(/\s/g, "").replace(/[^\d,.-]/g, "");
+
+        if (texto.includes(",") && texto.includes(".")) {
+            texto = texto.replace(/\./g, "").replace(",", ".");
+        } else {
+            texto = texto.replace(",", ".");
+        }
+
+        const valorNumerico = Number(texto);
+        return Number.isFinite(valorNumerico) ? valorNumerico : 0;
     }
 
     function formatarDuasCasas(valor) {
     const arredondado = Math.round(Number(valor) * 20) / 20;
     return arredondado.toFixed(2);
 }
+    function formatarMoedaBR(valor) {
+        return Number(valor || 0).toLocaleString("pt-BR", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
 function atualizarVisibilidadeFracionado() {
     const valor = String(campoVendeFracionado?.value || "").toLowerCase();
     const mostrar =
@@ -1301,7 +1326,7 @@ camposFracionados.forEach(campo => {
     }
 
     const compraFracionada = compra / fator;
-    campoPrecoCompraFracionado.value = formatarDuasCasas(compraFracionada);
+    campoPrecoCompraFracionado.value = formatarMoedaBR(compraFracionada);
 }
     function atualizarPercentualVistaFracionadoPeloPrecoVistaFracionado() {
     const compra = numero(campoPrecoCompraFracionado?.value);
@@ -1400,6 +1425,7 @@ const response = await fetch("{% url 'estoque:verificar_produto' %}?nome=" + enc
         if (!campo) return;
         campo.addEventListener("input", callback);
         campo.addEventListener("change", callback);
+        campo.addEventListener("blur", callback);
     }
 
     vincularEventos(campoPrecoVista, function () {
@@ -1614,7 +1640,7 @@ document.addEventListener("DOMContentLoaded", function () {
     })
     .filter(Boolean);
 
-    function normalizarValorDinheiroProduto(valor) {
+    function normalizarValorDinheiroProduto(valor, separadorDecimal) {
         let texto = String(valor || "").trim();
 
         if (!texto) {
@@ -1642,15 +1668,16 @@ document.addEventListener("DOMContentLoaded", function () {
             return "";
         }
 
-        return numero.toFixed(2);
+        const valorNormalizado = numero.toFixed(2);
+        return separadorDecimal === "," ? valorNormalizado.replace(".", ",") : valorNormalizado;
     }
 
-    function formatarCampoDinheiroProduto(campo) {
+    function formatarCampoDinheiroProduto(campo, separadorDecimal) {
         if (!campo) {
             return;
         }
 
-        const valorFormatado = normalizarValorDinheiroProduto(campo.value);
+        const valorFormatado = normalizarValorDinheiroProduto(campo.value, separadorDecimal);
 
         if (valorFormatado !== "") {
             campo.value = valorFormatado;
@@ -1662,11 +1689,11 @@ document.addEventListener("DOMContentLoaded", function () {
         campo.setAttribute("autocomplete", "off");
 
         campo.addEventListener("blur", function () {
-            formatarCampoDinheiroProduto(campo);
+            formatarCampoDinheiroProduto(campo, campo.type === "number" ? "." : ",");
         });
 
         campo.addEventListener("change", function () {
-            formatarCampoDinheiroProduto(campo);
+            formatarCampoDinheiroProduto(campo, campo.type === "number" ? "." : ",");
         });
     });
 
@@ -1674,9 +1701,86 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (formProduto) {
         formProduto.addEventListener("submit", function () {
-            camposDinheiroProduto.forEach(formatarCampoDinheiroProduto);
+            camposDinheiroProduto.forEach(function (campo) {
+                formatarCampoDinheiroProduto(campo, ".");
+            });
         });
     }
+});
+</script>
+
+
+<script id="script-preco-fracionado-fallback">
+document.addEventListener("DOMContentLoaded", function () {
+  function numeroBR(valor) {
+    let t = String(valor || "").trim();
+    if (!t) return 0;
+
+    t = t.replace("R$", "").replace(/\s/g, "").replace(/[^\d,.-]/g, "");
+
+    if (t.includes(",") && t.includes(".")) {
+      t = t.replace(/\./g, "").replace(",", ".");
+    } else {
+      t = t.replace(",", ".");
+    }
+
+    const n = Number(t);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function moedaBR(valor) {
+    return Number(valor || 0).toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function campo(id) {
+    return document.getElementById(id);
+  }
+
+  function prepararCampoTexto(c) {
+    if (!c) return;
+    try {
+      c.type = "text";
+    } catch (e) {}
+    c.setAttribute("inputmode", "decimal");
+  }
+
+  function calcularPrecoCompraFracionado() {
+    const precoCompra = campo("id_preco_compra");
+    const precoFracionado = campo("id_preco_compra_fracionado");
+    const fatorReal = campo("id_fator_conversao");
+    const fatorVisual = campo("fator_visual");
+
+    if (!precoCompra || !precoFracionado) return;
+
+    prepararCampoTexto(precoCompra);
+    prepararCampoTexto(precoFracionado);
+
+    const compra = numeroBR(precoCompra.value);
+    const fator = numeroBR((fatorVisual && fatorVisual.value) || (fatorReal && fatorReal.value));
+
+    if (compra > 0 && fator > 0) {
+      precoFracionado.value = moedaBR(compra / fator);
+      precoFracionado.dispatchEvent(new Event("input", { bubbles: true }));
+      precoFracionado.dispatchEvent(new Event("change", { bubbles: true }));
+    } else {
+      precoFracionado.value = "";
+    }
+  }
+
+  ["id_preco_compra", "id_fator_conversao", "fator_visual"].forEach(function (id) {
+    const c = campo(id);
+    if (!c) return;
+
+    ["input", "change", "blur", "keyup"].forEach(function (evento) {
+      c.addEventListener(evento, calcularPrecoCompraFracionado);
+    });
+  });
+
+  setTimeout(calcularPrecoCompraFracionado, 300);
+  setTimeout(calcularPrecoCompraFracionado, 1000);
 });
 </script>
 
@@ -1800,6 +1904,22 @@ document.addEventListener("DOMContentLoaded", function () {
 
     var op = select.options[select.selectedIndex];
     return texto(op ? op.textContent : select.value);
+  }
+
+  function textoUnidadeSelecionada(selectVisual, selectOriginal, padrao) {
+    var valor = textoSelect(selectVisual);
+    var valorNormalizado = valor.toLowerCase();
+
+    if (!valor || valorNormalizado === "selecione" || valorNormalizado === "---------") {
+      valor = textoSelect(selectOriginal);
+      valorNormalizado = valor.toLowerCase();
+    }
+
+    if (!valor || valorNormalizado === "selecione" || valorNormalizado === "---------") {
+      return padrao;
+    }
+
+    return valor;
   }
 
   function vendeFracionadoAtivo(campo) {
@@ -1938,8 +2058,8 @@ document.addEventListener("DOMContentLoaded", function () {
     esconderBlocoOriginal(campoUnidadeFracionada);
 
     function atualizarLabelsEVisibilidade() {
-      var unCompra = textoSelect(unidadeCompraVisual) || "unidade";
-      var unFrac = textoSelect(unidadeFracionadaVisual) || "fracionado";
+      var unCompra = textoUnidadeSelecionada(unidadeCompraVisual, campoUnidadeCompra, "unidade");
+      var unFrac = textoUnidadeSelecionada(unidadeFracionadaVisual, campoUnidadeFracionada, "unidade fracionada");
       var fator = numero(fatorVisual.value);
       var fracionado = vendeFracionadoAtivo(vendeFracionadoVisual);
 
