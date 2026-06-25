@@ -289,12 +289,31 @@ select.campo-obrigatorio-piscando:focus,
     border: 2px solid #b6bec8;
     border-radius: 8px;
     background: #ffffff;
-    padding: 10px 12px;
+    padding: 10px 42px 10px 12px;
     color: #212529;
     font: inherit;
     font-size: 16px;
     font-weight: 600;
     text-align: left;
+    position: relative;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.produto-mobile-select-trigger::after {
+    content: "";
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    width: 9px;
+    height: 9px;
+    border-right: 2px solid #164173;
+    border-bottom: 2px solid #164173;
+    transform: translateY(-65%) rotate(45deg);
+}
+
+.produto-mobile-select-trigger.tem-valor {
+    border-color: #8fb3de;
+    color: #0f3769;
 }
 
 .produto-mobile-select-trigger:focus {
@@ -356,12 +375,13 @@ select.campo-obrigatorio-piscando:focus,
 }
 
 .produto-mobile-modal-opcao {
+    position: relative;
     width: 100%;
     min-height: 46px;
     border: 1px solid #b7c6dc;
     border-radius: 8px;
     background: #ffffff;
-    padding: 10px 12px;
+    padding: 11px 42px 11px 12px;
     color: #172033;
     font: inherit;
     font-size: 15px;
@@ -374,6 +394,18 @@ select.campo-obrigatorio-piscando:focus,
     border-color: #2563eb;
     background: #dbeafe;
     color: #164173;
+}
+
+.produto-mobile-modal-opcao.selecionado::after {
+    content: "";
+    position: absolute;
+    right: 16px;
+    top: calc(50% - 7px);
+    width: 8px;
+    height: 14px;
+    border-right: 3px solid #1d4ed8;
+    border-bottom: 3px solid #1d4ed8;
+    transform: rotate(45deg);
 }
 
 .produto-mobile-modal-actions {
@@ -581,6 +613,41 @@ select.campo-obrigatorio-piscando:focus,
 
     .produto-mobile-select-trigger {
         display: block;
+    }
+
+    .produto-mobile-modal {
+        align-items: flex-end;
+        justify-content: center;
+        padding: 12px;
+    }
+
+    .produto-mobile-modal-content {
+        width: 100%;
+        max-width: 520px;
+        max-height: min(78vh, 620px);
+        border-radius: 18px 18px 14px 14px;
+        box-shadow: 0 -14px 44px rgba(15, 23, 42, 0.28);
+    }
+
+    .produto-mobile-modal-header {
+        padding: 16px 18px 8px;
+    }
+
+    .produto-mobile-modal-lista {
+        max-height: min(52vh, 420px);
+        padding: 8px 14px 14px;
+        gap: 10px;
+    }
+
+    .produto-mobile-modal-opcao {
+        min-height: 52px;
+        border-radius: 12px;
+        font-size: 16px;
+    }
+
+    .produto-mobile-modal-cancelar {
+        min-height: 50px;
+        border-radius: 12px;
     }
 
     #bloco-percentual-vista-fracionado,
@@ -1178,6 +1245,12 @@ if (criarMaisProdutos?.checked) {
         const trigger = document.querySelector(`[data-produto-select-trigger="${select.id}"]`);
         if (!trigger) return;
         trigger.textContent = textoSelectProduto(select);
+        const valor = String(select.value || "").trim().toLowerCase();
+        const texto = textoSelectProduto(select).trim().toLowerCase();
+        trigger.classList.toggle(
+            "tem-valor",
+            Boolean(valor) && valor !== "0" && valor !== "none" && valor !== "null" && texto !== "selecione"
+        );
         trigger.classList.toggle("campo-obrigatorio-piscando", select.classList.contains("campo-obrigatorio-piscando"));
     }
 
@@ -1202,6 +1275,7 @@ if (criarMaisProdutos?.checked) {
             btn.type = "button";
             btn.className = "produto-mobile-modal-opcao" + (option.selected ? " selecionado" : "");
             btn.textContent = option.textContent.trim() || "Selecione";
+            btn.setAttribute("aria-selected", option.selected ? "true" : "false");
             btn.addEventListener("click", () => {
                 select.value = option.value;
                 select.dispatchEvent(new Event("change", { bubbles: true }));
@@ -1216,7 +1290,10 @@ if (criarMaisProdutos?.checked) {
         modal.classList.add("visivel");
         const selecionado = lista.querySelector(".produto-mobile-modal-opcao.selecionado")
             || lista.querySelector(".produto-mobile-modal-opcao");
-        window.setTimeout(() => selecionado?.focus({ preventScroll: true }), 0);
+        window.setTimeout(() => {
+            selecionado?.focus({ preventScroll: true });
+            selecionado?.scrollIntoView({ block: "nearest" });
+        }, 0);
         return true;
     }
 
@@ -1236,6 +1313,7 @@ if (criarMaisProdutos?.checked) {
             trigger.dataset.produtoSelectTrigger = select.id;
             trigger.setAttribute("aria-haspopup", "dialog");
             trigger.setAttribute("aria-controls", "produto-mobile-select-modal");
+            trigger.setAttribute("aria-label", labelDoSelectProduto(select));
             trigger.addEventListener("click", () => abrirSelectMobileProduto(select));
             trigger.addEventListener("keydown", (event) => {
                 if (event.key === "Enter" || event.key === " ") {
@@ -1249,8 +1327,30 @@ if (criarMaisProdutos?.checked) {
             atualizarTriggerSelectProduto(select);
         });
 
-        document.getElementById("produto-mobile-select-cancelar")?.addEventListener("click", fecharSelectMobileProduto);
+        const botaoCancelarSelect = document.getElementById("produto-mobile-select-cancelar");
+        if (botaoCancelarSelect && botaoCancelarSelect.dataset.mobileSelectFecharPreparado !== "1") {
+            botaoCancelarSelect.dataset.mobileSelectFecharPreparado = "1";
+            botaoCancelarSelect.addEventListener("click", fecharSelectMobileProduto);
+        }
     }
+    window.prepararSelectsMobileProduto = prepararSelectsMobileProduto;
+    window.atualizarTriggerSelectProduto = atualizarTriggerSelectProduto;
+
+    const modalSelectProduto = document.getElementById("produto-mobile-select-modal");
+    if (modalSelectProduto && modalSelectProduto.dataset.fechamentoPreparado !== "1") {
+        modalSelectProduto.dataset.fechamentoPreparado = "1";
+        modalSelectProduto.addEventListener("click", function (event) {
+            if (event.target === modalSelectProduto) {
+                fecharSelectMobileProduto();
+            }
+        });
+    }
+
+    document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") {
+            fecharSelectMobileProduto();
+        }
+    });
     function numero(valor) {
         let texto = String(valor || "").trim();
 
@@ -1269,15 +1369,9 @@ if (criarMaisProdutos?.checked) {
     }
 
     function formatarDuasCasas(valor) {
-    const arredondado = Math.round(Number(valor) * 20) / 20;
+    const arredondado = Math.round(Number(valor) * 100) / 100;
     return arredondado.toFixed(2);
 }
-    function formatarMoedaBR(valor) {
-        return Number(valor || 0).toLocaleString("pt-BR", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        });
-    }
 function atualizarVisibilidadeFracionado() {
     const valor = String(campoVendeFracionado?.value || "").toLowerCase();
     const mostrar =
@@ -1328,125 +1422,77 @@ camposFracionados.forEach(campo => {
     campo.disabled = !mostrar;
 });
 }
-        function atualizarPercentualVistaPeloPrecoVista() {
-        const compra = numero(campoPrecoCompra?.value);
-        const vista = numero(campoPrecoVista?.value);
-
-        if (!campoPercentualVista) return;
-        if (compra <= 0 || vista <= 0) {
-            campoPercentualVista.value = "";
-            return;
-        }
-
-        const percentual = ((vista - compra) / compra) * 100;
-        campoPercentualVista.value = formatarDuasCasas(percentual);
+    function fatorConversaoAtual() {
+        const fatorVisual = document.getElementById("fator_visual");
+        const fatorReal = document.getElementById("id_fator_conversao");
+        return numero(fatorVisual?.value || fatorReal?.value);
     }
 
-    function atualizarPrecoVistaPeloPercentualVista() {
-        const compra = numero(campoPrecoCompra?.value);
-        const percentual = numero(campoPercentualVista?.value);
-
-        if (!campoPrecoVista) return;
-        if (compra <= 0 || percentual < 0) {
-            return;
-        }
-
-        const vista = compra * (1 + percentual / 100);
-        campoPrecoVista.value = formatarDuasCasas(vista);
-    }
-
-    function atualizarPercentualPrazoPeloPrecoPrazo() {
-        const compra = numero(campoPrecoCompra?.value);
-        const prazo = numero(campoPrecoPrazo?.value);
-
-        if (!campoPercentualPrazo) return;
-        if (compra <= 0 || prazo <= 0) {
-            campoPercentualPrazo.value = "";
-            return;
-        }
-
-        const percentual = ((prazo - compra) / compra) * 100;
-        campoPercentualPrazo.value = formatarDuasCasas(percentual);
-    }
-
-    function atualizarPrecoPrazoPeloPercentualPrazo() {
-        const compra = numero(campoPrecoCompra?.value);
-        const percentual = numero(campoPercentualPrazo?.value);
-
-        if (!campoPrecoPrazo) return;
-        if (compra <= 0 || percentual < 0) {
-            return;
-        }
-
-        const prazo = compra * (1 + percentual / 100);
-        campoPrecoPrazo.value = formatarDuasCasas(prazo);
-    }
     function atualizarPrecoCompraFracionado() {
-    if (!campoPrecoCompraFracionado) return;
+        if (!campoPrecoCompraFracionado) return;
 
-    const compra = numero(campoPrecoCompra?.value);
-    const fator = numero(document.getElementById("id_fator_conversao")?.value);
+        const compra = numero(campoPrecoCompra?.value);
+        const fator = fatorConversaoAtual();
 
-    if (compra <= 0 || fator <= 0) {
-        campoPrecoCompraFracionado.value = "";
-        return;
+        if (compra <= 0 || fator <= 0) {
+            campoPrecoCompraFracionado.value = "";
+            return;
+        }
+
+        campoPrecoCompraFracionado.value = formatarDuasCasas(compra / fator);
     }
 
-    const compraFracionada = compra / fator;
-    campoPrecoCompraFracionado.value = formatarMoedaBR(compraFracionada);
-}
-    function atualizarPercentualVistaFracionadoPeloPrecoVistaFracionado() {
-    const compra = numero(campoPrecoCompraFracionado?.value);
-    const vista = numero(campoPrecoVistaFracionado?.value);
+    function sincronizarPrecoPercentual(baseCampo, percentualCampo, precoCampo, origem) {
+        if (!baseCampo || !percentualCampo || !precoCampo) return;
 
-    if (!campoPercentualVistaFracionado) return;
-    if (compra <= 0 || vista <= 0) {
-        campoPercentualVistaFracionado.value = "";
-        return;
+        const base = numero(baseCampo.value);
+        const percentual = numero(percentualCampo.value);
+        const preco = numero(precoCampo.value);
+
+        if (base <= 0) {
+            if (origem === "preco") percentualCampo.value = "";
+            return;
+        }
+
+        if (origem === "percentual") {
+            if (percentualCampo.value.trim() === "" || percentual < 0) return;
+            precoCampo.value = formatarDuasCasas(base * (1 + percentual / 100));
+            return;
+        }
+
+        if (origem === "preco") {
+            if (precoCampo.value.trim() === "" || preco <= 0) {
+                percentualCampo.value = "";
+                return;
+            }
+            percentualCampo.value = formatarDuasCasas(((preco - base) / base) * 100);
+        }
     }
 
-    const percentual = ((vista - compra) / compra) * 100;
-    campoPercentualVistaFracionado.value = formatarDuasCasas(percentual);
-}
-
-function atualizarPrecoVistaFracionadoPeloPercentualVistaFracionado() {
-    const compra = numero(campoPrecoCompraFracionado?.value);
-    const percentual = numero(campoPercentualVistaFracionado?.value);
-
-    if (!campoPrecoVistaFracionado) return;
-    if (compra <= 0 || percentual < 0) {
-        return;
+    function recalcularPrecosPorPercentual() {
+        sincronizarPrecoPercentual(campoPrecoCompra, campoPercentualVista, campoPrecoVista, "percentual");
+        sincronizarPrecoPercentual(campoPrecoCompra, campoPercentualPrazo, campoPrecoPrazo, "percentual");
+        sincronizarPrecoPercentual(campoPrecoCompraFracionado, campoPercentualVistaFracionado, campoPrecoVistaFracionado, "percentual");
+        sincronizarPrecoPercentual(campoPrecoCompraFracionado, campoPercentualPrazoFracionado, campoPrecoPrazoFracionado, "percentual");
     }
 
-    const vista = compra * (1 + percentual / 100);
-    campoPrecoVistaFracionado.value = formatarDuasCasas(vista);
-}
-function atualizarPercentualPrazoFracionadoPeloPrecoPrazoFracionado() {
-    const compra = numero(campoPrecoCompraFracionado?.value);
-    const prazo = numero(campoPrecoPrazoFracionado?.value);
+    function inicializarPrecoPercentual(baseCampo, percentualCampo, precoCampo) {
+        if (!baseCampo || !percentualCampo || !precoCampo) return;
 
-    if (!campoPercentualPrazoFracionado) return;
-    if (compra <= 0 || prazo <= 0) {
-        campoPercentualPrazoFracionado.value = "";
-        return;
+        if (precoCampo.value.trim() !== "") {
+            sincronizarPrecoPercentual(baseCampo, percentualCampo, precoCampo, "preco");
+        } else if (percentualCampo.value.trim() !== "") {
+            sincronizarPrecoPercentual(baseCampo, percentualCampo, precoCampo, "percentual");
+        }
     }
 
-    const percentual = ((prazo - compra) / compra) * 100;
-    campoPercentualPrazoFracionado.value = formatarDuasCasas(percentual);
-}
-
-function atualizarPrecoPrazoFracionadoPeloPercentualPrazoFracionado() {
-    const compra = numero(campoPrecoCompraFracionado?.value);
-    const percentual = numero(campoPercentualPrazoFracionado?.value);
-
-    if (!campoPrecoPrazoFracionado) return;
-    if (compra <= 0 || percentual < 0) {
-        return;
+    function inicializarPrecos() {
+        atualizarPrecoCompraFracionado();
+        inicializarPrecoPercentual(campoPrecoCompra, campoPercentualVista, campoPrecoVista);
+        inicializarPrecoPercentual(campoPrecoCompra, campoPercentualPrazo, campoPrecoPrazo);
+        inicializarPrecoPercentual(campoPrecoCompraFracionado, campoPercentualVistaFracionado, campoPrecoVistaFracionado);
+        inicializarPrecoPercentual(campoPrecoCompraFracionado, campoPercentualPrazoFracionado, campoPrecoPrazoFracionado);
     }
-
-    const prazo = compra * (1 + percentual / 100);
-    campoPrecoPrazoFracionado.value = formatarDuasCasas(prazo);
-}
     let erroNome = document.getElementById("erro-nome");
 
     if (!erroNome && campoNome) {
@@ -1496,113 +1542,49 @@ const response = await fetch("{% url 'estoque:verificar_produto' %}?nome=" + enc
     }
 
     vincularEventos(campoPrecoVista, function () {
-        atualizarPercentualVistaPeloPrecoVista();
+        sincronizarPrecoPercentual(campoPrecoCompra, campoPercentualVista, campoPrecoVista, "preco");
     });
 
     vincularEventos(campoPercentualVista, function () {
-        atualizarPrecoVistaPeloPercentualVista();
+        sincronizarPrecoPercentual(campoPrecoCompra, campoPercentualVista, campoPrecoVista, "percentual");
     });
-vincularEventos(campoPrecoVistaFracionado, function () {
-    atualizarPercentualVistaFracionadoPeloPrecoVistaFracionado();
-});
 
-vincularEventos(campoPercentualVistaFracionado, function () {
-    atualizarPrecoVistaFracionadoPeloPercentualVistaFracionado();
-});
-vincularEventos(campoPrecoPrazoFracionado, function () {
-    atualizarPercentualPrazoFracionadoPeloPrecoPrazoFracionado();
-});
-
-vincularEventos(campoPercentualPrazoFracionado, function () {
-    atualizarPrecoPrazoFracionadoPeloPercentualPrazoFracionado();
-});
     vincularEventos(campoPrecoPrazo, function () {
-        atualizarPercentualPrazoPeloPrecoPrazo();
+        sincronizarPrecoPercentual(campoPrecoCompra, campoPercentualPrazo, campoPrecoPrazo, "preco");
     });
 
     vincularEventos(campoPercentualPrazo, function () {
-        atualizarPrecoPrazoPeloPercentualPrazo();
+        sincronizarPrecoPercentual(campoPrecoCompra, campoPercentualPrazo, campoPrecoPrazo, "percentual");
+    });
+
+    vincularEventos(campoPrecoVistaFracionado, function () {
+        sincronizarPrecoPercentual(campoPrecoCompraFracionado, campoPercentualVistaFracionado, campoPrecoVistaFracionado, "preco");
+    });
+
+    vincularEventos(campoPercentualVistaFracionado, function () {
+        sincronizarPrecoPercentual(campoPrecoCompraFracionado, campoPercentualVistaFracionado, campoPrecoVistaFracionado, "percentual");
+    });
+
+    vincularEventos(campoPrecoPrazoFracionado, function () {
+        sincronizarPrecoPercentual(campoPrecoCompraFracionado, campoPercentualPrazoFracionado, campoPrecoPrazoFracionado, "preco");
+    });
+
+    vincularEventos(campoPercentualPrazoFracionado, function () {
+        sincronizarPrecoPercentual(campoPrecoCompraFracionado, campoPercentualPrazoFracionado, campoPrecoPrazoFracionado, "percentual");
     });
 
     vincularEventos(campoPrecoCompra, function () {
         atualizarPrecoCompraFracionado();
-        if (campoPercentualVista && campoPercentualVista.value.trim() !== "") {
-            atualizarPrecoVistaPeloPercentualVista();
-        } else if (campoPrecoVista && campoPrecoVista.value.trim() !== "") {
-            atualizarPercentualVistaPeloPrecoVista();
-        }
-
-        if (campoPercentualPrazo && campoPercentualPrazo.value.trim() !== "") {
-            atualizarPrecoPrazoPeloPercentualPrazo();
-        } else if (campoPrecoPrazo && campoPrecoPrazo.value.trim() !== "") {
-            atualizarPercentualPrazoPeloPrecoPrazo();
-        }
-        if (campoPercentualVistaFracionado && campoPercentualVistaFracionado.value.trim() !== "") {
-    atualizarPrecoVistaFracionadoPeloPercentualVistaFracionado();
-} else if (campoPrecoVistaFracionado && campoPrecoVistaFracionado.value.trim() !== "") {
-    atualizarPercentualVistaFracionadoPeloPrecoVistaFracionado();
-}
-
-if (campoPercentualPrazoFracionado && campoPercentualPrazoFracionado.value.trim() !== "") {
-    atualizarPrecoPrazoFracionadoPeloPercentualPrazoFracionado();
-} else if (campoPrecoPrazoFracionado && campoPrecoPrazoFracionado.value.trim() !== "") {
-    atualizarPercentualPrazoFracionadoPeloPrecoPrazoFracionado();
-}
+        recalcularPrecosPorPercentual();
     });
-vincularEventos(document.getElementById("id_fator_conversao"), function () {
-    atualizarPrecoCompraFracionado();
 
-    if (
-    campoPercentualVistaFracionado &&
-    campoPrecoVistaFracionado &&
-    campoPercentualVistaFracionado.value.trim() !== "" &&
-    campoPrecoVistaFracionado.value.trim() === ""
-) {
-    atualizarPrecoVistaFracionadoPeloPercentualVistaFracionado();
-} else if (
-    campoPrecoVistaFracionado &&
-    campoPercentualVistaFracionado &&
-    campoPrecoVistaFracionado.value.trim() !== "" &&
-    campoPercentualVistaFracionado.value.trim() === ""
-) {
-    atualizarPercentualVistaFracionadoPeloPrecoVistaFracionado();
-}
+    vincularEventos(document.getElementById("id_fator_conversao"), function () {
+        atualizarPrecoCompraFracionado();
+        sincronizarPrecoPercentual(campoPrecoCompraFracionado, campoPercentualVistaFracionado, campoPrecoVistaFracionado, "percentual");
+        sincronizarPrecoPercentual(campoPrecoCompraFracionado, campoPercentualPrazoFracionado, campoPrecoPrazoFracionado, "percentual");
+    });
 
-    if (
-    campoPercentualPrazoFracionado &&
-    campoPrecoPrazoFracionado &&
-    campoPercentualPrazoFracionado.value.trim() !== "" &&
-    campoPrecoPrazoFracionado.value.trim() === ""
-) {
-    atualizarPrecoPrazoFracionadoPeloPercentualPrazoFracionado();
-} else if (
-    campoPrecoPrazoFracionado &&
-    campoPercentualPrazoFracionado &&
-    campoPrecoPrazoFracionado.value.trim() !== "" &&
-    campoPercentualPrazoFracionado.value.trim() === ""
-) {
-    atualizarPercentualPrazoFracionadoPeloPrecoPrazoFracionado();
-}
-});
-    if (campoPrecoCompra && campoPrecoCompra.value.trim() !== "") {
-    atualizarPrecoCompraFracionado();
-
-    if (campoPrecoVista && campoPrecoVista.value.trim() !== "") {
-        atualizarPercentualVistaPeloPrecoVista();
-    }
-
-    if (campoPrecoPrazo && campoPrecoPrazo.value.trim() !== "") {
-        atualizarPercentualPrazoPeloPrecoPrazo();
-    }
-
-    if (campoPrecoVistaFracionado && campoPrecoVistaFracionado.value.trim() !== "") {
-        atualizarPercentualVistaFracionadoPeloPrecoVistaFracionado();
-    }
-
-    if (campoPrecoPrazoFracionado && campoPrecoPrazoFracionado.value.trim() !== "") {
-        atualizarPercentualPrazoFracionadoPeloPrecoPrazoFracionado();
-    }
-}
+    inicializarPrecos();
     if (campoVendeFracionado) {
     campoVendeFracionado.addEventListener("change", atualizarVisibilidadeFracionado);
 }
@@ -1699,8 +1681,8 @@ document.addEventListener("DOMContentLoaded", function () {
         "id_preco_vista",
         "id_preco_prazo",
         "id_preco_compra_fracionado",
-        "id_preco_vista_fracionado",
-        "id_preco_prazo_fracionado"
+        "preco_vista_fracionado",
+        "preco_prazo_fracionado"
     ]
     .map(function (id) {
         return document.getElementById(id);
@@ -1775,82 +1757,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 });
 </script>
-
-
-<script id="script-preco-fracionado-fallback">
-document.addEventListener("DOMContentLoaded", function () {
-  function numeroBR(valor) {
-    let t = String(valor || "").trim();
-    if (!t) return 0;
-
-    t = t.replace("R$", "").replace(/\s/g, "").replace(/[^\d,.-]/g, "");
-
-    if (t.includes(",") && t.includes(".")) {
-      t = t.replace(/\./g, "").replace(",", ".");
-    } else {
-      t = t.replace(",", ".");
-    }
-
-    const n = Number(t);
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  function moedaBR(valor) {
-    return Number(valor || 0).toLocaleString("pt-BR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-  }
-
-  function campo(id) {
-    return document.getElementById(id);
-  }
-
-  function prepararCampoTexto(c) {
-    if (!c) return;
-    try {
-      c.type = "text";
-    } catch (e) {}
-    c.setAttribute("inputmode", "decimal");
-  }
-
-  function calcularPrecoCompraFracionado() {
-    const precoCompra = campo("id_preco_compra");
-    const precoFracionado = campo("id_preco_compra_fracionado");
-    const fatorReal = campo("id_fator_conversao");
-    const fatorVisual = campo("fator_visual");
-
-    if (!precoCompra || !precoFracionado) return;
-
-    prepararCampoTexto(precoCompra);
-    prepararCampoTexto(precoFracionado);
-
-    const compra = numeroBR(precoCompra.value);
-    const fator = numeroBR((fatorVisual && fatorVisual.value) || (fatorReal && fatorReal.value));
-
-    if (compra > 0 && fator > 0) {
-      precoFracionado.value = moedaBR(compra / fator);
-      precoFracionado.dispatchEvent(new Event("input", { bubbles: true }));
-      precoFracionado.dispatchEvent(new Event("change", { bubbles: true }));
-    } else {
-      precoFracionado.value = "";
-    }
-  }
-
-  ["id_preco_compra", "id_fator_conversao", "fator_visual"].forEach(function (id) {
-    const c = campo(id);
-    if (!c) return;
-
-    ["input", "change", "blur", "keyup"].forEach(function (evento) {
-      c.addEventListener(evento, calcularPrecoCompraFracionado);
-    });
-  });
-
-  setTimeout(calcularPrecoCompraFracionado, 300);
-  setTimeout(calcularPrecoCompraFracionado, 1000);
-});
-</script>
-
 
 <script id="script-normaliza-dinheiro-produto-submit-final">
 document.addEventListener("DOMContentLoaded", function () {
@@ -2318,6 +2224,10 @@ document.addEventListener("DOMContentLoaded", function () {
     copiarSelectOriginal(campoVendeFracionado, vendeFracionadoVisual);
     copiarSelectOriginal(campoUnidadeFracionada, unidadeFracionadaVisual);
 
+    if (typeof window.prepararSelectsMobileProduto === "function") {
+      window.prepararSelectsMobileProduto();
+    }
+
     campoQtd.classList.add("campo-real-estoque-oculto");
     campoMinimo.classList.add("campo-real-estoque-oculto");
 
@@ -2490,16 +2400,19 @@ document.addEventListener("DOMContentLoaded", function () {
     unidadeCompraVisual.addEventListener("change", function () {
       sincronizarSelects();
       atualizarLabelsEVisibilidade();
+      window.atualizarTriggerSelectProduto?.(unidadeCompraVisual);
     });
 
     vendeFracionadoVisual.addEventListener("change", function () {
       sincronizarSelects();
       atualizarLabelsEVisibilidade();
+      window.atualizarTriggerSelectProduto?.(vendeFracionadoVisual);
     });
 
     unidadeFracionadaVisual.addEventListener("change", function () {
       sincronizarSelects();
       atualizarLabelsEVisibilidade();
+      window.atualizarTriggerSelectProduto?.(unidadeFracionadaVisual);
     });
 
     [qtdPrincipal, qtdFracionada, minimoPrincipal, minimoFracionado, fatorVisual].forEach(function (campo) {
@@ -2545,9 +2458,9 @@ document.addEventListener("DOMContentLoaded", function () {
       "#percentual_prazo",
       "#id_preco_prazo",
       "#percentual_vista_fracionado",
-      "#id_preco_vista_fracionado",
+      "#preco_vista_fracionado",
       "#percentual_prazo_fracionado",
-      "#id_preco_prazo_fracionado"
+      "#preco_prazo_fracionado"
     ];
 
     function campoVisivel(campo) {
