@@ -955,10 +955,9 @@
 }
 
 #btn-topo-produtos {
-  position: fixed !important;
-  right: 16px !important;
-  bottom: 110px !important;
-  z-index: 9999999 !important;
+  position: sticky;
+  top: 8px;
+  z-index: 5000;
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
@@ -975,6 +974,22 @@
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.28);
   text-decoration: none;
   touch-action: manipulation;
+}
+
+.topo-produtos-sticky {
+  position: sticky;
+  top: 8px;
+  z-index: 5000;
+  display: flex;
+  justify-content: flex-end;
+  max-width: 720px;
+  margin: 0 auto 10px auto;
+  padding: 4px 0;
+  pointer-events: none;
+}
+
+.topo-produtos-sticky #btn-topo-produtos {
+  pointer-events: auto;
 }
 
 #btn-topo-produtos:hover,
@@ -1223,6 +1238,11 @@ align-items: center;
 
     <div id="contadorFiltroCategoria" style="font-size: 12px; color: #6c757d; font-weight: 600; margin-top: 6px;"></div>
   </div>
+</div>
+<div class="topo-produtos-sticky">
+  <button type="button" id="btn-topo-produtos" aria-label="Voltar ao topo da lista de produtos">
+    &uarr; Topo
+  </button>
 </div>
 <div class="produtos-tabela-card" style="max-width: 720px; margin: 0 auto 90px auto; background: #fff; border: 1px solid #e9ecef; border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); overflow: hidden;">
   <table class="table table-hover mx-auto align-middle produtos-tabela" style="width: auto;">
@@ -1693,10 +1713,6 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
 </div>
 
 </div>
-
-<button type="button" id="btn-topo-produtos" aria-label="Voltar ao topo da lista de produtos">
-  &uarr; Topo
-</button>
 
 <script>
   document.addEventListener("DOMContentLoaded", function () {
