@@ -15,7 +15,7 @@
         .botao-voltar-topo {
             position: fixed;
             right: max(18px, env(safe-area-inset-right));
-            bottom: max(22px, env(safe-area-inset-bottom));
+            bottom: calc(22px + env(safe-area-inset-bottom));
             z-index: 1080;
             display: inline-flex;
             align-items: center;
@@ -57,7 +57,7 @@
         @media (max-width: 575.98px) {
             .botao-voltar-topo {
                 right: max(14px, env(safe-area-inset-right));
-                bottom: max(86px, env(safe-area-inset-bottom));
+                bottom: calc(96px + env(safe-area-inset-bottom));
                 min-width: 82px;
                 min-height: 48px;
                 font-size: 0.9rem;
@@ -78,13 +78,33 @@
             const botao = document.getElementById("botao-voltar-topo");
             if (!botao) return;
 
-            const limiteParaExibir = 320;
+            const limiteParaExibir = 260;
+
+            function posicaoRolagemAtual() {
+                const elementoRolagem = document.scrollingElement || document.documentElement || document.body;
+                return Math.max(
+                    window.pageYOffset || 0,
+                    window.scrollY || 0,
+                    elementoRolagem ? elementoRolagem.scrollTop || 0 : 0,
+                    document.documentElement ? document.documentElement.scrollTop || 0 : 0,
+                    document.body ? document.body.scrollTop || 0 : 0
+                );
+            }
 
             function atualizarBotaoTopo() {
-                botao.classList.toggle("visivel", window.scrollY > limiteParaExibir);
+                botao.classList.toggle("visivel", posicaoRolagemAtual() > limiteParaExibir);
             }
 
             botao.addEventListener("click", function () {
+                const elementoRolagem = document.scrollingElement || document.documentElement || document.body;
+
+                if (elementoRolagem && typeof elementoRolagem.scrollTo === "function") {
+                    elementoRolagem.scrollTo({
+                        top: 0,
+                        behavior: "smooth"
+                    });
+                }
+
                 window.scrollTo({
                     top: 0,
                     behavior: "smooth"
@@ -92,6 +112,8 @@
             });
 
             window.addEventListener("scroll", atualizarBotaoTopo, { passive: true });
+            document.addEventListener("scroll", atualizarBotaoTopo, { passive: true, capture: true });
+            document.addEventListener("touchmove", atualizarBotaoTopo, { passive: true });
             window.addEventListener("resize", atualizarBotaoTopo);
             atualizarBotaoTopo();
         })();
