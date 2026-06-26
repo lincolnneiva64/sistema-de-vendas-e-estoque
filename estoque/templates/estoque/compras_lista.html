@@ -97,6 +97,7 @@
   .compras-lista-table tbody tr:hover { background:#fbfdff; }
   .compras-lista-table tbody tr:last-child td { border-bottom:0; }
   .compras-lista-numero { font-weight:900; color:#0f172a; }
+  .compras-lista-status-compra { display:block; margin-top:3px; color:#64748b; font-size:.72rem; font-weight:850; }
   .compras-lista-financeiro { display:inline-flex; align-items:center; max-width:220px; border-radius:999px; padding:4px 9px; border:1px solid #bfdbfe; background:#eff6ff; color:#1e4f85; font-weight:850; font-size:.76rem; line-height:1.2; }
   .compras-lista-financeiro.paga { background:#ecfdf3; border-color:#a7e3bd; color:#166534; }
   .compras-lista-financeiro.pendente { background:#eff6ff; border-color:#bfdbfe; color:#1e4f85; }
@@ -480,33 +481,33 @@
           <th>Data</th>
           <th>Pagamento</th>
           <th>Financeiro</th>
-          <th>Total</th>
+          <th>Total itens</th>
           <th>Ações</th>
         </tr>
       </thead>
       <tbody>
         {% for compra in compras %}
           <tr>
-            <td class="compras-lista-numero">#{{ compra.id }}</td>
+            <td class="compras-lista-numero">Compra #{{ compra.id }}<span class="compras-lista-status-compra">Status: {{ compra.get_status_display }}</span></td>
             <td>{{ compra.fornecedor.nome|default:"Fornecedor nao informado" }}</td>
             <td>{{ compra.data_compra|date:"d/m/Y" }}</td>
             <td><span class="compras-lista-pagamento{% if compra.tipo_pagamento_texto == 'A prazo' %} prazo{% endif %}">{{ compra.tipo_pagamento_texto|default:"-" }}</span></td>
             <td><span class="compras-lista-financeiro {{ compra.situacao_financeira_classe }}">{{ compra.situacao_financeira_texto }}</span></td>
-            <td class="compras-lista-total">R$ {{ compra.total|floatformat:2 }}</td>
+            <td class="compras-lista-total">R$ {{ compra.total_lista|floatformat:2 }}</td>
             <td>
-              <div class="compras-lista-acoes-linha">
+              <div class="compras-lista-acoes-linha" data-compra-id="{{ compra.id }}">
           {% if compra.status == "rascunho" or compra.status == "finalizacao_iniciada" %}
-          <a href="{% url 'estoque:compra_editar' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit">Continuar</a>
+          <a href="{% url 'estoque:compra_editar' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit" data-compra-id="{{ compra.id }}">Continuar Compra #{{ compra.id }}</a>
           {% else %}
-          <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-view">Ver</a>
-          <a href="{% url 'estoque:compra_corrigir_itens' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit">Editar</a>
+          <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-view" data-compra-id="{{ compra.id }}">Ver Compra #{{ compra.id }}</a>
+          <a href="{% url 'estoque:compra_corrigir_itens' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit" data-compra-id="{{ compra.id }}">Editar Compra #{{ compra.id }}</a>
           {% endif %}
           <button type="button"
                   class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-danger btnAbrirModalExcluirCompra"
                   data-url="{% url 'estoque:compra_excluir' compra.pk %}"
                   data-compra="#{{ compra.id }}"
                   data-fornecedor="{{ compra.fornecedor.nome|default:'Fornecedor nao informado' }}"
-                  data-total="R$ {{ compra.total|floatformat:2 }}">
+                  data-total="R$ {{ compra.total_lista|floatformat:2 }}">
             Excluir
           </button>
         </div>
@@ -538,27 +539,31 @@
             <span class="compras-lista-mobile-value">{{ compra.data_compra|date:"d/m/Y" }}</span>
           </div>
           <div>
+            <span class="compras-lista-mobile-label">Status</span>
+            <span class="compras-lista-mobile-value">{{ compra.get_status_display }}</span>
+          </div>
+          <div>
             <span class="compras-lista-mobile-label">Pagamento</span>
             <span class="compras-lista-pagamento{% if compra.tipo_pagamento_texto == 'A prazo' %} prazo{% endif %}">{{ compra.tipo_pagamento_texto|default:"-" }}</span>
           </div>
           <div>
-            <span class="compras-lista-mobile-label">Total</span>
-            <span class="compras-lista-mobile-value compras-lista-total">R$ {{ compra.total|floatformat:2 }}</span>
+            <span class="compras-lista-mobile-label">Total itens</span>
+            <span class="compras-lista-mobile-value compras-lista-total">R$ {{ compra.total_lista|floatformat:2 }}</span>
           </div>
         </div>
-        <div class="compras-lista-acoes-linha">
+        <div class="compras-lista-acoes-linha" data-compra-id="{{ compra.id }}">
           {% if compra.status == "rascunho" or compra.status == "finalizacao_iniciada" %}
-          <a href="{% url 'estoque:compra_editar' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit">Continuar</a>
+          <a href="{% url 'estoque:compra_editar' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit" data-compra-id="{{ compra.id }}">Continuar Compra #{{ compra.id }}</a>
           {% else %}
-          <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-view">Ver</a>
-          <a href="{% url 'estoque:compra_corrigir_itens' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit">Editar</a>
+          <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-view" data-compra-id="{{ compra.id }}">Ver Compra #{{ compra.id }}</a>
+          <a href="{% url 'estoque:compra_corrigir_itens' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit" data-compra-id="{{ compra.id }}">Editar Compra #{{ compra.id }}</a>
           {% endif %}
           <button type="button"
                   class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-danger btnAbrirModalExcluirCompra"
                   data-url="{% url 'estoque:compra_excluir' compra.pk %}"
                   data-compra="#{{ compra.id }}"
                   data-fornecedor="{{ compra.fornecedor.nome|default:'Fornecedor nao informado' }}"
-                  data-total="R$ {{ compra.total|floatformat:2 }}">
+                  data-total="R$ {{ compra.total_lista|floatformat:2 }}">
             Excluir
           </button>
         </div>

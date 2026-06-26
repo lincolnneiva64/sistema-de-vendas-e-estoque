@@ -3703,7 +3703,17 @@ def compras_lista(request):
     pagamento_filtro = request.GET.get("pagamento", "").strip()
     financeiro_filtro = request.GET.get("financeiro", "").strip()
 
-    compras = Compra.objects.select_related("fornecedor", "conta_pagar").order_by("-data_compra", "-id")
+    compras = (
+        Compra.objects.select_related("fornecedor", "conta_pagar")
+        .annotate(
+            total_itens_calculado=Coalesce(
+                Sum("itens__valor_total"),
+                Value(Decimal("0.00")),
+                output_field=DecimalField(max_digits=12, decimal_places=2),
+            )
+        )
+        .order_by("-data_compra", "-id")
+    )
 
     if compra_filtro:
         if compra_filtro.isdigit():
@@ -3746,6 +3756,7 @@ def compras_lista(request):
     hoje = timezone.localdate()
     compras_lista_filtrada = []
     for compra in compras:
+        compra.total_lista = (compra.total_itens_calculado or compra.total or Decimal("0.00")).quantize(Decimal("0.01"))
         compra.situacao_financeira_texto, compra.situacao_financeira_classe = (
             _situacao_financeira_compra_lista(compra, hoje)
         )
@@ -3986,6 +3997,15 @@ def _linhas_item_compra(compra=None):
     return linhas or [_linha_item_compra_vazia()]
 
 
+def _total_itens_compra(compra=None):
+    if not compra:
+        return Decimal("0.00")
+    return sum(
+        (item.valor_total or Decimal("0.00") for item in compra.itens.all()),
+        Decimal("0.00"),
+    ).quantize(Decimal("0.01"))
+
+
 def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None, rascunho_salvo=False):
     conta_caixa = _conta_financeira_padrao("caixa")
     conta_reserva = _conta_financeira_padrao("reserva")
@@ -4000,6 +4020,7 @@ def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None,
         "compra": compra,
         "finalizando": finalizando,
         "rascunho_salvo": rascunho_salvo,
+        "total_itens_compra": _total_itens_compra(compra),
         "item_linhas": _linhas_item_compra(compra),
         "fechamento_token": fechamento_token or (compra.fechamento_token if compra and compra.fechamento_token else uuid4().hex),
         "saldo_caixa_modal": _financeiro_moeda_br(saldo_caixa),
