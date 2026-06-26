@@ -6,7 +6,6 @@ import os
 import re
 import sys
 import textwrap
-import time
 import unicodedata
 import ipaddress
 from difflib import SequenceMatcher
@@ -4010,12 +4009,20 @@ def _total_itens_compra(compra=None):
 
 
 def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None, rascunho_salvo=False):
-    conta_caixa = _conta_financeira_padrao("caixa")
-    conta_reserva = _conta_financeira_padrao("reserva")
-    conta_banco = _conta_financeira_padrao("banco")
-    saldo_caixa = _saldo_conta_financeira(conta_caixa) if conta_caixa else Decimal("0.00")
-    saldo_reserva = _saldo_conta_financeira(conta_reserva) if conta_reserva else Decimal("0.00")
-    saldo_banco = _saldo_conta_financeira(conta_banco) if conta_banco else Decimal("0.00")
+    precisa_saldos_financeiros = finalizando or compra is None
+
+    if precisa_saldos_financeiros:
+        conta_caixa = _conta_financeira_padrao("caixa")
+        conta_reserva = _conta_financeira_padrao("reserva")
+        conta_banco = _conta_financeira_padrao("banco")
+        saldo_caixa = _saldo_conta_financeira(conta_caixa) if conta_caixa else Decimal("0.00")
+        saldo_reserva = _saldo_conta_financeira(conta_reserva) if conta_reserva else Decimal("0.00")
+        saldo_banco = _saldo_conta_financeira(conta_banco) if conta_banco else Decimal("0.00")
+    else:
+        saldo_caixa = Decimal("0.00")
+        saldo_reserva = Decimal("0.00")
+        saldo_banco = Decimal("0.00")
+
     return {
         "fornecedores": Fornecedor.objects.filter(ativo=True).order_by("nome", "id"),
         "produtos": _produto_opcoes_compra(),
@@ -4032,7 +4039,6 @@ def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None,
         "saldo_reserva_modal": _financeiro_moeda_br(saldo_reserva),
         "saldo_banco_modal": _financeiro_moeda_br(saldo_banco),
     }
-
 
 def _dados_compra_post(request, exigir_itens=True):
     fornecedor_id = request.POST.get("fornecedor_id")
@@ -4056,12 +4062,26 @@ def _dados_compra_post(request, exigir_itens=True):
     precos = request.POST.getlist("preco_unitario[]")
     observacoes_itens = request.POST.getlist("observacao_item[]")
 
+    ids_validos = []
+    for produto_id in produto_ids:
+        produto_id = str(produto_id or "").strip()
+        if produto_id:
+            ids_validos.append(produto_id)
+
+    produtos_map = Produto.objects.filter(pk__in=ids_validos, excluido=False).in_bulk()
+
     itens_validos = []
     for indice, produto_id in enumerate(produto_ids):
         produto_id = str(produto_id or "").strip()
         if not produto_id:
             continue
-        produto = Produto.objects.filter(pk=produto_id, excluido=False).first()
+
+        try:
+            produto_chave = int(produto_id)
+        except (TypeError, ValueError):
+            raise ValueError("Produto informado nao foi encontrado.")
+
+        produto = produtos_map.get(produto_chave)
         if not produto:
             raise ValueError("Produto informado nao foi encontrado.")
 
@@ -4111,8 +4131,8 @@ def _salvar_compra_e_itens(compra, dados, status):
     compra.save()
 
     compra.itens.all().delete()
-    for item in dados["itens"]:
-        ItemCompra.objects.create(
+    itens_para_criar = [
+        ItemCompra(
             compra=compra,
             produto=item["produto"],
             quantidade=item["quantidade"],
@@ -4121,6 +4141,10 @@ def _salvar_compra_e_itens(compra, dados, status):
             valor_total=item["valor_total"],
             observacao=item["observacao"] or None,
         )
+        for item in dados["itens"]
+    ]
+    if itens_para_criar:
+        ItemCompra.objects.bulk_create(itens_para_criar)
     return compra
 
 
@@ -4221,7 +4245,8 @@ def compras_nova(request):
 
 
 def compra_editar(request, pk):
-    compra = get_object_or_404(Compra.objects.prefetch_related("itens__produto"), pk=pk)
+    compra_qs = Compra.objects.all() if request.method == "POST" else Compra.objects.prefetch_related("itens__produto")
+    compra = get_object_or_404(compra_qs, pk=pk)
     if not _compra_editavel_ou_redireciona(compra):
         messages.warning(request, "Compra finalizada deve ser editada pela correcao de itens.")
         return redirect("estoque:compras_detalhe", pk=compra.pk)
