@@ -1473,11 +1473,12 @@
     </section>
 
     {% if compra %}
-    <section class="compras-card{% if rascunho_salvo %} compra-bloco-recolhido{% endif %}" id="secaoProdutoRapidoCompra">
-      <div class="compras-card-head">Cadastrar Produto Rapido</div>
+    <section class="compras-card produto-rapido-destaque{% if rascunho_salvo %} compra-bloco-recolhido{% endif %}" id="secaoProdutoRapidoCompra">
+      <div class="compras-card-head produto-rapido-destaque-head">Cadastrar Produto Rapido</div>
       <div class="compras-card-body">
+        <div class="produto-rapido-ajuda">Use este bloco somente para cadastrar rapidamente produto que ainda nao existe. Depois complete o cadastro no painel de produtos.</div>
         <div class="compras-grid">
-          <div class="compras-field"><label>Nome</label><input type="text" name="nome" form="formProdutoRapidoCompra" placeholder="Nome do produto" required></div>
+          <div class="compras-field"><label>Nome</label><input type="text" name="nome" form="formProdutoRapidoCompra" placeholder="Nome do produto" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" required></div>
           <div class="compras-field">
             <label>Categoria</label>
             <input type="hidden" name="categoria" form="formProdutoRapidoCompra" id="produtoRapidoCategoria">
@@ -4592,6 +4593,349 @@
   document.addEventListener("DOMContentLoaded", iniciarAutoDistribuir);
   document.addEventListener("click", function () {
     setTimeout(iniciarAutoDistribuir, 100);
+  });
+})();
+</script>
+
+<style>
+/* DESTAQUE DO CADASTRO RAPIDO DE PRODUTO NA COMPRA */
+.produto-rapido-destaque {
+  border: 3px solid #2563eb !important;
+  box-shadow: 0 18px 45px rgba(37, 99, 235, 0.18) !important;
+  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 42%) !important;
+}
+
+.produto-rapido-destaque-head {
+  background: #dbeafe !important;
+  color: #0f172a !important;
+  border-bottom: 2px solid #93c5fd !important;
+  font-size: 1.15rem !important;
+  font-weight: 950 !important;
+}
+
+.produto-rapido-ajuda {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+@media (max-width: 768px) {
+  .produto-rapido-destaque {
+    border-width: 3px !important;
+    border-radius: 22px !important;
+    margin-top: 18px !important;
+  }
+
+  .produto-rapido-destaque-head {
+    font-size: 1.25rem !important;
+    padding: 18px 20px !important;
+  }
+
+  .produto-rapido-ajuda {
+    font-size: 0.98rem;
+  }
+}
+</style>
+
+<style>
+/* MODAL MOBILE PARA ESCOLHER PRODUTO NA COMPRA */
+@media (max-width: 768px) {
+  .produto-mobile-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 999999;
+    background: rgba(15, 23, 42, 0.62);
+    display: none;
+    align-items: flex-end;
+    padding: 12px;
+  }
+
+  .produto-mobile-modal.aberto {
+    display: flex;
+  }
+
+  .produto-mobile-card {
+    width: 100%;
+    max-height: 86vh;
+    overflow: hidden;
+    background: #ffffff;
+    border-radius: 24px 24px 18px 18px;
+    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.35);
+    border: 2px solid #bfdbfe;
+  }
+
+  .produto-mobile-topo {
+    padding: 16px;
+    background: #dbeafe;
+    border-bottom: 1px solid #93c5fd;
+  }
+
+  .produto-mobile-topo h2 {
+    margin: 0 0 10px;
+    font-size: 1.22rem;
+    font-weight: 950;
+    color: #0f172a;
+  }
+
+  .produto-mobile-busca {
+    width: 100%;
+    border: 2px solid #2563eb;
+    border-radius: 16px;
+    padding: 14px 16px;
+    font-size: 1.05rem;
+    font-weight: 800;
+    outline: none;
+  }
+
+  .produto-mobile-lista {
+    max-height: 54vh;
+    overflow-y: auto;
+    padding: 12px;
+    background: #ffffff;
+  }
+
+  .produto-mobile-opcao {
+    width: 100%;
+    border: 1px solid #dbeafe;
+    background: #f8fafc;
+    color: #0f172a;
+    border-radius: 16px;
+    padding: 14px 15px;
+    margin-bottom: 10px;
+    text-align: left;
+    font-size: 1rem;
+    font-weight: 850;
+  }
+
+  .produto-mobile-opcao small {
+    display: block;
+    margin-top: 4px;
+    color: #64748b;
+    font-weight: 750;
+  }
+
+  .produto-mobile-rodape {
+    display: flex;
+    gap: 10px;
+    padding: 12px;
+    background: #f8fafc;
+    border-top: 1px solid #e5e7eb;
+  }
+
+  .produto-mobile-rodape button {
+    flex: 1;
+  }
+}
+</style>
+
+<script>
+/* MODAL BONITO PARA PRODUTO NA COMPRA MOBILE */
+(function() {
+  if (window.__produtoMobileModalAplicado) return;
+  window.__produtoMobileModalAplicado = true;
+
+  function ehMobile() {
+    return window.innerWidth <= 768;
+  }
+
+  function normalizar(txt) {
+    return (txt || "")
+      .toString()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
+  function criarModal() {
+    var modal = document.getElementById("produtoMobileModalCompra");
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.id = "produtoMobileModalCompra";
+    modal.className = "produto-mobile-modal";
+    modal.innerHTML = `
+      <div class="produto-mobile-card" role="dialog" aria-modal="true">
+        <div class="produto-mobile-topo">
+          <h2>Escolher produto</h2>
+          <input type="text" id="produtoMobileBuscaCompra" class="produto-mobile-busca" placeholder="Digite para procurar o produto" autocomplete="off">
+        </div>
+        <div class="produto-mobile-lista" id="produtoMobileListaCompra"></div>
+        <div class="produto-mobile-rodape">
+          <button type="button" class="compras-btn compras-btn-secondary" id="produtoMobileCancelarCompra">Cancelar</button>
+          <button type="button" class="compras-btn compras-btn-primary" id="produtoMobileUsarDigitadoCompra">Usar digitado</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.addEventListener("click", function(event) {
+      if (event.target === modal) fecharModalProduto();
+    });
+
+    document.getElementById("produtoMobileCancelarCompra").addEventListener("click", fecharModalProduto);
+
+    return modal;
+  }
+
+  var campoAtual = null;
+
+  function opcoesDoCampo(campo) {
+    var area = campo.closest(".produto-autocomplete");
+    if (!area) return [];
+    var select = area.querySelector(".produto-select-real");
+    if (!select) return [];
+
+    return Array.from(select.options || [])
+      .filter(function(op) { return op.value; })
+      .map(function(op) {
+        return {
+          id: op.value,
+          nome: (op.textContent || "").trim(),
+          unidade: op.dataset.unidade || "",
+          preco: op.dataset.precoCompra || "",
+          estoque: op.dataset.estoque || ""
+        };
+      });
+  }
+
+  function selecionarProduto(item) {
+    if (!campoAtual || !item) return;
+
+    var area = campoAtual.closest(".produto-autocomplete");
+    var select = area ? area.querySelector(".produto-select-real") : null;
+
+    campoAtual.value = item.nome || "";
+
+    if (select) {
+      select.value = item.id || "";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    campoAtual.dispatchEvent(new Event("input", { bubbles: true }));
+    campoAtual.dispatchEvent(new Event("change", { bubbles: true }));
+
+    fecharModalProduto();
+
+    setTimeout(function() {
+      var linha = campoAtual.closest("tr");
+      var qtd = linha ? linha.querySelector('input[name="quantidade[]"]') : null;
+      if (qtd) {
+        qtd.focus();
+        qtd.select();
+      } else {
+        campoAtual.focus();
+      }
+    }, 80);
+  }
+
+  function usarDigitado() {
+    if (!campoAtual) return;
+    var busca = document.getElementById("produtoMobileBuscaCompra");
+    campoAtual.value = busca ? busca.value : campoAtual.value;
+    campoAtual.dispatchEvent(new Event("input", { bubbles: true }));
+    campoAtual.dispatchEvent(new Event("change", { bubbles: true }));
+    fecharModalProduto();
+    setTimeout(function() { campoAtual.focus(); }, 80);
+  }
+
+  function renderizarLista() {
+    if (!campoAtual) return;
+
+    var busca = document.getElementById("produtoMobileBuscaCompra");
+    var lista = document.getElementById("produtoMobileListaCompra");
+    if (!lista || !busca) return;
+
+    var termo = normalizar(busca.value);
+    var itens = opcoesDoCampo(campoAtual);
+
+    if (termo) {
+      itens = itens.filter(function(item) {
+        return normalizar(item.nome).includes(termo);
+      });
+    }
+
+    itens = itens.slice(0, 60);
+    lista.innerHTML = "";
+
+    if (!itens.length) {
+      lista.innerHTML = '<div style="padding:14px; font-weight:850; color:#64748b;">Nenhum produto encontrado. Pode usar o texto digitado ou cadastrar produto rapido.</div>';
+      return;
+    }
+
+    itens.forEach(function(item) {
+      var botao = document.createElement("button");
+      botao.type = "button";
+      botao.className = "produto-mobile-opcao";
+      botao.innerHTML = `
+        ${item.nome}
+        <small>Unidade: ${item.unidade || "-"} | Estoque: ${item.estoque || "-"}</small>
+      `;
+      botao.addEventListener("click", function() {
+        selecionarProduto(item);
+      });
+      lista.appendChild(botao);
+    });
+  }
+
+  function abrirModalProduto(campo) {
+    if (!ehMobile() || !campo) return;
+
+    campoAtual = campo;
+    var modal = criarModal();
+    var busca = document.getElementById("produtoMobileBuscaCompra");
+    var usar = document.getElementById("produtoMobileUsarDigitadoCompra");
+
+    modal.classList.add("aberto");
+    document.body.style.overflow = "hidden";
+
+    if (busca) {
+      busca.value = campo.value || "";
+      busca.oninput = renderizarLista;
+      setTimeout(function() {
+        busca.focus();
+        busca.select();
+      }, 100);
+    }
+
+    if (usar) usar.onclick = usarDigitado;
+
+    renderizarLista();
+  }
+
+  function fecharModalProduto() {
+    var modal = document.getElementById("produtoMobileModalCompra");
+    if (modal) modal.classList.remove("aberto");
+    document.body.style.overflow = "";
+  }
+
+  document.addEventListener("focusin", function(event) {
+    var campo = event.target.closest ? event.target.closest(".produto-busca") : null;
+    if (!campo || !ehMobile()) return;
+
+    if (campo.dataset.produtoMobileAbrindo === "1") return;
+    campo.dataset.produtoMobileAbrindo = "1";
+
+    setTimeout(function() {
+      abrirModalProduto(campo);
+      campo.dataset.produtoMobileAbrindo = "0";
+    }, 60);
+  });
+
+  document.addEventListener("click", function(event) {
+    var campo = event.target.closest ? event.target.closest(".produto-busca") : null;
+    if (!campo || !ehMobile()) return;
+    abrirModalProduto(campo);
+  });
+
+  document.addEventListener("keydown", function(event) {
+    if (event.key === "Escape") fecharModalProduto();
   });
 })();
 </script>
