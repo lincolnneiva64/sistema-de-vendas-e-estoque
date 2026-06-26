@@ -4940,4 +4940,499 @@
 })();
 </script>
 
+<style>
+/* MODO PROTEGIDO APOS SALVAR RASCUNHO */
+.rascunho-protegido {
+  opacity: 0.72;
+  filter: grayscale(0.15);
+}
+
+.rascunho-protegido input,
+.rascunho-protegido select,
+.rascunho-protegido textarea,
+.rascunho-protegido button {
+  pointer-events: none !important;
+}
+
+.rascunho-protegido .compras-btn,
+.rascunho-protegido input,
+.rascunho-protegido select,
+.rascunho-protegido textarea {
+  background: #f1f5f9 !important;
+}
+
+.botao-continuar-rascunho-rodape {
+  background: #dbeafe !important;
+  color: #0f3f78 !important;
+  border-color: #60a5fa !important;
+}
+</style>
+
+<script>
+/* MODO PROTEGIDO APOS SALVAR RASCUNHO */
+(function() {
+  const aviso = document.getElementById("avisoRascunhoSalvoCompra");
+  if (!aviso) return;
+
+  const btnAvisoContinuar = document.getElementById("btnContinuarLancandoItens");
+  const btnSalvarRascunho = document.getElementById("btnSalvarRascunhoCompra");
+  const btnFinalizar = document.getElementById("btnSalvarCompra");
+  const dadosCompra = document.querySelector(".compras-card");
+  const secaoItens = document.getElementById("secaoItensCompra");
+  const areaAdicionar = document.getElementById("areaAdicionarProdutoMobile");
+  const secaoProdutoRapido = document.getElementById("secaoProdutoRapidoCompra");
+
+  function setDisabledDentro(container, disabled) {
+    if (!container) return;
+
+    container.querySelectorAll("input, select, textarea, button").forEach(function(el) {
+      if (el.id === "btnContinuarLancandoItens") return;
+      if (el.closest("#avisoRascunhoSalvoCompra")) return;
+
+      if (disabled) {
+        el.dataset.bloqueadoRascunho = "1";
+        el.disabled = true;
+      } else if (el.dataset.bloqueadoRascunho === "1") {
+        el.disabled = false;
+        delete el.dataset.bloqueadoRascunho;
+      }
+    });
+
+    container.classList.toggle("rascunho-protegido", disabled);
+  }
+
+  function protegerRascunho() {
+    setDisabledDentro(dadosCompra, true);
+    setDisabledDentro(secaoItens, true);
+    setDisabledDentro(areaAdicionar, true);
+    setDisabledDentro(secaoProdutoRapido, true);
+
+    if (btnFinalizar) {
+      btnFinalizar.disabled = true;
+      btnFinalizar.dataset.bloqueadoRascunho = "1";
+    }
+
+    if (btnSalvarRascunho) {
+      btnSalvarRascunho.type = "button";
+      btnSalvarRascunho.textContent = "Continuar Lancando Itens";
+      btnSalvarRascunho.classList.add("botao-continuar-rascunho-rodape");
+      btnSalvarRascunho.disabled = false;
+      btnSalvarRascunho.addEventListener("click", liberarRascunho);
+    }
+  }
+
+  function liberarRascunho() {
+    setDisabledDentro(dadosCompra, false);
+    setDisabledDentro(secaoItens, false);
+    setDisabledDentro(areaAdicionar, false);
+    setDisabledDentro(secaoProdutoRapido, false);
+
+    if (btnFinalizar && btnFinalizar.dataset.bloqueadoRascunho === "1") {
+      btnFinalizar.disabled = false;
+      delete btnFinalizar.dataset.bloqueadoRascunho;
+    }
+
+    if (btnSalvarRascunho) {
+      btnSalvarRascunho.textContent = "Salvar Rascunho";
+      btnSalvarRascunho.classList.remove("botao-continuar-rascunho-rodape");
+    }
+
+    if (areaAdicionar) {
+      areaAdicionar.classList.remove("compra-bloco-recolhido");
+    }
+
+    if (secaoProdutoRapido) {
+      secaoProdutoRapido.classList.remove("compra-bloco-recolhido");
+    }
+
+    const produtos = Array.from(document.querySelectorAll("#secaoItensCompra .produto-busca"))
+      .filter(function(campo) { return !campo.disabled && campo.offsetParent !== null; });
+    const alvo = produtos.length ? produtos[produtos.length - 1] : document.getElementById("btnAdicionarItem");
+
+    if (alvo) {
+      setTimeout(function() {
+        alvo.scrollIntoView({ behavior: "smooth", block: "center" });
+        alvo.focus();
+        if (typeof alvo.select === "function") alvo.select();
+      }, 120);
+    }
+
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("rascunho_salvo");
+      window.history.replaceState({}, "", url.toString());
+    } catch (e) {}
+  }
+
+  if (btnAvisoContinuar) {
+    btnAvisoContinuar.addEventListener("click", liberarRascunho);
+  }
+
+  protegerRascunho();
+})();
+</script>
+
+<script>
+/* AJUSTE FINAL DO BOTAO SALVAR/CONTINUAR RASCUNHO */
+(function() {
+  const aviso = document.getElementById("avisoRascunhoSalvoCompra");
+  if (!aviso) return;
+
+  const btnAvisoContinuar = document.getElementById("btnContinuarLancandoItens");
+  const btnSalvarRascunho = document.getElementById("btnSalvarRascunhoCompra");
+  const btnFinalizar = document.getElementById("btnSalvarCompra");
+  const areaAdicionar = document.getElementById("areaAdicionarProdutoMobile");
+  const secaoProdutoRapido = document.getElementById("secaoProdutoRapidoCompra");
+  const secaoItens = document.getElementById("secaoItensCompra");
+
+  function mostrarBotao(botao) {
+    if (!botao) return;
+    botao.style.display = "";
+    botao.style.visibility = "visible";
+    botao.hidden = false;
+  }
+
+  function modoSalvoProtegido() {
+    if (btnSalvarRascunho) {
+      mostrarBotao(btnSalvarRascunho);
+      btnSalvarRascunho.type = "button";
+      btnSalvarRascunho.textContent = "Continuar Lancando Itens";
+      btnSalvarRascunho.disabled = false;
+      btnSalvarRascunho.classList.add("botao-continuar-rascunho-rodape");
+    }
+
+    if (btnFinalizar) {
+      mostrarBotao(btnFinalizar);
+      btnFinalizar.disabled = true;
+    }
+  }
+
+  function modoLancandoItens() {
+    if (btnSalvarRascunho) {
+      mostrarBotao(btnSalvarRascunho);
+      btnSalvarRascunho.type = "button";
+      btnSalvarRascunho.textContent = "Salvar Rascunho";
+      btnSalvarRascunho.disabled = false;
+      btnSalvarRascunho.classList.remove("botao-continuar-rascunho-rodape");
+    }
+
+    if (btnFinalizar) {
+      mostrarBotao(btnFinalizar);
+      btnFinalizar.disabled = false;
+    }
+
+    if (areaAdicionar) {
+      areaAdicionar.classList.remove("compra-bloco-recolhido");
+      areaAdicionar.classList.remove("rascunho-protegido");
+      areaAdicionar.querySelectorAll("input, select, textarea, button").forEach(function(el) {
+        el.disabled = false;
+      });
+    }
+
+    if (secaoProdutoRapido) {
+      secaoProdutoRapido.classList.remove("compra-bloco-recolhido");
+      secaoProdutoRapido.classList.remove("rascunho-protegido");
+      secaoProdutoRapido.querySelectorAll("input, select, textarea, button").forEach(function(el) {
+        el.disabled = false;
+      });
+    }
+
+    if (secaoItens) {
+      secaoItens.classList.remove("rascunho-protegido");
+      secaoItens.querySelectorAll("input, select, textarea, button").forEach(function(el) {
+        el.disabled = false;
+      });
+    }
+
+    if (aviso) {
+      aviso.style.display = "none";
+    }
+
+    const alvo = document.querySelector("#secaoItensCompra .produto-busca") || document.getElementById("btnAdicionarItem");
+    if (alvo) {
+      setTimeout(function() {
+        alvo.scrollIntoView({ behavior: "smooth", block: "center" });
+        alvo.focus();
+        if (typeof alvo.select === "function") alvo.select();
+      }, 120);
+    }
+
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("rascunho_salvo");
+      window.history.replaceState({}, "", url.toString());
+    } catch (e) {}
+  }
+
+  if (btnSalvarRascunho) {
+    btnSalvarRascunho.addEventListener("click", function(event) {
+      if (btnSalvarRascunho.textContent.trim().toLowerCase().includes("continuar")) {
+        event.preventDefault();
+        modoLancandoItens();
+      }
+    });
+  }
+
+  if (btnAvisoContinuar) {
+    btnAvisoContinuar.addEventListener("click", function(event) {
+      event.preventDefault();
+      modoLancandoItens();
+    });
+  }
+
+  modoSalvoProtegido();
+})();
+</script>
+
+<style>
+/* MOVE BOTOES DA COMPRA PARA ANTES DO CADASTRO RAPIDO */
+.acoes-compra-antes-produto-rapido {
+  margin: 18px 0 18px !important;
+  padding: 0 8px !important;
+}
+
+@media (max-width: 768px) {
+  .acoes-compra-antes-produto-rapido {
+    margin: 14px 0 16px !important;
+  }
+}
+</style>
+
+<script>
+/* MOVE BOTOES DA COMPRA PARA ANTES DO CADASTRO RAPIDO */
+(function() {
+  if (window.__acoesCompraAntesProdutoRapido) return;
+  window.__acoesCompraAntesProdutoRapido = true;
+
+  function moverAcoes() {
+    const secaoProdutoRapido = document.getElementById("secaoProdutoRapidoCompra");
+    const btnSalvar = document.getElementById("btnSalvarRascunhoCompra");
+
+    if (!secaoProdutoRapido || !btnSalvar) return;
+
+    const acoes = btnSalvar.closest(".compras-actions, .form-actions, .acoes-compra, .botoes-compra") || btnSalvar.parentElement;
+
+    if (!acoes || acoes.dataset.movidoAntesProdutoRapido === "1") return;
+
+    acoes.dataset.movidoAntesProdutoRapido = "1";
+    acoes.classList.add("acoes-compra-antes-produto-rapido");
+
+    secaoProdutoRapido.parentNode.insertBefore(acoes, secaoProdutoRapido);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", moverAcoes);
+  } else {
+    moverAcoes();
+  }
+
+  setTimeout(moverAcoes, 300);
+})();
+</script>
+
+<script>
+/* CORRIGE SALVAR RASCUNHO E FOCO NO ULTIMO ITEM */
+(function() {
+  function ultimoCampoProduto() {
+    const campos = Array.from(document.querySelectorAll("#secaoItensCompra .produto-busca"))
+      .filter(function(campo) {
+        return !campo.disabled && campo.offsetParent !== null;
+      });
+
+    if (campos.length) return campos[campos.length - 1];
+
+    return document.getElementById("btnAdicionarItem");
+  }
+
+  function habilitarSalvarRascunho() {
+    const btnSalvar = document.getElementById("btnSalvarRascunhoCompra");
+    const btnFinalizar = document.getElementById("btnSalvarCompra");
+
+    if (btnSalvar) {
+      btnSalvar.style.display = "";
+      btnSalvar.style.visibility = "visible";
+      btnSalvar.hidden = false;
+      btnSalvar.disabled = false;
+      btnSalvar.type = "submit";
+      btnSalvar.textContent = "Salvar Rascunho";
+      btnSalvar.classList.remove("botao-continuar-rascunho-rodape");
+      btnSalvar.removeAttribute("aria-disabled");
+    }
+
+    if (btnFinalizar) {
+      btnFinalizar.disabled = false;
+      btnFinalizar.removeAttribute("aria-disabled");
+    }
+  }
+
+  function focarUltimoProduto() {
+    const alvo = ultimoCampoProduto();
+
+    if (alvo) {
+      setTimeout(function() {
+        alvo.scrollIntoView({ behavior: "smooth", block: "center" });
+        alvo.focus();
+        if (typeof alvo.select === "function") alvo.select();
+      }, 160);
+    }
+  }
+
+  document.addEventListener("click", function(event) {
+    const textoBotao = (event.target && event.target.textContent || "").trim().toLowerCase();
+
+    if (textoBotao.includes("continuar lancando itens")) {
+      setTimeout(function() {
+        habilitarSalvarRascunho();
+        focarUltimoProduto();
+      }, 220);
+    }
+  });
+
+  document.addEventListener("click", function(event) {
+    const alvo = event.target;
+    if (!alvo) return;
+
+    if (alvo.id === "btnAdicionarItem" || alvo.closest && alvo.closest("#btnAdicionarItem")) {
+      setTimeout(function() {
+        habilitarSalvarRascunho();
+        focarUltimoProduto();
+      }, 250);
+    }
+  });
+})();
+</script>
+
+<script>
+/* AJUSTE DEFINITIVO SALVAR RASCUNHO E PRODUTO VAZIO */
+(function() {
+  function campoProdutoVazioFinal() {
+    const campos = Array.from(document.querySelectorAll("#secaoItensCompra .produto-busca"))
+      .filter(function(campo) {
+        return !campo.disabled && campo.offsetParent !== null;
+      });
+
+    const vazios = campos.filter(function(campo) {
+      return !(campo.value || "").trim();
+    });
+
+    if (vazios.length) return vazios[vazios.length - 1];
+
+    return document.getElementById("btnAdicionarItem");
+  }
+
+  function liberarBotaoSalvarRascunho() {
+    const btnSalvar = document.getElementById("btnSalvarRascunhoCompra");
+    if (!btnSalvar) return;
+
+    btnSalvar.style.display = "";
+    btnSalvar.style.visibility = "visible";
+    btnSalvar.hidden = false;
+    btnSalvar.disabled = false;
+    btnSalvar.removeAttribute("disabled");
+    btnSalvar.removeAttribute("aria-disabled");
+    btnSalvar.type = "submit";
+    btnSalvar.name = "acao";
+    btnSalvar.value = "rascunho";
+    btnSalvar.textContent = "Salvar Rascunho";
+    btnSalvar.classList.remove("botao-continuar-rascunho-rodape");
+  }
+
+  function liberarFinalizar() {
+    const btnFinalizar = document.getElementById("btnSalvarCompra");
+    if (!btnFinalizar) return;
+
+    btnFinalizar.style.display = "";
+    btnFinalizar.style.visibility = "visible";
+    btnFinalizar.hidden = false;
+    btnFinalizar.disabled = false;
+    btnFinalizar.removeAttribute("disabled");
+    btnFinalizar.removeAttribute("aria-disabled");
+  }
+
+  function liberarCamposCompra() {
+    const containers = [
+      document.getElementById("secaoItensCompra"),
+      document.getElementById("areaAdicionarProdutoMobile"),
+      document.getElementById("secaoProdutoRapidoCompra")
+    ];
+
+    containers.forEach(function(container) {
+      if (!container) return;
+
+      container.classList.remove("rascunho-protegido");
+      container.classList.remove("compra-bloco-recolhido");
+
+      container.querySelectorAll("input, select, textarea, button").forEach(function(el) {
+        el.disabled = false;
+        el.removeAttribute("disabled");
+        el.removeAttribute("aria-disabled");
+        if (el.dataset.bloqueadoRascunho === "1") {
+          delete el.dataset.bloqueadoRascunho;
+        }
+      });
+    });
+  }
+
+  function focarProdutoVazioFinal() {
+    const alvo = campoProdutoVazioFinal();
+
+    if (!alvo) return;
+
+    setTimeout(function() {
+      alvo.scrollIntoView({ behavior: "smooth", block: "center" });
+      alvo.focus();
+
+      if (typeof alvo.select === "function") {
+        alvo.select();
+      }
+    }, 180);
+  }
+
+  function modoLancandoItensCorreto() {
+    const aviso = document.getElementById("avisoRascunhoSalvoCompra");
+
+    liberarCamposCompra();
+    liberarBotaoSalvarRascunho();
+    liberarFinalizar();
+
+    if (aviso) {
+      aviso.style.display = "none";
+    }
+
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("rascunho_salvo");
+      window.history.replaceState({}, "", url.toString());
+    } catch (e) {}
+
+    focarProdutoVazioFinal();
+  }
+
+  document.addEventListener("click", function(event) {
+    const alvo = event.target;
+    const textoBotao = (alvo && alvo.textContent || "").trim().toLowerCase();
+
+    if (textoBotao.includes("continuar lancando itens")) {
+      event.preventDefault();
+
+      setTimeout(modoLancandoItensCorreto, 50);
+      setTimeout(modoLancandoItensCorreto, 250);
+      setTimeout(modoLancandoItensCorreto, 600);
+    }
+  }, true);
+
+  document.addEventListener("click", function(event) {
+    const alvo = event.target;
+    if (!alvo) return;
+
+    if (alvo.id === "btnAdicionarItem" || (alvo.closest && alvo.closest("#btnAdicionarItem"))) {
+      setTimeout(function() {
+        liberarBotaoSalvarRascunho();
+        focarProdutoVazioFinal();
+      }, 250);
+    }
+  }, true);
+})();
+</script>
+
 {% endblock %}
