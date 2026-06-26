@@ -4182,7 +4182,7 @@ def compras_nova(request):
             return redirect("estoque:compras_nova")
 
         if acao == "salvar_rascunho":
-            return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1&rascunho_salvo=1")
+            return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?rascunho_salvo=1")
         if acao == "confirmar_financeiro":
             if dados["compra_a_prazo"]:
                 messages.success(request, "Compra finalizada e conta a pagar criada com sucesso.")
@@ -4218,7 +4218,7 @@ def compra_editar(request, pk):
             return redirect("estoque:compra_editar", pk=compra.pk)
 
         if acao == "salvar_rascunho":
-            return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1&rascunho_salvo=1")
+            return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?rascunho_salvo=1")
         return redirect("estoque:compra_finalizar", pk=compra.pk)
 
     return render(

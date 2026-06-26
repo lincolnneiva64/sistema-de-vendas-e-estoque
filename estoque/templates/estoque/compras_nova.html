@@ -1428,7 +1428,9 @@
 <script>
 (function() {
   const formCompra = document.getElementById("formCompra");
-  const continuarItensAoAbrir = new URLSearchParams(window.location.search).get("continuar_itens") === "1";
+  const parametrosCompra = new URLSearchParams(window.location.search);
+  const continuarItensAoAbrir = parametrosCompra.get("continuar_itens") === "1";
+  const rascunhoSalvoAoAbrir = parametrosCompra.get("rascunho_salvo") === "1";
   const btnSalvarCompra = document.getElementById("btnSalvarCompra");
   const btnSalvarRascunhoCompra = document.getElementById("btnSalvarRascunhoCompra");
   const btnVoltarRascunhoCompra = document.getElementById("btnVoltarRascunhoCompra");
@@ -2583,14 +2585,23 @@
     }, 220);
   }
 
+  function rolarParaAvisoRascunhoSalvo() {
+    if (!avisoRascunhoSalvoCompra) return;
+    setTimeout(function() {
+      avisoRascunhoSalvoCompra.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 220);
+  }
+
   if (btnContinuarLancandoItens) {
     btnContinuarLancandoItens.addEventListener("click", function() {
-      focarContinuacaoItens(false);
+      focarContinuacaoItens(true);
     });
   }
 
   if (continuarItensAoAbrir) {
     focarContinuacaoItens(true);
+  } else if (rascunhoSalvoAoAbrir) {
+    rolarParaAvisoRascunhoSalvo();
   }
 })();
 </script>
@@ -2599,7 +2610,9 @@
 (function() {
   const form = document.getElementById("formCompra");
   if (!form) return;
-  const continuarItensAoAbrir = new URLSearchParams(window.location.search).get("continuar_itens") === "1";
+  const parametrosCompra = new URLSearchParams(window.location.search);
+  const continuarItensAoAbrir = parametrosCompra.get("continuar_itens") === "1";
+  const rascunhoSalvoAoAbrir = parametrosCompra.get("rascunho_salvo") === "1";
 
   const fornecedor = form.querySelector('[name="fornecedor_id"]');
   const fornecedorBusca = form.querySelector('[name="fornecedor_busca"]');
@@ -2903,13 +2916,13 @@
 
   window.addEventListener("load", function() {
     atualizarVencimentoCompra();
-    if (!continuarItensAoAbrir) {
+    if (!continuarItensAoAbrir && !rascunhoSalvoAoAbrir) {
       selecionarPrimeiroFornecedor();
     }
     fecharSugestoesFornecedor();
 
     setTimeout(function() {
-      if (continuarItensAoAbrir) return;
+      if (continuarItensAoAbrir || rascunhoSalvoAoAbrir) return;
       bloquearAberturaInicialFornecedor = true;
       focar(fornecedorBusca);
       fecharSugestoesFornecedor();
