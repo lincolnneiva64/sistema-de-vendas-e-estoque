@@ -37,6 +37,7 @@ class Produto(models.Model):
     fornecedor = models.CharField(max_length=120, blank=True, null=True)
     excluido = models.BooleanField(default=False)
     excluido_em = models.DateTimeField(null=True, blank=True)
+    cadastro_incompleto = models.BooleanField(default=False)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -956,10 +957,14 @@ class ProdutoFornecedor(models.Model):
 
 class Compra(models.Model):
     STATUS_ABERTA = "aberta"
+    STATUS_RASCUNHO = "rascunho"
+    STATUS_FINALIZACAO_INICIADA = "finalizacao_iniciada"
     STATUS_CANCELADA = "cancelada"
     STATUS_FINALIZADA = "finalizada"
     STATUS_CHOICES = [
         (STATUS_ABERTA, "Aberta"),
+        (STATUS_RASCUNHO, "Rascunho"),
+        (STATUS_FINALIZACAO_INICIADA, "Finalizacao iniciada"),
         (STATUS_CANCELADA, "Cancelada"),
         (STATUS_FINALIZADA, "Finalizada"),
     ]

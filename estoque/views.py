@@ -3670,6 +3670,8 @@ def _situacao_financeira_compra_lista(compra, hoje=None):
     hoje = hoje or timezone.localdate()
     if compra.cancelada or compra.status == Compra.STATUS_CANCELADA:
         return "Cancelada", "cancelada"
+    if compra.status in {Compra.STATUS_RASCUNHO, Compra.STATUS_FINALIZACAO_INICIADA}:
+        return "Rascunho", "alerta"
     if _compra_pagamento_imediato(compra.tipo_pagamento):
         return "Nota paga", "paga"
 
@@ -3950,6 +3952,358 @@ def compras_nova(request):
             "saldo_banco_modal": _financeiro_moeda_br(saldo_banco),
         },
     )
+
+
+def _produto_opcoes_compra():
+    return Produto.objects.filter(excluido=False).order_by("nome")
+
+
+def _linha_item_compra_vazia():
+    return {
+        "produto_id": "",
+        "produto_nome": "",
+        "quantidade": "1",
+        "unidade": "",
+        "preco_unitario": "0,00",
+        "observacao": "",
+    }
+
+
+def _linhas_item_compra(compra=None):
+    if not compra:
+        return [_linha_item_compra_vazia()]
+
+    linhas = []
+    for item in compra.itens.select_related("produto").all():
+        linhas.append({
+            "produto_id": item.produto_id or "",
+            "produto_nome": item.produto.nome if item.produto else "",
+            "quantidade": str(item.quantidade).replace(".", ","),
+            "unidade": item.unidade or "",
+            "preco_unitario": f"{item.preco_unitario:.2f}".replace(".", ","),
+            "observacao": item.observacao or "",
+        })
+    return linhas or [_linha_item_compra_vazia()]
+
+
+def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None, rascunho_salvo=False):
+    conta_caixa = _conta_financeira_padrao("caixa")
+    conta_reserva = _conta_financeira_padrao("reserva")
+    conta_banco = _conta_financeira_padrao("banco")
+    saldo_caixa = _saldo_conta_financeira(conta_caixa) if conta_caixa else Decimal("0.00")
+    saldo_reserva = _saldo_conta_financeira(conta_reserva) if conta_reserva else Decimal("0.00")
+    saldo_banco = _saldo_conta_financeira(conta_banco) if conta_banco else Decimal("0.00")
+    return {
+        "fornecedores": Fornecedor.objects.filter(ativo=True).order_by("nome", "id"),
+        "produtos": _produto_opcoes_compra(),
+        "hoje": timezone.localdate(),
+        "compra": compra,
+        "finalizando": finalizando,
+        "rascunho_salvo": rascunho_salvo,
+        "item_linhas": _linhas_item_compra(compra),
+        "fechamento_token": fechamento_token or (compra.fechamento_token if compra and compra.fechamento_token else uuid4().hex),
+        "saldo_caixa_modal": _financeiro_moeda_br(saldo_caixa),
+        "saldo_reserva_modal": _financeiro_moeda_br(saldo_reserva),
+        "saldo_banco_modal": _financeiro_moeda_br(saldo_banco),
+    }
+
+
+def _dados_compra_post(request, exigir_itens=True):
+    fornecedor_id = request.POST.get("fornecedor_id")
+    data_compra = parse_date(request.POST.get("data_compra") or "")
+    tipo_pagamento = (request.POST.get("tipo_pagamento") or "").strip()
+    data_vencimento = parse_date(request.POST.get("data_vencimento") or "")
+    observacao = (request.POST.get("observacao") or "").strip()
+    compra_a_prazo = _compra_pagamento_a_prazo(tipo_pagamento)
+
+    fornecedor = Fornecedor.objects.filter(pk=fornecedor_id, ativo=True).first()
+    if not fornecedor:
+        raise ValueError("Selecione um fornecedor ativo.")
+    if not data_compra:
+        raise ValueError("Informe uma data valida para a compra.")
+    if compra_a_prazo and not data_vencimento:
+        raise ValueError("Informe o vencimento da compra a prazo.")
+
+    produto_ids = request.POST.getlist("produto_id[]")
+    quantidades = request.POST.getlist("quantidade[]")
+    unidades = request.POST.getlist("unidade[]")
+    precos = request.POST.getlist("preco_unitario[]")
+    observacoes_itens = request.POST.getlist("observacao_item[]")
+
+    itens_validos = []
+    for indice, produto_id in enumerate(produto_ids):
+        produto_id = str(produto_id or "").strip()
+        if not produto_id:
+            continue
+        produto = Produto.objects.filter(pk=produto_id, excluido=False).first()
+        if not produto:
+            raise ValueError("Produto informado nao foi encontrado.")
+
+        quantidade = _decimal_compra(quantidades[indice] if indice < len(quantidades) else "", casas=3)
+        preco_unitario = _decimal_compra(precos[indice] if indice < len(precos) else "", casas=2)
+        unidade = (unidades[indice] if indice < len(unidades) else "").strip()
+        if quantidade <= 0:
+            raise ValueError(f"Informe quantidade maior que zero para {produto.nome}.")
+        if preco_unitario < 0:
+            raise ValueError(f"Informe preco valido para {produto.nome}.")
+
+        valor_total = (quantidade * preco_unitario).quantize(Decimal("0.01"))
+        itens_validos.append({
+            "produto": produto,
+            "quantidade": quantidade,
+            "unidade": unidade,
+            "preco_unitario": preco_unitario,
+            "valor_total": valor_total,
+            "observacao": (observacoes_itens[indice] if indice < len(observacoes_itens) else "").strip(),
+        })
+
+    if exigir_itens and not itens_validos:
+        raise ValueError("Inclua pelo menos um item na compra.")
+
+    total = sum((item["valor_total"] for item in itens_validos), Decimal("0.00")).quantize(Decimal("0.01"))
+    return {
+        "fornecedor": fornecedor,
+        "data_compra": data_compra,
+        "data_vencimento": data_vencimento if compra_a_prazo else None,
+        "tipo_pagamento": tipo_pagamento,
+        "observacao": observacao,
+        "itens": itens_validos,
+        "total": total,
+        "compra_a_prazo": compra_a_prazo,
+        "compra_a_vista": _compra_pagamento_imediato(tipo_pagamento),
+    }
+
+
+def _salvar_compra_e_itens(compra, dados, status):
+    compra.fornecedor = dados["fornecedor"]
+    compra.data_compra = dados["data_compra"]
+    compra.data_vencimento = dados["data_vencimento"]
+    compra.tipo_pagamento = dados["tipo_pagamento"]
+    compra.total = dados["total"]
+    compra.observacao = dados["observacao"]
+    compra.status = status
+    compra.save()
+
+    compra.itens.all().delete()
+    for item in dados["itens"]:
+        ItemCompra.objects.create(
+            compra=compra,
+            produto=item["produto"],
+            quantidade=item["quantidade"],
+            unidade=item["unidade"],
+            preco_unitario=item["preco_unitario"],
+            valor_total=item["valor_total"],
+            observacao=item["observacao"] or None,
+        )
+    return compra
+
+
+def _compra_editavel_ou_redireciona(compra):
+    return compra.status in {Compra.STATUS_RASCUNHO, Compra.STATUS_FINALIZACAO_INICIADA, Compra.STATUS_ABERTA}
+
+
+def _finalizar_compra_com_financeiro(compra, valores_origem=None):
+    with transaction.atomic():
+        compra = Compra.objects.select_for_update().prefetch_related("itens__produto").get(pk=compra.pk)
+        if compra.status == Compra.STATUS_FINALIZADA:
+            return
+
+        for item in compra.itens.select_related("produto").all():
+            if not item.produto_id:
+                continue
+            produto = Produto.objects.select_for_update().get(pk=item.produto_id)
+            produto.quantidade = Decimal(str(produto.quantidade or "0")) + item.quantidade
+            produto.save(update_fields=["quantidade", "atualizado_em"])
+            if compra.fornecedor_id:
+                ProdutoFornecedor.objects.update_or_create(
+                    produto=produto,
+                    fornecedor=compra.fornecedor,
+                    defaults={
+                        "ultimo_preco_compra": item.preco_unitario,
+                        "ultima_compra_em": compra.data_compra,
+                    },
+                )
+
+        compra.estoque_entrada_realizada = True
+        compra.estoque_entrada_realizada_em = timezone.now()
+        compra.status = Compra.STATUS_FINALIZADA
+        compra.save(update_fields=["estoque_entrada_realizada", "estoque_entrada_realizada_em", "status", "atualizado_em"])
+
+        if _compra_pagamento_a_prazo(compra.tipo_pagamento):
+            ContaPagar.objects.get_or_create(
+                compra=compra,
+                defaults={
+                    "fornecedor": compra.fornecedor,
+                    "data_emissao": compra.data_compra,
+                    "data_vencimento": compra.data_vencimento,
+                    "valor_original": compra.total,
+                    "valor_em_aberto": compra.total,
+                    "status": ContaPagar.STATUS_ABERTA,
+                    "observacao": compra.observacao or "",
+                },
+            )
+        else:
+            _registrar_movimentos_compra_a_vista(compra, valores_origem)
+
+
+def compras_nova(request):
+    if request.method == "POST":
+        fechamento_token = (request.POST.get("fechamento_token") or "").strip() or uuid4().hex
+        acao = request.POST.get("acao_compra") or "confirmar_financeiro"
+        try:
+            dados = _dados_compra_post(request, exigir_itens=acao != "salvar_rascunho")
+            valores_origem = None
+            if acao == "confirmar_financeiro" and dados["compra_a_vista"]:
+                valores_origem = _valores_origem_compra_post(request)
+                _validar_origem_compra_a_vista(valores_origem, dados["total"])
+        except (ValueError, IndexError) as exc:
+            messages.error(request, str(exc))
+            return redirect("estoque:compras_nova")
+
+        try:
+            with transaction.atomic():
+                compra = Compra.objects.create(
+                    fornecedor=dados["fornecedor"],
+                    data_compra=dados["data_compra"],
+                    data_vencimento=dados["data_vencimento"],
+                    tipo_pagamento=dados["tipo_pagamento"],
+                    total=dados["total"],
+                    observacao=dados["observacao"],
+                    status=Compra.STATUS_RASCUNHO,
+                    fechamento_token=fechamento_token,
+                )
+                status = Compra.STATUS_RASCUNHO
+                _salvar_compra_e_itens(compra, dados, status)
+                if acao == "confirmar_financeiro":
+                    _finalizar_compra_com_financeiro(compra, valores_origem)
+        except Exception:
+            logger.exception("Falha ao salvar compra")
+            messages.error(request, "Nao foi possivel salvar a compra.")
+            return redirect("estoque:compras_nova")
+
+        if acao == "salvar_rascunho":
+            return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1&rascunho_salvo=1")
+        if acao == "confirmar_financeiro":
+            if dados["compra_a_prazo"]:
+                messages.success(request, "Compra finalizada e conta a pagar criada com sucesso.")
+            else:
+                messages.success(request, "Compra finalizada e valores lancados no financeiro com sucesso.")
+            return redirect("estoque:compras_lista")
+        return redirect("estoque:compra_finalizar", pk=compra.pk)
+
+    return render(request, "estoque/compras_nova.html", _contexto_form_compra())
+
+
+def compra_editar(request, pk):
+    compra = get_object_or_404(Compra.objects.prefetch_related("itens__produto"), pk=pk)
+    if not _compra_editavel_ou_redireciona(compra):
+        messages.warning(request, "Compra finalizada deve ser editada pela correcao de itens.")
+        return redirect("estoque:compras_detalhe", pk=compra.pk)
+
+    if request.method == "POST":
+        acao = request.POST.get("acao_compra") or "salvar_rascunho"
+        if acao in {"voltar_rascunho", "voltar_itens", "continuar_editando"}:
+            compra.status = Compra.STATUS_RASCUNHO
+            compra.save(update_fields=["status", "atualizado_em"])
+            messages.success(request, "Compra voltou para a edicao dos itens.")
+            return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
+        try:
+            dados = _dados_compra_post(request, exigir_itens=acao != "salvar_rascunho")
+            status = Compra.STATUS_RASCUNHO
+            with transaction.atomic():
+                compra = Compra.objects.select_for_update().get(pk=compra.pk)
+                _salvar_compra_e_itens(compra, dados, status)
+        except (ValueError, IndexError) as exc:
+            messages.error(request, str(exc))
+            return redirect("estoque:compra_editar", pk=compra.pk)
+
+        if acao == "salvar_rascunho":
+            return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1&rascunho_salvo=1")
+        return redirect("estoque:compra_finalizar", pk=compra.pk)
+
+    return render(
+        request,
+        "estoque/compras_nova.html",
+        _contexto_form_compra(compra, rascunho_salvo=request.GET.get("rascunho_salvo") == "1"),
+    )
+
+
+def compra_finalizar(request, pk):
+    compra = get_object_or_404(Compra.objects.prefetch_related("itens__produto"), pk=pk)
+    if not _compra_editavel_ou_redireciona(compra):
+        return redirect("estoque:compras_detalhe", pk=compra.pk)
+
+    if request.method == "POST":
+        acao = request.POST.get("acao_compra")
+        if acao in {"voltar_rascunho", "voltar_itens", "continuar_editando"}:
+            compra.status = Compra.STATUS_RASCUNHO
+            compra.save(update_fields=["status", "atualizado_em"])
+            messages.success(request, "Compra voltou para a edicao dos itens.")
+            return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
+
+        if acao == "confirmar_financeiro":
+            if not compra.itens.exists():
+                messages.error(request, "Inclua pelo menos um item antes de finalizar.")
+                return redirect("estoque:compra_editar", pk=compra.pk)
+            valores_origem = None
+            if _compra_pagamento_imediato(compra.tipo_pagamento):
+                try:
+                    valores_origem = _valores_origem_compra_post(request)
+                    _validar_origem_compra_a_vista(valores_origem, compra.total)
+                except ValueError as exc:
+                    messages.error(request, str(exc))
+                    return redirect("estoque:compra_finalizar", pk=compra.pk)
+            try:
+                _finalizar_compra_com_financeiro(compra, valores_origem)
+            except Exception:
+                logger.exception("Falha ao finalizar compra e lancar financeiro")
+                messages.error(request, "Nao foi possivel finalizar a compra. Nenhum valor foi lancado no financeiro.")
+                return redirect("estoque:compra_finalizar", pk=compra.pk)
+            if _compra_pagamento_a_prazo(compra.tipo_pagamento):
+                messages.success(request, "Compra finalizada e conta a pagar criada com sucesso.")
+            else:
+                messages.success(request, "Compra finalizada e valores lancados no financeiro com sucesso.")
+            return redirect("estoque:compras_detalhe", pk=compra.pk)
+
+    if compra.status == Compra.STATUS_FINALIZACAO_INICIADA:
+        compra.status = Compra.STATUS_RASCUNHO
+        compra.save(update_fields=["status", "atualizado_em"])
+    return render(request, "estoque/compras_nova.html", _contexto_form_compra(compra, finalizando=True))
+
+
+@require_POST
+def compra_produto_rapido(request, pk):
+    compra = get_object_or_404(Compra, pk=pk)
+    if not _compra_editavel_ou_redireciona(compra):
+        messages.error(request, "Produto rapido so pode ser usado em compra em andamento.")
+        return redirect("estoque:compras_detalhe", pk=compra.pk)
+
+    nome = (request.POST.get("nome") or "").strip()
+    categoria = (request.POST.get("categoria") or "").strip()
+    unidade = (request.POST.get("unidade") or "").strip()
+    preco_compra = _decimal_compra(request.POST.get("preco_compra") or "0", casas=2)
+    if not nome:
+        messages.error(request, "Informe o nome do produto.")
+        return redirect("estoque:compra_editar", pk=compra.pk)
+    if _produto_existente_por_nome_normalizado(nome):
+        messages.error(request, "Ja existe um produto com esse nome.")
+        return redirect("estoque:compra_editar", pk=compra.pk)
+
+    produto = Produto.objects.create(
+        nome=nome,
+        categoria=categoria or None,
+        unidade_compra=unidade or None,
+        unidade_venda_1=unidade or None,
+        preco_compra=preco_compra,
+        preco_vista=Decimal("0.00"),
+        preco_prazo=Decimal("0.00"),
+        quantidade=Decimal("0.000"),
+        cadastro_incompleto=True,
+        permitir_prejuizo=True,
+        motivo_prejuizo="Cadastro rapido durante compra.",
+    )
+    messages.success(request, f'Produto "{produto.nome}" criado como cadastro incompleto.')
+    return redirect("estoque:compra_editar", pk=compra.pk)
 
 
 def compras_detalhe(request, pk):

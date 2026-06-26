@@ -495,8 +495,12 @@
             <td class="compras-lista-total">R$ {{ compra.total|floatformat:2 }}</td>
             <td>
               <div class="compras-lista-acoes-linha">
+          {% if compra.status == "rascunho" or compra.status == "finalizacao_iniciada" %}
+          <a href="{% url 'estoque:compra_editar' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit">Continuar</a>
+          {% else %}
           <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-view">Ver</a>
           <a href="{% url 'estoque:compra_corrigir_itens' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit">Editar</a>
+          {% endif %}
           <button type="button"
                   class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-danger btnAbrirModalExcluirCompra"
                   data-url="{% url 'estoque:compra_excluir' compra.pk %}"
@@ -543,8 +547,12 @@
           </div>
         </div>
         <div class="compras-lista-acoes-linha">
+          {% if compra.status == "rascunho" or compra.status == "finalizacao_iniciada" %}
+          <a href="{% url 'estoque:compra_editar' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit">Continuar</a>
+          {% else %}
           <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-view">Ver</a>
           <a href="{% url 'estoque:compra_corrigir_itens' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit">Editar</a>
+          {% endif %}
           <button type="button"
                   class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-danger btnAbrirModalExcluirCompra"
                   data-url="{% url 'estoque:compra_excluir' compra.pk %}"

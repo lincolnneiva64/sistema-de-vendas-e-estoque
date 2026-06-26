@@ -727,6 +727,7 @@
   .compras-alert { border-radius:12px; padding:10px 12px; margin-bottom:12px; font-weight:750; }
   .compras-alert.success { background:#ecfdf3; border:1px solid #b7e4c7; color:#166534; }
   .compras-alert.error { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
+  .compras-alert-acoes { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
   .compras-financeiro-geral {
     margin-bottom:10px;
     padding:12px 14px;
@@ -1168,8 +1169,8 @@
 <div class="compras-page">
   <header class="compras-header">
     <div>
-      <h1 class="compras-title">Nova Compra</h1>
-      <p class="compras-subtitle">Revise os itens e feche a compra junto com os lançamentos financeiros.</p>
+      <h1 class="compras-title">{% if compra %}Compra #{{ compra.id }}{% else %}Nova Compra{% endif %}</h1>
+      <p class="compras-subtitle">{% if finalizando %}Confirme a origem do dinheiro para finalizar de verdade.{% else %}Salve como rascunho quantas vezes precisar, sem lancar financeiro.{% endif %}</p>
     </div>
     <div class="compras-actions">
       <a href="{% url 'estoque:compras_lista' %}" class="compras-btn compras-btn-secondary">Compras</a>
@@ -1183,7 +1184,6 @@
       <div class="compras-alert {% if message.tags == 'error' %}error{% else %}success{% endif %}">{{ message }}</div>
     {% endfor %}
   {% endif %}
-
   <section class="compras-financeiro-geral">
     <div class="compras-financeiro-geral-topo">
       <div>
@@ -1198,6 +1198,7 @@
   <form method="post" id="formCompra">
     {% csrf_token %}
     <input type="hidden" name="fechamento_token" value="{{ fechamento_token }}">
+    <input type="hidden" name="acao_compra" id="acaoCompra" value="{% if finalizando %}confirmar_financeiro{% else %}salvar_rascunho{% endif %}">
 
     <section class="compras-card">
       <div class="compras-card-head">Dados da compra</div>
@@ -1206,11 +1207,11 @@
           <div class="compras-field">
             <label>Fornecedor</label>
             <div class="produto-autocomplete fornecedor-autocomplete">
-              <input type="text" name="fornecedor_busca" class="produto-busca fornecedor-busca" autocomplete="off" placeholder="Digite o fornecedor" required>
+              <input type="text" name="fornecedor_busca" class="produto-busca fornecedor-busca" autocomplete="off" placeholder="Digite o fornecedor" value="{{ compra.fornecedor.nome|default:'' }}" required>
               <select name="fornecedor_id" class="produto-select-real fornecedor-select-real" tabindex="-1" aria-hidden="true" required>
                 <option value="">Selecione...</option>
                 {% for fornecedor in fornecedores %}
-                  <option value="{{ fornecedor.id }}">{{ fornecedor.nome }}</option>
+                  <option value="{{ fornecedor.id }}" {% if compra.fornecedor_id == fornecedor.id %}selected{% endif %}>{{ fornecedor.nome }}</option>
                 {% endfor %}
               </select>
               <div class="produto-sugestoes fornecedor-sugestoes"></div>
@@ -1225,26 +1226,26 @@
           </div>
           <div class="compras-field">
             <label>Data da compra</label>
-            <input type="date" name="data_compra" value="{{ hoje|date:'Y-m-d' }}" required>
+            <input type="date" name="data_compra" value="{% if compra %}{{ compra.data_compra|date:'Y-m-d' }}{% else %}{{ hoje|date:'Y-m-d' }}{% endif %}" required>
           </div>
           <div class="compras-field">
             <label>Tipo de pagamento</label>
             <select name="tipo_pagamento" id="tipoPagamentoCompra">
               <option value="">Selecione...</option>
-              <option value="avista">À vista (Dinheiro / Pix)</option>
-              <option value="aprazo" selected>A prazo</option>
-              <option value="cartao_credito">Cartão crédito</option>
-              <option value="cartao_debito">Cartão débito</option>
+              <option value="avista" {% if compra.tipo_pagamento == "avista" %}selected{% endif %}>A vista (Dinheiro / Pix)</option>
+              <option value="aprazo" {% if not compra or compra.tipo_pagamento == "aprazo" %}selected{% endif %}>A prazo</option>
+              <option value="cartao_credito" {% if compra.tipo_pagamento == "cartao_credito" %}selected{% endif %}>Cartao credito</option>
+              <option value="cartao_debito" {% if compra.tipo_pagamento == "cartao_debito" %}selected{% endif %}>Cartao debito</option>
             </select>
           </div>
           <div class="compras-field" id="campoVencimentoCompra">
             <label>Vencimento</label>
-            <input type="date" name="data_vencimento" id="dataVencimentoCompra" value="{{ hoje|date:'Y-m-d' }}">
+            <input type="date" name="data_vencimento" id="dataVencimentoCompra" value="{% if compra.data_vencimento %}{{ compra.data_vencimento|date:'Y-m-d' }}{% else %}{{ hoje|date:'Y-m-d' }}{% endif %}">
           </div>
         </div>
         <div class="compras-field campo-observacao-compra" style="margin-top:10px;">
           <label>Observacao</label>
-          <textarea name="observacao" placeholder="Observacao opcional"></textarea>
+          <textarea name="observacao" placeholder="Observacao opcional">{{ compra.observacao|default:"" }}</textarea>
         </div>
       </div>
     </section>
@@ -1310,7 +1311,16 @@
       <div class="compras-card-body" id="acoesAdicionarProdutoMobile"></div>
     </section>
 
-    <section class="compras-card">
+    {% if rascunho_salvo %}
+      <div class="compras-alert success" id="avisoRascunhoSalvoCompra">
+        Rascunho salvo com sucesso.
+        <div class="compras-alert-acoes">
+          <button type="button" class="compras-btn compras-btn-secondary" id="btnContinuarLancandoItens">Continuar Lancando Itens</button>
+        </div>
+      </div>
+    {% endif %}
+
+    <section class="compras-card" id="secaoItensCompra">
       <div class="compras-card-head">Itens da compra</div>
       <div class="compras-table-wrap">
         <table class="compras-table" id="tabelaItensCompra">
@@ -1324,29 +1334,32 @@
               <th class="col-pequena">Acao</th>
             </tr>
           </thead>
-          <tbody>
+                    <tbody>
+            {% for linha in item_linhas %}
             <tr class="linha-item">
               <td data-label="Produto">
                 <div class="produto-autocomplete">
                   <div class="produto-estoque-compra">Estoque <span class="produto-estoque-valor">-</span></div>
-                  <input type="text" name="produto_busca[]" class="produto-busca" autocomplete="off" placeholder="Digite o produto">
+                  <input type="text" name="produto_busca[]" class="produto-busca" autocomplete="off" placeholder="Digite o produto" value="{{ linha.produto_nome }}">
                   <select name="produto_id[]" class="produto-select-real" tabindex="-1" aria-hidden="true">
                     <option value="">Selecione...</option>
                     {% for produto in produtos %}
-                      <option value="{{ produto.id }}" data-unidade="{{ produto.unidade_compra|default:'' }}" data-preco-compra="{{ produto.preco_compra|default:0|floatformat:2 }}" data-estoque="{{ produto.quantidade|default:0 }}">{{ produto.nome }}</option>
+                      <option value="{{ produto.id }}" data-unidade="{{ produto.unidade_compra|default:'' }}" data-preco-compra="{{ produto.preco_compra|default:0|floatformat:2 }}" data-estoque="{{ produto.quantidade|default:0 }}" {% if linha.produto_id == produto.id %}selected{% endif %}>{{ produto.nome }}</option>
                     {% endfor %}
                   </select>
                   <div class="produto-sugestoes"></div>
                   <div class="produto-historico-compra"></div>
                 </div>
               </td>
-              <td data-label="Quantidade"><input type="text" name="quantidade[]" inputmode="decimal" value="1"></td>
-              <td data-label="Unidade"><input type="text" name="unidade[]" placeholder="UN"></td>
-              <td data-label="Valor"><input type="text" name="preco_unitario[]" inputmode="decimal" value="0,00" placeholder="0,00"></td>
+              <td data-label="Quantidade"><input type="text" name="quantidade[]" inputmode="decimal" value="{{ linha.quantidade }}"></td>
+              <td data-label="Unidade"><input type="text" name="unidade[]" placeholder="UN" value="{{ linha.unidade }}"></td>
+              <td data-label="Valor"><input type="text" name="preco_unitario[]" inputmode="decimal" value="{{ linha.preco_unitario }}" placeholder="0,00"></td>
               <td data-label="Total do item" class="valor-total-item">R$ 0,00</td>
               <td data-label="Acao"><button type="button" class="compras-btn compras-btn-secondary btn-remover">Remover</button></td>
             </tr>
+            {% endfor %}
           </tbody>
+
         </table>
       </div>
       <div class="compras-total">Total: <span id="totalCompra" style="margin-left:8px;">R$ 0,00</span></div>
@@ -1355,11 +1368,37 @@
       </div>
     </section>
 
+    {% if compra %}
+    <section class="compras-card">
+      <div class="compras-card-head">Cadastrar Produto Rapido</div>
+      <div class="compras-card-body">
+        <div class="compras-grid">
+          <div class="compras-field"><label>Nome</label><input type="text" name="nome" form="formProdutoRapidoCompra" placeholder="Nome do produto"></div>
+          <div class="compras-field"><label>Categoria</label><input type="text" name="categoria" form="formProdutoRapidoCompra" placeholder="Categoria"></div>
+          <div class="compras-field"><label>Unidade</label><input type="text" name="unidade" form="formProdutoRapidoCompra" placeholder="UN"></div>
+          <div class="compras-field"><label>Preco compra</label><input type="text" name="preco_compra" form="formProdutoRapidoCompra" inputmode="decimal" placeholder="0,00"></div>
+        </div>
+        <button type="submit" form="formProdutoRapidoCompra" class="compras-btn compras-btn-secondary">Cadastrar Produto Rapido</button>
+      </div>
+    </section>
+    {% endif %}
+
     <div class="compras-actions">
       <a href="{% url 'estoque:compras_lista' %}" class="compras-btn compras-btn-secondary">Cancelar</a>
-      <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">Salvar compra</button>
+      {% if finalizando %}
+        <button type="button" class="compras-btn compras-btn-secondary" id="btnVoltarRascunhoCompra">Continuar Editando</button>
+        <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">Confirmar Pagamento</button>
+      {% else %}
+        <button type="button" class="compras-btn compras-btn-secondary" id="btnSalvarRascunhoCompra">Salvar Rascunho</button>
+        <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">Finalizar Compra</button>
+      {% endif %}
     </div>
   </form>
+  {% if compra %}
+  <form method="post" action="{% url 'estoque:compra_produto_rapido' compra.id %}" id="formProdutoRapidoCompra">
+    {% csrf_token %}
+  </form>
+  {% endif %}
 </div>
 
 <div id="modalContasPagarFornecedor" class="fornecedor-financeiro-modal">
@@ -1389,10 +1428,17 @@
 <script>
 (function() {
   const formCompra = document.getElementById("formCompra");
+  const continuarItensAoAbrir = new URLSearchParams(window.location.search).get("continuar_itens") === "1";
   const btnSalvarCompra = document.getElementById("btnSalvarCompra");
+  const btnSalvarRascunhoCompra = document.getElementById("btnSalvarRascunhoCompra");
+  const btnVoltarRascunhoCompra = document.getElementById("btnVoltarRascunhoCompra");
+  const btnContinuarLancandoItens = document.getElementById("btnContinuarLancandoItens");
+  const acaoCompra = document.getElementById("acaoCompra");
   const tabela = document.getElementById("tabelaItensCompra");
   const totalCompra = document.getElementById("totalCompra");
   const btnAdicionar = document.getElementById("btnAdicionarItem");
+  const secaoItensCompra = document.getElementById("secaoItensCompra");
+  const avisoRascunhoSalvoCompra = document.getElementById("avisoRascunhoSalvoCompra");
   const addMobileTbody = document.getElementById("tbodyAdicionarProdutoMobile");
   const acoesItensCompra = document.getElementById("acoesItensCompra");
   const acoesAdicionarMobile = document.getElementById("acoesAdicionarProdutoMobile");
@@ -1412,6 +1458,7 @@
   let fechamentoOrigemConfirmado = false;
   let envioAcionadoPeloBotao = false;
   let envioModalEmAndamento = false;
+  let botaoEnvioAtual = null;
 
   function compraMobile() {
     return mobileQuery.matches;
@@ -1670,9 +1717,10 @@
     origemDinheiroCompra.setAttribute("aria-hidden", "true");
     fechamentoOrigemConfirmado = false;
     envioAcionadoPeloBotao = false;
+    botaoEnvioAtual = null;
     if (btnSalvarCompra) {
       btnSalvarCompra.disabled = false;
-      btnSalvarCompra.textContent = "Salvar compra";
+      btnSalvarCompra.textContent = "{% if finalizando %}Confirmar Pagamento{% else %}Finalizar Compra{% endif %}";
     }
     delete formCompra.dataset.enviando;
     focarCampo(btnSalvarCompra);
@@ -2369,10 +2417,28 @@
     btnAdicionar.click();
   });
 
+  function enviarCompraComAcao(acao, botao) {
+    if (acaoCompra) acaoCompra.value = acao;
+    botaoEnvioAtual = botao || null;
+    envioAcionadoPeloBotao = true;
+    formCompra.requestSubmit ? formCompra.requestSubmit() : formCompra.submit();
+  }
+
+  if (btnSalvarRascunhoCompra && formCompra) {
+    btnSalvarRascunhoCompra.addEventListener("click", function() {
+      enviarCompraComAcao("salvar_rascunho", btnSalvarRascunhoCompra);
+    });
+  }
+
+  if (btnVoltarRascunhoCompra && formCompra) {
+    btnVoltarRascunhoCompra.addEventListener("click", function() {
+      enviarCompraComAcao("continuar_editando", btnVoltarRascunhoCompra);
+    });
+  }
+
   if (btnSalvarCompra && formCompra) {
     btnSalvarCompra.addEventListener("click", function() {
-      envioAcionadoPeloBotao = true;
-      formCompra.requestSubmit ? formCompra.requestSubmit() : formCompra.submit();
+      enviarCompraComAcao("{% if finalizando %}confirmar_financeiro{% else %}finalizar{% endif %}", btnSalvarCompra);
     });
   }
 
@@ -2395,14 +2461,19 @@
         return;
       }
 
-      if (compraAVista() && !fechamentoOrigemConfirmado) {
+      if (acaoCompra && ["voltar_rascunho", "voltar_itens", "continuar_editando"].includes(acaoCompra.value)) {
+        formCompra.dataset.enviando = "1";
+        return;
+      }
+
+      if (compraAVista() && acaoCompra && acaoCompra.value === "confirmar_financeiro" && !fechamentoOrigemConfirmado) {
         event.preventDefault();
         envioAcionadoPeloBotao = false;
         abrirOrigemDinheiroCompra();
         return;
       }
 
-      if (compraAVista() && !normalizarOrigensParaEnvio()) {
+      if (compraAVista() && acaoCompra && acaoCompra.value === "confirmar_financeiro" && !normalizarOrigensParaEnvio()) {
         event.preventDefault();
         fechamentoOrigemConfirmado = false;
         definirEnvioModalEmAndamento(false);
@@ -2420,9 +2491,9 @@
         }
       }
 
-      if (btnSalvarCompra) {
-        btnSalvarCompra.disabled = true;
-        btnSalvarCompra.textContent = "Salvando...";
+      if (botaoEnvioAtual) {
+        botaoEnvioAtual.disabled = true;
+        botaoEnvioAtual.textContent = acaoCompra && acaoCompra.value === "salvar_rascunho" ? "Salvando..." : "Enviando...";
       }
     });
   }
@@ -2479,6 +2550,7 @@
         return;
       }
       fechamentoOrigemConfirmado = true;
+      if (acaoCompra) acaoCompra.value = "confirmar_financeiro";
       envioAcionadoPeloBotao = false;
       definirEnvioModalEmAndamento(true);
       formCompra.requestSubmit ? formCompra.requestSubmit() : formCompra.submit();
@@ -2492,6 +2564,34 @@
     mobileQuery.addListener(organizarLayoutMobileCompra);
   }
   recalcular();
+
+  function focarContinuacaoItens(limparUrl) {
+    setTimeout(function() {
+      const alvoScroll = avisoRascunhoSalvoCompra || secaoItensCompra;
+      if (alvoScroll) {
+        alvoScroll.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      if (btnAdicionar) {
+        btnAdicionar.focus({ preventScroll: true });
+      }
+      if (limparUrl && window.history && window.history.replaceState) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("continuar_itens");
+        url.searchParams.delete("rascunho_salvo");
+        window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+      }
+    }, 220);
+  }
+
+  if (btnContinuarLancandoItens) {
+    btnContinuarLancandoItens.addEventListener("click", function() {
+      focarContinuacaoItens(false);
+    });
+  }
+
+  if (continuarItensAoAbrir) {
+    focarContinuacaoItens(true);
+  }
 })();
 </script>
 
@@ -2499,6 +2599,7 @@
 (function() {
   const form = document.getElementById("formCompra");
   if (!form) return;
+  const continuarItensAoAbrir = new URLSearchParams(window.location.search).get("continuar_itens") === "1";
 
   const fornecedor = form.querySelector('[name="fornecedor_id"]');
   const fornecedorBusca = form.querySelector('[name="fornecedor_busca"]');
@@ -2802,10 +2903,13 @@
 
   window.addEventListener("load", function() {
     atualizarVencimentoCompra();
-    selecionarPrimeiroFornecedor();
+    if (!continuarItensAoAbrir) {
+      selecionarPrimeiroFornecedor();
+    }
     fecharSugestoesFornecedor();
 
     setTimeout(function() {
+      if (continuarItensAoAbrir) return;
       bloquearAberturaInicialFornecedor = true;
       focar(fornecedorBusca);
       fecharSugestoesFornecedor();
