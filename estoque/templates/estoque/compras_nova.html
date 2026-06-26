@@ -189,6 +189,131 @@
   carregarContas();
 })();
 </script>
+
+<script>
+/* CORRIGE ESTOQUE INICIAL DOS ITENS DA COMPRA */
+(function() {
+  function atualizarEstoqueLinhaCompra(linha) {
+    if (!linha) return;
+
+    var select = linha.querySelector(".produto-select-real");
+    var estoqueValor = linha.querySelector(".produto-estoque-valor");
+
+    if (!select || !estoqueValor) return;
+
+    var opt = select.options[select.selectedIndex];
+
+    if (select.value && opt) {
+      estoqueValor.textContent = opt.dataset.estoque || "0";
+    } else {
+      estoqueValor.textContent = "-";
+    }
+  }
+
+  function atualizarTodosEstoquesCompra() {
+    document.querySelectorAll("#tabelaItensCompra .linha-item").forEach(function(linha) {
+      atualizarEstoqueLinhaCompra(linha);
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", function() {
+    atualizarTodosEstoquesCompra();
+    setTimeout(atualizarTodosEstoquesCompra, 150);
+    setTimeout(atualizarTodosEstoquesCompra, 600);
+
+    document.querySelectorAll("#tabelaItensCompra .produto-select-real").forEach(function(select) {
+      select.addEventListener("change", function() {
+        atualizarEstoqueLinhaCompra(select.closest(".linha-item"));
+      });
+    });
+  });
+})();
+</script>
+
+
+<script>
+/* SINCRONIZA ESTOQUE DA SUGESTAO ATIVA */
+(function() {
+  function optionPorProdutoId(linha, produtoId) {
+    if (!linha || !produtoId) return null;
+    var select = linha.querySelector(".produto-select-real");
+    if (!select) return null;
+
+    return Array.from(select.options || []).find(function(opt) {
+      return opt.value === String(produtoId);
+    }) || null;
+  }
+
+  function atualizarEstoqueTopoPelaSugestao(linha) {
+    if (!linha) return;
+
+    var estoqueValor = linha.querySelector(".produto-estoque-valor");
+    if (!estoqueValor) return;
+
+    var sugestaoAtiva = linha.querySelector(".produto-sugestao.ativa");
+    var primeiraSugestao = linha.querySelector(".produto-sugestao");
+    var sugestao = sugestaoAtiva || primeiraSugestao;
+
+    if (!sugestao || !sugestao.dataset.produtoId) {
+      return;
+    }
+
+    var opt = optionPorProdutoId(linha, sugestao.dataset.produtoId);
+    if (opt) {
+      estoqueValor.textContent = opt.dataset.estoque || "0";
+    }
+  }
+
+  function agendarAtualizacaoEstoque(campo) {
+    var linha = campo ? campo.closest(".linha-item") : null;
+    if (!linha) return;
+
+    setTimeout(function() {
+      atualizarEstoqueTopoPelaSugestao(linha);
+    }, 0);
+
+    setTimeout(function() {
+      atualizarEstoqueTopoPelaSugestao(linha);
+    }, 80);
+  }
+
+  document.addEventListener("input", function(event) {
+    if (event.target && event.target.matches('[name="produto_busca[]"]')) {
+      agendarAtualizacaoEstoque(event.target);
+    }
+  });
+
+  document.addEventListener("keyup", function(event) {
+    if (event.target && event.target.matches('[name="produto_busca[]"]')) {
+      agendarAtualizacaoEstoque(event.target);
+    }
+  });
+
+  document.addEventListener("keydown", function(event) {
+    if (event.target && event.target.matches('[name="produto_busca[]"]')) {
+      if (["ArrowDown", "ArrowUp"].includes(event.key)) {
+        agendarAtualizacaoEstoque(event.target);
+      }
+    }
+  });
+
+  document.addEventListener("mouseover", function(event) {
+    var sugestao = event.target ? event.target.closest(".produto-sugestao") : null;
+    if (!sugestao) return;
+
+    var linha = sugestao.closest(".linha-item");
+    if (!linha) return;
+
+    var estoqueValor = linha.querySelector(".produto-estoque-valor");
+    var opt = optionPorProdutoId(linha, sugestao.dataset.produtoId);
+
+    if (estoqueValor && opt) {
+      estoqueValor.textContent = opt.dataset.estoque || "0";
+    }
+  });
+})();
+</script>
+
 {% endblock %}
 {% block content %}
 
@@ -2130,6 +2255,7 @@
 
     const botaoAtivo = botoes[novoIndice];
     const optAtiva = botaoAtivo ? opcaoPorId(linha, botaoAtivo.dataset.produtoId) : null;
+    atualizarEstoquePreviewCompra(linha, optAtiva);
     botoes[novoIndice].scrollIntoView({ block: "nearest" });
   }
 
