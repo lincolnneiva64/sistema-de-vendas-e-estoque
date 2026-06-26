@@ -4019,6 +4019,8 @@ def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None,
     return {
         "fornecedores": Fornecedor.objects.filter(ativo=True).order_by("nome", "id"),
         "produtos": _produto_opcoes_compra(),
+        "categorias_produto": Categoria.objects.filter(ativa=True).order_by("nome"),
+        "unidades_produto": Unidade.objects.filter(ativa=True).order_by("sigla", "nome"),
         "hoje": timezone.localdate(),
         "compra": compra,
         "finalizando": finalizando,
@@ -4304,30 +4306,35 @@ def compra_produto_rapido(request, pk):
 
     nome = (request.POST.get("nome") or "").strip()
     categoria = (request.POST.get("categoria") or "").strip()
-    unidade = (request.POST.get("unidade") or "").strip()
+    unidade = (request.POST.get("unidade") or "").strip().upper()
     preco_compra = _decimal_compra(request.POST.get("preco_compra") or "0", casas=2)
     if not nome:
         messages.error(request, "Informe o nome do produto.")
-        return redirect("estoque:compra_editar", pk=compra.pk)
+        return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
     if _produto_existente_por_nome_normalizado(nome):
         messages.error(request, "Ja existe um produto com esse nome.")
-        return redirect("estoque:compra_editar", pk=compra.pk)
+        return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
 
-    produto = Produto.objects.create(
-        nome=nome,
-        categoria=categoria or None,
-        unidade_compra=unidade or None,
-        unidade_venda_1=unidade or None,
-        preco_compra=preco_compra,
-        preco_vista=Decimal("0.00"),
-        preco_prazo=Decimal("0.00"),
-        quantidade=Decimal("0.000"),
-        cadastro_incompleto=True,
-        permitir_prejuizo=True,
-        motivo_prejuizo="Cadastro rapido durante compra.",
-    )
+    preco_minimo = preco_compra if preco_compra > 0 else Decimal("0.01")
+    try:
+        produto = Produto.objects.create(
+            nome=nome,
+            categoria=categoria or None,
+            unidade_compra=unidade or None,
+            unidade_venda_1=unidade or None,
+            preco_compra=preco_compra,
+            preco_vista=preco_minimo,
+            preco_prazo=preco_minimo,
+            quantidade=Decimal("0.000"),
+            cadastro_incompleto=True,
+            permitir_prejuizo=True,
+            motivo_prejuizo="Cadastro rapido durante compra.",
+        )
+    except ValidationError as exc:
+        messages.error(request, "; ".join(exc.messages) if hasattr(exc, "messages") else str(exc))
+        return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
     messages.success(request, f'Produto "{produto.nome}" criado como cadastro incompleto.')
-    return redirect("estoque:compra_editar", pk=compra.pk)
+    return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
 
 
 def compras_detalhe(request, pk):

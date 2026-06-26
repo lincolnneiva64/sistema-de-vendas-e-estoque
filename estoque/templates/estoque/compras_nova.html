@@ -1381,9 +1381,25 @@
       <div class="compras-card-head">Cadastrar Produto Rapido</div>
       <div class="compras-card-body">
         <div class="compras-grid">
-          <div class="compras-field"><label>Nome</label><input type="text" name="nome" form="formProdutoRapidoCompra" placeholder="Nome do produto"></div>
-          <div class="compras-field"><label>Categoria</label><input type="text" name="categoria" form="formProdutoRapidoCompra" placeholder="Categoria"></div>
-          <div class="compras-field"><label>Unidade</label><input type="text" name="unidade" form="formProdutoRapidoCompra" placeholder="UN"></div>
+          <div class="compras-field"><label>Nome</label><input type="text" name="nome" form="formProdutoRapidoCompra" placeholder="Nome do produto" required></div>
+          <div class="compras-field">
+            <label>Categoria</label>
+            <input type="text" name="categoria" form="formProdutoRapidoCompra" list="categoriasProdutoRapidoCompra" placeholder="Categoria" autocomplete="off">
+            <datalist id="categoriasProdutoRapidoCompra">
+              {% for categoria in categorias_produto %}
+                <option value="{{ categoria.nome }}"></option>
+              {% endfor %}
+            </datalist>
+          </div>
+          <div class="compras-field">
+            <label>Unidade</label>
+            <input type="text" name="unidade" form="formProdutoRapidoCompra" list="unidadesProdutoRapidoCompra" placeholder="UN" autocomplete="off">
+            <datalist id="unidadesProdutoRapidoCompra">
+              {% for unidade in unidades_produto %}
+                <option value="{{ unidade.sigla }}">{{ unidade.nome }}</option>
+              {% endfor %}
+            </datalist>
+          </div>
           <div class="compras-field"><label>Preco compra</label><input type="text" name="preco_compra" form="formProdutoRapidoCompra" inputmode="decimal" placeholder="0,00"></div>
         </div>
         <button type="submit" form="formProdutoRapidoCompra" class="compras-btn compras-btn-secondary">Cadastrar Produto Rapido</button>
