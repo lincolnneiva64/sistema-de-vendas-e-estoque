@@ -235,6 +235,82 @@
     width:100%; border:1.5px solid #d3dbe8; border-radius:9px; padding:9px 11px; font-weight:600; outline:none;
   }
   .compras-field textarea { min-height:52px; resize:vertical; }
+  .compra-bloco-recolhido { display:none !important; }
+  .produto-rapido-escolha {
+    width:100%;
+    min-height:42px;
+    border:1.5px solid #d3dbe8;
+    border-radius:9px;
+    padding:9px 11px;
+    background:#fff;
+    color:#172033;
+    font-weight:750;
+    text-align:left;
+    cursor:pointer;
+  }
+  .produto-rapido-escolha span {
+    color:#64748b;
+    font-weight:650;
+  }
+  .produto-rapido-modal {
+    position:fixed;
+    inset:0;
+    z-index:9200;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:12px;
+    background:rgba(15,23,42,.55);
+  }
+  .produto-rapido-modal.aberto { display:flex; }
+  .produto-rapido-modal-card {
+    width:min(520px, 100%);
+    max-height:min(82vh, 680px);
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+    border-radius:14px;
+    background:#fff;
+    box-shadow:0 24px 56px rgba(15,23,42,.28);
+  }
+  .produto-rapido-modal-topo {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:13px 14px;
+    border-bottom:1px solid #e5ebf3;
+  }
+  .produto-rapido-modal-topo h2 {
+    margin:0;
+    color:#172033;
+    font-size:1rem;
+    font-weight:950;
+  }
+  .produto-rapido-modal-lista {
+    display:grid;
+    gap:8px;
+    padding:12px;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  .produto-rapido-opcao {
+    width:100%;
+    min-height:46px;
+    border:1px solid #bfdbfe;
+    border-radius:10px;
+    padding:10px 12px;
+    background:#eff6ff;
+    color:#172554;
+    font-weight:900;
+    text-align:left;
+    cursor:pointer;
+  }
+  .produto-rapido-opcao:focus,
+  .produto-rapido-opcao:hover {
+    outline:3px solid rgba(37,99,235,.24);
+    background:#dbeafe;
+  }
   .compras-prazo-info {
     display:none;
     margin-top:8px;
@@ -1062,6 +1138,26 @@
       overflow-y:auto;
       -webkit-overflow-scrolling:touch;
     }
+    .produto-rapido-escolha {
+      min-height:50px;
+      padding:12px;
+      font-size:1rem;
+      font-weight:900;
+    }
+    .produto-rapido-modal {
+      align-items:flex-end;
+      padding:10px;
+    }
+    .produto-rapido-modal-card {
+      width:100%;
+      max-height:78vh;
+      border-radius:14px 14px 10px 10px;
+    }
+    .produto-rapido-modal-topo h2 { font-size:1.08rem; }
+    .produto-rapido-opcao {
+      min-height:52px;
+      font-size:1rem;
+    }
   }
 
 .compra-atalhos-lateral {
@@ -1299,7 +1395,7 @@
       </div>
     </section>
 
-    <section class="compras-card compras-mobile-add-card" id="areaAdicionarProdutoMobile">
+    <section class="compras-card compras-mobile-add-card{% if rascunho_salvo %} compra-bloco-recolhido{% endif %}" id="areaAdicionarProdutoMobile">
       <div class="compras-card-head">Adicionar produto</div>
       <div class="compras-table-wrap">
         <table class="compras-table" id="tabelaAdicionarProdutoMobile">
@@ -1377,28 +1473,20 @@
     </section>
 
     {% if compra %}
-    <section class="compras-card">
+    <section class="compras-card{% if rascunho_salvo %} compra-bloco-recolhido{% endif %}" id="secaoProdutoRapidoCompra">
       <div class="compras-card-head">Cadastrar Produto Rapido</div>
       <div class="compras-card-body">
         <div class="compras-grid">
           <div class="compras-field"><label>Nome</label><input type="text" name="nome" form="formProdutoRapidoCompra" placeholder="Nome do produto" required></div>
           <div class="compras-field">
             <label>Categoria</label>
-            <input type="text" name="categoria" form="formProdutoRapidoCompra" list="categoriasProdutoRapidoCompra" placeholder="Categoria" autocomplete="off">
-            <datalist id="categoriasProdutoRapidoCompra">
-              {% for categoria in categorias_produto %}
-                <option value="{{ categoria.nome }}"></option>
-              {% endfor %}
-            </datalist>
+            <input type="hidden" name="categoria" form="formProdutoRapidoCompra" id="produtoRapidoCategoria">
+            <button type="button" class="produto-rapido-escolha" id="abrirCategoriaProdutoRapido"><span>Escolher categoria</span></button>
           </div>
           <div class="compras-field">
             <label>Unidade</label>
-            <input type="text" name="unidade" form="formProdutoRapidoCompra" list="unidadesProdutoRapidoCompra" placeholder="UN" autocomplete="off">
-            <datalist id="unidadesProdutoRapidoCompra">
-              {% for unidade in unidades_produto %}
-                <option value="{{ unidade.sigla }}">{{ unidade.nome }}</option>
-              {% endfor %}
-            </datalist>
+            <input type="hidden" name="unidade" form="formProdutoRapidoCompra" id="produtoRapidoUnidade">
+            <button type="button" class="produto-rapido-escolha" id="abrirUnidadeProdutoRapido"><span>Escolher unidade</span></button>
           </div>
           <div class="compras-field"><label>Preco compra</label><input type="text" name="preco_compra" form="formProdutoRapidoCompra" inputmode="decimal" placeholder="0,00"></div>
         </div>
@@ -1424,6 +1512,40 @@
   </form>
   {% endif %}
 </div>
+
+{% if compra %}
+<div class="produto-rapido-modal" id="modalCategoriaProdutoRapido" aria-hidden="true">
+  <div class="produto-rapido-modal-card" role="dialog" aria-modal="true" aria-labelledby="tituloCategoriaProdutoRapido">
+    <div class="produto-rapido-modal-topo">
+      <h2 id="tituloCategoriaProdutoRapido">Escolher categoria</h2>
+      <button type="button" class="compras-btn compras-btn-secondary" data-fechar-produto-rapido-modal>Fechar</button>
+    </div>
+    <div class="produto-rapido-modal-lista">
+      {% for categoria in categorias_produto %}
+        <button type="button" class="produto-rapido-opcao" data-produto-rapido-categoria="{{ categoria.nome }}">{{ categoria.nome }}</button>
+      {% empty %}
+        <button type="button" class="produto-rapido-opcao" data-fechar-produto-rapido-modal>Nenhuma categoria ativa</button>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="produto-rapido-modal" id="modalUnidadeProdutoRapido" aria-hidden="true">
+  <div class="produto-rapido-modal-card" role="dialog" aria-modal="true" aria-labelledby="tituloUnidadeProdutoRapido">
+    <div class="produto-rapido-modal-topo">
+      <h2 id="tituloUnidadeProdutoRapido">Escolher unidade</h2>
+      <button type="button" class="compras-btn compras-btn-secondary" data-fechar-produto-rapido-modal>Fechar</button>
+    </div>
+    <div class="produto-rapido-modal-lista">
+      {% for unidade in unidades_produto %}
+        <button type="button" class="produto-rapido-opcao" data-produto-rapido-unidade="{{ unidade.sigla }}">{{ unidade.sigla }}{% if unidade.nome %} - {{ unidade.nome }}{% endif %}</button>
+      {% empty %}
+        <button type="button" class="produto-rapido-opcao" data-fechar-produto-rapido-modal>Nenhuma unidade ativa</button>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <div id="modalContasPagarFornecedor" class="fornecedor-financeiro-modal">
   <div class="fornecedor-financeiro-caixa">
@@ -1466,6 +1588,7 @@
   const btnAdicionar = document.getElementById("btnAdicionarItem");
   const secaoItensCompra = document.getElementById("secaoItensCompra");
   const areaAdicionarProdutoMobile = document.getElementById("areaAdicionarProdutoMobile");
+  const secaoProdutoRapidoCompra = document.getElementById("secaoProdutoRapidoCompra");
   const avisoRascunhoSalvoCompra = document.getElementById("avisoRascunhoSalvoCompra");
   const addMobileTbody = document.getElementById("tbodyAdicionarProdutoMobile");
   const acoesItensCompra = document.getElementById("acoesItensCompra");
@@ -2607,7 +2730,7 @@
 
   function focarContinuacaoItens(limparUrl) {
     setTimeout(function() {
-      const alvoScroll = avisoRascunhoSalvoCompra || (compraMobile() && areaAdicionarProdutoMobile ? areaAdicionarProdutoMobile : secaoItensCompra);
+      const alvoScroll = compraMobile() && areaAdicionarProdutoMobile ? areaAdicionarProdutoMobile : secaoItensCompra;
       if (alvoScroll) {
         alvoScroll.scrollIntoView({ behavior: "smooth", block: "start" });
       }
@@ -2635,6 +2758,13 @@
 
   if (btnContinuarLancandoItens) {
     btnContinuarLancandoItens.addEventListener("click", function() {
+      if (areaAdicionarProdutoMobile) {
+        areaAdicionarProdutoMobile.classList.remove("compra-bloco-recolhido");
+      }
+      if (secaoProdutoRapidoCompra) {
+        secaoProdutoRapidoCompra.classList.remove("compra-bloco-recolhido");
+      }
+      organizarLayoutMobileCompra();
       focarContinuacaoItens(true);
     });
   }
@@ -2968,6 +3098,94 @@
       focar(fornecedorBusca);
       fecharSugestoesFornecedor();
     }, 150);
+  });
+})();
+</script>
+
+<script>
+(function() {
+  const botaoCategoria = document.getElementById("abrirCategoriaProdutoRapido");
+  const botaoUnidade = document.getElementById("abrirUnidadeProdutoRapido");
+  const campoCategoria = document.getElementById("produtoRapidoCategoria");
+  const campoUnidade = document.getElementById("produtoRapidoUnidade");
+  const modalCategoria = document.getElementById("modalCategoriaProdutoRapido");
+  const modalUnidade = document.getElementById("modalUnidadeProdutoRapido");
+
+  function abrirModal(modal) {
+    if (!modal) return;
+    modal.classList.add("aberto");
+    modal.setAttribute("aria-hidden", "false");
+    const primeiraOpcao = modal.querySelector(".produto-rapido-opcao");
+    if (primeiraOpcao) {
+      setTimeout(function() { primeiraOpcao.focus(); }, 80);
+    }
+  }
+
+  function fecharModal(modal) {
+    if (!modal) return;
+    modal.classList.remove("aberto");
+    modal.setAttribute("aria-hidden", "true");
+  }
+
+  function fecharTodos() {
+    fecharModal(modalCategoria);
+    fecharModal(modalUnidade);
+  }
+
+  function atualizarBotao(botao, texto) {
+    if (!botao) return;
+    botao.textContent = texto || "";
+    if (!texto) {
+      botao.innerHTML = "<span>Escolher</span>";
+    }
+  }
+
+  if (botaoCategoria) {
+    botaoCategoria.addEventListener("click", function() {
+      abrirModal(modalCategoria);
+    });
+  }
+
+  if (botaoUnidade) {
+    botaoUnidade.addEventListener("click", function() {
+      abrirModal(modalUnidade);
+    });
+  }
+
+  document.querySelectorAll("[data-produto-rapido-categoria]").forEach(function(botao) {
+    botao.addEventListener("click", function() {
+      const valor = botao.dataset.produtoRapidoCategoria || "";
+      if (campoCategoria) campoCategoria.value = valor;
+      atualizarBotao(botaoCategoria, valor);
+      fecharModal(modalCategoria);
+      if (botaoUnidade) botaoUnidade.focus();
+    });
+  });
+
+  document.querySelectorAll("[data-produto-rapido-unidade]").forEach(function(botao) {
+    botao.addEventListener("click", function() {
+      const valor = botao.dataset.produtoRapidoUnidade || "";
+      if (campoUnidade) campoUnidade.value = valor;
+      atualizarBotao(botaoUnidade, valor);
+      fecharModal(modalUnidade);
+      const preco = document.querySelector('[name="preco_compra"][form="formProdutoRapidoCompra"]');
+      if (preco) preco.focus();
+    });
+  });
+
+  document.querySelectorAll("[data-fechar-produto-rapido-modal]").forEach(function(botao) {
+    botao.addEventListener("click", fecharTodos);
+  });
+
+  [modalCategoria, modalUnidade].forEach(function(modal) {
+    if (!modal) return;
+    modal.addEventListener("click", function(event) {
+      if (event.target === modal) fecharModal(modal);
+    });
+  });
+
+  document.addEventListener("keydown", function(event) {
+    if (event.key === "Escape") fecharTodos();
   });
 })();
 </script>
