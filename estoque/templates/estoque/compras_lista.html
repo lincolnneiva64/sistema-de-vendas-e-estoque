@@ -497,7 +497,7 @@
             <td>
               <div class="compras-lista-acoes-linha" data-compra-id="{{ compra.id }}">
           {% if compra.status == "rascunho" or compra.status == "finalizacao_iniciada" %}
-          <a href="{% url 'estoque:compra_editar' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit" data-compra-id="{{ compra.id }}">Continuar Compra #{{ compra.id }}</a>
+          <a href="{% url 'estoque:compra_editar' compra.pk %}?continuar_itens=1" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit" data-compra-id="{{ compra.id }}">Continuar Compra #{{ compra.id }}</a>
           {% else %}
           <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-view" data-compra-id="{{ compra.id }}">Ver Compra #{{ compra.id }}</a>
           <a href="{% url 'estoque:compra_corrigir_itens' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit" data-compra-id="{{ compra.id }}">Editar Compra #{{ compra.id }}</a>
@@ -553,7 +553,7 @@
         </div>
         <div class="compras-lista-acoes-linha" data-compra-id="{{ compra.id }}">
           {% if compra.status == "rascunho" or compra.status == "finalizacao_iniciada" %}
-          <a href="{% url 'estoque:compra_editar' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit" data-compra-id="{{ compra.id }}">Continuar Compra #{{ compra.id }}</a>
+          <a href="{% url 'estoque:compra_editar' compra.pk %}?continuar_itens=1" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit" data-compra-id="{{ compra.id }}">Continuar Compra #{{ compra.id }}</a>
           {% else %}
           <a href="{% url 'estoque:compras_detalhe' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-view" data-compra-id="{{ compra.id }}">Ver Compra #{{ compra.id }}</a>
           <a href="{% url 'estoque:compra_corrigir_itens' compra.pk %}" class="compras-lista-btn compras-lista-btn-compact compras-lista-btn-edit" data-compra-id="{{ compra.id }}">Editar Compra #{{ compra.id }}</a>

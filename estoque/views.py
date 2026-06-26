@@ -3756,7 +3756,10 @@ def compras_lista(request):
     hoje = timezone.localdate()
     compras_lista_filtrada = []
     for compra in compras:
-        compra.total_lista = (compra.total_itens_calculado or compra.total or Decimal("0.00")).quantize(Decimal("0.01"))
+        total_calculado = compra.total_itens_calculado
+        if total_calculado is None:
+            total_calculado = Decimal("0.00")
+        compra.total_lista = total_calculado.quantize(Decimal("0.01"))
         compra.situacao_financeira_texto, compra.situacao_financeira_classe = (
             _situacao_financeira_compra_lista(compra, hoje)
         )

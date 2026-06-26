@@ -1449,6 +1449,7 @@
   const totalCompraCabecalho = document.getElementById("totalCompraCabecalho");
   const btnAdicionar = document.getElementById("btnAdicionarItem");
   const secaoItensCompra = document.getElementById("secaoItensCompra");
+  const areaAdicionarProdutoMobile = document.getElementById("areaAdicionarProdutoMobile");
   const avisoRascunhoSalvoCompra = document.getElementById("avisoRascunhoSalvoCompra");
   const addMobileTbody = document.getElementById("tbodyAdicionarProdutoMobile");
   const acoesItensCompra = document.getElementById("acoesItensCompra");
@@ -1531,8 +1532,13 @@
     if (compraMobile()) {
       if (!linhaFormularioMobile()) {
         const primeiraLinha = tabela.querySelector("tbody .linha-item");
-        if (primeiraLinha) {
+        if (primeiraLinha && linhaSemProduto(primeiraLinha)) {
           moverLinhaParaFormularioMobile(primeiraLinha);
+        } else {
+          const novaLinha = criarLinhaItem();
+          if (novaLinha) {
+            moverLinhaParaFormularioMobile(novaLinha);
+          }
         }
       }
     } else {
@@ -1773,10 +1779,12 @@
       const quantidade = numero(linha.querySelector('[name="quantidade[]"]').value);
       const preco = numero(linha.querySelector('[name="preco_unitario[]"]').value);
       const subtotal = quantidade * preco;
-      if (!compraMobile() || !linhaNoFormularioMobile(linha)) {
-        total += subtotal;
-      }
       linha.querySelector(".valor-total-item").textContent = moeda(subtotal);
+    });
+    tabela.querySelectorAll("tbody .linha-item").forEach((linha) => {
+      const quantidade = numero(linha.querySelector('[name="quantidade[]"]').value);
+      const preco = numero(linha.querySelector('[name="preco_unitario[]"]').value);
+      total += quantidade * preco;
     });
     totalCompra.textContent = moeda(total);
     if (totalCompraCabecalho) {
@@ -2500,8 +2508,10 @@
 
       if (compraMobile()) {
         const linhaAtual = linhaFormularioMobile();
-        if (linhaAtual && produtoSelecionadoValido(linhaAtual)) {
-          publicarLinhaMobile(linhaAtual);
+        if (linhaAtual) {
+          linhaAtual.querySelectorAll("input, select, textarea").forEach(function(campo) {
+            campo.disabled = true;
+          });
         }
       }
 
@@ -2581,12 +2591,15 @@
 
   function focarContinuacaoItens(limparUrl) {
     setTimeout(function() {
-      const alvoScroll = avisoRascunhoSalvoCompra || secaoItensCompra;
+      const alvoScroll = avisoRascunhoSalvoCompra || (compraMobile() && areaAdicionarProdutoMobile ? areaAdicionarProdutoMobile : secaoItensCompra);
       if (alvoScroll) {
         alvoScroll.scrollIntoView({ behavior: "smooth", block: "start" });
       }
-      if (btnAdicionar) {
-        btnAdicionar.focus({ preventScroll: true });
+      const linhaMobile = compraMobile() ? linhaFormularioMobile() : null;
+      const campoProdutoMobile = linhaMobile ? linhaMobile.querySelector('[name="produto_busca[]"]') : null;
+      const alvoFoco = campoProdutoMobile || btnAdicionar;
+      if (alvoFoco) {
+        alvoFoco.focus({ preventScroll: true });
       }
       if (limparUrl && window.history && window.history.replaceState) {
         const url = new URL(window.location.href);
