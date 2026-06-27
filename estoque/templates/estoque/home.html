@@ -1,5 +1,123 @@
 {% extends 'estoque/base.html' %}
 {% block content %}
+
+<!-- AVISO PRODUTOS INCOMPLETOS - INICIO -->
+<style>
+.produtos-incompletos-alerta {
+  max-width: 1180px;
+  margin: 8px auto 12px;
+  padding: 10px 12px;
+  border: 1.5px solid #f59e0b;
+  border-radius: 12px;
+  background: #fffbeb;
+  color: #172033;
+  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.10);
+}
+.produtos-incompletos-alerta h2 {
+  margin: 0 0 3px;
+  font-size: .98rem;
+  font-weight: 950;
+  color: #92400e;
+}
+.produtos-incompletos-alerta p {
+  margin: 0;
+  font-size: .9rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.produtos-incompletos-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.produtos-incompletos-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 6px 11px;
+  border-radius: 9px;
+  border: 1px solid #d97706;
+  background: #f59e0b;
+  color: #111827 !important;
+  font-size: .88rem;
+  font-weight: 900;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.produtos-incompletos-lista {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+.produtos-incompletos-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  border: 1px solid #fde68a;
+  border-radius: 9px;
+  background: #fff;
+}
+.produtos-incompletos-item strong {
+  font-size: .9rem;
+}
+@media (max-width: 768px) {
+  .produtos-incompletos-alerta {
+    margin: 8px 8px 12px;
+    padding: 10px;
+    border-radius: 11px;
+  }
+  .produtos-incompletos-topo {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .produtos-incompletos-btn {
+    width: 100%;
+  }
+  .produtos-incompletos-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+</style>
+
+{% if produtos_incompletos_home_qtd %}
+<section class="produtos-incompletos-alerta" id="produtos-incompletos-alerta">
+  <div class="produtos-incompletos-topo">
+    <div>
+      <h2>Produtos incompletos</h2>
+      <p>
+        {{ produtos_incompletos_home_qtd }} produto{{ produtos_incompletos_home_qtd|pluralize }} cadastrado{{ produtos_incompletos_home_qtd|pluralize }} rapidamente precisa{{ produtos_incompletos_home_qtd|pluralize:"m" }} ser completado{{ produtos_incompletos_home_qtd|pluralize }}.
+      </p>
+    </div>
+    <a class="produtos-incompletos-btn" href="?incompletos=1#produtos-incompletos-alerta">Ver produtos</a>
+  </div>
+
+  {% if mostrar_produtos_incompletos_home %}
+    <div class="produtos-incompletos-lista">
+      {% for produto in produtos_incompletos_home %}
+        <div class="produtos-incompletos-item">
+          <strong>{{ produto.nome }}</strong>
+          <a class="produtos-incompletos-btn" href="{% url 'estoque:produto_editar' produto.id %}?next={% url 'estoque:home' %}%3Fincompletos%3D1%23produtos-incompletos-alerta">Completar cadastro</a>
+        </div>
+      {% endfor %}
+      {% if produtos_incompletos_home_qtd > 8 %}
+        <div class="produtos-incompletos-item">
+          <strong>H? mais produtos incompletos. Complete os primeiros e atualize a p?gina.</strong>
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+</section>
+{% endif %}
+<!-- AVISO PRODUTOS INCOMPLETOS - FIM -->
+
+
 <style>
 .linha-destacada {
   background-color: #eff6ff !important;

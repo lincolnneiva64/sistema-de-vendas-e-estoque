@@ -1227,10 +1227,32 @@ def home(request):
 
     categorias_ativas = Categoria.objects.filter(ativa=True).order_by("nome")
 
+
+    produtos_incompletos_home_qs = (
+
+        Produto.objects
+
+        .filter(excluido=False, cadastro_incompleto=True)
+
+        .order_by("nome", "id")
+
+    )
+
+    produtos_incompletos_home_qtd = produtos_incompletos_home_qs.count()
+
+    produtos_incompletos_home = list(produtos_incompletos_home_qs[:8])
+
+    mostrar_produtos_incompletos_home = request.GET.get("incompletos") == "1"
+
+
     return render(
         request,
         "estoque/home.html",
         {
+        "produtos_incompletos_home": produtos_incompletos_home,
+        "produtos_incompletos_home_qtd": produtos_incompletos_home_qtd,
+        "mostrar_produtos_incompletos_home": mostrar_produtos_incompletos_home,
+
             "produtos": produtos,
             "produto_edicao": produto_edicao,
             "form": form,
@@ -5920,7 +5942,11 @@ def produto_editar(request, pk):
     if request.method == "POST":
         form = ProdutoForm(request.POST, instance=produto)
         if form.is_valid():
-            form.save()
+            produto = form.save(commit=False)
+            produto.cadastro_incompleto = False
+            produto.save()
+            if hasattr(form, "save_m2m"):
+                form.save_m2m()
             return redirect(f"{reverse('estoque:home')}?produto_destacado={produto.id}")
         else:
             print("ERROS DO FORM EDITAR:", form.errors)
@@ -6054,7 +6080,19 @@ def vendas(request):
     ).only("total", "tipo_pagamento")
     resumo_vendas_hoje = _calcular_resumo_vendas(vendas_hoje)
 
+    produtos_incompletos_vendas_qs = (
+        Produto.objects
+        .filter(excluido=False, cadastro_incompleto=True)
+        .order_by("nome", "id")
+    )
+    produtos_incompletos_vendas_qtd = produtos_incompletos_vendas_qs.count()
+    produtos_incompletos_vendas = list(produtos_incompletos_vendas_qs[:5])
+    mostrar_produtos_incompletos_vendas = request.GET.get("incompletos") == "1"
+
     return render(request, 'estoque/vendas_layout_teste.html', {
+        'produtos_incompletos_vendas': produtos_incompletos_vendas,
+        'produtos_incompletos_vendas_qtd': produtos_incompletos_vendas_qtd,
+        'mostrar_produtos_incompletos_vendas': mostrar_produtos_incompletos_vendas,
         'produtos': produtos,
         'operadores_venda': operadores_venda,
         'cliente_inicial': cliente_inicial,
