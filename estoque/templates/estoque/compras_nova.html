@@ -1540,7 +1540,7 @@
 
     <section class="compras-card compras-mobile-add-card{% if rascunho_salvo %} compra-bloco-recolhido{% endif %}" id="areaAdicionarProdutoMobile">
       <div class="compras-card-head">Adicionar produto</div>
-      <div class="compras-table-wrap" id="blocoLancamentoItensMobile">
+      <div class="compras-table-wrap">
         <table class="compras-table" id="tabelaAdicionarProdutoMobile">
           <thead>
             <tr>
@@ -1860,11 +1860,11 @@
 
     const linhaMobile = linhaFormularioMobile();
     const produtoBusca = linhaMobile ? linhaMobile.querySelector('[name="produto_busca[]"]') : null;
-    const alvoLancamento = linhaMobile || produtoBusca || document.getElementById("blocoLancamentoItensMobile") || areaAdicionarProdutoMobile;
 
-    if (alvoLancamento) {
+    if (produtoBusca) {
       setTimeout(function() {
-        alvoLancamento.scrollIntoView({ behavior: "smooth", block: "start" });
+        const y = produtoBusca.getBoundingClientRect().top + window.pageYOffset - 90;
+        window.scrollTo({ top: Math.max(y, 0), behavior: "smooth" });
       }, 40);
     }
 
