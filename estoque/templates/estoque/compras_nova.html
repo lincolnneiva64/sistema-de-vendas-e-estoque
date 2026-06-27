@@ -1879,10 +1879,6 @@
     definirEnvioModalEmAndamento(false);
     botaoEnvioAtual = null;
 
-    if (acaoCompra) {
-      acaoCompra.value = "salvar_rascunho";
-    }
-
     if (avisoRascunhoSalvoCompra) {
       avisoRascunhoSalvoCompra.style.display = "none";
     }
@@ -2898,6 +2894,7 @@
 
   if (btnSalvarCompra && formCompra) {
     btnSalvarCompra.addEventListener("click", function() {
+      window.compraMobileMantendoItemVisivel = false;
       enviarCompraComAcao("{% if finalizando %}confirmar_financeiro{% else %}finalizar{% endif %}", btnSalvarCompra);
     });
   }
@@ -2926,14 +2923,16 @@
         return;
       }
 
-      if (compraAVista() && acaoCompra && acaoCompra.value === "confirmar_financeiro" && !fechamentoOrigemConfirmado) {
+      const finalizandoCompra = acaoCompra && ["confirmar_financeiro", "finalizar"].includes(acaoCompra.value);
+
+      if (compraAVista() && finalizandoCompra && !fechamentoOrigemConfirmado) {
         event.preventDefault();
         envioAcionadoPeloBotao = false;
         abrirOrigemDinheiroCompra();
         return;
       }
 
-      if (compraAVista() && acaoCompra && acaoCompra.value === "confirmar_financeiro" && !normalizarOrigensParaEnvio()) {
+      if (compraAVista() && finalizandoCompra && !normalizarOrigensParaEnvio()) {
         event.preventDefault();
         fechamentoOrigemConfirmado = false;
         definirEnvioModalEmAndamento(false);
