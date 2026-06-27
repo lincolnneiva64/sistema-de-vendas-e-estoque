@@ -1854,7 +1854,9 @@
 
     window.compraMobileMantendoItemVisivel = false;
 
-    [secaoItensCompra, areaAdicionarProdutoMobile, secaoProdutoRapidoCompra].forEach(function(container) {
+    const dadosCompraCard = formCompra ? formCompra.querySelector(".compras-card") : null;
+
+    [dadosCompraCard, secaoItensCompra, areaAdicionarProdutoMobile, secaoProdutoRapidoCompra].forEach(function(container) {
       if (!container) return;
 
       container.classList.remove("rascunho-protegido");
@@ -1868,6 +1870,18 @@
         }
       });
     });
+
+    if (formCompra) {
+      delete formCompra.dataset.enviando;
+    }
+    envioAcionadoPeloBotao = false;
+    fechamentoOrigemConfirmado = false;
+    definirEnvioModalEmAndamento(false);
+    botaoEnvioAtual = null;
+
+    if (acaoCompra) {
+      acaoCompra.value = "salvar_rascunho";
+    }
 
     if (avisoRascunhoSalvoCompra) {
       avisoRascunhoSalvoCompra.style.display = "none";
