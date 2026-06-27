@@ -3308,10 +3308,25 @@ function precarregarClientesVendaMobile() {
     if (clientesVendaPrecarregados) return;
     clientesVendaPrecarregados = true;
 
-    window.setTimeout(() => {
-        if (!clienteBuscaCache.has("")) {
-            buscarClientes("", { forcarServidor: true });
+    window.setTimeout(async () => {
+        if (clienteBuscaCache.has("")) return;
+
+        const params = new URLSearchParams({ q: "", contexto: "venda" });
+
+        try {
+            const resposta = await fetch(clientesAutocompleteUrl + "?" + params.toString(), {
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            });
+            const dados = await resposta.json();
+            clienteBuscaCache.set("", dados.clientes || []);
+        } catch (erro) {
+            clienteBuscaCache.set("", []);
         }
+
+        clientesSugestoes = [];
+        clienteIndexAtivo = -1;
+        clienteSugestoesBox.innerHTML = "";
+        clienteSugestoesBox.style.display = "none";
     }, 300);
 }
 
