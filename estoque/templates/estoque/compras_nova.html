@@ -1071,6 +1071,7 @@
     }
   }
   .compras-mobile-add-card { display:none; }
+  .compras-mobile-voltar-lancamento { display:none; }
   .pagamento-opcoes-mobile {
     display:none;
     gap:8px;
@@ -1098,6 +1099,14 @@
     .compras-actions { justify-content:flex-start; }
     .compras-grid { grid-template-columns:1fr; }
     .compras-mobile-add-card { display:block; }
+    .compras-mobile-voltar-lancamento {
+      display:block;
+      padding-top:4px;
+    }
+    .compras-mobile-voltar-lancamento .compras-btn {
+      width:100%;
+      min-height:48px;
+    }
     .compras-mobile-add-card .compras-table,
     .compras-mobile-add-card .compras-table tbody,
     .compras-mobile-add-card .compras-table tr,
@@ -1185,6 +1194,15 @@
     #tabelaItensCompra .linha-item {
       border-bottom:1px solid #e2e8f0;
       padding:10px 0;
+    }
+    #tabelaItensCompra .linha-item.item-mobile-destacado {
+      margin:8px 0;
+      border:2px solid #2563eb;
+      border-radius:12px;
+      padding:10px;
+      background:#eff6ff;
+      box-shadow:0 12px 28px rgba(37,99,235,.18);
+      transition:background .25s ease, border-color .25s ease, box-shadow .25s ease;
     }
     #tabelaItensCompra .linha-item:first-child { padding-top:0; }
     #tabelaItensCompra .linha-item td {
@@ -1592,6 +1610,9 @@
         </table>
       </div>
       <div class="compras-total">Total: <span id="totalCompra" style="margin-left:8px;">R$ 0,00</span></div>
+      <div class="compras-card-body compras-mobile-voltar-lancamento">
+        <button type="button" id="btnVoltarLancamentoProdutoMobile" class="compras-btn compras-btn-primary">Adicionar outro produto</button>
+      </div>
       <div class="compras-card-body" id="acoesItensCompra">
         <button type="button" id="btnAdicionarItem" class="compras-btn compras-btn-secondary">+ Adicionar item</button>
       </div>
@@ -1712,6 +1733,7 @@
   const totalCompra = document.getElementById("totalCompra");
   const totalCompraCabecalho = document.getElementById("totalCompraCabecalho");
   const btnAdicionar = document.getElementById("btnAdicionarItem");
+  const btnVoltarLancamentoProdutoMobile = document.getElementById("btnVoltarLancamentoProdutoMobile");
   const secaoItensCompra = document.getElementById("secaoItensCompra");
   const areaAdicionarProdutoMobile = document.getElementById("areaAdicionarProdutoMobile");
   const secaoProdutoRapidoCompra = document.getElementById("secaoProdutoRapidoCompra");
@@ -1789,6 +1811,53 @@
     linha.classList.remove("linha-item-ativa");
     tabela.querySelector("tbody").appendChild(linha);
     atualizarListaItensMobileVazia();
+  }
+
+  function destacarUltimoItemMobile(linha) {
+    if (!compraMobile() || !linha) return;
+
+    document.querySelectorAll("#tabelaItensCompra .item-mobile-destacado").forEach(function(item) {
+      item.classList.remove("item-mobile-destacado");
+      item.removeAttribute("id");
+    });
+
+    linha.id = "ultimoItemAdicionadoCompraMobile";
+    linha.classList.add("item-mobile-destacado");
+
+    setTimeout(function() {
+      linha.classList.remove("item-mobile-destacado");
+    }, 3600);
+  }
+
+  function rolarParaItemAdicionadoMobile(linha) {
+    if (!compraMobile() || !linha) return;
+
+    destacarUltimoItemMobile(linha);
+
+    setTimeout(function() {
+      linha.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 80);
+  }
+
+  function voltarParaLancamentoProdutoMobile() {
+    if (!compraMobile()) return;
+
+    if (areaAdicionarProdutoMobile) {
+      areaAdicionarProdutoMobile.classList.remove("compra-bloco-recolhido");
+      areaAdicionarProdutoMobile.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    const linhaMobile = linhaFormularioMobile();
+    const produtoBusca = linhaMobile ? linhaMobile.querySelector('[name="produto_busca[]"]') : null;
+
+    if (produtoBusca) {
+      setTimeout(function() {
+        produtoBusca.focus({ preventScroll: true });
+        if (typeof produtoBusca.select === "function") {
+          produtoBusca.select();
+        }
+      }, 420);
+    }
   }
 
   function organizarLayoutMobileCompra() {
@@ -2670,6 +2739,7 @@
       const produtoAtualId = produtoAtual ? produtoAtual.value : "";
 
       publicarLinhaMobile(linhaAtual);
+      rolarParaItemAdicionadoMobile(linhaAtual);
 
       const nova = criarLinhaItem();
 
@@ -2680,16 +2750,6 @@
         }
 
         moverLinhaParaFormularioMobile(nova);
-        focarCampo(nova.querySelector('[name="produto_busca[]"]'));
-
-        if (compraMobile()) {
-          mostrarSugestoes(nova, true);
-          const botoes = botoesSugestao(nova);
-          const indiceProximo = botoes.findIndex(function(botao) {
-            return botao.dataset.produtoId === String(proximaOpcao ? proximaOpcao.value : "");
-          });
-          definirSugestaoAtiva(nova, indiceProximo >= 0 ? indiceProximo : 0);
-        }
       }
 
       recalcular();
@@ -2706,6 +2766,12 @@
     event.preventDefault();
     btnAdicionar.click();
   });
+
+  if (btnVoltarLancamentoProdutoMobile) {
+    btnVoltarLancamentoProdutoMobile.addEventListener("click", function() {
+      voltarParaLancamentoProdutoMobile();
+    });
+  }
 
   function enviarCompraComAcao(acao, botao) {
     if (acaoCompra) acaoCompra.value = acao;
@@ -5409,6 +5475,10 @@
 <script>
 /* CORRIGE SALVAR RASCUNHO E FOCO NO ULTIMO ITEM */
 (function() {
+  function compraMobileFinal() {
+    return window.matchMedia && window.matchMedia("(max-width: 820px)").matches;
+  }
+
   function ultimoCampoProduto() {
     const campos = Array.from(document.querySelectorAll("#secaoItensCompra .produto-busca"))
       .filter(function(campo) {
@@ -5470,6 +5540,8 @@
     if (!alvo) return;
 
     if (alvo.id === "btnAdicionarItem" || alvo.closest && alvo.closest("#btnAdicionarItem")) {
+      if (compraMobileFinal()) return;
+
       setTimeout(function() {
         habilitarSalvarRascunho();
         focarUltimoProduto();
@@ -5482,6 +5554,10 @@
 <script>
 /* AJUSTE DEFINITIVO SALVAR RASCUNHO E PRODUTO VAZIO */
 (function() {
+  function compraMobileFinal() {
+    return window.matchMedia && window.matchMedia("(max-width: 820px)").matches;
+  }
+
   function campoProdutoVazioFinal() {
     const campos = Array.from(document.querySelectorAll("#secaoItensCompra .produto-busca"))
       .filter(function(campo) {
@@ -5602,6 +5678,8 @@
     if (!alvo) return;
 
     if (alvo.id === "btnAdicionarItem" || (alvo.closest && alvo.closest("#btnAdicionarItem"))) {
+      if (compraMobileFinal()) return;
+
       setTimeout(function() {
         liberarBotaoSalvarRascunho();
         focarProdutoVazioFinal();
@@ -5621,6 +5699,8 @@
 
 <script>
 (function () {
+    if (window.matchMedia && window.matchMedia("(max-width: 820px)").matches) return;
+
     let travarFocoProdutoAte = 0;
     let intervaloFocoProduto = null;
 
@@ -5730,6 +5810,8 @@
 
 <script>
 (function () {
+  if (window.matchMedia && window.matchMedia("(max-width: 820px)").matches) return;
+
   let compraScrollGuardAtivo = false;
   let compraScrollGuardFim = 0;
   let ultimaPosicaoBoa = 0;
