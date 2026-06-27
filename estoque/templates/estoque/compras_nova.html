@@ -5020,7 +5020,6 @@
             <h2>Produtos</h2>
             <button type="button" class="produto-mobile-fechar" id="produtoMobileFecharCompra" aria-label="Fechar">x</button>
           </div>
-          <input type="text" id="produtoMobileBuscaCompra" class="produto-mobile-busca" placeholder="Digite para procurar o produto" autocomplete="off">
         </div>
         <div class="produto-mobile-lista" id="produtoMobileListaCompra"></div>
       </div>
@@ -5038,6 +5037,7 @@
   }
 
   var campoAtual = null;
+  var campoAtualListener = null;
 
   function opcoesDoCampo(campo) {
     var area = campo.closest(".produto-autocomplete");
@@ -5107,11 +5107,10 @@
   function renderizarLista() {
     if (!campoAtual) return;
 
-    var busca = document.getElementById("produtoMobileBuscaCompra");
     var lista = document.getElementById("produtoMobileListaCompra");
-    if (!lista || !busca) return;
+    if (!lista) return;
 
-    var termo = normalizar(busca.value);
+    var termo = normalizar(campoAtual.value);
     var itens = opcoesDoCampo(campoAtual);
 
     if (termo) {
@@ -5146,21 +5145,18 @@
   function abrirModalProduto(campo) {
     if (!ehMobile() || !campo) return;
 
+    if (campoAtual && campoAtualListener) {
+      campoAtual.removeEventListener("input", campoAtualListener);
+    }
+
     campoAtual = campo;
     var modal = criarModal();
-    var busca = document.getElementById("produtoMobileBuscaCompra");
 
     modal.classList.add("aberto");
     document.body.style.overflow = "hidden";
 
-    if (busca) {
-      busca.value = campo.value || "";
-      busca.oninput = renderizarLista;
-      setTimeout(function() {
-        busca.focus();
-        busca.select();
-      }, 100);
-    }
+    campoAtualListener = renderizarLista;
+    campoAtual.addEventListener("input", campoAtualListener);
 
     renderizarLista();
   }
@@ -5169,22 +5165,28 @@
     var modal = document.getElementById("produtoMobileModalCompra");
     if (modal) modal.classList.remove("aberto");
     document.body.style.overflow = "";
+
+    if (campoAtual && campoAtualListener) {
+      campoAtual.removeEventListener("input", campoAtualListener);
+    }
+    campoAtualListener = null;
   }
 
-  document.addEventListener("pointerdown", function(event) {
+  document.addEventListener("click", function(event) {
     var campo = event.target.closest ? event.target.closest(".produto-busca") : null;
     if (!campo || !ehMobile()) return;
     if (!event.isTrusted) return;
     if (campo.name !== "produto_busca[]") return;
 
-    try {
-      campo.focus({ preventScroll: true });
-      if (typeof campo.select === "function") {
-        campo.select();
-      }
-    } catch (erro) {}
+    setTimeout(function() {
+      try {
+        if (document.activeElement === campo && typeof campo.select === "function") {
+          campo.select();
+        }
+      } catch (erro) {}
 
-    abrirModalProduto(campo);
+      abrirModalProduto(campo);
+    }, 60);
   });
 
   document.addEventListener("keydown", function(event) {
