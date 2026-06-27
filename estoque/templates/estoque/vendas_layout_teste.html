@@ -3311,7 +3311,7 @@ function precarregarClientesVendaMobile() {
     window.setTimeout(async () => {
         if (clienteBuscaCache.has("")) return;
 
-        const params = new URLSearchParams({ q: "", contexto: "venda" });
+        const params = new URLSearchParams({ q: "", contexto: "venda_rapida" });
 
         try {
             const resposta = await fetch(clientesAutocompleteUrl + "?" + params.toString(), {
@@ -3375,7 +3375,7 @@ async function buscarClientes(texto, opcoes = {}) {
     }
 
     clienteBuscaAbortController = new AbortController();
-    const params = new URLSearchParams({ q: termoSolicitado, contexto: "venda" });
+    const params = new URLSearchParams({ q: termoSolicitado, contexto: "venda_rapida" });
 
     try {
         const resposta = await fetch(clientesAutocompleteUrl + "?" + params.toString(), {
@@ -3474,7 +3474,7 @@ clienteBusca.addEventListener("input", () => {
 
     clienteBuscaTimer = setTimeout(() => {
         buscarClientes(texto, { forcarServidor: true });
-    }, 80);
+    }, 120);
 });
 
 clienteBusca.addEventListener("focus", () => {
