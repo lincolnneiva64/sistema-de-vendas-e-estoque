@@ -5171,10 +5171,19 @@
     document.body.style.overflow = "";
   }
 
-  document.addEventListener("click", function(event) {
+  document.addEventListener("pointerdown", function(event) {
     var campo = event.target.closest ? event.target.closest(".produto-busca") : null;
     if (!campo || !ehMobile()) return;
     if (!event.isTrusted) return;
+    if (campo.name !== "produto_busca[]") return;
+
+    try {
+      campo.focus({ preventScroll: true });
+      if (typeof campo.select === "function") {
+        campo.select();
+      }
+    } catch (erro) {}
+
     abrirModalProduto(campo);
   });
 
