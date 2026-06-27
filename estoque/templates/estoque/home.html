@@ -158,6 +158,110 @@
   transform: translateY(-1px);
   box-shadow: 0 10px 22px rgba(13, 110, 253, 0.28);
 }
+.produtos-topo {
+  max-width: 1180px !important;
+  margin: 0 auto 18px !important;
+  padding: 18px;
+  border: 1px solid #dbe7f3;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+}
+.produtos-topo-cabecalho {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.produtos-topo h3 {
+  margin: 0;
+  color: #172033;
+  font-weight: 800;
+}
+.produtos-topo small {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  font-weight: 600;
+}
+.produtos-topo-resumo {
+  min-width: 132px;
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #172033;
+  text-align: right;
+  font-weight: 800;
+}
+.produtos-topo-resumo span {
+  display: block;
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.produtos-nav-grupos {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.produtos-nav-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+.produtos-nav-titulo {
+  margin: 0;
+  color: #334155;
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.produtos-topo-acoes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.produtos-topo-acoes .btn-acao-principal-painel,
+.produtos-topo-acoes .btn-tarja {
+  width: 100%;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  border-radius: 9px;
+  font-size: 0.86rem;
+  line-height: 1.15;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  box-shadow: none;
+}
+.produtos-topo-acoes .btn-texto-duas-linhas {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.produtos-topo-acoes .btn-tarja {
+  border: 1px solid transparent;
+}
+.produtos-topo-acoes .btn-tarja-secundario {
+  background: #475569;
+}
+.produtos-topo-acoes .btn-tarja-perigo {
+  background: #dc3545;
+}
 .tarja-acoes {
   position: fixed;
   left: 2px;
@@ -230,6 +334,16 @@
   filter: brightness(0.95);
 }
 @media (max-width: 760px) {
+  .produtos-topo-cabecalho {
+    flex-direction: column;
+  }
+  .produtos-topo-resumo {
+    width: 100%;
+    text-align: left;
+  }
+  .produtos-nav-grupos {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .tarja-acoes {
     align-items: stretch;
     flex-direction: column;
@@ -249,16 +363,7 @@
     max-width: none !important;
     margin: 0 0 12px !important;
     padding: 14px;
-    border: 1px solid #dbe7f3;
     border-radius: 14px;
-    background: #ffffff;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
-  }
-
-  .produtos-topo > div {
-    align-items: stretch !important;
-    flex-direction: column;
-    gap: 12px;
   }
 
   .produtos-topo h3 {
@@ -276,14 +381,6 @@
   .produtos-topo-acoes {
     display: grid !important;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-areas:
-      "pedidos pedidos"
-      "financeiro financeiro"
-      "receber clientes"
-      "compras fornecedores"
-      "entregas vendas"
-      "novo funcionarios"
-      "categorias unidades";
     gap: 8px !important;
     justify-content: stretch !important;
   }
@@ -311,55 +408,12 @@
     box-shadow: 0 3px 10px rgba(15, 23, 42, 0.16);
   }
 
-  #btnPedidosPainel {
-    grid-area: pedidos;
-    min-height: 48px;
-    font-size: 1rem;
-    box-shadow: 0 10px 24px rgba(13, 110, 253, 0.24);
+  .produtos-nav-grupos {
+    grid-template-columns: 1fr;
   }
 
-  #btnFinanceiroPainel {
-    grid-area: financeiro;
-  }
-
-  #btnClientesPainel {
-    grid-area: clientes;
-  }
-
-  #btnReceberClientePainel {
-    grid-area: receber;
-  }
-
-  #btnEntregasPainel {
-    grid-area: entregas;
-  }
-
-  #btnVendasPainel {
-    grid-area: vendas;
-  }
-
-  #btnFornecedoresPainel {
-    grid-area: fornecedores;
-  }
-
-  #btnNovoProduto {
-    grid-area: novo;
-  }
-
-  #btnFuncionariosPainel {
-    grid-area: funcionarios;
-  }
-
-  #btnCategoriasPainel {
-    grid-area: categorias;
-  }
-
-  #btnUnidadesPainel {
-    grid-area: unidades;
-  }
-
-  #btnComprasPainel {
-    grid-area: compras;
+  .produtos-nav-card {
+    padding: 11px;
   }
 
   .novo-produto-prefixo {
@@ -1095,14 +1149,14 @@
 }
 
 .topo-produtos-sticky {
-  position: sticky;
-  top: 8px;
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
   z-index: 5000;
   display: flex;
   justify-content: flex-end;
-  max-width: 720px;
-  margin: 0 auto 10px auto;
-  padding: 4px 0;
+  margin: 0;
+  padding: 0;
   pointer-events: none;
 }
 
@@ -1119,6 +1173,17 @@
 #btn-topo-produtos:focus-visible {
   outline: none;
   box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.24), 0 12px 30px rgba(15, 23, 42, 0.28);
+}
+
+@media (max-width: 575.98px) {
+  .topo-produtos-sticky {
+    position: sticky;
+    top: 8px;
+    justify-content: flex-end;
+    max-width: 720px;
+    margin: 0 auto 10px auto;
+    padding: 4px 0;
+  }
 }
 
 </style>
@@ -1177,105 +1242,166 @@ align-items: center;
     {% endfor %}
   </div>
 {% endif %}
-<div class="produtos-topo" style="max-width: 720px; margin: 0 auto 16px auto;">
-    
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-
-        <div>
-            <h3 style="margin: 0; font-weight: 700;">Produtos</h3>
-            <small style="color: #6c757d;">
-                Cadastro e controle de itens do estoque
-            </small>
-        </div>
-
-        <div class="produtos-topo-acoes" style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
-          <a
-            href="{% url 'estoque:unidades_produto' %}"
-            id="btnUnidadesPainel"
-            class="btn-acao-principal-painel"
-          >
-            Unidades
-          </a>
-          <a
-            href="{% url 'estoque:categorias_produto' %}"
-            id="btnCategoriasPainel"
-            class="btn-acao-principal-painel"
-          >
-            Categorias
-          </a>
-          <a
-            href="/estoque/clientes/consulta/"
-            id="btnClientesPainel"
-            class="btn-acao-principal-painel"
-          >
-            Clientes
-          </a>
-          <a
-            href="{% url 'estoque:funcionarios' %}"
-            id="btnFuncionariosPainel"
-            class="btn-acao-principal-painel"
-          >
-            Funcionarios
-          </a>
-          <a
-            href="{% url 'estoque:fornecedores' %}"
-            id="btnFornecedoresPainel"
-            class="btn-acao-principal-painel"
-          >
-            Fornecedores
-          </a>
-          <a
-            href="{% url 'estoque:entregas_dia' %}"
-            id="btnEntregasPainel"
-            class="btn-acao-principal-painel"
-          >
-            Entregas
-          </a>
-          <a
-            href="{% url 'estoque:pedidos' %}"
-            id="btnPedidosPainel"
-            class="btn-acao-principal-painel"
-          >
-            Pedidos
-          </a>
-          <a
-            href="{% url 'estoque:painel_financeiro' %}"
-            id="btnFinanceiroPainel"
-            class="btn-acao-principal-painel"
-          >
-            Central Financeira
-          </a>
-          <a
-            href="{% url 'estoque:vendas' %}"
-            id="btnVendasPainel"
-            class="btn-acao-principal-painel"
-          >
-            Vendas
-          </a>
-          <a
-            href="{% url 'estoque:receber_cliente_escolher' %}"
-            id="btnReceberClientePainel"
-            class="btn-acao-principal-painel"
-          >
-            Receber Cliente
-          </a>
-          <a
-            href="{% url 'estoque:compras_lista' %}"
-            id="btnComprasPainel"
-            class="btn-acao-principal-painel"
-          >
-            Compras
-          </a>
-          <a
-            id="btnNovoProduto"
-            href="{% url 'estoque:cadastrar_produto' %}"
-            class="btn-acao-principal-painel"
-          >
-            <span class="novo-produto-prefixo">+ </span>Novo Produto
-          </a>
-        </div>
+<div class="produtos-topo">
+  <div class="produtos-topo-cabecalho">
+    <div>
+      <h3>Produtos</h3>
+      <small>Cadastro e controle de itens do estoque</small>
     </div>
+    <div class="produtos-topo-resumo">
+      <span>Total</span>
+      {{ total_produtos }} produtos
+    </div>
+  </div>
 
+  <div class="produtos-nav-grupos" aria-label="Navegacao principal de produtos">
+    <section class="produtos-nav-card" aria-labelledby="produtos-nav-cadastro">
+      <h4 class="produtos-nav-titulo" id="produtos-nav-cadastro">Cadastro</h4>
+      <div class="produtos-topo-acoes">
+        <a
+          id="btnNovoProduto"
+          href="{% url 'estoque:cadastrar_produto' %}"
+          class="btn-acao-principal-painel"
+        >
+          <span class="novo-produto-prefixo">+ </span>Novo Produto
+        </a>
+        <a
+          href="{% url 'estoque:unidades_produto' %}"
+          id="btnUnidadesPainel"
+          class="btn-acao-principal-painel"
+        >
+          Unidades
+        </a>
+        <a
+          href="{% url 'estoque:categorias_produto' %}"
+          id="btnCategoriasPainel"
+          class="btn-acao-principal-painel"
+        >
+          Categorias
+        </a>
+        <a
+          href="/estoque/clientes/consulta/"
+          id="btnClientesPainel"
+          class="btn-acao-principal-painel"
+        >
+          Clientes
+        </a>
+        <a
+          href="{% url 'estoque:funcionarios' %}"
+          id="btnFuncionariosPainel"
+          class="btn-acao-principal-painel"
+        >
+          Funcionarios
+        </a>
+        <a
+          href="{% url 'estoque:fornecedores' %}"
+          id="btnFornecedoresPainel"
+          class="btn-acao-principal-painel"
+        >
+          Fornecedores
+        </a>
+      </div>
+    </section>
+
+    <section class="produtos-nav-card" aria-labelledby="produtos-nav-movimento">
+      <h4 class="produtos-nav-titulo" id="produtos-nav-movimento">Movimento</h4>
+      <div class="produtos-topo-acoes">
+        <a
+          href="{% url 'estoque:vendas' %}"
+          id="btnVendasPainel"
+          class="btn-acao-principal-painel"
+        >
+          Vendas
+        </a>
+        <a
+          href="{% url 'estoque:pedidos' %}"
+          id="btnPedidosPainel"
+          class="btn-acao-principal-painel"
+        >
+          Pedidos
+        </a>
+        <a
+          href="{% url 'estoque:pedido_criar' %}"
+          class="btn-acao-principal-painel"
+        >
+          + Novo Pedido
+        </a>
+        <a
+          href="{% url 'estoque:compras_lista' %}"
+          id="btnComprasPainel"
+          class="btn-acao-principal-painel"
+        >
+          Compras
+        </a>
+        <a
+          href="{% url 'estoque:compras_nova' %}"
+          class="btn-acao-principal-painel"
+        >
+          Nova Compra
+        </a>
+        <a
+          href="{% url 'estoque:entregas_dia' %}"
+          id="btnEntregasPainel"
+          class="btn-acao-principal-painel"
+        >
+          Entregas
+        </a>
+        <a
+          href="{% url 'estoque:receber_cliente_escolher' %}"
+          id="btnReceberClientePainel"
+          class="btn-acao-principal-painel"
+        >
+          Receber Cliente
+        </a>
+      </div>
+    </section>
+
+    <section class="produtos-nav-card" aria-labelledby="produtos-nav-financeiro">
+      <h4 class="produtos-nav-titulo" id="produtos-nav-financeiro">Financeiro</h4>
+      <div class="produtos-topo-acoes">
+        <a
+          href="{% url 'estoque:painel_financeiro' %}"
+          id="btnFinanceiroPainel"
+          class="btn-acao-principal-painel"
+        >
+          Central Financeira
+        </a>
+        <a
+          href="{% url 'estoque:caixa_banco' %}"
+          class="btn-acao-principal-painel"
+        >
+          Caixa e Banco
+        </a>
+        <a
+          href="{% url 'estoque:emprestimos_dividas' %}"
+          class="btn-acao-principal-painel"
+        >
+          <span class="btn-texto-duas-linhas">
+            <span>Empr&eacute;stimos</span>
+            <span>e D&iacute;vidas</span>
+          </span>
+        </a>
+        <a
+          href="{% url 'estoque:despesas_diarias' %}"
+          class="btn-acao-principal-painel"
+        >
+          Despesa Di&aacute;ria
+        </a>
+      </div>
+    </section>
+
+    <section class="produtos-nav-card" aria-labelledby="produtos-nav-admin">
+      <h4 class="produtos-nav-titulo" id="produtos-nav-admin">Administracao</h4>
+      <div class="produtos-topo-acoes">
+        <a href="{% url 'estoque:lixeira' %}" class="btn-tarja btn-tarja-secundario">
+          Ver Lixeira
+        </a>
+        <a href="#" id="btnExcluirProduto" class="btn-tarja btn-tarja-perigo">
+          Excluir Produto
+        </a>
+      </div>
+    </section>
+  </div>
 </div>
   <div class="produtos-resumo" style="max-width: 720px; margin: 0 auto 12px auto;">
     <div class="produtos-resumo-titulo" style="margin-bottom: 6px; font-weight: 600;">
@@ -1786,48 +1912,6 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
         </div>
     </div>
 </div>
-</div>
-
-<!-- TARJA -->
-<div class="tarja-acoes" aria-label="Acoes rapidas de produtos">
-  <div class="tarja-grupo">
-    <span class="tarja-label">Ações</span>
-    <a class="btn-acao-principal-painel" href="{% url 'estoque:cadastrar_produto' %}">
-      + Novo Produto
-    </a>
-    <a href="{% url 'estoque:unidades_produto' %}" class="btn-acao-principal-painel">
-      Unidades
-    </a>
-    <a href="{% url 'estoque:categorias_produto' %}" class="btn-acao-principal-painel">
-      Categorias
-    </a>
-    <a href="/estoque/clientes/consulta/" class="btn-acao-principal-painel">
-      Clientes
-    </a>
-    <a href="{% url 'estoque:funcionarios' %}" class="btn-acao-principal-painel">
-      Funcionarios
-    </a>
-    <a href="{% url 'estoque:fornecedores' %}" class="btn-acao-principal-painel">
-      Fornecedores
-    </a>
-    <a href="{% url 'estoque:compras_lista' %}" class="btn-acao-principal-painel">
-      Compras
-    </a>
-  </div>
-  <div class="tarja-grupo">
-    <a href="{% url 'estoque:vendas' %}" class="btn-tarja btn-tarja-vendas">
-      Vendas
-    </a>
-    <a href="{% url 'estoque:receber_cliente_escolher' %}" class="btn-tarja btn-tarja-vendas">
-      Receber Cliente
-    </a>
-    <a href="{% url 'estoque:lixeira' %}" class="btn-tarja btn-tarja-secundario">
-      Ver Lixeira
-    </a>
-    <a href="#" id="btnExcluirProduto" class="btn-tarja btn-tarja-perigo">
-      Excluir Produto
-    </a>
-  </div>
 </div>
 
 </div>
