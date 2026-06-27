@@ -713,4 +713,60 @@
 })();
 </script>
 
+
+<!-- AJUSTE MOBILE FILTRO COMPRAS SIMPLES - INICIO -->
+<style>
+@media (max-width: 768px) {
+    .campo-compra-mobile-oculto {
+        display: none !important;
+    }
+}
+</style>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const isMobile = window.matchMedia("(max-width: 768px)").matches;
+    if (!isMobile) return;
+
+    function limparTexto(txt) {
+        return (txt || "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^A-Z0-9 ]/gi, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+            .toUpperCase();
+    }
+
+    function esconderBloco(el) {
+        const bloco = el.closest(".mb-3, .form-group, .col-md-2, .col-md-3, .col-md-4, .col, div");
+        if (bloco) bloco.classList.add("campo-compra-mobile-oculto");
+    }
+
+    document.querySelectorAll("label, .form-label, strong").forEach(function (label) {
+        const t = limparTexto(label.textContent);
+
+        const ehNumeroCompra =
+            t === "COMPRA" ||
+            t.includes("N DA COMPRA") ||
+            t.includes("NUMERO DA COMPRA");
+
+        if (
+            ehNumeroCompra ||
+            t === "DATA FIM" ||
+            t === "PAGAMENTO" ||
+            t === "FINANCEIRO"
+        ) {
+            esconderBloco(label);
+        }
+
+        if (t === "DATA INICIO") {
+            label.textContent = "DATA DA COMPRA";
+        }
+    });
+});
+</script>
+<!-- AJUSTE MOBILE FILTRO COMPRAS SIMPLES - FIM -->
+
+
 {% endblock %}
