@@ -1763,6 +1763,14 @@
     return mobileQuery.matches;
   }
 
+  if (typeof window.compraMobileMantendoItemVisivel === "undefined") {
+    window.compraMobileMantendoItemVisivel = false;
+  }
+
+  function mantendoItemMobileVisivel() {
+    return compraMobile() && window.compraMobileMantendoItemVisivel === true;
+  }
+
   function linhaNoFormularioMobile(linha) {
     return addMobileTbody && linha && linha.parentElement === addMobileTbody;
   }
@@ -1832,15 +1840,19 @@
   function rolarParaItemAdicionadoMobile(linha) {
     if (!compraMobile() || !linha) return;
 
+    window.compraMobileMantendoItemVisivel = true;
     destacarUltimoItemMobile(linha);
 
     setTimeout(function() {
+      if (!mantendoItemMobileVisivel()) return;
       linha.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 80);
   }
 
   function voltarParaLancamentoProdutoMobile() {
     if (!compraMobile()) return;
+
+    window.compraMobileMantendoItemVisivel = false;
 
     if (areaAdicionarProdutoMobile) {
       areaAdicionarProdutoMobile.classList.remove("compra-bloco-recolhido");
@@ -2131,6 +2143,15 @@
 
   function focarCampo(campo) {
     if (!campo) return;
+    if (
+      mantendoItemMobileVisivel() &&
+      (
+        campo.matches && campo.matches('[name="produto_busca[]"]') ||
+        areaAdicionarProdutoMobile && areaAdicionarProdutoMobile.contains(campo)
+      )
+    ) {
+      return;
+    }
     campo.focus();
     if (typeof campo.select === "function") {
       campo.select();
@@ -2199,10 +2220,13 @@
   }
 
   function rolarParaHistoricoProduto(linha) {
+    if (mantendoItemMobileVisivel()) return;
+
     const box = linha.querySelector(".produto-historico-compra");
     if (!box) return;
 
     setTimeout(function() {
+      if (mantendoItemMobileVisivel()) return;
       box.scrollIntoView({
         behavior: "smooth",
         block: "center"
@@ -2351,8 +2375,10 @@
 
   function ajustarProdutoNaTelaMobile(linha) {
     if (!compraMobile() || !linha) return;
+    if (mantendoItemMobileVisivel()) return;
 
     setTimeout(function() {
+      if (mantendoItemMobileVisivel()) return;
       linha.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 80);
   }
@@ -5186,11 +5212,14 @@
   }
 
   function focarUltimoProduto() {
+    if (window.compraMobileMantendoItemVisivel === true) return;
+
     const alvo = ultimoCampoProduto();
 
     if (alvo) {
       [120, 350, 700].forEach(function(tempo) {
         setTimeout(function() {
+          if (window.compraMobileMantendoItemVisivel === true) return;
           alvo.focus({ preventScroll: true });
           if (typeof alvo.select === "function") alvo.select();
         }, tempo);
@@ -5304,11 +5333,14 @@
   }
 
   function focarProdutoVazioFinal() {
+    if (window.compraMobileMantendoItemVisivel === true) return;
+
     const alvo = campoProdutoVazioFinal();
 
     if (!alvo) return;
 
     setTimeout(function() {
+      if (window.compraMobileMantendoItemVisivel === true) return;
       alvo.focus({ preventScroll: true });
 
       if (typeof alvo.select === "function") {
@@ -5412,6 +5444,8 @@
     }
 
     function focarESelecionarProduto() {
+        if (window.compraMobileMantendoItemVisivel === true) return;
+
         let campo = ultimoCampoProdutoVisivel();
         if (!campo) return;
 
@@ -5435,6 +5469,8 @@
     }
 
     function iniciarTravaFocoProduto() {
+        if (window.compraMobileMantendoItemVisivel === true) return;
+
         travarFocoProdutoAte = Date.now() + 5000;
 
         if (intervaloFocoProduto) {
@@ -5521,6 +5557,8 @@
   }
 
   function iniciarProtecaoScrollCompra() {
+    if (window.compraMobileMantendoItemVisivel === true) return;
+
     compraScrollGuardAtivo = true;
     compraScrollGuardFim = Date.now() + 6000;
     ultimaPosicaoBoa = Math.max(window.scrollY || 0, document.documentElement.scrollTop || 0);
@@ -5530,6 +5568,13 @@
     }
 
     intervaloScrollCompra = setInterval(function() {
+      if (window.compraMobileMantendoItemVisivel === true) {
+        clearInterval(intervaloScrollCompra);
+        intervaloScrollCompra = null;
+        compraScrollGuardAtivo = false;
+        return;
+      }
+
       if (!compraScrollGuardAtivo || Date.now() > compraScrollGuardFim) {
         clearInterval(intervaloScrollCompra);
         intervaloScrollCompra = null;
