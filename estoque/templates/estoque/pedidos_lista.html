@@ -49,7 +49,8 @@
 }
 
 @media (max-width: 768px) {
-    #localidade {
+    #localidade,
+    #cliente_id {
         display: none !important;
     }
 
@@ -180,6 +181,61 @@
     }
 }
 /* MODAL MOBILE BAIRRO/CIDADE PEDIDOS - FIM */
+
+
+/* MODAL MOBILE CLIENTE PEDIDOS - INICIO */
+.btn-cliente-mobile {
+    display: none;
+}
+
+.modal-cliente-mobile {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .btn-cliente-mobile {
+        width: 100%;
+        min-height: 48px;
+        padding: 12px 14px;
+        border: 1.5px solid #d3dbe8;
+        border-radius: 12px;
+        background: #ffffff;
+        color: #172033;
+        font-size: 16px;
+        font-weight: 900;
+        text-align: left;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
+    }
+
+    .btn-cliente-mobile:focus {
+        outline: none;
+        border-color: #2563eb;
+        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.16);
+    }
+
+    .btn-cliente-mobile::after {
+        content: "?";
+        color: #475569;
+        font-size: 15px;
+        line-height: 1;
+    }
+
+    .modal-cliente-mobile.aberto {
+        display: flex;
+        position: fixed;
+        inset: 0;
+        z-index: 999999;
+        background: rgba(15, 23, 42, 0.48);
+        align-items: flex-end;
+        justify-content: center;
+        padding: 14px;
+    }
+}
+/* MODAL MOBILE CLIENTE PEDIDOS - FIM */
 
 </style>
 
@@ -988,6 +1044,20 @@
                                 </option>
                             {% endfor %}
                         </select>
+
+                        <button type="button" class="btn-cliente-mobile" id="btnClienteMobile">
+                            <span id="textoClienteMobile">Todos</span>
+                        </button>
+
+                        <div class="modal-cliente-mobile" id="modalClienteMobile" aria-hidden="true">
+                            <div class="modal-localidade-card" role="dialog" aria-modal="true" aria-label="Escolher cliente">
+                                <div class="modal-localidade-topo">
+                                    <strong>Cliente</strong>
+                                    <button type="button" class="modal-localidade-fechar" id="fecharClienteMobile" aria-label="Fechar">?</button>
+                                </div>
+                                <div class="modal-localidade-lista" id="listaClienteMobile"></div>
+                            </div>
+                        </div>
                     </div>
 
                     <div>
@@ -1193,6 +1263,105 @@
     }
   });
 })();
+</script>
+
+
+<script>
+/* MODAIS MOBILE FILTROS PEDIDOS - INICIO */
+(function () {
+    function ehMobile() {
+        return window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
+    }
+
+    function configurarModalSelect(config) {
+        const select = document.getElementById(config.selectId);
+        const botao = document.getElementById(config.botaoId);
+        const textoBotao = document.getElementById(config.textoId);
+        const modal = document.getElementById(config.modalId);
+        const lista = document.getElementById(config.listaId);
+        const fechar = document.getElementById(config.fecharId);
+
+        if (!select || !botao || !textoBotao || !modal || !lista || !fechar) return;
+
+        function textoSelecionado() {
+            const opt = select.options[select.selectedIndex];
+            return (opt && opt.textContent ? opt.textContent.trim() : "") || "Todos";
+        }
+
+        function atualizarTexto() {
+            textoBotao.textContent = textoSelecionado();
+        }
+
+        function fecharModal() {
+            modal.classList.remove("aberto");
+            modal.setAttribute("aria-hidden", "true");
+        }
+
+        function abrirModal() {
+            if (!ehMobile()) return;
+
+            lista.innerHTML = "";
+
+            Array.from(select.options).forEach((opt) => {
+                const item = document.createElement("button");
+                item.type = "button";
+                item.className = "modal-localidade-opcao" + (opt.selected ? " ativo" : "");
+                item.textContent = (opt.textContent || "").trim() || "Todos";
+
+                item.addEventListener("click", () => {
+                    select.value = opt.value;
+                    atualizarTexto();
+                    fecharModal();
+                    select.dispatchEvent(new Event("change", { bubbles: true }));
+                });
+
+                lista.appendChild(item);
+            });
+
+            modal.classList.add("aberto");
+            modal.setAttribute("aria-hidden", "false");
+        }
+
+        botao.addEventListener("click", abrirModal);
+        fechar.addEventListener("click", fecharModal);
+
+        modal.addEventListener("click", (event) => {
+            if (event.target === modal) {
+                fecharModal();
+            }
+        });
+
+        select.addEventListener("change", atualizarTexto);
+        atualizarTexto();
+    }
+
+    configurarModalSelect({
+        selectId: "cliente_id",
+        botaoId: "btnClienteMobile",
+        textoId: "textoClienteMobile",
+        modalId: "modalClienteMobile",
+        listaId: "listaClienteMobile",
+        fecharId: "fecharClienteMobile"
+    });
+
+    configurarModalSelect({
+        selectId: "localidade",
+        botaoId: "btnLocalidadeMobile",
+        textoId: "textoLocalidadeMobile",
+        modalId: "modalLocalidadeMobile",
+        listaId: "listaLocalidadeMobile",
+        fecharId: "fecharLocalidadeMobile"
+    });
+
+    document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        document.querySelectorAll(".modal-localidade-mobile.aberto, .modal-cliente-mobile.aberto").forEach((modal) => {
+            modal.classList.remove("aberto");
+            modal.setAttribute("aria-hidden", "true");
+        });
+    });
+})();
+/* MODAIS MOBILE FILTROS PEDIDOS - FIM */
 </script>
 
 </body>
