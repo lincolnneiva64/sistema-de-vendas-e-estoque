@@ -2562,24 +2562,17 @@
         }
       }, 30);
 
+      if (compraMobile()) {
+        return;
+      }
+
       if (produtoBusca.value.trim()) {
-        if (compraMobile()) {
-          mostrarSugestoes(linha, true);
-          definirSugestaoAtiva(linha, 0);
-        } else {
-          fecharSugestoes(linha);
-        }
+        fecharSugestoes(linha);
       } else {
         const primeiraOpcao = opcoesProduto(linha)[0];
         if (primeiraOpcao) {
           selecionarProduto(linha, primeiraOpcao);
-
-          if (compraMobile()) {
-            mostrarSugestoes(linha, true);
-            definirSugestaoAtiva(linha, 0);
-          } else {
-            produtoBusca.select();
-          }
+          produtoBusca.select();
         } else {
           mostrarSugestoes(linha, true);
           definirSugestaoAtiva(linha, 0);
@@ -2587,7 +2580,18 @@
       }
     });
 
-    produtoBusca.addEventListener("input", function() {
+    produtoBusca.addEventListener("click", function(event) {
+      if (!compraMobile() || !event.isTrusted) return;
+
+      marcarLinhaAtiva(linha);
+      if (typeof produtoBusca.select === "function") {
+        produtoBusca.select();
+      }
+      mostrarSugestoes(linha, true);
+      definirSugestaoAtiva(linha, 0);
+    });
+
+    produtoBusca.addEventListener("input", function(event) {
       produto.value = "";
       produto.selectedIndex = 0;
       unidade.value = "";
@@ -2597,7 +2601,7 @@
         estoqueValor.textContent = "-";
       }
       limparHistoricoProduto(linha);
-      if (produtoBusca.value.trim()) {
+      if (produtoBusca.value.trim() && (!compraMobile() || event.isTrusted)) {
         mostrarSugestoes(linha);
         definirSugestaoAtiva(linha, 0);
       } else {
@@ -2727,10 +2731,6 @@
 
       if (!linhaAtual || !produtoSelecionadoValido(linhaAtual)) {
         const produtoBusca = linhaAtual ? linhaAtual.querySelector('[name="produto_busca[]"]') : null;
-        if (linhaAtual) {
-          mostrarSugestoes(linhaAtual, true);
-          definirSugestaoAtiva(linhaAtual, 0);
-        }
         focarCampo(produtoBusca);
         return;
       }
@@ -4854,346 +4854,6 @@
   }
 }
 </style>
-
-<style>
-/* MODAL MOBILE PARA ESCOLHER PRODUTO NA COMPRA */
-@media (max-width: 768px) {
-  .produto-mobile-modal {
-    position: fixed;
-    inset: 0;
-    z-index: 999999;
-    background: rgba(15, 23, 42, 0.62);
-    display: none;
-    align-items: flex-end;
-    padding: 12px;
-  }
-
-  .produto-mobile-modal.aberto {
-    display: flex;
-  }
-
-  .produto-mobile-card {
-    width: 100%;
-    max-height: 86vh;
-    overflow: hidden;
-    background: #ffffff;
-    border-radius: 24px 24px 18px 18px;
-    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.35);
-    border: 2px solid #bfdbfe;
-  }
-
-  .produto-mobile-topo {
-    padding: 16px;
-    background: #dbeafe;
-    border-bottom: 1px solid #93c5fd;
-  }
-
-  .produto-mobile-topo-linha {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 10px;
-  }
-
-  .produto-mobile-topo h2 {
-    margin: 0;
-    font-size: 1.22rem;
-    font-weight: 950;
-    color: #0f172a;
-  }
-
-  .produto-mobile-fechar {
-    width: 42px;
-    height: 42px;
-    border: 0;
-    border-radius: 50%;
-    background: #ffffff;
-    color: #0f172a;
-    font-size: 1.45rem;
-    line-height: 1;
-    font-weight: 900;
-  }
-
-  .produto-mobile-busca {
-    width: 100%;
-    border: 2px solid #2563eb;
-    border-radius: 16px;
-    padding: 14px 16px;
-    font-size: 1.05rem;
-    font-weight: 800;
-    outline: none;
-  }
-
-  .produto-mobile-lista {
-    max-height: 54vh;
-    overflow-y: auto;
-    padding: 12px;
-    background: #ffffff;
-  }
-
-  .produto-mobile-opcao {
-    width: 100%;
-    border: 1px solid #dbeafe;
-    background: #f8fafc;
-    color: #0f172a;
-    border-radius: 16px;
-    padding: 14px 15px;
-    margin-bottom: 10px;
-    text-align: left;
-    font-size: 1rem;
-    font-weight: 850;
-  }
-
-  .produto-mobile-opcao small {
-    display: block;
-    margin-top: 4px;
-    color: #64748b;
-    font-weight: 750;
-  }
-
-}
-</style>
-
-<script>
-/* MODAL BONITO PARA PRODUTO NA COMPRA MOBILE */
-(function() {
-  if (window.__produtoMobileModalAplicado) return;
-  window.__produtoMobileModalAplicado = true;
-
-  function ehMobile() {
-    return window.innerWidth <= 768;
-  }
-
-  function normalizar(txt) {
-    return (txt || "")
-      .toString()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .trim();
-  }
-
-  function numeroMobile(valor) {
-    var texto = String(valor || "").trim();
-    if (!texto) return 0;
-
-    var temVirgula = texto.indexOf(",") >= 0;
-    var temPonto = texto.indexOf(".") >= 0;
-
-    if (temVirgula && temPonto) {
-      texto = texto.replace(/\./g, "").replace(",", ".");
-    } else if (temVirgula) {
-      texto = texto.replace(",", ".");
-    } else if (temPonto) {
-      var partes = texto.split(".");
-      if (partes.length > 2) {
-        var ultimaParte = partes[partes.length - 1];
-        texto = ultimaParte.length <= 2
-          ? partes.slice(0, -1).join("") + "." + ultimaParte
-          : partes.join("");
-      }
-    }
-
-    texto = texto.replace(/[^\d.-]/g, "");
-    return Number(texto) || 0;
-  }
-
-  function precoCampoMobile(valor) {
-    return numeroMobile(valor).toLocaleString("pt-BR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-  }
-
-  function criarModal() {
-    var modal = document.getElementById("produtoMobileModalCompra");
-    if (modal) return modal;
-
-    modal = document.createElement("div");
-    modal.id = "produtoMobileModalCompra";
-    modal.className = "produto-mobile-modal";
-    modal.innerHTML = `
-      <div class="produto-mobile-card" role="dialog" aria-modal="true">
-        <div class="produto-mobile-topo">
-          <div class="produto-mobile-topo-linha">
-            <h2>Produtos</h2>
-            <button type="button" class="produto-mobile-fechar" id="produtoMobileFecharCompra" aria-label="Fechar">x</button>
-          </div>
-        </div>
-        <div class="produto-mobile-lista" id="produtoMobileListaCompra"></div>
-      </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    modal.addEventListener("click", function(event) {
-      if (event.target === modal) fecharModalProduto();
-    });
-
-    document.getElementById("produtoMobileFecharCompra").addEventListener("click", fecharModalProduto);
-
-    return modal;
-  }
-
-  var campoAtual = null;
-  var campoAtualListener = null;
-
-  function opcoesDoCampo(campo) {
-    var area = campo.closest(".produto-autocomplete");
-    if (!area) return [];
-    var select = area.querySelector(".produto-select-real");
-    if (!select) return [];
-
-    return Array.from(select.options || [])
-      .filter(function(op) { return op.value; })
-      .map(function(op) {
-        return {
-          id: op.value,
-          nome: (op.textContent || "").trim(),
-          unidade: op.dataset.unidade || "",
-          preco: op.dataset.precoCompra || "",
-          estoque: op.dataset.estoque || ""
-        };
-      });
-  }
-
-  function selecionarProduto(item) {
-    if (!campoAtual || !item) return;
-
-    var area = campoAtual.closest(".produto-autocomplete");
-    var select = area ? area.querySelector(".produto-select-real") : null;
-    var linha = campoAtual.closest("tr");
-    var unidade = linha ? linha.querySelector('[name="unidade[]"]') : null;
-    var preco = linha ? linha.querySelector('[name="preco_unitario[]"]') : null;
-    var estoqueValor = linha ? linha.querySelector(".produto-estoque-valor") : null;
-
-    campoAtual.value = item.nome || "";
-
-    if (select) {
-      select.value = item.id || "";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-
-    if (unidade) {
-      unidade.value = item.unidade || "";
-      unidade.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-
-    if (preco) {
-      preco.value = precoCampoMobile(item.preco || "0");
-      preco.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-
-    if (estoqueValor) {
-      estoqueValor.textContent = item.estoque || "0";
-    }
-
-    campoAtual.dispatchEvent(new Event("change", { bubbles: true }));
-
-    fecharModalProduto();
-
-    setTimeout(function() {
-      var qtd = linha ? linha.querySelector('input[name="quantidade[]"]') : null;
-      if (qtd) {
-        qtd.focus();
-        qtd.select();
-      } else {
-        campoAtual.focus();
-      }
-    }, 80);
-  }
-
-  function renderizarLista() {
-    if (!campoAtual) return;
-
-    var lista = document.getElementById("produtoMobileListaCompra");
-    if (!lista) return;
-
-    var termo = normalizar(campoAtual.value);
-    var itens = opcoesDoCampo(campoAtual);
-
-    if (termo) {
-      itens = itens.filter(function(item) {
-        return normalizar(item.nome).includes(termo);
-      });
-    }
-
-    itens = itens.slice(0, 60);
-    lista.innerHTML = "";
-
-    if (!itens.length) {
-      lista.innerHTML = '<div style="padding:14px; font-weight:850; color:#64748b;">Nenhum produto encontrado.</div>';
-      return;
-    }
-
-    itens.forEach(function(item) {
-      var botao = document.createElement("button");
-      botao.type = "button";
-      botao.className = "produto-mobile-opcao";
-      botao.innerHTML = `
-        ${item.nome}
-        <small>Unidade: ${item.unidade || "-"} | Estoque: ${item.estoque || "-"}</small>
-      `;
-      botao.addEventListener("click", function() {
-        selecionarProduto(item);
-      });
-      lista.appendChild(botao);
-    });
-  }
-
-  function abrirModalProduto(campo) {
-    if (!ehMobile() || !campo) return;
-
-    if (campoAtual && campoAtualListener) {
-      campoAtual.removeEventListener("input", campoAtualListener);
-    }
-
-    campoAtual = campo;
-    var modal = criarModal();
-
-    modal.classList.add("aberto");
-    document.body.style.overflow = "hidden";
-
-    campoAtualListener = renderizarLista;
-    campoAtual.addEventListener("input", campoAtualListener);
-
-    renderizarLista();
-  }
-
-  function fecharModalProduto() {
-    var modal = document.getElementById("produtoMobileModalCompra");
-    if (modal) modal.classList.remove("aberto");
-    document.body.style.overflow = "";
-
-    if (campoAtual && campoAtualListener) {
-      campoAtual.removeEventListener("input", campoAtualListener);
-    }
-    campoAtualListener = null;
-  }
-
-  document.addEventListener("click", function(event) {
-    var campo = event.target.closest ? event.target.closest(".produto-busca") : null;
-    if (!campo || !ehMobile()) return;
-    if (!event.isTrusted) return;
-    if (campo.name !== "produto_busca[]") return;
-
-    setTimeout(function() {
-      try {
-        if (document.activeElement === campo && typeof campo.select === "function") {
-          campo.select();
-        }
-      } catch (erro) {}
-
-      abrirModalProduto(campo);
-    }, 60);
-  });
-
-  document.addEventListener("keydown", function(event) {
-    if (event.key === "Escape") fecharModalProduto();
-  });
-})();
-</script>
 
 <style>
 /* MODO PROTEGIDO APOS SALVAR RASCUNHO */
