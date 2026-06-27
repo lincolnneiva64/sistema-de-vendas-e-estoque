@@ -1854,6 +1854,25 @@
 
     window.compraMobileMantendoItemVisivel = false;
 
+    [secaoItensCompra, areaAdicionarProdutoMobile, secaoProdutoRapidoCompra].forEach(function(container) {
+      if (!container) return;
+
+      container.classList.remove("rascunho-protegido");
+      container.classList.remove("compra-bloco-recolhido");
+      container.querySelectorAll("input, select, textarea, button").forEach(function(el) {
+        el.disabled = false;
+        el.removeAttribute("disabled");
+        el.removeAttribute("aria-disabled");
+        if (el.dataset.bloqueadoRascunho === "1") {
+          delete el.dataset.bloqueadoRascunho;
+        }
+      });
+    });
+
+    if (avisoRascunhoSalvoCompra) {
+      avisoRascunhoSalvoCompra.style.display = "none";
+    }
+
     if (areaAdicionarProdutoMobile) {
       areaAdicionarProdutoMobile.classList.remove("compra-bloco-recolhido");
     }
@@ -2804,6 +2823,18 @@
       voltarParaLancamentoProdutoMobile();
     });
   }
+
+  document.addEventListener("click", function(event) {
+    const botaoContinuar = event.target.closest ? event.target.closest("#btnContinuarLancandoItens") : null;
+    if (!botaoContinuar || !compraMobile()) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") {
+      event.stopImmediatePropagation();
+    }
+    voltarParaLancamentoProdutoMobile();
+  }, true);
 
   function enviarCompraComAcao(acao, botao) {
     if (acaoCompra) acaoCompra.value = acao;
