@@ -3270,11 +3270,11 @@
 
   if (fornecedorBusca) {
     fornecedorBusca.addEventListener("focus", function() {
-      if (bloquearAberturaInicialFornecedor) {
-        bloquearAberturaInicialFornecedor = false;
-        fecharSugestoesFornecedor();
-        return;
-      }
+      bloquearAberturaInicialFornecedor = false;
+      fecharSugestoesFornecedor();
+    });
+
+    fornecedorBusca.addEventListener("click", function() {
       mostrarSugestoesFornecedor(true);
     });
 
