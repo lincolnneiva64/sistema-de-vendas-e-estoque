@@ -1442,7 +1442,7 @@
     <button type="button" class="compras-btn compras-btn-primary" id="abrirContasPagarGeralCompra">Ver / pagar contas</button>
   </section>
 
-  <form method="post" id="formCompra">
+  <form method="post" id="formCompra"{% if compra %} data-confirmar-financeiro-url="{% url 'estoque:compra_finalizar' compra.id %}"{% endif %}>
     {% csrf_token %}
     <input type="hidden" name="fechamento_token" value="{{ fechamento_token }}">
     <input type="hidden" name="acao_compra" id="acaoCompra" value="{% if finalizando %}confirmar_financeiro{% else %}salvar_rascunho{% endif %}">
@@ -3012,6 +3012,11 @@
       }
       fechamentoOrigemConfirmado = true;
       if (acaoCompra) acaoCompra.value = "confirmar_financeiro";
+      if (formCompra.dataset.confirmarFinanceiroUrl) {
+        formCompra.action = formCompra.dataset.confirmarFinanceiroUrl;
+      }
+      delete formCompra.dataset.enviando;
+      window.compraMobileMantendoItemVisivel = false;
       envioAcionadoPeloBotao = false;
       definirEnvioModalEmAndamento(true);
       formCompra.requestSubmit ? formCompra.requestSubmit() : formCompra.submit();
