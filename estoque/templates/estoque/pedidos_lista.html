@@ -79,10 +79,14 @@
     }
 
     .btn-localidade-mobile::after {
-        content: "?";
-        color: #475569;
-        font-size: 22px;
-        line-height: 1;
+        content: "";
+        width: 10px;
+        height: 10px;
+        border-right: 2px solid #475569;
+        border-bottom: 2px solid #475569;
+        transform: rotate(45deg);
+        margin-right: 4px;
+        flex: 0 0 auto;
     }
 
     .modal-localidade-mobile.aberto {
@@ -166,18 +170,15 @@
     }
 
     .modal-localidade-opcao.ativo::after {
-        content: "?";
-        width: 30px;
-        height: 30px;
+        content: "";
+        width: 18px;
+        height: 18px;
         border-radius: 999px;
         display: inline-flex;
-        align-items: center;
-        justify-content: center;
         background: #0ea5e9;
-        color: white;
-        font-size: 18px;
-        font-weight: 950;
+        box-shadow: 0 0 0 6px #bae6fd;
         flex: 0 0 auto;
+        margin-right: 10px;
     }
 }
 /* MODAL MOBILE BAIRRO/CIDADE PEDIDOS - FIM */
@@ -218,10 +219,14 @@
     }
 
     .btn-cliente-mobile::after {
-        content: "?";
-        color: #475569;
-        font-size: 15px;
-        line-height: 1;
+        content: "";
+        width: 10px;
+        height: 10px;
+        border-right: 2px solid #475569;
+        border-bottom: 2px solid #475569;
+        transform: rotate(45deg);
+        margin-right: 4px;
+        flex: 0 0 auto;
     }
 
     .modal-cliente-mobile.aberto {
@@ -1053,7 +1058,7 @@
                             <div class="modal-localidade-card" role="dialog" aria-modal="true" aria-label="Escolher cliente">
                                 <div class="modal-localidade-topo">
                                     <strong>Cliente</strong>
-                                    <button type="button" class="modal-localidade-fechar" id="fecharClienteMobile" aria-label="Fechar">?</button>
+                                    <button type="button" class="modal-localidade-fechar" id="fecharClienteMobile" aria-label="Fechar">X</button>
                                 </div>
                                 <div class="modal-localidade-lista" id="listaClienteMobile"></div>
                             </div>
@@ -1079,7 +1084,7 @@
                             <div class="modal-localidade-card" role="dialog" aria-modal="true" aria-label="Escolher bairro ou cidade">
                                 <div class="modal-localidade-topo">
                                     <strong>Bairro/Cidade</strong>
-                                    <button type="button" class="modal-localidade-fechar" id="fecharLocalidadeMobile" aria-label="Fechar">?</button>
+                                    <button type="button" class="modal-localidade-fechar" id="fecharLocalidadeMobile" aria-label="Fechar">X</button>
                                 </div>
                                 <div class="modal-localidade-lista" id="listaLocalidadeMobile"></div>
                             </div>
