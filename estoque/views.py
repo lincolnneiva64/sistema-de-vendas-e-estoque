@@ -3730,10 +3730,11 @@ def compras_lista(request):
         data_inicio_obj, data_fim_obj = data_fim_obj, data_inicio_obj
         data_inicio, data_fim = data_fim, data_inicio
 
-    if data_inicio_obj:
-        compras = compras.filter(data_compra__gte=data_inicio_obj)
-
-    if data_fim_obj:
+    if data_inicio_obj and data_fim_obj:
+        compras = compras.filter(data_compra__gte=data_inicio_obj, data_compra__lte=data_fim_obj)
+    elif data_inicio_obj:
+        compras = compras.filter(data_compra=data_inicio_obj)
+    elif data_fim_obj:
         compras = compras.filter(data_compra__lte=data_fim_obj)
 
     if pagamento_filtro == "avista":
