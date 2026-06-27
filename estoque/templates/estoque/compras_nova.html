@@ -4822,11 +4822,31 @@
     border-bottom: 1px solid #93c5fd;
   }
 
+  .produto-mobile-topo-linha {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
   .produto-mobile-topo h2 {
-    margin: 0 0 10px;
+    margin: 0;
     font-size: 1.22rem;
     font-weight: 950;
     color: #0f172a;
+  }
+
+  .produto-mobile-fechar {
+    width: 42px;
+    height: 42px;
+    border: 0;
+    border-radius: 50%;
+    background: #ffffff;
+    color: #0f172a;
+    font-size: 1.45rem;
+    line-height: 1;
+    font-weight: 900;
   }
 
   .produto-mobile-busca {
@@ -4866,17 +4886,6 @@
     font-weight: 750;
   }
 
-  .produto-mobile-rodape {
-    display: flex;
-    gap: 10px;
-    padding: 12px;
-    background: #f8fafc;
-    border-top: 1px solid #e5e7eb;
-  }
-
-  .produto-mobile-rodape button {
-    flex: 1;
-  }
 }
 </style>
 
@@ -4899,6 +4908,38 @@
       .trim();
   }
 
+  function numeroMobile(valor) {
+    var texto = String(valor || "").trim();
+    if (!texto) return 0;
+
+    var temVirgula = texto.indexOf(",") >= 0;
+    var temPonto = texto.indexOf(".") >= 0;
+
+    if (temVirgula && temPonto) {
+      texto = texto.replace(/\./g, "").replace(",", ".");
+    } else if (temVirgula) {
+      texto = texto.replace(",", ".");
+    } else if (temPonto) {
+      var partes = texto.split(".");
+      if (partes.length > 2) {
+        var ultimaParte = partes[partes.length - 1];
+        texto = ultimaParte.length <= 2
+          ? partes.slice(0, -1).join("") + "." + ultimaParte
+          : partes.join("");
+      }
+    }
+
+    texto = texto.replace(/[^\d.-]/g, "");
+    return Number(texto) || 0;
+  }
+
+  function precoCampoMobile(valor) {
+    return numeroMobile(valor).toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
   function criarModal() {
     var modal = document.getElementById("produtoMobileModalCompra");
     if (modal) return modal;
@@ -4909,14 +4950,13 @@
     modal.innerHTML = `
       <div class="produto-mobile-card" role="dialog" aria-modal="true">
         <div class="produto-mobile-topo">
-          <h2>Escolher produto</h2>
+          <div class="produto-mobile-topo-linha">
+            <h2>Produtos</h2>
+            <button type="button" class="produto-mobile-fechar" id="produtoMobileFecharCompra" aria-label="Fechar">x</button>
+          </div>
           <input type="text" id="produtoMobileBuscaCompra" class="produto-mobile-busca" placeholder="Digite para procurar o produto" autocomplete="off">
         </div>
         <div class="produto-mobile-lista" id="produtoMobileListaCompra"></div>
-        <div class="produto-mobile-rodape">
-          <button type="button" class="compras-btn compras-btn-secondary" id="produtoMobileCancelarCompra">Cancelar</button>
-          <button type="button" class="compras-btn compras-btn-primary" id="produtoMobileUsarDigitadoCompra">Usar digitado</button>
-        </div>
       </div>
     `;
 
@@ -4926,7 +4966,7 @@
       if (event.target === modal) fecharModalProduto();
     });
 
-    document.getElementById("produtoMobileCancelarCompra").addEventListener("click", fecharModalProduto);
+    document.getElementById("produtoMobileFecharCompra").addEventListener("click", fecharModalProduto);
 
     return modal;
   }
@@ -4957,6 +4997,10 @@
 
     var area = campoAtual.closest(".produto-autocomplete");
     var select = area ? area.querySelector(".produto-select-real") : null;
+    var linha = campoAtual.closest("tr");
+    var unidade = linha ? linha.querySelector('[name="unidade[]"]') : null;
+    var preco = linha ? linha.querySelector('[name="preco_unitario[]"]') : null;
+    var estoqueValor = linha ? linha.querySelector(".produto-estoque-valor") : null;
 
     campoAtual.value = item.nome || "";
 
@@ -4965,13 +5009,25 @@
       select.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
-    campoAtual.dispatchEvent(new Event("input", { bubbles: true }));
+    if (unidade) {
+      unidade.value = item.unidade || "";
+      unidade.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    if (preco) {
+      preco.value = precoCampoMobile(item.preco || "0");
+      preco.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    if (estoqueValor) {
+      estoqueValor.textContent = item.estoque || "0";
+    }
+
     campoAtual.dispatchEvent(new Event("change", { bubbles: true }));
 
     fecharModalProduto();
 
     setTimeout(function() {
-      var linha = campoAtual.closest("tr");
       var qtd = linha ? linha.querySelector('input[name="quantidade[]"]') : null;
       if (qtd) {
         qtd.focus();
@@ -4980,16 +5036,6 @@
         campoAtual.focus();
       }
     }, 80);
-  }
-
-  function usarDigitado() {
-    if (!campoAtual) return;
-    var busca = document.getElementById("produtoMobileBuscaCompra");
-    campoAtual.value = busca ? busca.value : campoAtual.value;
-    campoAtual.dispatchEvent(new Event("input", { bubbles: true }));
-    campoAtual.dispatchEvent(new Event("change", { bubbles: true }));
-    fecharModalProduto();
-    setTimeout(function() { campoAtual.focus(); }, 80);
   }
 
   function renderizarLista() {
@@ -5012,7 +5058,7 @@
     lista.innerHTML = "";
 
     if (!itens.length) {
-      lista.innerHTML = '<div style="padding:14px; font-weight:850; color:#64748b;">Nenhum produto encontrado. Pode usar o texto digitado ou cadastrar produto rapido.</div>';
+      lista.innerHTML = '<div style="padding:14px; font-weight:850; color:#64748b;">Nenhum produto encontrado.</div>';
       return;
     }
 
@@ -5037,7 +5083,6 @@
     campoAtual = campo;
     var modal = criarModal();
     var busca = document.getElementById("produtoMobileBuscaCompra");
-    var usar = document.getElementById("produtoMobileUsarDigitadoCompra");
 
     modal.classList.add("aberto");
     document.body.style.overflow = "hidden";
@@ -5051,8 +5096,6 @@
       }, 100);
     }
 
-    if (usar) usar.onclick = usarDigitado;
-
     renderizarLista();
   }
 
@@ -5062,22 +5105,10 @@
     document.body.style.overflow = "";
   }
 
-  document.addEventListener("focusin", function(event) {
-    var campo = event.target.closest ? event.target.closest(".produto-busca") : null;
-    if (!campo || !ehMobile()) return;
-
-    if (campo.dataset.produtoMobileAbrindo === "1") return;
-    campo.dataset.produtoMobileAbrindo = "1";
-
-    setTimeout(function() {
-      abrirModalProduto(campo);
-      campo.dataset.produtoMobileAbrindo = "0";
-    }, 60);
-  });
-
   document.addEventListener("click", function(event) {
     var campo = event.target.closest ? event.target.closest(".produto-busca") : null;
     if (!campo || !ehMobile()) return;
+    if (!event.isTrusted) return;
     abrirModalProduto(campo);
   });
 
