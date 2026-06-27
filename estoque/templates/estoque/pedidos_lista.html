@@ -38,6 +38,149 @@
         gap: 14px !important;
     }
 }
+
+/* MODAL MOBILE BAIRRO/CIDADE PEDIDOS - INICIO */
+.btn-localidade-mobile {
+    display: none;
+}
+
+.modal-localidade-mobile {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    #localidade {
+        display: none !important;
+    }
+
+    .btn-localidade-mobile {
+        width: 100%;
+        min-height: 48px;
+        padding: 12px 14px;
+        border: 1.5px solid #d3dbe8;
+        border-radius: 12px;
+        background: #ffffff;
+        color: #172033;
+        font-size: 16px;
+        font-weight: 900;
+        text-align: left;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
+    }
+
+    .btn-localidade-mobile:focus {
+        outline: none;
+        border-color: #2563eb;
+        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.16);
+    }
+
+    .btn-localidade-mobile::after {
+        content: "?";
+        color: #475569;
+        font-size: 22px;
+        line-height: 1;
+    }
+
+    .modal-localidade-mobile.aberto {
+        display: flex;
+        position: fixed;
+        inset: 0;
+        z-index: 999999;
+        background: rgba(15, 23, 42, 0.48);
+        align-items: flex-end;
+        justify-content: center;
+        padding: 14px;
+    }
+
+    .modal-localidade-card {
+        width: min(100%, 640px);
+        max-height: 82vh;
+        background: #ffffff;
+        border-radius: 24px 24px 18px 18px;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
+        overflow: hidden;
+        border: 1px solid #dbeafe;
+    }
+
+    .modal-localidade-topo {
+        padding: 16px 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        background: linear-gradient(135deg, #eff6ff, #f8fafc);
+        border-bottom: 1px solid #dbeafe;
+    }
+
+    .modal-localidade-topo strong {
+        color: #0f172a;
+        font-size: 19px;
+        font-weight: 950;
+    }
+
+    .modal-localidade-fechar {
+        width: 42px;
+        height: 42px;
+        border-radius: 999px;
+        border: 1px solid #bfdbfe;
+        background: #ffffff;
+        color: #1d4ed8;
+        font-size: 24px;
+        font-weight: 950;
+    }
+
+    .modal-localidade-lista {
+        max-height: calc(82vh - 76px);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 8px;
+    }
+
+    .modal-localidade-opcao {
+        width: 100%;
+        border: 0;
+        background: #ffffff;
+        color: #172033;
+        font-size: 20px;
+        font-weight: 850;
+        text-align: left;
+        padding: 17px 14px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .modal-localidade-opcao + .modal-localidade-opcao {
+        margin-top: 4px;
+    }
+
+    .modal-localidade-opcao.ativo {
+        background: #e0f2fe;
+        color: #075985;
+    }
+
+    .modal-localidade-opcao.ativo::after {
+        content: "?";
+        width: 30px;
+        height: 30px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #0ea5e9;
+        color: white;
+        font-size: 18px;
+        font-weight: 950;
+        flex: 0 0 auto;
+    }
+}
+/* MODAL MOBILE BAIRRO/CIDADE PEDIDOS - FIM */
+
 </style>
 
 ﻿<!DOCTYPE html>
@@ -857,6 +1000,20 @@
                                 </option>
                             {% endfor %}
                         </select>
+
+                        <button type="button" class="btn-localidade-mobile" id="btnLocalidadeMobile">
+                            <span id="textoLocalidadeMobile">Todos</span>
+                        </button>
+
+                        <div class="modal-localidade-mobile" id="modalLocalidadeMobile" aria-hidden="true">
+                            <div class="modal-localidade-card" role="dialog" aria-modal="true" aria-label="Escolher bairro ou cidade">
+                                <div class="modal-localidade-topo">
+                                    <strong>Bairro/Cidade</strong>
+                                    <button type="button" class="modal-localidade-fechar" id="fecharLocalidadeMobile" aria-label="Fechar">?</button>
+                                </div>
+                                <div class="modal-localidade-lista" id="listaLocalidadeMobile"></div>
+                            </div>
+                        </div>
                     </div>
                     
                     <div>
