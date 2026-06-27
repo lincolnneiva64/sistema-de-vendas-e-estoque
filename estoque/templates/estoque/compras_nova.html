@@ -5147,7 +5147,10 @@
 /* CORRIGE SALVAR RASCUNHO E FOCO NO ULTIMO ITEM */
 (function() {
   function compraMobileFinal() {
-    return window.matchMedia && window.matchMedia("(max-width: 820px)").matches;
+    return window.matchMedia && (
+      window.matchMedia("(max-width: 820px)").matches ||
+      window.matchMedia("(pointer: coarse)").matches
+    );
   }
 
   function ultimoCampoProduto() {
@@ -5226,7 +5229,10 @@
 /* AJUSTE DEFINITIVO SALVAR RASCUNHO E PRODUTO VAZIO */
 (function() {
   function compraMobileFinal() {
-    return window.matchMedia && window.matchMedia("(max-width: 820px)").matches;
+    return window.matchMedia && (
+      window.matchMedia("(max-width: 820px)").matches ||
+      window.matchMedia("(pointer: coarse)").matches
+    );
   }
 
   function campoProdutoVazioFinal() {
@@ -5370,7 +5376,10 @@
 
 <script>
 (function () {
-    if (window.matchMedia && window.matchMedia("(max-width: 820px)").matches) return;
+    if (window.matchMedia && (
+        window.matchMedia("(max-width: 820px)").matches ||
+        window.matchMedia("(pointer: coarse)").matches
+    )) return;
 
     let travarFocoProdutoAte = 0;
     let intervaloFocoProduto = null;
@@ -5481,7 +5490,10 @@
 
 <script>
 (function () {
-  if (window.matchMedia && window.matchMedia("(max-width: 820px)").matches) return;
+  if (window.matchMedia && (
+    window.matchMedia("(max-width: 820px)").matches ||
+    window.matchMedia("(pointer: coarse)").matches
+  )) return;
 
   let compraScrollGuardAtivo = false;
   let compraScrollGuardFim = 0;
