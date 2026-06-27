@@ -1873,6 +1873,33 @@
       avisoRascunhoSalvoCompra.style.display = "none";
     }
 
+    if (btnSalvarRascunhoCompra) {
+      btnSalvarRascunhoCompra.style.display = "";
+      btnSalvarRascunhoCompra.style.visibility = "visible";
+      btnSalvarRascunhoCompra.hidden = false;
+      btnSalvarRascunhoCompra.disabled = false;
+      btnSalvarRascunhoCompra.removeAttribute("disabled");
+      btnSalvarRascunhoCompra.removeAttribute("aria-disabled");
+      btnSalvarRascunhoCompra.type = "button";
+      btnSalvarRascunhoCompra.textContent = "Salvar Rascunho";
+      btnSalvarRascunhoCompra.classList.remove("botao-continuar-rascunho-rodape");
+      if (btnSalvarRascunhoCompra.dataset.bloqueadoRascunho === "1") {
+        delete btnSalvarRascunhoCompra.dataset.bloqueadoRascunho;
+      }
+    }
+
+    if (btnSalvarCompra) {
+      btnSalvarCompra.style.display = "";
+      btnSalvarCompra.style.visibility = "visible";
+      btnSalvarCompra.hidden = false;
+      btnSalvarCompra.disabled = false;
+      btnSalvarCompra.removeAttribute("disabled");
+      btnSalvarCompra.removeAttribute("aria-disabled");
+      if (btnSalvarCompra.dataset.bloqueadoRascunho === "1") {
+        delete btnSalvarCompra.dataset.bloqueadoRascunho;
+      }
+    }
+
     if (areaAdicionarProdutoMobile) {
       areaAdicionarProdutoMobile.classList.remove("compra-bloco-recolhido");
     }
