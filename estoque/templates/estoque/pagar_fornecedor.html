@@ -255,6 +255,29 @@ main .row:nth-of-type(2) small {
     color: #92400e !important;
 }
 
+/* Foco e selecao fortes no autocomplete do fornecedor */
+.pf-field input:focus,
+#fornecedorBusca:focus,
+#buscarFornecedor:focus,
+input[placeholder*="fornecedor" i]:focus {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.38), inset 0 0 0 1px #2563eb !important;
+  outline: none !important;
+}
+
+.pf-sugestao.ativa,
+.pf-sugestao.ativa *,
+.pf-sugestao.active,
+.pf-sugestao.active * {
+  background: #bfdbfe !important;
+}
+
+.pf-sugestao.ativa,
+.pf-sugestao.active {
+  border-radius: 14px !important;
+  box-shadow: inset 0 0 0 2px #2563eb !important;
+}
+
 </style>
 
 <div class="pf-page">
@@ -614,14 +637,14 @@ main .row:nth-of-type(2) small {
 
   function abrirSugestoes() {
     const encontrados = filtrarFornecedores();
-    sugestaoAtiva = encontrados.length ? 0 : -1;
+    sugestaoAtiva = -1;
     if (!encontrados.length) {
       sugestoes.innerHTML = '<div class="pf-sugestao"><strong>Nenhum fornecedor encontrado</strong></div>';
       sugestoes.style.display = "block";
       return;
     }
     sugestoes.innerHTML = encontrados.map((fornecedor, index) => (
-      '<button type="button" class="pf-sugestao' + (index === 0 ? " ativa" : "") + '" data-fornecedor-id="' + fornecedor.id + '">' +
+      '<button type="button" class="pf-sugestao" data-fornecedor-id="' + fornecedor.id + '">' +
         '<strong>' + fornecedor.nome + '</strong>' +
         '<span>' + fornecedor.quantidade + ' conta(s) - ' + moeda(fornecedor.total_aberto) + ' em aberto</span>' +
       '</button>'
@@ -636,7 +659,11 @@ main .row:nth-of-type(2) small {
   function marcarSugestao(indice) {
     const itens = Array.from(sugestoes.querySelectorAll(".pf-sugestao[data-fornecedor-id]"));
     if (!itens.length) return;
-    sugestaoAtiva = Math.max(0, Math.min(indice, itens.length - 1));
+
+    if (indice < 0) indice = itens.length - 1;
+    if (indice >= itens.length) indice = 0;
+
+    sugestaoAtiva = indice;
     itens.forEach((item, index) => item.classList.toggle("ativa", index === sugestaoAtiva));
     itens[sugestaoAtiva].scrollIntoView({ block: "nearest" });
   }
@@ -778,20 +805,38 @@ main .row:nth-of-type(2) small {
     }
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      if (sugestoes.style.display === "none") {
+
+      const displayCalculado = window.getComputedStyle(sugestoes).display;
+      let itensAtualizados = Array.from(sugestoes.querySelectorAll(".pf-sugestao[data-fornecedor-id]"));
+      const listaFechada = sugestoes.style.display === "none" || displayCalculado === "none" || !itensAtualizados.length;
+
+      if (listaFechada) {
         abrirSugestoes();
+        itensAtualizados = Array.from(sugestoes.querySelectorAll(".pf-sugestao[data-fornecedor-id]"));
+        if (!itensAtualizados.length) return;
+        marcarSugestao(0);
         return;
       }
-      marcarSugestao(sugestaoAtiva + 1);
+
+      marcarSugestao(sugestaoAtiva < 0 ? 0 : sugestaoAtiva + 1);
       return;
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      if (sugestoes.style.display === "none") {
+
+      const displayCalculado = window.getComputedStyle(sugestoes).display;
+      let itensAtualizados = Array.from(sugestoes.querySelectorAll(".pf-sugestao[data-fornecedor-id]"));
+      const listaFechada = sugestoes.style.display === "none" || displayCalculado === "none" || !itensAtualizados.length;
+
+      if (listaFechada) {
         abrirSugestoes();
+        itensAtualizados = Array.from(sugestoes.querySelectorAll(".pf-sugestao[data-fornecedor-id]"));
+        if (!itensAtualizados.length) return;
+        marcarSugestao(itensAtualizados.length - 1);
         return;
       }
-      marcarSugestao(sugestaoAtiva <= 0 ? itens.length - 1 : sugestaoAtiva - 1);
+
+      marcarSugestao(sugestaoAtiva <= 0 ? itensAtualizados.length - 1 : sugestaoAtiva - 1);
       return;
     }
     if (event.key === "Enter") {
@@ -943,5 +988,7 @@ main .row:nth-of-type(2) small {
   }
 })();
 </script>
-
 {% endblock %}
+
+
+
