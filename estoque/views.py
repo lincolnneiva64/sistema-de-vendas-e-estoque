@@ -3687,6 +3687,301 @@ def conta_pagar_baixar(request, pk):
         "conta": _conta_pagar_payload(conta),
     })
 
+
+def _conta_financeira_saida_pagar_fornecedor(chave):
+    chave = _texto_sem_acentos(chave).lower().strip()
+    if chave not in {"caixa", "banco", "reserva"}:
+        return None
+    return _conta_financeira_padrao(chave)
+
+
+def _registrar_movimento_pagar_fornecedor(conta, valor_pago, data_pagamento, conta_saida):
+    valor = _financeiro_dinheiro(valor_pago).quantize(Decimal("0.01"))
+    if valor <= Decimal("0.00"):
+        return None
+    conta_financeira = _conta_financeira_saida_pagar_fornecedor(conta_saida)
+    if not conta_financeira:
+        return None
+    fornecedor_nome = conta.fornecedor.nome if conta.fornecedor else ""
+    descricao = (
+        f"Pagamento de fornecedor: {fornecedor_nome}"
+        if fornecedor_nome
+        else "Pagamento de conta a pagar"
+    )
+    if conta.compra_id:
+        descricao = f"{descricao} - Compra #{conta.compra_id}"
+    return MovimentoFinanceiro.objects.create(
+        conta=conta_financeira,
+        tipo=MovimentoFinanceiro.TIPO_SAIDA,
+        valor=valor,
+        data=data_pagamento or timezone.localdate(),
+        descricao=descricao[:255],
+        origem="pagar_fornecedor",
+    )
+
+
+def _registrar_movimento_pagar_fornecedor_origem(fornecedor, valor_pago, data_pagamento, conta_saida, quantidade_contas):
+    valor = _financeiro_dinheiro(valor_pago).quantize(Decimal("0.01"))
+    if valor <= Decimal("0.00"):
+        return None
+    conta_financeira = _conta_financeira_saida_pagar_fornecedor(conta_saida)
+    if not conta_financeira:
+        return None
+    fornecedor_nome = fornecedor.nome if fornecedor else "Fornecedor nao informado"
+    descricao = f"Pagamento de fornecedor: {fornecedor_nome}"
+    if quantidade_contas:
+        descricao = f"{descricao} - baixa geral ({quantidade_contas} conta(s))"
+    return MovimentoFinanceiro.objects.create(
+        conta=conta_financeira,
+        tipo=MovimentoFinanceiro.TIPO_SAIDA,
+        valor=valor,
+        data=data_pagamento or timezone.localdate(),
+        descricao=descricao[:255],
+        origem="pagar_fornecedor",
+    )
+
+
+def pagar_fornecedor(request):
+    hoje = timezone.localdate()
+
+    if request.method == "POST":
+        is_ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
+
+        def resposta_erro(mensagem, status=400):
+            logger.warning("pagar_fornecedor erro: %s", mensagem)
+            if is_ajax:
+                return JsonResponse({"ok": False, "erro": mensagem}, status=status)
+            messages.error(request, mensagem)
+            return redirect("estoque:pagar_fornecedor")
+
+        def resposta_sucesso(payload):
+            mensagem = payload.get("mensagem") or "Pagamento confirmado com sucesso."
+            logger.info(
+                "pagar_fornecedor sucesso fornecedor_id=%s valor_pago=%s aplicacoes=%s",
+                payload.get("fornecedor_id"),
+                payload.get("valor_pago"),
+                len(payload.get("aplicacoes") or []),
+            )
+            if is_ajax:
+                return JsonResponse(payload)
+            messages.success(request, mensagem)
+            return redirect("estoque:pagar_fornecedor")
+
+        fornecedor_id = request.POST.get("fornecedor_id")
+        valor_recebido = (request.POST.get("valor_pago") or request.POST.get("valor") or "").replace("R$", "").strip()
+        logger.info(
+            "pagar_fornecedor POST recebido fornecedor_id=%s valor_pago=%s data_pagamento=%s forma_pagamento=%s saida_caixa=%s saida_reserva=%s saida_banco=%s observacao=%s",
+            fornecedor_id,
+            valor_recebido,
+            request.POST.get("data_pagamento"),
+            request.POST.get("forma_pagamento"),
+            request.POST.get("valor_saida_caixa"),
+            request.POST.get("valor_saida_reserva"),
+            request.POST.get("valor_saida_banco"),
+            bool(request.POST.get("observacao")),
+        )
+
+        if not fornecedor_id:
+            return resposta_erro("Selecione um fornecedor antes de confirmar o pagamento.")
+        fornecedor = Fornecedor.objects.filter(pk=fornecedor_id).first()
+        if not fornecedor:
+            return resposta_erro("Fornecedor nao encontrado para o pagamento.")
+
+        try:
+            valor_total = _decimal_compra(valor_recebido, casas=2)
+            distribuicao_saida = {
+                "caixa": _decimal_compra(request.POST.get("valor_saida_caixa"), casas=2),
+                "reserva": _decimal_compra(request.POST.get("valor_saida_reserva"), casas=2),
+                "banco": _decimal_compra(request.POST.get("valor_saida_banco"), casas=2),
+            }
+        except ValueError:
+            return resposta_erro("Informe valores validos para o pagamento e a distribuicao da saida.")
+
+        data_pagamento = parse_date(request.POST.get("data_pagamento") or "") or hoje
+        forma_pagamento = (request.POST.get("forma_pagamento") or "").strip()
+        observacao = (request.POST.get("observacao") or "").strip()
+
+        if valor_total <= Decimal("0.00"):
+            return resposta_erro("Informe um valor maior que zero.")
+        if not forma_pagamento:
+            return resposta_erro("Informe a forma de pagamento.")
+        if any(valor < Decimal("0.00") for valor in distribuicao_saida.values()):
+            return resposta_erro("A distribuicao da saida nao pode ter valor negativo.")
+        total_saida = sum(distribuicao_saida.values(), Decimal("0.00")).quantize(Decimal("0.01"))
+        if total_saida != valor_total:
+            diferenca = (valor_total - total_saida).quantize(Decimal("0.01"))
+            if diferenca > Decimal("0.00"):
+                return resposta_erro(f"Falta distribuir {_financeiro_moeda_br(diferenca)} entre Caixa, Reserva e Banco/Pix.")
+            return resposta_erro(f"A distribuicao esta {_financeiro_moeda_br(abs(diferenca))} acima do valor pago.")
+        saldos_saida = {}
+        for chave, valor_saida in distribuicao_saida.items():
+            conta_financeira = _conta_financeira_saida_pagar_fornecedor(chave)
+            if valor_saida > Decimal("0.00") and not conta_financeira:
+                return resposta_erro("Nao foi possivel localizar uma das contas de saida financeira.")
+            saldo_disponivel = _saldo_conta_financeira(conta_financeira) if conta_financeira else Decimal("0.00")
+            saldos_saida[chave] = saldo_disponivel.quantize(Decimal("0.01"))
+            if valor_saida > saldos_saida[chave]:
+                nome_conta = conta_financeira.nome if conta_financeira else chave
+                return resposta_erro(
+                    f"Saldo insuficiente em {nome_conta}. Disponivel: {_financeiro_moeda_br(saldos_saida[chave])}."
+                )
+
+        try:
+            with transaction.atomic():
+                contas = list(
+                    ContaPagar.objects
+                    .select_for_update()
+                    .select_related("fornecedor", "compra")
+                    .filter(fornecedor=fornecedor, valor_em_aberto__gt=0)
+                    .exclude(status__in=[ContaPagar.STATUS_PAGA, ContaPagar.STATUS_CANCELADA])
+                    .order_by("data_vencimento", "id")
+                )
+                logger.info("pagar_fornecedor contas encontradas=%s fornecedor_id=%s", len(contas), fornecedor.id)
+                if not contas:
+                    return resposta_erro("Este fornecedor nao tem contas em aberto.")
+
+                total_aberto = sum((conta.valor_em_aberto for conta in contas), Decimal("0.00")).quantize(Decimal("0.01"))
+                if valor_total > total_aberto:
+                    return resposta_erro(
+                        f"O valor informado supera o total em aberto do fornecedor ({_financeiro_moeda_br(total_aberto)})."
+                    )
+
+                restante = valor_total
+                aplicacoes = []
+                for conta in contas:
+                    if restante <= Decimal("0.00"):
+                        break
+                    saldo_antes = conta.valor_em_aberto.quantize(Decimal("0.01"))
+                    valor_aplicar = min(restante, saldo_antes).quantize(Decimal("0.01"))
+                    if valor_aplicar <= Decimal("0.00"):
+                        continue
+                    obs_conta = (
+                        f"Pagamento geral em Pagar fornecedor. {observacao}"
+                        if observacao
+                        else "Pagamento geral em Pagar fornecedor."
+                    )
+                    PagamentoContaPagar.objects.create(
+                        conta=conta,
+                        data_pagamento=data_pagamento,
+                        valor=valor_aplicar,
+                        juros_bancarios=Decimal("0.00"),
+                        forma_pagamento=forma_pagamento,
+                        observacao=obs_conta,
+                    )
+                    conta.valor_em_aberto = (conta.valor_em_aberto - valor_aplicar).quantize(Decimal("0.01"))
+                    conta.status = ContaPagar.STATUS_PAGA if conta.valor_em_aberto <= 0 else ContaPagar.STATUS_PARCIAL
+                    conta.save(update_fields=["valor_em_aberto", "status", "atualizado_em"])
+                    aplicacoes.append({
+                        "conta_id": conta.id,
+                        "compra_id": conta.compra_id,
+                        "vencimento": conta.data_vencimento.strftime("%d/%m/%Y") if conta.data_vencimento else "-",
+                        "saldo_antes": str(saldo_antes),
+                        "valor_aplicado": str(valor_aplicar),
+                        "saldo_depois": str(conta.valor_em_aberto.quantize(Decimal("0.01"))),
+                        "status": conta.get_status_display(),
+                    })
+                    restante = (restante - valor_aplicar).quantize(Decimal("0.01"))
+                for chave, valor_saida in distribuicao_saida.items():
+                    if valor_saida <= Decimal("0.00"):
+                        continue
+                    movimento = _registrar_movimento_pagar_fornecedor_origem(
+                        fornecedor,
+                        valor_saida,
+                        data_pagamento,
+                        chave,
+                        len(aplicacoes),
+                    )
+                    if not movimento:
+                        raise ValueError("Nao foi possivel registrar a saida financeira do pagamento.")
+        except ValueError as exc:
+            return resposta_erro(str(exc))
+
+        return resposta_sucesso({
+            "ok": True,
+            "mensagem": f"Pagamento de {_financeiro_moeda_br(valor_total)} confirmado para {fornecedor.nome}.",
+            "fornecedor_id": fornecedor.id,
+            "fornecedor_nome": fornecedor.nome,
+            "valor_pago": str(valor_total.quantize(Decimal("0.01"))),
+            "aplicacoes": aplicacoes,
+        })
+
+    contas = list(
+        ContaPagar.objects
+        .select_related("fornecedor", "compra")
+        .filter(valor_em_aberto__gt=0, fornecedor__isnull=False)
+        .exclude(status__in=[ContaPagar.STATUS_PAGA, ContaPagar.STATUS_CANCELADA])
+        .order_by("fornecedor__nome", "data_vencimento", "id")
+    )
+    fornecedores_map = {}
+    total_aberto = Decimal("0.00")
+    total_vencido = Decimal("0.00")
+    for conta in contas:
+        saldo = (conta.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
+        total_aberto += saldo
+        vencida = bool(conta.data_vencimento and conta.data_vencimento < hoje)
+        if vencida:
+            total_vencido += saldo
+        fornecedor_id = conta.fornecedor_id or 0
+        fornecedor_nome = conta.fornecedor.nome if conta.fornecedor else "Fornecedor nao informado"
+        item = fornecedores_map.setdefault(fornecedor_id, {
+            "id": fornecedor_id,
+            "nome": fornecedor_nome,
+            "quantidade": 0,
+            "total_aberto": "0.00",
+            "total_vencido": "0.00",
+            "contas": [],
+        })
+        item["quantidade"] += 1
+        item["total_aberto"] = str((Decimal(item["total_aberto"]) + saldo).quantize(Decimal("0.01")))
+        if vencida:
+            item["total_vencido"] = str((Decimal(item["total_vencido"]) + saldo).quantize(Decimal("0.01")))
+        item["contas"].append({
+            "id": conta.id,
+            "compra_id": conta.compra_id,
+            "vencimento_iso": conta.data_vencimento.isoformat() if conta.data_vencimento else "",
+            "vencimento": conta.data_vencimento.strftime("%d/%m/%Y") if conta.data_vencimento else "-",
+            "saldo": str(saldo),
+            "valor_original": str((conta.valor_original or Decimal("0.00")).quantize(Decimal("0.01"))),
+            "status": conta.get_status_display(),
+            "vencida": vencida,
+        })
+
+    fornecedores_payload = sorted(fornecedores_map.values(), key=lambda item: item["nome"].lower())
+    conta_caixa = _conta_financeira_padrao("caixa")
+    conta_reserva = _conta_financeira_padrao("reserva")
+    conta_banco = _conta_financeira_padrao("banco")
+    saldo_caixa = _saldo_conta_financeira(conta_caixa) if conta_caixa else Decimal("0.00")
+    saldo_reserva = _saldo_conta_financeira(conta_reserva) if conta_reserva else Decimal("0.00")
+    saldo_banco = _saldo_conta_financeira(conta_banco) if conta_banco else Decimal("0.00")
+    contexto = {
+        "fornecedores_payload": fornecedores_payload,
+        "resumo_geral": {
+            "fornecedores": len(fornecedores_payload),
+            "contas": len(contas),
+            "total_aberto": str(total_aberto.quantize(Decimal("0.01"))),
+            "total_vencido": str(total_vencido.quantize(Decimal("0.01"))),
+        },
+        "saldos_pagamento": {
+            "caixa": {
+                "label": "Caixa em espécie",
+                "valor": str(saldo_caixa.quantize(Decimal("0.01"))),
+                "texto": _financeiro_moeda_br(saldo_caixa),
+            },
+            "reserva": {
+                "label": "Sangria/Reserva em mãos",
+                "valor": str(saldo_reserva.quantize(Decimal("0.01"))),
+                "texto": _financeiro_moeda_br(saldo_reserva),
+            },
+            "banco": {
+                "label": "Banco/Pix",
+                "valor": str(saldo_banco.quantize(Decimal("0.01"))),
+                "texto": _financeiro_moeda_br(saldo_banco),
+            },
+        },
+        "hoje_iso": hoje.isoformat(),
+    }
+    return render(request, "estoque/pagar_fornecedor.html", contexto)
+
 def _situacao_financeira_compra_lista(compra, hoje=None):
     hoje = hoje or timezone.localdate()
     if compra.cancelada or compra.status == Compra.STATUS_CANCELADA:

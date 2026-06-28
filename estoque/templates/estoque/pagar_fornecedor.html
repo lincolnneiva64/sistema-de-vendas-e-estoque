@@ -1,0 +1,755 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Pagar fornecedor{% endblock %}
+{% block content %}
+
+<style>
+  .pf-page { max-width:1180px; margin:0 auto; padding:14px 16px 28px; color:#172033; }
+  .pf-header { display:flex; justify-content:space-between; align-items:flex-end; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .pf-title { margin:0; font-size:1.3rem; font-weight:950; color:#111827; }
+  .pf-subtitle { margin:3px 0 0; color:#64748b; font-size:.86rem; font-weight:750; }
+  .pf-actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .pf-btn { border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#0f172a; padding:8px 12px; font-weight:900; text-decoration:none; cursor:pointer; }
+  .pf-btn-primary { border-color:#2563eb; background:#2563eb; color:#fff; }
+  .pf-btn-danger { border-color:#fecaca; background:#fef2f2; color:#991b1b; }
+  .pf-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-bottom:10px; }
+  .pf-card { border:1px solid #e2e8f0; border-radius:10px; background:#fff; padding:10px 12px; box-shadow:0 8px 18px rgba(15,23,42,.05); }
+  .pf-label { display:block; color:#64748b; font-size:.68rem; font-weight:950; text-transform:uppercase; }
+  .pf-value { display:block; margin-top:4px; color:#111827; font-size:1.02rem; font-weight:950; }
+  .pf-value.red { color:#991b1b; }
+  .pf-panel { border:1px solid #e2e8f0; border-radius:12px; background:#fff; margin-bottom:10px; overflow:visible; box-shadow:0 10px 22px rgba(15,23,42,.05); }
+  .pf-panel-head { padding:10px 12px; border-bottom:1px solid #edf2f7; background:#f8fafc; font-weight:950; }
+  .pf-panel-body { padding:12px; }
+  .pf-grid { display:grid; grid-template-columns:minmax(280px,.9fr) minmax(320px,1.1fr); gap:12px; align-items:start; }
+  .pf-field { position:relative; }
+  .pf-field label { display:block; margin-bottom:5px; color:#64748b; font-size:.7rem; font-weight:950; text-transform:uppercase; }
+  .pf-input, .pf-select, .pf-textarea { width:100%; border:1.5px solid #cbd5e1; border-radius:9px; padding:10px 11px; font:inherit; font-weight:800; outline:none; }
+  .pf-textarea { min-height:74px; resize:vertical; }
+  .pf-input:focus, .pf-select:focus, .pf-textarea:focus { border-color:#2563eb; box-shadow:0 0 0 4px rgba(37,99,235,.14); }
+  #valorPagoFornecedor { min-height:64px; border:3px solid #2563eb; border-radius:16px; background:#eff6ff; font-size:1.35rem; font-weight:950; }
+  .pf-sugestoes { display:none; position:absolute; z-index:30; left:0; right:0; top:calc(100% + 5px); max-height:280px; overflow:auto; border:1.5px solid #bfdbfe; border-radius:12px; background:#fff; box-shadow:0 18px 38px rgba(15,23,42,.18); padding:6px; }
+  .pf-sugestao { width:100%; border:0; border-radius:9px; background:#fff; padding:10px; text-align:left; cursor:pointer; font:inherit; }
+  .pf-sugestao:hover, .pf-sugestao.ativa { background:#eff6ff; }
+  .pf-sugestao strong { display:block; color:#111827; font-weight:950; }
+  .pf-sugestao span { display:block; margin-top:2px; color:#64748b; font-size:.8rem; font-weight:800; }
+  .pf-fornecedor { display:none; border:1px solid #bfdbfe; border-radius:10px; background:#eff6ff; padding:10px; font-weight:900; color:#1e3a8a; }
+  .pf-fornecedor.visivel { display:block; }
+  .pf-lista { display:grid; gap:8px; max-height:430px; overflow:auto; }
+  .pf-conta { border:1px solid #e2e8f0; border-radius:10px; padding:10px; background:#fff; }
+  .pf-conta-top { display:flex; justify-content:space-between; gap:8px; font-weight:950; }
+  .pf-conta-meta { margin-top:4px; color:#64748b; font-size:.82rem; font-weight:800; }
+  .pf-conta.vencida { border-color:#fecaca; background:#fff7f7; }
+  .pf-form { display:grid; gap:10px; }
+  .pf-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .pf-saldos { border:1px solid #dbeafe; border-radius:12px; background:#eff6ff; padding:10px; }
+  .pf-saldos-title { margin:0 0 8px; color:#1e3a8a; font-size:.76rem; font-weight:950; text-transform:uppercase; }
+  .pf-saldos-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+  .pf-saldo-item { border:1px solid #bfdbfe; border-radius:9px; background:#fff; padding:8px; }
+  .pf-saldo-item span { display:block; color:#64748b; font-size:.72rem; font-weight:900; }
+  .pf-saldo-item strong { display:block; margin-top:3px; color:#111827; font-size:.95rem; font-weight:950; }
+  .pf-saldo-aviso { display:none; margin-top:8px; border:1px solid #f59e0b; border-radius:9px; background:#fffbeb; color:#92400e; padding:8px; font-size:.82rem; font-weight:900; }
+  .pf-saldo-aviso.visivel { display:block; }
+  .pf-origens { border:1px solid #bdd3ef; border-radius:12px; background:#f8fbff; padding:12px; box-shadow:0 10px 22px rgba(15,23,42,.06); }
+  .pf-origens-title { margin:0 0 9px; color:#111827; font-size:.95rem; font-weight:950; }
+  .pf-origens-resumo { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; align-items:stretch; border:1px solid #bfdbfe; border-radius:10px; background:#fff; padding:8px; margin-bottom:10px; }
+  .pf-origem-total { border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc; padding:8px 10px; }
+  .pf-origem-total span { display:block; color:#64748b; font-size:.68rem; font-weight:950; text-transform:uppercase; }
+  .pf-origem-total strong { display:block; margin-top:3px; color:#111827; font-size:1.02rem; font-weight:950; }
+  .pf-origem-total.alerta { border-color:#f59e0b; background:#fffbeb; }
+  .pf-origem-total.alerta span, .pf-origem-total.alerta strong { color:#92400e; }
+  .pf-origem-total.ok { border-color:#86efac; background:#ecfdf3; }
+  .pf-origem-total.ok span, .pf-origem-total.ok strong { color:#166534; }
+  .pf-origem-total.excesso { border-color:#fca5a5; background:#fef2f2; }
+  .pf-origem-total.excesso span, .pf-origem-total.excesso strong { color:#991b1b; }
+  .pf-origens-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+  .pf-origem-card { border:1px solid #cbd5e1; border-left-width:5px; border-radius:10px; background:#fff; padding:10px; display:grid; gap:8px; box-shadow:0 8px 18px rgba(15,23,42,.06); }
+  .pf-origem-card[data-origem-card="caixa"] { border-left-color:#2563eb; background:#f8fbff; }
+  .pf-origem-card[data-origem-card="reserva"] { border-left-color:#f59e0b; background:#fffdf5; }
+  .pf-origem-card[data-origem-card="banco"] { border-left-color:#16a34a; background:#f7fff9; }
+  .pf-origem-card.negativo { border-color:#fca5a5; background:#fef2f2; }
+  .pf-origem-card span { display:block; color:#111827; font-size:.82rem; font-weight:950; text-transform:uppercase; }
+  .pf-origem-linha { display:flex; align-items:center; justify-content:space-between; gap:8px; color:#64748b; font-size:.82rem; font-weight:900; }
+  .pf-origem-linha strong { color:#111827; font-size:.92rem; }
+  .pf-origem-card label { color:#64748b; font-size:.7rem; font-weight:950; text-transform:uppercase; }
+  .pf-origem-card .pf-input { border-width:2px; background:#fff; font-size:1rem; font-weight:950; }
+  .pf-origem-card.negativo .pf-origem-depois { color:#991b1b; }
+  .pf-origens-alerta { margin-top:10px; border:1.5px solid #f59e0b; border-radius:10px; background:#fffbeb; color:#92400e; padding:10px 12px; font-weight:950; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .pf-origens-alerta strong { font-size:1.02rem; }
+  .pf-origens-alerta.ok { border-color:#86efac; background:#ecfdf3; color:#166534; }
+  .pf-origens-alerta.excesso { border-color:#fca5a5; background:#fef2f2; color:#991b1b; }
+  .pf-origens-ajuda { margin:9px 0 0; color:#64748b; font-size:.82rem; font-weight:800; }
+  .pf-previa { border:1.5px solid #f59e0b; border-radius:12px; background:#fffbeb; padding:10px; color:#78350f; font-weight:850; }
+  .pf-previa.oculta { display:none; }
+  .pf-previa-lista { display:grid; gap:7px; margin-top:8px; }
+  .pf-previa-item { display:grid; grid-template-columns:1fr repeat(3,minmax(82px,auto)); gap:8px; align-items:center; border:1px solid #fde68a; border-radius:9px; background:#fff; padding:8px; font-size:.84rem; }
+  .pf-status { border-radius:999px; padding:3px 8px; text-align:center; font-weight:950; }
+  .pf-status.quit { background:#dcfce7; color:#166534; }
+  .pf-status.parcial { background:#fef3c7; color:#92400e; }
+  .pf-feedback { display:none; border-radius:10px; padding:10px 12px; margin-bottom:10px; font-weight:900; }
+  .pf-feedback.visivel { display:block; }
+  .pf-feedback.sucesso { background:#ecfdf3; border:1px solid #bbf7d0; color:#166534; }
+  .pf-feedback.erro { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
+  @media (max-width:780px) {
+    .pf-page { padding:10px; }
+    .pf-summary { grid-template-columns:1fr 1fr; }
+    .pf-grid, .pf-form-grid { grid-template-columns:1fr; }
+    .pf-saldos-grid { grid-template-columns:1fr; }
+    .pf-origens-resumo { grid-template-columns:1fr; }
+    .pf-origens-grid { grid-template-columns:1fr; }
+    .pf-origens-alerta { display:block; }
+    .pf-previa-item { grid-template-columns:1fr 1fr; }
+  }
+</style>
+
+<div class="pf-page">
+  <header class="pf-header">
+    <div>
+      <h1 class="pf-title">Pagar fornecedor</h1>
+      <p class="pf-subtitle">Baixa geral de contas a pagar por fornecedor, distribuindo nas contas mais antigas primeiro.</p>
+    </div>
+    <div class="pf-actions">
+      <a class="pf-btn" href="{% url 'estoque:contas_pagar' %}">Contas a pagar</a>
+      <a class="pf-btn" href="{% url 'estoque:painel_financeiro' %}">Central Financeira</a>
+    </div>
+  </header>
+
+  <div id="pfFeedback" class="pf-feedback" role="alert" aria-live="polite"></div>
+
+  <section class="pf-summary" aria-label="Resumo geral">
+    <div class="pf-card"><span class="pf-label">Fornecedores</span><span class="pf-value" id="resumoFornecedores">{{ resumo_geral.fornecedores }}</span></div>
+    <div class="pf-card"><span class="pf-label">Contas abertas</span><span class="pf-value" id="resumoContas">{{ resumo_geral.contas }}</span></div>
+    <div class="pf-card"><span class="pf-label">Total em aberto</span><span class="pf-value" id="resumoTotalAberto"></span></div>
+    <div class="pf-card"><span class="pf-label">Total vencido</span><span class="pf-value red" id="resumoTotalVencido"></span></div>
+  </section>
+
+  <section class="pf-panel">
+    <div class="pf-panel-head">Fornecedor</div>
+    <div class="pf-panel-body">
+      <div class="pf-field">
+        <label for="buscaFornecedorPagar">Buscar fornecedor</label>
+        <input id="buscaFornecedorPagar" class="pf-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Digite o fornecedor">
+        <div id="sugestoesFornecedorPagar" class="pf-sugestoes"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="pf-grid">
+    <section class="pf-panel">
+      <div class="pf-panel-head">Contas abertas</div>
+      <div class="pf-panel-body">
+        <div id="fornecedorSelecionadoPagar" class="pf-fornecedor">Nenhum fornecedor selecionado.</div>
+        <div id="listaContasPagarFornecedor" class="pf-lista" style="margin-top:10px;">
+          <div class="pf-conta-meta">Selecione um fornecedor para listar as contas abertas.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pf-panel">
+      <div class="pf-panel-head">Pagamento</div>
+      <div class="pf-panel-body">
+        <form id="formPagarFornecedor" class="pf-form" autocomplete="off">
+          {% csrf_token %}
+          <input type="hidden" id="fornecedorIdPagar" name="fornecedor_id">
+          <div class="pf-field">
+            <label for="valorPagoFornecedor">Valor pago</label>
+            <input id="valorPagoFornecedor" class="pf-input" name="valor_pago" type="text" inputmode="decimal" placeholder="0,00">
+          </div>
+          <div class="pf-form-grid">
+            <div class="pf-field">
+              <label for="dataPagamentoFornecedor">Data do pagamento</label>
+              <input id="dataPagamentoFornecedor" class="pf-input" name="data_pagamento" type="date" value="{{ hoje_iso }}">
+            </div>
+            <div class="pf-field">
+              <label for="formaPagamentoFornecedor">Forma de pagamento</label>
+              <select id="formaPagamentoFornecedor" class="pf-select" name="forma_pagamento">
+                <option value="À vista (Dinheiro / Pix)">À vista (Dinheiro / Pix)</option>
+                <option value="Cartão crédito">Cartão crédito</option>
+                <option value="Cartão débito">Cartão débito</option>
+              </select>
+            </div>
+          </div>
+          <div class="pf-saldos" aria-label="Saldos disponíveis">
+            <p class="pf-saldos-title">Saldos disponíveis</p>
+            <div class="pf-saldos-grid">
+              <div class="pf-saldo-item">
+                <span>Caixa em espécie</span>
+                <strong>{{ saldos_pagamento.caixa.texto }}</strong>
+              </div>
+              <div class="pf-saldo-item">
+                <span>Sangria/Reserva em mãos</span>
+                <strong>{{ saldos_pagamento.reserva.texto }}</strong>
+              </div>
+              <div class="pf-saldo-item">
+                <span>Banco/Pix</span>
+                <strong>{{ saldos_pagamento.banco.texto }}</strong>
+              </div>
+            </div>
+            <div id="avisoSaldoPagarFornecedor" class="pf-saldo-aviso"></div>
+          </div>
+          <div class="pf-origens">
+            <h2 class="pf-origens-title">De onde saiu o dinheiro?</h2>
+            <div class="pf-origens-resumo">
+              <div class="pf-origem-total">
+                <span>Total do pagamento</span>
+                <strong id="saidaValorPagoResumo">R$ 0,00</strong>
+              </div>
+              <div class="pf-origem-total pf-origem-distribuido">
+                <span>Distribuído</span>
+                <strong id="saidaDistribuidoResumo">R$ 0,00</strong>
+              </div>
+              <div id="saidaFaltaResumoCard" class="pf-origem-total alerta">
+                <span id="saidaFaltaResumoLabel">Falta distribuir</span>
+                <strong id="saidaFaltaResumo">R$ 0,00</strong>
+              </div>
+            </div>
+            <div class="pf-origens-grid">
+              <div class="pf-origem-card" data-origem-card="caixa">
+                <span>Caixa em espécie</span>
+                <div class="pf-origem-linha"><small>Saldo atual</small><strong>{{ saldos_pagamento.caixa.texto }}</strong></div>
+                <label for="valorSaidaCaixaFornecedor">Vai sair</label>
+                <input id="valorSaidaCaixaFornecedor" class="pf-input" name="valor_saida_caixa" type="text" inputmode="decimal" value="0,00">
+                <div class="pf-origem-linha"><small>Saldo depois</small><strong id="saldoDepoisCaixaFornecedor" class="pf-origem-depois">{{ saldos_pagamento.caixa.texto }}</strong></div>
+              </div>
+              <div class="pf-origem-card" data-origem-card="reserva">
+                <span>Sangria/Reserva em mãos</span>
+                <div class="pf-origem-linha"><small>Saldo atual</small><strong>{{ saldos_pagamento.reserva.texto }}</strong></div>
+                <label for="valorSaidaReservaFornecedor">Vai sair</label>
+                <input id="valorSaidaReservaFornecedor" class="pf-input" name="valor_saida_reserva" type="text" inputmode="decimal" value="0,00">
+                <div class="pf-origem-linha"><small>Saldo depois</small><strong id="saldoDepoisReservaFornecedor" class="pf-origem-depois">{{ saldos_pagamento.reserva.texto }}</strong></div>
+              </div>
+              <div class="pf-origem-card" data-origem-card="banco">
+                <span>Banco/Pix</span>
+                <div class="pf-origem-linha"><small>Saldo atual</small><strong>{{ saldos_pagamento.banco.texto }}</strong></div>
+                <label for="valorSaidaBancoFornecedor">Vai sair</label>
+                <input id="valorSaidaBancoFornecedor" class="pf-input" name="valor_saida_banco" type="text" inputmode="decimal" value="0,00">
+                <div class="pf-origem-linha"><small>Saldo depois</small><strong id="saldoDepoisBancoFornecedor" class="pf-origem-depois">{{ saldos_pagamento.banco.texto }}</strong></div>
+              </div>
+            </div>
+            <div id="saidaResumoAbaixo" class="pf-origens-alerta">
+              <span id="saidaResumoAbaixoLabel">Falta distribuir</span>
+              <strong id="saidaResumoAbaixoValor">R$ 0,00</strong>
+            </div>
+            <p class="pf-origens-ajuda">Distribua o total do pagamento entre Caixa, Sangria e Banco/Pix. Campos vazios contam como zero.</p>
+          </div>
+          <div class="pf-field">
+            <label for="observacaoPagarFornecedor">Observação</label>
+            <textarea id="observacaoPagarFornecedor" class="pf-textarea" name="observacao" placeholder="Opcional"></textarea>
+          </div>
+          <div id="previaPagarFornecedor" class="pf-previa">Selecione um fornecedor e informe um valor para ver a prévia.</div>
+          <div class="pf-actions">
+            <button type="submit" id="confirmarPagarFornecedor" class="pf-btn pf-btn-primary">Confirmar pagamento</button>
+            <button type="button" id="cancelarPagarFornecedor" class="pf-btn pf-btn-danger">Cancelar</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </div>
+</div>
+
+{{ fornecedores_payload|json_script:"fornecedores-pagar-data" }}
+{{ resumo_geral|json_script:"resumo-pagar-data" }}
+{{ saldos_pagamento|json_script:"saldos-pagar-data" }}
+
+<script>
+(function() {
+  const fornecedores = JSON.parse(document.getElementById("fornecedores-pagar-data").textContent || "[]");
+  const resumoGeral = JSON.parse(document.getElementById("resumo-pagar-data").textContent || "{}");
+  const saldosPagamento = JSON.parse(document.getElementById("saldos-pagar-data").textContent || "{}");
+  const busca = document.getElementById("buscaFornecedorPagar");
+  const sugestoes = document.getElementById("sugestoesFornecedorPagar");
+  const info = document.getElementById("fornecedorSelecionadoPagar");
+  const lista = document.getElementById("listaContasPagarFornecedor");
+  const form = document.getElementById("formPagarFornecedor");
+  const fornecedorId = document.getElementById("fornecedorIdPagar");
+  const valorInput = document.getElementById("valorPagoFornecedor");
+  const dataInput = document.getElementById("dataPagamentoFornecedor");
+  const formaInput = document.getElementById("formaPagamentoFornecedor");
+  const saidaCaixaInput = document.getElementById("valorSaidaCaixaFornecedor");
+  const saidaReservaInput = document.getElementById("valorSaidaReservaFornecedor");
+  const saidaBancoInput = document.getElementById("valorSaidaBancoFornecedor");
+  const saidaValorPagoResumo = document.getElementById("saidaValorPagoResumo");
+  const saidaDistribuidoResumo = document.getElementById("saidaDistribuidoResumo");
+  const saidaFaltaResumo = document.getElementById("saidaFaltaResumo");
+  const saidaFaltaResumoLabel = document.getElementById("saidaFaltaResumoLabel");
+  const saidaFaltaResumoCard = document.getElementById("saidaFaltaResumoCard");
+  const saidaResumoAbaixo = document.getElementById("saidaResumoAbaixo");
+  const saidaResumoAbaixoLabel = document.getElementById("saidaResumoAbaixoLabel");
+  const saidaResumoAbaixoValor = document.getElementById("saidaResumoAbaixoValor");
+  const saldoDepoisCaixa = document.getElementById("saldoDepoisCaixaFornecedor");
+  const saldoDepoisReserva = document.getElementById("saldoDepoisReservaFornecedor");
+  const saldoDepoisBanco = document.getElementById("saldoDepoisBancoFornecedor");
+  const observacaoInput = document.getElementById("observacaoPagarFornecedor");
+  const previa = document.getElementById("previaPagarFornecedor");
+  const avisoSaldo = document.getElementById("avisoSaldoPagarFornecedor");
+  const feedback = document.getElementById("pfFeedback");
+  const confirmar = document.getElementById("confirmarPagarFornecedor");
+  const chaveSucesso = "pagarFornecedorSucesso";
+  let fornecedorAtual = null;
+  let sugestaoAtiva = -1;
+  let saidaAutomatica = { reserva: true, banco: true };
+
+  function numero(valor) {
+    let texto = String(valor || "").trim();
+    if (!texto) return 0;
+    if (texto.includes(",")) texto = texto.replace(/\./g, "").replace(",", ".");
+    texto = texto.replace(/[^\d.-]/g, "");
+    return Number(texto) || 0;
+  }
+
+  function moeda(valor) {
+    return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }
+
+  function moedaCampo(valor) {
+    return Math.max(Number(valor || 0), 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function normalizar(valor) {
+    return String(valor || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  }
+
+  function contasFornecedor() {
+    return fornecedorAtual ? (fornecedorAtual.contas || []) : [];
+  }
+
+  function mostrarFeedback(tipo, texto) {
+    feedback.textContent = texto;
+    feedback.className = "pf-feedback visivel " + tipo;
+  }
+
+  function limparFeedbackSucessoAoDigitar() {
+    if (feedback.classList.contains("sucesso")) {
+      feedback.textContent = "";
+      feedback.className = "pf-feedback";
+    }
+  }
+
+  function valoresSaida() {
+    return {
+      caixa: numero(saidaCaixaInput.value),
+      reserva: numero(saidaReservaInput.value),
+      banco: numero(saidaBancoInput.value)
+    };
+  }
+
+  function definirSaidaAutomatica(campo, chave, valor) {
+    campo.value = moedaCampo(valor);
+    saidaAutomatica[chave] = true;
+  }
+
+  function preencherDepoisDoCaixa() {
+    const valor = numero(valorInput.value);
+    const caixa = numero(saidaCaixaInput.value);
+    if (saidaAutomatica.reserva || !saidaReservaInput.value.trim()) {
+      definirSaidaAutomatica(saidaReservaInput, "reserva", valor - caixa);
+      definirSaidaAutomatica(saidaBancoInput, "banco", 0);
+    } else if (saidaAutomatica.banco || !saidaBancoInput.value.trim()) {
+      definirSaidaAutomatica(saidaBancoInput, "banco", valor - caixa - numero(saidaReservaInput.value));
+    }
+    atualizarPrevia();
+    atualizarDistribuicaoSaida();
+  }
+
+  function preencherDepoisDaReserva() {
+    const valor = numero(valorInput.value);
+    const caixa = numero(saidaCaixaInput.value);
+    const reserva = numero(saidaReservaInput.value);
+    if (saidaAutomatica.banco || !saidaBancoInput.value.trim()) {
+      definirSaidaAutomatica(saidaBancoInput, "banco", valor - caixa - reserva);
+    }
+    atualizarPrevia();
+    atualizarDistribuicaoSaida();
+  }
+
+  function distribuicaoSaidaValida() {
+    const valor = numero(valorInput.value);
+    const saidas = valoresSaida();
+    const total = Math.round((saidas.caixa + saidas.reserva + saidas.banco) * 100) / 100;
+    const saldos = {
+      caixa: Number((saldosPagamento.caixa || {}).valor || 0),
+      reserva: Number((saldosPagamento.reserva || {}).valor || 0),
+      banco: Number((saldosPagamento.banco || {}).valor || 0)
+    };
+    return Boolean(
+      fornecedorAtual &&
+      valor > 0 &&
+      valor <= Number(fornecedorAtual.total_aberto || 0) &&
+      Math.abs(total - valor) < 0.005 &&
+      saidas.caixa >= 0 &&
+      saidas.reserva >= 0 &&
+      saidas.banco >= 0 &&
+      saidas.caixa <= saldos.caixa &&
+      saidas.reserva <= saldos.reserva &&
+      saidas.banco <= saldos.banco
+    );
+  }
+
+  function atualizarDistribuicaoSaida() {
+    const valor = numero(valorInput.value);
+    const saidas = valoresSaida();
+    const saldos = {
+      caixa: Number((saldosPagamento.caixa || {}).valor || 0),
+      reserva: Number((saldosPagamento.reserva || {}).valor || 0),
+      banco: Number((saldosPagamento.banco || {}).valor || 0)
+    };
+    const total = Math.round((saidas.caixa + saidas.reserva + saidas.banco) * 100) / 100;
+    const falta = Math.round((valor - total) * 100) / 100;
+    saidaValorPagoResumo.textContent = moeda(valor);
+    saidaDistribuidoResumo.textContent = moeda(total);
+    saidaFaltaResumoCard.classList.remove("ok", "alerta", "excesso");
+    saidaResumoAbaixo.classList.remove("ok", "excesso");
+    if (Math.abs(falta) < 0.005 && valor > 0) {
+      saidaFaltaResumoLabel.textContent = "Tudo distribuído";
+      saidaFaltaResumo.textContent = moeda(0);
+      saidaFaltaResumoCard.classList.add("ok");
+      saidaResumoAbaixoLabel.textContent = saidaFaltaResumoLabel.textContent;
+      saidaResumoAbaixoValor.textContent = saidaFaltaResumo.textContent;
+      saidaResumoAbaixo.classList.add("ok");
+    } else if (falta < 0) {
+      saidaFaltaResumoLabel.textContent = "Excedeu";
+      saidaFaltaResumo.textContent = moeda(Math.abs(falta));
+      saidaFaltaResumoCard.classList.add("excesso");
+      saidaResumoAbaixoLabel.textContent = saidaFaltaResumoLabel.textContent;
+      saidaResumoAbaixoValor.textContent = saidaFaltaResumo.textContent;
+      saidaResumoAbaixo.classList.add("excesso");
+    } else {
+      saidaFaltaResumoLabel.textContent = "Falta distribuir";
+      saidaFaltaResumo.textContent = moeda(falta);
+      saidaFaltaResumoCard.classList.add("alerta");
+      saidaResumoAbaixoLabel.textContent = saidaFaltaResumoLabel.textContent;
+      saidaResumoAbaixoValor.textContent = saidaFaltaResumo.textContent;
+    }
+    [
+      ["caixa", saidas.caixa, saldos.caixa, saldoDepoisCaixa],
+      ["reserva", saidas.reserva, saldos.reserva, saldoDepoisReserva],
+      ["banco", saidas.banco, saldos.banco, saldoDepoisBanco]
+    ].forEach(([chave, saida, saldo, saldoDepoisEl]) => {
+      const depois = Math.round((saldo - saida) * 100) / 100;
+      const card = document.querySelector('[data-origem-card="' + chave + '"]');
+      saldoDepoisEl.textContent = moeda(depois);
+      if (card) card.classList.toggle("negativo", depois < 0 || saida < 0);
+    });
+    const negativos = [
+      ["Caixa em espécie", saidas.caixa, saldos.caixa],
+      ["Sangria/Reserva em mãos", saidas.reserva, saldos.reserva],
+      ["Banco/Pix", saidas.banco, saldos.banco]
+    ].filter((item) => item[1] < 0 || item[1] > item[2]);
+    if (negativos.length) {
+      avisoSaldo.textContent = "Atenção: confira a origem " + negativos[0][0] + ". O valor informado deixa saldo negativo.";
+      avisoSaldo.classList.add("visivel");
+    } else {
+      avisoSaldo.textContent = "";
+      avisoSaldo.classList.remove("visivel");
+    }
+    confirmar.disabled = !distribuicaoSaidaValida();
+  }
+
+  function limparLancamentoParaProximoFornecedor(opcoes) {
+    const ocultarPrevia = Boolean(opcoes && opcoes.ocultarPrevia);
+    fornecedorAtual = null;
+    sugestaoAtiva = -1;
+    fornecedorId.value = "";
+    busca.value = "";
+    valorInput.value = "0,00";
+    saidaCaixaInput.value = "0,00";
+    saidaReservaInput.value = "0,00";
+    saidaBancoInput.value = "0,00";
+    saidaAutomatica = { reserva: true, banco: true };
+    observacaoInput.value = "";
+    fecharSugestoes();
+    renderizarContas();
+    atualizarPrevia();
+    if (ocultarPrevia) previa.classList.add("oculta");
+    atualizarDistribuicaoSaida();
+  }
+
+  function focarBuscaNoTopo() {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.setTimeout(function() {
+      busca.focus();
+      busca.select();
+    }, 180);
+  }
+
+  function atualizarResumoGeral() {
+    document.getElementById("resumoTotalAberto").textContent = moeda(resumoGeral.total_aberto || 0);
+    document.getElementById("resumoTotalVencido").textContent = moeda(resumoGeral.total_vencido || 0);
+  }
+
+  function filtrarFornecedores() {
+    const termo = normalizar(busca.value);
+    return fornecedores.filter((fornecedor) => {
+      const texto = normalizar(fornecedor.nome + " " + (fornecedor.contas || []).map((conta) => "#" + conta.compra_id).join(" "));
+      return !termo || texto.includes(termo);
+    });
+  }
+
+  function abrirSugestoes() {
+    const encontrados = filtrarFornecedores();
+    sugestaoAtiva = encontrados.length ? 0 : -1;
+    if (!encontrados.length) {
+      sugestoes.innerHTML = '<div class="pf-sugestao"><strong>Nenhum fornecedor encontrado</strong></div>';
+      sugestoes.style.display = "block";
+      return;
+    }
+    sugestoes.innerHTML = encontrados.map((fornecedor, index) => (
+      '<button type="button" class="pf-sugestao' + (index === 0 ? " ativa" : "") + '" data-fornecedor-id="' + fornecedor.id + '">' +
+        '<strong>' + fornecedor.nome + '</strong>' +
+        '<span>' + fornecedor.quantidade + ' conta(s) - ' + moeda(fornecedor.total_aberto) + ' em aberto</span>' +
+      '</button>'
+    )).join("");
+    sugestoes.style.display = "block";
+  }
+
+  function fecharSugestoes() {
+    sugestoes.style.display = "none";
+  }
+
+  function marcarSugestao(indice) {
+    const itens = Array.from(sugestoes.querySelectorAll(".pf-sugestao[data-fornecedor-id]"));
+    if (!itens.length) return;
+    sugestaoAtiva = Math.max(0, Math.min(indice, itens.length - 1));
+    itens.forEach((item, index) => item.classList.toggle("ativa", index === sugestaoAtiva));
+    itens[sugestaoAtiva].scrollIntoView({ block: "nearest" });
+  }
+
+  function renderizarContas() {
+    const contas = contasFornecedor();
+    if (!fornecedorAtual) {
+      info.classList.remove("visivel");
+      lista.innerHTML = '<div class="pf-conta-meta">Selecione um fornecedor para listar as contas abertas.</div>';
+      return;
+    }
+    info.classList.add("visivel");
+    info.textContent = fornecedorAtual.nome + " - " + fornecedorAtual.quantidade + " conta(s), total " + moeda(fornecedorAtual.total_aberto);
+    lista.innerHTML = contas.map((conta) => (
+      '<div class="pf-conta' + (conta.vencida ? " vencida" : "") + '">' +
+        '<div class="pf-conta-top"><span>Compra #' + conta.compra_id + '</span><span>' + moeda(conta.saldo) + '</span></div>' +
+        '<div class="pf-conta-meta">Vencimento: ' + conta.vencimento + ' - Status: ' + conta.status + '</div>' +
+      '</div>'
+    )).join("");
+  }
+
+  function distribuir(valor) {
+    let restante = Math.round(Number(valor || 0) * 100) / 100;
+    const itens = [];
+    for (const conta of contasFornecedor()) {
+      if (restante <= 0) break;
+      const saldoAntes = Number(conta.saldo || 0);
+      const aplicado = Math.min(restante, saldoAntes);
+      if (aplicado <= 0) continue;
+      const saldoDepois = Math.round((saldoAntes - aplicado) * 100) / 100;
+      itens.push({ conta, saldoAntes, aplicado, saldoDepois });
+      restante = Math.round((restante - aplicado) * 100) / 100;
+    }
+    return itens;
+  }
+
+  function atualizarPrevia() {
+    previa.classList.remove("oculta");
+    const valor = numero(valorInput.value);
+    if (!fornecedorAtual) {
+      previa.textContent = "Selecione um fornecedor e informe um valor para ver a prévia.";
+      return;
+    }
+    const total = Number(fornecedorAtual.total_aberto || 0);
+    if (valor <= 0) {
+      previa.textContent = "Informe um valor maior que zero para calcular a prévia.";
+      return;
+    }
+    if (valor > total) {
+      previa.textContent = "Valor maior que o total em aberto do fornecedor (" + moeda(total) + ").";
+      return;
+    }
+    const itens = distribuir(valor);
+    previa.innerHTML =
+      '<strong>Prévia da distribuição</strong>' +
+      '<div class="pf-previa-lista">' +
+      itens.map((item) => {
+        const quitada = item.saldoDepois <= 0;
+        return '<div class="pf-previa-item">' +
+          '<div><strong>Compra #' + item.conta.compra_id + '</strong><br><span>Venc. ' + item.conta.vencimento + '</span></div>' +
+          '<div><span class="pf-label">Antes</span><strong>' + moeda(item.saldoAntes) + '</strong></div>' +
+          '<div><span class="pf-label">Aplica</span><strong>' + moeda(item.aplicado) + '</strong></div>' +
+          '<div><span class="pf-label">Depois</span><strong>' + moeda(item.saldoDepois) + '</strong></div>' +
+          '<div><span class="pf-status ' + (quitada ? "quit" : "parcial") + '">' + (quitada ? "Quitada" : "Parcial") + '</span></div>' +
+        '</div>';
+      }).join("") +
+      '</div>';
+  }
+
+  function selecionarFornecedor(id) {
+    fornecedorAtual = fornecedores.find((fornecedor) => String(fornecedor.id) === String(id)) || null;
+    if (!fornecedorAtual) return;
+    fornecedorId.value = fornecedorAtual.id;
+    busca.value = fornecedorAtual.nome;
+    fecharSugestoes();
+    renderizarContas();
+    atualizarPrevia();
+    atualizarDistribuicaoSaida();
+    valorInput.focus();
+    valorInput.select();
+  }
+
+  busca.addEventListener("focus", abrirSugestoes);
+  busca.addEventListener("click", abrirSugestoes);
+  busca.addEventListener("input", function() {
+    limparFeedbackSucessoAoDigitar();
+    fornecedorAtual = null;
+    fornecedorId.value = "";
+    renderizarContas();
+    atualizarPrevia();
+    atualizarDistribuicaoSaida();
+    abrirSugestoes();
+  });
+  busca.addEventListener("keydown", function(event) {
+    const itens = Array.from(sugestoes.querySelectorAll(".pf-sugestao[data-fornecedor-id]"));
+    if (event.key === "Escape") {
+      event.preventDefault();
+      fecharSugestoes();
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (sugestoes.style.display === "none") abrirSugestoes();
+      marcarSugestao(sugestaoAtiva + 1);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (sugestoes.style.display === "none") abrirSugestoes();
+      marcarSugestao(sugestaoAtiva <= 0 ? itens.length - 1 : sugestaoAtiva - 1);
+      return;
+    }
+    if (event.key === "Enter") {
+      const ativo = sugestoes.querySelector(".pf-sugestao.ativa[data-fornecedor-id]");
+      if (ativo) {
+        event.preventDefault();
+        selecionarFornecedor(ativo.dataset.fornecedorId);
+      }
+    }
+  });
+  sugestoes.addEventListener("click", function(event) {
+    const item = event.target.closest(".pf-sugestao[data-fornecedor-id]");
+    if (item) selecionarFornecedor(item.dataset.fornecedorId);
+  });
+
+  [valorInput, dataInput, formaInput, saidaCaixaInput, saidaReservaInput, saidaBancoInput, observacaoInput].forEach((campo) => {
+    campo.addEventListener("input", atualizarPrevia);
+    campo.addEventListener("change", atualizarPrevia);
+  });
+  valorInput.addEventListener("input", function() {
+    if (saidaAutomatica.reserva) preencherDepoisDoCaixa();
+    else if (saidaAutomatica.banco) preencherDepoisDaReserva();
+    else atualizarDistribuicaoSaida();
+  });
+  valorInput.addEventListener("change", function() {
+    if (saidaAutomatica.reserva) preencherDepoisDoCaixa();
+    else if (saidaAutomatica.banco) preencherDepoisDaReserva();
+    else atualizarDistribuicaoSaida();
+  });
+  saidaCaixaInput.addEventListener("input", preencherDepoisDoCaixa);
+  saidaCaixaInput.addEventListener("change", preencherDepoisDoCaixa);
+  saidaReservaInput.addEventListener("input", function() {
+    saidaAutomatica.reserva = !saidaReservaInput.value.trim();
+    preencherDepoisDaReserva();
+  });
+  saidaReservaInput.addEventListener("change", function() {
+    saidaAutomatica.reserva = !saidaReservaInput.value.trim();
+    preencherDepoisDaReserva();
+  });
+  saidaBancoInput.addEventListener("input", function() {
+    saidaAutomatica.banco = !saidaBancoInput.value.trim();
+    atualizarDistribuicaoSaida();
+  });
+  saidaBancoInput.addEventListener("change", function() {
+    saidaAutomatica.banco = !saidaBancoInput.value.trim();
+    atualizarDistribuicaoSaida();
+  });
+  [[valorInput, dataInput], [dataInput, formaInput], [formaInput, saidaCaixaInput], [saidaCaixaInput, saidaReservaInput], [saidaReservaInput, saidaBancoInput], [saidaBancoInput, observacaoInput], [observacaoInput, confirmar]].forEach(([campo, proximo]) => {
+    campo.addEventListener("keydown", function(event) {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      proximo.focus();
+      if (typeof proximo.select === "function") proximo.select();
+    });
+  });
+
+  document.getElementById("cancelarPagarFornecedor").addEventListener("click", function() {
+    limparLancamentoParaProximoFornecedor();
+    focarBuscaNoTopo();
+  });
+
+  form.addEventListener("submit", async function(event) {
+    event.preventDefault();
+    if (!fornecedorAtual) {
+      mostrarFeedback("erro", "Selecione um fornecedor antes de confirmar.");
+      return;
+    }
+    const valor = numero(valorInput.value);
+    if (valor <= 0 || valor > Number(fornecedorAtual.total_aberto || 0)) {
+      mostrarFeedback("erro", "Confira o valor informado antes de confirmar.");
+      return;
+    }
+    if (!distribuicaoSaidaValida()) {
+      atualizarDistribuicaoSaida();
+      mostrarFeedback("erro", "Distribua o valor pago entre Caixa, Reserva e Banco/Pix antes de confirmar.");
+      return;
+    }
+    confirmar.disabled = true;
+    confirmar.textContent = "Confirmando...";
+    try {
+      const dados = new FormData(form);
+      dados.set("fornecedor_id", String(fornecedorAtual.id));
+      dados.set("valor_pago", valor.toFixed(2).replace(".", ","));
+      dados.set("data_pagamento", dataInput.value || "");
+      dados.set("forma_pagamento", formaInput.value || "");
+      dados.set("valor_saida_caixa", valoresSaida().caixa.toFixed(2).replace(".", ","));
+      dados.set("valor_saida_reserva", valoresSaida().reserva.toFixed(2).replace(".", ","));
+      dados.set("valor_saida_banco", valoresSaida().banco.toFixed(2).replace(".", ","));
+      dados.set("observacao", observacaoInput.value || "");
+      const resposta = await fetch("{% url 'estoque:pagar_fornecedor' %}", {
+        method: "POST",
+        headers: {
+          "X-CSRFToken": form.querySelector("[name='csrfmiddlewaretoken']").value,
+          "X-Requested-With": "XMLHttpRequest"
+        },
+        body: dados
+      });
+      const texto = await resposta.text();
+      let retorno = {};
+      try {
+        retorno = texto ? JSON.parse(texto) : {};
+      } catch (erroJson) {
+        throw new Error("Resposta inesperada do servidor: " + texto.slice(0, 180));
+      }
+      if (!resposta.ok || !retorno.ok) throw new Error(retorno.erro || "Nao foi possivel confirmar o pagamento.");
+      const mensagemSucesso = retorno.mensagem || ("Pagamento confirmado para " + fornecedorAtual.nome + ".");
+      mostrarFeedback("sucesso", mensagemSucesso);
+      sessionStorage.setItem(chaveSucesso, mensagemSucesso);
+      window.setTimeout(function() { window.location.reload(); }, 1400);
+    } catch (erro) {
+      mostrarFeedback("erro", erro.message || "Erro ao confirmar pagamento.");
+      feedback.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    } finally {
+      confirmar.textContent = "Confirmar pagamento";
+      atualizarDistribuicaoSaida();
+    }
+  });
+
+  document.addEventListener("click", function(event) {
+    if (!event.target.closest(".pf-field")) fecharSugestoes();
+  });
+
+  atualizarResumoGeral();
+  atualizarDistribuicaoSaida();
+  const mensagemAposReload = sessionStorage.getItem(chaveSucesso);
+  if (mensagemAposReload) {
+    sessionStorage.removeItem(chaveSucesso);
+    limparLancamentoParaProximoFornecedor({ ocultarPrevia: true });
+    mostrarFeedback("sucesso", mensagemAposReload);
+    focarBuscaNoTopo();
+  }
+})();
+</script>
+
+{% endblock %}

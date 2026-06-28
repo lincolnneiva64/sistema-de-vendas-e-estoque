@@ -51,6 +51,7 @@ urlpatterns = [
     path("vendas/gravar/", views.gravar_venda, name="gravar_venda"),
     path("contas-a-receber/", views.contas_receber, name="contas_receber"),
     path("contas-a-pagar/", views.contas_pagar, name="contas_pagar"),
+    path("pagar-fornecedor/", views.pagar_fornecedor, name="pagar_fornecedor"),
     path("contas-a-pagar/abertas/", views.contas_pagar_abertas_geral, name="contas_pagar_abertas_geral"),
     path("emprestimos-rapidos/", views.emprestimos_rapidos, name="emprestimos_rapidos"),
     path("emprestimos-dividas/", views.emprestimos_dividas, name="emprestimos_dividas"),
