@@ -5663,6 +5663,312 @@
   });
 })();
 </script>
+
+<script>
+/* BLOQUEIO COMPACTO SALDO NEGATIVO - MODAL FINANCEIRO NOVA COMPRA */
+(function () {
+  if (window.__bloqueioCompactoSaldoNegativoCompra) return;
+  window.__bloqueioCompactoSaldoNegativoCompra = true;
+
+  function paraNumero(valor) {
+    valor = (valor || "").toString().trim();
+    if (!valor) return 0;
+    valor = valor.replace(/[^\d,.-]/g, "");
+    if (valor.includes(",")) valor = valor.replace(/\./g, "").replace(",", ".");
+    var n = parseFloat(valor);
+    return isNaN(n) ? 0 : n;
+  }
+
+  function moeda(valor) {
+    return Number(valor || 0).toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL"
+    });
+  }
+
+  function visivel(el) {
+    if (!el) return false;
+    var st = window.getComputedStyle(el);
+    return st.display !== "none" && st.visibility !== "hidden" && el.offsetParent !== null;
+  }
+
+  function ehBotaoFechar(el) {
+    var t = (el && (el.innerText || el.value || "") || "").toLowerCase();
+    return t.includes("fechar compra") || t.includes("lan?ar no financeiro") || t.includes("lancar no financeiro");
+  }
+
+  function acharCardModalPorElemento(el) {
+    var atual = el;
+    while (atual && atual !== document.body) {
+      var t = atual.innerText || "";
+      if (
+        t.includes("De onde saiu o dinheiro") &&
+        t.includes("Total da compra") &&
+        t.includes("Dinheiro do caixa") &&
+        t.includes("Banco/Pix") &&
+        Array.from(atual.querySelectorAll("button")).some(ehBotaoFechar)
+      ) {
+        return atual;
+      }
+      atual = atual.parentElement;
+    }
+    return null;
+  }
+
+  function camposDoModal(card) {
+    return Array.from(card.querySelectorAll("input"))
+      .filter(visivel)
+      .slice(0, 3);
+  }
+
+  function blocoCampo(campo) {
+    var atual = campo.parentElement;
+    while (atual && atual !== document.body) {
+      var t = atual.innerText || "";
+      if (
+        t.includes("Saldo atual:") ||
+        t.includes("Dinheiro do caixa") ||
+        t.includes("Sangria") ||
+        t.includes("Banco/Pix")
+      ) {
+        return atual;
+      }
+      atual = atual.parentElement;
+    }
+    return campo.parentElement;
+  }
+
+  function saldoAtual(bloco) {
+    var t = bloco ? (bloco.innerText || "") : "";
+    var m = t.match(/Saldo atual:\s*R\$\s*([\d.]+,\d{2})/i);
+    return m ? paraNumero(m[1]) : 0;
+  }
+
+  function nomeOrigem(bloco, indice) {
+    var t = bloco ? (bloco.innerText || "") : "";
+    if (t.includes("Dinheiro do caixa")) return "Caixa";
+    if (t.includes("Sangria") || t.includes("Reserva")) return "Sangria/Reserva";
+    if (t.includes("Banco/Pix")) return "Banco/Pix";
+    return ["Caixa", "Sangria/Reserva", "Banco/Pix"][indice] || "origem";
+  }
+
+  function validar(card) {
+    var campos = camposDoModal(card);
+    if (campos.length < 3) return { ok: true };
+
+    for (var i = 0; i < campos.length; i++) {
+      var campo = campos[i];
+      var bloco = blocoCampo(campo);
+      var atual = saldoAtual(bloco);
+      var sair = paraNumero(campo.value);
+      var depois = atual - sair;
+
+      if (depois < -0.004) {
+        return {
+          ok: false,
+          campo: campo,
+          origem: nomeOrigem(bloco, i),
+          saldo: atual,
+          sair: sair,
+          depois: depois
+        };
+      }
+    }
+
+    return { ok: true };
+  }
+
+  function linhaBotoes(card) {
+    var botoes = Array.from(card.querySelectorAll("button"));
+    var fechar = botoes.find(ehBotaoFechar);
+    return fechar ? fechar.parentElement : null;
+  }
+
+  function mostrarAviso(card, erro) {
+    var aviso = card.querySelector(".aviso-compacto-saldo-negativo-compra");
+
+    if (!aviso) {
+      aviso = document.createElement("div");
+      aviso.className = "aviso-compacto-saldo-negativo-compra";
+
+      var linha = linhaBotoes(card);
+      if (linha && linha.parentElement) {
+        linha.parentElement.insertBefore(aviso, linha);
+      } else {
+        card.appendChild(aviso);
+      }
+    }
+
+    aviso.innerHTML =
+      '<strong>Saldo insuficiente no ' + erro.origem + '.</strong> ' +
+      'Atual: ' + moeda(erro.saldo) + ' | Saida: ' + moeda(erro.sair) +
+      ' | Depois: ' + moeda(erro.depois) +
+      '. Distribua o valor antes de fechar.';
+
+    if (erro.campo) {
+      erro.campo.focus();
+      erro.campo.select();
+    }
+  }
+
+  function limparAvisoSeOk(card) {
+    if (!card) return;
+    var erro = validar(card);
+    var aviso = card.querySelector(".aviso-compacto-saldo-negativo-compra");
+    if (erro.ok && aviso) aviso.remove();
+  }
+
+  function bloquear(event, origemEvento) {
+    var card = acharCardModalPorElemento(origemEvento);
+    if (!card) return true;
+
+    var erro = validar(card);
+    if (erro.ok) return true;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+
+    mostrarAviso(card, erro);
+    return false;
+  }
+
+  if (!document.getElementById("cssBloqueioCompactoSaldoCompra")) {
+    var style = document.createElement("style");
+    style.id = "cssBloqueioCompactoSaldoCompra";
+    style.textContent = `
+      .aviso-compacto-saldo-negativo-compra {
+        margin: 10px 0 8px 0;
+        padding: 9px 11px;
+        border: 2px solid #ef4444;
+        border-radius: 12px;
+        background: #fff1f2;
+        color: #7f1d1d;
+        font-weight: 900;
+        font-size: 0.9rem;
+        line-height: 1.3;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .aviso-compacto-saldo-negativo-compra strong {
+        color: #991b1b;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  document.addEventListener("click", function(event) {
+    var botao = event.target.closest("button, input[type='submit']");
+    if (botao && ehBotaoFechar(botao)) {
+      bloquear(event, botao);
+    }
+  }, true);
+
+  document.addEventListener("keydown", function(event) {
+    if (event.key !== "Enter") return;
+    var card = acharCardModalPorElemento(event.target);
+    if (card) bloquear(event, event.target);
+  }, true);
+
+  document.addEventListener("input", function(event) {
+    limparAvisoSeOk(acharCardModalPorElemento(event.target));
+  }, true);
+
+  document.addEventListener("change", function(event) {
+    limparAvisoSeOk(acharCardModalPorElemento(event.target));
+  }, true);
+})();
+</script>
+
+
+
+<script>
+/* AJUSTA DESTAQUE SALDO ATUAL - MODAL FINANCEIRO NOVA COMPRA */
+(function () {
+  if (window.__ajustaDestaqueSaldoAtualModalCompra) return;
+  window.__ajustaDestaqueSaldoAtualModalCompra = true;
+
+  function acharCardModal() {
+    var candidatos = Array.from(document.querySelectorAll("div, section, form"));
+    candidatos = candidatos.filter(function(el) {
+      var t = el.innerText || "";
+      return (
+        t.includes("De onde saiu o dinheiro") &&
+        t.includes("Total da compra") &&
+        t.includes("Dinheiro do caixa") &&
+        t.includes("Banco/Pix")
+      );
+    });
+
+    candidatos.sort(function(a, b) {
+      return (a.innerText || "").length - (b.innerText || "").length;
+    });
+
+    return candidatos[0] || null;
+  }
+
+  function aplicarEstilo() {
+    var card = acharCardModal();
+    if (!card) return;
+
+    var elementos = Array.from(card.querySelectorAll("div, p, span, small, strong, label"));
+
+    elementos.forEach(function(el) {
+      if (el.dataset.saldoAtualFormatado === "1") return;
+      if (el.querySelector("input, button, select, textarea")) return;
+
+      var texto = (el.textContent || "").replace(/\s+/g, " ").trim();
+      var m = texto.match(/^(Saldo atual:)\s*(R\$\s*[\d.]+,\d{2})$/i);
+      if (!m) return;
+
+      el.dataset.saldoAtualFormatado = "1";
+      el.classList.add("saldo-atual-modal-compra-linha");
+      el.innerHTML =
+        '<span class="saldo-atual-modal-compra-label">' + m[1] + '</span> ' +
+        '<span class="saldo-atual-modal-compra-valor">' + m[2] + '</span>';
+    });
+  }
+
+  if (!document.getElementById("cssSaldoAtualModalCompra")) {
+    var style = document.createElement("style");
+    style.id = "cssSaldoAtualModalCompra";
+    style.textContent = `
+      .saldo-atual-modal-compra-linha {
+        margin-top: 2px;
+        margin-bottom: 8px;
+        line-height: 1.2;
+      }
+
+      .saldo-atual-modal-compra-label {
+        color: #64748b;
+        font-size: 1rem;
+        font-weight: 800;
+      }
+
+      .saldo-atual-modal-compra-valor {
+        color: #1e3a5f;
+        font-size: 1.15rem;
+        font-weight: 900;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  document.addEventListener("click", function() {
+    setTimeout(aplicarEstilo, 80);
+    setTimeout(aplicarEstilo, 250);
+  }, true);
+
+  document.addEventListener("DOMContentLoaded", aplicarEstilo);
+  window.addEventListener("load", function() {
+    aplicarEstilo();
+    setInterval(aplicarEstilo, 900);
+  });
+})();
+</script>
+
+
 {% endblock %}
 
 
