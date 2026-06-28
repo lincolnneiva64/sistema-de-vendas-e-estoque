@@ -4267,8 +4267,7 @@
     if (abrir) {
       event.preventDefault();
       event.stopPropagation();
-      garantirModal().style.display = "flex";
-      carregarContas();
+      window.location.href = "/pagar-fornecedor/";
       return;
     }
 
