@@ -40,26 +40,10 @@
   .pf-conta.vencida { border-color:#fecaca; background:#fff7f7; }
   .pf-form { display:grid; gap:10px; }
   .pf-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-  .pf-saldos { border:1px solid #dbeafe; border-radius:12px; background:#eff6ff; padding:10px; }
-  .pf-saldos-title { margin:0 0 8px; color:#1e3a8a; font-size:.76rem; font-weight:950; text-transform:uppercase; }
-  .pf-saldos-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
-  .pf-saldo-item { border:1px solid #bfdbfe; border-radius:9px; background:#fff; padding:8px; }
-  .pf-saldo-item span { display:block; color:#64748b; font-size:.72rem; font-weight:900; }
-  .pf-saldo-item strong { display:block; margin-top:3px; color:#111827; font-size:.95rem; font-weight:950; }
   .pf-saldo-aviso { display:none; margin-top:8px; border:1px solid #f59e0b; border-radius:9px; background:#fffbeb; color:#92400e; padding:8px; font-size:.82rem; font-weight:900; }
   .pf-saldo-aviso.visivel { display:block; }
   .pf-origens { border:1px solid #bdd3ef; border-radius:12px; background:#f8fbff; padding:12px; box-shadow:0 10px 22px rgba(15,23,42,.06); }
   .pf-origens-title { margin:0 0 9px; color:#111827; font-size:.95rem; font-weight:950; }
-  .pf-origens-resumo { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; align-items:stretch; border:1px solid #bfdbfe; border-radius:10px; background:#fff; padding:8px; margin-bottom:10px; }
-  .pf-origem-total { border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc; padding:8px 10px; }
-  .pf-origem-total span { display:block; color:#64748b; font-size:.68rem; font-weight:950; text-transform:uppercase; }
-  .pf-origem-total strong { display:block; margin-top:3px; color:#111827; font-size:1.02rem; font-weight:950; }
-  .pf-origem-total.alerta { border-color:#f59e0b; background:#fffbeb; }
-  .pf-origem-total.alerta span, .pf-origem-total.alerta strong { color:#92400e; }
-  .pf-origem-total.ok { border-color:#86efac; background:#ecfdf3; }
-  .pf-origem-total.ok span, .pf-origem-total.ok strong { color:#166534; }
-  .pf-origem-total.excesso { border-color:#fca5a5; background:#fef2f2; }
-  .pf-origem-total.excesso span, .pf-origem-total.excesso strong { color:#991b1b; }
   .pf-origens-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
   .pf-origem-card { border:1px solid #cbd5e1; border-left-width:5px; border-radius:10px; background:#fff; padding:10px; display:grid; gap:8px; box-shadow:0 8px 18px rgba(15,23,42,.06); }
   .pf-origem-card[data-origem-card="caixa"] { border-left-color:#2563eb; background:#f8fbff; }
@@ -92,8 +76,6 @@
     .pf-page { padding:10px; }
     .pf-summary { grid-template-columns:1fr 1fr; }
     .pf-grid, .pf-form-grid { grid-template-columns:1fr; }
-    .pf-saldos-grid { grid-template-columns:1fr; }
-    .pf-origens-resumo { grid-template-columns:1fr; }
     .pf-origens-grid { grid-template-columns:1fr; }
     .pf-origens-alerta { display:block; }
     .pf-previa-item { grid-template-columns:1fr 1fr; }
@@ -167,40 +149,8 @@
               </select>
             </div>
           </div>
-          <div class="pf-saldos" aria-label="Saldos disponíveis">
-            <p class="pf-saldos-title">Saldos disponíveis</p>
-            <div class="pf-saldos-grid">
-              <div class="pf-saldo-item">
-                <span>Caixa em espécie</span>
-                <strong>{{ saldos_pagamento.caixa.texto }}</strong>
-              </div>
-              <div class="pf-saldo-item">
-                <span>Sangria/Reserva em mãos</span>
-                <strong>{{ saldos_pagamento.reserva.texto }}</strong>
-              </div>
-              <div class="pf-saldo-item">
-                <span>Banco/Pix</span>
-                <strong>{{ saldos_pagamento.banco.texto }}</strong>
-              </div>
-            </div>
-            <div id="avisoSaldoPagarFornecedor" class="pf-saldo-aviso"></div>
-          </div>
           <div class="pf-origens">
             <h2 class="pf-origens-title">De onde saiu o dinheiro?</h2>
-            <div class="pf-origens-resumo">
-              <div class="pf-origem-total">
-                <span>Total do pagamento</span>
-                <strong id="saidaValorPagoResumo">R$ 0,00</strong>
-              </div>
-              <div class="pf-origem-total pf-origem-distribuido">
-                <span>Distribuído</span>
-                <strong id="saidaDistribuidoResumo">R$ 0,00</strong>
-              </div>
-              <div id="saidaFaltaResumoCard" class="pf-origem-total alerta">
-                <span id="saidaFaltaResumoLabel">Falta distribuir</span>
-                <strong id="saidaFaltaResumo">R$ 0,00</strong>
-              </div>
-            </div>
             <div class="pf-origens-grid">
               <div class="pf-origem-card" data-origem-card="caixa">
                 <span>Caixa em espécie</span>
@@ -228,6 +178,7 @@
               <span id="saidaResumoAbaixoLabel">Falta distribuir</span>
               <strong id="saidaResumoAbaixoValor">R$ 0,00</strong>
             </div>
+            <div id="avisoSaldoPagarFornecedor" class="pf-saldo-aviso"></div>
             <p class="pf-origens-ajuda">Distribua o total do pagamento entre Caixa, Sangria e Banco/Pix. Campos vazios contam como zero.</p>
           </div>
           <div class="pf-field">
@@ -266,11 +217,6 @@
   const saidaCaixaInput = document.getElementById("valorSaidaCaixaFornecedor");
   const saidaReservaInput = document.getElementById("valorSaidaReservaFornecedor");
   const saidaBancoInput = document.getElementById("valorSaidaBancoFornecedor");
-  const saidaValorPagoResumo = document.getElementById("saidaValorPagoResumo");
-  const saidaDistribuidoResumo = document.getElementById("saidaDistribuidoResumo");
-  const saidaFaltaResumo = document.getElementById("saidaFaltaResumo");
-  const saidaFaltaResumoLabel = document.getElementById("saidaFaltaResumoLabel");
-  const saidaFaltaResumoCard = document.getElementById("saidaFaltaResumoCard");
   const saidaResumoAbaixo = document.getElementById("saidaResumoAbaixo");
   const saidaResumoAbaixoLabel = document.getElementById("saidaResumoAbaixoLabel");
   const saidaResumoAbaixoValor = document.getElementById("saidaResumoAbaixoValor");
@@ -286,6 +232,10 @@
   let fornecedorAtual = null;
   let sugestaoAtiva = -1;
   let saidaAutomatica = { reserva: true, banco: true };
+  let origemInformadaManual = { caixa: false, reserva: false, banco: false };
+  let suprimirSugestoesNoFoco = false;
+  let valorPagoEdicaoManual = false;
+  let valorPagoSelecaoPendente = false;
 
   function numero(valor) {
     let texto = String(valor || "").trim();
@@ -334,6 +284,18 @@
   function definirSaidaAutomatica(campo, chave, valor) {
     campo.value = moedaCampo(valor);
     saidaAutomatica[chave] = true;
+  }
+
+  function zerarOrigensSaida() {
+    saidaCaixaInput.value = "0,00";
+    saidaReservaInput.value = "0,00";
+    saidaBancoInput.value = "0,00";
+    saidaAutomatica = { reserva: true, banco: true };
+    origemInformadaManual = { caixa: false, reserva: false, banco: false };
+  }
+
+  function marcarOrigemManual(chave, campo) {
+    origemInformadaManual[chave] = Boolean(campo.value.trim());
   }
 
   function preencherDepoisDoCaixa() {
@@ -393,30 +355,18 @@
     };
     const total = Math.round((saidas.caixa + saidas.reserva + saidas.banco) * 100) / 100;
     const falta = Math.round((valor - total) * 100) / 100;
-    saidaValorPagoResumo.textContent = moeda(valor);
-    saidaDistribuidoResumo.textContent = moeda(total);
-    saidaFaltaResumoCard.classList.remove("ok", "alerta", "excesso");
     saidaResumoAbaixo.classList.remove("ok", "excesso");
     if (Math.abs(falta) < 0.005 && valor > 0) {
-      saidaFaltaResumoLabel.textContent = "Tudo distribuído";
-      saidaFaltaResumo.textContent = moeda(0);
-      saidaFaltaResumoCard.classList.add("ok");
-      saidaResumoAbaixoLabel.textContent = saidaFaltaResumoLabel.textContent;
-      saidaResumoAbaixoValor.textContent = saidaFaltaResumo.textContent;
+      saidaResumoAbaixoLabel.textContent = "Tudo distribuído";
+      saidaResumoAbaixoValor.textContent = "";
       saidaResumoAbaixo.classList.add("ok");
     } else if (falta < 0) {
-      saidaFaltaResumoLabel.textContent = "Excedeu";
-      saidaFaltaResumo.textContent = moeda(Math.abs(falta));
-      saidaFaltaResumoCard.classList.add("excesso");
-      saidaResumoAbaixoLabel.textContent = saidaFaltaResumoLabel.textContent;
-      saidaResumoAbaixoValor.textContent = saidaFaltaResumo.textContent;
+      saidaResumoAbaixoLabel.textContent = "Excedeu:";
+      saidaResumoAbaixoValor.textContent = moeda(Math.abs(falta));
       saidaResumoAbaixo.classList.add("excesso");
     } else {
-      saidaFaltaResumoLabel.textContent = "Falta distribuir";
-      saidaFaltaResumo.textContent = moeda(falta);
-      saidaFaltaResumoCard.classList.add("alerta");
-      saidaResumoAbaixoLabel.textContent = saidaFaltaResumoLabel.textContent;
-      saidaResumoAbaixoValor.textContent = saidaFaltaResumo.textContent;
+      saidaResumoAbaixoLabel.textContent = "Falta distribuir:";
+      saidaResumoAbaixoValor.textContent = moeda(falta);
     }
     [
       ["caixa", saidas.caixa, saldos.caixa, saldoDepoisCaixa],
@@ -429,10 +379,10 @@
       if (card) card.classList.toggle("negativo", depois < 0 || saida < 0);
     });
     const negativos = [
-      ["Caixa em espécie", saidas.caixa, saldos.caixa],
-      ["Sangria/Reserva em mãos", saidas.reserva, saldos.reserva],
-      ["Banco/Pix", saidas.banco, saldos.banco]
-    ].filter((item) => item[1] < 0 || item[1] > item[2]);
+      ["Caixa em espécie", saidas.caixa, saldos.caixa, origemInformadaManual.caixa],
+      ["Sangria/Reserva em mãos", saidas.reserva, saldos.reserva, origemInformadaManual.reserva],
+      ["Banco/Pix", saidas.banco, saldos.banco, origemInformadaManual.banco]
+    ].filter((item) => item[3] && (item[1] < 0 || item[1] > item[2]));
     if (negativos.length) {
       avisoSaldo.textContent = "Atenção: confira a origem " + negativos[0][0] + ". O valor informado deixa saldo negativo.";
       avisoSaldo.classList.add("visivel");
@@ -450,10 +400,7 @@
     fornecedorId.value = "";
     busca.value = "";
     valorInput.value = "0,00";
-    saidaCaixaInput.value = "0,00";
-    saidaReservaInput.value = "0,00";
-    saidaBancoInput.value = "0,00";
-    saidaAutomatica = { reserva: true, banco: true };
+    zerarOrigensSaida();
     observacaoInput.value = "";
     fecharSugestoes();
     renderizarContas();
@@ -468,6 +415,13 @@
       busca.focus();
       busca.select();
     }, 180);
+  }
+
+  function focarBuscaInicial() {
+    window.setTimeout(function() {
+      suprimirSugestoesNoFoco = true;
+      busca.focus();
+    }, 0);
   }
 
   function atualizarResumoGeral() {
@@ -510,6 +464,36 @@
     sugestaoAtiva = Math.max(0, Math.min(indice, itens.length - 1));
     itens.forEach((item, index) => item.classList.toggle("ativa", index === sugestaoAtiva));
     itens[sugestaoAtiva].scrollIntoView({ block: "nearest" });
+  }
+
+  function focarValorPagoSelecionado() {
+    const valorEsperado = valorInput.value;
+    valorPagoSelecaoPendente = true;
+    valorInput.focus();
+    valorInput.select();
+    if (typeof valorInput.setSelectionRange === "function") {
+      valorInput.setSelectionRange(0, valorInput.value.length);
+    }
+    window.setTimeout(function() {
+      if (valorPagoEdicaoManual || !valorPagoSelecaoPendente || document.activeElement !== valorInput || valorInput.value !== valorEsperado) return;
+      valorInput.select();
+      if (typeof valorInput.setSelectionRange === "function") {
+        valorInput.setSelectionRange(0, valorInput.value.length);
+      }
+      valorPagoSelecaoPendente = false;
+    }, 0);
+  }
+
+  function formatarValorPago() {
+    valorInput.value = moedaCampo(numero(valorInput.value));
+    atualizarPrevia();
+    atualizarDistribuicaoSaida();
+  }
+
+  function rolarOrigemParaCampo(campo) {
+    window.setTimeout(function() {
+      campo.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    }, 80);
   }
 
   function renderizarContas() {
@@ -582,15 +566,24 @@
     if (!fornecedorAtual) return;
     fornecedorId.value = fornecedorAtual.id;
     busca.value = fornecedorAtual.nome;
+    valorPagoEdicaoManual = false;
+    valorPagoSelecaoPendente = false;
+    valorInput.value = moedaCampo(fornecedorAtual.total_aberto || 0);
+    zerarOrigensSaida();
     fecharSugestoes();
     renderizarContas();
     atualizarPrevia();
     atualizarDistribuicaoSaida();
-    valorInput.focus();
-    valorInput.select();
+    focarValorPagoSelecionado();
   }
 
-  busca.addEventListener("focus", abrirSugestoes);
+  busca.addEventListener("focus", function() {
+    if (suprimirSugestoesNoFoco) {
+      suprimirSugestoesNoFoco = false;
+      return;
+    }
+    abrirSugestoes();
+  });
   busca.addEventListener("click", abrirSugestoes);
   busca.addEventListener("input", function() {
     limparFeedbackSucessoAoDigitar();
@@ -610,13 +603,19 @@
     }
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      if (sugestoes.style.display === "none") abrirSugestoes();
+      if (sugestoes.style.display === "none") {
+        abrirSugestoes();
+        return;
+      }
       marcarSugestao(sugestaoAtiva + 1);
       return;
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      if (sugestoes.style.display === "none") abrirSugestoes();
+      if (sugestoes.style.display === "none") {
+        abrirSugestoes();
+        return;
+      }
       marcarSugestao(sugestaoAtiva <= 0 ? itens.length - 1 : sugestaoAtiva - 1);
       return;
     }
@@ -637,31 +636,48 @@
     campo.addEventListener("input", atualizarPrevia);
     campo.addEventListener("change", atualizarPrevia);
   });
+  valorInput.addEventListener("keydown", function(event) {
+    if (event.key === "Tab" || event.key === "Shift" || event.key === "Control" || event.key === "Alt" || event.key === "Meta") return;
+    valorPagoEdicaoManual = true;
+    valorPagoSelecaoPendente = false;
+  });
   valorInput.addEventListener("input", function() {
-    if (saidaAutomatica.reserva) preencherDepoisDoCaixa();
-    else if (saidaAutomatica.banco) preencherDepoisDaReserva();
-    else atualizarDistribuicaoSaida();
+    valorPagoEdicaoManual = true;
+    valorPagoSelecaoPendente = false;
+    atualizarDistribuicaoSaida();
   });
-  valorInput.addEventListener("change", function() {
-    if (saidaAutomatica.reserva) preencherDepoisDoCaixa();
-    else if (saidaAutomatica.banco) preencherDepoisDaReserva();
-    else atualizarDistribuicaoSaida();
+  valorInput.addEventListener("change", formatarValorPago);
+  valorInput.addEventListener("blur", formatarValorPago);
+  [saidaCaixaInput, saidaReservaInput, saidaBancoInput].forEach((campo) => {
+    campo.addEventListener("focus", function() {
+      rolarOrigemParaCampo(campo);
+    });
   });
-  saidaCaixaInput.addEventListener("input", preencherDepoisDoCaixa);
-  saidaCaixaInput.addEventListener("change", preencherDepoisDoCaixa);
+  saidaCaixaInput.addEventListener("input", function() {
+    marcarOrigemManual("caixa", saidaCaixaInput);
+    preencherDepoisDoCaixa();
+  });
+  saidaCaixaInput.addEventListener("change", function() {
+    marcarOrigemManual("caixa", saidaCaixaInput);
+    preencherDepoisDoCaixa();
+  });
   saidaReservaInput.addEventListener("input", function() {
+    marcarOrigemManual("reserva", saidaReservaInput);
     saidaAutomatica.reserva = !saidaReservaInput.value.trim();
     preencherDepoisDaReserva();
   });
   saidaReservaInput.addEventListener("change", function() {
+    marcarOrigemManual("reserva", saidaReservaInput);
     saidaAutomatica.reserva = !saidaReservaInput.value.trim();
     preencherDepoisDaReserva();
   });
   saidaBancoInput.addEventListener("input", function() {
+    marcarOrigemManual("banco", saidaBancoInput);
     saidaAutomatica.banco = !saidaBancoInput.value.trim();
     atualizarDistribuicaoSaida();
   });
   saidaBancoInput.addEventListener("change", function() {
+    marcarOrigemManual("banco", saidaBancoInput);
     saidaAutomatica.banco = !saidaBancoInput.value.trim();
     atualizarDistribuicaoSaida();
   });
@@ -742,6 +758,7 @@
 
   atualizarResumoGeral();
   atualizarDistribuicaoSaida();
+  focarBuscaInicial();
   const mensagemAposReload = sessionStorage.getItem(chaveSucesso);
   if (mensagemAposReload) {
     sessionStorage.removeItem(chaveSucesso);
@@ -751,128 +768,5 @@
   }
 })();
 </script>
-
-
-<!-- AJUSTE FOCO E ENTER PAGAR FORNECEDOR -->
-<script>
-(function() {
-  function dinheiroParaNumero(txt) {
-    txt = String(txt || "");
-    var achou = txt.match(/R\$\s*([\d\.\,]+)/);
-    if (!achou) return 0;
-    return parseFloat(achou[1].replace(/\./g, "").replace(",", ".")) || 0;
-  }
-
-  function numeroParaDinheiro(valor) {
-    valor = Number(valor || 0);
-    return valor.toLocaleString("pt-BR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-  }
-
-  function acharInputFornecedor() {
-    var inputs = Array.from(document.querySelectorAll("input"));
-    return inputs.find(function(input) {
-      var texto = [
-        input.id,
-        input.name,
-        input.placeholder,
-        input.getAttribute("aria-label")
-      ].join(" ").toLowerCase();
-
-      return texto.includes("fornecedor");
-    });
-  }
-
-  function acharInputValorPago() {
-    var inputs = Array.from(document.querySelectorAll("input"));
-    return inputs.find(function(input) {
-      var texto = [
-        input.id,
-        input.name,
-        input.placeholder,
-        input.getAttribute("aria-label")
-      ].join(" ").toLowerCase();
-
-      return texto.includes("valor") && texto.includes("pago");
-    });
-  }
-
-  function totalAbertoFornecedorSelecionado() {
-    var linhas = (document.body.innerText || "")
-      .split(/\n+/)
-      .map(function(l) { return l.trim(); })
-      .filter(Boolean);
-
-    for (var i = 0; i < linhas.length; i++) {
-      var linha = linhas[i].toLowerCase();
-      if (linha.includes("conta(s)") && linha.includes("total r$")) {
-        return dinheiroParaNumero(linhas[i]);
-      }
-    }
-
-    return 0;
-  }
-
-  function preencherTotalEIrParaValor() {
-    setTimeout(function() {
-      var valor = acharInputValorPago();
-      if (!valor) return;
-
-      var total = totalAbertoFornecedorSelecionado();
-      if (total > 0) {
-        valor.value = numeroParaDinheiro(total);
-        valor.dispatchEvent(new Event("input", { bubbles: true }));
-        valor.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-
-      valor.focus();
-      valor.select();
-    }, 350);
-  }
-
-  function focarFornecedorAoAbrir() {
-    setTimeout(function() {
-      var fornecedor = acharInputFornecedor();
-      if (!fornecedor) return;
-
-      fornecedor.focus();
-      fornecedor.select();
-    }, 300);
-  }
-
-  document.addEventListener("DOMContentLoaded", function() {
-    focarFornecedorAoAbrir();
-
-    var fornecedor = acharInputFornecedor();
-    if (!fornecedor) return;
-
-    fornecedor.addEventListener("keydown", function(e) {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        preencherTotalEIrParaValor();
-      }
-
-      if (e.key === "ArrowDown") {
-        fornecedor.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-    });
-
-    fornecedor.addEventListener("change", preencherTotalEIrParaValor);
-  });
-
-  document.addEventListener("click", function(e) {
-    var alvo = e.target;
-    var txt = (alvo && alvo.innerText ? alvo.innerText : "").toLowerCase();
-
-    if (txt.includes("conta(s)") || txt.includes("r$")) {
-      preencherTotalEIrParaValor();
-    }
-  });
-})();
-</script>
-<!-- FIM AJUSTE FOCO E ENTER PAGAR FORNECEDOR -->
-
 
 {% endblock %}
