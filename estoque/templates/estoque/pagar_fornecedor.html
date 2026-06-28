@@ -752,4 +752,127 @@
 })();
 </script>
 
+
+<!-- AJUSTE FOCO E ENTER PAGAR FORNECEDOR -->
+<script>
+(function() {
+  function dinheiroParaNumero(txt) {
+    txt = String(txt || "");
+    var achou = txt.match(/R\$\s*([\d\.\,]+)/);
+    if (!achou) return 0;
+    return parseFloat(achou[1].replace(/\./g, "").replace(",", ".")) || 0;
+  }
+
+  function numeroParaDinheiro(valor) {
+    valor = Number(valor || 0);
+    return valor.toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function acharInputFornecedor() {
+    var inputs = Array.from(document.querySelectorAll("input"));
+    return inputs.find(function(input) {
+      var texto = [
+        input.id,
+        input.name,
+        input.placeholder,
+        input.getAttribute("aria-label")
+      ].join(" ").toLowerCase();
+
+      return texto.includes("fornecedor");
+    });
+  }
+
+  function acharInputValorPago() {
+    var inputs = Array.from(document.querySelectorAll("input"));
+    return inputs.find(function(input) {
+      var texto = [
+        input.id,
+        input.name,
+        input.placeholder,
+        input.getAttribute("aria-label")
+      ].join(" ").toLowerCase();
+
+      return texto.includes("valor") && texto.includes("pago");
+    });
+  }
+
+  function totalAbertoFornecedorSelecionado() {
+    var linhas = (document.body.innerText || "")
+      .split(/\n+/)
+      .map(function(l) { return l.trim(); })
+      .filter(Boolean);
+
+    for (var i = 0; i < linhas.length; i++) {
+      var linha = linhas[i].toLowerCase();
+      if (linha.includes("conta(s)") && linha.includes("total r$")) {
+        return dinheiroParaNumero(linhas[i]);
+      }
+    }
+
+    return 0;
+  }
+
+  function preencherTotalEIrParaValor() {
+    setTimeout(function() {
+      var valor = acharInputValorPago();
+      if (!valor) return;
+
+      var total = totalAbertoFornecedorSelecionado();
+      if (total > 0) {
+        valor.value = numeroParaDinheiro(total);
+        valor.dispatchEvent(new Event("input", { bubbles: true }));
+        valor.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+
+      valor.focus();
+      valor.select();
+    }, 350);
+  }
+
+  function focarFornecedorAoAbrir() {
+    setTimeout(function() {
+      var fornecedor = acharInputFornecedor();
+      if (!fornecedor) return;
+
+      fornecedor.focus();
+      fornecedor.select();
+    }, 300);
+  }
+
+  document.addEventListener("DOMContentLoaded", function() {
+    focarFornecedorAoAbrir();
+
+    var fornecedor = acharInputFornecedor();
+    if (!fornecedor) return;
+
+    fornecedor.addEventListener("keydown", function(e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        preencherTotalEIrParaValor();
+      }
+
+      if (e.key === "ArrowDown") {
+        fornecedor.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+
+    fornecedor.addEventListener("change", preencherTotalEIrParaValor);
+  });
+
+  document.addEventListener("click", function(e) {
+    var alvo = e.target;
+    var txt = (alvo && alvo.innerText ? alvo.innerText : "").toLowerCase();
+
+    if (txt.includes("conta(s)") || txt.includes("r$")) {
+      preencherTotalEIrParaValor();
+    }
+  });
+})();
+</script>
+<!-- FIM AJUSTE FOCO E ENTER PAGAR FORNECEDOR -->
+
+
 {% endblock %}
