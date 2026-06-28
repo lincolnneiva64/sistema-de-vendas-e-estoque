@@ -313,7 +313,6 @@
   });
 })();
 </script>
-
 {% endblock %}
 {% block content %}
 
@@ -5485,6 +5484,185 @@
 
 
 
+
+<script>
+/* SALDO DEPOIS - MODAL FINANCEIRO NOVA COMPRA */
+(function () {
+  if (window.__saldoDepoisModalCompraFinal) return;
+  window.__saldoDepoisModalCompraFinal = true;
+
+  function paraNumero(valor) {
+    valor = (valor || "").toString().trim();
+    if (!valor) return 0;
+    valor = valor.replace(/[^\d,.-]/g, "");
+    if (valor.includes(",")) valor = valor.replace(/\./g, "").replace(",", ".");
+    var n = parseFloat(valor);
+    return isNaN(n) ? 0 : n;
+  }
+
+  function moeda(valor) {
+    return Number(valor || 0).toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL"
+    });
+  }
+
+  function visivel(el) {
+    if (!el) return false;
+    var st = window.getComputedStyle(el);
+    return st.display !== "none" && st.visibility !== "hidden" && el.offsetParent !== null;
+  }
+
+  function modalFinanceiro() {
+    var candidatos = Array.from(document.querySelectorAll("div, section, form"));
+    candidatos = candidatos.filter(function(el) {
+      var t = el.innerText || "";
+      return t.includes("De onde saiu o dinheiro") &&
+             t.includes("Total da compra") &&
+             t.includes("Dinheiro do caixa") &&
+             t.includes("Banco/Pix") &&
+             el.querySelectorAll("input").length >= 3;
+    });
+    candidatos.sort(function(a, b) {
+      return (a.innerText || "").length - (b.innerText || "").length;
+    });
+    return candidatos[0] || null;
+  }
+
+  function camposDoModal(modal) {
+    return Array.from(modal.querySelectorAll("input"))
+      .filter(visivel)
+      .slice(0, 3);
+  }
+
+  function blocoCampo(campo) {
+    var atual = campo.parentElement;
+    while (atual && atual !== document.body) {
+      var t = atual.innerText || "";
+      if (t.includes("Saldo atual:") || t.includes("Dinheiro do caixa") || t.includes("Banco/Pix") || t.includes("Sangria")) {
+        return atual;
+      }
+      atual = atual.parentElement;
+    }
+    return campo.parentElement;
+  }
+
+  function saldoAtual(bloco) {
+    var t = bloco ? (bloco.innerText || "") : "";
+    var m = t.match(/Saldo atual:\s*R\$\s*([\d.]+,\d{2})/i);
+    return m ? paraNumero(m[1]) : 0;
+  }
+
+  function criarLinha(campo, bloco) {
+    var linha = bloco.querySelector(".saldo-depois-modal-compra");
+    if (!linha) {
+      linha = document.createElement("div");
+      linha.className = "saldo-depois-modal-compra";
+      linha.innerHTML = '<span>Saldo depois</span><strong>R$ 0,00</strong>';
+      campo.insertAdjacentElement("afterend", linha);
+    }
+    return linha;
+  }
+
+  function atualizar() {
+    var modal = modalFinanceiro();
+    if (!modal) return;
+
+    var campos = camposDoModal(modal);
+    if (campos.length < 3) return;
+
+    campos.forEach(function(campo) {
+      var bloco = blocoCampo(campo);
+      if (!bloco) return;
+
+      var linha = criarLinha(campo, bloco);
+      var atual = saldoAtual(bloco);
+      var sair = paraNumero(campo.value);
+      var depois = atual - sair;
+
+      linha.querySelector("strong").textContent = moeda(depois);
+      linha.classList.toggle("negativo", depois < -0.004);
+    });
+  }
+
+  function instalar() {
+    var modal = modalFinanceiro();
+    if (!modal) return;
+
+    camposDoModal(modal).forEach(function(campo) {
+      if (campo.dataset.saldoDepoisCompraListener === "1") return;
+      campo.dataset.saldoDepoisCompraListener = "1";
+      campo.addEventListener("input", atualizar);
+      campo.addEventListener("change", atualizar);
+      campo.addEventListener("blur", atualizar);
+    });
+
+    atualizar();
+    setTimeout(atualizar, 100);
+    setTimeout(atualizar, 300);
+  }
+
+  function css() {
+    if (document.getElementById("cssSaldoDepoisModalCompra")) return;
+
+    var style = document.createElement("style");
+    style.id = "cssSaldoDepoisModalCompra";
+    style.textContent = `
+      .saldo-depois-modal-compra {
+        margin-top: 8px;
+        padding: 8px 10px;
+        border: 1px solid #bbf7d0;
+        border-radius: 12px;
+        background: #f0fdf4;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        font-weight: 900;
+      }
+
+      .saldo-depois-modal-compra span {
+        color: #64748b;
+        font-size: 0.92rem;
+      }
+
+      .saldo-depois-modal-compra strong {
+        color: #166534;
+        font-size: 1rem;
+      }
+
+      .saldo-depois-modal-compra.negativo {
+        background: #fff1f2;
+        border-color: #fecdd3;
+      }
+
+      .saldo-depois-modal-compra.negativo strong {
+        color: #991b1b;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function iniciar() {
+    css();
+    instalar();
+  }
+
+  document.addEventListener("click", function() {
+    setTimeout(iniciar, 80);
+    setTimeout(iniciar, 250);
+    setTimeout(iniciar, 600);
+  }, true);
+
+  document.addEventListener("input", atualizar, true);
+  document.addEventListener("change", atualizar, true);
+
+  window.addEventListener("load", function() {
+    iniciar();
+    setInterval(iniciar, 700);
+  });
+})();
+</script>
 {% endblock %}
 
 
