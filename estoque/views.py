@@ -4480,6 +4480,23 @@ def _produtos_custo_atualizar_post(request):
     return ids
 
 
+def _produtos_preco_venda_atualizar_post(request):
+    precos = {}
+    for produto_id in request.POST.getlist("atualizar_preco_venda_produto_ids[]"):
+        try:
+            produto_id_int = int(produto_id)
+        except (TypeError, ValueError):
+            continue
+
+        try:
+            preco = _decimal_compra(request.POST.get(f"novo_preco_venda_produto_{produto_id_int}") or "0", casas=2)
+        except ValueError:
+            continue
+        if preco >= 0:
+            precos[produto_id_int] = preco
+    return precos
+
+
 def _atualizar_custos_produtos_compra(itens, produto_ids):
     produto_ids = set(produto_ids or [])
     if not produto_ids:
@@ -4498,8 +4515,21 @@ def _atualizar_custos_produtos_compra(itens, produto_ids):
         )
 
 
-def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_custo_produto_ids=None):
+def _atualizar_precos_venda_produtos_compra(precos_por_produto):
+    if not precos_por_produto:
+        return
+
+    agora = timezone.now()
+    for produto_id, novo_preco in precos_por_produto.items():
+        Produto.objects.filter(pk=produto_id, excluido=False).update(
+            preco_venda=novo_preco,
+            atualizado_em=agora,
+        )
+
+
+def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_custo_produto_ids=None, atualizar_preco_venda_produtos=None):
     atualizar_custo_produto_ids = set(atualizar_custo_produto_ids or [])
+    atualizar_preco_venda_produtos = atualizar_preco_venda_produtos or {}
     with transaction.atomic():
         compra = Compra.objects.select_for_update().prefetch_related("itens__produto").get(pk=compra.pk)
         if compra.status == Compra.STATUS_FINALIZADA:
@@ -4521,6 +4551,8 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
                         "ultima_compra_em": compra.data_compra,
                     },
                 )
+
+        _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos)
 
         compra.estoque_entrada_realizada = True
         compra.estoque_entrada_realizada_em = timezone.now()
@@ -4551,6 +4583,7 @@ def compras_nova(request):
         try:
             dados = _dados_compra_post(request, exigir_itens=acao != "salvar_rascunho")
             atualizar_custo_produto_ids = _produtos_custo_atualizar_post(request)
+            atualizar_preco_venda_produtos = _produtos_preco_venda_atualizar_post(request)
             valores_origem = None
             if acao == "confirmar_financeiro" and dados["compra_a_vista"]:
                 valores_origem = _valores_origem_compra_post(request)
@@ -4575,8 +4608,9 @@ def compras_nova(request):
                 _salvar_compra_e_itens(compra, dados, status)
                 if acao == "finalizar":
                     _atualizar_custos_produtos_compra(dados["itens"], atualizar_custo_produto_ids)
+                    _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos)
                 if acao == "confirmar_financeiro":
-                    _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids)
+                    _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos)
         except Exception:
             logger.exception("Falha ao salvar compra")
             messages.error(request, "Nao foi possivel salvar a compra.")
@@ -4605,6 +4639,7 @@ def compra_editar(request, pk):
     if request.method == "POST":
         acao = request.POST.get("acao_compra") or "salvar_rascunho"
         atualizar_custo_produto_ids = _produtos_custo_atualizar_post(request)
+        atualizar_preco_venda_produtos = _produtos_preco_venda_atualizar_post(request)
         if acao in {"voltar_rascunho", "voltar_itens", "continuar_editando"}:
             compra.status = Compra.STATUS_RASCUNHO
             compra.save(update_fields=["status", "atualizado_em"])
@@ -4618,6 +4653,7 @@ def compra_editar(request, pk):
                 _salvar_compra_e_itens(compra, dados, status)
                 if acao == "finalizar":
                     _atualizar_custos_produtos_compra(dados["itens"], atualizar_custo_produto_ids)
+                    _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos)
         except (ValueError, IndexError) as exc:
             messages.error(request, str(exc))
             return redirect("estoque:compra_editar", pk=compra.pk)
@@ -4648,6 +4684,7 @@ def compra_finalizar(request, pk):
 
         if acao == "confirmar_financeiro":
             atualizar_custo_produto_ids = _produtos_custo_atualizar_post(request)
+            atualizar_preco_venda_produtos = _produtos_preco_venda_atualizar_post(request)
             if not compra.itens.exists():
                 messages.error(request, "Inclua pelo menos um item antes de finalizar.")
                 return redirect("estoque:compra_editar", pk=compra.pk)
@@ -4660,7 +4697,7 @@ def compra_finalizar(request, pk):
                     messages.error(request, str(exc))
                     return redirect("estoque:compra_finalizar", pk=compra.pk)
             try:
-                _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids)
+                _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos)
             except Exception:
                 logger.exception("Falha ao finalizar compra e lancar financeiro")
                 messages.error(request, "Nao foi possivel finalizar a compra. Nenhum valor foi lancado no financeiro.")
