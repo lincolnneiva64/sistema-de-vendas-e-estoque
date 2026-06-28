@@ -4470,7 +4470,36 @@ def _compra_editavel_ou_redireciona(compra):
     return compra.status in {Compra.STATUS_RASCUNHO, Compra.STATUS_FINALIZACAO_INICIADA, Compra.STATUS_ABERTA}
 
 
-def _finalizar_compra_com_financeiro(compra, valores_origem=None):
+def _produtos_custo_atualizar_post(request):
+    ids = set()
+    for produto_id in request.POST.getlist("atualizar_custo_produto_ids[]"):
+        try:
+            ids.add(int(produto_id))
+        except (TypeError, ValueError):
+            continue
+    return ids
+
+
+def _atualizar_custos_produtos_compra(itens, produto_ids):
+    produto_ids = set(produto_ids or [])
+    if not produto_ids:
+        return
+
+    for item in itens:
+        produto = item.get("produto")
+        if not produto or produto.pk not in produto_ids:
+            continue
+        preco_unitario = item.get("preco_unitario")
+        if produto.preco_compra == preco_unitario:
+            continue
+        Produto.objects.filter(pk=produto.pk).update(
+            preco_compra=preco_unitario,
+            atualizado_em=timezone.now(),
+        )
+
+
+def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_custo_produto_ids=None):
+    atualizar_custo_produto_ids = set(atualizar_custo_produto_ids or [])
     with transaction.atomic():
         compra = Compra.objects.select_for_update().prefetch_related("itens__produto").get(pk=compra.pk)
         if compra.status == Compra.STATUS_FINALIZADA:
@@ -4482,6 +4511,7 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None):
             produto = Produto.objects.select_for_update().get(pk=item.produto_id)
             produto.quantidade = Decimal(str(produto.quantidade or "0")) + item.quantidade
             produto.save(update_fields=["quantidade", "atualizado_em"])
+            _atualizar_custos_produtos_compra([{"produto": produto, "preco_unitario": item.preco_unitario}], atualizar_custo_produto_ids)
             if compra.fornecedor_id:
                 ProdutoFornecedor.objects.update_or_create(
                     produto=produto,
@@ -4520,6 +4550,7 @@ def compras_nova(request):
         acao = request.POST.get("acao_compra") or "confirmar_financeiro"
         try:
             dados = _dados_compra_post(request, exigir_itens=acao != "salvar_rascunho")
+            atualizar_custo_produto_ids = _produtos_custo_atualizar_post(request)
             valores_origem = None
             if acao == "confirmar_financeiro" and dados["compra_a_vista"]:
                 valores_origem = _valores_origem_compra_post(request)
@@ -4542,8 +4573,10 @@ def compras_nova(request):
                 )
                 status = Compra.STATUS_RASCUNHO
                 _salvar_compra_e_itens(compra, dados, status)
+                if acao == "finalizar":
+                    _atualizar_custos_produtos_compra(dados["itens"], atualizar_custo_produto_ids)
                 if acao == "confirmar_financeiro":
-                    _finalizar_compra_com_financeiro(compra, valores_origem)
+                    _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids)
         except Exception:
             logger.exception("Falha ao salvar compra")
             messages.error(request, "Nao foi possivel salvar a compra.")
@@ -4571,6 +4604,7 @@ def compra_editar(request, pk):
 
     if request.method == "POST":
         acao = request.POST.get("acao_compra") or "salvar_rascunho"
+        atualizar_custo_produto_ids = _produtos_custo_atualizar_post(request)
         if acao in {"voltar_rascunho", "voltar_itens", "continuar_editando"}:
             compra.status = Compra.STATUS_RASCUNHO
             compra.save(update_fields=["status", "atualizado_em"])
@@ -4582,6 +4616,8 @@ def compra_editar(request, pk):
             with transaction.atomic():
                 compra = Compra.objects.select_for_update().get(pk=compra.pk)
                 _salvar_compra_e_itens(compra, dados, status)
+                if acao == "finalizar":
+                    _atualizar_custos_produtos_compra(dados["itens"], atualizar_custo_produto_ids)
         except (ValueError, IndexError) as exc:
             messages.error(request, str(exc))
             return redirect("estoque:compra_editar", pk=compra.pk)
@@ -4611,6 +4647,7 @@ def compra_finalizar(request, pk):
             return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
 
         if acao == "confirmar_financeiro":
+            atualizar_custo_produto_ids = _produtos_custo_atualizar_post(request)
             if not compra.itens.exists():
                 messages.error(request, "Inclua pelo menos um item antes de finalizar.")
                 return redirect("estoque:compra_editar", pk=compra.pk)
@@ -4623,7 +4660,7 @@ def compra_finalizar(request, pk):
                     messages.error(request, str(exc))
                     return redirect("estoque:compra_finalizar", pk=compra.pk)
             try:
-                _finalizar_compra_com_financeiro(compra, valores_origem)
+                _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids)
             except Exception:
                 logger.exception("Falha ao finalizar compra e lancar financeiro")
                 messages.error(request, "Nao foi possivel finalizar a compra. Nenhum valor foi lancado no financeiro.")
