@@ -5849,6 +5849,7 @@ def fornecedor_novo(request):
             fornecedor = form.save()
             contatos_formset.instance = fornecedor
             contatos_formset.save()
+            form.salvar_produtos(fornecedor)
             messages.success(request, f'Fornecedor "{fornecedor.nome}" salvo com sucesso.')
             return redirect(f"{reverse('estoque:fornecedores')}?fornecedor_salvo={fornecedor.id}")
 
@@ -5881,6 +5882,7 @@ def fornecedor_editar(request, pk):
             fornecedor = form.save()
             contatos_formset.instance = fornecedor
             contatos_formset.save()
+            form.salvar_produtos(fornecedor)
             messages.success(request, f'Fornecedor "{fornecedor.nome}" salvo com sucesso.')
             return redirect(f"{reverse('estoque:fornecedores')}?fornecedor_salvo={fornecedor.id}")
 

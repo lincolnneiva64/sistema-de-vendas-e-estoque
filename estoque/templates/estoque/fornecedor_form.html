@@ -225,6 +225,112 @@ function fornecedorEnterAvanca(event) {
   .fornecedor-section-title { margin: 0 0 5px; color: #172033; font-size: 1rem; font-weight: 950; }
   .fornecedor-section-note { margin: 0 0 12px; color: #64748b; font-size: 0.8rem; font-weight: 700; }
   .fornecedor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .fornecedor-produtos-card {
+    margin: 16px 0;
+    padding: 14px;
+    border: 1px solid #d7e3f4;
+    border-left: 5px solid #2563eb;
+    border-radius: 13px;
+    background: #f8fbff;
+  }
+  .fornecedor-produtos-topo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    margin: 0 0 10px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .fornecedor-produtos-topo-texto { min-width: 0; }
+  .fornecedor-produtos-titulo {
+    display: block;
+    color: #172033;
+    font-size: 1rem;
+    font-weight: 950;
+  }
+  .fornecedor-produtos-ajuda {
+    display: block;
+    margin-top: 3px;
+    color: #64748b;
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+  .fornecedor-produtos-resumo {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    color: #164173;
+    font-size: 0.86rem;
+    font-weight: 850;
+  }
+  .fornecedor-produtos-contador {
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    background: #eff6ff;
+    padding: 4px 8px;
+  }
+  .fornecedor-produtos-toggle {
+    color: #1d4ed8;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .fornecedor-produtos-card.recolhido .fornecedor-produtos-corpo { display: none; }
+  .fornecedor-produtos-card.recolhido .fornecedor-produtos-topo { margin-bottom: 0; }
+  .fornecedor-produtos-busca {
+    width: 100%;
+    min-height: 40px;
+    border: 1.5px solid #d3dbe8;
+    border-radius: 9px;
+    padding: 9px 11px;
+    margin-bottom: 10px;
+    color: #172033;
+    font-weight: 700;
+    outline: none;
+  }
+  .fornecedor-produtos-busca:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, .14);
+  }
+  .fornecedor-produtos-lista {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .fornecedor-produto-opcao {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 42px;
+    border: 1px solid #dbe5f2;
+    border-radius: 10px;
+    background: #fff;
+    padding: 9px 10px;
+    color: #172033;
+    font-size: 0.9rem;
+    font-weight: 750;
+  }
+  .fornecedor-produto-opcao[hidden] { display: none !important; }
+  .fornecedor-produto-opcao input {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+    accent-color: #2563eb;
+  }
+  .fornecedor-produtos-vazio {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
   .fornecedor-contato-add {
     width: 100%; min-height: 40px; border: 1px dashed #93c5fd;
     border-radius: 10px; background: #eff6ff; color: #1d4ed8;
@@ -273,6 +379,21 @@ function fornecedorEnterAvanca(event) {
   @media (max-width: 760px) {
     .fornecedor-form-header { flex-direction: column; align-items: stretch; }
     .fornecedor-grid { grid-template-columns: 1fr; }
+    .fornecedor-produtos-topo { align-items: flex-start; }
+    .fornecedor-produtos-resumo {
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 3px;
+      font-size: 0.82rem;
+    }
+    .fornecedor-produtos-lista {
+      grid-template-columns: 1fr;
+      max-height: 300px;
+    }
+    .fornecedor-produto-opcao {
+      min-height: 50px;
+      font-size: 0.96rem;
+    }
     .fornecedores-form-actions { display: grid; grid-template-columns: 1fr 1fr; }
   }
 </style>
@@ -367,6 +488,41 @@ function fornecedorEnterAvanca(event) {
         </div>
       </section>
 
+      <section class="fornecedor-produtos-card{% if not form.produtos.errors %} recolhido{% endif %}" id="fornecedorProdutosCard">
+        <button type="button" class="fornecedor-produtos-topo" id="fornecedorProdutosToggle" aria-expanded="{% if form.produtos.errors %}true{% else %}false{% endif %}" aria-controls="fornecedorProdutosCorpo">
+          <span class="fornecedor-produtos-topo-texto">
+            <span class="fornecedor-produtos-titulo">Produtos deste fornecedor</span>
+            <span class="fornecedor-produtos-ajuda">Marque os produtos que este fornecedor vende.</span>
+          </span>
+          <span class="fornecedor-produtos-resumo">
+            <span class="fornecedor-produtos-contador" id="fornecedorProdutosContador">0 selecionados</span>
+            <span class="fornecedor-produtos-toggle" id="fornecedorProdutosToggleTexto">{% if form.produtos.errors %}Ocultar{% else %}Mostrar{% endif %}</span>
+          </span>
+        </button>
+
+        <div class="fornecedor-produtos-corpo" id="fornecedorProdutosCorpo">
+          {% if form.produtos.field.queryset %}
+            <input type="search" class="fornecedor-produtos-busca" id="fornecedorProdutosBusca" placeholder="Buscar produto..." autocomplete="off">
+            <div class="fornecedor-produtos-lista" id="fornecedorProdutosLista">
+              {% for produto_opcao in form.produtos %}
+                <label class="fornecedor-produto-opcao" for="{{ produto_opcao.id_for_label }}" data-produto-fornecedor-item>
+                  {{ produto_opcao.tag }}
+                  <span>{{ produto_opcao.choice_label }}</span>
+                </label>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="fornecedor-produtos-vazio">Nenhum produto ativo cadastrado ainda.</p>
+          {% endif %}
+
+          {% if form.produtos.errors %}
+            <div class="fornecedores-alert error">
+              {{ form.produtos.errors|join:", " }}
+            </div>
+          {% endif %}
+        </div>
+      </section>
+
       <div class="fornecedores-field">
         <label for="{{ form.observacao.id_for_label }}">Observação</label>
         {{ form.observacao }}
@@ -445,4 +601,63 @@ function fornecedorEnterAvanca(event) {
     </form>
   </div>
 </div>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const card = document.getElementById("fornecedorProdutosCard");
+  const botao = document.getElementById("fornecedorProdutosToggle");
+  const textoToggle = document.getElementById("fornecedorProdutosToggleTexto");
+  const contador = document.getElementById("fornecedorProdutosContador");
+  const busca = document.getElementById("fornecedorProdutosBusca");
+
+  if (!card || !botao || !textoToggle || !contador) return;
+
+  const checkboxes = Array.from(card.querySelectorAll('input[type="checkbox"][name="produtos"]'));
+  const itens = Array.from(card.querySelectorAll("[data-produto-fornecedor-item]"));
+
+  function normalizar(texto) {
+    return String(texto || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
+  function atualizarContador() {
+    const total = checkboxes.filter(function (checkbox) { return checkbox.checked; }).length;
+    contador.textContent = total === 1 ? "1 selecionado" : total + " selecionados";
+  }
+
+  function definirAberto(aberto) {
+    card.classList.toggle("recolhido", !aberto);
+    botao.setAttribute("aria-expanded", aberto ? "true" : "false");
+    textoToggle.textContent = aberto ? "Ocultar" : "Mostrar";
+    if (aberto && busca) {
+      setTimeout(function () { busca.focus(); }, 40);
+    }
+  }
+
+  function filtrarProdutos() {
+    const termo = normalizar(busca ? busca.value : "");
+    itens.forEach(function (item) {
+      item.hidden = termo && !normalizar(item.textContent).includes(termo);
+    });
+  }
+
+  botao.addEventListener("click", function () {
+    definirAberto(card.classList.contains("recolhido"));
+  });
+
+  checkboxes.forEach(function (checkbox) {
+    checkbox.addEventListener("change", atualizarContador);
+  });
+
+  if (busca) {
+    busca.addEventListener("input", filtrarProdutos);
+  }
+
+  atualizarContador();
+  filtrarProdutos();
+  definirAberto(!card.classList.contains("recolhido"));
+});
+</script>
 {% endblock %}

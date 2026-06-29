@@ -1002,6 +1002,13 @@ class MeioPagamentoForm(forms.ModelForm):
 
 
 class FornecedorForm(forms.ModelForm):
+    produtos = forms.ModelMultipleChoiceField(
+        queryset=Produto.objects.none(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label="Produtos deste fornecedor",
+    )
+
     class Meta:
         model = Fornecedor
         fields = [
@@ -1065,6 +1072,12 @@ class FornecedorForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["produtos"].queryset = Produto.objects.filter(excluido=False).order_by("nome", "id")
+        if self.instance and self.instance.pk:
+            self.fields["produtos"].initial = ProdutoFornecedor.objects.filter(
+                fornecedor=self.instance,
+                ativo=True,
+            ).values_list("produto_id", flat=True)
         if "tipo" in self.fields:
             self.fields["tipo"].initial = MeioPagamento.TIPO_CREDITO
         if "tipo" in self.fields:
@@ -1129,6 +1142,21 @@ class FornecedorForm(forms.ModelForm):
         if dia < 1 or dia > 31:
             raise forms.ValidationError("Informe um dia entre 1 e 31.")
         return dia
+
+    def salvar_produtos(self, fornecedor):
+        produtos_marcados = list(self.cleaned_data.get("produtos") or [])
+        ids_marcados = {produto.pk for produto in produtos_marcados}
+
+        ProdutoFornecedor.objects.filter(fornecedor=fornecedor).exclude(
+            produto_id__in=ids_marcados
+        ).update(ativo=False)
+
+        for produto in produtos_marcados:
+            ProdutoFornecedor.objects.update_or_create(
+                produto=produto,
+                fornecedor=fornecedor,
+                defaults={"ativo": True},
+            )
 
 
 
