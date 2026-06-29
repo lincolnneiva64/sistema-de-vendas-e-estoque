@@ -482,6 +482,70 @@ select.campo-obrigatorio-piscando:focus,
     padding-right: 12px;
 }
 
+.produto-fornecedores-card {
+    border: 1px solid #d7e3f4;
+    border-radius: 12px;
+    background: #f8fbff;
+    padding: 12px;
+}
+
+.produto-fornecedores-topo {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.produto-fornecedores-titulo {
+    color: #164173;
+    font-size: 1rem;
+    font-weight: 800;
+}
+
+.produto-fornecedores-ajuda {
+    color: #64748b;
+    font-size: 0.86rem;
+    font-weight: 600;
+}
+
+.produto-fornecedores-lista {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    max-height: 220px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.produto-fornecedor-opcao {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 42px;
+    border: 1px solid #dbe5f2;
+    border-radius: 10px;
+    background: #fff;
+    padding: 9px 10px;
+    color: #172033;
+    font-size: 0.92rem;
+    font-weight: 700;
+}
+
+.produto-fornecedor-opcao input {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+    accent-color: #2563eb;
+}
+
+.produto-fornecedores-vazio {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.92rem;
+    font-weight: 650;
+}
+
 @media (max-width: 991.98px) {
     .campo-nome-produto,
     .campo-codigo-produto,
@@ -554,6 +618,30 @@ select.campo-obrigatorio-piscando:focus,
 
     .categoria-controle {
         flex-direction: column;
+    }
+
+    .produto-fornecedores-card {
+        padding: 11px;
+    }
+
+    .produto-fornecedores-topo {
+        display: block;
+    }
+
+    .produto-fornecedores-ajuda {
+        display: block;
+        margin-top: 3px;
+    }
+
+    .produto-fornecedores-lista {
+        grid-template-columns: 1fr;
+        max-height: 260px;
+        gap: 9px;
+    }
+
+    .produto-fornecedor-opcao {
+        min-height: 50px;
+        font-size: 0.98rem;
     }
 
     .categoria-controle .btn-gerenciar-unidades,
@@ -829,6 +917,34 @@ select.campo-obrigatorio-piscando:focus,
   </div>
 </div>
   </div>
+</div>
+
+<div class="col-12">
+  <section class="produto-fornecedores-card">
+    <div class="produto-fornecedores-topo">
+      <div class="produto-fornecedores-titulo">Fornecedores deste produto</div>
+      <span class="produto-fornecedores-ajuda">Marque quem vende este item.</span>
+    </div>
+
+    {% if form.fornecedores.field.queryset %}
+      <div class="produto-fornecedores-lista">
+        {% for fornecedor_opcao in form.fornecedores %}
+          <label class="produto-fornecedor-opcao" for="{{ fornecedor_opcao.id_for_label }}">
+            {{ fornecedor_opcao.tag }}
+            <span>{{ fornecedor_opcao.choice_label }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="produto-fornecedores-vazio">Nenhum fornecedor ativo cadastrado ainda.</p>
+    {% endif %}
+
+    {% if form.fornecedores.errors %}
+      <div class="campo-erro">
+        {{ form.fornecedores.errors|join:", " }}
+      </div>
+    {% endif %}
+  </section>
 </div>
   
   

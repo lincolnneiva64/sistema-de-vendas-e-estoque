@@ -3043,6 +3043,7 @@ def cadastrar_produto(request):
         form = ProdutoForm(request.POST)
         if form.is_valid():
             produto = form.save()
+            form.salvar_fornecedores(produto)
             if criar_mais_produtos:
                 return redirect(f"{reverse('estoque:cadastrar_produto')}?criar_mais_produtos=1")
             messages.success(request, f'Produto "{produto.nome}" cadastrado com sucesso!')
@@ -5658,7 +5659,7 @@ def fornecedores(request):
         Prefetch("contatos", queryset=FornecedorContato.objects.all())
     ).annotate(
         total_compras=Count("compras", distinct=True),
-        total_produtos=Count("produtos_fornecedor", distinct=True),
+        total_produtos=Count("produtos_vinculados", filter=Q(produtos_vinculados__ativo=True), distinct=True),
     ).order_by("-ativo", "nome", "id")
 
     if termo:
@@ -6358,6 +6359,7 @@ def produto_editar(request, pk):
             produto.save()
             if hasattr(form, "save_m2m"):
                 form.save_m2m()
+            form.salvar_fornecedores(produto)
             return redirect(f"{reverse('estoque:home')}?produto_destacado={produto.id}")
         else:
             print("ERROS DO FORM EDITAR:", form.errors)

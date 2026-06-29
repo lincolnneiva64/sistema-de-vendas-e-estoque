@@ -4,11 +4,18 @@ from django import forms
 
 from django.utils import timezone
 
-from .models import Categoria, Cliente, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, PixRecebido, Produto, Unidade
+from .models import Categoria, Cliente, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, PixRecebido, Produto, ProdutoFornecedor, Unidade
 from .utils import normalize_category_name, normalize_product_name
 
 
 class ProdutoForm(forms.ModelForm):
+    fornecedores = forms.ModelMultipleChoiceField(
+        queryset=Fornecedor.objects.none(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label="Fornecedores deste produto",
+    )
+
     factor_conversao = forms.DecimalField(
     required=False,
     widget=forms.NumberInput(attrs={
@@ -200,6 +207,13 @@ class ProdutoForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.fields["fornecedores"].queryset = Fornecedor.objects.filter(ativo=True).order_by("nome", "id")
+        if self.instance and self.instance.pk:
+            self.fields["fornecedores"].initial = ProdutoFornecedor.objects.filter(
+                produto=self.instance,
+                ativo=True,
+            ).values_list("fornecedor_id", flat=True)
+
         unidades_ativas = list(Unidade.objects.filter(ativa=True).order_by("sigla"))
         opcoes_unidade = [("", "Selecione")] + [
             (unidade.sigla, unidade.sigla)
@@ -336,6 +350,21 @@ class ProdutoForm(forms.ModelForm):
             self._errors.pop("preco_prazo_fracionado", None)
 
         return cleaned_data
+
+    def salvar_fornecedores(self, produto):
+        fornecedores_marcados = list(self.cleaned_data.get("fornecedores") or [])
+        ids_marcados = {fornecedor.pk for fornecedor in fornecedores_marcados}
+
+        ProdutoFornecedor.objects.filter(produto=produto).exclude(
+            fornecedor_id__in=ids_marcados
+        ).update(ativo=False)
+
+        for fornecedor in fornecedores_marcados:
+            ProdutoFornecedor.objects.update_or_create(
+                produto=produto,
+                fornecedor=fornecedor,
+                defaults={"ativo": True},
+            )
 
 
 class UnidadeForm(forms.ModelForm):

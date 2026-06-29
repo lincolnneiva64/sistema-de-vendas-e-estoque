@@ -933,13 +933,14 @@ class ProdutoFornecedor(models.Model):
     produto = models.ForeignKey(
         Produto,
         on_delete=models.CASCADE,
-        related_name="fornecedores_produto",
+        related_name="fornecedores_vinculados",
     )
     fornecedor = models.ForeignKey(
         Fornecedor,
         on_delete=models.CASCADE,
-        related_name="produtos_fornecedor",
+        related_name="produtos_vinculados",
     )
+    ativo = models.BooleanField(default=True)
     codigo_produto_fornecedor = models.CharField(max_length=80, blank=True, null=True)
     ultimo_preco_compra = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
     ultima_compra_em = models.DateField(blank=True, null=True)
