@@ -3508,7 +3508,7 @@
             '</div>' +
           '</div>' +
           '<label class="compras-preco-venda-opcao">' +
-            '<input type="checkbox" class="marcarAtualizarVendaCompra" data-produto-id="' + escapeHtml(item.produtoId) + '" data-campo-preco="' + escapeHtml(preco.campo) + '">' +
+            '<input type="checkbox" class="marcarAtualizarVendaCompra" data-produto-id="' + escapeHtml(item.produtoId) + '" data-campo-preco="' + escapeHtml(preco.campo) + '" checked>' +
             '<span>Atualizar ' + escapeHtml(preco.titulo.toLowerCase()) + ' no cadastro<small>Somente este preco sera alterado se esta opcao estiver marcada.</small></span>' +
           '</label>' +
         '</div>'
@@ -3678,6 +3678,7 @@
     modalConferenciaPrecosCompra.setAttribute("aria-hidden", "true");
     travarScrollBodyConferenciaPrecos(false);
     delete formCompra.dataset.enviando;
+    envioAcionadoPeloBotao = true;
     formCompra.requestSubmit ? formCompra.requestSubmit() : formCompra.submit();
   }
 
