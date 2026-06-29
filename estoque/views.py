@@ -4482,18 +4482,33 @@ def _produtos_custo_atualizar_post(request):
 
 def _produtos_preco_venda_atualizar_post(request):
     precos = {}
-    for produto_id in request.POST.getlist("atualizar_preco_venda_produto_ids[]"):
-        try:
-            produto_id_int = int(produto_id)
-        except (TypeError, ValueError):
+    campos_permitidos = {
+        "preco_vista",
+        "preco_prazo",
+        "preco_vista_fracionado",
+        "preco_prazo_fracionado",
+    }
+
+    for chave in request.POST.getlist("atualizar_preco_venda_campos[]"):
+        partes = str(chave or "").split(":", 1)
+        if len(partes) != 2:
             continue
 
         try:
-            preco = _decimal_compra(request.POST.get(f"novo_preco_venda_produto_{produto_id_int}") or "0", casas=2)
+            produto_id_int = int(partes[0])
+        except (TypeError, ValueError):
+            continue
+
+        campo = partes[1]
+        if campo not in campos_permitidos:
+            continue
+
+        try:
+            preco = _decimal_compra(request.POST.get(f"novo_preco_venda_produto_{produto_id_int}_{campo}") or "0", casas=2)
         except ValueError:
             continue
         if preco >= 0:
-            precos[produto_id_int] = preco
+            precos[(produto_id_int, campo)] = preco
     return precos
 
 
@@ -4509,10 +4524,14 @@ def _atualizar_custos_produtos_compra(itens, produto_ids):
         preco_unitario = item.get("preco_unitario")
         if produto.preco_compra == preco_unitario:
             continue
-        Produto.objects.filter(pk=produto.pk).update(
-            preco_compra=preco_unitario,
-            atualizado_em=timezone.now(),
-        )
+        atualizacoes = {
+            "preco_compra": preco_unitario,
+            "atualizado_em": timezone.now(),
+        }
+        fator = Decimal(str(produto.fator_conversao or "0"))
+        if produto.vende_fracionado and fator > 0:
+            atualizacoes["preco_compra_fracionado"] = (preco_unitario / fator).quantize(Decimal("0.01"))
+        Produto.objects.filter(pk=produto.pk).update(**atualizacoes)
 
 
 def _atualizar_precos_venda_produtos_compra(precos_por_produto):
@@ -4520,11 +4539,15 @@ def _atualizar_precos_venda_produtos_compra(precos_por_produto):
         return
 
     agora = timezone.now()
-    for produto_id, novo_preco in precos_por_produto.items():
-        Produto.objects.filter(pk=produto_id, excluido=False).update(
-            preco_venda=novo_preco,
-            atualizado_em=agora,
-        )
+    for chave, novo_preco in precos_por_produto.items():
+        produto_id, campo = chave
+        atualizacoes = {
+            campo: novo_preco,
+            "atualizado_em": agora,
+        }
+        if campo == "preco_vista":
+            atualizacoes["preco_venda"] = novo_preco
+        Produto.objects.filter(pk=produto_id, excluido=False).update(**atualizacoes)
 
 
 def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_custo_produto_ids=None, atualizar_preco_venda_produtos=None):
