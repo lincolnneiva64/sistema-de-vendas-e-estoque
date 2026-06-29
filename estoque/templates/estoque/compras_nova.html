@@ -539,7 +539,8 @@
   }
   .compras-precos-modal.visivel { display:flex; }
   .compras-precos-caixa {
-    width:min(920px, 96vw);
+    width:min(1120px, 96vw);
+    height:min(92vh, 880px);
     max-height:92vh;
     display:flex;
     flex-direction:column;
@@ -550,6 +551,7 @@
     box-shadow:0 26px 76px rgba(15,23,42,.32);
   }
   .compras-precos-topo {
+    flex:0 0 auto;
     padding:16px 18px;
     color:#172033;
     background:linear-gradient(135deg, #fff7d6 0%, #eff6ff 100%);
@@ -557,7 +559,17 @@
   }
   .compras-precos-topo h2 { margin:0; font-size:1.22rem; font-weight:950; }
   .compras-precos-topo p { margin:4px 0 0; color:#475569; font-weight:750; line-height:1.35; }
-  .compras-precos-lista { display:grid; gap:10px; padding:12px; overflow:auto; -webkit-overflow-scrolling:touch; }
+  .compras-precos-lista {
+    flex:1 1 auto;
+    min-height:0;
+    display:grid;
+    align-content:start;
+    gap:9px;
+    padding:10px 12px 18px;
+    overflow-y:auto;
+    overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;
+  }
   .compras-preco-card {
     border:1px solid #e6edf6;
     border-left:5px solid #2563eb;
@@ -590,8 +602,8 @@
   .compras-preco-card.caiu .compras-preco-status { background:#f0fdf4; color:#166534; }
   .compras-preco-blocos {
     display:grid;
-    gap:10px;
-    padding:10px 14px 12px;
+    gap:8px;
+    padding:9px 12px 10px;
   }
   .compras-preco-bloco {
     border:1px solid #e2e8f0;
@@ -604,7 +616,7 @@
   .compras-preco-bloco.simulacao { border-color:#f2d58f; background:#fffdf4; }
   .compras-preco-bloco-titulo {
     margin:0;
-    padding:9px 11px;
+    padding:8px 10px;
     color:#172033;
     font-size:.92rem;
     font-weight:950;
@@ -615,8 +627,8 @@
   .compras-preco-bloco.simulacao .compras-preco-bloco-titulo { background:#fff7db; color:#7c4a03; }
   .compras-preco-grupo-lista {
     display:grid;
-    gap:9px;
-    padding:10px 11px;
+    gap:8px;
+    padding:9px 10px;
   }
   .compras-preco-grupo {
     border:1px solid #e2e8f0;
@@ -627,7 +639,7 @@
   .compras-preco-grupo.fracionado { border-color:#fde68a; }
   .compras-preco-grupo-titulo {
     margin:0;
-    padding:7px 9px;
+    padding:6px 8px;
     background:#f8fafc;
     color:#334155;
     font-size:.82rem;
@@ -638,13 +650,13 @@
     color:#7c4a03;
   }
   .compras-preco-grid.sem-padding { padding:0; }
-  .compras-preco-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; padding:10px 14px; }
-  .compras-preco-metrica { min-height:66px; padding:8px 10px; border:1px solid #e2e8f0; border-radius:9px; background:#f8fafc; }
+  .compras-preco-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:7px; padding:9px 10px; }
+  .compras-preco-metrica { min-height:58px; padding:7px 9px; border:1px solid #e2e8f0; border-radius:9px; background:#f8fafc; }
   .compras-preco-metrica.destaque { background:#eff6ff; border-color:#bfdbfe; }
   .compras-preco-metrica.alerta { background:#fff1f2; border-color:#fecdd3; }
   .compras-preco-metrica.ok { background:#f0fdf4; border-color:#bbf7d0; }
   .compras-preco-label { display:block; color:#64748b; font-size:.72rem; font-weight:900; text-transform:uppercase; }
-  .compras-preco-valor { display:block; margin-top:4px; color:#172033; font-size:1rem; font-weight:950; }
+  .compras-preco-valor { display:block; margin-top:3px; color:#172033; font-size:.96rem; font-weight:950; }
   .compras-preco-metrica.alerta .compras-preco-valor { color:#991b1b; }
   .compras-preco-metrica.ok .compras-preco-valor { color:#166534; }
   .compras-preco-escolha {
@@ -652,7 +664,7 @@
     align-items:center;
     justify-content:space-between;
     gap:12px;
-    padding:10px 11px 11px;
+    padding:9px 10px 10px;
     background:#fffaf0;
     border-top:1px solid rgba(148,163,184,.25);
     color:#334155;
@@ -661,12 +673,12 @@
   .compras-preco-escolha label { display:inline-flex; align-items:center; gap:9px; cursor:pointer; }
   .compras-preco-escolha input { width:18px; height:18px; accent-color:#2563eb; }
   .compras-preco-simulador {
-    padding:12px;
+    padding:10px;
   }
   .compras-preco-simulador-lista {
     display:grid;
-    gap:10px;
-    padding:10px 11px;
+    gap:9px;
+    padding:9px 10px;
   }
   .compras-preco-simulador {
     border:1px solid #f1d38d;
@@ -785,13 +797,15 @@
     font-weight:800;
   }
   .compras-precos-rodape {
+    flex:0 0 auto;
     display:flex;
     justify-content:flex-end;
     gap:8px;
     flex-wrap:wrap;
-    padding:12px;
+    padding:10px 12px;
     border-top:1px solid #eadfbf;
     background:#fffaf0;
+    box-shadow:0 -8px 18px rgba(15,23,42,.08);
   }
   .compras-table { width:100%; border-collapse:collapse; }
   .compras-table th { text-align:left; font-size:.72rem; color:#64748b; text-transform:uppercase; background:#f8fafc; padding:9px; border-bottom:1px solid #edf1f6; }
@@ -1536,8 +1550,14 @@
     .compras-origem-acoes { display:grid; grid-template-columns:1fr; }
     .compras-origem-caixa { width:100%; }
     .compras-precos-modal { padding:10px; align-items:stretch; }
-    .compras-precos-caixa { width:100%; max-height:94vh; }
-    .compras-precos-topo { padding:14px; }
+    .compras-precos-caixa {
+      width:100%;
+      height:calc(100vh - 20px);
+      max-height:calc(100vh - 20px);
+      border-radius:12px;
+    }
+    .compras-precos-topo { padding:12px; }
+    .compras-precos-lista { padding:9px 9px 16px; }
     .compras-preco-card-topo,
     .compras-preco-escolha { flex-direction:column; align-items:flex-start; }
     .compras-preco-status { white-space:normal; }
@@ -1545,11 +1565,11 @@
     .compras-preco-grid { grid-template-columns:1fr 1fr; padding:10px; }
     .compras-preco-grid.sem-padding { padding:0; }
     .compras-preco-grupo-lista,
-    .compras-preco-simulador-lista { padding:10px; }
+    .compras-preco-simulador-lista { padding:8px; }
     .compras-preco-simulador-topo { flex-direction:column; }
     .compras-preco-sugerido { white-space:normal; }
     .compras-preco-simulador-grid { grid-template-columns:1fr; }
-    .compras-precos-rodape { display:grid; grid-template-columns:1fr; }
+    .compras-precos-rodape { display:grid; grid-template-columns:1fr; padding:9px; }
     .pagamento-select-real { display:none !important; }
     .pagamento-opcoes-mobile { display:grid; }
     .campo-observacao-compra { display:none !important; }
