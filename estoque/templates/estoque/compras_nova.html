@@ -530,7 +530,6 @@
   body.modal-preco-aberto {
     overflow:hidden;
     width:100%;
-    touch-action:none;
   }
   .compras-precos-modal {
     position:fixed;
@@ -547,8 +546,11 @@
   .compras-precos-modal.visivel { display:flex; }
   .compras-precos-caixa {
     width:min(1120px, 96vw);
+    height:92vh;
     height:min(92dvh, 880px);
+    max-height:calc(100vh - 32px);
     max-height:calc(100dvh - 32px);
+    min-height:0;
     display:flex;
     flex-direction:column;
     overflow:hidden;
@@ -567,16 +569,20 @@
   .compras-precos-topo h2 { margin:0; font-size:1.22rem; font-weight:950; }
   .compras-precos-topo p { margin:4px 0 0; color:#475569; font-weight:750; line-height:1.35; }
   .compras-precos-lista {
-    flex:1 1 auto;
-    min-height:0;
-    display:grid;
-    align-content:start;
-    gap:9px;
+    flex:1 1 0;
+    min-height:120px;
+    max-height:calc(92vh - 150px);
+    max-height:calc(92dvh - 150px);
+    display:block;
     padding:10px 12px 18px;
     overflow-y:auto;
     overflow-x:hidden;
     overscroll-behavior:contain;
+    scrollbar-gutter:stable;
     -webkit-overflow-scrolling:touch;
+  }
+  .compras-precos-lista > .compras-preco-card + .compras-preco-card {
+    margin-top:9px;
   }
   .compras-preco-card {
     border:1px solid #e6edf6;
@@ -1560,12 +1566,19 @@
     .compras-precos-modal { padding:10px; align-items:stretch; }
     .compras-precos-caixa {
       width:100%;
+      height:calc(100vh - 20px);
       height:calc(100dvh - 20px);
+      max-height:calc(100vh - 20px);
       max-height:calc(100dvh - 20px);
       border-radius:12px;
     }
     .compras-precos-topo { padding:12px; }
-    .compras-precos-lista { padding:9px 9px 16px; }
+    .compras-precos-lista {
+      min-height:0;
+      max-height:calc(100vh - 145px);
+      max-height:calc(100dvh - 145px);
+      padding:9px 9px 16px;
+    }
     .compras-preco-card-topo,
     .compras-preco-escolha { flex-direction:column; align-items:flex-start; }
     .compras-preco-status { white-space:normal; }
@@ -3586,6 +3599,11 @@
     window.scrollTo(0, scrollBodyConferenciaPrecos || 0);
   }
 
+  function rolarListaConferenciaPrecos(delta) {
+    if (!listaConferenciaPrecosCompra) return;
+    listaConferenciaPrecosCompra.scrollTop += delta;
+  }
+
   function abrirConferenciaPrecosCompra(itens) {
     if (!modalConferenciaPrecosCompra) return false;
     renderizarConferenciaPrecos(itens);
@@ -3851,6 +3869,17 @@
   }
 
   if (modalConferenciaPrecosCompra) {
+    modalConferenciaPrecosCompra.addEventListener("wheel", function(event) {
+      if (!modalConferenciaPrecosCompra.classList.contains("visivel")) return;
+      if (!listaConferenciaPrecosCompra) return;
+
+      const dentroLista = event.target.closest ? event.target.closest("#listaConferenciaPrecosCompra") : null;
+      if (dentroLista) return;
+
+      event.preventDefault();
+      rolarListaConferenciaPrecos(event.deltaY);
+    }, { passive:false });
+
     modalConferenciaPrecosCompra.addEventListener("click", function(event) {
       if (event.target !== modalConferenciaPrecosCompra) return;
       conferenciaPrecosConfirmada = false;
