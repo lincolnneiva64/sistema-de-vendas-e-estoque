@@ -588,6 +588,31 @@
   }
   .compras-preco-card.subiu .compras-preco-status { background:#fff1f2; color:#991b1b; }
   .compras-preco-card.caiu .compras-preco-status { background:#f0fdf4; color:#166534; }
+  .compras-preco-blocos {
+    display:grid;
+    gap:10px;
+    padding:10px 14px 12px;
+  }
+  .compras-preco-bloco {
+    border:1px solid #e2e8f0;
+    border-radius:10px;
+    background:#fff;
+    overflow:hidden;
+  }
+  .compras-preco-bloco.compra { border-color:#dbeafe; background:#f8fbff; }
+  .compras-preco-bloco.impacto { border-color:#e2e8f0; background:#fbfdff; }
+  .compras-preco-bloco.simulacao { border-color:#f2d58f; background:#fffdf4; }
+  .compras-preco-bloco-titulo {
+    margin:0;
+    padding:9px 11px;
+    color:#172033;
+    font-size:.92rem;
+    font-weight:950;
+    border-bottom:1px solid rgba(148,163,184,.25);
+  }
+  .compras-preco-bloco.compra .compras-preco-bloco-titulo { background:#eff6ff; color:#164173; }
+  .compras-preco-bloco.impacto .compras-preco-bloco-titulo { background:#f8fafc; color:#334155; }
+  .compras-preco-bloco.simulacao .compras-preco-bloco-titulo { background:#fff7db; color:#7c4a03; }
   .compras-preco-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; padding:10px 14px; }
   .compras-preco-metrica { min-height:66px; padding:8px 10px; border:1px solid #e2e8f0; border-radius:9px; background:#f8fafc; }
   .compras-preco-metrica.destaque { background:#eff6ff; border-color:#bfdbfe; }
@@ -602,20 +627,16 @@
     align-items:center;
     justify-content:space-between;
     gap:12px;
-    padding:10px 14px 12px;
+    padding:10px 11px 11px;
     background:#fffaf0;
-    border-top:1px solid #f3ead2;
+    border-top:1px solid rgba(148,163,184,.25);
     color:#334155;
     font-weight:850;
   }
   .compras-preco-escolha label { display:inline-flex; align-items:center; gap:9px; cursor:pointer; }
   .compras-preco-escolha input { width:18px; height:18px; accent-color:#2563eb; }
   .compras-preco-simulador {
-    margin:0 14px 12px;
     padding:12px;
-    border:1px solid #f2d58f;
-    border-radius:10px;
-    background:#fffdf4;
   }
   .compras-preco-simulador-topo {
     display:flex;
@@ -1485,8 +1506,8 @@
     .compras-preco-card-topo,
     .compras-preco-escolha { flex-direction:column; align-items:flex-start; }
     .compras-preco-status { white-space:normal; }
+    .compras-preco-blocos { padding:10px; }
     .compras-preco-grid { grid-template-columns:1fr 1fr; padding:10px; }
-    .compras-preco-simulador { margin:0 10px 10px; }
     .compras-preco-simulador-topo { flex-direction:column; }
     .compras-preco-sugerido { white-space:normal; }
     .compras-preco-simulador-grid { grid-template-columns:1fr; }
@@ -3248,6 +3269,15 @@
     );
   }
 
+  function blocoConferenciaPreco(titulo, classe, conteudo) {
+    return (
+      '<section class="compras-preco-bloco ' + escapeHtml(classe || "") + '">' +
+        '<h4 class="compras-preco-bloco-titulo">' + escapeHtml(titulo) + '</h4>' +
+        conteudo +
+      '</section>'
+    );
+  }
+
   function renderizarConferenciaPrecos(itens) {
     if (!listaConferenciaPrecosCompra) return;
 
@@ -3257,6 +3287,9 @@
         ? "Custo subiu " + moeda(item.diferenca)
         : "Custo caiu " + moeda(Math.abs(item.diferenca));
       const margemClasse = classeMargem(item.margemAtual, item.margemNova);
+      const diferencaClasse = subiu ? "alerta" : "ok";
+      const diferencaTexto = (item.diferenca > 0 ? "+" : "-") + moeda(Math.abs(item.diferenca));
+      const tituloDiferenca = subiu ? "Aumento do custo" : "Reducao do custo";
 
       return (
         '<article class="compras-preco-card ' + (subiu ? "subiu" : "caiu") + '">' +
@@ -3264,50 +3297,60 @@
             '<h3 class="compras-preco-produto">' + escapeHtml(item.nome) + '</h3>' +
             '<span class="compras-preco-status">' + escapeHtml(status) + '</span>' +
           '</div>' +
-          '<div class="compras-preco-grid">' +
-            metricaPreco("Custo atual", moeda(item.custoAtual), "destaque") +
-            metricaPreco("Custo desta compra", moeda(item.custoCompra), subiu ? "alerta" : "ok") +
-            metricaPreco("Diferenca", (item.diferenca > 0 ? "+" : "-") + moeda(Math.abs(item.diferenca)), subiu ? "alerta" : "ok") +
-            metricaPreco("Preco venda atual", moeda(item.precoVenda), "destaque") +
-            metricaPreco("Margem real atual", moeda(item.margemAtual.real), item.margemAtual.real < 0 ? "alerta" : "ok") +
-            metricaPreco("Margem % atual", percentual(item.margemAtual.percentual), item.margemAtual.percentual < 0 ? "alerta" : "ok") +
-            metricaPreco("Nova margem real", moeda(item.margemNova.real), margemClasse) +
-            metricaPreco("Nova margem %", percentual(item.margemNova.percentual), margemClasse) +
-          '</div>' +
-          '<div class="compras-preco-escolha">' +
-            '<label><input type="checkbox" class="marcarAtualizarCustoCompra" data-produto-id="' + escapeHtml(item.produtoId) + '" checked> Atualizar custo no cadastro</label>' +
-            '<span>O custo novo so sera gravado se esta opcao estiver marcada.</span>' +
-          '</div>' +
-          '<div class="compras-preco-simulador" data-produto-id="' + escapeHtml(item.produtoId) + '" data-custo-novo="' + escapeHtml(String(item.custoCompra)) + '" data-margem-atual="' + escapeHtml(String(item.margemAtual.percentual)) + '">' +
-            '<div class="compras-preco-simulador-topo">' +
-              '<div>' +
-                '<strong class="compras-preco-simulador-titulo">Simular novo preco</strong>' +
-                '<p class="compras-preco-simulador-ajuda">Ajuste a margem ou digite um preco. O preco de venda so sera alterado se a opcao estiver marcada.</p>' +
+          '<div class="compras-preco-blocos">' +
+            blocoConferenciaPreco("1. O que mudou na compra", "compra",
+              '<div class="compras-preco-grid">' +
+                metricaPreco("Custo antigo no cadastro", moeda(item.custoAtual), "destaque") +
+                metricaPreco("Custo desta compra", moeda(item.custoCompra), subiu ? "alerta" : "ok") +
+                metricaPreco(tituloDiferenca, diferencaTexto, diferencaClasse) +
               '</div>' +
-              '<span class="compras-preco-sugerido">Preco sugerido: ' + escapeHtml(moeda(item.precoSugerido)) + '</span>' +
-            '</div>' +
-            '<div class="compras-preco-simulador-grid">' +
-              '<div class="compras-preco-campo">' +
-                '<label>Margem desejada %</label>' +
-                '<input type="text" inputmode="decimal" autocomplete="off" class="campoMargemDesejadaCompra" value="' + escapeHtml(percentualCampo(item.margemAtual.percentual)) + '">' +
-              '</div>' +
-              '<div class="compras-preco-campo venda">' +
-                '<label>Novo preco de venda</label>' +
-                '<input type="text" inputmode="decimal" autocomplete="off" class="campoNovoPrecoVendaCompra" value="' + escapeHtml(precoCampo(item.precoSugerido)) + '">' +
-              '</div>' +
-              '<div>' +
-                '<span class="compras-preco-label">Margem real com novo preco</span>' +
-                '<div class="compras-preco-resultado resultadoMargemRealCompra ' + escapeHtml(classeMargemSimulada(item.margemAtual.percentual, item.margemSimulada)) + '">' + escapeHtml(moeda(item.margemSimulada.real)) + '</div>' +
-              '</div>' +
-              '<div>' +
-                '<span class="compras-preco-label">Margem % com novo preco</span>' +
-                '<div class="compras-preco-resultado resultadoMargemPercentualCompra ' + escapeHtml(classeMargemSimulada(item.margemAtual.percentual, item.margemSimulada)) + '">' + escapeHtml(percentual(item.margemSimulada.percentual)) + '</div>' +
-              '</div>' +
-            '</div>' +
-            '<label class="compras-preco-venda-opcao">' +
-              '<input type="checkbox" class="marcarAtualizarVendaCompra" data-produto-id="' + escapeHtml(item.produtoId) + '">' +
-              '<span>Atualizar preco de venda no cadastro<small>O preco de venda so sera alterado se esta opcao estiver marcada.</small></span>' +
-            '</label>' +
+              '<div class="compras-preco-escolha">' +
+                '<label><input type="checkbox" class="marcarAtualizarCustoCompra" data-produto-id="' + escapeHtml(item.produtoId) + '" checked> Atualizar custo no cadastro</label>' +
+                '<span>O custo novo so sera gravado se esta opcao estiver marcada.</span>' +
+              '</div>'
+            ) +
+            blocoConferenciaPreco("2. Se continuar vendendo pelo preco atual", "impacto",
+              '<div class="compras-preco-grid">' +
+                metricaPreco("Venda atual no cadastro", moeda(item.precoVenda), "destaque") +
+                metricaPreco("Ganho antigo", moeda(item.margemAtual.real), item.margemAtual.real < 0 ? "alerta" : "ok") +
+                metricaPreco("Margem antiga", percentual(item.margemAtual.percentual), item.margemAtual.percentual < 0 ? "alerta" : "ok") +
+                metricaPreco("Ganho agora", moeda(item.margemNova.real), margemClasse) +
+                metricaPreco("Margem agora", percentual(item.margemNova.percentual), margemClasse) +
+              '</div>'
+            ) +
+            blocoConferenciaPreco("3. Simular novo preco", "simulacao",
+              '<div class="compras-preco-simulador" data-produto-id="' + escapeHtml(item.produtoId) + '" data-custo-novo="' + escapeHtml(String(item.custoCompra)) + '" data-margem-atual="' + escapeHtml(String(item.margemAtual.percentual)) + '">' +
+                '<div class="compras-preco-simulador-topo">' +
+                  '<div>' +
+                    '<strong class="compras-preco-simulador-titulo">Escolher preco e margem</strong>' +
+                    '<p class="compras-preco-simulador-ajuda">Ajuste a margem ou digite um preco. O preco de venda so sera alterado se a opcao estiver marcada.</p>' +
+                  '</div>' +
+                  '<span class="compras-preco-sugerido">Preco sugerido arredondado: ' + escapeHtml(moeda(item.precoSugerido)) + '</span>' +
+                '</div>' +
+                '<div class="compras-preco-simulador-grid">' +
+                  '<div class="compras-preco-campo">' +
+                    '<label>Margem desejada %</label>' +
+                    '<input type="text" inputmode="decimal" autocomplete="off" class="campoMargemDesejadaCompra" value="' + escapeHtml(percentualCampo(item.margemAtual.percentual)) + '">' +
+                  '</div>' +
+                  '<div class="compras-preco-campo venda">' +
+                    '<label>Novo preco de venda</label>' +
+                    '<input type="text" inputmode="decimal" autocomplete="off" class="campoNovoPrecoVendaCompra" value="' + escapeHtml(precoCampo(item.precoSugerido)) + '">' +
+                  '</div>' +
+                  '<div>' +
+                    '<span class="compras-preco-label">Ganho com novo preco</span>' +
+                    '<div class="compras-preco-resultado resultadoMargemRealCompra ' + escapeHtml(classeMargemSimulada(item.margemAtual.percentual, item.margemSimulada)) + '">' + escapeHtml(moeda(item.margemSimulada.real)) + '</div>' +
+                  '</div>' +
+                  '<div>' +
+                    '<span class="compras-preco-label">Margem com novo preco</span>' +
+                    '<div class="compras-preco-resultado resultadoMargemPercentualCompra ' + escapeHtml(classeMargemSimulada(item.margemAtual.percentual, item.margemSimulada)) + '">' + escapeHtml(percentual(item.margemSimulada.percentual)) + '</div>' +
+                  '</div>' +
+                '</div>' +
+                '<label class="compras-preco-venda-opcao">' +
+                  '<input type="checkbox" class="marcarAtualizarVendaCompra" data-produto-id="' + escapeHtml(item.produtoId) + '">' +
+                  '<span>Atualizar preco de venda no cadastro<small>O preco de venda so sera alterado se esta opcao estiver marcada.</small></span>' +
+                '</label>' +
+              '</div>'
+            ) +
           '</div>' +
         '</article>'
       );
