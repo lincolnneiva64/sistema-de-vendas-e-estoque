@@ -491,10 +491,20 @@ select.campo-obrigatorio-piscando:focus,
 
 .produto-fornecedores-topo {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     gap: 10px;
     margin-bottom: 10px;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+}
+
+.produto-fornecedores-topo-texto {
+    min-width: 0;
 }
 
 .produto-fornecedores-titulo {
@@ -507,6 +517,37 @@ select.campo-obrigatorio-piscando:focus,
     color: #64748b;
     font-size: 0.86rem;
     font-weight: 600;
+}
+
+.produto-fornecedores-resumo {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    color: #164173;
+    font-size: 0.86rem;
+    font-weight: 800;
+}
+
+.produto-fornecedores-contador {
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    background: #eff6ff;
+    padding: 4px 8px;
+}
+
+.produto-fornecedores-toggle {
+    color: #1d4ed8;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.produto-fornecedores-card.recolhido .produto-fornecedores-corpo {
+    display: none;
+}
+
+.produto-fornecedores-card.recolhido .produto-fornecedores-topo {
+    margin-bottom: 0;
 }
 
 .produto-fornecedores-lista {
@@ -625,12 +666,19 @@ select.campo-obrigatorio-piscando:focus,
     }
 
     .produto-fornecedores-topo {
-        display: block;
+        align-items: flex-start;
     }
 
     .produto-fornecedores-ajuda {
         display: block;
         margin-top: 3px;
+    }
+
+    .produto-fornecedores-resumo {
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 3px;
+        font-size: 0.82rem;
     }
 
     .produto-fornecedores-lista {
@@ -920,30 +968,38 @@ select.campo-obrigatorio-piscando:focus,
 </div>
 
 <div class="col-12">
-  <section class="produto-fornecedores-card">
-    <div class="produto-fornecedores-topo">
-      <div class="produto-fornecedores-titulo">Fornecedores deste produto</div>
-      <span class="produto-fornecedores-ajuda">Marque quem vende este item.</span>
+  <section class="produto-fornecedores-card{% if not form.fornecedores.errors %} recolhido{% endif %}" id="produtoFornecedoresCard">
+    <button type="button" class="produto-fornecedores-topo" id="produtoFornecedoresToggle" aria-expanded="{% if form.fornecedores.errors %}true{% else %}false{% endif %}" aria-controls="produtoFornecedoresCorpo">
+      <span class="produto-fornecedores-topo-texto">
+        <span class="produto-fornecedores-titulo">Fornecedores deste produto</span>
+        <span class="produto-fornecedores-ajuda">Marque quem vende este item.</span>
+      </span>
+      <span class="produto-fornecedores-resumo">
+        <span class="produto-fornecedores-contador" id="produtoFornecedoresContador">0 selecionados</span>
+        <span class="produto-fornecedores-toggle" id="produtoFornecedoresToggleTexto">{% if form.fornecedores.errors %}Ocultar{% else %}Mostrar{% endif %}</span>
+      </span>
+    </button>
+
+    <div class="produto-fornecedores-corpo" id="produtoFornecedoresCorpo">
+      {% if form.fornecedores.field.queryset %}
+        <div class="produto-fornecedores-lista">
+          {% for fornecedor_opcao in form.fornecedores %}
+            <label class="produto-fornecedor-opcao" for="{{ fornecedor_opcao.id_for_label }}">
+              {{ fornecedor_opcao.tag }}
+              <span>{{ fornecedor_opcao.choice_label }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="produto-fornecedores-vazio">Nenhum fornecedor ativo cadastrado ainda.</p>
+      {% endif %}
+
+      {% if form.fornecedores.errors %}
+        <div class="campo-erro">
+          {{ form.fornecedores.errors|join:", " }}
+        </div>
+      {% endif %}
     </div>
-
-    {% if form.fornecedores.field.queryset %}
-      <div class="produto-fornecedores-lista">
-        {% for fornecedor_opcao in form.fornecedores %}
-          <label class="produto-fornecedor-opcao" for="{{ fornecedor_opcao.id_for_label }}">
-            {{ fornecedor_opcao.tag }}
-            <span>{{ fornecedor_opcao.choice_label }}</span>
-          </label>
-        {% endfor %}
-      </div>
-    {% else %}
-      <p class="produto-fornecedores-vazio">Nenhum fornecedor ativo cadastrado ainda.</p>
-    {% endif %}
-
-    {% if form.fornecedores.errors %}
-      <div class="campo-erro">
-        {{ form.fornecedores.errors|join:", " }}
-      </div>
-    {% endif %}
   </section>
 </div>
   
@@ -1240,6 +1296,39 @@ select.campo-obrigatorio-piscando:focus,
     </div>
 </div>
 <script>
+document.addEventListener("DOMContentLoaded", function () {
+    const card = document.getElementById("produtoFornecedoresCard");
+    const botao = document.getElementById("produtoFornecedoresToggle");
+    const textoToggle = document.getElementById("produtoFornecedoresToggleTexto");
+    const contador = document.getElementById("produtoFornecedoresContador");
+
+    if (!card || !botao || !textoToggle || !contador) return;
+
+    const checkboxes = Array.from(card.querySelectorAll('input[type="checkbox"][name="fornecedores"]'));
+
+    function atualizarContador() {
+        const total = checkboxes.filter((checkbox) => checkbox.checked).length;
+        contador.textContent = total === 1 ? "1 selecionado" : total + " selecionados";
+    }
+
+    function definirAberto(aberto) {
+        card.classList.toggle("recolhido", !aberto);
+        botao.setAttribute("aria-expanded", aberto ? "true" : "false");
+        textoToggle.textContent = aberto ? "Ocultar" : "Mostrar";
+    }
+
+    botao.addEventListener("click", function () {
+        definirAberto(card.classList.contains("recolhido"));
+    });
+
+    checkboxes.forEach(function (checkbox) {
+        checkbox.addEventListener("change", atualizarContador);
+    });
+
+    atualizarContador();
+    definirAberto(!card.classList.contains("recolhido"));
+});
+
     function limparFormulario() {
     const form = document.getElementById("form-produto");
 
