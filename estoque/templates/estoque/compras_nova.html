@@ -527,6 +527,11 @@
     flex-wrap:wrap;
     margin-top:12px;
   }
+  body.modal-preco-aberto {
+    overflow:hidden;
+    width:100%;
+    touch-action:none;
+  }
   .compras-precos-modal {
     position:fixed;
     inset:0;
@@ -536,12 +541,14 @@
     justify-content:center;
     padding:16px;
     background:rgba(15,23,42,.58);
+    overflow:hidden;
+    overscroll-behavior:contain;
   }
   .compras-precos-modal.visivel { display:flex; }
   .compras-precos-caixa {
     width:min(1120px, 96vw);
-    height:min(92vh, 880px);
-    max-height:92vh;
+    height:min(92dvh, 880px);
+    max-height:calc(100dvh - 32px);
     display:flex;
     flex-direction:column;
     overflow:hidden;
@@ -568,6 +575,7 @@
     padding:10px 12px 18px;
     overflow-y:auto;
     overflow-x:hidden;
+    overscroll-behavior:contain;
     -webkit-overflow-scrolling:touch;
   }
   .compras-preco-card {
@@ -1552,8 +1560,8 @@
     .compras-precos-modal { padding:10px; align-items:stretch; }
     .compras-precos-caixa {
       width:100%;
-      height:calc(100vh - 20px);
-      max-height:calc(100vh - 20px);
+      height:calc(100dvh - 20px);
+      max-height:calc(100dvh - 20px);
       border-radius:12px;
     }
     .compras-precos-topo { padding:12px; }
@@ -2087,6 +2095,7 @@
   let envioAcionadoPeloBotao = false;
   let envioModalEmAndamento = false;
   let botaoEnvioAtual = null;
+  let scrollBodyConferenciaPrecos = 0;
 
   function compraMobile() {
     return mobileQuery.matches;
@@ -3556,11 +3565,34 @@
     atualizarResultadoSimuladorPreco(simulador);
   }
 
+  function travarScrollBodyConferenciaPrecos(ativo) {
+    if (ativo) {
+      if (document.body.classList.contains("modal-preco-aberto")) return;
+      scrollBodyConferenciaPrecos = window.scrollY || document.documentElement.scrollTop || 0;
+      document.body.classList.add("modal-preco-aberto");
+      document.body.style.position = "fixed";
+      document.body.style.top = "-" + scrollBodyConferenciaPrecos + "px";
+      document.body.style.left = "0";
+      document.body.style.right = "0";
+      return;
+    }
+
+    if (!document.body.classList.contains("modal-preco-aberto")) return;
+    document.body.classList.remove("modal-preco-aberto");
+    document.body.style.position = "";
+    document.body.style.top = "";
+    document.body.style.left = "";
+    document.body.style.right = "";
+    window.scrollTo(0, scrollBodyConferenciaPrecos || 0);
+  }
+
   function abrirConferenciaPrecosCompra(itens) {
     if (!modalConferenciaPrecosCompra) return false;
     renderizarConferenciaPrecos(itens);
+    if (listaConferenciaPrecosCompra) listaConferenciaPrecosCompra.scrollTop = 0;
     modalConferenciaPrecosCompra.classList.add("visivel");
     modalConferenciaPrecosCompra.setAttribute("aria-hidden", "false");
+    travarScrollBodyConferenciaPrecos(true);
     setTimeout(function() {
       if (btnAtualizarPrecosContinuarCompra) btnAtualizarPrecosContinuarCompra.focus();
     }, 80);
@@ -3571,6 +3603,7 @@
     if (!modalConferenciaPrecosCompra) return;
     modalConferenciaPrecosCompra.classList.remove("visivel");
     modalConferenciaPrecosCompra.setAttribute("aria-hidden", "true");
+    travarScrollBodyConferenciaPrecos(false);
     if (btnSalvarCompra) {
       btnSalvarCompra.disabled = false;
       btnSalvarCompra.textContent = "{% if finalizando %}Confirmar Pagamento{% else %}Finalizar Compra{% endif %}";
@@ -3625,6 +3658,7 @@
     conferenciaPrecosConfirmada = true;
     modalConferenciaPrecosCompra.classList.remove("visivel");
     modalConferenciaPrecosCompra.setAttribute("aria-hidden", "true");
+    travarScrollBodyConferenciaPrecos(false);
     delete formCompra.dataset.enviando;
     formCompra.requestSubmit ? formCompra.requestSubmit() : formCompra.submit();
   }
