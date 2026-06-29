@@ -1071,12 +1071,15 @@ class FornecedorForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        args = self._remover_produtos_excluidos_do_post(args)
         super().__init__(*args, **kwargs)
-        self.fields["produtos"].queryset = Produto.objects.all().order_by("nome", "id")
+        self.fields["produtos"].queryset = self.produtos_disponiveis_queryset()
         if self.instance and self.instance.pk:
             self.fields["produtos"].initial = ProdutoFornecedor.objects.filter(
                 fornecedor=self.instance,
                 ativo=True,
+                produto__excluido=False,
+                produto__excluido_em__isnull=True,
             ).values_list("produto_id", flat=True)
         if "tipo" in self.fields:
             self.fields["tipo"].initial = MeioPagamento.TIPO_CREDITO
@@ -1084,6 +1087,41 @@ class FornecedorForm(forms.ModelForm):
             self.fields["tipo"].choices = MeioPagamento.TIPO_CHOICES
         if "tipo" in self.fields:
             self.fields["tipo"].widget.choices = MeioPagamento.TIPO_CHOICES
+
+    @staticmethod
+    def produtos_disponiveis_queryset():
+        return Produto.objects.filter(
+            excluido=False,
+            excluido_em__isnull=True,
+        ).order_by("nome", "id")
+
+    @classmethod
+    def _remover_produtos_excluidos_do_post(cls, args):
+        if not args:
+            return args
+
+        data = args[0]
+        if not hasattr(data, "getlist"):
+            return args
+
+        produtos_ids = data.getlist("produtos")
+        if not produtos_ids:
+            return args
+
+        ids_validos = {
+            str(produto_id)
+            for produto_id in cls.produtos_disponiveis_queryset()
+            .filter(pk__in=produtos_ids)
+            .values_list("pk", flat=True)
+        }
+        produtos_filtrados = [produto_id for produto_id in produtos_ids if str(produto_id) in ids_validos]
+
+        if len(produtos_filtrados) == len(produtos_ids):
+            return args
+
+        data_filtrada = data.copy()
+        data_filtrada.setlist("produtos", produtos_filtrados)
+        return (data_filtrada, *args[1:])
 
     @staticmethod
     def _nome_proprio(valor):

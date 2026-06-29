@@ -229,7 +229,7 @@ class FechamentoCompraFinanceiroTests(TestCase):
 
 
 class FornecedorProdutosFormTests(TestCase):
-    def _produto_teste(self, nome, excluido=False):
+    def _produto_teste(self, nome, excluido=False, excluido_em=None):
         return Produto.objects.create(
             nome=nome,
             preco_compra=Decimal("10.00"),
@@ -237,6 +237,7 @@ class FornecedorProdutosFormTests(TestCase):
             preco_prazo=Decimal("16.00"),
             quantidade=Decimal("1.000"),
             excluido=excluido,
+            excluido_em=excluido_em,
         )
 
     def _dados_fornecedor(self, fornecedor, produtos):
@@ -265,25 +266,57 @@ class FornecedorProdutosFormTests(TestCase):
             })
         return dados
 
-    def test_fornecedor_form_aceita_todos_os_produtos_existentes(self):
-        produto = self._produto_teste("Pirakids Achoc 27/200Ml", excluido=True)
+    def test_fornecedor_form_mostra_apenas_produtos_fora_da_lixeira(self):
+        produto_valido = self._produto_teste("Produto Valido", excluido=False, excluido_em=None)
+        produto_lixeira = self._produto_teste(
+            "Tmp Url Prod",
+            excluido=True,
+            excluido_em=timezone.now(),
+        )
 
         form = FornecedorForm()
 
-        self.assertTrue(form.fields["produtos"].queryset.filter(pk=produto.pk).exists())
+        self.assertTrue(form.fields["produtos"].queryset.filter(pk=produto_valido.pk).exists())
+        self.assertFalse(form.fields["produtos"].queryset.filter(pk=produto_lixeira.pk).exists())
 
-    def test_editar_fornecedor_salva_e_reabre_produto_existente_marcado(self):
+    def test_produto_da_lixeira_com_vinculo_ativo_nao_aparece_no_fornecedor(self):
         fornecedor = Fornecedor.objects.create(nome="Atacadao Br", ativo=True)
-        produto = self._produto_teste("Pirakids Achoc 27/200Ml", excluido=True)
+        produto_lixeira = self._produto_teste(
+            "Pirakids Achoc 27/200Ml",
+            excluido=True,
+            excluido_em=timezone.now(),
+        )
+        ProdutoFornecedor.objects.create(
+            fornecedor=fornecedor,
+            produto=produto_lixeira,
+            ativo=True,
+        )
 
-        resposta = self.client.post(
+        resposta = self.client.get(
             reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}),
-            self._dados_fornecedor(fornecedor, [produto]),
             secure=True,
         )
 
-        self.assertEqual(resposta.status_code, 302)
-        vinculo = ProdutoFornecedor.objects.get(fornecedor=fornecedor, produto=produto)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotContains(resposta, "Pirakids Achoc 27/200Ml")
+        form = resposta.context["form"]
+        self.assertNotIn(produto_lixeira.pk, list(form.fields["produtos"].initial))
+        self.assertFalse(form.fields["produtos"].queryset.filter(pk=produto_lixeira.pk).exists())
+
+    def test_editar_fornecedor_salva_produto_valido_sem_erro_de_choice(self):
+        fornecedor = Fornecedor.objects.create(nome="Atacadao Br", ativo=True)
+        produto_valido = self._produto_teste("Produto Valido", excluido=False, excluido_em=None)
+
+        resposta = self.client.post(
+            reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}),
+            self._dados_fornecedor(fornecedor, [produto_valido]),
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotContains(resposta, "Select a valid choice")
+        vinculo = ProdutoFornecedor.objects.get(fornecedor=fornecedor, produto=produto_valido)
         self.assertTrue(vinculo.ativo)
 
         resposta_get = self.client.get(
@@ -293,7 +326,37 @@ class FornecedorProdutosFormTests(TestCase):
 
         self.assertEqual(resposta_get.status_code, 200)
         form = resposta_get.context["form"]
-        self.assertIn(produto.pk, list(form.fields["produtos"].initial))
+        self.assertIn(produto_valido.pk, list(form.fields["produtos"].initial))
+
+    def test_editar_fornecedor_ignora_produto_da_lixeira_enviado_no_post(self):
+        fornecedor = Fornecedor.objects.create(nome="Atacadao Br", ativo=True)
+        produto_valido = self._produto_teste("Produto Valido", excluido=False, excluido_em=None)
+        produto_lixeira = self._produto_teste(
+            "Sardinha Gc 50/78",
+            excluido=True,
+            excluido_em=timezone.now(),
+        )
+        ProdutoFornecedor.objects.create(
+            fornecedor=fornecedor,
+            produto=produto_lixeira,
+            ativo=True,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}),
+            self._dados_fornecedor(fornecedor, [produto_valido, produto_lixeira]),
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotContains(resposta, "Select a valid choice")
+        self.assertTrue(
+            ProdutoFornecedor.objects.get(fornecedor=fornecedor, produto=produto_valido).ativo
+        )
+        self.assertFalse(
+            ProdutoFornecedor.objects.get(fornecedor=fornecedor, produto=produto_lixeira).ativo
+        )
 
 
 class ComprasListaFinanceiroTests(TestCase):
