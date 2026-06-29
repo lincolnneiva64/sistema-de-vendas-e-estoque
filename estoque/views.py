@@ -4489,6 +4489,25 @@ def _produtos_preco_venda_atualizar_post(request):
         "preco_prazo_fracionado",
     }
 
+    produto_ids = request.POST.getlist("atualizar_preco_venda_produto_ids[]")
+    campos = request.POST.getlist("atualizar_preco_venda_nomes[]")
+    valores = request.POST.getlist("atualizar_preco_venda_valores[]")
+    for produto_id, campo, valor in zip(produto_ids, campos, valores):
+        try:
+            produto_id_int = int(produto_id)
+        except (TypeError, ValueError):
+            continue
+
+        if campo not in campos_permitidos:
+            continue
+
+        try:
+            preco = _decimal_compra(valor or "0", casas=2)
+        except ValueError:
+            continue
+        if preco >= 0:
+            precos[(produto_id_int, campo)] = preco
+
     for chave in request.POST.getlist("atualizar_preco_venda_campos[]"):
         partes = str(chave or "").split(":", 1)
         if len(partes) != 2:

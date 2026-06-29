@@ -760,9 +760,12 @@
     box-shadow:0 0 0 4px rgba(37,99,235,.16);
   }
   .compras-preco-campo.venda input {
-    border-color:#93c5fd;
+    border-color:#2563eb;
+    border-width:2px;
     background:#eff6ff;
     color:#172554;
+    box-shadow:0 0 0 4px rgba(37,99,235,.10);
+    font-size:1rem;
   }
   .compras-preco-resultado {
     min-height:40px;
@@ -3495,7 +3498,7 @@
               '<input type="text" inputmode="decimal" autocomplete="off" class="campoMargemDesejadaCompra" value="' + escapeHtml(percentualCampo(preco.margemAntiga.percentual)) + '">' +
             '</div>' +
             '<div class="compras-preco-campo venda">' +
-              '<label>Novo preco</label>' +
+              '<label>NOVO PRECO QUE SERA GRAVADO</label>' +
               '<input type="text" inputmode="decimal" autocomplete="off" class="campoNovoPrecoVendaCompra" value="' + escapeHtml(precoCampo(preco.precoSugerido)) + '">' +
             '</div>' +
             '<div>' +
@@ -3667,6 +3670,24 @@
       precoInput.name = "novo_preco_venda_produto_" + produtoId + "_" + campoPrecoCadastro;
       precoInput.value = precoCampo(numero(precoCampoSimulado.value));
       camposAtualizarCustoCompra.appendChild(precoInput);
+
+      const produtoListaInput = document.createElement("input");
+      produtoListaInput.type = "hidden";
+      produtoListaInput.name = "atualizar_preco_venda_produto_ids[]";
+      produtoListaInput.value = produtoId;
+      camposAtualizarCustoCompra.appendChild(produtoListaInput);
+
+      const campoListaInput = document.createElement("input");
+      campoListaInput.type = "hidden";
+      campoListaInput.name = "atualizar_preco_venda_nomes[]";
+      campoListaInput.value = campoPrecoCadastro;
+      camposAtualizarCustoCompra.appendChild(campoListaInput);
+
+      const valorListaInput = document.createElement("input");
+      valorListaInput.type = "hidden";
+      valorListaInput.name = "atualizar_preco_venda_valores[]";
+      valorListaInput.value = precoCampo(numero(precoCampoSimulado.value));
+      camposAtualizarCustoCompra.appendChild(valorListaInput);
     });
   }
 
