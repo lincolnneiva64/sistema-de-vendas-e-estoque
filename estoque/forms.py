@@ -1072,7 +1072,7 @@ class FornecedorForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["produtos"].queryset = Produto.objects.filter(excluido=False).order_by("nome", "id")
+        self.fields["produtos"].queryset = Produto.objects.all().order_by("nome", "id")
         if self.instance and self.instance.pk:
             self.fields["produtos"].initial = ProdutoFornecedor.objects.filter(
                 fornecedor=self.instance,

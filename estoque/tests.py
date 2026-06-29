@@ -17,8 +17,8 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from .forms import FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, Funcionario, ItemCompra, ItemVenda, ItemVendaRemovido, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, RecebimentoContaReceber, Venda
+from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
+from .models import AjusteItemVendaQuitada, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, Funcionario, ItemCompra, ItemVenda, ItemVendaRemovido, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Venda
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
 from . import views
 
@@ -226,6 +226,74 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
         self.assertEqual(self.produto.quantidade, Decimal("10.000"))
         self.assertContains(resposta, "Não foi possível fechar a compra. Nenhum valor foi lançado no financeiro.")
+
+
+class FornecedorProdutosFormTests(TestCase):
+    def _produto_teste(self, nome, excluido=False):
+        return Produto.objects.create(
+            nome=nome,
+            preco_compra=Decimal("10.00"),
+            preco_vista=Decimal("15.00"),
+            preco_prazo=Decimal("16.00"),
+            quantidade=Decimal("1.000"),
+            excluido=excluido,
+        )
+
+    def _dados_fornecedor(self, fornecedor, produtos):
+        dados = {
+            "nome": fornecedor.nome,
+            "nome_fantasia": fornecedor.nome_fantasia or "",
+            "telefone_whatsapp": fornecedor.telefone_whatsapp or "",
+            "cidade": fornecedor.cidade or "",
+            "bairro": fornecedor.bairro or "",
+            "prazos_pagamento_padrao": fornecedor.prazos_pagamento_padrao or "",
+            "observacao": fornecedor.observacao or "",
+            "ativo": "on",
+            "produtos": [str(produto.id) for produto in produtos],
+            "contatos-TOTAL_FORMS": "3",
+            "contatos-INITIAL_FORMS": "0",
+            "contatos-MIN_NUM_FORMS": "0",
+            "contatos-MAX_NUM_FORMS": "1000",
+        }
+        for indice in range(3):
+            dados.update({
+                f"contatos-{indice}-id": "",
+                f"contatos-{indice}-nome": "",
+                f"contatos-{indice}-cargo": "",
+                f"contatos-{indice}-telefone_whatsapp": "",
+                f"contatos-{indice}-observacao": "",
+            })
+        return dados
+
+    def test_fornecedor_form_aceita_todos_os_produtos_existentes(self):
+        produto = self._produto_teste("Pirakids Achoc 27/200Ml", excluido=True)
+
+        form = FornecedorForm()
+
+        self.assertTrue(form.fields["produtos"].queryset.filter(pk=produto.pk).exists())
+
+    def test_editar_fornecedor_salva_e_reabre_produto_existente_marcado(self):
+        fornecedor = Fornecedor.objects.create(nome="Atacadao Br", ativo=True)
+        produto = self._produto_teste("Pirakids Achoc 27/200Ml", excluido=True)
+
+        resposta = self.client.post(
+            reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}),
+            self._dados_fornecedor(fornecedor, [produto]),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        vinculo = ProdutoFornecedor.objects.get(fornecedor=fornecedor, produto=produto)
+        self.assertTrue(vinculo.ativo)
+
+        resposta_get = self.client.get(
+            reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta_get.status_code, 200)
+        form = resposta_get.context["form"]
+        self.assertIn(produto.pk, list(form.fields["produtos"].initial))
 
 
 class ComprasListaFinanceiroTests(TestCase):
