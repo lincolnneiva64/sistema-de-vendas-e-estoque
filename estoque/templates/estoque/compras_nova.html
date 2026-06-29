@@ -755,6 +755,31 @@
     font-weight:900;
     outline:none;
   }
+  .compras-preco-campo.venda {
+    position:relative;
+    padding:10px;
+    border:1.5px solid #93c5fd;
+    border-radius:11px;
+    background:linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+    box-shadow:0 8px 18px rgba(37,99,235,.12);
+  }
+  .compras-preco-campo.venda label {
+    color:#1d4ed8;
+    font-size:.82rem;
+    letter-spacing:0;
+  }
+  .compras-preco-salvo-etiqueta {
+    display:inline-flex;
+    align-items:center;
+    margin-bottom:6px;
+    border:1px solid #bbf7d0;
+    border-radius:999px;
+    padding:3px 8px;
+    background:#f0fdf4;
+    color:#166534;
+    font-size:.72rem;
+    font-weight:950;
+  }
   .compras-preco-campo input:focus {
     border-color:#2563eb;
     box-shadow:0 0 0 4px rgba(37,99,235,.16);
@@ -762,10 +787,16 @@
   .compras-preco-campo.venda input {
     border-color:#2563eb;
     border-width:2px;
-    background:#eff6ff;
+    min-height:48px;
+    background:#dbeafe;
     color:#172554;
-    box-shadow:0 0 0 4px rgba(37,99,235,.10);
-    font-size:1rem;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.8), 0 0 0 4px rgba(37,99,235,.10);
+    font-size:1.18rem;
+    font-weight:950;
+  }
+  .compras-preco-campo.venda input:focus {
+    background:#fff;
+    box-shadow:0 0 0 5px rgba(37,99,235,.18), 0 10px 24px rgba(37,99,235,.16);
   }
   .compras-preco-resultado {
     min-height:40px;
@@ -3498,6 +3529,7 @@
               '<input type="text" inputmode="decimal" autocomplete="off" class="campoMargemDesejadaCompra" value="' + escapeHtml(percentualCampo(preco.margemAntiga.percentual)) + '">' +
             '</div>' +
             '<div class="compras-preco-campo venda">' +
+              '<span class="compras-preco-salvo-etiqueta">Sera salvo no cadastro</span>' +
               '<label>NOVO PRECO QUE SERA GRAVADO</label>' +
               '<input type="text" inputmode="decimal" autocomplete="off" class="campoNovoPrecoVendaCompra" value="' + escapeHtml(precoCampo(preco.precoSugerido)) + '">' +
             '</div>' +
