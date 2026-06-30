@@ -134,6 +134,10 @@
   }
 
   .sugestao-conferencia-item {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 6px;
     min-height: 74px;
     padding: 11px 12px;
     border: 1px solid #e9b8c0;
@@ -142,9 +146,13 @@
     box-shadow: 0 10px 24px rgba(127, 29, 29, .065);
   }
 
+  .sugestao-conferencia-item.total {
+    justify-content: space-between;
+  }
+
   .sugestao-conferencia-label {
     display: block;
-    margin-bottom: 5px;
+    margin-bottom: 0;
     color: #64748b;
     font-size: .72rem;
     font-weight: 950;
@@ -164,6 +172,41 @@
     color: #991b1b;
   }
 
+  .sugestao-resumo-final {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+  }
+
+  .sugestao-resumo-final-item {
+    display: flex;
+    min-height: 78px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
+    padding: 13px 14px;
+    border: 1px solid #e9b8c0;
+    border-radius: 12px;
+    background: #fff3f4;
+    box-shadow: 0 10px 24px rgba(127, 29, 29, .065);
+  }
+
+  .sugestao-resumo-final-label {
+    color: #64748b;
+    font-size: .74rem;
+    font-weight: 950;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+
+  .sugestao-resumo-final-valor {
+    color: #991b1b;
+    font-size: 1.12rem;
+    font-weight: 950;
+    line-height: 1.2;
+  }
+
   .sugestao-aviso {
     margin-bottom: 14px;
     padding: 11px 12px;
@@ -178,24 +221,24 @@
     width: 100%;
     box-sizing: border-box;
     overflow: visible;
-    padding: 0 28px 18px 0;
+    padding: 0 10px 18px 0;
     margin-right: 0;
   }
 
   .sugestao-table {
-    width: 1040px;
-    min-width: 1040px;
+    width: 100%;
+    min-width: 1188px;
     max-width: none;
     border-collapse: separate;
     border-spacing: 0;
     table-layout: fixed;
   }
 
-  .sugestao-table col.col-produto { width: 185px; }
-  .sugestao-table col.col-numero { width: 68px; }
-  .sugestao-table col.col-editavel { width: 90px; }
-  .sugestao-table col.col-unidade { width: 48px; }
-  .sugestao-table col.col-acao { width: 73px; }
+  .sugestao-table col.col-produto { width: 260px; }
+  .sugestao-table col.col-numero { width: 72px; }
+  .sugestao-table col.col-editavel { width: 104px; }
+  .sugestao-table col.col-unidade { width: 64px; }
+  .sugestao-table col.col-acao { width: 92px; }
 
   .sugestao-table th {
     position: sticky;
@@ -209,7 +252,8 @@
     font-size: .6rem;
     font-weight: 900;
     letter-spacing: .04em;
-    text-align: left;
+    line-height: 1.12;
+    text-align: center;
     text-transform: uppercase;
     white-space: normal;
   }
@@ -260,6 +304,10 @@
   }
 
   .sugestao-col-produto {
+    text-align: left;
+  }
+
+  .sugestao-table th.sugestao-col-produto {
     text-align: left;
   }
 
@@ -531,7 +579,8 @@
     .sugestao-actions,
     .sugestao-grid,
     .sugestao-conferencia,
-    .sugestao-manual-grid {
+    .sugestao-manual-grid,
+    .sugestao-resumo-final {
       display: grid;
       grid-template-columns: 1fr;
     }
@@ -630,11 +679,11 @@
       <span class="sugestao-conferencia-label">Produtos na lista</span>
       <span class="sugestao-conferencia-valor" data-produtos-lista-total>{{ total_produtos_sugeridos }}</span>
     </div>
-    <div class="sugestao-conferencia-item">
+    <div class="sugestao-conferencia-item total">
       <span class="sugestao-conferencia-label">Total sugerido original</span>
       <span class="sugestao-conferencia-valor total">R$ {{ total_sugerido|floatformat:2 }}</span>
     </div>
-    <div class="sugestao-conferencia-item">
+    <div class="sugestao-conferencia-item total">
       <span class="sugestao-conferencia-label">Total da lista/pedido</span>
       <span class="sugestao-conferencia-valor total" data-total-lista-pedido>R$ {{ total_sugerido|floatformat:2 }}</span>
     </div>
@@ -682,9 +731,9 @@
               <th class="sugestao-col-produto">Produto</th>
               <th class="sugestao-col-numero">Estoque</th>
               <th class="sugestao-col-numero">Minimo</th>
-              <th class="sugestao-col-numero">Vend.</th>
+              <th class="sugestao-col-numero">Qtd. Vend.</th>
               <th class="sugestao-col-numero">Pedidos</th>
-              <th class="sugestao-col-editavel">Sug.</th>
+              <th class="sugestao-col-editavel">Sug. Compra</th>
               <th class="sugestao-col-numero">Unidade</th>
               <th class="sugestao-col-editavel">Pr. compra</th>
               <th class="sugestao-col-editavel">Pr. unit.</th>
@@ -750,6 +799,17 @@
           A lista aparecera aqui depois que voce escolher o fornecedor.
         {% endif %}
       </div>
+  </section>
+
+  <section class="sugestao-resumo-final" aria-label="Resumo final da lista por fornecedor">
+    <div class="sugestao-resumo-final-item">
+      <span class="sugestao-resumo-final-label">Total sugerido original</span>
+      <span class="sugestao-resumo-final-valor">R$ {{ total_sugerido|floatformat:2 }}</span>
+    </div>
+    <div class="sugestao-resumo-final-item">
+      <span class="sugestao-resumo-final-label">Total da lista/pedido</span>
+      <span class="sugestao-resumo-final-valor" data-total-lista-pedido>R$ {{ total_sugerido|floatformat:2 }}</span>
+    </div>
   </section>
 </div>
 
