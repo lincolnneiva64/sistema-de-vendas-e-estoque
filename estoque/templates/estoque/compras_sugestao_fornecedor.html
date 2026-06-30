@@ -1081,6 +1081,26 @@
     return !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
   }
 
+  function campoNumericoEditavel(campo) {
+    return campo && campo.matches(
+      ".sugestao-qtd-input, " +
+      ".sugestao-preco-input, " +
+      ".sugestao-preco-unitario-input, " +
+      ".sugestao-total-input"
+    );
+  }
+
+  function selecionarValorCampo(campo) {
+    if (!campoNumericoEditavel(campo) || !campo.value) return;
+    window.setTimeout(function() {
+      try {
+        campo.select();
+      } catch (erro) {
+        // Alguns navegadores mobile podem ignorar selecao programatica.
+      }
+    }, 0);
+  }
+
   function fatorLinha(container) {
     const unitario = container.querySelector(".sugestao-preco-unitario-input");
     let fator = paraNumero(unitario?.dataset.fator || "1");
@@ -1164,7 +1184,7 @@
 
   document.addEventListener("input", function (event) {
     const campo = event.target;
-    if (!campo.matches(".sugestao-qtd-input, .sugestao-preco-input, .sugestao-preco-unitario-input, .sugestao-total-input")) return;
+    if (!campoNumericoEditavel(campo)) return;
 
     const container = containerLinha(campo);
     if (!container) return;
@@ -1184,10 +1204,18 @@
 
   document.addEventListener("blur", function (event) {
     const campo = event.target;
-    if (!campo.matches(".sugestao-qtd-input, .sugestao-preco-input, .sugestao-preco-unitario-input, .sugestao-total-input")) return;
+    if (!campoNumericoEditavel(campo)) return;
     const casas = campo.classList.contains("sugestao-qtd-input") ? 3 : 2;
     campo.value = decimal(paraNumero(campo.value), casas);
   }, true);
+
+  document.addEventListener("focus", function(event) {
+    selecionarValorCampo(event.target);
+  }, true);
+
+  document.addEventListener("click", function(event) {
+    selecionarValorCampo(event.target);
+  });
 
   atualizarTotalGeral();
   atualizarContagemProdutos();
