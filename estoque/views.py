@@ -4037,11 +4037,14 @@ def sugestao_compra_fornecedor(request):
     fornecedores = Fornecedor.objects.filter(ativo=True).order_by("nome", "id")
     fornecedor_id = (request.GET.get("fornecedor") or "").strip()
     periodo, data_inicial, data_final = _periodo_sugestao_compra(request)
+    data_chegada = (request.GET.get("data_chegada") or "").strip()
     fornecedor = None
     linhas = []
     total_sugerido = Decimal("0.00")
     total_produtos_vinculados = 0
     quantidade_vendida_calculada = False
+    produtos_manual_payload = []
+    status_pedidos_abertos = []
 
     if fornecedor_id and fornecedor_id.isdigit():
         fornecedor = get_object_or_404(Fornecedor, pk=fornecedor_id, ativo=True)
@@ -4064,11 +4067,15 @@ def sugestao_compra_fornecedor(request):
             .order_by("produto__nome", "id")
         )
         produto_ids = [vinculo.produto_id for vinculo in vinculos]
+
+        produtos_manual = list(Produto.objects.filter(excluido=False).order_by("nome", "id"))
+        produto_ids_consulta = [produto.id for produto in produtos_manual]
+        produtos_vinculados_ids = set(produto_ids)
         vendidos_por_produto = {
             item["produto_id"]: item["quantidade_vendida"] or Decimal("0.000")
             for item in (
                 ItemVenda.objects.filter(
-                    produto_id__in=produto_ids,
+                    produto_id__in=produto_ids_consulta,
                     venda__cancelada=False,
                     venda__data_venda__gte=data_inicial,
                     venda__data_venda__lte=data_final,
@@ -4081,7 +4088,7 @@ def sugestao_compra_fornecedor(request):
             item["produto_id"]: item["quantidade_pedida"] or Decimal("0.000")
             for item in (
                 ItemPedido.objects.filter(
-                    produto_id__in=produto_ids,
+                    produto_id__in=produto_ids_consulta,
                     pedido__status__in=status_pedidos_abertos,
                 )
                 .values("produto_id")
@@ -4125,6 +4132,7 @@ def sugestao_compra_fornecedor(request):
             linhas.append(
                 {
                     "produto": produto,
+                    "produto_id": produto.id,
                     "estoque_atual": estoque_atual,
                     "estoque_minimo": estoque_minimo,
                     "quantidade_vendida": quantidade_vendida.quantize(Decimal("0.001")),
@@ -4140,6 +4148,54 @@ def sugestao_compra_fornecedor(request):
                 }
             )
 
+        for produto in produtos_manual:
+            estoque_atual = Decimal(produto.quantidade or 0)
+            estoque_minimo = Decimal(produto.estoque_minimo or 0)
+            quantidade_vendida = Decimal(vendidos_por_produto.get(produto.id, Decimal("0.000")) or 0)
+            quantidade_pedidos_abertos = Decimal(pedidos_abertos_por_produto.get(produto.id, Decimal("0.000")) or 0)
+            sugestao = max(
+                Decimal("0.000"),
+                estoque_minimo - estoque_atual + quantidade_vendida + quantidade_pedidos_abertos,
+            ).quantize(Decimal("0.001"))
+            fator_conversao = Decimal(produto.fator_conversao or 1)
+            if fator_conversao <= 0:
+                fator_conversao = Decimal("1")
+            preco_compra = Decimal(produto.preco_compra or 0).quantize(Decimal("0.01"))
+            preco_unitario_calculado = (preco_compra / fator_conversao).quantize(Decimal("0.01"))
+            total_item = (sugestao * preco_compra).quantize(Decimal("0.01"))
+
+            if estoque_atual < estoque_minimo:
+                status_texto = "Abaixo do minimo"
+                status_classe = "abaixo"
+            elif estoque_atual == estoque_minimo:
+                status_texto = "No minimo"
+                status_classe = "minimo"
+            else:
+                status_texto = "Acima do minimo"
+                status_classe = "acima"
+
+            produtos_manual_payload.append(
+                {
+                    "id": produto.id,
+                    "nome": produto.nome,
+                    "vinculado": produto.id in produtos_vinculados_ids,
+                    "estoque_atual": f"{estoque_atual:.3f}",
+                    "estoque_minimo": f"{estoque_minimo:.3f}",
+                    "quantidade_vendida": f"{quantidade_vendida.quantize(Decimal('0.001')):.3f}",
+                    "quantidade_pedidos_abertos": f"{quantidade_pedidos_abertos.quantize(Decimal('0.001')):.3f}",
+                    "sugestao": f"{sugestao:.3f}",
+                    "unidade": produto.unidade_compra or produto.unidade_venda_1 or "-",
+                    "fator_conversao": f"{fator_conversao.quantize(Decimal('0.001')):.3f}",
+                    "preco_compra": f"{preco_compra:.2f}",
+                    "preco_unitario_calculado": f"{preco_unitario_calculado:.2f}",
+                    "total_sugerido": f"{total_item:.2f}",
+                    "status_texto": status_texto,
+                    "status_classe": status_classe,
+                }
+            )
+
+        produtos_manual_payload.sort(key=lambda item: (not item["vinculado"], item["nome"].casefold(), item["id"]))
+
     return render(
         request,
         "estoque/compras_sugestao_fornecedor.html",
@@ -4150,12 +4206,14 @@ def sugestao_compra_fornecedor(request):
             "periodo": periodo,
             "data_inicio": data_inicial,
             "data_fim": data_final,
+            "data_chegada": data_chegada,
             "linhas": linhas,
             "total_produtos_vinculados": total_produtos_vinculados,
             "total_produtos_sugeridos": len(linhas),
             "total_sugerido": total_sugerido.quantize(Decimal("0.01")),
             "quantidade_vendida_calculada": quantidade_vendida_calculada,
             "status_pedidos_abertos": status_pedidos_abertos if fornecedor else [],
+            "produtos_manual_payload": produtos_manual_payload,
         },
     )
 

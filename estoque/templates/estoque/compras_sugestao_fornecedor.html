@@ -14,7 +14,7 @@
   .sugestao-filtros,
   .sugestao-card {
     background: #fff;
-    border: 1px solid #e1e7ef;
+    border: 1px solid #ead5d8;
     border-radius: 12px;
     box-shadow: 0 10px 24px rgba(15, 23, 42, .055);
   }
@@ -31,7 +31,7 @@
 
   .sugestao-title {
     margin: 0;
-    color: #111827;
+    color: #7f1d1d;
     font-size: 1.72rem;
     font-weight: 900;
     line-height: 1.12;
@@ -64,15 +64,15 @@
   }
 
   .sugestao-btn-primary {
-    background: #2563eb;
+    background: #991b1b;
     color: #fff;
-    box-shadow: 0 10px 22px rgba(37, 99, 235, .18);
+    box-shadow: 0 10px 22px rgba(153, 27, 27, .18);
   }
 
   .sugestao-btn-secondary {
-    background: #dbeafe;
-    border: 1px solid #7ea6d9;
-    color: #164173;
+    background: #fff1f2;
+    border: 1px solid #fecdd3;
+    color: #9f1239;
   }
 
   .sugestao-filtros {
@@ -82,7 +82,7 @@
 
   .sugestao-grid {
     display: grid;
-    grid-template-columns: minmax(260px, 1.5fr) minmax(160px, .7fr) repeat(2, minmax(150px, .65fr)) auto;
+    grid-template-columns: minmax(230px, 1.35fr) minmax(140px, .6fr) repeat(3, minmax(145px, .65fr)) auto;
     gap: 10px;
     align-items: end;
   }
@@ -115,19 +115,9 @@
     color: #475569;
   }
 
-  .sugestao-datas {
-    margin-top: 10px;
-    padding: 10px 12px;
-    border: 1px solid #bfdbfe;
-    border-radius: 10px;
-    background: #eff6ff;
-    color: #164173;
-    font-weight: 850;
-  }
-
   .sugestao-conferencia {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 10px;
     margin-bottom: 14px;
   }
@@ -135,7 +125,7 @@
   .sugestao-conferencia-item {
     min-height: 74px;
     padding: 11px 12px;
-    border: 1px solid #e1e7ef;
+    border: 1px solid #ead5d8;
     border-radius: 12px;
     background: #fff;
     box-shadow: 0 10px 24px rgba(15, 23, 42, .055);
@@ -160,7 +150,7 @@
   }
 
   .sugestao-conferencia-valor.total {
-    color: #166534;
+    color: #991b1b;
   }
 
   .sugestao-aviso {
@@ -185,8 +175,8 @@
 
   .sugestao-table th {
     padding: 11px 10px;
-    background: #14532d;
-    border-bottom: 2px solid #0f3d22;
+    background: #7f1d1d;
+    border-bottom: 2px solid #5f1111;
     border-right: 1px solid rgba(255, 255, 255, .22);
     color: #fff;
     font-size: .72rem;
@@ -221,7 +211,7 @@
   }
 
   .sugestao-table tbody tr:hover {
-    background: #eef6ff;
+    background: #fff1f2;
   }
 
   .sugestao-col-produto {
@@ -276,24 +266,27 @@
 
   .sugestao-pedidos {
     display: inline-flex;
-    justify-content: flex-end;
+    justify-content: center;
     min-width: 64px;
-    padding: 5px 8px;
+    padding: 6px 9px;
+    border: 1px solid #e2e8f0;
     border-radius: 999px;
+    background: #f8fafc;
     color: #64748b;
     font-weight: 950;
     font-variant-numeric: tabular-nums;
   }
 
   .sugestao-pedidos.tem-pedido {
-    border: 1px solid #fed7aa;
-    background: #fff7ed;
-    color: #c2410c;
+    border: 1px solid #fca5a5;
+    background: #fff1f2;
+    color: #b91c1c;
+    box-shadow: 0 0 0 3px rgba(248, 113, 113, .14);
   }
 
   .sugestao-input:focus {
-    outline: 3px solid rgba(37, 99, 235, .18);
-    border-color: #2563eb;
+    outline: 3px solid rgba(153, 27, 27, .16);
+    border-color: #991b1b;
   }
 
   .sugestao-status {
@@ -311,6 +304,19 @@
     background: #fee2e2;
     border: 1px solid #fecaca;
     color: #991b1b;
+  }
+
+  .sugestao-btn-danger {
+    min-height: 36px;
+    padding: 7px 10px;
+    border: 1px solid #fecaca;
+    background: #fee2e2;
+    color: #991b1b;
+  }
+
+  .sugestao-btn-danger:hover,
+  .sugestao-btn-danger:focus {
+    background: #fecaca;
   }
 
   .sugestao-status.minimo {
@@ -391,6 +397,92 @@
     margin-top: 10px;
   }
 
+  .sugestao-manual {
+    margin-bottom: 14px;
+    padding: 13px 16px;
+    border: 1px solid #fecdd3;
+    border-radius: 12px;
+    background: #fff7f8;
+  }
+
+  .sugestao-manual-grid {
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) auto;
+    gap: 10px;
+    align-items: end;
+  }
+
+  .sugestao-manual-msg {
+    display: none;
+    margin-top: 9px;
+    color: #9a3412;
+    font-weight: 850;
+  }
+
+  .sugestao-manual-msg.visivel {
+    display: block;
+  }
+
+  .sugestao-autocomplete {
+    position: relative;
+  }
+
+  .sugestao-autocomplete-lista {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 5px);
+    z-index: 40;
+    display: none;
+    max-height: 280px;
+    overflow-y: auto;
+    border: 1px solid #fecdd3;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 18px 38px rgba(127, 29, 29, .18);
+  }
+
+  .sugestao-autocomplete-lista.aberta {
+    display: block;
+  }
+
+  .sugestao-autocomplete-opcao {
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid #fff1f2;
+    padding: 10px 12px;
+    background: #fff;
+    color: #172033;
+    font-weight: 850;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .sugestao-autocomplete-opcao:last-child {
+    border-bottom: 0;
+  }
+
+  .sugestao-autocomplete-opcao.ativa,
+  .sugestao-autocomplete-opcao:hover {
+    background: #fff1f2;
+    color: #7f1d1d;
+  }
+
+  .sugestao-autocomplete-tag {
+    display: inline-flex;
+    margin-left: 6px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: #fee2e2;
+    color: #991b1b;
+    font-size: .68rem;
+    font-weight: 950;
+  }
+
+  .sugestao-empty.oculto {
+    display: none;
+  }
+
   @media (max-width: 860px) {
     .sugestao-page {
       margin-top: 10px;
@@ -408,7 +500,8 @@
 
     .sugestao-actions,
     .sugestao-grid,
-    .sugestao-conferencia {
+    .sugestao-conferencia,
+    .sugestao-manual-grid {
       display: grid;
       grid-template-columns: 1fr;
     }
@@ -480,10 +573,12 @@
           <input type="date" name="data_fim" id="data_fim" value="{{ data_fim|date:'Y-m-d' }}">
         </div>
 
+        <div class="sugestao-field">
+          <label for="data_chegada">Data provavel de chegada</label>
+          <input type="date" name="data_chegada" id="data_chegada" value="{{ data_chegada }}">
+        </div>
+
         <button type="submit" class="sugestao-btn sugestao-btn-primary">Gerar lista</button>
-      </div>
-      <div class="sugestao-datas" id="datasCalculadasSugestao">
-        Periodo calculado: {{ data_inicio|date:"d/m/Y" }} ate {{ data_fim|date:"d/m/Y" }}.
       </div>
     </form>
   </section>
@@ -503,11 +598,15 @@
     </div>
     <div class="sugestao-conferencia-item">
       <span class="sugestao-conferencia-label">Produtos na lista</span>
-      <span class="sugestao-conferencia-valor">{{ total_produtos_sugeridos }}</span>
+      <span class="sugestao-conferencia-valor" data-produtos-lista-total>{{ total_produtos_sugeridos }}</span>
     </div>
     <div class="sugestao-conferencia-item">
-      <span class="sugestao-conferencia-label">Total sugerido</span>
-      <span class="sugestao-conferencia-valor total" data-total-geral-sugestao>R$ {{ total_sugerido|floatformat:2 }}</span>
+      <span class="sugestao-conferencia-label">Total sugerido original</span>
+      <span class="sugestao-conferencia-valor total">R$ {{ total_sugerido|floatformat:2 }}</span>
+    </div>
+    <div class="sugestao-conferencia-item">
+      <span class="sugestao-conferencia-label">Total da lista/pedido</span>
+      <span class="sugestao-conferencia-valor total" data-total-lista-pedido>R$ {{ total_sugerido|floatformat:2 }}</span>
     </div>
   </section>
 
@@ -517,8 +616,22 @@
     </div>
   {% endif %}
 
+  <section class="sugestao-manual" aria-label="Adicionar produto manualmente">
+    <div class="sugestao-manual-grid">
+      <div class="sugestao-field">
+        <label for="produtoManualBuscaSugestao">Adicionar produto</label>
+        <div class="sugestao-autocomplete">
+          <input type="text" id="produtoManualBuscaSugestao" autocomplete="off" placeholder="Digite o nome do produto">
+          <input type="hidden" id="produtoManualSugestao">
+          <div class="sugestao-autocomplete-lista" id="produtoManualSugestoes"></div>
+        </div>
+      </div>
+      <button type="button" class="sugestao-btn sugestao-btn-secondary" id="btnAdicionarProdutoSugestao">Adicionar produto</button>
+    </div>
+    <div class="sugestao-manual-msg" id="msgAdicionarProdutoSugestao"></div>
+  </section>
+
   <section class="sugestao-card">
-    {% if linhas %}
       <div class="sugestao-table-wrap sugestao-desktop">
         <table class="sugestao-table">
           <thead>
@@ -535,11 +648,13 @@
               <th class="sugestao-col-editavel">Preco unitario</th>
               <th class="sugestao-col-editavel">Total</th>
               <th class="sugestao-col-status">Status</th>
+              <th class="sugestao-col-status">Acao</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody id="tbodySugestaoProdutos">
+            {% if linhas %}
             {% for linha in linhas %}
-              <tr>
+              <tr data-produto-id="{{ linha.produto_id }}">
                 <td class="sugestao-col-produto">{{ linha.produto.nome }}</td>
                 <td class="sugestao-numero">{{ linha.estoque_atual|floatformat:3 }}</td>
                 <td class="sugestao-numero">{{ linha.estoque_minimo|floatformat:3 }}</td>
@@ -552,15 +667,18 @@
                 <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-unitario-input" data-fator="{{ linha.fator_conversao|floatformat:3 }}" value="{{ linha.preco_unitario_calculado|floatformat:2 }}" aria-label="Preco unitario para {{ linha.produto.nome }}"></td>
                 <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-total-input" value="{{ linha.total_sugerido|floatformat:2 }}" aria-label="Total sugerido para {{ linha.produto.nome }}"></td>
                 <td><span class="sugestao-status {{ linha.status_classe }}">{{ linha.status_texto }}</span></td>
+                <td><button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button></td>
               </tr>
             {% endfor %}
+            {% endif %}
           </tbody>
         </table>
       </div>
 
-      <div class="sugestao-mobile">
+      <div class="sugestao-mobile" id="mobileSugestaoProdutos">
+        {% if linhas %}
         {% for linha in linhas %}
-          <article class="sugestao-mobile-card">
+          <article class="sugestao-mobile-card" data-produto-id="{{ linha.produto_id }}">
             <div class="sugestao-mobile-top">
               <div class="sugestao-mobile-produto">{{ linha.produto.nome }}</div>
               <span class="sugestao-status {{ linha.status_classe }}">{{ linha.status_texto }}</span>
@@ -582,39 +700,34 @@
               <input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-unitario-input" data-fator="{{ linha.fator_conversao|floatformat:3 }}" value="{{ linha.preco_unitario_calculado|floatformat:2 }}" aria-label="Preco unitario para {{ linha.produto.nome }}">
               <label class="sugestao-mobile-label">Total sugerido</label>
               <input type="text" inputmode="decimal" class="sugestao-input sugestao-total-input" value="{{ linha.total_sugerido|floatformat:2 }}" aria-label="Total sugerido para {{ linha.produto.nome }}">
+              <button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button>
             </div>
           </article>
         {% endfor %}
+        {% endif %}
       </div>
-    {% else %}
-      <div class="sugestao-empty">
+      <div class="sugestao-empty {% if linhas %}oculto{% endif %}" id="sugestaoListaVazia">
         {% if fornecedor %}
           Nenhum produto ativo deste fornecedor esta abaixo/no minimo ou com pedido em aberto.
         {% else %}
           A lista aparecera aqui depois que voce escolher o fornecedor.
         {% endif %}
       </div>
-    {% endif %}
   </section>
 </div>
+
+{{ produtos_manual_payload|json_script:"produtosManualSugestaoData" }}
 
 <script>
 (function () {
   const periodo = document.getElementById("periodo");
   const dataInicio = document.getElementById("data_inicio");
   const dataFim = document.getElementById("data_fim");
-  const datasCalculadas = document.getElementById("datasCalculadasSugestao");
 
-  if (!periodo || !dataInicio || !dataFim || !datasCalculadas) return;
+  if (!periodo || !dataInicio || !dataFim) return;
 
   function iso(data) {
     return data.toISOString().slice(0, 10);
-  }
-
-  function br(valor) {
-    if (!valor) return "";
-    const partes = valor.split("-");
-    return partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : valor;
   }
 
   function atualizarDatasRapidas() {
@@ -630,8 +743,6 @@
       dataFim.value = iso(fim);
       dataInicio.value = iso(inicio);
     }
-
-    datasCalculadas.textContent = `Periodo calculado: ${br(dataInicio.value)} ate ${br(dataFim.value)}.`;
   }
 
   periodo.addEventListener("change", atualizarDatasRapidas);
@@ -694,9 +805,21 @@
       .filter(visivel)
       .reduce((soma, campo) => soma + paraNumero(campo.value), 0);
 
-    document.querySelectorAll("[data-total-geral-sugestao]").forEach((el) => {
+    document.querySelectorAll("[data-total-lista-pedido]").forEach((el) => {
       el.textContent = moeda(total);
     });
+  }
+
+  function atualizarContagemProdutos() {
+    const total = document.querySelectorAll("#tbodySugestaoProdutos tr[data-produto-id]").length;
+    document.querySelectorAll("[data-produtos-lista-total]").forEach((el) => {
+      el.textContent = String(total);
+    });
+
+    const vazio = document.getElementById("sugestaoListaVazia");
+    if (vazio) {
+      vazio.classList.toggle("oculto", total > 0);
+    }
   }
 
   function atualizarPorQuantidadeOuPreco(container) {
@@ -770,6 +893,270 @@
   }, true);
 
   atualizarTotalGeral();
+  atualizarContagemProdutos();
+})();
+</script>
+
+<script>
+(function () {
+  const busca = document.getElementById("produtoManualBuscaSugestao");
+  const selecionado = document.getElementById("produtoManualSugestao");
+  const lista = document.getElementById("produtoManualSugestoes");
+  const botao = document.getElementById("btnAdicionarProdutoSugestao");
+  const msg = document.getElementById("msgAdicionarProdutoSugestao");
+  const tbody = document.getElementById("tbodySugestaoProdutos");
+  const mobile = document.getElementById("mobileSugestaoProdutos");
+  const dadosEl = document.getElementById("produtosManualSugestaoData");
+
+  if (!busca || !selecionado || !lista || !botao || !tbody || !mobile || !dadosEl) return;
+
+  const produtos = JSON.parse(dadosEl.textContent || "[]");
+  const produtosPorId = new Map(produtos.map((produto) => [String(produto.id), produto]));
+  let indiceAtivo = -1;
+
+  function mostrarMsg(texto) {
+    if (!msg) return;
+    msg.textContent = texto || "";
+    msg.classList.toggle("visivel", Boolean(texto));
+  }
+
+  function escapeHtml(valor) {
+    return String(valor ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function numero(valor) {
+    const n = Number(String(valor || "0").replace(",", "."));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function classePedido(produto) {
+    return numero(produto.quantidade_pedidos_abertos) > 0 ? "tem-pedido" : "";
+  }
+
+  function existeNaLista(produtoId) {
+    return Array.from(document.querySelectorAll("[data-produto-id]")).some((el) => {
+      return String(el.dataset.produtoId) === String(produtoId);
+    });
+  }
+
+  function fecharSugestoes() {
+    lista.classList.remove("aberta");
+    lista.innerHTML = "";
+    indiceAtivo = -1;
+  }
+
+  function opcoesAtuais() {
+    return Array.from(lista.querySelectorAll(".sugestao-autocomplete-opcao"));
+  }
+
+  function destacarOpcao(indice) {
+    const opcoes = opcoesAtuais();
+    if (!opcoes.length) {
+      indiceAtivo = -1;
+      return;
+    }
+
+    indiceAtivo = Math.max(0, Math.min(indice, opcoes.length - 1));
+    opcoes.forEach((opcao, atual) => {
+      opcao.classList.toggle("ativa", atual === indiceAtivo);
+    });
+    opcoes[indiceAtivo].scrollIntoView({ block: "nearest" });
+  }
+
+  function selecionarProduto(produtoId) {
+    const produto = produtosPorId.get(String(produtoId));
+    if (!produto) return;
+    selecionado.value = String(produto.id);
+    busca.value = produto.nome;
+    fecharSugestoes();
+    mostrarMsg("");
+  }
+
+  function renderizarSugestoes() {
+    const termo = busca.value.trim().toLowerCase();
+    selecionado.value = "";
+
+    const filtrados = produtos
+      .filter((produto) => {
+        return !termo || String(produto.nome || "").toLowerCase().includes(termo);
+      })
+      .slice(0, 24);
+
+    if (!filtrados.length) {
+      lista.innerHTML = '<button type="button" class="sugestao-autocomplete-opcao" disabled>Nenhum produto encontrado</button>';
+      lista.classList.add("aberta");
+      indiceAtivo = -1;
+      return;
+    }
+
+    lista.innerHTML = filtrados.map((produto) => {
+      const tag = produto.vinculado ? '<span class="sugestao-autocomplete-tag">fornecedor</span>' : "";
+      return `<button type="button" class="sugestao-autocomplete-opcao" data-produto-id="${produto.id}">${escapeHtml(produto.nome)}${tag}</button>`;
+    }).join("");
+    lista.classList.add("aberta");
+    destacarOpcao(0);
+  }
+
+  function linhaDesktop(produto) {
+    return `
+      <tr data-produto-id="${produto.id}">
+        <td class="sugestao-col-produto">${escapeHtml(produto.nome)}</td>
+        <td class="sugestao-numero">${escapeHtml(produto.estoque_atual)}</td>
+        <td class="sugestao-numero">${escapeHtml(produto.estoque_minimo)}</td>
+        <td class="sugestao-numero">${escapeHtml(produto.quantidade_vendida)}</td>
+        <td class="sugestao-numero"><span class="sugestao-pedidos ${classePedido(produto)}">${escapeHtml(produto.quantidade_pedidos_abertos)}</span></td>
+        <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-qtd-input" value="${escapeHtml(produto.sugestao)}" aria-label="Sugestao de compra para ${escapeHtml(produto.nome)}"></td>
+        <td>${escapeHtml(produto.unidade)}</td>
+        <td class="sugestao-numero"><span class="sugestao-fator-valor">${escapeHtml(produto.fator_conversao)}</span></td>
+        <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-input" value="${escapeHtml(produto.preco_compra)}" aria-label="Preco de compra para ${escapeHtml(produto.nome)}"></td>
+        <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-unitario-input" data-fator="${escapeHtml(produto.fator_conversao)}" value="${escapeHtml(produto.preco_unitario_calculado)}" aria-label="Preco unitario para ${escapeHtml(produto.nome)}"></td>
+        <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-total-input" value="${escapeHtml(produto.total_sugerido)}" aria-label="Total sugerido para ${escapeHtml(produto.nome)}"></td>
+        <td><span class="sugestao-status ${escapeHtml(produto.status_classe)}">${escapeHtml(produto.status_texto)}</span></td>
+        <td><button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button></td>
+      </tr>
+    `;
+  }
+
+  function cardMobile(produto) {
+    return `
+      <article class="sugestao-mobile-card" data-produto-id="${produto.id}">
+        <div class="sugestao-mobile-top">
+          <div class="sugestao-mobile-produto">${escapeHtml(produto.nome)}</div>
+          <span class="sugestao-status ${escapeHtml(produto.status_classe)}">${escapeHtml(produto.status_texto)}</span>
+        </div>
+        <div class="sugestao-mobile-grid">
+          <div><span class="sugestao-mobile-label">Estoque atual</span><span class="sugestao-mobile-value">${escapeHtml(produto.estoque_atual)}</span></div>
+          <div><span class="sugestao-mobile-label">Estoque minimo</span><span class="sugestao-mobile-value">${escapeHtml(produto.estoque_minimo)}</span></div>
+          <div><span class="sugestao-mobile-label">Vendido no periodo</span><span class="sugestao-mobile-value">${escapeHtml(produto.quantidade_vendida)}</span></div>
+          <div><span class="sugestao-mobile-label">Pedidos em aberto</span><span class="sugestao-mobile-value"><span class="sugestao-pedidos ${classePedido(produto)}">${escapeHtml(produto.quantidade_pedidos_abertos)}</span></span></div>
+          <div><span class="sugestao-mobile-label">Unidade</span><span class="sugestao-mobile-value">${escapeHtml(produto.unidade)}</span></div>
+          <div><span class="sugestao-mobile-label">Qtd emb.</span><span class="sugestao-mobile-value sugestao-fator-valor">${escapeHtml(produto.fator_conversao)}</span></div>
+        </div>
+        <div class="sugestao-mobile-edit">
+          <label class="sugestao-mobile-label">Sugestao de compra</label>
+          <input type="text" inputmode="decimal" class="sugestao-input sugestao-qtd-input" value="${escapeHtml(produto.sugestao)}" aria-label="Sugestao de compra para ${escapeHtml(produto.nome)}">
+          <label class="sugestao-mobile-label">Preco compra</label>
+          <input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-input" value="${escapeHtml(produto.preco_compra)}" aria-label="Preco de compra para ${escapeHtml(produto.nome)}">
+          <label class="sugestao-mobile-label">Preco unitario</label>
+          <input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-unitario-input" data-fator="${escapeHtml(produto.fator_conversao)}" value="${escapeHtml(produto.preco_unitario_calculado)}" aria-label="Preco unitario para ${escapeHtml(produto.nome)}">
+          <label class="sugestao-mobile-label">Total sugerido</label>
+          <input type="text" inputmode="decimal" class="sugestao-input sugestao-total-input" value="${escapeHtml(produto.total_sugerido)}" aria-label="Total sugerido para ${escapeHtml(produto.nome)}">
+          <button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function atualizarResumoDepoisDeAdicionar() {
+    const total = Array.from(document.querySelectorAll(".sugestao-total-input"))
+      .filter((el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length))
+      .reduce((soma, campo) => {
+        let texto = String(campo.value || "0").replace(/[^\d,.-]/g, "");
+        if (texto.includes(",")) texto = texto.replace(/\./g, "").replace(",", ".");
+        const n = Number(texto);
+        return soma + (Number.isFinite(n) ? n : 0);
+      }, 0);
+
+    document.querySelectorAll("[data-total-lista-pedido]").forEach((el) => {
+      el.textContent = "R$ " + total.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    });
+
+    const totalProdutos = tbody.querySelectorAll("tr[data-produto-id]").length;
+    document.querySelectorAll("[data-produtos-lista-total]").forEach((el) => {
+      el.textContent = String(totalProdutos);
+    });
+
+    document.getElementById("sugestaoListaVazia")?.classList.toggle("oculto", totalProdutos > 0);
+  }
+
+  function adicionarSelecionado() {
+    const produtoId = selecionado.value;
+    const produto = produtosPorId.get(String(produtoId));
+    mostrarMsg("");
+
+    if (!produto) {
+      mostrarMsg("Escolha um produto para adicionar.");
+      return;
+    }
+
+    if (existeNaLista(produtoId)) {
+      mostrarMsg("Este produto ja esta na lista.");
+      return;
+    }
+
+    tbody.insertAdjacentHTML("beforeend", linhaDesktop(produto));
+    mobile.insertAdjacentHTML("beforeend", cardMobile(produto));
+    busca.value = "";
+    selecionado.value = "";
+    fecharSugestoes();
+    atualizarResumoDepoisDeAdicionar();
+  }
+
+  busca.addEventListener("focus", renderizarSugestoes);
+  busca.addEventListener("input", renderizarSugestoes);
+  busca.addEventListener("keydown", function(event) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      destacarOpcao(indiceAtivo + 1);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      destacarOpcao(indiceAtivo - 1);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      fecharSugestoes();
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const opcoes = opcoesAtuais();
+      const opcao = opcoes[indiceAtivo] || opcoes[0];
+      if (opcao && opcao.dataset.produtoId) {
+        selecionarProduto(opcao.dataset.produtoId);
+      } else {
+        adicionarSelecionado();
+      }
+    }
+  });
+
+  lista.addEventListener("click", function(event) {
+    const opcao = event.target.closest(".sugestao-autocomplete-opcao[data-produto-id]");
+    if (opcao) selecionarProduto(opcao.dataset.produtoId);
+  });
+
+  document.addEventListener("click", function(event) {
+    if (!event.target.closest(".sugestao-autocomplete")) {
+      fecharSugestoes();
+    }
+  });
+
+  botao.addEventListener("click", adicionarSelecionado);
+
+  document.addEventListener("click", function(event) {
+    const botaoRemover = event.target.closest(".sugestao-remover-item");
+    if (!botaoRemover) return;
+
+    const item = botaoRemover.closest("[data-produto-id]");
+    if (!item) return;
+
+    const produtoId = item.dataset.produtoId;
+    document.querySelectorAll("[data-produto-id]").forEach((el) => {
+      if (String(el.dataset.produtoId) === String(produtoId)) {
+        el.remove();
+      }
+    });
+    atualizarResumoDepoisDeAdicionar();
+  });
 })();
 </script>
 
