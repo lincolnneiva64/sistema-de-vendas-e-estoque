@@ -24,7 +24,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemPedido, ItemVenda, ItemVendaRemovido, PagamentoContaPagar, PagamentoEmprestimoDivida, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, PagamentoContaPagar, PagamentoEmprestimoDivida, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -4198,6 +4198,182 @@ def sugestao_compra_fornecedor(request):
 
 def sugestao_compra_fornecedor_whatsapp(request):
     return render(request, "estoque/compras_sugestao_fornecedor_whatsapp.html")
+
+
+def _decimal_lista_fornecedor(valor, casas=2):
+    texto = str(valor or "0").strip()
+    texto = re.sub(r"[^\d,.-]", "", texto)
+    if not texto:
+        texto = "0"
+    if "," in texto:
+        texto = texto.replace(".", "").replace(",", ".")
+    try:
+        return Decimal(texto).quantize(Decimal("1").scaleb(-casas))
+    except (InvalidOperation, ValueError):
+        raise ValueError("Valor numerico invalido.")
+
+
+def _payload_lista_fornecedor(lista):
+    return {
+        "tipo": "sintetica",
+        "titulo": "Lista de Compras",
+        "fornecedor": lista.fornecedor.nome if lista.fornecedor else "Fornecedor nao informado",
+        "periodo": f"{lista.data_inicio_periodo.strftime('%d/%m/%Y')} ate {lista.data_fim_periodo.strftime('%d/%m/%Y')}",
+        "chegada": lista.data_chegada_prevista.strftime("%d/%m/%Y") if lista.data_chegada_prevista else "",
+        "totalOriginal": f"R$ {lista.total_sugerido_original:.2f}",
+        "totalLista": f"R$ {lista.total_lista:.2f}",
+        "linhas": [
+            {
+                "produto": item.produto.nome if item.produto else "Produto nao identificado",
+                "sugestao": f"{item.quantidade_final:.3f}",
+                "unidade": item.unidade,
+                "precoCompra": f"{item.preco_compra:.2f}",
+                "precoUnitario": f"{item.preco_unitario:.2f}",
+                "total": f"{item.total:.2f}",
+            }
+            for item in lista.itens.all()
+        ],
+    }
+
+
+def compras_listas_fornecedor(request):
+    fornecedor_filtro = request.GET.get("fornecedor", "").strip()
+    status_filtro = request.GET.get("status", "").strip()
+
+    listas = ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens").order_by("-data_lista", "-id")
+    if fornecedor_filtro:
+        listas = listas.filter(fornecedor__nome__icontains=fornecedor_filtro)
+    if status_filtro:
+        listas = listas.filter(status=status_filtro)
+
+    return render(
+        request,
+        "estoque/compras_listas_fornecedor.html",
+        {
+            "listas": listas,
+            "fornecedor_filtro": fornecedor_filtro,
+            "status_filtro": status_filtro,
+            "status_choices": ListaCompraFornecedor.STATUS_CHOICES,
+        },
+    )
+
+
+def compras_lista_fornecedor_detalhe(request, pk):
+    lista = get_object_or_404(
+        ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+    return render(request, "estoque/compras_lista_fornecedor_detalhe.html", {"lista": lista})
+
+
+@require_POST
+def compras_lista_fornecedor_gravar(request):
+    payload_raw = request.POST.get("lista_payload") or ""
+    try:
+        payload = json.loads(payload_raw)
+    except json.JSONDecodeError:
+        messages.error(request, "Nao foi possivel ler os dados da lista.")
+        return redirect("estoque:sugestao_compra_fornecedor")
+
+    fornecedor_id = str(payload.get("fornecedorId") or "").strip()
+    fornecedor = Fornecedor.objects.filter(pk=fornecedor_id, ativo=True).first()
+    if not fornecedor:
+        messages.error(request, "Selecione um fornecedor ativo antes de gravar a lista.")
+        return redirect("estoque:sugestao_compra_fornecedor")
+
+    data_inicio = parse_date(str(payload.get("dataInicio") or ""))
+    data_fim = parse_date(str(payload.get("dataFim") or ""))
+    data_chegada = parse_date(str(payload.get("dataChegada") or ""))
+    if not data_inicio or not data_fim:
+        messages.error(request, "Informe periodo valido antes de gravar a lista.")
+        return redirect("estoque:sugestao_compra_fornecedor")
+    if data_inicio > data_fim:
+        data_inicio, data_fim = data_fim, data_inicio
+
+    linhas = payload.get("linhas") if isinstance(payload.get("linhas"), list) else []
+    itens_validos = []
+    try:
+        for linha in linhas:
+            produto_id = str(linha.get("produtoId") or "").strip()
+            produto = Produto.objects.filter(pk=produto_id, excluido=False).first()
+            if not produto:
+                continue
+
+            quantidade_final = _decimal_lista_fornecedor(linha.get("sugestao"), casas=3)
+            quantidade_sugerida = _decimal_lista_fornecedor(linha.get("sugestaoOriginal") or linha.get("sugestao"), casas=3)
+            preco_compra = _decimal_lista_fornecedor(linha.get("precoCompra"), casas=2)
+            preco_unitario = _decimal_lista_fornecedor(linha.get("precoUnitario"), casas=2)
+            total = _decimal_lista_fornecedor(linha.get("total"), casas=2)
+            if total == Decimal("0.00") and quantidade_final and preco_compra:
+                total = (quantidade_final * preco_compra).quantize(Decimal("0.01"))
+
+            itens_validos.append({
+                "produto": produto,
+                "estoque_atual": _decimal_lista_fornecedor(linha.get("estoque"), casas=3),
+                "estoque_minimo": _decimal_lista_fornecedor(linha.get("minimo"), casas=3),
+                "vendido_periodo": _decimal_lista_fornecedor(linha.get("vendido"), casas=3),
+                "pedidos_abertos": _decimal_lista_fornecedor(linha.get("pedidos"), casas=3),
+                "quantidade_sugerida": quantidade_sugerida,
+                "quantidade_final": quantidade_final,
+                "unidade": str(linha.get("unidade") or "")[:20],
+                "preco_compra": preco_compra,
+                "preco_unitario": preco_unitario,
+                "total": total,
+            })
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect("estoque:sugestao_compra_fornecedor")
+
+    if not itens_validos:
+        messages.error(request, "Inclua pelo menos um produto antes de gravar a lista.")
+        return redirect("estoque:sugestao_compra_fornecedor")
+
+    total_lista = sum((item["total"] for item in itens_validos), Decimal("0.00")).quantize(Decimal("0.01"))
+    try:
+        total_original = _decimal_lista_fornecedor(payload.get("totalOriginal"), casas=2)
+    except ValueError:
+        total_original = total_lista
+
+    with transaction.atomic():
+        lista = ListaCompraFornecedor.objects.create(
+            fornecedor=fornecedor,
+            data_lista=timezone.localdate(),
+            data_inicio_periodo=data_inicio,
+            data_fim_periodo=data_fim,
+            data_chegada_prevista=data_chegada,
+            total_sugerido_original=total_original,
+            total_lista=total_lista,
+            status=ListaCompraFornecedor.STATUS_ABERTA,
+        )
+        ItemListaCompraFornecedor.objects.bulk_create([
+            ItemListaCompraFornecedor(lista=lista, **item)
+            for item in itens_validos
+        ])
+
+    messages.success(request, f"Lista de compras #{lista.id} gravada com sucesso.")
+    return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
+
+
+def compras_lista_fornecedor_whatsapp(request, pk):
+    lista = get_object_or_404(
+        ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+    return render(
+        request,
+        "estoque/compras_sugestao_fornecedor_whatsapp.html",
+        {"whatsapp_payload": _payload_lista_fornecedor(lista)},
+    )
+
+
+@require_POST
+def compras_lista_fornecedor_cancelar(request, pk):
+    lista = get_object_or_404(ListaCompraFornecedor, pk=pk)
+    if lista.status != ListaCompraFornecedor.STATUS_CANCELADA:
+        lista.status = ListaCompraFornecedor.STATUS_CANCELADA
+        lista.save(update_fields=["status", "atualizado_em"])
+        messages.success(request, f"Lista #{lista.id} cancelada.")
+    return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
 
 
 def compras_lista(request):

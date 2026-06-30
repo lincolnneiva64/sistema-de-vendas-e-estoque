@@ -1,0 +1,112 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Listas por Fornecedor{% endblock %}
+{% block content %}
+
+<style>
+  .listas-fornecedor-page { max-width:1120px; margin:22px auto 90px; padding:0 16px; color:#172033; }
+  .listas-fornecedor-header { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:14px; flex-wrap:wrap; }
+  .listas-fornecedor-title { margin:0; font-size:1.55rem; font-weight:900; }
+  .listas-fornecedor-subtitle { margin:4px 0 0; color:#64748b; font-weight:700; }
+  .listas-fornecedor-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+  .listas-fornecedor-btn { display:inline-flex; align-items:center; justify-content:center; min-height:38px; padding:8px 12px; border-radius:9px; border:1px solid #d8e0ea; background:#f8fafc; color:#334155; font-weight:850; text-decoration:none; cursor:pointer; }
+  .listas-fornecedor-btn.primary { background:#2563eb; color:#fff; border-color:#2563eb; }
+  .listas-fornecedor-btn.whatsapp { background:#fff1f3; color:#7f1d2d; border-color:#e9b8c0; }
+  .listas-fornecedor-card { background:#fff; border:1px solid #e1e7ef; border-radius:14px; box-shadow:0 14px 30px rgba(15,23,42,.06); overflow:hidden; }
+  .listas-fornecedor-filtros { display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; padding:14px 16px; border-bottom:1px solid #edf2f7; }
+  .listas-fornecedor-field { flex:1 1 220px; }
+  .listas-fornecedor-field label { display:block; margin-bottom:4px; color:#334155; font-size:.8rem; font-weight:850; }
+  .listas-fornecedor-field input,
+  .listas-fornecedor-field select { width:100%; min-height:38px; border:1.5px solid #d3dbe8; border-radius:9px; padding:8px 10px; font-weight:700; background:#fff; }
+  .listas-fornecedor-table { width:100%; border-collapse:collapse; }
+  .listas-fornecedor-table th { padding:10px 12px; border-bottom:1px solid #e5ebf3; background:#f8fafc; color:#64748b; font-size:.7rem; font-weight:900; text-align:left; text-transform:uppercase; }
+  .listas-fornecedor-table td { padding:11px 12px; border-bottom:1px solid #edf2f7; vertical-align:middle; }
+  .listas-fornecedor-table tr:last-child td { border-bottom:0; }
+  .listas-fornecedor-numero { font-weight:950; color:#0f172a; }
+  .listas-fornecedor-total { font-weight:950; color:#166534; }
+  .listas-fornecedor-status { display:inline-flex; border-radius:999px; padding:4px 9px; background:#eff6ff; border:1px solid #bfdbfe; color:#1e4f85; font-size:.76rem; font-weight:900; }
+  .listas-fornecedor-status.cancelada { background:#f1f5f9; border-color:#cbd5e1; color:#9f1239; }
+  .listas-fornecedor-status.finalizada { background:#ecfdf3; border-color:#a7e3bd; color:#166534; }
+  .listas-fornecedor-status.enviada { background:#fff7ed; border-color:#fed7aa; color:#9a3412; }
+  .listas-fornecedor-acoes { display:flex; gap:6px; flex-wrap:wrap; }
+  .listas-fornecedor-empty { padding:28px 16px; color:#64748b; text-align:center; font-weight:800; }
+  @media (max-width:760px) {
+    .listas-fornecedor-page { margin-top:14px; padding:0 10px 80px; }
+    .listas-fornecedor-table { display:block; overflow-x:auto; white-space:nowrap; }
+    .listas-fornecedor-actions,
+    .listas-fornecedor-btn { width:100%; }
+  }
+</style>
+
+<main class="listas-fornecedor-page">
+  <header class="listas-fornecedor-header">
+    <div>
+      <h1 class="listas-fornecedor-title">Listas de Compras por Fornecedor</h1>
+      <p class="listas-fornecedor-subtitle">Consulte listas gravadas sem lancar compra, estoque ou financeiro.</p>
+    </div>
+    <div class="listas-fornecedor-actions">
+      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista' %}">Compras</a>
+      <a class="listas-fornecedor-btn primary" href="{% url 'estoque:sugestao_compra_fornecedor' %}">Nova lista</a>
+    </div>
+  </header>
+
+  <section class="listas-fornecedor-card">
+    <form method="get" class="listas-fornecedor-filtros">
+      <div class="listas-fornecedor-field">
+        <label for="fornecedor">Fornecedor</label>
+        <input type="text" id="fornecedor" name="fornecedor" value="{{ fornecedor_filtro }}" placeholder="Buscar fornecedor">
+      </div>
+      <div class="listas-fornecedor-field">
+        <label for="status">Status</label>
+        <select id="status" name="status">
+          <option value="">Todos</option>
+          {% for valor, rotulo in status_choices %}
+            <option value="{{ valor }}" {% if status_filtro == valor %}selected{% endif %}>{{ rotulo }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="listas-fornecedor-btn primary">Filtrar</button>
+      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}">Limpar</a>
+    </form>
+
+    {% if listas %}
+      <table class="listas-fornecedor-table">
+        <thead>
+          <tr>
+            <th>Numero</th>
+            <th>Fornecedor</th>
+            <th>Data</th>
+            <th>Periodo</th>
+            <th>Chegada</th>
+            <th>Total</th>
+            <th>Status</th>
+            <th>Acoes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for lista in listas %}
+            <tr>
+              <td class="listas-fornecedor-numero">#{{ lista.id }}</td>
+              <td>{% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}</td>
+              <td>{{ lista.data_lista|date:"d/m/Y" }}</td>
+              <td>{{ lista.data_inicio_periodo|date:"d/m/Y" }} ate {{ lista.data_fim_periodo|date:"d/m/Y" }}</td>
+              <td>{% if lista.data_chegada_prevista %}{{ lista.data_chegada_prevista|date:"d/m/Y" }}{% else %}-{% endif %}</td>
+              <td class="listas-fornecedor-total">R$ {{ lista.total_lista|floatformat:2 }}</td>
+              <td><span class="listas-fornecedor-status {{ lista.status }}">{{ lista.get_status_display }}</span></td>
+              <td>
+                <div class="listas-fornecedor-acoes">
+                  <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Abrir</a>
+                  <a class="listas-fornecedor-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">WhatsApp</a>
+                  <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Imprimir</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="listas-fornecedor-empty">Nenhuma lista gravada encontrada.</div>
+    {% endif %}
+  </section>
+</main>
+
+{% endblock %}

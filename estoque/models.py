@@ -1051,6 +1051,76 @@ class ItemCompra(models.Model):
         return f"{nome_produto} - Compra #{self.compra_id}"
 
 
+class ListaCompraFornecedor(models.Model):
+    STATUS_ABERTA = "aberta"
+    STATUS_ENVIADA = "enviada"
+    STATUS_FINALIZADA = "finalizada"
+    STATUS_CANCELADA = "cancelada"
+    STATUS_CHOICES = [
+        (STATUS_ABERTA, "Aberta"),
+        (STATUS_ENVIADA, "Enviada"),
+        (STATUS_FINALIZADA, "Finalizada"),
+        (STATUS_CANCELADA, "Cancelada"),
+    ]
+
+    fornecedor = models.ForeignKey(
+        Fornecedor,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="listas_compra",
+    )
+    data_lista = models.DateField()
+    data_inicio_periodo = models.DateField()
+    data_fim_periodo = models.DateField()
+    data_chegada_prevista = models.DateField(blank=True, null=True)
+    total_sugerido_original = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_lista = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    observacao = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ABERTA)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-id"]
+
+    def __str__(self):
+        fornecedor_nome = self.fornecedor.nome if self.fornecedor else "Fornecedor nao informado"
+        return f"Lista de compras #{self.id} - {fornecedor_nome}"
+
+
+class ItemListaCompraFornecedor(models.Model):
+    lista = models.ForeignKey(
+        ListaCompraFornecedor,
+        on_delete=models.CASCADE,
+        related_name="itens",
+    )
+    produto = models.ForeignKey(
+        Produto,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="itens_lista_compra_fornecedor",
+    )
+    estoque_atual = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    estoque_minimo = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    vendido_periodo = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    pedidos_abertos = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    quantidade_sugerida = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    quantidade_final = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    unidade = models.CharField(max_length=20, blank=True)
+    preco_compra = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    preco_unitario = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        nome_produto = self.produto.nome if self.produto else "Produto nao identificado"
+        return f"{nome_produto} - Lista #{self.lista_id}"
+
+
 class ContaPagar(models.Model):
     STATUS_ABERTA = "aberta"
     STATUS_PARCIAL = "parcial"

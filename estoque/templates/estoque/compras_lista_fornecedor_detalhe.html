@@ -1,0 +1,139 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Lista de Compras #{{ lista.id }}{% endblock %}
+{% block content %}
+
+<style>
+  .lista-fornecedor-wrap { max-width:1040px; margin:18px auto 90px; padding:0 14px; color:#172033; }
+  .lista-fornecedor-topo { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; }
+  .lista-fornecedor-topo h1 { margin:0; font-size:1.5rem; font-weight:950; }
+  .lista-fornecedor-sub { margin:4px 0 0; color:#64748b; font-weight:750; }
+  .lista-fornecedor-acoes { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+  .lista-fornecedor-btn { display:inline-flex; align-items:center; justify-content:center; min-height:38px; padding:8px 12px; border-radius:9px; border:1px solid #d8e0ea; background:#f8fafc; color:#334155; font-weight:850; text-decoration:none; cursor:pointer; }
+  .lista-fornecedor-btn.primary { background:#2563eb; color:#fff; border-color:#2563eb; }
+  .lista-fornecedor-btn.whatsapp { background:#fff1f3; color:#7f1d2d; border-color:#e9b8c0; }
+  .lista-fornecedor-btn.danger { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
+  .lista-fornecedor-card { background:#fff; border:1px solid #e1e7ef; border-radius:14px; box-shadow:0 14px 30px rgba(15,23,42,.06); overflow:hidden; margin-bottom:12px; }
+  .lista-fornecedor-resumo { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px; padding:14px; }
+  .lista-fornecedor-item { border:1px solid #edf2f7; border-radius:10px; background:#f8fafc; padding:9px 10px; }
+  .lista-fornecedor-label { display:block; margin-bottom:3px; color:#64748b; font-size:.72rem; font-weight:900; text-transform:uppercase; }
+  .lista-fornecedor-value { display:block; color:#172033; font-weight:950; overflow-wrap:anywhere; }
+  .lista-fornecedor-value.total { color:#166534; }
+  .lista-fornecedor-status { display:inline-flex; border-radius:999px; padding:4px 9px; background:#eff6ff; border:1px solid #bfdbfe; color:#1e4f85; font-size:.76rem; font-weight:900; }
+  .lista-fornecedor-status.cancelada { background:#f1f5f9; border-color:#cbd5e1; color:#9f1239; }
+  .lista-fornecedor-status.finalizada { background:#ecfdf3; border-color:#a7e3bd; color:#166534; }
+  .lista-fornecedor-status.enviada { background:#fff7ed; border-color:#fed7aa; color:#9a3412; }
+  .lista-fornecedor-table { width:100%; border-collapse:collapse; }
+  .lista-fornecedor-table th { padding:10px 9px; border-bottom:1px solid #e5ebf3; background:#7f1d2d; color:#fff; font-size:.68rem; font-weight:900; text-transform:uppercase; text-align:center; }
+  .lista-fornecedor-table th:first-child,
+  .lista-fornecedor-table td:first-child { text-align:left; }
+  .lista-fornecedor-table td { padding:9px; border-bottom:1px solid #edf2f7; text-align:center; vertical-align:middle; }
+  .lista-fornecedor-table tr:last-child td { border-bottom:0; }
+  .lista-fornecedor-produto { font-weight:900; }
+  .lista-fornecedor-total { font-weight:950; color:#166534; }
+  @media (max-width:860px) {
+    .lista-fornecedor-resumo { grid-template-columns:1fr 1fr; }
+    .lista-fornecedor-table { display:block; overflow-x:auto; white-space:nowrap; }
+  }
+  @media (max-width:620px) {
+    .lista-fornecedor-wrap { margin-top:12px; padding:0 10px 80px; }
+    .lista-fornecedor-resumo { grid-template-columns:1fr; }
+    .lista-fornecedor-acoes,
+    .lista-fornecedor-btn { width:100%; }
+  }
+</style>
+
+<main class="lista-fornecedor-wrap">
+  <header class="lista-fornecedor-topo">
+    <div>
+      <h1>Lista de Compras #{{ lista.id }}</h1>
+      <p class="lista-fornecedor-sub">Sugestao gravada para consulta e envio, sem lancar compra ou estoque.</p>
+    </div>
+    <div class="lista-fornecedor-acoes">
+      <a class="lista-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}">Voltar</a>
+      <a class="lista-fornecedor-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">WhatsApp</a>
+      <a class="lista-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Imprimir</a>
+      {% if lista.status != "cancelada" %}
+        <form method="post" action="{% url 'estoque:compras_lista_fornecedor_cancelar' lista.id %}" style="margin:0" onsubmit="return confirm('Cancelar esta lista?');">
+          {% csrf_token %}
+          <button type="submit" class="lista-fornecedor-btn danger">Cancelar lista</button>
+        </form>
+      {% endif %}
+    </div>
+  </header>
+
+  <section class="lista-fornecedor-card">
+    <div class="lista-fornecedor-resumo">
+      <div class="lista-fornecedor-item">
+        <span class="lista-fornecedor-label">Fornecedor</span>
+        <span class="lista-fornecedor-value">{% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}</span>
+      </div>
+      <div class="lista-fornecedor-item">
+        <span class="lista-fornecedor-label">Data</span>
+        <span class="lista-fornecedor-value">{{ lista.data_lista|date:"d/m/Y" }}</span>
+      </div>
+      <div class="lista-fornecedor-item">
+        <span class="lista-fornecedor-label">Periodo</span>
+        <span class="lista-fornecedor-value">{{ lista.data_inicio_periodo|date:"d/m/Y" }} ate {{ lista.data_fim_periodo|date:"d/m/Y" }}</span>
+      </div>
+      <div class="lista-fornecedor-item">
+        <span class="lista-fornecedor-label">Chegada prevista</span>
+        <span class="lista-fornecedor-value">{% if lista.data_chegada_prevista %}{{ lista.data_chegada_prevista|date:"d/m/Y" }}{% else %}-{% endif %}</span>
+      </div>
+      <div class="lista-fornecedor-item">
+        <span class="lista-fornecedor-label">Total sugerido original</span>
+        <span class="lista-fornecedor-value total">R$ {{ lista.total_sugerido_original|floatformat:2 }}</span>
+      </div>
+      <div class="lista-fornecedor-item">
+        <span class="lista-fornecedor-label">Total da lista/pedido</span>
+        <span class="lista-fornecedor-value total">R$ {{ lista.total_lista|floatformat:2 }}</span>
+      </div>
+      <div class="lista-fornecedor-item">
+        <span class="lista-fornecedor-label">Status</span>
+        <span class="lista-fornecedor-status {{ lista.status }}">{{ lista.get_status_display }}</span>
+      </div>
+      <div class="lista-fornecedor-item">
+        <span class="lista-fornecedor-label">Produtos</span>
+        <span class="lista-fornecedor-value">{{ lista.itens.count }}</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="lista-fornecedor-card">
+    <table class="lista-fornecedor-table">
+      <thead>
+        <tr>
+          <th>Produto</th>
+          <th>Estoque</th>
+          <th>Minimo</th>
+          <th>Qtd. Vend.</th>
+          <th>Pedidos</th>
+          <th>Sug. Original</th>
+          <th>Sug. Final</th>
+          <th>Unidade</th>
+          <th>Pr. Compra</th>
+          <th>Pr. Unit.</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in lista.itens.all %}
+          <tr>
+            <td class="lista-fornecedor-produto">{% if item.produto %}{{ item.produto.nome }}{% else %}-{% endif %}</td>
+            <td>{{ item.estoque_atual|floatformat:3 }}</td>
+            <td>{{ item.estoque_minimo|floatformat:3 }}</td>
+            <td>{{ item.vendido_periodo|floatformat:3 }}</td>
+            <td>{{ item.pedidos_abertos|floatformat:3 }}</td>
+            <td>{{ item.quantidade_sugerida|floatformat:3 }}</td>
+            <td>{{ item.quantidade_final|floatformat:3 }}</td>
+            <td>{{ item.unidade }}</td>
+            <td>R$ {{ item.preco_compra|floatformat:2 }}</td>
+            <td>R$ {{ item.preco_unitario|floatformat:2 }}</td>
+            <td class="lista-fornecedor-total">R$ {{ item.total|floatformat:2 }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</main>
+
+{% endblock %}

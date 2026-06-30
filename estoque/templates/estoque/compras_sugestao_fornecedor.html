@@ -779,7 +779,13 @@
     <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnVisualizarAnalitica">Visualizar Analitica</button>
     <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnVisualizarSintetica">Visualizar Sintetica</button>
     <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnImagemWhatsapp">Imagem / WhatsApp</button>
+    <button type="button" class="sugestao-btn sugestao-btn-primary" id="btnGravarListaFornecedor">Gravar lista</button>
   </section>
+
+  <form method="post" action="{% url 'estoque:compras_lista_fornecedor_gravar' %}" id="formGravarListaFornecedor" hidden>
+    {% csrf_token %}
+    <input type="hidden" name="lista_payload" id="listaFornecedorPayload">
+  </form>
 
   <section class="sugestao-card">
       <div class="sugestao-table-wrap sugestao-desktop">
@@ -815,7 +821,7 @@
           <tbody id="tbodySugestaoProdutos">
             {% if linhas %}
             {% for linha in linhas %}
-              <tr data-produto-id="{{ linha.produto_id }}" data-fator="{{ linha.fator_conversao|floatformat:3 }}">
+              <tr data-produto-id="{{ linha.produto_id }}" data-fator="{{ linha.fator_conversao|floatformat:3 }}" data-sugestao-original="{{ linha.sugestao|floatformat:3 }}">
                 <td class="sugestao-col-produto">{{ linha.produto.nome }}</td>
                 <td class="sugestao-numero">{{ linha.estoque_atual|floatformat:3 }}</td>
                 <td class="sugestao-numero">{{ linha.estoque_minimo|floatformat:3 }}</td>
@@ -837,7 +843,7 @@
       <div class="sugestao-mobile" id="mobileSugestaoProdutos">
         {% if linhas %}
         {% for linha in linhas %}
-          <article class="sugestao-mobile-card" data-produto-id="{{ linha.produto_id }}">
+          <article class="sugestao-mobile-card" data-produto-id="{{ linha.produto_id }}" data-sugestao-original="{{ linha.sugestao|floatformat:3 }}">
             <div class="sugestao-mobile-top">
               <div class="sugestao-mobile-produto">{{ linha.produto.nome }}</div>
             </div>
@@ -1387,7 +1393,7 @@
 
   function linhaDesktop(produto) {
     return `
-      <tr data-produto-id="${produto.id}" data-fator="${escapeHtml(produto.fator_conversao)}">
+      <tr data-produto-id="${produto.id}" data-fator="${escapeHtml(produto.fator_conversao)}" data-sugestao-original="${escapeHtml(produto.sugestao)}">
         <td class="sugestao-col-produto">${escapeHtml(produto.nome)}</td>
         <td class="sugestao-numero">${escapeHtml(produto.estoque_atual)}</td>
         <td class="sugestao-numero">${escapeHtml(produto.estoque_minimo)}</td>
@@ -1405,7 +1411,7 @@
 
   function cardMobile(produto) {
     return `
-      <article class="sugestao-mobile-card" data-produto-id="${produto.id}">
+      <article class="sugestao-mobile-card" data-produto-id="${produto.id}" data-sugestao-original="${escapeHtml(produto.sugestao)}">
         <div class="sugestao-mobile-top">
           <div class="sugestao-mobile-produto">${escapeHtml(produto.nome)}</div>
         </div>
@@ -1685,8 +1691,11 @@
   const btnAnalitica = document.getElementById("btnVisualizarAnalitica");
   const btnSintetica = document.getElementById("btnVisualizarSintetica");
   const btnImagemWhatsapp = document.getElementById("btnImagemWhatsapp");
+  const btnGravarLista = document.getElementById("btnGravarListaFornecedor");
+  const formGravarLista = document.getElementById("formGravarListaFornecedor");
+  const payloadGravarLista = document.getElementById("listaFornecedorPayload");
 
-  if (!btnAnalitica || !btnSintetica || !btnImagemWhatsapp) return;
+  if (!btnAnalitica || !btnSintetica || !btnImagemWhatsapp || !btnGravarLista) return;
 
   function texto(el) {
     return String(el?.textContent || "").trim();
@@ -1722,10 +1731,12 @@
       const celulas = linha.children;
       return {
         produto: texto(celulas[0]),
+        produtoId: linha.dataset.produtoId || "",
         estoque: texto(celulas[1]),
         minimo: texto(celulas[2]),
         vendido: texto(celulas[3]),
         pedidos: texto(celulas[4]),
+        sugestaoOriginal: linha.dataset.sugestaoOriginal || "",
         sugestao: valor(".sugestao-qtd-input", linha),
         unidade: texto(celulas[6]),
         precoCompra: valor(".sugestao-preco-input", linha),
@@ -1740,11 +1751,13 @@
       const valores = Array.from(card.querySelectorAll(".sugestao-mobile-value")).map(texto);
       return {
         produto: texto(card.querySelector(".sugestao-mobile-produto")),
+        produtoId: card.dataset.produtoId || "",
         estoque: valores[0] || "",
         minimo: valores[1] || "",
         vendido: valores[2] || "",
         pedidos: valores[3] || "",
         unidade: valores[4] || "",
+        sugestaoOriginal: card.dataset.sugestaoOriginal || "",
         sugestao: valor(".sugestao-qtd-input", card),
         precoCompra: valor(".sugestao-preco-input", card),
         precoUnitario: valor(".sugestao-preco-unitario-input", card),
@@ -1762,7 +1775,11 @@
     return {
       tipo,
       titulo: tipo === "analitica" ? "Visualizacao Analitica" : "Visualizacao Sintetica",
+      fornecedorId: valor("#fornecedor"),
       fornecedor: valor("#fornecedorBuscaSugestao") || "Fornecedor nao informado",
+      dataInicio: valor("#data_inicio"),
+      dataFim: valor("#data_fim"),
+      dataChegada: valor("#data_chegada"),
       periodo: dataBr(valor("#data_inicio")) + " ate " + dataBr(valor("#data_fim")),
       chegada: dataBr(valor("#data_chegada")),
       totalOriginal: texto(document.querySelector(".sugestao-conferencia-item.total .sugestao-conferencia-valor.total")),
@@ -1936,6 +1953,21 @@
     if (!janela) {
       alert("Nao foi possivel abrir a visualizacao. Verifique o bloqueador de pop-ups.");
     }
+  });
+
+  btnGravarLista.addEventListener("click", function() {
+    const payload = montarPayload("sintetica");
+    if (!payload.fornecedorId) {
+      alert("Selecione um fornecedor antes de gravar a lista.");
+      return;
+    }
+    if (!payload.linhas.length) {
+      alert("Gere ou adicione produtos antes de gravar a lista.");
+      return;
+    }
+    if (!formGravarLista || !payloadGravarLista) return;
+    payloadGravarLista.value = JSON.stringify(payload);
+    formGravarLista.submit();
   });
 })();
 </script>

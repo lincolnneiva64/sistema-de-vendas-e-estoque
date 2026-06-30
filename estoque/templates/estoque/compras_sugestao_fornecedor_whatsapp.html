@@ -438,6 +438,9 @@
     </article>
 
     <pre class="texto-copia" id="textoCopia"></pre>
+    {% if whatsapp_payload %}
+      {{ whatsapp_payload|json_script:"listaFornecedorWhatsappPayload" }}
+    {% endif %}
   </main>
 
   <script>
@@ -470,6 +473,15 @@
     }
 
     function carregarPayload() {
+      const payloadSalvo = document.getElementById("listaFornecedorWhatsappPayload");
+      if (payloadSalvo) {
+        try {
+          return JSON.parse(payloadSalvo.textContent || "{}");
+        } catch (erro) {
+          return null;
+        }
+      }
+
       let bruto = sessionStorage.getItem(chavePayload);
       if (!bruto && window.opener) {
         try {
