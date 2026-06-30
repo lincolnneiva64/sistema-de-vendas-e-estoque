@@ -177,17 +177,17 @@
   .sugestao-table-wrap {
     width: 100%;
     box-sizing: border-box;
-    overflow-x: auto;
+    overflow: visible;
     padding: 0 28px 18px 0;
     margin-right: 0;
-    scrollbar-gutter: stable both-edges;
   }
 
   .sugestao-table {
     width: 1040px;
     min-width: 1040px;
     max-width: none;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
     table-layout: fixed;
   }
 
@@ -200,7 +200,7 @@
   .sugestao-table th {
     position: sticky;
     top: 0;
-    z-index: 5;
+    z-index: 20;
     padding: 7px 4px;
     background: #7f1d2d;
     border-bottom: 2px solid #5f111f;
