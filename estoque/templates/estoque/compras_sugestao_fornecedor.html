@@ -525,27 +525,96 @@
     margin-bottom: 14px;
     padding: 13px 16px;
     border: 1px solid #f3b5bf;
-    border-radius: 12px;
+    border-radius: 8px;
     background: #fff0f2;
     box-shadow: 0 10px 24px rgba(127, 29, 29, .045);
   }
 
-  .sugestao-manual-grid {
-    display: grid;
-    grid-template-columns: minmax(260px, 1fr) auto;
-    gap: 10px;
-    align-items: end;
+  .sugestao-manual-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: visible;
+    padding-bottom: 8px;
+  }
+
+  .sugestao-manual-table-wrap.autocomplete-aberto {
+    padding-bottom: 288px;
   }
 
   .sugestao-manual-msg {
     display: none;
-    margin-top: 9px;
+    margin-top: 12px;
     color: #9a3412;
     font-weight: 850;
   }
 
   .sugestao-manual-msg.visivel {
     display: block;
+  }
+
+  .sugestao-manual-table {
+    min-width: 1188px;
+  }
+
+  .sugestao-manual-table .sugestao-btn {
+    width: 100%;
+    min-height: 32px;
+    padding: 4px 5px;
+    border-radius: 8px;
+    font-size: .68rem;
+    line-height: 1.1;
+    white-space: normal;
+  }
+
+  .sugestao-manual-table th {
+    position: static;
+  }
+
+  .sugestao-manual-table tbody tr,
+  .sugestao-manual-table tbody tr:nth-child(odd),
+  .sugestao-manual-table tbody tr:nth-child(even) {
+    background: #fff;
+  }
+
+  .sugestao-manual-table tbody tr:hover {
+    background: #fff;
+  }
+
+  .sugestao-manual-table .sugestao-col-produto {
+    overflow: visible;
+  }
+
+  .sugestao-manual-table tbody tr .sugestao-col-produto,
+  .sugestao-manual-table tbody tr:hover .sugestao-col-produto {
+    background: #edf5ff;
+  }
+
+  .sugestao-manual-produto-input {
+    width: 100%;
+    min-height: 28px;
+    border: 1.5px solid #bfdbfe;
+    border-radius: 8px;
+    padding: 3px 8px;
+    background: #fff;
+    color: #172033;
+    font-size: .74rem;
+    font-weight: 900;
+  }
+
+  .sugestao-manual-produto-input:focus {
+    outline: 3px solid rgba(153, 27, 27, .16);
+    border-color: #991b1b;
+  }
+
+  .sugestao-manual-qtd-input {
+    border-color: #dc8fa0;
+    background: #fff8fa;
+    box-shadow: inset 0 0 0 1px rgba(159, 18, 57, .08), 0 1px 4px rgba(159, 18, 57, .08);
+  }
+
+  .sugestao-manual-numero-vazio {
+    color: #94a3b8;
+    font-weight: 900;
   }
 
   .sugestao-visualizacao-acoes {
@@ -651,7 +720,6 @@
     .sugestao-actions,
     .sugestao-grid,
     .sugestao-conferencia,
-    .sugestao-manual-grid,
     .sugestao-visualizacao-acoes,
     .sugestao-resumo-final {
       display: grid;
@@ -766,16 +834,58 @@
   {% endif %}
 
   <section class="sugestao-manual" aria-label="Adicionar produto manualmente">
-    <div class="sugestao-manual-grid">
-      <div class="sugestao-field">
-        <label for="produtoManualBuscaSugestao">Adicionar produto</label>
-        <div class="sugestao-autocomplete">
-          <input type="text" id="produtoManualBuscaSugestao" autocomplete="off" placeholder="Digite o nome do produto">
-          <input type="hidden" id="produtoManualSugestao">
-          <div class="sugestao-autocomplete-lista" id="produtoManualSugestoes"></div>
-        </div>
-      </div>
-      <button type="button" class="sugestao-btn sugestao-btn-primary" id="btnAdicionarProdutoSugestao">Adicionar produto</button>
+    <div class="sugestao-manual-table-wrap">
+      <table class="sugestao-table sugestao-manual-table">
+        <colgroup>
+          <col class="col-produto">
+          <col class="col-numero">
+          <col class="col-numero">
+          <col class="col-numero">
+          <col class="col-numero">
+          <col class="col-editavel">
+          <col class="col-unidade">
+          <col class="col-editavel">
+          <col class="col-editavel">
+          <col class="col-editavel">
+          <col class="col-acao">
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="sugestao-col-produto">Produto</th>
+            <th class="sugestao-col-numero">Estoque</th>
+            <th class="sugestao-col-numero">Minimo</th>
+            <th class="sugestao-col-numero">Qtd. Vend.</th>
+            <th class="sugestao-col-numero">Pedidos</th>
+            <th class="sugestao-col-editavel">Sug. Compra</th>
+            <th class="sugestao-col-numero">Unidade</th>
+            <th class="sugestao-col-editavel">Pr. Compra</th>
+            <th class="sugestao-col-editavel">Pr. Unit.</th>
+            <th class="sugestao-col-editavel">Total</th>
+            <th class="sugestao-col-acao">Acao</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr id="linhaProdutoManualSugestao">
+            <td class="sugestao-col-produto">
+              <div class="sugestao-autocomplete">
+                <input type="text" id="produtoManualBuscaSugestao" class="sugestao-manual-produto-input" autocomplete="off" placeholder="Adicionar produto" aria-label="Adicionar produto">
+                <input type="hidden" id="produtoManualSugestao">
+                <div class="sugestao-autocomplete-lista" id="produtoManualSugestoes"></div>
+              </div>
+            </td>
+            <td class="sugestao-numero" id="produtoManualEstoque">-</td>
+            <td class="sugestao-numero" id="produtoManualMinimo">-</td>
+            <td class="sugestao-numero" id="produtoManualVendido">-</td>
+            <td class="sugestao-numero"><span class="sugestao-pedidos" id="produtoManualPedidos">-</span></td>
+            <td class="sugestao-col-sugestao"><input type="text" inputmode="decimal" class="sugestao-input sugestao-manual-input sugestao-manual-qtd-input" id="produtoManualQtd" aria-label="Sugestao de compra do produto manual"></td>
+            <td id="produtoManualUnidade">-</td>
+            <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-manual-input sugestao-manual-preco-input" id="produtoManualPrecoCompra" aria-label="Preco de compra do produto manual"></td>
+            <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-manual-input sugestao-manual-preco-unitario-input" id="produtoManualPrecoUnitario" data-fator="1" aria-label="Preco unitario do produto manual"></td>
+            <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-manual-input sugestao-manual-total-input" id="produtoManualTotal" aria-label="Total do produto manual"></td>
+            <td class="sugestao-col-acao"><button type="button" class="sugestao-btn sugestao-btn-primary" id="btnAdicionarProdutoSugestao">Adicionar produto</button></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
     <div class="sugestao-manual-msg" id="msgAdicionarProdutoSugestao"></div>
   </section>
@@ -1344,8 +1454,20 @@
   const tbody = document.getElementById("tbodySugestaoProdutos");
   const mobile = document.getElementById("mobileSugestaoProdutos");
   const dadosEl = document.getElementById("produtosManualSugestaoData");
+  const linhaManual = document.getElementById("linhaProdutoManualSugestao");
+  const manualEstoque = document.getElementById("produtoManualEstoque");
+  const manualMinimo = document.getElementById("produtoManualMinimo");
+  const manualVendido = document.getElementById("produtoManualVendido");
+  const manualPedidos = document.getElementById("produtoManualPedidos");
+  const manualUnidade = document.getElementById("produtoManualUnidade");
+  const manualQtd = document.getElementById("produtoManualQtd");
+  const manualPreco = document.getElementById("produtoManualPrecoCompra");
+  const manualUnitario = document.getElementById("produtoManualPrecoUnitario");
+  const manualTotal = document.getElementById("produtoManualTotal");
+  const camposManuais = [manualQtd, manualPreco, manualUnitario, manualTotal];
+  const manualWrap = linhaManual?.closest(".sugestao-manual-table-wrap");
 
-  if (!busca || !selecionado || !lista || !botao || !tbody || !mobile || !dadosEl) return;
+  if (!busca || !selecionado || !lista || !botao || !tbody || !mobile || !dadosEl || !linhaManual || camposManuais.some((campo) => !campo)) return;
 
   const produtos = JSON.parse(dadosEl.textContent || "[]");
   const produtosPorId = new Map(produtos.map((produto) => [String(produto.id), produto]));
@@ -1367,12 +1489,67 @@
   }
 
   function numero(valor) {
-    const n = Number(String(valor || "0").replace(",", "."));
+    let texto = String(valor || "0").trim().replace(/[^\d,.-]/g, "");
+    if (texto.includes(",")) {
+      texto = texto.replace(/\./g, "").replace(",", ".");
+    }
+    const n = Number(texto);
     return Number.isFinite(n) ? n : 0;
+  }
+
+  function decimal(valor, casas) {
+    return Number(valor || 0).toLocaleString("pt-BR", {
+      minimumFractionDigits: casas,
+      maximumFractionDigits: casas
+    });
   }
 
   function classePedido(produto) {
     return numero(produto.quantidade_pedidos_abertos) > 0 ? "tem-pedido" : "";
+  }
+
+  function tagFornecedor(produto) {
+    return produto.vinculado
+      ? '<span class="sugestao-autocomplete-tag">fornecedor</span>'
+      : '<span class="sugestao-autocomplete-tag fora-fornecedor">fora do fornecedor</span>';
+  }
+
+  function limparLinhaManual(limparProduto) {
+    const deveLimparProduto = limparProduto !== false;
+    selecionado.value = "";
+    if (deveLimparProduto) {
+      busca.value = "";
+    }
+    manualEstoque.textContent = "-";
+    manualMinimo.textContent = "-";
+    manualVendido.textContent = "-";
+    manualPedidos.textContent = "-";
+    manualPedidos.className = "sugestao-pedidos";
+    manualUnidade.textContent = "-";
+    camposManuais.forEach((campo) => {
+      campo.value = "";
+    });
+    manualUnitario.dataset.fator = "1";
+  }
+
+  function preencherLinhaManual(produto) {
+    if (!produto) {
+      limparLinhaManual();
+      return;
+    }
+    selecionado.value = String(produto.id);
+    busca.value = produto.nome;
+    manualEstoque.textContent = produto.estoque_atual || "0,000";
+    manualMinimo.textContent = produto.estoque_minimo || "0,000";
+    manualVendido.textContent = produto.quantidade_vendida || "0,000";
+    manualPedidos.textContent = produto.quantidade_pedidos_abertos || "0,000";
+    manualPedidos.className = `sugestao-pedidos ${classePedido(produto)}`.trim();
+    manualUnidade.textContent = produto.unidade || "-";
+    manualQtd.value = produto.sugestao || "0,000";
+    manualPreco.value = produto.preco_compra || "0,00";
+    manualUnitario.value = produto.preco_unitario_calculado || "0,00";
+    manualUnitario.dataset.fator = produto.fator_conversao || "1";
+    manualTotal.value = produto.total_sugerido || "0,00";
   }
 
   function existeNaLista(produtoId) {
@@ -1383,6 +1560,7 @@
 
   function fecharSugestoes() {
     lista.classList.remove("aberta");
+    manualWrap?.classList.remove("autocomplete-aberto");
     lista.innerHTML = "";
     indiceAtivo = -1;
   }
@@ -1395,8 +1573,7 @@
     if (!opcao || !opcao.dataset.produtoId) return;
     const produto = produtosPorId.get(String(opcao.dataset.produtoId));
     if (!produto) return;
-    selecionado.value = String(produto.id);
-    busca.value = produto.nome;
+    preencherLinhaManual(produto);
     mostrarMsg("");
   }
 
@@ -1418,10 +1595,10 @@
   function selecionarProduto(produtoId) {
     const produto = produtosPorId.get(String(produtoId));
     if (!produto) return;
-    selecionado.value = String(produto.id);
-    busca.value = produto.nome;
+    preencherLinhaManual(produto);
     fecharSugestoes();
     mostrarMsg("");
+    manualQtd.focus();
   }
 
   function produtoDigitadoExato() {
@@ -1446,35 +1623,37 @@
     if (!filtrados.length) {
       lista.innerHTML = '<button type="button" class="sugestao-autocomplete-opcao" disabled>Nenhum produto disponivel para adicionar</button>';
       lista.classList.add("aberta");
+      manualWrap?.classList.add("autocomplete-aberto");
       indiceAtivo = -1;
-      busca.value = "";
+      limparLinhaManual(false);
       mostrarMsg("Nenhum produto disponivel para adicionar.");
       return;
     }
 
     lista.innerHTML = filtrados.map((produto) => {
-      const tag = produto.vinculado
-        ? '<span class="sugestao-autocomplete-tag">fornecedor</span>'
-        : '<span class="sugestao-autocomplete-tag fora-fornecedor">fora do fornecedor</span>';
-      return `<button type="button" class="sugestao-autocomplete-opcao" data-produto-id="${produto.id}">${escapeHtml(produto.nome)}${tag}</button>`;
+      return `<button type="button" class="sugestao-autocomplete-opcao" data-produto-id="${produto.id}">${escapeHtml(produto.nome)}${tagFornecedor(produto)}</button>`;
     }).join("");
     lista.classList.add("aberta");
+    manualWrap?.classList.add("autocomplete-aberto");
     mostrarMsg("");
     if (selecionarPrimeira) {
       destacarOpcao(0);
     } else {
       indiceAtivo = -1;
       const exato = produtoDigitadoExato();
-      if (exato) selecionado.value = String(exato.id);
+      if (exato) {
+        preencherLinhaManual(exato);
+      } else {
+        limparLinhaManual(false);
+      }
     }
   }
 
   function prepararProximoProduto() {
-    busca.value = "";
-    selecionado.value = "";
+    limparLinhaManual();
     window.setTimeout(function() {
       busca.focus();
-      renderizarSugestoes(true);
+      renderizarSugestoes(false);
     }, 0);
   }
 
@@ -1546,14 +1725,52 @@
     document.getElementById("sugestaoListaVazia")?.classList.toggle("oculto", totalProdutos > 0);
   }
 
+  function fatorManual() {
+    const fator = numero(manualUnitario.dataset.fator || "1");
+    return fator > 0 ? fator : 1;
+  }
+
+  function atualizarManualPorQuantidadeOuPreco() {
+    const qtd = numero(manualQtd.value);
+    const preco = numero(manualPreco.value);
+    manualTotal.value = decimal(qtd * preco, 2);
+    manualUnitario.value = decimal(preco / fatorManual(), 2);
+  }
+
+  function atualizarManualPorUnitario() {
+    const qtd = numero(manualQtd.value);
+    const preco = numero(manualUnitario.value) * fatorManual();
+    manualPreco.value = decimal(preco, 2);
+    manualTotal.value = decimal(qtd * preco, 2);
+  }
+
+  function atualizarManualPorTotal() {
+    const qtd = numero(manualQtd.value);
+    const total = numero(manualTotal.value);
+    if (qtd > 0) {
+      manualPreco.value = decimal(total / qtd, 2);
+      manualUnitario.value = decimal((total / qtd) / fatorManual(), 2);
+    }
+  }
+
+  function produtoComValoresManuais(produto) {
+    return {
+      ...produto,
+      sugestao: manualQtd.value || produto.sugestao,
+      preco_compra: manualPreco.value || produto.preco_compra,
+      preco_unitario_calculado: manualUnitario.value || produto.preco_unitario_calculado,
+      total_sugerido: manualTotal.value || produto.total_sugerido
+    };
+  }
+
   function adicionarSelecionado() {
     const produtoId = selecionado.value || produtoDigitadoExato()?.id || "";
-    const produto = produtosPorId.get(String(produtoId));
+    const produtoBase = produtosPorId.get(String(produtoId));
     mostrarMsg("");
 
-    if (!produto) {
+    if (!produtoBase) {
       mostrarMsg("Escolha um produto para adicionar.");
-      renderizarSugestoes(true);
+      renderizarSugestoes(false);
       return;
     }
 
@@ -1563,6 +1780,7 @@
       return;
     }
 
+    const produto = produtoComValoresManuais(produtoBase);
     tbody.insertAdjacentHTML("beforeend", linhaDesktop(produto));
     mobile.insertAdjacentHTML("beforeend", cardMobile(produto));
     atualizarResumoDepoisDeAdicionar();
@@ -1581,10 +1799,10 @@
   }
 
   busca.addEventListener("focus", function() {
-    renderizarSugestoes(true);
+    renderizarSugestoes(false);
   });
   busca.addEventListener("click", function() {
-    renderizarSugestoes(true);
+    renderizarSugestoes(false);
   });
   busca.addEventListener("input", function() {
     renderizarSugestoes(false);
@@ -1615,9 +1833,12 @@
         preencherComOpcao(opcao);
       } else {
         const exato = produtoDigitadoExato();
-        if (exato) selecionado.value = String(exato.id);
+        if (exato) preencherLinhaManual(exato);
       }
-      adicionarSelecionado();
+      fecharSugestoes();
+      if (selecionado.value) {
+        manualQtd.focus();
+      }
     }
   });
 
@@ -1633,6 +1854,58 @@
   });
 
   botao.addEventListener("click", adicionarSelecionado);
+  botao.addEventListener("keydown", function(event) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    adicionarSelecionado();
+  });
+
+  camposManuais.forEach((campo) => {
+    campo.addEventListener("input", function() {
+      if (campo === manualUnitario) {
+        atualizarManualPorUnitario();
+        return;
+      }
+      if (campo === manualTotal) {
+        atualizarManualPorTotal();
+        return;
+      }
+      atualizarManualPorQuantidadeOuPreco();
+    });
+
+    campo.addEventListener("focus", function() {
+      if (!campo.value) return;
+      window.setTimeout(function() {
+        try {
+          campo.select();
+        } catch (erro) {
+          // Alguns navegadores mobile podem ignorar selecao programatica.
+        }
+      }, 0);
+    });
+
+    campo.addEventListener("blur", function() {
+      if (!campo.value) return;
+      campo.value = decimal(numero(campo.value), campo === manualQtd ? 3 : 2);
+    });
+  });
+
+  linhaManual.addEventListener("keydown", function(event) {
+    if (event.defaultPrevented) return;
+    if (event.key !== "Enter") return;
+
+    const ordem = [manualQtd, manualPreco, manualUnitario, manualTotal, botao];
+    const indice = ordem.indexOf(event.target);
+    if (indice === -1) return;
+
+    event.preventDefault();
+    const proximo = ordem[indice + 1];
+    if (proximo) {
+      proximo.focus();
+    } else {
+      adicionarSelecionado();
+    }
+  });
 
   try {
     if (window.sessionStorage.getItem("focarAdicionarProdutoSugestaoFornecedor") === "1") {
@@ -1670,7 +1943,7 @@
     });
     atualizarResumoDepoisDeAdicionar();
     if (document.activeElement === busca) {
-      renderizarSugestoes(true);
+      renderizarSugestoes(false);
     }
 
     if (estavaSelecionado && window.selecionarProdutoSugestao) {
