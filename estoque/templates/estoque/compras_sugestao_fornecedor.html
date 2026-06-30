@@ -278,6 +278,10 @@
     border-right: 0;
   }
 
+  .sugestao-table th:nth-child(6) {
+    background: #93233a;
+  }
+
   .sugestao-table td {
     padding: 5px 4px;
     border-bottom: 1px solid #edf1f6;
@@ -320,11 +324,28 @@
   }
 
   .sugestao-col-produto {
+    background: #edf5ff;
+    color: #172033;
+    font-weight: 900;
     text-align: left;
   }
 
   .sugestao-table th.sugestao-col-produto {
+    background: #7f1d2d;
     text-align: left;
+  }
+
+  .sugestao-table tbody tr:nth-child(even) .sugestao-col-produto {
+    background: #dfeeff;
+  }
+
+  .sugestao-table tbody tr:hover .sugestao-col-produto {
+    background: #ffdce5;
+  }
+
+  .sugestao-table tbody tr.selecionado .sugestao-col-produto,
+  .sugestao-table tbody tr.selecionado:hover .sugestao-col-produto {
+    background: #ffd7df;
   }
 
   .sugestao-col-numero,
@@ -374,6 +395,16 @@
     font-weight: 900;
     text-align: right;
     font-variant-numeric: tabular-nums;
+  }
+
+  .sugestao-col-sugestao {
+    background: #fff0f4;
+  }
+
+  .sugestao-qtd-input {
+    border-color: #dc8fa0;
+    background: #fff8fa;
+    box-shadow: inset 0 0 0 1px rgba(159, 18, 57, .08), 0 1px 4px rgba(159, 18, 57, .08);
   }
 
   .sugestao-pedidos {
@@ -763,7 +794,7 @@
                 <td class="sugestao-numero">{{ linha.estoque_minimo|floatformat:3 }}</td>
                 <td class="sugestao-numero">{{ linha.quantidade_vendida|floatformat:3 }}</td>
                 <td class="sugestao-numero"><span class="sugestao-pedidos {% if linha.quantidade_pedidos_abertos > 0 %}tem-pedido{% endif %}">{{ linha.quantidade_pedidos_abertos|floatformat:3 }}</span></td>
-                <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-qtd-input" value="{{ linha.sugestao|floatformat:3 }}" aria-label="Sugestao de compra para {{ linha.produto.nome }}"></td>
+                <td class="sugestao-col-sugestao"><input type="text" inputmode="decimal" class="sugestao-input sugestao-qtd-input" value="{{ linha.sugestao|floatformat:3 }}" aria-label="Sugestao de compra para {{ linha.produto.nome }}"></td>
                 <td>{{ linha.unidade }}</td>
                 <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-input" value="{{ linha.preco_compra|floatformat:2 }}" aria-label="Preco de compra para {{ linha.produto.nome }}"></td>
                 <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-unitario-input" data-fator="{{ linha.fator_conversao|floatformat:3 }}" value="{{ linha.preco_unitario_calculado|floatformat:2 }}" aria-label="Preco unitario para {{ linha.produto.nome }}"></td>
@@ -1335,7 +1366,7 @@
         <td class="sugestao-numero">${escapeHtml(produto.estoque_minimo)}</td>
         <td class="sugestao-numero">${escapeHtml(produto.quantidade_vendida)}</td>
         <td class="sugestao-numero"><span class="sugestao-pedidos ${classePedido(produto)}">${escapeHtml(produto.quantidade_pedidos_abertos)}</span></td>
-        <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-qtd-input" value="${escapeHtml(produto.sugestao)}" aria-label="Sugestao de compra para ${escapeHtml(produto.nome)}"></td>
+        <td class="sugestao-col-sugestao"><input type="text" inputmode="decimal" class="sugestao-input sugestao-qtd-input" value="${escapeHtml(produto.sugestao)}" aria-label="Sugestao de compra para ${escapeHtml(produto.nome)}"></td>
         <td>${escapeHtml(produto.unidade)}</td>
         <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-input" value="${escapeHtml(produto.preco_compra)}" aria-label="Preco de compra para ${escapeHtml(produto.nome)}"></td>
         <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-unitario-input" data-fator="${escapeHtml(produto.fator_conversao)}" value="${escapeHtml(produto.preco_unitario_calculado)}" aria-label="Preco unitario para ${escapeHtml(produto.nome)}"></td>
