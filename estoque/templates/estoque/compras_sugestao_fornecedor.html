@@ -175,30 +175,40 @@
   }
 
   .sugestao-table-wrap {
+    width: 100%;
+    box-sizing: border-box;
     overflow-x: auto;
-    overflow-y: visible;
-    padding: 0 80px 18px 0;
-    margin-right: -28px;
+    padding: 0 28px 18px 0;
+    margin-right: 0;
     scrollbar-gutter: stable both-edges;
   }
 
   .sugestao-table {
-    width: 100%;
-    min-width: 1680px;
+    width: 1040px;
+    min-width: 1040px;
+    max-width: none;
     border-collapse: collapse;
+    table-layout: fixed;
   }
 
+  .sugestao-table col.col-produto { width: 185px; }
+  .sugestao-table col.col-numero { width: 68px; }
+  .sugestao-table col.col-editavel { width: 90px; }
+  .sugestao-table col.col-unidade { width: 48px; }
+  .sugestao-table col.col-acao { width: 73px; }
+
   .sugestao-table th {
-    padding: 11px 10px;
+    padding: 7px 4px;
     background: #7f1d2d;
     border-bottom: 2px solid #5f111f;
     border-right: 1px solid rgba(255, 255, 255, .22);
     color: #fff;
-    font-size: .72rem;
+    font-size: .6rem;
     font-weight: 900;
     letter-spacing: .04em;
     text-align: left;
     text-transform: uppercase;
+    white-space: normal;
   }
 
   .sugestao-table th:last-child {
@@ -206,11 +216,13 @@
   }
 
   .sugestao-table td {
-    padding: 10px;
+    padding: 5px 4px;
     border-bottom: 1px solid #edf1f6;
     border-right: 1px solid #e5ebf3;
     vertical-align: middle;
+    font-size: .8rem;
     font-weight: 750;
+    overflow: hidden;
   }
 
   .sugestao-table td:last-child {
@@ -229,60 +241,41 @@
     background: #fff1f2;
   }
 
+  .sugestao-table tbody tr.selecionado,
+  .sugestao-table tbody tr.selecionado:hover {
+    background: #ffe1e7;
+  }
+
+  .sugestao-table tbody tr.selecionado td {
+    background: #ffe1e7;
+    border-bottom-color: #f3a6b4;
+  }
+
+  .sugestao-table tbody tr.selecionado .sugestao-input {
+    border-color: #e8798f;
+    background: #fff8fa;
+  }
+
   .sugestao-col-produto {
-    min-width: 230px;
     text-align: left;
   }
 
   .sugestao-col-numero,
   .sugestao-col-editavel,
-  .sugestao-col-fator,
-  .sugestao-col-status,
   .sugestao-col-acao {
     text-align: center;
   }
 
-  .sugestao-col-fator {
-    width: 82px;
+  .sugestao-col-numero {
+    text-align: center;
   }
 
   .sugestao-col-editavel {
-    width: 130px;
+    text-align: center;
   }
 
   .sugestao-col-acao {
-    width: 118px;
-    min-width: 118px;
-  }
-
-  .sugestao-col-status {
-    width: 150px;
-    min-width: 150px;
-  }
-
-  .sugestao-table th.sugestao-col-acao,
-  .sugestao-table td.sugestao-col-acao {
-    position: sticky;
-    right: 0;
-    z-index: 2;
-    box-shadow: -10px 0 16px rgba(127, 29, 29, .08);
-  }
-
-  .sugestao-table th.sugestao-col-acao {
-    z-index: 4;
-    background: #7f1d2d;
-  }
-
-  .sugestao-table tbody tr:nth-child(odd) td.sugestao-col-acao {
-    background: #ffffff;
-  }
-
-  .sugestao-table tbody tr:nth-child(even) td.sugestao-col-acao {
-    background: #fff7f8;
-  }
-
-  .sugestao-table tbody tr:hover td.sugestao-col-acao {
-    background: #fff1f2;
+    text-align: center;
   }
 
   .sugestao-numero,
@@ -301,15 +294,16 @@
   .sugestao-input {
     display: block;
     width: 100%;
-    min-width: 88px;
-    max-width: 112px;
+    min-width: 62px;
+    max-width: 70px;
     margin: 0 auto;
-    min-height: 38px;
+    min-height: 28px;
     border: 1.5px solid #bfdbfe;
     border-radius: 8px;
-    padding: 7px 9px;
+    padding: 3px 4px;
     background: #ffffff;
     color: #172033;
+    font-size: .74rem;
     font-weight: 900;
     text-align: right;
     font-variant-numeric: tabular-nums;
@@ -318,8 +312,8 @@
   .sugestao-pedidos {
     display: inline-flex;
     justify-content: center;
-    min-width: 64px;
-    padding: 6px 9px;
+    min-width: 38px;
+    padding: 3px 4px;
     border: 1px solid #e2e8f0;
     border-radius: 999px;
     background: #f8fafc;
@@ -340,49 +334,21 @@
     border-color: #991b1b;
   }
 
-  .sugestao-status {
-    display: inline-flex;
-    justify-content: center;
-    min-width: 118px;
-    border-radius: 999px;
-    padding: 5px 9px;
-    font-size: .75rem;
-    font-weight: 950;
-    text-transform: uppercase;
-  }
-
-  .sugestao-status.abaixo {
-    background: #fee2e2;
-    border: 1px solid #fecaca;
-    color: #991b1b;
-  }
-
   .sugestao-btn-danger {
-    min-height: 36px;
-    padding: 7px 10px;
+    min-height: 28px;
+    padding: 3px 5px;
     border: 1px solid #fecaca;
     background: #fee2e2;
     color: #991b1b;
     width: 100%;
-    min-width: 86px;
+    min-width: 56px;
+    font-size: .72rem;
     white-space: nowrap;
   }
 
   .sugestao-btn-danger:hover,
   .sugestao-btn-danger:focus {
     background: #fecaca;
-  }
-
-  .sugestao-status.minimo {
-    background: #fffbeb;
-    border: 1px solid #fde68a;
-    color: #854d0e;
-  }
-
-  .sugestao-status.acima {
-    background: #ecfdf3;
-    border: 1px solid #b7e4c7;
-    color: #166534;
   }
 
   .sugestao-empty {
@@ -407,6 +373,12 @@
 
   .sugestao-mobile-card + .sugestao-mobile-card {
     margin-top: 12px;
+  }
+
+  .sugestao-mobile-card.selecionado {
+    border-color: #e8798f;
+    background: #ffe1e7;
+    box-shadow: 0 14px 26px rgba(159, 18, 57, .16);
   }
 
   .sugestao-mobile-top {
@@ -689,27 +661,38 @@
   <section class="sugestao-card">
       <div class="sugestao-table-wrap sugestao-desktop">
         <table class="sugestao-table">
+          <colgroup>
+            <col class="col-produto">
+            <col class="col-numero">
+            <col class="col-numero">
+            <col class="col-numero">
+            <col class="col-numero">
+            <col class="col-editavel">
+            <col class="col-unidade">
+            <col class="col-editavel">
+            <col class="col-editavel">
+            <col class="col-editavel">
+            <col class="col-acao">
+          </colgroup>
           <thead>
             <tr>
               <th class="sugestao-col-produto">Produto</th>
-              <th class="sugestao-col-numero">Estoque atual</th>
-              <th class="sugestao-col-numero">Estoque minimo</th>
-              <th class="sugestao-col-numero">Vendido no periodo</th>
-              <th class="sugestao-col-numero">Pedidos em aberto</th>
-              <th class="sugestao-col-editavel">Sugestao</th>
+              <th class="sugestao-col-numero">Estoque</th>
+              <th class="sugestao-col-numero">Minimo</th>
+              <th class="sugestao-col-numero">Vend.</th>
+              <th class="sugestao-col-numero">Pedidos</th>
+              <th class="sugestao-col-editavel">Sug.</th>
               <th class="sugestao-col-numero">Unidade</th>
-              <th class="sugestao-col-fator">Qtd emb.</th>
-              <th class="sugestao-col-editavel">Preco compra</th>
-              <th class="sugestao-col-editavel">Preco unitario</th>
+              <th class="sugestao-col-editavel">Pr. compra</th>
+              <th class="sugestao-col-editavel">Pr. unit.</th>
               <th class="sugestao-col-editavel">Total</th>
-              <th class="sugestao-col-status">Status</th>
               <th class="sugestao-col-acao">Acao</th>
             </tr>
           </thead>
           <tbody id="tbodySugestaoProdutos">
             {% if linhas %}
             {% for linha in linhas %}
-              <tr data-produto-id="{{ linha.produto_id }}">
+              <tr data-produto-id="{{ linha.produto_id }}" data-fator="{{ linha.fator_conversao|floatformat:3 }}">
                 <td class="sugestao-col-produto">{{ linha.produto.nome }}</td>
                 <td class="sugestao-numero">{{ linha.estoque_atual|floatformat:3 }}</td>
                 <td class="sugestao-numero">{{ linha.estoque_minimo|floatformat:3 }}</td>
@@ -717,11 +700,9 @@
                 <td class="sugestao-numero"><span class="sugestao-pedidos {% if linha.quantidade_pedidos_abertos > 0 %}tem-pedido{% endif %}">{{ linha.quantidade_pedidos_abertos|floatformat:3 }}</span></td>
                 <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-qtd-input" value="{{ linha.sugestao|floatformat:3 }}" aria-label="Sugestao de compra para {{ linha.produto.nome }}"></td>
                 <td>{{ linha.unidade }}</td>
-                <td class="sugestao-numero"><span class="sugestao-fator-valor">{{ linha.fator_conversao|floatformat:3 }}</span></td>
                 <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-input" value="{{ linha.preco_compra|floatformat:2 }}" aria-label="Preco de compra para {{ linha.produto.nome }}"></td>
                 <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-unitario-input" data-fator="{{ linha.fator_conversao|floatformat:3 }}" value="{{ linha.preco_unitario_calculado|floatformat:2 }}" aria-label="Preco unitario para {{ linha.produto.nome }}"></td>
                 <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-total-input" value="{{ linha.total_sugerido|floatformat:2 }}" aria-label="Total sugerido para {{ linha.produto.nome }}"></td>
-                <td><span class="sugestao-status {{ linha.status_classe }}">{{ linha.status_texto }}</span></td>
                 <td class="sugestao-col-acao"><button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button></td>
               </tr>
             {% endfor %}
@@ -736,7 +717,6 @@
           <article class="sugestao-mobile-card" data-produto-id="{{ linha.produto_id }}">
             <div class="sugestao-mobile-top">
               <div class="sugestao-mobile-produto">{{ linha.produto.nome }}</div>
-              <span class="sugestao-status {{ linha.status_classe }}">{{ linha.status_texto }}</span>
             </div>
             <div class="sugestao-mobile-grid">
               <div><span class="sugestao-mobile-label">Estoque atual</span><span class="sugestao-mobile-value">{{ linha.estoque_atual|floatformat:3 }}</span></div>
@@ -744,7 +724,6 @@
               <div><span class="sugestao-mobile-label">Vendido no periodo</span><span class="sugestao-mobile-value">{{ linha.quantidade_vendida|floatformat:3 }}</span></div>
               <div><span class="sugestao-mobile-label">Pedidos em aberto</span><span class="sugestao-mobile-value"><span class="sugestao-pedidos {% if linha.quantidade_pedidos_abertos > 0 %}tem-pedido{% endif %}">{{ linha.quantidade_pedidos_abertos|floatformat:3 }}</span></span></div>
               <div><span class="sugestao-mobile-label">Unidade</span><span class="sugestao-mobile-value">{{ linha.unidade }}</span></div>
-              <div><span class="sugestao-mobile-label">Qtd emb.</span><span class="sugestao-mobile-value sugestao-fator-valor">{{ linha.fator_conversao|floatformat:3 }}</span></div>
             </div>
             <div class="sugestao-mobile-edit">
               <label class="sugestao-mobile-label">Sugestao de compra</label>
@@ -763,7 +742,7 @@
       </div>
       <div class="sugestao-empty {% if linhas %}oculto{% endif %}" id="sugestaoListaVazia">
         {% if fornecedor %}
-          Nenhum produto ativo deste fornecedor esta abaixo/no minimo ou com pedido em aberto.
+          Nenhum produto ativo deste fornecedor esta dentro do limite de reposicao.
         {% else %}
           A lista aparecera aqui depois que voce escolher o fornecedor.
         {% endif %}
@@ -1210,7 +1189,7 @@
 
   function linhaDesktop(produto) {
     return `
-      <tr data-produto-id="${produto.id}">
+      <tr data-produto-id="${produto.id}" data-fator="${escapeHtml(produto.fator_conversao)}">
         <td class="sugestao-col-produto">${escapeHtml(produto.nome)}</td>
         <td class="sugestao-numero">${escapeHtml(produto.estoque_atual)}</td>
         <td class="sugestao-numero">${escapeHtml(produto.estoque_minimo)}</td>
@@ -1218,11 +1197,9 @@
         <td class="sugestao-numero"><span class="sugestao-pedidos ${classePedido(produto)}">${escapeHtml(produto.quantidade_pedidos_abertos)}</span></td>
         <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-qtd-input" value="${escapeHtml(produto.sugestao)}" aria-label="Sugestao de compra para ${escapeHtml(produto.nome)}"></td>
         <td>${escapeHtml(produto.unidade)}</td>
-        <td class="sugestao-numero"><span class="sugestao-fator-valor">${escapeHtml(produto.fator_conversao)}</span></td>
         <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-input" value="${escapeHtml(produto.preco_compra)}" aria-label="Preco de compra para ${escapeHtml(produto.nome)}"></td>
         <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-unitario-input" data-fator="${escapeHtml(produto.fator_conversao)}" value="${escapeHtml(produto.preco_unitario_calculado)}" aria-label="Preco unitario para ${escapeHtml(produto.nome)}"></td>
         <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-total-input" value="${escapeHtml(produto.total_sugerido)}" aria-label="Total sugerido para ${escapeHtml(produto.nome)}"></td>
-        <td><span class="sugestao-status ${escapeHtml(produto.status_classe)}">${escapeHtml(produto.status_texto)}</span></td>
         <td class="sugestao-col-acao"><button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button></td>
       </tr>
     `;
@@ -1233,7 +1210,6 @@
       <article class="sugestao-mobile-card" data-produto-id="${produto.id}">
         <div class="sugestao-mobile-top">
           <div class="sugestao-mobile-produto">${escapeHtml(produto.nome)}</div>
-          <span class="sugestao-status ${escapeHtml(produto.status_classe)}">${escapeHtml(produto.status_texto)}</span>
         </div>
         <div class="sugestao-mobile-grid">
           <div><span class="sugestao-mobile-label">Estoque atual</span><span class="sugestao-mobile-value">${escapeHtml(produto.estoque_atual)}</span></div>
@@ -1241,7 +1217,6 @@
           <div><span class="sugestao-mobile-label">Vendido no periodo</span><span class="sugestao-mobile-value">${escapeHtml(produto.quantidade_vendida)}</span></div>
           <div><span class="sugestao-mobile-label">Pedidos em aberto</span><span class="sugestao-mobile-value"><span class="sugestao-pedidos ${classePedido(produto)}">${escapeHtml(produto.quantidade_pedidos_abertos)}</span></span></div>
           <div><span class="sugestao-mobile-label">Unidade</span><span class="sugestao-mobile-value">${escapeHtml(produto.unidade)}</span></div>
-          <div><span class="sugestao-mobile-label">Qtd emb.</span><span class="sugestao-mobile-value sugestao-fator-valor">${escapeHtml(produto.fator_conversao)}</span></div>
         </div>
         <div class="sugestao-mobile-edit">
           <label class="sugestao-mobile-label">Sugestao de compra</label>
@@ -1356,12 +1331,95 @@
     if (!item) return;
 
     const produtoId = item.dataset.produtoId;
+    const linhasAntes = Array.from(tbody.querySelectorAll("tr[data-produto-id]"));
+    const linhaAtual = item.closest("tr[data-produto-id]") || linhasAntes.find((linha) => {
+      return String(linha.dataset.produtoId) === String(produtoId);
+    });
+    const indiceAtual = linhasAntes.indexOf(linhaAtual);
+    const estavaSelecionado = Array.from(document.querySelectorAll("[data-produto-id]")).some((el) => {
+      return String(el.dataset.produtoId) === String(produtoId) && el.classList.contains("selecionado");
+    });
+
     document.querySelectorAll("[data-produto-id]").forEach((el) => {
       if (String(el.dataset.produtoId) === String(produtoId)) {
         el.remove();
       }
     });
     atualizarResumoDepoisDeAdicionar();
+
+    if (estavaSelecionado && window.selecionarProdutoSugestao) {
+      const linhasRestantes = Array.from(tbody.querySelectorAll("tr[data-produto-id]"));
+      const proximaLinha = linhasRestantes[Math.min(indiceAtual, linhasRestantes.length - 1)] || linhasRestantes[linhasRestantes.length - 1];
+      window.selecionarProdutoSugestao(proximaLinha?.dataset.produtoId || "", { rolar: false });
+    }
+  });
+})();
+</script>
+
+<script>
+(function () {
+  function itensSelecionaveis() {
+    return Array.from(document.querySelectorAll("tr[data-produto-id], .sugestao-mobile-card[data-produto-id]"));
+  }
+
+  function linhasDesktop() {
+    return Array.from(document.querySelectorAll("#tbodySugestaoProdutos tr[data-produto-id]"));
+  }
+
+  function focoBloqueiaNavegacao() {
+    const ativo = document.activeElement;
+    return Boolean(
+      ativo &&
+      ativo.closest("input, textarea, select, button, .sugestao-autocomplete, [contenteditable='true']")
+    );
+  }
+
+  function selecionarProduto(produtoId, opcoes) {
+    const id = String(produtoId || "");
+    itensSelecionaveis().forEach((el) => {
+      el.classList.toggle("selecionado", id && String(el.dataset.produtoId) === id);
+    });
+
+    if (!id || opcoes?.rolar === false) return;
+
+    const alvo = linhasDesktop().find((linha) => String(linha.dataset.produtoId) === id)
+      || itensSelecionaveis().find((el) => String(el.dataset.produtoId) === id);
+
+    if (alvo) {
+      alvo.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  }
+
+  window.selecionarProdutoSugestao = selecionarProduto;
+
+  document.addEventListener("click", function(event) {
+    if (event.target.closest(".sugestao-remover-item")) return;
+
+    const item = event.target.closest("tr[data-produto-id], .sugestao-mobile-card[data-produto-id]");
+    if (!item) return;
+
+    selecionarProduto(item.dataset.produtoId, { rolar: false });
+  });
+
+  document.addEventListener("keydown", function(event) {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    if (focoBloqueiaNavegacao()) return;
+
+    const linhas = linhasDesktop();
+    if (!linhas.length) return;
+
+    event.preventDefault();
+
+    const indiceAtual = linhas.findIndex((linha) => linha.classList.contains("selecionado"));
+    let proximoIndice;
+
+    if (event.key === "ArrowDown") {
+      proximoIndice = indiceAtual < 0 ? 0 : Math.min(indiceAtual + 1, linhas.length - 1);
+    } else {
+      proximoIndice = indiceAtual < 0 ? linhas.length - 1 : Math.max(indiceAtual - 1, 0);
+    }
+
+    selecionarProduto(linhas[proximoIndice].dataset.produtoId, { rolar: true });
   });
 })();
 </script>

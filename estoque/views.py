@@ -4104,13 +4104,14 @@ def sugestao_compra_fornecedor(request):
             estoque_minimo = Decimal(produto.estoque_minimo or 0)
             quantidade_vendida = Decimal(vendidos_por_produto.get(produto.id, Decimal("0.000")) or 0)
             quantidade_pedidos_abertos = Decimal(pedidos_abertos_por_produto.get(produto.id, Decimal("0.000")) or 0)
-            produto_no_minimo = produto.estoque_minimo is not None and estoque_atual <= estoque_minimo
-            if not produto_no_minimo and quantidade_pedidos_abertos <= 0:
+            estoque_previsto = estoque_atual - quantidade_vendida - quantidade_pedidos_abertos
+            limite_reposicao = estoque_minimo * Decimal("1.20")
+            if estoque_previsto > limite_reposicao:
                 continue
 
             sugestao = max(
                 Decimal("0.000"),
-                estoque_minimo - estoque_atual + quantidade_vendida + quantidade_pedidos_abertos,
+                estoque_minimo - estoque_previsto,
             ).quantize(Decimal("0.001"))
             fator_conversao = Decimal(produto.fator_conversao or 1)
             if fator_conversao <= 0:
@@ -4119,16 +4120,6 @@ def sugestao_compra_fornecedor(request):
             preco_unitario_calculado = (preco_compra / fator_conversao).quantize(Decimal("0.01"))
             total_item = (sugestao * preco_compra).quantize(Decimal("0.01"))
             total_sugerido += total_item
-
-            if estoque_atual < estoque_minimo:
-                status_texto = "Abaixo do minimo"
-                status_classe = "abaixo"
-            elif estoque_atual == estoque_minimo:
-                status_texto = "No minimo"
-                status_classe = "minimo"
-            else:
-                status_texto = "Acima do minimo"
-                status_classe = "acima"
 
             linhas.append(
                 {
@@ -4144,8 +4135,6 @@ def sugestao_compra_fornecedor(request):
                     "preco_compra": preco_compra,
                     "preco_unitario_calculado": preco_unitario_calculado,
                     "total_sugerido": total_item,
-                    "status_texto": status_texto,
-                    "status_classe": status_classe,
                 }
             )
 
@@ -4165,16 +4154,6 @@ def sugestao_compra_fornecedor(request):
             preco_unitario_calculado = (preco_compra / fator_conversao).quantize(Decimal("0.01"))
             total_item = (sugestao * preco_compra).quantize(Decimal("0.01"))
 
-            if estoque_atual < estoque_minimo:
-                status_texto = "Abaixo do minimo"
-                status_classe = "abaixo"
-            elif estoque_atual == estoque_minimo:
-                status_texto = "No minimo"
-                status_classe = "minimo"
-            else:
-                status_texto = "Acima do minimo"
-                status_classe = "acima"
-
             produtos_manual_payload.append(
                 {
                     "id": produto.id,
@@ -4190,8 +4169,6 @@ def sugestao_compra_fornecedor(request):
                     "preco_compra": f"{preco_compra:.2f}",
                     "preco_unitario_calculado": f"{preco_unitario_calculado:.2f}",
                     "total_sugerido": f"{total_item:.2f}",
-                    "status_texto": status_texto,
-                    "status_classe": status_classe,
                 }
             )
 
