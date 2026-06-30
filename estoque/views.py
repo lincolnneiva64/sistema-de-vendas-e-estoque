@@ -24,7 +24,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemVenda, ItemVendaRemovido, PagamentoContaPagar, PagamentoEmprestimoDivida, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemPedido, ItemVenda, ItemVendaRemovido, PagamentoContaPagar, PagamentoEmprestimoDivida, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -4045,6 +4045,7 @@ def sugestao_compra_fornecedor(request):
 
     if fornecedor_id and fornecedor_id.isdigit():
         fornecedor = get_object_or_404(Fornecedor, pk=fornecedor_id, ativo=True)
+        status_pedidos_abertos = [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL]
         vinculos_base = ProdutoFornecedor.objects.select_related("produto", "fornecedor").filter(
             fornecedor=fornecedor,
             ativo=True,
@@ -4059,10 +4060,6 @@ def sugestao_compra_fornecedor(request):
                     Value(Decimal("0.000")),
                     output_field=DecimalField(max_digits=12, decimal_places=3),
                 )
-            )
-            .filter(
-                produto__estoque_minimo__isnull=False,
-                estoque_atual_calc__lte=F("produto__estoque_minimo"),
             )
             .order_by("produto__nome", "id")
         )
@@ -4080,6 +4077,17 @@ def sugestao_compra_fornecedor(request):
                 .annotate(quantidade_vendida=Sum("quantidade"))
             )
         }
+        pedidos_abertos_por_produto = {
+            item["produto_id"]: item["quantidade_pedida"] or Decimal("0.000")
+            for item in (
+                ItemPedido.objects.filter(
+                    produto_id__in=produto_ids,
+                    pedido__status__in=status_pedidos_abertos,
+                )
+                .values("produto_id")
+                .annotate(quantidade_pedida=Sum("quantidade"))
+            )
+        }
         quantidade_vendida_calculada = True
 
         for vinculo in vinculos:
@@ -4087,12 +4095,21 @@ def sugestao_compra_fornecedor(request):
             estoque_atual = Decimal(produto.quantidade or 0)
             estoque_minimo = Decimal(produto.estoque_minimo or 0)
             quantidade_vendida = Decimal(vendidos_por_produto.get(produto.id, Decimal("0.000")) or 0)
+            quantidade_pedidos_abertos = Decimal(pedidos_abertos_por_produto.get(produto.id, Decimal("0.000")) or 0)
+            produto_no_minimo = produto.estoque_minimo is not None and estoque_atual <= estoque_minimo
+            if not produto_no_minimo and quantidade_pedidos_abertos <= 0:
+                continue
+
             sugestao = max(
                 Decimal("0.000"),
-                estoque_minimo - estoque_atual + quantidade_vendida,
+                estoque_minimo - estoque_atual + quantidade_vendida + quantidade_pedidos_abertos,
             ).quantize(Decimal("0.001"))
-            preco_unitario = Decimal(produto.preco_compra or 0).quantize(Decimal("0.01"))
-            total_item = (sugestao * preco_unitario).quantize(Decimal("0.01"))
+            fator_conversao = Decimal(produto.fator_conversao or 1)
+            if fator_conversao <= 0:
+                fator_conversao = Decimal("1")
+            preco_compra = Decimal(produto.preco_compra or 0).quantize(Decimal("0.01"))
+            preco_unitario_calculado = (preco_compra / fator_conversao).quantize(Decimal("0.01"))
+            total_item = (sugestao * preco_compra).quantize(Decimal("0.01"))
             total_sugerido += total_item
 
             if estoque_atual < estoque_minimo:
@@ -4111,9 +4128,12 @@ def sugestao_compra_fornecedor(request):
                     "estoque_atual": estoque_atual,
                     "estoque_minimo": estoque_minimo,
                     "quantidade_vendida": quantidade_vendida.quantize(Decimal("0.001")),
+                    "quantidade_pedidos_abertos": quantidade_pedidos_abertos.quantize(Decimal("0.001")),
                     "sugestao": sugestao,
                     "unidade": produto.unidade_compra or produto.unidade_venda_1 or "-",
-                    "preco_unitario": preco_unitario,
+                    "fator_conversao": fator_conversao.quantize(Decimal("0.001")),
+                    "preco_compra": preco_compra,
+                    "preco_unitario_calculado": preco_unitario_calculado,
                     "total_sugerido": total_item,
                     "status_texto": status_texto,
                     "status_classe": status_classe,
@@ -4135,6 +4155,7 @@ def sugestao_compra_fornecedor(request):
             "total_produtos_sugeridos": len(linhas),
             "total_sugerido": total_sugerido.quantize(Decimal("0.01")),
             "quantidade_vendida_calculada": quantidade_vendida_calculada,
+            "status_pedidos_abertos": status_pedidos_abertos if fornecedor else [],
         },
     )
 

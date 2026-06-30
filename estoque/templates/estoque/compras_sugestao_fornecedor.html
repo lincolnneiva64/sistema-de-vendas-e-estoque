@@ -173,50 +173,21 @@
     font-weight: 850;
   }
 
-  .sugestao-resumo {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    flex-wrap: wrap;
-    padding: 13px 16px;
-    border-bottom: 1px solid #edf1f6;
-    background: #fbfdff;
-  }
-
-  .sugestao-resumo h2 {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 950;
-  }
-
-  .sugestao-resumo p {
-    margin: 3px 0 0;
-    color: #64748b;
-    font-weight: 750;
-  }
-
-  .sugestao-total {
-    color: #166534;
-    font-size: 1.08rem;
-    font-weight: 950;
-    white-space: nowrap;
-  }
-
   .sugestao-table-wrap {
     overflow-x: auto;
   }
 
   .sugestao-table {
     width: 100%;
-    min-width: 1040px;
+    min-width: 1360px;
     border-collapse: collapse;
   }
 
   .sugestao-table th {
-    padding: 10px 11px;
+    padding: 11px 10px;
     background: #14532d;
     border-bottom: 2px solid #0f3d22;
+    border-right: 1px solid rgba(255, 255, 255, .22);
     color: #fff;
     font-size: .72rem;
     font-weight: 900;
@@ -225,11 +196,52 @@
     text-transform: uppercase;
   }
 
+  .sugestao-table th:last-child {
+    border-right: 0;
+  }
+
   .sugestao-table td {
-    padding: 11px;
+    padding: 10px;
     border-bottom: 1px solid #edf1f6;
+    border-right: 1px solid #e5ebf3;
     vertical-align: middle;
     font-weight: 750;
+  }
+
+  .sugestao-table td:last-child {
+    border-right: 0;
+  }
+
+  .sugestao-table tbody tr:nth-child(odd) {
+    background: #ffffff;
+  }
+
+  .sugestao-table tbody tr:nth-child(even) {
+    background: #f8fbff;
+  }
+
+  .sugestao-table tbody tr:hover {
+    background: #eef6ff;
+  }
+
+  .sugestao-col-produto {
+    min-width: 230px;
+    text-align: left;
+  }
+
+  .sugestao-col-numero,
+  .sugestao-col-editavel,
+  .sugestao-col-fator,
+  .sugestao-col-status {
+    text-align: center;
+  }
+
+  .sugestao-col-fator {
+    width: 82px;
+  }
+
+  .sugestao-col-editavel {
+    width: 122px;
   }
 
   .sugestao-numero,
@@ -243,6 +255,45 @@
   .sugestao-compra {
     color: #166534;
     font-weight: 950;
+  }
+
+  .sugestao-input {
+    display: block;
+    width: 100%;
+    min-width: 88px;
+    max-width: 112px;
+    margin: 0 auto;
+    min-height: 38px;
+    border: 1.5px solid #bfdbfe;
+    border-radius: 8px;
+    padding: 7px 9px;
+    background: #ffffff;
+    color: #172033;
+    font-weight: 900;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sugestao-pedidos {
+    display: inline-flex;
+    justify-content: flex-end;
+    min-width: 64px;
+    padding: 5px 8px;
+    border-radius: 999px;
+    color: #64748b;
+    font-weight: 950;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sugestao-pedidos.tem-pedido {
+    border: 1px solid #fed7aa;
+    background: #fff7ed;
+    color: #c2410c;
+  }
+
+  .sugestao-input:focus {
+    outline: 3px solid rgba(37, 99, 235, .18);
+    border-color: #2563eb;
   }
 
   .sugestao-status {
@@ -332,6 +383,12 @@
     display: block;
     color: #172033;
     font-weight: 850;
+  }
+
+  .sugestao-mobile-edit {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
   }
 
   @media (max-width: 860px) {
@@ -445,63 +502,55 @@
       <span class="sugestao-conferencia-valor">{{ total_produtos_vinculados }}</span>
     </div>
     <div class="sugestao-conferencia-item">
-      <span class="sugestao-conferencia-label">Abaixo ou no minimo</span>
+      <span class="sugestao-conferencia-label">Produtos na lista</span>
       <span class="sugestao-conferencia-valor">{{ total_produtos_sugeridos }}</span>
     </div>
     <div class="sugestao-conferencia-item">
       <span class="sugestao-conferencia-label">Total sugerido</span>
-      <span class="sugestao-conferencia-valor total">R$ {{ total_sugerido|floatformat:2 }}</span>
+      <span class="sugestao-conferencia-valor total" data-total-geral-sugestao>R$ {{ total_sugerido|floatformat:2 }}</span>
     </div>
   </section>
 
   {% if fornecedor and not linhas %}
     <div class="sugestao-aviso">
-      Nenhum produto apareceu na lista. Confira se os produtos deste fornecedor estao ativos, fora da lixeira, com estoque minimo preenchido e estoque atual abaixo ou igual ao minimo.
+      Nenhum produto apareceu na lista. Confira se os produtos deste fornecedor estao ativos, fora da lixeira, abaixo/no minimo ou com pedido em aberto.
     </div>
   {% endif %}
 
   <section class="sugestao-card">
-    <div class="sugestao-resumo">
-      <div>
-        <h2>{% if fornecedor %}{{ fornecedor.nome }}{% else %}Escolha um fornecedor{% endif %}</h2>
-        <p>
-          {% if fornecedor %}
-            {{ linhas|length }} produto(s) abaixo ou no estoque minimo.
-          {% else %}
-            Selecione um fornecedor e gere a lista para ver as sugestoes.
-          {% endif %}
-        </p>
-      </div>
-      <div class="sugestao-total">Total sugerido: R$ {{ total_sugerido|floatformat:2 }}</div>
-    </div>
-
     {% if linhas %}
       <div class="sugestao-table-wrap sugestao-desktop">
         <table class="sugestao-table">
           <thead>
             <tr>
-              <th>Produto</th>
-              <th>Estoque atual</th>
-              <th>Estoque minimo</th>
-              <th>Vendido no periodo</th>
-              <th>Sugestao de compra</th>
-              <th>Unidade</th>
-              <th>Preco unitario</th>
-              <th>Total sugerido</th>
-              <th>Status</th>
+              <th class="sugestao-col-produto">Produto</th>
+              <th class="sugestao-col-numero">Estoque atual</th>
+              <th class="sugestao-col-numero">Estoque minimo</th>
+              <th class="sugestao-col-numero">Vendido no periodo</th>
+              <th class="sugestao-col-numero">Pedidos em aberto</th>
+              <th class="sugestao-col-editavel">Sugestao</th>
+              <th class="sugestao-col-numero">Unidade</th>
+              <th class="sugestao-col-fator">Qtd emb.</th>
+              <th class="sugestao-col-editavel">Preco compra</th>
+              <th class="sugestao-col-editavel">Preco unitario</th>
+              <th class="sugestao-col-editavel">Total</th>
+              <th class="sugestao-col-status">Status</th>
             </tr>
           </thead>
           <tbody>
             {% for linha in linhas %}
               <tr>
-                <td>{{ linha.produto.nome }}</td>
+                <td class="sugestao-col-produto">{{ linha.produto.nome }}</td>
                 <td class="sugestao-numero">{{ linha.estoque_atual|floatformat:3 }}</td>
                 <td class="sugestao-numero">{{ linha.estoque_minimo|floatformat:3 }}</td>
                 <td class="sugestao-numero">{{ linha.quantidade_vendida|floatformat:3 }}</td>
-                <td class="sugestao-numero sugestao-compra">{{ linha.sugestao|floatformat:3 }}</td>
+                <td class="sugestao-numero"><span class="sugestao-pedidos {% if linha.quantidade_pedidos_abertos > 0 %}tem-pedido{% endif %}">{{ linha.quantidade_pedidos_abertos|floatformat:3 }}</span></td>
+                <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-qtd-input" value="{{ linha.sugestao|floatformat:3 }}" aria-label="Sugestao de compra para {{ linha.produto.nome }}"></td>
                 <td>{{ linha.unidade }}</td>
-                <td class="sugestao-dinheiro">R$ {{ linha.preco_unitario|floatformat:2 }}</td>
-                <td class="sugestao-dinheiro">R$ {{ linha.total_sugerido|floatformat:2 }}</td>
+                <td class="sugestao-numero"><span class="sugestao-fator-valor">{{ linha.fator_conversao|floatformat:3 }}</span></td>
+                <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-input" value="{{ linha.preco_compra|floatformat:2 }}" aria-label="Preco de compra para {{ linha.produto.nome }}"></td>
+                <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-unitario-input" data-fator="{{ linha.fator_conversao|floatformat:3 }}" value="{{ linha.preco_unitario_calculado|floatformat:2 }}" aria-label="Preco unitario para {{ linha.produto.nome }}"></td>
+                <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-total-input" value="{{ linha.total_sugerido|floatformat:2 }}" aria-label="Total sugerido para {{ linha.produto.nome }}"></td>
                 <td><span class="sugestao-status {{ linha.status_classe }}">{{ linha.status_texto }}</span></td>
               </tr>
             {% endfor %}
@@ -520,9 +569,19 @@
               <div><span class="sugestao-mobile-label">Estoque atual</span><span class="sugestao-mobile-value">{{ linha.estoque_atual|floatformat:3 }}</span></div>
               <div><span class="sugestao-mobile-label">Estoque minimo</span><span class="sugestao-mobile-value">{{ linha.estoque_minimo|floatformat:3 }}</span></div>
               <div><span class="sugestao-mobile-label">Vendido no periodo</span><span class="sugestao-mobile-value">{{ linha.quantidade_vendida|floatformat:3 }}</span></div>
-              <div><span class="sugestao-mobile-label">Sugestao</span><span class="sugestao-mobile-value sugestao-compra">{{ linha.sugestao|floatformat:3 }} {{ linha.unidade }}</span></div>
-              <div><span class="sugestao-mobile-label">Preco unitario</span><span class="sugestao-mobile-value">R$ {{ linha.preco_unitario|floatformat:2 }}</span></div>
-              <div><span class="sugestao-mobile-label">Total sugerido</span><span class="sugestao-mobile-value sugestao-compra">R$ {{ linha.total_sugerido|floatformat:2 }}</span></div>
+              <div><span class="sugestao-mobile-label">Pedidos em aberto</span><span class="sugestao-mobile-value"><span class="sugestao-pedidos {% if linha.quantidade_pedidos_abertos > 0 %}tem-pedido{% endif %}">{{ linha.quantidade_pedidos_abertos|floatformat:3 }}</span></span></div>
+              <div><span class="sugestao-mobile-label">Unidade</span><span class="sugestao-mobile-value">{{ linha.unidade }}</span></div>
+              <div><span class="sugestao-mobile-label">Qtd emb.</span><span class="sugestao-mobile-value sugestao-fator-valor">{{ linha.fator_conversao|floatformat:3 }}</span></div>
+            </div>
+            <div class="sugestao-mobile-edit">
+              <label class="sugestao-mobile-label">Sugestao de compra</label>
+              <input type="text" inputmode="decimal" class="sugestao-input sugestao-qtd-input" value="{{ linha.sugestao|floatformat:3 }}" aria-label="Sugestao de compra para {{ linha.produto.nome }}">
+              <label class="sugestao-mobile-label">Preco compra</label>
+              <input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-input" value="{{ linha.preco_compra|floatformat:2 }}" aria-label="Preco de compra para {{ linha.produto.nome }}">
+              <label class="sugestao-mobile-label">Preco unitario</label>
+              <input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-unitario-input" data-fator="{{ linha.fator_conversao|floatformat:3 }}" value="{{ linha.preco_unitario_calculado|floatformat:2 }}" aria-label="Preco unitario para {{ linha.produto.nome }}">
+              <label class="sugestao-mobile-label">Total sugerido</label>
+              <input type="text" inputmode="decimal" class="sugestao-input sugestao-total-input" value="{{ linha.total_sugerido|floatformat:2 }}" aria-label="Total sugerido para {{ linha.produto.nome }}">
             </div>
           </article>
         {% endfor %}
@@ -530,7 +589,7 @@
     {% else %}
       <div class="sugestao-empty">
         {% if fornecedor %}
-          Nenhum produto ativo deste fornecedor esta abaixo ou no estoque minimo.
+          Nenhum produto ativo deste fornecedor esta abaixo/no minimo ou com pedido em aberto.
         {% else %}
           A lista aparecera aqui depois que voce escolher o fornecedor.
         {% endif %}
@@ -579,6 +638,138 @@
   dataInicio.addEventListener("change", atualizarDatasRapidas);
   dataFim.addEventListener("change", atualizarDatasRapidas);
   atualizarDatasRapidas();
+})();
+</script>
+
+<script>
+(function () {
+  function paraNumero(valor) {
+    let texto = String(valor || "").trim();
+    if (!texto) return 0;
+    texto = texto.replace(/[^\d,.-]/g, "");
+    if (texto.includes(",")) {
+      texto = texto.replace(/\./g, "").replace(",", ".");
+    }
+    const numero = Number(texto);
+    return Number.isFinite(numero) ? numero : 0;
+  }
+
+  function decimal(valor, casas) {
+    return Number(valor || 0).toLocaleString("pt-BR", {
+      minimumFractionDigits: casas,
+      maximumFractionDigits: casas
+    });
+  }
+
+  function moeda(valor) {
+    return "R$ " + decimal(valor, 2);
+  }
+
+  function containerLinha(campo) {
+    return campo.closest("tr, .sugestao-mobile-card");
+  }
+
+  function visivel(el) {
+    return !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
+  }
+
+  function fatorLinha(container) {
+    const unitario = container.querySelector(".sugestao-preco-unitario-input");
+    let fator = paraNumero(unitario?.dataset.fator || "1");
+    if (!fator || fator <= 0) fator = 1;
+    return fator;
+  }
+
+  function atualizarPrecoUnitario(container) {
+    const preco = paraNumero(container.querySelector(".sugestao-preco-input")?.value);
+    const unitario = container.querySelector(".sugestao-preco-unitario-input");
+    const fator = fatorLinha(container);
+    if (unitario) {
+      unitario.value = decimal(preco / fator, 2);
+    }
+  }
+
+  function atualizarTotalGeral() {
+    const total = Array.from(document.querySelectorAll(".sugestao-total-input"))
+      .filter(visivel)
+      .reduce((soma, campo) => soma + paraNumero(campo.value), 0);
+
+    document.querySelectorAll("[data-total-geral-sugestao]").forEach((el) => {
+      el.textContent = moeda(total);
+    });
+  }
+
+  function atualizarPorQuantidadeOuPreco(container) {
+    const qtd = paraNumero(container.querySelector(".sugestao-qtd-input")?.value);
+    const preco = paraNumero(container.querySelector(".sugestao-preco-input")?.value);
+    const total = container.querySelector(".sugestao-total-input");
+    if (total) {
+      total.value = decimal(qtd * preco, 2);
+    }
+    atualizarPrecoUnitario(container);
+    atualizarTotalGeral();
+  }
+
+  function atualizarPorTotal(container) {
+    const qtd = paraNumero(container.querySelector(".sugestao-qtd-input")?.value);
+    const total = paraNumero(container.querySelector(".sugestao-total-input")?.value);
+    const preco = container.querySelector(".sugestao-preco-input");
+
+    if (preco && qtd > 0) {
+      preco.value = decimal(total / qtd, 2);
+    }
+
+    atualizarPrecoUnitario(container);
+    atualizarTotalGeral();
+  }
+
+  function atualizarPorPrecoUnitario(container) {
+    const qtd = paraNumero(container.querySelector(".sugestao-qtd-input")?.value);
+    const unitario = paraNumero(container.querySelector(".sugestao-preco-unitario-input")?.value);
+    const fator = fatorLinha(container);
+    const preco = container.querySelector(".sugestao-preco-input");
+    const total = container.querySelector(".sugestao-total-input");
+    const precoCompra = unitario * fator;
+
+    if (preco) {
+      preco.value = decimal(precoCompra, 2);
+    }
+
+    if (total) {
+      total.value = decimal(qtd * precoCompra, 2);
+    }
+
+    atualizarTotalGeral();
+  }
+
+  document.addEventListener("input", function (event) {
+    const campo = event.target;
+    if (!campo.matches(".sugestao-qtd-input, .sugestao-preco-input, .sugestao-preco-unitario-input, .sugestao-total-input")) return;
+
+    const container = containerLinha(campo);
+    if (!container) return;
+
+    if (campo.classList.contains("sugestao-preco-unitario-input")) {
+      atualizarPorPrecoUnitario(container);
+      return;
+    }
+
+    if (campo.classList.contains("sugestao-total-input")) {
+      atualizarPorTotal(container);
+      return;
+    }
+
+    atualizarPorQuantidadeOuPreco(container);
+  });
+
+  document.addEventListener("blur", function (event) {
+    const campo = event.target;
+    if (!campo.matches(".sugestao-qtd-input, .sugestao-preco-input, .sugestao-preco-unitario-input, .sugestao-total-input")) return;
+    const casas = campo.classList.contains("sugestao-qtd-input") ? 3 : 2;
+    campo.value = decimal(paraNumero(campo.value), casas);
+  }, true);
+
+  atualizarTotalGeral();
 })();
 </script>
 
