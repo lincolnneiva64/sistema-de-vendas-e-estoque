@@ -126,6 +126,22 @@
     box-shadow: 0 0 0 3px rgba(159, 18, 57, .12);
   }
 
+  .sugestao-periodo-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .sugestao-periodo-input input {
+    flex: 1;
+  }
+
+  .sugestao-periodo-sufixo {
+    color: #64748b;
+    font-weight: 850;
+    white-space: nowrap;
+  }
+
   .sugestao-conferencia {
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -633,13 +649,10 @@
 
         <div class="sugestao-field">
           <label for="periodo">Periodo</label>
-          <select name="periodo" id="periodo">
-            <option value="7" {% if periodo == "7" %}selected{% endif %}>7 dias</option>
-            <option value="14" {% if periodo == "14" %}selected{% endif %}>14 dias</option>
-            <option value="21" {% if periodo == "21" %}selected{% endif %}>21 dias</option>
-            <option value="30" {% if periodo == "30" %}selected{% endif %}>30 dias</option>
-            <option value="personalizado" {% if periodo == "personalizado" %}selected{% endif %}>Personalizado</option>
-          </select>
+          <div class="sugestao-periodo-input">
+            <input type="number" name="periodo" id="periodo" min="1" step="1" inputmode="numeric" value="{{ periodo|default:'14' }}">
+            <span class="sugestao-periodo-sufixo">dias</span>
+          </div>
         </div>
 
         <div class="sugestao-field">
@@ -829,24 +842,41 @@
   }
 
   function atualizarDatasRapidas() {
-    const personalizado = periodo.value === "personalizado";
-    dataInicio.readOnly = !personalizado;
-    dataFim.readOnly = !personalizado;
-
-    if (!personalizado) {
-      const dias = Number(periodo.value || 14);
-      const fim = new Date();
-      const inicio = new Date();
-      inicio.setDate(fim.getDate() - dias);
-      dataFim.value = iso(fim);
-      dataInicio.value = iso(inicio);
+    let dias = Number(periodo.value || 14);
+    if (!Number.isFinite(dias) || dias <= 0) {
+      dias = 14;
+      periodo.value = "14";
     }
+
+    const fim = dataFim.value ? new Date(dataFim.value + "T00:00:00") : new Date();
+    const inicio = new Date(fim);
+    inicio.setDate(fim.getDate() - dias);
+    dataFim.value = iso(fim);
+    dataInicio.value = iso(inicio);
   }
 
+  periodo.addEventListener("input", atualizarDatasRapidas);
   periodo.addEventListener("change", atualizarDatasRapidas);
-  dataInicio.addEventListener("change", atualizarDatasRapidas);
-  dataFim.addEventListener("change", atualizarDatasRapidas);
-  atualizarDatasRapidas();
+})();
+</script>
+
+<script>
+(function () {
+  const form = document.getElementById("formSugestaoCompra");
+  if (!form) return;
+
+  const ordem = ["periodo", "data_inicio", "data_fim", "data_chegada"];
+
+  form.addEventListener("keydown", function(event) {
+    if (event.key !== "Enter") return;
+    const atual = event.target;
+    if (!atual || !ordem.includes(atual.id)) return;
+
+    event.preventDefault();
+    const proximoId = ordem[ordem.indexOf(atual.id) + 1];
+    const proximo = proximoId ? document.getElementById(proximoId) : form.querySelector("button[type='submit']");
+    if (proximo) proximo.focus();
+  });
 })();
 </script>
 
@@ -983,6 +1013,7 @@
       if (opcao && opcao.dataset.fornecedorId) {
         event.preventDefault();
         selecionarFornecedor(opcao.dataset.fornecedorId);
+        document.getElementById("periodo")?.focus();
       }
     }
   });

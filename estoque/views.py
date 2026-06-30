@@ -4014,18 +4014,17 @@ def _situacao_financeira_compra_lista(compra, hoje=None):
 
 def _periodo_sugestao_compra(request):
     hoje = timezone.localdate()
-    periodos_rapidos = {"7": 7, "14": 14, "21": 21, "30": 30}
     periodo = (request.GET.get("periodo") or "14").strip()
-    if periodo not in {*periodos_rapidos.keys(), "personalizado"}:
-        periodo = "14"
+    try:
+        dias = int(periodo)
+    except (TypeError, ValueError):
+        dias = 14
+    if dias <= 0:
+        dias = 14
+    periodo = str(dias)
 
-    if periodo == "personalizado":
-        data_final = parse_date(request.GET.get("data_fim") or "") or hoje
-        data_inicial = parse_date(request.GET.get("data_inicio") or "") or (data_final - timedelta(days=14))
-    else:
-        dias = periodos_rapidos[periodo]
-        data_final = hoje
-        data_inicial = hoje - timedelta(days=dias)
+    data_final = parse_date(request.GET.get("data_fim") or "") or hoje
+    data_inicial = parse_date(request.GET.get("data_inicio") or "") or (data_final - timedelta(days=dias))
 
     if data_inicial > data_final:
         data_inicial, data_final = data_final, data_inicial
