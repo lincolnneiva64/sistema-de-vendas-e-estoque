@@ -624,6 +624,11 @@
     font-weight: 950;
   }
 
+  .sugestao-autocomplete-tag.fora-fornecedor {
+    background: #eef2ff;
+    color: #3730a3;
+  }
+
   .sugestao-empty.oculto {
     display: none;
   }
@@ -981,10 +986,34 @@
   }
 
   function opcoesAtuais() {
-    return Array.from(lista.querySelectorAll(".sugestao-autocomplete-opcao"));
+    return Array.from(lista.querySelectorAll(".sugestao-autocomplete-opcao[data-fornecedor-id]"));
   }
 
-  function destacarOpcao(indice) {
+  function posicionarCursorFim() {
+    window.setTimeout(function() {
+      try {
+        const fim = busca.value.length;
+        busca.setSelectionRange(fim, fim);
+      } catch (erro) {
+        // Alguns navegadores mobile podem ignorar selecao programatica.
+      }
+    }, 0);
+  }
+
+  function preencherFornecedor(fornecedorId, confirmar) {
+    const fornecedor = fornecedoresPorId.get(String(fornecedorId));
+    if (!fornecedor) return false;
+    selecionado.value = String(fornecedor.id);
+    busca.value = fornecedor.nome;
+    mostrarMsg("");
+    if (confirmar) {
+      fecharSugestoes();
+      posicionarCursorFim();
+    }
+    return true;
+  }
+
+  function destacarOpcao(indice, preencherInput) {
     const opcoes = opcoesAtuais();
     if (!opcoes.length) {
       indiceAtivo = -1;
@@ -995,16 +1024,22 @@
     opcoes.forEach((opcao, atual) => {
       opcao.classList.toggle("ativa", atual === indiceAtivo);
     });
+    if (preencherInput) {
+      preencherFornecedor(opcoes[indiceAtivo].dataset.fornecedorId, false);
+    }
     opcoes[indiceAtivo].scrollIntoView({ block: "nearest" });
   }
 
   function selecionarFornecedor(fornecedorId) {
-    const fornecedor = fornecedoresPorId.get(String(fornecedorId));
-    if (!fornecedor) return;
-    selecionado.value = String(fornecedor.id);
-    busca.value = fornecedor.nome;
-    fecharSugestoes();
-    mostrarMsg("");
+    preencherFornecedor(fornecedorId, true);
+  }
+
+  function fornecedorDigitadoExato() {
+    const termo = busca.value.trim().toLowerCase();
+    if (!termo) return null;
+    return fornecedores.find((fornecedor) => {
+      return String(fornecedor.nome || "").trim().toLowerCase() === termo;
+    }) || null;
   }
 
   function renderizarSugestoes(limparSelecao) {
@@ -1031,7 +1066,11 @@
       return `<button type="button" class="sugestao-autocomplete-opcao" data-fornecedor-id="${fornecedor.id}">${escapeHtml(fornecedor.nome)}</button>`;
     }).join("");
     lista.classList.add("aberta");
-    destacarOpcao(0);
+    const exato = fornecedorDigitadoExato();
+    if (exato) {
+      selecionado.value = String(exato.id);
+    }
+    destacarOpcao(0, false);
   }
 
   function selecionarTextoBusca() {
@@ -1056,13 +1095,15 @@
   busca.addEventListener("keydown", function(event) {
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      destacarOpcao(indiceAtivo + 1);
+      event.stopPropagation();
+      destacarOpcao(indiceAtivo + 1, true);
       return;
     }
 
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      destacarOpcao(indiceAtivo - 1);
+      event.stopPropagation();
+      destacarOpcao(indiceAtivo - 1, true);
       return;
     }
 
@@ -1072,11 +1113,18 @@
     }
 
     if (event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
       const opcoes = opcoesAtuais();
       const opcao = opcoes[indiceAtivo] || opcoes[0];
       if (opcao && opcao.dataset.fornecedorId) {
-        event.preventDefault();
         selecionarFornecedor(opcao.dataset.fornecedorId);
+        document.getElementById("periodo")?.focus();
+        return;
+      }
+      const exato = fornecedorDigitadoExato();
+      if (exato) {
+        selecionarFornecedor(exato.id);
         document.getElementById("periodo")?.focus();
       }
     }
@@ -1328,7 +1376,7 @@
   }
 
   function existeNaLista(produtoId) {
-    return Array.from(document.querySelectorAll("[data-produto-id]")).some((el) => {
+    return Array.from(tbody.querySelectorAll("tr[data-produto-id]")).some((el) => {
       return String(el.dataset.produtoId) === String(produtoId);
     });
   }
@@ -1340,7 +1388,16 @@
   }
 
   function opcoesAtuais() {
-    return Array.from(lista.querySelectorAll(".sugestao-autocomplete-opcao"));
+    return Array.from(lista.querySelectorAll(".sugestao-autocomplete-opcao[data-produto-id]"));
+  }
+
+  function preencherComOpcao(opcao) {
+    if (!opcao || !opcao.dataset.produtoId) return;
+    const produto = produtosPorId.get(String(opcao.dataset.produtoId));
+    if (!produto) return;
+    selecionado.value = String(produto.id);
+    busca.value = produto.nome;
+    mostrarMsg("");
   }
 
   function destacarOpcao(indice) {
@@ -1354,6 +1411,7 @@
     opcoes.forEach((opcao, atual) => {
       opcao.classList.toggle("ativa", atual === indiceAtivo);
     });
+    preencherComOpcao(opcoes[indiceAtivo]);
     opcoes[indiceAtivo].scrollIntoView({ block: "nearest" });
   }
 
@@ -1366,29 +1424,58 @@
     mostrarMsg("");
   }
 
-  function renderizarSugestoes() {
+  function produtoDigitadoExato() {
+    const termo = busca.value.trim().toLowerCase();
+    if (!termo) return null;
+    return produtos.find((produto) => {
+      return !existeNaLista(produto.id) && String(produto.nome || "").trim().toLowerCase() === termo;
+    }) || null;
+  }
+
+  function renderizarSugestoes(selecionarPrimeira) {
     const termo = busca.value.trim().toLowerCase();
     selecionado.value = "";
 
     const filtrados = produtos
       .filter((produto) => {
+        if (existeNaLista(produto.id)) return false;
         return !termo || String(produto.nome || "").toLowerCase().includes(termo);
       })
       .slice(0, 24);
 
     if (!filtrados.length) {
-      lista.innerHTML = '<button type="button" class="sugestao-autocomplete-opcao" disabled>Nenhum produto encontrado</button>';
+      lista.innerHTML = '<button type="button" class="sugestao-autocomplete-opcao" disabled>Nenhum produto disponivel para adicionar</button>';
       lista.classList.add("aberta");
       indiceAtivo = -1;
+      busca.value = "";
+      mostrarMsg("Nenhum produto disponivel para adicionar.");
       return;
     }
 
     lista.innerHTML = filtrados.map((produto) => {
-      const tag = produto.vinculado ? '<span class="sugestao-autocomplete-tag">fornecedor</span>' : "";
+      const tag = produto.vinculado
+        ? '<span class="sugestao-autocomplete-tag">fornecedor</span>'
+        : '<span class="sugestao-autocomplete-tag fora-fornecedor">fora do fornecedor</span>';
       return `<button type="button" class="sugestao-autocomplete-opcao" data-produto-id="${produto.id}">${escapeHtml(produto.nome)}${tag}</button>`;
     }).join("");
     lista.classList.add("aberta");
-    destacarOpcao(0);
+    mostrarMsg("");
+    if (selecionarPrimeira) {
+      destacarOpcao(0);
+    } else {
+      indiceAtivo = -1;
+      const exato = produtoDigitadoExato();
+      if (exato) selecionado.value = String(exato.id);
+    }
+  }
+
+  function prepararProximoProduto() {
+    busca.value = "";
+    selecionado.value = "";
+    window.setTimeout(function() {
+      busca.focus();
+      renderizarSugestoes(true);
+    }, 0);
   }
 
   function linhaDesktop(produto) {
@@ -1460,26 +1547,26 @@
   }
 
   function adicionarSelecionado() {
-    const produtoId = selecionado.value;
+    const produtoId = selecionado.value || produtoDigitadoExato()?.id || "";
     const produto = produtosPorId.get(String(produtoId));
     mostrarMsg("");
 
     if (!produto) {
       mostrarMsg("Escolha um produto para adicionar.");
+      renderizarSugestoes(true);
       return;
     }
 
     if (existeNaLista(produtoId)) {
       mostrarMsg("Este produto ja esta na lista.");
+      prepararProximoProduto();
       return;
     }
 
     tbody.insertAdjacentHTML("beforeend", linhaDesktop(produto));
     mobile.insertAdjacentHTML("beforeend", cardMobile(produto));
-    busca.value = "";
-    selecionado.value = "";
-    fecharSugestoes();
     atualizarResumoDepoisDeAdicionar();
+    prepararProximoProduto();
   }
 
   function selecionarTextoBusca() {
@@ -1494,11 +1581,14 @@
   }
 
   busca.addEventListener("focus", function() {
-    selecionarTextoBusca();
-    renderizarSugestoes();
+    renderizarSugestoes(true);
   });
-  busca.addEventListener("click", selecionarTextoBusca);
-  busca.addEventListener("input", renderizarSugestoes);
+  busca.addEventListener("click", function() {
+    renderizarSugestoes(true);
+  });
+  busca.addEventListener("input", function() {
+    renderizarSugestoes(false);
+  });
   busca.addEventListener("keydown", function(event) {
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -1521,11 +1611,13 @@
       event.preventDefault();
       const opcoes = opcoesAtuais();
       const opcao = opcoes[indiceAtivo] || opcoes[0];
-      if (opcao && opcao.dataset.produtoId) {
-        selecionarProduto(opcao.dataset.produtoId);
+      if (!selecionado.value && opcao && opcao.dataset.produtoId) {
+        preencherComOpcao(opcao);
       } else {
-        adicionarSelecionado();
+        const exato = produtoDigitadoExato();
+        if (exato) selecionado.value = String(exato.id);
       }
+      adicionarSelecionado();
     }
   });
 
@@ -1535,7 +1627,7 @@
   });
 
   document.addEventListener("click", function(event) {
-    if (!event.target.closest(".sugestao-autocomplete")) {
+    if (!event.target.closest("#produtoManualBuscaSugestao, #produtoManualSugestoes")) {
       fecharSugestoes();
     }
   });
@@ -1577,6 +1669,9 @@
       }
     });
     atualizarResumoDepoisDeAdicionar();
+    if (document.activeElement === busca) {
+      renderizarSugestoes(true);
+    }
 
     if (estavaSelecionado && window.selecionarProdutoSugestao) {
       const linhasRestantes = Array.from(tbody.querySelectorAll("tr[data-produto-id]"));
