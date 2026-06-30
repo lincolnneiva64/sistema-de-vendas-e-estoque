@@ -4196,6 +4196,10 @@ def sugestao_compra_fornecedor(request):
     )
 
 
+def sugestao_compra_fornecedor_whatsapp(request):
+    return render(request, "estoque/compras_sugestao_fornecedor_whatsapp.html")
+
+
 def compras_lista(request):
     compra_filtro = request.GET.get("compra", "").strip().lstrip("#")
     fornecedor_filtro = request.GET.get("fornecedor", "").strip()

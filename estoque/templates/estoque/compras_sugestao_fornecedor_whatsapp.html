@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lista de Compras - WhatsApp</title>
+  <style>
+    :root {
+      --vinho: #8a2f3d;
+      --vinho-escuro: #6f2430;
+      --vinho-claro: #fff5f6;
+      --borda: #eadadd;
+      --texto: #182033;
+      --suave: #667085;
+      --fundo: #f8f4ee;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--fundo);
+      color: var(--texto);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .whatsapp-page {
+      width: min(700px, calc(100% - 18px));
+      margin: 8px auto 20px;
+    }
+
+    .acoes {
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+      margin: 0 0 8px;
+      flex-wrap: wrap;
+    }
+
+    .acao-btn {
+      border: 0;
+      border-radius: 7px;
+      background: var(--vinho);
+      color: #fff;
+      padding: 8px 11px;
+      font-size: .84rem;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 5px 12px rgba(127, 29, 45, .13);
+    }
+
+    .acao-btn.secundario {
+      border: 1px solid var(--borda);
+      background: #fff;
+      color: var(--vinho);
+      box-shadow: none;
+    }
+
+    .documento {
+      overflow: hidden;
+      border: 1px solid var(--borda);
+      border-radius: 12px;
+      background: #fffefc;
+      box-shadow: 0 12px 28px rgba(64, 41, 45, .10);
+    }
+
+    .cabecalho {
+      padding: 13px 15px 11px;
+      background: linear-gradient(135deg, #fbf0f2, #fffaf4);
+      border-bottom: 2px solid rgba(138, 47, 61, .20);
+      color: var(--vinho-escuro);
+    }
+
+    .cabecalho h1 {
+      margin: 0;
+      font-size: 1.26rem;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .cabecalho p {
+      margin: 4px 0 0;
+      color: #8b5860;
+      font-size: .78rem;
+      font-weight: 700;
+    }
+
+    .conteudo {
+      padding: 12px 14px 14px;
+    }
+
+    .meta-grid,
+    .totais-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      margin-bottom: 9px;
+    }
+
+    .meta-item,
+    .total-item {
+      min-height: 50px;
+      border: 1px solid #f0e0e3;
+      border-radius: 8px;
+      background: #fffbfb;
+      padding: 7px 8px;
+    }
+
+    .rotulo {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--suave);
+      font-size: .64rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .valor {
+      display: block;
+      color: var(--texto);
+      font-size: .88rem;
+      font-weight: 900;
+      line-height: 1.18;
+      overflow-wrap: anywhere;
+    }
+
+    .total-item .valor {
+      color: var(--vinho);
+      font-size: .94rem;
+    }
+
+    .lista-titulo {
+      margin: 12px 0 7px;
+      color: var(--vinho);
+      font-size: .76rem;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .produto-lista {
+      display: grid;
+      gap: 6px;
+    }
+
+    .produto-card {
+      border: 1px solid #eee1e3;
+      border-radius: 8px;
+      background: #fff;
+      padding: 8px;
+    }
+
+    .produto-topo {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 7px;
+      align-items: start;
+      margin-bottom: 6px;
+    }
+
+    .produto-indice {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      background: var(--vinho-claro);
+      color: var(--vinho);
+      font-size: .72rem;
+      font-weight: 950;
+    }
+
+    .produto-nome {
+      font-size: .88rem;
+      font-weight: 950;
+      line-height: 1.2;
+    }
+
+    .produto-qtd {
+      min-width: 80px;
+      border: 1px solid rgba(138, 47, 61, .20);
+      border-radius: 7px;
+      background: #fff5f6;
+      color: var(--vinho-escuro);
+      padding: 5px 7px;
+      text-align: center;
+      font-size: .78rem;
+      font-weight: 950;
+      white-space: nowrap;
+    }
+
+    .produto-detalhes {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 5px;
+    }
+
+    .produto-detalhe {
+      border-radius: 7px;
+      background: #fbf8f4;
+      padding: 5px 7px;
+    }
+
+    .produto-detalhe .rotulo {
+      margin-bottom: 1px;
+      font-size: .58rem;
+    }
+
+    .produto-detalhe .valor {
+      font-size: .78rem;
+    }
+
+    .rodape {
+      margin-top: 10px;
+      border-top: 1px dashed var(--borda);
+      padding-top: 8px;
+      color: var(--suave);
+      font-size: .7rem;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .texto-copia {
+      position: fixed;
+      left: -9999px;
+      top: -9999px;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      white-space: pre-wrap;
+    }
+
+    .estado-vazio {
+      padding: 22px 16px;
+      text-align: center;
+    }
+
+    .estado-vazio h1 {
+      margin: 0 0 6px;
+      color: var(--vinho);
+      font-size: 1.08rem;
+    }
+
+    .estado-vazio p {
+      margin: 0;
+      color: var(--suave);
+      font-weight: 800;
+      line-height: 1.35;
+    }
+
+    @media (max-width: 620px) {
+      .whatsapp-page {
+        width: min(100% - 10px, 700px);
+        margin-top: 5px;
+      }
+
+      .acoes {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .acao-btn {
+        width: 100%;
+      }
+
+      .cabecalho {
+        padding: 12px 12px 10px;
+      }
+
+      .cabecalho h1 {
+        font-size: 1.12rem;
+      }
+
+      .conteudo {
+        padding: 10px;
+      }
+
+      .meta-grid,
+      .totais-grid,
+      .produto-detalhes {
+        grid-template-columns: 1fr;
+      }
+
+      .produto-topo {
+        grid-template-columns: auto 1fr;
+      }
+
+      .produto-qtd {
+        grid-column: 1 / -1;
+        width: 100%;
+      }
+    }
+
+    @media print {
+      @page {
+        margin: 8mm;
+      }
+
+      body {
+        background: #fff;
+        color: #111827;
+      }
+
+      .whatsapp-page {
+        width: 100%;
+        margin: 0;
+      }
+
+      .acoes {
+        display: none;
+      }
+
+      .documento {
+        border: 1px solid #ddd;
+        border-radius: 0;
+        box-shadow: none;
+      }
+
+      .cabecalho {
+        padding: 8px 10px;
+        background: #fff;
+        border-bottom: 1px solid #bbb;
+        color: #111827;
+      }
+
+      .cabecalho h1 {
+        font-size: 1rem;
+      }
+
+      .cabecalho p {
+        color: #555;
+        font-size: .68rem;
+      }
+
+      .conteudo {
+        padding: 8px 10px 10px;
+      }
+
+      .meta-grid,
+      .totais-grid {
+        gap: 4px;
+        margin-bottom: 6px;
+      }
+
+      .meta-item,
+      .total-item,
+      .produto-card {
+        background: #fff;
+        border-color: #ddd;
+      }
+
+      .meta-item,
+      .total-item {
+        min-height: auto;
+        padding: 5px 6px;
+      }
+
+      .rotulo {
+        color: #555;
+        font-size: .56rem;
+      }
+
+      .valor,
+      .total-item .valor {
+        color: #111827;
+        font-size: .78rem;
+      }
+
+      .lista-titulo {
+        margin: 8px 0 5px;
+        color: #111827;
+        font-size: .68rem;
+      }
+
+      .produto-lista {
+        gap: 4px;
+      }
+
+      .produto-card {
+        padding: 6px;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      .produto-topo {
+        margin-bottom: 4px;
+      }
+
+      .produto-indice,
+      .produto-qtd,
+      .produto-detalhe {
+        background: #fff;
+        border: 1px solid #ddd;
+        color: #111827;
+      }
+
+      .produto-indice {
+        min-width: 20px;
+        height: 20px;
+      }
+
+      .produto-nome {
+        font-size: .8rem;
+      }
+
+      .produto-qtd,
+      .produto-detalhe .valor {
+        font-size: .72rem;
+      }
+
+      .produto-detalhe {
+        padding: 4px 5px;
+      }
+
+      .rodape {
+        margin-top: 7px;
+        padding-top: 5px;
+        color: #555;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="whatsapp-page">
+    <section class="acoes" aria-label="Acoes da lista">
+      <button type="button" class="acao-btn secundario" id="btnVoltar">Voltar</button>
+      <button type="button" class="acao-btn secundario" id="btnCopiarTexto">Copiar texto</button>
+      <button type="button" class="acao-btn" id="btnImprimir">Imprimir</button>
+    </section>
+
+    <article class="documento" id="documentoWhatsapp">
+      <div class="estado-vazio">
+        <h1>Lista de Compras</h1>
+        <p>Abra esta tela pelo botao Imagem / WhatsApp da lista de compras por fornecedor.</p>
+      </div>
+    </article>
+
+    <pre class="texto-copia" id="textoCopia"></pre>
+  </main>
+
+  <script>
+  (function () {
+    const chavePayload = "sugestaoCompraFornecedorWhatsappPayload";
+    const documento = document.getElementById("documentoWhatsapp");
+    const textoCopia = document.getElementById("textoCopia");
+    const btnCopiar = document.getElementById("btnCopiarTexto");
+    const btnImprimir = document.getElementById("btnImprimir");
+    const btnVoltar = document.getElementById("btnVoltar");
+
+    function html(valor) {
+      return String(valor ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function texto(valor, padrao) {
+      const final = String(valor ?? "").trim();
+      return final || padrao || "-";
+    }
+
+    function dinheiro(valor) {
+      const final = texto(valor);
+      if (final === "-") return final;
+      return /^R\$/i.test(final) ? final : "R$ " + final;
+    }
+
+    function carregarPayload() {
+      let bruto = sessionStorage.getItem(chavePayload);
+      if (!bruto && window.opener) {
+        try {
+          bruto = window.opener.sessionStorage.getItem(chavePayload);
+          if (bruto) sessionStorage.setItem(chavePayload, bruto);
+        } catch (erro) {
+          bruto = "";
+        }
+      }
+      if (!bruto) return null;
+      try {
+        return JSON.parse(bruto);
+      } catch (erro) {
+        return null;
+      }
+    }
+
+    function montarTexto(payload) {
+      const partes = [
+        "Lista de Compras",
+        "Fornecedor: " + texto(payload.fornecedor, "Fornecedor nao informado"),
+        "Periodo: " + texto(payload.periodo),
+      ];
+
+      if (payload.chegada) partes.push("Chegada prevista: " + payload.chegada);
+      partes.push("Total sugerido original: " + texto(payload.totalOriginal));
+      partes.push("Total da lista/pedido: " + texto(payload.totalLista));
+      partes.push("");
+
+      (payload.linhas || []).forEach((linha, indice) => {
+        partes.push((indice + 1) + ". " + texto(linha.produto));
+        partes.push("Qtd: " + texto(linha.sugestao) + " " + texto(linha.unidade, ""));
+        partes.push("Pr. compra: " + dinheiro(linha.precoCompra));
+        partes.push("Pr. unit.: " + dinheiro(linha.precoUnitario));
+        partes.push("Total: " + dinheiro(linha.total));
+        partes.push("");
+      });
+
+      return partes.join("\n").trim();
+    }
+
+    function renderizar(payload) {
+      const linhas = Array.isArray(payload.linhas) ? payload.linhas.filter((linha) => texto(linha.produto, "")) : [];
+      if (!linhas.length) return;
+
+      const chegada = texto(payload.chegada, "");
+      const itensHtml = linhas.map((linha, indice) => `
+        <article class="produto-card">
+          <div class="produto-topo">
+            <span class="produto-indice">${indice + 1}</span>
+            <div class="produto-nome">${html(texto(linha.produto))}</div>
+            <div class="produto-qtd">${html(texto(linha.sugestao))} ${html(texto(linha.unidade, ""))}</div>
+          </div>
+          <div class="produto-detalhes">
+            <div class="produto-detalhe">
+              <span class="rotulo">Pr. compra</span>
+              <span class="valor">${html(dinheiro(linha.precoCompra))}</span>
+            </div>
+            <div class="produto-detalhe">
+              <span class="rotulo">Pr. unit.</span>
+              <span class="valor">${html(dinheiro(linha.precoUnitario))}</span>
+            </div>
+            <div class="produto-detalhe">
+              <span class="rotulo">Total</span>
+              <span class="valor">${html(dinheiro(linha.total))}</span>
+            </div>
+          </div>
+        </article>
+      `).join("");
+
+      documento.innerHTML = `
+        <header class="cabecalho">
+          <h1>Lista de Compras</h1>
+          <p>Nota de compra pronta para envio ao fornecedor</p>
+        </header>
+        <section class="conteudo">
+          <div class="meta-grid">
+            <div class="meta-item">
+              <span class="rotulo">Fornecedor</span>
+              <span class="valor">${html(texto(payload.fornecedor, "Fornecedor nao informado"))}</span>
+            </div>
+            <div class="meta-item">
+              <span class="rotulo">Periodo</span>
+              <span class="valor">${html(texto(payload.periodo))}</span>
+            </div>
+            ${chegada ? `
+              <div class="meta-item">
+                <span class="rotulo">Chegada prevista</span>
+                <span class="valor">${html(chegada)}</span>
+              </div>
+            ` : ""}
+          </div>
+          <div class="totais-grid">
+            <div class="total-item">
+              <span class="rotulo">Total sugerido original</span>
+              <span class="valor">${html(texto(payload.totalOriginal))}</span>
+            </div>
+            <div class="total-item">
+              <span class="rotulo">Total da lista/pedido</span>
+              <span class="valor">${html(texto(payload.totalLista))}</span>
+            </div>
+          </div>
+          <h2 class="lista-titulo">Produtos da compra</h2>
+          <section class="produto-lista">${itensHtml}</section>
+          <footer class="rodape">${linhas.length} produto${linhas.length === 1 ? "" : "s"} na lista</footer>
+        </section>
+      `;
+
+      textoCopia.textContent = montarTexto({ ...payload, linhas });
+    }
+
+    btnCopiar.addEventListener("click", async function () {
+      const conteudo = textoCopia.textContent.trim();
+      if (!conteudo) return;
+      try {
+        await navigator.clipboard.writeText(conteudo);
+        btnCopiar.textContent = "Copiado";
+        setTimeout(() => { btnCopiar.textContent = "Copiar texto"; }, 1600);
+      } catch (erro) {
+        const range = document.createRange();
+        range.selectNodeContents(textoCopia);
+        const selecao = window.getSelection();
+        selecao.removeAllRanges();
+        selecao.addRange(range);
+      }
+    });
+
+    btnImprimir.addEventListener("click", function () {
+      window.print();
+    });
+
+    btnVoltar.addEventListener("click", function () {
+      if (window.opener && !window.opener.closed) {
+        window.close();
+      } else {
+        history.back();
+      }
+    });
+
+    renderizar(carregarPayload() || {});
+  })();
+  </script>
+</body>
+</html>

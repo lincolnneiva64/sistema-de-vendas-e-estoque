@@ -548,6 +548,26 @@
     display: block;
   }
 
+  .sugestao-visualizacao-acoes {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin: 0 0 14px;
+    flex-wrap: wrap;
+  }
+
+  .sugestao-btn-visualizacao {
+    background: #fff;
+    border: 1px solid #e9b8c0;
+    color: #8f1d2c;
+  }
+
+  .sugestao-btn-visualizacao:hover,
+  .sugestao-btn-visualizacao:focus {
+    background: #fff1f2;
+    color: #7f1d1d;
+  }
+
   .sugestao-autocomplete {
     position: relative;
   }
@@ -627,6 +647,7 @@
     .sugestao-grid,
     .sugestao-conferencia,
     .sugestao-manual-grid,
+    .sugestao-visualizacao-acoes,
     .sugestao-resumo-final {
       display: grid;
       grid-template-columns: 1fr;
@@ -752,6 +773,12 @@
       <button type="button" class="sugestao-btn sugestao-btn-primary" id="btnAdicionarProdutoSugestao">Adicionar produto</button>
     </div>
     <div class="sugestao-manual-msg" id="msgAdicionarProdutoSugestao"></div>
+  </section>
+
+  <section class="sugestao-visualizacao-acoes" aria-label="Visualizacoes da lista">
+    <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnVisualizarAnalitica">Visualizar Analitica</button>
+    <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnVisualizarSintetica">Visualizar Sintetica</button>
+    <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnImagemWhatsapp">Imagem / WhatsApp</button>
   </section>
 
   <section class="sugestao-card">
@@ -1649,6 +1676,266 @@
     }
 
     selecionarProduto(linhas[proximoIndice].dataset.produtoId, { rolar: true });
+  });
+})();
+</script>
+
+<script>
+(function () {
+  const btnAnalitica = document.getElementById("btnVisualizarAnalitica");
+  const btnSintetica = document.getElementById("btnVisualizarSintetica");
+  const btnImagemWhatsapp = document.getElementById("btnImagemWhatsapp");
+
+  if (!btnAnalitica || !btnSintetica || !btnImagemWhatsapp) return;
+
+  function texto(el) {
+    return String(el?.textContent || "").trim();
+  }
+
+  function valor(seletor, raiz) {
+    return String((raiz || document).querySelector(seletor)?.value || "").trim();
+  }
+
+  function html(valorTexto) {
+    return String(valorTexto ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function dataBr(valorIso) {
+    if (!valorIso) return "";
+    const partes = String(valorIso).split("-");
+    if (partes.length !== 3) return valorIso;
+    return partes[2] + "/" + partes[1] + "/" + partes[0];
+  }
+
+  function tabelaDesktopVisivel() {
+    const desktop = document.querySelector(".sugestao-desktop");
+    return !!(desktop && (desktop.offsetWidth || desktop.offsetHeight || desktop.getClientRects().length));
+  }
+
+  function linhasDesktop() {
+    return Array.from(document.querySelectorAll("#tbodySugestaoProdutos tr[data-produto-id]")).map((linha) => {
+      const celulas = linha.children;
+      return {
+        produto: texto(celulas[0]),
+        estoque: texto(celulas[1]),
+        minimo: texto(celulas[2]),
+        vendido: texto(celulas[3]),
+        pedidos: texto(celulas[4]),
+        sugestao: valor(".sugestao-qtd-input", linha),
+        unidade: texto(celulas[6]),
+        precoCompra: valor(".sugestao-preco-input", linha),
+        precoUnitario: valor(".sugestao-preco-unitario-input", linha),
+        total: valor(".sugestao-total-input", linha),
+      };
+    });
+  }
+
+  function linhasMobile() {
+    return Array.from(document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-produto-id]")).map((card) => {
+      const valores = Array.from(card.querySelectorAll(".sugestao-mobile-value")).map(texto);
+      return {
+        produto: texto(card.querySelector(".sugestao-mobile-produto")),
+        estoque: valores[0] || "",
+        minimo: valores[1] || "",
+        vendido: valores[2] || "",
+        pedidos: valores[3] || "",
+        unidade: valores[4] || "",
+        sugestao: valor(".sugestao-qtd-input", card),
+        precoCompra: valor(".sugestao-preco-input", card),
+        precoUnitario: valor(".sugestao-preco-unitario-input", card),
+        total: valor(".sugestao-total-input", card),
+      };
+    });
+  }
+
+  function linhasAtuais() {
+    const linhas = tabelaDesktopVisivel() ? linhasDesktop() : linhasMobile();
+    return linhas.filter((linha) => linha.produto);
+  }
+
+  function montarPayload(tipo) {
+    return {
+      tipo,
+      titulo: tipo === "analitica" ? "Visualizacao Analitica" : "Visualizacao Sintetica",
+      fornecedor: valor("#fornecedorBuscaSugestao") || "Fornecedor nao informado",
+      periodo: dataBr(valor("#data_inicio")) + " ate " + dataBr(valor("#data_fim")),
+      chegada: dataBr(valor("#data_chegada")),
+      totalOriginal: texto(document.querySelector(".sugestao-conferencia-item.total .sugestao-conferencia-valor.total")),
+      totalLista: texto(document.querySelector("[data-total-lista-pedido]")),
+      linhas: linhasAtuais(),
+    };
+  }
+
+  function montarTexto(payload) {
+    const partes = [
+      "Lista de Compras - " + payload.titulo,
+      "Fornecedor: " + payload.fornecedor,
+      "Periodo: " + payload.periodo,
+    ];
+    if (payload.chegada) partes.push("Chegada prevista: " + payload.chegada);
+    partes.push("Total sugerido original: " + payload.totalOriginal);
+    partes.push("Total da lista/pedido: " + payload.totalLista);
+    partes.push("");
+
+    payload.linhas.forEach((linha, indice) => {
+      partes.push((indice + 1) + ". " + linha.produto);
+      if (payload.tipo === "analitica") {
+        partes.push("Estoque: " + linha.estoque + " | Minimo: " + linha.minimo + " | Qtd. vend.: " + linha.vendido + " | Pedidos: " + linha.pedidos);
+      }
+      partes.push("Qtd: " + linha.sugestao + " " + linha.unidade);
+      partes.push("Pr. compra: " + linha.precoCompra + " | Pr. unit.: " + linha.precoUnitario);
+      partes.push("Total: " + linha.total);
+      partes.push("");
+    });
+
+    return partes.join("\n");
+  }
+
+  function colunasTabela(payload) {
+    if (payload.tipo === "analitica") {
+      return ["Produto", "Estoque", "Minimo", "Qtd. Vend.", "Pedidos", "Sug. Compra", "Unidade", "Pr. Compra", "Pr. Unit.", "Total"];
+    }
+    return ["Produto", "Qtd.", "Unidade", "Pr. Compra", "Pr. Unit.", "Total"];
+  }
+
+  function valoresLinha(payload, linha) {
+    if (payload.tipo === "analitica") {
+      return [linha.produto, linha.estoque, linha.minimo, linha.vendido, linha.pedidos, linha.sugestao, linha.unidade, linha.precoCompra, linha.precoUnitario, linha.total];
+    }
+    return [linha.produto, linha.sugestao, linha.unidade, linha.precoCompra, linha.precoUnitario, linha.total];
+  }
+
+  function abrirVisualizacao(tipo) {
+    const payload = montarPayload(tipo);
+    if (!payload.linhas.length) {
+      alert("Gere ou adicione produtos antes de visualizar a lista.");
+      return;
+    }
+
+    const textoCopiar = montarTexto(payload);
+    const colunas = colunasTabela(payload);
+    const cabecalho = colunas.map((coluna) => "<th>" + html(coluna) + "</th>").join("");
+    const linhasHtml = payload.linhas.map((linha) => {
+      return "<tr>" + valoresLinha(payload, linha).map((valorCelula) => "<td>" + html(valorCelula) + "</td>").join("") + "</tr>";
+    }).join("");
+
+    const janela = window.open("", "_blank");
+    if (!janela) {
+      alert("Nao foi possivel abrir a visualizacao. Verifique o bloqueador de pop-ups.");
+      return;
+    }
+
+    const doc = `<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${html(payload.titulo)}</title>
+  <style>
+    body { margin: 0; padding: 18px; background: #fff7f8; color: #172033; font-family: Arial, sans-serif; }
+    .wrap { max-width: 1120px; margin: 0 auto; }
+    h1 { margin: 0 0 8px; color: #7f1d2d; font-size: 1.55rem; }
+    .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+    .meta div, .totais div { border: 1px solid #e9b8c0; border-radius: 8px; background: #fff; padding: 10px; font-weight: 800; }
+    .totais { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; color: #991b1b; }
+    .acoes { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0; }
+    button { border: 0; border-radius: 8px; background: #8f1d2c; color: #fff; padding: 10px 14px; font-weight: 800; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; background: #fff; }
+    th { background: #7f1d2d; color: #fff; padding: 8px 6px; text-align: left; font-size: .78rem; text-transform: uppercase; }
+    td { border: 1px solid #edf1f6; padding: 7px 6px; font-size: .9rem; }
+    td:not(:first-child), th:not(:first-child) { text-align: center; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid #e9b8c0; border-radius: 8px; background: #fff; padding: 12px; font-size: .9rem; }
+    @media (max-width: 760px) {
+      body { padding: 10px; }
+      .meta, .totais { grid-template-columns: 1fr; }
+      table { display: block; overflow-x: auto; white-space: nowrap; }
+      h1 { font-size: 1.25rem; }
+    }
+    @media print {
+      .acoes, pre { display: none; }
+      body { background: #fff; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>${html(payload.titulo)} - Lista de Compras</h1>
+    <section class="meta">
+      <div>Fornecedor: ${html(payload.fornecedor)}</div>
+      <div>Periodo: ${html(payload.periodo)}</div>
+      ${payload.chegada ? "<div>Chegada prevista: " + html(payload.chegada) + "</div>" : ""}
+    </section>
+    <section class="totais">
+      <div>Total sugerido original: ${html(payload.totalOriginal)}</div>
+      <div>Total da lista/pedido: ${html(payload.totalLista)}</div>
+    </section>
+    <section class="acoes">
+      <button type="button" id="copiarTexto">Copiar texto</button>
+      <button type="button" onclick="window.print()">Imprimir</button>
+    </section>
+    <table>
+      <thead><tr>${cabecalho}</tr></thead>
+      <tbody>${linhasHtml}</tbody>
+    </table>
+    <h2>Texto para WhatsApp</h2>
+    <pre id="textoCopiar">${html(textoCopiar)}</pre>
+  </main>
+  <script>
+    document.getElementById("copiarTexto").addEventListener("click", async function() {
+      const texto = document.getElementById("textoCopiar").innerText;
+      try {
+        await navigator.clipboard.writeText(texto);
+        this.textContent = "Copiado";
+      } catch (erro) {
+        const range = document.createRange();
+        range.selectNodeContents(document.getElementById("textoCopiar"));
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    });
+  <\/script>
+</body>
+</html>`;
+
+    janela.document.open();
+    janela.document.write(doc);
+    janela.document.close();
+  }
+
+  btnAnalitica.addEventListener("click", function() {
+    abrirVisualizacao("analitica");
+  });
+
+  btnSintetica.addEventListener("click", function() {
+    abrirVisualizacao("sintetica");
+  });
+
+  btnImagemWhatsapp.addEventListener("click", function() {
+    const payload = montarPayload("sintetica");
+    payload.titulo = "Lista de Compras";
+
+    if (!payload.linhas.length) {
+      alert("Gere ou adicione produtos antes de abrir a imagem para WhatsApp.");
+      return;
+    }
+
+    try {
+      sessionStorage.setItem("sugestaoCompraFornecedorWhatsappPayload", JSON.stringify(payload));
+    } catch (erro) {
+      alert("Nao foi possivel preparar a visualizacao para WhatsApp neste navegador.");
+      return;
+    }
+
+    const janela = window.open("{% url 'estoque:sugestao_compra_fornecedor_whatsapp' %}", "_blank");
+    if (!janela) {
+      alert("Nao foi possivel abrir a visualizacao. Verifique o bloqueador de pop-ups.");
+    }
   });
 })();
 </script>
