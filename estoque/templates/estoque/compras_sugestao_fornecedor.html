@@ -537,18 +537,20 @@
 
   .sugestao-manual {
     margin-bottom: 14px;
-    padding: 13px 16px;
+    padding: 0;
     border: 1px solid #f3b5bf;
     border-radius: 8px;
     background: #fff0f2;
     box-shadow: 0 10px 24px rgba(127, 29, 29, .045);
+    overflow: visible;
   }
 
   .sugestao-manual-table-wrap {
     width: 100%;
+    box-sizing: border-box;
     overflow-x: auto;
     overflow-y: visible;
-    padding-bottom: 8px;
+    padding: 0 0 8px;
   }
 
   .sugestao-manual-table-wrap.autocomplete-aberto {
@@ -557,7 +559,7 @@
 
   .sugestao-manual-msg {
     display: none;
-    margin-top: 12px;
+    margin: 12px 16px 13px;
     color: #9a3412;
     font-weight: 850;
   }
@@ -572,10 +574,12 @@
 
   .sugestao-manual-table .sugestao-btn {
     width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
     min-height: 32px;
-    padding: 4px 5px;
+    padding: 4px 3px;
     border-radius: 8px;
-    font-size: .68rem;
+    font-size: .64rem;
     line-height: 1.1;
     white-space: normal;
   }
@@ -596,6 +600,13 @@
 
   .sugestao-manual-table .sugestao-col-produto {
     overflow: visible;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+
+  .sugestao-manual-table .sugestao-col-acao {
+    padding-left: 4px;
+    padding-right: 4px;
   }
 
   .sugestao-manual-table tbody tr .sugestao-col-produto,
@@ -605,10 +616,11 @@
 
   .sugestao-manual-produto-input {
     width: 100%;
+    box-sizing: border-box;
     min-height: 28px;
     border: 1.5px solid #bfdbfe;
     border-radius: 8px;
-    padding: 3px 8px;
+    padding: 3px 5px;
     background: #fff;
     color: #172033;
     font-size: .74rem;
