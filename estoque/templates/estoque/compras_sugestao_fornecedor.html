@@ -940,9 +940,22 @@
     destacarOpcao(0);
   }
 
+  function selecionarTextoBusca() {
+    if (!busca.value) return;
+    window.setTimeout(function() {
+      try {
+        busca.select();
+      } catch (erro) {
+        // Alguns navegadores mobile podem ignorar selecao programatica.
+      }
+    }, 0);
+  }
+
   busca.addEventListener("focus", function() {
+    selecionarTextoBusca();
     renderizarSugestoes(false);
   });
+  busca.addEventListener("click", selecionarTextoBusca);
   busca.addEventListener("input", function() {
     renderizarSugestoes(true);
   });
@@ -1341,7 +1354,22 @@
     atualizarResumoDepoisDeAdicionar();
   }
 
-  busca.addEventListener("focus", renderizarSugestoes);
+  function selecionarTextoBusca() {
+    if (!busca.value) return;
+    window.setTimeout(function() {
+      try {
+        busca.select();
+      } catch (erro) {
+        // Alguns navegadores mobile podem ignorar selecao programatica.
+      }
+    }, 0);
+  }
+
+  busca.addEventListener("focus", function() {
+    selecionarTextoBusca();
+    renderizarSugestoes();
+  });
+  busca.addEventListener("click", selecionarTextoBusca);
   busca.addEventListener("input", renderizarSugestoes);
   busca.addEventListener("keydown", function(event) {
     if (event.key === "ArrowDown") {
