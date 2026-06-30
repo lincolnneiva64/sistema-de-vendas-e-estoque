@@ -4035,6 +4035,7 @@ def _periodo_sugestao_compra(request):
 
 def sugestao_compra_fornecedor(request):
     fornecedores = Fornecedor.objects.filter(ativo=True).order_by("nome", "id")
+    fornecedores_payload = [{"id": item.id, "nome": item.nome} for item in fornecedores]
     fornecedor_id = (request.GET.get("fornecedor") or "").strip()
     periodo, data_inicial, data_final = _periodo_sugestao_compra(request)
     data_chegada = (request.GET.get("data_chegada") or "").strip()
@@ -4201,6 +4202,7 @@ def sugestao_compra_fornecedor(request):
         "estoque/compras_sugestao_fornecedor.html",
         {
             "fornecedores": fornecedores,
+            "fornecedores_payload": fornecedores_payload,
             "fornecedor": fornecedor,
             "fornecedor_id": fornecedor_id,
             "periodo": periodo,

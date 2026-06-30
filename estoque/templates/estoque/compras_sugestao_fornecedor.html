@@ -6,17 +6,17 @@
   .sugestao-page {
     max-width: 1240px;
     margin: 18px auto 90px;
-    padding: 0 16px;
+    padding: 0 22px 110px 16px;
     color: #172033;
   }
 
   .sugestao-header,
   .sugestao-filtros,
   .sugestao-card {
-    background: #fff;
-    border: 1px solid #ead5d8;
+    background: #fff8f8;
+    border: 1px solid #ecc6cb;
     border-radius: 12px;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, .055);
+    box-shadow: 0 10px 24px rgba(127, 29, 29, .06);
   }
 
   .sugestao-header {
@@ -64,9 +64,14 @@
   }
 
   .sugestao-btn-primary {
-    background: #991b1b;
+    background: #8f1d2c;
     color: #fff;
-    box-shadow: 0 10px 22px rgba(153, 27, 27, .18);
+    box-shadow: 0 10px 22px rgba(143, 29, 44, .2);
+  }
+
+  .sugestao-btn-primary:hover,
+  .sugestao-btn-primary:focus {
+    background: #7f1d1d;
   }
 
   .sugestao-btn-secondary {
@@ -115,6 +120,12 @@
     color: #475569;
   }
 
+  .sugestao-field input:focus,
+  .sugestao-field select:focus {
+    border-color: #9f1239;
+    box-shadow: 0 0 0 3px rgba(159, 18, 57, .12);
+  }
+
   .sugestao-conferencia {
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -125,10 +136,10 @@
   .sugestao-conferencia-item {
     min-height: 74px;
     padding: 11px 12px;
-    border: 1px solid #ead5d8;
+    border: 1px solid #ecc6cb;
     border-radius: 12px;
-    background: #fff;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, .055);
+    background: #fffafa;
+    box-shadow: 0 10px 24px rgba(127, 29, 29, .055);
   }
 
   .sugestao-conferencia-label {
@@ -165,18 +176,21 @@
 
   .sugestao-table-wrap {
     overflow-x: auto;
+    padding: 0 22px 16px 0;
+    margin-right: -8px;
+    scrollbar-gutter: stable both-edges;
   }
 
   .sugestao-table {
     width: 100%;
-    min-width: 1360px;
+    min-width: 1510px;
     border-collapse: collapse;
   }
 
   .sugestao-table th {
     padding: 11px 10px;
-    background: #7f1d1d;
-    border-bottom: 2px solid #5f1111;
+    background: #7f1d2d;
+    border-bottom: 2px solid #5f111f;
     border-right: 1px solid rgba(255, 255, 255, .22);
     color: #fff;
     font-size: .72rem;
@@ -222,7 +236,8 @@
   .sugestao-col-numero,
   .sugestao-col-editavel,
   .sugestao-col-fator,
-  .sugestao-col-status {
+  .sugestao-col-status,
+  .sugestao-col-acao {
     text-align: center;
   }
 
@@ -232,6 +247,10 @@
 
   .sugestao-col-editavel {
     width: 122px;
+  }
+
+  .sugestao-col-acao {
+    width: 96px;
   }
 
   .sugestao-numero,
@@ -278,10 +297,10 @@
   }
 
   .sugestao-pedidos.tem-pedido {
-    border: 1px solid #fca5a5;
-    background: #fff1f2;
-    color: #b91c1c;
-    box-shadow: 0 0 0 3px rgba(248, 113, 113, .14);
+    border: 1px solid #fdba74;
+    background: #fff3e8;
+    color: #c2410c;
+    box-shadow: 0 0 0 3px rgba(251, 146, 60, .18);
   }
 
   .sugestao-input:focus {
@@ -343,12 +362,12 @@
   }
 
   .sugestao-mobile-card {
-    border: 1px solid #d8e2ef;
-    border-left: 6px solid #16a34a;
+    border: 1px solid #ecc6cb;
+    border-left: 6px solid #9f1239;
     border-radius: 10px;
-    background: #fff;
+    background: #fffafa;
     padding: 12px;
-    box-shadow: 0 12px 24px rgba(15, 23, 42, .08);
+    box-shadow: 0 12px 24px rgba(127, 29, 29, .08);
   }
 
   .sugestao-mobile-card + .sugestao-mobile-card {
@@ -403,6 +422,7 @@
     border: 1px solid #fecdd3;
     border-radius: 12px;
     background: #fff7f8;
+    box-shadow: 0 10px 24px rgba(127, 29, 29, .045);
   }
 
   .sugestao-manual-grid {
@@ -486,7 +506,7 @@
   @media (max-width: 860px) {
     .sugestao-page {
       margin-top: 10px;
-      padding: 0 10px 80px;
+      padding: 0 10px 100px;
     }
 
     .sugestao-header {
@@ -543,13 +563,13 @@
     <form method="get" id="formSugestaoCompra">
       <div class="sugestao-grid">
         <div class="sugestao-field">
-          <label for="fornecedor">Fornecedor</label>
-          <select name="fornecedor" id="fornecedor" required>
-            <option value="">Selecione...</option>
-            {% for item in fornecedores %}
-              <option value="{{ item.id }}" {% if fornecedor_id|stringformat:"s" == item.id|stringformat:"s" %}selected{% endif %}>{{ item.nome }}</option>
-            {% endfor %}
-          </select>
+          <label for="fornecedorBuscaSugestao">Fornecedor</label>
+          <div class="sugestao-autocomplete">
+            <input type="text" id="fornecedorBuscaSugestao" autocomplete="off" placeholder="Digite o fornecedor" value="{% if fornecedor %}{{ fornecedor.nome }}{% endif %}" required>
+            <input type="hidden" name="fornecedor" id="fornecedor" value="{% if fornecedor %}{{ fornecedor.id }}{% endif %}">
+            <div class="sugestao-autocomplete-lista" id="fornecedorSugestoes"></div>
+          </div>
+          <div class="sugestao-manual-msg" id="msgFornecedorSugestao"></div>
         </div>
 
         <div class="sugestao-field">
@@ -626,7 +646,7 @@
           <div class="sugestao-autocomplete-lista" id="produtoManualSugestoes"></div>
         </div>
       </div>
-      <button type="button" class="sugestao-btn sugestao-btn-secondary" id="btnAdicionarProdutoSugestao">Adicionar produto</button>
+      <button type="button" class="sugestao-btn sugestao-btn-primary" id="btnAdicionarProdutoSugestao">Adicionar produto</button>
     </div>
     <div class="sugestao-manual-msg" id="msgAdicionarProdutoSugestao"></div>
   </section>
@@ -648,7 +668,7 @@
               <th class="sugestao-col-editavel">Preco unitario</th>
               <th class="sugestao-col-editavel">Total</th>
               <th class="sugestao-col-status">Status</th>
-              <th class="sugestao-col-status">Acao</th>
+              <th class="sugestao-col-acao">Acao</th>
             </tr>
           </thead>
           <tbody id="tbodySugestaoProdutos">
@@ -667,7 +687,7 @@
                 <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-unitario-input" data-fator="{{ linha.fator_conversao|floatformat:3 }}" value="{{ linha.preco_unitario_calculado|floatformat:2 }}" aria-label="Preco unitario para {{ linha.produto.nome }}"></td>
                 <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-total-input" value="{{ linha.total_sugerido|floatformat:2 }}" aria-label="Total sugerido para {{ linha.produto.nome }}"></td>
                 <td><span class="sugestao-status {{ linha.status_classe }}">{{ linha.status_texto }}</span></td>
-                <td><button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button></td>
+                <td class="sugestao-col-acao"><button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button></td>
               </tr>
             {% endfor %}
             {% endif %}
@@ -716,6 +736,7 @@
   </section>
 </div>
 
+{{ fornecedores_payload|json_script:"fornecedoresSugestaoData" }}
 {{ produtos_manual_payload|json_script:"produtosManualSugestaoData" }}
 
 <script>
@@ -749,6 +770,156 @@
   dataInicio.addEventListener("change", atualizarDatasRapidas);
   dataFim.addEventListener("change", atualizarDatasRapidas);
   atualizarDatasRapidas();
+})();
+</script>
+
+<script>
+(function () {
+  const form = document.getElementById("formSugestaoCompra");
+  const busca = document.getElementById("fornecedorBuscaSugestao");
+  const selecionado = document.getElementById("fornecedor");
+  const lista = document.getElementById("fornecedorSugestoes");
+  const msg = document.getElementById("msgFornecedorSugestao");
+  const dadosEl = document.getElementById("fornecedoresSugestaoData");
+
+  if (!form || !busca || !selecionado || !lista || !dadosEl) return;
+
+  const fornecedores = JSON.parse(dadosEl.textContent || "[]");
+  const fornecedoresPorId = new Map(fornecedores.map((fornecedor) => [String(fornecedor.id), fornecedor]));
+  let indiceAtivo = -1;
+
+  function mostrarMsg(texto) {
+    if (!msg) return;
+    msg.textContent = texto || "";
+    msg.classList.toggle("visivel", Boolean(texto));
+  }
+
+  function escapeHtml(valor) {
+    return String(valor ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function fecharSugestoes() {
+    lista.classList.remove("aberta");
+    lista.innerHTML = "";
+    indiceAtivo = -1;
+  }
+
+  function opcoesAtuais() {
+    return Array.from(lista.querySelectorAll(".sugestao-autocomplete-opcao"));
+  }
+
+  function destacarOpcao(indice) {
+    const opcoes = opcoesAtuais();
+    if (!opcoes.length) {
+      indiceAtivo = -1;
+      return;
+    }
+
+    indiceAtivo = Math.max(0, Math.min(indice, opcoes.length - 1));
+    opcoes.forEach((opcao, atual) => {
+      opcao.classList.toggle("ativa", atual === indiceAtivo);
+    });
+    opcoes[indiceAtivo].scrollIntoView({ block: "nearest" });
+  }
+
+  function selecionarFornecedor(fornecedorId) {
+    const fornecedor = fornecedoresPorId.get(String(fornecedorId));
+    if (!fornecedor) return;
+    selecionado.value = String(fornecedor.id);
+    busca.value = fornecedor.nome;
+    fecharSugestoes();
+    mostrarMsg("");
+  }
+
+  function renderizarSugestoes(limparSelecao) {
+    const termo = busca.value.trim().toLowerCase();
+    if (limparSelecao) {
+      selecionado.value = "";
+    }
+    mostrarMsg("");
+
+    const filtrados = fornecedores
+      .filter((fornecedor) => {
+        return !termo || String(fornecedor.nome || "").toLowerCase().includes(termo);
+      })
+      .slice(0, 24);
+
+    if (!filtrados.length) {
+      lista.innerHTML = '<button type="button" class="sugestao-autocomplete-opcao" disabled>Nenhum fornecedor encontrado</button>';
+      lista.classList.add("aberta");
+      indiceAtivo = -1;
+      return;
+    }
+
+    lista.innerHTML = filtrados.map((fornecedor) => {
+      return `<button type="button" class="sugestao-autocomplete-opcao" data-fornecedor-id="${fornecedor.id}">${escapeHtml(fornecedor.nome)}</button>`;
+    }).join("");
+    lista.classList.add("aberta");
+    destacarOpcao(0);
+  }
+
+  busca.addEventListener("focus", function() {
+    renderizarSugestoes(false);
+  });
+  busca.addEventListener("input", function() {
+    renderizarSugestoes(true);
+  });
+  busca.addEventListener("keydown", function(event) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      destacarOpcao(indiceAtivo + 1);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      destacarOpcao(indiceAtivo - 1);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      fecharSugestoes();
+      return;
+    }
+
+    if (event.key === "Enter") {
+      const opcoes = opcoesAtuais();
+      const opcao = opcoes[indiceAtivo] || opcoes[0];
+      if (opcao && opcao.dataset.fornecedorId) {
+        event.preventDefault();
+        selecionarFornecedor(opcao.dataset.fornecedorId);
+      }
+    }
+  });
+
+  lista.addEventListener("click", function(event) {
+    const opcao = event.target.closest(".sugestao-autocomplete-opcao[data-fornecedor-id]");
+    if (opcao) selecionarFornecedor(opcao.dataset.fornecedorId);
+  });
+
+  document.addEventListener("click", function(event) {
+    if (!event.target.closest("#fornecedorBuscaSugestao, #fornecedorSugestoes")) {
+      fecharSugestoes();
+    }
+  });
+
+  form.addEventListener("submit", function(event) {
+    if (selecionado.value && fornecedoresPorId.has(String(selecionado.value))) {
+      mostrarMsg("");
+      return;
+    }
+
+    event.preventDefault();
+    selecionado.value = "";
+    mostrarMsg("Escolha um fornecedor da lista.");
+    busca.focus();
+    renderizarSugestoes(false);
+  });
 })();
 </script>
 
@@ -1017,7 +1188,7 @@
         <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-unitario-input" data-fator="${escapeHtml(produto.fator_conversao)}" value="${escapeHtml(produto.preco_unitario_calculado)}" aria-label="Preco unitario para ${escapeHtml(produto.nome)}"></td>
         <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-total-input" value="${escapeHtml(produto.total_sugerido)}" aria-label="Total sugerido para ${escapeHtml(produto.nome)}"></td>
         <td><span class="sugestao-status ${escapeHtml(produto.status_classe)}">${escapeHtml(produto.status_texto)}</span></td>
-        <td><button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button></td>
+        <td class="sugestao-col-acao"><button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button></td>
       </tr>
     `;
   }
