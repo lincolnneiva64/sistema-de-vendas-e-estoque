@@ -1032,6 +1032,11 @@
   form.addEventListener("submit", function(event) {
     if (selecionado.value && fornecedoresPorId.has(String(selecionado.value))) {
       mostrarMsg("");
+      try {
+        window.sessionStorage.setItem("focarAdicionarProdutoSugestaoFornecedor", "1");
+      } catch (erro) {
+        // sessionStorage pode estar indisponivel em alguns modos de privacidade.
+      }
       return;
     }
 
@@ -1445,6 +1450,18 @@
 
   botao.addEventListener("click", adicionarSelecionado);
 
+  try {
+    if (window.sessionStorage.getItem("focarAdicionarProdutoSugestaoFornecedor") === "1") {
+      window.sessionStorage.removeItem("focarAdicionarProdutoSugestaoFornecedor");
+      window.setTimeout(function() {
+        busca.focus();
+        selecionarTextoBusca();
+      }, 0);
+    }
+  } catch (erro) {
+    // sessionStorage pode estar indisponivel em alguns modos de privacidade.
+  }
+
   document.addEventListener("click", function(event) {
     const botaoRemover = event.target.closest(".sugestao-remover-item");
     if (!botaoRemover) return;
@@ -1488,6 +1505,15 @@
     return Array.from(document.querySelectorAll("#tbodySugestaoProdutos tr[data-produto-id]"));
   }
 
+  function camposNavegaveisTabela() {
+    return linhasDesktop().flatMap((linha) => [
+      linha.querySelector(".sugestao-qtd-input"),
+      linha.querySelector(".sugestao-preco-input"),
+      linha.querySelector(".sugestao-preco-unitario-input"),
+      linha.querySelector(".sugestao-total-input"),
+    ]).filter(Boolean);
+  }
+
   function focoBloqueiaNavegacao() {
     const ativo = document.activeElement;
     return Boolean(
@@ -1524,6 +1550,28 @@
   });
 
   document.addEventListener("keydown", function(event) {
+    if (event.key === "Enter") {
+      const alvo = event.target;
+      const navegavel = alvo && alvo.closest(
+        "#tbodySugestaoProdutos .sugestao-qtd-input, " +
+        "#tbodySugestaoProdutos .sugestao-preco-input, " +
+        "#tbodySugestaoProdutos .sugestao-preco-unitario-input, " +
+        "#tbodySugestaoProdutos .sugestao-total-input"
+      );
+
+      if (navegavel) {
+        event.preventDefault();
+        const campos = camposNavegaveisTabela();
+        const indiceAtual = campos.indexOf(navegavel);
+        const proximo = campos[indiceAtual + 1];
+        if (proximo) {
+          proximo.focus();
+          if (typeof proximo.select === "function") proximo.select();
+        }
+        return;
+      }
+    }
+
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
     if (focoBloqueiaNavegacao()) return;
 
