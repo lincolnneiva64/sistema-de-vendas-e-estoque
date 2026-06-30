@@ -9,6 +9,7 @@
     <div class="compras-atalhos-lista">
       <a href="{% url 'estoque:pedidos' %}" class="compras-atalhos-btn">Pedidos</a>
       <a href="{% url 'estoque:compras_nova' %}" class="compras-atalhos-btn">Nova compra</a>
+      <a href="{% url 'estoque:sugestao_compra_fornecedor' %}" class="compras-atalhos-btn">Sugestao de compra</a>
       <a href="{% url 'estoque:contas_pagar' %}" class="compras-atalhos-btn">Contas a pagar</a>
       <a href="{% url 'estoque:receber_cliente_escolher' %}" class="compras-atalhos-btn">Receber do cliente</a>
       <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="compras-atalhos-btn {% if tem_pix_em_atencao %}pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
@@ -407,6 +408,7 @@
     </div>
     <div class="compras-lista-actions">
       <a href="{% url 'estoque:compras_nova' %}" class="compras-lista-btn compras-lista-btn-primary">Nova compra</a>
+      <a href="{% url 'estoque:sugestao_compra_fornecedor' %}" class="compras-lista-btn compras-lista-btn-secondary">Sugestao de compra</a>
 
     </div>
   </header>

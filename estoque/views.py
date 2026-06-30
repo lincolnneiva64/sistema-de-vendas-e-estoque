@@ -4012,6 +4012,133 @@ def _situacao_financeira_compra_lista(compra, hoje=None):
     return f"{prefixo} {vencimento.strftime('%d/%m/%Y')}", ("parcial" if parcial else "pendente")
 
 
+def _periodo_sugestao_compra(request):
+    hoje = timezone.localdate()
+    periodos_rapidos = {"7": 7, "14": 14, "21": 21, "30": 30}
+    periodo = (request.GET.get("periodo") or "14").strip()
+    if periodo not in {*periodos_rapidos.keys(), "personalizado"}:
+        periodo = "14"
+
+    if periodo == "personalizado":
+        data_final = parse_date(request.GET.get("data_fim") or "") or hoje
+        data_inicial = parse_date(request.GET.get("data_inicio") or "") or (data_final - timedelta(days=14))
+    else:
+        dias = periodos_rapidos[periodo]
+        data_final = hoje
+        data_inicial = hoje - timedelta(days=dias)
+
+    if data_inicial > data_final:
+        data_inicial, data_final = data_final, data_inicial
+
+    return periodo, data_inicial, data_final
+
+
+def sugestao_compra_fornecedor(request):
+    fornecedores = Fornecedor.objects.filter(ativo=True).order_by("nome", "id")
+    fornecedor_id = (request.GET.get("fornecedor") or "").strip()
+    periodo, data_inicial, data_final = _periodo_sugestao_compra(request)
+    fornecedor = None
+    linhas = []
+    total_sugerido = Decimal("0.00")
+    total_produtos_vinculados = 0
+    quantidade_vendida_calculada = False
+
+    if fornecedor_id and fornecedor_id.isdigit():
+        fornecedor = get_object_or_404(Fornecedor, pk=fornecedor_id, ativo=True)
+        vinculos_base = ProdutoFornecedor.objects.select_related("produto", "fornecedor").filter(
+            fornecedor=fornecedor,
+            ativo=True,
+            produto__excluido=False,
+        )
+        total_produtos_vinculados = vinculos_base.count()
+        vinculos = list(
+            vinculos_base
+            .annotate(
+                estoque_atual_calc=Coalesce(
+                    "produto__quantidade",
+                    Value(Decimal("0.000")),
+                    output_field=DecimalField(max_digits=12, decimal_places=3),
+                )
+            )
+            .filter(
+                produto__estoque_minimo__isnull=False,
+                estoque_atual_calc__lte=F("produto__estoque_minimo"),
+            )
+            .order_by("produto__nome", "id")
+        )
+        produto_ids = [vinculo.produto_id for vinculo in vinculos]
+        vendidos_por_produto = {
+            item["produto_id"]: item["quantidade_vendida"] or Decimal("0.000")
+            for item in (
+                ItemVenda.objects.filter(
+                    produto_id__in=produto_ids,
+                    venda__cancelada=False,
+                    venda__data_venda__gte=data_inicial,
+                    venda__data_venda__lte=data_final,
+                )
+                .values("produto_id")
+                .annotate(quantidade_vendida=Sum("quantidade"))
+            )
+        }
+        quantidade_vendida_calculada = True
+
+        for vinculo in vinculos:
+            produto = vinculo.produto
+            estoque_atual = Decimal(produto.quantidade or 0)
+            estoque_minimo = Decimal(produto.estoque_minimo or 0)
+            quantidade_vendida = Decimal(vendidos_por_produto.get(produto.id, Decimal("0.000")) or 0)
+            sugestao = max(
+                Decimal("0.000"),
+                estoque_minimo - estoque_atual + quantidade_vendida,
+            ).quantize(Decimal("0.001"))
+            preco_unitario = Decimal(produto.preco_compra or 0).quantize(Decimal("0.01"))
+            total_item = (sugestao * preco_unitario).quantize(Decimal("0.01"))
+            total_sugerido += total_item
+
+            if estoque_atual < estoque_minimo:
+                status_texto = "Abaixo do minimo"
+                status_classe = "abaixo"
+            elif estoque_atual == estoque_minimo:
+                status_texto = "No minimo"
+                status_classe = "minimo"
+            else:
+                status_texto = "Acima do minimo"
+                status_classe = "acima"
+
+            linhas.append(
+                {
+                    "produto": produto,
+                    "estoque_atual": estoque_atual,
+                    "estoque_minimo": estoque_minimo,
+                    "quantidade_vendida": quantidade_vendida.quantize(Decimal("0.001")),
+                    "sugestao": sugestao,
+                    "unidade": produto.unidade_compra or produto.unidade_venda_1 or "-",
+                    "preco_unitario": preco_unitario,
+                    "total_sugerido": total_item,
+                    "status_texto": status_texto,
+                    "status_classe": status_classe,
+                }
+            )
+
+    return render(
+        request,
+        "estoque/compras_sugestao_fornecedor.html",
+        {
+            "fornecedores": fornecedores,
+            "fornecedor": fornecedor,
+            "fornecedor_id": fornecedor_id,
+            "periodo": periodo,
+            "data_inicio": data_inicial,
+            "data_fim": data_final,
+            "linhas": linhas,
+            "total_produtos_vinculados": total_produtos_vinculados,
+            "total_produtos_sugeridos": len(linhas),
+            "total_sugerido": total_sugerido.quantize(Decimal("0.01")),
+            "quantidade_vendida_calculada": quantidade_vendida_calculada,
+        },
+    )
+
+
 def compras_lista(request):
     compra_filtro = request.GET.get("compra", "").strip().lstrip("#")
     fornecedor_filtro = request.GET.get("fornecedor", "").strip()
