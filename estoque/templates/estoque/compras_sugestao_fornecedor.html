@@ -74,6 +74,20 @@
     background: #7f1d1d;
   }
 
+  .sugestao-submit-btn:focus,
+  .sugestao-submit-btn:focus-visible {
+    outline: 3px solid rgba(15, 23, 42, .32);
+    outline-offset: 3px;
+    box-shadow: 0 0 0 5px rgba(253, 164, 175, .68), 0 14px 28px rgba(127, 29, 29, .28);
+  }
+
+  .sugestao-submit-btn.is-loading,
+  .sugestao-submit-btn:disabled {
+    cursor: wait;
+    opacity: .88;
+    background: #7f1d1d;
+  }
+
   .sugestao-btn-secondary {
     background: #ffe8eb;
     border: 1px solid #f3b5bf;
@@ -795,7 +809,7 @@
           <input type="date" name="data_chegada" id="data_chegada" value="{{ data_chegada }}">
         </div>
 
-        <button type="submit" class="sugestao-btn sugestao-btn-primary">Gerar lista</button>
+        <button type="submit" class="sugestao-btn sugestao-btn-primary sugestao-submit-btn" id="btnGerarListaSugestao">Gerar lista</button>
       </div>
     </form>
   </section>
@@ -1067,6 +1081,7 @@
   const lista = document.getElementById("fornecedorSugestoes");
   const msg = document.getElementById("msgFornecedorSugestao");
   const dadosEl = document.getElementById("fornecedoresSugestaoData");
+  const botaoGerar = document.getElementById("btnGerarListaSugestao");
 
   if (!form || !busca || !selecionado || !lista || !dadosEl) return;
 
@@ -1254,6 +1269,11 @@
   form.addEventListener("submit", function(event) {
     if (selecionado.value && fornecedoresPorId.has(String(selecionado.value))) {
       mostrarMsg("");
+      if (botaoGerar) {
+        botaoGerar.textContent = "Gerando...";
+        botaoGerar.classList.add("is-loading");
+        botaoGerar.disabled = true;
+      }
       try {
         window.sessionStorage.setItem("focarAdicionarProdutoSugestaoFornecedor", "1");
       } catch (erro) {
