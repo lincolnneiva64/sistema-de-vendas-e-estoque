@@ -728,6 +728,81 @@
     display: none;
   }
 
+  .sugestao-atalhos-lateral {
+    position: fixed;
+    top: 72px;
+    right: 0;
+    z-index: 9990;
+    display: flex;
+    align-items: flex-start;
+    transform: translateX(calc(100% - 42px));
+    transition: transform 180ms ease;
+  }
+
+  .sugestao-atalhos-lateral.aberto {
+    transform: translateX(0);
+  }
+
+  .sugestao-atalhos-toggle {
+    width: 42px;
+    min-height: 116px;
+    padding: 10px 6px;
+    border: 1px solid #8f1d2c;
+    border-right: 0;
+    border-radius: 12px 0 0 12px;
+    background: #8f1d2c;
+    color: #fff;
+    font-weight: 950;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    cursor: pointer;
+    box-shadow: 0 10px 24px rgba(127, 29, 45, .22);
+  }
+
+  .sugestao-atalhos-painel {
+    width: min(270px, calc(100vw - 48px));
+    padding: 10px;
+    border: 1px solid #e9b8c0;
+    border-right: 0;
+    border-radius: 12px 0 0 12px;
+    background: #fff3f4;
+    box-shadow: 0 18px 42px rgba(127, 29, 45, .20);
+  }
+
+  .sugestao-atalhos-titulo {
+    margin: 0 0 8px;
+    color: #7f1d1d;
+    font-size: 14px;
+    font-weight: 950;
+  }
+
+  .sugestao-atalhos-lista {
+    display: grid;
+    gap: 6px;
+  }
+
+  .sugestao-atalhos-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 36px;
+    padding: 8px 12px;
+    border: 1px solid #f3b5bf;
+    border-radius: 10px;
+    background: #ffe8eb;
+    color: #9f1239;
+    text-decoration: none;
+    font-weight: 900;
+    text-align: center;
+  }
+
+  .sugestao-atalhos-btn:hover,
+  .sugestao-atalhos-btn:focus {
+    background: #fff1f2;
+    outline: 3px solid rgba(159, 18, 57, .18);
+  }
+
   @media (max-width: 860px) {
     .sugestao-page {
       margin-top: 10px;
@@ -770,8 +845,45 @@
     .sugestao-mobile-grid {
       grid-template-columns: 1fr;
     }
+
+    .sugestao-atalhos-lateral {
+      top: auto;
+      right: 8px;
+      bottom: 78px;
+      transform: translateX(calc(100% - 46px));
+    }
+
+    .sugestao-atalhos-toggle {
+      width: 46px;
+      min-height: 104px;
+      font-size: 12px;
+    }
+
+    .sugestao-atalhos-painel {
+      width: min(270px, calc(100vw - 54px));
+      max-height: min(62vh, calc(100vh - 190px));
+      overflow-y: auto;
+    }
   }
 </style>
+
+<aside class="sugestao-atalhos-lateral" id="atalhosSugestaoFornecedor" aria-label="Atalhos da lista por fornecedor">
+  <button type="button" class="sugestao-atalhos-toggle" id="btnAtalhosSugestaoFornecedor" aria-expanded="false" aria-controls="atalhosSugestaoFornecedorPainel">Atalhos</button>
+  <div class="sugestao-atalhos-painel" id="atalhosSugestaoFornecedorPainel">
+    <h2 class="sugestao-atalhos-titulo">Atalhos</h2>
+    <div class="sugestao-atalhos-lista">
+      <a href="{% url 'estoque:compras_listas_fornecedor' %}" class="sugestao-atalhos-btn">Consultar Listas</a>
+      <a href="{% url 'estoque:sugestao_compra_fornecedor' %}" class="sugestao-atalhos-btn">Nova Lista</a>
+      <a href="{% url 'estoque:compras_lista' %}" class="sugestao-atalhos-btn">Consultar Compras</a>
+      <a href="{% url 'estoque:compras_nova' %}" class="sugestao-atalhos-btn">Nova compra</a>
+      <a href="{% url 'estoque:contas_pagar' %}" class="sugestao-atalhos-btn">Contas a pagar</a>
+      <a href="{% url 'estoque:fornecedores' %}" class="sugestao-atalhos-btn">Fornecedores</a>
+      <a href="{% url 'estoque:caixa_banco' %}" class="sugestao-atalhos-btn">Caixa e Banco</a>
+      <a href="{% url 'estoque:painel_financeiro' %}" class="sugestao-atalhos-btn">Central Financeira</a>
+      <a href="{% url 'estoque:home' %}" class="sugestao-atalhos-btn">Painel</a>
+    </div>
+  </div>
+</aside>
 
 <div class="sugestao-page">
   <header class="sugestao-header">
@@ -2369,6 +2481,34 @@
     if (!formGravarLista || !payloadGravarLista) return;
     payloadGravarLista.value = JSON.stringify(payload);
     formGravarLista.submit();
+  });
+})();
+</script>
+
+<script>
+(function() {
+  const atalhos = document.getElementById("atalhosSugestaoFornecedor");
+  const botao = document.getElementById("btnAtalhosSugestaoFornecedor");
+  if (!atalhos || !botao) return;
+
+  botao.addEventListener("click", function(event) {
+    event.stopPropagation();
+    const aberto = atalhos.classList.toggle("aberto");
+    botao.setAttribute("aria-expanded", aberto ? "true" : "false");
+  });
+
+  document.addEventListener("click", function(event) {
+    if (!atalhos.classList.contains("aberto")) return;
+    if (atalhos.contains(event.target)) return;
+    atalhos.classList.remove("aberto");
+    botao.setAttribute("aria-expanded", "false");
+  });
+
+  document.addEventListener("keydown", function(event) {
+    if (event.key !== "Escape" || !atalhos.classList.contains("aberto")) return;
+    atalhos.classList.remove("aberto");
+    botao.setAttribute("aria-expanded", "false");
+    botao.focus();
   });
 })();
 </script>
