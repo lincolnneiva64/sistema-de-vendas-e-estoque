@@ -3,41 +3,288 @@
 {% block content %}
 
 <style>
-  .listas-fornecedor-page { max-width:1120px; margin:18px auto 90px; padding:0 16px; color:#172033; }
-  .listas-fornecedor-header { display:flex; justify-content:space-between; gap:14px; align-items:flex-end; margin-bottom:14px; flex-wrap:wrap; padding:18px 20px; background:#fff3f4; border:1px solid #e9b8c0; border-radius:12px; box-shadow:0 10px 24px rgba(127,29,29,.075); }
-  .listas-fornecedor-title { margin:0; color:#7f1d1d; font-size:1.72rem; font-weight:900; line-height:1.12; }
-  .listas-fornecedor-subtitle { margin:4px 0 0; color:#64748b; font-weight:700; }
-  .listas-fornecedor-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
-  .listas-fornecedor-btn { display:inline-flex; align-items:center; justify-content:center; min-height:40px; padding:9px 14px; border-radius:9px; border:1px solid #f3b5bf; background:#ffe8eb; color:#9f1239; font-weight:850; text-decoration:none; cursor:pointer; }
-  .listas-fornecedor-btn.primary { background:#8f1d2c; color:#fff; border-color:#8f1d2c; box-shadow:0 10px 22px rgba(143,29,44,.2); }
-  .listas-fornecedor-btn.primary:hover,
-  .listas-fornecedor-btn.primary:focus { background:#7f1d1d; }
-  .listas-fornecedor-btn.whatsapp { background:#fff1f3; color:#7f1d2d; border-color:#e9b8c0; box-shadow:0 8px 18px rgba(127,29,45,.10); }
-  .listas-fornecedor-card { background:#fff3f4; border:1px solid #e9b8c0; border-radius:12px; box-shadow:0 10px 24px rgba(127,29,29,.075); overflow:hidden; }
-  .listas-fornecedor-filtros { display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; padding:14px 16px; border-bottom:1px solid #e9b8c0; background:#fff3f4; }
-  .listas-fornecedor-field { flex:1 1 220px; }
-  .listas-fornecedor-field label { display:block; margin-bottom:5px; color:#64748b; font-size:.78rem; font-weight:900; letter-spacing:.04em; text-transform:uppercase; }
+  .listas-fornecedor-page {
+    max-width: 1220px;
+    margin: 18px auto 90px;
+    padding: 0 16px;
+    color: #172033;
+  }
+
+  .listas-fornecedor-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: center;
+    margin-bottom: 14px;
+    padding: 20px 22px;
+    background: #fff3f4;
+    border: 1px solid #e9b8c0;
+    border-radius: 14px;
+    box-shadow: 0 10px 24px rgba(127, 29, 29, .075);
+  }
+
+  .listas-fornecedor-title {
+    margin: 0;
+    color: #7f1d1d;
+    font-size: 1.72rem;
+    font-weight: 900;
+    line-height: 1.12;
+  }
+
+  .listas-fornecedor-subtitle {
+    margin: 6px 0 0;
+    color: #64748b;
+    font-weight: 750;
+  }
+
+  .listas-fornecedor-header-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  .listas-fornecedor-filter-card {
+    margin-bottom: 14px;
+    padding: 16px;
+    background: #fff8f8;
+    border: 1px solid #e9b8c0;
+    border-radius: 14px;
+    box-shadow: 0 10px 24px rgba(127, 29, 29, .06);
+  }
+
+  .listas-fornecedor-filtros {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.6fr) minmax(160px, .9fr) minmax(150px, .75fr) minmax(150px, .75fr);
+    gap: 12px;
+    align-items: end;
+  }
+
+  .listas-fornecedor-field label {
+    display: block;
+    margin-bottom: 6px;
+    color: #64748b;
+    font-size: .78rem;
+    font-weight: 900;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+
   .listas-fornecedor-field input,
-  .listas-fornecedor-field select { width:100%; min-height:42px; border:1.5px solid #d3dbe8; border-radius:9px; padding:9px 11px; font-weight:700; background:#fff; color:#172033; outline:none; }
+  .listas-fornecedor-field select {
+    width: 100%;
+    min-height: 44px;
+    border: 1.5px solid #d3dbe8;
+    border-radius: 9px;
+    padding: 10px 12px;
+    font-weight: 750;
+    background: #fff;
+    color: #172033;
+    outline: none;
+    box-sizing: border-box;
+  }
+
   .listas-fornecedor-field input:focus,
-  .listas-fornecedor-field select:focus { border-color:#9f1239; box-shadow:0 0 0 3px rgba(159,18,57,.12); }
-  .listas-fornecedor-table { width:100%; border-collapse:collapse; }
-  .listas-fornecedor-table th { padding:10px 12px; border-bottom:1px solid #e9b8c0; background:#8f1d2c; color:#fff; font-size:.7rem; font-weight:900; text-align:left; text-transform:uppercase; }
-  .listas-fornecedor-table td { padding:11px 12px; border-bottom:1px solid #f0c9cf; background:#fff; vertical-align:middle; }
-  .listas-fornecedor-table tr:last-child td { border-bottom:0; }
-  .listas-fornecedor-numero { font-weight:950; color:#0f172a; }
-  .listas-fornecedor-total { font-weight:950; color:#991b1b; }
-  .listas-fornecedor-status { display:inline-flex; border-radius:999px; padding:4px 9px; background:#fff1f3; border:1px solid #e9b8c0; color:#7f1d2d; font-size:.76rem; font-weight:900; }
-  .listas-fornecedor-status.cancelada { background:#f8fafc; border-color:#e2e8f0; color:#9f1239; }
-  .listas-fornecedor-status.finalizada { background:#f0fdf4; border-color:#bbf7d0; color:#166534; }
-  .listas-fornecedor-status.enviada { background:#fff7ed; border-color:#fed7aa; color:#9a3412; }
-  .listas-fornecedor-acoes { display:flex; gap:6px; flex-wrap:wrap; }
-  .listas-fornecedor-empty { padding:28px 16px; color:#64748b; text-align:center; font-weight:800; }
-  @media (max-width:760px) {
-    .listas-fornecedor-page { margin-top:14px; padding:0 10px 80px; }
-    .listas-fornecedor-table { display:block; overflow-x:auto; white-space:nowrap; }
-    .listas-fornecedor-actions,
-    .listas-fornecedor-btn { width:100%; }
+  .listas-fornecedor-field select:focus {
+    border-color: #9f1239;
+    box-shadow: 0 0 0 3px rgba(159, 18, 57, .12);
+  }
+
+  .listas-fornecedor-filter-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .listas-fornecedor-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 9px 15px;
+    border-radius: 9px;
+    border: 1px solid #f3b5bf;
+    background: #ffe8eb;
+    color: #9f1239;
+    font-weight: 850;
+    text-decoration: none;
+    cursor: pointer;
+    line-height: 1.1;
+    white-space: nowrap;
+    box-sizing: border-box;
+  }
+
+  .listas-fornecedor-btn.primary {
+    background: #8f1d2c;
+    color: #fff;
+    border-color: #8f1d2c;
+    box-shadow: 0 10px 22px rgba(143, 29, 44, .2);
+  }
+
+  .listas-fornecedor-btn.primary:hover,
+  .listas-fornecedor-btn.primary:focus {
+    background: #7f1d1d;
+  }
+
+  .listas-fornecedor-btn.whatsapp {
+    background: #fff1f3;
+    color: #7f1d2d;
+    border-color: #e9b8c0;
+    box-shadow: 0 8px 18px rgba(127, 29, 45, .10);
+  }
+
+  .listas-fornecedor-table-card {
+    background: #fff;
+    border: 1px solid #e9b8c0;
+    border-radius: 14px;
+    box-shadow: 0 10px 24px rgba(127, 29, 29, .06);
+    overflow: hidden;
+  }
+
+  .listas-fornecedor-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .listas-fornecedor-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 940px;
+  }
+
+  .listas-fornecedor-table th {
+    padding: 12px 12px;
+    border-bottom: 1px solid #e9b8c0;
+    background: #8f1d2c;
+    color: #fff;
+    font-size: .72rem;
+    font-weight: 900;
+    text-align: left;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+  }
+
+  .listas-fornecedor-table td {
+    padding: 13px 12px;
+    border-bottom: 1px solid #f0c9cf;
+    background: #fff;
+    vertical-align: middle;
+    font-weight: 650;
+  }
+
+  .listas-fornecedor-table tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .listas-fornecedor-numero {
+    font-weight: 950;
+    color: #0f172a;
+  }
+
+  .listas-fornecedor-total {
+    font-weight: 950;
+    color: #991b1b;
+    white-space: nowrap;
+  }
+
+  .listas-fornecedor-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 5px 10px;
+    background: #fff1f3;
+    border: 1px solid #e9b8c0;
+    color: #7f1d2d;
+    font-size: .76rem;
+    font-weight: 900;
+    white-space: nowrap;
+  }
+
+  .listas-fornecedor-status.cancelada {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #9f1239;
+  }
+
+  .listas-fornecedor-status.finalizada {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+    color: #166534;
+  }
+
+  .listas-fornecedor-status.enviada {
+    background: #fff7ed;
+    border-color: #fed7aa;
+    color: #9a3412;
+  }
+
+  .listas-fornecedor-acoes {
+    display: flex;
+    gap: 7px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .listas-fornecedor-acoes .listas-fornecedor-btn {
+    min-height: 38px;
+    padding: 8px 12px;
+  }
+
+  .listas-fornecedor-empty {
+    padding: 30px 16px;
+    color: #64748b;
+    text-align: center;
+    font-weight: 850;
+  }
+
+  @media (max-width: 900px) {
+    .listas-fornecedor-header {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .listas-fornecedor-header-actions {
+      justify-content: stretch;
+    }
+
+    .listas-fornecedor-header-actions .listas-fornecedor-btn {
+      flex: 1 1 180px;
+    }
+
+    .listas-fornecedor-filtros {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .listas-fornecedor-page {
+      margin-top: 14px;
+      padding: 0 10px 80px;
+    }
+
+    .listas-fornecedor-header,
+    .listas-fornecedor-filter-card {
+      padding: 14px;
+    }
+
+    .listas-fornecedor-title {
+      font-size: 1.38rem;
+    }
+
+    .listas-fornecedor-filtros {
+      grid-template-columns: 1fr;
+    }
+
+    .listas-fornecedor-filter-actions {
+      flex-direction: column;
+    }
+
+    .listas-fornecedor-btn {
+      width: 100%;
+    }
   }
 </style>
 
@@ -47,66 +294,88 @@
       <h1 class="listas-fornecedor-title">Consulta de Listas por Fornecedor</h1>
       <p class="listas-fornecedor-subtitle">Consulte listas gravadas sem lancar compra, estoque ou financeiro.</p>
     </div>
-    <div class="listas-fornecedor-actions">
+
+    <div class="listas-fornecedor-header-actions">
       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista' %}">Consultar Compras</a>
       <a class="listas-fornecedor-btn primary" href="{% url 'estoque:sugestao_compra_fornecedor' %}">Nova Lista</a>
     </div>
   </header>
 
-  <section class="listas-fornecedor-card">
-    <form method="get" class="listas-fornecedor-filtros">
-      <div class="listas-fornecedor-field">
-        <label for="fornecedor">Fornecedor</label>
-        <input type="text" id="fornecedor" name="fornecedor" value="{{ fornecedor_filtro }}" placeholder="Buscar fornecedor">
-      </div>
-      <div class="listas-fornecedor-field">
-        <label for="status">Status</label>
-        <select id="status" name="status">
-          <option value="">Todos</option>
-          {% for valor, rotulo in status_choices %}
-            <option value="{{ valor }}" {% if status_filtro == valor %}selected{% endif %}>{{ rotulo }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <button type="submit" class="listas-fornecedor-btn primary">Filtrar</button>
-      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}">Limpar</a>
-    </form>
+  <section class="listas-fornecedor-filter-card">
+    <form method="get">
+      <div class="listas-fornecedor-filtros">
+        <div class="listas-fornecedor-field">
+          <label for="fornecedor">Fornecedor</label>
+          <input type="text" id="fornecedor" name="fornecedor" value="{{ fornecedor_filtro }}" placeholder="Nome do fornecedor">
+        </div>
 
+        <div class="listas-fornecedor-field">
+          <label for="status">Status</label>
+          <select id="status" name="status">
+            <option value="">Todos</option>
+            {% for valor, rotulo in status_choices %}
+              <option value="{{ valor }}" {% if status_filtro == valor %}selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="listas-fornecedor-field">
+          <label for="data_inicio">Data inicio</label>
+          <input type="date" id="data_inicio" name="data_inicio" value="{{ data_inicio_filtro }}">
+        </div>
+
+        <div class="listas-fornecedor-field">
+          <label for="data_fim">Data fim</label>
+          <input type="date" id="data_fim" name="data_fim" value="{{ data_fim_filtro }}">
+        </div>
+      </div>
+
+      <div class="listas-fornecedor-filter-actions">
+        <button type="submit" class="listas-fornecedor-btn primary">Filtrar</button>
+        <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}">Limpar</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="listas-fornecedor-table-card">
     {% if listas %}
-      <table class="listas-fornecedor-table">
-        <thead>
-          <tr>
-            <th>Numero</th>
-            <th>Fornecedor</th>
-            <th>Data</th>
-            <th>Periodo</th>
-            <th>Chegada</th>
-            <th>Total</th>
-            <th>Status</th>
-            <th>Acoes</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for lista in listas %}
+      <div class="listas-fornecedor-table-wrap">
+        <table class="listas-fornecedor-table">
+          <thead>
             <tr>
-              <td class="listas-fornecedor-numero">#{{ lista.id }}</td>
-              <td>{% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}</td>
-              <td>{{ lista.data_lista|date:"d/m/Y" }}</td>
-              <td>{{ lista.data_inicio_periodo|date:"d/m/Y" }} ate {{ lista.data_fim_periodo|date:"d/m/Y" }}</td>
-              <td>{% if lista.data_chegada_prevista %}{{ lista.data_chegada_prevista|date:"d/m/Y" }}{% else %}-{% endif %}</td>
-              <td class="listas-fornecedor-total">R$ {{ lista.total_lista|floatformat:2 }}</td>
-              <td><span class="listas-fornecedor-status {{ lista.status }}">{{ lista.get_status_display }}</span></td>
-              <td>
-                <div class="listas-fornecedor-acoes">
-                  <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Abrir</a>
-                  <a class="listas-fornecedor-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">WhatsApp</a>
-                  <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Imprimir</a>
-                </div>
-              </td>
+              <th>Numero</th>
+              <th>Fornecedor</th>
+              <th>Data</th>
+              <th>Periodo</th>
+              <th>Chegada</th>
+              <th>Total</th>
+              <th>Status</th>
+              <th>Acoes</th>
             </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+          </thead>
+
+          <tbody>
+            {% for lista in listas %}
+              <tr>
+                <td class="listas-fornecedor-numero">#{{ lista.id }}</td>
+                <td>{% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}</td>
+                <td>{{ lista.data_lista|date:"d/m/Y" }}</td>
+                <td>{{ lista.data_inicio_periodo|date:"d/m/Y" }} ate {{ lista.data_fim_periodo|date:"d/m/Y" }}</td>
+                <td>{% if lista.data_chegada_prevista %}{{ lista.data_chegada_prevista|date:"d/m/Y" }}{% else %}-{% endif %}</td>
+                <td class="listas-fornecedor-total">R$ {{ lista.total_lista|floatformat:2 }}</td>
+                <td><span class="listas-fornecedor-status {{ lista.status }}">{{ lista.get_status_display }}</span></td>
+                <td>
+                  <div class="listas-fornecedor-acoes">
+                    <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Abrir</a>
+                    <a class="listas-fornecedor-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">WhatsApp</a>
+                    <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Imprimir</a>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     {% else %}
       <div class="listas-fornecedor-empty">Nenhuma lista gravada encontrada.</div>
     {% endif %}

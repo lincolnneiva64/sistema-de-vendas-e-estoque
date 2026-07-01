@@ -4400,12 +4400,30 @@ def _gerar_lista_fornecedor_whatsapp_imagem(lista):
 def compras_listas_fornecedor(request):
     fornecedor_filtro = request.GET.get("fornecedor", "").strip()
     status_filtro = request.GET.get("status", "").strip()
+    data_inicio_filtro = request.GET.get("data_inicio", "").strip()
+    data_fim_filtro = request.GET.get("data_fim", "").strip()
 
-    listas = ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens").order_by("-data_lista", "-id")
+    listas = (
+        ListaCompraFornecedor.objects
+        .select_related("fornecedor")
+        .prefetch_related("itens")
+        .order_by("-data_lista", "-id")
+    )
+
     if fornecedor_filtro:
         listas = listas.filter(fornecedor__nome__icontains=fornecedor_filtro)
+
     if status_filtro:
         listas = listas.filter(status=status_filtro)
+
+    data_inicio = parse_date(data_inicio_filtro) if data_inicio_filtro else None
+    data_fim = parse_date(data_fim_filtro) if data_fim_filtro else None
+
+    if data_inicio:
+        listas = listas.filter(data_lista__gte=data_inicio)
+
+    if data_fim:
+        listas = listas.filter(data_lista__lte=data_fim)
 
     return render(
         request,
@@ -4414,10 +4432,11 @@ def compras_listas_fornecedor(request):
             "listas": listas,
             "fornecedor_filtro": fornecedor_filtro,
             "status_filtro": status_filtro,
+            "data_inicio_filtro": data_inicio_filtro,
+            "data_fim_filtro": data_fim_filtro,
             "status_choices": ListaCompraFornecedor.STATUS_CHOICES,
         },
     )
-
 
 def compras_lista_fornecedor_detalhe(request, pk):
     lista = get_object_or_404(
