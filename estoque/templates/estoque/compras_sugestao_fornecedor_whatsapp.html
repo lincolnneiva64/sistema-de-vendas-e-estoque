@@ -91,16 +91,14 @@
       padding: 12px 14px 14px;
     }
 
-    .meta-grid,
-    .totais-grid {
+    .meta-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 6px;
       margin-bottom: 9px;
     }
 
-    .meta-item,
-    .total-item {
+    .meta-item {
       min-height: 50px;
       border: 1px solid #f0e0e3;
       border-radius: 8px;
@@ -124,11 +122,6 @@
       font-weight: 900;
       line-height: 1.18;
       overflow-wrap: anywhere;
-    }
-
-    .total-item .valor {
-      color: var(--vinho);
-      font-size: .94rem;
     }
 
     .lista-titulo {
@@ -212,6 +205,40 @@
       font-size: .78rem;
     }
 
+    .fechamento-lista {
+      margin-top: 10px;
+      border-top: 2px solid rgba(138, 47, 61, .22);
+      border-bottom: 2px solid rgba(138, 47, 61, .22);
+      background: linear-gradient(135deg, #fff5f6, #fffaf4);
+      padding: 10px 8px 9px;
+      text-align: right;
+    }
+
+    .fechamento-label {
+      display: block;
+      color: var(--vinho-escuro);
+      font-size: .72rem;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .fechamento-valor {
+      display: block;
+      margin-top: 3px;
+      color: var(--vinho);
+      font-size: 1.18rem;
+      font-weight: 950;
+      line-height: 1.1;
+    }
+
+    .fechamento-fim {
+      display: block;
+      margin-top: 5px;
+      color: var(--suave);
+      font-size: .68rem;
+      font-weight: 850;
+    }
+
     .rodape {
       margin-top: 10px;
       border-top: 1px dashed var(--borda);
@@ -278,7 +305,6 @@
       }
 
       .meta-grid,
-      .totais-grid,
       .produto-detalhes {
         grid-template-columns: 1fr;
       }
@@ -338,21 +364,18 @@
         padding: 8px 10px 10px;
       }
 
-      .meta-grid,
-      .totais-grid {
+      .meta-grid {
         gap: 4px;
         margin-bottom: 6px;
       }
 
       .meta-item,
-      .total-item,
       .produto-card {
         background: #fff;
         border-color: #ddd;
       }
 
-      .meta-item,
-      .total-item {
+      .meta-item {
         min-height: auto;
         padding: 5px 6px;
       }
@@ -362,8 +385,7 @@
         font-size: .56rem;
       }
 
-      .valor,
-      .total-item .valor {
+      .valor {
         color: #111827;
         font-size: .78rem;
       }
@@ -412,6 +434,22 @@
 
       .produto-detalhe {
         padding: 4px 5px;
+      }
+
+      .fechamento-lista {
+        margin-top: 7px;
+        border-color: #bbb;
+        background: #fff;
+        padding: 7px 6px;
+      }
+
+      .fechamento-label,
+      .fechamento-valor {
+        color: #111827;
+      }
+
+      .fechamento-valor {
+        font-size: .95rem;
       }
 
       .rodape {
@@ -507,8 +545,6 @@
       ];
 
       if (payload.chegada) partes.push("Chegada prevista: " + payload.chegada);
-      partes.push("Total sugerido original: " + texto(payload.totalOriginal));
-      partes.push("Total da lista/pedido: " + texto(payload.totalLista));
       partes.push("");
 
       (payload.linhas || []).forEach((linha, indice) => {
@@ -519,6 +555,10 @@
         partes.push("Total: " + dinheiro(linha.total));
         partes.push("");
       });
+
+      partes.push("TOTAL DA LISTA/PEDIDO");
+      partes.push(texto(payload.totalLista));
+      partes.push("Fim da lista");
 
       return partes.join("\n").trim();
     }
@@ -574,18 +614,13 @@
               </div>
             ` : ""}
           </div>
-          <div class="totais-grid">
-            <div class="total-item">
-              <span class="rotulo">Total sugerido original</span>
-              <span class="valor">${html(texto(payload.totalOriginal))}</span>
-            </div>
-            <div class="total-item">
-              <span class="rotulo">Total da lista/pedido</span>
-              <span class="valor">${html(texto(payload.totalLista))}</span>
-            </div>
-          </div>
           <h2 class="lista-titulo">Produtos da compra</h2>
           <section class="produto-lista">${itensHtml}</section>
+          <section class="fechamento-lista" aria-label="Total final da lista">
+            <span class="fechamento-label">Total da lista/pedido</span>
+            <span class="fechamento-valor">${html(texto(payload.totalLista))}</span>
+            <span class="fechamento-fim">Fim da lista</span>
+          </section>
           <footer class="rodape">${linhas.length} produto${linhas.length === 1 ? "" : "s"} na lista</footer>
         </section>
       `;
