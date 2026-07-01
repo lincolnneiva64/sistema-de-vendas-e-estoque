@@ -1782,6 +1782,17 @@
   </div>
 {% endif %}
 
+
+{% if finalizando and compra and compra.tipo_pagamento == "aprazo" %}
+  <div class="compras-alert success" style="border-color:#86efac; background:#ecfdf5; color:#166534;">
+    Esta etapa vai lancar estoque e criar a Conta a Pagar.
+  </div>
+{% elif finalizando %}
+  <div class="compras-alert success" style="border-color:#bfdbfe; background:#eff6ff; color:#1d4ed8;">
+    Esta etapa vai lancar estoque e registrar o financeiro da compra.
+  </div>
+{% endif %}
+
 {% if messages %}
     {% for message in messages %}
       <div class="compras-alert {% if message.tags == 'error' %}error{% else %}success{% endif %}">{{ message }}</div>
@@ -2024,7 +2035,13 @@
         <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">Confirmar Pagamento</button>
       {% else %}
         <button type="button" class="compras-btn compras-btn-secondary compras-rascunho-mobile-only" id="btnSalvarRascunhoCompra">Salvar Rascunho</button>
-        <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">Finalizar Compra</button>
+        <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">{% if compra and compra.tipo_pagamento == "aprazo" %}
+            Finalizar e gerar Conta a Pagar
+          {% elif compra and compra.tipo_pagamento == "avista" %}
+            Finalizar e lancar financeiro
+          {% else %}
+            Finalizar Compra
+          {% endif %}</button>
       {% endif %}
     </div>
   </form>
@@ -6638,7 +6655,7 @@
 
   function ehBotaoFechar(el) {
     var t = (el && (el.innerText || el.value || "") || "").toLowerCase();
-    return t.includes("fechar compra") || t.includes("lan?ar no financeiro") || t.includes("lancar no financeiro");
+    return t.includes("fechar compra") || t.includes("lancar no financeiro") || t.includes("lancar no financeiro");
   }
 
   function acharCardModalPorElemento(el) {
@@ -7127,6 +7144,59 @@
       setTimeout(iniciarProtecaoScrollCompra, 300);
       setTimeout(iniciarProtecaoScrollCompra, 900);
     }
+  });
+})();
+</script>
+
+<script id="script-texto-finalizar-compra-dinamico">
+(function () {
+  function normalizar(valor) {
+    return String(valor || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[()\s_\/-]/g, "");
+  }
+
+  function atualizarTextoBotaoFinalizar() {
+    var select = document.querySelector('[name="tipo_pagamento"]');
+    var botao = document.getElementById("btnSalvarCompra");
+
+    if (!select || !botao) return;
+
+    var valor = normalizar(select.value);
+    var textoOpcao = "";
+    if (select.selectedOptions && select.selectedOptions.length) {
+      textoOpcao = normalizar(select.selectedOptions[0].textContent);
+    }
+
+    var combinado = valor + " " + textoOpcao;
+
+    if (combinado.indexOf("aprazo") >= 0) {
+      botao.textContent = "Finalizar e gerar Conta a Pagar";
+    } else if (
+      combinado.indexOf("avista") >= 0 ||
+      combinado.indexOf("dinheiro") >= 0 ||
+      combinado.indexOf("pix") >= 0
+    ) {
+      botao.textContent = "Finalizar e lancar financeiro";
+    } else {
+      botao.textContent = "Finalizar Compra";
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    var select = document.querySelector('[name="tipo_pagamento"]');
+
+    atualizarTextoBotaoFinalizar();
+
+    if (select) {
+      select.addEventListener("change", atualizarTextoBotaoFinalizar);
+      select.addEventListener("input", atualizarTextoBotaoFinalizar);
+    }
+
+    setTimeout(atualizarTextoBotaoFinalizar, 200);
+    setTimeout(atualizarTextoBotaoFinalizar, 700);
   });
 })();
 </script>
