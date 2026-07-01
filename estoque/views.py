@@ -3067,7 +3067,7 @@ def cadastrar_produto(request):
             print("DADOS RECEBIDOS:", request.POST)
     else:
         form = ProdutoForm()
-        
+
     return render(
         request,
         "estoque/cadastrar_produto.html",
@@ -4424,6 +4424,28 @@ def compras_listas_fornecedor(request):
 
     if data_fim:
         listas = listas.filter(data_lista__lte=data_fim)
+
+    listas = list(listas)
+    if listas:
+        filtros_origem = Q()
+        for lista in listas:
+            filtros_origem |= Q(observacao__icontains=f"Gerada a partir da Lista de Compras #{lista.id}")
+
+        compras_geradas = (
+            Compra.objects
+            .filter(filtros_origem, cancelada=False)
+            .exclude(status=Compra.STATUS_CANCELADA)
+            .order_by("-id")
+        )
+
+        compras_por_lista = {}
+        for compra in compras_geradas:
+            match_lista = re.search(r"Lista de Compras #(\d+)", compra.observacao or "")
+            if match_lista:
+                compras_por_lista.setdefault(int(match_lista.group(1)), compra)
+
+        for lista in listas:
+            lista.compra_gerada = compras_por_lista.get(lista.id)
 
     return render(
         request,
@@ -12428,12 +12450,12 @@ def venda_criar_entrega(request, pk):
     bloqueio = _bloquear_venda_cancelada(request, venda)
     if bloqueio:
         return bloqueio
-    
+
     # Verificar se já existe entrega para esta venda
     if EntregaRotaItem.objects.filter(venda=venda).exists():
         messages.warning(request, "Esta venda já possui entrega criada.")
         return redirect("estoque:venda_detalhe", pk=venda.pk)
-    
+
     # Criar entrega unitária
     with transaction.atomic():
         rota = EntregaRota.objects.create(
@@ -12446,7 +12468,7 @@ def venda_criar_entrega(request, pk):
             venda=venda,
             ordem_entrega=1,
         )
-    
+
     messages.success(request, f"Entrega unitária #{rota.pk} criada para a venda #{venda.pk}.")
     return redirect("estoque:venda_detalhe", pk=venda.pk)
 
@@ -13447,14 +13469,14 @@ def montar_link_whatsapp_venda(venda):
 def pedidos(request):
     """Listar pedidos com filtros básicos."""
     from .models import Pedido
-    
+
     pedidos_lista = Pedido.objects.select_related("cliente").order_by("-id")
-    
+
     # Filtro por status
     status = request.GET.get("status", "")
     if status:
         pedidos_lista = pedidos_lista.filter(status=status)
-    
+
     # Filtro por cliente
     cliente_id = request.GET.get("cliente_id", "")
     if cliente_id:
@@ -13466,7 +13488,7 @@ def pedidos(request):
             Q(cliente__bairro__icontains=localidade) |
             Q(cliente__cidade__icontains=localidade)
         )
-    
+
     # Filtro por data
     data_inicio = request.GET.get("data_inicio", "")
     data_fim = request.GET.get("data_fim", "")
@@ -13478,7 +13500,7 @@ def pedidos(request):
         pedidos_lista = pedidos_lista.filter(data_pedido=data_inicio_obj)
     elif data_fim_obj:
         pedidos_lista = pedidos_lista.filter(data_pedido__lte=data_fim_obj)
-    
+
     clientes = Cliente.objects.filter(ativo=True).order_by("nome")
     localidades = []
     localidades_vistas = set()
@@ -13489,7 +13511,7 @@ def pedidos(request):
             if valor and chave not in localidades_vistas:
                 localidades.append(valor)
                 localidades_vistas.add(chave)
-    
+
     return render(request, "estoque/pedidos_lista.html", {
         "pedidos": pedidos_lista,
         "clientes": clientes,
@@ -13754,7 +13776,7 @@ def pedido_criar(request):
         except (TypeError, ValueError):
             return JsonResponse({"sugestoes": []})
         return JsonResponse({"sugestoes": _sugestoes_ultimas_compras_cliente(cliente_id)})
-    
+
     if request.method == "POST":
         try:
             data_pedido_str = request.POST.get("data_pedido", "")
@@ -13764,20 +13786,20 @@ def pedido_criar(request):
             if resposta_operador:
                 return resposta_operador
             observacao = request.POST.get("observacao", "").strip()
-            
+
             # Validar dados obrigatórios
             if not data_pedido_str:
                 return JsonResponse({"sucesso": False, "mensagem": "Data do pedido é obrigatória."})
             if not cliente_id:
                 return JsonResponse({"sucesso": False, "mensagem": "Cliente é obrigatório."})
-            
+
             try:
                 data_pedido = parse_date(data_pedido_str)
                 if not data_pedido:
                     raise ValueError("Data inválida")
             except:
                 return JsonResponse({"sucesso": False, "mensagem": "Data do pedido inválida."})
-            
+
             try:
                 cliente_id_int = int(cliente_id)
                 cliente = Cliente.objects.filter(pk=cliente_id_int, ativo=True).first()
@@ -13785,26 +13807,26 @@ def pedido_criar(request):
                     return JsonResponse({"sucesso": False, "mensagem": "Cliente inválido."})
             except:
                 return JsonResponse({"sucesso": False, "mensagem": "Cliente inválido."})
-            
+
             data_prevista_entrega = None
             if data_prevista_entrega_str:
                 try:
                     data_prevista_entrega = parse_date(data_prevista_entrega_str)
                 except:
                     pass
-            
+
             # Obter itens do POST
             itens_data = request.POST.get("itens_json", "")
             if not itens_data:
                 return JsonResponse({"sucesso": False, "mensagem": "Adicione pelo menos um item ao pedido."})
-            
+
             try:
                 itens = json.loads(itens_data)
                 if not itens:
                     return JsonResponse({"sucesso": False, "mensagem": "Adicione pelo menos um item ao pedido."})
             except:
                 return JsonResponse({"sucesso": False, "mensagem": "Dados de itens inválidos."})
-            
+
             # Criar pedido
             with transaction.atomic():
                 total = Decimal(0)
@@ -13814,7 +13836,7 @@ def pedido_criar(request):
                         total += valor_total
                     except:
                         pass
-                
+
                 pedido = Pedido.objects.create(
                     cliente=cliente,
                     data_pedido=data_pedido,
@@ -13823,7 +13845,7 @@ def pedido_criar(request):
                     observacao=observacao or None,
                     total=total,
                 )
-                
+
                 # Criar itens do pedido
                 for item in itens:
                     try:
@@ -13831,14 +13853,14 @@ def pedido_criar(request):
                         produto = Produto.objects.filter(pk=produto_id, excluido=False).first()
                         if not produto:
                             continue
-                        
+
                         quantidade = Decimal(str(item.get("quantidade", 0)))
                         unidade = item.get("unidade", "").strip()
                         preco_unitario = Decimal(str(item.get("preco_unitario", 0)))
                         valor_total = Decimal(str(item.get("valor_total", 0)))
                         estoque_no_momento = int(produto.quantidade or 0)
                         observacao_item = item.get("observacao", "").strip()
-                        
+
                         ItemPedido.objects.create(
                             pedido=pedido,
                             produto=produto,
@@ -13852,7 +13874,7 @@ def pedido_criar(request):
                     except Exception as e:
                         logger.exception(f"Erro ao criar item do pedido: {e}")
                         continue
-            
+
             return JsonResponse({
                 "sucesso": True,
                 "pedido_id": pedido.id,
@@ -13863,11 +13885,11 @@ def pedido_criar(request):
                     else reverse("estoque:pedido_detalhe", args=[pedido.id])
                 ),
             })
-        
+
         except Exception as e:
             logger.exception(f"Erro ao criar pedido: {e}")
             return JsonResponse({"sucesso": False, "mensagem": "Erro ao criar pedido."}, status=500)
-    
+
     # GET: mostrar formulário de criação
     produtos = Produto.objects.filter(excluido=False).order_by("nome")
     clientes = Cliente.objects.filter(ativo=True).order_by("nome")
@@ -14101,7 +14123,7 @@ def _itens_pendentes_exibicao_pedido_parcial(pedido, itens_pedido):
 def pedido_detalhe(request, pk):
     """Mostrar detalhe do pedido."""
     from .models import Pedido
-    
+
     pedido = get_object_or_404(
         Pedido.objects.select_related("cliente").prefetch_related("itens__produto"),
         pk=pk,
@@ -14119,7 +14141,7 @@ def pedido_detalhe(request, pk):
 
     for item in itens_exibidos:
         item.quantidade_formatada = _formatar_decimal_pedido(item.quantidade)
-    
+
     return render(request, "estoque/pedido_detalhe.html", {
         "pedido": pedido,
         "itens_exibidos": itens_exibidos,

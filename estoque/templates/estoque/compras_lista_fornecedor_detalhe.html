@@ -336,15 +336,22 @@
   </section>
 
   {% if compra_gerada %}
-    <section class="lista-fornecedor-card" style="border-color:#facc15; background:#fffbeb;">
-      <div style="padding:10px 12px; color:#92400e; font-weight:900;">
-        Esta lista ja gerou a Compra #{{ compra_gerada.id }} em {{ compra_gerada.get_status_display }}. Para gerar outra, descarte primeiro a compra atual.
-        <a href="{% url 'estoque:compra_editar' compra_gerada.id %}?continuar_itens=1" style="color:#1d4ed8; font-weight:950; margin-left:8px;">Abrir compra gerada</a>
-        {% if compra_gerada.status == "rascunho" or compra_gerada.status == "aberta" %}
-          <form method="post" action="{% url 'estoque:compras_lista_fornecedor_descartar_compra' lista.id %}" style="display:inline; margin-left:8px;">
-            {% csrf_token %}
-            <button type="submit" style="border:1px solid #f97316; background:#fff7ed; color:#9a3412; border-radius:8px; padding:5px 9px; font-weight:950; cursor:pointer;">Descartar compra gerada</button>
-          </form>
+    <section class="lista-fornecedor-card" style="border:2px solid #f59e0b; background:#fffbeb; box-shadow:0 12px 28px rgba(146,64,14,.16);">
+      <div style="padding:16px 18px; color:#92400e; font-weight:900; font-size:1.05rem; line-height:1.35;">
+        {% if compra_gerada.status == "finalizada" %}
+          <strong>Lista lancada como Compra #{{ compra_gerada.id }}.</strong>
+          A compra ja foi finalizada, com estoque e financeiro lancados.
+          <a href="{% url 'estoque:compras_detalhe' compra_gerada.id %}" style="color:#1d4ed8; font-weight:950; margin-left:8px;">Abrir compra finalizada</a>
+        {% else %}
+          <strong>Esta lista gerou a Compra #{{ compra_gerada.id }} em {{ compra_gerada.get_status_display }}.</strong>
+          Confira ou finalize a compra antes de gerar outra.
+          <a href="{% url 'estoque:compra_editar' compra_gerada.id %}?continuar_itens=1" style="color:#1d4ed8; font-weight:950; margin-left:8px;">Abrir compra gerada</a>
+          {% if compra_gerada.status == "rascunho" or compra_gerada.status == "aberta" %}
+            <form method="post" action="{% url 'estoque:compras_lista_fornecedor_descartar_compra' lista.id %}" style="display:inline; margin-left:8px;">
+              {% csrf_token %}
+              <button type="submit" style="border:1px solid #f97316; background:#fff7ed; color:#9a3412; border-radius:8px; padding:5px 9px; font-weight:950; cursor:pointer;">Descartar compra gerada</button>
+            </form>
+          {% endif %}
         {% endif %}
       </div>
     </section>
@@ -353,7 +360,7 @@
   <section class="lista-fornecedor-card">
     <div class="lista-fornecedor-card-titulo">
       <h2>Informa??es da Lista</h2>
-      <small>Lista ainda n?o lan?ada como compra</small>
+      {% if compra_gerada %}<small>Lista lancada como Compra #{{ compra_gerada.id }}</small>{% else %}<small>Lista ainda nao lancada como compra</small>{% endif %}
     </div>
 
     <div class="lista-fornecedor-resumo">

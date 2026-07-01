@@ -427,6 +427,475 @@
   flex-wrap: nowrap !important;
 }
 
+
+  .listas-fornecedor-compra-gerada {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 3px;
+    align-items: center;
+    justify-content: center;
+    padding: 7px 10px;
+    border: 1px solid #f59e0b;
+    border-radius: 10px;
+    background: #fffbeb;
+    color: #92400e;
+    font-weight: 950;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+
+  .listas-fornecedor-compra-gerada small {
+    color: #166534;
+    font-weight: 900;
+  }
+
+  .listas-fornecedor-linha-com-compra td {
+    background: #fffdf3 !important;
+  }
+
+
+/* Ajuste visual: linha de lista que virou compra */
+.listas-fornecedor-table td {
+  vertical-align: middle !important;
+}
+
+.listas-fornecedor-table th:nth-child(7),
+.listas-fornecedor-table td:nth-child(7) {
+  width: 150px !important;
+  text-align: center !important;
+}
+
+.listas-fornecedor-table th:nth-child(8),
+.listas-fornecedor-table td:nth-child(8) {
+  width: 300px !important;
+  text-align: center !important;
+}
+
+.listas-fornecedor-compra-gerada {
+  display: inline-flex !important;
+  flex-direction: column !important;
+  gap: 1px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 118px !important;
+  padding: 5px 8px !important;
+  border: 1px solid #f59e0b !important;
+  border-radius: 9px !important;
+  background: #fffbeb !important;
+  color: #92400e !important;
+  font-size: .82rem !important;
+  font-weight: 950 !important;
+  line-height: 1.05 !important;
+  white-space: nowrap !important;
+}
+
+.listas-fornecedor-compra-gerada small {
+  color: #166534 !important;
+  font-size: .74rem !important;
+  font-weight: 950 !important;
+}
+
+.listas-fornecedor-linha-com-compra td {
+  background: #fffdf3 !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes {
+  justify-content: center !important;
+  gap: 5px !important;
+  flex-wrap: nowrap !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-btn {
+  min-height: 30px !important;
+  padding: 5px 8px !important;
+  border-radius: 8px !important;
+  font-size: .74rem !important;
+  line-height: 1 !important;
+}
+
+
+/* Ajuste final: status de compra gerada mais discreto */
+.listas-fornecedor-compra-gerada {
+  display: none !important;
+}
+
+.listas-fornecedor-compra-mini {
+  margin-top: 5px;
+  font-size: .74rem;
+  font-weight: 950;
+  color: #92400e;
+  white-space: nowrap;
+}
+
+.listas-fornecedor-linha-com-compra td {
+  background: #fffdf3 !important;
+}
+
+.listas-fornecedor-table th:nth-child(7),
+.listas-fornecedor-table td:nth-child(7) {
+  width: 155px !important;
+  text-align: center !important;
+}
+
+.listas-fornecedor-table th:nth-child(8),
+.listas-fornecedor-table td:nth-child(8) {
+  width: 260px !important;
+  text-align: center !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes {
+  justify-content: center !important;
+  gap: 4px !important;
+  flex-wrap: nowrap !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-btn {
+  min-height: 30px !important;
+  padding: 5px 7px !important;
+  border-radius: 8px !important;
+  font-size: .72rem !important;
+  line-height: 1 !important;
+}
+
+
+/* Consulta de listas: resumo limpo quando a lista virou compra */
+.listas-fornecedor-table {
+  min-width: 1040px !important;
+}
+
+.listas-fornecedor-table th:nth-child(1),
+.listas-fornecedor-table td:nth-child(1) {
+  width: 78px !important;
+  text-align: center !important;
+}
+
+.listas-fornecedor-table th:nth-child(2),
+.listas-fornecedor-table td:nth-child(2) {
+  width: 260px !important;
+  text-align: left !important;
+}
+
+.listas-fornecedor-table th:nth-child(3),
+.listas-fornecedor-table td:nth-child(3) {
+  width: 140px !important;
+  text-align: center !important;
+}
+
+.listas-fornecedor-table th:nth-child(4),
+.listas-fornecedor-table td:nth-child(4) {
+  width: 150px !important;
+  text-align: right !important;
+}
+
+.listas-fornecedor-table th:nth-child(5),
+.listas-fornecedor-table td:nth-child(5) {
+  width: 330px !important;
+  text-align: center !important;
+}
+
+.listas-fornecedor-table th:nth-child(6),
+.listas-fornecedor-table td:nth-child(6) {
+  width: 210px !important;
+  text-align: center !important;
+}
+
+.listas-fornecedor-compra-lancada {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+  justify-content: center;
+  min-width: 270px;
+  padding: 8px 12px;
+  border: 1.5px solid #f59e0b;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #92400e;
+  line-height: 1.12;
+}
+
+.listas-fornecedor-compra-lancada strong {
+  font-size: .88rem;
+  font-weight: 950;
+}
+
+.listas-fornecedor-compra-lancada span {
+  color: #166534;
+  font-size: .78rem;
+  font-weight: 950;
+}
+
+.listas-fornecedor-periodo-mini {
+  margin-top: 5px;
+  color: #64748b;
+  font-size: .72rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.listas-fornecedor-linha-com-compra td {
+  background: #fffdf3 !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes {
+  justify-content: center !important;
+  gap: 6px !important;
+  flex-wrap: nowrap !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-btn {
+  min-height: 34px !important;
+  padding: 7px 12px !important;
+  border-radius: 9px !important;
+  font-size: .82rem !important;
+}
+
+
+/* Ajuste fino final: alinhamento da consulta de listas */
+.listas-fornecedor-table td {
+  vertical-align: middle !important;
+}
+
+.listas-fornecedor-table td:nth-child(3),
+.listas-fornecedor-table td:nth-child(4),
+.listas-fornecedor-table td:nth-child(5),
+.listas-fornecedor-table td:nth-child(6) {
+  padding-top: 18px !important;
+  padding-bottom: 18px !important;
+}
+
+.listas-fornecedor-table td:nth-child(4) {
+  background: #fffdf3 !important;
+  text-align: center !important;
+}
+
+.listas-fornecedor-total {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 44px !important;
+  text-align: center !important;
+  color: #991b1b !important;
+  font-size: .95rem !important;
+  font-weight: 950 !important;
+}
+
+.listas-fornecedor-compra-lancada {
+  min-width: 310px !important;
+  padding: 11px 18px !important;
+  border: 2px solid #f59e0b !important;
+  border-radius: 12px !important;
+  background: #fffbeb !important;
+  box-shadow: 0 8px 18px rgba(146, 64, 14, .12) !important;
+}
+
+.listas-fornecedor-compra-lancada strong {
+  font-size: .98rem !important;
+  font-weight: 950 !important;
+  color: #92400e !important;
+}
+
+.listas-fornecedor-compra-lancada span {
+  margin-top: 2px !important;
+  font-size: .84rem !important;
+  font-weight: 950 !important;
+  color: #166534 !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes {
+  min-height: 52px !important;
+  align-items: center !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-btn {
+  min-height: 38px !important;
+  padding: 8px 14px !important;
+  font-size: .86rem !important;
+}
+
+
+/* FORCA FINAL 0107 - alinhamento limpo da consulta de listas */
+.listas-fornecedor-table {
+  min-width: 980px !important;
+  table-layout: fixed !important;
+}
+
+.listas-fornecedor-table th,
+.listas-fornecedor-table td {
+  vertical-align: middle !important;
+}
+
+.listas-fornecedor-table th:nth-child(1),
+.listas-fornecedor-table td:nth-child(1) {
+  width: 70px !important;
+  text-align: center !important;
+}
+
+.listas-fornecedor-table th:nth-child(2),
+.listas-fornecedor-table td:nth-child(2) {
+  width: 250px !important;
+  text-align: left !important;
+}
+
+.listas-fornecedor-table th:nth-child(3),
+.listas-fornecedor-table td:nth-child(3) {
+  width: 135px !important;
+  text-align: center !important;
+}
+
+.listas-fornecedor-table th:nth-child(4),
+.listas-fornecedor-table td:nth-child(4) {
+  width: 145px !important;
+  text-align: center !important;
+}
+
+.listas-fornecedor-table th:nth-child(5),
+.listas-fornecedor-table td:nth-child(5) {
+  width: 340px !important;
+  text-align: center !important;
+}
+
+.listas-fornecedor-table th:nth-child(6),
+.listas-fornecedor-table td:nth-child(6) {
+  width: 190px !important;
+  text-align: center !important;
+}
+
+.listas-fornecedor-linha-com-compra td,
+.listas-fornecedor-linha-com-compra td:nth-child(1),
+.listas-fornecedor-linha-com-compra td:nth-child(2),
+.listas-fornecedor-linha-com-compra td:nth-child(3),
+.listas-fornecedor-linha-com-compra td:nth-child(4),
+.listas-fornecedor-linha-com-compra td:nth-child(5),
+.listas-fornecedor-linha-com-compra td:nth-child(6) {
+  background: #fffdf3 !important;
+  padding-top: 22px !important;
+  padding-bottom: 22px !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-total {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 40px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  text-align: center !important;
+  color: #991b1b !important;
+  font-size: 1rem !important;
+  font-weight: 950 !important;
+}
+
+.listas-fornecedor-compra-lancada {
+  display: inline-flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 330px !important;
+  padding: 12px 20px !important;
+  border: 2px solid #f59e0b !important;
+  border-radius: 13px !important;
+  background: #fffbeb !important;
+  color: #92400e !important;
+  box-shadow: 0 8px 18px rgba(146, 64, 14, .12) !important;
+  line-height: 1.15 !important;
+}
+
+.listas-fornecedor-compra-lancada strong {
+  font-size: 1rem !important;
+  font-weight: 950 !important;
+  color: #92400e !important;
+}
+
+.listas-fornecedor-compra-lancada span {
+  margin-top: 3px !important;
+  font-size: .86rem !important;
+  font-weight: 950 !important;
+  color: #166534 !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  min-height: 50px !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-btn {
+  min-height: 38px !important;
+  padding: 8px 15px !important;
+  font-size: .86rem !important;
+  border-radius: 9px !important;
+}
+
+
+/* FORCA FINAL 0107 B - eixo horizontal da linha finalizada */
+.listas-fornecedor-linha-com-compra td {
+  height: 92px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  vertical-align: middle !important;
+}
+
+.listas-fornecedor-linha-com-compra td:nth-child(1),
+.listas-fornecedor-linha-com-compra td:nth-child(2),
+.listas-fornecedor-linha-com-compra td:nth-child(3),
+.listas-fornecedor-linha-com-compra td:nth-child(4),
+.listas-fornecedor-linha-com-compra td:nth-child(5),
+.listas-fornecedor-linha-com-compra td:nth-child(6) {
+  line-height: 92px !important;
+}
+
+.listas-fornecedor-linha-com-compra td:nth-child(4) {
+  background: #fffdf3 !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-total {
+  display: inline-block !important;
+  min-height: 0 !important;
+  height: auto !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  vertical-align: middle !important;
+  position: relative !important;
+  top: 0 !important;
+  background: transparent !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-compra-lancada,
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes {
+  line-height: normal !important;
+  vertical-align: middle !important;
+}
+
+
+/* FORCA FINAL 0107 C - botoes de acoes iguais e proporcionais */
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 16px !important;
+  min-height: 54px !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-btn {
+  width: 92px !important;
+  min-width: 92px !important;
+  max-width: 92px !important;
+  min-height: 40px !important;
+  height: 40px !important;
+  padding: 0 !important;
+  border-radius: 10px !important;
+  font-size: .86rem !important;
+  line-height: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
 </style>
 
 <main class="listas-fornecedor-page">
@@ -487,32 +956,58 @@
               <th>Numero</th>
               <th>Fornecedor</th>
               <th>Data</th>
-              <th>Periodo</th>
-              <th>Chegada</th>
               <th>Total</th>
-              <th>Status</th>
+              <th>Situacao</th>
               <th>Acoes</th>
             </tr>
           </thead>
 
           <tbody>
             {% for lista in listas %}
-              <tr>
-                <td class="listas-fornecedor-numero">#{{ lista.id }}</td>
-                <td>{% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}</td>
-                <td>{{ lista.data_lista|date:"d/m/Y" }}</td>
-                <td>{{ lista.data_inicio_periodo|date:"d/m/Y" }} ate {{ lista.data_fim_periodo|date:"d/m/Y" }}</td>
-                <td>{% if lista.data_chegada_prevista %}{{ lista.data_chegada_prevista|date:"d/m/Y" }}{% else %}-{% endif %}</td>
-                <td class="listas-fornecedor-total">R$ {{ lista.total_lista|floatformat:2 }}</td>
-                <td><span class="listas-fornecedor-status {{ lista.status }}">{{ lista.get_status_display }}</span></td>
-                <td>
-                  <div class="listas-fornecedor-acoes">
-                    <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Abrir</a>
-                    <a class="listas-fornecedor-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">WhatsApp</a>
-                    <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Imprimir</a>
-                  </div>
-                </td>
-              </tr>
+              {% if lista.compra_gerada %}
+                <tr class="listas-fornecedor-linha-com-compra">
+                  <td class="listas-fornecedor-numero">#{{ lista.id }}</td>
+                  <td>{% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}</td>
+                  <td>{{ lista.data_lista|date:"d/m/Y" }}</td>
+                  <td class="listas-fornecedor-total">R$ {{ lista.total_lista|floatformat:2 }}</td>
+                  <td>
+                    <div class="listas-fornecedor-compra-lancada">
+                      <strong>Lista #{{ lista.id }} virou Compra #{{ lista.compra_gerada.id }}</strong>
+                      <span>{{ lista.compra_gerada.get_status_display }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="listas-fornecedor-acoes">
+                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Lista</a>
+                      {% if lista.compra_gerada.status == "finalizada" %}
+                        <a class="listas-fornecedor-btn primary" href="{% url 'estoque:compras_detalhe' lista.compra_gerada.id %}">Compra</a>
+                      {% else %}
+                        <a class="listas-fornecedor-btn primary" href="{% url 'estoque:compra_editar' lista.compra_gerada.id %}?continuar_itens=1">Compra</a>
+                      {% endif %}
+                    </div>
+                  </td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td class="listas-fornecedor-numero">#{{ lista.id }}</td>
+                  <td>{% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}</td>
+                  <td>{{ lista.data_lista|date:"d/m/Y" }}</td>
+                  <td class="listas-fornecedor-total">R$ {{ lista.total_lista|floatformat:2 }}</td>
+                  <td>
+                    <span class="listas-fornecedor-status {{ lista.status }}">{{ lista.get_status_display }}</span>
+                    <div class="listas-fornecedor-periodo-mini">
+                      {{ lista.data_inicio_periodo|date:"d/m/Y" }} ate {{ lista.data_fim_periodo|date:"d/m/Y" }}
+                    </div>
+                  </td>
+                  <td>
+                    <div class="listas-fornecedor-acoes">
+                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Abrir</a>
+                      <a class="listas-fornecedor-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">WhatsApp</a>
+                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Imprimir</a>
+                    </div>
+                  </td>
+                </tr>
+              {% endif %}
             {% endfor %}
           </tbody>
         </table>
