@@ -486,9 +486,9 @@
                 <a href="{% url 'estoque:pedido_editar' pedido.id %}" class="btn btn-editar">Editar Pedido</a>
             {% endif %}
             {% if pedido.status == 'aberto' %}
-                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar" onclick="return confirm('Enviar este pedido para venda? Confira os dados antes de continuar.');">Enviar para Venda</a>
+                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar" onclick="return confirm('Gerar venda a partir deste pedido? Confira os dados antes de continuar.');">Gerar Venda</a>
             {% elif pedido.status == 'parcial' %}
-                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar" onclick="return confirm('Enviar a pendencia deste pedido para venda? Confira os dados antes de continuar.');">Enviar pend&ecirc;ncia para Venda</a>
+                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar" onclick="return confirm('Gerar venda da pendencia deste pedido? Confira os dados antes de continuar.');">Gerar Venda da Pend&ecirc;ncia</a>
             {% elif pedido.status == 'convertido_em_venda' %}
                 <a href="{% url 'estoque:vendas' %}" class="btn btn-venda">Ir para Vendas</a>
             {% else %}
@@ -666,9 +666,9 @@
                 <a href="{% url 'estoque:pedido_editar' pedido.id %}" class="btn btn-editar">Editar Pedido</a>
             {% endif %}
             {% if pedido.status == 'aberto' %}
-                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar" onclick="return confirm('Enviar este pedido para venda? Confira os dados antes de continuar.');">Enviar para Venda</a>
+                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar" onclick="return confirm('Gerar venda a partir deste pedido? Confira os dados antes de continuar.');">Gerar Venda</a>
             {% elif pedido.status == 'parcial' %}
-                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar" onclick="return confirm('Enviar a pendencia deste pedido para venda? Confira os dados antes de continuar.');">Enviar pend&ecirc;ncia para Venda</a>
+                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar" onclick="return confirm('Gerar venda da pendencia deste pedido? Confira os dados antes de continuar.');">Gerar Venda da Pend&ecirc;ncia</a>
             {% elif pedido.status == 'convertido_em_venda' %}
                 <a href="{% url 'estoque:vendas' %}" class="btn btn-venda">Ir para Vendas</a>
             {% else %}
