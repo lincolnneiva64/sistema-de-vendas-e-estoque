@@ -4213,10 +4213,58 @@ def _decimal_lista_fornecedor(valor, casas=2):
         raise ValueError("Valor numerico invalido.")
 
 
+def _normalizar_whatsapp_fornecedor(valor):
+    return "".join(caractere for caractere in str(valor or "") if caractere.isdigit())
+
+
+def _payload_destinatarios_lista_fornecedor(fornecedor):
+    destinatarios = []
+    vistos = set()
+
+    def adicionar(tipo, nome, whatsapp):
+        numero = _normalizar_whatsapp_fornecedor(whatsapp)
+        if not nome or not numero or numero in vistos:
+            return
+        vistos.add(numero)
+        destinatarios.append({
+            "tipo": tipo,
+            "nome": nome,
+            "whatsapp": whatsapp,
+            "numero": numero,
+        })
+
+    funcionarios = Funcionario.objects.filter(
+        ativo=True,
+        telefone_whatsapp_normalizado__isnull=False,
+    ).filter(Q(nome__icontains="lincoln") | Q(nome__icontains="roseli")).order_by("nome", "id")
+    for funcionario in funcionarios:
+        adicionar("funcionario", funcionario.nome, funcionario.telefone_whatsapp_normalizado or funcionario.telefone_whatsapp)
+
+    contatos_fornecedor = []
+    if fornecedor:
+        contatos_fornecedor = list(
+            fornecedor.contatos.filter(
+                ativo=True,
+                telefone_whatsapp_normalizado__isnull=False,
+            ).order_by("-principal", "nome", "id")
+        )
+        for contato in contatos_fornecedor:
+            cargo = f" ({contato.cargo})" if contato.cargo else ""
+            adicionar("fornecedor", f"{contato.nome}{cargo}", contato.telefone_whatsapp_normalizado or contato.telefone_whatsapp)
+        adicionar("fornecedor", f"{fornecedor.nome} - WhatsApp principal", fornecedor.telefone_whatsapp)
+
+    return {
+        "opcoes": destinatarios,
+        "temContatoFornecedor": bool(contatos_fornecedor or (fornecedor and _normalizar_whatsapp_fornecedor(fornecedor.telefone_whatsapp))),
+    }
+
+
 def _payload_lista_fornecedor(lista):
+    destinatarios = _payload_destinatarios_lista_fornecedor(lista.fornecedor)
     return {
         "tipo": "sintetica",
         "titulo": "Lista de Compras",
+        "imagemUrl": reverse("estoque:compras_lista_fornecedor_whatsapp_imagem", kwargs={"pk": lista.pk}),
         "fornecedor": lista.fornecedor.nome if lista.fornecedor else "Fornecedor nao informado",
         "periodo": f"{lista.data_inicio_periodo.strftime('%d/%m/%Y')} ate {lista.data_fim_periodo.strftime('%d/%m/%Y')}",
         "chegada": lista.data_chegada_prevista.strftime("%d/%m/%Y") if lista.data_chegada_prevista else "",
@@ -4233,7 +4281,120 @@ def _payload_lista_fornecedor(lista):
             }
             for item in lista.itens.all()
         ],
+        "destinatarios": destinatarios["opcoes"],
+        "temContatoFornecedor": destinatarios["temContatoFornecedor"],
     }
+
+
+def _desenhar_texto_quebrado_lista(draw, xy, texto, fonte, preenchimento, largura_maxima, entrelinhas=6):
+    x, y = xy
+    linhas = _quebrar_texto(draw, texto, fonte, largura_maxima)
+    for linha in linhas:
+        draw.text((x, y), linha, fill=preenchimento, font=fonte)
+        caixa = draw.textbbox((x, y), linha or " ", font=fonte)
+        y = caixa[3] + entrelinhas
+    return y
+
+
+def _gerar_lista_fornecedor_whatsapp_imagem(lista):
+    largura = 1080
+    margem = 44
+    conteudo_largura = largura - (margem * 2)
+    fundo = "#f8f4ee"
+    papel = "#fffefc"
+    vinho = "#8a2f3d"
+    vinho_escuro = "#6f2430"
+    texto_cor = "#182033"
+    suave = "#667085"
+    borda = "#eadadd"
+    verde = "#14532d"
+
+    fonte_titulo = _fonte_nota_whatsapp(42, True)
+    fonte_subtitulo = _fonte_nota_whatsapp(25)
+    fonte_label = _fonte_nota_whatsapp(22, True)
+    fonte_texto_negrito = _fonte_nota_whatsapp(28, True)
+    fonte_detalhe_label = _fonte_nota_whatsapp(19, True)
+    fonte_detalhe_valor = _fonte_nota_whatsapp(30, True)
+    fonte_total = _fonte_nota_whatsapp(38, True)
+    fonte_fim = _fonte_nota_whatsapp(24, True)
+
+    medida = Image.new("RGB", (largura, 100), fundo)
+    draw_medida = ImageDraw.Draw(medida)
+    y = margem + 102
+
+    metadados = [
+        ("Fornecedor", lista.fornecedor.nome if lista.fornecedor else "Fornecedor nao informado"),
+    ]
+    if lista.data_chegada_prevista:
+        metadados.append(("Chegada prevista", lista.data_chegada_prevista.strftime("%d/%m/%Y")))
+    y += len(metadados) * 62 + 26
+
+    itens = list(lista.itens.select_related("produto").all())
+    for indice, item in enumerate(itens, start=1):
+        nome = item.produto.nome if item.produto else "Produto nao identificado"
+        linhas_nome = _quebrar_texto(draw_medida, f"{indice}. {nome}", fonte_texto_negrito, conteudo_largura - 22)
+        y += max(132, 50 + (len(linhas_nome) * 34) + 76)
+    y += 156
+    altura = max(780, y + margem)
+
+    imagem = Image.new("RGB", (largura, altura), fundo)
+    draw = ImageDraw.Draw(imagem)
+    draw.rounded_rectangle((22, 22, largura - 22, altura - 22), radius=30, fill=papel, outline=borda, width=2)
+    draw.rounded_rectangle((22, 22, largura - 22, 122), radius=30, fill="#fff5f6", outline="#f0d4da", width=1)
+    draw.rectangle((22, 88, largura - 22, 122), fill="#fff5f6")
+    draw.text((margem, 42), "Lista de Compras", fill=vinho_escuro, font=fonte_titulo)
+    draw.text((margem, 88), "Pedido pronto para envio ao fornecedor", fill="#8b5860", font=fonte_subtitulo)
+
+    y = 150
+    for label, valor in metadados:
+        draw.text((margem, y), label.upper(), fill=suave, font=fonte_label)
+        y = _desenhar_texto_quebrado_lista(draw, (margem, y + 26), valor, fonte_texto_negrito, texto_cor, conteudo_largura, 4)
+        y += 10
+
+    y += 4
+    for indice, item in enumerate(itens, start=1):
+        nome = item.produto.nome if item.produto else "Produto nao identificado"
+        topo = y
+        linhas_nome = _quebrar_texto(draw, f"{indice}. {nome}", fonte_texto_negrito, conteudo_largura - 22)
+        altura_card = max(132, 50 + (len(linhas_nome) * 34) + 76)
+        draw.rounded_rectangle((margem, topo, largura - margem, topo + altura_card), radius=16, fill="#ffffff", outline="#eee1e3", width=2)
+        y = _desenhar_texto_quebrado_lista(draw, (margem + 16, topo + 14), f"{indice}. {nome}", fonte_texto_negrito, texto_cor, conteudo_largura - 32, 4)
+
+        qtd = f"{_formatar_quantidade(item.quantidade_final)} {item.unidade or ''}".strip()
+        compra = _formatar_moeda(item.preco_compra)
+        total = _formatar_moeda(item.total)
+        detalhe_y = topo + altura_card - 66
+        coluna_qtd = margem + 16
+        coluna_compra = margem + 330
+        coluna_total = margem + 650
+        caixa_topo = detalhe_y - 8
+        caixa_base = detalhe_y + 56
+
+        draw.rounded_rectangle((coluna_qtd - 14, caixa_topo, coluna_compra - 26, caixa_base), radius=12, fill="#fff8f9", outline="#eadadd", width=1)
+        draw.rounded_rectangle((coluna_compra - 14, caixa_topo, coluna_total - 26, caixa_base), radius=12, fill="#f8fafc", outline="#d7dde6", width=1)
+        draw.rounded_rectangle((coluna_total - 14, caixa_topo, largura - margem - 14, caixa_base), radius=12, fill="#f0fff4", outline="#bbf7d0", width=1)
+
+        draw.text((coluna_qtd, detalhe_y), "QUANTIDADE", fill=vinho_escuro, font=fonte_detalhe_label)
+        draw.text((coluna_qtd, detalhe_y + 24), qtd, fill=vinho_escuro, font=fonte_detalhe_valor)
+
+        draw.text((coluna_compra, detalhe_y), "PR. COMPRA", fill="#111827", font=fonte_detalhe_label)
+        draw.text((coluna_compra, detalhe_y + 24), compra, fill="#111827", font=fonte_detalhe_valor)
+
+        draw.text((coluna_total, detalhe_y), "TOTAL", fill=verde, font=fonte_detalhe_label)
+        draw.text((coluna_total, detalhe_y + 24), total, fill=verde, font=fonte_detalhe_valor)
+        y = topo + altura_card + 10
+
+    draw.rounded_rectangle((margem, y + 10, largura - margem, y + 92), radius=18, fill="#fff5f6", outline="#d9a1aa", width=3)
+    draw.text((margem + 20, y + 28), "TOTAL DO PEDIDO", fill=vinho_escuro, font=fonte_label)
+    total_texto = _formatar_moeda(lista.total_lista)
+    largura_total = _texto_largura(draw, total_texto, fonte_total)
+    draw.text((largura - margem - 20 - largura_total, y + 28), total_texto, fill=verde, font=fonte_total)
+    draw.text((margem, y + 116), "Fim da lista", fill=suave, font=fonte_fim)
+
+    png = BytesIO()
+    imagem.save(png, format="PNG")
+    png.seek(0)
+    return png
 
 
 def compras_listas_fornecedor(request):
@@ -4356,7 +4517,7 @@ def compras_lista_fornecedor_gravar(request):
 
 def compras_lista_fornecedor_whatsapp(request, pk):
     lista = get_object_or_404(
-        ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto"),
+        ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("fornecedor__contatos", "itens__produto"),
         pk=pk,
     )
     return render(
@@ -4364,6 +4525,17 @@ def compras_lista_fornecedor_whatsapp(request, pk):
         "estoque/compras_sugestao_fornecedor_whatsapp.html",
         {"whatsapp_payload": _payload_lista_fornecedor(lista)},
     )
+
+
+def compras_lista_fornecedor_whatsapp_imagem(request, pk):
+    lista = get_object_or_404(
+        ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+    buffer = _gerar_lista_fornecedor_whatsapp_imagem(lista)
+    response = FileResponse(buffer, content_type="image/png")
+    response["Content-Disposition"] = f'inline; filename="lista-compra-fornecedor-{lista.id}.png"'
+    return response
 
 
 @require_POST

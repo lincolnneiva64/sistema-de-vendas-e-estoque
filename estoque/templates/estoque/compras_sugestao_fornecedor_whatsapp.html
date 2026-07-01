@@ -48,6 +48,10 @@
       font-size: .84rem;
       font-weight: 800;
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
       box-shadow: 0 5px 12px rgba(127, 29, 45, .13);
     }
 
@@ -56,6 +60,11 @@
       background: #fff;
       color: var(--vinho);
       box-shadow: none;
+    }
+
+    .acao-btn.imagem-lista {
+      background: #14532d;
+      box-shadow: 0 5px 12px rgba(20, 83, 45, .14);
     }
 
     .documento {
@@ -249,14 +258,190 @@
       text-align: center;
     }
 
-    .texto-copia {
-      position: fixed;
-      left: -9999px;
-      top: -9999px;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;
+    .envio-whatsapp-topo,
+    .mensagem-whatsapp {
+      margin-top: 10px;
+      border: 1px solid var(--borda);
+      border-radius: 12px;
+      background: #fffefc;
+      box-shadow: 0 10px 22px rgba(64, 41, 45, .08);
+      padding: 12px;
+    }
+
+    .envio-whatsapp-topo {
+      margin: 0 0 8px;
+    }
+
+    .mensagem-whatsapp summary {
+      cursor: pointer;
+      color: var(--vinho);
+      font-size: .9rem;
+      font-weight: 950;
+      text-transform: uppercase;
+      list-style-position: inside;
+    }
+
+    .mensagem-controles {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) auto;
+      gap: 8px;
+      align-items: end;
+      margin-bottom: 10px;
+    }
+
+    .envio-whatsapp-topo .mensagem-controles {
+      margin-top: 10px;
+      margin-bottom: 0;
+    }
+
+    .mensagem-acoes-envio {
+      display: grid;
+      gap: 8px;
+      min-width: 220px;
+    }
+
+    .mensagem-whatsapp[open] summary {
+      margin-bottom: 8px;
+    }
+
+    .mensagem-whatsapp .acao-btn {
+      margin-bottom: 8px;
+    }
+
+    .mensagem-campo label {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--suave);
+      font-size: .66rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .mensagem-campo input {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid #e6d4d8;
+      border-radius: 8px;
+      background: #fff;
+      color: var(--texto);
+      padding: 8px 10px;
+      font-size: .9rem;
+      font-weight: 750;
+    }
+
+    .mensagem-campo input:focus {
+      outline: 3px solid rgba(138, 47, 61, .13);
+      border-color: var(--vinho);
+    }
+
+    .destinatarios-rapidos {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .destinatario-btn {
+      border: 1px solid #ecd3d8;
+      border-radius: 999px;
+      background: #fff8f9;
+      color: var(--vinho-escuro);
+      padding: 6px 9px;
+      font-size: .76rem;
+      font-weight: 850;
+      cursor: pointer;
+    }
+
+    .destinatario-btn:hover,
+    .destinatario-btn:focus {
+      outline: 2px solid rgba(138, 47, 61, .14);
+      border-color: var(--vinho);
+      background: #fff0f2;
+    }
+
+    .destinatario-aviso {
+      display: none;
+      margin-top: 7px;
+      color: var(--suave);
+      font-size: .72rem;
+      font-weight: 800;
+    }
+
+    .destinatario-aviso.visivel {
+      display: block;
+    }
+
+    .mensagem-curta {
+      margin-top: 10px;
+      border: 1px solid #eee1e3;
+      border-radius: 10px;
+      background: #fff8f9;
+      padding: 10px;
+    }
+
+    .mensagem-curta-titulo {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--vinho-escuro);
+      font-size: .72rem;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .mensagem-curta-texto {
+      margin: 0;
       white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: var(--texto);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: .84rem;
+      font-weight: 750;
+      line-height: 1.35;
+      user-select: text;
+    }
+
+    .texto-copia {
+      display: block;
+      width: 100%;
+      max-height: 360px;
+      margin: 0;
+      overflow: auto;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      border: 1px solid #eee1e3;
+      border-radius: 8px;
+      background: #fff8f9;
+      color: var(--texto);
+      padding: 10px;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: .82rem;
+      font-weight: 750;
+      line-height: 1.35;
+    }
+
+    .texto-final {
+      display: block;
+      margin-top: 8px;
+      border-top: 2px solid rgba(138, 47, 61, .28);
+      border-bottom: 2px solid rgba(138, 47, 61, .22);
+      border-radius: 8px;
+      background: #fff0f2;
+      padding: 9px 10px;
+    }
+
+    .texto-final-label,
+    .texto-final-fim {
+      display: block;
+      color: var(--vinho-escuro);
+      font-weight: 950;
+    }
+
+    .texto-final-valor {
+      display: block;
+      margin: 3px 0;
+      color: var(--vinho);
+      font-size: 1.05rem;
+      font-weight: 950;
     }
 
     .estado-vazio {
@@ -290,6 +475,23 @@
 
       .acao-btn {
         width: 100%;
+      }
+
+      .envio-whatsapp-topo {
+        margin-bottom: 8px;
+      }
+
+      .mensagem-controles {
+        grid-template-columns: 1fr;
+      }
+
+      .mensagem-acoes-envio {
+        min-width: 0;
+      }
+
+      .destinatario-btn {
+        width: 100%;
+        border-radius: 8px;
       }
 
       .cabecalho {
@@ -335,6 +537,11 @@
       }
 
       .acoes {
+        display: none;
+      }
+
+      .envio-whatsapp-topo,
+      .mensagem-whatsapp {
         display: none;
       }
 
@@ -463,10 +670,36 @@
 <body>
   <main class="whatsapp-page">
     <section class="acoes" aria-label="Acoes da lista">
-      <button type="button" class="acao-btn secundario" id="btnVoltar">Voltar</button>
-      <button type="button" class="acao-btn secundario" id="btnCopiarTexto">Copiar texto</button>
+      <a class="acao-btn secundario" href="{% url 'estoque:compras_listas_fornecedor' %}">Voltar para listas</a>
+      <a class="acao-btn secundario" href="{% url 'estoque:sugestao_compra_fornecedor' %}">Nova lista</a>
+      <button type="button" class="acao-btn secundario" id="btnCopiarTexto">Copiar mensagem</button>
       <button type="button" class="acao-btn" id="btnImprimir">Imprimir</button>
     </section>
+
+    <section class="envio-whatsapp-topo" aria-label="Enviar lista pelo WhatsApp">
+      <div class="mensagem-curta" aria-label="Mensagem curta para o fornecedor">
+        <span class="mensagem-curta-titulo">Mensagem curta para o fornecedor</span>
+        <pre class="mensagem-curta-texto" id="textoMensagemCurta"></pre>
+      </div>
+      <div class="mensagem-controles">
+        <div class="mensagem-campo">
+          <label for="whatsappDestinatario">WhatsApp do destinatario</label>
+          <input type="tel" id="whatsappDestinatario" inputmode="tel" autocomplete="tel" placeholder="Opcional">
+        </div>
+        <div class="mensagem-acoes-envio">
+          <a class="acao-btn imagem-lista" id="btnImagemLista" href="#" target="_blank" rel="noopener" hidden>Imagem da lista</a>
+          <button type="button" class="acao-btn" id="btnEnviarWhatsapp">Abrir conversa no WhatsApp</button>
+        </div>
+      </div>
+      <div class="destinatarios-rapidos" id="destinatariosRapidos"></div>
+      <div class="destinatario-aviso" id="destinatarioAviso"></div>
+    </section>
+
+    <details class="mensagem-whatsapp" aria-label="Mensagem para WhatsApp">
+      <summary id="resumoMensagemWhatsapp">Ver texto completo da lista</summary>
+      <button type="button" class="acao-btn secundario" id="btnCopiarTextoCompleto">Copiar texto completo</button>
+      <pre class="texto-copia" id="textoCopia"></pre>
+    </details>
 
     <article class="documento" id="documentoWhatsapp">
       <div class="estado-vazio">
@@ -475,7 +708,6 @@
       </div>
     </article>
 
-    <pre class="texto-copia" id="textoCopia"></pre>
     {% if whatsapp_payload %}
       {{ whatsapp_payload|json_script:"listaFornecedorWhatsappPayload" }}
     {% endif %}
@@ -486,9 +718,17 @@
     const chavePayload = "sugestaoCompraFornecedorWhatsappPayload";
     const documento = document.getElementById("documentoWhatsapp");
     const textoCopia = document.getElementById("textoCopia");
+    const textoMensagemCurta = document.getElementById("textoMensagemCurta");
+    const painelMensagem = document.querySelector(".mensagem-whatsapp");
+    const resumoMensagem = document.getElementById("resumoMensagemWhatsapp");
     const btnCopiar = document.getElementById("btnCopiarTexto");
+    const btnCopiarTextoCompleto = document.getElementById("btnCopiarTextoCompleto");
+    const btnImagemLista = document.getElementById("btnImagemLista");
+    const btnEnviarWhatsapp = document.getElementById("btnEnviarWhatsapp");
+    const whatsappDestinatario = document.getElementById("whatsappDestinatario");
+    const destinatariosRapidos = document.getElementById("destinatariosRapidos");
+    const destinatarioAviso = document.getElementById("destinatarioAviso");
     const btnImprimir = document.getElementById("btnImprimir");
-    const btnVoltar = document.getElementById("btnVoltar");
 
     function html(valor) {
       return String(valor ?? "")
@@ -508,6 +748,18 @@
       const final = texto(valor);
       if (final === "-") return final;
       return /^R\$/i.test(final) ? final : "R$ " + final;
+    }
+
+    function periodoTexto(valor) {
+      return texto(valor).replace(/\s+ate\s+/i, " até ");
+    }
+
+    function normalizarWhatsapp(valor) {
+      let numero = String(valor || "").replace(/\D/g, "");
+      if ((numero.length === 10 || numero.length === 11) && !numero.startsWith("55")) {
+        numero = "55" + numero;
+      }
+      return numero;
     }
 
     function carregarPayload() {
@@ -538,29 +790,66 @@
     }
 
     function montarTexto(payload) {
+      const separador = "━━━━━━━━━━━━━━━━━━━━";
       const partes = [
-        "Lista de Compras",
+        "Segue lista de pedido para entrega.",
+        "",
         "Fornecedor: " + texto(payload.fornecedor, "Fornecedor nao informado"),
-        "Periodo: " + texto(payload.periodo),
+        "Período: " + periodoTexto(payload.periodo),
       ];
 
       if (payload.chegada) partes.push("Chegada prevista: " + payload.chegada);
       partes.push("");
+      partes.push(separador);
+      partes.push("");
 
       (payload.linhas || []).forEach((linha, indice) => {
-        partes.push((indice + 1) + ". " + texto(linha.produto));
+        partes.push((indice + 1) + ") " + texto(linha.produto));
         partes.push("Qtd: " + texto(linha.sugestao) + " " + texto(linha.unidade, ""));
         partes.push("Pr. compra: " + dinheiro(linha.precoCompra));
-        partes.push("Pr. unit.: " + dinheiro(linha.precoUnitario));
         partes.push("Total: " + dinheiro(linha.total));
         partes.push("");
       });
 
-      partes.push("TOTAL DA LISTA/PEDIDO");
-      partes.push(texto(payload.totalLista));
-      partes.push("Fim da lista");
+      partes.push(separador);
+      partes.push("TOTAL DO PEDIDO: " + texto(payload.totalLista));
+      partes.push(separador);
+      partes.push("");
+      partes.push("Fim da lista.");
 
       return partes.join("\n").trim();
+    }
+
+    function montarMensagemCurta() {
+      return "Olá, segue lista de pedido para entrega.";
+    }
+
+    function montarTextoVisual(payload) {
+      const partes = montarTexto(payload).split("\n");
+      const fim = partes.splice(-4);
+      const corpo = html(partes.join("\n")).replace(/\n/g, "\n");
+      return `${corpo}
+<span class="texto-final"><span class="texto-final-label">${html(fim[0] || "━━━━━━━━━━━━━━━━━━━━")}</span>
+<span class="texto-final-valor">${html(fim[1] || ("TOTAL DO PEDIDO: " + texto(payload.totalLista)))}</span>
+<span class="texto-final-label">${html(fim[2] || "━━━━━━━━━━━━━━━━━━━━")}</span>
+<span class="texto-final-fim">${html(fim[3] || "Fim da lista.")}</span></span>`;
+    }
+
+    function renderizarDestinatarios(payload) {
+      const opcoes = Array.isArray(payload.destinatarios) ? payload.destinatarios : [];
+      if (destinatariosRapidos) {
+        destinatariosRapidos.innerHTML = opcoes.map((destinatario) => {
+          const nome = texto(destinatario.nome, "Contato");
+          const numero = texto(destinatario.numero || destinatario.whatsapp, "");
+          return `<button type="button" class="destinatario-btn" data-whatsapp="${html(numero)}">${html(nome)}</button>`;
+        }).join("");
+      }
+
+      if (destinatarioAviso) {
+        const mostrarAviso = payload.temContatoFornecedor === false;
+        destinatarioAviso.textContent = mostrarAviso ? "Nenhum vendedor cadastrado para este fornecedor." : "";
+        destinatarioAviso.classList.toggle("visivel", mostrarAviso);
+      }
     }
 
     function renderizar(payload) {
@@ -625,17 +914,49 @@
         </section>
       `;
 
-      textoCopia.textContent = montarTexto({ ...payload, linhas });
+      const payloadRenderizado = { ...payload, linhas };
+      textoCopia.innerHTML = montarTextoVisual(payloadRenderizado);
+      if (textoMensagemCurta) {
+        textoMensagemCurta.textContent = montarMensagemCurta();
+      }
+      if (btnImagemLista && payload.imagemUrl) {
+        btnImagemLista.href = payload.imagemUrl;
+        btnImagemLista.hidden = false;
+      }
+      renderizarDestinatarios(payload);
     }
 
+    painelMensagem?.addEventListener("toggle", function () {
+      if (!resumoMensagem) return;
+      resumoMensagem.textContent = painelMensagem.open ? "Ocultar texto completo da lista" : "Ver texto completo da lista";
+    });
+
     btnCopiar.addEventListener("click", async function () {
-      const conteudo = textoCopia.textContent.trim();
+      const conteudo = (textoMensagemCurta?.textContent || "").trim();
       if (!conteudo) return;
       try {
         await navigator.clipboard.writeText(conteudo);
         btnCopiar.textContent = "Copiado";
-        setTimeout(() => { btnCopiar.textContent = "Copiar texto"; }, 1600);
+        setTimeout(() => { btnCopiar.textContent = "Copiar mensagem"; }, 1600);
       } catch (erro) {
+        textoMensagemCurta?.focus?.();
+        const range = document.createRange();
+        range.selectNodeContents(textoMensagemCurta || textoCopia);
+        const selecao = window.getSelection();
+        selecao.removeAllRanges();
+        selecao.addRange(range);
+      }
+    });
+
+    btnCopiarTextoCompleto?.addEventListener("click", async function () {
+      const conteudo = textoCopia.textContent.trim();
+      if (!conteudo) return;
+      try {
+        await navigator.clipboard.writeText(conteudo);
+        btnCopiarTextoCompleto.textContent = "Copiado";
+        setTimeout(() => { btnCopiarTextoCompleto.textContent = "Copiar texto completo"; }, 1600);
+      } catch (erro) {
+        if (painelMensagem) painelMensagem.open = true;
         const range = document.createRange();
         range.selectNodeContents(textoCopia);
         const selecao = window.getSelection();
@@ -644,16 +965,25 @@
       }
     });
 
-    btnImprimir.addEventListener("click", function () {
-      window.print();
+    btnEnviarWhatsapp.addEventListener("click", function () {
+      const mensagem = (textoMensagemCurta?.textContent || "").trim();
+      if (!mensagem) return;
+      const numero = normalizarWhatsapp(whatsappDestinatario?.value || "");
+      const url = numero
+        ? `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`
+        : `https://wa.me/?text=${encodeURIComponent(mensagem)}`;
+      window.open(url, "_blank", "noopener");
     });
 
-    btnVoltar.addEventListener("click", function () {
-      if (window.opener && !window.opener.closed) {
-        window.close();
-      } else {
-        history.back();
-      }
+    destinatariosRapidos?.addEventListener("click", function(event) {
+      const botao = event.target.closest(".destinatario-btn[data-whatsapp]");
+      if (!botao || !whatsappDestinatario) return;
+      whatsappDestinatario.value = botao.dataset.whatsapp || "";
+      whatsappDestinatario.focus();
+    });
+
+    btnImprimir.addEventListener("click", function () {
+      window.print();
     });
 
     renderizar(carregarPayload() || {});
