@@ -3,65 +3,338 @@
 {% block content %}
 
 <style>
-  .lista-fornecedor-wrap { max-width:1040px; margin:18px auto 90px; padding:0 14px; color:#172033; }
-  .lista-fornecedor-topo { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; }
-  .lista-fornecedor-topo h1 { margin:0; font-size:1.5rem; font-weight:950; }
-  .lista-fornecedor-sub { margin:4px 0 0; color:#64748b; font-weight:750; }
-  .lista-fornecedor-acoes { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
-  .lista-fornecedor-btn { display:inline-flex; align-items:center; justify-content:center; min-height:38px; padding:8px 12px; border-radius:9px; border:1px solid #d8e0ea; background:#f8fafc; color:#334155; font-weight:850; text-decoration:none; cursor:pointer; }
-  .lista-fornecedor-btn.primary { background:#2563eb; color:#fff; border-color:#2563eb; }
-  .lista-fornecedor-btn.whatsapp { background:#fff1f3; color:#7f1d2d; border-color:#e9b8c0; }
-  .lista-fornecedor-btn.danger { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
-  .lista-fornecedor-card { background:#fff; border:1px solid #e1e7ef; border-radius:14px; box-shadow:0 14px 30px rgba(15,23,42,.06); overflow:hidden; margin-bottom:12px; }
-  .lista-fornecedor-resumo { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px; padding:14px; }
-  .lista-fornecedor-item { border:1px solid #edf2f7; border-radius:10px; background:#f8fafc; padding:9px 10px; }
-  .lista-fornecedor-label { display:block; margin-bottom:3px; color:#64748b; font-size:.72rem; font-weight:900; text-transform:uppercase; }
-  .lista-fornecedor-value { display:block; color:#172033; font-weight:950; overflow-wrap:anywhere; }
-  .lista-fornecedor-value.total { color:#166534; }
-  .lista-fornecedor-status { display:inline-flex; border-radius:999px; padding:4px 9px; background:#eff6ff; border:1px solid #bfdbfe; color:#1e4f85; font-size:.76rem; font-weight:900; }
-  .lista-fornecedor-status.cancelada { background:#f1f5f9; border-color:#cbd5e1; color:#9f1239; }
-  .lista-fornecedor-status.finalizada { background:#ecfdf3; border-color:#a7e3bd; color:#166534; }
-  .lista-fornecedor-status.enviada { background:#fff7ed; border-color:#fed7aa; color:#9a3412; }
-  .lista-fornecedor-table { width:100%; border-collapse:collapse; }
-  .lista-fornecedor-table th { padding:10px 9px; border-bottom:1px solid #e5ebf3; background:#7f1d2d; color:#fff; font-size:.68rem; font-weight:900; text-transform:uppercase; text-align:center; }
-  .lista-fornecedor-table th:first-child,
-  .lista-fornecedor-table td:first-child { text-align:left; }
-  .lista-fornecedor-table td { padding:9px; border-bottom:1px solid #edf2f7; text-align:center; vertical-align:middle; }
-  .lista-fornecedor-table tr:last-child td { border-bottom:0; }
-  .lista-fornecedor-produto { font-weight:900; }
-  .lista-fornecedor-total { font-weight:950; color:#166534; }
-  @media (max-width:860px) {
-    .lista-fornecedor-resumo { grid-template-columns:1fr 1fr; }
-    .lista-fornecedor-table { display:block; overflow-x:auto; white-space:nowrap; }
+  .lista-fornecedor-wrap {
+    max-width: 1220px;
+    margin: 8px auto 28px;
+    padding: 0 10px 64px;
+    color: #172033;
   }
-  @media (max-width:620px) {
-    .lista-fornecedor-wrap { margin-top:12px; padding:0 10px 80px; }
-    .lista-fornecedor-resumo { grid-template-columns:1fr; }
+
+  .lista-fornecedor-topo {
+    background: linear-gradient(135deg, #fff7f7 0%, #fff2f2 60%, #fff8f1 100%);
+    border: 1px solid #f4b9c2;
+    border-radius: 9px;
+    padding: 9px 14px;
+    box-shadow: 0 8px 18px rgba(127, 29, 45, .06);
+    margin-bottom: 10px;
+  }
+
+  .lista-fornecedor-topo h1 {
+    margin: 0 0 2px;
+    color: #8f1d31;
+    font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+    line-height: 1.05;
+    font-weight: 950;
+    letter-spacing: -.02em;
+  }
+
+  .lista-fornecedor-sub {
+    margin: 0;
+    font-size: .78rem;
+    color: #64748b;
+    font-weight: 750;
+    line-height: 1.25;
+  }
+
+  .lista-fornecedor-acoes-card {
+    background: #ffffff;
+    border: 1px solid #f3c1c9;
+    border-radius: 9px;
+    padding: 8px;
+    margin-bottom: 10px;
+    box-shadow: 0 6px 14px rgba(127, 29, 45, .05);
+  }
+
+  .lista-fornecedor-acoes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .lista-fornecedor-btn {
+    min-height: 30px;
+    border: 1px solid #f0b4be;
+    border-radius: 9px;
+    padding: 5px 10px;
+    background: #fff8f8;
+    color: #9f1830;
+    font-weight: 950;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 8px 18px rgba(159, 24, 48, .08);
+    font-family: inherit;
+    font-size: .76rem;
+  }
+
+  .lista-fornecedor-btn:hover {
+    background: #fff1f3;
+  }
+
+  .lista-fornecedor-btn.principal {
+    background: #9f1830;
+    border-color: #9f1830;
+    color: #fff;
+  }
+
+  .lista-fornecedor-btn.neutro {
+    background: #f8fafc;
+    border-color: #d8e1ea;
+    color: #334155;
+  }
+
+  .lista-fornecedor-btn.danger {
+    background: #fff1f2;
+    border-color: #fda4af;
+    color: #9f1239;
+  }
+
+  .lista-fornecedor-card {
+    background: #ffffff;
+    border: 1px solid #e7edf4;
+    border-radius: 9px;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, .045);
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+
+  .lista-fornecedor-card-titulo {
+    padding: 5px 9px;
+    background: #fff7f7;
+    border-bottom: 1px solid #f3c1c9;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .lista-fornecedor-card-titulo h2 {
+    margin: 0;
+    line-height: 1.1;
+    color: #8f1d31;
+    font-size: .78rem;
+    font-weight: 950;
+  }
+
+  .lista-fornecedor-card-titulo small {
+    color: #64748b;
+    font-size: .76rem;
+    font-weight: 750;
+  }
+
+  .lista-fornecedor-resumo {
+    padding: 8px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .lista-fornecedor-item {
+    border: 1px solid #e8eef6;
+    border-radius: 14px;
+    background: #fbfdff;
+    padding: 6px 8px;
+    min-height: 44px;
+  }
+
+  .lista-fornecedor-label {
+    display: block;
+    margin-bottom: 4px;
+    color: #64748b;
+    font-size: .58rem;
+    font-weight: 950;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+
+  .lista-fornecedor-value {
+    display: block;
+    font-size: .82rem;
+    color: #172033;
+    font-weight: 950;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+  }
+
+  .lista-fornecedor-value.total {
+    color: #166534;
+    font-size: .92rem;
+  }
+
+  .lista-fornecedor-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 4px 9px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e4f85;
+    font-size: .70rem;
+    font-weight: 950;
+    white-space: nowrap;
+  }
+
+  .lista-fornecedor-status.cancelada {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #9f1239;
+  }
+
+  .lista-fornecedor-status.finalizada {
+    background: #ecfdf3;
+    border-color: #a7e3bd;
+    color: #166534;
+  }
+
+  .lista-fornecedor-status.enviada {
+    background: #fff7ed;
+    border-color: #fed7aa;
+    color: #9a3412;
+  }
+
+  .lista-fornecedor-table-wrap {
+    overflow-x: auto;
+  }
+
+  .lista-fornecedor-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    min-width: 1180px;
+  }
+
+  .lista-fornecedor-table th {
+    padding: 5px 6px;
+    background: #8f1d31;
+    color: #fff;
+    font-size: .58rem;
+    font-weight: 950;
+    text-transform: uppercase;
+    text-align: center;
+    letter-spacing: .03em;
+    border-bottom: 2px solid #701426;
+  }
+
+  .lista-fornecedor-table th:first-child,
+  .lista-fornecedor-table td:first-child {
+    text-align: left;
+  }
+
+  .lista-fornecedor-table td {
+    padding: 5px 7px;
+    font-size: .82rem;
+    border-bottom: 1px solid #eef2f7;
+    text-align: center;
+    vertical-align: middle;
+    background: #fff;
+    color: #111827;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+
+  .lista-fornecedor-table tbody tr:nth-child(even) td {
+    background: #fffafa;
+  }
+
+  .lista-fornecedor-table tbody tr:hover td {
+    background: #fff3f5;
+  }
+
+  .lista-fornecedor-produto {
+    font-weight: 900;
+    color: #172033;
+    white-space: normal;
+    min-width: 240px;
+  }
+
+  .lista-fornecedor-total {
+    font-weight: 950;
+    color: #166534;
+    min-width: 92px;
+    white-space: nowrap;
+  }
+
+  .lista-fornecedor-totalizacao {
+    padding: 5px 9px;
+    background: #fff7f7;
+    border-top: 1px solid #f3c1c9;
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    align-items: center;
+    color: #8f1d31;
+    font-weight: 950;
+  }
+
+  .lista-fornecedor-totalizacao strong {
+    color: #166534;
+    font-size: .92rem;
+  }
+
+  @media (max-width: 920px) {
+    .lista-fornecedor-resumo {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 620px) {
+    .lista-fornecedor-wrap {
+      margin-top: 12px;
+      padding: 0 10px 90px;
+    }
+
+    .lista-fornecedor-topo {
+      padding: 18px;
+      border-radius: 15px;
+    }
+
     .lista-fornecedor-acoes,
-    .lista-fornecedor-btn { width:100%; }
+    .lista-fornecedor-btn,
+    .lista-fornecedor-acoes form {
+      width: 100%;
+    }
+
+    .lista-fornecedor-resumo {
+      grid-template-columns: 1fr;
+    }
+
+    .lista-fornecedor-totalizacao {
+      flex-direction: column;
+      align-items: flex-start;
+    }
   }
 </style>
 
 <main class="lista-fornecedor-wrap">
   <header class="lista-fornecedor-topo">
-    <div>
-      <h1>Lista de Compras #{{ lista.id }}</h1>
-      <p class="lista-fornecedor-sub">Sugestao gravada para consulta e envio, sem lancar compra ou estoque.</p>
-    </div>
+    <h1>Lista de Compras #{{ lista.id }}</h1>
+    <p class="lista-fornecedor-sub">Sugestao gravada para consulta e envio, sem lancar compra, estoque ou financeiro.</p>
+  </header>
+
+  <section class="lista-fornecedor-acoes-card">
     <div class="lista-fornecedor-acoes">
-      <a class="lista-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}">Consultar Listas</a>
-      <a class="lista-fornecedor-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">WhatsApp</a>
-      <a class="lista-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Imprimir</a>
+      <a class="lista-fornecedor-btn neutro" href="{% url 'estoque:compras_listas_fornecedor' %}">Consultar Listas</a>
+      <a class="lista-fornecedor-btn principal" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">WhatsApp</a>
+      <a class="lista-fornecedor-btn neutro" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Imprimir</a>
       {% if lista.status != "cancelada" %}
         <form method="post" action="{% url 'estoque:compras_lista_fornecedor_cancelar' lista.id %}" style="margin:0" onsubmit="return confirm('Cancelar esta lista?');">
           {% csrf_token %}
-          <button type="submit" class="lista-fornecedor-btn danger">Cancelar lista</button>
+          <button type="submit" class="lista-fornecedor-btn danger">Cancelar Lista</button>
         </form>
       {% endif %}
     </div>
-  </header>
+  </section>
 
   <section class="lista-fornecedor-card">
+    <div class="lista-fornecedor-card-titulo">
+      <h2>Informa??es da Lista</h2>
+      <small>Lista ainda n?o lan?ada como compra</small>
+    </div>
+
     <div class="lista-fornecedor-resumo">
       <div class="lista-fornecedor-item">
         <span class="lista-fornecedor-label">Fornecedor</span>
@@ -99,40 +372,52 @@
   </section>
 
   <section class="lista-fornecedor-card">
-    <table class="lista-fornecedor-table">
-      <thead>
-        <tr>
-          <th>Produto</th>
-          <th>Estoque</th>
-          <th>Minimo</th>
-          <th>Qtd. Vend.</th>
-          <th>Pedidos</th>
-          <th>Sug. Original</th>
-          <th>Sug. Final</th>
-          <th>Unidade</th>
-          <th>Pr. Compra</th>
-          <th>Pr. Unit.</th>
-          <th>Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for item in lista.itens.all %}
+    <div class="lista-fornecedor-card-titulo">
+      <h2>Itens da Lista</h2>
+      <small>Confer?ncia dos produtos sugeridos para compra</small>
+    </div>
+
+    <div class="lista-fornecedor-table-wrap">
+      <table class="lista-fornecedor-table">
+        <thead>
           <tr>
-            <td class="lista-fornecedor-produto">{% if item.produto %}{{ item.produto.nome }}{% else %}-{% endif %}</td>
-            <td>{{ item.estoque_atual|floatformat:3 }}</td>
-            <td>{{ item.estoque_minimo|floatformat:3 }}</td>
-            <td>{{ item.vendido_periodo|floatformat:3 }}</td>
-            <td>{{ item.pedidos_abertos|floatformat:3 }}</td>
-            <td>{{ item.quantidade_sugerida|floatformat:3 }}</td>
-            <td>{{ item.quantidade_final|floatformat:3 }}</td>
-            <td>{{ item.unidade }}</td>
-            <td>R$ {{ item.preco_compra|floatformat:2 }}</td>
-            <td>R$ {{ item.preco_unitario|floatformat:2 }}</td>
-            <td class="lista-fornecedor-total">R$ {{ item.total|floatformat:2 }}</td>
+            <th>Produto</th>
+            <th>Estoque</th>
+            <th>Minimo</th>
+            <th>Qtd. Vend.</th>
+            <th>Pedidos</th>
+            <th>Sug. Original</th>
+            <th>Sug. Final</th>
+            <th>Unidade</th>
+            <th>Pr. Compra</th>
+            <th>Pr. Unit.</th>
+            <th style="min-width:92px;">Total</th>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {% for item in lista.itens.all %}
+            <tr>
+              <td class="lista-fornecedor-produto">{% if item.produto %}{{ item.produto.nome }}{% else %}-{% endif %}</td>
+              <td>{{ item.estoque_atual|floatformat:3 }}</td>
+              <td>{{ item.estoque_minimo|floatformat:3 }}</td>
+              <td>{{ item.vendido_periodo|floatformat:3 }}</td>
+              <td>{{ item.pedidos_abertos|floatformat:3 }}</td>
+              <td>{{ item.quantidade_sugerida|floatformat:3 }}</td>
+              <td>{{ item.quantidade_final|floatformat:3 }}</td>
+              <td>{{ item.unidade }}</td>
+              <td>R$ {{ item.preco_compra|floatformat:2 }}</td>
+              <td>R$ {{ item.preco_unitario|floatformat:2 }}</td>
+              <td class="lista-fornecedor-total">R$ {{ item.total|floatformat:2 }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="lista-fornecedor-totalizacao">
+      <span>Quantidade total de produtos: {{ lista.itens.count }}</span>
+      <span>Total da lista: <strong>R$ {{ lista.total_lista|floatformat:2 }}</strong></span>
+    </div>
   </section>
 </main>
 
