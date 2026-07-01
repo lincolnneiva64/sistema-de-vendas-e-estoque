@@ -49,7 +49,7 @@
       <p class="lista-fornecedor-sub">Sugestao gravada para consulta e envio, sem lancar compra ou estoque.</p>
     </div>
     <div class="lista-fornecedor-acoes">
-      <a class="lista-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}">Voltar</a>
+      <a class="lista-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}">Consultar Listas</a>
       <a class="lista-fornecedor-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">WhatsApp</a>
       <a class="lista-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Imprimir</a>
       {% if lista.status != "cancelada" %}

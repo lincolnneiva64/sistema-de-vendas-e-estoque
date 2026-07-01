@@ -1,5 +1,5 @@
 {% extends 'estoque/base.html' %}
-{% block title %}Lista de Compras por Fornecedor{% endblock %}
+{% block title %}Nova Lista por Fornecedor{% endblock %}
 {% block content %}
 
 <style>
@@ -776,12 +776,12 @@
 <div class="sugestao-page">
   <header class="sugestao-header">
     <div>
-      <h1 class="sugestao-title">Lista de Compras por Fornecedor</h1>
+      <h1 class="sugestao-title">Nova Lista por Fornecedor</h1>
       <p class="sugestao-subtitle">Gere sugestao de reposicao com base nas vendas do periodo e no estoque minimo.</p>
     </div>
     <div class="sugestao-actions">
-      <a href="{% url 'estoque:compras_lista' %}" class="sugestao-btn sugestao-btn-secondary">Compras</a>
-      <a href="{% url 'estoque:compras_listas_fornecedor' %}" class="sugestao-btn sugestao-btn-secondary">Listas gravadas</a>
+      <a href="{% url 'estoque:compras_lista' %}" class="sugestao-btn sugestao-btn-secondary">Consultar Compras</a>
+      <a href="{% url 'estoque:compras_listas_fornecedor' %}" class="sugestao-btn sugestao-btn-secondary">Consultar Listas</a>
       <a href="{% url 'estoque:compras_nova' %}" class="sugestao-btn sugestao-btn-secondary">Nova compra</a>
     </div>
   </header>

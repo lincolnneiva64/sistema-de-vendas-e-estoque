@@ -481,7 +481,7 @@
         </div>
 
         <div class="acoes acoes-topo">
-            <a href="{% url 'estoque:pedidos' %}" class="btn btn-voltar">Voltar para Pedidos</a>
+            <a href="{% url 'estoque:pedidos' %}" class="btn btn-voltar">Voltar para Consulta de Pedidos</a>
             {% if pode_editar_pedido %}
                 <a href="{% url 'estoque:pedido_editar' pedido.id %}" class="btn btn-editar">Editar Pedido</a>
             {% endif %}
@@ -661,7 +661,7 @@
         </div>
         
         <div class="acoes">
-            <a href="{% url 'estoque:pedidos' %}" class="btn btn-voltar">Voltar para Pedidos</a>
+            <a href="{% url 'estoque:pedidos' %}" class="btn btn-voltar">Voltar para Consulta de Pedidos</a>
             {% if pode_editar_pedido %}
                 <a href="{% url 'estoque:pedido_editar' pedido.id %}" class="btn btn-editar">Editar Pedido</a>
             {% endif %}

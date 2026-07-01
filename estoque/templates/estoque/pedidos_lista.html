@@ -249,7 +249,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pedidos - Sistema de Vendas e Estoque</title>
+    <title>Consulta de Pedidos - Sistema de Vendas e Estoque</title>
     <style>
         * {
             margin: 0;
@@ -1002,10 +1002,10 @@
   <div class="pedidos-atalhos-painel" id="atalhosPedidosPainel">
     <h2 class="pedidos-atalhos-titulo">Atalhos</h2>
     <div class="pedidos-atalhos-lista">
-      <a href="{% url 'estoque:pedidos' %}" class="pedidos-atalhos-btn">Pedidos</a>
+      <a href="{% url 'estoque:pedidos' %}" class="pedidos-atalhos-btn">Consultar Pedidos</a>
       <a href="{% url 'estoque:pedido_criar' %}" class="pedidos-atalhos-btn">Novo Pedido</a>
       <a href="{% url 'estoque:vendas' %}" class="pedidos-atalhos-btn">Vendas</a>
-      <a href="/compras/" class="pedidos-atalhos-btn">Compras</a>
+      <a href="/compras/" class="pedidos-atalhos-btn">Consultar Compras</a>
       <a href="{% url 'estoque:receber_cliente_escolher' %}" class="pedidos-atalhos-btn">Receber do cliente</a>
       <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="pedidos-atalhos-btn {% if tem_pix_em_atencao %}pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
       <a href="{% url 'estoque:entregas_dia' %}" class="pedidos-atalhos-btn">Ir para Entregas</a>
@@ -1020,7 +1020,7 @@
 
     <div class="container">
         <div class="header pedidos-topo-fixo">
-            <h1>Pedidos</h1>
+            <h1>Consulta de Pedidos</h1>
             <a href="{% url 'estoque:pedido_criar' %}" class="btn-criar novo-pedido-estavel">+ Novo Pedido</a>
         </div>
         

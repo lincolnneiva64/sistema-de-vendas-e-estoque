@@ -1,5 +1,5 @@
 {% extends 'estoque/base.html' %}
-{% block title %}Listas por Fornecedor{% endblock %}
+{% block title %}Consulta de Listas por Fornecedor{% endblock %}
 {% block content %}
 
 <style>
@@ -40,12 +40,12 @@
 <main class="listas-fornecedor-page">
   <header class="listas-fornecedor-header">
     <div>
-      <h1 class="listas-fornecedor-title">Listas de Compras por Fornecedor</h1>
+      <h1 class="listas-fornecedor-title">Consulta de Listas por Fornecedor</h1>
       <p class="listas-fornecedor-subtitle">Consulte listas gravadas sem lancar compra, estoque ou financeiro.</p>
     </div>
     <div class="listas-fornecedor-actions">
-      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista' %}">Compras</a>
-      <a class="listas-fornecedor-btn primary" href="{% url 'estoque:sugestao_compra_fornecedor' %}">Nova lista</a>
+      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista' %}">Consultar Compras</a>
+      <a class="listas-fornecedor-btn primary" href="{% url 'estoque:sugestao_compra_fornecedor' %}">Nova Lista</a>
     </div>
   </header>
 

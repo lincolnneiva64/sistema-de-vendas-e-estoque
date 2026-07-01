@@ -1,5 +1,5 @@
 {% extends 'estoque/base.html' %}
-{% block title %}Compras{% endblock %}
+{% block title %}Consulta de Compras{% endblock %}
 {% block content %}
 
 <aside class="compras-atalhos-lateral" id="atalhosComprasLista" aria-label="Atalhos das compras">
@@ -7,9 +7,9 @@
   <div class="compras-atalhos-painel" id="atalhosComprasListaPainel">
     <h2 class="compras-atalhos-titulo">Atalhos</h2>
     <div class="compras-atalhos-lista">
-      <a href="{% url 'estoque:pedidos' %}" class="compras-atalhos-btn">Pedidos</a>
+      <a href="{% url 'estoque:pedidos' %}" class="compras-atalhos-btn">Consultar Pedidos</a>
       <a href="{% url 'estoque:compras_nova' %}" class="compras-atalhos-btn">Nova compra</a>
-      <a href="{% url 'estoque:sugestao_compra_fornecedor' %}" class="compras-atalhos-btn">Sugestao de compra</a>
+      <a href="{% url 'estoque:sugestao_compra_fornecedor' %}" class="compras-atalhos-btn">Nova Lista por Fornecedor</a>
       <a href="{% url 'estoque:contas_pagar' %}" class="compras-atalhos-btn">Contas a pagar</a>
       <a href="{% url 'estoque:receber_cliente_escolher' %}" class="compras-atalhos-btn">Receber do cliente</a>
       <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="compras-atalhos-btn {% if tem_pix_em_atencao %}pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
@@ -402,13 +402,13 @@
 <div class="compras-lista-page">
   <header class="compras-lista-header">
     <div>
-      <h1 class="compras-lista-title">Compras</h1>
-      <p class="compras-lista-subtitle">Listagem inicial das compras registradas.</p>
+      <h1 class="compras-lista-title">Consulta de Compras</h1>
+      <p class="compras-lista-subtitle">Listagem das compras registradas.</p>
       <p class="compras-lista-financeiro-nota">Compra à vista sai do Caixa/Banco. Compra a prazo gera Conta a Pagar.</p>
     </div>
     <div class="compras-lista-actions">
       <a href="{% url 'estoque:compras_nova' %}" class="compras-lista-btn compras-lista-btn-primary">Nova compra</a>
-      <a href="{% url 'estoque:sugestao_compra_fornecedor' %}" class="compras-lista-btn compras-lista-btn-secondary">Sugestao de compra</a>
+      <a href="{% url 'estoque:sugestao_compra_fornecedor' %}" class="compras-lista-btn compras-lista-btn-secondary">Nova Lista por Fornecedor</a>
 
     </div>
   </header>
