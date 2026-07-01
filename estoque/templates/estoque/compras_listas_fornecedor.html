@@ -3,29 +3,33 @@
 {% block content %}
 
 <style>
-  .listas-fornecedor-page { max-width:1120px; margin:22px auto 90px; padding:0 16px; color:#172033; }
-  .listas-fornecedor-header { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:14px; flex-wrap:wrap; }
-  .listas-fornecedor-title { margin:0; font-size:1.55rem; font-weight:900; }
+  .listas-fornecedor-page { max-width:1120px; margin:18px auto 90px; padding:0 16px; color:#172033; }
+  .listas-fornecedor-header { display:flex; justify-content:space-between; gap:14px; align-items:flex-end; margin-bottom:14px; flex-wrap:wrap; padding:18px 20px; background:#fff3f4; border:1px solid #e9b8c0; border-radius:12px; box-shadow:0 10px 24px rgba(127,29,29,.075); }
+  .listas-fornecedor-title { margin:0; color:#7f1d1d; font-size:1.72rem; font-weight:900; line-height:1.12; }
   .listas-fornecedor-subtitle { margin:4px 0 0; color:#64748b; font-weight:700; }
   .listas-fornecedor-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
-  .listas-fornecedor-btn { display:inline-flex; align-items:center; justify-content:center; min-height:38px; padding:8px 12px; border-radius:9px; border:1px solid #d8e0ea; background:#f8fafc; color:#334155; font-weight:850; text-decoration:none; cursor:pointer; }
-  .listas-fornecedor-btn.primary { background:#2563eb; color:#fff; border-color:#2563eb; }
-  .listas-fornecedor-btn.whatsapp { background:#fff1f3; color:#7f1d2d; border-color:#e9b8c0; }
-  .listas-fornecedor-card { background:#fff; border:1px solid #e1e7ef; border-radius:14px; box-shadow:0 14px 30px rgba(15,23,42,.06); overflow:hidden; }
-  .listas-fornecedor-filtros { display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; padding:14px 16px; border-bottom:1px solid #edf2f7; }
+  .listas-fornecedor-btn { display:inline-flex; align-items:center; justify-content:center; min-height:40px; padding:9px 14px; border-radius:9px; border:1px solid #f3b5bf; background:#ffe8eb; color:#9f1239; font-weight:850; text-decoration:none; cursor:pointer; }
+  .listas-fornecedor-btn.primary { background:#8f1d2c; color:#fff; border-color:#8f1d2c; box-shadow:0 10px 22px rgba(143,29,44,.2); }
+  .listas-fornecedor-btn.primary:hover,
+  .listas-fornecedor-btn.primary:focus { background:#7f1d1d; }
+  .listas-fornecedor-btn.whatsapp { background:#fff1f3; color:#7f1d2d; border-color:#e9b8c0; box-shadow:0 8px 18px rgba(127,29,45,.10); }
+  .listas-fornecedor-card { background:#fff3f4; border:1px solid #e9b8c0; border-radius:12px; box-shadow:0 10px 24px rgba(127,29,29,.075); overflow:hidden; }
+  .listas-fornecedor-filtros { display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; padding:14px 16px; border-bottom:1px solid #e9b8c0; background:#fff3f4; }
   .listas-fornecedor-field { flex:1 1 220px; }
-  .listas-fornecedor-field label { display:block; margin-bottom:4px; color:#334155; font-size:.8rem; font-weight:850; }
+  .listas-fornecedor-field label { display:block; margin-bottom:5px; color:#64748b; font-size:.78rem; font-weight:900; letter-spacing:.04em; text-transform:uppercase; }
   .listas-fornecedor-field input,
-  .listas-fornecedor-field select { width:100%; min-height:38px; border:1.5px solid #d3dbe8; border-radius:9px; padding:8px 10px; font-weight:700; background:#fff; }
+  .listas-fornecedor-field select { width:100%; min-height:42px; border:1.5px solid #d3dbe8; border-radius:9px; padding:9px 11px; font-weight:700; background:#fff; color:#172033; outline:none; }
+  .listas-fornecedor-field input:focus,
+  .listas-fornecedor-field select:focus { border-color:#9f1239; box-shadow:0 0 0 3px rgba(159,18,57,.12); }
   .listas-fornecedor-table { width:100%; border-collapse:collapse; }
-  .listas-fornecedor-table th { padding:10px 12px; border-bottom:1px solid #e5ebf3; background:#f8fafc; color:#64748b; font-size:.7rem; font-weight:900; text-align:left; text-transform:uppercase; }
-  .listas-fornecedor-table td { padding:11px 12px; border-bottom:1px solid #edf2f7; vertical-align:middle; }
+  .listas-fornecedor-table th { padding:10px 12px; border-bottom:1px solid #e9b8c0; background:#8f1d2c; color:#fff; font-size:.7rem; font-weight:900; text-align:left; text-transform:uppercase; }
+  .listas-fornecedor-table td { padding:11px 12px; border-bottom:1px solid #f0c9cf; background:#fff; vertical-align:middle; }
   .listas-fornecedor-table tr:last-child td { border-bottom:0; }
   .listas-fornecedor-numero { font-weight:950; color:#0f172a; }
-  .listas-fornecedor-total { font-weight:950; color:#166534; }
-  .listas-fornecedor-status { display:inline-flex; border-radius:999px; padding:4px 9px; background:#eff6ff; border:1px solid #bfdbfe; color:#1e4f85; font-size:.76rem; font-weight:900; }
-  .listas-fornecedor-status.cancelada { background:#f1f5f9; border-color:#cbd5e1; color:#9f1239; }
-  .listas-fornecedor-status.finalizada { background:#ecfdf3; border-color:#a7e3bd; color:#166534; }
+  .listas-fornecedor-total { font-weight:950; color:#991b1b; }
+  .listas-fornecedor-status { display:inline-flex; border-radius:999px; padding:4px 9px; background:#fff1f3; border:1px solid #e9b8c0; color:#7f1d2d; font-size:.76rem; font-weight:900; }
+  .listas-fornecedor-status.cancelada { background:#f8fafc; border-color:#e2e8f0; color:#9f1239; }
+  .listas-fornecedor-status.finalizada { background:#f0fdf4; border-color:#bbf7d0; color:#166534; }
   .listas-fornecedor-status.enviada { background:#fff7ed; border-color:#fed7aa; color:#9a3412; }
   .listas-fornecedor-acoes { display:flex; gap:6px; flex-wrap:wrap; }
   .listas-fornecedor-empty { padding:28px 16px; color:#64748b; text-align:center; font-weight:800; }
