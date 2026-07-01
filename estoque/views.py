@@ -4443,7 +4443,21 @@ def compras_lista_fornecedor_detalhe(request, pk):
         ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto"),
         pk=pk,
     )
-    return render(request, "estoque/compras_lista_fornecedor_detalhe.html", {"lista": lista})
+    marcador_origem = f"Gerada a partir da Lista de Compras #{lista.id}"
+    compra_gerada = (
+        Compra.objects.filter(
+            observacao__icontains=marcador_origem,
+            cancelada=False,
+        )
+        .exclude(status=Compra.STATUS_CANCELADA)
+        .order_by("-id")
+        .first()
+    )
+    return render(
+        request,
+        "estoque/compras_lista_fornecedor_detalhe.html",
+        {"lista": lista, "compra_gerada": compra_gerada},
+    )
 
 
 @require_POST
@@ -4555,6 +4569,78 @@ def compras_lista_fornecedor_whatsapp_imagem(request, pk):
     response = FileResponse(buffer, content_type="image/png")
     response["Content-Disposition"] = f'inline; filename="lista-compra-fornecedor-{lista.id}.png"'
     return response
+
+
+@require_POST
+def compras_lista_fornecedor_gerar_compra(request, pk):
+    lista = get_object_or_404(
+        ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+
+    if lista.status == ListaCompraFornecedor.STATUS_CANCELADA:
+        messages.error(request, "Lista cancelada nao pode gerar compra.")
+        return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
+
+    if not lista.fornecedor_id:
+        messages.error(request, "Lista sem fornecedor nao pode gerar compra.")
+        return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
+
+    marcador_origem = f"Gerada a partir da Lista de Compras #{lista.id}"
+    compra_existente = (
+        Compra.objects.filter(
+            fornecedor=lista.fornecedor,
+            observacao__icontains=marcador_origem,
+            cancelada=False,
+        )
+        .exclude(status=Compra.STATUS_CANCELADA)
+        .order_by("-id")
+        .first()
+    )
+
+    if compra_existente:
+        messages.warning(request, f"Esta lista ja gerou a Compra #{compra_existente.id}. Nao e possivel gerar outra compra pela mesma lista.")
+        return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
+
+    itens_validos = [
+        item
+        for item in lista.itens.all()
+        if item.produto_id and item.quantidade_final and item.quantidade_final > 0
+    ]
+
+    if not itens_validos:
+        messages.error(request, "Esta lista nao tem itens validos para gerar compra.")
+        return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
+
+    total_compra = sum((item.total for item in itens_validos), Decimal("0.00")).quantize(Decimal("0.01"))
+
+    with transaction.atomic():
+        compra = Compra.objects.create(
+            fornecedor=lista.fornecedor,
+            data_compra=timezone.localdate(),
+            data_vencimento=None,
+            tipo_pagamento="",
+            operador=(request.user.get_username() if request.user.is_authenticated else ""),
+            total=total_compra,
+            status=Compra.STATUS_RASCUNHO,
+            observacao=marcador_origem,
+        )
+
+        ItemCompra.objects.bulk_create([
+            ItemCompra(
+                compra=compra,
+                produto=item.produto,
+                quantidade=item.quantidade_final,
+                unidade=item.unidade or "",
+                preco_unitario=item.preco_compra,
+                valor_total=item.total,
+                observacao=None,
+            )
+            for item in itens_validos
+        ])
+
+    messages.success(request, f"Compra #{compra.id} criada em rascunho a partir da Lista #{lista.id}. Confira antes de finalizar.")
+    return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
 
 
 @require_POST
@@ -4852,6 +4938,7 @@ def _linha_item_compra_vazia():
         "quantidade": "1",
         "unidade": "",
         "preco_unitario": "0,00",
+        "estoque": "-",
         "observacao": "",
     }
 
@@ -4868,6 +4955,7 @@ def _linhas_item_compra(compra=None):
             "quantidade": str(item.quantidade).replace(".", ","),
             "unidade": item.unidade or "",
             "preco_unitario": f"{item.preco_unitario:.2f}".replace(".", ","),
+            "estoque": str(item.produto.quantidade).replace(".", ",") if item.produto else "-",
             "observacao": item.observacao or "",
         })
     return linhas or [_linha_item_compra_vazia()]

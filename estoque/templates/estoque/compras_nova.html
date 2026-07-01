@@ -1944,7 +1944,7 @@
             <tr class="linha-item">
               <td data-label="Produto">
                 <div class="produto-autocomplete">
-                  <div class="produto-estoque-compra">Estoque <span class="produto-estoque-valor">-</span></div>
+                  <div class="produto-estoque-compra">Estoque <span class="produto-estoque-valor">{{ linha.estoque|default:"-" }}</span></div>
                   <input type="text" name="produto_busca[]" class="produto-busca" autocomplete="off" placeholder="Digite o produto" value="{{ linha.produto_nome }}">
                   <select name="produto_id[]" class="produto-select-real" tabindex="-1" aria-hidden="true">
                     <option value="">Selecione...</option>

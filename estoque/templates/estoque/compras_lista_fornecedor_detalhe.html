@@ -317,6 +317,12 @@
 
   <section class="lista-fornecedor-acoes-card">
     <div class="lista-fornecedor-acoes">
+      {% if lista.status != "cancelada" and lista.status != "finalizada" and not compra_gerada %}
+        <form method="post" action="{% url 'estoque:compras_lista_fornecedor_gerar_compra' lista.id %}" style="margin:0" onsubmit="return confirm('Gerar compra em rascunho a partir desta lista?');">
+          {% csrf_token %}
+          <button type="submit" class="lista-fornecedor-btn principal">Gerar Compra</button>
+        </form>
+      {% endif %}
       <a class="lista-fornecedor-btn neutro" href="{% url 'estoque:compras_listas_fornecedor' %}">Consultar Listas</a>
       <a class="lista-fornecedor-btn principal" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">WhatsApp</a>
       <a class="lista-fornecedor-btn neutro" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Imprimir</a>
@@ -328,6 +334,15 @@
       {% endif %}
     </div>
   </section>
+
+  {% if compra_gerada %}
+    <section class="lista-fornecedor-card" style="border-color:#facc15; background:#fffbeb;">
+      <div style="padding:10px 12px; color:#92400e; font-weight:900;">
+        Esta lista ja gerou a Compra #{{ compra_gerada.id }} em {{ compra_gerada.get_status_display }}. Nao e possivel gerar outra compra por esta mesma lista.
+        <a href="{% url 'estoque:compra_editar' compra_gerada.id %}?continuar_itens=1" style="color:#1d4ed8; font-weight:950; margin-left:8px;">Abrir compra gerada</a>
+      </div>
+    </section>
+  {% endif %}
 
   <section class="lista-fornecedor-card">
     <div class="lista-fornecedor-card-titulo">
