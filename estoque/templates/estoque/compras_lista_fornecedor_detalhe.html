@@ -318,7 +318,7 @@
   <section class="lista-fornecedor-acoes-card">
     <div class="lista-fornecedor-acoes">
       {% if lista.status != "cancelada" and lista.status != "finalizada" and not compra_gerada %}
-        <form method="post" action="{% url 'estoque:compras_lista_fornecedor_gerar_compra' lista.id %}" style="margin:0" onsubmit="return confirm('Gerar compra em rascunho a partir desta lista?');">
+        <form method="post" action="{% url 'estoque:compras_lista_fornecedor_gerar_compra' lista.id %}" style="margin:0">
           {% csrf_token %}
           <button type="submit" class="lista-fornecedor-btn principal">Gerar Compra</button>
         </form>
@@ -338,8 +338,14 @@
   {% if compra_gerada %}
     <section class="lista-fornecedor-card" style="border-color:#facc15; background:#fffbeb;">
       <div style="padding:10px 12px; color:#92400e; font-weight:900;">
-        Esta lista ja gerou a Compra #{{ compra_gerada.id }} em {{ compra_gerada.get_status_display }}. Nao e possivel gerar outra compra por esta mesma lista.
+        Esta lista ja gerou a Compra #{{ compra_gerada.id }} em {{ compra_gerada.get_status_display }}. Para gerar outra, descarte primeiro a compra atual.
         <a href="{% url 'estoque:compra_editar' compra_gerada.id %}?continuar_itens=1" style="color:#1d4ed8; font-weight:950; margin-left:8px;">Abrir compra gerada</a>
+        {% if compra_gerada.status == "rascunho" or compra_gerada.status == "aberta" %}
+          <form method="post" action="{% url 'estoque:compras_lista_fornecedor_descartar_compra' lista.id %}" style="display:inline; margin-left:8px;">
+            {% csrf_token %}
+            <button type="submit" style="border:1px solid #f97316; background:#fff7ed; color:#9a3412; border-radius:8px; padding:5px 9px; font-weight:950; cursor:pointer;">Descartar compra gerada</button>
+          </form>
+        {% endif %}
       </div>
     </section>
   {% endif %}

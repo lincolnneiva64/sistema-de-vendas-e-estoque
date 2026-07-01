@@ -1768,7 +1768,21 @@
     </div>
   </header>
 
-  {% if messages %}
+
+{% if compra and lista_origem_compra and compra.status == "rascunho" %}
+  <div class="compras-alerta" style="border-color:#f97316; background:#fff7ed; color:#9a3412;">
+    <strong>Compra gerada pela Lista #{{ lista_origem_compra.id }}.</strong>
+    Se nao quiser continuar este rascunho, descarte a compra gerada e volte para a lista.
+    <form method="post" action="{% url 'estoque:compras_lista_fornecedor_descartar_compra' lista_origem_compra.id %}" style="display:inline-block; margin-left:10px;">
+      {% csrf_token %}
+      <button type="submit" class="compras-btn compras-btn-secondary" style="border-color:#f97316; color:#9a3412; background:#fff7ed; min-height:34px; padding:6px 12px;">
+        Descartar compra gerada
+      </button>
+    </form>
+  </div>
+{% endif %}
+
+{% if messages %}
     {% for message in messages %}
       <div class="compras-alert {% if message.tags == 'error' %}error{% else %}success{% endif %}">{{ message }}</div>
     {% endfor %}

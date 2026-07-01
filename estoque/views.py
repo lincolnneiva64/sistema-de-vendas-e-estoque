@@ -4644,6 +4644,39 @@ def compras_lista_fornecedor_gerar_compra(request, pk):
 
 
 @require_POST
+def compras_lista_fornecedor_descartar_compra(request, pk):
+    lista = get_object_or_404(ListaCompraFornecedor.objects.select_related("fornecedor"), pk=pk)
+    marcador_origem = f"Gerada a partir da Lista de Compras #{lista.id}"
+
+    compra = (
+        Compra.objects.filter(
+            observacao__icontains=marcador_origem,
+            cancelada=False,
+        )
+        .exclude(status=Compra.STATUS_CANCELADA)
+        .order_by("-id")
+        .first()
+    )
+
+    if not compra:
+        messages.warning(request, "Nao existe compra gerada por esta lista para descartar.")
+        return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
+
+    if compra.status not in {Compra.STATUS_RASCUNHO, Compra.STATUS_ABERTA}:
+        messages.error(request, f"A Compra #{compra.id} nao pode ser descartada porque nao esta mais em rascunho.")
+        return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
+
+    compra.status = Compra.STATUS_CANCELADA
+    compra.cancelada = True
+    compra.cancelada_em = timezone.now()
+    compra.motivo_cancelamento = f"Compra rascunho descartada pela Lista de Compras #{lista.id}."
+    compra.save(update_fields=["status", "cancelada", "cancelada_em", "motivo_cancelamento", "atualizado_em"])
+
+    messages.success(request, f"Compra #{compra.id} descartada. Agora voce pode gerar uma nova compra por esta lista.")
+    return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
+
+
+@require_POST
 def compras_lista_fornecedor_cancelar(request, pk):
     lista = get_object_or_404(ListaCompraFornecedor, pk=pk)
     if lista.status != ListaCompraFornecedor.STATUS_CANCELADA:
@@ -4972,6 +5005,11 @@ def _total_itens_compra(compra=None):
 
 def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None, rascunho_salvo=False):
     precisa_saldos_financeiros = finalizando or compra is None
+    lista_origem_compra = None
+    if compra and compra.observacao:
+        match_lista_origem = re.search(r"Lista de Compras #(\d+)", compra.observacao or "")
+        if match_lista_origem:
+            lista_origem_compra = ListaCompraFornecedor.objects.filter(pk=match_lista_origem.group(1)).first()
 
     if precisa_saldos_financeiros:
         conta_caixa = _conta_financeira_padrao("caixa")
@@ -4992,6 +5030,7 @@ def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None,
         "unidades_produto": Unidade.objects.filter(ativa=True).order_by("sigla", "nome"),
         "hoje": timezone.localdate(),
         "compra": compra,
+        "lista_origem_compra": lista_origem_compra,
         "finalizando": finalizando,
         "rascunho_salvo": rascunho_salvo,
         "total_itens_compra": _total_itens_compra(compra),
@@ -5015,6 +5054,8 @@ def _dados_compra_post(request, exigir_itens=True):
         raise ValueError("Selecione um fornecedor ativo.")
     if not data_compra:
         raise ValueError("Informe uma data valida para a compra.")
+    if exigir_itens and not tipo_pagamento:
+        raise ValueError("Selecione o tipo de pagamento antes de finalizar a compra.")
     if compra_a_prazo and not data_vencimento:
         raise ValueError("Informe o vencimento da compra a prazo.")
 
@@ -5369,6 +5410,13 @@ def compra_finalizar(request, pk):
             return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
 
         if acao == "confirmar_financeiro":
+            if not compra.tipo_pagamento:
+                messages.error(request, "Selecione o tipo de pagamento antes de finalizar a compra.")
+                return redirect("estoque:compra_editar", pk=compra.pk)
+            if _compra_pagamento_a_prazo(compra.tipo_pagamento) and not compra.data_vencimento:
+                messages.error(request, "Informe o vencimento da compra a prazo.")
+                return redirect("estoque:compra_editar", pk=compra.pk)
+
             atualizar_custo_produto_ids = _produtos_custo_atualizar_post(request)
             atualizar_preco_venda_produtos = _produtos_preco_venda_atualizar_post(request)
             if not compra.itens.exists():
