@@ -286,6 +286,147 @@
       width: 100%;
     }
   }
+
+/* Ajuste fino: botoes de acoes menores e alinhados com o status */
+.listas-fornecedor-acoes {
+  display: flex !important;
+  gap: 6px !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+}
+
+.listas-fornecedor-acoes .listas-fornecedor-btn {
+  width: auto !important;
+  min-height: 32px !important;
+  padding: 6px 10px !important;
+  border-radius: 8px !important;
+  font-size: .78rem !important;
+  line-height: 1 !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 760px) {
+  .listas-fornecedor-acoes {
+    flex-wrap: wrap !important;
+  }
+
+  .listas-fornecedor-acoes .listas-fornecedor-btn {
+    width: auto !important;
+  }
+}
+
+
+/* Ajuste fino: alinhamento das colunas da tabela de listas por fornecedor */
+.listas-fornecedor-table {
+  table-layout: fixed !important;
+}
+
+.listas-fornecedor-table th,
+.listas-fornecedor-table td {
+  vertical-align: middle !important;
+}
+
+.listas-fornecedor-table th:nth-child(1),
+.listas-fornecedor-table td:nth-child(1) {
+  width: 70px;
+  text-align: center !important;
+}
+
+.listas-fornecedor-table th:nth-child(2),
+.listas-fornecedor-table td:nth-child(2) {
+  width: 210px;
+  text-align: left !important;
+}
+
+.listas-fornecedor-table th:nth-child(3),
+.listas-fornecedor-table td:nth-child(3) {
+  width: 125px;
+  text-align: center !important;
+  white-space: nowrap;
+}
+
+.listas-fornecedor-table th:nth-child(4),
+.listas-fornecedor-table td:nth-child(4) {
+  width: 230px;
+  text-align: center !important;
+  white-space: nowrap;
+}
+
+.listas-fornecedor-table th:nth-child(5),
+.listas-fornecedor-table td:nth-child(5) {
+  width: 105px;
+  text-align: center !important;
+  white-space: nowrap;
+}
+
+.listas-fornecedor-table th:nth-child(6),
+.listas-fornecedor-table td:nth-child(6) {
+  width: 135px;
+  text-align: right !important;
+  white-space: nowrap;
+}
+
+.listas-fornecedor-table th:nth-child(7),
+.listas-fornecedor-table td:nth-child(7) {
+  width: 120px;
+  text-align: center !important;
+  white-space: nowrap;
+}
+
+.listas-fornecedor-table th:nth-child(8),
+.listas-fornecedor-table td:nth-child(8) {
+  width: 250px;
+  text-align: center !important;
+}
+
+.listas-fornecedor-table td:nth-child(8) {
+  padding-left: 10px !important;
+  padding-right: 10px !important;
+}
+
+.listas-fornecedor-table td:nth-child(8) .listas-fornecedor-acoes {
+  justify-content: center !important;
+}
+
+.listas-fornecedor-total {
+  display: block;
+  text-align: right !important;
+}
+
+
+/* Ajuste fino: alarga a consulta para nao cortar a coluna Acoes */
+.listas-fornecedor-page {
+  max-width: min(1480px, calc(100vw - 48px)) !important;
+}
+
+.listas-fornecedor-table {
+  min-width: 1320px !important;
+}
+
+.listas-fornecedor-table th:nth-child(2),
+.listas-fornecedor-table td:nth-child(2) {
+  width: 240px !important;
+}
+
+.listas-fornecedor-table th:nth-child(4),
+.listas-fornecedor-table td:nth-child(4) {
+  width: 245px !important;
+}
+
+.listas-fornecedor-table th:nth-child(8),
+.listas-fornecedor-table td:nth-child(8) {
+  width: 330px !important;
+}
+
+.listas-fornecedor-table td:nth-child(8) {
+  overflow: visible !important;
+}
+
+.listas-fornecedor-table td:nth-child(8) .listas-fornecedor-acoes {
+  justify-content: center !important;
+  flex-wrap: nowrap !important;
+}
+
 </style>
 
 <main class="listas-fornecedor-page">
