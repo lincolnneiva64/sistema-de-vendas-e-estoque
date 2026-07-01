@@ -2032,16 +2032,10 @@
       <a href="{% url 'estoque:compras_lista' %}" class="compras-btn compras-btn-secondary">Cancelar</a>
       {% if finalizando %}
         <button type="button" class="compras-btn compras-btn-secondary" id="btnVoltarRascunhoCompra">Continuar Editando</button>
-        <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">Confirmar Pagamento</button>
+        <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">Finalizar Compra</button>
       {% else %}
         <button type="button" class="compras-btn compras-btn-secondary compras-rascunho-mobile-only" id="btnSalvarRascunhoCompra">Salvar Rascunho</button>
-        <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">{% if compra and compra.tipo_pagamento == "aprazo" %}
-            Finalizar e gerar Conta a Pagar
-          {% elif compra and compra.tipo_pagamento == "avista" %}
-            Finalizar e lancar financeiro
-          {% else %}
-            Finalizar Compra
-          {% endif %}</button>
+        <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">Finalizar Compra</button>
       {% endif %}
     </div>
   </form>
@@ -2566,7 +2560,11 @@
     botaoEnvioAtual = null;
     if (btnSalvarCompra) {
       btnSalvarCompra.disabled = false;
-      btnSalvarCompra.textContent = "{% if finalizando %}Confirmar Pagamento{% else %}Finalizar Compra{% endif %}";
+      if (window.atualizarTextoBotaoFinalizarCompra) {
+        window.atualizarTextoBotaoFinalizarCompra();
+      } else {
+        btnSalvarCompra.textContent = "Finalizar Compra";
+      }
     }
     delete formCompra.dataset.enviando;
     focarCampo(btnSalvarCompra);
@@ -3673,7 +3671,11 @@
     travarScrollBodyConferenciaPrecos(false);
     if (btnSalvarCompra) {
       btnSalvarCompra.disabled = false;
-      btnSalvarCompra.textContent = "{% if finalizando %}Confirmar Pagamento{% else %}Finalizar Compra{% endif %}";
+      if (window.atualizarTextoBotaoFinalizarCompra) {
+        window.atualizarTextoBotaoFinalizarCompra();
+      } else {
+        btnSalvarCompra.textContent = "Finalizar Compra";
+      }
     }
     delete formCompra.dataset.enviando;
     envioAcionadoPeloBotao = false;
@@ -6929,6 +6931,72 @@
 })();
 </script>
 
+
+<script id="script-texto-finalizar-compra-dinamico-final">
+(function () {
+  function normalizar(valor) {
+    return String(valor || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "");
+  }
+
+  function pegarTipoPagamento() {
+    return document.getElementById("tipoPagamentoCompra") ||
+           document.querySelector('select[name="tipo_pagamento"]');
+  }
+
+  function textoTipoPagamento(select) {
+    if (!select) return "";
+    var opcao = select.options && select.selectedIndex >= 0 ? select.options[select.selectedIndex] : null;
+    return normalizar((select.value || "") + " " + (opcao ? opcao.text : ""));
+  }
+
+  function atualizarTextoBotaoFinalizarCompra() {
+    var botao = document.getElementById("btnSalvarCompra");
+    var select = pegarTipoPagamento();
+
+    if (!botao || !select) return;
+
+    var tipo = textoTipoPagamento(select);
+
+    if (tipo.indexOf("aprazo") >= 0 || tipo === "prazo" || tipo.indexOf("apraz") >= 0) {
+      botao.textContent = "Finalizar e gerar Conta a Pagar";
+    } else if (tipo.indexOf("avista") >= 0 || tipo.indexOf("dinheiro") >= 0 || tipo.indexOf("pix") >= 0) {
+      botao.textContent = "Finalizar e lancar financeiro";
+    } else {
+      botao.textContent = "Finalizar Compra";
+    }
+  }
+
+  window.atualizarTextoBotaoFinalizarCompra = atualizarTextoBotaoFinalizarCompra;
+
+  function iniciar() {
+    var select = pegarTipoPagamento();
+
+    if (select && !select.dataset.textoFinalizarCompraFinal) {
+      select.dataset.textoFinalizarCompraFinal = "1";
+      select.addEventListener("change", atualizarTextoBotaoFinalizarCompra);
+      select.addEventListener("input", atualizarTextoBotaoFinalizarCompra);
+    }
+
+    atualizarTextoBotaoFinalizarCompra();
+    setTimeout(atualizarTextoBotaoFinalizarCompra, 100);
+    setTimeout(atualizarTextoBotaoFinalizarCompra, 500);
+    setTimeout(atualizarTextoBotaoFinalizarCompra, 1000);
+  }
+
+  document.addEventListener("DOMContentLoaded", iniciar);
+  window.addEventListener("load", iniciar);
+
+  if (document.readyState !== "loading") {
+    iniciar();
+  }
+})();
+</script>
+
+
 {% endblock %}
 
 
@@ -7144,59 +7212,6 @@
       setTimeout(iniciarProtecaoScrollCompra, 300);
       setTimeout(iniciarProtecaoScrollCompra, 900);
     }
-  });
-})();
-</script>
-
-<script id="script-texto-finalizar-compra-dinamico">
-(function () {
-  function normalizar(valor) {
-    return String(valor || "")
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[()\s_\/-]/g, "");
-  }
-
-  function atualizarTextoBotaoFinalizar() {
-    var select = document.querySelector('[name="tipo_pagamento"]');
-    var botao = document.getElementById("btnSalvarCompra");
-
-    if (!select || !botao) return;
-
-    var valor = normalizar(select.value);
-    var textoOpcao = "";
-    if (select.selectedOptions && select.selectedOptions.length) {
-      textoOpcao = normalizar(select.selectedOptions[0].textContent);
-    }
-
-    var combinado = valor + " " + textoOpcao;
-
-    if (combinado.indexOf("aprazo") >= 0) {
-      botao.textContent = "Finalizar e gerar Conta a Pagar";
-    } else if (
-      combinado.indexOf("avista") >= 0 ||
-      combinado.indexOf("dinheiro") >= 0 ||
-      combinado.indexOf("pix") >= 0
-    ) {
-      botao.textContent = "Finalizar e lancar financeiro";
-    } else {
-      botao.textContent = "Finalizar Compra";
-    }
-  }
-
-  document.addEventListener("DOMContentLoaded", function () {
-    var select = document.querySelector('[name="tipo_pagamento"]');
-
-    atualizarTextoBotaoFinalizar();
-
-    if (select) {
-      select.addEventListener("change", atualizarTextoBotaoFinalizar);
-      select.addEventListener("input", atualizarTextoBotaoFinalizar);
-    }
-
-    setTimeout(atualizarTextoBotaoFinalizar, 200);
-    setTimeout(atualizarTextoBotaoFinalizar, 700);
   });
 })();
 </script>
