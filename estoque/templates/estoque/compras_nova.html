@@ -193,6 +193,12 @@
 <script>
 /* CORRIGE ESTOQUE INICIAL DOS ITENS DA COMPRA */
 (function() {
+  function estoqueSeguro(valor) {
+    var texto = String(valor == null ? "" : valor).trim();
+    return (!texto || ["none", "null", "undefined"].includes(texto.toLowerCase())) ? "0" : texto;
+  }
+  window.estoqueCompraTextoSeguro = estoqueSeguro;
+
   function atualizarEstoqueLinhaCompra(linha) {
     if (!linha) return;
 
@@ -204,7 +210,7 @@
     var opt = select.options[select.selectedIndex];
 
     if (select.value && opt) {
-      estoqueValor.textContent = opt.dataset.estoque || "0";
+      estoqueValor.textContent = estoqueSeguro(opt.dataset.estoque);
     } else {
       estoqueValor.textContent = "-";
     }
@@ -260,7 +266,7 @@
 
     var opt = optionPorProdutoId(linha, sugestao.dataset.produtoId);
     if (opt) {
-      estoqueValor.textContent = opt.dataset.estoque || "0";
+      estoqueValor.textContent = window.estoqueCompraTextoSeguro ? window.estoqueCompraTextoSeguro(opt.dataset.estoque) : (opt.dataset.estoque || "0");
     }
   }
 
@@ -308,7 +314,7 @@
     var opt = optionPorProdutoId(linha, sugestao.dataset.produtoId);
 
     if (estoqueValor && opt) {
-      estoqueValor.textContent = opt.dataset.estoque || "0";
+      estoqueValor.textContent = window.estoqueCompraTextoSeguro ? window.estoqueCompraTextoSeguro(opt.dataset.estoque) : (opt.dataset.estoque || "0");
     }
   });
 })();
@@ -477,14 +483,19 @@
     border-radius:12px;
     box-shadow:0 24px 70px rgba(15,23,42,.28);
   }
-  .compras-origem-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; }
+  .compras-origem-grid { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:10px; align-items:stretch; }
+  .compras-origem-grid .compras-field { display:flex; flex-direction:column; min-width:0; }
+  .compras-origem-grid .compras-field label { min-height:32px; display:flex; align-items:flex-end; }
   .saldo-conta-modal {
     display:block;
     margin:2px 0 5px;
     color:#64748b;
     font-size:.72rem;
     font-weight:800;
+    min-height:18px;
+    white-space:nowrap;
   }
+  .compras-origem-grid .compras-field input { margin-top:auto; }
   .compras-origem-nota { margin:8px 0 0; color:#164173; font-weight:850; font-size:.86rem; }
   .compras-origem-total {
     display:grid;
@@ -2690,7 +2701,7 @@
     sincronizarPrecoUnitarioLinha(linha);
 
     if (estoqueValor) {
-      estoqueValor.textContent = opt.dataset.estoque || "0";
+      estoqueValor.textContent = window.estoqueCompraTextoSeguro ? window.estoqueCompraTextoSeguro(opt.dataset.estoque) : (opt.dataset.estoque || "0");
     }
     fecharSugestoes(linha);
     conferenciaPrecosConfirmada = false;
@@ -2797,7 +2808,7 @@
     if (!estoqueValor) return;
 
     if (opt) {
-      estoqueValor.textContent = opt.dataset.estoque || "0";
+      estoqueValor.textContent = window.estoqueCompraTextoSeguro ? window.estoqueCompraTextoSeguro(opt.dataset.estoque) : (opt.dataset.estoque || "0");
     } else {
       estoqueValor.textContent = "-";
     }
@@ -2921,7 +2932,7 @@
       botao.type = "button";
       botao.className = "produto-sugestao";
       botao.dataset.produtoId = opt.value;
-      botao.dataset.estoqueLabel = "Est: " + (opt.dataset.estoque || "0");
+      botao.dataset.estoqueLabel = "Est: " + (window.estoqueCompraTextoSeguro ? window.estoqueCompraTextoSeguro(opt.dataset.estoque) : (opt.dataset.estoque || "0"));
       botao.textContent = opt.textContent.trim();
 
       let toque = null;
@@ -3889,31 +3900,38 @@
     btnVoltarEditarCompra.addEventListener("click", fecharOrigemDinheiroCompra);
   }
 
+  function confirmarFechamentoOrigemCompra() {
+    if (btnConfirmarFechamentoCompra.disabled) return;
+    if (!normalizarOrigensParaEnvio()) {
+      mostrarErroOrigem("Informe apenas valores válidos e positivos nas origens do dinheiro.");
+      focarSelecionando(origemCaixaCompra);
+      return;
+    }
+    const erro = validarOrigemDinheiroCompra();
+    if (erro) {
+      mostrarErroOrigem(erro);
+      focarSelecionando(origemCaixaCompra);
+      return;
+    }
+    fechamentoOrigemConfirmado = true;
+    if (acaoCompra) acaoCompra.value = "confirmar_financeiro";
+    if (formCompra.dataset.confirmarFinanceiroUrl) {
+      formCompra.action = formCompra.dataset.confirmarFinanceiroUrl;
+    }
+    sincronizarTodosPrecosUnitarios();
+    delete formCompra.dataset.enviando;
+    window.compraMobileMantendoItemVisivel = false;
+    envioAcionadoPeloBotao = false;
+    definirEnvioModalEmAndamento(true);
+    formCompra.requestSubmit ? formCompra.requestSubmit() : formCompra.submit();
+  }
+
   if (btnConfirmarFechamentoCompra && formCompra) {
-    btnConfirmarFechamentoCompra.addEventListener("click", function() {
-      if (btnConfirmarFechamentoCompra.disabled) return;
-      if (!normalizarOrigensParaEnvio()) {
-        mostrarErroOrigem("Informe apenas valores válidos e positivos nas origens do dinheiro.");
-        focarSelecionando(origemCaixaCompra);
-        return;
-      }
-      const erro = validarOrigemDinheiroCompra();
-      if (erro) {
-        mostrarErroOrigem(erro);
-        focarSelecionando(origemCaixaCompra);
-        return;
-      }
-      fechamentoOrigemConfirmado = true;
-      if (acaoCompra) acaoCompra.value = "confirmar_financeiro";
-      if (formCompra.dataset.confirmarFinanceiroUrl) {
-        formCompra.action = formCompra.dataset.confirmarFinanceiroUrl;
-      }
-      sincronizarTodosPrecosUnitarios();
-      delete formCompra.dataset.enviando;
-      window.compraMobileMantendoItemVisivel = false;
-      envioAcionadoPeloBotao = false;
-      definirEnvioModalEmAndamento(true);
-      formCompra.requestSubmit ? formCompra.requestSubmit() : formCompra.submit();
+    btnConfirmarFechamentoCompra.addEventListener("click", confirmarFechamentoOrigemCompra);
+    btnConfirmarFechamentoCompra.addEventListener("keydown", function(event) {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      confirmarFechamentoOrigemCompra();
     });
   }
 

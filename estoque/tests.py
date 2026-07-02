@@ -18,7 +18,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, Funcionario, ItemCompra, ItemVenda, ItemVendaRemovido, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Venda
+from .models import AjusteItemVendaQuitada, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Venda
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
 from . import views
 
@@ -119,6 +119,139 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, "Saldo atual: R$ 1800,00")
         self.assertContains(resposta, "Saldo atual: R$ 985,35")
 
+    def test_compra_gerada_pela_lista_exibe_saldos_reais_no_modal(self):
+        saldos = {
+            "caixa": Decimal("476.85"),
+            "reserva": Decimal("1800.00"),
+            "banco": Decimal("985.35"),
+        }
+        for chave, valor in saldos.items():
+            MovimentoFinanceiro.objects.create(
+                conta=views._conta_financeira_padrao(chave),
+                tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+                valor=valor,
+                data=timezone.localdate(),
+                origem="teste_saldo_lista_compra",
+            )
+        lista = ListaCompraFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_lista=timezone.localdate(),
+            data_inicio_periodo=timezone.localdate(),
+            data_fim_periodo=timezone.localdate(),
+        )
+        ItemListaCompraFornecedor.objects.create(
+            lista=lista,
+            produto=self.produto,
+            estoque_atual=Decimal("10.000"),
+            estoque_minimo=Decimal("0.000"),
+            quantidade_final=Decimal("1.000"),
+            unidade="UN",
+            preco_compra=Decimal("100.00"),
+            total=Decimal("100.00"),
+        )
+
+        resposta_geracao = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gerar_compra", kwargs={"pk": lista.pk}),
+            secure=True,
+        )
+        compra = Compra.objects.get(observacao__icontains=f"Lista de Compras #{lista.id}")
+        resposta = self.client.get(reverse("estoque:compra_editar", kwargs={"pk": compra.pk}), secure=True)
+
+        self.assertEqual(resposta_geracao.status_code, 302)
+        self.assertContains(resposta, "Saldo atual: R$ 476,85")
+        self.assertContains(resposta, "Saldo atual: R$ 1800,00")
+        self.assertContains(resposta, "Saldo atual: R$ 985,35")
+        self.assertNotContains(resposta, "Saldo atual: R$ 0,00")
+
+    def test_compra_gerada_com_produto_sem_estoque_nao_exibe_none(self):
+        produto_sem_estoque = Produto.objects.create(
+            nome="Produto Sem Estoque",
+            preco_compra=Decimal("10.00"),
+            preco_vista=Decimal("15.00"),
+            preco_prazo=Decimal("16.00"),
+            quantidade=None,
+        )
+        compra = Compra.objects.create(
+            fornecedor=self.fornecedor,
+            data_compra=timezone.localdate(),
+            tipo_pagamento="avista",
+            total=Decimal("10.00"),
+            status=Compra.STATUS_RASCUNHO,
+            observacao="Gerada a partir da Lista de Compras #999",
+        )
+        ItemCompra.objects.create(
+            compra=compra,
+            produto=produto_sem_estoque,
+            quantidade=Decimal("1.000"),
+            unidade="UN",
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("10.00"),
+        )
+
+        resposta = self.client.get(reverse("estoque:compra_editar", kwargs={"pk": compra.pk}), secure=True)
+
+        self.assertContains(resposta, '<span class="produto-estoque-valor">0</span>')
+        self.assertNotContains(resposta, ">None<")
+        self.assertNotContains(resposta, "data-estoque=\"None\"")
+
+    def test_compra_gerada_pela_lista_finaliza_avista_com_dados_do_modal(self):
+        lista = ListaCompraFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_lista=timezone.localdate(),
+            data_inicio_periodo=timezone.localdate(),
+            data_fim_periodo=timezone.localdate(),
+        )
+        ItemListaCompraFornecedor.objects.create(
+            lista=lista,
+            produto=self.produto,
+            estoque_atual=Decimal("10.000"),
+            estoque_minimo=Decimal("0.000"),
+            quantidade_final=Decimal("1.000"),
+            unidade="UN",
+            preco_compra=Decimal("100.00"),
+            total=Decimal("100.00"),
+        )
+        self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gerar_compra", kwargs={"pk": lista.pk}),
+            secure=True,
+        )
+        compra = Compra.objects.get(observacao__icontains=f"Lista de Compras #{lista.id}")
+        self.assertEqual(compra.tipo_pagamento, "")
+        estoque_antes = self.produto.quantidade
+
+        resposta = self.client.post(
+            reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}),
+            {
+                "acao_compra": "confirmar_financeiro",
+                "fornecedor_id": str(self.fornecedor.id),
+                "data_compra": timezone.localdate().isoformat(),
+                "tipo_pagamento": "avista",
+                "data_vencimento": "",
+                "observacao": compra.observacao,
+                "produto_id[]": [str(self.produto.id)],
+                "quantidade[]": ["1"],
+                "unidade[]": ["UN"],
+                "preco_unitario[]": ["100,00"],
+                "observacao_item[]": [""],
+                "origem_caixa": "100,00",
+                "origem_reserva": "0,00",
+                "origem_banco": "0,00",
+            },
+            secure=True,
+        )
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        self.assertRedirects(resposta, reverse("estoque:compras_lista"), fetch_redirect_response=False)
+        self.assertEqual(compra.status, Compra.STATUS_FINALIZADA)
+        self.assertEqual(compra.tipo_pagamento, "avista")
+        self.assertTrue(compra.estoque_entrada_realizada)
+        self.assertEqual(self.produto.quantidade, estoque_antes + Decimal("1.000"))
+        movimento = compra.movimentos_financeiros.get()
+        self.assertEqual(movimento.tipo, MovimentoFinanceiro.TIPO_SAIDA)
+        self.assertEqual(movimento.valor, Decimal("100.00"))
+        self.assertFalse(hasattr(compra, "conta_pagar"))
+
     def test_fecha_compra_e_cria_tres_saidas(self):
         resposta = self.client.post(self.url, self.dados(), follow=True, secure=True)
 
@@ -129,7 +262,7 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertEqual([movimento.valor for movimento in movimentos], [Decimal("200.00"), Decimal("200.00"), Decimal("600.00")])
         self.assertTrue(all(movimento.tipo == MovimentoFinanceiro.TIPO_SAIDA for movimento in movimentos))
         self.assertTrue(all(f"Pagamento da compra #{compra.id}" in movimento.descricao for movimento in movimentos))
-        self.assertContains(resposta, "Compra fechada e valores lançados no financeiro com sucesso.")
+        self.assertContains(resposta, "Compra finalizada e valores lancados no financeiro com sucesso.")
 
     def test_detalhe_exibe_resumo_financeiro_compacto_e_lancamentos_fechados(self):
         self.client.post(self.url, self.dados(tipo_pagamento="avista"), secure=True)

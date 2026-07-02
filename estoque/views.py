@@ -4998,6 +4998,12 @@ def _linha_item_compra_vazia():
     }
 
 
+def _estoque_produto_texto(produto):
+    if not produto or produto.quantidade is None:
+        return "0"
+    return str(produto.quantidade).replace(".", ",")
+
+
 def _linhas_item_compra(compra=None):
     if not compra:
         return [_linha_item_compra_vazia()]
@@ -5010,7 +5016,7 @@ def _linhas_item_compra(compra=None):
             "quantidade": str(item.quantidade).replace(".", ","),
             "unidade": item.unidade or "",
             "preco_unitario": f"{item.preco_unitario:.2f}".replace(".", ","),
-            "estoque": str(item.produto.quantidade).replace(".", ",") if item.produto else "-",
+            "estoque": _estoque_produto_texto(item.produto),
             "observacao": item.observacao or "",
         })
     return linhas or [_linha_item_compra_vazia()]
@@ -5026,13 +5032,13 @@ def _total_itens_compra(compra=None):
 
 
 def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None, rascunho_salvo=False):
-    precisa_saldos_financeiros = finalizando or compra is None
     lista_origem_compra = None
     if compra and compra.observacao:
         match_lista_origem = re.search(r"Lista de Compras #(\d+)", compra.observacao or "")
         if match_lista_origem:
             lista_origem_compra = ListaCompraFornecedor.objects.filter(pk=match_lista_origem.group(1)).first()
 
+    precisa_saldos_financeiros = finalizando or compra is None or lista_origem_compra is not None
     if precisa_saldos_financeiros:
         conta_caixa = _conta_financeira_padrao("caixa")
         conta_reserva = _conta_financeira_padrao("reserva")
@@ -5432,37 +5438,38 @@ def compra_finalizar(request, pk):
             return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
 
         if acao == "confirmar_financeiro":
-            if not compra.tipo_pagamento:
-                messages.error(request, "Selecione o tipo de pagamento antes de finalizar a compra.")
-                return redirect("estoque:compra_editar", pk=compra.pk)
-            if _compra_pagamento_a_prazo(compra.tipo_pagamento) and not compra.data_vencimento:
-                messages.error(request, "Informe o vencimento da compra a prazo.")
+            try:
+                dados = _dados_compra_post(request, exigir_itens=True)
+                atualizar_custo_produto_ids = _produtos_custo_atualizar_post(request)
+                atualizar_preco_venda_produtos = _produtos_preco_venda_atualizar_post(request)
+                valores_origem = None
+                if dados["compra_a_vista"]:
+                    valores_origem = _valores_origem_compra_post(request)
+                    _validar_origem_compra_a_vista(valores_origem, dados["total"])
+            except (ValueError, IndexError) as exc:
+                messages.error(request, str(exc))
                 return redirect("estoque:compra_editar", pk=compra.pk)
 
-            atualizar_custo_produto_ids = _produtos_custo_atualizar_post(request)
-            atualizar_preco_venda_produtos = _produtos_preco_venda_atualizar_post(request)
-            if not compra.itens.exists():
-                messages.error(request, "Inclua pelo menos um item antes de finalizar.")
+            if not dados["tipo_pagamento"]:
+                messages.error(request, "Selecione o tipo de pagamento antes de finalizar a compra.")
                 return redirect("estoque:compra_editar", pk=compra.pk)
-            valores_origem = None
-            if _compra_pagamento_imediato(compra.tipo_pagamento):
-                try:
-                    valores_origem = _valores_origem_compra_post(request)
-                    _validar_origem_compra_a_vista(valores_origem, compra.total)
-                except ValueError as exc:
-                    messages.error(request, str(exc))
-                    return redirect("estoque:compra_finalizar", pk=compra.pk)
+            if dados["compra_a_prazo"] and not dados["data_vencimento"]:
+                messages.error(request, "Informe o vencimento da compra a prazo.")
+                return redirect("estoque:compra_editar", pk=compra.pk)
             try:
+                with transaction.atomic():
+                    compra = Compra.objects.select_for_update().get(pk=compra.pk)
+                    _salvar_compra_e_itens(compra, dados, Compra.STATUS_RASCUNHO)
                 _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos)
             except Exception:
                 logger.exception("Falha ao finalizar compra e lancar financeiro")
                 messages.error(request, "Nao foi possivel finalizar a compra. Nenhum valor foi lancado no financeiro.")
                 return redirect("estoque:compra_finalizar", pk=compra.pk)
-            if _compra_pagamento_a_prazo(compra.tipo_pagamento):
+            if dados["compra_a_prazo"]:
                 messages.success(request, "Compra finalizada e conta a pagar criada com sucesso.")
             else:
                 messages.success(request, "Compra finalizada e valores lancados no financeiro com sucesso.")
-            return redirect("estoque:compras_detalhe", pk=compra.pk)
+            return redirect("estoque:compras_lista")
 
     if compra.status == Compra.STATUS_FINALIZACAO_INICIADA:
         compra.status = Compra.STATUS_RASCUNHO
