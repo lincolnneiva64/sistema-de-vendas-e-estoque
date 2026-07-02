@@ -4482,6 +4482,48 @@ def compras_lista_fornecedor_detalhe(request, pk):
     )
 
 
+def _quantidade_recebida_conferencia(valor):
+    texto = str(valor or "").strip()
+    if not texto:
+        return None
+    quantidade = _decimal_lista_fornecedor(texto, casas=3)
+    if quantidade < Decimal("0.000"):
+        raise ValueError("Quantidade recebida nao pode ser negativa.")
+    return quantidade
+
+
+@require_POST
+def compras_lista_fornecedor_conferencia_salvar(request, pk):
+    lista = get_object_or_404(
+        ListaCompraFornecedor.objects.prefetch_related("itens"),
+        pk=pk,
+    )
+    agora = timezone.now()
+    try:
+        with transaction.atomic():
+            itens = list(lista.itens.select_for_update().all())
+            for item in itens:
+                quantidade = _quantidade_recebida_conferencia(request.POST.get(f"quantidade_recebida_{item.id}"))
+                item.quantidade_recebida = quantidade
+                item.observacao_conferencia = (request.POST.get(f"observacao_conferencia_{item.id}") or "").strip()
+                item.status_conferencia = item.calcular_status_conferencia()
+                item.conferido = quantidade is not None
+                item.conferido_em = agora if item.conferido else None
+                item.save(update_fields=[
+                    "quantidade_recebida",
+                    "observacao_conferencia",
+                    "status_conferencia",
+                    "conferido",
+                    "conferido_em",
+                ])
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
+
+    messages.success(request, "Conferencia salva com sucesso.")
+    return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
+
+
 @require_POST
 def compras_lista_fornecedor_gravar(request):
     payload_raw = request.POST.get("lista_payload") or ""

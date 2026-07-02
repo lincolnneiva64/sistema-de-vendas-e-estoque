@@ -622,6 +622,96 @@ class ComprasListaFinanceiroTests(TestCase):
         )
 
 
+class ComprasListaConferenciaTests(TestCase):
+    def setUp(self):
+        self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Conferencia")
+        self.lista = ListaCompraFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_lista=timezone.localdate(),
+            data_inicio_periodo=timezone.localdate(),
+            data_fim_periodo=timezone.localdate(),
+            total_lista=Decimal("100.00"),
+        )
+
+    def criar_item(self, nome, quantidade_final):
+        produto = Produto.objects.create(
+            nome=nome,
+            preco_compra=Decimal("10.00"),
+            preco_vista=Decimal("15.00"),
+            preco_prazo=Decimal("16.00"),
+            quantidade=Decimal("5.000"),
+        )
+        item = ItemListaCompraFornecedor.objects.create(
+            lista=self.lista,
+            produto=produto,
+            quantidade_final=Decimal(quantidade_final),
+            unidade="UN",
+            preco_compra=Decimal("10.00"),
+            preco_unitario=Decimal("10.00"),
+            total=Decimal("10.00"),
+        )
+        return item
+
+    def test_salvar_conferencia_calcula_status_e_nao_altera_compra_financeiro_estoque(self):
+        item_ok = self.criar_item("Produto Ok", "2.000")
+        item_faltou = self.criar_item("Produto Faltou", "3.000")
+        item_mais = self.criar_item("Produto Mais", "1.000")
+        item_nao_veio = self.criar_item("Produto Nao Veio", "4.000")
+        item_pendente = self.criar_item("Produto Pendente", "5.000")
+        estoques_antes = {
+            item.produto_id: item.produto.quantidade
+            for item in [item_ok, item_faltou, item_mais, item_nao_veio, item_pendente]
+        }
+        compras_antes = Compra.objects.count()
+        contas_antes = ContaPagar.objects.count()
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_conferencia_salvar", kwargs={"pk": self.lista.pk}),
+            {
+                f"quantidade_recebida_{item_ok.id}": "2,000",
+                f"observacao_conferencia_{item_ok.id}": "Tudo certo",
+                f"quantidade_recebida_{item_faltou.id}": "1,000",
+                f"observacao_conferencia_{item_faltou.id}": "Fornecedor entregou parcial",
+                f"quantidade_recebida_{item_mais.id}": "2,000",
+                f"observacao_conferencia_{item_mais.id}": "",
+                f"quantidade_recebida_{item_nao_veio.id}": "0",
+                f"observacao_conferencia_{item_nao_veio.id}": "Nao veio",
+                f"quantidade_recebida_{item_pendente.id}": "",
+                f"observacao_conferencia_{item_pendente.id}": "",
+            },
+            secure=True,
+        )
+
+        self.assertRedirects(
+            resposta,
+            reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),
+            fetch_redirect_response=False,
+        )
+        item_ok.refresh_from_db()
+        item_faltou.refresh_from_db()
+        item_mais.refresh_from_db()
+        item_nao_veio.refresh_from_db()
+        item_pendente.refresh_from_db()
+        self.assertEqual(item_ok.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK)
+        self.assertEqual(item_faltou.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_FALTOU)
+        self.assertEqual(item_mais.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_VEIO_A_MAIS)
+        self.assertEqual(item_nao_veio.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_NAO_VEIO)
+        self.assertEqual(item_pendente.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_PENDENTE)
+        self.assertTrue(item_ok.conferido)
+        self.assertTrue(item_nao_veio.conferido)
+        self.assertFalse(item_pendente.conferido)
+        self.assertEqual(item_ok.observacao_conferencia, "Tudo certo")
+        self.assertEqual(item_faltou.quantidade_recebida, Decimal("1.000"))
+        self.assertIsNone(item_pendente.quantidade_recebida)
+        self.assertEqual(self.lista.itens.count(), 5)
+        self.assertEqual(Compra.objects.count(), compras_antes)
+        self.assertEqual(ContaPagar.objects.count(), contas_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+        for produto_id, quantidade_antes in estoques_antes.items():
+            self.assertEqual(Produto.objects.get(pk=produto_id).quantidade, quantidade_antes)
+
+
 class CorrecaoItensCompraTests(TestCase):
     def setUp(self):
         self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Correcao")

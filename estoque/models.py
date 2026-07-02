@@ -1090,6 +1090,19 @@ class ListaCompraFornecedor(models.Model):
 
 
 class ItemListaCompraFornecedor(models.Model):
+    STATUS_CONFERENCIA_PENDENTE = "pendente"
+    STATUS_CONFERENCIA_OK = "ok"
+    STATUS_CONFERENCIA_FALTOU = "faltou"
+    STATUS_CONFERENCIA_VEIO_A_MAIS = "veio_a_mais"
+    STATUS_CONFERENCIA_NAO_VEIO = "nao_veio"
+    STATUS_CONFERENCIA_CHOICES = [
+        (STATUS_CONFERENCIA_PENDENTE, "Pendente"),
+        (STATUS_CONFERENCIA_OK, "OK"),
+        (STATUS_CONFERENCIA_FALTOU, "Faltou"),
+        (STATUS_CONFERENCIA_VEIO_A_MAIS, "Veio a mais"),
+        (STATUS_CONFERENCIA_NAO_VEIO, "Nao veio"),
+    ]
+
     lista = models.ForeignKey(
         ListaCompraFornecedor,
         on_delete=models.CASCADE,
@@ -1112,6 +1125,15 @@ class ItemListaCompraFornecedor(models.Model):
     preco_compra = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     preco_unitario = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    quantidade_recebida = models.DecimalField(max_digits=12, decimal_places=3, blank=True, null=True)
+    status_conferencia = models.CharField(
+        max_length=20,
+        choices=STATUS_CONFERENCIA_CHOICES,
+        default=STATUS_CONFERENCIA_PENDENTE,
+    )
+    observacao_conferencia = models.TextField(blank=True)
+    conferido = models.BooleanField(default=False)
+    conferido_em = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         ordering = ["id"]
@@ -1119,6 +1141,25 @@ class ItemListaCompraFornecedor(models.Model):
     def __str__(self):
         nome_produto = self.produto.nome if self.produto else "Produto nao identificado"
         return f"{nome_produto} - Lista #{self.lista_id}"
+
+    def calcular_status_conferencia(self):
+        if self.quantidade_recebida is None:
+            return self.STATUS_CONFERENCIA_PENDENTE
+        quantidade = self.quantidade_recebida
+        solicitada = self.quantidade_final or 0
+        if quantidade == 0:
+            return self.STATUS_CONFERENCIA_NAO_VEIO
+        if quantidade == solicitada:
+            return self.STATUS_CONFERENCIA_OK
+        if quantidade < solicitada:
+            return self.STATUS_CONFERENCIA_FALTOU
+        return self.STATUS_CONFERENCIA_VEIO_A_MAIS
+
+    @property
+    def diferenca_conferencia(self):
+        if self.quantidade_recebida is None:
+            return None
+        return self.quantidade_recebida - (self.quantidade_final or 0)
 
 
 class ContaPagar(models.Model):

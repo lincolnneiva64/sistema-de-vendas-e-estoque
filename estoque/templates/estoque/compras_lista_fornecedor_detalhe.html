@@ -275,6 +275,105 @@
     font-size: .92rem;
   }
 
+  .lista-fornecedor-alert {
+    border-radius: 9px;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+    border: 1px solid #fed7aa;
+    background: #fff7ed;
+    color: #9a3412;
+    font-weight: 850;
+  }
+
+  .lista-fornecedor-alert.success {
+    border-color: #bbf7d0;
+    background: #ecfdf5;
+    color: #166534;
+  }
+
+  .conferencia-card {
+    border-color: #fed7aa;
+    background: #fffaf0;
+  }
+
+  .conferencia-card .lista-fornecedor-card-titulo {
+    background: #fffbeb;
+    border-bottom-color: #fed7aa;
+  }
+
+  .conferencia-table {
+    min-width: 980px;
+  }
+
+  .conferencia-table th {
+    background: #b45309;
+    border-bottom-color: #92400e;
+  }
+
+  .conferencia-table input {
+    width: 108px;
+    min-height: 34px;
+    border: 1.5px solid #f1d7b8;
+    border-radius: 8px;
+    padding: 7px 9px;
+    font-weight: 850;
+    text-align: center;
+  }
+
+  .conferencia-table textarea {
+    width: 100%;
+    min-width: 210px;
+    min-height: 34px;
+    border: 1.5px solid #f1d7b8;
+    border-radius: 8px;
+    padding: 7px 9px;
+    font-weight: 650;
+    resize: vertical;
+  }
+
+  .conferencia-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 82px;
+    border-radius: 999px;
+    padding: 4px 8px;
+    border: 1px solid #fed7aa;
+    background: #fff7ed;
+    color: #9a3412;
+    font-size: .7rem;
+    font-weight: 950;
+  }
+
+  .conferencia-status.ok {
+    border-color: #bbf7d0;
+    background: #ecfdf5;
+    color: #166534;
+  }
+
+  .conferencia-status.faltou,
+  .conferencia-status.nao_veio {
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #991b1b;
+  }
+
+  .conferencia-status.veio_a_mais {
+    border-color: #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  .conferencia-acoes {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 8px;
+    border-top: 1px solid #fed7aa;
+    background: #fffbeb;
+  }
+
   @media (max-width: 920px) {
     .lista-fornecedor-resumo {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -314,6 +413,12 @@
     <h1>Lista de Compras #{{ lista.id }}</h1>
     <p class="lista-fornecedor-sub">Sugestao gravada para consulta e envio, sem lancar compra, estoque ou financeiro.</p>
   </header>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="lista-fornecedor-alert {{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
 
   <section class="lista-fornecedor-acoes-card">
     <div class="lista-fornecedor-acoes">
@@ -399,6 +504,57 @@
     </div>
   </section>
 
+  <section class="lista-fornecedor-card conferencia-card">
+    <div class="lista-fornecedor-card-titulo">
+      <h2>Conferencia de chegada</h2>
+      <small>Registre apenas o que chegou. Nao gera compra, estoque ou financeiro.</small>
+    </div>
+
+    <form method="post" action="{% url 'estoque:compras_lista_fornecedor_conferencia_salvar' lista.id %}" id="formConferenciaListaFornecedor">
+      {% csrf_token %}
+      <div class="lista-fornecedor-table-wrap">
+        <table class="lista-fornecedor-table conferencia-table">
+          <thead>
+            <tr>
+              <th>Produto</th>
+              <th>Qtd. lista</th>
+              <th>Qtd. recebida</th>
+              <th>Diferenca</th>
+              <th>Status</th>
+              <th>Observacao</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in lista.itens.all %}
+              <tr>
+                <td class="lista-fornecedor-produto">{% if item.produto %}{{ item.produto.nome }}{% else %}-{% endif %}</td>
+                <td>{{ item.quantidade_final|floatformat:3 }} {{ item.unidade }}</td>
+                <td>
+                  <input type="text"
+                         name="quantidade_recebida_{{ item.id }}"
+                         class="campoQuantidadeRecebidaLista"
+                         inputmode="decimal"
+                         data-qtd-final="{{ item.quantidade_final|floatformat:3 }}"
+                         value="{% if item.conferido %}{{ item.quantidade_recebida|floatformat:3 }}{% endif %}">
+                </td>
+                <td>{% if item.conferido %}{{ item.diferenca_conferencia|floatformat:3 }}{% else %}-{% endif %}</td>
+                <td><span class="conferencia-status {{ item.status_conferencia }}">{{ item.get_status_conferencia_display }}</span></td>
+                <td>
+                  <textarea name="observacao_conferencia_{{ item.id }}" rows="1" placeholder="Opcional">{{ item.observacao_conferencia }}</textarea>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="conferencia-acoes">
+        <button type="button" class="lista-fornecedor-btn neutro" id="btnMarcarTudoRecebido">Marcar tudo como recebido</button>
+        <button type="submit" class="lista-fornecedor-btn principal">Salvar conferencia</button>
+      </div>
+    </form>
+  </section>
+
   <section class="lista-fornecedor-card">
     <div class="lista-fornecedor-card-titulo">
       <h2>Itens da Lista</h2>
@@ -448,5 +604,27 @@
     </div>
   </section>
 </main>
+
+<script>
+(function() {
+  const botao = document.getElementById("btnMarcarTudoRecebido");
+  const campos = Array.from(document.querySelectorAll(".campoQuantidadeRecebidaLista"));
+
+  campos.forEach(function(campo) {
+    campo.addEventListener("focus", function() {
+      campo.select();
+    });
+  });
+
+  if (!botao) return;
+  botao.addEventListener("click", function() {
+    campos.forEach(function(campo) {
+      campo.value = campo.dataset.qtdFinal || "";
+    });
+    const primeiro = campos[0];
+    if (primeiro) primeiro.focus();
+  });
+})();
+</script>
 
 {% endblock %}
