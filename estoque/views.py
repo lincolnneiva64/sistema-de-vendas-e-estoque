@@ -5402,6 +5402,8 @@ def compra_editar(request, pk):
             return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
         try:
             dados = _dados_compra_post(request, exigir_itens=acao != "salvar_rascunho")
+            if acao == "finalizar" and dados["compra_a_prazo"] and not dados["data_vencimento"]:
+                raise ValueError("Informe o vencimento da compra a prazo.")
             status = Compra.STATUS_RASCUNHO
             with transaction.atomic():
                 compra = Compra.objects.select_for_update().get(pk=compra.pk)
@@ -5409,12 +5411,21 @@ def compra_editar(request, pk):
                 if acao == "finalizar":
                     _atualizar_custos_produtos_compra(dados["itens"], atualizar_custo_produto_ids)
                     _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos)
+                    if dados["compra_a_prazo"]:
+                        _finalizar_compra_com_financeiro(compra, None, atualizar_custo_produto_ids, atualizar_preco_venda_produtos)
         except (ValueError, IndexError) as exc:
             messages.error(request, str(exc))
+            return redirect("estoque:compra_editar", pk=compra.pk)
+        except Exception:
+            logger.exception("Falha ao finalizar compra a prazo")
+            messages.error(request, "Nao foi possivel finalizar a compra. Nenhum valor foi lancado no financeiro.")
             return redirect("estoque:compra_editar", pk=compra.pk)
 
         if acao == "salvar_rascunho":
             return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?rascunho_salvo=1")
+        if acao == "finalizar" and dados["compra_a_prazo"]:
+            messages.success(request, "Compra finalizada e conta a pagar criada com sucesso.")
+            return redirect("estoque:compras_lista")
         return redirect("estoque:compra_finalizar", pk=compra.pk)
 
     return render(

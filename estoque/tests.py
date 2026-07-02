@@ -252,6 +252,65 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertEqual(movimento.valor, Decimal("100.00"))
         self.assertFalse(hasattr(compra, "conta_pagar"))
 
+    def test_compra_gerada_pela_lista_finaliza_aprazo_e_cria_conta_pagar(self):
+        lista = ListaCompraFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_lista=timezone.localdate(),
+            data_inicio_periodo=timezone.localdate(),
+            data_fim_periodo=timezone.localdate(),
+        )
+        ItemListaCompraFornecedor.objects.create(
+            lista=lista,
+            produto=self.produto,
+            estoque_atual=Decimal("10.000"),
+            estoque_minimo=Decimal("0.000"),
+            quantidade_final=Decimal("1.000"),
+            unidade="UN",
+            preco_compra=Decimal("100.00"),
+            total=Decimal("100.00"),
+        )
+        self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gerar_compra", kwargs={"pk": lista.pk}),
+            secure=True,
+        )
+        compra = Compra.objects.get(observacao__icontains=f"Lista de Compras #{lista.id}")
+        estoque_antes = self.produto.quantidade
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        resposta = self.client.post(
+            reverse("estoque:compra_editar", kwargs={"pk": compra.pk}),
+            {
+                "acao_compra": "finalizar",
+                "fornecedor_id": str(self.fornecedor.id),
+                "data_compra": timezone.localdate().isoformat(),
+                "tipo_pagamento": "aprazo",
+                "data_vencimento": "2026-07-16",
+                "observacao": compra.observacao,
+                "produto_id[]": [str(self.produto.id)],
+                "quantidade[]": ["1"],
+                "unidade[]": ["UN"],
+                "preco_unitario[]": ["100,00"],
+                "observacao_item[]": [""],
+            },
+            secure=True,
+        )
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        conta = compra.conta_pagar
+        self.assertRedirects(resposta, reverse("estoque:compras_lista"), fetch_redirect_response=False)
+        self.assertEqual(compra.status, Compra.STATUS_FINALIZADA)
+        self.assertEqual(compra.tipo_pagamento, "aprazo")
+        self.assertEqual(compra.data_vencimento.isoformat(), "2026-07-16")
+        self.assertTrue(compra.estoque_entrada_realizada)
+        self.assertEqual(self.produto.quantidade, estoque_antes + Decimal("1.000"))
+        self.assertEqual(conta.fornecedor, self.fornecedor)
+        self.assertEqual(conta.valor_original, Decimal("100.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("100.00"))
+        self.assertEqual(conta.data_vencimento.isoformat(), "2026-07-16")
+        self.assertEqual(conta.status, ContaPagar.STATUS_ABERTA)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+
     def test_fecha_compra_e_cria_tres_saidas(self):
         resposta = self.client.post(self.url, self.dados(), follow=True, secure=True)
 
