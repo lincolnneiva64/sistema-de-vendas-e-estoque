@@ -463,6 +463,233 @@
     background: #fecaca;
   }
 
+  /* Estilos para itens zerados */
+  .sugestao-table tbody tr.sugestao-row-zerada,
+  .sugestao-table tbody tr.sugestao-row-zerada:hover,
+  .sugestao-mobile-card.sugestao-item-zerado {
+    background: #fef2f2 !important;
+  }
+
+  .sugestao-table tbody tr.sugestao-row-zerada td,
+  .sugestao-table tbody tr.sugestao-row-zerada:hover td {
+    border-bottom-color: #fecaca;
+    background: #fef2f2;
+  }
+
+  .sugestao-table tbody tr.sugestao-row-zerada .sugestao-col-produto {
+    background: #fee2e2;
+    color: #991b1b;
+    font-weight: 950;
+  }
+
+  .sugestao-table tbody tr.sugestao-row-zerada .sugestao-input {
+    border-color: #fecaca;
+    background: #fff5f5;
+    color: #991b1b;
+    font-weight: 900;
+  }
+
+  .sugestao-table tbody tr.sugestao-row-zerada .sugestao-input:focus {
+    outline-color: rgba(239, 68, 68, .16);
+    border-color: #ef4444;
+  }
+
+  .sugestao-table tbody tr.sugestao-row-zerada::after {
+    content: "Quantidade zerada - será ignorado ao gravar";
+    display: block;
+    font-size: .65rem;
+    color: #991b1b;
+    font-weight: 850;
+    margin-top: 2px;
+    padding: 0 4px;
+  }
+
+  .sugestao-mobile-card.sugestao-item-zerado {
+    border-color: #fecaca;
+    border-left-color: #dc2626;
+    background: #fef2f2;
+  }
+
+  .sugestao-mobile-card.sugestao-item-zerado .sugestao-mobile-produto {
+    color: #991b1b;
+    font-weight: 950;
+  }
+
+  .sugestao-mobile-card.sugestao-item-zerado .sugestao-input {
+    border-color: #fecaca;
+    background: #fff5f5;
+    color: #991b1b;
+  }
+
+  /* Aviso de itens zerados */
+  .sugestao-aviso-zerados {
+    display: none;
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    border: 1.5px solid #fde68a;
+    border-left: 5px solid #d97706;
+    border-radius: 10px;
+    background: #fffbeb;
+    color: #92400e;
+    font-weight: 850;
+    font-size: .85rem;
+    line-height: 1.4;
+  }
+
+  .sugestao-aviso-zerados.visivel {
+    display: block;
+  }
+
+  .sugestao-aviso-zerados strong {
+    display: block;
+    margin-bottom: 4px;
+    color: #854d0e;
+    font-size: .76rem;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+  }
+
+  .sugestao-aviso-zerados-itens {
+    margin-top: 6px;
+    padding-top: 8px;
+    border-top: 1px solid #fcd34d;
+    font-size: .78rem;
+  }
+
+  .sugestao-aviso-zerados-itens strong {
+    display: inline;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-size: .78rem;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  /* Modal de confirmação */
+  .sugestao-modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 9999;
+    background: rgba(0, 0, 0, .5);
+    animation: fadeIn 150ms ease;
+  }
+
+  .sugestao-modal-overlay.aberto {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .sugestao-modal-content {
+    position: relative;
+    background: #fff;
+    border: 2px solid #fecdd3;
+    border-radius: 14px;
+    padding: 24px;
+    max-width: 420px;
+    width: 90%;
+    box-shadow: 0 24px 48px rgba(127, 29, 29, .28);
+    animation: slideUp 200ms ease;
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .sugestao-modal-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    background: #fee2e2;
+    color: #dc2626;
+    font-size: 24px;
+    font-weight: 950;
+  }
+
+  .sugestao-modal-titulo {
+    margin: 0 0 8px;
+    color: #7f1d1d;
+    font-size: 1.1rem;
+    font-weight: 950;
+    text-align: center;
+  }
+
+  .sugestao-modal-msg {
+    margin: 0 0 20px;
+    color: #475569;
+    font-size: .95rem;
+    line-height: 1.5;
+    text-align: center;
+  }
+
+  .sugestao-modal-acoes {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-direction: column-reverse;
+  }
+
+  .sugestao-modal-btn {
+    min-height: 42px;
+    border: 0;
+    border-radius: 9px;
+    padding: 10px 16px;
+    cursor: pointer;
+    font-weight: 850;
+    font-size: .9rem;
+    transition: all 150ms ease;
+  }
+
+  .sugestao-modal-btn-cancelar {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+  }
+
+  .sugestao-modal-btn-cancelar:hover,
+  .sugestao-modal-btn-cancelar:focus {
+    background: #e2e8f0;
+    color: #334155;
+  }
+
+  .sugestao-modal-btn-confirmar {
+    background: #8f1d2c;
+    color: #fff;
+    box-shadow: 0 10px 22px rgba(143, 29, 44, .2);
+  }
+
+  .sugestao-modal-btn-confirmar:hover,
+  .sugestao-modal-btn-confirmar:focus {
+    background: #7f1d1d;
+  }
+
+  .sugestao-modal-btn:focus-visible {
+    outline: 3px solid rgba(15, 23, 42, .32);
+    outline-offset: 2px;
+  }
+
   .sugestao-empty {
     padding: 28px 16px;
     color: #64748b;
@@ -968,6 +1195,12 @@
     </div>
   </section>
 
+  <div class="sugestao-aviso-zerados" id="avisoItensZerados" aria-live="polite" aria-atomic="true">
+    <strong id="avisoZeradosTitulo">Atenção: itens com quantidade zerada</strong>
+    <div id="avisoZeradosMensagem">Existem itens com quantidade zerada. Corrija a quantidade ou eles serão ignorados ao gravar.</div>
+    <div class="sugestao-aviso-zerados-itens" id="avisoZeradosItens"></div>
+  </div>
+
   {% if fornecedor and not linhas %}
     <div class="sugestao-aviso">
       Nenhum produto apareceu na lista. Confira se os produtos deste fornecedor estao ativos, fora da lixeira, abaixo/no minimo ou com pedido em aberto.
@@ -1042,6 +1275,20 @@
     {% csrf_token %}
     <input type="hidden" name="lista_payload" id="listaFornecedorPayload">
   </form>
+
+  <div class="sugestao-modal-overlay" id="modalConfirmacaoZerados">
+    <div class="sugestao-modal-content">
+      <div class="sugestao-modal-icon">⚠</div>
+      <h2 class="sugestao-modal-titulo">Itens com quantidade zerada</h2>
+      <div class="sugestao-modal-msg" id="modalConfirmacaoMensagem">
+        1 item está com quantidade zerada e não será gravado. Deseja continuar?
+      </div>
+      <div class="sugestao-modal-acoes">
+        <button type="button" class="sugestao-modal-btn sugestao-modal-btn-confirmar" id="btnConfirmarGravar">Gravar ignorando zerados</button>
+        <button type="button" class="sugestao-modal-btn sugestao-modal-btn-cancelar" id="btnCancelarGravar">Voltar para corrigir</button>
+      </div>
+    </div>
+  </div>
 
   <section class="sugestao-card">
       <div class="sugestao-table-wrap sugestao-desktop">
@@ -2483,6 +2730,234 @@
     if (!formGravarLista || !payloadGravarLista) return;
     payloadGravarLista.value = JSON.stringify(payload);
     formGravarLista.submit();
+  });
+})();
+</script>
+
+<script>
+(function () {
+  // Gerenciar itens zerados na sugestão de compra por fornecedor
+  const avisoZerados = document.getElementById("avisoItensZerados");
+  const avisoZeradosMensagem = document.getElementById("avisoZeradosMensagem");
+  const avisoZeradosItens = document.getElementById("avisoZeradosItens");
+  const modalConfirmacao = document.getElementById("modalConfirmacaoZerados");
+  const modalMensagem = document.getElementById("modalConfirmacaoMensagem");
+  const btnConfirmarGravar = document.getElementById("btnConfirmarGravar");
+  const btnCancelarGravar = document.getElementById("btnCancelarGravar");
+  const btnGravarListaFornecedor = document.getElementById("btnGravarListaFornecedor");
+  const formGravarListaFornecedor = document.getElementById("formGravarListaFornecedor");
+  const listaFornecedorPayload = document.getElementById("listaFornecedorPayload");
+
+  if (!avisoZerados || !modalConfirmacao || !btnGravarListaFornecedor) return;
+
+  // Detectar se um valor é considerado zero
+  function isZero(valor) {
+    if (typeof valor === "string") {
+      valor = valor.trim();
+      // Considerar vazio como zero
+      if (!valor) return true;
+      // Normalizar para número
+      valor = valor.replace(/[^\d,.-]/g, "");
+      if (valor.includes(",")) {
+        valor = valor.replace(/\./g, "").replace(",", ".");
+      }
+    }
+    const num = Number(valor);
+    return !Number.isFinite(num) || num === 0;
+  }
+
+  // Coletar dados dos itens zerados
+  function getZeroItems() {
+    const zerados = [];
+    const linhasDesktop = Array.from(document.querySelectorAll("#tbodySugestaoProdutos tr[data-produto-id]"));
+    const linhasMobile = Array.from(document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-produto-id]"));
+
+    // Desktop
+    linhasDesktop.forEach((linha) => {
+      const inputQtd = linha.querySelector(".sugestao-qtd-input");
+      if (inputQtd && isZero(inputQtd.value)) {
+        const nome = linha.querySelector(".sugestao-col-produto")?.textContent?.trim() || "Produto desconhecido";
+        zerados.push({ nome, elemento: linha, tipo: "desktop" });
+      }
+    });
+
+    // Mobile
+    linhasMobile.forEach((card) => {
+      const inputQtd = card.querySelector(".sugestao-qtd-input");
+      if (inputQtd && isZero(inputQtd.value)) {
+        const nome = card.querySelector(".sugestao-mobile-produto")?.textContent?.trim() || "Produto desconhecido";
+        zerados.push({ nome, elemento: card, tipo: "mobile" });
+      }
+    });
+
+    return zerados;
+  }
+
+  // Atualizar UI dos itens zerados
+  function updateZeroItemsUI() {
+    const zerados = getZeroItems();
+    const temZerados = zerados.length > 0;
+
+    // Destacar/remover destaque das linhas
+    document.querySelectorAll(".sugestao-row-zerada").forEach((el) => {
+      el.classList.remove("sugestao-row-zerada");
+    });
+    document.querySelectorAll(".sugestao-item-zerado").forEach((el) => {
+      el.classList.remove("sugestao-item-zerado");
+    });
+
+    zerados.forEach(({ elemento }) => {
+      if (elemento.tagName === "TR") {
+        elemento.classList.add("sugestao-row-zerada");
+      } else {
+        elemento.classList.add("sugestao-item-zerado");
+      }
+    });
+
+    // Atualizar aviso
+    if (temZerados) {
+      const nomes = zerados.map(({ nome }) => nome);
+      const count = nomes.length;
+      avisoZeradosMensagem.textContent =
+        `Existem ${count} item${count > 1 ? "ns" : ""} com quantidade zerada. Corrija a quantidade ou ${count > 1 ? "eles serão" : "ele será"} ignorado${count > 1 ? "s" : ""} ao gravar.`;
+
+      // Listar os nomes dos itens zerados
+      const listaHtml = "<strong>Produtos zerados:</strong> " + nomes.join(", ");
+      avisoZeradosItens.innerHTML = listaHtml;
+
+      avisoZerados.classList.add("visivel");
+    } else {
+      avisoZerados.classList.remove("visivel");
+      avisoZeradosItens.innerHTML = "";
+    }
+  }
+
+  // Fechar modal
+  function fecharModal() {
+    modalConfirmacao.classList.remove("aberto");
+  }
+
+  // Mostrar modal de confirmação
+  function mostrarModalConfirmacao() {
+    const zerados = getZeroItems();
+    if (zerados.length === 0) return false;
+
+    const count = zerados.length;
+    const nomes = zerados.map(({ nome }) => nome).join(", ");
+
+    modalMensagem.innerHTML =
+      `<strong>${count} item${count > 1 ? "ns estão" : " está"} com quantidade zerada</strong> e não ${count > 1 ? "serão" : "será"} gravado${count > 1 ? "s" : ""}. Deseja continuar?<br><br>Itens: <em>${escapeHtml(nomes)}</em>`;
+
+    modalConfirmacao.classList.add("aberto");
+    return true;
+  }
+
+  // Helper para escape HTML
+  function escapeHtml(texto) {
+    const map = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;"
+    };
+    return String(texto || "").replace(/[&<>"']/g, (char) => map[char]);
+  }
+
+  // Event listeners
+  btnCancelarGravar.addEventListener("click", fecharModal);
+
+  btnConfirmarGravar.addEventListener("click", function() {
+    fecharModal();
+    // Montar e enviar o payload
+    if (window.__sugestaoGravarPayload) {
+      listaFornecedorPayload.value = JSON.stringify(window.__sugestaoGravarPayload);
+      formGravarListaFornecedor.submit();
+    }
+  });
+
+  // Substituir o evento de clique do botão "Gravar lista"
+  const novoClique = function() {
+    const payload = {
+      fornecedorId: document.getElementById("fornecedor")?.value || "",
+      fornecedor: document.getElementById("fornecedorBuscaSugestao")?.value || "Fornecedor não informado",
+      dataInicio: document.getElementById("data_inicio")?.value || "",
+      dataFim: document.getElementById("data_fim")?.value || "",
+      dataChegada: document.getElementById("data_chegada")?.value || "",
+      totalOriginal: document.querySelector(".sugestao-conferencia-item.total .sugestao-conferencia-valor.total")?.textContent?.replace("R$ ", "") || "0,00",
+      linhas: Array.from(document.querySelectorAll("#tbodySugestaoProdutos tr[data-produto-id]")).map((linha) => {
+        const cells = linha.children;
+        return {
+          produto: cells[0]?.textContent?.trim() || "",
+          produtoId: linha.dataset.produtoId || "",
+          estoque: cells[1]?.textContent?.trim() || "",
+          minimo: cells[2]?.textContent?.trim() || "",
+          vendido: cells[3]?.textContent?.trim() || "",
+          pedidos: cells[4]?.textContent?.trim() || "",
+          sugestaoOriginal: linha.dataset.sugestaoOriginal || "",
+          sugestao: linha.querySelector(".sugestao-qtd-input")?.value || "0",
+          unidade: cells[6]?.textContent?.trim() || "",
+          precoCompra: linha.querySelector(".sugestao-preco-input")?.value || "0",
+          precoUnitario: linha.querySelector(".sugestao-preco-unitario-input")?.value || "0",
+          total: linha.querySelector(".sugestao-total-input")?.value || "0"
+        };
+      })
+    };
+
+    if (!payload.fornecedorId) {
+      alert("Selecione um fornecedor antes de gravar a lista.");
+      return;
+    }
+    if (!payload.linhas.length) {
+      alert("Gere ou adicione produtos antes de gravar a lista.");
+      return;
+    }
+
+    // Verificar se há itens zerados
+    if (mostrarModalConfirmacao()) {
+      // Salvar payload para usar se confirmar
+      window.__sugestaoGravarPayload = payload;
+      return;
+    }
+
+    // Sem itens zerados, gravar normalmente
+    listaFornecedorPayload.value = JSON.stringify(payload);
+    formGravarListaFornecedor.submit();
+  };
+
+  // Remover listener anterior e adicionar novo
+  const novoBtn = btnGravarListaFornecedor.cloneNode(true);
+  btnGravarListaFornecedor.parentNode.replaceChild(novoBtn, btnGravarListaFornecedor);
+  novoBtn.addEventListener("click", novoClique);
+
+  // Listeners para atualizar dinamicamente quando mudar quantidade
+  document.addEventListener("input", function(event) {
+    if (event.target.closest(".sugestao-qtd-input")) {
+      window.setTimeout(updateZeroItemsUI, 0);
+    }
+  });
+
+  document.addEventListener("change", function(event) {
+    if (event.target.closest(".sugestao-qtd-input")) {
+      updateZeroItemsUI();
+    }
+  });
+
+  // Inicializar
+  updateZeroItemsUI();
+
+  // Fechar modal se clicar fora
+  document.addEventListener("click", function(event) {
+    if (event.target === modalConfirmacao) {
+      fecharModal();
+    }
+  });
+
+  // Fechar modal com ESC
+  document.addEventListener("keydown", function(event) {
+    if (event.key === "Escape" && modalConfirmacao.classList.contains("aberto")) {
+      fecharModal();
+    }
   });
 })();
 </script>
