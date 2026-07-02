@@ -898,6 +898,8 @@
     </div>
   </header>
 
+  {% if messages %}{% for message in messages %}<div class="compra-correcao-aviso">{{ message }}</div>{% endfor %}{% endif %}
+
   <section class="sugestao-filtros">
     <form method="get" id="formSugestaoCompra">
       <div class="sugestao-grid">

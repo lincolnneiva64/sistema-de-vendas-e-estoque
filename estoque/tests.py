@@ -712,6 +712,125 @@ class ComprasListaConferenciaTests(TestCase):
             self.assertEqual(Produto.objects.get(pk=produto_id).quantidade, quantidade_antes)
 
 
+class ComprasListaFornecedorGravarTests(TestCase):
+    def setUp(self):
+        self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Lista Gravar")
+
+    def criar_produto(self, nome, quantidade=Decimal("5.000")):
+        return Produto.objects.create(
+            nome=nome,
+            preco_compra=Decimal("10.00"),
+            preco_vista=Decimal("15.00"),
+            preco_prazo=Decimal("16.00"),
+            quantidade=quantidade,
+        )
+
+    def payload(self, linhas):
+        return {
+            "fornecedorId": str(self.fornecedor.id),
+            "dataInicio": "2026-06-01",
+            "dataFim": "2026-06-15",
+            "dataChegada": "2026-06-20",
+            "totalOriginal": "0,00",
+            "linhas": linhas,
+        }
+
+    def criar_linha(self, produto, sugestao, total=None):
+        total = total if total is not None else (Decimal(str(sugestao)) * Decimal("10.00"))
+        return {
+            "produtoId": str(produto.id),
+            "estoque": "5.000",
+            "minimo": "0.000",
+            "vendido": "0.000",
+            "pedidos": "0.000",
+            "sugestao": f"{sugestao:.3f}",
+            "sugestaoOriginal": f"{sugestao:.3f}",
+            "unidade": "UN",
+            "precoCompra": "10,00",
+            "precoUnitario": "10,00",
+            "total": f"{total:.2f}",
+        }
+
+    def test_item_com_quantidade_final_zero_nao_e_gravado_e_mensagem_indica_ignorados(self):
+        produto_valido = self.criar_produto("Produto Valido")
+        produto_zerado = self.criar_produto("Produto Zerado")
+        estoque_antes = produto_valido.quantidade
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(self.payload([
+                self.criar_linha(produto_valido, 2),
+                self.criar_linha(produto_zerado, 0),
+            ]))},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertContains(resposta, "gravada com sucesso. 1 item(ns) zerado(s) foram ignorados.")
+        self.assertContains(resposta, "Itens ignorados: Produto Zerado")
+        self.assertEqual(ListaCompraFornecedor.objects.count(), 1)
+        self.assertEqual(ItemListaCompraFornecedor.objects.count(), 1)
+        item = ItemListaCompraFornecedor.objects.get()
+        self.assertEqual(item.produto, produto_valido)
+        self.assertEqual(item.quantidade_final, Decimal("2.000"))
+        self.assertEqual(produto_valido.quantidade, estoque_antes)
+        self.assertEqual(produto_zerado.quantidade, Decimal("5.000"))
+        self.assertEqual(Compra.objects.count(), 0)
+        self.assertEqual(ContaPagar.objects.count(), 0)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
+
+    def test_item_com_quantidade_final_maior_que_zero_e_gravado_normalmente(self):
+        produto = self.criar_produto("Produto Positivo")
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(self.payload([self.criar_linha(produto, 3)]))},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertContains(resposta, "gravada com sucesso.")
+        self.assertEqual(ListaCompraFornecedor.objects.count(), 1)
+        self.assertEqual(ItemListaCompraFornecedor.objects.count(), 1)
+        item = ItemListaCompraFornecedor.objects.get()
+        self.assertEqual(item.produto, produto)
+        self.assertEqual(item.quantidade_final, Decimal("3.000"))
+        self.assertEqual(Compra.objects.count(), 0)
+
+    def test_lista_com_itens_zerados_cria_apenas_itens_validos(self):
+        produto_positivo = self.criar_produto("Produto Positivo")
+        produto_zerado = self.criar_produto("Produto Zerado")
+
+        self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(self.payload([
+                self.criar_linha(produto_positivo, 1),
+                self.criar_linha(produto_zerado, 0),
+            ]))},
+            secure=True,
+        )
+
+        lista = ListaCompraFornecedor.objects.get()
+        self.assertEqual(lista.itens.count(), 1)
+        self.assertEqual(lista.itens.get().produto, produto_positivo)
+        self.assertFalse(lista.itens.filter(produto=produto_zerado).exists())
+
+    def test_lista_com_todos_itens_zerados_nao_e_criada(self):
+        produto_zerado = self.criar_produto("Produto Zerado")
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(self.payload([self.criar_linha(produto_zerado, 0)]))},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertContains(resposta, "Nenhum item com quantidade maior que zero para gravar. Ajuste as quantidades antes de gravar a lista.")
+        self.assertEqual(ListaCompraFornecedor.objects.count(), 0)
+        self.assertEqual(ItemListaCompraFornecedor.objects.count(), 0)
+        self.assertEqual(Compra.objects.count(), 0)
+
+
 class CorrecaoItensCompraTests(TestCase):
     def setUp(self):
         self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Correcao")

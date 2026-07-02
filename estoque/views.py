@@ -4550,6 +4550,7 @@ def compras_lista_fornecedor_gravar(request):
 
     linhas = payload.get("linhas") if isinstance(payload.get("linhas"), list) else []
     itens_validos = []
+    itens_zerados = []
     try:
         for linha in linhas:
             produto_id = str(linha.get("produtoId") or "").strip()
@@ -4565,7 +4566,7 @@ def compras_lista_fornecedor_gravar(request):
             if total == Decimal("0.00") and quantidade_final and preco_compra:
                 total = (quantidade_final * preco_compra).quantize(Decimal("0.01"))
 
-            itens_validos.append({
+            item_data = {
                 "produto": produto,
                 "estoque_atual": _decimal_lista_fornecedor(linha.get("estoque"), casas=3),
                 "estoque_minimo": _decimal_lista_fornecedor(linha.get("minimo"), casas=3),
@@ -4577,13 +4578,21 @@ def compras_lista_fornecedor_gravar(request):
                 "preco_compra": preco_compra,
                 "preco_unitario": preco_unitario,
                 "total": total,
-            })
+            }
+
+            if quantidade_final > 0:
+                itens_validos.append(item_data)
+            else:
+                itens_zerados.append({"nome": produto.nome, "item_data": item_data})
     except ValueError as exc:
         messages.error(request, str(exc))
         return redirect("estoque:sugestao_compra_fornecedor")
 
     if not itens_validos:
-        messages.error(request, "Inclua pelo menos um produto antes de gravar a lista.")
+        if itens_zerados:
+            messages.error(request, "Nenhum item com quantidade maior que zero para gravar. Ajuste as quantidades antes de gravar a lista.")
+        else:
+            messages.error(request, "Inclua pelo menos um produto antes de gravar a lista.")
         return redirect("estoque:sugestao_compra_fornecedor")
 
     total_lista = sum((item["total"] for item in itens_validos), Decimal("0.00")).quantize(Decimal("0.01"))
@@ -4608,7 +4617,13 @@ def compras_lista_fornecedor_gravar(request):
             for item in itens_validos
         ])
 
-    messages.success(request, f"Lista de compras #{lista.id} gravada com sucesso.")
+    mensagem = f"Lista de compras #{lista.id} gravada com sucesso."
+    if itens_zerados:
+        nomes_ignorados = [item["nome"] for item in itens_zerados]
+        mensagem += f" {len(nomes_ignorados)} item(ns) zerado(s) foram ignorados."
+        if nomes_ignorados:
+            mensagem += f" Itens ignorados: {', '.join(nomes_ignorados)}"
+    messages.success(request, mensagem)
     return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
 
 
