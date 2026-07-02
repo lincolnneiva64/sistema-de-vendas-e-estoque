@@ -586,6 +586,7 @@
 
   .sugestao-aviso-zerados-lista li,
   .sugestao-modal-lista li {
+    display: block;
     padding: 6px 0;
     border-top: 1px solid rgba(217, 119, 6, .22);
     color: #78350f;
@@ -1227,12 +1228,6 @@
       <span class="sugestao-conferencia-valor total" data-total-lista-pedido>R$ {{ total_sugerido|floatformat:2 }}</span>
     </div>
   </section>
-
-  <div class="sugestao-aviso-zerados" id="avisoItensZerados" aria-live="polite" aria-atomic="true">
-    <strong id="avisoZeradosTitulo">Atenção: itens com quantidade zerada</strong>
-    <div id="avisoZeradosMensagem">Existem itens com quantidade zerada. Corrija a quantidade ou eles serão ignorados ao gravar.</div>
-    <div class="sugestao-aviso-zerados-itens" id="avisoZeradosItens"></div>
-  </div>
 
   {% if fornecedor and not linhas %}
     <div class="sugestao-aviso">
@@ -1883,6 +1878,7 @@
   const dadosEl = document.getElementById("produtosManualSugestaoData");
   const linhaManual = document.getElementById("linhaProdutoManualSugestao");
   const manualEstoque = document.getElementById("produtoManualEstoque");
+  window.__sugestaoProdutosRemovidos = window.__sugestaoProdutosRemovidos || new Set();
   const manualMinimo = document.getElementById("produtoManualMinimo");
   const manualVendido = document.getElementById("produtoManualVendido");
   const manualPedidos = document.getElementById("produtoManualPedidos");
@@ -2354,6 +2350,7 @@
     if (!item) return;
 
     const produtoId = item.dataset.produtoId;
+    window.__sugestaoProdutosRemovidos.add(String(produtoId));
     const linhasAntes = Array.from(tbody.querySelectorAll("tr[data-produto-id]"));
     const linhaAtual = item.closest("tr[data-produto-id]") || linhasAntes.find((linha) => {
       return String(linha.dataset.produtoId) === String(produtoId);
@@ -2572,7 +2569,8 @@
 
   function linhasAtuais() {
     const linhas = tabelaDesktopVisivel() ? linhasDesktop() : linhasMobile();
-    return linhas.filter((linha) => linha.produto);
+    const removidos = window.__sugestaoProdutosRemovidos || new Set();
+    return linhas.filter((linha) => linha.produto && !removidos.has(String(linha.produtoId)));
   }
 
   function montarPayload(tipo) {
@@ -2779,9 +2777,6 @@
 <script>
 (function () {
   // Gerenciar itens zerados na sugestão de compra por fornecedor
-  const avisoZerados = document.getElementById("avisoItensZerados");
-  const avisoZeradosMensagem = document.getElementById("avisoZeradosMensagem");
-  const avisoZeradosItens = document.getElementById("avisoZeradosItens");
   const modalConfirmacao = document.getElementById("modalConfirmacaoZerados");
   const modalMensagem = document.getElementById("modalConfirmacaoMensagem");
   const btnConfirmarGravar = document.getElementById("btnConfirmarGravar");
@@ -2790,7 +2785,7 @@
   const formGravarListaFornecedor = document.getElementById("formGravarListaFornecedor");
   const listaFornecedorPayload = document.getElementById("listaFornecedorPayload");
 
-  if (!avisoZerados || !modalConfirmacao || !btnGravarListaFornecedor) return;
+  if (!modalConfirmacao || !btnGravarListaFornecedor) return;
 
   // Detectar se um valor é considerado zero
   function isZero(valor) {
@@ -2906,9 +2901,6 @@
     const itemAtual = itemDoInput(inputAtual);
     if (!inputAtual || !itemAtual || !inputAtual.classList.contains("sugestao-total-input")) return false;
 
-    const inputQtd = itemAtual.querySelector(".sugestao-qtd-input");
-    if (!quantidadeMaiorQueZero(inputQtd?.value)) return false;
-
     updateZeroItemsUI();
     const proximo = proximoZeradoDepoisDoInput(inputAtual);
     if (!proximo) return false;
@@ -2967,23 +2959,6 @@
       });
     });
 
-    // Atualizar aviso
-    if (temZerados) {
-      const nomes = zerados.map(({ nome }) => nome);
-      const count = nomes.length;
-      avisoZeradosMensagem.textContent =
-        `Existem ${count} item${count > 1 ? "ns" : ""} com quantidade zerada. Corrija a quantidade ou ${count > 1 ? "eles serão" : "ele será"} ignorado${count > 1 ? "s" : ""} ao gravar.`;
-
-      const listaHtml =
-        "<strong>Produtos zerados:</strong>" +
-        `<ul class="sugestao-aviso-zerados-lista">${nomes.map((nome) => `<li>${escapeHtml(nome)}</li>`).join("")}</ul>`;
-      avisoZeradosItens.innerHTML = listaHtml;
-
-      avisoZerados.classList.add("visivel");
-    } else {
-      avisoZerados.classList.remove("visivel");
-      avisoZeradosItens.innerHTML = "";
-    }
   }
 
   // Fechar modal
@@ -3015,6 +2990,11 @@
       `Itens com quantidade zerada:<ul class="sugestao-modal-lista">${listaHtml}</ul>`;
 
     modalConfirmacao.classList.add("aberto");
+    window.setTimeout(function() {
+      if (btnConfirmarGravar && typeof btnConfirmarGravar.focus === "function") {
+        btnConfirmarGravar.focus();
+      }
+    }, 0);
     return true;
   }
 
@@ -3033,13 +3013,29 @@
   // Event listeners
   btnCancelarGravar.addEventListener("click", voltarParaCorrigir);
 
+  function montarPayloadLista() {
+    const linhas = itensEditaveisAtuais().map((item) => {
+      return item.tagName === "TR" ? linhaPayloadDesktop(item) : linhaPayloadMobile(item);
+    }).filter((linha) => linha.produto);
+
+    return {
+      fornecedorId: document.getElementById("fornecedor")?.value || "",
+      fornecedor: document.getElementById("fornecedorBuscaSugestao")?.value || "Fornecedor não informado",
+      dataInicio: document.getElementById("data_inicio")?.value || "",
+      dataFim: document.getElementById("data_fim")?.value || "",
+      dataChegada: document.getElementById("data_chegada")?.value || "",
+      totalOriginal: document.querySelector(".sugestao-conferencia-item.total .sugestao-conferencia-valor.total")?.textContent?.replace("R$ ", "") || "0,00",
+      linhas: linhas
+    };
+  }
+
   btnConfirmarGravar.addEventListener("click", function() {
     fecharModal();
-    // Montar e enviar o payload
-    if (window.__sugestaoGravarPayload) {
-      listaFornecedorPayload.value = JSON.stringify(window.__sugestaoGravarPayload);
-      formGravarListaFornecedor.submit();
-    }
+    if (!formGravarListaFornecedor || !listaFornecedorPayload) return;
+
+    const payload = montarPayloadLista();
+    listaFornecedorPayload.value = JSON.stringify(payload);
+    formGravarListaFornecedor.submit();
   });
 
   // Substituir o evento de clique do botão "Gravar lista"
@@ -3065,7 +3061,8 @@
       unidade: texto(cells[6]),
       precoCompra: valor(".sugestao-preco-input", linha) || "0",
       precoUnitario: valor(".sugestao-preco-unitario-input", linha) || "0",
-      total: valor(".sugestao-total-input", linha) || "0"
+      total: valor(".sugestao-total-input", linha) || "0",
+      ativo: true,
     };
   }
 
@@ -3083,14 +3080,16 @@
       unidade: valores[4] || "",
       precoCompra: valor(".sugestao-preco-input", card) || "0",
       precoUnitario: valor(".sugestao-preco-unitario-input", card) || "0",
-      total: valor(".sugestao-total-input", card) || "0"
+      total: valor(".sugestao-total-input", card) || "0",
+      ativo: true,
     };
   }
 
   function linhasPayloadAtuais() {
+    const removidos = window.__sugestaoProdutosRemovidos || new Set();
     return itensEditaveisAtuais()
       .map((item) => item.tagName === "TR" ? linhaPayloadDesktop(item) : linhaPayloadMobile(item))
-      .filter((linha) => linha.produto);
+      .filter((linha) => linha.produto && !removidos.has(String(linha.produtoId)));
   }
 
   const novoClique = function() {
@@ -3115,8 +3114,6 @@
 
     // Verificar se há itens zerados
     if (mostrarModalConfirmacao()) {
-      // Salvar payload para usar se confirmar
-      window.__sugestaoGravarPayload = payload;
       return;
     }
 

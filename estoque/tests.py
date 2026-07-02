@@ -415,9 +415,87 @@ class FechamentoCompraFinanceiroTests(TestCase):
 
         self.produto.refresh_from_db()
         self.assertEqual(Compra.objects.count(), 0)
+
+
+class ComprasListaFornecedorConferenciaTests(TestCase):
+    def setUp(self):
+        self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Teste")
+        self.produto = Produto.objects.create(
+            nome="Produto Conferencia",
+            preco_compra=Decimal("10.00"),
+            preco_vista=Decimal("15.00"),
+            preco_prazo=Decimal("16.00"),
+            quantidade=Decimal("10.000"),
+        )
+        self.lista = ListaCompraFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_lista=timezone.localdate(),
+            data_inicio_periodo=timezone.localdate(),
+            data_fim_periodo=timezone.localdate(),
+        )
+        self.item = ItemListaCompraFornecedor.objects.create(
+            lista=self.lista,
+            produto=self.produto,
+            estoque_atual=Decimal("10.000"),
+            estoque_minimo=Decimal("0.000"),
+            quantidade_final=Decimal("2.000"),
+            unidade="UN",
+            preco_compra=Decimal("10.00"),
+            total=Decimal("20.00"),
+        )
+
+    def _post_conferencia(self, dados):
+        url = reverse("estoque:compras_lista_fornecedor_conferencia_salvar", kwargs={"pk": self.lista.pk})
+        return self.client.post(url, dados, secure=True)
+
+    def test_salvar_igual_lista(self):
+        resposta = self._post_conferencia({f"quantidade_recebida_{self.item.id}": "2.000", f"observacao_conferencia_{self.item.id}": ""})
+        self.assertEqual(resposta.status_code, 302)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK)
+        self.assertTrue(self.item.conferido)
+        self.assertEqual(self.item.diferenca_conferencia, Decimal('0.000'))
+        self.assertEqual(Compra.objects.filter(observacao__icontains=f"Lista de Compras #{self.lista.id}").count(), 0)
+
+    def test_salvar_menor(self):
+        resposta = self._post_conferencia({f"quantidade_recebida_{self.item.id}": "1.000"})
+        self.assertEqual(resposta.status_code, 302)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_FALTOU)
+        self.assertTrue(self.item.conferido)
+
+    def test_salvar_maior(self):
+        resposta = self._post_conferencia({f"quantidade_recebida_{self.item.id}": "3.000"})
+        self.assertEqual(resposta.status_code, 302)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_VEIO_A_MAIS)
+        self.assertTrue(self.item.conferido)
+
+    def test_salvar_zero(self):
+        resposta = self._post_conferencia({f"quantidade_recebida_{self.item.id}": "0"})
+        self.assertEqual(resposta.status_code, 302)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_NAO_VEIO)
+        self.assertTrue(self.item.conferido)
+
+    def test_quantidade_vazia_pendente(self):
+        resposta = self._post_conferencia({f"quantidade_recebida_{self.item.id}": ""})
+        # endpoint deve redirecionar de volta (salva e redireciona)
+        self.assertEqual(resposta.status_code, 302)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_PENDENTE)
+        self.assertFalse(self.item.conferido)
+        # quantidade_recebida deve ficar como None
+        self.assertIsNone(self.item.quantidade_recebida)
+        # nao deve criar movimentos financeiros nem alterar estoque
         self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
-        self.assertEqual(self.produto.quantidade, Decimal("10.000"))
-        self.assertContains(resposta, "Não foi possível fechar a compra. Nenhum valor foi lançado no financeiro.")
+        self.assertEqual(Produto.objects.get(pk=self.produto.pk).quantidade, Decimal("10.000"))
+        # opcionalmente garantir redirecionamento para detalhe
+        self.assertRedirects(
+            resposta,
+            reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),
+            fetch_redirect_response=False,
+        )
 
 
 class FornecedorProdutosFormTests(TestCase):
@@ -736,48 +814,113 @@ class ComprasListaFornecedorGravarTests(TestCase):
         }
 
     def criar_linha(self, produto, sugestao, total=None):
-        total = total if total is not None else (Decimal(str(sugestao)) * Decimal("10.00"))
+        sugestao_decimal = Decimal(str(sugestao))
+        preco_compra = Decimal("10.00")
+        total_decimal = Decimal(str(total)) if total is not None else sugestao_decimal * preco_compra
+
         return {
             "produtoId": str(produto.id),
+            "produtoNome": produto.nome,
             "estoque": "5.000",
-            "minimo": "0.000",
+            "minimo": "1.000",
             "vendido": "0.000",
             "pedidos": "0.000",
-            "sugestao": f"{sugestao:.3f}",
-            "sugestaoOriginal": f"{sugestao:.3f}",
+            "sugestaoOriginal": str(sugestao_decimal),
+            "sugestao": str(sugestao_decimal),
+            "sugestaoFinal": str(sugestao_decimal),
+            "quantidadeFinal": str(sugestao_decimal),
             "unidade": "UN",
-            "precoCompra": "10,00",
-            "precoUnitario": "10,00",
-            "total": f"{total:.2f}",
+            "precoCompra": str(preco_compra),
+            "precoUnitario": str(preco_compra),
+            "total": str(total_decimal),
+            "ativo": True,
+            "removido": False,
         }
 
-    def test_item_com_quantidade_final_zero_nao_e_gravado_e_mensagem_indica_ignorados(self):
+    def criar_linha_removida(self, produto, sugestao, total=None):
+        linha = self.criar_linha(produto, sugestao, total=total)
+        linha["removido"] = True
+        return linha
+
+    def criar_linha_ativo_false(self, produto, sugestao, total=None):
+        linha = self.criar_linha(produto, sugestao, total=total)
+        linha["ativo"] = False
+        return linha
+
+    def test_item_removido_nao_e_gravado_no_post(self):
         produto_valido = self.criar_produto("Produto Valido")
-        produto_zerado = self.criar_produto("Produto Zerado")
-        estoque_antes = produto_valido.quantidade
+        produto_removido = self.criar_produto("Produto Removido")
 
         resposta = self.client.post(
             reverse("estoque:compras_lista_fornecedor_gravar"),
             {"lista_payload": json.dumps(self.payload([
                 self.criar_linha(produto_valido, 2),
+                self.criar_linha_removida(produto_removido, 3),
+            ]))},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertContains(resposta, "gravada com sucesso.")
+        self.assertEqual(ListaCompraFornecedor.objects.count(), 1)
+        lista = ListaCompraFornecedor.objects.get()
+        self.assertEqual(lista.itens.count(), 1)
+        self.assertEqual(lista.itens.get().produto, produto_valido)
+        self.assertFalse(lista.itens.filter(produto=produto_removido).exists())
+
+    def test_item_removido_com_quantidade_maior_que_zero_nao_e_gravado(self):
+        produto_ativo = self.criar_produto("Produto Ativo")
+        produto_removido = self.criar_produto("Produto Removido")
+
+        self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(self.payload([
+                self.criar_linha(produto_ativo, 2),
+                self.criar_linha_removida(produto_removido, 5),
+            ]))},
+            secure=True,
+        )
+
+        lista = ListaCompraFornecedor.objects.get()
+        self.assertEqual(lista.itens.count(), 1)
+        self.assertEqual(lista.itens.get().produto, produto_ativo)
+        self.assertFalse(lista.itens.filter(produto=produto_removido).exists())
+
+    def test_item_ativo_false_nao_e_gravado(self):
+        produto_ativo = self.criar_produto("Produto Ativo")
+        produto_inativo = self.criar_produto("Produto Inativo")
+
+        self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(self.payload([
+                self.criar_linha(produto_ativo, 2),
+                self.criar_linha_ativo_false(produto_inativo, 5),
+            ]))},
+            secure=True,
+        )
+
+        lista = ListaCompraFornecedor.objects.get()
+        self.assertEqual(lista.itens.count(), 1)
+        self.assertEqual(lista.itens.get().produto, produto_ativo)
+        self.assertFalse(lista.itens.filter(produto=produto_inativo).exists())
+
+    def test_itens_removidos_e_zerados_nao_criam_lista(self):
+        produto_removido = self.criar_produto("Produto Removido")
+        produto_zerado = self.criar_produto("Produto Zerado")
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(self.payload([
+                self.criar_linha_removida(produto_removido, 5),
                 self.criar_linha(produto_zerado, 0),
             ]))},
             secure=True,
             follow=True,
         )
 
-        self.assertContains(resposta, "gravada com sucesso. 1 item(ns) zerado(s) foram ignorados.")
-        self.assertContains(resposta, "Itens ignorados: Produto Zerado")
-        self.assertEqual(ListaCompraFornecedor.objects.count(), 1)
-        self.assertEqual(ItemListaCompraFornecedor.objects.count(), 1)
-        item = ItemListaCompraFornecedor.objects.get()
-        self.assertEqual(item.produto, produto_valido)
-        self.assertEqual(item.quantidade_final, Decimal("2.000"))
-        self.assertEqual(produto_valido.quantidade, estoque_antes)
-        self.assertEqual(produto_zerado.quantidade, Decimal("5.000"))
-        self.assertEqual(Compra.objects.count(), 0)
-        self.assertEqual(ContaPagar.objects.count(), 0)
-        self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
+        self.assertContains(resposta, "Nenhum item com quantidade maior que zero para gravar. Ajuste as quantidades antes de gravar a lista.")
+        self.assertEqual(ListaCompraFornecedor.objects.count(), 0)
+        self.assertEqual(ItemListaCompraFornecedor.objects.count(), 0)
 
     def test_item_com_quantidade_final_maior_que_zero_e_gravado_normalmente(self):
         produto = self.criar_produto("Produto Positivo")

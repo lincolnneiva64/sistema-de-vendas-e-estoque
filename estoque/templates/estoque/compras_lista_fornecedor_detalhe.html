@@ -510,6 +510,18 @@
       <small>Registre apenas o que chegou. Nao gera compra, estoque ou financeiro.</small>
     </div>
 
+    <div style="padding:8px 12px;">
+      <div id="conferenciaResumo" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+        <div class="lista-fornecedor-item" style="min-width:120px"><span class="lista-fornecedor-label">Total</span><span id="resumo_total" class="lista-fornecedor-value">{{ lista.itens.count }}</span></div>
+        <div class="lista-fornecedor-item" style="min-width:120px"><span class="lista-fornecedor-label">Conferidos</span><span id="resumo_conferidos" class="lista-fornecedor-value">0</span></div>
+        <div class="lista-fornecedor-item" style="min-width:120px"><span class="lista-fornecedor-label">Pendentes</span><span id="resumo_pendentes" class="lista-fornecedor-value">0</span></div>
+        <div class="lista-fornecedor-item" style="min-width:120px"><span class="lista-fornecedor-label">OK</span><span id="resumo_ok" class="lista-fornecedor-value">0</span></div>
+        <div class="lista-fornecedor-item" style="min-width:120px"><span class="lista-fornecedor-label">Faltou</span><span id="resumo_faltou" class="lista-fornecedor-value">0</span></div>
+        <div class="lista-fornecedor-item" style="min-width:120px"><span class="lista-fornecedor-label">Veio a mais</span><span id="resumo_veio_a_mais" class="lista-fornecedor-value">0</span></div>
+        <div class="lista-fornecedor-item" style="min-width:120px"><span class="lista-fornecedor-label">Nao veio</span><span id="resumo_nao_veio" class="lista-fornecedor-value">0</span></div>
+      </div>
+    </div>
+
     <form method="post" action="{% url 'estoque:compras_lista_fornecedor_conferencia_salvar' lista.id %}" id="formConferenciaListaFornecedor">
       {% csrf_token %}
       <div class="lista-fornecedor-table-wrap">
@@ -526,7 +538,7 @@
           </thead>
           <tbody>
             {% for item in lista.itens.all %}
-              <tr>
+              <tr data-item-id="{{ item.id }}" class="linha-conferencia {{ item.status_conferencia }}">
                 <td class="lista-fornecedor-produto">{% if item.produto %}{{ item.produto.nome }}{% else %}-{% endif %}</td>
                 <td>{{ item.quantidade_final|floatformat:3 }} {{ item.unidade }}</td>
                 <td>
@@ -535,9 +547,10 @@
                          class="campoQuantidadeRecebidaLista"
                          inputmode="decimal"
                          data-qtd-final="{{ item.quantidade_final|floatformat:3 }}"
+                         data-item-id="{{ item.id }}"
                          value="{% if item.conferido %}{{ item.quantidade_recebida|floatformat:3 }}{% endif %}">
                 </td>
-                <td>{% if item.conferido %}{{ item.diferenca_conferencia|floatformat:3 }}{% else %}-{% endif %}</td>
+                <td><span class="diferenca_valor">{% if item.conferido %}{{ item.diferenca_conferencia|floatformat:3 }}{% else %}-{% endif %}</span></td>
                 <td><span class="conferencia-status {{ item.status_conferencia }}">{{ item.get_status_conferencia_display }}</span></td>
                 <td>
                   <textarea name="observacao_conferencia_{{ item.id }}" rows="1" placeholder="Opcional">{{ item.observacao_conferencia }}</textarea>
@@ -624,6 +637,109 @@
     const primeiro = campos[0];
     if (primeiro) primeiro.focus();
   });
+})();
+</script>
+
+<script>
+(function() {
+  function parseDecimal(text) {
+    if (text === null || text === undefined) return null;
+    const t = String(text).replace(',', '.').trim();
+    if (t === '') return null;
+    const n = Number(t);
+    return Number.isNaN(n) ? null : n;
+  }
+
+  function atualizarLinha(input) {
+    const tr = input.closest('tr');
+    const qtdFinal = parseDecimal(input.dataset.qtdFinal);
+    const valor = parseDecimal(input.value);
+    const diferencaSpan = tr.querySelector('.diferenca_valor');
+    const statusSpan = tr.querySelector('.conferencia-status');
+
+    let status = 'pendente';
+    let diferencaText = '-';
+    let conferido = false;
+    if (valor === null) {
+      status = 'pendente';
+      conferido = false;
+      diferencaText = '-';
+    } else {
+      conferido = true;
+      const solicitada = qtdFinal || 0;
+      const diff = valor - solicitada;
+      diferencaText = diff.toFixed(3);
+      if (valor === 0) status = 'nao_veio';
+      else if (Math.abs(valor - solicitada) < 0.0005) status = 'ok';
+      else if (valor < solicitada) status = 'faltou';
+      else status = 'veio_a_mais';
+    }
+
+    diferencaSpan.textContent = conferido ? diferencaText : '-';
+    const statusTextMap = {
+      pendente: 'Pendente',
+      ok: 'OK',
+      faltou: 'Faltou',
+      veio_a_mais: 'Veio a mais',
+      nao_veio: 'Nao veio',
+    };
+    statusSpan.textContent = statusTextMap[status] || status;
+    tr.classList.remove('pendente','ok','faltou','veio_a_mais','nao_veio');
+    tr.classList.add(status);
+    statusSpan.className = 'conferencia-status ' + status;
+    atualizarResumo();
+  }
+
+  function atualizarResumo() {
+    const linhas = Array.from(document.querySelectorAll('tr[data-item-id]'));
+    const total = linhas.length;
+    let conferidos = 0, pendentes = 0, ok = 0, faltou = 0, veio = 0, nao = 0;
+    linhas.forEach(function(tr){
+      const status = Array.from(tr.classList).find(c=>['pendente','ok','faltou','veio_a_mais','nao_veio'].includes(c)) || 'pendente';
+      if (status === 'pendente') pendentes++; else conferidos++;
+      if (status === 'ok') ok++;
+      if (status === 'faltou') faltou++;
+      if (status === 'veio_a_mais') veio++;
+      if (status === 'nao_veio') nao++;
+    });
+    const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    setText('resumo_total', total);
+    setText('resumo_conferidos', conferidos);
+    setText('resumo_pendentes', pendentes);
+    setText('resumo_ok', ok);
+    setText('resumo_faltou', faltou);
+    setText('resumo_veio_a_mais', veio);
+    setText('resumo_nao_veio', nao);
+  }
+
+  const inputs = Array.from(document.querySelectorAll('.campoQuantidadeRecebidaLista'));
+  inputs.forEach((input, idx) => {
+    input.addEventListener('input', function(){ atualizarLinha(input); });
+    input.addEventListener('change', function(){ atualizarLinha(input); });
+    input.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const next = inputs[idx+1];
+        if (next) { next.focus(); next.select(); } else {
+          const botaoSalvar = document.querySelector('.conferencia-acoes button[type=submit]');
+          if (botaoSalvar) botaoSalvar.focus();
+        }
+      } else if (e.key === 'Enter' && e.shiftKey) {
+        e.preventDefault();
+        const prev = inputs[idx-1];
+        if (prev) { prev.focus(); prev.select(); }
+      }
+    });
+    atualizarLinha(input);
+  });
+
+  const botao = document.getElementById('btnMarcarTudoRecebido');
+  if (botao) botao.addEventListener('click', function(){
+    inputs.forEach(function(input){ input.value = input.dataset.qtdFinal || ''; atualizarLinha(input); });
+    if (inputs[0]) { inputs[0].focus(); inputs[0].select(); }
+  });
+
+  atualizarResumo();
 })();
 </script>
 

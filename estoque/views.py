@@ -4475,10 +4475,25 @@ def compras_lista_fornecedor_detalhe(request, pk):
         .order_by("-id")
         .first()
     )
+    # conferencia resumo
+    itens_qs = lista.itens.all()
+    total_itens = itens_qs.count()
+    conferidos = itens_qs.filter(conferido=True).count()
+    pendentes = total_itens - conferidos
+    resumo = {
+        'total': total_itens,
+        'conferidos': conferidos,
+        'pendentes': pendentes,
+        'ok': itens_qs.filter(status_conferencia=ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK).count(),
+        'faltou': itens_qs.filter(status_conferencia=ItemListaCompraFornecedor.STATUS_CONFERENCIA_FALTOU).count(),
+        'veio_a_mais': itens_qs.filter(status_conferencia=ItemListaCompraFornecedor.STATUS_CONFERENCIA_VEIO_A_MAIS).count(),
+        'nao_veio': itens_qs.filter(status_conferencia=ItemListaCompraFornecedor.STATUS_CONFERENCIA_NAO_VEIO).count(),
+    }
+
     return render(
         request,
         "estoque/compras_lista_fornecedor_detalhe.html",
-        {"lista": lista, "compra_gerada": compra_gerada},
+        {"lista": lista, "compra_gerada": compra_gerada, 'resumo_conferencia': resumo},
     )
 
 
@@ -4520,7 +4535,7 @@ def compras_lista_fornecedor_conferencia_salvar(request, pk):
         messages.error(request, str(exc))
         return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
 
-    messages.success(request, "Conferencia salva com sucesso.")
+    messages.success(request, "Conferencia de chegada salva com sucesso.")
     return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
 
 
@@ -4553,6 +4568,18 @@ def compras_lista_fornecedor_gravar(request):
     itens_zerados = []
     try:
         for linha in linhas:
+            if linha.get("ativo") is not None:
+                ativo = str(linha.get("ativo") or "").strip().lower()
+                if ativo in ("false", "0", "no", "n", "off", "f", ""):
+                    continue
+
+            if linha.get("removido") is not None:
+                removido = linha.get("removido")
+                if isinstance(removido, str):
+                    removido = removido.strip().lower() in ("true", "1", "yes", "y", "on")
+                if removido:
+                    continue
+
             produto_id = str(linha.get("produtoId") or "").strip()
             produto = Produto.objects.filter(pk=produto_id, excluido=False).first()
             if not produto:
