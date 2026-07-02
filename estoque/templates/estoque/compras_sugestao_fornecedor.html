@@ -467,58 +467,68 @@
   .sugestao-table tbody tr.sugestao-row-zerada,
   .sugestao-table tbody tr.sugestao-row-zerada:hover,
   .sugestao-mobile-card.sugestao-item-zerado {
-    background: #fef2f2 !important;
+    background: #fffbeb !important;
   }
 
   .sugestao-table tbody tr.sugestao-row-zerada td,
   .sugestao-table tbody tr.sugestao-row-zerada:hover td {
-    border-bottom-color: #fecaca;
-    background: #fef2f2;
+    border-top: 1px solid #fbbf24;
+    border-bottom-color: #fbbf24;
+    background: #fffbeb;
   }
 
   .sugestao-table tbody tr.sugestao-row-zerada .sugestao-col-produto {
-    background: #fee2e2;
-    color: #991b1b;
+    background: #fef3c7;
+    color: #92400e;
     font-weight: 950;
   }
 
   .sugestao-table tbody tr.sugestao-row-zerada .sugestao-input {
-    border-color: #fecaca;
-    background: #fff5f5;
-    color: #991b1b;
+    border-color: #f59e0b;
+    background: #fff7ed;
+    color: #7c2d12;
     font-weight: 900;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, .16);
   }
 
   .sugestao-table tbody tr.sugestao-row-zerada .sugestao-input:focus {
-    outline-color: rgba(239, 68, 68, .16);
-    border-color: #ef4444;
+    outline-color: rgba(245, 158, 11, .24);
+    border-color: #d97706;
   }
 
-  .sugestao-table tbody tr.sugestao-row-zerada::after {
+  .sugestao-table tbody tr.sugestao-row-zerada .sugestao-col-produto::after,
+  .sugestao-mobile-card.sugestao-item-zerado .sugestao-mobile-produto::after {
     content: "Quantidade zerada - será ignorado ao gravar";
     display: block;
-    font-size: .65rem;
-    color: #991b1b;
-    font-weight: 850;
-    margin-top: 2px;
-    padding: 0 4px;
+    width: max-content;
+    max-width: 100%;
+    margin-top: 5px;
+    padding: 3px 7px;
+    border: 1px solid #f59e0b;
+    border-radius: 999px;
+    background: #fff7ed;
+    color: #9a3412;
+    font-size: .66rem;
+    font-weight: 900;
   }
 
   .sugestao-mobile-card.sugestao-item-zerado {
-    border-color: #fecaca;
-    border-left-color: #dc2626;
-    background: #fef2f2;
+    border-color: #fbbf24;
+    border-left-color: #d97706;
+    background: #fffbeb;
   }
 
   .sugestao-mobile-card.sugestao-item-zerado .sugestao-mobile-produto {
-    color: #991b1b;
+    color: #92400e;
     font-weight: 950;
   }
 
   .sugestao-mobile-card.sugestao-item-zerado .sugestao-input {
-    border-color: #fecaca;
-    background: #fff5f5;
-    color: #991b1b;
+    border-color: #f59e0b;
+    background: #fff7ed;
+    color: #7c2d12;
+    font-weight: 900;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, .16);
   }
 
   /* Aviso de itens zerados */
@@ -557,7 +567,7 @@
   }
 
   .sugestao-aviso-zerados-itens strong {
-    display: inline;
+    display: block;
     margin: 0;
     padding: 0;
     border: 0;
@@ -565,6 +575,27 @@
     font-size: .78rem;
     text-transform: none;
     letter-spacing: normal;
+  }
+
+  .sugestao-aviso-zerados-lista,
+  .sugestao-modal-lista {
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .sugestao-aviso-zerados-lista li,
+  .sugestao-modal-lista li {
+    padding: 6px 0;
+    border-top: 1px solid rgba(217, 119, 6, .22);
+    color: #78350f;
+    font-weight: 850;
+    overflow-wrap: anywhere;
+  }
+
+  .sugestao-aviso-zerados-lista li:first-child,
+  .sugestao-modal-lista li:first-child {
+    border-top: 0;
   }
 
   /* Modal de confirmação */
@@ -641,14 +672,14 @@
     color: #475569;
     font-size: .95rem;
     line-height: 1.5;
-    text-align: center;
+    text-align: left;
   }
 
   .sugestao-modal-acoes {
     display: flex;
     gap: 12px;
     justify-content: center;
-    flex-direction: column-reverse;
+    flex-direction: column;
   }
 
   .sugestao-modal-btn {
@@ -663,26 +694,28 @@
   }
 
   .sugestao-modal-btn-cancelar {
-    background: #f1f5f9;
-    color: #475569;
-    border: 1px solid #e2e8f0;
+    background: #8f1d2c;
+    color: #fff;
+    border: 1px solid #8f1d2c;
+    box-shadow: 0 10px 22px rgba(143, 29, 44, .2);
   }
 
   .sugestao-modal-btn-cancelar:hover,
   .sugestao-modal-btn-cancelar:focus {
-    background: #e2e8f0;
-    color: #334155;
+    background: #7f1d1d;
+    color: #fff;
   }
 
   .sugestao-modal-btn-confirmar {
-    background: #8f1d2c;
-    color: #fff;
-    box-shadow: 0 10px 22px rgba(143, 29, 44, .2);
+    background: #fff;
+    color: #7f1d1d;
+    border: 1px solid #fecdd3;
+    box-shadow: none;
   }
 
   .sugestao-modal-btn-confirmar:hover,
   .sugestao-modal-btn-confirmar:focus {
-    background: #7f1d1d;
+    background: #fff1f2;
   }
 
   .sugestao-modal-btn:focus-visible {
@@ -1284,8 +1317,8 @@
         1 item está com quantidade zerada e não será gravado. Deseja continuar?
       </div>
       <div class="sugestao-modal-acoes">
-        <button type="button" class="sugestao-modal-btn sugestao-modal-btn-confirmar" id="btnConfirmarGravar">Gravar ignorando zerados</button>
         <button type="button" class="sugestao-modal-btn sugestao-modal-btn-cancelar" id="btnCancelarGravar">Voltar para corrigir</button>
+        <button type="button" class="sugestao-modal-btn sugestao-modal-btn-confirmar" id="btnConfirmarGravar">Gravar ignorando zerados</button>
       </div>
     </div>
   </div>
@@ -2414,6 +2447,15 @@
       );
 
       if (navegavel) {
+        if (
+          navegavel.classList.contains("sugestao-total-input") &&
+          window.__sugestaoFocarProximoZeradoPorEnter &&
+          window.__sugestaoFocarProximoZeradoPorEnter(navegavel)
+        ) {
+          event.preventDefault();
+          return;
+        }
+
         event.preventDefault();
         const campos = camposNavegaveisTabela();
         const indiceAtual = campos.indexOf(navegavel);
@@ -2766,28 +2808,137 @@
     return !Number.isFinite(num) || num === 0;
   }
 
+  function numeroQuantidade(valor) {
+    let texto = String(valor || "").trim();
+    if (!texto) return 0;
+    texto = texto.replace(/[^\d,.-]/g, "");
+    if (texto.includes(",")) {
+      texto = texto.replace(/\./g, "").replace(",", ".");
+    }
+    const num = Number(texto);
+    return Number.isFinite(num) ? num : 0;
+  }
+
+  function quantidadeMaiorQueZero(valor) {
+    return numeroQuantidade(valor) > 0;
+  }
+
+  function estaVisivel(elemento) {
+    return !!(elemento && (elemento.offsetWidth || elemento.offsetHeight || elemento.getClientRects().length));
+  }
+
+  function usarItensDesktop() {
+    const desktop = document.querySelector(".sugestao-desktop");
+    const linhasDesktop = document.querySelectorAll("#tbodySugestaoProdutos tr[data-produto-id]");
+    const cardsMobile = document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-produto-id]");
+    return estaVisivel(desktop) || cardsMobile.length === 0 || linhasDesktop.length > 0 && !estaVisivel(document.getElementById("mobileSugestaoProdutos"));
+  }
+
+  function linhasDesktop() {
+    return Array.from(document.querySelectorAll("#tbodySugestaoProdutos tr[data-produto-id]"));
+  }
+
+  function cardsMobile() {
+    return Array.from(document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-produto-id]"));
+  }
+
+  function itensEditaveisAtuais() {
+    return usarItensDesktop() ? linhasDesktop() : cardsMobile();
+  }
+
+  function nomeDoItem(item) {
+    return (
+      item.querySelector(".sugestao-col-produto")?.textContent ||
+      item.querySelector(".sugestao-mobile-produto")?.textContent ||
+      "Produto desconhecido"
+    ).trim();
+  }
+
+  function chaveDoItem(item, nome) {
+    return String(item.dataset.produtoId || nome || "").trim().toLowerCase();
+  }
+
+  function parVisualDoItem(item) {
+    const produtoId = String(item.dataset.produtoId || "");
+    if (!produtoId) return null;
+    const colecao = item.tagName === "TR" ? cardsMobile() : linhasDesktop();
+    return colecao.find((el) => String(el.dataset.produtoId || "") === produtoId) || null;
+  }
+
+  function itensVisuaisDoItem(item) {
+    return [item, parVisualDoItem(item)].filter(Boolean);
+  }
+
+  function itemDoInput(input) {
+    return input?.closest("#tbodySugestaoProdutos tr[data-produto-id], #mobileSugestaoProdutos .sugestao-mobile-card[data-produto-id]");
+  }
+
+  function focarCampoZerado(itemZerado, opcoes) {
+    if (!itemZerado?.input || !itemZerado?.elemento) return;
+
+    const rolagem = opcoes?.behavior || "smooth";
+    itemZerado.elemento.scrollIntoView({ behavior: rolagem, block: "center", inline: "nearest" });
+    if (window.selecionarProdutoSugestao) {
+      window.selecionarProdutoSugestao(itemZerado.elemento.dataset.produtoId || "", { rolar: false });
+    }
+
+    window.setTimeout(function() {
+      itemZerado.input.focus();
+      if (typeof itemZerado.input.select === "function") {
+        itemZerado.input.select();
+      }
+    }, opcoes?.delay ?? 150);
+  }
+
+  function proximoZeradoDepoisDoInput(input) {
+    const itemAtual = itemDoInput(input);
+    if (!itemAtual) return null;
+
+    const itens = itensEditaveisAtuais();
+    const indiceAtual = itens.indexOf(itemAtual);
+    const zerados = getZeroItems();
+    if (!zerados.length) return null;
+
+    return zerados.find((zerado) => itens.indexOf(zerado.elemento) > indiceAtual) || null;
+  }
+
+  function tentarFocarProximoZeradoPorEnter(inputAtual) {
+    const itemAtual = itemDoInput(inputAtual);
+    if (!inputAtual || !itemAtual || !inputAtual.classList.contains("sugestao-total-input")) return false;
+
+    const inputQtd = itemAtual.querySelector(".sugestao-qtd-input");
+    if (!quantidadeMaiorQueZero(inputQtd?.value)) return false;
+
+    updateZeroItemsUI();
+    const proximo = proximoZeradoDepoisDoInput(inputAtual);
+    if (!proximo) return false;
+
+    focarCampoZerado(proximo, { delay: 0 });
+    return true;
+  }
+
+  window.__sugestaoFocarProximoZeradoPorEnter = tentarFocarProximoZeradoPorEnter;
+
   // Coletar dados dos itens zerados
   function getZeroItems() {
     const zerados = [];
-    const linhasDesktop = Array.from(document.querySelectorAll("#tbodySugestaoProdutos tr[data-produto-id]"));
-    const linhasMobile = Array.from(document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-produto-id]"));
+    const vistos = new Set();
 
-    // Desktop
-    linhasDesktop.forEach((linha) => {
-      const inputQtd = linha.querySelector(".sugestao-qtd-input");
-      if (inputQtd && isZero(inputQtd.value)) {
-        const nome = linha.querySelector(".sugestao-col-produto")?.textContent?.trim() || "Produto desconhecido";
-        zerados.push({ nome, elemento: linha, tipo: "desktop" });
-      }
-    });
+    itensEditaveisAtuais().forEach((item) => {
+      const inputQtd = item.querySelector(".sugestao-qtd-input");
+      if (!inputQtd || !isZero(inputQtd.value)) return;
 
-    // Mobile
-    linhasMobile.forEach((card) => {
-      const inputQtd = card.querySelector(".sugestao-qtd-input");
-      if (inputQtd && isZero(inputQtd.value)) {
-        const nome = card.querySelector(".sugestao-mobile-produto")?.textContent?.trim() || "Produto desconhecido";
-        zerados.push({ nome, elemento: card, tipo: "mobile" });
-      }
+      const nome = nomeDoItem(item);
+      const chave = chaveDoItem(item, nome);
+      if (vistos.has(chave)) return;
+
+      vistos.add(chave);
+      zerados.push({
+        nome,
+        elemento: item,
+        input: inputQtd,
+        elementos: itensVisuaisDoItem(item)
+      });
     });
 
     return zerados;
@@ -2806,12 +2957,14 @@
       el.classList.remove("sugestao-item-zerado");
     });
 
-    zerados.forEach(({ elemento }) => {
-      if (elemento.tagName === "TR") {
-        elemento.classList.add("sugestao-row-zerada");
-      } else {
-        elemento.classList.add("sugestao-item-zerado");
-      }
+    zerados.forEach(({ elementos }) => {
+      elementos.forEach((elemento) => {
+        if (elemento.tagName === "TR") {
+          elemento.classList.add("sugestao-row-zerada");
+        } else {
+          elemento.classList.add("sugestao-item-zerado");
+        }
+      });
     });
 
     // Atualizar aviso
@@ -2821,8 +2974,9 @@
       avisoZeradosMensagem.textContent =
         `Existem ${count} item${count > 1 ? "ns" : ""} com quantidade zerada. Corrija a quantidade ou ${count > 1 ? "eles serão" : "ele será"} ignorado${count > 1 ? "s" : ""} ao gravar.`;
 
-      // Listar os nomes dos itens zerados
-      const listaHtml = "<strong>Produtos zerados:</strong> " + nomes.join(", ");
+      const listaHtml =
+        "<strong>Produtos zerados:</strong>" +
+        `<ul class="sugestao-aviso-zerados-lista">${nomes.map((nome) => `<li>${escapeHtml(nome)}</li>`).join("")}</ul>`;
       avisoZeradosItens.innerHTML = listaHtml;
 
       avisoZerados.classList.add("visivel");
@@ -2837,16 +2991,28 @@
     modalConfirmacao.classList.remove("aberto");
   }
 
+  function voltarParaCorrigir() {
+    fecharModal();
+    updateZeroItemsUI();
+
+    const primeiro = getZeroItems()[0];
+    if (!primeiro) return;
+
+    focarCampoZerado(primeiro, { delay: 250 });
+  }
+
   // Mostrar modal de confirmação
   function mostrarModalConfirmacao() {
     const zerados = getZeroItems();
     if (zerados.length === 0) return false;
 
     const count = zerados.length;
-    const nomes = zerados.map(({ nome }) => nome).join(", ");
+    const nomes = zerados.map(({ nome }) => nome);
+    const listaHtml = nomes.map((nome) => `<li>${escapeHtml(nome)}</li>`).join("");
 
     modalMensagem.innerHTML =
-      `<strong>${count} item${count > 1 ? "ns estão" : " está"} com quantidade zerada</strong> e não ${count > 1 ? "serão" : "será"} gravado${count > 1 ? "s" : ""}. Deseja continuar?<br><br>Itens: <em>${escapeHtml(nomes)}</em>`;
+      `<strong>${count} item${count > 1 ? "ns estão" : " está"} com quantidade zerada</strong> e não ${count > 1 ? "serão" : "será"} gravado${count > 1 ? "s" : ""}.<br><br>` +
+      `Itens com quantidade zerada:<ul class="sugestao-modal-lista">${listaHtml}</ul>`;
 
     modalConfirmacao.classList.add("aberto");
     return true;
@@ -2865,7 +3031,7 @@
   }
 
   // Event listeners
-  btnCancelarGravar.addEventListener("click", fecharModal);
+  btnCancelarGravar.addEventListener("click", voltarParaCorrigir);
 
   btnConfirmarGravar.addEventListener("click", function() {
     fecharModal();
@@ -2877,6 +3043,56 @@
   });
 
   // Substituir o evento de clique do botão "Gravar lista"
+  function texto(elemento) {
+    return String(elemento?.textContent || "").trim();
+  }
+
+  function valor(seletor, raiz) {
+    return String((raiz || document).querySelector(seletor)?.value || "").trim();
+  }
+
+  function linhaPayloadDesktop(linha) {
+    const cells = linha.children;
+    return {
+      produto: texto(cells[0]),
+      produtoId: linha.dataset.produtoId || "",
+      estoque: texto(cells[1]),
+      minimo: texto(cells[2]),
+      vendido: texto(cells[3]),
+      pedidos: texto(cells[4]),
+      sugestaoOriginal: linha.dataset.sugestaoOriginal || "",
+      sugestao: valor(".sugestao-qtd-input", linha) || "0",
+      unidade: texto(cells[6]),
+      precoCompra: valor(".sugestao-preco-input", linha) || "0",
+      precoUnitario: valor(".sugestao-preco-unitario-input", linha) || "0",
+      total: valor(".sugestao-total-input", linha) || "0"
+    };
+  }
+
+  function linhaPayloadMobile(card) {
+    const valores = Array.from(card.querySelectorAll(".sugestao-mobile-value")).map(texto);
+    return {
+      produto: texto(card.querySelector(".sugestao-mobile-produto")),
+      produtoId: card.dataset.produtoId || "",
+      estoque: valores[0] || "",
+      minimo: valores[1] || "",
+      vendido: valores[2] || "",
+      pedidos: valores[3] || "",
+      sugestaoOriginal: card.dataset.sugestaoOriginal || "",
+      sugestao: valor(".sugestao-qtd-input", card) || "0",
+      unidade: valores[4] || "",
+      precoCompra: valor(".sugestao-preco-input", card) || "0",
+      precoUnitario: valor(".sugestao-preco-unitario-input", card) || "0",
+      total: valor(".sugestao-total-input", card) || "0"
+    };
+  }
+
+  function linhasPayloadAtuais() {
+    return itensEditaveisAtuais()
+      .map((item) => item.tagName === "TR" ? linhaPayloadDesktop(item) : linhaPayloadMobile(item))
+      .filter((linha) => linha.produto);
+  }
+
   const novoClique = function() {
     const payload = {
       fornecedorId: document.getElementById("fornecedor")?.value || "",
@@ -2885,23 +3101,7 @@
       dataFim: document.getElementById("data_fim")?.value || "",
       dataChegada: document.getElementById("data_chegada")?.value || "",
       totalOriginal: document.querySelector(".sugestao-conferencia-item.total .sugestao-conferencia-valor.total")?.textContent?.replace("R$ ", "") || "0,00",
-      linhas: Array.from(document.querySelectorAll("#tbodySugestaoProdutos tr[data-produto-id]")).map((linha) => {
-        const cells = linha.children;
-        return {
-          produto: cells[0]?.textContent?.trim() || "",
-          produtoId: linha.dataset.produtoId || "",
-          estoque: cells[1]?.textContent?.trim() || "",
-          minimo: cells[2]?.textContent?.trim() || "",
-          vendido: cells[3]?.textContent?.trim() || "",
-          pedidos: cells[4]?.textContent?.trim() || "",
-          sugestaoOriginal: linha.dataset.sugestaoOriginal || "",
-          sugestao: linha.querySelector(".sugestao-qtd-input")?.value || "0",
-          unidade: cells[6]?.textContent?.trim() || "",
-          precoCompra: linha.querySelector(".sugestao-preco-input")?.value || "0",
-          precoUnitario: linha.querySelector(".sugestao-preco-unitario-input")?.value || "0",
-          total: linha.querySelector(".sugestao-total-input")?.value || "0"
-        };
-      })
+      linhas: linhasPayloadAtuais()
     };
 
     if (!payload.fornecedorId) {
@@ -2942,6 +3142,30 @@
       updateZeroItemsUI();
     }
   });
+
+  document.addEventListener("keydown", function(event) {
+    if (event.key !== "Enter") return;
+
+    const inputTotal = event.target?.closest(".sugestao-total-input");
+    if (!tentarFocarProximoZeradoPorEnter(inputTotal)) return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
+
+  window.addEventListener("resize", function() {
+    window.setTimeout(updateZeroItemsUI, 0);
+  });
+
+  if ("MutationObserver" in window) {
+    const observer = new MutationObserver(function() {
+      updateZeroItemsUI();
+    });
+    const tbody = document.getElementById("tbodySugestaoProdutos");
+    const mobile = document.getElementById("mobileSugestaoProdutos");
+    if (tbody) observer.observe(tbody, { childList: true });
+    if (mobile) observer.observe(mobile, { childList: true });
+  }
 
   // Inicializar
   updateZeroItemsUI();
