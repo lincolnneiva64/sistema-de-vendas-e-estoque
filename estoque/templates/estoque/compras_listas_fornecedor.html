@@ -896,6 +896,60 @@
   justify-content: center !important;
 }
 
+
+/* AJUSTE VISUAL 0207 - status da compra gerada pela lista */
+.listas-fornecedor-compra-lancada {
+  background: #fffbeb !important;
+  border-color: #f59e0b !important;
+  color: #92400e !important;
+}
+
+.listas-fornecedor-compra-lancada strong {
+  color: #92400e !important;
+}
+
+.listas-fornecedor-status-compra {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin-top: 6px !important;
+  padding: 4px 13px !important;
+  border-radius: 999px !important;
+  font-size: .82rem !important;
+  font-weight: 950 !important;
+  line-height: 1 !important;
+}
+
+.listas-fornecedor-status-compra.status-rascunho {
+  background: #fff7ed !important;
+  border: 1px solid #fdba74 !important;
+  color: #9a3412 !important;
+}
+
+.listas-fornecedor-status-compra.status-finalizada {
+  background: #dcfce7 !important;
+  border: 1px solid #86efac !important;
+  color: #166534 !important;
+}
+
+.listas-fornecedor-status-compra.status-cancelada,
+.listas-fornecedor-status-compra.status-cancelado {
+  background: #fee2e2 !important;
+  border: 1px solid #fca5a5 !important;
+  color: #991b1b !important;
+}
+
+.listas-fornecedor-linha-com-compra:has(.listas-fornecedor-status-compra.status-cancelada) td,
+.listas-fornecedor-linha-com-compra:has(.listas-fornecedor-status-compra.status-cancelado) td {
+  background: #fff1f2 !important;
+}
+
+.listas-fornecedor-linha-com-compra:has(.listas-fornecedor-status-compra.status-cancelada) .listas-fornecedor-compra-lancada,
+.listas-fornecedor-linha-com-compra:has(.listas-fornecedor-status-compra.status-cancelado) .listas-fornecedor-compra-lancada {
+  background: #fff1f2 !important;
+  border-color: #f87171 !important;
+}
+
 </style>
 
 <main class="listas-fornecedor-page">
@@ -973,7 +1027,7 @@
                   <td>
                     <div class="listas-fornecedor-compra-lancada">
                       <strong>Lista #{{ lista.id }} virou Compra #{{ lista.compra_gerada.id }}</strong>
-                      <span>{{ lista.compra_gerada.get_status_display }}</span>
+                      <span class="listas-fornecedor-status-compra status-{{ lista.compra_gerada.status|default:'sem-status' }}">{{ lista.compra_gerada.get_status_display }}</span>
                     </div>
                   </td>
                   <td>
