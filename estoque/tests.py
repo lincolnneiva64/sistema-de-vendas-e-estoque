@@ -576,6 +576,10 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
 
         self.assertNotContains(resposta, "Previa da conferencia")
         self.assertContains(resposta, "Resumo da conferencia salva")
+        self.assertContains(resposta, "Editar conferencia")
+        self.assertContains(resposta, "Salvar alteracoes")
+        self.assertContains(resposta, "data-conferencia-salva=\"1\"")
+        self.assertContains(resposta, "definirModoEdicaoConferencia")
         self.assertContains(resposta, "Corretos:")
         self.assertContains(resposta, "Nao chegaram:")
         self.assertContains(resposta, "Com falta:")

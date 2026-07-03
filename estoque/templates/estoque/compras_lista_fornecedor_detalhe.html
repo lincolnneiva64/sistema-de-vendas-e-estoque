@@ -507,7 +507,7 @@
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 8px;
-    padding: 8px;
+    padding: 8px 8px 6px;
     border-top: 1px solid #fed7aa;
     background: #fffbeb;
   }
@@ -659,6 +659,82 @@
     border-color: #7c2d12;
     background: #7c2d12;
     color: #fff;
+  }
+
+
+  /* Ajuste fino do resumo/historico da conferencia */
+  .conferencia-historico {
+    margin: 8px 10px 10px;
+    padding: 10px 12px;
+    background: #fffdf7;
+  }
+
+  .conferencia-historico-titulo {
+    margin-bottom: 10px;
+    font-size: 1rem;
+    line-height: 1.2;
+  }
+
+  .conferencia-historico-contadores {
+    gap: 8px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+  }
+
+  .conferencia-historico-contadores li {
+    font-size: .82rem;
+    padding: 7px 10px;
+  }
+
+  .conferencia-historico-contadores li:first-child,
+  .conferencia-historico-contadores li:last-child {
+    background: #fffaf0;
+    color: #7c2d12;
+  }
+
+  .conferencia-historico-detalhes {
+    display: grid;
+    gap: 12px;
+  }
+
+  .conferencia-historico-grupo {
+    padding: 10px 0 2px;
+    border-top: 1px solid #f4d28f;
+  }
+
+  .conferencia-historico-grupo > strong {
+    display: block;
+    margin-bottom: 7px;
+    color: #7c2d12;
+    font-size: .92rem;
+  }
+
+  .conferencia-historico-grupo ul {
+    margin: 0;
+    padding-left: 22px;
+  }
+
+  .conferencia-historico-grupo li {
+    margin: 6px 0;
+    font-size: .92rem;
+    line-height: 1.45;
+  }
+
+
+  .conferencia-card.conferencia-salva-bloqueada .conferencia-opcao,
+  .conferencia-card.conferencia-salva-bloqueada .campoQuantidadeRecebidaLista,
+  .conferencia-card.conferencia-salva-bloqueada .conferencia-obs-btn,
+  .conferencia-card.conferencia-salva-bloqueada #btnLimparConferencia {
+    cursor: not-allowed;
+  }
+
+  .conferencia-card.conferencia-salva-bloqueada .campoQuantidadeRecebidaLista {
+    background: #fffaf0;
+  }
+
+  .conferencia-card.conferencia-salva-bloqueada .conferencia-obs-btn,
+  .conferencia-card.conferencia-salva-bloqueada #btnLimparConferencia {
+    opacity: .58;
   }
 
   @media (max-width: 920px) {
@@ -974,7 +1050,13 @@
       <div class="conferencia-acoes">
         <button type="button" class="conferencia-filtro" id="btnMostrarPendencias">Mostrar so pendencias</button>
         <button type="button" class="lista-fornecedor-btn neutro" id="btnLimparConferencia">Limpar conferencia</button>
-        <button type="submit" class="lista-fornecedor-btn principal">Salvar conferencia</button>
+        <button
+          type="{% if resumo_conferencia.total and resumo_conferencia.pendentes == 0 %}button{% else %}submit{% endif %}"
+          class="lista-fornecedor-btn principal"
+          id="btnSalvarOuEditarConferencia"
+          data-conferencia-salva="{% if resumo_conferencia.total and resumo_conferencia.pendentes == 0 %}1{% else %}0{% endif %}">
+          {% if resumo_conferencia.total and resumo_conferencia.pendentes == 0 %}Editar conferencia{% else %}Salvar conferencia{% endif %}
+        </button>
       </div>
     </form>
 
@@ -1276,7 +1358,64 @@
   }
 
   const resumoAtual = document.getElementById('conferenciaResumoAtual');
+  const botaoSalvarOuEditarConferencia = document.getElementById('btnSalvarOuEditarConferencia');
+  const conferenciaSalvaInicial = botaoSalvarOuEditarConferencia?.dataset.conferenciaSalva === '1';
   let resumoEditado = false;
+  let conferenciaEmEdicao = !conferenciaSalvaInicial;
+
+  function definirModoEdicaoConferencia(ativo) {
+    conferenciaEmEdicao = Boolean(ativo);
+    const card = document.querySelector('.conferencia-card');
+
+    if (card) {
+      card.classList.toggle('conferencia-salva-bloqueada', !conferenciaEmEdicao && conferenciaSalvaInicial);
+    }
+
+    document.querySelectorAll('.conferencia-opcao').forEach(function(botao) {
+      botao.disabled = !conferenciaEmEdicao && conferenciaSalvaInicial;
+    });
+
+    document.querySelectorAll('.campoQuantidadeRecebidaLista').forEach(function(input) {
+      if (!conferenciaEmEdicao && conferenciaSalvaInicial) {
+        input.readOnly = true;
+      }
+    });
+
+    document.querySelectorAll('.conferencia-obs-btn').forEach(function(botao) {
+      botao.disabled = !conferenciaEmEdicao && conferenciaSalvaInicial;
+    });
+
+    const botaoLimpar = document.getElementById('btnLimparConferencia');
+    if (botaoLimpar) {
+      botaoLimpar.disabled = !conferenciaEmEdicao && conferenciaSalvaInicial;
+    }
+
+    if (botaoSalvarOuEditarConferencia) {
+      if (!conferenciaEmEdicao && conferenciaSalvaInicial) {
+        botaoSalvarOuEditarConferencia.type = 'button';
+        botaoSalvarOuEditarConferencia.textContent = 'Editar conferencia';
+      } else if (conferenciaSalvaInicial) {
+        botaoSalvarOuEditarConferencia.type = 'submit';
+        botaoSalvarOuEditarConferencia.textContent = 'Salvar alteracoes';
+      } else {
+        botaoSalvarOuEditarConferencia.type = 'submit';
+        botaoSalvarOuEditarConferencia.textContent = 'Salvar conferencia';
+      }
+    }
+  }
+
+  if (botaoSalvarOuEditarConferencia) {
+    botaoSalvarOuEditarConferencia.addEventListener('click', function(event) {
+      if (conferenciaSalvaInicial && !conferenciaEmEdicao) {
+        event.preventDefault();
+        resumoEditado = true;
+        definirModoEdicaoConferencia(true);
+        const primeiroCampo = document.querySelector('.conferencia-opcao:not(:disabled), .campoQuantidadeRecebidaLista:not([readonly])');
+        if (primeiroCampo) primeiroCampo.focus();
+      }
+    });
+  }
+
 
   function nomeProdutoDaLinha(tr) {
     return String(tr.querySelector('.lista-fornecedor-produto')?.textContent || 'Produto').trim();
@@ -1518,6 +1657,7 @@
   }
 
   if (botaoLimpar) botaoLimpar.addEventListener('click', function() {
+    if (conferenciaSalvaInicial && !conferenciaEmEdicao) return;
     abrirModalLimpar();
   });
 
@@ -1663,6 +1803,7 @@
 
   atualizarResumoConferencia();
   atualizarFiltroPendencias();
+  definirModoEdicaoConferencia(conferenciaEmEdicao);
 })();
 </script>
 
