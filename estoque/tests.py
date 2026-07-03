@@ -449,11 +449,6 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         return self.client.post(url, dados, secure=True)
 
     def test_detalhe_exibe_checklist_de_conferencia(self):
-        self.item.quantidade_recebida = Decimal("0.000")
-        self.item.status_conferencia = ItemListaCompraFornecedor.STATUS_CONFERENCIA_NAO_VEIO
-        self.item.conferido = True
-        self.item.save(update_fields=["quantidade_recebida", "status_conferencia", "conferido"])
-
         resposta = self.client.get(
             reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),
             secure=True,
@@ -463,14 +458,15 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertContains(resposta, "Qtd. correta?")
         self.assertContains(resposta, "Qtd. entregue")
         self.assertContains(resposta, "+ Obs.")
-        self.assertContains(resposta, "Previa da conferencia")
-        self.assertContains(resposta, "Resumo da conferencia salva")
-        self.assertContains(resposta, "Com falta")
-        self.assertContains(resposta, "Nao chegaram")
-        self.assertContains(resposta, "Com sobra")
+        self.assertNotContains(resposta, "Previa da conferencia")
+        self.assertNotContains(resposta, 'id="conferenciaHistoricoTitulo">Resumo da conferencia')
         self.assertContains(resposta, "data-unidade")
-        self.assertContains(resposta, "faltou ${formatarQtd(diff)}${unidade}")
-        self.assertContains(resposta, "sobrou ${formatarQtd(diff)}${unidade}")
+        self.assertContains(resposta, "Faltou ${diff}")
+        self.assertContains(resposta, "Sobrou ${diff}")
+        self.assertContains(resposta, "function atualizarResumoConferencia")
+        self.assertContains(resposta, "grupos.pendente.length")
+        self.assertContains(resposta, "resumoAtual.innerHTML = ''")
+        self.assertContains(resposta, "Resumo da conferencia")
         self.assertContains(resposta, "Mostrar so pendencias")
         self.assertContains(resposta, "Limpar conferencia")
         self.assertContains(resposta, "Salvar conferencia")
@@ -490,8 +486,6 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertContains(resposta, "formConferencia.addEventListener('submit'")
         self.assertContains(resposta, "encontrarPrimeiroItemInvalido")
         self.assertContains(resposta, "event.preventDefault()")
-        self.assertContains(resposta, "Produto nao chegou")
-        self.assertContains(resposta, "linha-conferencia nao_veio")
         self.assertNotContains(resposta, 'id="conferenciaResumo"')
         self.assertNotContains(resposta, 'id="resumo_total"')
         self.assertNotContains(resposta, 'id="resumo_conferidos"')
@@ -507,6 +501,96 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertNotContains(resposta, "Qtd. recebida")
         self.assertNotContains(resposta, "Veio")
         self.assertNotContains(resposta, "window.confirm")
+
+    def test_detalhe_exibe_resumo_compacto_da_conferencia_salva(self):
+        produto_nao_veio = Produto.objects.create(
+            nome="Produto Nao Chegou",
+            preco_compra=Decimal("10.00"),
+            preco_vista=Decimal("15.00"),
+            preco_prazo=Decimal("16.00"),
+            quantidade=Decimal("10.000"),
+        )
+        produto_faltou = Produto.objects.create(
+            nome="Produto Faltou",
+            preco_compra=Decimal("10.00"),
+            preco_vista=Decimal("15.00"),
+            preco_prazo=Decimal("16.00"),
+            quantidade=Decimal("10.000"),
+        )
+        produto_sobrou = Produto.objects.create(
+            nome="Produto Sobrou",
+            preco_compra=Decimal("10.00"),
+            preco_vista=Decimal("15.00"),
+            preco_prazo=Decimal("16.00"),
+            quantidade=Decimal("10.000"),
+        )
+        item_nao_veio = ItemListaCompraFornecedor.objects.create(
+            lista=self.lista,
+            produto=produto_nao_veio,
+            estoque_atual=Decimal("10.000"),
+            estoque_minimo=Decimal("0.000"),
+            quantidade_final=Decimal("2.000"),
+            quantidade_recebida=Decimal("0.000"),
+            unidade="UN",
+            preco_compra=Decimal("10.00"),
+            total=Decimal("20.00"),
+            status_conferencia=ItemListaCompraFornecedor.STATUS_CONFERENCIA_NAO_VEIO,
+            observacao_conferencia="Caixa amassada",
+            conferido=True,
+        )
+        item_faltou = ItemListaCompraFornecedor.objects.create(
+            lista=self.lista,
+            produto=produto_faltou,
+            estoque_atual=Decimal("10.000"),
+            estoque_minimo=Decimal("0.000"),
+            quantidade_final=Decimal("2.000"),
+            quantidade_recebida=Decimal("1.000"),
+            unidade="UN",
+            preco_compra=Decimal("10.00"),
+            total=Decimal("20.00"),
+            status_conferencia=ItemListaCompraFornecedor.STATUS_CONFERENCIA_FALTOU,
+            conferido=True,
+        )
+        ItemListaCompraFornecedor.objects.create(
+            lista=self.lista,
+            produto=produto_sobrou,
+            estoque_atual=Decimal("10.000"),
+            estoque_minimo=Decimal("0.000"),
+            quantidade_final=Decimal("2.000"),
+            quantidade_recebida=Decimal("3.000"),
+            unidade="UN",
+            preco_compra=Decimal("10.00"),
+            total=Decimal("20.00"),
+            status_conferencia=ItemListaCompraFornecedor.STATUS_CONFERENCIA_VEIO_A_MAIS,
+            conferido=True,
+        )
+        self.item.quantidade_recebida = Decimal("2.000")
+        self.item.status_conferencia = ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK
+        self.item.conferido = True
+        self.item.save(update_fields=["quantidade_recebida", "status_conferencia", "conferido"])
+
+        resposta = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),
+            secure=True,
+        )
+
+        self.assertNotContains(resposta, "Previa da conferencia")
+        self.assertContains(resposta, "Resumo da conferencia salva")
+        self.assertContains(resposta, "Corretos:")
+        self.assertContains(resposta, "Nao chegaram:")
+        self.assertContains(resposta, "Com falta:")
+        self.assertContains(resposta, "Com sobra:")
+        self.assertContains(resposta, "Pendentes:")
+        self.assertContains(resposta, item_nao_veio.produto.nome)
+        self.assertContains(resposta, item_faltou.produto.nome)
+        self.assertContains(resposta, "pediu 2.000 UN, chegou 1.000 UN")
+        self.assertContains(resposta, "Produto Sobrou")
+        self.assertContains(resposta, "Observacoes:")
+        self.assertContains(resposta, "Caixa amassada")
+        self.assertContains(resposta, "Produto confirmado?")
+        self.assertContains(resposta, "Qtd. correta?")
+        self.assertContains(resposta, "Qtd. entregue")
+        self.assertContains(resposta, "+ Obs.")
 
     def test_salvar_igual_lista(self):
         resposta = self._post_conferencia({f"quantidade_recebida_{self.item.id}": "2.000", f"observacao_conferencia_{self.item.id}": ""})

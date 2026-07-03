@@ -512,88 +512,69 @@
     background: #fffbeb;
   }
 
-  .conferencia-resumo-card {
-    margin: 10px 12px 0;
+  .conferencia-historico {
+    margin: 10px 12px 12px;
     border: 1px solid #fed7aa;
-    border-radius: 10px;
+    border-radius: 8px;
     background: #fffdf7;
-    padding: 14px;
+    padding: 10px;
   }
 
-  .conferencia-resumo-titulo {
+  .conferencia-historico-titulo {
     margin: 0 0 8px;
     color: #7c2d12;
-    font-size: .98rem;
+    font-size: .92rem;
     font-weight: 950;
   }
 
-  .conferencia-resumo-contadores {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+  .conferencia-historico-contadores {
+    display: flex;
+    flex-wrap: wrap;
     gap: 6px;
-    margin-bottom: 12px;
-  }
-
-  .conferencia-resumo-contador {
-    border-radius: 8px;
-    border: 1px solid #fde68a;
-    background: #fff;
-    padding: 7px 8px;
-  }
-
-  .conferencia-resumo-contador span {
-    display: block;
-    color: #7c2d12;
-    font-size: .66rem;
-    font-weight: 950;
-    text-transform: uppercase;
-  }
-
-  .conferencia-resumo-contador strong {
-    display: block;
-    margin-top: 2px;
-    color: #172033;
-    font-size: 1.05rem;
-    font-weight: 950;
-  }
-
-  .conferencia-resumo-detalhes {
-    display: grid;
-    gap: 10px;
-    color: #3f2a2a;
-    font-size: .86rem;
-    font-weight: 750;
-  }
-
-  .conferencia-resumo-grupo {
-    border-radius: 8px;
-    background: #fff7ed;
-    padding: 10px;
-    line-height: 1.45;
-  }
-
-  .conferencia-resumo-grupo.ok {
-    background: #ecfdf5;
-    color: #166534;
-  }
-
-  .conferencia-resumo-grupo.problema {
-    background: #fff1f2;
-    color: #991b1b;
-  }
-
-  .conferencia-resumo-grupo ul {
-    display: grid;
-    gap: 6px;
-    margin: 8px 0 0;
+    margin: 0 0 10px;
     padding: 0;
     list-style: none;
   }
 
-  .conferencia-resumo-grupo li {
-    border-radius: 7px;
-    background: rgba(255, 255, 255, .7);
-    padding: 6px 8px;
+  .conferencia-historico-contadores li {
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    background: #fff;
+    padding: 5px 8px;
+    color: #7c2d12;
+    font-size: .74rem;
+    font-weight: 900;
+  }
+
+  .conferencia-historico-contadores strong {
+    color: #172033;
+  }
+
+  .conferencia-historico-detalhes {
+    display: grid;
+    gap: 8px;
+  }
+
+  .conferencia-historico-grupo {
+    border-top: 1px solid #fde68a;
+    padding-top: 8px;
+    color: #3f2a2a;
+    font-size: .82rem;
+    font-weight: 750;
+  }
+
+  .conferencia-historico-grupo strong {
+    display: block;
+    margin-bottom: 4px;
+    color: #7c2d12;
+    font-weight: 950;
+  }
+
+  .conferencia-historico-grupo ul {
+    display: grid;
+    gap: 3px;
+    margin: 0;
+    padding-left: 18px;
   }
 
   .conferencia-modal-overlay {
@@ -822,9 +803,6 @@
       min-height: 72px;
     }
 
-    .conferencia-resumo-contadores {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
   }
 </style>
 
@@ -993,22 +971,80 @@
         </table>
       </div>
 
-      <div class="conferencia-resumo-card"
-           id="conferenciaResumoDinamico"
-           data-titulo-previa="Previa da conferencia"
-           data-titulo-salva="Resumo da conferencia salva"
-           data-inicial-salva="{% if resumo_conferencia.total and resumo_conferencia.pendentes == 0 %}1{% else %}0{% endif %}">
-        <h3 class="conferencia-resumo-titulo" id="conferenciaResumoTitulo">Previa da conferencia</h3>
-        <div class="conferencia-resumo-contadores" id="conferenciaResumoContadores"></div>
-        <div class="conferencia-resumo-detalhes" id="conferenciaResumoDetalhes"></div>
-      </div>
-
       <div class="conferencia-acoes">
         <button type="button" class="conferencia-filtro" id="btnMostrarPendencias">Mostrar so pendencias</button>
         <button type="button" class="lista-fornecedor-btn neutro" id="btnLimparConferencia">Limpar conferencia</button>
         <button type="submit" class="lista-fornecedor-btn principal">Salvar conferencia</button>
       </div>
     </form>
+
+    <div id="conferenciaResumoAtual"
+         data-inicial-salva="{% if resumo_conferencia.total and resumo_conferencia.pendentes == 0 %}1{% else %}0{% endif %}">
+      {% if resumo_conferencia.total and resumo_conferencia.pendentes == 0 %}
+        <div class="conferencia-historico" aria-labelledby="conferenciaHistoricoTitulo">
+          <h3 class="conferencia-historico-titulo" id="conferenciaHistoricoTitulo">Resumo da conferencia salva</h3>
+          <ul class="conferencia-historico-contadores">
+            <li>Corretos: <strong>{{ resumo_conferencia.ok }}</strong></li>
+            <li>Nao chegaram: <strong>{{ resumo_conferencia.nao_veio }}</strong></li>
+            <li>Com falta: <strong>{{ resumo_conferencia.faltou }}</strong></li>
+            <li>Com sobra: <strong>{{ resumo_conferencia.veio_a_mais }}</strong></li>
+            <li>Pendentes: <strong>{{ resumo_conferencia.pendentes }}</strong></li>
+          </ul>
+
+          <div class="conferencia-historico-detalhes">
+            {% if resumo_conferencia.nao_veio %}
+              <div class="conferencia-historico-grupo">
+                <strong>Nao chegaram:</strong>
+                <ul>
+                  {% for item in lista.itens.all %}
+                    {% if item.status_conferencia == "nao_veio" %}
+                      <li>{% if item.produto %}{{ item.produto.nome }}{% else %}Produto nao identificado{% endif %}</li>
+                    {% endif %}
+                  {% endfor %}
+                </ul>
+              </div>
+            {% endif %}
+
+            {% if resumo_conferencia.faltou %}
+              <div class="conferencia-historico-grupo">
+                <strong>Com falta:</strong>
+                <ul>
+                  {% for item in lista.itens.all %}
+                    {% if item.status_conferencia == "faltou" %}
+                      <li>{% if item.produto %}{{ item.produto.nome }}{% else %}Produto nao identificado{% endif %}: pediu {{ item.quantidade_final|floatformat:3 }}{% if item.unidade %} {{ item.unidade }}{% endif %}, chegou {{ item.quantidade_recebida|floatformat:3 }}{% if item.unidade %} {{ item.unidade }}{% endif %}</li>
+                    {% endif %}
+                  {% endfor %}
+                </ul>
+              </div>
+            {% endif %}
+
+            {% if resumo_conferencia.veio_a_mais %}
+              <div class="conferencia-historico-grupo">
+                <strong>Com sobra:</strong>
+                <ul>
+                  {% for item in lista.itens.all %}
+                    {% if item.status_conferencia == "veio_a_mais" %}
+                      <li>{% if item.produto %}{{ item.produto.nome }}{% else %}Produto nao identificado{% endif %}: pediu {{ item.quantidade_final|floatformat:3 }}{% if item.unidade %} {{ item.unidade }}{% endif %}, chegou {{ item.quantidade_recebida|floatformat:3 }}{% if item.unidade %} {{ item.unidade }}{% endif %}</li>
+                    {% endif %}
+                  {% endfor %}
+                </ul>
+              </div>
+            {% endif %}
+
+            <div class="conferencia-historico-grupo">
+              <strong>Observacoes:</strong>
+              <ul>
+                {% for item in lista.itens.all %}
+                  {% if item.observacao_conferencia %}
+                    <li>{% if item.produto %}{{ item.produto.nome }}{% else %}Produto nao identificado{% endif %}: {{ item.observacao_conferencia }}</li>
+                  {% endif %}
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    </div>
 
     <div class="conferencia-modal-overlay" id="modalLimparConferencia" aria-hidden="true">
       <div class="conferencia-modal" role="dialog" aria-modal="true" aria-labelledby="modalLimparConferenciaTitulo">
@@ -1213,8 +1249,8 @@
     tr.classList.remove('pendente','ok','faltou','veio_a_mais','nao_veio');
     tr.classList.add(status);
     resultado.className = 'conferencia-resultado ' + status;
-    atualizarResumoConferencia();
     atualizarFiltroPendencias();
+    atualizarResumoConferencia();
   }
 
   function limparLinha(tr) {
@@ -1239,45 +1275,43 @@
     });
   }
 
-  const resumoCard = document.getElementById('conferenciaResumoDinamico');
-  const resumoTitulo = document.getElementById('conferenciaResumoTitulo');
-  const resumoContadores = document.getElementById('conferenciaResumoContadores');
-  const resumoDetalhes = document.getElementById('conferenciaResumoDetalhes');
+  const resumoAtual = document.getElementById('conferenciaResumoAtual');
   let resumoEditado = false;
 
-  function marcarResumoComoPrevia() {
-    resumoEditado = true;
+  function nomeProdutoDaLinha(tr) {
+    return String(tr.querySelector('.lista-fornecedor-produto')?.textContent || 'Produto').trim();
   }
 
   function itemResumoDaLinha(tr) {
     const input = tr.querySelector('.campoQuantidadeRecebidaLista');
     const lista = parseDecimal(input?.dataset.qtdFinal) || 0;
     const entregue = parseDecimal(input?.value);
+    const observacao = tr.querySelector('textarea[name^="observacao_conferencia_"]')?.value.trim() || '';
     return {
       nome: nomeProdutoDaLinha(tr),
       status: statusDaLinha(tr),
       lista,
       entregue: entregue === null ? 0 : entregue,
       unidade: input?.dataset.unidade || '',
+      observacao,
     };
   }
 
   function linhaResumoProblema(item, tipo) {
-    let diff = 0;
     const unidade = item.unidade ? ` ${escapeHtml(item.unidade)}` : '';
     if (tipo === 'faltou') {
-      diff = Math.max(item.lista - item.entregue, 0);
-      return `<li>${escapeHtml(item.nome)}: faltou ${formatarQtd(diff)}${unidade}</li>`;
+      const diff = Math.max(item.lista - item.entregue, 0);
+      return `<li>${escapeHtml(item.nome)}: pediu ${formatarQtd(item.lista)}${unidade}, chegou ${formatarQtd(item.entregue)}${unidade}, faltou ${formatarQtd(diff)}${unidade}</li>`;
     }
     if (tipo === 'sobrou') {
-      diff = Math.max(item.entregue - item.lista, 0);
-      return `<li>${escapeHtml(item.nome)}: sobrou ${formatarQtd(diff)}${unidade}</li>`;
+      const diff = Math.max(item.entregue - item.lista, 0);
+      return `<li>${escapeHtml(item.nome)}: pediu ${formatarQtd(item.lista)}${unidade}, chegou ${formatarQtd(item.entregue)}${unidade}, sobrou ${formatarQtd(diff)}${unidade}</li>`;
     }
     return `<li>${escapeHtml(item.nome)}</li>`;
   }
 
   function atualizarResumoConferencia() {
-    if (!resumoCard || !resumoTitulo || !resumoContadores || !resumoDetalhes) return;
+    if (!resumoAtual) return;
 
     const itens = Array.from(document.querySelectorAll('tr.linha-conferencia[data-item-id]')).map(itemResumoDaLinha);
     const grupos = {
@@ -1286,43 +1320,49 @@
       nao: itens.filter((item) => item.status === 'nao_veio'),
       sobrou: itens.filter((item) => item.status === 'veio_a_mais'),
       pendente: itens.filter((item) => item.status === 'pendente'),
+      observacoes: itens.filter((item) => item.observacao),
     };
-    const tituloSalvo = resumoCard.dataset.tituloSalva || 'Resumo da conferencia salva';
-    const tituloPrevia = resumoCard.dataset.tituloPrevia || 'Previa da conferencia';
-    resumoTitulo.textContent = resumoCard.dataset.inicialSalva === '1' && !resumoEditado ? tituloSalvo : tituloPrevia;
 
-    resumoContadores.innerHTML = [
-      ['Corretos', grupos.ok.length],
-      ['Com falta', grupos.faltou.length],
-      ['Nao chegaram', grupos.nao.length],
-      ['Com sobra', grupos.sobrou.length],
-      ['Pendentes', grupos.pendente.length],
-    ].map(([rotulo, valor]) => (
-      `<div class="conferencia-resumo-contador"><span>${rotulo}</span><strong>${valor}</strong></div>`
-    )).join('');
-
-    const partes = [];
-    if (grupos.pendente.length) {
-      partes.push('<div class="conferencia-resumo-grupo">Conclua todos os itens para ver o resumo completo.</div>');
-    } else if (!grupos.faltou.length && !grupos.nao.length && !grupos.sobrou.length) {
-      partes.push('<div class="conferencia-resumo-grupo ok">Todos os produtos foram confirmados corretamente.</div>');
+    if (!itens.length || grupos.pendente.length) {
+      resumoAtual.innerHTML = '';
+      return;
     }
+
+    const titulo = resumoAtual.dataset.inicialSalva === '1' && !resumoEditado
+      ? 'Resumo da conferencia salva'
+      : 'Resumo da conferencia';
+    const partes = [];
     if (grupos.nao.length) {
-      partes.push(`<div class="conferencia-resumo-grupo problema"><strong>Nao chegaram:</strong><ul>${grupos.nao.map((item) => linhaResumoProblema(item, 'nao')).join('')}</ul></div>`);
+      partes.push(`<div class="conferencia-historico-grupo"><strong>Nao chegaram:</strong><ul>${grupos.nao.map((item) => linhaResumoProblema(item, 'nao')).join('')}</ul></div>`);
     }
     if (grupos.faltou.length) {
-      partes.push(`<div class="conferencia-resumo-grupo problema"><strong>Com falta:</strong><ul>${grupos.faltou.map((item) => linhaResumoProblema(item, 'faltou')).join('')}</ul></div>`);
+      partes.push(`<div class="conferencia-historico-grupo"><strong>Com falta:</strong><ul>${grupos.faltou.map((item) => linhaResumoProblema(item, 'faltou')).join('')}</ul></div>`);
     }
     if (grupos.sobrou.length) {
-      partes.push(`<div class="conferencia-resumo-grupo"><strong>Com sobra:</strong><ul>${grupos.sobrou.map((item) => linhaResumoProblema(item, 'sobrou')).join('')}</ul></div>`);
+      partes.push(`<div class="conferencia-historico-grupo"><strong>Com sobra:</strong><ul>${grupos.sobrou.map((item) => linhaResumoProblema(item, 'sobrou')).join('')}</ul></div>`);
     }
-    resumoDetalhes.innerHTML = partes.join('');
+    if (grupos.observacoes.length) {
+      partes.push(`<div class="conferencia-historico-grupo"><strong>Observacoes:</strong><ul>${grupos.observacoes.map((item) => `<li>${escapeHtml(item.nome)}: ${escapeHtml(item.observacao)}</li>`).join('')}</ul></div>`);
+    }
+
+    resumoAtual.innerHTML = `
+      <div class="conferencia-historico" aria-labelledby="conferenciaHistoricoTitulo">
+        <h3 class="conferencia-historico-titulo" id="conferenciaHistoricoTitulo">${titulo}</h3>
+        <ul class="conferencia-historico-contadores">
+          <li>Corretos: <strong>${grupos.ok.length}</strong></li>
+          <li>Nao chegaram: <strong>${grupos.nao.length}</strong></li>
+          <li>Com falta: <strong>${grupos.faltou.length}</strong></li>
+          <li>Com sobra: <strong>${grupos.sobrou.length}</strong></li>
+          <li>Pendentes: <strong>${grupos.pendente.length}</strong></li>
+        </ul>
+        <div class="conferencia-historico-detalhes">${partes.join('')}</div>
+      </div>`;
   }
 
   const inputs = Array.from(document.querySelectorAll('.campoQuantidadeRecebidaLista'));
   inputs.forEach((input, idx) => {
     input.addEventListener('input', function(){
-      marcarResumoComoPrevia();
+      resumoEditado = true;
       const tr = input.closest('tr');
       if (tr && parseDecimal(input.value) !== null) {
         definirGrupo(tr, 'produto', 'sim');
@@ -1330,7 +1370,10 @@
       }
       atualizarLinha(input);
     });
-    input.addEventListener('change', function(){ atualizarLinha(input); });
+    input.addEventListener('change', function(){
+      resumoEditado = true;
+      atualizarLinha(input);
+    });
     input.addEventListener('keydown', function(e){
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -1350,7 +1393,7 @@
 
   document.querySelectorAll('.conferencia-opcao').forEach(function(botao) {
     botao.addEventListener('click', function() {
-      marcarResumoComoPrevia();
+      resumoEditado = true;
       const tr = botao.closest('tr');
       const input = tr?.querySelector('.campoQuantidadeRecebidaLista');
       if (!tr || !input) return;
@@ -1415,12 +1458,14 @@
   document.querySelectorAll('textarea[name^="observacao_conferencia_"]').forEach(function(textarea) {
     const botao = textarea.closest('tr')?.querySelector('.conferencia-obs-btn');
     textarea.addEventListener('input', function() {
+      resumoEditado = true;
       const temObs = textarea.value.trim().length > 0;
       if (botao) {
         botao.classList.toggle('tem-obs', temObs);
         botao.textContent = temObs ? 'Obs. preenchida' : '+ Obs.';
       }
       atualizarFiltroPendencias();
+      atualizarResumoConferencia();
     });
   });
 
@@ -1479,7 +1524,6 @@
   if (botaoCancelarLimpar) botaoCancelarLimpar.addEventListener('click', fecharModalLimpar);
 
   if (botaoConfirmarLimpar) botaoConfirmarLimpar.addEventListener('click', function() {
-    marcarResumoComoPrevia();
     document.querySelectorAll('tr.linha-conferencia[data-item-id]').forEach(limparLinha);
     fecharModalLimpar();
   });
@@ -1487,10 +1531,6 @@
   if (modalLimpar) modalLimpar.addEventListener('click', function(event) {
     if (event.target === modalLimpar) fecharModalLimpar();
   });
-
-  function nomeProdutoDaLinha(tr) {
-    return String(tr.querySelector('.lista-fornecedor-produto')?.textContent || 'Produto').trim();
-  }
 
   function encontrarPrimeiroItemInvalido() {
     const linhas = Array.from(document.querySelectorAll('tr.linha-conferencia[data-item-id]'));
