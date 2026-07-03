@@ -305,6 +305,41 @@
     min-width: 980px;
   }
 
+  .linha-conferencia {
+    transition: background .16s ease, box-shadow .16s ease, border-color .16s ease;
+  }
+
+  .linha-conferencia.ok {
+    background: #f0fdf4;
+  }
+
+  .linha-conferencia.faltou {
+    background: #fff7ed;
+  }
+
+  .linha-conferencia.veio_a_mais {
+    background: #eff6ff;
+  }
+
+  .linha-conferencia.nao_veio {
+    background: #ffe4e6;
+    box-shadow: inset 0 2px 0 #fb7185, inset 0 -2px 0 #fb7185, 0 6px 14px rgba(225, 29, 72, .12);
+  }
+
+  .conferencia-table tbody tr.linha-conferencia.nao_veio > td {
+    background: #ffe4e6;
+    border-top-color: #fb7185;
+    border-bottom-color: #fb7185;
+  }
+
+  .linha-conferencia.pendente {
+    background: #fff;
+  }
+
+  .linha-conferencia.oculto-filtro {
+    display: none;
+  }
+
   .conferencia-table th {
     background: #b45309;
     border-bottom-color: #92400e;
@@ -331,11 +366,96 @@
     resize: vertical;
   }
 
-  .conferencia-status {
+  .conferencia-pergunta {
+    display: grid;
+    gap: 4px;
+    min-width: 150px;
+  }
+
+  .conferencia-pergunta-label {
+    color: #7c2d12;
+    font-size: .68rem;
+    font-weight: 950;
+    text-transform: uppercase;
+  }
+
+  .conferencia-opcoes {
+    display: inline-grid;
+    grid-template-columns: repeat(2, minmax(54px, 1fr));
+    gap: 4px;
+  }
+
+  .conferencia-opcao {
+    min-height: 30px;
+    border: 1px solid #fed7aa;
+    border-radius: 8px;
+    padding: 4px 8px;
+    background: #fff;
+    color: #7c2d12;
+    font-size: .75rem;
+    font-weight: 950;
+    cursor: pointer;
+  }
+
+  .conferencia-opcao.ativo[data-valor="sim"] {
+    border-color: #15803d;
+    background: #16a34a;
+    color: #fff;
+    box-shadow: 0 0 0 2px rgba(22, 163, 74, .16);
+  }
+
+  .conferencia-opcao.ativo[data-valor="nao"] {
+    border-color: #dc2626;
+    background: #dc2626;
+    color: #fff;
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, .16);
+  }
+
+  .conferencia-opcao:disabled {
+    cursor: not-allowed;
+    opacity: .48;
+  }
+
+  .conferencia-qtd-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .conferencia-obs-input {
+    min-width: 180px;
+  }
+
+  .conferencia-obs-wrap {
+    display: none;
+    margin-top: 6px;
+  }
+
+  .conferencia-obs-wrap.aberto {
+    display: block;
+  }
+
+  .conferencia-obs-btn {
+    min-height: 30px;
+    border: 1px solid #fed7aa;
+    border-radius: 8px;
+    padding: 4px 8px;
+    background: #fff;
+    color: #7c2d12;
+    font-size: .75rem;
+    font-weight: 950;
+    cursor: pointer;
+  }
+
+  .conferencia-obs-btn.tem-obs {
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+  }
+
+  .conferencia-resultado {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    min-width: 82px;
+    min-width: 88px;
     border-radius: 999px;
     padding: 4px 8px;
     border: 1px solid #fed7aa;
@@ -345,20 +465,38 @@
     font-weight: 950;
   }
 
-  .conferencia-status.ok {
+  .conferencia-filtro {
+    border: 1px solid #fed7aa;
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: #fff;
+    color: #7c2d12;
+    font-weight: 950;
+    cursor: pointer;
+  }
+
+  .conferencia-filtro.ativo,
+  .conferencia-filtro:hover,
+  .conferencia-filtro:focus-visible {
+    border-color: #f59e0b;
+    background: #fffbeb;
+    outline: none;
+  }
+
+  .conferencia-resultado.ok {
     border-color: #bbf7d0;
     background: #ecfdf5;
     color: #166534;
   }
 
-  .conferencia-status.faltou,
-  .conferencia-status.nao_veio {
+  .conferencia-resultado.faltou,
+  .conferencia-resultado.nao_veio {
     border-color: #fecaca;
     background: #fef2f2;
     color: #991b1b;
   }
 
-  .conferencia-status.veio_a_mais {
+  .conferencia-resultado.veio_a_mais {
     border-color: #bfdbfe;
     background: #eff6ff;
     color: #1d4ed8;
@@ -372,6 +510,174 @@
     padding: 8px;
     border-top: 1px solid #fed7aa;
     background: #fffbeb;
+  }
+
+  .conferencia-resumo-card {
+    margin: 10px 12px 0;
+    border: 1px solid #fed7aa;
+    border-radius: 10px;
+    background: #fffdf7;
+    padding: 14px;
+  }
+
+  .conferencia-resumo-titulo {
+    margin: 0 0 8px;
+    color: #7c2d12;
+    font-size: .98rem;
+    font-weight: 950;
+  }
+
+  .conferencia-resumo-contadores {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .conferencia-resumo-contador {
+    border-radius: 8px;
+    border: 1px solid #fde68a;
+    background: #fff;
+    padding: 7px 8px;
+  }
+
+  .conferencia-resumo-contador span {
+    display: block;
+    color: #7c2d12;
+    font-size: .66rem;
+    font-weight: 950;
+    text-transform: uppercase;
+  }
+
+  .conferencia-resumo-contador strong {
+    display: block;
+    margin-top: 2px;
+    color: #172033;
+    font-size: 1.05rem;
+    font-weight: 950;
+  }
+
+  .conferencia-resumo-detalhes {
+    display: grid;
+    gap: 10px;
+    color: #3f2a2a;
+    font-size: .86rem;
+    font-weight: 750;
+  }
+
+  .conferencia-resumo-grupo {
+    border-radius: 8px;
+    background: #fff7ed;
+    padding: 10px;
+    line-height: 1.45;
+  }
+
+  .conferencia-resumo-grupo.ok {
+    background: #ecfdf5;
+    color: #166534;
+  }
+
+  .conferencia-resumo-grupo.problema {
+    background: #fff1f2;
+    color: #991b1b;
+  }
+
+  .conferencia-resumo-grupo ul {
+    display: grid;
+    gap: 6px;
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .conferencia-resumo-grupo li {
+    border-radius: 7px;
+    background: rgba(255, 255, 255, .7);
+    padding: 6px 8px;
+  }
+
+  .conferencia-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(15, 23, 42, .48);
+  }
+
+  .conferencia-modal-overlay.aberto {
+    display: flex;
+  }
+
+  .conferencia-modal {
+    width: min(420px, 100%);
+    border-radius: 14px;
+    border: 1px solid #fecaca;
+    background: #fff;
+    box-shadow: 0 24px 70px rgba(15, 23, 42, .24);
+    overflow: hidden;
+  }
+
+  .conferencia-modal-corpo {
+    padding: 18px;
+  }
+
+  .conferencia-modal-titulo {
+    margin: 0 0 8px;
+    color: #7f1d1d;
+    font-size: 1.15rem;
+    font-weight: 950;
+  }
+
+  .conferencia-modal-texto {
+    margin: 0;
+    color: #3f2a2a;
+    line-height: 1.45;
+    font-weight: 700;
+  }
+
+  .conferencia-modal-acoes {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 18px;
+    border-top: 1px solid #fee2e2;
+    background: #fff7f7;
+  }
+
+  .conferencia-modal-btn {
+    min-height: 38px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    padding: 8px 12px;
+    font-weight: 950;
+    cursor: pointer;
+  }
+
+  .conferencia-modal-btn:focus,
+  .conferencia-modal-btn:focus-visible {
+    outline: 3px solid #f59e0b;
+    outline-offset: 3px;
+    box-shadow: 0 0 0 5px rgba(245, 158, 11, .22);
+  }
+
+  .conferencia-modal-btn.cancelar {
+    background: #fff;
+    color: #374151;
+  }
+
+  .conferencia-modal-btn.confirmar {
+    border-color: #991b1b;
+    background: #991b1b;
+    color: #fff;
+  }
+
+  .conferencia-modal-btn.entendi {
+    border-color: #7c2d12;
+    background: #7c2d12;
+    color: #fff;
   }
 
   @media (max-width: 920px) {
@@ -404,6 +710,120 @@
     .lista-fornecedor-totalizacao {
       flex-direction: column;
       align-items: flex-start;
+    }
+
+    .conferencia-card .lista-fornecedor-card-titulo {
+      padding: 12px;
+    }
+
+    .conferencia-card .lista-fornecedor-table-wrap {
+      overflow: visible;
+      border-top: 1px solid #fed7aa;
+    }
+
+    .conferencia-table {
+      min-width: 0;
+      border-collapse: separate;
+      border-spacing: 0 8px;
+      background: #fff7ed;
+    }
+
+    .conferencia-table thead {
+      display: none;
+    }
+
+    .conferencia-table,
+    .conferencia-table tbody,
+    .conferencia-table tr,
+    .conferencia-table td {
+      display: block;
+      width: 100%;
+    }
+
+    .conferencia-table tr.linha-conferencia {
+      border: 1px solid #fed7aa;
+      border-radius: 10px;
+      padding: 9px;
+      box-shadow: 0 6px 16px rgba(146, 64, 14, .08);
+    }
+
+    .conferencia-table tr.linha-conferencia.ok {
+      border-color: #86efac;
+    }
+
+    .conferencia-table tr.linha-conferencia.faltou,
+    .conferencia-table tr.linha-conferencia.nao_veio {
+      border-color: #fecaca;
+    }
+
+    .conferencia-table tr.linha-conferencia.nao_veio {
+      border-color: #fb7185;
+      background: #ffe4e6;
+      box-shadow: 0 8px 18px rgba(225, 29, 72, .18);
+    }
+
+    .conferencia-table tbody tr.linha-conferencia.nao_veio > td {
+      background: transparent;
+      border: 0;
+    }
+
+    .conferencia-table tr.linha-conferencia.veio_a_mais {
+      border-color: #bfdbfe;
+    }
+
+    .conferencia-table td {
+      border: 0;
+      padding: 4px 0;
+      text-align: left;
+    }
+
+    .conferencia-table td[data-label]::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: 2px;
+      color: #9a3412;
+      font-size: .68rem;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .conferencia-table .lista-fornecedor-produto {
+      font-size: .96rem;
+      line-height: 1.25;
+    }
+
+    .conferencia-pergunta {
+      min-width: 0;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .conferencia-opcoes {
+      grid-template-columns: repeat(2, 68px);
+    }
+
+    .conferencia-opcao {
+      min-height: 38px;
+    }
+
+    .conferencia-qtd-wrap {
+      gap: 8px;
+    }
+
+    .conferencia-table input {
+      width: 132px;
+      min-height: 42px;
+      font-size: 1rem;
+    }
+
+    .conferencia-table textarea {
+      min-width: 0;
+      min-height: 72px;
+    }
+
+    .conferencia-resumo-contadores {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 </style>
@@ -510,18 +930,6 @@
       <small>Registre apenas o que chegou. Nao gera compra, estoque ou financeiro.</small>
     </div>
 
-    <div style="padding:8px 12px;">
-      <div id="conferenciaResumo" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px">
-        <div class="lista-fornecedor-item" style="min-width:120px"><span class="lista-fornecedor-label">Total</span><span id="resumo_total" class="lista-fornecedor-value">{{ lista.itens.count }}</span></div>
-        <div class="lista-fornecedor-item" style="min-width:120px"><span class="lista-fornecedor-label">Conferidos</span><span id="resumo_conferidos" class="lista-fornecedor-value">0</span></div>
-        <div class="lista-fornecedor-item" style="min-width:120px"><span class="lista-fornecedor-label">Pendentes</span><span id="resumo_pendentes" class="lista-fornecedor-value">0</span></div>
-        <div class="lista-fornecedor-item" style="min-width:120px"><span class="lista-fornecedor-label">OK</span><span id="resumo_ok" class="lista-fornecedor-value">0</span></div>
-        <div class="lista-fornecedor-item" style="min-width:120px"><span class="lista-fornecedor-label">Faltou</span><span id="resumo_faltou" class="lista-fornecedor-value">0</span></div>
-        <div class="lista-fornecedor-item" style="min-width:120px"><span class="lista-fornecedor-label">Veio a mais</span><span id="resumo_veio_a_mais" class="lista-fornecedor-value">0</span></div>
-        <div class="lista-fornecedor-item" style="min-width:120px"><span class="lista-fornecedor-label">Nao veio</span><span id="resumo_nao_veio" class="lista-fornecedor-value">0</span></div>
-      </div>
-    </div>
-
     <form method="post" action="{% url 'estoque:compras_lista_fornecedor_conferencia_salvar' lista.id %}" id="formConferenciaListaFornecedor">
       {% csrf_token %}
       <div class="lista-fornecedor-table-wrap">
@@ -530,30 +938,54 @@
             <tr>
               <th>Produto</th>
               <th>Qtd. lista</th>
-              <th>Qtd. recebida</th>
-              <th>Diferenca</th>
-              <th>Status</th>
+              <th>Produto confirmado?</th>
+              <th>Qtd. correta?</th>
+              <th>Qtd. entregue</th>
+              <th>Resultado</th>
               <th>Observacao</th>
             </tr>
           </thead>
           <tbody>
             {% for item in lista.itens.all %}
               <tr data-item-id="{{ item.id }}" class="linha-conferencia {{ item.status_conferencia }}">
-                <td class="lista-fornecedor-produto">{% if item.produto %}{{ item.produto.nome }}{% else %}-{% endif %}</td>
-                <td>{{ item.quantidade_final|floatformat:3 }} {{ item.unidade }}</td>
-                <td>
-                  <input type="text"
-                         name="quantidade_recebida_{{ item.id }}"
-                         class="campoQuantidadeRecebidaLista"
-                         inputmode="decimal"
-                         data-qtd-final="{{ item.quantidade_final|floatformat:3 }}"
-                         data-item-id="{{ item.id }}"
-                         value="{% if item.conferido %}{{ item.quantidade_recebida|floatformat:3 }}{% endif %}">
+                <td class="lista-fornecedor-produto" data-label="Produto">{% if item.produto %}{{ item.produto.nome }}{% else %}-{% endif %}</td>
+                <td data-label="Qtd. lista">{{ item.quantidade_final|floatformat:3 }} {{ item.unidade }}</td>
+                <td data-label="Produto confirmado?">
+                  <div class="conferencia-pergunta" data-grupo-conferencia="produto">
+                    <span class="conferencia-pergunta-label">Produto confirmado?</span>
+                    <span class="conferencia-opcoes">
+                      <button type="button" class="conferencia-opcao {% if item.conferido and item.status_conferencia != "nao_veio" %}ativo{% endif %}" data-valor="sim" aria-pressed="{% if item.conferido and item.status_conferencia != "nao_veio" %}true{% else %}false{% endif %}">Sim</button>
+                      <button type="button" class="conferencia-opcao {% if item.status_conferencia == "nao_veio" %}ativo{% endif %}" data-valor="nao" aria-pressed="{% if item.status_conferencia == "nao_veio" %}true{% else %}false{% endif %}">Nao</button>
+                    </span>
+                  </div>
                 </td>
-                <td><span class="diferenca_valor">{% if item.conferido %}{{ item.diferenca_conferencia|floatformat:3 }}{% else %}-{% endif %}</span></td>
-                <td><span class="conferencia-status {{ item.status_conferencia }}">{{ item.get_status_conferencia_display }}</span></td>
-                <td>
-                  <textarea name="observacao_conferencia_{{ item.id }}" rows="1" placeholder="Opcional">{{ item.observacao_conferencia }}</textarea>
+                <td data-label="Qtd. correta?">
+                  <div class="conferencia-pergunta" data-grupo-conferencia="quantidade">
+                    <span class="conferencia-pergunta-label">Qtd. correta?</span>
+                    <span class="conferencia-opcoes">
+                      <button type="button" class="conferencia-opcao {% if item.status_conferencia == "ok" %}ativo{% endif %}" data-valor="sim" aria-pressed="{% if item.status_conferencia == "ok" %}true{% else %}false{% endif %}">Sim</button>
+                      <button type="button" class="conferencia-opcao {% if item.conferido and item.status_conferencia != "ok" and item.status_conferencia != "nao_veio" %}ativo{% endif %}" data-valor="nao" aria-pressed="{% if item.conferido and item.status_conferencia != "ok" and item.status_conferencia != "nao_veio" %}true{% else %}false{% endif %}">Nao</button>
+                    </span>
+                  </div>
+                </td>
+                <td data-label="Qtd. entregue">
+                  <div class="conferencia-qtd-wrap">
+                    <input type="text"
+                           name="quantidade_recebida_{{ item.id }}"
+                           class="campoQuantidadeRecebidaLista"
+                           inputmode="decimal"
+                           data-qtd-final="{{ item.quantidade_final|floatformat:3 }}"
+                           data-unidade="{{ item.unidade }}"
+                           data-item-id="{{ item.id }}"
+                           value="{% if item.conferido %}{{ item.quantidade_recebida|floatformat:3 }}{% endif %}">
+                  </div>
+                </td>
+                <td data-label="Resultado"><span class="conferencia-resultado {{ item.status_conferencia }}">{% if item.status_conferencia == "veio_a_mais" %}Sobrou{% elif item.status_conferencia == "nao_veio" %}Produto nao chegou{% else %}{{ item.get_status_conferencia_display }}{% endif %}</span></td>
+                <td data-label="Observacao">
+                  <button type="button" class="conferencia-obs-btn {% if item.observacao_conferencia %}tem-obs{% endif %}">{% if item.observacao_conferencia %}Obs. preenchida{% else %}+ Obs.{% endif %}</button>
+                  <div class="conferencia-obs-wrap {% if item.observacao_conferencia %}aberto{% endif %}">
+                    <textarea name="observacao_conferencia_{{ item.id }}" class="conferencia-obs-input" rows="1" placeholder="Opcional">{{ item.observacao_conferencia }}</textarea>
+                  </div>
                 </td>
               </tr>
             {% endfor %}
@@ -561,11 +993,48 @@
         </table>
       </div>
 
+      <div class="conferencia-resumo-card"
+           id="conferenciaResumoDinamico"
+           data-titulo-previa="Previa da conferencia"
+           data-titulo-salva="Resumo da conferencia salva"
+           data-inicial-salva="{% if resumo_conferencia.total and resumo_conferencia.pendentes == 0 %}1{% else %}0{% endif %}">
+        <h3 class="conferencia-resumo-titulo" id="conferenciaResumoTitulo">Previa da conferencia</h3>
+        <div class="conferencia-resumo-contadores" id="conferenciaResumoContadores"></div>
+        <div class="conferencia-resumo-detalhes" id="conferenciaResumoDetalhes"></div>
+      </div>
+
       <div class="conferencia-acoes">
-        <button type="button" class="lista-fornecedor-btn neutro" id="btnMarcarTudoRecebido">Marcar tudo como recebido</button>
+        <button type="button" class="conferencia-filtro" id="btnMostrarPendencias">Mostrar so pendencias</button>
+        <button type="button" class="lista-fornecedor-btn neutro" id="btnLimparConferencia">Limpar conferencia</button>
         <button type="submit" class="lista-fornecedor-btn principal">Salvar conferencia</button>
       </div>
     </form>
+
+    <div class="conferencia-modal-overlay" id="modalLimparConferencia" aria-hidden="true">
+      <div class="conferencia-modal" role="dialog" aria-modal="true" aria-labelledby="modalLimparConferenciaTitulo">
+        <div class="conferencia-modal-corpo">
+          <h3 class="conferencia-modal-titulo" id="modalLimparConferenciaTitulo">Limpar conferencia?</h3>
+          <p class="conferencia-modal-texto">Deseja mesmo limpar toda a conferencia? Essa acao vai desmarcar os itens conferidos.</p>
+        </div>
+        <div class="conferencia-modal-acoes">
+          <button type="button" tabindex="0" class="conferencia-modal-btn cancelar" id="btn-cancelar-limpar-conferencia">Cancelar</button>
+          <button type="button" tabindex="0" class="conferencia-modal-btn confirmar" id="btn-confirmar-limpar-conferencia">Sim, limpar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="conferencia-modal-overlay" id="modalConferenciaIncompleta" aria-hidden="true">
+      <div class="conferencia-modal" role="dialog" aria-modal="true" aria-labelledby="modalConferenciaIncompletaTitulo">
+        <div class="conferencia-modal-corpo">
+          <h3 class="conferencia-modal-titulo" id="modalConferenciaIncompletaTitulo">Conferencia incompleta</h3>
+          <p class="conferencia-modal-texto">Confira todos os produtos antes de salvar.</p>
+          <p class="conferencia-modal-texto" id="modalConferenciaIncompletaProblema" style="margin-top:8px;"></p>
+        </div>
+        <div class="conferencia-modal-acoes">
+          <button type="button" class="conferencia-modal-btn entendi" id="btnEntendiConferenciaIncompleta">Entendi</button>
+        </div>
+      </div>
+    </div>
   </section>
 
   <section class="lista-fornecedor-card">
@@ -620,28 +1089,6 @@
 
 <script>
 (function() {
-  const botao = document.getElementById("btnMarcarTudoRecebido");
-  const campos = Array.from(document.querySelectorAll(".campoQuantidadeRecebidaLista"));
-
-  campos.forEach(function(campo) {
-    campo.addEventListener("focus", function() {
-      campo.select();
-    });
-  });
-
-  if (!botao) return;
-  botao.addEventListener("click", function() {
-    campos.forEach(function(campo) {
-      campo.value = campo.dataset.qtdFinal || "";
-    });
-    const primeiro = campos[0];
-    if (primeiro) primeiro.focus();
-  });
-})();
-</script>
-
-<script>
-(function() {
   function parseDecimal(text) {
     if (text === null || text === undefined) return null;
     const t = String(text).replace(',', '.').trim();
@@ -650,71 +1097,239 @@
     return Number.isNaN(n) ? null : n;
   }
 
+  function escapeHtml(texto) {
+    const mapa = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;',
+    };
+    return String(texto || '').replace(/[&<>"']/g, (char) => mapa[char]);
+  }
+
+  function formatarQtd(valor) {
+    const numero = Number(valor || 0);
+    return Number.isFinite(numero) ? numero.toFixed(3) : '0.000';
+  }
+
+  function statusDaLinha(tr) {
+    return Array.from(tr.classList).find(function(classe) {
+      return ['pendente','ok','faltou','veio_a_mais','nao_veio'].includes(classe);
+    }) || 'pendente';
+  }
+
+  function botoesDoGrupo(tr, grupo) {
+    return Array.from(tr.querySelectorAll(`[data-grupo-conferencia="${grupo}"] .conferencia-opcao`));
+  }
+
+  function valorDoGrupo(tr, grupo) {
+    const ativo = tr.querySelector(`[data-grupo-conferencia="${grupo}"] .conferencia-opcao.ativo`);
+    return ativo ? ativo.dataset.valor : "";
+  }
+
+  function definirGrupo(tr, grupo, valor) {
+    botoesDoGrupo(tr, grupo).forEach(function(botao) {
+      const ativo = valor && botao.dataset.valor === valor;
+      botao.classList.toggle('ativo', Boolean(ativo));
+      botao.setAttribute('aria-pressed', ativo ? 'true' : 'false');
+    });
+  }
+
+  function bloquearGrupo(tr, grupo, bloqueado) {
+    botoesDoGrupo(tr, grupo).forEach(function(botao) {
+      botao.disabled = bloqueado;
+      if (bloqueado) {
+        botao.classList.remove('ativo');
+        botao.setAttribute('aria-pressed', 'false');
+      }
+    });
+  }
+
   function atualizarLinha(input) {
     const tr = input.closest('tr');
     const qtdFinal = parseDecimal(input.dataset.qtdFinal);
     const valor = parseDecimal(input.value);
-    const diferencaSpan = tr.querySelector('.diferenca_valor');
-    const statusSpan = tr.querySelector('.conferencia-status');
+    const resultado = tr.querySelector('.conferencia-resultado');
+    const produtoConfirmado = valorDoGrupo(tr, 'produto');
+    const qtdCorreta = valorDoGrupo(tr, 'quantidade');
 
     let status = 'pendente';
-    let diferencaText = '-';
-    let conferido = false;
-    if (valor === null) {
+    let texto = 'Pendente';
+    const solicitada = qtdFinal || 0;
+
+    if (!produtoConfirmado) {
       status = 'pendente';
-      conferido = false;
-      diferencaText = '-';
+      texto = 'Pendente';
+      bloquearGrupo(tr, 'quantidade', false);
+      input.readOnly = false;
+    } else if (produtoConfirmado === 'nao') {
+      status = 'nao_veio';
+      texto = 'Produto nao chegou';
+      input.value = '0';
+      input.readOnly = true;
+      bloquearGrupo(tr, 'quantidade', true);
     } else {
-      conferido = true;
-      const solicitada = qtdFinal || 0;
-      const diff = valor - solicitada;
-      diferencaText = diff.toFixed(3);
-      if (valor === 0) status = 'nao_veio';
-      else if (Math.abs(valor - solicitada) < 0.0005) status = 'ok';
-      else if (valor < solicitada) status = 'faltou';
-      else status = 'veio_a_mais';
+      bloquearGrupo(tr, 'quantidade', false);
+      if (qtdCorreta === 'sim') {
+        input.value = input.dataset.qtdFinal || '';
+        input.readOnly = true;
+        status = 'ok';
+        texto = 'OK';
+      } else {
+        input.readOnly = false;
+        const entregue = parseDecimal(input.value);
+        if (!qtdCorreta && entregue === null) {
+          status = 'pendente';
+          texto = 'Pendente';
+        } else if (entregue === null) {
+          status = 'pendente';
+          texto = 'Informe qtd.';
+        } else if (entregue === 0) {
+          const diff = solicitada.toFixed(3);
+          status = 'faltou';
+          texto = `Faltou ${diff}`;
+          definirGrupo(tr, 'quantidade', 'nao');
+        } else if (Math.abs(entregue - solicitada) < 0.0005) {
+          status = 'ok';
+          texto = 'OK';
+          definirGrupo(tr, 'quantidade', 'sim');
+          input.readOnly = true;
+        } else if (entregue < solicitada) {
+          const diff = (solicitada - entregue).toFixed(3);
+          status = 'faltou';
+          texto = `Faltou ${diff}`;
+          definirGrupo(tr, 'quantidade', 'nao');
+        } else {
+          const diff = (entregue - solicitada).toFixed(3);
+          status = 'veio_a_mais';
+          texto = `Sobrou ${diff}`;
+          definirGrupo(tr, 'quantidade', 'nao');
+        }
+      }
     }
 
-    diferencaSpan.textContent = conferido ? diferencaText : '-';
-    const statusTextMap = {
-      pendente: 'Pendente',
-      ok: 'OK',
-      faltou: 'Faltou',
-      veio_a_mais: 'Veio a mais',
-      nao_veio: 'Nao veio',
-    };
-    statusSpan.textContent = statusTextMap[status] || status;
+    resultado.textContent = texto;
     tr.classList.remove('pendente','ok','faltou','veio_a_mais','nao_veio');
     tr.classList.add(status);
-    statusSpan.className = 'conferencia-status ' + status;
-    atualizarResumo();
+    resultado.className = 'conferencia-resultado ' + status;
+    atualizarResumoConferencia();
+    atualizarFiltroPendencias();
   }
 
-  function atualizarResumo() {
-    const linhas = Array.from(document.querySelectorAll('tr[data-item-id]'));
-    const total = linhas.length;
-    let conferidos = 0, pendentes = 0, ok = 0, faltou = 0, veio = 0, nao = 0;
-    linhas.forEach(function(tr){
-      const status = Array.from(tr.classList).find(c=>['pendente','ok','faltou','veio_a_mais','nao_veio'].includes(c)) || 'pendente';
-      if (status === 'pendente') pendentes++; else conferidos++;
-      if (status === 'ok') ok++;
-      if (status === 'faltou') faltou++;
-      if (status === 'veio_a_mais') veio++;
-      if (status === 'nao_veio') nao++;
+  function limparLinha(tr) {
+    const input = tr.querySelector('.campoQuantidadeRecebidaLista');
+    if (!input) return;
+    definirGrupo(tr, 'produto', '');
+    definirGrupo(tr, 'quantidade', '');
+    bloquearGrupo(tr, 'quantidade', false);
+    input.readOnly = false;
+    input.value = '';
+    atualizarLinha(input);
+  }
+
+  function atualizarFiltroPendencias() {
+    const botao = document.getElementById('btnMostrarPendencias');
+    const somentePendencias = botao?.classList.contains('ativo');
+    document.querySelectorAll('tr.linha-conferencia[data-item-id]').forEach(function(tr) {
+      const status = statusDaLinha(tr);
+      const obs = tr.querySelector('textarea[name^="observacao_conferencia_"]')?.value.trim();
+      const deveMostrar = !somentePendencias || status !== 'ok' || Boolean(obs);
+      tr.classList.toggle('oculto-filtro', !deveMostrar);
     });
-    const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-    setText('resumo_total', total);
-    setText('resumo_conferidos', conferidos);
-    setText('resumo_pendentes', pendentes);
-    setText('resumo_ok', ok);
-    setText('resumo_faltou', faltou);
-    setText('resumo_veio_a_mais', veio);
-    setText('resumo_nao_veio', nao);
+  }
+
+  const resumoCard = document.getElementById('conferenciaResumoDinamico');
+  const resumoTitulo = document.getElementById('conferenciaResumoTitulo');
+  const resumoContadores = document.getElementById('conferenciaResumoContadores');
+  const resumoDetalhes = document.getElementById('conferenciaResumoDetalhes');
+  let resumoEditado = false;
+
+  function marcarResumoComoPrevia() {
+    resumoEditado = true;
+  }
+
+  function itemResumoDaLinha(tr) {
+    const input = tr.querySelector('.campoQuantidadeRecebidaLista');
+    const lista = parseDecimal(input?.dataset.qtdFinal) || 0;
+    const entregue = parseDecimal(input?.value);
+    return {
+      nome: nomeProdutoDaLinha(tr),
+      status: statusDaLinha(tr),
+      lista,
+      entregue: entregue === null ? 0 : entregue,
+      unidade: input?.dataset.unidade || '',
+    };
+  }
+
+  function linhaResumoProblema(item, tipo) {
+    let diff = 0;
+    const unidade = item.unidade ? ` ${escapeHtml(item.unidade)}` : '';
+    if (tipo === 'faltou') {
+      diff = Math.max(item.lista - item.entregue, 0);
+      return `<li>${escapeHtml(item.nome)}: faltou ${formatarQtd(diff)}${unidade}</li>`;
+    }
+    if (tipo === 'sobrou') {
+      diff = Math.max(item.entregue - item.lista, 0);
+      return `<li>${escapeHtml(item.nome)}: sobrou ${formatarQtd(diff)}${unidade}</li>`;
+    }
+    return `<li>${escapeHtml(item.nome)}</li>`;
+  }
+
+  function atualizarResumoConferencia() {
+    if (!resumoCard || !resumoTitulo || !resumoContadores || !resumoDetalhes) return;
+
+    const itens = Array.from(document.querySelectorAll('tr.linha-conferencia[data-item-id]')).map(itemResumoDaLinha);
+    const grupos = {
+      ok: itens.filter((item) => item.status === 'ok'),
+      faltou: itens.filter((item) => item.status === 'faltou'),
+      nao: itens.filter((item) => item.status === 'nao_veio'),
+      sobrou: itens.filter((item) => item.status === 'veio_a_mais'),
+      pendente: itens.filter((item) => item.status === 'pendente'),
+    };
+    const tituloSalvo = resumoCard.dataset.tituloSalva || 'Resumo da conferencia salva';
+    const tituloPrevia = resumoCard.dataset.tituloPrevia || 'Previa da conferencia';
+    resumoTitulo.textContent = resumoCard.dataset.inicialSalva === '1' && !resumoEditado ? tituloSalvo : tituloPrevia;
+
+    resumoContadores.innerHTML = [
+      ['Corretos', grupos.ok.length],
+      ['Com falta', grupos.faltou.length],
+      ['Nao chegaram', grupos.nao.length],
+      ['Com sobra', grupos.sobrou.length],
+      ['Pendentes', grupos.pendente.length],
+    ].map(([rotulo, valor]) => (
+      `<div class="conferencia-resumo-contador"><span>${rotulo}</span><strong>${valor}</strong></div>`
+    )).join('');
+
+    const partes = [];
+    if (grupos.pendente.length) {
+      partes.push('<div class="conferencia-resumo-grupo">Conclua todos os itens para ver o resumo completo.</div>');
+    } else if (!grupos.faltou.length && !grupos.nao.length && !grupos.sobrou.length) {
+      partes.push('<div class="conferencia-resumo-grupo ok">Todos os produtos foram confirmados corretamente.</div>');
+    }
+    if (grupos.nao.length) {
+      partes.push(`<div class="conferencia-resumo-grupo problema"><strong>Nao chegaram:</strong><ul>${grupos.nao.map((item) => linhaResumoProblema(item, 'nao')).join('')}</ul></div>`);
+    }
+    if (grupos.faltou.length) {
+      partes.push(`<div class="conferencia-resumo-grupo problema"><strong>Com falta:</strong><ul>${grupos.faltou.map((item) => linhaResumoProblema(item, 'faltou')).join('')}</ul></div>`);
+    }
+    if (grupos.sobrou.length) {
+      partes.push(`<div class="conferencia-resumo-grupo"><strong>Com sobra:</strong><ul>${grupos.sobrou.map((item) => linhaResumoProblema(item, 'sobrou')).join('')}</ul></div>`);
+    }
+    resumoDetalhes.innerHTML = partes.join('');
   }
 
   const inputs = Array.from(document.querySelectorAll('.campoQuantidadeRecebidaLista'));
   inputs.forEach((input, idx) => {
-    input.addEventListener('input', function(){ atualizarLinha(input); });
+    input.addEventListener('input', function(){
+      marcarResumoComoPrevia();
+      const tr = input.closest('tr');
+      if (tr && parseDecimal(input.value) !== null) {
+        definirGrupo(tr, 'produto', 'sim');
+        definirGrupo(tr, 'quantidade', 'nao');
+      }
+      atualizarLinha(input);
+    });
     input.addEventListener('change', function(){ atualizarLinha(input); });
     input.addEventListener('keydown', function(e){
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -733,13 +1348,281 @@
     atualizarLinha(input);
   });
 
-  const botao = document.getElementById('btnMarcarTudoRecebido');
-  if (botao) botao.addEventListener('click', function(){
-    inputs.forEach(function(input){ input.value = input.dataset.qtdFinal || ''; atualizarLinha(input); });
-    if (inputs[0]) { inputs[0].focus(); inputs[0].select(); }
+  document.querySelectorAll('.conferencia-opcao').forEach(function(botao) {
+    botao.addEventListener('click', function() {
+      marcarResumoComoPrevia();
+      const tr = botao.closest('tr');
+      const input = tr?.querySelector('.campoQuantidadeRecebidaLista');
+      if (!tr || !input) return;
+
+      const grupo = botao.closest('[data-grupo-conferencia]')?.dataset.grupoConferencia;
+      const valor = botao.dataset.valor;
+      const estavaAtivo = botao.classList.contains('ativo');
+
+      if (estavaAtivo) {
+        if (grupo === 'produto') {
+          limparLinha(tr);
+        } else if (grupo === 'quantidade') {
+          definirGrupo(tr, 'quantidade', '');
+          input.readOnly = false;
+          input.value = '';
+          atualizarLinha(input);
+          input.focus();
+        }
+        return;
+      }
+
+      definirGrupo(tr, grupo, valor);
+
+      if (grupo === 'produto' && valor === 'nao') {
+        input.value = '0';
+      } else if (grupo === 'produto' && valor === 'sim' && !valorDoGrupo(tr, 'quantidade')) {
+        input.readOnly = false;
+      } else if (grupo === 'quantidade' && valor === 'sim') {
+        definirGrupo(tr, 'produto', 'sim');
+        input.value = input.dataset.qtdFinal || '';
+      } else if (grupo === 'quantidade' && valor === 'nao') {
+        definirGrupo(tr, 'produto', 'sim');
+        input.readOnly = false;
+        if (parseDecimal(input.value) === null || Math.abs((parseDecimal(input.value) || 0) - (parseDecimal(input.dataset.qtdFinal) || 0)) < 0.0005) {
+          input.value = '';
+        }
+        input.focus();
+        input.select();
+      }
+
+      atualizarLinha(input);
+      if (grupo === 'produto' && valor === 'sim' && valorDoGrupo(tr, 'quantidade') === 'nao') {
+        input.focus();
+        input.select();
+      }
+    });
   });
 
-  atualizarResumo();
+  document.querySelectorAll('.conferencia-obs-btn').forEach(function(botao) {
+    botao.addEventListener('click', function() {
+      const tr = botao.closest('tr');
+      const wrap = tr?.querySelector('.conferencia-obs-wrap');
+      const textarea = tr?.querySelector('textarea[name^="observacao_conferencia_"]');
+      if (!wrap) return;
+      const aberto = wrap.classList.toggle('aberto');
+      if (aberto && textarea) {
+        textarea.focus();
+      }
+    });
+  });
+
+  document.querySelectorAll('textarea[name^="observacao_conferencia_"]').forEach(function(textarea) {
+    const botao = textarea.closest('tr')?.querySelector('.conferencia-obs-btn');
+    textarea.addEventListener('input', function() {
+      const temObs = textarea.value.trim().length > 0;
+      if (botao) {
+        botao.classList.toggle('tem-obs', temObs);
+        botao.textContent = temObs ? 'Obs. preenchida' : '+ Obs.';
+      }
+      atualizarFiltroPendencias();
+    });
+  });
+
+  document.querySelectorAll('tr.linha-conferencia[data-item-id]').forEach(function(tr) {
+    const input = tr.querySelector('.campoQuantidadeRecebidaLista');
+    const status = statusDaLinha(tr);
+    if (!input) return;
+    if (status === 'ok') {
+      definirGrupo(tr, 'produto', 'sim');
+      definirGrupo(tr, 'quantidade', 'sim');
+    } else if (status === 'faltou' || status === 'veio_a_mais') {
+      definirGrupo(tr, 'produto', 'sim');
+      definirGrupo(tr, 'quantidade', 'nao');
+    } else if (status === 'nao_veio') {
+      definirGrupo(tr, 'produto', 'nao');
+      definirGrupo(tr, 'quantidade', '');
+    }
+    atualizarLinha(input);
+  });
+
+  const botaoLimpar = document.getElementById('btnLimparConferencia');
+  const formConferencia = document.getElementById('formConferenciaListaFornecedor');
+  const modalLimpar = document.getElementById('modalLimparConferencia');
+  const botaoCancelarLimpar = document.getElementById('btn-cancelar-limpar-conferencia');
+  const botaoConfirmarLimpar = document.getElementById('btn-confirmar-limpar-conferencia');
+  const modalIncompleta = document.getElementById('modalConferenciaIncompleta');
+  const textoProblemaIncompleta = document.getElementById('modalConferenciaIncompletaProblema');
+  const botaoEntendiIncompleta = document.getElementById('btnEntendiConferenciaIncompleta');
+  let itemInvalidoAtual = null;
+
+  function abrirModalLimpar() {
+    if (!modalLimpar) return;
+    modalLimpar.classList.add('aberto');
+    modalLimpar.setAttribute('aria-hidden', 'false');
+    requestAnimationFrame(function () {
+      setTimeout(function () {
+        var btnCancelar = document.getElementById("btn-cancelar-limpar-conferencia");
+        if (btnCancelar) {
+          btnCancelar.focus({ preventScroll: true });
+        }
+      }, 120);
+    });
+  }
+
+  function fecharModalLimpar() {
+    if (!modalLimpar) return;
+    modalLimpar.classList.remove('aberto');
+    modalLimpar.setAttribute('aria-hidden', 'true');
+    if (botaoLimpar) botaoLimpar.focus();
+  }
+
+  if (botaoLimpar) botaoLimpar.addEventListener('click', function() {
+    abrirModalLimpar();
+  });
+
+  if (botaoCancelarLimpar) botaoCancelarLimpar.addEventListener('click', fecharModalLimpar);
+
+  if (botaoConfirmarLimpar) botaoConfirmarLimpar.addEventListener('click', function() {
+    marcarResumoComoPrevia();
+    document.querySelectorAll('tr.linha-conferencia[data-item-id]').forEach(limparLinha);
+    fecharModalLimpar();
+  });
+
+  if (modalLimpar) modalLimpar.addEventListener('click', function(event) {
+    if (event.target === modalLimpar) fecharModalLimpar();
+  });
+
+  function nomeProdutoDaLinha(tr) {
+    return String(tr.querySelector('.lista-fornecedor-produto')?.textContent || 'Produto').trim();
+  }
+
+  function encontrarPrimeiroItemInvalido() {
+    const linhas = Array.from(document.querySelectorAll('tr.linha-conferencia[data-item-id]'));
+    for (const tr of linhas) {
+      const produtoConfirmado = valorDoGrupo(tr, 'produto');
+      const qtdCorreta = valorDoGrupo(tr, 'quantidade');
+      const input = tr.querySelector('.campoQuantidadeRecebidaLista');
+      const nome = nomeProdutoDaLinha(tr);
+
+      if (!produtoConfirmado) {
+        return { tr, mensagem: `Falta conferir: ${nome}` };
+      }
+      if (produtoConfirmado === 'nao') {
+        if (input) {
+          input.value = '0';
+          atualizarLinha(input);
+        }
+        continue;
+      }
+      if (!qtdCorreta) {
+        return { tr, mensagem: `Falta confirmar quantidade: ${nome}` };
+      }
+      if (qtdCorreta === 'sim') {
+        if (input) {
+          input.value = input.dataset.qtdFinal || '';
+          atualizarLinha(input);
+        }
+        continue;
+      }
+
+      const textoQuantidade = String(input?.value || '').trim();
+      if (!textoQuantidade || parseDecimal(textoQuantidade) === null) {
+        return { tr, mensagem: `Informe a quantidade entregue: ${nome}` };
+      }
+      if (input) atualizarLinha(input);
+    }
+    return null;
+  }
+
+  function abrirModalConferenciaIncompleta(problema) {
+    if (!modalIncompleta) return;
+    itemInvalidoAtual = problema?.tr || null;
+    if (textoProblemaIncompleta) {
+      textoProblemaIncompleta.textContent = problema?.mensagem || '';
+    }
+    modalIncompleta.classList.add('aberto');
+    modalIncompleta.setAttribute('aria-hidden', 'false');
+    window.setTimeout(function() {
+      if (botaoEntendiIncompleta) botaoEntendiIncompleta.focus();
+    }, 0);
+  }
+
+  function fecharModalConferenciaIncompleta() {
+    if (!modalIncompleta) return;
+    modalIncompleta.classList.remove('aberto');
+    modalIncompleta.setAttribute('aria-hidden', 'true');
+    const alvo = itemInvalidoAtual;
+    itemInvalidoAtual = null;
+    if (alvo) {
+      alvo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const foco = alvo.querySelector('.conferencia-opcao:not(:disabled), .campoQuantidadeRecebidaLista');
+      window.setTimeout(function() {
+        if (foco) foco.focus();
+      }, 180);
+    }
+  }
+
+  if (formConferencia) formConferencia.addEventListener('submit', function(event) {
+    const problema = encontrarPrimeiroItemInvalido();
+    if (problema) {
+      event.preventDefault();
+      abrirModalConferenciaIncompleta(problema);
+    }
+  });
+
+  if (botaoEntendiIncompleta) botaoEntendiIncompleta.addEventListener('click', fecharModalConferenciaIncompleta);
+
+  if (modalIncompleta) modalIncompleta.addEventListener('click', function(event) {
+    if (event.target === modalIncompleta) fecharModalConferenciaIncompleta();
+  });
+
+  document.addEventListener('keydown', function(event) {
+    if (modalIncompleta?.classList.contains('aberto')) {
+      if (event.key === 'Escape') {
+        fecharModalConferenciaIncompleta();
+      }
+      return;
+    }
+
+    if (!modalLimpar?.classList.contains('aberto')) return;
+
+    const botoesModal = [botaoCancelarLimpar, botaoConfirmarLimpar].filter(Boolean);
+    const primeiro = botoesModal[0];
+    const ultimo = botoesModal[botoesModal.length - 1];
+
+    if (event.key === 'Escape') {
+      fecharModalLimpar();
+      return;
+    }
+
+    if (event.key === 'ArrowRight' && botaoConfirmarLimpar) {
+      event.preventDefault();
+      botaoConfirmarLimpar.focus();
+      return;
+    }
+
+    if (event.key === 'ArrowLeft' && botaoCancelarLimpar) {
+      event.preventDefault();
+      botaoCancelarLimpar.focus();
+      return;
+    }
+
+    if (event.key === 'Tab' && primeiro && ultimo) {
+      if (event.shiftKey && document.activeElement === primeiro) {
+        event.preventDefault();
+        ultimo.focus();
+      } else if (!event.shiftKey && document.activeElement === ultimo) {
+        event.preventDefault();
+        primeiro.focus();
+      }
+    }
+  });
+
+  const botaoPendencias = document.getElementById('btnMostrarPendencias');
+  if (botaoPendencias) botaoPendencias.addEventListener('click', function() {
+    botaoPendencias.classList.toggle('ativo');
+    botaoPendencias.textContent = botaoPendencias.classList.contains('ativo') ? 'Mostrar todos' : 'Mostrar so pendencias';
+    atualizarFiltroPendencias();
+  });
+
+  atualizarResumoConferencia();
+  atualizarFiltroPendencias();
 })();
 </script>
 
