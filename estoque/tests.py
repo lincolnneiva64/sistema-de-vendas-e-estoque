@@ -958,6 +958,24 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertEqual(lista.itens.get().produto, produto_positivo)
         self.assertFalse(lista.itens.filter(produto=produto_zerado).exists())
 
+    def test_lista_com_item_zerado_e_total_preenchido_cria_apenas_itens_validos(self):
+        produto_positivo = self.criar_produto("Produto Positivo")
+        produto_zerado = self.criar_produto("Produto Zerado")
+
+        self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(self.payload([
+                self.criar_linha(produto_positivo, 2),
+                self.criar_linha(produto_zerado, 0, total=Decimal("20.00")),
+            ]))},
+            secure=True,
+        )
+
+        lista = ListaCompraFornecedor.objects.get()
+        self.assertEqual(lista.itens.count(), 1)
+        self.assertEqual(lista.itens.get().produto, produto_positivo)
+        self.assertFalse(lista.itens.filter(produto=produto_zerado).exists())
+
     def test_lista_com_todos_itens_zerados_nao_e_criada(self):
         produto_zerado = self.criar_produto("Produto Zerado")
 
@@ -972,6 +990,60 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertEqual(ListaCompraFornecedor.objects.count(), 0)
         self.assertEqual(ItemListaCompraFornecedor.objects.count(), 0)
         self.assertEqual(Compra.objects.count(), 0)
+
+
+class ComprasSugestaoFornecedorGeracaoTests(TestCase):
+    def setUp(self):
+        self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Sugestao")
+        self.url = reverse("estoque:sugestao_compra_fornecedor")
+
+    def criar_produto(self, nome, quantidade, estoque_minimo):
+        produto = Produto.objects.create(
+            nome=nome,
+            preco_compra=Decimal("10.00"),
+            preco_vista=Decimal("15.00"),
+            preco_prazo=Decimal("16.00"),
+            quantidade=Decimal(str(quantidade)),
+            estoque_minimo=Decimal(str(estoque_minimo)),
+        )
+        ProdutoFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            produto=produto,
+            ativo=True,
+        )
+        return produto
+
+    def produtos_da_lista_inicial(self, resposta):
+        return {linha["produto"] for linha in resposta.context["linhas"]}
+
+    def test_produto_com_estoque_maior_ou_igual_ao_minimo_e_sugestao_zero_nao_aparece(self):
+        produto_sem_necessidade = self.criar_produto("Cafe Estoque Ok", "14.000", "12.000")
+        produto_com_necessidade = self.criar_produto("Cafe Comprar", "8.000", "12.000")
+
+        resposta = self.client.get(
+            self.url,
+            {"fornecedor": str(self.fornecedor.id)},
+            secure=True,
+        )
+
+        produtos = self.produtos_da_lista_inicial(resposta)
+        self.assertIn(produto_com_necessidade, produtos)
+        self.assertNotIn(produto_sem_necessidade, produtos)
+        self.assertEqual(resposta.context["total_produtos_vinculados"], 2)
+        self.assertEqual(resposta.context["total_produtos_sugeridos"], 1)
+
+    def test_geracao_nao_traz_produtos_apenas_por_estarem_vinculados_ao_fornecedor(self):
+        produto_sem_necessidade = self.criar_produto("Produto Apenas Vinculado", "17.000", "15.000")
+
+        resposta = self.client.get(
+            self.url,
+            {"fornecedor": str(self.fornecedor.id)},
+            secure=True,
+        )
+
+        self.assertNotIn(produto_sem_necessidade, self.produtos_da_lista_inicial(resposta))
+        self.assertEqual(resposta.context["total_produtos_vinculados"], 1)
+        self.assertEqual(resposta.context["total_produtos_sugeridos"], 0)
 
 
 class CorrecaoItensCompraTests(TestCase):

@@ -3013,11 +3013,7 @@
   // Event listeners
   btnCancelarGravar.addEventListener("click", voltarParaCorrigir);
 
-  function montarPayloadLista() {
-    const linhas = itensEditaveisAtuais().map((item) => {
-      return item.tagName === "TR" ? linhaPayloadDesktop(item) : linhaPayloadMobile(item);
-    }).filter((linha) => linha.produto);
-
+  function montarPayloadLista(linhas) {
     return {
       fornecedorId: document.getElementById("fornecedor")?.value || "",
       fornecedor: document.getElementById("fornecedorBuscaSugestao")?.value || "Fornecedor não informado",
@@ -3025,7 +3021,7 @@
       dataFim: document.getElementById("data_fim")?.value || "",
       dataChegada: document.getElementById("data_chegada")?.value || "",
       totalOriginal: document.querySelector(".sugestao-conferencia-item.total .sugestao-conferencia-valor.total")?.textContent?.replace("R$ ", "") || "0,00",
-      linhas: linhas
+      linhas: linhas || linhasPayloadAtuais()
     };
   }
 
@@ -3034,6 +3030,10 @@
     if (!formGravarListaFornecedor || !listaFornecedorPayload) return;
 
     const payload = montarPayloadLista();
+    if (!payload.linhas.length) {
+      alert("Nenhum item com quantidade maior que zero para gravar. Ajuste as quantidades antes de gravar a lista.");
+      return;
+    }
     listaFornecedorPayload.value = JSON.stringify(payload);
     formGravarListaFornecedor.submit();
   });
@@ -3085,11 +3085,34 @@
     };
   }
 
-  function linhasPayloadAtuais() {
+  function linhaAtiva(linha) {
+    if (linha.ativo === false) return false;
+    if (typeof linha.ativo === "string") {
+      const ativo = linha.ativo.trim().toLowerCase();
+      if (["false", "0", "no", "n", "off", "f", ""].includes(ativo)) return false;
+    }
+    return true;
+  }
+
+  function linhaRemovida(linha, removidos) {
+    if (removidos.has(String(linha.produtoId))) return true;
+    if (linha.removido === true) return true;
+    if (typeof linha.removido === "string") {
+      return ["true", "1", "yes", "y", "on"].includes(linha.removido.trim().toLowerCase());
+    }
+    return false;
+  }
+
+  function linhasCandidatasAtuais() {
     const removidos = window.__sugestaoProdutosRemovidos || new Set();
     return itensEditaveisAtuais()
       .map((item) => item.tagName === "TR" ? linhaPayloadDesktop(item) : linhaPayloadMobile(item))
-      .filter((linha) => linha.produto && !removidos.has(String(linha.produtoId)));
+      .filter((linha) => linha.produto && linhaAtiva(linha) && !linhaRemovida(linha, removidos));
+  }
+
+  function linhasPayloadAtuais() {
+    return linhasCandidatasAtuais()
+      .filter((linha) => quantidadeMaiorQueZero(linha.sugestao));
   }
 
   const novoClique = function() {
@@ -3107,7 +3130,7 @@
       alert("Selecione um fornecedor antes de gravar a lista.");
       return;
     }
-    if (!payload.linhas.length) {
+    if (!linhasCandidatasAtuais().length) {
       alert("Gere ou adicione produtos antes de gravar a lista.");
       return;
     }
@@ -3118,6 +3141,10 @@
     }
 
     // Sem itens zerados, gravar normalmente
+    if (!payload.linhas.length) {
+      alert("Nenhum item com quantidade maior que zero para gravar. Ajuste as quantidades antes de gravar a lista.");
+      return;
+    }
     listaFornecedorPayload.value = JSON.stringify(payload);
     formGravarListaFornecedor.submit();
   };

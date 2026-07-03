@@ -4112,6 +4112,9 @@ def sugestao_compra_fornecedor(request):
                 Decimal("0.000"),
                 estoque_minimo - estoque_previsto,
             ).quantize(Decimal("0.001"))
+            if sugestao <= Decimal("0.000"):
+                continue
+
             fator_conversao = Decimal(produto.fator_conversao or 1)
             if fator_conversao <= 0:
                 fator_conversao = Decimal("1")
