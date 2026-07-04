@@ -348,6 +348,10 @@
     display: none;
   }
 
+  .conferencia-sugestoes-mobile {
+    display: none;
+  }
+
   .conferencia-sem-resultados {
     display: none;
   }
@@ -806,6 +810,7 @@
 
     .conferencia-busca-mobile {
       display: block;
+      position: relative;
       padding: 10px 12px 12px;
       background: #fffbeb;
       border-bottom: 1px solid #fed7aa;
@@ -837,6 +842,52 @@
     .conferencia-busca-mobile input:focus {
       border-color: #d97706;
       box-shadow: 0 0 0 3px rgba(217, 119, 6, .16);
+    }
+
+    .conferencia-sugestoes-mobile {
+      display: none;
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      top: calc(100% - 10px);
+      z-index: 20;
+      max-height: 220px;
+      overflow-y: auto;
+      border: 1px solid #f1d7b8;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 14px 30px rgba(146, 64, 14, .18);
+    }
+
+    .conferencia-sugestoes-mobile.aberto {
+      display: grid;
+      gap: 0;
+    }
+
+    .conferencia-sugestao-mobile {
+      width: 100%;
+      min-height: 40px;
+      border: 0;
+      border-bottom: 1px solid #ffedd5;
+      padding: 9px 11px;
+      background: #fff;
+      color: #172033;
+      font: inherit;
+      font-size: .9rem;
+      font-weight: 850;
+      line-height: 1.2;
+      text-align: left;
+    }
+
+    .conferencia-sugestao-mobile:last-child {
+      border-bottom: 0;
+    }
+
+    .conferencia-sugestao-mobile:active,
+    .conferencia-sugestao-mobile:focus {
+      background: #fff7ed;
+      color: #7c2d12;
+      outline: none;
     }
 
     .conferencia-card .lista-fornecedor-table-wrap {
@@ -1064,6 +1115,7 @@
     <div class="conferencia-busca-mobile">
       <label for="buscaConferenciaListaFornecedor">Buscar na checklist</label>
       <input type="search" id="buscaConferenciaListaFornecedor" placeholder="Buscar produto nesta lista..." autocomplete="off">
+      <div class="conferencia-sugestoes-mobile" id="sugestoesConferenciaListaFornecedor"></div>
     </div>
 
     <form method="post" action="{% url 'estoque:compras_lista_fornecedor_conferencia_salvar' lista.id %}" id="formConferenciaListaFornecedor">
@@ -1458,11 +1510,13 @@
   const resumoAtual = document.getElementById('conferenciaResumoAtual');
   const botaoSalvarOuEditarConferencia = document.getElementById('btnSalvarOuEditarConferencia');
   const buscaConferenciaMobile = document.getElementById('buscaConferenciaListaFornecedor');
+  const sugestoesConferenciaMobile = document.getElementById('sugestoesConferenciaListaFornecedor');
   const mensagemBuscaVazia = document.getElementById('conferenciaSemResultados');
   const consultaMobileConferencia = window.matchMedia('(max-width: 620px)');
   const conferenciaSalvaInicial = botaoSalvarOuEditarConferencia?.dataset.conferenciaSalva === '1';
   let resumoEditado = false;
   let conferenciaEmEdicao = !conferenciaSalvaInicial;
+  let produtosConferenciaCache = [];
 
   function normalizarTexto(valor) {
     return String(valor || '')
@@ -1476,6 +1530,73 @@
     return normalizarTexto(buscaConferenciaMobile?.value || '');
   }
 
+  function produtosDaChecklistConferencia() {
+    if (!produtosConferenciaCache.length) {
+      produtosConferenciaCache = Array.from(document.querySelectorAll('tr.linha-conferencia[data-item-id]'))
+        .map(function(tr) {
+          const nome = nomeProdutoDaLinha(tr);
+          return {
+            id: tr.dataset.itemId,
+            nome,
+            termo: normalizarTexto(nome),
+          };
+        })
+        .filter(function(item) {
+          return item.nome && item.nome !== '-';
+        });
+    }
+
+    return produtosConferenciaCache;
+  }
+
+  function esconderSugestoesConferencia() {
+    if (!sugestoesConferenciaMobile) return;
+    sugestoesConferenciaMobile.classList.remove('aberto');
+  }
+
+  function mostrarSugestoesConferencia() {
+    if (!consultaMobileConferencia.matches || !sugestoesConferenciaMobile) return;
+
+    const termo = termoBuscaConferencia();
+    const produtos = produtosDaChecklistConferencia()
+      .filter(function(item) {
+        return !termo || item.termo.includes(termo);
+      })
+      .slice(0, 18);
+
+    if (!produtos.length) {
+      esconderSugestoesConferencia();
+      return;
+    }
+
+    sugestoesConferenciaMobile.innerHTML = produtos.map(function(item) {
+      return '<button type="button" class="conferencia-sugestao-mobile" data-item-id="' +
+        escapeHtml(item.id) + '">' + escapeHtml(item.nome) + '</button>';
+    }).join('');
+
+    sugestoesConferenciaMobile.classList.add('aberto');
+  }
+
+  function selecionarSugestaoConferencia(botao) {
+    const itemId = botao?.dataset.itemId;
+    const item = produtosDaChecklistConferencia().find(function(produto) {
+      return produto.id === itemId;
+    });
+
+    if (!item || !buscaConferenciaMobile) return;
+    buscaConferenciaMobile.value = item.nome;
+    atualizarFiltroPendencias();
+    esconderSugestoesConferencia();
+    const linha = Array.from(document.querySelectorAll('tr.linha-conferencia[data-item-id]')).find(function(tr) {
+      return tr.dataset.itemId === item.id;
+    });
+    if (linha && !linha.classList.contains('oculto-filtro') && !linha.classList.contains('oculto-busca')) {
+      linha.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    buscaConferenciaMobile.focus({ preventScroll: true });
+    buscaConferenciaMobile.select();
+  }
+
   function focarBuscaConferenciaMobile() {
     if (!consultaMobileConferencia.matches || !buscaConferenciaMobile) return;
     if (!termoBuscaConferencia()) return;
@@ -1483,6 +1604,7 @@
     window.setTimeout(function() {
       buscaConferenciaMobile.focus({ preventScroll: true });
       buscaConferenciaMobile.select();
+      mostrarSugestoesConferencia();
     }, 80);
   }
 
@@ -1540,7 +1662,35 @@
   }
 
   if (buscaConferenciaMobile) {
-    buscaConferenciaMobile.addEventListener('input', atualizarFiltroPendencias);
+    buscaConferenciaMobile.addEventListener('focus', mostrarSugestoesConferencia);
+    buscaConferenciaMobile.addEventListener('input', function() {
+      atualizarFiltroPendencias();
+      mostrarSugestoesConferencia();
+    });
+    buscaConferenciaMobile.addEventListener('keydown', function(event) {
+      if (event.key === 'Escape') {
+        esconderSugestoesConferencia();
+      }
+    });
+  }
+
+  if (sugestoesConferenciaMobile) {
+    sugestoesConferenciaMobile.addEventListener('click', function(event) {
+      const botao = event.target.closest('.conferencia-sugestao-mobile');
+      if (botao) selecionarSugestaoConferencia(botao);
+    });
+  }
+
+  document.addEventListener('click', function(event) {
+    if (!sugestoesConferenciaMobile?.classList.contains('aberto')) return;
+    if (event.target.closest('.conferencia-busca-mobile')) return;
+    esconderSugestoesConferencia();
+  });
+
+  if (typeof consultaMobileConferencia.addEventListener === 'function') {
+    consultaMobileConferencia.addEventListener('change', function() {
+      if (!consultaMobileConferencia.matches) esconderSugestoesConferencia();
+    });
   }
 
 
