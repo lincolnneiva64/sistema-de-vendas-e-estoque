@@ -645,6 +645,78 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
             fetch_redirect_response=False,
         )
 
+    def test_detalhe_gera_link_externo_com_conferente(self):
+        francisco = Funcionario.objects.create(
+            nome="Francisco Miranda",
+            telefone_whatsapp="85999990001",
+            ativo=True,
+            pode_receber_checklist=True,
+        )
+        Funcionario.objects.create(
+            nome="Roseli Da Costa Gama",
+            telefone_whatsapp="85999990002",
+            ativo=True,
+            pode_receber_checklist=True,
+        )
+        Funcionario.objects.create(
+            nome="Funcionario Sem Checklist",
+            telefone_whatsapp="85999990003",
+            ativo=True,
+            pode_receber_checklist=False,
+        )
+        Funcionario.objects.create(
+            nome="Funcionario Inativo",
+            telefone_whatsapp="85999990004",
+            ativo=False,
+            pode_receber_checklist=True,
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),
+            {"funcionario_checklist": str(francisco.id)},
+            secure=True,
+        )
+
+        self.assertContains(resposta, "Checklist externa")
+        self.assertContains(resposta, "Francisco Miranda")
+        self.assertContains(resposta, "Roseli Da Costa Gama")
+        self.assertNotContains(resposta, "Funcionario Sem Checklist")
+        self.assertNotContains(resposta, "Funcionario Inativo")
+        self.assertContains(resposta, "Conferente: <strong>Francisco Miranda</strong>", html=True)
+        self.assertContains(resposta, "conferencia-externa")
+
+    def test_conferencia_externa_exibe_tela_isolada(self):
+        token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")
+        resposta = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_conferencia_externa", kwargs={"token": token}),
+            secure=True,
+        )
+
+        self.assertContains(resposta, "Conferencia de chegada")
+        self.assertContains(resposta, "Fornecedor Teste")
+        self.assertContains(resposta, "Francisco")
+        self.assertContains(resposta, "Buscar produto nesta lista")
+        self.assertContains(resposta, "OK, proximo")
+        self.assertNotContains(resposta, "Gerar Compra")
+        self.assertNotContains(resposta, "Consultar Listas")
+        self.assertNotContains(resposta, "WhatsApp")
+        self.assertNotContains(resposta, "Cancelar Lista")
+        self.assertNotContains(resposta, "Sistema de Vendas")
+
+    def test_conferencia_externa_salva_conferencia(self):
+        token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_conferencia_externa", kwargs={"token": token}),
+            {f"quantidade_recebida_{self.item.id}": "2.000", f"observacao_conferencia_{self.item.id}": "OK"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK)
+        self.assertTrue(self.item.conferido)
+        self.assertEqual(self.item.observacao_conferencia, "OK")
+
 
 class FornecedorProdutosFormTests(TestCase):
     def _produto_teste(self, nome, excluido=False, excluido_em=None):

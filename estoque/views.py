@@ -16,6 +16,7 @@ from datetime import date, timedelta
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core import signing
 from django.db import IntegrityError, transaction
 from django.db.models import Q, Sum, Max, Prefetch
 from django.db.models.functions import Coalesce
@@ -38,6 +39,8 @@ from uuid import uuid4
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+
+LISTA_FORNECEDOR_CONFERENCIA_EXTERNA_SALT = "estoque.lista-fornecedor-conferencia-externa"
 
 PIX_OCR_PENDENTE_MOBILE = (
     "OCR nao executado automaticamente no envio mobile para evitar timeout. "
@@ -4463,6 +4466,58 @@ def compras_listas_fornecedor(request):
         },
     )
 
+def _resumo_conferencia_lista_fornecedor(lista):
+    itens_qs = lista.itens.all()
+    total_itens = itens_qs.count()
+    conferidos = itens_qs.filter(conferido=True).count()
+    return {
+        'total': total_itens,
+        'conferidos': conferidos,
+        'pendentes': total_itens - conferidos,
+        'ok': itens_qs.filter(status_conferencia=ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK).count(),
+        'faltou': itens_qs.filter(status_conferencia=ItemListaCompraFornecedor.STATUS_CONFERENCIA_FALTOU).count(),
+        'veio_a_mais': itens_qs.filter(status_conferencia=ItemListaCompraFornecedor.STATUS_CONFERENCIA_VEIO_A_MAIS).count(),
+        'nao_veio': itens_qs.filter(status_conferencia=ItemListaCompraFornecedor.STATUS_CONFERENCIA_NAO_VEIO).count(),
+    }
+
+
+def _token_conferencia_externa_lista_fornecedor(lista, conferente):
+    return signing.dumps(
+        {"lista_id": lista.pk, "conferente": (conferente or "").strip()},
+        salt=LISTA_FORNECEDOR_CONFERENCIA_EXTERNA_SALT,
+    )
+
+
+def _dados_token_conferencia_externa(token):
+    try:
+        dados = signing.loads(token, salt=LISTA_FORNECEDOR_CONFERENCIA_EXTERNA_SALT)
+    except signing.BadSignature as exc:
+        raise Http404("Checklist externa invalida.") from exc
+    if not isinstance(dados, dict) or not dados.get("lista_id"):
+        raise Http404("Checklist externa invalida.")
+    return dados
+
+
+def _salvar_conferencia_lista_fornecedor(request, lista):
+    agora = timezone.now()
+    with transaction.atomic():
+        itens = list(lista.itens.select_for_update().all())
+        for item in itens:
+            quantidade = _quantidade_recebida_conferencia(request.POST.get(f"quantidade_recebida_{item.id}"))
+            item.quantidade_recebida = quantidade
+            item.observacao_conferencia = (request.POST.get(f"observacao_conferencia_{item.id}") or "").strip()
+            item.status_conferencia = item.calcular_status_conferencia()
+            item.conferido = quantidade is not None
+            item.conferido_em = agora if item.conferido else None
+            item.save(update_fields=[
+                "quantidade_recebida",
+                "observacao_conferencia",
+                "status_conferencia",
+                "conferido",
+                "conferido_em",
+            ])
+
+
 def compras_lista_fornecedor_detalhe(request, pk):
     lista = get_object_or_404(
         ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto"),
@@ -4478,25 +4533,34 @@ def compras_lista_fornecedor_detalhe(request, pk):
         .order_by("-id")
         .first()
     )
-    # conferencia resumo
-    itens_qs = lista.itens.all()
-    total_itens = itens_qs.count()
-    conferidos = itens_qs.filter(conferido=True).count()
-    pendentes = total_itens - conferidos
-    resumo = {
-        'total': total_itens,
-        'conferidos': conferidos,
-        'pendentes': pendentes,
-        'ok': itens_qs.filter(status_conferencia=ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK).count(),
-        'faltou': itens_qs.filter(status_conferencia=ItemListaCompraFornecedor.STATUS_CONFERENCIA_FALTOU).count(),
-        'veio_a_mais': itens_qs.filter(status_conferencia=ItemListaCompraFornecedor.STATUS_CONFERENCIA_VEIO_A_MAIS).count(),
-        'nao_veio': itens_qs.filter(status_conferencia=ItemListaCompraFornecedor.STATUS_CONFERENCIA_NAO_VEIO).count(),
-    }
+    resumo = _resumo_conferencia_lista_fornecedor(lista)
+    funcionarios_checklist = Funcionario.habilitados_para_checklist().only("id", "nome", "telefone_whatsapp")
+    funcionario_checklist_id = (request.GET.get("funcionario_checklist") or "").strip()
+    conferente_avulso = (request.GET.get("conferente_link") or "").strip()
+    funcionario_checklist = None
+    if funcionario_checklist_id:
+        funcionario_checklist = funcionarios_checklist.filter(pk=funcionario_checklist_id).first()
+    conferente_link = funcionario_checklist.nome if funcionario_checklist else conferente_avulso
+    link_conferencia_externa = ""
+    if conferente_link:
+        token = _token_conferencia_externa_lista_fornecedor(lista, conferente_link)
+        link_conferencia_externa = request.build_absolute_uri(
+            reverse("estoque:compras_lista_fornecedor_conferencia_externa", kwargs={"token": token})
+        )
 
     return render(
         request,
         "estoque/compras_lista_fornecedor_detalhe.html",
-        {"lista": lista, "compra_gerada": compra_gerada, 'resumo_conferencia': resumo},
+        {
+            "lista": lista,
+            "compra_gerada": compra_gerada,
+            'resumo_conferencia': resumo,
+            "funcionarios_checklist": funcionarios_checklist,
+            "funcionario_checklist_id": funcionario_checklist_id,
+            "conferente_avulso": conferente_avulso,
+            "conferente_link": conferente_link,
+            "link_conferencia_externa": link_conferencia_externa,
+        },
     )
 
 
@@ -4516,30 +4580,44 @@ def compras_lista_fornecedor_conferencia_salvar(request, pk):
         ListaCompraFornecedor.objects.prefetch_related("itens"),
         pk=pk,
     )
-    agora = timezone.now()
     try:
-        with transaction.atomic():
-            itens = list(lista.itens.select_for_update().all())
-            for item in itens:
-                quantidade = _quantidade_recebida_conferencia(request.POST.get(f"quantidade_recebida_{item.id}"))
-                item.quantidade_recebida = quantidade
-                item.observacao_conferencia = (request.POST.get(f"observacao_conferencia_{item.id}") or "").strip()
-                item.status_conferencia = item.calcular_status_conferencia()
-                item.conferido = quantidade is not None
-                item.conferido_em = agora if item.conferido else None
-                item.save(update_fields=[
-                    "quantidade_recebida",
-                    "observacao_conferencia",
-                    "status_conferencia",
-                    "conferido",
-                    "conferido_em",
-                ])
+        _salvar_conferencia_lista_fornecedor(request, lista)
     except ValueError as exc:
         messages.error(request, str(exc))
         return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
 
     messages.success(request, "Conferencia de chegada salva com sucesso.")
     return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
+
+
+def compras_lista_fornecedor_conferencia_externa(request, token):
+    dados_token = _dados_token_conferencia_externa(token)
+    lista = get_object_or_404(
+        ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto"),
+        pk=dados_token["lista_id"],
+    )
+    conferente = (dados_token.get("conferente") or "").strip()
+
+    if request.method == "POST":
+        try:
+            _salvar_conferencia_lista_fornecedor(request, lista)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(request, "Conferencia salva com sucesso.")
+        return redirect("estoque:compras_lista_fornecedor_conferencia_externa", token=token)
+
+    resumo = _resumo_conferencia_lista_fornecedor(lista)
+    return render(
+        request,
+        "estoque/compras_lista_fornecedor_conferencia_externa.html",
+        {
+            "lista": lista,
+            "conferente": conferente,
+            "token": token,
+            "resumo_conferencia": resumo,
+        },
+    )
 
 
 @require_POST

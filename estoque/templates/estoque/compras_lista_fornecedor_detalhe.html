@@ -10,6 +10,18 @@
     color: #172033;
   }
 
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
   .lista-fornecedor-topo {
     background: linear-gradient(135deg, #fff7f7 0%, #fff2f2 60%, #fff8f1 100%);
     border: 1px solid #f4b9c2;
@@ -289,6 +301,65 @@
     border-color: #bbf7d0;
     background: #ecfdf5;
     color: #166534;
+  }
+
+  .lista-fornecedor-link-externo {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 10px;
+    border: 1px solid #bfdbfe;
+    border-radius: 9px;
+    background: #eff6ff;
+    color: #1e3a8a;
+    box-shadow: 0 6px 14px rgba(29, 78, 216, .06);
+  }
+
+  .lista-fornecedor-link-externo strong {
+    font-size: .9rem;
+    font-weight: 950;
+  }
+
+  .lista-fornecedor-link-form {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .lista-fornecedor-link-form input,
+  .lista-fornecedor-link-form select {
+    flex: 1 1 220px;
+    min-height: 36px;
+    border: 1.5px solid #bfdbfe;
+    border-radius: 8px;
+    padding: 7px 9px;
+    color: #172033;
+    font-weight: 800;
+    background: #fff;
+    font-family: inherit;
+  }
+
+  .lista-fornecedor-link-ajuda {
+    margin: 0;
+    color: #1e40af;
+    font-size: .78rem;
+    font-weight: 800;
+    line-height: 1.35;
+  }
+
+  .lista-fornecedor-link-gerado {
+    display: grid;
+    gap: 5px;
+    padding: 8px;
+    border: 1px solid #93c5fd;
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  .lista-fornecedor-link-gerado a {
+    color: #1d4ed8;
+    font-weight: 900;
+    overflow-wrap: anywhere;
   }
 
   .conferencia-card {
@@ -784,6 +855,10 @@
       width: 100%;
     }
 
+    .lista-fornecedor-link-form {
+      display: grid;
+    }
+
     .lista-fornecedor-resumo {
       grid-template-columns: 1fr;
     }
@@ -1142,6 +1217,32 @@
         </form>
       {% endif %}
     </div>
+  </section>
+
+  <section class="lista-fornecedor-link-externo" aria-label="Gerar link externo da checklist">
+    <strong>Checklist externa</strong>
+    <form method="get" class="lista-fornecedor-link-form">
+      <label class="sr-only" for="funcionarioChecklistExterna">Funcionario habilitado para checklist</label>
+      <select name="funcionario_checklist" id="funcionarioChecklistExterna" aria-label="Funcionario habilitado para checklist">
+        <option value="">Selecione um funcionario</option>
+        {% for funcionario in funcionarios_checklist %}
+          <option value="{{ funcionario.id }}" {% if funcionario_checklist_id == funcionario.id|stringformat:"s" %}selected{% endif %}>
+            {{ funcionario.nome }}
+          </option>
+        {% endfor %}
+      </select>
+      <input type="text" name="conferente_link" value="{{ conferente_avulso }}" placeholder="Nome avulso (opcional)" aria-label="Nome avulso para checklist">
+      <button type="submit" class="lista-fornecedor-btn principal">Gerar link</button>
+    </form>
+    {% if not funcionarios_checklist %}
+      <p class="lista-fornecedor-link-ajuda">Nenhum funcionario habilitado para receber checklist. Use o nome avulso ou habilite um funcionario no cadastro.</p>
+    {% endif %}
+    {% if link_conferencia_externa %}
+      <div class="lista-fornecedor-link-gerado">
+        <span>Conferente: <strong>{{ conferente_link }}</strong></span>
+        <a href="{{ link_conferencia_externa }}" target="_blank" rel="noopener">{{ link_conferencia_externa }}</a>
+      </div>
+    {% endif %}
   </section>
 
   {% if compra_gerada %}
