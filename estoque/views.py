@@ -4534,19 +4534,46 @@ def compras_lista_fornecedor_detalhe(request, pk):
         .first()
     )
     resumo = _resumo_conferencia_lista_fornecedor(lista)
-    funcionarios_checklist = Funcionario.habilitados_para_checklist().only("id", "nome", "telefone_whatsapp")
+    funcionarios_checklist = Funcionario.habilitados_para_checklist().only(
+        "id",
+        "nome",
+        "telefone_whatsapp",
+        "telefone_whatsapp_normalizado",
+    )
     funcionario_checklist_id = (request.GET.get("funcionario_checklist") or "").strip()
     conferente_avulso = (request.GET.get("conferente_link") or "").strip()
     funcionario_checklist = None
-    if funcionario_checklist_id:
+    if funcionario_checklist_id.isdigit():
         funcionario_checklist = funcionarios_checklist.filter(pk=funcionario_checklist_id).first()
     conferente_link = funcionario_checklist.nome if funcionario_checklist else conferente_avulso
     link_conferencia_externa = ""
+    whatsapp_conferencia_externa_url = ""
+    whatsapp_conferencia_externa_sem_numero = False
     if conferente_link:
         token = _token_conferencia_externa_lista_fornecedor(lista, conferente_link)
         link_conferencia_externa = request.build_absolute_uri(
             reverse("estoque:compras_lista_fornecedor_conferencia_externa", kwargs={"token": token})
         )
+        if funcionario_checklist:
+            numero_whatsapp = (
+                funcionario_checklist.telefone_whatsapp_normalizado
+                or Funcionario.normalizar_whatsapp(funcionario_checklist.telefone_whatsapp)
+            )
+            if numero_whatsapp:
+                fornecedor_nome = lista.fornecedor.nome if lista.fornecedor else "Fornecedor"
+                data_pedido = lista.data_lista.strftime("%d/%m/%Y") if lista.data_lista else "-"
+                mensagem_whatsapp = (
+                    f"Ola, {funcionario_checklist.nome}. Segue checklist de conferencia da lista #{lista.id} - "
+                    f"{fornecedor_nome}.\n"
+                    f"Pedido: {data_pedido}\n"
+                    "Abra o link para conferir:\n"
+                    f"{link_conferencia_externa}"
+                )
+                whatsapp_conferencia_externa_url = (
+                    f"https://web.whatsapp.com/send?phone={numero_whatsapp}&text={quote(mensagem_whatsapp)}"
+                )
+            else:
+                whatsapp_conferencia_externa_sem_numero = True
 
     return render(
         request,
@@ -4560,6 +4587,8 @@ def compras_lista_fornecedor_detalhe(request, pk):
             "conferente_avulso": conferente_avulso,
             "conferente_link": conferente_link,
             "link_conferencia_externa": link_conferencia_externa,
+            "whatsapp_conferencia_externa_url": whatsapp_conferencia_externa_url,
+            "whatsapp_conferencia_externa_sem_numero": whatsapp_conferencia_externa_sem_numero,
         },
     )
 

@@ -684,6 +684,19 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertNotContains(resposta, "Funcionario Inativo")
         self.assertContains(resposta, "Conferente: <strong>Francisco Miranda</strong>", html=True)
         self.assertContains(resposta, "conferencia-externa")
+        self.assertContains(resposta, "Enviar pelo WhatsApp")
+        self.assertContains(resposta, "https://web.whatsapp.com/send?phone=85999990001")
+        self.assertContains(resposta, "Francisco%20Miranda")
+        self.assertContains(resposta, "Fornecedor%20Teste")
+
+        resposta_avulso = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),
+            {"conferente_link": "Conferente Avulso"},
+            secure=True,
+        )
+
+        self.assertContains(resposta_avulso, "Conferente: <strong>Conferente Avulso</strong>", html=True)
+        self.assertNotContains(resposta_avulso, "Enviar pelo WhatsApp")
 
     def test_conferencia_externa_exibe_tela_isolada(self):
         token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")

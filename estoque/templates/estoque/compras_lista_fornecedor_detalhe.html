@@ -362,6 +362,12 @@
     overflow-wrap: anywhere;
   }
 
+  .lista-fornecedor-link-gerado .lista-fornecedor-whatsapp-link {
+    justify-self: start;
+    color: #fff;
+    overflow-wrap: normal;
+  }
+
   .conferencia-card {
     border-color: #fed7aa;
     background: #fffaf0;
@@ -1241,6 +1247,11 @@
       <div class="lista-fornecedor-link-gerado">
         <span>Conferente: <strong>{{ conferente_link }}</strong></span>
         <a href="{{ link_conferencia_externa }}" target="_blank" rel="noopener">{{ link_conferencia_externa }}</a>
+        {% if whatsapp_conferencia_externa_url %}
+          <a class="lista-fornecedor-btn principal lista-fornecedor-whatsapp-link" href="{{ whatsapp_conferencia_externa_url }}" target="_blank" rel="noopener">Enviar pelo WhatsApp</a>
+        {% elif whatsapp_conferencia_externa_sem_numero %}
+          <span class="lista-fornecedor-link-ajuda">Funcionario selecionado sem WhatsApp cadastrado.</span>
+        {% endif %}
       </div>
     {% endif %}
   </section>
