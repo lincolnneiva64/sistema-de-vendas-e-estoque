@@ -950,6 +950,39 @@
   border-color: #f87171 !important;
 }
 
+.listas-fornecedor-mobile-abrir {
+  display: none !important;
+}
+
+@media (max-width: 640px) {
+  .listas-fornecedor-fornecedor-cell {
+    line-height: 1.25 !important;
+    white-space: normal !important;
+  }
+
+  .listas-fornecedor-mobile-abrir {
+    display: inline-flex !important;
+    width: 100% !important;
+    min-height: 46px !important;
+    margin-top: 9px !important;
+    padding: 10px 14px !important;
+    border-radius: 10px !important;
+    background: #8f1d2c !important;
+    border-color: #8f1d2c !important;
+    color: #fff !important;
+    font-size: .9rem !important;
+    line-height: 1.1 !important;
+    box-shadow: 0 8px 18px rgba(143, 29, 44, .18) !important;
+  }
+
+  .listas-fornecedor-linha-com-compra .listas-fornecedor-fornecedor-cell {
+    height: auto !important;
+    padding-top: 12px !important;
+    padding-bottom: 12px !important;
+    line-height: 1.25 !important;
+  }
+}
+
 </style>
 
 <main class="listas-fornecedor-page">
@@ -1021,7 +1054,10 @@
               {% if lista.compra_gerada %}
                 <tr class="listas-fornecedor-linha-com-compra">
                   <td class="listas-fornecedor-numero">#{{ lista.id }}</td>
-                  <td>{% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}</td>
+                  <td class="listas-fornecedor-fornecedor-cell">
+                    {% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}
+                    <a class="listas-fornecedor-btn listas-fornecedor-mobile-abrir" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Abrir lista</a>
+                  </td>
                   <td>{{ lista.data_lista|date:"d/m/Y" }}</td>
                   <td class="listas-fornecedor-total">R$ {{ lista.total_lista|floatformat:2 }}</td>
                   <td>
@@ -1044,7 +1080,10 @@
               {% else %}
                 <tr>
                   <td class="listas-fornecedor-numero">#{{ lista.id }}</td>
-                  <td>{% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}</td>
+                  <td class="listas-fornecedor-fornecedor-cell">
+                    {% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}
+                    <a class="listas-fornecedor-btn listas-fornecedor-mobile-abrir" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Abrir lista</a>
+                  </td>
                   <td>{{ lista.data_lista|date:"d/m/Y" }}</td>
                   <td class="listas-fornecedor-total">R$ {{ lista.total_lista|floatformat:2 }}</td>
                   <td>
