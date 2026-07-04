@@ -4563,10 +4563,12 @@ def compras_lista_fornecedor_detalhe(request, pk):
                 fornecedor_nome = lista.fornecedor.nome if lista.fornecedor else "Fornecedor"
                 data_pedido = lista.data_lista.strftime("%d/%m/%Y") if lista.data_lista else "-"
                 mensagem_whatsapp = (
-                    f"Ola, {funcionario_checklist.nome}. Segue checklist de conferencia da lista #{lista.id} - "
-                    f"{fornecedor_nome}.\n"
-                    f"Pedido: {data_pedido}\n"
-                    "Abra o link para conferir:\n"
+                    f"Ola, {funcionario_checklist.nome}.\n\n"
+                    "Checklist de conferencia\n"
+                    f"Fornecedor: {fornecedor_nome}\n"
+                    f"Lista: #{lista.id}\n"
+                    f"Pedido: {data_pedido}\n\n"
+                    "Abrir checklist:\n"
                     f"{link_conferencia_externa}"
                 )
                 whatsapp_conferencia_externa_url = (
