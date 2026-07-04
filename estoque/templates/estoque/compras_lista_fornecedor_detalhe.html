@@ -1734,6 +1734,7 @@
   let resumoEditado = false;
   let conferenciaEmEdicao = !conferenciaSalvaInicial;
   let produtosConferenciaCache = [];
+  let itemPonteiroConferenciaId = '';
 
   function normalizarTexto(valor) {
     return String(valor || '')
@@ -1744,7 +1745,16 @@
   }
 
   function termoBuscaConferencia() {
+    if (buscaConferenciaMobile?.dataset.listaFinalizada === '1') return '';
     return normalizarTexto(buscaConferenciaMobile?.value || '');
+  }
+
+  function passaFiltroPendenciasConferencia(tr) {
+    const botao = document.getElementById('btnMostrarPendencias');
+    const somentePendencias = botao?.classList.contains('ativo');
+    const status = statusDaLinha(tr);
+    const obs = tr.querySelector('textarea[name^="observacao_conferencia_"]')?.value.trim();
+    return !somentePendencias || status !== 'ok' || Boolean(obs);
   }
 
   function produtosDaChecklistConferencia() {
@@ -1773,6 +1783,10 @@
 
   function mostrarSugestoesConferencia() {
     if (!consultaMobileConferencia.matches || !sugestoesConferenciaMobile) return;
+    if (buscaConferenciaMobile?.dataset.listaFinalizada === '1') {
+      esconderSugestoesConferencia();
+      return;
+    }
 
     const termo = termoBuscaConferencia();
     const produtos = produtosDaChecklistConferencia()
@@ -1794,6 +1808,62 @@
     sugestoesConferenciaMobile.classList.add('aberto');
   }
 
+  function linhaConferenciaPorId(itemId) {
+    if (!itemId) return null;
+    return Array.from(document.querySelectorAll('tr.linha-conferencia[data-item-id]')).find(function(tr) {
+      return tr.dataset.itemId === itemId;
+    }) || null;
+  }
+
+  function linhaDoPonteiroConferencia() {
+    return linhaConferenciaPorId(itemPonteiroConferenciaId);
+  }
+
+  function definirPonteiroConferencia(linha) {
+    if (!buscaConferenciaMobile) return;
+    if (!linha) {
+      itemPonteiroConferenciaId = '';
+      buscaConferenciaMobile.dataset.listaFinalizada = '1';
+      buscaConferenciaMobile.value = 'Lista concluida';
+      buscaConferenciaMobile.placeholder = 'Lista concluida';
+      atualizarFiltroPendencias();
+      esconderSugestoesConferencia();
+      return;
+    }
+
+    itemPonteiroConferenciaId = linha.dataset.itemId || '';
+    buscaConferenciaMobile.dataset.listaFinalizada = '';
+    buscaConferenciaMobile.value = nomeProdutoDaLinha(linha);
+    buscaConferenciaMobile.placeholder = 'Buscar produto nesta lista...';
+    atualizarFiltroPendencias();
+    esconderSugestoesConferencia();
+  }
+
+  function proximaLinhaPendenteConferencia(linhaAtual) {
+    const linhas = Array.from(document.querySelectorAll('tr.linha-conferencia[data-item-id]'));
+    const inicio = linhaAtual ? linhas.indexOf(linhaAtual) + 1 : 0;
+    return linhas.slice(inicio).find(function(tr) {
+      return statusDaLinha(tr) === 'pendente' && passaFiltroPendenciasConferencia(tr);
+    }) || null;
+  }
+
+  function apontarProximoProdutoConferencia(linhaAtual) {
+    definirPonteiroConferencia(proximaLinhaPendenteConferencia(linhaAtual));
+  }
+
+  function rolarParaPonteiroConferencia() {
+    const linha = linhaDoPonteiroConferencia();
+    if (!linha || !buscaConferenciaMobile) return false;
+    atualizarFiltroPendencias();
+    esconderSugestoesConferencia();
+    if (!linha.classList.contains('oculto-filtro') && !linha.classList.contains('oculto-busca')) {
+      linha.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    buscaConferenciaMobile.focus({ preventScroll: true });
+    buscaConferenciaMobile.select();
+    return true;
+  }
+
   function selecionarSugestaoConferencia(botao) {
     const itemId = botao?.dataset.itemId;
     const item = produtosDaChecklistConferencia().find(function(produto) {
@@ -1801,17 +1871,10 @@
     });
 
     if (!item || !buscaConferenciaMobile) return;
-    buscaConferenciaMobile.value = item.nome;
-    atualizarFiltroPendencias();
-    esconderSugestoesConferencia();
-    const linha = Array.from(document.querySelectorAll('tr.linha-conferencia[data-item-id]')).find(function(tr) {
-      return tr.dataset.itemId === item.id;
-    });
-    if (linha && !linha.classList.contains('oculto-filtro') && !linha.classList.contains('oculto-busca')) {
-      linha.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-    buscaConferenciaMobile.focus({ preventScroll: true });
-    buscaConferenciaMobile.select();
+    const linha = linhaConferenciaPorId(item.id);
+    if (!linha) return;
+    definirPonteiroConferencia(linha);
+    rolarParaPonteiroConferencia();
   }
 
   function focarBuscaConferenciaMobile() {
@@ -1823,22 +1886,6 @@
       buscaConferenciaMobile.select();
       mostrarSugestoesConferencia();
     }, 80);
-  }
-
-  function voltarParaBuscaProximoProduto() {
-    if (!consultaMobileConferencia.matches || !buscaConferenciaMobile) return;
-
-    buscaConferenciaMobile.value = '';
-    atualizarFiltroPendencias();
-    esconderSugestoesConferencia();
-
-    const blocoBusca = buscaConferenciaMobile.closest('.conferencia-busca-mobile') || buscaConferenciaMobile;
-    blocoBusca.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-    window.setTimeout(function() {
-      buscaConferenciaMobile.focus({ preventScroll: true });
-      mostrarSugestoesConferencia();
-    }, 220);
   }
 
   function feedbackToqueBotaoConferencia(textoTemporario) {
@@ -1930,7 +1977,12 @@
 
   if (buscaConferenciaMobile) {
     buscaConferenciaMobile.addEventListener('focus', mostrarSugestoesConferencia);
+    buscaConferenciaMobile.addEventListener('click', function() {
+      if (itemPonteiroConferenciaId) rolarParaPonteiroConferencia();
+    });
     buscaConferenciaMobile.addEventListener('input', function() {
+      itemPonteiroConferenciaId = '';
+      buscaConferenciaMobile.dataset.listaFinalizada = '';
       atualizarFiltroPendencias();
       mostrarSugestoesConferencia();
     });
@@ -1961,7 +2013,10 @@
   }
 
   document.querySelectorAll('.conferencia-proximo-btn').forEach(function(botao) {
-    botao.addEventListener('click', voltarParaBuscaProximoProduto);
+    botao.addEventListener('click', function() {
+      if (!consultaMobileConferencia.matches) return;
+      apontarProximoProdutoConferencia(botao.closest('tr.linha-conferencia'));
+    });
   });
 
 
@@ -2357,10 +2412,19 @@
     botaoPendencias.classList.toggle('ativo');
     botaoPendencias.textContent = botaoPendencias.classList.contains('ativo') ? 'Mostrar todos' : 'Mostrar so pendencias';
     atualizarFiltroPendencias();
+    const linhaPonteiro = linhaDoPonteiroConferencia();
+    if (
+      !linhaPonteiro ||
+      statusDaLinha(linhaPonteiro) !== 'pendente' ||
+      !passaFiltroPendenciasConferencia(linhaPonteiro)
+    ) {
+      apontarProximoProdutoConferencia(null);
+    }
   });
 
   atualizarResumoConferencia();
   atualizarFiltroPendencias();
+  apontarProximoProdutoConferencia(null);
   definirModoEdicaoConferencia(conferenciaEmEdicao);
 })();
 </script>
