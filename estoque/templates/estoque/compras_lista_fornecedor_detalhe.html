@@ -1733,15 +1733,20 @@
     if (!consultaMobileConferencia.matches || !botaoSalvarOuEditarConferencia) return;
 
     const textoOriginal = botaoSalvarOuEditarConferencia.dataset.textoOriginal || botaoSalvarOuEditarConferencia.textContent;
+    const textoAplicado = textoTemporario || '';
     botaoSalvarOuEditarConferencia.dataset.textoOriginal = textoOriginal;
     botaoSalvarOuEditarConferencia.classList.add('feedback-toque');
-    if (textoTemporario) {
-      botaoSalvarOuEditarConferencia.textContent = textoTemporario;
+    if (textoAplicado) {
+      botaoSalvarOuEditarConferencia.textContent = textoAplicado;
     }
 
     window.setTimeout(function() {
       botaoSalvarOuEditarConferencia.classList.remove('feedback-toque');
-      if (!botaoSalvarOuEditarConferencia.classList.contains('processando')) {
+      if (
+        !botaoSalvarOuEditarConferencia.classList.contains('processando') &&
+        textoAplicado &&
+        botaoSalvarOuEditarConferencia.textContent === textoAplicado
+      ) {
         botaoSalvarOuEditarConferencia.textContent = textoOriginal;
       }
     }, 420);
