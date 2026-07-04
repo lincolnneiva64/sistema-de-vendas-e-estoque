@@ -20,7 +20,7 @@ from django.core import signing
 from django.db import IntegrityError, transaction
 from django.db.models import Q, Sum, Max, Prefetch
 from django.db.models.functions import Coalesce
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, unquote, urlencode
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
@@ -4491,12 +4491,28 @@ def _token_conferencia_externa_lista_fornecedor(lista, conferente):
     )
 
 
+def _path_conferencia_externa_lista_fornecedor(token):
+    marcador_token = "__TOKEN_CONFERENCIA_EXTERNA__"
+    path = reverse(
+        "estoque:compras_lista_fornecedor_conferencia_externa",
+        kwargs={"token": marcador_token},
+    )
+    return path.replace(marcador_token, quote(token, safe=""))
+
+
 def _dados_token_conferencia_externa(token):
+    token = unquote(token or "")
     try:
         dados = signing.loads(token, salt=LISTA_FORNECEDOR_CONFERENCIA_EXTERNA_SALT)
     except signing.BadSignature as exc:
+        logger.warning(
+            "Checklist externa de lista por fornecedor com token invalido. token_prefix=%s erro=%s",
+            token[:24],
+            exc,
+        )
         raise Http404("Checklist externa invalida.") from exc
     if not isinstance(dados, dict) or not dados.get("lista_id"):
+        logger.warning("Checklist externa de lista por fornecedor com payload invalido: %s", dados)
         raise Http404("Checklist externa invalida.")
     return dados
 
@@ -4556,7 +4572,7 @@ def compras_lista_fornecedor_detalhe(request, pk):
         token = _token_conferencia_externa_lista_fornecedor(lista, conferente_link)
         link_conferencia_externa = montar_url_publica(
             request,
-            reverse("estoque:compras_lista_fornecedor_conferencia_externa", kwargs={"token": token}),
+            _path_conferencia_externa_lista_fornecedor(token),
         )
         if funcionario_checklist:
             numero_whatsapp = (
@@ -4626,11 +4642,32 @@ def compras_lista_fornecedor_conferencia_salvar(request, pk):
 
 
 def compras_lista_fornecedor_conferencia_externa(request, token):
-    dados_token = _dados_token_conferencia_externa(token)
-    lista = get_object_or_404(
-        ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto"),
-        pk=dados_token["lista_id"],
+    try:
+        dados_token = _dados_token_conferencia_externa(token)
+    except Http404:
+        return render(
+            request,
+            "estoque/compras_lista_fornecedor_conferencia_erro.html",
+            {"mensagem": "Este link de checklist esta invalido ou expirado."},
+            status=404,
+        )
+    lista = (
+        ListaCompraFornecedor.objects.select_related("fornecedor")
+        .prefetch_related("itens__produto")
+        .filter(pk=dados_token["lista_id"])
+        .first()
     )
+    if not lista:
+        logger.warning(
+            "Checklist externa de lista por fornecedor sem lista encontrada. lista_id=%s",
+            dados_token["lista_id"],
+        )
+        return render(
+            request,
+            "estoque/compras_lista_fornecedor_conferencia_erro.html",
+            {"mensagem": "Esta lista de compras nao foi encontrada."},
+            status=404,
+        )
     conferente = (dados_token.get("conferente") or "").strip()
 
     if request.method == "POST":
@@ -4640,7 +4677,7 @@ def compras_lista_fornecedor_conferencia_externa(request, token):
             messages.error(request, str(exc))
         else:
             messages.success(request, "Conferencia salva com sucesso.")
-        return redirect("estoque:compras_lista_fornecedor_conferencia_externa", token=token)
+        return redirect(_path_conferencia_externa_lista_fornecedor(unquote(token or "")))
 
     resumo = _resumo_conferencia_lista_fornecedor(lista)
     return render(

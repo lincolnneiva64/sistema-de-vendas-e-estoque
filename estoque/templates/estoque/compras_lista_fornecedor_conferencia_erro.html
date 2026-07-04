@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Checklist indisponivel</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      background: #fff7ed;
+      color: #172033;
+      font-family: Arial, sans-serif;
+    }
+    .erro-card {
+      width: min(100%, 520px);
+      padding: 18px;
+      border: 1px solid #fed7aa;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 8px 20px rgba(146, 64, 14, .08);
+    }
+    h1 {
+      margin: 0 0 8px;
+      color: #7c2d12;
+      font-size: 1.35rem;
+      line-height: 1.15;
+    }
+    p {
+      margin: 0;
+      color: #475569;
+      font-size: 1rem;
+      line-height: 1.45;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <main class="erro-card">
+    <h1>Checklist indisponivel</h1>
+    <p>{{ mensagem }}</p>
+  </main>
+</body>
+</html>

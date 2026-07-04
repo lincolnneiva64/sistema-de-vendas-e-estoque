@@ -691,6 +691,7 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertContains(resposta, "https%3A//sistema-de-vendas-e-estoque.onrender.com/compras/listas-fornecedor/conferencia-externa/")
         self.assertNotContains(resposta, "127.0.0.1")
         self.assertContains(resposta, "abra%20no%20navegador%20do%20celular")
+        self.assertIn("%3A", resposta.context["link_conferencia_externa"])
 
         resposta_avulso = self.client.get(
             reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),
@@ -701,6 +702,7 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertContains(resposta_avulso, "Conferente: <strong>Conferente Avulso</strong>", html=True)
         self.assertContains(resposta_avulso, "https://sistema-de-vendas-e-estoque.onrender.com/compras/listas-fornecedor/conferencia-externa/")
         self.assertNotContains(resposta_avulso, "127.0.0.1")
+        self.assertIn("%3A", resposta_avulso.context["link_conferencia_externa"])
         self.assertNotContains(resposta_avulso, "Enviar pelo WhatsApp")
 
     def test_conferencia_externa_exibe_tela_isolada(self):
@@ -726,9 +728,11 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
     def test_conferencia_externa_abre_url_literal_com_token_assinado(self):
         token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")
         self.assertIn(":", token)
+        path_conferencia = views._path_conferencia_externa_lista_fornecedor(token)
+        self.assertIn("%3A", path_conferencia)
 
         resposta = self.client.get(
-            f"/compras/listas-fornecedor/conferencia-externa/{token}/",
+            path_conferencia,
             secure=True,
             HTTP_HOST="sistema-de-vendas-e-estoque.onrender.com",
         )
@@ -737,6 +741,31 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertContains(resposta, "Conferencia de chegada")
         self.assertContains(resposta, "Fornecedor Teste")
         self.assertContains(resposta, "Francisco")
+
+    def test_conferencia_externa_lista_inexistente_mostra_mensagem(self):
+        token_render_lista_9 = (
+            "eyJsaXN0YV9pZCI6OSwiY29uZmVyZW50ZSI6IkxpbmNvbG4gQWxidXF1ZXJxdWUgTmVpdmEifQ"
+            ":1wg4Nu:MOVwLy-gbSMwB8oMLfus8JbDT7hFcVv1WnlQfQUuZFs"
+        )
+        resposta = self.client.get(
+            f"/compras/listas-fornecedor/conferencia-externa/{token_render_lista_9}/",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 404)
+        self.assertContains(resposta, "Checklist indisponivel", status_code=404)
+        self.assertContains(resposta, "lista de compras nao foi encontrada", status_code=404)
+
+    def test_conferencia_externa_token_invalido_mostra_mensagem(self):
+        token_invalido = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco") + "x"
+        resposta = self.client.get(
+            f"/compras/listas-fornecedor/conferencia-externa/{token_invalido}/",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 404)
+        self.assertContains(resposta, "Checklist indisponivel", status_code=404)
+        self.assertContains(resposta, "link de checklist esta invalido", status_code=404)
 
     def test_conferencia_externa_salva_conferencia(self):
         token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")
