@@ -705,6 +705,7 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
 
     def test_conferencia_externa_exibe_tela_isolada(self):
         token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")
+        self.assertIn(":", token)
         resposta = self.client.get(
             reverse("estoque:compras_lista_fornecedor_conferencia_externa", kwargs={"token": token}),
             secure=True,
@@ -720,6 +721,22 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertNotContains(resposta, "WhatsApp")
         self.assertNotContains(resposta, "Cancelar Lista")
         self.assertNotContains(resposta, "Sistema de Vendas")
+
+    @override_settings(ALLOWED_HOSTS=["sistema-de-vendas-e-estoque.onrender.com", "testserver"])
+    def test_conferencia_externa_abre_url_literal_com_token_assinado(self):
+        token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")
+        self.assertIn(":", token)
+
+        resposta = self.client.get(
+            f"/compras/listas-fornecedor/conferencia-externa/{token}/",
+            secure=True,
+            HTTP_HOST="sistema-de-vendas-e-estoque.onrender.com",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Conferencia de chegada")
+        self.assertContains(resposta, "Fornecedor Teste")
+        self.assertContains(resposta, "Francisco")
 
     def test_conferencia_externa_salva_conferencia(self):
         token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")

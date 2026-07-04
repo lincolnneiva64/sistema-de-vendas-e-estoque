@@ -34,7 +34,11 @@ urlpatterns = [
     path("compras/sugestao-fornecedor/whatsapp/", views.sugestao_compra_fornecedor_whatsapp, name="sugestao_compra_fornecedor_whatsapp"),
     path("compras/listas-fornecedor/", views.compras_listas_fornecedor, name="compras_listas_fornecedor"),
     path("compras/listas-fornecedor/gravar/", views.compras_lista_fornecedor_gravar, name="compras_lista_fornecedor_gravar"),
-    path("compras/listas-fornecedor/conferencia-externa/<str:token>/", views.compras_lista_fornecedor_conferencia_externa, name="compras_lista_fornecedor_conferencia_externa"),
+    path(
+        "compras/listas-fornecedor/conferencia-externa/<path:token>/",
+        views.compras_lista_fornecedor_conferencia_externa,
+        name="compras_lista_fornecedor_conferencia_externa",
+    ),
     path("compras/listas-fornecedor/<int:pk>/", views.compras_lista_fornecedor_detalhe, name="compras_lista_fornecedor_detalhe"),
     path("compras/listas-fornecedor/<int:pk>/conferencia/salvar/", views.compras_lista_fornecedor_conferencia_salvar, name="compras_lista_fornecedor_conferencia_salvar"),
     path("compras/listas-fornecedor/<int:pk>/whatsapp/", views.compras_lista_fornecedor_whatsapp, name="compras_lista_fornecedor_whatsapp"),
