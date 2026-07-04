@@ -31,10 +31,11 @@
             font-weight: 800;
             line-height: 1;
             box-shadow: 0 10px 26px rgba(15, 23, 42, 0.22);
+            overflow: hidden;
             opacity: 0;
             pointer-events: none;
             transform: translateY(12px);
-            transition: opacity 0.18s ease, transform 0.18s ease, background-color 0.18s ease;
+            transition: opacity 0.18s ease, transform 0.18s ease, background-color 0.18s ease, right 0.18s ease, min-width 0.18s ease, width 0.18s ease, border-radius 0.18s ease;
         }
 
         .botao-voltar-topo.visivel {
@@ -56,14 +57,29 @@
 
         @media (max-width: 575.98px) {
             .botao-voltar-topo {
-                right: 16px;
+                right: 12px;
                 bottom: calc(110px + env(safe-area-inset-bottom));
                 min-width: 82px;
                 min-height: 48px;
+                padding: 0 14px;
                 font-size: 0.9rem;
                 opacity: 1;
                 pointer-events: auto;
                 transform: none;
+            }
+
+            .botao-voltar-topo.recolhido {
+                right: 0;
+                width: 34px;
+                min-width: 34px;
+                padding: 0;
+                border-right: 0;
+                border-radius: 999px 0 0 999px;
+                box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18);
+            }
+
+            .botao-voltar-topo.recolhido .botao-voltar-topo-texto {
+                display: none;
             }
         }
     </style>
@@ -71,8 +87,9 @@
 <body class="bg-light" style="padding-bottom: 16px;">
 
     {% block content %}{% endblock %}
-    <button type="button" class="botao-voltar-topo" id="botao-voltar-topo" aria-label="Voltar ao topo">
-        &uarr; Topo
+    <button type="button" class="botao-voltar-topo" id="botao-voltar-topo" aria-label="Voltar ao topo" aria-expanded="false">
+        <span aria-hidden="true">&uarr;</span>
+        <span class="botao-voltar-topo-texto">Topo</span>
     </button>
     {% include "estoque/includes/ambiente_sistema.html" %}
 
@@ -82,7 +99,9 @@
             if (!botao) return;
 
             const limiteParaExibir = 260;
+            const tempoParaRecolher = 3200;
             const consultaMobile = window.matchMedia("(max-width: 575.98px)");
+            let temporizadorRecolher = null;
 
             function posicaoRolagemAtual() {
                 const elementoRolagem = document.scrollingElement || document.documentElement || document.body;
@@ -101,10 +120,43 @@
                     return;
                 }
 
+                botao.classList.remove("recolhido");
+                botao.setAttribute("aria-expanded", "false");
                 botao.classList.toggle("visivel", posicaoRolagemAtual() > limiteParaExibir);
             }
 
+            function cancelarRecolhimentoAgendado() {
+                if (temporizadorRecolher) {
+                    window.clearTimeout(temporizadorRecolher);
+                    temporizadorRecolher = null;
+                }
+            }
+
+            function recolherBotaoMobile() {
+                if (!consultaMobile.matches) return;
+                botao.classList.add("recolhido");
+                botao.setAttribute("aria-expanded", "false");
+            }
+
+            function agendarRecolhimentoMobile() {
+                cancelarRecolhimentoAgendado();
+                if (!consultaMobile.matches) return;
+                temporizadorRecolher = window.setTimeout(recolherBotaoMobile, tempoParaRecolher);
+            }
+
+            function expandirBotaoMobile() {
+                if (!consultaMobile.matches) return;
+                botao.classList.remove("recolhido");
+                botao.setAttribute("aria-expanded", "true");
+                agendarRecolhimentoMobile();
+            }
+
             botao.addEventListener("click", function () {
+                if (consultaMobile.matches && botao.classList.contains("recolhido")) {
+                    expandirBotaoMobile();
+                    return;
+                }
+
                 const elementoRolagem = document.scrollingElement || document.documentElement || document.body;
 
                 if (elementoRolagem && typeof elementoRolagem.scrollTo === "function") {
@@ -118,6 +170,8 @@
                     top: 0,
                     behavior: "smooth"
                 });
+
+                recolherBotaoMobile();
             });
 
             window.addEventListener("scroll", atualizarBotaoTopo, { passive: true });
@@ -125,9 +179,13 @@
             document.addEventListener("touchmove", atualizarBotaoTopo, { passive: true });
             window.addEventListener("resize", atualizarBotaoTopo);
             if (typeof consultaMobile.addEventListener === "function") {
-                consultaMobile.addEventListener("change", atualizarBotaoTopo);
+                consultaMobile.addEventListener("change", function () {
+                    atualizarBotaoTopo();
+                    recolherBotaoMobile();
+                });
             }
             atualizarBotaoTopo();
+            recolherBotaoMobile();
         })();
     </script>
 </body>
