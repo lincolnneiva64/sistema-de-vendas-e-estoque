@@ -688,6 +688,9 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertContains(resposta, "https://web.whatsapp.com/send?phone=85999990001")
         self.assertContains(resposta, "Francisco%20Miranda")
         self.assertContains(resposta, "Fornecedor%20Teste")
+        self.assertContains(resposta, "https%3A//sistema-de-vendas-e-estoque.onrender.com/compras/listas-fornecedor/conferencia-externa/")
+        self.assertNotContains(resposta, "127.0.0.1")
+        self.assertContains(resposta, "abra%20no%20navegador%20do%20celular")
 
         resposta_avulso = self.client.get(
             reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),
@@ -696,6 +699,8 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         )
 
         self.assertContains(resposta_avulso, "Conferente: <strong>Conferente Avulso</strong>", html=True)
+        self.assertContains(resposta_avulso, "https://sistema-de-vendas-e-estoque.onrender.com/compras/listas-fornecedor/conferencia-externa/")
+        self.assertNotContains(resposta_avulso, "127.0.0.1")
         self.assertNotContains(resposta_avulso, "Enviar pelo WhatsApp")
 
     def test_conferencia_externa_exibe_tela_isolada(self):

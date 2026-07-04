@@ -605,7 +605,10 @@ def montar_checklist_cliente_url(request, rota_id, venda_id, rota_item_id=None):
 
 
 def montar_url_publica(request, path):
-    base_url = getattr(settings, "CHECKLIST_BASE_URL", "").rstrip("/")
+    base_url = (
+        getattr(settings, "CHECKLIST_BASE_URL", "")
+        or getattr(settings, "SISTEMA_ONLINE_URL", "")
+    ).rstrip("/")
     if base_url:
         return f"{base_url}{path}"
     return request.build_absolute_uri(path)
@@ -4551,8 +4554,9 @@ def compras_lista_fornecedor_detalhe(request, pk):
     whatsapp_conferencia_externa_sem_numero = False
     if conferente_link:
         token = _token_conferencia_externa_lista_fornecedor(lista, conferente_link)
-        link_conferencia_externa = request.build_absolute_uri(
-            reverse("estoque:compras_lista_fornecedor_conferencia_externa", kwargs={"token": token})
+        link_conferencia_externa = montar_url_publica(
+            request,
+            reverse("estoque:compras_lista_fornecedor_conferencia_externa", kwargs={"token": token}),
         )
         if funcionario_checklist:
             numero_whatsapp = (
@@ -4568,7 +4572,7 @@ def compras_lista_fornecedor_detalhe(request, pk):
                     f"Fornecedor: {fornecedor_nome}\n"
                     f"Lista: #{lista.id}\n"
                     f"Pedido: {data_pedido}\n\n"
-                    "Abrir checklist:\n"
+                    "Para visualizar melhor, abra no navegador do celular, de preferencia no Chrome:\n\n"
                     f"{link_conferencia_externa}"
                 )
                 whatsapp_conferencia_externa_url = (
