@@ -340,6 +340,22 @@
     display: none;
   }
 
+  .linha-conferencia.oculto-busca {
+    display: none;
+  }
+
+  .conferencia-busca-mobile {
+    display: none;
+  }
+
+  .conferencia-sem-resultados {
+    display: none;
+  }
+
+  .conferencia-sem-resultados.visivel {
+    display: block;
+  }
+
   .conferencia-table th {
     background: #b45309;
     border-bottom-color: #92400e;
@@ -771,6 +787,56 @@
 
     .conferencia-card .lista-fornecedor-card-titulo {
       padding: 12px;
+      display: grid;
+      gap: 5px;
+      justify-content: stretch;
+      align-items: start;
+      background: #fff3d0;
+    }
+
+    .conferencia-card .lista-fornecedor-card-titulo h2 {
+      font-size: 1.18rem;
+      line-height: 1.15;
+    }
+
+    .conferencia-card .lista-fornecedor-card-titulo small {
+      font-size: .86rem;
+      line-height: 1.35;
+    }
+
+    .conferencia-busca-mobile {
+      display: block;
+      padding: 10px 12px 12px;
+      background: #fffbeb;
+      border-bottom: 1px solid #fed7aa;
+    }
+
+    .conferencia-busca-mobile label {
+      display: block;
+      margin-bottom: 5px;
+      color: #7c2d12;
+      font-size: .72rem;
+      font-weight: 950;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+    }
+
+    .conferencia-busca-mobile input {
+      width: 100%;
+      min-height: 42px;
+      border: 1.5px solid #f1d7b8;
+      border-radius: 9px;
+      padding: 9px 11px;
+      color: #172033;
+      font-size: .94rem;
+      font-weight: 800;
+      background: #fff;
+      outline: none;
+    }
+
+    .conferencia-busca-mobile input:focus {
+      border-color: #d97706;
+      box-shadow: 0 0 0 3px rgba(217, 119, 6, .16);
     }
 
     .conferencia-card .lista-fornecedor-table-wrap {
@@ -879,6 +945,17 @@
       min-height: 72px;
     }
 
+    .conferencia-sem-resultados {
+      margin: 10px 12px 4px;
+      padding: 10px 12px;
+      border: 1px solid #fed7aa;
+      border-radius: 9px;
+      background: #fff;
+      color: #7c2d12;
+      font-weight: 900;
+      text-align: center;
+    }
+
   }
 </style>
 
@@ -984,6 +1061,11 @@
       <small>Registre apenas o que chegou. Nao gera compra, estoque ou financeiro.</small>
     </div>
 
+    <div class="conferencia-busca-mobile">
+      <label for="buscaConferenciaListaFornecedor">Buscar na checklist</label>
+      <input type="search" id="buscaConferenciaListaFornecedor" placeholder="Buscar produto nesta lista..." autocomplete="off">
+    </div>
+
     <form method="post" action="{% url 'estoque:compras_lista_fornecedor_conferencia_salvar' lista.id %}" id="formConferenciaListaFornecedor">
       {% csrf_token %}
       <div class="lista-fornecedor-table-wrap">
@@ -1046,6 +1128,7 @@
           </tbody>
         </table>
       </div>
+      <div class="conferencia-sem-resultados" id="conferenciaSemResultados">Nenhum produto encontrado nesta lista.</div>
 
       <div class="conferencia-acoes">
         <button type="button" class="conferencia-filtro" id="btnMostrarPendencias">Mostrar so pendencias</button>
@@ -1349,19 +1432,59 @@
   function atualizarFiltroPendencias() {
     const botao = document.getElementById('btnMostrarPendencias');
     const somentePendencias = botao?.classList.contains('ativo');
+    const termoBusca = termoBuscaConferencia();
+    let linhasVisiveis = 0;
+
     document.querySelectorAll('tr.linha-conferencia[data-item-id]').forEach(function(tr) {
       const status = statusDaLinha(tr);
       const obs = tr.querySelector('textarea[name^="observacao_conferencia_"]')?.value.trim();
-      const deveMostrar = !somentePendencias || status !== 'ok' || Boolean(obs);
-      tr.classList.toggle('oculto-filtro', !deveMostrar);
+      const nome = normalizarTexto(nomeProdutoDaLinha(tr));
+      const deveMostrarPendencia = !somentePendencias || status !== 'ok' || Boolean(obs);
+      const deveMostrarBusca = !termoBusca || nome.includes(termoBusca);
+
+      tr.classList.toggle('oculto-filtro', !deveMostrarPendencia);
+      tr.classList.toggle('oculto-busca', !deveMostrarBusca);
+
+      if (deveMostrarPendencia && deveMostrarBusca) {
+        linhasVisiveis += 1;
+      }
     });
+
+    if (mensagemBuscaVazia) {
+      mensagemBuscaVazia.classList.toggle('visivel', Boolean(termoBusca) && linhasVisiveis === 0);
+    }
   }
 
   const resumoAtual = document.getElementById('conferenciaResumoAtual');
   const botaoSalvarOuEditarConferencia = document.getElementById('btnSalvarOuEditarConferencia');
+  const buscaConferenciaMobile = document.getElementById('buscaConferenciaListaFornecedor');
+  const mensagemBuscaVazia = document.getElementById('conferenciaSemResultados');
+  const consultaMobileConferencia = window.matchMedia('(max-width: 620px)');
   const conferenciaSalvaInicial = botaoSalvarOuEditarConferencia?.dataset.conferenciaSalva === '1';
   let resumoEditado = false;
   let conferenciaEmEdicao = !conferenciaSalvaInicial;
+
+  function normalizarTexto(valor) {
+    return String(valor || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  function termoBuscaConferencia() {
+    return normalizarTexto(buscaConferenciaMobile?.value || '');
+  }
+
+  function focarBuscaConferenciaMobile() {
+    if (!consultaMobileConferencia.matches || !buscaConferenciaMobile) return;
+    if (!termoBuscaConferencia()) return;
+
+    window.setTimeout(function() {
+      buscaConferenciaMobile.focus({ preventScroll: true });
+      buscaConferenciaMobile.select();
+    }, 80);
+  }
 
   function definirModoEdicaoConferencia(ativo) {
     conferenciaEmEdicao = Boolean(ativo);
@@ -1414,6 +1537,10 @@
         if (primeiroCampo) primeiroCampo.focus();
       }
     });
+  }
+
+  if (buscaConferenciaMobile) {
+    buscaConferenciaMobile.addEventListener('input', atualizarFiltroPendencias);
   }
 
 
@@ -1512,6 +1639,7 @@
     input.addEventListener('change', function(){
       resumoEditado = true;
       atualizarLinha(input);
+      focarBuscaConferenciaMobile();
     });
     input.addEventListener('keydown', function(e){
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -1540,6 +1668,7 @@
       const grupo = botao.closest('[data-grupo-conferencia]')?.dataset.grupoConferencia;
       const valor = botao.dataset.valor;
       const estavaAtivo = botao.classList.contains('ativo');
+      let deveVoltarParaBusca = grupo === 'quantidade' || valor === 'nao';
 
       if (estavaAtivo) {
         if (grupo === 'produto') {
@@ -1550,7 +1679,9 @@
           input.value = '';
           atualizarLinha(input);
           input.focus();
+          deveVoltarParaBusca = false;
         }
+        if (deveVoltarParaBusca) focarBuscaConferenciaMobile();
         return;
       }
 
@@ -1571,13 +1702,17 @@
         }
         input.focus();
         input.select();
+        deveVoltarParaBusca = false;
       }
 
       atualizarLinha(input);
       if (grupo === 'produto' && valor === 'sim' && valorDoGrupo(tr, 'quantidade') === 'nao') {
         input.focus();
         input.select();
+        deveVoltarParaBusca = false;
       }
+
+      if (deveVoltarParaBusca) focarBuscaConferenciaMobile();
     });
   });
 
