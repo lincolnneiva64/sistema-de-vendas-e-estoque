@@ -4484,6 +4484,69 @@ def _resumo_conferencia_lista_fornecedor(lista):
     }
 
 
+def _comparacao_conferencia_lista_fornecedor(lista, resumo=None):
+    resumo = resumo or _resumo_conferencia_lista_fornecedor(lista)
+    conferencia_salva = bool(resumo["total"] and resumo["pendentes"] == 0)
+    totais = {
+        "planejado": Decimal("0.00"),
+        "real": Decimal("0.00"),
+        "diferenca": Decimal("0.00"),
+        "nao_chegaram": Decimal("0.00"),
+        "faltas": Decimal("0.00"),
+        "sobras": Decimal("0.00"),
+    }
+    comparacao = {
+        "exibir": conferencia_salva,
+        "itens": [],
+        "totais": totais,
+    }
+    if not conferencia_salva:
+        return comparacao
+
+    centavos = Decimal("0.01")
+    for item in lista.itens.all():
+        quantidade_lista = item.quantidade_final or Decimal("0.000")
+        quantidade_recebida = item.quantidade_recebida if item.quantidade_recebida is not None else Decimal("0.000")
+        preco_unitario = item.preco_unitario or Decimal("0.00")
+        valor_previsto = (quantidade_lista * preco_unitario).quantize(centavos)
+        valor_real = (quantidade_recebida * preco_unitario).quantize(centavos)
+        diferenca_quantidade = quantidade_recebida - quantidade_lista
+        diferenca_valor = (valor_real - valor_previsto).quantize(centavos)
+        status = item.status_conferencia or ItemListaCompraFornecedor.STATUS_CONFERENCIA_PENDENTE
+        if status == ItemListaCompraFornecedor.STATUS_CONFERENCIA_NAO_VEIO:
+            situacao = "Nao chegou"
+            totais["nao_chegaram"] += abs(diferenca_valor)
+        elif status == ItemListaCompraFornecedor.STATUS_CONFERENCIA_FALTOU:
+            situacao = "Com falta"
+            totais["faltas"] += abs(diferenca_valor)
+        elif status == ItemListaCompraFornecedor.STATUS_CONFERENCIA_VEIO_A_MAIS:
+            situacao = "Com sobra"
+            totais["sobras"] += diferenca_valor
+        elif status == ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK:
+            situacao = "OK"
+        else:
+            situacao = "Pendente"
+
+        totais["planejado"] += valor_previsto
+        totais["real"] += valor_real
+        totais["diferenca"] += diferenca_valor
+        comparacao["itens"].append({
+            "produto": item.produto.nome if item.produto else "Produto nao identificado",
+            "unidade": item.unidade,
+            "quantidade_lista": quantidade_lista,
+            "quantidade_recebida": quantidade_recebida,
+            "preco_unitario": preco_unitario,
+            "valor_previsto": valor_previsto,
+            "valor_real": valor_real,
+            "diferenca_quantidade": diferenca_quantidade,
+            "diferenca_valor": diferenca_valor,
+            "status": status,
+            "situacao": situacao,
+            "tem_diferenca": diferenca_quantidade != 0 or diferenca_valor != 0,
+        })
+    return comparacao
+
+
 def _token_conferencia_externa_lista_fornecedor(lista, conferente):
     return signing.dumps(
         {"lista_id": lista.pk, "conferente": (conferente or "").strip()},
@@ -4564,6 +4627,7 @@ def compras_lista_fornecedor_detalhe(request, pk):
         .first()
     )
     resumo = _resumo_conferencia_lista_fornecedor(lista)
+    comparacao_conferencia = _comparacao_conferencia_lista_fornecedor(lista, resumo)
     funcionarios_checklist = Funcionario.habilitados_para_checklist().only(
         "id",
         "nome",
@@ -4611,6 +4675,7 @@ def compras_lista_fornecedor_detalhe(request, pk):
             "lista": lista,
             "compra_gerada": compra_gerada,
             'resumo_conferencia': resumo,
+            "comparacao_conferencia": comparacao_conferencia,
             "funcionarios_checklist": funcionarios_checklist,
             "funcionario_checklist_id": funcionario_checklist_id,
             "conferente_avulso": conferente_avulso,

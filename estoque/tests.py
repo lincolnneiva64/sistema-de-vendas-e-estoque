@@ -441,6 +441,7 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
             quantidade_final=Decimal("2.000"),
             unidade="UN",
             preco_compra=Decimal("10.00"),
+            preco_unitario=Decimal("10.00"),
             total=Decimal("20.00"),
         )
 
@@ -595,6 +596,115 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertContains(resposta, "Qtd. correta?")
         self.assertContains(resposta, "Qtd. entregue")
         self.assertContains(resposta, "+ Obs.")
+
+    def test_detalhe_exibe_comparacao_final_da_lista_conferida(self):
+        produto_nao_veio = Produto.objects.create(
+            nome="Produto Nao Chegou Comparacao",
+            preco_compra=Decimal("30.00"),
+            preco_vista=Decimal("35.00"),
+            preco_prazo=Decimal("36.00"),
+            quantidade=Decimal("8.000"),
+        )
+        produto_faltou = Produto.objects.create(
+            nome="Produto Faltou Comparacao",
+            preco_compra=Decimal("20.49"),
+            preco_vista=Decimal("25.00"),
+            preco_prazo=Decimal("26.00"),
+            quantidade=Decimal("9.000"),
+        )
+        produto_sobrou = Produto.objects.create(
+            nome="Produto Sobrou Comparacao",
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("8.00"),
+            preco_prazo=Decimal("9.00"),
+            quantidade=Decimal("7.000"),
+        )
+        item_nao_veio = ItemListaCompraFornecedor.objects.create(
+            lista=self.lista,
+            produto=produto_nao_veio,
+            estoque_atual=Decimal("8.000"),
+            estoque_minimo=Decimal("0.000"),
+            quantidade_final=Decimal("3.000"),
+            quantidade_recebida=Decimal("0.000"),
+            unidade="CX",
+            preco_compra=Decimal("30.00"),
+            preco_unitario=Decimal("30.00"),
+            total=Decimal("90.00"),
+            status_conferencia=ItemListaCompraFornecedor.STATUS_CONFERENCIA_NAO_VEIO,
+            conferido=True,
+        )
+        item_faltou = ItemListaCompraFornecedor.objects.create(
+            lista=self.lista,
+            produto=produto_faltou,
+            estoque_atual=Decimal("9.000"),
+            estoque_minimo=Decimal("0.000"),
+            quantidade_final=Decimal("2.000"),
+            quantidade_recebida=Decimal("1.000"),
+            unidade="UN",
+            preco_compra=Decimal("20.49"),
+            preco_unitario=Decimal("20.49"),
+            total=Decimal("40.98"),
+            status_conferencia=ItemListaCompraFornecedor.STATUS_CONFERENCIA_FALTOU,
+            conferido=True,
+        )
+        item_sobrou = ItemListaCompraFornecedor.objects.create(
+            lista=self.lista,
+            produto=produto_sobrou,
+            estoque_atual=Decimal("7.000"),
+            estoque_minimo=Decimal("0.000"),
+            quantidade_final=Decimal("1.000"),
+            quantidade_recebida=Decimal("3.000"),
+            unidade="UN",
+            preco_compra=Decimal("5.00"),
+            preco_unitario=Decimal("5.00"),
+            total=Decimal("5.00"),
+            status_conferencia=ItemListaCompraFornecedor.STATUS_CONFERENCIA_VEIO_A_MAIS,
+            conferido=True,
+        )
+        self.item.preco_unitario = Decimal("10.00")
+        self.item.total = Decimal("20.00")
+        self.item.quantidade_recebida = Decimal("2.000")
+        self.item.status_conferencia = ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK
+        self.item.conferido = True
+        self.item.save()
+        compras_antes = Compra.objects.count()
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+        contas_pagar_antes = ContaPagar.objects.count()
+        estoque_produto_original = self.produto.quantidade
+
+        resposta = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),
+            secure=True,
+        )
+
+        comparacao = resposta.context["comparacao_conferencia"]
+        self.assertTrue(comparacao["exibir"])
+        self.assertEqual(comparacao["totais"]["planejado"], Decimal("155.98"))
+        self.assertEqual(comparacao["totais"]["real"], Decimal("55.49"))
+        self.assertEqual(comparacao["totais"]["diferenca"], Decimal("-100.49"))
+        self.assertEqual(comparacao["totais"]["nao_chegaram"], Decimal("90.00"))
+        self.assertEqual(comparacao["totais"]["faltas"], Decimal("20.49"))
+        self.assertEqual(comparacao["totais"]["sobras"], Decimal("10.00"))
+        itens_por_produto = {item["produto"]: item for item in comparacao["itens"]}
+        self.assertEqual(itens_por_produto[self.produto.nome]["diferenca_valor"], Decimal("0.00"))
+        self.assertFalse(itens_por_produto[self.produto.nome]["tem_diferenca"])
+        self.assertEqual(itens_por_produto[item_nao_veio.produto.nome]["valor_real"], Decimal("0.00"))
+        self.assertEqual(itens_por_produto[item_nao_veio.produto.nome]["situacao"], "Nao chegou")
+        self.assertEqual(itens_por_produto[item_faltou.produto.nome]["diferenca_valor"], Decimal("-20.49"))
+        self.assertEqual(itens_por_produto[item_sobrou.produto.nome]["diferenca_valor"], Decimal("10.00"))
+        self.assertContains(resposta, "Comparação da lista conferida")
+        self.assertContains(resposta, "Total planejado")
+        self.assertContains(resposta, "Total real recebido")
+        self.assertContains(resposta, "Diferença total")
+        self.assertContains(resposta, "Produto Nao Chegou Comparacao")
+        self.assertContains(resposta, "Nao chegou")
+        self.assertContains(resposta, "Com falta")
+        self.assertContains(resposta, "Com sobra")
+        self.assertEqual(Compra.objects.count(), compras_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+        self.assertEqual(ContaPagar.objects.count(), contas_pagar_antes)
+        self.produto.refresh_from_db()
+        self.assertEqual(self.produto.quantidade, estoque_produto_original)
 
     def test_salvar_igual_lista(self):
         resposta = self._post_conferencia({f"quantidade_recebida_{self.item.id}": "2.000", f"observacao_conferencia_{self.item.id}": ""})
