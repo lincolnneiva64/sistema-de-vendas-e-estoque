@@ -4686,6 +4686,7 @@ def compras_lista_fornecedor_conferencia_externa(request, token):
         return redirect(_path_conferencia_externa_lista_fornecedor(_normalizar_token_conferencia_externa(token)))
 
     resumo = _resumo_conferencia_lista_fornecedor(lista)
+    token_normalizado = _normalizar_token_conferencia_externa(token)
     return render(
         request,
         "estoque/compras_lista_fornecedor_conferencia_externa.html",
@@ -4693,6 +4694,7 @@ def compras_lista_fornecedor_conferencia_externa(request, token):
             "lista": lista,
             "conferente": conferente,
             "token": token,
+            "conferencia_action": _path_conferencia_externa_lista_fornecedor(token_normalizado),
             "resumo_conferencia": resumo,
         },
     )

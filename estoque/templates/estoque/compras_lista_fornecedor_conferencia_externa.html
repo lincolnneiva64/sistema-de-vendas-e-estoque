@@ -341,7 +341,7 @@
         <div class="sugestoes-mobile" id="sugestoesConferenciaListaFornecedor"></div>
       </div>
 
-      <form method="post" id="formConferenciaListaFornecedor">
+      <form method="post" action="{{ conferencia_action }}" id="formConferenciaListaFornecedor">
         {% csrf_token %}
         {% for item in lista.itens.all %}
           <div data-item-id="{{ item.id }}" class="linha-conferencia {{ item.status_conferencia }}">

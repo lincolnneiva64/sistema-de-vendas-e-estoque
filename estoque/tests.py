@@ -724,6 +724,7 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertContains(resposta, "Conferencia de chegada")
         self.assertContains(resposta, "Fornecedor Teste")
         self.assertContains(resposta, "Francisco")
+        self.assertContains(resposta, f'action="{views._path_conferencia_externa_lista_fornecedor(token)}"')
         self.assertContains(resposta, "Buscar produto nesta lista")
         self.assertContains(resposta, "OK, proximo")
         self.assertNotContains(resposta, "Gerar Compra")
@@ -762,6 +763,7 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertContains(resposta, "Conferencia de chegada")
         self.assertContains(resposta, "Fornecedor Teste")
         self.assertNotContains(resposta, "Checklist indisponivel")
+        self.assertContains(resposta, f'action="{views._path_conferencia_externa_lista_fornecedor(token)}"')
 
     def test_conferencia_externa_lista_inexistente_mostra_mensagem(self):
         lista_inexistente = types.SimpleNamespace(pk=self.lista.pk + 999)
@@ -792,16 +794,34 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
     def test_conferencia_externa_salva_conferencia(self):
         token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")
         resposta = self.client.post(
-            reverse("estoque:compras_lista_fornecedor_conferencia_externa", kwargs={"token": token}),
+            views._path_conferencia_externa_lista_fornecedor(token),
             {f"quantidade_recebida_{self.item.id}": "2.000", f"observacao_conferencia_{self.item.id}": "OK"},
             secure=True,
         )
 
         self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(resposta["Location"], views._path_conferencia_externa_lista_fornecedor(token))
         self.item.refresh_from_db()
         self.assertEqual(self.item.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK)
         self.assertTrue(self.item.conferido)
         self.assertEqual(self.item.observacao_conferencia, "OK")
+
+    def test_conferencia_externa_salva_token_duplamente_codificado(self):
+        token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")
+        path_conferencia = views._path_conferencia_externa_lista_fornecedor(token).replace("%", "%25")
+
+        resposta = self.client.post(
+            path_conferencia,
+            {f"quantidade_recebida_{self.item.id}": "1.000", f"observacao_conferencia_{self.item.id}": "Faltou"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(resposta["Location"], views._path_conferencia_externa_lista_fornecedor(token))
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_FALTOU)
+        self.assertTrue(self.item.conferido)
+        self.assertEqual(self.item.observacao_conferencia, "Faltou")
 
 
 class FornecedorProdutosFormTests(TestCase):
