@@ -4222,6 +4222,78 @@ def _decimal_lista_fornecedor(valor, casas=2):
         raise ValueError("Valor numerico invalido.")
 
 
+CLASSIFICACOES_DIFERENCA_NOTA = {
+    "": "Não informado",
+    "frete": "Frete",
+    "desconto": "Desconto",
+    "arredondamento": "Arredondamento",
+    "preco_diferente": "Preço diferente",
+    "produto_extra": "Produto extra",
+    "erro_nota": "Erro da nota",
+    "outro": "Outro",
+}
+
+
+def _moeda_lista_fornecedor(valor):
+    numero = Decimal(valor or 0).quantize(Decimal("0.01"))
+    sinal = "-R$ " if numero < 0 else "R$ "
+    numero_abs = abs(numero)
+    texto = f"{numero_abs:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return sinal + texto
+
+
+def _valor_monetario_obrigatorio_lista_fornecedor(valor):
+    texto = str(valor or "").strip()
+    if not texto:
+        raise ValueError("Informe o valor da nota/boleto.")
+    texto_limpo = re.sub(r"[^\d,.-]", "", texto)
+    if not texto_limpo or not any(caractere.isdigit() for caractere in texto_limpo):
+        raise ValueError("Valor numerico invalido.")
+    return _decimal_lista_fornecedor(texto, casas=2)
+
+
+def _comparacao_nota_boleto_lista_fornecedor(lista, comparacao_conferencia):
+    valor_real = Decimal(comparacao_conferencia.get("totais", {}).get("real") or 0).quantize(Decimal("0.01"))
+    valor_nota = lista.valor_nota_boleto
+    classificacao = lista.classificacao_diferenca_nota or ""
+    classificacao_texto = CLASSIFICACOES_DIFERENCA_NOTA.get(classificacao, "Outro")
+    diferenca = None
+    if valor_nota is not None:
+        diferenca = (valor_nota - valor_real).quantize(Decimal("0.01"))
+    return {
+        "classificacoes": CLASSIFICACOES_DIFERENCA_NOTA,
+        "tem_valor": valor_nota is not None,
+        "valor_real": valor_real,
+        "valor_real_texto": _moeda_lista_fornecedor(valor_real),
+        "valor_nota": valor_nota,
+        "valor_nota_texto": _moeda_lista_fornecedor(valor_nota) if valor_nota is not None else "",
+        "valor_nota_input": f"{valor_nota:.2f}".replace(".", ",") if valor_nota is not None else "",
+        "diferenca": diferenca,
+        "diferenca_texto": _moeda_lista_fornecedor(diferenca) if diferenca is not None else "",
+        "classificacao": classificacao,
+        "classificacao_texto": classificacao_texto,
+        "observacao": lista.observacao_diferenca_nota or "",
+    }
+
+
+def _salvar_comparacao_nota_boleto_lista_fornecedor(request, lista):
+    valor_nota = _valor_monetario_obrigatorio_lista_fornecedor(request.POST.get("valor_nota_boleto"))
+    classificacao = (request.POST.get("classificacao_diferenca_nota") or "").strip()
+    if classificacao not in CLASSIFICACOES_DIFERENCA_NOTA:
+        classificacao = "outro"
+    observacao = (request.POST.get("observacao_diferenca_nota") or "").strip()
+    lista.valor_nota_boleto = valor_nota
+    lista.classificacao_diferenca_nota = classificacao
+    lista.observacao_diferenca_nota = observacao
+    lista.save(update_fields=[
+        "valor_nota_boleto",
+        "classificacao_diferenca_nota",
+        "observacao_diferenca_nota",
+        "atualizado_em",
+    ])
+    return lista
+
+
 def _normalizar_whatsapp_fornecedor(valor):
     return "".join(caractere for caractere in str(valor or "") if caractere.isdigit())
 
@@ -4663,6 +4735,15 @@ def compras_lista_fornecedor_detalhe(request, pk):
     )
     resumo = _resumo_conferencia_lista_fornecedor(lista)
     comparacao_conferencia = _comparacao_conferencia_lista_fornecedor(lista, resumo)
+    if request.method == "POST" and request.POST.get("acao") == "salvar_comparacao_nota":
+        try:
+            _salvar_comparacao_nota_boleto_lista_fornecedor(request, lista)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(request, "Comparação com nota/boleto salva.")
+            return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
+    comparacao_nota_boleto = _comparacao_nota_boleto_lista_fornecedor(lista, comparacao_conferencia)
     funcionarios_checklist = Funcionario.habilitados_para_checklist().only(
         "id",
         "nome",
@@ -4711,6 +4792,7 @@ def compras_lista_fornecedor_detalhe(request, pk):
             "compra_gerada": compra_gerada,
             'resumo_conferencia': resumo,
             "comparacao_conferencia": comparacao_conferencia,
+            "comparacao_nota_boleto": comparacao_nota_boleto,
             "funcionarios_checklist": funcionarios_checklist,
             "funcionario_checklist_id": funcionario_checklist_id,
             "conferente_avulso": conferente_avulso,

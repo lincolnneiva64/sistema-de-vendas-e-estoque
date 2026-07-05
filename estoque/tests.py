@@ -704,8 +704,8 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertContains(resposta, "abaixo da lista planejada.")
         self.assertContains(resposta, "Produtos que explicam a diferença")
         self.assertContains(resposta, "Total explicado")
-        self.assertContains(resposta, "Próxima etapa: comparar com nota/boleto")
-        self.assertContains(resposta, "Valor real recebido calculado")
+        self.assertContains(resposta, "Comparar com nota/boleto")
+        self.assertContains(resposta, "Total real recebido")
         self.assertContains(resposta, "Valor da nota/boleto")
         self.assertContains(resposta, "ainda não informado")
         self.assertContains(resposta, "Diferença nota x recebido")
@@ -739,7 +739,87 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertEqual(comparacao["itens_com_diferenca"], [])
         self.assertContains(resposta, "A lista real recebida bate com a lista planejada.")
         self.assertContains(resposta, "Nenhum produto com diferença. A lista recebida bate com a planejada.")
-        self.assertContains(resposta, "Próxima etapa: comparar com nota/boleto")
+        self.assertContains(resposta, "Comparar com nota/boleto")
+
+    def test_salva_comparacao_nota_boleto_informativa(self):
+        self.item.quantidade_recebida = Decimal("2.000")
+        self.item.status_conferencia = ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK
+        self.item.conferido = True
+        self.item.save()
+
+        compras_antes = Compra.objects.count()
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+        contas_pagar_antes = ContaPagar.objects.count()
+        estoque_original = self.produto.quantidade
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),
+            {
+                "acao": "salvar_comparacao_nota",
+                "valor_nota_boleto": "25,50",
+                "classificacao_diferenca_nota": "frete",
+                "observacao_diferenca_nota": "Frete cobrado na nota.",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.lista.refresh_from_db()
+        self.assertEqual(self.lista.valor_nota_boleto, Decimal("25.50"))
+        self.assertEqual(self.lista.classificacao_diferenca_nota, "frete")
+        self.assertEqual(self.lista.observacao_diferenca_nota, "Frete cobrado na nota.")
+        self.assertEqual(Compra.objects.count(), compras_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+        self.assertEqual(ContaPagar.objects.count(), contas_pagar_antes)
+        self.produto.refresh_from_db()
+        self.assertEqual(self.produto.quantidade, estoque_original)
+
+    def test_diferenca_nota_boleto_aparece_negativa_formatada(self):
+        self.item.preco_unitario = Decimal("10.00")
+        self.item.total = Decimal("20.00")
+        self.item.quantidade_recebida = Decimal("2.000")
+        self.item.status_conferencia = ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK
+        self.item.conferido = True
+        self.item.save()
+        self.lista.valor_nota_boleto = Decimal("-150.79")
+        self.lista.classificacao_diferenca_nota = "desconto"
+        self.lista.observacao_diferenca_nota = "Desconto lançado na nota."
+        self.lista.save()
+
+        resposta = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),
+            secure=True,
+        )
+
+        comparacao_nota = resposta.context["comparacao_nota_boleto"]
+        self.assertEqual(comparacao_nota["valor_real"], Decimal("20.00"))
+        self.assertEqual(comparacao_nota["diferenca"], Decimal("-170.79"))
+        self.assertContains(resposta, "-R$ 170,79")
+        self.assertContains(resposta, "Desconto")
+        self.assertContains(resposta, "Desconto lançado na nota.")
+
+    def test_post_comparacao_nota_boleto_valor_invalido_nao_quebra(self):
+        self.item.quantidade_recebida = Decimal("2.000")
+        self.item.status_conferencia = ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK
+        self.item.conferido = True
+        self.item.save()
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),
+            {
+                "acao": "salvar_comparacao_nota",
+                "valor_nota_boleto": "abc",
+                "classificacao_diferenca_nota": "frete",
+                "observacao_diferenca_nota": "Nao deve salvar.",
+            },
+            follow=True,
+            secure=True,
+        )
+
+        self.lista.refresh_from_db()
+        self.assertIsNone(self.lista.valor_nota_boleto)
+        self.assertEqual(self.lista.classificacao_diferenca_nota, "")
+        self.assertContains(resposta, "Valor numerico invalido.")
 
     def test_salvar_igual_lista(self):
         resposta = self._post_conferencia({f"quantidade_recebida_{self.item.id}": "2.000", f"observacao_conferencia_{self.item.id}": ""})

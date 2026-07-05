@@ -1585,6 +1585,49 @@
     }
 
   }
+
+  .comparacao-nota-form {
+    margin-top: 14px;
+  }
+
+  .comparacao-nota-form input,
+  .comparacao-nota-form select,
+  .comparacao-nota-form textarea {
+    width: 100%;
+    border: 1px solid #e5d4bd;
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-size: 0.95rem;
+    background: #fffdf8;
+  }
+
+  .comparacao-proxima-resumo {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 14px;
+    background: #fff8ed;
+    border: 1px solid #f1dfc4;
+  }
+
+  .comparacao-proxima-resumo p {
+    margin: 4px 0;
+  }
+
+  .comparacao-nota-btn {
+    margin-top: 12px;
+    border: 0;
+    border-radius: 12px;
+    padding: 11px 18px;
+    font-weight: 800;
+    cursor: pointer;
+    background: #1f7a4f;
+    color: #fff;
+    box-shadow: 0 8px 18px rgba(31, 122, 79, 0.18);
+  }
+
+  .comparacao-nota-btn:hover {
+    filter: brightness(0.96);
+  }
 </style>
 
 <main class="lista-fornecedor-wrap">
@@ -2088,20 +2131,67 @@
       </div>
 
       <div class="comparacao-proxima-etapa">
-        <h3>Próxima etapa: comparar com nota/boleto</h3>
+        <h3>Comparar com nota/boleto</h3>
         <div class="comparacao-proxima-grid">
           <div class="comparacao-proxima-item">
-            <span class="lista-fornecedor-label">Valor real recebido calculado</span>
-            <strong>{{ comparacao_conferencia.totais_texto.real }}</strong>
+            <span class="lista-fornecedor-label">Total real recebido</span>
+            <strong>{{ comparacao_nota_boleto.valor_real_texto }}</strong>
           </div>
           <div class="comparacao-proxima-item">
             <span class="lista-fornecedor-label">Valor da nota/boleto</span>
-            <strong>ainda não informado</strong>
+            <strong>{% if comparacao_nota_boleto.tem_valor %}{{ comparacao_nota_boleto.valor_nota_texto }}{% else %}ainda não informado{% endif %}</strong>
           </div>
           <div class="comparacao-proxima-item">
             <span class="lista-fornecedor-label">Diferença nota x recebido</span>
-            <strong>—</strong>
+            <strong>{% if comparacao_nota_boleto.tem_valor %}{{ comparacao_nota_boleto.diferenca_texto }}{% else %}—{% endif %}</strong>
           </div>
+        </div>
+
+        <form method="post" class="comparacao-nota-form">
+          {% csrf_token %}
+          <input type="hidden" name="acao" value="salvar_comparacao_nota">
+
+          <div class="comparacao-proxima-grid">
+            <div class="comparacao-proxima-item">
+              <label class="lista-fornecedor-label" for="valor_nota_boleto">Valor da nota/boleto</label>
+              <input
+                type="text"
+                id="valor_nota_boleto"
+                name="valor_nota_boleto"
+                value="{{ comparacao_nota_boleto.valor_nota_input }}"
+                placeholder="0,00"
+                inputmode="decimal"
+              >
+            </div>
+
+            <div class="comparacao-proxima-item">
+              <label class="lista-fornecedor-label" for="classificacao_diferenca_nota">Classificação da diferença</label>
+              <select id="classificacao_diferenca_nota" name="classificacao_diferenca_nota">
+                {% for valor, texto in comparacao_nota_boleto.classificacoes.items %}
+                  <option value="{{ valor }}" {% if comparacao_nota_boleto.classificacao == valor %}selected{% endif %}>{{ texto }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="comparacao-proxima-item">
+              <label class="lista-fornecedor-label" for="observacao_diferenca_nota">Observação</label>
+              <textarea id="observacao_diferenca_nota" name="observacao_diferenca_nota" rows="2">{{ comparacao_nota_boleto.observacao }}</textarea>
+            </div>
+          </div>
+
+          <button type="submit" class="comparacao-nota-btn">Salvar comparação</button>
+        </form>
+
+        <div class="comparacao-proxima-resumo">
+          {% if comparacao_nota_boleto.tem_valor %}
+            <p><strong>Resumo da comparação:</strong> total real recebido {{ comparacao_nota_boleto.valor_real_texto }}, nota/boleto {{ comparacao_nota_boleto.valor_nota_texto }}, diferença {{ comparacao_nota_boleto.diferenca_texto }}.</p>
+            <p><strong>Classificação:</strong> {{ comparacao_nota_boleto.classificacao_texto }}</p>
+            {% if comparacao_nota_boleto.observacao %}
+              <p><strong>Observação:</strong> {{ comparacao_nota_boleto.observacao }}</p>
+            {% endif %}
+          {% else %}
+            <p>A comparação com nota/boleto ainda não foi informada.</p>
+          {% endif %}
         </div>
       </div>
     </section>
