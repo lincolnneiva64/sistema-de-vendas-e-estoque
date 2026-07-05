@@ -4494,14 +4494,24 @@ def _token_conferencia_externa_lista_fornecedor(lista, conferente):
 def _path_conferencia_externa_lista_fornecedor(token):
     marcador_token = "__TOKEN_CONFERENCIA_EXTERNA__"
     path = reverse(
-        "estoque:compras_lista_fornecedor_conferencia_externa",
+        "estoque:checklist_conferencia_externa",
         kwargs={"token": marcador_token},
     )
     return path.replace(marcador_token, quote(token, safe=""))
 
 
+def _normalizar_token_conferencia_externa(token):
+    token_normalizado = str(token or "")
+    for _ in range(3):
+        token_decodificado = unquote(token_normalizado)
+        if token_decodificado == token_normalizado:
+            break
+        token_normalizado = token_decodificado
+    return token_normalizado
+
+
 def _dados_token_conferencia_externa(token):
-    token = unquote(token or "")
+    token = _normalizar_token_conferencia_externa(token)
     try:
         dados = signing.loads(token, salt=LISTA_FORNECEDOR_CONFERENCIA_EXTERNA_SALT)
     except signing.BadSignature as exc:
@@ -4581,14 +4591,10 @@ def compras_lista_fornecedor_detalhe(request, pk):
             )
             if numero_whatsapp:
                 fornecedor_nome = lista.fornecedor.nome if lista.fornecedor else "Fornecedor"
-                data_pedido = lista.data_lista.strftime("%d/%m/%Y") if lista.data_lista else "-"
                 mensagem_whatsapp = (
-                    f"Ola, {funcionario_checklist.nome}.\n\n"
-                    "Checklist de conferencia\n"
-                    f"Fornecedor: {fornecedor_nome}\n"
-                    f"Lista: #{lista.id}\n"
-                    f"Pedido: {data_pedido}\n\n"
-                    "Para visualizar melhor, abra no navegador do celular, de preferencia no Chrome:\n\n"
+                    "Checklist de recebimento\n"
+                    f"{fornecedor_nome} - Lista #{lista.id}\n\n"
+                    "Abra o link abaixo no Chrome:\n"
                     f"{link_conferencia_externa}"
                 )
                 whatsapp_conferencia_externa_url = (
@@ -4677,7 +4683,7 @@ def compras_lista_fornecedor_conferencia_externa(request, token):
             messages.error(request, str(exc))
         else:
             messages.success(request, "Conferencia salva com sucesso.")
-        return redirect(_path_conferencia_externa_lista_fornecedor(unquote(token or "")))
+        return redirect(_path_conferencia_externa_lista_fornecedor(_normalizar_token_conferencia_externa(token)))
 
     resumo = _resumo_conferencia_lista_fornecedor(lista)
     return render(

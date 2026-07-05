@@ -35,6 +35,11 @@ urlpatterns = [
     path("compras/listas-fornecedor/", views.compras_listas_fornecedor, name="compras_listas_fornecedor"),
     path("compras/listas-fornecedor/gravar/", views.compras_lista_fornecedor_gravar, name="compras_lista_fornecedor_gravar"),
     path(
+        "checklist/<path:token>/",
+        views.compras_lista_fornecedor_conferencia_externa,
+        name="checklist_conferencia_externa",
+    ),
+    path(
         "compras/listas-fornecedor/conferencia-externa/<path:token>/",
         views.compras_lista_fornecedor_conferencia_externa,
         name="compras_lista_fornecedor_conferencia_externa",
