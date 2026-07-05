@@ -4485,6 +4485,15 @@ def _resumo_conferencia_lista_fornecedor(lista):
 
 
 def _comparacao_conferencia_lista_fornecedor(lista, resumo=None):
+    centavos = Decimal("0.01")
+
+    def moeda_comparacao(valor):
+        numero = Decimal(valor or 0).quantize(centavos)
+        sinal = "-R$ " if numero < 0 else "R$ "
+        numero_abs = abs(numero)
+        texto = f"{numero_abs:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        return sinal + texto
+
     resumo = resumo or _resumo_conferencia_lista_fornecedor(lista)
     conferencia_salva = bool(resumo["total"] and resumo["pendentes"] == 0)
     totais = {
@@ -4544,6 +4553,10 @@ def _comparacao_conferencia_lista_fornecedor(lista, resumo=None):
             "valor_real": valor_real,
             "diferenca_quantidade": diferenca_quantidade,
             "diferenca_valor": diferenca_valor,
+            "preco_unitario_texto": moeda_comparacao(preco_unitario),
+            "valor_previsto_texto": moeda_comparacao(valor_previsto),
+            "valor_real_texto": moeda_comparacao(valor_real),
+            "diferenca_valor_texto": moeda_comparacao(diferenca_valor),
             "status": status,
             "situacao": situacao,
             "tem_diferenca": diferenca_quantidade != 0 or diferenca_valor != 0,
@@ -4557,6 +4570,15 @@ def _comparacao_conferencia_lista_fornecedor(lista, resumo=None):
     elif totais["diferenca"] < 0:
         comparacao["diferenca_direcao"] = "abaixo"
     comparacao["total_explicado"] = totais["diferenca"]
+    comparacao["total_explicado_texto"] = moeda_comparacao(comparacao["total_explicado"])
+    comparacao["totais_texto"] = {
+        "planejado": moeda_comparacao(totais["planejado"]),
+        "real": moeda_comparacao(totais["real"]),
+        "diferenca": moeda_comparacao(totais["diferenca"]),
+        "nao_chegaram": moeda_comparacao(totais["nao_chegaram"]),
+        "faltas": moeda_comparacao(totais["faltas"]),
+        "sobras": moeda_comparacao(totais["sobras"]),
+    }
     return comparacao
 
 

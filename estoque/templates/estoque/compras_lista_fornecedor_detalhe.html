@@ -1933,27 +1933,27 @@
       <div class="comparacao-resumo">
         <div class="comparacao-resumo-item">
           <span class="lista-fornecedor-label">Total planejado</span>
-          <strong>R$ {{ comparacao_conferencia.totais.planejado|floatformat:2 }}</strong>
+          <strong>{{ comparacao_conferencia.totais_texto.planejado }}</strong>
         </div>
         <div class="comparacao-resumo-item">
           <span class="lista-fornecedor-label">Total real recebido</span>
-          <strong>R$ {{ comparacao_conferencia.totais.real|floatformat:2 }}</strong>
+          <strong>{{ comparacao_conferencia.totais_texto.real }}</strong>
         </div>
         <div class="comparacao-resumo-item diferenca">
           <span class="lista-fornecedor-label">Diferença total</span>
-          <strong>R$ {{ comparacao_conferencia.totais.diferenca|floatformat:2 }}</strong>
+          <strong>{{ comparacao_conferencia.totais_texto.diferenca }}</strong>
         </div>
         <div class="comparacao-resumo-item">
           <span class="lista-fornecedor-label">Não chegaram</span>
-          <strong>R$ {{ comparacao_conferencia.totais.nao_chegaram|floatformat:2 }}</strong>
+          <strong>{{ comparacao_conferencia.totais_texto.nao_chegaram }}</strong>
         </div>
         <div class="comparacao-resumo-item">
           <span class="lista-fornecedor-label">Com falta</span>
-          <strong>R$ {{ comparacao_conferencia.totais.faltas|floatformat:2 }}</strong>
+          <strong>{{ comparacao_conferencia.totais_texto.faltas }}</strong>
         </div>
         <div class="comparacao-resumo-item sobra">
           <span class="lista-fornecedor-label">Com sobra</span>
-          <strong>R$ {{ comparacao_conferencia.totais.sobras|floatformat:2 }}</strong>
+          <strong>{{ comparacao_conferencia.totais_texto.sobras }}</strong>
         </div>
       </div>
 
@@ -1974,11 +1974,11 @@
                 </div>
                 <div class="comparacao-linha">
                   <span>Unit.</span>
-                  <strong>R$ {{ item.preco_unitario|floatformat:2 }}</strong>
+                  <strong>{{ item.preco_unitario_texto }}</strong>
                 </div>
                 <div class="comparacao-linha">
                   <span>Total</span>
-                  <strong>R$ {{ item.valor_previsto|floatformat:2 }}</strong>
+                  <strong>{{ item.valor_previsto_texto }}</strong>
                 </div>
               </div>
             </div>
@@ -1992,11 +1992,11 @@
                 </div>
                 <div class="comparacao-linha">
                   <span>Unit.</span>
-                  <strong>R$ {{ item.preco_unitario|floatformat:2 }}</strong>
+                  <strong>{{ item.preco_unitario_texto }}</strong>
                 </div>
                 <div class="comparacao-linha">
                   <span>Total</span>
-                  <strong>R$ {{ item.valor_real|floatformat:2 }}</strong>
+                  <strong>{{ item.valor_real_texto }}</strong>
                 </div>
               </div>
             </div>
@@ -2010,7 +2010,7 @@
                 </div>
                 <div class="comparacao-linha">
                   <span>Valor</span>
-                  <strong class="{% if item.diferenca_valor > 0 %}comparacao-valor positivo{% elif item.diferenca_valor < 0 %}comparacao-valor negativo{% endif %}">R$ {{ item.diferenca_valor|floatformat:2 }}</strong>
+                  <strong class="{% if item.diferenca_valor > 0 %}comparacao-valor positivo{% elif item.diferenca_valor < 0 %}comparacao-valor negativo{% endif %}">{{ item.diferenca_valor_texto }}</strong>
                 </div>
                 <div class="comparacao-linha">
                   <span>Sit.</span>
@@ -2035,15 +2035,15 @@
                 </div>
                 <div>
                   <span>Planejado</span>
-                  <strong>R$ {{ item.valor_previsto|floatformat:2 }}</strong>
+                  <strong>{{ item.valor_previsto_texto }}</strong>
                 </div>
                 <div>
                   <span>Recebido</span>
-                  <strong>R$ {{ item.valor_real|floatformat:2 }}</strong>
+                  <strong>{{ item.valor_real_texto }}</strong>
                 </div>
                 <div>
                   <span>Diferença</span>
-                  <strong class="{% if item.diferenca_valor > 0 %}comparacao-valor positivo{% elif item.diferenca_valor < 0 %}comparacao-valor negativo{% endif %}">R$ {{ item.diferenca_valor|floatformat:2 }}</strong>
+                  <strong class="{% if item.diferenca_valor > 0 %}comparacao-valor positivo{% elif item.diferenca_valor < 0 %}comparacao-valor negativo{% endif %}">{{ item.diferenca_valor_texto }}</strong>
                 </div>
                 <div>
                   <span>Motivo</span>
@@ -2053,7 +2053,7 @@
             {% endfor %}
           </div>
           <div class="comparacao-explicacao-total">
-            Total explicado: <span class="{% if comparacao_conferencia.total_explicado > 0 %}comparacao-valor positivo{% elif comparacao_conferencia.total_explicado < 0 %}comparacao-valor negativo{% endif %}">R$ {{ comparacao_conferencia.total_explicado|floatformat:2 }}</span>
+            Total explicado: <span class="{% if comparacao_conferencia.total_explicado > 0 %}comparacao-valor positivo{% elif comparacao_conferencia.total_explicado < 0 %}comparacao-valor negativo{% endif %}">{{ comparacao_conferencia.total_explicado_texto }}</span>
           </div>
         {% else %}
           <p class="comparacao-sem-diferenca">Nenhum produto com diferença. A lista recebida bate com a planejada.</p>
@@ -2063,27 +2063,27 @@
       <div class="comparacao-resumo">
         <div class="comparacao-resumo-item">
           <span class="lista-fornecedor-label">Total planejado</span>
-          <strong>R$ {{ comparacao_conferencia.totais.planejado|floatformat:2 }}</strong>
+          <strong>{{ comparacao_conferencia.totais_texto.planejado }}</strong>
         </div>
         <div class="comparacao-resumo-item">
           <span class="lista-fornecedor-label">Total real recebido</span>
-          <strong>R$ {{ comparacao_conferencia.totais.real|floatformat:2 }}</strong>
+          <strong>{{ comparacao_conferencia.totais_texto.real }}</strong>
         </div>
         <div class="comparacao-resumo-item diferenca">
           <span class="lista-fornecedor-label">Diferença total</span>
-          <strong>R$ {{ comparacao_conferencia.totais.diferenca|floatformat:2 }}</strong>
+          <strong>{{ comparacao_conferencia.totais_texto.diferenca }}</strong>
         </div>
         <div class="comparacao-resumo-item">
           <span class="lista-fornecedor-label">Não chegaram</span>
-          <strong>R$ {{ comparacao_conferencia.totais.nao_chegaram|floatformat:2 }}</strong>
+          <strong>{{ comparacao_conferencia.totais_texto.nao_chegaram }}</strong>
         </div>
         <div class="comparacao-resumo-item">
           <span class="lista-fornecedor-label">Com falta</span>
-          <strong>R$ {{ comparacao_conferencia.totais.faltas|floatformat:2 }}</strong>
+          <strong>{{ comparacao_conferencia.totais_texto.faltas }}</strong>
         </div>
         <div class="comparacao-resumo-item sobra">
           <span class="lista-fornecedor-label">Com sobra</span>
-          <strong>R$ {{ comparacao_conferencia.totais.sobras|floatformat:2 }}</strong>
+          <strong>{{ comparacao_conferencia.totais_texto.sobras }}</strong>
         </div>
       </div>
 
@@ -2092,7 +2092,7 @@
         <div class="comparacao-proxima-grid">
           <div class="comparacao-proxima-item">
             <span class="lista-fornecedor-label">Valor real recebido calculado</span>
-            <strong>R$ {{ comparacao_conferencia.totais.real|floatformat:2 }}</strong>
+            <strong>{{ comparacao_conferencia.totais_texto.real }}</strong>
           </div>
           <div class="comparacao-proxima-item">
             <span class="lista-fornecedor-label">Valor da nota/boleto</span>
@@ -2110,7 +2110,7 @@
   <section class="lista-fornecedor-card">
     <div class="lista-fornecedor-card-titulo">
       <h2>Itens da Lista</h2>
-      <small>Confer?ncia dos produtos sugeridos para compra</small>
+      <small>Conferência dos produtos sugeridos para compra</small>
     </div>
 
     <div class="lista-fornecedor-table-wrap">
@@ -2142,7 +2142,7 @@
               <td>{{ item.quantidade_final|floatformat:3 }}</td>
               <td>{{ item.unidade }}</td>
               <td>R$ {{ item.preco_compra|floatformat:2 }}</td>
-              <td>R$ {{ item.preco_unitario|floatformat:2 }}</td>
+              <td>{{ item.preco_unitario_texto }}</td>
               <td class="lista-fornecedor-total">R$ {{ item.total|floatformat:2 }}</td>
             </tr>
           {% endfor %}
