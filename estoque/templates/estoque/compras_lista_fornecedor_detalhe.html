@@ -878,54 +878,122 @@
     color: #1d4ed8;
   }
 
-  .comparacao-table {
-    min-width: 1060px;
-  }
-
-  .comparacao-table th {
+  .comparacao-lista {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
     background: #f8fafc;
-    color: #334155;
   }
 
-  .comparacao-table tbody tr.com-diferenca {
-    box-shadow: inset 4px 0 0 #f59e0b;
+  .comparacao-faixa {
+    display: grid;
+    grid-template-columns: minmax(180px, 1.25fr) minmax(170px, 1fr) minmax(170px, 1fr) minmax(180px, 1.05fr);
+    gap: 8px;
+    align-items: stretch;
+    border: 1px solid #dbe7f1;
+    border-radius: 8px;
+    background: #fff;
+    padding: 8px;
+    box-shadow: inset 4px 0 0 #cbd5e1;
   }
 
-  .comparacao-table tbody tr.ok {
+  .comparacao-faixa.ok {
     box-shadow: inset 4px 0 0 #16a34a;
   }
 
-  .comparacao-table tbody tr.nao_veio {
-    background: #fff1f2;
+  .comparacao-faixa.nao_veio {
+    background: #fff7f7;
+    border-color: #fecaca;
     box-shadow: inset 4px 0 0 #e11d48;
   }
 
-  .comparacao-table tbody tr.faltou {
+  .comparacao-faixa.faltou {
     background: #fffbeb;
+    border-color: #fed7aa;
     box-shadow: inset 4px 0 0 #f59e0b;
   }
 
-  .comparacao-table tbody tr.veio_a_mais {
+  .comparacao-faixa.veio_a_mais {
     background: #eff6ff;
+    border-color: #bfdbfe;
     box-shadow: inset 4px 0 0 #2563eb;
   }
 
-  .comparacao-grupo {
-    display: grid;
-    gap: 3px;
+  .comparacao-produto,
+  .comparacao-painel {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px;
+    background: #fff;
   }
 
-  .comparacao-grupo span {
+  .comparacao-produto {
+    display: grid;
+    align-content: center;
+    gap: 6px;
+  }
+
+  .comparacao-produto span,
+  .comparacao-painel-titulo {
     color: #64748b;
     font-size: .68rem;
     font-weight: 950;
     text-transform: uppercase;
   }
 
-  .comparacao-grupo strong {
+  .comparacao-produto strong {
     color: #172033;
-    font-size: .86rem;
+    font-size: .92rem;
     font-weight: 950;
+    line-height: 1.25;
+  }
+
+  .comparacao-painel.planejado {
+    background: #eef6ff;
+    border-color: #bfdbfe;
+  }
+
+  .comparacao-painel.recebido {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+  }
+
+  .comparacao-painel.diferenca {
+    background: #fffbeb;
+    border-color: #fde68a;
+  }
+
+  .comparacao-painel-titulo {
+    display: block;
+    margin-bottom: 7px;
+    color: #334155;
+  }
+
+  .comparacao-linhas {
+    display: grid;
+    gap: 4px;
+  }
+
+  .comparacao-linha {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 8px;
+    align-items: baseline;
+    min-height: 22px;
+  }
+
+  .comparacao-linha span {
+    color: #64748b;
+    font-size: .72rem;
+    font-weight: 950;
+  }
+
+  .comparacao-linha strong {
+    color: #172033;
+    font-size: .84rem;
+    font-weight: 950;
+    text-align: right;
+    overflow-wrap: anywhere;
   }
 
   .comparacao-situacao {
@@ -1324,50 +1392,17 @@
       grid-template-columns: 1fr;
     }
 
-    .comparacao-table-wrap {
-      overflow: visible;
+    .comparacao-lista {
+      padding: 8px;
     }
 
-    .comparacao-table {
-      min-width: 0;
-      border-collapse: separate;
-      border-spacing: 0 10px;
-      background: #f8fafc;
+    .comparacao-faixa {
+      grid-template-columns: 1fr;
+      gap: 7px;
     }
 
-    .comparacao-table thead {
-      display: none;
-    }
-
-    .comparacao-table,
-    .comparacao-table tbody,
-    .comparacao-table tr,
-    .comparacao-table td {
-      display: block;
-      width: 100%;
-    }
-
-    .comparacao-table tr {
-      border: 1px solid #dbe7f1;
-      border-radius: 10px;
-      overflow: hidden;
-      background: #fff;
-    }
-
-    .comparacao-table td {
-      border: 0;
-      padding: 7px 9px;
-      text-align: left;
-    }
-
-    .comparacao-table td[data-label]::before {
-      content: attr(data-label);
-      display: block;
-      margin-bottom: 3px;
-      color: #64748b;
-      font-size: .66rem;
-      font-weight: 950;
-      text-transform: uppercase;
+    .comparacao-linha {
+      grid-template-columns: 50px minmax(0, 1fr);
     }
 
   }
@@ -1721,54 +1756,69 @@
         </div>
       </div>
 
-      <div class="lista-fornecedor-table-wrap comparacao-table-wrap">
-        <table class="lista-fornecedor-table comparacao-table">
-          <thead>
-            <tr>
-              <th>Produto</th>
-              <th>Lista planejada</th>
-              <th>Conferido recebido</th>
-              <th>Diferença</th>
-              <th>Situação</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for item in comparacao_conferencia.itens %}
-              <tr class="{{ item.status }} {% if item.tem_diferenca %}com-diferenca{% endif %}">
-                <td class="lista-fornecedor-produto" data-label="Produto">{{ item.produto }}</td>
-                <td data-label="Lista planejada">
-                  <div class="comparacao-grupo">
-                    <span>Qtd. lista</span>
-                    <strong>{{ item.quantidade_lista|floatformat:3 }}{% if item.unidade %} {{ item.unidade }}{% endif %}</strong>
-                    <span>Preço unitário</span>
-                    <strong>R$ {{ item.preco_unitario|floatformat:2 }}</strong>
-                    <span>Total previsto</span>
-                    <strong>R$ {{ item.valor_previsto|floatformat:2 }}</strong>
-                  </div>
-                </td>
-                <td data-label="Conferido recebido">
-                  <div class="comparacao-grupo">
-                    <span>Qtd. recebida</span>
-                    <strong>{{ item.quantidade_recebida|floatformat:3 }}{% if item.unidade %} {{ item.unidade }}{% endif %}</strong>
-                    <span>Total real recebido</span>
-                    <strong>R$ {{ item.valor_real|floatformat:2 }}</strong>
-                  </div>
-                </td>
-                <td data-label="Diferença">
-                  <div class="comparacao-grupo">
-                    <span>Diferença de quantidade</span>
-                    <strong class="{% if item.diferenca_quantidade > 0 %}comparacao-valor positivo{% elif item.diferenca_quantidade < 0 %}comparacao-valor negativo{% endif %}">{{ item.diferenca_quantidade|floatformat:3 }}{% if item.unidade %} {{ item.unidade }}{% endif %}</strong>
-                    <span>Diferença em valor</span>
-                    <strong class="{% if item.diferenca_valor > 0 %}comparacao-valor positivo{% elif item.diferenca_valor < 0 %}comparacao-valor negativo{% endif %}">R$ {{ item.diferenca_valor|floatformat:2 }}</strong>
-                  </div>
-                </td>
-                <td data-label="Situação">
-                  <span class="comparacao-situacao {{ item.status }}">{{ item.situacao }}</span>
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <div class="comparacao-lista">
+        {% for item in comparacao_conferencia.itens %}
+          <div class="comparacao-faixa {{ item.status }} {% if item.tem_diferenca %}com-diferenca{% endif %}">
+            <div class="comparacao-produto">
+              <span>Produto</span>
+              <strong>{{ item.produto }}</strong>
+            </div>
+
+            <div class="comparacao-painel planejado">
+              <span class="comparacao-painel-titulo">Lista planejada</span>
+              <div class="comparacao-linhas">
+                <div class="comparacao-linha">
+                  <span>Qtd.</span>
+                  <strong>{{ item.quantidade_lista|floatformat:3 }}{% if item.unidade %} {{ item.unidade }}{% endif %}</strong>
+                </div>
+                <div class="comparacao-linha">
+                  <span>Unit.</span>
+                  <strong>R$ {{ item.preco_unitario|floatformat:2 }}</strong>
+                </div>
+                <div class="comparacao-linha">
+                  <span>Total</span>
+                  <strong>R$ {{ item.valor_previsto|floatformat:2 }}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="comparacao-painel recebido">
+              <span class="comparacao-painel-titulo">Recebido real</span>
+              <div class="comparacao-linhas">
+                <div class="comparacao-linha">
+                  <span>Qtd.</span>
+                  <strong>{{ item.quantidade_recebida|floatformat:3 }}{% if item.unidade %} {{ item.unidade }}{% endif %}</strong>
+                </div>
+                <div class="comparacao-linha">
+                  <span>Unit.</span>
+                  <strong>R$ {{ item.preco_unitario|floatformat:2 }}</strong>
+                </div>
+                <div class="comparacao-linha">
+                  <span>Total</span>
+                  <strong>R$ {{ item.valor_real|floatformat:2 }}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="comparacao-painel diferenca">
+              <span class="comparacao-painel-titulo">Diferença</span>
+              <div class="comparacao-linhas">
+                <div class="comparacao-linha">
+                  <span>Qtd.</span>
+                  <strong class="{% if item.diferenca_quantidade > 0 %}comparacao-valor positivo{% elif item.diferenca_quantidade < 0 %}comparacao-valor negativo{% endif %}">{{ item.diferenca_quantidade|floatformat:3 }}{% if item.unidade %} {{ item.unidade }}{% endif %}</strong>
+                </div>
+                <div class="comparacao-linha">
+                  <span>Valor</span>
+                  <strong class="{% if item.diferenca_valor > 0 %}comparacao-valor positivo{% elif item.diferenca_valor < 0 %}comparacao-valor negativo{% endif %}">R$ {{ item.diferenca_valor|floatformat:2 }}</strong>
+                </div>
+                <div class="comparacao-linha">
+                  <span>Sit.</span>
+                  <strong><span class="comparacao-situacao {{ item.status }}">{{ item.situacao }}</span></strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
       </div>
     </section>
   {% endif %}
