@@ -512,25 +512,18 @@
     const vazio = document.getElementById('conferenciaSemResultados');
     const botaoPendencias = document.getElementById('btnMostrarPendencias');
     const itens = Array.from(document.querySelectorAll('.linha-conferencia[data-item-id]'));
-    let itemPonteiroId = '';
     const produtos = itens.map(function(item) {
       const nome = nomeProduto(item);
       return { id: item.dataset.itemId, nome: nome, termo: normalizarTexto(nome) };
     }).filter(function(item) { return item.nome && item.nome !== '-'; });
-    function termoBusca() {
-      if (busca?.dataset.listaFinalizada === '1') return '';
-      return normalizarTexto(busca?.value || '');
-    }
-    function passaFiltroPendencias(item) {
-      const somentePendencias = botaoPendencias?.classList.contains('ativo');
-      const obs = item.querySelector('.obs-input')?.value.trim();
-      return !somentePendencias || statusDaLinha(item) !== 'ok' || Boolean(obs);
-    }
+    function termoBusca() { return normalizarTexto(busca?.value || ''); }
     function atualizarFiltro() {
       const termo = termoBusca();
+      const somentePendencias = botaoPendencias?.classList.contains('ativo');
       let visiveis = 0;
       itens.forEach(function(item) {
-        const mostraPendencia = passaFiltroPendencias(item);
+        const obs = item.querySelector('.obs-input')?.value.trim();
+        const mostraPendencia = !somentePendencias || statusDaLinha(item) !== 'ok' || Boolean(obs);
         const mostraBusca = !termo || normalizarTexto(nomeProduto(item)).includes(termo);
         item.classList.toggle('oculto-filtro', !mostraPendencia);
         item.classList.toggle('oculto-busca', !mostraBusca);
@@ -541,10 +534,6 @@
     function esconderSugestoes() { sugestoes?.classList.remove('aberto'); }
     function mostrarSugestoes() {
       if (!sugestoes) return;
-      if (busca?.dataset.listaFinalizada === '1') {
-        esconderSugestoes();
-        return;
-      }
       const termo = termoBusca();
       const filtrados = produtos.filter(function(item) {
         return !termo || item.termo.includes(termo);
@@ -558,54 +547,19 @@
       }).join('');
       sugestoes.classList.add('aberto');
     }
-    function linhaDoPonteiro() {
-      if (!itemPonteiroId) return null;
-      return itens.find(function(item) { return item.dataset.itemId === itemPonteiroId; }) || null;
-    }
-    function definirPonteiro(item) {
+    function voltarParaBusca() {
       if (!busca) return;
-      if (!item) {
-        itemPonteiroId = '';
-        busca.dataset.listaFinalizada = '1';
-        busca.value = 'Lista concluida';
-        busca.placeholder = 'Lista concluida';
-        atualizarFiltro();
-        esconderSugestoes();
-        return;
-      }
-      itemPonteiroId = item.dataset.itemId || '';
-      busca.dataset.listaFinalizada = '';
-      busca.value = nomeProduto(item);
-      busca.placeholder = 'Buscar produto nesta lista...';
+      busca.value = '';
       atualizarFiltro();
       esconderSugestoes();
-    }
-    function proximoItemPendente(itemAtual) {
-      const inicio = itemAtual ? itens.indexOf(itemAtual) + 1 : 0;
-      return itens.slice(inicio).find(function(item) {
-        return statusDaLinha(item) === 'pendente' && passaFiltroPendencias(item);
-      }) || null;
-    }
-    function apontarProximoProduto(itemAtual) {
-      definirPonteiro(proximoItemPendente(itemAtual));
-    }
-    function rolarParaPonteiro() {
-      const linha = linhaDoPonteiro();
-      if (!linha || !busca) return false;
-      atualizarFiltro();
-      esconderSugestoes();
-      linha.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      busca.focus({ preventScroll: true });
-      busca.select();
-      return true;
+      busca.closest('.busca-mobile').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      window.setTimeout(function() {
+        busca.focus({ preventScroll: true });
+        mostrarSugestoes();
+      }, 220);
     }
     busca?.addEventListener('focus', mostrarSugestoes);
-    busca?.addEventListener('click', function() {
-      if (itemPonteiroId) rolarParaPonteiro();
-    });
     busca?.addEventListener('input', function() {
-      itemPonteiroId = '';
-      busca.dataset.listaFinalizada = '';
       atualizarFiltro();
       mostrarSugestoes();
     });
@@ -615,8 +569,12 @@
       const produto = produtos.find(function(item) { return item.id === botao.dataset.itemId; });
       const linha = itens.find(function(item) { return item.dataset.itemId === botao.dataset.itemId; });
       if (!produto || !linha || !busca) return;
-      definirPonteiro(linha);
-      rolarParaPonteiro();
+      busca.value = produto.nome;
+      atualizarFiltro();
+      esconderSugestoes();
+      linha.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      busca.focus({ preventScroll: true });
+      busca.select();
     });
     document.addEventListener('click', function(event) {
       if (event.target.closest('.busca-mobile')) return;
@@ -672,18 +630,12 @@
       input.addEventListener('input', atualizarFiltro);
     });
     document.querySelectorAll('.proximo-btn').forEach(function(botao) {
-      botao.addEventListener('click', function() {
-        apontarProximoProduto(botao.closest('.linha-conferencia'));
-      });
+      botao.addEventListener('click', voltarParaBusca);
     });
     botaoPendencias?.addEventListener('click', function() {
       botaoPendencias.classList.toggle('ativo');
       botaoPendencias.textContent = botaoPendencias.classList.contains('ativo') ? 'Mostrar todos' : 'Mostrar so pendencias';
       atualizarFiltro();
-      const linhaPonteiro = linhaDoPonteiro();
-      if (!linhaPonteiro || statusDaLinha(linhaPonteiro) !== 'pendente' || !passaFiltroPendencias(linhaPonteiro)) {
-        apontarProximoProduto(null);
-      }
     });
     const form = document.getElementById('formConferenciaListaFornecedor');
     const botaoSalvar = document.getElementById('btnSalvarConferenciaExterna');
@@ -695,7 +647,6 @@
       }
     });
     atualizarFiltro();
-    apontarProximoProduto(null);
   })();
   </script>
 </body>
