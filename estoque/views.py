@@ -4545,6 +4545,7 @@ def _salvar_conferencia_lista_fornecedor(request, lista):
                 "conferido",
                 "conferido_em",
             ])
+    return len(itens)
 
 
 def compras_lista_fornecedor_detalhe(request, pk):
@@ -4648,6 +4649,13 @@ def compras_lista_fornecedor_conferencia_salvar(request, pk):
 
 
 def compras_lista_fornecedor_conferencia_externa(request, token):
+    token_normalizado = _normalizar_token_conferencia_externa(token)
+    if request.method == "POST":
+        logger.info(
+            "Checklist externa lista fornecedor: POST recebido. token_prefix=%s post_keys=%s",
+            token_normalizado[:24],
+            list(request.POST.keys())[:12],
+        )
     try:
         dados_token = _dados_token_conferencia_externa(token)
     except Http404:
@@ -4656,6 +4664,11 @@ def compras_lista_fornecedor_conferencia_externa(request, token):
             "estoque/compras_lista_fornecedor_conferencia_erro.html",
             {"mensagem": "Este link de checklist esta invalido ou expirado."},
             status=404,
+        )
+    if request.method == "POST":
+        logger.info(
+            "Checklist externa lista fornecedor: token validado. lista_id=%s",
+            dados_token["lista_id"],
         )
     lista = (
         ListaCompraFornecedor.objects.select_related("fornecedor")
@@ -4674,19 +4687,39 @@ def compras_lista_fornecedor_conferencia_externa(request, token):
             {"mensagem": "Esta lista de compras nao foi encontrada."},
             status=404,
         )
+    if request.method == "POST":
+        logger.info(
+            "Checklist externa lista fornecedor: lista encontrada. lista_id=%s",
+            lista.pk,
+        )
     conferente = (dados_token.get("conferente") or "").strip()
 
     if request.method == "POST":
         try:
-            _salvar_conferencia_lista_fornecedor(request, lista)
+            itens_processados = _salvar_conferencia_lista_fornecedor(request, lista)
         except ValueError as exc:
+            logger.warning(
+                "Checklist externa lista fornecedor: erro ao salvar. lista_id=%s erro=%s",
+                lista.pk,
+                exc,
+            )
             messages.error(request, str(exc))
         else:
+            logger.info(
+                "Checklist externa lista fornecedor: salvamento concluido. lista_id=%s itens_processados=%s",
+                lista.pk,
+                itens_processados,
+            )
             messages.success(request, "Conferencia salva com sucesso.")
-        return redirect(_path_conferencia_externa_lista_fornecedor(_normalizar_token_conferencia_externa(token)))
+        redirect_path = _path_conferencia_externa_lista_fornecedor(token_normalizado)
+        logger.info(
+            "Checklist externa lista fornecedor: redirecionando apos POST. lista_id=%s redirect=%s",
+            lista.pk,
+            redirect_path,
+        )
+        return redirect(redirect_path)
 
     resumo = _resumo_conferencia_lista_fornecedor(lista)
-    token_normalizado = _normalizar_token_conferencia_externa(token)
     return render(
         request,
         "estoque/compras_lista_fornecedor_conferencia_externa.html",
