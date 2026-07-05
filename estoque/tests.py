@@ -729,7 +729,10 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertContains(resposta, 'name="csrfmiddlewaretoken"')
         self.assertContains(resposta, f'name="quantidade_recebida_{self.item.id}"')
         self.assertContains(resposta, f'name="observacao_conferencia_{self.item.id}"')
-        self.assertContains(resposta, '<button type="submit" class="acao-btn principal" id="btnSalvarConferenciaExterna">Salvar conferencia</button>')
+        self.assertContains(resposta, 'id="btnSalvarConferenciaExterna"')
+        self.assertContains(resposta, 'type="submit"')
+        self.assertContains(resposta, "Salvar conferencia")
+        self.assertContains(resposta, 'data-conferencia-salva="0"')
         self.assertNotContains(resposta, "botaoSalvar.disabled = true")
         self.assertContains(resposta, "Buscar produto nesta lista")
         self.assertContains(resposta, "OK, proximo")
@@ -819,9 +822,47 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertEqual(self.item.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK)
         self.assertTrue(self.item.conferido)
         self.assertEqual(self.item.observacao_conferencia, "OK")
+        externa_salva = self.client.get(resposta["Location"], secure=True)
+        self.assertContains(externa_salva, "Conferencia salva com sucesso.")
+        self.assertContains(externa_salva, "conferencia-salva-bloqueada")
+        self.assertContains(externa_salva, 'data-conferencia-salva="1"')
+        self.assertContains(externa_salva, "Editar conferencia")
+        self.assertContains(externa_salva, "Salvar alteracoes")
+        self.assertContains(externa_salva, "definirModoEdicaoConferenciaExterna")
+        self.assertContains(externa_salva, f'name="quantidade_recebida_{self.item.id}"')
+        self.assertContains(externa_salva, "readonly")
+        self.assertContains(externa_salva, "disabled")
         detalhe = self.client.get(reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}), secure=True)
         self.assertContains(detalhe, "Resumo da conferencia salva")
         self.assertContains(detalhe, "Corretos:")
+
+    def test_conferencia_externa_salva_recarrega_bloqueada_e_permite_editar(self):
+        token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")
+        self.client.post(
+            views._path_conferencia_externa_lista_fornecedor(token),
+            {f"quantidade_recebida_{self.item.id}": "2.000", f"observacao_conferencia_{self.item.id}": "OK"},
+            secure=True,
+        )
+
+        resposta = self.client.get(views._path_conferencia_externa_lista_fornecedor(token), secure=True)
+
+        self.assertContains(resposta, "conferencia-salva-bloqueada")
+        self.assertContains(resposta, "Editar conferencia")
+        self.assertContains(resposta, "Salvar alteracoes")
+        self.assertContains(resposta, "conferenciaSalvaInicial && !conferenciaEmEdicao")
+        self.assertContains(resposta, "botaoSalvar.type = 'submit'")
+        self.assertContains(resposta, "botao.disabled = bloqueado")
+        self.assertContains(resposta, "input.readOnly = true")
+
+        resposta_edicao = self.client.post(
+            views._path_conferencia_externa_lista_fornecedor(token),
+            {f"quantidade_recebida_{self.item.id}": "1.000", f"observacao_conferencia_{self.item.id}": "Editado"},
+            secure=True,
+        )
+        self.assertEqual(resposta_edicao.status_code, 302)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_FALTOU)
+        self.assertEqual(self.item.observacao_conferencia, "Editado")
 
     def test_conferencia_externa_salva_token_normalizado(self):
         token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")

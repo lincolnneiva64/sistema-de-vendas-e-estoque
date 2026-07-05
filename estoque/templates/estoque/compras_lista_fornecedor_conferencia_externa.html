@@ -276,6 +276,20 @@
       box-shadow: inset 0 3px 8px rgba(15, 23, 42, .18);
     }
     .acao-btn.processando { opacity: .78; pointer-events: none; }
+    .externa-card.conferencia-salva-bloqueada .opcao,
+    .externa-card.conferencia-salva-bloqueada .qtd-input,
+    .externa-card.conferencia-salva-bloqueada .obs-input,
+    .externa-card.conferencia-salva-bloqueada .proximo-btn {
+      cursor: not-allowed;
+    }
+    .externa-card.conferencia-salva-bloqueada .qtd-input,
+    .externa-card.conferencia-salva-bloqueada .obs-input {
+      background: #fffaf0;
+    }
+    .externa-card.conferencia-salva-bloqueada .opcao,
+    .externa-card.conferencia-salva-bloqueada .proximo-btn {
+      opacity: .62;
+    }
     .resumo {
       margin: 10px;
       padding: 10px;
@@ -329,7 +343,7 @@
       {% endfor %}
     {% endif %}
 
-    <section class="externa-card">
+    <section class="externa-card {% if conferencia_salva %}conferencia-salva-bloqueada{% endif %}" id="cardConferenciaExterna">
       <div class="externa-card-titulo">
         <h2>Conferencia de chegada</h2>
         <small>Registre apenas o que chegou. Nao gera compra, estoque ou financeiro.</small>
@@ -353,36 +367,42 @@
             <div class="campo-grupo" data-grupo-conferencia="produto">
               <span class="campo-label">Produto confirmado?</span>
               <div class="opcoes">
-                <button type="button" class="opcao {% if item.conferido and item.status_conferencia != "nao_veio" %}ativo{% endif %}" data-valor="sim" aria-pressed="{% if item.conferido and item.status_conferencia != "nao_veio" %}true{% else %}false{% endif %}">Sim</button>
-                <button type="button" class="opcao {% if item.status_conferencia == "nao_veio" %}ativo{% endif %}" data-valor="nao" aria-pressed="{% if item.status_conferencia == "nao_veio" %}true{% else %}false{% endif %}">Nao</button>
+                <button type="button" class="opcao {% if item.conferido and item.status_conferencia != "nao_veio" %}ativo{% endif %}" data-valor="sim" aria-pressed="{% if item.conferido and item.status_conferencia != "nao_veio" %}true{% else %}false{% endif %}" {% if conferencia_salva %}disabled{% endif %}>Sim</button>
+                <button type="button" class="opcao {% if item.status_conferencia == "nao_veio" %}ativo{% endif %}" data-valor="nao" aria-pressed="{% if item.status_conferencia == "nao_veio" %}true{% else %}false{% endif %}" {% if conferencia_salva %}disabled{% endif %}>Nao</button>
               </div>
             </div>
             <div class="campo-grupo" data-grupo-conferencia="quantidade">
               <span class="campo-label">Qtd. correta?</span>
               <div class="opcoes">
-                <button type="button" class="opcao {% if item.status_conferencia == "ok" %}ativo{% endif %}" data-valor="sim" aria-pressed="{% if item.status_conferencia == "ok" %}true{% else %}false{% endif %}">Sim</button>
-                <button type="button" class="opcao {% if item.conferido and item.status_conferencia != "ok" and item.status_conferencia != "nao_veio" %}ativo{% endif %}" data-valor="nao" aria-pressed="{% if item.conferido and item.status_conferencia != "ok" and item.status_conferencia != "nao_veio" %}true{% else %}false{% endif %}">Nao</button>
+                <button type="button" class="opcao {% if item.status_conferencia == "ok" %}ativo{% endif %}" data-valor="sim" aria-pressed="{% if item.status_conferencia == "ok" %}true{% else %}false{% endif %}" {% if conferencia_salva %}disabled{% endif %}>Sim</button>
+                <button type="button" class="opcao {% if item.conferido and item.status_conferencia != "ok" and item.status_conferencia != "nao_veio" %}ativo{% endif %}" data-valor="nao" aria-pressed="{% if item.conferido and item.status_conferencia != "ok" and item.status_conferencia != "nao_veio" %}true{% else %}false{% endif %}" {% if conferencia_salva %}disabled{% endif %}>Nao</button>
               </div>
             </div>
             <div class="campo-grupo">
               <label class="campo-label" for="qtd_{{ item.id }}">Qtd. entregue</label>
-              <input id="qtd_{{ item.id }}" type="text" name="quantidade_recebida_{{ item.id }}" class="qtd-input campoQuantidadeRecebidaLista" inputmode="decimal" data-qtd-final="{{ item.quantidade_final|floatformat:3 }}" data-unidade="{{ item.unidade }}" value="{% if item.conferido %}{{ item.quantidade_recebida|floatformat:3 }}{% endif %}">
+              <input id="qtd_{{ item.id }}" type="text" name="quantidade_recebida_{{ item.id }}" class="qtd-input campoQuantidadeRecebidaLista" inputmode="decimal" data-qtd-final="{{ item.quantidade_final|floatformat:3 }}" data-unidade="{{ item.unidade }}" value="{% if item.conferido %}{{ item.quantidade_recebida|floatformat:3 }}{% endif %}" {% if conferencia_salva %}readonly{% endif %}>
             </div>
             <div class="campo-grupo">
               <span class="campo-label">Resultado</span>
               <span class="resultado {{ item.status_conferencia }}">{% if item.status_conferencia == "veio_a_mais" %}Sobrou{% elif item.status_conferencia == "nao_veio" %}Produto nao chegou{% else %}{{ item.get_status_conferencia_display }}{% endif %}</span>
-              <button type="button" class="proximo-btn">OK, proximo</button>
+              <button type="button" class="proximo-btn" {% if conferencia_salva %}disabled{% endif %}>OK, proximo</button>
             </div>
             <div class="campo-grupo">
               <label class="campo-label" for="obs_{{ item.id }}">Observacao</label>
-              <textarea id="obs_{{ item.id }}" name="observacao_conferencia_{{ item.id }}" class="obs-input" rows="2" placeholder="Opcional">{{ item.observacao_conferencia }}</textarea>
+              <textarea id="obs_{{ item.id }}" name="observacao_conferencia_{{ item.id }}" class="obs-input" rows="2" placeholder="Opcional" {% if conferencia_salva %}readonly{% endif %}>{{ item.observacao_conferencia }}</textarea>
             </div>
           </div>
         {% endfor %}
         <div class="sem-resultados" id="conferenciaSemResultados">Nenhum produto encontrado nesta lista.</div>
         <div class="acoes">
           <button type="button" class="acao-btn" id="btnMostrarPendencias">Mostrar so pendencias</button>
-          <button type="submit" class="acao-btn principal" id="btnSalvarConferenciaExterna">Salvar conferencia</button>
+          <button
+            type="{% if conferencia_salva %}button{% else %}submit{% endif %}"
+            class="acao-btn principal"
+            id="btnSalvarConferenciaExterna"
+            data-conferencia-salva="{% if conferencia_salva %}1{% else %}0{% endif %}">
+            {% if conferencia_salva %}Editar conferencia{% else %}Salvar conferencia{% endif %}
+          </button>
         </div>
       </form>
 
@@ -639,12 +659,60 @@
     });
     const form = document.getElementById('formConferenciaListaFornecedor');
     const botaoSalvar = document.getElementById('btnSalvarConferenciaExterna');
+    const cardConferencia = document.getElementById('cardConferenciaExterna');
+    const conferenciaSalvaInicial = botaoSalvar?.dataset.conferenciaSalva === '1';
+    let conferenciaEmEdicao = !conferenciaSalvaInicial;
+
+    function definirModoEdicaoConferenciaExterna(ativo) {
+      conferenciaEmEdicao = Boolean(ativo);
+      const bloqueado = conferenciaSalvaInicial && !conferenciaEmEdicao;
+      cardConferencia?.classList.toggle('conferencia-salva-bloqueada', bloqueado);
+      document.querySelectorAll('.opcao').forEach(function(botao) {
+        botao.disabled = bloqueado;
+      });
+      document.querySelectorAll('.campoQuantidadeRecebidaLista').forEach(function(input) {
+        if (bloqueado) {
+          input.readOnly = true;
+        }
+      });
+      document.querySelectorAll('.obs-input').forEach(function(input) {
+        input.readOnly = bloqueado;
+      });
+      document.querySelectorAll('.proximo-btn').forEach(function(botao) {
+        botao.disabled = bloqueado;
+      });
+      if (botaoSalvar) {
+        if (bloqueado) {
+          botaoSalvar.type = 'button';
+          botaoSalvar.textContent = 'Editar conferencia';
+        } else if (conferenciaSalvaInicial) {
+          botaoSalvar.type = 'submit';
+          botaoSalvar.textContent = 'Salvar alteracoes';
+        } else {
+          botaoSalvar.type = 'submit';
+          botaoSalvar.textContent = 'Salvar conferencia';
+        }
+      }
+    }
+
+    botaoSalvar?.addEventListener('click', function(event) {
+      if (conferenciaSalvaInicial && !conferenciaEmEdicao) {
+        event.preventDefault();
+        definirModoEdicaoConferenciaExterna(true);
+        const primeiroCampo = document.querySelector('.opcao:not(:disabled), .campoQuantidadeRecebidaLista:not([readonly]), .obs-input:not([readonly])');
+        window.setTimeout(function() {
+          if (primeiroCampo) primeiroCampo.focus();
+        }, 120);
+      }
+    });
+
     form?.addEventListener('submit', function() {
       if (botaoSalvar) {
         botaoSalvar.classList.add('processando', 'feedback-toque');
         botaoSalvar.textContent = 'Salvando...';
       }
     });
+    definirModoEdicaoConferenciaExterna(conferenciaEmEdicao);
     atualizarFiltro();
   })();
   </script>

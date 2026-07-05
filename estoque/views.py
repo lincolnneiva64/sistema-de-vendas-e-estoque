@@ -4728,6 +4728,7 @@ def compras_lista_fornecedor_conferencia_externa(request, token):
             "conferente": conferente,
             "token": token,
             "conferencia_action": _path_conferencia_externa_lista_fornecedor(token_normalizado),
+            "conferencia_salva": bool(resumo["total"] and resumo["pendentes"] == 0),
             "resumo_conferencia": resumo,
         },
     )
