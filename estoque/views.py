@@ -25,7 +25,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, PagamentoContaPagar, PagamentoEmprestimoDivida, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -4294,6 +4294,123 @@ def _salvar_comparacao_nota_boleto_lista_fornecedor(request, lista):
     return lista
 
 
+def _dividir_valor_em_parcelas(valor_total, quantidade):
+    valor_total = Decimal(valor_total or 0).quantize(Decimal("0.01"))
+    quantidade = int(quantidade or 0)
+    if quantidade <= 0:
+        return []
+    centavos_total = int((valor_total * 100).to_integral_value())
+    base = centavos_total // quantidade
+    resto = centavos_total % quantidade
+    parcelas = []
+    for indice in range(quantidade):
+        centavos = base + (1 if indice < resto else 0)
+        parcelas.append((Decimal(centavos) / Decimal("100")).quantize(Decimal("0.01")))
+    return parcelas
+
+
+def _parcelas_pagamento_nota_para_tela(lista):
+    parcelas_salvas = list(lista.parcelas_nota.all())
+    valor_nota = lista.valor_nota_boleto or Decimal("0.00")
+    forma = lista.forma_cobranca_nota or ""
+    quantidade = len(parcelas_salvas)
+    if not parcelas_salvas:
+        if forma == ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO:
+            quantidade = 1
+        elif forma == ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS:
+            quantidade = 2
+        else:
+            quantidade = 0
+    valores_sugeridos = _dividir_valor_em_parcelas(valor_nota, quantidade)
+    linhas = []
+    for indice in range(quantidade):
+        parcela = parcelas_salvas[indice] if indice < len(parcelas_salvas) else None
+        valor = parcela.valor if parcela else valores_sugeridos[indice]
+        vencimento = parcela.data_vencimento if parcela else None
+        linhas.append({
+            "numero": indice + 1,
+            "valor": valor,
+            "valor_input": f"{valor:.2f}".replace(".", ","),
+            "vencimento": vencimento.isoformat() if vencimento else "",
+            "observacao": parcela.observacao if parcela else "",
+        })
+    total_parcelas = sum((linha["valor"] for linha in linhas), Decimal("0.00")).quantize(Decimal("0.01"))
+    diferenca = (total_parcelas - valor_nota).quantize(Decimal("0.01"))
+    return {
+        "formas": ListaCompraFornecedor.FORMA_COBRANCA_NOTA_CHOICES,
+        "forma": forma,
+        "forma_texto": dict(ListaCompraFornecedor.FORMA_COBRANCA_NOTA_CHOICES).get(forma, "Não informada"),
+        "observacao": lista.observacao_pagamento_nota or "",
+        "quantidade": quantidade,
+        "linhas": linhas,
+        "total_parcelas": total_parcelas,
+        "total_parcelas_texto": _moeda_lista_fornecedor(total_parcelas),
+        "diferenca": diferenca,
+        "diferenca_texto": _moeda_lista_fornecedor(diferenca),
+        "tem_parcelas": bool(linhas),
+        "bate_com_nota": diferenca == 0,
+    }
+
+
+def _salvar_pagamento_nota_lista_fornecedor(request, lista):
+    if lista.valor_nota_boleto is None:
+        raise ValueError("Informe primeiro o valor da nota/boleto.")
+    forma = (request.POST.get("forma_cobranca_nota") or "").strip()
+    formas_validas = {opcao[0] for opcao in ListaCompraFornecedor.FORMA_COBRANCA_NOTA_CHOICES}
+    if forma not in formas_validas:
+        forma = ""
+    observacao = (request.POST.get("observacao_pagamento_nota") or "").strip()
+
+    parcelas = []
+    if forma == ListaCompraFornecedor.FORMA_COBRANCA_AVISTA:
+        parcelas = []
+    else:
+        try:
+            quantidade = int(request.POST.get("quantidade_boletos") or "0")
+        except ValueError:
+            quantidade = 0
+        if forma == ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO:
+            quantidade = 1
+        if forma == ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS and quantidade < 2:
+            raise ValueError("Informe pelo menos 2 boletos.")
+        if forma == ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO and quantidade != 1:
+            quantidade = 1
+        if forma in {ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO, ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS}:
+            for numero in range(1, quantidade + 1):
+                valor = _valor_monetario_obrigatorio_lista_fornecedor(request.POST.get(f"parcela_valor_{numero}"))
+                vencimento_texto = (request.POST.get(f"parcela_vencimento_{numero}") or "").strip()
+                vencimento = parse_date(vencimento_texto) if vencimento_texto else None
+                if not vencimento:
+                    raise ValueError(f"Informe a data de vencimento do boleto {numero}.")
+                parcelas.append({
+                    "numero": numero,
+                    "data_vencimento": vencimento,
+                    "valor": valor,
+                    "observacao": (request.POST.get(f"parcela_observacao_{numero}") or "").strip(),
+                })
+
+    total_parcelas = sum((parcela["valor"] for parcela in parcelas), Decimal("0.00")).quantize(Decimal("0.01"))
+    if parcelas and total_parcelas != lista.valor_nota_boleto:
+        raise ValueError("A soma dos boletos precisa bater com o valor da nota.")
+
+    with transaction.atomic():
+        lista.forma_cobranca_nota = forma
+        lista.observacao_pagamento_nota = observacao
+        lista.save(update_fields=["forma_cobranca_nota", "observacao_pagamento_nota", "atualizado_em"])
+        lista.parcelas_nota.all().delete()
+        ParcelaNotaListaCompraFornecedor.objects.bulk_create([
+            ParcelaNotaListaCompraFornecedor(
+                lista=lista,
+                numero=parcela["numero"],
+                data_vencimento=parcela["data_vencimento"],
+                valor=parcela["valor"],
+                observacao=parcela["observacao"],
+            )
+            for parcela in parcelas
+        ])
+    return lista
+
+
 def _normalizar_whatsapp_fornecedor(valor):
     return "".join(caractere for caractere in str(valor or "") if caractere.isdigit())
 
@@ -4743,7 +4860,16 @@ def compras_lista_fornecedor_detalhe(request, pk):
         else:
             messages.success(request, "Comparação com nota/boleto salva.")
             return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
+    if request.method == "POST" and request.POST.get("acao") == "salvar_pagamento_nota":
+        try:
+            _salvar_pagamento_nota_lista_fornecedor(request, lista)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(request, "Forma de pagamento da nota salva.")
+            return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
     comparacao_nota_boleto = _comparacao_nota_boleto_lista_fornecedor(lista, comparacao_conferencia)
+    pagamento_nota = _parcelas_pagamento_nota_para_tela(lista)
     funcionarios_checklist = Funcionario.habilitados_para_checklist().only(
         "id",
         "nome",
@@ -4793,6 +4919,7 @@ def compras_lista_fornecedor_detalhe(request, pk):
             'resumo_conferencia': resumo,
             "comparacao_conferencia": comparacao_conferencia,
             "comparacao_nota_boleto": comparacao_nota_boleto,
+            "pagamento_nota": pagamento_nota,
             "funcionarios_checklist": funcionarios_checklist,
             "funcionario_checklist_id": funcionario_checklist_id,
             "conferente_avulso": conferente_avulso,

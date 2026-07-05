@@ -821,6 +821,84 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertEqual(self.lista.classificacao_diferenca_nota, "")
         self.assertContains(resposta, "Valor numerico invalido.")
 
+    def test_salva_forma_pagamento_boleto_unico_informativa(self):
+        self.lista.valor_nota_boleto = Decimal("300.00")
+        self.lista.save()
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),
+            {
+                "acao": "salvar_pagamento_nota",
+                "forma_cobranca_nota": "boleto_unico",
+                "quantidade_boletos": "1",
+                "parcela_vencimento_1": "2026-07-10",
+                "parcela_valor_1": "300,00",
+                "parcela_observacao_1": "Boleto unico",
+                "observacao_pagamento_nota": "Pagamento em boleto unico.",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.lista.refresh_from_db()
+        self.assertEqual(self.lista.forma_cobranca_nota, ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO)
+        self.assertEqual(self.lista.observacao_pagamento_nota, "Pagamento em boleto unico.")
+        parcela = self.lista.parcelas_nota.get()
+        self.assertEqual(parcela.valor, Decimal("300.00"))
+        self.assertEqual(str(parcela.data_vencimento), "2026-07-10")
+
+    def test_salva_varios_boletos_quando_soma_bate_com_nota(self):
+        self.lista.valor_nota_boleto = Decimal("1000.00")
+        self.lista.save()
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),
+            {
+                "acao": "salvar_pagamento_nota",
+                "forma_cobranca_nota": "varios_boletos",
+                "quantidade_boletos": "3",
+                "parcela_vencimento_1": "2026-07-10",
+                "parcela_valor_1": "333,34",
+                "parcela_vencimento_2": "2026-07-17",
+                "parcela_valor_2": "333,33",
+                "parcela_vencimento_3": "2026-07-24",
+                "parcela_valor_3": "333,33",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.lista.refresh_from_db()
+        self.assertEqual(self.lista.forma_cobranca_nota, ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS)
+        self.assertEqual(self.lista.parcelas_nota.count(), 3)
+        self.assertEqual(
+            sum(self.lista.parcelas_nota.values_list("valor", flat=True), Decimal("0.00")),
+            Decimal("1000.00"),
+        )
+
+    def test_bloqueia_boletos_com_soma_diferente_da_nota(self):
+        self.lista.valor_nota_boleto = Decimal("1000.00")
+        self.lista.save()
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),
+            {
+                "acao": "salvar_pagamento_nota",
+                "forma_cobranca_nota": "varios_boletos",
+                "quantidade_boletos": "2",
+                "parcela_vencimento_1": "2026-07-10",
+                "parcela_valor_1": "300,00",
+                "parcela_vencimento_2": "2026-07-17",
+                "parcela_valor_2": "300,00",
+            },
+            follow=True,
+            secure=True,
+        )
+
+        self.lista.refresh_from_db()
+        self.assertEqual(self.lista.forma_cobranca_nota, "")
+        self.assertEqual(self.lista.parcelas_nota.count(), 0)
+        self.assertContains(resposta, "A soma dos boletos precisa bater com o valor da nota.")
+
     def test_salvar_igual_lista(self):
         resposta = self._post_conferencia({f"quantidade_recebida_{self.item.id}": "2.000", f"observacao_conferencia_{self.item.id}": ""})
         self.assertEqual(resposta.status_code, 302)

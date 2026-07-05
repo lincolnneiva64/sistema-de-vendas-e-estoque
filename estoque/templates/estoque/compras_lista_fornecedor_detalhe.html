@@ -1628,6 +1628,71 @@
   .comparacao-nota-btn:hover {
     filter: brightness(0.96);
   }
+
+  .pagamento-nota-card {
+    margin-top: 16px;
+  }
+
+  .pagamento-nota-ajuda {
+    margin: 4px 0 12px;
+    color: #7a5b35;
+    font-size: 0.92rem;
+  }
+
+  .pagamento-parcelas {
+    margin-top: 14px;
+    padding: 12px;
+    border: 1px solid #f1dfc4;
+    border-radius: 14px;
+    background: #fffaf2;
+  }
+
+  .pagamento-parcelas-topo {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .comparacao-nota-btn.secundario {
+    background: #8a5a1f;
+    box-shadow: none;
+    padding: 8px 12px;
+  }
+
+  .pagamento-parcela-linha {
+    display: grid;
+    grid-template-columns: 95px minmax(130px, 1fr) minmax(120px, 1fr) minmax(130px, 1fr);
+    gap: 10px;
+    align-items: end;
+    padding: 10px 0;
+    border-top: 1px solid #efdcc0;
+  }
+
+  .pagamento-parcela-linha:first-child {
+    border-top: 0;
+  }
+
+  .pagamento-parcela-linha label span {
+    display: block;
+    font-size: 0.78rem;
+    color: #7a5b35;
+    font-weight: 700;
+    margin-bottom: 3px;
+  }
+
+  .pagamento-nota-alerta {
+    color: #b42318;
+    font-weight: 800;
+  }
+
+  @media (max-width: 760px) {
+    .pagamento-parcela-linha {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>
 
 <main class="lista-fornecedor-wrap">
@@ -1710,6 +1775,85 @@
               <button type="submit" style="border:1px solid #f97316; background:#fff7ed; color:#9a3412; border-radius:8px; padding:5px 9px; font-weight:950; cursor:pointer;">Descartar compra gerada</button>
             </form>
           {% endif %}
+        {% endif %}
+      </div>
+
+      </div>
+    </section>
+  {% endif %}
+
+  {% if comparacao_conferencia.exibir %}
+    <section class="lista-fornecedor-card pagamento-nota-card">
+        <h3>Forma de pagamento da nota</h3>
+        <p class="pagamento-nota-ajuda">Etapa informativa. Ainda não gera Conta a Pagar nem movimenta Caixa/Banco.</p>
+
+        {% if comparacao_nota_boleto.tem_valor %}
+          <form method="post" class="comparacao-nota-form" id="formPagamentoNota">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="salvar_pagamento_nota">
+
+            <div class="comparacao-proxima-grid">
+              <div class="comparacao-proxima-item">
+                <label class="lista-fornecedor-label" for="forma_cobranca_nota">Forma de cobrança</label>
+                <select id="forma_cobranca_nota" name="forma_cobranca_nota">
+                  {% for valor, texto in pagamento_nota.formas %}
+                    <option value="{{ valor }}" {% if pagamento_nota.forma == valor %}selected{% endif %}>{{ texto }}</option>
+                  {% endfor %}
+                </select>
+
+              <div class="comparacao-proxima-item" id="grupoQuantidadeBoletos">
+                <label class="lista-fornecedor-label" for="quantidade_boletos">Quantidade de boletos</label>
+                <input type="number" min="1" max="12" id="quantidade_boletos" name="quantidade_boletos" value="{% if pagamento_nota.quantidade %}{{ pagamento_nota.quantidade }}{% else %}2{% endif %}">
+              </div>
+
+              <div class="comparacao-proxima-item">
+                <label class="lista-fornecedor-label" for="observacao_pagamento_nota">Observação do pagamento</label>
+                <textarea id="observacao_pagamento_nota" name="observacao_pagamento_nota" rows="2">{{ pagamento_nota.observacao }}</textarea>
+              </div>
+            </div>
+
+            <div class="pagamento-parcelas" id="pagamentoParcelas"
+                 data-valor-nota="{{ comparacao_nota_boleto.valor_nota|default_if_none:'0' }}"
+                 data-quantidade="{{ pagamento_nota.quantidade|default:'0' }}">
+              <div class="pagamento-parcelas-topo">
+                <strong>Boletos / parcelas</strong>
+                <button type="button" class="comparacao-nota-btn secundario" id="btnGerarParcelasNota">Gerar parcelas</button>
+              </div>
+
+              <div id="parcelasNotaLinhas">
+                {% for parcela in pagamento_nota.linhas %}
+                  <div class="pagamento-parcela-linha">
+                    <strong>Boleto {{ parcela.numero }}</strong>
+                    <label>
+                      <span>Vencimento</span>
+                      <input type="date" name="parcela_vencimento_{{ parcela.numero }}" value="{{ parcela.vencimento }}">
+                    </label>
+                    <label>
+                      <span>Valor</span>
+                      <input type="text" inputmode="decimal" name="parcela_valor_{{ parcela.numero }}" value="{{ parcela.valor_input }}">
+                    </label>
+                    <label>
+                      <span>Obs.</span>
+                      <input type="text" name="parcela_observacao_{{ parcela.numero }}" value="{{ parcela.observacao }}">
+                    </label>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="comparacao-proxima-resumo pagamento-nota-resumo">
+              <p><strong>Total da nota:</strong> {{ comparacao_nota_boleto.valor_nota_texto }}</p>
+              <p><strong>Total dos boletos:</strong> <span id="totalBoletosTexto">{{ pagamento_nota.total_parcelas_texto }}</span></p>
+              <p><strong>Diferença:</strong> <span id="diferencaBoletosTexto">{{ pagamento_nota.diferenca_texto }}</span></p>
+              <p id="alertaDiferencaBoletos" class="pagamento-nota-alerta" {% if pagamento_nota.bate_com_nota %}style="display:none;"{% endif %}>A soma dos boletos precisa bater com o valor da nota.</p>
+            </div>
+
+            <button type="submit" class="comparacao-nota-btn">Salvar forma de pagamento</button>
+          </form>
+        {% else %}
+          <div class="comparacao-proxima-resumo">
+            <p>Informe primeiro o valor da nota/boleto para cadastrar a forma de pagamento.</p>
+          </div>
         {% endif %}
       </div>
     </section>
@@ -2193,7 +2337,6 @@
             <p>A comparação com nota/boleto ainda não foi informada.</p>
           {% endif %}
         </div>
-      </div>
     </section>
   {% endif %}
 
@@ -3070,3 +3213,117 @@
 </script>
 
 {% endblock %}
+
+<script>
+(function() {
+  const forma = document.getElementById('forma_cobranca_nota');
+  const quantidade = document.getElementById('quantidade_boletos');
+  const grupoQuantidade = document.getElementById('grupoQuantidadeBoletos');
+  const parcelasBox = document.getElementById('pagamentoParcelas');
+  const linhasBox = document.getElementById('parcelasNotaLinhas');
+  const btnGerar = document.getElementById('btnGerarParcelasNota');
+  const totalTexto = document.getElementById('totalBoletosTexto');
+  const diferencaTexto = document.getElementById('diferencaBoletosTexto');
+  const alerta = document.getElementById('alertaDiferencaBoletos');
+
+  if (!forma || !quantidade || !parcelasBox || !linhasBox) return;
+
+  function parseMoeda(valor) {
+    const texto = String(valor || '').replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.');
+    const numero = Number(texto || '0');
+    return Number.isNaN(numero) ? 0 : numero;
+  }
+
+  function formatarMoeda(valor) {
+    const numero = Number(valor || 0);
+    const abs = Math.abs(numero);
+    const texto = abs.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return (numero < 0 ? '-R$ ' : 'R$ ') + texto;
+  }
+
+  function valorNota() {
+    return parseMoeda(parcelasBox.dataset.valorNota || '0');
+  }
+
+  function dividir(total, qtd) {
+    const centavos = Math.round(total * 100);
+    const base = Math.floor(centavos / qtd);
+    const resto = centavos % qtd;
+    const valores = [];
+    for (let i = 0; i < qtd; i++) {
+      valores.push((base + (i < resto ? 1 : 0)) / 100);
+    }
+    return valores;
+  }
+
+  function linhaParcela(numero, valor) {
+    const valorTexto = valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return
+      <div class="pagamento-parcela-linha">
+        <strong>Boleto </strong>
+        <label>
+          <span>Vencimento</span>
+          <input type="date" name="parcela_vencimento_">
+        </label>
+        <label>
+          <span>Valor</span>
+          <input type="text" inputmode="decimal" name="parcela_valor_" value="">
+        </label>
+        <label>
+          <span>Obs.</span>
+          <input type="text" name="parcela_observacao_">
+        </label>
+      </div>
+    ;
+  }
+
+  function atualizarVisibilidade() {
+    const f = forma.value;
+    const mostrarBoletos = f === 'boleto_unico' || f === 'varios_boletos';
+    parcelasBox.style.display = mostrarBoletos ? '' : 'none';
+    grupoQuantidade.style.display = f === 'varios_boletos' ? '' : 'none';
+    if (f === 'boleto_unico') {
+      quantidade.value = '1';
+    }
+  }
+
+  function gerarParcelas() {
+    const f = forma.value;
+    if (f !== 'boleto_unico' && f !== 'varios_boletos') {
+      linhasBox.innerHTML = '';
+      atualizarTotais();
+      return;
+    }
+    let qtd = f === 'boleto_unico' ? 1 : parseInt(quantidade.value || '2', 10);
+    if (!qtd || qtd < 1) qtd = 1;
+    if (f === 'varios_boletos' && qtd < 2) qtd = 2;
+    quantidade.value = String(qtd);
+    const valores = dividir(valorNota(), qtd);
+    linhasBox.innerHTML = valores.map((valor, idx) => linhaParcela(idx + 1, valor)).join('');
+    atualizarTotais();
+  }
+
+  function atualizarTotais() {
+    const inputs = linhasBox.querySelectorAll('input[name^="parcela_valor_"]');
+    let total = 0;
+    inputs.forEach((input) => {
+      total += parseMoeda(input.value);
+    });
+    const diff = total - valorNota();
+    if (totalTexto) totalTexto.textContent = formatarMoeda(total);
+    if (diferencaTexto) diferencaTexto.textContent = formatarMoeda(diff);
+    if (alerta) alerta.style.display = Math.abs(diff) < 0.005 ? 'none' : '';
+  }
+
+  forma.addEventListener('change', function() {
+    atualizarVisibilidade();
+    gerarParcelas();
+  });
+  quantidade.addEventListener('change', gerarParcelas);
+  if (btnGerar) btnGerar.addEventListener('click', gerarParcelas);
+  linhasBox.addEventListener('input', atualizarTotais);
+
+  atualizarVisibilidade();
+  atualizarTotais();
+})();
+</script>

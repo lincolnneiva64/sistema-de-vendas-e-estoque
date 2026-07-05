@@ -1056,6 +1056,18 @@ class ListaCompraFornecedor(models.Model):
     STATUS_ENVIADA = "enviada"
     STATUS_FINALIZADA = "finalizada"
     STATUS_CANCELADA = "cancelada"
+
+    FORMA_COBRANCA_NAO_INFORMADA = ""
+    FORMA_COBRANCA_AVISTA = "avista"
+    FORMA_COBRANCA_BOLETO_UNICO = "boleto_unico"
+    FORMA_COBRANCA_VARIOS_BOLETOS = "varios_boletos"
+    FORMA_COBRANCA_NOTA_CHOICES = [
+        (FORMA_COBRANCA_NAO_INFORMADA, "Não informada"),
+        (FORMA_COBRANCA_AVISTA, "À vista"),
+        (FORMA_COBRANCA_BOLETO_UNICO, "Boleto único"),
+        (FORMA_COBRANCA_VARIOS_BOLETOS, "Vários boletos"),
+    ]
+
     STATUS_CHOICES = [
         (STATUS_ABERTA, "Aberta"),
         (STATUS_ENVIADA, "Enviada"),
@@ -1079,6 +1091,13 @@ class ListaCompraFornecedor(models.Model):
     valor_nota_boleto = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
     classificacao_diferenca_nota = models.CharField(max_length=40, blank=True, default="")
     observacao_diferenca_nota = models.TextField(blank=True, default="")
+    forma_cobranca_nota = models.CharField(
+        max_length=30,
+        choices=FORMA_COBRANCA_NOTA_CHOICES,
+        blank=True,
+        default=FORMA_COBRANCA_NAO_INFORMADA,
+    )
+    observacao_pagamento_nota = models.TextField(blank=True, default="")
     observacao = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ABERTA)
     criado_em = models.DateTimeField(auto_now_add=True)
@@ -1090,6 +1109,26 @@ class ListaCompraFornecedor(models.Model):
     def __str__(self):
         fornecedor_nome = self.fornecedor.nome if self.fornecedor else "Fornecedor nao informado"
         return f"Lista de compras #{self.id} - {fornecedor_nome}"
+
+
+class ParcelaNotaListaCompraFornecedor(models.Model):
+    lista = models.ForeignKey(
+        ListaCompraFornecedor,
+        on_delete=models.CASCADE,
+        related_name="parcelas_nota",
+    )
+    numero = models.PositiveIntegerField(default=1)
+    data_vencimento = models.DateField(blank=True, null=True)
+    valor = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    observacao = models.CharField(max_length=120, blank=True, default="")
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["numero", "id"]
+
+    def __str__(self):
+        return f"Parcela {self.numero} - Lista #{self.lista_id}"
 
 
 class ItemListaCompraFornecedor(models.Model):
