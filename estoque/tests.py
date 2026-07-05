@@ -682,6 +682,8 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertEqual(comparacao["totais"]["planejado"], Decimal("155.98"))
         self.assertEqual(comparacao["totais"]["real"], Decimal("55.49"))
         self.assertEqual(comparacao["totais"]["diferenca"], Decimal("-100.49"))
+        self.assertEqual(comparacao["diferenca_abs"], Decimal("100.49"))
+        self.assertEqual(comparacao["diferenca_direcao"], "abaixo")
         self.assertEqual(comparacao["totais"]["nao_chegaram"], Decimal("90.00"))
         self.assertEqual(comparacao["totais"]["faltas"], Decimal("20.49"))
         self.assertEqual(comparacao["totais"]["sobras"], Decimal("10.00"))
@@ -696,6 +698,18 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertContains(resposta, "Total planejado")
         self.assertContains(resposta, "Total real recebido")
         self.assertContains(resposta, "Diferença total")
+        self.assertContains(resposta, "Mostrar todos")
+        self.assertContains(resposta, "Mostrar só diferenças")
+        self.assertContains(resposta, "Atenção: a lista real recebida ficou R$")
+        self.assertContains(resposta, "abaixo da lista planejada.")
+        self.assertContains(resposta, "Produtos que explicam a diferença")
+        self.assertContains(resposta, "Total explicado")
+        self.assertContains(resposta, "Próxima etapa: comparar com nota/boleto")
+        self.assertContains(resposta, "Valor real recebido calculado")
+        self.assertContains(resposta, "Valor da nota/boleto")
+        self.assertContains(resposta, "ainda não informado")
+        self.assertContains(resposta, "Diferença nota x recebido")
+        self.assertContains(resposta, "filtrar-diferencas")
         self.assertContains(resposta, "Produto Nao Chegou Comparacao")
         self.assertContains(resposta, "Nao chegou")
         self.assertContains(resposta, "Com falta")
@@ -705,6 +719,27 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertEqual(ContaPagar.objects.count(), contas_pagar_antes)
         self.produto.refresh_from_db()
         self.assertEqual(self.produto.quantidade, estoque_produto_original)
+
+    def test_detalhe_comparacao_sem_diferenca_mostra_mensagem(self):
+        self.item.preco_unitario = Decimal("10.00")
+        self.item.total = Decimal("20.00")
+        self.item.quantidade_recebida = Decimal("2.000")
+        self.item.status_conferencia = ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK
+        self.item.conferido = True
+        self.item.save()
+
+        resposta = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),
+            secure=True,
+        )
+
+        comparacao = resposta.context["comparacao_conferencia"]
+        self.assertTrue(comparacao["exibir"])
+        self.assertEqual(comparacao["totais"]["diferenca"], Decimal("0.00"))
+        self.assertEqual(comparacao["itens_com_diferenca"], [])
+        self.assertContains(resposta, "A lista real recebida bate com a lista planejada.")
+        self.assertContains(resposta, "Nenhum produto com diferença. A lista recebida bate com a planejada.")
+        self.assertContains(resposta, "Próxima etapa: comparar com nota/boleto")
 
     def test_salvar_igual_lista(self):
         resposta = self._post_conferencia({f"quantidade_recebida_{self.item.id}": "2.000", f"observacao_conferencia_{self.item.id}": ""})

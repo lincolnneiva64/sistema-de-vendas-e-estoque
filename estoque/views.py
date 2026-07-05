@@ -4498,7 +4498,11 @@ def _comparacao_conferencia_lista_fornecedor(lista, resumo=None):
     comparacao = {
         "exibir": conferencia_salva,
         "itens": [],
+        "itens_com_diferenca": [],
         "totais": totais,
+        "diferenca_abs": Decimal("0.00"),
+        "diferenca_direcao": "igual",
+        "total_explicado": Decimal("0.00"),
     }
     if not conferencia_salva:
         return comparacao
@@ -4530,7 +4534,7 @@ def _comparacao_conferencia_lista_fornecedor(lista, resumo=None):
         totais["planejado"] += valor_previsto
         totais["real"] += valor_real
         totais["diferenca"] += diferenca_valor
-        comparacao["itens"].append({
+        item_comparacao = {
             "produto": item.produto.nome if item.produto else "Produto nao identificado",
             "unidade": item.unidade,
             "quantidade_lista": quantidade_lista,
@@ -4543,7 +4547,16 @@ def _comparacao_conferencia_lista_fornecedor(lista, resumo=None):
             "status": status,
             "situacao": situacao,
             "tem_diferenca": diferenca_quantidade != 0 or diferenca_valor != 0,
-        })
+        }
+        comparacao["itens"].append(item_comparacao)
+        if item_comparacao["tem_diferenca"]:
+            comparacao["itens_com_diferenca"].append(item_comparacao)
+    comparacao["diferenca_abs"] = abs(totais["diferenca"])
+    if totais["diferenca"] > 0:
+        comparacao["diferenca_direcao"] = "acima"
+    elif totais["diferenca"] < 0:
+        comparacao["diferenca_direcao"] = "abaixo"
+    comparacao["total_explicado"] = totais["diferenca"]
     return comparacao
 
 
