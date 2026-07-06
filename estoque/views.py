@@ -5371,7 +5371,9 @@ def _lista_fornecedor_produto_payload(produto, fornecedor_id=None, item=None):
 
     quantidade = Decimal("0.000")
     total = Decimal("0.00")
-    estoque_atual = dec_attr("estoque", "0")
+    estoque_atual = dec_attr("quantidade", "0")
+    if estoque_atual == Decimal("0"):
+        estoque_atual = dec_attr("estoque", "0")
     estoque_minimo = dec_attr("estoque_minimo", "0")
     vendido = Decimal("0")
     pedidos = Decimal("0")
@@ -5381,7 +5383,9 @@ def _lista_fornecedor_produto_payload(produto, fornecedor_id=None, item=None):
         preco_compra = item.preco_compra or preco_compra
         preco_unitario = item.preco_unitario or preco_unitario
         total = item.total or Decimal("0")
-        estoque_atual = item.estoque_atual or estoque_atual
+        estoque_item = item.estoque_atual
+        if estoque_item not in (None, Decimal("0"), Decimal("0.000")):
+            estoque_atual = estoque_item
         estoque_minimo = item.estoque_minimo or estoque_minimo
         vendido = item.vendido_periodo or Decimal("0")
         pedidos = item.pedidos_abertos or Decimal("0")
@@ -5546,7 +5550,7 @@ def compras_lista_fornecedor_editar(request, pk):
             "produto": produto,
             "fator_conversao": fator,
             "sugestao": item.quantidade_final or item.quantidade_sugerida or Decimal("0"),
-            "estoque_atual": item.estoque_atual or Decimal("0"),
+            "estoque_atual": getattr(produto, "quantidade", None) or item.estoque_atual or Decimal("0"),
             "estoque_minimo": item.estoque_minimo or Decimal("0"),
             "quantidade_vendida": item.vendido_periodo or Decimal("0"),
             "quantidade_pedidos_abertos": item.pedidos_abertos or Decimal("0"),
