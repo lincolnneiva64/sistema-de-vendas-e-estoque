@@ -1,5 +1,9 @@
 {% extends 'estoque/base.html' %}
-{% block title %}Lista de Compras #{{ lista.id }}{% endblock %}
+{% block title %}Lista de Compras #{{ lista.id }}
+
+
+
+{% endblock %}
 {% block content %}
 
 <style>
@@ -1664,11 +1668,20 @@
 
   .pagamento-parcela-linha {
     display: grid;
-    grid-template-columns: 95px minmax(130px, 1fr) minmax(120px, 1fr) minmax(130px, 1fr);
+    grid-template-columns: 95px minmax(120px, 1fr) minmax(110px, 1fr);
     gap: 10px;
     align-items: end;
     padding: 10px 0;
     border-top: 1px solid #efdcc0;
+  }
+
+  .pagamento-parcela-linha label:last-child {
+    grid-column: 2 / -1;
+  }
+
+  .pagamento-parcela-linha input {
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .pagamento-parcela-linha:first-child {
@@ -3215,8 +3228,6 @@
 })();
 </script>
 
-{% endblock %}
-
 <script>
 (function() {
   const forma = document.getElementById('forma_cobranca_nota');
@@ -3232,7 +3243,12 @@
   if (!forma || !quantidade || !parcelasBox || !linhasBox) return;
 
   function parseMoeda(valor) {
-    const texto = String(valor || '').replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.');
+    let texto = String(valor || '').trim().replace(/[^\d,.-]/g, '');
+
+    if (texto.includes(',')) {
+      texto = texto.replace(/\./g, '').replace(',', '.');
+    }
+
     const numero = Number(texto || '0');
     return Number.isNaN(numero) ? 0 : numero;
   }
@@ -3261,46 +3277,70 @@
 
   function linhaParcela(numero, valor) {
     const valorTexto = valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    return
+    return `
       <div class="pagamento-parcela-linha">
-        <strong>Boleto </strong>
+        <strong>Boleto ${numero}</strong>
         <label>
           <span>Vencimento</span>
-          <input type="date" name="parcela_vencimento_">
+          <input type="date" name="parcela_vencimento_${numero}">
         </label>
         <label>
           <span>Valor</span>
-          <input type="text" inputmode="decimal" name="parcela_valor_" value="">
+          <input type="text" inputmode="decimal" name="parcela_valor_${numero}" value="${valorTexto}">
         </label>
         <label>
           <span>Obs.</span>
-          <input type="text" name="parcela_observacao_">
+          <input type="text" name="parcela_observacao_${numero}">
         </label>
       </div>
-    ;
+    `;
   }
 
   function atualizarVisibilidade() {
     const f = forma.value;
     const mostrarBoletos = f === 'boleto_unico' || f === 'varios_boletos';
+
     parcelasBox.style.display = mostrarBoletos ? '' : 'none';
-    grupoQuantidade.style.display = f === 'varios_boletos' ? '' : 'none';
+
+    if (grupoQuantidade) {
+      grupoQuantidade.style.display = mostrarBoletos ? '' : 'none';
+    }
+
     if (f === 'boleto_unico') {
       quantidade.value = '1';
+      quantidade.readOnly = true;
+      quantidade.min = '1';
+      quantidade.max = '1';
+    } else if (f === 'varios_boletos') {
+      quantidade.readOnly = false;
+      quantidade.min = '2';
+      quantidade.max = '12';
+      if (parseInt(quantidade.value || '0', 10) < 2) {
+        quantidade.value = '2';
+      }
+    } else {
+      quantidade.readOnly = false;
+      quantidade.min = '1';
+      quantidade.max = '12';
     }
   }
 
   function gerarParcelas() {
     const f = forma.value;
+
     if (f !== 'boleto_unico' && f !== 'varios_boletos') {
       linhasBox.innerHTML = '';
       atualizarTotais();
       return;
     }
+
     let qtd = f === 'boleto_unico' ? 1 : parseInt(quantidade.value || '2', 10);
     if (!qtd || qtd < 1) qtd = 1;
     if (f === 'varios_boletos' && qtd < 2) qtd = 2;
+    if (qtd > 12) qtd = 12;
+
     quantidade.value = String(qtd);
+
     const valores = dividir(valorNota(), qtd);
     linhasBox.innerHTML = valores.map((valor, idx) => linhaParcela(idx + 1, valor)).join('');
     atualizarTotais();
@@ -3309,10 +3349,13 @@
   function atualizarTotais() {
     const inputs = linhasBox.querySelectorAll('input[name^="parcela_valor_"]');
     let total = 0;
+
     inputs.forEach((input) => {
       total += parseMoeda(input.value);
     });
+
     const diff = total - valorNota();
+
     if (totalTexto) totalTexto.textContent = formatarMoeda(total);
     if (diferencaTexto) diferencaTexto.textContent = formatarMoeda(diff);
     if (alerta) alerta.style.display = Math.abs(diff) < 0.005 ? 'none' : '';
@@ -3322,11 +3365,24 @@
     atualizarVisibilidade();
     gerarParcelas();
   });
-  quantidade.addEventListener('change', gerarParcelas);
-  if (btnGerar) btnGerar.addEventListener('click', gerarParcelas);
+
+  quantidade.addEventListener('change', function() {
+    atualizarVisibilidade();
+    gerarParcelas();
+  });
+
+  if (btnGerar) {
+    btnGerar.addEventListener('click', function() {
+      atualizarVisibilidade();
+      gerarParcelas();
+    });
+  }
+
   linhasBox.addEventListener('input', atualizarTotais);
 
   atualizarVisibilidade();
   atualizarTotais();
 })();
 </script>
+
+{% endblock %}\n
