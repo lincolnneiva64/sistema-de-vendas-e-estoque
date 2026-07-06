@@ -314,7 +314,60 @@
 
   <section class="lista-ver-card">
     <div class="lista-ver-table-wrap">
-      <table class="lista-ver-table">
+
+<style>
+  .lista-ver-tabela {
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  .lista-ver-tabela th,
+  .lista-ver-tabela td {
+    vertical-align: middle;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .lista-ver-tabela th:nth-child(1),
+  .lista-ver-tabela td:nth-child(1) {
+    width: 28%;
+    text-align: left;
+  }
+
+  .lista-ver-tabela th:nth-child(2),
+  .lista-ver-tabela td:nth-child(2) {
+    width: 10%;
+    text-align: center;
+  }
+
+  .lista-ver-tabela th:nth-child(3),
+  .lista-ver-tabela td:nth-child(3) {
+    width: 15%;
+    text-align: center;
+  }
+
+  .lista-ver-tabela th:nth-child(4),
+  .lista-ver-tabela td:nth-child(4) {
+    width: 15%;
+    text-align: center;
+  }
+
+  .lista-ver-tabela th:nth-child(5),
+  .lista-ver-tabela td:nth-child(5) {
+    width: 16%;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .lista-ver-tabela th:nth-child(6),
+  .lista-ver-tabela td:nth-child(6) {
+    width: 16%;
+    text-align: center;
+    white-space: nowrap;
+  }
+</style>
+
+<table class="lista-ver-table lista-ver-tabela">
         <thead>
           <tr>
             <th>Produto</th>
