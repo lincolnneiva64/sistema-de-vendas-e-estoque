@@ -1782,82 +1782,7 @@
     </section>
   {% endif %}
 
-  {% if comparacao_conferencia.exibir %}
-    <section class="lista-fornecedor-card pagamento-nota-card">
-        <h3>Forma de pagamento da nota</h3>
-        <p class="pagamento-nota-ajuda">Etapa informativa. Ainda não gera Conta a Pagar nem movimenta Caixa/Banco.</p>
 
-        {% if comparacao_nota_boleto.tem_valor %}
-          <form method="post" class="comparacao-nota-form" id="formPagamentoNota">
-            {% csrf_token %}
-            <input type="hidden" name="acao" value="salvar_pagamento_nota">
-
-            <div class="comparacao-proxima-grid">
-              <div class="comparacao-proxima-item">
-                <label class="lista-fornecedor-label" for="forma_cobranca_nota">Forma de cobrança</label>
-                <select id="forma_cobranca_nota" name="forma_cobranca_nota">
-                  {% for valor, texto in pagamento_nota.formas %}
-                    <option value="{{ valor }}" {% if pagamento_nota.forma == valor %}selected{% endif %}>{{ texto }}</option>
-                  {% endfor %}
-                </select>
-
-              <div class="comparacao-proxima-item" id="grupoQuantidadeBoletos">
-                <label class="lista-fornecedor-label" for="quantidade_boletos">Quantidade de boletos</label>
-                <input type="number" min="1" max="12" id="quantidade_boletos" name="quantidade_boletos" value="{% if pagamento_nota.quantidade %}{{ pagamento_nota.quantidade }}{% else %}2{% endif %}">
-              </div>
-
-              <div class="comparacao-proxima-item">
-                <label class="lista-fornecedor-label" for="observacao_pagamento_nota">Observação do pagamento</label>
-                <textarea id="observacao_pagamento_nota" name="observacao_pagamento_nota" rows="2">{{ pagamento_nota.observacao }}</textarea>
-              </div>
-            </div>
-
-            <div class="pagamento-parcelas" id="pagamentoParcelas"
-                 data-valor-nota="{{ comparacao_nota_boleto.valor_nota|default_if_none:'0' }}"
-                 data-quantidade="{{ pagamento_nota.quantidade|default:'0' }}">
-              <div class="pagamento-parcelas-topo">
-                <strong>Boletos / parcelas</strong>
-                <button type="button" class="comparacao-nota-btn secundario" id="btnGerarParcelasNota">Gerar parcelas</button>
-              </div>
-
-              <div id="parcelasNotaLinhas">
-                {% for parcela in pagamento_nota.linhas %}
-                  <div class="pagamento-parcela-linha">
-                    <strong>Boleto {{ parcela.numero }}</strong>
-                    <label>
-                      <span>Vencimento</span>
-                      <input type="date" name="parcela_vencimento_{{ parcela.numero }}" value="{{ parcela.vencimento }}">
-                    </label>
-                    <label>
-                      <span>Valor</span>
-                      <input type="text" inputmode="decimal" name="parcela_valor_{{ parcela.numero }}" value="{{ parcela.valor_input }}">
-                    </label>
-                    <label>
-                      <span>Obs.</span>
-                      <input type="text" name="parcela_observacao_{{ parcela.numero }}" value="{{ parcela.observacao }}">
-                    </label>
-                  </div>
-                {% endfor %}
-              </div>
-            </div>
-
-            <div class="comparacao-proxima-resumo pagamento-nota-resumo">
-              <p><strong>Total da nota:</strong> {{ comparacao_nota_boleto.valor_nota_texto }}</p>
-              <p><strong>Total dos boletos:</strong> <span id="totalBoletosTexto">{{ pagamento_nota.total_parcelas_texto }}</span></p>
-              <p><strong>Diferença:</strong> <span id="diferencaBoletosTexto">{{ pagamento_nota.diferenca_texto }}</span></p>
-              <p id="alertaDiferencaBoletos" class="pagamento-nota-alerta" {% if pagamento_nota.bate_com_nota %}style="display:none;"{% endif %}>A soma dos boletos precisa bater com o valor da nota.</p>
-            </div>
-
-            <button type="submit" class="comparacao-nota-btn">Salvar forma de pagamento</button>
-          </form>
-        {% else %}
-          <div class="comparacao-proxima-resumo">
-            <p>Informe primeiro o valor da nota/boleto para cadastrar a forma de pagamento.</p>
-          </div>
-        {% endif %}
-      </div>
-    </section>
-  {% endif %}
 
   <section class="lista-fornecedor-card">
     <div class="lista-fornecedor-card-titulo">
@@ -2337,6 +2262,84 @@
             <p>A comparação com nota/boleto ainda não foi informada.</p>
           {% endif %}
         </div>
+    </section>
+  {% endif %}
+
+
+  {% if comparacao_conferencia.exibir %}
+    <section class="lista-fornecedor-card pagamento-nota-card">
+        <h3>Forma de pagamento da nota</h3>
+        <p class="pagamento-nota-ajuda">Etapa informativa. Ainda não gera Conta a Pagar nem movimenta Caixa/Banco.</p>
+
+        {% if comparacao_nota_boleto.tem_valor %}
+          <form method="post" class="comparacao-nota-form" id="formPagamentoNota">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="salvar_pagamento_nota">
+
+            <div class="comparacao-proxima-grid">
+              <div class="comparacao-proxima-item">
+                <label class="lista-fornecedor-label" for="forma_cobranca_nota">Forma de cobrança</label>
+                <select id="forma_cobranca_nota" name="forma_cobranca_nota">
+                  {% for valor, texto in pagamento_nota.formas %}
+                    <option value="{{ valor }}" {% if pagamento_nota.forma == valor %}selected{% endif %}>{{ texto }}</option>
+                  {% endfor %}
+                </select>
+
+              <div class="comparacao-proxima-item" id="grupoQuantidadeBoletos">
+                <label class="lista-fornecedor-label" for="quantidade_boletos">Quantidade de boletos</label>
+                <input type="number" min="1" max="12" id="quantidade_boletos" name="quantidade_boletos" value="{% if pagamento_nota.quantidade %}{{ pagamento_nota.quantidade }}{% else %}2{% endif %}">
+              </div>
+
+              <div class="comparacao-proxima-item">
+                <label class="lista-fornecedor-label" for="observacao_pagamento_nota">Observação do pagamento</label>
+                <textarea id="observacao_pagamento_nota" name="observacao_pagamento_nota" rows="2">{{ pagamento_nota.observacao }}</textarea>
+              </div>
+            </div>
+
+            <div class="pagamento-parcelas" id="pagamentoParcelas"
+                 data-valor-nota="{{ comparacao_nota_boleto.valor_nota|default_if_none:'0' }}"
+                 data-quantidade="{{ pagamento_nota.quantidade|default:'0' }}">
+              <div class="pagamento-parcelas-topo">
+                <strong>Boletos / parcelas</strong>
+                <button type="button" class="comparacao-nota-btn secundario" id="btnGerarParcelasNota">Gerar parcelas</button>
+              </div>
+
+              <div id="parcelasNotaLinhas">
+                {% for parcela in pagamento_nota.linhas %}
+                  <div class="pagamento-parcela-linha">
+                    <strong>Boleto {{ parcela.numero }}</strong>
+                    <label>
+                      <span>Vencimento</span>
+                      <input type="date" name="parcela_vencimento_{{ parcela.numero }}" value="{{ parcela.vencimento }}">
+                    </label>
+                    <label>
+                      <span>Valor</span>
+                      <input type="text" inputmode="decimal" name="parcela_valor_{{ parcela.numero }}" value="{{ parcela.valor_input }}">
+                    </label>
+                    <label>
+                      <span>Obs.</span>
+                      <input type="text" name="parcela_observacao_{{ parcela.numero }}" value="{{ parcela.observacao }}">
+                    </label>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="comparacao-proxima-resumo pagamento-nota-resumo">
+              <p><strong>Total da nota:</strong> {{ comparacao_nota_boleto.valor_nota_texto }}</p>
+              <p><strong>Total dos boletos:</strong> <span id="totalBoletosTexto">{{ pagamento_nota.total_parcelas_texto }}</span></p>
+              <p><strong>Diferença:</strong> <span id="diferencaBoletosTexto">{{ pagamento_nota.diferenca_texto }}</span></p>
+              <p id="alertaDiferencaBoletos" class="pagamento-nota-alerta" {% if pagamento_nota.bate_com_nota %}style="display:none;"{% endif %}>A soma dos boletos precisa bater com o valor da nota.</p>
+            </div>
+
+            <button type="submit" class="comparacao-nota-btn">Salvar forma de pagamento</button>
+          </form>
+        {% else %}
+          <div class="comparacao-proxima-resumo">
+            <p>Informe primeiro o valor da nota/boleto para cadastrar a forma de pagamento.</p>
+          </div>
+        {% endif %}
+      </div>
     </section>
   {% endif %}
 
