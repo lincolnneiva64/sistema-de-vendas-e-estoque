@@ -425,75 +425,15 @@ table.listas-fornecedor-tabela {
 </style>
 
 
-<style>
-/* AJUSTE FINAL 0607 C - corrige coluna Total e equilibrio da tabela */
-.listas-fornecedor-table th:nth-child(1),
-.listas-fornecedor-table td:nth-child(1) {
-  width: 5% !important;
-}
-
-.listas-fornecedor-table th:nth-child(2),
-.listas-fornecedor-table td:nth-child(2) {
-  width: 19% !important;
-}
-
-.listas-fornecedor-table th:nth-child(3),
-.listas-fornecedor-table td:nth-child(3) {
-  width: 11% !important;
-}
-
-.listas-fornecedor-table th:nth-child(4),
-.listas-fornecedor-table td:nth-child(4) {
-  width: 14% !important;
-  text-align: center !important;
-  white-space: nowrap !important;
-  overflow: visible !important;
-}
-
-.listas-fornecedor-table th:nth-child(5),
-.listas-fornecedor-table td:nth-child(5) {
-  width: 15% !important;
-}
-
-.listas-fornecedor-table th:nth-child(6),
-.listas-fornecedor-table td:nth-child(6) {
-  width: 36% !important;
-}
-
-.listas-fornecedor-table td:nth-child(4) * {
-  white-space: nowrap !important;
-}
-
-.listas-fornecedor-total,
-.listas-fornecedor-total-valor {
-  white-space: nowrap !important;
-  display: inline-block !important;
-  min-width: 92px !important;
-  text-align: center !important;
-}
-</style>
-
 
 <style>
-/* AJUSTE FINAL 0607 D - filtros mais baixos e Total alinhado */
+/* AJUSTE DEFINITIVO 0607 - fecha visual da consulta */
+
+/* Topo/filtros mais baixos */
 .listas-fornecedor-filtros,
 .listas-fornecedor-filters {
   padding: 9px 14px !important;
   margin-bottom: 10px !important;
-}
-
-.listas-fornecedor-filtros form,
-.listas-fornecedor-filters form {
-  row-gap: 8px !important;
-  column-gap: 10px !important;
-  align-items: end !important;
-}
-
-.listas-fornecedor-filtros label,
-.listas-fornecedor-filters label {
-  font-size: .70rem !important;
-  line-height: 1.1 !important;
-  margin-bottom: 3px !important;
 }
 
 .listas-fornecedor-filtros input,
@@ -506,54 +446,99 @@ table.listas-fornecedor-tabela {
   font-size: .84rem !important;
 }
 
-.listas-fornecedor-filtros button,
-.listas-fornecedor-filters button,
-.listas-fornecedor-filtros .listas-fornecedor-btn,
-.listas-fornecedor-filters .listas-fornecedor-btn {
-  min-height: 32px !important;
-  height: 32px !important;
-  padding: 5px 11px !important;
-  font-size: .75rem !important;
+/* Tabela compacta */
+.listas-fornecedor-table {
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed !important;
 }
 
-/* Total centralizado e sem faixa torta */
+.listas-fornecedor-table th,
+.listas-fornecedor-table td {
+  padding: 10px 8px !important;
+  vertical-align: middle !important;
+}
+
+/* Larguras */
+.listas-fornecedor-table th:nth-child(1),
+.listas-fornecedor-table td:nth-child(1) {
+  width: 5% !important;
+  text-align: center !important;
+}
+
+.listas-fornecedor-table th:nth-child(2),
+.listas-fornecedor-table td:nth-child(2) {
+  width: 20% !important;
+  text-align: left !important;
+}
+
+.listas-fornecedor-table th:nth-child(3),
+.listas-fornecedor-table td:nth-child(3) {
+  width: 12% !important;
+  text-align: center !important;
+}
+
 .listas-fornecedor-table th:nth-child(4),
 .listas-fornecedor-table td:nth-child(4) {
   width: 13% !important;
   text-align: center !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  overflow: visible !important;
-}
-
-.listas-fornecedor-table td:nth-child(4) {
-  background: transparent !important;
-}
-
-.listas-fornecedor-table td:nth-child(4) > *,
-.listas-fornecedor-total,
-.listas-fornecedor-total-valor {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 104px !important;
-  min-width: 104px !important;
-  max-width: 104px !important;
-  min-height: 34px !important;
-  margin: 0 auto !important;
-  white-space: nowrap !important;
-  text-align: center !important;
-  background: #fffdf3 !important;
 }
 
 .listas-fornecedor-table th:nth-child(5),
 .listas-fornecedor-table td:nth-child(5) {
-  width: 14% !important;
+  width: 15% !important;
+  text-align: center !important;
 }
 
 .listas-fornecedor-table th:nth-child(6),
 .listas-fornecedor-table td:nth-child(6) {
-  width: 38% !important;
+  width: 35% !important;
+  text-align: right !important;
+}
+
+/* Cabeçalho Total vermelho normal */
+.listas-fornecedor-table th:nth-child(4) {
+  background: #9f172d !important;
+  color: #fff !important;
+}
+
+/* Correção principal: Total volta a ser célula de tabela */
+td.listas-fornecedor-total {
+  display: table-cell !important;
+  width: 13% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 10px 8px !important;
+  margin: 0 !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+  white-space: nowrap !important;
+  line-height: normal !important;
+  background: #fff !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: #991b1b !important;
+  font-weight: 950 !important;
+}
+
+/* Ações alinhadas e com espaço para futuro Editar Lista */
+.listas-fornecedor-acoes {
+  display: flex !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-wrap: nowrap !important;
+}
+
+.listas-fornecedor-acoes .listas-fornecedor-btn {
+  min-width: 0 !important;
+  width: auto !important;
+  min-height: 32px !important;
+  padding: 6px 9px !important;
+  font-size: .75rem !important;
+  white-space: nowrap !important;
 }
 </style>
 
@@ -2097,75 +2082,15 @@ table.listas-fornecedor-tabela {
 </style>
 
 
-<style>
-/* AJUSTE FINAL 0607 C - corrige coluna Total e equilibrio da tabela */
-.listas-fornecedor-table th:nth-child(1),
-.listas-fornecedor-table td:nth-child(1) {
-  width: 5% !important;
-}
-
-.listas-fornecedor-table th:nth-child(2),
-.listas-fornecedor-table td:nth-child(2) {
-  width: 19% !important;
-}
-
-.listas-fornecedor-table th:nth-child(3),
-.listas-fornecedor-table td:nth-child(3) {
-  width: 11% !important;
-}
-
-.listas-fornecedor-table th:nth-child(4),
-.listas-fornecedor-table td:nth-child(4) {
-  width: 14% !important;
-  text-align: center !important;
-  white-space: nowrap !important;
-  overflow: visible !important;
-}
-
-.listas-fornecedor-table th:nth-child(5),
-.listas-fornecedor-table td:nth-child(5) {
-  width: 15% !important;
-}
-
-.listas-fornecedor-table th:nth-child(6),
-.listas-fornecedor-table td:nth-child(6) {
-  width: 36% !important;
-}
-
-.listas-fornecedor-table td:nth-child(4) * {
-  white-space: nowrap !important;
-}
-
-.listas-fornecedor-total,
-.listas-fornecedor-total-valor {
-  white-space: nowrap !important;
-  display: inline-block !important;
-  min-width: 92px !important;
-  text-align: center !important;
-}
-</style>
-
 
 <style>
-/* AJUSTE FINAL 0607 D - filtros mais baixos e Total alinhado */
+/* AJUSTE DEFINITIVO 0607 - fecha visual da consulta */
+
+/* Topo/filtros mais baixos */
 .listas-fornecedor-filtros,
 .listas-fornecedor-filters {
   padding: 9px 14px !important;
   margin-bottom: 10px !important;
-}
-
-.listas-fornecedor-filtros form,
-.listas-fornecedor-filters form {
-  row-gap: 8px !important;
-  column-gap: 10px !important;
-  align-items: end !important;
-}
-
-.listas-fornecedor-filtros label,
-.listas-fornecedor-filters label {
-  font-size: .70rem !important;
-  line-height: 1.1 !important;
-  margin-bottom: 3px !important;
 }
 
 .listas-fornecedor-filtros input,
@@ -2178,54 +2103,99 @@ table.listas-fornecedor-tabela {
   font-size: .84rem !important;
 }
 
-.listas-fornecedor-filtros button,
-.listas-fornecedor-filters button,
-.listas-fornecedor-filtros .listas-fornecedor-btn,
-.listas-fornecedor-filters .listas-fornecedor-btn {
-  min-height: 32px !important;
-  height: 32px !important;
-  padding: 5px 11px !important;
-  font-size: .75rem !important;
+/* Tabela compacta */
+.listas-fornecedor-table {
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed !important;
 }
 
-/* Total centralizado e sem faixa torta */
+.listas-fornecedor-table th,
+.listas-fornecedor-table td {
+  padding: 10px 8px !important;
+  vertical-align: middle !important;
+}
+
+/* Larguras */
+.listas-fornecedor-table th:nth-child(1),
+.listas-fornecedor-table td:nth-child(1) {
+  width: 5% !important;
+  text-align: center !important;
+}
+
+.listas-fornecedor-table th:nth-child(2),
+.listas-fornecedor-table td:nth-child(2) {
+  width: 20% !important;
+  text-align: left !important;
+}
+
+.listas-fornecedor-table th:nth-child(3),
+.listas-fornecedor-table td:nth-child(3) {
+  width: 12% !important;
+  text-align: center !important;
+}
+
 .listas-fornecedor-table th:nth-child(4),
 .listas-fornecedor-table td:nth-child(4) {
   width: 13% !important;
   text-align: center !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  overflow: visible !important;
-}
-
-.listas-fornecedor-table td:nth-child(4) {
-  background: transparent !important;
-}
-
-.listas-fornecedor-table td:nth-child(4) > *,
-.listas-fornecedor-total,
-.listas-fornecedor-total-valor {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 104px !important;
-  min-width: 104px !important;
-  max-width: 104px !important;
-  min-height: 34px !important;
-  margin: 0 auto !important;
-  white-space: nowrap !important;
-  text-align: center !important;
-  background: #fffdf3 !important;
 }
 
 .listas-fornecedor-table th:nth-child(5),
 .listas-fornecedor-table td:nth-child(5) {
-  width: 14% !important;
+  width: 15% !important;
+  text-align: center !important;
 }
 
 .listas-fornecedor-table th:nth-child(6),
 .listas-fornecedor-table td:nth-child(6) {
-  width: 38% !important;
+  width: 35% !important;
+  text-align: right !important;
+}
+
+/* Cabeçalho Total vermelho normal */
+.listas-fornecedor-table th:nth-child(4) {
+  background: #9f172d !important;
+  color: #fff !important;
+}
+
+/* Correção principal: Total volta a ser célula de tabela */
+td.listas-fornecedor-total {
+  display: table-cell !important;
+  width: 13% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 10px 8px !important;
+  margin: 0 !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+  white-space: nowrap !important;
+  line-height: normal !important;
+  background: #fff !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: #991b1b !important;
+  font-weight: 950 !important;
+}
+
+/* Ações alinhadas e com espaço para futuro Editar Lista */
+.listas-fornecedor-acoes {
+  display: flex !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-wrap: nowrap !important;
+}
+
+.listas-fornecedor-acoes .listas-fornecedor-btn {
+  min-width: 0 !important;
+  width: auto !important;
+  min-height: 32px !important;
+  padding: 6px 9px !important;
+  font-size: .75rem !important;
+  white-space: nowrap !important;
 }
 </style>
 
