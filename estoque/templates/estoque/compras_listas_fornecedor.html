@@ -1057,7 +1057,7 @@
                   <td class="listas-fornecedor-numero">#{{ lista.id }}</td>
                   <td class="listas-fornecedor-fornecedor-cell">
                     {% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}
-                    <a class="listas-fornecedor-btn listas-fornecedor-mobile-abrir" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Abrir lista</a>
+                    <a class="listas-fornecedor-btn listas-fornecedor-mobile-abrir" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
                   </td>
                   <td>{{ lista.data_lista|date:"d/m/Y" }}</td>
                   <td class="listas-fornecedor-total">R$ {{ lista.total_lista|floatformat:2 }}</td>
@@ -1069,7 +1069,8 @@
                   </td>
                   <td>
                     <div class="listas-fornecedor-acoes">
-                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Lista</a>
+                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
+                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
                       {% if lista.compra_gerada.status == "finalizada" %}
                         <a class="listas-fornecedor-btn primary" href="{% url 'estoque:compras_detalhe' lista.compra_gerada.id %}">Compra</a>
                       {% else %}
@@ -1083,7 +1084,7 @@
                   <td class="listas-fornecedor-numero">#{{ lista.id }}</td>
                   <td class="listas-fornecedor-fornecedor-cell">
                     {% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}
-                    <a class="listas-fornecedor-btn listas-fornecedor-mobile-abrir" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Abrir lista</a>
+                    <a class="listas-fornecedor-btn listas-fornecedor-mobile-abrir" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
                   </td>
                   <td>{{ lista.data_lista|date:"d/m/Y" }}</td>
                   <td class="listas-fornecedor-total">R$ {{ lista.total_lista|floatformat:2 }}</td>
@@ -1095,8 +1096,9 @@
                   </td>
                   <td>
                     <div class="listas-fornecedor-acoes">
-                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Abrir</a>
-                      <a class="listas-fornecedor-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">WhatsApp</a>
+                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
+                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
+                      <a class="listas-fornecedor-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Enviar ao Vendedor</a>
                       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Imprimir</a>
                     </div>
                   </td>

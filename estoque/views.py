@@ -5158,6 +5158,21 @@ def compras_lista_fornecedor_gravar(request):
     return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
 
 
+
+def compras_lista_fornecedor_ver(request, pk):
+    lista = get_object_or_404(
+        ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+    return render(
+        request,
+        "estoque/compras_lista_fornecedor_ver.html",
+        {
+            "lista": lista,
+        },
+    )
+
+
 def compras_lista_fornecedor_whatsapp(request, pk):
     lista = get_object_or_404(
         ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("fornecedor__contatos", "itens__produto"),

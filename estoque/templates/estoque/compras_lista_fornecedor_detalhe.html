@@ -3,6 +3,202 @@
 
 
 
+
+<style>
+  /* Ajuste de acoes da tela pesada da lista */
+  .lista-fornecedor-acoes-normais {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .lista-fornecedor-acoes-perigo {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .lista-fornecedor-btn-excluir {
+    border-color: #991b1b !important;
+    background: #fff1f2 !important;
+    color: #991b1b !important;
+  }
+
+  .lista-fornecedor-btn-excluir:hover,
+  .lista-fornecedor-btn-excluir:focus {
+    background: #991b1b !important;
+    color: #fff !important;
+  }
+
+  .modal-excluir-lista-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(15, 23, 42, .55);
+  }
+
+  .modal-excluir-lista-overlay.aberto {
+    display: flex;
+  }
+
+  .modal-excluir-lista {
+    width: min(460px, 100%);
+    background: #fff;
+    border: 1px solid #fecaca;
+    border-radius: 18px;
+    box-shadow: 0 24px 70px rgba(127, 29, 29, .28);
+    overflow: hidden;
+  }
+
+  .modal-excluir-lista-corpo {
+    padding: 20px;
+    background: linear-gradient(135deg, #fff7ed, #fff1f2);
+  }
+
+  .modal-excluir-lista-titulo {
+    margin: 0 0 8px;
+    color: #7f1d1d;
+    font-size: 1.22rem;
+    font-weight: 950;
+  }
+
+  .modal-excluir-lista-texto {
+    margin: 0;
+    color: #3f2a2a;
+    line-height: 1.45;
+    font-weight: 750;
+  }
+
+  .modal-excluir-lista-aviso {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid #fecaca;
+    background: #fff;
+    color: #991b1b;
+    font-weight: 900;
+  }
+
+  .modal-excluir-lista-acoes {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 18px;
+    background: #fff;
+    border-top: 1px solid #fee2e2;
+  }
+
+  .modal-excluir-lista-btn {
+    min-height: 38px;
+    border-radius: 999px;
+    border: 1px solid #e5e7eb;
+    padding: 8px 14px;
+    font-weight: 900;
+    cursor: pointer;
+  }
+
+  .modal-excluir-lista-btn.voltar {
+    background: #fff;
+    color: #374151;
+  }
+
+  .modal-excluir-lista-btn.excluir {
+    border-color: #991b1b;
+    background: #991b1b;
+    color: #fff;
+  }
+
+  @media (max-width: 700px) {
+    .lista-fornecedor-acoes-perigo {
+      margin-left: 0;
+      width: 100%;
+      justify-content: flex-end;
+      padding-top: 8px;
+      border-top: 1px dashed #fecaca;
+    }
+
+    .modal-excluir-lista-acoes {
+      flex-direction: column;
+    }
+
+    .modal-excluir-lista-btn {
+      width: 100%;
+    }
+  }
+</style>
+
+
+<div class="modal-excluir-lista-overlay" id="modalExcluirLista" aria-hidden="true">
+  <div class="modal-excluir-lista" role="dialog" aria-modal="true" aria-labelledby="modalExcluirListaTitulo">
+    <div class="modal-excluir-lista-corpo">
+      <h3 class="modal-excluir-lista-titulo" id="modalExcluirListaTitulo">Excluir esta lista?</h3>
+      <p class="modal-excluir-lista-texto">
+        A lista sairá do fluxo normal e ficará marcada como cancelada/excluída para preservar o histórico.
+      </p>
+      <div class="modal-excluir-lista-aviso">
+        Isso não gera compra, não mexe no estoque e não cria financeiro.
+      </div>
+    </div>
+    <div class="modal-excluir-lista-acoes">
+      <button type="button" class="modal-excluir-lista-btn voltar" id="btnFecharModalExcluirLista">Voltar</button>
+      <button type="button" class="modal-excluir-lista-btn excluir" id="btnConfirmarExcluirLista">Excluir Lista</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const botaoAbrir = document.getElementById('btnAbrirModalExcluirLista');
+  const modal = document.getElementById('modalExcluirLista');
+  const botaoFechar = document.getElementById('btnFecharModalExcluirLista');
+  const botaoConfirmar = document.getElementById('btnConfirmarExcluirLista');
+  const formExcluir = document.getElementById('formExcluirListaFornecedor');
+
+  function abrirModalExcluir() {
+    if (!modal) return;
+    modal.classList.add('aberto');
+    modal.setAttribute('aria-hidden', 'false');
+    setTimeout(function() {
+      if (botaoFechar) botaoFechar.focus();
+    }, 80);
+  }
+
+  function fecharModalExcluir() {
+    if (!modal) return;
+    modal.classList.remove('aberto');
+    modal.setAttribute('aria-hidden', 'true');
+    if (botaoAbrir) botaoAbrir.focus();
+  }
+
+  if (botaoAbrir) botaoAbrir.addEventListener('click', abrirModalExcluir);
+  if (botaoFechar) botaoFechar.addEventListener('click', fecharModalExcluir);
+  if (botaoConfirmar) {
+    botaoConfirmar.addEventListener('click', function() {
+      if (formExcluir) formExcluir.submit();
+    });
+  }
+
+  if (modal) {
+    modal.addEventListener('click', function(event) {
+      if (event.target === modal) fecharModalExcluir();
+    });
+  }
+
+  document.addEventListener('keydown', function(event) {
+    if (!modal || !modal.classList.contains('aberto')) return;
+    if (event.key === 'Escape') {
+      fecharModalExcluir();
+    }
+  });
+})();
+</script>
+
 {% endblock %}
 {% block content %}
 
@@ -1728,14 +1924,20 @@
           <button type="submit" class="lista-fornecedor-btn principal">Gerar Compra</button>
         </form>
       {% endif %}
-      <a class="lista-fornecedor-btn neutro" href="{% url 'estoque:compras_listas_fornecedor' %}">Consultar Listas</a>
-      <a class="lista-fornecedor-btn principal" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">WhatsApp</a>
-      <a class="lista-fornecedor-btn neutro" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Imprimir</a>
+      <div class="lista-fornecedor-acoes-normais">
+        <a class="lista-fornecedor-btn neutro" href="{% url 'estoque:compras_listas_fornecedor' %}">Consultar Listas</a>
+        <a class="lista-fornecedor-btn neutro" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
+        <a class="lista-fornecedor-btn principal" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Enviar ao Vendedor</a>
+        <a class="lista-fornecedor-btn neutro" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Imprimir</a>
+      </div>
+
       {% if lista.status != "cancelada" %}
-        <form method="post" action="{% url 'estoque:compras_lista_fornecedor_cancelar' lista.id %}" style="margin:0" onsubmit="return confirm('Cancelar esta lista?');">
-          {% csrf_token %}
-          <button type="submit" class="lista-fornecedor-btn danger">Cancelar Lista</button>
-        </form>
+        <div class="lista-fornecedor-acoes-perigo">
+          <button type="button" class="lista-fornecedor-btn danger lista-fornecedor-btn-excluir" id="btnAbrirModalExcluirLista">Excluir Lista</button>
+          <form method="post" action="{% url 'estoque:compras_lista_fornecedor_cancelar' lista.id %}" id="formExcluirListaFornecedor" style="display:none;">
+            {% csrf_token %}
+          </form>
+        </div>
       {% endif %}
     </div>
   </section>
@@ -3382,6 +3584,202 @@
 
   atualizarVisibilidade();
   atualizarTotais();
+})();
+</script>
+
+
+<style>
+  /* Ajuste de acoes da tela pesada da lista */
+  .lista-fornecedor-acoes-normais {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .lista-fornecedor-acoes-perigo {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .lista-fornecedor-btn-excluir {
+    border-color: #991b1b !important;
+    background: #fff1f2 !important;
+    color: #991b1b !important;
+  }
+
+  .lista-fornecedor-btn-excluir:hover,
+  .lista-fornecedor-btn-excluir:focus {
+    background: #991b1b !important;
+    color: #fff !important;
+  }
+
+  .modal-excluir-lista-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(15, 23, 42, .55);
+  }
+
+  .modal-excluir-lista-overlay.aberto {
+    display: flex;
+  }
+
+  .modal-excluir-lista {
+    width: min(460px, 100%);
+    background: #fff;
+    border: 1px solid #fecaca;
+    border-radius: 18px;
+    box-shadow: 0 24px 70px rgba(127, 29, 29, .28);
+    overflow: hidden;
+  }
+
+  .modal-excluir-lista-corpo {
+    padding: 20px;
+    background: linear-gradient(135deg, #fff7ed, #fff1f2);
+  }
+
+  .modal-excluir-lista-titulo {
+    margin: 0 0 8px;
+    color: #7f1d1d;
+    font-size: 1.22rem;
+    font-weight: 950;
+  }
+
+  .modal-excluir-lista-texto {
+    margin: 0;
+    color: #3f2a2a;
+    line-height: 1.45;
+    font-weight: 750;
+  }
+
+  .modal-excluir-lista-aviso {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid #fecaca;
+    background: #fff;
+    color: #991b1b;
+    font-weight: 900;
+  }
+
+  .modal-excluir-lista-acoes {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 18px;
+    background: #fff;
+    border-top: 1px solid #fee2e2;
+  }
+
+  .modal-excluir-lista-btn {
+    min-height: 38px;
+    border-radius: 999px;
+    border: 1px solid #e5e7eb;
+    padding: 8px 14px;
+    font-weight: 900;
+    cursor: pointer;
+  }
+
+  .modal-excluir-lista-btn.voltar {
+    background: #fff;
+    color: #374151;
+  }
+
+  .modal-excluir-lista-btn.excluir {
+    border-color: #991b1b;
+    background: #991b1b;
+    color: #fff;
+  }
+
+  @media (max-width: 700px) {
+    .lista-fornecedor-acoes-perigo {
+      margin-left: 0;
+      width: 100%;
+      justify-content: flex-end;
+      padding-top: 8px;
+      border-top: 1px dashed #fecaca;
+    }
+
+    .modal-excluir-lista-acoes {
+      flex-direction: column;
+    }
+
+    .modal-excluir-lista-btn {
+      width: 100%;
+    }
+  }
+</style>
+
+
+<div class="modal-excluir-lista-overlay" id="modalExcluirLista" aria-hidden="true">
+  <div class="modal-excluir-lista" role="dialog" aria-modal="true" aria-labelledby="modalExcluirListaTitulo">
+    <div class="modal-excluir-lista-corpo">
+      <h3 class="modal-excluir-lista-titulo" id="modalExcluirListaTitulo">Excluir esta lista?</h3>
+      <p class="modal-excluir-lista-texto">
+        A lista sairá do fluxo normal e ficará marcada como cancelada/excluída para preservar o histórico.
+      </p>
+      <div class="modal-excluir-lista-aviso">
+        Isso não gera compra, não mexe no estoque e não cria financeiro.
+      </div>
+    </div>
+    <div class="modal-excluir-lista-acoes">
+      <button type="button" class="modal-excluir-lista-btn voltar" id="btnFecharModalExcluirLista">Voltar</button>
+      <button type="button" class="modal-excluir-lista-btn excluir" id="btnConfirmarExcluirLista">Excluir Lista</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const botaoAbrir = document.getElementById('btnAbrirModalExcluirLista');
+  const modal = document.getElementById('modalExcluirLista');
+  const botaoFechar = document.getElementById('btnFecharModalExcluirLista');
+  const botaoConfirmar = document.getElementById('btnConfirmarExcluirLista');
+  const formExcluir = document.getElementById('formExcluirListaFornecedor');
+
+  function abrirModalExcluir() {
+    if (!modal) return;
+    modal.classList.add('aberto');
+    modal.setAttribute('aria-hidden', 'false');
+    setTimeout(function() {
+      if (botaoFechar) botaoFechar.focus();
+    }, 80);
+  }
+
+  function fecharModalExcluir() {
+    if (!modal) return;
+    modal.classList.remove('aberto');
+    modal.setAttribute('aria-hidden', 'true');
+    if (botaoAbrir) botaoAbrir.focus();
+  }
+
+  if (botaoAbrir) botaoAbrir.addEventListener('click', abrirModalExcluir);
+  if (botaoFechar) botaoFechar.addEventListener('click', fecharModalExcluir);
+  if (botaoConfirmar) {
+    botaoConfirmar.addEventListener('click', function() {
+      if (formExcluir) formExcluir.submit();
+    });
+  }
+
+  if (modal) {
+    modal.addEventListener('click', function(event) {
+      if (event.target === modal) fecharModalExcluir();
+    });
+  }
+
+  document.addEventListener('keydown', function(event) {
+    if (!modal || !modal.classList.contains('aberto')) return;
+    if (event.key === 'Escape') {
+      fecharModalExcluir();
+    }
+  });
 })();
 </script>
 
