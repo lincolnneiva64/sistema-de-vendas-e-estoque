@@ -5525,6 +5525,36 @@ def compras_lista_fornecedor_editar(request, pk):
     )
 
     itens = list(lista.itens.select_related("produto").all())
+    produtos_queryset = Produto.objects.filter(excluido=False).order_by("nome", "id")
+    produtos_queryset_list = list(produtos_queryset)
+    produto_ids_edicao = [produto.id for produto in produtos_queryset_list]
+
+    vendidos_por_produto_edicao = {
+        item["produto_id"]: item["quantidade_vendida"] or Decimal("0.000")
+        for item in (
+            ItemVenda.objects.filter(
+                produto_id__in=produto_ids_edicao,
+                venda__cancelada=False,
+                venda__data_venda__gte=lista.data_inicio_periodo,
+                venda__data_venda__lte=lista.data_fim_periodo,
+            )
+            .values("produto_id")
+            .annotate(quantidade_vendida=Sum("quantidade"))
+        )
+    }
+
+    status_pedidos_abertos = [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL]
+    pedidos_abertos_por_produto_edicao = {
+        item["produto_id"]: item["quantidade_pedida"] or Decimal("0.000")
+        for item in (
+            ItemPedido.objects.filter(
+                produto_id__in=produto_ids_edicao,
+                pedido__status__in=status_pedidos_abertos,
+            )
+            .values("produto_id")
+            .annotate(quantidade_pedida=Sum("quantidade"))
+        )
+    }
 
     linhas_edicao = []
     for item in itens:
@@ -5552,13 +5582,22 @@ def compras_lista_fornecedor_editar(request, pk):
             "sugestao": item.quantidade_final or item.quantidade_sugerida or Decimal("0"),
             "estoque_atual": getattr(produto, "quantidade", None) or item.estoque_atual or Decimal("0"),
             "estoque_minimo": item.estoque_minimo or Decimal("0"),
-            "quantidade_vendida": item.vendido_periodo or Decimal("0"),
-            "quantidade_pedidos_abertos": item.pedidos_abertos or Decimal("0"),
+            "quantidade_vendida": Decimal(vendidos_por_produto_edicao.get(item.produto_id, Decimal("0.000")) or 0),
+            "quantidade_pedidos_abertos": Decimal(pedidos_abertos_por_produto_edicao.get(item.produto_id, Decimal("0.000")) or 0),
             "unidade": item.unidade or getattr(produto, "unidade", "") or "",
             "preco_compra": item.preco_compra or Decimal("0"),
             "preco_unitario_calculado": item.preco_unitario or Decimal("0"),
             "total_sugerido": item.total or Decimal("0"),
         })
+
+    for item in itens:
+        if item.produto_id:
+            item.vendido_periodo = Decimal(
+                vendidos_por_produto_edicao.get(item.produto_id, Decimal("0.000")) or 0
+            )
+            item.pedidos_abertos = Decimal(
+                pedidos_abertos_por_produto_edicao.get(item.produto_id, Decimal("0.000")) or 0
+            )
 
     produtos_sugestao = [
         _lista_fornecedor_produto_payload(item.produto, fornecedor_id=fornecedor_id, item=item)
@@ -5567,12 +5606,19 @@ def compras_lista_fornecedor_editar(request, pk):
     ]
 
     produtos_ids_lista = {item.produto_id for item in itens if item.produto_id}
-    produtos_queryset = Produto.objects.filter(excluido=False).order_by("nome", "id")
     produtos_manual = []
-    for produto in produtos_queryset:
+    for produto in produtos_queryset_list:
         if produto.id in produtos_ids_lista:
             continue
-        produtos_manual.append(_lista_fornecedor_produto_payload(produto, fornecedor_id=fornecedor_id))
+
+        payload_produto = _lista_fornecedor_produto_payload(produto, fornecedor_id=fornecedor_id)
+        payload_produto["quantidade_vendida"] = _lista_fornecedor_fmt_qtd(
+            Decimal(vendidos_por_produto_edicao.get(produto.id, Decimal("0.000")) or 0)
+        )
+        payload_produto["quantidade_pedidos_abertos"] = _lista_fornecedor_fmt_qtd(
+            Decimal(pedidos_abertos_por_produto_edicao.get(produto.id, Decimal("0.000")) or 0)
+        )
+        produtos_manual.append(payload_produto)
 
     produtos_manual_json = json.dumps(produtos_sugestao + produtos_manual, ensure_ascii=False)
 
