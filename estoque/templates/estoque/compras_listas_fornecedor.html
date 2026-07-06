@@ -1613,6 +1613,7 @@ td.listas-fornecedor-total {
                   <td>
                     <div class="listas-fornecedor-acoes">
                       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
+                      {% if lista.status != "cancelada" %}<a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar Lista</a>{% endif %}
                       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
                       {% if lista.compra_gerada.status == "finalizada" %}
                         <a class="listas-fornecedor-btn primary" href="{% url 'estoque:compras_detalhe' lista.compra_gerada.id %}">Compra</a>
@@ -1640,6 +1641,7 @@ td.listas-fornecedor-total {
                   <td>
                     <div class="listas-fornecedor-acoes">
                       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
+                      {% if lista.status != "cancelada" %}<a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar Lista</a>{% endif %}
                       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
                       <a class="listas-fornecedor-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Enviar ao Vendedor</a>
                     </div>

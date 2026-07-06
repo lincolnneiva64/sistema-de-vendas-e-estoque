@@ -1,5 +1,5 @@
 {% extends 'estoque/base.html' %}
-{% block title %}Nova Lista por Fornecedor{% endblock %}
+{% block title %}{% if modo_edicao_lista %}Editar Lista por Fornecedor{% else %}Nova Lista por Fornecedor{% endif %}{% endblock %}
 {% block content %}
 
 <style>
@@ -1149,8 +1149,8 @@
 <div class="sugestao-page">
   <header class="sugestao-header">
     <div>
-      <h1 class="sugestao-title">Nova Lista por Fornecedor</h1>
-      <p class="sugestao-subtitle">Gere sugestao de reposicao com base nas vendas do periodo e no estoque minimo.</p>
+      <h1 class="sugestao-title">{% if modo_edicao_lista %}Editar Lista por Fornecedor #{{ lista_edicao.id }}{% else %}Nova Lista por Fornecedor{% endif %}</h1>
+      <p class="sugestao-subtitle">{% if modo_edicao_lista %}Altere os itens da lista salva e grave novamente a mesma lista. Não gera compra, estoque nem financeiro.{% else %}Gere sugestao de reposicao com base nas vendas do periodo e no estoque minimo.{% endif %}</p>
     </div>
     <div class="sugestao-actions">
       <a href="{% url 'estoque:compras_lista' %}" class="sugestao-btn sugestao-btn-secondary">Consultar Compras</a>
@@ -1197,7 +1197,7 @@
           <input type="date" name="data_chegada" id="data_chegada" value="{{ data_chegada }}">
         </div>
 
-        <button type="submit" class="sugestao-btn sugestao-btn-primary sugestao-submit-btn" id="btnGerarListaSugestao">Gerar lista</button>
+        {% if not modo_edicao_lista %}<button type="submit" class="sugestao-btn sugestao-btn-primary sugestao-submit-btn" id="btnGerarListaSugestao">Gerar lista</button>{% endif %}
       </div>
     </form>
   </section>
@@ -1296,10 +1296,10 @@
     <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnVisualizarAnalitica">Visualizar Analitica</button>
     <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnVisualizarSintetica">Visualizar Sintetica</button>
     <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnImagemWhatsapp">Imagem / WhatsApp</button>
-    <button type="button" class="sugestao-btn sugestao-btn-primary" id="btnGravarListaFornecedor">Gravar lista</button>
+    <button type="button" class="sugestao-btn sugestao-btn-primary" id="btnGravarListaFornecedor">{% if modo_edicao_lista %}Salvar alterações{% else %}Gravar lista{% endif %}</button>
   </section>
 
-  <form method="post" action="{% url 'estoque:compras_lista_fornecedor_gravar' %}" id="formGravarListaFornecedor" hidden>
+  <form method="post" action="{% if modo_edicao_lista %}{% url 'estoque:compras_lista_fornecedor_editar' lista_edicao.id %}{% else %}{% url 'estoque:compras_lista_fornecedor_gravar' %}{% endif %}" id="formGravarListaFornecedor" hidden>
     {% csrf_token %}
     <input type="hidden" name="lista_payload" id="listaFornecedorPayload">
   </form>
@@ -2760,11 +2760,11 @@
   btnGravarLista.addEventListener("click", function() {
     const payload = montarPayload("sintetica");
     if (!payload.fornecedorId) {
-      alert("Selecione um fornecedor antes de gravar a lista.");
+      alert("{% if modo_edicao_lista %}Selecione um fornecedor antes de salvar as alterações.{% else %}Selecione um fornecedor antes de gravar a lista.{% endif %}");
       return;
     }
     if (!payload.linhas.length) {
-      alert("Gere ou adicione produtos antes de gravar a lista.");
+      alert("{% if modo_edicao_lista %}Adicione produtos antes de salvar as alterações.{% else %}Gere ou adicione produtos antes de gravar a lista.{% endif %}");
       return;
     }
     if (!formGravarLista || !payloadGravarLista) return;
@@ -3031,7 +3031,7 @@
 
     const payload = montarPayloadLista();
     if (!payload.linhas.length) {
-      alert("Nenhum item com quantidade maior que zero para gravar. Ajuste as quantidades antes de gravar a lista.");
+      alert("{% if modo_edicao_lista %}Nenhum item com quantidade maior que zero para salvar. Ajuste as quantidades antes de salvar.{% else %}Nenhum item com quantidade maior que zero para gravar. Ajuste as quantidades antes de gravar a lista.{% endif %}");
       return;
     }
     listaFornecedorPayload.value = JSON.stringify(payload);
@@ -3127,11 +3127,11 @@
     };
 
     if (!payload.fornecedorId) {
-      alert("Selecione um fornecedor antes de gravar a lista.");
+      alert("{% if modo_edicao_lista %}Selecione um fornecedor antes de salvar as alterações.{% else %}Selecione um fornecedor antes de gravar a lista.{% endif %}");
       return;
     }
     if (!linhasCandidatasAtuais().length) {
-      alert("Gere ou adicione produtos antes de gravar a lista.");
+      alert("{% if modo_edicao_lista %}Adicione produtos antes de salvar as alterações.{% else %}Gere ou adicione produtos antes de gravar a lista.{% endif %}");
       return;
     }
 
@@ -3142,7 +3142,7 @@
 
     // Sem itens zerados, gravar normalmente
     if (!payload.linhas.length) {
-      alert("Nenhum item com quantidade maior que zero para gravar. Ajuste as quantidades antes de gravar a lista.");
+      alert("{% if modo_edicao_lista %}Nenhum item com quantidade maior que zero para salvar. Ajuste as quantidades antes de salvar.{% else %}Nenhum item com quantidade maior que zero para gravar. Ajuste as quantidades antes de gravar a lista.{% endif %}");
       return;
     }
     listaFornecedorPayload.value = JSON.stringify(payload);

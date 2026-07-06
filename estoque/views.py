@@ -5301,6 +5301,300 @@ def compras_lista_fornecedor_descartar_compra(request, pk):
     return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
 
 
+
+def _lista_fornecedor_decimal(valor, casas="0.01"):
+    texto = str(valor or "").strip()
+    if not texto:
+        return Decimal("0").quantize(Decimal(casas))
+    texto = texto.replace("R$", "").replace(" ", "")
+    if "," in texto:
+        texto = texto.replace(".", "").replace(",", ".")
+    try:
+        return Decimal(texto).quantize(Decimal(casas))
+    except Exception:
+        return Decimal("0").quantize(Decimal(casas))
+
+
+def _lista_fornecedor_decimal_qtd(valor):
+    texto = str(valor or "").strip()
+    if not texto:
+        return Decimal("0.000")
+    texto = texto.replace("R$", "").replace(" ", "")
+    if "," in texto:
+        texto = texto.replace(".", "").replace(",", ".")
+    try:
+        return Decimal(texto).quantize(Decimal("0.001"))
+    except Exception:
+        return Decimal("0.000")
+
+
+def _lista_fornecedor_fmt_qtd(valor):
+    valor = valor or Decimal("0")
+    return f"{valor:.3f}".replace(".", ",")
+
+
+def _lista_fornecedor_fmt_moeda(valor):
+    valor = valor or Decimal("0")
+    return f"{valor:.2f}".replace(".", ",")
+
+
+def _lista_fornecedor_produto_payload(produto, fornecedor_id=None, item=None):
+    def dec_attr(nome, padrao="0"):
+        return getattr(produto, nome, Decimal(padrao)) or Decimal(padrao)
+
+    fator = (
+        getattr(produto, "fator_conversao", None)
+        or getattr(produto, "quantidade_por_unidade", None)
+        or getattr(produto, "qtd_por_unidade", None)
+        or Decimal("1")
+    )
+    try:
+        fator = Decimal(str(fator or "1"))
+    except Exception:
+        fator = Decimal("1")
+    if fator <= 0:
+        fator = Decimal("1")
+
+    preco_compra = getattr(produto, "preco_compra", None) or Decimal("0")
+    preco_unitario = (preco_compra / fator).quantize(Decimal("0.01")) if fator else preco_compra
+
+    vinculado = False
+    if fornecedor_id:
+        try:
+            vinculado = ProdutoFornecedor.objects.filter(
+                fornecedor_id=fornecedor_id,
+                produto_id=produto.id,
+                ativo=True,
+            ).exists()
+        except Exception:
+            vinculado = False
+
+    quantidade = Decimal("0.000")
+    total = Decimal("0.00")
+    estoque_atual = dec_attr("estoque", "0")
+    estoque_minimo = dec_attr("estoque_minimo", "0")
+    vendido = Decimal("0")
+    pedidos = Decimal("0")
+
+    if item is not None:
+        quantidade = item.quantidade_final or item.quantidade_sugerida or Decimal("0")
+        preco_compra = item.preco_compra or preco_compra
+        preco_unitario = item.preco_unitario or preco_unitario
+        total = item.total or Decimal("0")
+        estoque_atual = item.estoque_atual or estoque_atual
+        estoque_minimo = item.estoque_minimo or estoque_minimo
+        vendido = item.vendido_periodo or Decimal("0")
+        pedidos = item.pedidos_abertos or Decimal("0")
+
+    return {
+        "id": produto.id,
+        "nome": produto.nome,
+        "estoque_atual": _lista_fornecedor_fmt_qtd(estoque_atual),
+        "estoque_minimo": _lista_fornecedor_fmt_qtd(estoque_minimo),
+        "quantidade_vendida": _lista_fornecedor_fmt_qtd(vendido),
+        "quantidade_pedidos_abertos": _lista_fornecedor_fmt_qtd(pedidos),
+        "sugestao": _lista_fornecedor_fmt_qtd(quantidade),
+        "unidade": getattr(produto, "unidade", "") or "",
+        "preco_compra": _lista_fornecedor_fmt_moeda(preco_compra),
+        "preco_unitario_calculado": _lista_fornecedor_fmt_moeda(preco_unitario),
+        "total_sugerido": _lista_fornecedor_fmt_moeda(total),
+        "fator_conversao": str(fator).replace(".", ","),
+        "vinculado": vinculado,
+    }
+
+
+def compras_lista_fornecedor_editar(request, pk):
+    lista = get_object_or_404(
+        ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+
+    if lista.status == ListaCompraFornecedor.STATUS_CANCELADA:
+        messages.error(request, "Lista cancelada nao pode ser editada.")
+        return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
+
+    marcador_origem = f"Gerada a partir da Lista de Compras #{lista.id}"
+    compra_gerada = (
+        Compra.objects.filter(observacao__icontains=marcador_origem, cancelada=False)
+        .exclude(status=Compra.STATUS_CANCELADA)
+        .order_by("-id")
+        .first()
+    )
+    if compra_gerada and compra_gerada.status == Compra.STATUS_FINALIZADA:
+        messages.error(request, "Esta lista ja gerou uma compra finalizada e nao pode mais ser editada.")
+        return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
+
+    if request.method == "POST":
+        payload_raw = request.POST.get("lista_payload", "")
+        try:
+            payload = json.loads(payload_raw or "{}")
+        except json.JSONDecodeError:
+            messages.error(request, "Nao foi possivel ler os dados da lista.")
+            return redirect("estoque:compras_lista_fornecedor_editar", pk=lista.pk)
+
+        fornecedor_id = payload.get("fornecedorId") or payload.get("fornecedor_id") or ""
+        fornecedor = Fornecedor.objects.filter(pk=fornecedor_id).first()
+        if not fornecedor:
+            messages.error(request, "Selecione um fornecedor antes de salvar as alteracoes.")
+            return redirect("estoque:compras_lista_fornecedor_editar", pk=lista.pk)
+
+        linhas = payload.get("linhas") or []
+        itens_validos = []
+        total_lista = Decimal("0.00")
+
+        for linha in linhas:
+            produto_id = linha.get("produtoId") or linha.get("produto_id") or ""
+            produto = Produto.objects.filter(pk=produto_id).first()
+            if not produto:
+                continue
+
+            quantidade = _lista_fornecedor_decimal_qtd(linha.get("sugestao") or linha.get("quantidade") or "0")
+            if quantidade <= 0:
+                continue
+
+            preco_compra = _lista_fornecedor_decimal(linha.get("precoCompra") or linha.get("preco_compra") or "0")
+            preco_unitario = _lista_fornecedor_decimal(linha.get("precoUnitario") or linha.get("preco_unitario") or "0")
+            total = _lista_fornecedor_decimal(linha.get("total") or "0")
+            if total <= 0:
+                total = (quantidade * preco_compra).quantize(Decimal("0.01"))
+
+            total_lista += total
+
+            itens_validos.append(
+                ItemListaCompraFornecedor(
+                    lista=lista,
+                    produto=produto,
+                    estoque_atual=_lista_fornecedor_decimal_qtd(linha.get("estoque") or "0"),
+                    estoque_minimo=_lista_fornecedor_decimal_qtd(linha.get("minimo") or "0"),
+                    vendido_periodo=_lista_fornecedor_decimal_qtd(linha.get("vendido") or "0"),
+                    pedidos_abertos=_lista_fornecedor_decimal_qtd(linha.get("pedidos") or "0"),
+                    quantidade_sugerida=quantidade,
+                    quantidade_final=quantidade,
+                    unidade=linha.get("unidade") or getattr(produto, "unidade", "") or "",
+                    preco_compra=preco_compra,
+                    preco_unitario=preco_unitario,
+                    total=total,
+                )
+            )
+
+        if not itens_validos:
+            messages.error(request, "A lista precisa ter ao menos um item com quantidade maior que zero.")
+            return redirect("estoque:compras_lista_fornecedor_editar", pk=lista.pk)
+
+        data_inicio = parse_date(payload.get("dataInicio") or "") or lista.data_inicio_periodo
+        data_fim = parse_date(payload.get("dataFim") or "") or lista.data_fim_periodo
+        data_chegada = parse_date(payload.get("dataChegada") or "") or None
+        total_original = _lista_fornecedor_decimal(payload.get("totalOriginal") or lista.total_sugerido_original)
+
+        with transaction.atomic():
+            lista.fornecedor = fornecedor
+            lista.data_inicio_periodo = data_inicio
+            lista.data_fim_periodo = data_fim
+            lista.data_chegada_prevista = data_chegada
+            lista.total_sugerido_original = total_original
+            lista.total_lista = total_lista.quantize(Decimal("0.01"))
+            if lista.status == ListaCompraFornecedor.STATUS_FINALIZADA and not compra_gerada:
+                lista.status = ListaCompraFornecedor.STATUS_ABERTA
+            lista.save(update_fields=[
+                "fornecedor",
+                "data_inicio_periodo",
+                "data_fim_periodo",
+                "data_chegada_prevista",
+                "total_sugerido_original",
+                "total_lista",
+                "status",
+                "atualizado_em",
+            ])
+            lista.itens.all().delete()
+            ItemListaCompraFornecedor.objects.bulk_create(itens_validos)
+
+        messages.success(request, f"Lista #{lista.id} atualizada com sucesso.")
+        return redirect("estoque:compras_lista_fornecedor_ver", pk=lista.pk)
+
+    fornecedor = lista.fornecedor
+    fornecedor_id = fornecedor.id if fornecedor else None
+
+    fornecedores = list(Fornecedor.objects.all().order_by("nome", "id"))
+    fornecedores_json = json.dumps(
+        [{"id": f.id, "nome": f.nome} for f in fornecedores],
+        ensure_ascii=False,
+    )
+
+    itens = list(lista.itens.select_related("produto").all())
+
+    linhas_edicao = []
+    for item in itens:
+        if not item.produto_id:
+            continue
+
+        produto = item.produto
+        fator = (
+            getattr(produto, "fator_conversao", None)
+            or getattr(produto, "quantidade_por_unidade", None)
+            or getattr(produto, "qtd_por_unidade", None)
+            or Decimal("1")
+        )
+        try:
+            fator = Decimal(str(fator or "1"))
+        except Exception:
+            fator = Decimal("1")
+        if fator <= 0:
+            fator = Decimal("1")
+
+        linhas_edicao.append({
+            "produto_id": item.produto_id,
+            "produto": produto,
+            "fator_conversao": fator,
+            "sugestao": item.quantidade_final or item.quantidade_sugerida or Decimal("0"),
+            "estoque_atual": item.estoque_atual or Decimal("0"),
+            "estoque_minimo": item.estoque_minimo or Decimal("0"),
+            "quantidade_vendida": item.vendido_periodo or Decimal("0"),
+            "quantidade_pedidos_abertos": item.pedidos_abertos or Decimal("0"),
+            "unidade": item.unidade or getattr(produto, "unidade", "") or "",
+            "preco_compra": item.preco_compra or Decimal("0"),
+            "preco_unitario_calculado": item.preco_unitario or Decimal("0"),
+            "total_sugerido": item.total or Decimal("0"),
+        })
+
+    produtos_sugestao = [
+        _lista_fornecedor_produto_payload(item.produto, fornecedor_id=fornecedor_id, item=item)
+        for item in itens
+        if item.produto_id
+    ]
+
+    produtos_ids_lista = {item.produto_id for item in itens if item.produto_id}
+    produtos_queryset = Produto.objects.filter(excluido=False).order_by("nome", "id")
+    produtos_manual = []
+    for produto in produtos_queryset:
+        if produto.id in produtos_ids_lista:
+            continue
+        produtos_manual.append(_lista_fornecedor_produto_payload(produto, fornecedor_id=fornecedor_id))
+
+    produtos_manual_json = json.dumps(produtos_sugestao + produtos_manual, ensure_ascii=False)
+
+    context = {
+        "modo_edicao_lista": True,
+        "lista_edicao": lista,
+        "fornecedor": fornecedor,
+        "fornecedores": fornecedores,
+        "fornecedores_json": fornecedores_json,
+        "fornecedores_sugestao_json": fornecedores_json,
+        "linhas": linhas_edicao,
+        "produtos_sugestao": produtos_sugestao,
+        "produtos_manual_payload": produtos_sugestao + produtos_manual,
+        "produtos_manual_json": produtos_manual_json,
+        "produtos_manual_sugestao_json": produtos_manual_json,
+        "produtos_json": produtos_manual_json,
+        "data_inicio": lista.data_inicio_periodo,
+        "data_fim": lista.data_fim_periodo,
+        "data_chegada": lista.data_chegada_prevista.isoformat() if lista.data_chegada_prevista else "",
+        "total_sugerido": lista.total_sugerido_original,
+        "total_lista": lista.total_lista,
+        "total_produtos_vinculados": len(produtos_sugestao),
+    }
+    return render(request, "estoque/compras_sugestao_fornecedor.html", context)
+
+
 @require_POST
 def compras_lista_fornecedor_cancelar(request, pk):
     lista = get_object_or_404(ListaCompraFornecedor, pk=pk)
