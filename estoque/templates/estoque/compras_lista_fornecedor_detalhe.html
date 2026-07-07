@@ -2705,7 +2705,7 @@
 
         <div class="revisao-final-acoes">
           {% if lista.status != "cancelada" and lista.status != "finalizada" and not compra_gerada %}
-            <form method="post" action="{% url 'estoque:compras_lista_fornecedor_gerar_compra' lista.id %}" style="margin:0">
+            <form method="post" action="{% url 'estoque:compras_lista_fornecedor_gerar_compra' lista.id %}" style="margin:0" data-gerar-compra-lista-form="1">
               {% csrf_token %}
               <button type="submit" class="revisao-final-btn-gerar">Gerar Compra</button>
             </form>
@@ -4117,6 +4117,179 @@
     }
   });
 })();
+</script>
+
+
+<style>
+  .gerar-compra-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(15, 23, 42, .56);
+  }
+
+  .gerar-compra-modal-backdrop.aberto {
+    display: flex;
+  }
+
+  .gerar-compra-modal {
+    width: min(520px, 100%);
+    border: 1px solid #fecaca;
+    border-radius: 18px;
+    background: #fff7ed;
+    box-shadow: 0 24px 70px rgba(15, 23, 42, .28);
+    overflow: hidden;
+  }
+
+  .gerar-compra-modal-topo {
+    padding: 18px 20px 12px;
+    background: #fff1f2;
+    border-bottom: 1px solid #fecaca;
+  }
+
+  .gerar-compra-modal-topo h3 {
+    margin: 0;
+    color: #991b1b;
+    font-size: 1.28rem;
+    font-weight: 950;
+  }
+
+  .gerar-compra-modal-corpo {
+    padding: 18px 20px;
+    color: #334155;
+    font-weight: 750;
+    line-height: 1.45;
+  }
+
+  .gerar-compra-modal-aviso {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    background: #eff6ff;
+    color: #1e3a8a;
+    font-weight: 900;
+  }
+
+  .gerar-compra-modal-acoes {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 20px 18px;
+    background: #fffaf2;
+  }
+
+  .gerar-compra-modal-btn {
+    border: 1px solid #fecaca;
+    border-radius: 12px;
+    padding: 11px 16px;
+    font-weight: 950;
+    cursor: pointer;
+    background: #ffffff;
+    color: #7f1d1d;
+  }
+
+  .gerar-compra-modal-btn.principal {
+    border-color: #991b1b;
+    background: #991b1b;
+    color: #ffffff;
+    box-shadow: 0 8px 18px rgba(153, 27, 27, .20);
+  }
+
+  @media (max-width: 640px) {
+    .gerar-compra-modal-acoes {
+      flex-direction: column-reverse;
+    }
+
+    .gerar-compra-modal-btn {
+      width: 100%;
+    }
+  }
+</style>
+
+<div class="gerar-compra-modal-backdrop" id="modalGerarCompraLista" aria-hidden="true">
+  <div class="gerar-compra-modal" role="dialog" aria-modal="true" aria-labelledby="modalGerarCompraListaTitulo">
+    <div class="gerar-compra-modal-topo">
+      <h3 id="modalGerarCompraListaTitulo">Criar compra em rascunho?</h3>
+    </div>
+    <div class="gerar-compra-modal-corpo">
+      Vai ser criada uma compra com os itens desta lista para voce finalizar depois no computador, se precisar.
+      <div class="gerar-compra-modal-aviso">
+        Neste momento, nao altera estoque nem financeiro. Isso so acontece quando voce finalizar a compra.
+      </div>
+    </div>
+    <div class="gerar-compra-modal-acoes">
+      <button type="button" class="gerar-compra-modal-btn" id="btnCancelarGerarCompraLista">Cancelar</button>
+      <button type="button" class="gerar-compra-modal-btn principal" id="btnConfirmarGerarCompraLista">Criar rascunho</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var modal = document.getElementById("modalGerarCompraLista");
+    var btnCancelar = document.getElementById("btnCancelarGerarCompraLista");
+    var btnConfirmar = document.getElementById("btnConfirmarGerarCompraLista");
+    var formPendente = null;
+
+    function abrirModal(form) {
+      formPendente = form;
+      modal.classList.add("aberto");
+      modal.setAttribute("aria-hidden", "false");
+      if (btnCancelar) {
+        btnCancelar.focus();
+      }
+    }
+
+    function fecharModal() {
+      modal.classList.remove("aberto");
+      modal.setAttribute("aria-hidden", "true");
+      formPendente = null;
+    }
+
+    document.querySelectorAll("form[data-gerar-compra-lista-form='1']").forEach(function (form) {
+      form.addEventListener("submit", function (event) {
+        var telaMobile = window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
+        if (!telaMobile) {
+          return;
+        }
+        event.preventDefault();
+        abrirModal(form);
+      });
+    });
+
+    if (btnCancelar) {
+      btnCancelar.addEventListener("click", fecharModal);
+    }
+
+    if (btnConfirmar) {
+      btnConfirmar.addEventListener("click", function () {
+        if (formPendente) {
+          btnConfirmar.disabled = true;
+          btnConfirmar.textContent = "Gerando...";
+          formPendente.submit();
+        }
+      });
+    }
+
+    if (modal) {
+      modal.addEventListener("click", function (event) {
+        if (event.target === modal) {
+          fecharModal();
+        }
+      });
+    }
+
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && modal && modal.classList.contains("aberto")) {
+        fecharModal();
+      }
+    });
+  })();
 </script>
 
 {% endblock %}\n
