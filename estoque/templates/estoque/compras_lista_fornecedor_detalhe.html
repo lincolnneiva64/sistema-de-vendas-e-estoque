@@ -2621,6 +2621,7 @@
               <th>Produto</th>
               <th>Qtd. Lista</th>
               <th>Qtd. Compra</th>
+              <th>Diferenca</th>
               <th>Unid.</th>
               <th>Pr. Compra</th>
               <th>Total</th>
@@ -2628,36 +2629,78 @@
             </tr>
           </thead>
           <tbody>
-            {% for item in lista.itens.all %}
-              <tr>
-                <td>{% if item.produto %}{{ item.produto.nome }}{% else %}-{% endif %}</td>
-                <td>{{ item.quantidade_sugerida|floatformat:3 }}</td>
-                <td>
-                  {% if item.quantidade_final != item.quantidade_sugerida %}
-                    <span class="revisao-final-qtd-alterada">{{ item.quantidade_final|floatformat:3 }}</span>
-                  {% else %}
-                    {{ item.quantidade_final|floatformat:3 }}
-                  {% endif %}
-                </td>
-                <td>{{ item.unidade }}</td>
-                <td>R$ {{ item.preco_compra|floatformat:2 }}</td>
-                <td>R$ {{ item.total|floatformat:2 }}</td>
-                <td>
-                  {% if item.quantidade_final != item.quantidade_sugerida %}
-                    <span class="revisao-final-status alterado">Alterado</span>
-                  {% else %}
-                    <span class="revisao-final-status">Igual</span>
-                  {% endif %}
-                </td>
-              </tr>
-            {% endfor %}
+            {% if comparacao_conferencia.exibir %}
+              {% for item in comparacao_conferencia.itens %}
+                <tr>
+                  <td>{{ item.produto }}</td>
+                  <td>{{ item.quantidade_lista|floatformat:3 }}</td>
+                  <td>
+                    {% if item.tem_diferenca %}
+                      <span class="revisao-final-qtd-alterada">{{ item.quantidade_recebida|floatformat:3 }}</span>
+                    {% else %}
+                      {{ item.quantidade_recebida|floatformat:3 }}
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if item.diferenca_quantidade > 0 %}
+                      <span class="revisao-final-diferenca sobra">+{{ item.diferenca_quantidade|floatformat:3 }}</span>
+                    {% elif item.diferenca_quantidade < 0 %}
+                      <span class="revisao-final-diferenca falta">{{ item.diferenca_quantidade|floatformat:3 }}</span>
+                    {% else %}
+                      <span class="revisao-final-diferenca igual">0.000</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ item.unidade }}</td>
+                  <td>{{ item.preco_unitario_texto }}</td>
+                  <td>{{ item.valor_real_texto }}</td>
+                  <td>
+                    <span class="revisao-final-status {{ item.status }}">{{ item.situacao }}</span>
+                  </td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              {% for item in lista.itens.all %}
+                <tr>
+                  <td>{% if item.produto %}{{ item.produto.nome }}{% else %}-{% endif %}</td>
+                  <td>{{ item.quantidade_sugerida|floatformat:3 }}</td>
+                  <td>
+                    {% if item.quantidade_final != item.quantidade_sugerida %}
+                      <span class="revisao-final-qtd-alterada">{{ item.quantidade_final|floatformat:3 }}</span>
+                    {% else %}
+                      {{ item.quantidade_final|floatformat:3 }}
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if item.quantidade_final != item.quantidade_sugerida %}
+                      <span class="revisao-final-diferenca falta">Alterado</span>
+                    {% else %}
+                      <span class="revisao-final-diferenca igual">0.000</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ item.unidade }}</td>
+                  <td>R$ {{ item.preco_compra|floatformat:2 }}</td>
+                  <td>R$ {{ item.total|floatformat:2 }}</td>
+                  <td>
+                    {% if item.quantidade_final != item.quantidade_sugerida %}
+                      <span class="revisao-final-status alterado">Alterado</span>
+                    {% else %}
+                      <span class="revisao-final-status">Igual</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            {% endif %}
           </tbody>
         </table>
       </div>
 
       <div class="revisao-final-rodape">
         <div class="revisao-final-total">
-          Total final da compra: R$ {{ lista.total_lista|floatformat:2 }}
+          {% if comparacao_conferencia.exibir %}
+            Total final da compra: {{ comparacao_conferencia.totais_texto.real }}
+          {% else %}
+            Total final da compra: R$ {{ lista.total_lista|floatformat:2 }}
+          {% endif %}
         </div>
 
         <div class="revisao-final-acoes">
@@ -3962,6 +4005,50 @@
     .revisao-final-table {
       min-width: 760px;
     }
+  }
+
+
+  .revisao-final-diferenca {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 74px;
+    padding: 5px 8px;
+    border-radius: 999px;
+    font-weight: 950;
+  }
+
+  .revisao-final-diferenca.igual {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    color: #334155;
+  }
+
+  .revisao-final-diferenca.falta,
+  .revisao-final-status.faltou,
+  .revisao-final-status.nao_veio {
+    background: #fff1f2;
+    border-color: #fda4af;
+    color: #9f1239;
+  }
+
+  .revisao-final-diferenca.sobra,
+  .revisao-final-status.veio_a_mais {
+    background: #ecfdf5;
+    border-color: #86efac;
+    color: #166534;
+  }
+
+  .revisao-final-status.ok {
+    background: #f0fdf4;
+    border-color: #86efac;
+    color: #166534;
+  }
+
+  .revisao-final-status.pendente {
+    background: #fff7ed;
+    border-color: #fdba74;
+    color: #9a3412;
   }
 
 </style>
