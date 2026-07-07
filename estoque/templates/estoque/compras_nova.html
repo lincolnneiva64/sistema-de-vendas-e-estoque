@@ -485,6 +485,7 @@
   }
   .compras-origem-grid { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:10px; align-items:stretch; }
   .compras-origem-grid .compras-field { display:flex; flex-direction:column; min-width:0; }
+  .compras-origem-nota-mobile { display:none; }
   .compras-origem-grid .compras-field label { min-height:32px; display:flex; align-items:flex-end; }
   .saldo-conta-modal {
     display:block;
@@ -1590,6 +1591,9 @@
     .produto-busca { font-size:.84rem; }
     .compras-origem-total { grid-template-columns:1fr; }
     .compras-origem-grid { grid-template-columns:1fr; }
+    .compras-origem-campo-caixa { display:none !important; }
+    .compras-origem-nota-desktop { display:none; }
+    .compras-origem-nota-mobile { display:block; }
     .compras-origem-acoes { display:grid; grid-template-columns:1fr; }
     .compras-origem-caixa { width:100%; }
     .compras-precos-modal { padding:10px; align-items:stretch; }
@@ -1906,7 +1910,7 @@
             </div>
           </div>
           <div class="compras-origem-grid">
-            <div class="compras-field">
+            <div class="compras-field compras-origem-campo-caixa">
               <label>Dinheiro do caixa</label>
               <small class="saldo-conta-modal">Saldo atual: {{ saldo_caixa_modal|default:"R$ 0,00" }}</small>
               <input type="text" name="origem_caixa" id="origemCaixaCompra" inputmode="decimal" value="0,00" autocomplete="off">
@@ -1922,7 +1926,8 @@
               <input type="text" name="origem_banco" id="origemBancoCompra" inputmode="decimal" value="0,00" autocomplete="off">
             </div>
           </div>
-          <p class="compras-origem-nota">Distribua o total da compra entre Caixa, Sangria e Banco/Pix. Campos vazios contam como zero.</p>
+          <p class="compras-origem-nota compras-origem-nota-desktop">Distribua o total da compra entre Caixa, Sangria e Banco/Pix. Campos vazios contam como zero.</p>
+          <p class="compras-origem-nota compras-origem-nota-mobile">No celular, distribua o total entre Sangria/Reserva e Banco/Pix. O Caixa fica zerado.</p>
           <div class="compras-origem-erro" id="erroOrigemDinheiroCompra"></div>
           <div class="compras-origem-acoes">
             <button type="button" class="compras-btn compras-btn-secondary" id="btnVoltarEditarCompra">Voltar para editar compra</button>
@@ -2431,8 +2436,33 @@
     });
   }
 
+  function origemCompraMobileSemCaixa() {
+    return window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
+  }
+
+  function camposOrigemCompraAtivos() {
+    if (origemCompraMobileSemCaixa()) {
+      return [origemReservaCompra, origemBancoCompra].filter(Boolean);
+    }
+    return [origemCaixaCompra, origemReservaCompra, origemBancoCompra].filter(Boolean);
+  }
+
+  function textoDistribuicaoOrigemCompra() {
+    return origemCompraMobileSemCaixa()
+      ? "Distribua o total da compra entre Sangria/Reserva e Banco/Pix."
+      : "Distribua o total da compra entre Caixa, Sangria e Banco/Pix.";
+  }
+
+  function primeiroCampoOrigemCompra() {
+    const campos = camposOrigemCompraAtivos();
+    return campos[0] || origemReservaCompra || origemBancoCompra || origemCaixaCompra;
+  }
+
   function normalizarOrigensParaEnvio() {
-    const campos = [origemCaixaCompra, origemReservaCompra, origemBancoCompra];
+    if (origemCompraMobileSemCaixa()) {
+      definirCampoPorCentavos(origemCaixaCompra, 0);
+    }
+    const campos = camposOrigemCompraAtivos();
     const valores = campos.map(centavosCampoOrigem);
     if (valores.some(function(item) { return item.invalido; })) {
       return false;
@@ -2471,7 +2501,10 @@
 
   function estadoOrigemDinheiroCompra() {
     const total = Math.round(numero(totalCompra ? totalCompra.textContent : "0") * 100);
-    const campos = [origemCaixaCompra, origemReservaCompra, origemBancoCompra].map(centavosCampoOrigem);
+    if (origemCompraMobileSemCaixa()) {
+      definirCampoPorCentavos(origemCaixaCompra, 0);
+    }
+    const campos = camposOrigemCompraAtivos().map(centavosCampoOrigem);
     const invalido = campos.some(function(item) { return item.invalido; });
     const soma = campos.reduce(function(totalAtual, item) { return totalAtual + item.valor; }, 0);
 
@@ -2536,7 +2569,7 @@
     atualizarResumoOrigemDinheiroCompra();
     origemDinheiroCompra.classList.add("visivel");
     origemDinheiroCompra.setAttribute("aria-hidden", "false");
-    focarSelecionando(origemCaixaCompra);
+    focarSelecionando(primeiroCampoOrigemCompra());
   }
 
   function definirEnvioModalEmAndamento(ativo) {
@@ -2545,7 +2578,7 @@
       origemDinheiroCompra.classList.toggle("enviando", ativo);
       origemDinheiroCompra.setAttribute("aria-busy", ativo ? "true" : "false");
     }
-    [origemCaixaCompra, origemReservaCompra, origemBancoCompra].forEach(function(campo) {
+    camposOrigemCompraAtivos().forEach(function(campo) {
       if (campo) campo.readOnly = ativo;
     });
     if (btnVoltarEditarCompra) btnVoltarEditarCompra.disabled = ativo;
@@ -2593,7 +2626,7 @@
       return "Informe pelo menos uma origem do dinheiro com valor maior que zero.";
     }
     if (estado.diferenca !== 0) {
-      return "Distribua o total da compra entre Caixa, Sangria e Banco/Pix. Já distribuído: " + moeda(estado.soma / 100) + ". Total: " + moeda(estado.total / 100) + ".";
+      return textoDistribuicaoOrigemCompra() + " J? distribu?do: " + moeda(estado.soma / 100) + ". Total: " + moeda(estado.total / 100) + ".";
     }
     return "";
   }
@@ -3841,7 +3874,7 @@
         fechamentoOrigemConfirmado = false;
         definirEnvioModalEmAndamento(false);
         mostrarErroOrigem("Informe apenas valores válidos e positivos nas origens do dinheiro.");
-        focarSelecionando(origemCaixaCompra);
+        focarSelecionando(primeiroCampoOrigemCompra());
         return;
       }
 
@@ -3864,7 +3897,7 @@
   }
 
   tabela.querySelectorAll(".linha-item").forEach(ligarLinha);
-  [origemCaixaCompra, origemReservaCompra, origemBancoCompra].forEach(function(campo, indice, campos) {
+  camposOrigemCompraAtivos().forEach(function(campo, indice, campos) {
     if (!campo) return;
     campo.addEventListener("focus", function() {
       focarSelecionando(campo);
@@ -3904,13 +3937,13 @@
     if (btnConfirmarFechamentoCompra.disabled) return;
     if (!normalizarOrigensParaEnvio()) {
       mostrarErroOrigem("Informe apenas valores válidos e positivos nas origens do dinheiro.");
-      focarSelecionando(origemCaixaCompra);
+      focarSelecionando(primeiroCampoOrigemCompra());
       return;
     }
     const erro = validarOrigemDinheiroCompra();
     if (erro) {
       mostrarErroOrigem(erro);
-      focarSelecionando(origemCaixaCompra);
+      focarSelecionando(primeiroCampoOrigemCompra());
       return;
     }
     fechamentoOrigemConfirmado = true;
