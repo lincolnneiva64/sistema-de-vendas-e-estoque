@@ -508,6 +508,11 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         url = reverse("estoque:compras_lista_fornecedor_conferencia_salvar", kwargs={"pk": self.lista.pk})
         return self.client.post(url, dados, secure=True)
 
+    def _liberar_checklist_externa(self, conferente="Francisco"):
+        token = views._liberar_conferencia_externa_lista_fornecedor(self.lista, conferente)
+        self.lista.refresh_from_db()
+        return token
+
     def test_detalhe_exibe_checklist_de_conferencia(self):
         resposta = self.client.get(
             reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),
@@ -1076,7 +1081,7 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertNotContains(resposta_avulso, "Enviar pelo WhatsApp")
 
     def test_conferencia_externa_exibe_tela_isolada(self):
-        token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")
+        token = self._liberar_checklist_externa("Francisco")
         self.assertIn(":", token)
         resposta = self.client.get(
             reverse("estoque:compras_lista_fornecedor_conferencia_externa", kwargs={"token": token}),
@@ -1106,7 +1111,7 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
 
     @override_settings(ALLOWED_HOSTS=["sistema-de-vendas-e-estoque.onrender.com", "testserver"])
     def test_conferencia_externa_abre_url_literal_com_token_assinado(self):
-        token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")
+        token = self._liberar_checklist_externa("Francisco")
         self.assertIn(":", token)
         path_conferencia = views._path_conferencia_externa_lista_fornecedor(token)
         self.assertTrue(path_conferencia.startswith("/checklist/"))
@@ -1125,7 +1130,7 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertNotContains(resposta, "Checklist indisponivel")
 
     def test_conferencia_externa_abre_token_duplamente_codificado(self):
-        token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")
+        token = self._liberar_checklist_externa("Francisco")
         path_conferencia = views._path_conferencia_externa_lista_fornecedor(token).replace("%", "%25")
 
         resposta = self.client.get(path_conferencia, secure=True)
@@ -1152,7 +1157,7 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertContains(resposta, "lista de compras nao foi encontrada", status_code=404)
 
     def test_conferencia_externa_token_invalido_mostra_mensagem(self):
-        token_invalido = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco") + "x"
+        token_invalido = self._liberar_checklist_externa("Francisco") + "x"
         resposta = self.client.get(
             f"/compras/listas-fornecedor/conferencia-externa/{token_invalido}/",
             secure=True,
@@ -1163,7 +1168,7 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertContains(resposta, "link de checklist esta invalido", status_code=404)
 
     def test_conferencia_externa_salva_conferencia(self):
-        token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")
+        token = self._liberar_checklist_externa("Francisco")
         with self.assertLogs("estoque.views", level="INFO") as logs:
             resposta = self.client.post(
                 views._path_conferencia_externa_lista_fornecedor(token),
@@ -1184,22 +1189,18 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertEqual(self.item.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK)
         self.assertTrue(self.item.conferido)
         self.assertEqual(self.item.observacao_conferencia, "OK")
+        self.lista.refresh_from_db()
+        self.assertIsNotNone(self.lista.checklist_externa_token_usado_em)
         externa_salva = self.client.get(resposta["Location"], secure=True)
-        self.assertContains(externa_salva, "Conferencia salva com sucesso.")
-        self.assertContains(externa_salva, "conferencia-salva-bloqueada")
-        self.assertContains(externa_salva, 'data-conferencia-salva="1"')
-        self.assertContains(externa_salva, "Editar conferencia")
-        self.assertContains(externa_salva, "Salvar alteracoes")
-        self.assertContains(externa_salva, "definirModoEdicaoConferenciaExterna")
-        self.assertContains(externa_salva, f'name="quantidade_recebida_{self.item.id}"')
-        self.assertContains(externa_salva, "readonly")
-        self.assertContains(externa_salva, "disabled")
+        self.assertEqual(externa_salva.status_code, 404)
+        self.assertContains(externa_salva, "checklist ja foi enviada", status_code=404)
+        self.assertContains(externa_salva, "nova liberacao", status_code=404)
         detalhe = self.client.get(reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}), secure=True)
         self.assertContains(detalhe, "Resumo da conferencia salva")
         self.assertContains(detalhe, "Corretos:")
 
-    def test_conferencia_externa_salva_recarrega_bloqueada_e_permite_editar(self):
-        token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")
+    def test_conferencia_externa_salva_bloqueia_post_repetido(self):
+        token = self._liberar_checklist_externa("Francisco")
         self.client.post(
             views._path_conferencia_externa_lista_fornecedor(token),
             {f"quantidade_recebida_{self.item.id}": "2.000", f"observacao_conferencia_{self.item.id}": "OK"},
@@ -1208,26 +1209,22 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
 
         resposta = self.client.get(views._path_conferencia_externa_lista_fornecedor(token), secure=True)
 
-        self.assertContains(resposta, "conferencia-salva-bloqueada")
-        self.assertContains(resposta, "Editar conferencia")
-        self.assertContains(resposta, "Salvar alteracoes")
-        self.assertContains(resposta, "conferenciaSalvaInicial && !conferenciaEmEdicao")
-        self.assertContains(resposta, "botaoSalvar.type = 'submit'")
-        self.assertContains(resposta, "botao.disabled = bloqueado")
-        self.assertContains(resposta, "input.readOnly = true")
+        self.assertEqual(resposta.status_code, 404)
+        self.assertContains(resposta, "checklist ja foi enviada", status_code=404)
 
         resposta_edicao = self.client.post(
             views._path_conferencia_externa_lista_fornecedor(token),
             {f"quantidade_recebida_{self.item.id}": "1.000", f"observacao_conferencia_{self.item.id}": "Editado"},
             secure=True,
         )
-        self.assertEqual(resposta_edicao.status_code, 302)
+        self.assertEqual(resposta_edicao.status_code, 404)
+        self.assertContains(resposta_edicao, "checklist ja foi enviada", status_code=404)
         self.item.refresh_from_db()
-        self.assertEqual(self.item.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_FALTOU)
-        self.assertEqual(self.item.observacao_conferencia, "Editado")
+        self.assertEqual(self.item.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK)
+        self.assertEqual(self.item.observacao_conferencia, "OK")
 
     def test_conferencia_externa_salva_token_normalizado(self):
-        token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")
+        token = self._liberar_checklist_externa("Francisco")
         resposta = self.client.post(
             f"/checklist/{token}/",
             {f"quantidade_recebida_{self.item.id}": "2.000", f"observacao_conferencia_{self.item.id}": "Cru"},
@@ -1242,7 +1239,7 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertEqual(self.item.observacao_conferencia, "Cru")
 
     def test_conferencia_externa_salva_token_duplamente_codificado(self):
-        token = views._token_conferencia_externa_lista_fornecedor(self.lista, "Francisco")
+        token = self._liberar_checklist_externa("Francisco")
         path_conferencia = views._path_conferencia_externa_lista_fornecedor(token).replace("%", "%25")
 
         resposta = self.client.post(
@@ -1257,6 +1254,46 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertEqual(self.item.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_FALTOU)
         self.assertTrue(self.item.conferido)
         self.assertEqual(self.item.observacao_conferencia, "Faltou")
+
+    def test_nova_liberacao_gera_novo_link_e_invalida_antigo(self):
+        token_antigo = self._liberar_checklist_externa("Francisco")
+        token_novo = self._liberar_checklist_externa("Francisco")
+
+        self.assertNotEqual(token_antigo, token_novo)
+        resposta_antiga = self.client.get(views._path_conferencia_externa_lista_fornecedor(token_antigo), secure=True)
+        resposta_nova = self.client.get(views._path_conferencia_externa_lista_fornecedor(token_novo), secure=True)
+
+        self.assertContains(resposta_antiga, "link nao e mais valido", status_code=404)
+        self.assertContains(resposta_nova, "Conferencia de chegada")
+        self.assertContains(resposta_nova, "Francisco")
+
+    def test_conferencia_externa_link_expirado_nao_abre_edicao(self):
+        token = self._liberar_checklist_externa("Francisco")
+        self.lista.checklist_externa_token_expira_em = timezone.now() - timedelta(minutes=1)
+        self.lista.save(update_fields=["checklist_externa_token_expira_em", "atualizado_em"])
+
+        resposta = self.client.get(views._path_conferencia_externa_lista_fornecedor(token), secure=True)
+
+        self.assertContains(resposta, "link expirou", status_code=404)
+        self.assertContains(resposta, "nova liberacao", status_code=404)
+
+    def test_conferencia_interna_desktop_continua_salvando_com_link_externo_usado(self):
+        token = self._liberar_checklist_externa("Francisco")
+        self.client.post(
+            views._path_conferencia_externa_lista_fornecedor(token),
+            {f"quantidade_recebida_{self.item.id}": "2.000", f"observacao_conferencia_{self.item.id}": "OK externo"},
+            secure=True,
+        )
+
+        resposta = self._post_conferencia({
+            f"quantidade_recebida_{self.item.id}": "1.000",
+            f"observacao_conferencia_{self.item.id}": "Desktop",
+        })
+
+        self.assertEqual(resposta.status_code, 302)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status_conferencia, ItemListaCompraFornecedor.STATUS_CONFERENCIA_FALTOU)
+        self.assertEqual(self.item.observacao_conferencia, "Desktop")
 
 
 class FornecedorProdutosFormTests(TestCase):

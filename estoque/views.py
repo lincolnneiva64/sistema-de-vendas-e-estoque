@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import logging
 import mimetypes
@@ -41,6 +42,7 @@ from urllib.parse import urlparse
 logger = logging.getLogger(__name__)
 
 LISTA_FORNECEDOR_CONFERENCIA_EXTERNA_SALT = "estoque.lista-fornecedor-conferencia-externa"
+LISTA_FORNECEDOR_CONFERENCIA_EXTERNA_VALIDADE = timedelta(hours=24)
 
 PIX_OCR_PENDENTE_MOBILE = (
     "OCR nao executado automaticamente no envio mobile para evitar timeout. "
@@ -4771,11 +4773,37 @@ def _comparacao_conferencia_lista_fornecedor(lista, resumo=None):
     return comparacao
 
 
-def _token_conferencia_externa_lista_fornecedor(lista, conferente):
+def _hash_token_conferencia_externa(token):
+    token_normalizado = _normalizar_token_conferencia_externa(token)
+    return hashlib.sha256(token_normalizado.encode("utf-8")).hexdigest()
+
+
+def _token_conferencia_externa_lista_fornecedor(lista, conferente, token_id=None):
     return signing.dumps(
-        {"lista_id": lista.pk, "conferente": (conferente or "").strip()},
+        {
+            "lista_id": lista.pk,
+            "conferente": (conferente or "").strip(),
+            "token_id": token_id or uuid4().hex,
+        },
         salt=LISTA_FORNECEDOR_CONFERENCIA_EXTERNA_SALT,
     )
+
+
+def _liberar_conferencia_externa_lista_fornecedor(lista, conferente):
+    conferente = (conferente or "").strip()
+    token = _token_conferencia_externa_lista_fornecedor(lista, conferente)
+    lista.checklist_externa_token_hash = _hash_token_conferencia_externa(token)
+    lista.checklist_externa_token_expira_em = timezone.now() + LISTA_FORNECEDOR_CONFERENCIA_EXTERNA_VALIDADE
+    lista.checklist_externa_token_usado_em = None
+    lista.checklist_externa_conferente = conferente[:120]
+    lista.save(update_fields=[
+        "checklist_externa_token_hash",
+        "checklist_externa_token_expira_em",
+        "checklist_externa_token_usado_em",
+        "checklist_externa_conferente",
+        "atualizado_em",
+    ])
+    return token
 
 
 def _path_conferencia_externa_lista_fornecedor(token):
@@ -4812,6 +4840,31 @@ def _dados_token_conferencia_externa(token):
         logger.warning("Checklist externa de lista por fornecedor com payload invalido: %s", dados)
         raise Http404("Checklist externa invalida.")
     return dados
+
+
+def _mensagem_bloqueio_token_conferencia_externa(lista, token_normalizado):
+    token_hash = _hash_token_conferencia_externa(token_normalizado)
+    if not lista.checklist_externa_token_hash or lista.checklist_externa_token_hash != token_hash:
+        return "Este link nao e mais valido. Gere uma nova liberacao pelo desktop."
+    if lista.checklist_externa_token_usado_em:
+        return "Essa checklist ja foi enviada. Para alterar, gere uma nova liberacao pelo desktop."
+    if lista.checklist_externa_token_expira_em and lista.checklist_externa_token_expira_em <= timezone.now():
+        return "Este link expirou e precisa de nova liberacao pelo desktop."
+    if not lista.checklist_externa_token_expira_em:
+        return "Este link nao e mais valido. Gere uma nova liberacao pelo desktop."
+    return ""
+
+
+def _marcar_token_conferencia_externa_usado(lista, token_normalizado):
+    token_hash = _hash_token_conferencia_externa(token_normalizado)
+    ListaCompraFornecedor.objects.filter(
+        pk=lista.pk,
+        checklist_externa_token_hash=token_hash,
+        checklist_externa_token_usado_em__isnull=True,
+    ).update(
+        checklist_externa_token_usado_em=timezone.now(),
+        atualizado_em=timezone.now(),
+    )
 
 
 def _salvar_conferencia_lista_fornecedor(request, lista):
@@ -4886,7 +4939,7 @@ def compras_lista_fornecedor_detalhe(request, pk):
     whatsapp_conferencia_externa_url = ""
     whatsapp_conferencia_externa_sem_numero = False
     if conferente_link:
-        token = _token_conferencia_externa_lista_fornecedor(lista, conferente_link)
+        token = _liberar_conferencia_externa_lista_fornecedor(lista, conferente_link)
         link_conferencia_externa = montar_url_publica(
             request,
             _path_conferencia_externa_lista_fornecedor(token),
@@ -4996,6 +5049,20 @@ def compras_lista_fornecedor_conferencia_externa(request, token):
             {"mensagem": "Esta lista de compras nao foi encontrada."},
             status=404,
         )
+    mensagem_bloqueio = _mensagem_bloqueio_token_conferencia_externa(lista, token_normalizado)
+    if mensagem_bloqueio:
+        logger.warning(
+            "Checklist externa lista fornecedor bloqueada. lista_id=%s token_prefix=%s motivo=%s",
+            lista.pk,
+            token_normalizado[:24],
+            mensagem_bloqueio,
+        )
+        return render(
+            request,
+            "estoque/compras_lista_fornecedor_conferencia_erro.html",
+            {"mensagem": mensagem_bloqueio},
+            status=404,
+        )
     if request.method == "POST":
         logger.info(
             "Checklist externa lista fornecedor: lista encontrada. lista_id=%s",
@@ -5020,6 +5087,7 @@ def compras_lista_fornecedor_conferencia_externa(request, token):
                 itens_processados,
             )
             messages.success(request, "Conferencia salva com sucesso.")
+            _marcar_token_conferencia_externa_usado(lista, token_normalizado)
         redirect_path = _path_conferencia_externa_lista_fornecedor(token_normalizado)
         logger.info(
             "Checklist externa lista fornecedor: redirecionando apos POST. lista_id=%s redirect=%s",

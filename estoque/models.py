@@ -1098,6 +1098,10 @@ class ListaCompraFornecedor(models.Model):
         default=FORMA_COBRANCA_NAO_INFORMADA,
     )
     observacao_pagamento_nota = models.TextField(blank=True, default="")
+    checklist_externa_token_hash = models.CharField(max_length=64, blank=True, default="")
+    checklist_externa_token_expira_em = models.DateTimeField(blank=True, null=True)
+    checklist_externa_token_usado_em = models.DateTimeField(blank=True, null=True)
+    checklist_externa_conferente = models.CharField(max_length=120, blank=True, default="")
     observacao = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ABERTA)
     criado_em = models.DateTimeField(auto_now_add=True)
