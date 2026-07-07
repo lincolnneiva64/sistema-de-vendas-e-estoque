@@ -5164,11 +5164,22 @@ def compras_lista_fornecedor_ver(request, pk):
         ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto"),
         pk=pk,
     )
+    marcador_origem = f"Gerada a partir da Lista de Compras #{lista.id}"
+    compra_gerada = (
+        Compra.objects.filter(
+            observacao__icontains=marcador_origem,
+            cancelada=False,
+        )
+        .exclude(status=Compra.STATUS_CANCELADA)
+        .order_by("-id")
+        .first()
+    )
     return render(
         request,
         "estoque/compras_lista_fornecedor_ver.html",
         {
             "lista": lista,
+            "compra_gerada": compra_gerada,
         },
     )
 

@@ -285,6 +285,20 @@
     <div class="lista-ver-actions">
       <a class="lista-ver-btn" href="{% url 'estoque:compras_listas_fornecedor' %}">Voltar</a>
       <a class="lista-ver-btn primary" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
+
+      {% if compra_gerada %}
+        {% if compra_gerada.status == "finalizada" %}
+          <a class="lista-ver-btn primary" href="{% url 'estoque:compras_detalhe' compra_gerada.id %}">Ver Compra</a>
+        {% else %}
+          <a class="lista-ver-btn primary" href="{% url 'estoque:compra_editar' compra_gerada.id %}?continuar_itens=1">Continuar Compra</a>
+        {% endif %}
+      {% elif lista.status != "cancelada" and lista.status != "finalizada" %}
+        <form method="post" action="{% url 'estoque:compras_lista_fornecedor_gerar_compra' lista.id %}" style="margin:0;">
+          {% csrf_token %}
+          <button type="submit" class="lista-ver-btn primary">Gerar Compra</button>
+        </form>
+      {% endif %}
+
       <a class="lista-ver-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Enviar ao Vendedor</a>
       <a class="lista-ver-btn" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Imprimir</a>
       <button type="button" class="lista-ver-btn" onclick="window.print()">Imprimir tela</button>
