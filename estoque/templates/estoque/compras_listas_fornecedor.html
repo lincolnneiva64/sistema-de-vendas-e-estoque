@@ -1604,7 +1604,7 @@ td.listas-fornecedor-total {
                   </td>
                   <td>{{ lista.data_lista|date:"d/m/Y" }}</td>
                   <td class="listas-fornecedor-total">R$ {{ lista.total_lista|floatformat:2 }}</td>
-                  <td>
+                  <td class="listas-fornecedor-situacao-cell">
                     <div class="listas-fornecedor-compra-lancada">
                       <strong>Lista #{{ lista.id }} virou Compra #{{ lista.compra_gerada.id }}</strong>
                       <span class="listas-fornecedor-status-compra status-{{ lista.compra_gerada.status|default:'sem-status' }}">{{ lista.compra_gerada.get_status_display }}</span>
@@ -1616,9 +1616,9 @@ td.listas-fornecedor-total {
                       {% if lista.status != "cancelada" %}<a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar Lista</a>{% endif %}
                       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
                       {% if lista.compra_gerada.status == "finalizada" %}
-                        <a class="listas-fornecedor-btn primary" href="{% url 'estoque:compras_detalhe' lista.compra_gerada.id %}">Compra</a>
+                        <a class="listas-fornecedor-btn listas-fornecedor-btn-compra" href="{% url 'estoque:compras_detalhe' lista.compra_gerada.id %}">Ver Compra</a>
                       {% else %}
-                        <a class="listas-fornecedor-btn primary" href="{% url 'estoque:compra_editar' lista.compra_gerada.id %}?continuar_itens=1">Compra</a>
+                        <a class="listas-fornecedor-btn listas-fornecedor-btn-compra" href="{% url 'estoque:compra_editar' lista.compra_gerada.id %}?continuar_itens=1">Ver Compra</a>
                       {% endif %}
                     </div>
                   </td>
@@ -2199,6 +2199,259 @@ td.listas-fornecedor-total {
   font-size: .75rem !important;
   white-space: nowrap !important;
 }
+
+/* Ajuste visual das listas que ja viraram compra */
+.listas-fornecedor-situacao-cell {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-compra-lancada {
+  width: min(100%, 310px) !important;
+  max-width: 310px !important;
+  min-width: 0 !important;
+  margin: 0 auto !important;
+  padding: 10px 14px !important;
+  border-radius: 14px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  text-align: center !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-compra-lancada strong {
+  font-size: .95rem !important;
+  line-height: 1.2 !important;
+  white-space: normal !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-status-compra {
+  margin: 0 !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes {
+  justify-content: flex-start !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-wrap: wrap !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-btn-compra {
+  background: #fff1f2 !important;
+  border: 1px solid #f7a8b8 !important;
+  color: #9f1239 !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 768px) {
+  .listas-fornecedor-linha-com-compra .listas-fornecedor-compra-lancada {
+    width: min(100%, 280px) !important;
+    max-width: 280px !important;
+    padding: 9px 12px !important;
+  }
+
+  .listas-fornecedor-linha-com-compra .listas-fornecedor-acoes {
+    justify-content: flex-start !important;
+    gap: 7px !important;
+  }
+
+  .listas-fornecedor-linha-com-compra .listas-fornecedor-acoes .listas-fornecedor-btn {
+    min-height: 38px !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+}
+
+
+/* Padroniza botoes das listas que viraram compra com as listas abertas */
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes {
+  justify-content: flex-end !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-wrap: nowrap !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes .listas-fornecedor-btn,
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes .listas-fornecedor-btn-compra {
+  min-height: 38px !important;
+  height: 38px !important;
+  padding: 0 14px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  border-radius: 10px !important;
+  font-size: .86rem !important;
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-btn-compra {
+  background: #fff1f2 !important;
+  border: 1px solid #f7a8b8 !important;
+  color: #9f1239 !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 768px) {
+  .listas-fornecedor-linha-com-compra .listas-fornecedor-acoes {
+    justify-content: flex-start !important;
+    align-items: center !important;
+    gap: 8px !important;
+    flex-wrap: wrap !important;
+  }
+
+  .listas-fornecedor-linha-com-compra .listas-fornecedor-acoes .listas-fornecedor-btn,
+  .listas-fornecedor-linha-com-compra .listas-fornecedor-acoes .listas-fornecedor-btn-compra {
+    min-height: 38px !important;
+    height: 38px !important;
+    padding: 0 12px !important;
+  }
+}
+
+
+/* Compacta e realinha linhas que ja viraram compra */
+.listas-fornecedor-linha-com-compra td {
+  vertical-align: middle !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes {
+  justify-content: flex-end !important;
+  align-items: center !important;
+  align-content: center !important;
+  gap: 8px !important;
+  flex-wrap: nowrap !important;
+  height: 100% !important;
+  padding: 0 !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes .listas-fornecedor-btn,
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes .listas-fornecedor-btn-compra {
+  min-height: 32px !important;
+  height: 32px !important;
+  padding: 0 12px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  border-radius: 10px !important;
+  font-size: .84rem !important;
+  white-space: nowrap !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-btn-compra {
+  background: #fff1f2 !important;
+  border: 1px solid #f7a8b8 !important;
+  color: #9f1239 !important;
+  box-shadow: none !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-compra-lancada {
+  width: min(100%, 260px) !important;
+  max-width: 260px !important;
+  margin: 0 auto !important;
+  padding: 8px 12px !important;
+}
+
+@media (max-width: 768px) {
+  .listas-fornecedor-linha-com-compra .listas-fornecedor-acoes {
+    justify-content: flex-start !important;
+    align-items: center !important;
+    gap: 8px !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    padding: 0 8px !important;
+  }
+
+  .listas-fornecedor-linha-com-compra .listas-fornecedor-acoes .listas-fornecedor-btn,
+  .listas-fornecedor-linha-com-compra .listas-fornecedor-acoes .listas-fornecedor-btn-compra {
+    min-height: 32px !important;
+    height: 32px !important;
+    padding: 0 12px !important;
+    flex: 0 0 auto !important;
+  }
+
+  .listas-fornecedor-linha-com-compra .listas-fornecedor-compra-lancada {
+    width: min(100%, 230px) !important;
+    max-width: 230px !important;
+    padding: 7px 10px !important;
+  }
+}
+
+
+/* Ajuste fino: botoes das listas com compra no mesmo tamanho do padrao */
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes .listas-fornecedor-btn,
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes .listas-fornecedor-btn-compra {
+  min-height: 30px !important;
+  height: 30px !important;
+  padding: 0 10px !important;
+  font-size: .80rem !important;
+  border-radius: 9px !important;
+  line-height: 1 !important;
+}
+
+@media (max-width: 768px) {
+  .listas-fornecedor-linha-com-compra .listas-fornecedor-acoes .listas-fornecedor-btn,
+  .listas-fornecedor-linha-com-compra .listas-fornecedor-acoes .listas-fornecedor-btn-compra {
+    min-height: 30px !important;
+    height: 30px !important;
+    padding: 0 10px !important;
+    font-size: .80rem !important;
+    border-radius: 9px !important;
+  }
+}
+
+
+/* Alinha botoes das listas com compra nas mesmas colunas das listas abertas */
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes {
+  display: grid !important;
+  grid-template-columns: 88px 108px 86px 138px !important;
+  column-gap: 8px !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  padding: 0 !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes .listas-fornecedor-btn,
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes .listas-fornecedor-btn-compra {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 30px !important;
+  height: 30px !important;
+  padding: 0 8px !important;
+  font-size: .80rem !important;
+  border-radius: 9px !important;
+  box-sizing: border-box !important;
+}
+
+.listas-fornecedor-linha-com-compra .listas-fornecedor-acoes .listas-fornecedor-btn-compra {
+  justify-self: center !important;
+}
+
+@media (max-width: 768px) {
+  .listas-fornecedor-linha-com-compra .listas-fornecedor-acoes {
+    display: grid !important;
+    grid-template-columns: 88px 108px 86px 138px !important;
+    column-gap: 8px !important;
+    justify-content: flex-start !important;
+    overflow-x: auto !important;
+    padding: 0 8px !important;
+  }
+
+  .listas-fornecedor-linha-com-compra .listas-fornecedor-acoes .listas-fornecedor-btn,
+  .listas-fornecedor-linha-com-compra .listas-fornecedor-acoes .listas-fornecedor-btn-compra {
+    width: 100% !important;
+    min-height: 30px !important;
+    height: 30px !important;
+    padding: 0 8px !important;
+    font-size: .80rem !important;
+  }
+}
+
 </style>
 
 {% endblock %}
