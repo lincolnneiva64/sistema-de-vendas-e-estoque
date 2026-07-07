@@ -194,6 +194,65 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertNotContains(resposta, ">None<")
         self.assertNotContains(resposta, "data-estoque=\"None\"")
 
+    def test_compra_gerada_pela_lista_exibe_erro_tipo_pagamento_no_campo(self):
+        lista = ListaCompraFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_lista=timezone.localdate(),
+            data_inicio_periodo=timezone.localdate(),
+            data_fim_periodo=timezone.localdate(),
+        )
+        ItemListaCompraFornecedor.objects.create(
+            lista=lista,
+            produto=self.produto,
+            estoque_atual=Decimal("10.000"),
+            estoque_minimo=Decimal("0.000"),
+            quantidade_final=Decimal("1.000"),
+            unidade="UN",
+            preco_compra=Decimal("100.00"),
+            total=Decimal("100.00"),
+        )
+        self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gerar_compra", kwargs={"pk": lista.pk}),
+            secure=True,
+        )
+        compra = Compra.objects.get(observacao__icontains=f"Lista de Compras #{lista.id}")
+
+        resposta = self.client.post(
+            reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}),
+            {
+                "acao_compra": "confirmar_financeiro",
+                "fornecedor_id": str(self.fornecedor.id),
+                "data_compra": timezone.localdate().isoformat(),
+                "tipo_pagamento": "",
+                "data_vencimento": "",
+                "observacao": compra.observacao,
+                "produto_id[]": [str(self.produto.id)],
+                "quantidade[]": ["1"],
+                "unidade[]": ["UN"],
+                "preco_unitario[]": ["100,00"],
+                "observacao_item[]": [""],
+            },
+            secure=True,
+        )
+
+        destino = f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?erro_tipo_pagamento=1"
+        self.assertRedirects(resposta, destino, fetch_redirect_response=False)
+
+        resposta = self.client.get(destino, secure=True)
+        html = resposta.content.decode()
+        label_posicao = html.index("<label>Tipo de pagamento</label>")
+        select_posicao = html.index('id="tipoPagamentoCompra"', label_posicao)
+        erro_posicao = html.index('id="erroTipoPagamentoCompra"', select_posicao)
+
+        self.assertLess(label_posicao, select_posicao)
+        self.assertLess(select_posicao, erro_posicao)
+        self.assertContains(resposta, 'class="compras-field-error" id="erroTipoPagamentoCompra"')
+        self.assertContains(resposta, "Selecione o tipo de pagamento antes de finalizar a compra.", count=1)
+        self.assertNotContains(
+            resposta,
+            '<div class="compras-alert error">Selecione o tipo de pagamento antes de finalizar a compra.</div>',
+        )
+
     def test_compra_gerada_pela_lista_finaliza_avista_com_dados_do_modal(self):
         lista = ListaCompraFornecedor.objects.create(
             fornecedor=self.fornecedor,

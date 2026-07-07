@@ -364,6 +364,17 @@
   .compras-card-body { padding:10px 14px; }
   .compras-grid { display:grid; grid-template-columns: 1.2fr .55fr .65fr .55fr; gap:10px; }
   .compras-field label { display:block; font-weight:850; font-size:.82rem; margin-bottom:4px; color:#334155; }
+  .compras-field-error {
+    margin:6px 0 0;
+    padding:6px 8px;
+    border:1.5px solid #f59e0b;
+    border-radius:8px;
+    background:#fffbeb;
+    color:#991b1b;
+    font-size:.76rem;
+    font-weight:850;
+    line-height:1.25;
+  }
   .compras-field input, .compras-field select, .compras-field textarea {
     width:100%; border:1.5px solid #d3dbe8; border-radius:9px; padding:9px 11px; font-weight:600; outline:none;
   }
@@ -1882,6 +1893,11 @@
               <option value="cartao_credito" {% if compra.tipo_pagamento == "cartao_credito" %}selected{% endif %}>Cartao credito</option>
               <option value="cartao_debito" {% if compra.tipo_pagamento == "cartao_debito" %}selected{% endif %}>Cartao debito</option>
             </select>
+            {% if erro_tipo_pagamento %}
+              <div class="compras-field-error" id="erroTipoPagamentoCompra">
+                Selecione o tipo de pagamento antes de finalizar a compra.
+              </div>
+            {% endif %}
           </div>
           <div class="compras-field" id="campoVencimentoCompra">
             <label>Vencimento</label>

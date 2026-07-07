@@ -5989,7 +5989,10 @@ def _total_itens_compra(compra=None):
     ).quantize(Decimal("0.01"))
 
 
-def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None, rascunho_salvo=False):
+ERRO_TIPO_PAGAMENTO_COMPRA = "Selecione o tipo de pagamento antes de finalizar a compra."
+
+
+def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None, rascunho_salvo=False, erro_tipo_pagamento=False):
     lista_origem_compra = None
     if compra and compra.observacao:
         match_lista_origem = re.search(r"Lista de Compras #(\d+)", compra.observacao or "")
@@ -6025,6 +6028,7 @@ def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None,
         "saldo_caixa_modal": _financeiro_moeda_br(saldo_caixa),
         "saldo_reserva_modal": _financeiro_moeda_br(saldo_reserva),
         "saldo_banco_modal": _financeiro_moeda_br(saldo_banco),
+        "erro_tipo_pagamento": erro_tipo_pagamento,
     }
 
 def _dados_compra_post(request, exigir_itens=True):
@@ -6041,7 +6045,7 @@ def _dados_compra_post(request, exigir_itens=True):
     if not data_compra:
         raise ValueError("Informe uma data valida para a compra.")
     if exigir_itens and not tipo_pagamento:
-        raise ValueError("Selecione o tipo de pagamento antes de finalizar a compra.")
+        raise ValueError(ERRO_TIPO_PAGAMENTO_COMPRA)
     if compra_a_prazo and not data_vencimento:
         raise ValueError("Informe o vencimento da compra a prazo.")
 
@@ -6339,7 +6343,11 @@ def compras_nova(request):
             return redirect("estoque:compras_lista")
         return redirect("estoque:compra_finalizar", pk=compra.pk)
 
-    return render(request, "estoque/compras_nova.html", _contexto_form_compra())
+    return render(
+        request,
+        "estoque/compras_nova.html",
+        _contexto_form_compra(erro_tipo_pagamento=request.GET.get("erro_tipo_pagamento") == "1"),
+    )
 
 
 def compra_editar(request, pk):
@@ -6372,6 +6380,8 @@ def compra_editar(request, pk):
                     if dados["compra_a_prazo"]:
                         _finalizar_compra_com_financeiro(compra, None, atualizar_custo_produto_ids, atualizar_preco_venda_produtos)
         except (ValueError, IndexError) as exc:
+            if str(exc) == ERRO_TIPO_PAGAMENTO_COMPRA:
+                return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?erro_tipo_pagamento=1")
             messages.error(request, str(exc))
             return redirect("estoque:compra_editar", pk=compra.pk)
         except Exception:
@@ -6389,7 +6399,11 @@ def compra_editar(request, pk):
     return render(
         request,
         "estoque/compras_nova.html",
-        _contexto_form_compra(compra, rascunho_salvo=request.GET.get("rascunho_salvo") == "1"),
+        _contexto_form_compra(
+            compra,
+            rascunho_salvo=request.GET.get("rascunho_salvo") == "1",
+            erro_tipo_pagamento=request.GET.get("erro_tipo_pagamento") == "1",
+        ),
     )
 
 
@@ -6416,12 +6430,13 @@ def compra_finalizar(request, pk):
                     valores_origem = _valores_origem_compra_post(request)
                     _validar_origem_compra_a_vista(valores_origem, dados["total"])
             except (ValueError, IndexError) as exc:
+                if str(exc) == ERRO_TIPO_PAGAMENTO_COMPRA:
+                    return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?erro_tipo_pagamento=1")
                 messages.error(request, str(exc))
                 return redirect("estoque:compra_editar", pk=compra.pk)
 
             if not dados["tipo_pagamento"]:
-                messages.error(request, "Selecione o tipo de pagamento antes de finalizar a compra.")
-                return redirect("estoque:compra_editar", pk=compra.pk)
+                return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?erro_tipo_pagamento=1")
             if dados["compra_a_prazo"] and not dados["data_vencimento"]:
                 messages.error(request, "Informe o vencimento da compra a prazo.")
                 return redirect("estoque:compra_editar", pk=compra.pk)
@@ -6443,7 +6458,15 @@ def compra_finalizar(request, pk):
     if compra.status == Compra.STATUS_FINALIZACAO_INICIADA:
         compra.status = Compra.STATUS_RASCUNHO
         compra.save(update_fields=["status", "atualizado_em"])
-    return render(request, "estoque/compras_nova.html", _contexto_form_compra(compra, finalizando=True))
+    return render(
+        request,
+        "estoque/compras_nova.html",
+        _contexto_form_compra(
+            compra,
+            finalizando=True,
+            erro_tipo_pagamento=request.GET.get("erro_tipo_pagamento") == "1",
+        ),
+    )
 
 
 @require_POST
