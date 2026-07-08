@@ -92,7 +92,7 @@ class FechamentoCompraFinanceiroTests(TestCase):
             "data_compra": timezone.localdate().isoformat(),
             "tipo_pagamento": tipo_pagamento,
             "data_vencimento": data_vencimento,
-            "observacao": compra.observacao,
+            "observacao": compra.observacao or "",
             "produto_id[]": [str(self.produto.id)],
             "quantidade[]": ["1"],
             "unidade[]": ["UN"],
@@ -130,10 +130,150 @@ class FechamentoCompraFinanceiroTests(TestCase):
             Compra(tipo_pagamento="cartao_debito").tipo_pagamento_texto,
             "Cartão débito",
         )
-        # Comportamento atual: cartoes sao pagamento imediato porque apenas "a prazo" gera ContaPagar.
-        self.assertTrue(views._compra_pagamento_imediato("cartao_credito"))
+        self.assertFalse(views._compra_pagamento_imediato("cartao_credito"))
         self.assertTrue(views._compra_pagamento_imediato("cartao_debito"))
         self.assertTrue(views._compra_pagamento_a_prazo("aprazo"))
+
+    def test_cartao_credito_sem_data_fatura_nao_finaliza(self):
+        compra = Compra.objects.create(
+            fornecedor=self.fornecedor,
+            data_compra=timezone.localdate(),
+            tipo_pagamento="cartao_credito",
+            total=Decimal("100.00"),
+            status=Compra.STATUS_RASCUNHO,
+        )
+        ItemCompra.objects.create(
+            compra=compra,
+            produto=self.produto,
+            quantidade=Decimal("1.000"),
+            unidade="UN",
+            preco_unitario=Decimal("100.00"),
+            valor_total=Decimal("100.00"),
+        )
+        estoque_antes = self.produto.quantidade
+
+        resposta = self.client.post(
+            reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}),
+            self._dados_finalizacao_compra_lista(
+                compra,
+                tipo_pagamento="cartao_credito",
+                data_vencimento="",
+                origem_caixa="0,00",
+                origem_reserva="0,00",
+                origem_banco="0,00",
+            ),
+            follow=True,
+            secure=True,
+        )
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        self.assertEqual(compra.status, Compra.STATUS_RASCUNHO)
+        self.assertEqual(self.produto.quantidade, estoque_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
+        self.assertEqual(ContaPagar.objects.count(), 0)
+        self.assertContains(resposta, "Informe a data de vencimento da fatura do cartao antes de finalizar.")
+
+    def test_cartao_credito_com_data_fatura_finaliza_e_cria_conta_pagar(self):
+        compra = Compra.objects.create(
+            fornecedor=self.fornecedor,
+            data_compra=timezone.localdate(),
+            tipo_pagamento="cartao_credito",
+            total=Decimal("100.00"),
+            status=Compra.STATUS_RASCUNHO,
+        )
+        ItemCompra.objects.create(
+            compra=compra,
+            produto=self.produto,
+            quantidade=Decimal("1.000"),
+            unidade="UN",
+            preco_unitario=Decimal("100.00"),
+            valor_total=Decimal("100.00"),
+        )
+        estoque_antes = self.produto.quantidade
+
+        resposta = self.client.post(
+            reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}),
+            self._dados_finalizacao_compra_lista(
+                compra,
+                tipo_pagamento="cartao_credito",
+                data_vencimento="2026-07-21",
+                origem_caixa="0,00",
+                origem_reserva="0,00",
+                origem_banco="0,00",
+            ),
+            secure=True,
+        )
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        conta = compra.conta_pagar
+        self.assertRedirects(resposta, reverse("estoque:compras_lista"), fetch_redirect_response=False)
+        self.assertEqual(compra.status, Compra.STATUS_FINALIZADA)
+        self.assertEqual(compra.data_vencimento.isoformat(), "2026-07-21")
+        self.assertEqual(self.produto.quantidade, estoque_antes + Decimal("1.000"))
+        self.assertEqual(conta.data_vencimento.isoformat(), "2026-07-21")
+        self.assertEqual(conta.valor_original, Decimal("100.00"))
+        self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
+
+    def test_cartao_credito_post_duplo_nao_duplica_estoque_ou_conta_pagar(self):
+        compra = Compra.objects.create(
+            fornecedor=self.fornecedor,
+            data_compra=timezone.localdate(),
+            tipo_pagamento="cartao_credito",
+            total=Decimal("100.00"),
+            status=Compra.STATUS_RASCUNHO,
+        )
+        ItemCompra.objects.create(
+            compra=compra,
+            produto=self.produto,
+            quantidade=Decimal("1.000"),
+            unidade="UN",
+            preco_unitario=Decimal("100.00"),
+            valor_total=Decimal("100.00"),
+        )
+        dados = self._dados_finalizacao_compra_lista(
+            compra,
+            tipo_pagamento="cartao_credito",
+            data_vencimento="2026-07-21",
+            origem_caixa="0,00",
+            origem_reserva="0,00",
+            origem_banco="0,00",
+        )
+
+        self.client.post(reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}), dados, secure=True)
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        estoque_apos_primeira = self.produto.quantidade
+        segunda_resposta = self.client.post(reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}), dados, secure=True)
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        self.assertRedirects(segunda_resposta, reverse("estoque:compras_detalhe", kwargs={"pk": compra.pk}), fetch_redirect_response=False)
+        self.assertEqual(compra.status, Compra.STATUS_FINALIZADA)
+        self.assertEqual(self.produto.quantidade, estoque_apos_primeira)
+        self.assertEqual(ContaPagar.objects.filter(compra=compra).count(), 1)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
+
+    def test_cartao_debito_continua_pagamento_imediato(self):
+        dados = self.dados(
+            fechamento_token="d" * 32,
+            acao_compra="confirmar_financeiro",
+            tipo_pagamento="cartao_debito",
+            data_vencimento="",
+            **{"preco_unitario[]": ["100,00"], "origem_caixa": "100,00", "origem_reserva": "0,00", "origem_banco": "0,00"},
+        )
+        estoque_antes = self.produto.quantidade
+
+        resposta = self.client.post(self.url, dados, secure=True)
+
+        compra = Compra.objects.get(fechamento_token="d" * 32)
+        self.produto.refresh_from_db()
+        self.assertRedirects(resposta, reverse("estoque:compras_lista"), fetch_redirect_response=False)
+        self.assertEqual(compra.status, Compra.STATUS_FINALIZADA)
+        self.assertEqual(self.produto.quantidade, estoque_antes + Decimal("1.000"))
+        self.assertEqual(MovimentoFinanceiro.objects.filter(compra=compra, origem="compra_a_vista").count(), 1)
+        self.assertEqual(ContaPagar.objects.filter(compra=compra).count(), 0)
 
     def test_modal_de_fechamento_tem_resumo_compacto_e_sem_usar_restante(self):
         resposta = self.client.get(self.url, secure=True)
@@ -483,6 +623,60 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertEqual(self.produto.quantidade, estoque_apos_primeira)
         self.assertEqual(ContaPagar.objects.filter(compra=compra).count(), 1)
         self.assertEqual(MovimentoFinanceiro.objects.filter(compra=compra, origem="compra_a_vista").count(), 0)
+
+    def test_compra_gerada_pela_lista_cartao_credito_exige_data_e_cria_conta_pagar(self):
+        lista = self._criar_lista_fornecedor_conferida()
+        _, compra = self._gerar_compra_da_lista(lista)
+        estoque_antes = self.produto.quantidade
+        dados_sem_data = self._dados_finalizacao_compra_lista(
+            compra,
+            tipo_pagamento="cartao_credito",
+            data_vencimento="",
+            origem_caixa="0,00",
+            origem_reserva="0,00",
+            origem_banco="0,00",
+        )
+
+        resposta_sem_data = self.client.post(
+            reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}),
+            dados_sem_data,
+            follow=True,
+            secure=True,
+        )
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        self.assertEqual(compra.status, Compra.STATUS_RASCUNHO)
+        self.assertEqual(self.produto.quantidade, estoque_antes)
+        self.assertEqual(ContaPagar.objects.filter(compra=compra).count(), 0)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(compra=compra).count(), 0)
+        self.assertContains(resposta_sem_data, "Informe a data de vencimento da fatura do cartao antes de finalizar.")
+
+        dados_com_data = self._dados_finalizacao_compra_lista(
+            compra,
+            tipo_pagamento="cartao_credito",
+            data_vencimento="2026-07-22",
+            origem_caixa="0,00",
+            origem_reserva="0,00",
+            origem_banco="0,00",
+        )
+        resposta_com_data = self.client.post(
+            reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}),
+            dados_com_data,
+            secure=True,
+        )
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        conta = compra.conta_pagar
+        self.assertRedirects(resposta_com_data, reverse("estoque:compras_lista"), fetch_redirect_response=False)
+        self.assertEqual(compra.status, Compra.STATUS_FINALIZADA)
+        self.assertEqual(compra.tipo_pagamento, "cartao_credito")
+        self.assertEqual(compra.data_vencimento.isoformat(), "2026-07-22")
+        self.assertEqual(self.produto.quantidade, estoque_antes + Decimal("1.000"))
+        self.assertEqual(conta.data_vencimento.isoformat(), "2026-07-22")
+        self.assertEqual(conta.valor_original, Decimal("100.00"))
+        self.assertEqual(MovimentoFinanceiro.objects.filter(compra=compra).count(), 0)
 
     def test_lista_fornecedor_nao_gera_segunda_compra_com_rascunho_existente(self):
         lista = self._criar_lista_fornecedor_conferida()

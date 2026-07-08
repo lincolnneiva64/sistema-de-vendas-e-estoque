@@ -1496,9 +1496,47 @@ def _compra_pagamento_a_prazo(tipo_pagamento):
     return forma in {"a prazo", "prazo"} or forma_compacta in {"aprazo", "prazo"}
 
 
+def _compra_pagamento_cartao_credito(tipo_pagamento):
+    forma = normalizar_texto_cliente(tipo_pagamento)
+    forma_compacta = re.sub(r"\s+", "", forma)
+    return forma in {"cartao credito", "credito"} or forma_compacta in {
+        "cartaocredito",
+        "cartaodecredito",
+        "cartao_credito",
+    }
+
+
+def _compra_pagamento_conta_futura(tipo_pagamento):
+    return _compra_pagamento_a_prazo(tipo_pagamento) or _compra_pagamento_cartao_credito(tipo_pagamento)
+
+
 def _compra_pagamento_imediato(tipo_pagamento):
-    tipo_pagamento = (tipo_pagamento or "").strip()
-    return bool(tipo_pagamento) and not _compra_pagamento_a_prazo(tipo_pagamento)
+    forma = normalizar_texto_cliente(tipo_pagamento)
+    forma_compacta = re.sub(r"\s+", "", forma)
+    if not forma_compacta or _compra_pagamento_conta_futura(tipo_pagamento):
+        return False
+    return forma in {
+        "a vista",
+        "dinheiro",
+        "especie",
+        "pix",
+        "banco",
+        "transferencia",
+        "cartao debito",
+        "debito",
+        "sangria",
+        "caixa",
+    } or forma_compacta in {
+        "avista",
+        "cartaodebito",
+        "cartao_debito",
+    }
+
+
+def _mensagem_vencimento_compra(tipo_pagamento):
+    if _compra_pagamento_cartao_credito(tipo_pagamento):
+        return "Informe a data de vencimento da fatura do cartao antes de finalizar."
+    return "Informe o vencimento da compra a prazo."
 
 
 def _descricao_compra_a_vista(compra, conta=None, complemento=""):
@@ -6178,6 +6216,7 @@ def _dados_compra_post(request, exigir_itens=True):
     data_vencimento = parse_date(request.POST.get("data_vencimento") or "")
     observacao = (request.POST.get("observacao") or "").strip()
     compra_a_prazo = _compra_pagamento_a_prazo(tipo_pagamento)
+    compra_conta_futura = _compra_pagamento_conta_futura(tipo_pagamento)
 
     fornecedor = Fornecedor.objects.filter(pk=fornecedor_id, ativo=True).first()
     if not fornecedor:
@@ -6186,8 +6225,8 @@ def _dados_compra_post(request, exigir_itens=True):
         raise ValueError("Informe uma data valida para a compra.")
     if exigir_itens and not tipo_pagamento:
         raise ValueError(ERRO_TIPO_PAGAMENTO_COMPRA)
-    if compra_a_prazo and not data_vencimento:
-        raise ValueError("Informe o vencimento da compra a prazo.")
+    if exigir_itens and compra_conta_futura and not data_vencimento:
+        raise ValueError(_mensagem_vencimento_compra(tipo_pagamento))
 
     produto_ids = request.POST.getlist("produto_id[]")
     quantidades = request.POST.getlist("quantidade[]")
@@ -6243,12 +6282,13 @@ def _dados_compra_post(request, exigir_itens=True):
     return {
         "fornecedor": fornecedor,
         "data_compra": data_compra,
-        "data_vencimento": data_vencimento if compra_a_prazo else None,
+        "data_vencimento": data_vencimento if compra_conta_futura else None,
         "tipo_pagamento": tipo_pagamento,
         "observacao": observacao,
         "itens": itens_validos,
         "total": total,
         "compra_a_prazo": compra_a_prazo,
+        "compra_conta_futura": compra_conta_futura,
         "compra_a_vista": _compra_pagamento_imediato(tipo_pagamento),
     }
 
@@ -6416,7 +6456,7 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
         compra.status = Compra.STATUS_FINALIZADA
         compra.save(update_fields=["estoque_entrada_realizada", "estoque_entrada_realizada_em", "status", "atualizado_em"])
 
-        if _compra_pagamento_a_prazo(compra.tipo_pagamento):
+        if _compra_pagamento_conta_futura(compra.tipo_pagamento):
             ContaPagar.objects.get_or_create(
                 compra=compra,
                 defaults={
@@ -6476,7 +6516,7 @@ def compras_nova(request):
         if acao == "salvar_rascunho":
             return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?rascunho_salvo=1")
         if acao == "confirmar_financeiro":
-            if dados["compra_a_prazo"]:
+            if dados["compra_conta_futura"]:
                 messages.success(request, "Compra finalizada e conta a pagar criada com sucesso.")
             else:
                 messages.success(request, "Compra finalizada e valores lancados no financeiro com sucesso.")
@@ -6508,8 +6548,6 @@ def compra_editar(request, pk):
             return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
         try:
             dados = _dados_compra_post(request, exigir_itens=acao != "salvar_rascunho")
-            if acao == "finalizar" and dados["compra_a_prazo"] and not dados["data_vencimento"]:
-                raise ValueError("Informe o vencimento da compra a prazo.")
             status = Compra.STATUS_RASCUNHO
             with transaction.atomic():
                 compra = Compra.objects.select_for_update().get(pk=compra.pk)
@@ -6517,7 +6555,7 @@ def compra_editar(request, pk):
                 if acao == "finalizar":
                     _atualizar_custos_produtos_compra(dados["itens"], atualizar_custo_produto_ids)
                     _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos)
-                    if dados["compra_a_prazo"]:
+                    if dados["compra_conta_futura"]:
                         _finalizar_compra_com_financeiro(compra, None, atualizar_custo_produto_ids, atualizar_preco_venda_produtos)
         except (ValueError, IndexError) as exc:
             if str(exc) == ERRO_TIPO_PAGAMENTO_COMPRA:
@@ -6531,7 +6569,7 @@ def compra_editar(request, pk):
 
         if acao == "salvar_rascunho":
             return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?rascunho_salvo=1")
-        if acao == "finalizar" and dados["compra_a_prazo"]:
+        if acao == "finalizar" and dados["compra_conta_futura"]:
             messages.success(request, "Compra finalizada e conta a pagar criada com sucesso.")
             return redirect("estoque:compras_lista")
         return redirect("estoque:compra_finalizar", pk=compra.pk)
@@ -6577,8 +6615,8 @@ def compra_finalizar(request, pk):
 
             if not dados["tipo_pagamento"]:
                 return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?erro_tipo_pagamento=1")
-            if dados["compra_a_prazo"] and not dados["data_vencimento"]:
-                messages.error(request, "Informe o vencimento da compra a prazo.")
+            if dados["compra_conta_futura"] and not dados["data_vencimento"]:
+                messages.error(request, _mensagem_vencimento_compra(dados["tipo_pagamento"]))
                 return redirect("estoque:compra_editar", pk=compra.pk)
             try:
                 with transaction.atomic():
@@ -6589,7 +6627,7 @@ def compra_finalizar(request, pk):
                 logger.exception("Falha ao finalizar compra e lancar financeiro")
                 messages.error(request, "Nao foi possivel finalizar a compra. Nenhum valor foi lancado no financeiro.")
                 return redirect("estoque:compra_finalizar", pk=compra.pk)
-            if dados["compra_a_prazo"]:
+            if dados["compra_conta_futura"]:
                 messages.success(request, "Compra finalizada e conta a pagar criada com sucesso.")
             else:
                 messages.success(request, "Compra finalizada e valores lancados no financeiro com sucesso.")

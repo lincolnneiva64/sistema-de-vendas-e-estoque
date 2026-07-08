@@ -1813,6 +1813,10 @@
   <div class="compras-alert success" style="border-color:#86efac; background:#ecfdf5; color:#166534;">
     Esta etapa vai lancar estoque e criar a Conta a Pagar.
   </div>
+{% elif finalizando and compra and compra.tipo_pagamento == "cartao_credito" %}
+  <div class="compras-alert success" style="border-color:#86efac; background:#ecfdf5; color:#166534;">
+    Esta etapa vai lancar estoque e criar a Conta a Pagar.
+  </div>
 {% elif finalizando %}
   <div class="compras-alert success" style="border-color:#bfdbfe; background:#eff6ff; color:#1d4ed8;">
     Esta etapa vai lancar estoque e registrar o financeiro da compra.
@@ -1900,7 +1904,7 @@
             {% endif %}
           </div>
           <div class="compras-field" id="campoVencimentoCompra">
-            <label>Vencimento</label>
+            <label id="labelVencimentoCompra">Vencimento</label>
             <input type="date" name="data_vencimento" id="dataVencimentoCompra" value="{% if compra.data_vencimento %}{{ compra.data_vencimento|date:'Y-m-d' }}{% else %}{{ hoje|date:'Y-m-d' }}{% endif %}">
           </div>
         </div>
@@ -2440,8 +2444,17 @@
     return valor === "aprazo" || valor === "prazo";
   }
 
+  function compraCartaoCredito() {
+    const valor = String(tipoPagamentoCompra ? tipoPagamentoCompra.value : "").toLowerCase().replace(/\s/g, "");
+    return valor === "cartaocredito" || valor === "cartao_credito";
+  }
+
+  function compraContaFutura() {
+    return compraAPrazo() || compraCartaoCredito();
+  }
+
   function compraAVista() {
-    return tipoPagamentoCompra && tipoPagamentoCompra.value && !compraAPrazo();
+    return tipoPagamentoCompra && tipoPagamentoCompra.value && !compraContaFutura();
   }
 
   function definirCampoPorCentavos(campo, centavos) {
@@ -4168,11 +4181,25 @@
     return valor === "aprazo" || valor === "prazo";
   }
 
+  function pagamentoCartaoCredito() {
+    const valor = String(tipoPagamento ? tipoPagamento.value : "").toLowerCase().replace(/\s/g, "");
+    return valor === "cartaocredito" || valor === "cartao_credito";
+  }
+
+  function pagamentoContaFutura() {
+    return pagamentoAPrazo() || pagamentoCartaoCredito();
+  }
+
   function atualizarVencimentoCompra() {
-    const prazo = pagamentoAPrazo();
+    const contaFutura = pagamentoContaFutura();
 
     if (campoVencimento) {
-      campoVencimento.classList.toggle("oculto", !prazo);
+      campoVencimento.classList.toggle("oculto", !contaFutura);
+    }
+
+    const labelVencimento = document.getElementById("labelVencimentoCompra");
+    if (labelVencimento) {
+      labelVencimento.textContent = pagamentoCartaoCredito() ? "Vencimento da fatura" : "Vencimento";
     }
 
     if (pagamentoBotoes.length && tipoPagamento) {
@@ -4181,7 +4208,7 @@
         tipoPagamento.value = botao.dataset.pagamento || "";
         tipoPagamento.dispatchEvent(new Event("change", { bubbles:true }));
 
-        if (pagamentoAPrazo()) {
+        if (pagamentoContaFutura()) {
           focar(dataVencimento);
         } else {
           focar(primeiroProduto || observacao);
@@ -4191,12 +4218,12 @@
   }
 
   if (dataVencimento) {
-      dataVencimento.required = prazo;
-      if (prazo && !dataVencimento.value && dataCompra) {
+      dataVencimento.required = contaFutura;
+      if (contaFutura && !dataVencimento.value && dataCompra) {
         dataVencimento.value = dataCompra.value;
       }
 
-      if (!prazo) {
+      if (!contaFutura) {
         dataVencimento.value = "";
         vencimentoAlteradoManualmente = false;
       }
@@ -4370,7 +4397,7 @@
 
   if (dataCompra) {
     dataCompra.addEventListener("change", function() {
-      if (dataVencimento && pagamentoAPrazo() && !vencimentoAlteradoManualmente) {
+      if (dataVencimento && pagamentoContaFutura() && !vencimentoAlteradoManualmente) {
         dataVencimento.value = dataCompra.value;
       }
     });
@@ -4392,7 +4419,7 @@
       if (event.key !== "Enter") return;
       event.preventDefault();
 
-      if (pagamentoAPrazo()) {
+      if (pagamentoContaFutura()) {
         focar(dataVencimento);
       } else {
         focar(primeiroProduto || observacao);
@@ -4406,7 +4433,7 @@
         tipoPagamento.value = botao.dataset.pagamento || "";
         tipoPagamento.dispatchEvent(new Event("change", { bubbles:true }));
 
-        if (pagamentoAPrazo()) {
+        if (pagamentoContaFutura()) {
           focar(dataVencimento);
         } else {
           focar(primeiroProduto || observacao);
