@@ -403,9 +403,7 @@
         {% endfor %}
         <div class="sem-resultados" id="conferenciaSemResultados">Nenhum produto encontrado nesta lista.</div>
         <div class="acoes">
-          {% if not consulta_somente_leitura %}
-            <button type="button" class="acao-btn" id="btnMostrarPendencias">Mostrar so pendencias</button>
-          {% endif %}
+          <button type="button" class="acao-btn" id="btnMostrarPendencias">Mostrar so pendencias</button>
           {% if not consulta_somente_leitura %}
             <button
               type="{% if conferencia_salva %}button{% else %}submit{% endif %}"
@@ -615,65 +613,63 @@
       if (event.target.closest('.busca-mobile')) return;
       esconderSugestoes();
     });
-    if (!consultaSomenteLeitura) {
-      document.querySelectorAll('.opcao').forEach(function(botao) {
-        botao.addEventListener('click', function() {
-          const item = botao.closest('.linha-conferencia');
-          const input = item?.querySelector('.campoQuantidadeRecebidaLista');
-          if (!item || !input) return;
-          const grupo = botao.closest('[data-grupo-conferencia]')?.dataset.grupoConferencia;
-          const valor = botao.dataset.valor;
-          const estavaAtivo = botao.classList.contains('ativo');
-          if (estavaAtivo) {
-            definirGrupo(item, grupo, '');
-            if (grupo === 'produto') definirGrupo(item, 'quantidade', '');
-            input.readOnly = false;
-            input.value = '';
-            atualizarItem(input);
-            return;
-          }
-          definirGrupo(item, grupo, valor);
-          if (grupo === 'produto' && valor === 'nao') {
-            input.value = '0';
-          } else if (grupo === 'quantidade' && valor === 'sim') {
-            definirGrupo(item, 'produto', 'sim');
-            input.value = input.dataset.qtdFinal || '';
-          } else if (grupo === 'quantidade' && valor === 'nao') {
-            definirGrupo(item, 'produto', 'sim');
-            input.value = '';
-            input.readOnly = false;
-            input.focus();
-            input.select();
-          }
+    document.querySelectorAll('.opcao').forEach(function(botao) {
+      botao.addEventListener('click', function() {
+        const item = botao.closest('.linha-conferencia');
+        const input = item?.querySelector('.campoQuantidadeRecebidaLista');
+        if (!item || !input) return;
+        const grupo = botao.closest('[data-grupo-conferencia]')?.dataset.grupoConferencia;
+        const valor = botao.dataset.valor;
+        const estavaAtivo = botao.classList.contains('ativo');
+        if (estavaAtivo) {
+          definirGrupo(item, grupo, '');
+          if (grupo === 'produto') definirGrupo(item, 'quantidade', '');
+          input.readOnly = false;
+          input.value = '';
           atualizarItem(input);
-        });
-      });
-      document.querySelectorAll('.campoQuantidadeRecebidaLista').forEach(function(input) {
-        input.addEventListener('input', function() {
-          const item = input.closest('.linha-conferencia');
-          if (item && parseDecimal(input.value) !== null) {
-            definirGrupo(item, 'produto', 'sim');
-            definirGrupo(item, 'quantidade', 'nao');
-          }
-          atualizarItem(input);
-        });
-        input.addEventListener('change', function() {
-          atualizarItem(input);
-        });
+          return;
+        }
+        definirGrupo(item, grupo, valor);
+        if (grupo === 'produto' && valor === 'nao') {
+          input.value = '0';
+        } else if (grupo === 'quantidade' && valor === 'sim') {
+          definirGrupo(item, 'produto', 'sim');
+          input.value = input.dataset.qtdFinal || '';
+        } else if (grupo === 'quantidade' && valor === 'nao') {
+          definirGrupo(item, 'produto', 'sim');
+          input.value = '';
+          input.readOnly = false;
+          input.focus();
+          input.select();
+        }
         atualizarItem(input);
       });
-      document.querySelectorAll('.obs-input').forEach(function(input) {
-        input.addEventListener('input', atualizarFiltro);
+    });
+    document.querySelectorAll('.campoQuantidadeRecebidaLista').forEach(function(input) {
+      input.addEventListener('input', function() {
+        const item = input.closest('.linha-conferencia');
+        if (item && parseDecimal(input.value) !== null) {
+          definirGrupo(item, 'produto', 'sim');
+          definirGrupo(item, 'quantidade', 'nao');
+        }
+        atualizarItem(input);
       });
-      document.querySelectorAll('.proximo-btn').forEach(function(botao) {
-        botao.addEventListener('click', voltarParaBusca);
+      input.addEventListener('change', function() {
+        atualizarItem(input);
       });
-      botaoPendencias?.addEventListener('click', function() {
-        botaoPendencias.classList.toggle('ativo');
-        botaoPendencias.textContent = botaoPendencias.classList.contains('ativo') ? 'Mostrar todos' : 'Mostrar so pendencias';
-        atualizarFiltro();
-      });
-    }
+      atualizarItem(input);
+    });
+    document.querySelectorAll('.obs-input').forEach(function(input) {
+      input.addEventListener('input', atualizarFiltro);
+    });
+    document.querySelectorAll('.proximo-btn').forEach(function(botao) {
+      botao.addEventListener('click', voltarParaBusca);
+    });
+    botaoPendencias?.addEventListener('click', function() {
+      botaoPendencias.classList.toggle('ativo');
+      botaoPendencias.textContent = botaoPendencias.classList.contains('ativo') ? 'Mostrar todos' : 'Mostrar so pendencias';
+      atualizarFiltro();
+    });
     const form = document.getElementById('formConferenciaListaFornecedor');
     const botaoSalvar = document.getElementById('btnSalvarConferenciaExterna');
     const conferenciaSalvaInicial = botaoSalvar?.dataset.conferenciaSalva === '1';
