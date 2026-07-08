@@ -5162,6 +5162,7 @@ def compras_lista_fornecedor_conferencia_externa(request, token):
         return redirect(redirect_path)
 
     resumo = _resumo_conferencia_lista_fornecedor(lista)
+    checklist_externa_editavel = not consulta_somente_leitura
     return render(
         request,
         "estoque/compras_lista_fornecedor_conferencia_externa.html",
@@ -5172,6 +5173,7 @@ def compras_lista_fornecedor_conferencia_externa(request, token):
             "conferencia_action": _path_conferencia_externa_lista_fornecedor(token_normalizado),
             "conferencia_salva": bool(resumo["total"] and resumo["pendentes"] == 0),
             "consulta_somente_leitura": consulta_somente_leitura,
+            "checklist_externa_editavel": checklist_externa_editavel,
             "mensagem_consulta_somente_leitura": (
                 "Checklist já enviada. Esta tela está disponível apenas para consulta. "
                 "Para alterar, gere uma nova liberação pelo desktop."

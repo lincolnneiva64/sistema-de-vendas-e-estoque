@@ -363,8 +363,12 @@
         <div class="sugestoes-mobile" id="sugestoesConferenciaListaFornecedor"></div>
       </div>
 
-      <form method="post" action="{{ conferencia_action }}" id="formConferenciaListaFornecedor">
+      {% if checklist_externa_editavel %}
+        <form method="post" action="{{ conferencia_action }}" id="formConferenciaListaFornecedor">
         {% csrf_token %}
+      {% else %}
+        <div id="formConferenciaListaFornecedor" aria-readonly="true">
+      {% endif %}
         {% for item in lista.itens.all %}
           <div data-item-id="{{ item.id }}" class="linha-conferencia {{ item.status_conferencia }}">
             <span class="produto-nome">{% if item.produto %}{{ item.produto.nome }}{% else %}-{% endif %}</span>
@@ -372,39 +376,43 @@
               <span class="campo-label">Qtd. lista</span>
               <strong>{{ item.quantidade_final|floatformat:3 }} {{ item.unidade }}</strong>
             </div>
-            <div class="campo-grupo" data-grupo-conferencia="produto">
-              <span class="campo-label">Produto confirmado?</span>
-              <div class="opcoes">
-                <button type="button" class="opcao {% if item.conferido and item.status_conferencia != "nao_veio" %}ativo{% endif %}" data-valor="sim" aria-pressed="{% if item.conferido and item.status_conferencia != "nao_veio" %}true{% else %}false{% endif %}" {% if conferencia_salva or consulta_somente_leitura %}disabled{% endif %}>Sim</button>
-                <button type="button" class="opcao {% if item.status_conferencia == "nao_veio" %}ativo{% endif %}" data-valor="nao" aria-pressed="{% if item.status_conferencia == "nao_veio" %}true{% else %}false{% endif %}" {% if conferencia_salva or consulta_somente_leitura %}disabled{% endif %}>Nao</button>
+            {% if checklist_externa_editavel %}
+              <div class="campo-grupo" data-grupo-conferencia="produto">
+                <span class="campo-label">Produto confirmado?</span>
+                <div class="opcoes">
+                  <button type="button" class="opcao {% if item.conferido and item.status_conferencia != "nao_veio" %}ativo{% endif %}" data-valor="sim" aria-pressed="{% if item.conferido and item.status_conferencia != "nao_veio" %}true{% else %}false{% endif %}" {% if conferencia_salva %}disabled{% endif %}>Sim</button>
+                  <button type="button" class="opcao {% if item.status_conferencia == "nao_veio" %}ativo{% endif %}" data-valor="nao" aria-pressed="{% if item.status_conferencia == "nao_veio" %}true{% else %}false{% endif %}" {% if conferencia_salva %}disabled{% endif %}>Nao</button>
+                </div>
               </div>
-            </div>
-            <div class="campo-grupo" data-grupo-conferencia="quantidade">
-              <span class="campo-label">Qtd. correta?</span>
-              <div class="opcoes">
-                <button type="button" class="opcao {% if item.status_conferencia == "ok" %}ativo{% endif %}" data-valor="sim" aria-pressed="{% if item.status_conferencia == "ok" %}true{% else %}false{% endif %}" {% if conferencia_salva or consulta_somente_leitura %}disabled{% endif %}>Sim</button>
-                <button type="button" class="opcao {% if item.conferido and item.status_conferencia != "ok" and item.status_conferencia != "nao_veio" %}ativo{% endif %}" data-valor="nao" aria-pressed="{% if item.conferido and item.status_conferencia != "ok" and item.status_conferencia != "nao_veio" %}true{% else %}false{% endif %}" {% if conferencia_salva or consulta_somente_leitura %}disabled{% endif %}>Nao</button>
+              <div class="campo-grupo" data-grupo-conferencia="quantidade">
+                <span class="campo-label">Qtd. correta?</span>
+                <div class="opcoes">
+                  <button type="button" class="opcao {% if item.status_conferencia == "ok" %}ativo{% endif %}" data-valor="sim" aria-pressed="{% if item.status_conferencia == "ok" %}true{% else %}false{% endif %}" {% if conferencia_salva %}disabled{% endif %}>Sim</button>
+                  <button type="button" class="opcao {% if item.conferido and item.status_conferencia != "ok" and item.status_conferencia != "nao_veio" %}ativo{% endif %}" data-valor="nao" aria-pressed="{% if item.conferido and item.status_conferencia != "ok" and item.status_conferencia != "nao_veio" %}true{% else %}false{% endif %}" {% if conferencia_salva %}disabled{% endif %}>Nao</button>
+                </div>
               </div>
-            </div>
+            {% endif %}
             <div class="campo-grupo">
               <label class="campo-label" for="qtd_{{ item.id }}">Qtd. entregue</label>
-              <input id="qtd_{{ item.id }}" type="text" name="quantidade_recebida_{{ item.id }}" class="qtd-input campoQuantidadeRecebidaLista" inputmode="decimal" data-qtd-final="{{ item.quantidade_final|floatformat:3 }}" data-unidade="{{ item.unidade }}" value="{% if item.conferido %}{{ item.quantidade_recebida|floatformat:3 }}{% endif %}" {% if conferencia_salva or consulta_somente_leitura %}readonly{% endif %} {% if consulta_somente_leitura %}disabled{% endif %}>
+              <input id="qtd_{{ item.id }}" type="text" name="quantidade_recebida_{{ item.id }}" class="qtd-input campoQuantidadeRecebidaLista" inputmode="decimal" data-qtd-final="{{ item.quantidade_final|floatformat:3 }}" data-unidade="{{ item.unidade }}" value="{% if item.conferido %}{{ item.quantidade_recebida|floatformat:3 }}{% endif %}" {% if conferencia_salva or not checklist_externa_editavel %}readonly{% endif %} {% if not checklist_externa_editavel %}disabled{% endif %}>
             </div>
             <div class="campo-grupo">
               <span class="campo-label">Resultado</span>
               <span class="resultado {{ item.status_conferencia }}">{% if item.status_conferencia == "veio_a_mais" %}Sobrou{% elif item.status_conferencia == "nao_veio" %}Produto nao chegou{% else %}{{ item.get_status_conferencia_display }}{% endif %}</span>
-              <button type="button" class="proximo-btn" {% if conferencia_salva or consulta_somente_leitura %}disabled{% endif %}>OK, proximo</button>
+              {% if checklist_externa_editavel %}
+                <button type="button" class="proximo-btn" {% if conferencia_salva %}disabled{% endif %}>OK, proximo</button>
+              {% endif %}
             </div>
             <div class="campo-grupo">
               <label class="campo-label" for="obs_{{ item.id }}">Observacao</label>
-              <textarea id="obs_{{ item.id }}" name="observacao_conferencia_{{ item.id }}" class="obs-input" rows="2" placeholder="Opcional" {% if conferencia_salva or consulta_somente_leitura %}readonly{% endif %} {% if consulta_somente_leitura %}disabled{% endif %}>{{ item.observacao_conferencia }}</textarea>
+              <textarea id="obs_{{ item.id }}" name="observacao_conferencia_{{ item.id }}" class="obs-input" rows="2" placeholder="Opcional" {% if conferencia_salva or not checklist_externa_editavel %}readonly{% endif %} {% if not checklist_externa_editavel %}disabled{% endif %}>{{ item.observacao_conferencia }}</textarea>
             </div>
           </div>
         {% endfor %}
         <div class="sem-resultados" id="conferenciaSemResultados">Nenhum produto encontrado nesta lista.</div>
-        <div class="acoes">
-          <button type="button" class="acao-btn" id="btnMostrarPendencias">Mostrar so pendencias</button>
-          {% if not consulta_somente_leitura %}
+        {% if checklist_externa_editavel %}
+          <div class="acoes">
+            <button type="button" class="acao-btn" id="btnMostrarPendencias">Mostrar so pendencias</button>
             <button
               type="{% if conferencia_salva %}button{% else %}submit{% endif %}"
               class="acao-btn principal"
@@ -412,9 +420,13 @@
               data-conferencia-salva="{% if conferencia_salva %}1{% else %}0{% endif %}">
               {% if conferencia_salva %}Editar conferencia{% else %}Salvar conferencia{% endif %}
             </button>
-          {% endif %}
+          </div>
+        {% endif %}
+      {% if checklist_externa_editavel %}
+        </form>
+      {% else %}
         </div>
-      </form>
+      {% endif %}
 
       {% if resumo_conferencia.total and resumo_conferencia.pendentes == 0 %}
         <div class="resumo">
@@ -430,6 +442,7 @@
     </section>
   </main>
 
+  {% if checklist_externa_editavel %}
   <script>
   (function() {
     function parseDecimal(valor) {
@@ -733,5 +746,6 @@
     atualizarFiltro();
   })();
   </script>
+  {% endif %}
 </body>
 </html>
