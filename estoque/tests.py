@@ -294,6 +294,20 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, "definirEnvioModalEmAndamento(true)")
         self.assertContains(resposta, "Saldo atual: R$ 0,00", count=3)
 
+    def test_mobile_oculta_apenas_caixa_e_mantem_origens_e_cartoes(self):
+        resposta = self.client.get(self.url, secure=True)
+
+        self.assertContains(resposta, 'id="origemCaixaCompra"')
+        self.assertContains(resposta, 'id="origemReservaCompra"')
+        self.assertContains(resposta, 'id="origemBancoCompra"')
+        self.assertContains(resposta, ".compras-origem-campo-caixa { display:none !important; }")
+        self.assertContains(resposta, ".compras-origem-nota-mobile { display:block; }")
+        self.assertContains(resposta, "No celular, distribua o total entre Sangria/Reserva e Banco/Pix.")
+        self.assertContains(resposta, "return [origemReservaCompra, origemBancoCompra].filter(Boolean);")
+        self.assertContains(resposta, "definirCampoPorCentavos(origemCaixaCompra, 0);")
+        self.assertContains(resposta, '<option value="cartao_credito"')
+        self.assertContains(resposta, '<option value="cartao_debito"')
+
     def test_modal_exibe_saldos_financeiros_calculados_na_renderizacao(self):
         saldos = {
             "caixa": Decimal("476.85"),
