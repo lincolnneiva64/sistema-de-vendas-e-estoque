@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 
 LISTA_FORNECEDOR_CONFERENCIA_EXTERNA_SALT = "estoque.lista-fornecedor-conferencia-externa"
 LISTA_FORNECEDOR_CONFERENCIA_EXTERNA_VALIDADE = timedelta(hours=24)
+LISTA_FORNECEDOR_CONFERENCIA_EXTERNA_CONSULTA_USADA = timedelta(hours=2)
 
 PIX_OCR_PENDENTE_MOBILE = (
     "OCR nao executado automaticamente no envio mobile para evitar timeout. "
@@ -4864,6 +4865,13 @@ def _mensagem_bloqueio_token_conferencia_externa(lista, token_normalizado):
     return ""
 
 
+def _token_conferencia_externa_usado_em_consulta(lista):
+    if not lista.checklist_externa_token_usado_em:
+        return False
+    limite_consulta = lista.checklist_externa_token_usado_em + LISTA_FORNECEDOR_CONFERENCIA_EXTERNA_CONSULTA_USADA
+    return timezone.now() <= limite_consulta
+
+
 def _marcar_token_conferencia_externa_usado(lista, token_normalizado):
     token_hash = _hash_token_conferencia_externa(token_normalizado)
     ListaCompraFornecedor.objects.filter(
@@ -5059,19 +5067,28 @@ def compras_lista_fornecedor_conferencia_externa(request, token):
             status=404,
         )
     mensagem_bloqueio = _mensagem_bloqueio_token_conferencia_externa(lista, token_normalizado)
+    consulta_somente_leitura = (
+        request.method == "GET"
+        and bool(lista.checklist_externa_token_usado_em)
+        and _token_conferencia_externa_usado_em_consulta(lista)
+        and lista.checklist_externa_token_hash == _hash_token_conferencia_externa(token_normalizado)
+    )
     if mensagem_bloqueio:
-        logger.warning(
-            "Checklist externa lista fornecedor bloqueada. lista_id=%s token_prefix=%s motivo=%s",
-            lista.pk,
-            token_normalizado[:24],
-            mensagem_bloqueio,
-        )
-        return render(
-            request,
-            "estoque/compras_lista_fornecedor_conferencia_erro.html",
-            {"mensagem": mensagem_bloqueio},
-            status=404,
-        )
+        if consulta_somente_leitura:
+            mensagem_bloqueio = ""
+        else:
+            logger.warning(
+                "Checklist externa lista fornecedor bloqueada. lista_id=%s token_prefix=%s motivo=%s",
+                lista.pk,
+                token_normalizado[:24],
+                mensagem_bloqueio,
+            )
+            return render(
+                request,
+                "estoque/compras_lista_fornecedor_conferencia_erro.html",
+                {"mensagem": mensagem_bloqueio},
+                status=404,
+            )
     if request.method == "POST":
         logger.info(
             "Checklist externa lista fornecedor: lista encontrada. lista_id=%s",
@@ -5115,6 +5132,11 @@ def compras_lista_fornecedor_conferencia_externa(request, token):
             "token": token,
             "conferencia_action": _path_conferencia_externa_lista_fornecedor(token_normalizado),
             "conferencia_salva": bool(resumo["total"] and resumo["pendentes"] == 0),
+            "consulta_somente_leitura": consulta_somente_leitura,
+            "mensagem_consulta_somente_leitura": (
+                "Checklist já enviada. Esta tela está disponível apenas para consulta. "
+                "Para alterar, gere uma nova liberação pelo desktop."
+            ),
             "resumo_conferencia": resumo,
         },
     )
