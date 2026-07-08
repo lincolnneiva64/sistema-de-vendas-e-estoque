@@ -1129,7 +1129,9 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
 
     def test_conferencia_externa_exibe_tela_isolada(self):
         token = self._liberar_checklist_externa("Francisco")
-        self.assertIn(":", token)
+        self.assertTrue(token.startswith("v2-"))
+        self.lista.refresh_from_db()
+        self.assertEqual(self.lista.checklist_externa_token_hash, views._hash_token_conferencia_externa(token))
         resposta = self.client.get(
             reverse("estoque:compras_lista_fornecedor_conferencia_externa", kwargs={"token": token}),
             secure=True,
@@ -1157,13 +1159,17 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertNotContains(resposta, "Sistema de Vendas")
 
     @override_settings(ALLOWED_HOSTS=["sistema-de-vendas-e-estoque.onrender.com", "testserver"])
-    def test_conferencia_externa_abre_url_literal_com_token_assinado(self):
+    def test_conferencia_externa_abre_url_literal_com_token_v2(self):
         token = self._liberar_checklist_externa("Francisco")
-        self.assertIn(":", token)
+        self.assertTrue(token.startswith("v2-"))
         path_conferencia = views._path_conferencia_externa_lista_fornecedor(token)
         self.assertTrue(path_conferencia.startswith("/checklist/"))
         self.assertIn("/checklist/v2-", path_conferencia)
         self.assertNotIn("%3A", path_conferencia)
+        self.lista.refresh_from_db()
+        token_publico = path_conferencia.rstrip("/").rsplit("/", 1)[-1]
+        self.assertEqual(token_publico, token)
+        self.assertEqual(self.lista.checklist_externa_token_hash, views._hash_token_conferencia_externa(token_publico))
 
         resposta = self.client.get(
             path_conferencia,

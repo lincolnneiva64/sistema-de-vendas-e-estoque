@@ -4791,14 +4791,14 @@ def _hash_token_conferencia_externa(token):
 
 
 def _token_conferencia_externa_lista_fornecedor(lista, conferente, token_id=None):
-    return signing.dumps(
-        {
-            "lista_id": lista.pk,
-            "conferente": (conferente or "").strip(),
-            "token_id": token_id or uuid4().hex,
-        },
-        salt=LISTA_FORNECEDOR_CONFERENCIA_EXTERNA_SALT,
-    )
+    payload = {
+        "lista_id": lista.pk,
+        "conferente": (conferente or "").strip(),
+        "token_id": token_id or uuid4().hex,
+    }
+    payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    token_codificado = base64.urlsafe_b64encode(payload_json.encode("utf-8")).decode("ascii").rstrip("=")
+    return f"v2-{token_codificado}"
 
 
 def _liberar_conferencia_externa_lista_fornecedor(lista, conferente):
@@ -4834,24 +4834,48 @@ def _normalizar_token_conferencia_externa(token):
         if token_decodificado == token_normalizado:
             break
         token_normalizado = token_decodificado
-    if token_normalizado.startswith("v2-"):
-        token_codificado = token_normalizado[3:]
-        try:
-            padding = "=" * (-len(token_codificado) % 4)
-            token_normalizado = base64.urlsafe_b64decode((token_codificado + padding).encode("ascii")).decode("utf-8")
-        except (binascii.Error, UnicodeDecodeError, ValueError):
-            return token_normalizado
     return token_normalizado
 
 
 def _token_url_conferencia_externa(token):
     token_normalizado = _normalizar_token_conferencia_externa(token)
+    if token_normalizado.startswith("v2-"):
+        return token_normalizado
     token_codificado = base64.urlsafe_b64encode(token_normalizado.encode("utf-8")).decode("ascii").rstrip("=")
-    return f"v2-{token_codificado}"
+    return f"legacy-{token_codificado}"
 
 
 def _dados_token_conferencia_externa(token):
     token = _normalizar_token_conferencia_externa(token)
+    if token.startswith("v2-"):
+        token_codificado = token[3:]
+        try:
+            padding = "=" * (-len(token_codificado) % 4)
+            payload_json = base64.urlsafe_b64decode((token_codificado + padding).encode("ascii")).decode("utf-8")
+            dados = json.loads(payload_json)
+        except (binascii.Error, UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
+            logger.warning(
+                "Checklist externa de lista por fornecedor com token v2 invalido. token_publico_prefix=%s erro=%s",
+                token[:32],
+                exc,
+            )
+            raise Http404("Checklist externa invalida.") from exc
+        if not isinstance(dados, dict) or not dados.get("lista_id") or not dados.get("token_id"):
+            logger.warning("Checklist externa de lista por fornecedor com payload v2 invalido: %s", dados)
+            raise Http404("Checklist externa invalida.")
+        return dados
+    if token.startswith("legacy-"):
+        token_codificado = token[7:]
+        try:
+            padding = "=" * (-len(token_codificado) % 4)
+            token = base64.urlsafe_b64decode((token_codificado + padding).encode("ascii")).decode("utf-8")
+        except (binascii.Error, UnicodeDecodeError, ValueError) as exc:
+            logger.warning(
+                "Checklist externa de lista por fornecedor com token legado encapsulado invalido. token_prefix=%s erro=%s",
+                token[:32],
+                exc,
+            )
+            raise Http404("Checklist externa invalida.") from exc
     try:
         dados = signing.loads(token, salt=LISTA_FORNECEDOR_CONFERENCIA_EXTERNA_SALT)
     except signing.BadSignature as exc:
