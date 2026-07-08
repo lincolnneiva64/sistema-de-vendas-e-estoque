@@ -805,6 +805,45 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertContains(resposta, "Nenhum produto com diferença. A lista recebida bate com a planejada.")
         self.assertContains(resposta, "Comparar com nota/boleto")
 
+    def test_comparacao_e_revisao_final_usam_preco_da_lista_para_item_em_caixa(self):
+        self.produto.nome = "Oleo Soja Soya 20/900Ml"
+        self.produto.save(update_fields=["nome"])
+        self.item.unidade = "CX"
+        self.item.quantidade_final = Decimal("2.000")
+        self.item.preco_compra = Decimal("150.00")
+        self.item.preco_unitario = Decimal("7.50")
+        self.item.total = Decimal("300.00")
+        self.item.quantidade_recebida = Decimal("2.000")
+        self.item.status_conferencia = ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK
+        self.item.conferido = True
+        self.item.save()
+        self.lista.total_lista = Decimal("300.00")
+        self.lista.save(update_fields=["total_lista"])
+
+        resposta = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),
+            secure=True,
+        )
+
+        comparacao = resposta.context["comparacao_conferencia"]
+        item_comparacao = comparacao["itens"][0]
+        self.assertTrue(comparacao["exibir"])
+        self.assertEqual(item_comparacao["preco_unitario"], Decimal("150.00"))
+        self.assertEqual(item_comparacao["valor_previsto"], Decimal("300.00"))
+        self.assertEqual(item_comparacao["valor_real"], Decimal("300.00"))
+        self.assertEqual(comparacao["totais"]["planejado"], Decimal("300.00"))
+        self.assertEqual(comparacao["totais"]["real"], Decimal("300.00"))
+        self.assertEqual(comparacao["totais"]["diferenca"], Decimal("0.00"))
+        self.assertEqual(comparacao["totais"]["real"], self.lista.total_lista)
+        self.assertEqual(self.lista.total_lista, Decimal("300.00"))
+        self.assertContains(resposta, "Comparação da lista conferida")
+        self.assertContains(resposta, "Revisao final antes de gerar compra")
+        self.assertContains(resposta, "R$ 150,00")
+        self.assertContains(resposta, "Total da lista:")
+        self.assertContains(resposta, "R$ 300,00")
+        self.assertContains(resposta, "Total final da compra: R$ 300,00")
+        self.assertNotContains(resposta, "R$ 15,00")
+
     def test_salva_comparacao_nota_boleto_informativa(self):
         self.item.quantidade_recebida = Decimal("2.000")
         self.item.status_conferencia = ItemListaCompraFornecedor.STATUS_CONFERENCIA_OK

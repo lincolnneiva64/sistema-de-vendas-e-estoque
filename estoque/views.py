@@ -4685,6 +4685,15 @@ def _comparacao_conferencia_lista_fornecedor(lista, resumo=None):
         texto = f"{numero_abs:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         return sinal + texto
 
+    def preco_lista_salvo(item, quantidade_lista):
+        preco_compra = Decimal(item.preco_compra or 0).quantize(centavos)
+        if preco_compra:
+            return preco_compra
+        total = Decimal(item.total or 0).quantize(centavos)
+        if total and quantidade_lista:
+            return (total / quantidade_lista).quantize(centavos)
+        return Decimal(item.preco_unitario or 0).quantize(centavos)
+
     resumo = resumo or _resumo_conferencia_lista_fornecedor(lista)
     conferencia_salva = bool(resumo["total"] and resumo["pendentes"] == 0)
     totais = {
@@ -4711,7 +4720,7 @@ def _comparacao_conferencia_lista_fornecedor(lista, resumo=None):
     for item in lista.itens.all():
         quantidade_lista = item.quantidade_final or Decimal("0.000")
         quantidade_recebida = item.quantidade_recebida if item.quantidade_recebida is not None else Decimal("0.000")
-        preco_unitario = item.preco_unitario or Decimal("0.00")
+        preco_unitario = preco_lista_salvo(item, quantidade_lista)
         valor_previsto = (quantidade_lista * preco_unitario).quantize(centavos)
         valor_real = (quantidade_recebida * preco_unitario).quantize(centavos)
         diferenca_quantidade = quantidade_recebida - quantidade_lista
