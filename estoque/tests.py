@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import re
 import tempfile
 import types
 from contextlib import redirect_stdout
@@ -1096,8 +1097,14 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertContains(resposta, "https%3A//sistema-de-vendas-e-estoque.onrender.com/checklist/")
         self.assertNotContains(resposta, "127.0.0.1")
         self.assertContains(resposta, "Abra%20o%20link%20abaixo%20no%20Chrome")
-        self.assertIn("%3A", resposta.context["link_conferencia_externa"])
-        path_link_gerado = urlsplit(resposta.context["link_conferencia_externa"]).path
+        self.assertNotIn("%3A", resposta.context["link_conferencia_externa"])
+        self.assertIn("/checklist/v2-", resposta.context["link_conferencia_externa"])
+        html_resposta = resposta.content.decode()
+        href_link_gerado = re.search(r'href="([^"]+/checklist/v2-[^"]+)"', html_resposta).group(1)
+        texto_link_gerado = re.search(r'>([^<]+/checklist/v2-[^<]+)</a>', html_resposta).group(1)
+        self.assertEqual(href_link_gerado, resposta.context["link_conferencia_externa"])
+        self.assertEqual(texto_link_gerado, resposta.context["link_conferencia_externa"])
+        path_link_gerado = urlsplit(href_link_gerado).path
         resposta_link_gerado = self.client.get(
             path_link_gerado,
             secure=True,
@@ -1116,7 +1123,8 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertContains(resposta_avulso, "Conferente: <strong>Conferente Avulso</strong>", html=True)
         self.assertContains(resposta_avulso, "https://sistema-de-vendas-e-estoque.onrender.com/checklist/")
         self.assertNotContains(resposta_avulso, "127.0.0.1")
-        self.assertIn("%3A", resposta_avulso.context["link_conferencia_externa"])
+        self.assertNotIn("%3A", resposta_avulso.context["link_conferencia_externa"])
+        self.assertIn("/checklist/v2-", resposta_avulso.context["link_conferencia_externa"])
         self.assertNotContains(resposta_avulso, "Enviar pelo WhatsApp")
 
     def test_conferencia_externa_exibe_tela_isolada(self):
@@ -1154,7 +1162,8 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertIn(":", token)
         path_conferencia = views._path_conferencia_externa_lista_fornecedor(token)
         self.assertTrue(path_conferencia.startswith("/checklist/"))
-        self.assertIn("%3A", path_conferencia)
+        self.assertIn("/checklist/v2-", path_conferencia)
+        self.assertNotIn("%3A", path_conferencia)
 
         resposta = self.client.get(
             path_conferencia,

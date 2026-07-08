@@ -1,3 +1,5 @@
+import base64
+import binascii
 import copy
 import hashlib
 import json
@@ -4822,7 +4824,7 @@ def _path_conferencia_externa_lista_fornecedor(token):
         "estoque:checklist_conferencia_externa",
         kwargs={"token": marcador_token},
     )
-    return path.replace(marcador_token, quote(token, safe=""))
+    return path.replace(marcador_token, _token_url_conferencia_externa(token))
 
 
 def _normalizar_token_conferencia_externa(token):
@@ -4832,7 +4834,20 @@ def _normalizar_token_conferencia_externa(token):
         if token_decodificado == token_normalizado:
             break
         token_normalizado = token_decodificado
+    if token_normalizado.startswith("v2-"):
+        token_codificado = token_normalizado[3:]
+        try:
+            padding = "=" * (-len(token_codificado) % 4)
+            token_normalizado = base64.urlsafe_b64decode((token_codificado + padding).encode("ascii")).decode("utf-8")
+        except (binascii.Error, UnicodeDecodeError, ValueError):
+            return token_normalizado
     return token_normalizado
+
+
+def _token_url_conferencia_externa(token):
+    token_normalizado = _normalizar_token_conferencia_externa(token)
+    token_codificado = base64.urlsafe_b64encode(token_normalizado.encode("utf-8")).decode("ascii").rstrip("=")
+    return f"v2-{token_codificado}"
 
 
 def _dados_token_conferencia_externa(token):
