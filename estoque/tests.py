@@ -1348,6 +1348,24 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertEqual(html.count(">Listas canceladas</a>"), 1)
         self.assertIn("listas-fornecedor-top-canceladas", html)
 
+    def test_edicao_lista_fornecedor_tem_layout_mobile_em_cards_sem_tabela_horizontal(self):
+        resposta = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_editar", kwargs={"pk": self.lista.pk}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'id="mobileSugestaoProdutos"')
+        self.assertContains(resposta, 'class="sugestao-mobile-card"')
+        self.assertContains(resposta, "Sugestao compra")
+        self.assertContains(resposta, "Quantidade/compra")
+        self.assertContains(resposta, 'data-label="Produto"')
+        self.assertContains(resposta, 'data-label="Quantidade/compra"')
+        self.assertContains(resposta, ".sugestao-manual-table colgroup")
+        self.assertContains(resposta, ".sugestao-manual-table td::before")
+        self.assertContains(resposta, "overflow-x: hidden;")
+        self.assertContains(resposta, 'id="btnAdicionarProdutoSugestao"')
+
     def test_consulta_desktop_mantem_regra_atual_do_filtro_de_status(self):
         lista_aberta = self._criar_lista_fornecedor_conferencia("Produto Desktop Aberta")
         lista_enviada = self._criar_lista_fornecedor_conferencia(
