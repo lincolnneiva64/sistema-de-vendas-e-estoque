@@ -411,6 +411,41 @@
       </table>
     </div>
 
+    <div class="lista-ver-mobile-itens" aria-label="Itens da lista">
+      {% for item in lista.itens.all %}
+        <article class="lista-ver-mobile-item">
+          <div class="lista-ver-mobile-produto">
+            <small>Produto</small>
+            <strong>{% if item.produto %}{{ item.produto.nome }}{% else %}{{ item.nome_produto|default:"-" }}{% endif %}</strong>
+          </div>
+          <div class="lista-ver-mobile-grid">
+            <div>
+              <small>Unidade</small>
+              <span>{{ item.unidade|default:"-" }}</span>
+            </div>
+            <div>
+              <small>Sug. compra</small>
+              <span>{{ item.quantidade_sugerida|floatformat:2 }}</span>
+            </div>
+            <div>
+              <small>Qtd. pedido</small>
+              <span>{{ item.quantidade_final|floatformat:2 }}</span>
+            </div>
+            <div>
+              <small>Preco unit.</small>
+              <span>R$ {{ item.preco_compra|floatformat:2 }}</span>
+            </div>
+            <div class="lista-ver-mobile-total-item">
+              <small>Total</small>
+              <span>R$ {{ item.total|floatformat:2 }}</span>
+            </div>
+          </div>
+        </article>
+      {% empty %}
+        <div class="lista-ver-mobile-empty">Nenhum item gravado nesta lista.</div>
+      {% endfor %}
+    </div>
+
     <div class="lista-ver-total">
       Total da lista: R$ {{ lista.total_lista|floatformat:2 }}
     </div>
@@ -600,6 +635,103 @@
 
     .gerar-compra-modal-btn {
       width: 100%;
+    }
+  }
+
+  .lista-ver-mobile-itens {
+    display: none;
+  }
+
+  @media (max-width: 720px) {
+    .lista-ver-table-wrap {
+      display: none !important;
+    }
+
+    .lista-ver-mobile-itens {
+      display: grid !important;
+      gap: 12px !important;
+    }
+
+    .lista-ver-mobile-item {
+      display: grid;
+      gap: 12px;
+      padding: 13px;
+      border: 1px solid #f0c9cf;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 8px 18px rgba(127, 29, 29, .08);
+      box-sizing: border-box;
+    }
+
+    .lista-ver-mobile-produto {
+      display: grid;
+      gap: 4px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #fee2e2;
+    }
+
+    .lista-ver-mobile-produto small,
+    .lista-ver-mobile-grid small {
+      color: #92400e;
+      font-size: .74rem;
+      font-weight: 950;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+    }
+
+    .lista-ver-mobile-produto strong {
+      color: #111827;
+      font-size: 1rem;
+      font-weight: 950;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .lista-ver-mobile-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 9px;
+    }
+
+    .lista-ver-mobile-grid div {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+      padding: 9px 10px;
+      border: 1px solid #fed7aa;
+      border-radius: 10px;
+      background: #fff7ed;
+    }
+
+    .lista-ver-mobile-grid span {
+      color: #1f2937;
+      font-weight: 950;
+      line-height: 1.2;
+    }
+
+    .lista-ver-mobile-total-item {
+      grid-column: 1 / -1;
+    }
+
+    .lista-ver-mobile-total-item span {
+      color: #991b1b;
+      font-size: 1.04rem;
+    }
+
+    .lista-ver-mobile-empty {
+      padding: 16px;
+      border: 1px solid #f0c9cf;
+      border-radius: 12px;
+      background: #fff7ed;
+      color: #64748b;
+      font-weight: 850;
+      text-align: center;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .lista-ver-mobile-grid {
+      grid-template-columns: 1fr;
     }
   }
 </style>
