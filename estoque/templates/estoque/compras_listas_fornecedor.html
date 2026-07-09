@@ -672,6 +672,22 @@ td.listas-fornecedor-total {
     line-height: 1.1;
     white-space: nowrap;
     box-sizing: border-box;
+    transition: transform .12s ease, filter .12s ease, box-shadow .12s ease, opacity .12s ease;
+    -webkit-tap-highlight-color: rgba(159, 18, 57, .18);
+    touch-action: manipulation;
+  }
+
+  .listas-fornecedor-btn:active,
+  .listas-fornecedor-btn.is-pressed,
+  .listas-fornecedor-btn.is-loading {
+    transform: translateY(1px) scale(.985);
+    filter: brightness(.94);
+    box-shadow: inset 0 2px 6px rgba(15, 23, 42, .16);
+  }
+
+  .listas-fornecedor-btn.is-loading {
+    opacity: .84;
+    cursor: progress;
   }
 
   .listas-fornecedor-btn.primary {
@@ -1604,13 +1620,13 @@ td.listas-fornecedor-total {
 
   <nav class="listas-fornecedor-mobile-toggle" aria-label="Filtro mobile de listas por fornecedor">
     {% if mostrando_historico_mobile or mostrando_canceladas_mobile %}
-      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}">Listas pendentes</a>
+      <a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{% url 'estoque:compras_listas_fornecedor' %}">Listas pendentes</a>
     {% endif %}
     {% if not mostrando_historico_mobile %}
-      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}?mobile=historico">Historico</a>
+      <a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{% url 'estoque:compras_listas_fornecedor' %}?mobile=historico">Historico</a>
     {% endif %}
     {% if not mostrando_canceladas_mobile %}
-      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}?mobile=canceladas">Listas canceladas</a>
+      <a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{% url 'estoque:compras_listas_fornecedor' %}?mobile=canceladas">Listas canceladas</a>
     {% endif %}
   </nav>
 
@@ -1735,20 +1751,20 @@ td.listas-fornecedor-total {
             </dl>
 
             <div class="listas-fornecedor-mobile-acoes" aria-label="Acoes da Lista #{{ lista.id }}">
-              <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
-              {% if lista.status != "cancelada" %}<a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar Lista</a>{% endif %}
-              <a class="listas-fornecedor-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Enviar ao Vendedor</a>
-              <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
+              <a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
+              {% if lista.status != "cancelada" %}<a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar Lista</a>{% endif %}
+              <a class="listas-fornecedor-btn listas-fornecedor-mobile-action whatsapp" data-mobile-action-feedback href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Enviar ao Vendedor</a>
+              <a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
               {% if lista.compra_gerada %}
                 {% if lista.compra_gerada.status == "rascunho" %}
-                  <a class="listas-fornecedor-btn listas-fornecedor-btn-compra" href="{% url 'estoque:compra_editar' lista.compra_gerada.id %}?continuar_itens=1">Ver Compra</a>
+                  <a class="listas-fornecedor-btn listas-fornecedor-mobile-action listas-fornecedor-btn-compra" data-mobile-action-feedback href="{% url 'estoque:compra_editar' lista.compra_gerada.id %}?continuar_itens=1">Ver Compra</a>
                 {% else %}
-                  <a class="listas-fornecedor-btn listas-fornecedor-btn-compra" href="{% url 'estoque:compras_detalhe' lista.compra_gerada.id %}">Ver Compra</a>
+                  <a class="listas-fornecedor-btn listas-fornecedor-mobile-action listas-fornecedor-btn-compra" data-mobile-action-feedback href="{% url 'estoque:compras_detalhe' lista.compra_gerada.id %}">Ver Compra</a>
                 {% endif %}
               {% elif lista.status != "cancelada" %}
                 <form method="post" action="{% url 'estoque:compras_lista_fornecedor_cancelar' lista.id %}" class="listas-fornecedor-excluir-form" onsubmit="return confirm('Tem certeza que deseja cancelar esta lista? Ela saira da consulta principal, mas ficara no historico de listas canceladas.');">
                   {% csrf_token %}
-                  <button type="submit" class="listas-fornecedor-btn listas-fornecedor-btn-excluir">Cancelar Lista</button>
+                  <button type="submit" class="listas-fornecedor-btn listas-fornecedor-mobile-action listas-fornecedor-btn-excluir" data-mobile-action-feedback>Cancelar Lista</button>
                 </form>
               {% endif %}
             </div>
@@ -2672,6 +2688,8 @@ td.listas-fornecedor-total {
     display: grid !important;
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 8px !important;
+    position: relative !important;
+    z-index: 3 !important;
   }
 
   .listas-fornecedor-mobile-acoes .listas-fornecedor-btn,
@@ -2685,6 +2703,10 @@ td.listas-fornecedor-total {
     line-height: 1.15 !important;
     white-space: normal !important;
     text-align: center !important;
+    position: relative !important;
+    z-index: 4 !important;
+    pointer-events: auto !important;
+    user-select: none !important;
   }
 }
 
@@ -2747,5 +2769,48 @@ td.listas-fornecedor-total {
 }
 
 </style>
+
+<script>
+(function () {
+  function textoCarregando(botao) {
+    if (!botao || botao.dataset.loadingApplied === "1") return;
+    botao.dataset.loadingApplied = "1";
+    botao.dataset.originalText = botao.textContent.trim();
+    if (botao.matches("a") && !botao.target) {
+      botao.textContent = "Abrindo...";
+    }
+  }
+
+  document.addEventListener("pointerdown", function(event) {
+    const botao = event.target.closest("[data-mobile-action-feedback]");
+    if (!botao) return;
+    botao.classList.add("is-pressed");
+  }, { passive: true });
+
+  document.addEventListener("pointerup", function(event) {
+    const botao = event.target.closest("[data-mobile-action-feedback]");
+    if (!botao) return;
+    window.setTimeout(function() {
+      botao.classList.remove("is-pressed");
+    }, 120);
+  }, { passive: true });
+
+  document.addEventListener("click", function(event) {
+    const link = event.target.closest("a[data-mobile-action-feedback]");
+    if (!link || event.defaultPrevented) return;
+    link.classList.add("is-loading");
+    textoCarregando(link);
+  });
+
+  document.addEventListener("submit", function(event) {
+    const form = event.target.closest(".listas-fornecedor-excluir-form");
+    if (!form || event.defaultPrevented) return;
+    const botao = form.querySelector("[data-mobile-action-feedback]");
+    if (!botao) return;
+    botao.classList.add("is-loading");
+    botao.textContent = "Cancelando...";
+  });
+})();
+</script>
 
 {% endblock %}

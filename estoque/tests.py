@@ -1325,7 +1325,7 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
 
         resposta = self.client.get(
             reverse("estoque:compras_listas_fornecedor"),
-            {"mobile": "canceladas"},
+            {"mobile": "canceladas", "status": ListaCompraFornecedor.STATUS_CANCELADA},
             secure=True,
         )
 
@@ -1347,6 +1347,52 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertEqual(html.count(">Historico</a>"), 1)
         self.assertEqual(html.count(">Listas canceladas</a>"), 1)
         self.assertIn("listas-fornecedor-top-canceladas", html)
+
+    def test_consulta_mobile_editar_lista_e_link_real_com_mesma_rota_do_desktop(self):
+        lista = self._criar_lista_fornecedor_conferencia("Produto Mobile Editar Link")
+        url_edicao = reverse("estoque:compras_lista_fornecedor_editar", kwargs={"pk": lista.pk})
+
+        resposta = self.client.get(reverse("estoque:compras_listas_fornecedor"), secure=True)
+        html = resposta.content.decode()
+
+        self.assertContains(resposta, f'href="{url_edicao}"', count=2)
+        self.assertIn(
+            f'<a class="listas-fornecedor-btn" href="{url_edicao}">Editar Lista</a>',
+            html,
+        )
+        self.assertIn(
+            f'<a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{url_edicao}">Editar Lista</a>',
+            html,
+        )
+        self.assertNotIn(f'<button type="button" class="listas-fornecedor-btn" href="{url_edicao}">Editar Lista</button>', html)
+
+    def test_consulta_mobile_nao_mostra_editar_para_lista_cancelada(self):
+        lista = self._criar_lista_fornecedor_conferencia(
+            "Produto Mobile Editar Cancelada",
+            status=ListaCompraFornecedor.STATUS_CANCELADA,
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:compras_listas_fornecedor"),
+            {"mobile": "canceladas"},
+            secure=True,
+        )
+
+        url_edicao = reverse("estoque:compras_lista_fornecedor_editar", kwargs={"pk": lista.pk})
+        self.assertContains(resposta, f'data-mobile-lista-id="{lista.id}"')
+        self.assertNotContains(resposta, f'href="{url_edicao}"')
+
+    def test_consulta_mobile_tem_feedback_visual_seguro_nas_acoes(self):
+        resposta = self.client.get(reverse("estoque:compras_listas_fornecedor"), secure=True)
+
+        self.assertContains(resposta, "data-mobile-action-feedback")
+        self.assertContains(resposta, ".listas-fornecedor-btn:active")
+        self.assertContains(resposta, ".listas-fornecedor-btn.is-pressed")
+        self.assertContains(resposta, ".listas-fornecedor-btn.is-loading")
+        self.assertContains(resposta, "pointer-events: auto")
+        self.assertContains(resposta, 'textContent = "Abrindo..."')
+        self.assertContains(resposta, 'textContent = "Cancelando..."')
+        self.assertContains(resposta, 'closest("a[data-mobile-action-feedback]")')
 
     def test_edicao_lista_fornecedor_tem_layout_mobile_em_cards_sem_tabela_horizontal(self):
         resposta = self.client.get(
@@ -2753,8 +2799,12 @@ class ComprasListaFornecedorGravarTests(TestCase):
         resposta = self.client.get(reverse("estoque:compras_listas_fornecedor"), secure=True)
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, f"#{lista_aberta.id}")
-        self.assertNotContains(resposta, f"#{lista_cancelada.id}")
+        listas_ids = {lista.id for lista in resposta.context["listas"]}
+        listas_mobile_ids = {lista.id for lista in resposta.context["listas_mobile"]}
+        self.assertIn(lista_aberta.id, listas_ids)
+        self.assertIn(lista_aberta.id, listas_mobile_ids)
+        self.assertNotIn(lista_cancelada.id, listas_ids)
+        self.assertNotIn(lista_cancelada.id, listas_mobile_ids)
         self.assertContains(resposta, "Listas canceladas")
 
     def test_consulta_canceladas_mostra_cancelada_sem_misturar_ativas(self):
@@ -2772,8 +2822,9 @@ class ComprasListaFornecedorGravarTests(TestCase):
         )
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, f"#{lista_cancelada.id}")
-        self.assertNotContains(resposta, f"#{lista_aberta.id}")
+        listas_ids = {lista.id for lista in resposta.context["listas"]}
+        self.assertIn(lista_cancelada.id, listas_ids)
+        self.assertNotIn(lista_aberta.id, listas_ids)
         self.assertContains(resposta, "Listas ativas")
 
     def test_mobile_principal_mostra_lista_aberta_sem_compra(self):
@@ -2870,8 +2921,12 @@ class ComprasListaFornecedorGravarTests(TestCase):
             {"status": ListaCompraFornecedor.STATUS_CANCELADA},
             secure=True,
         )
-        self.assertNotContains(resposta_principal, f"#{lista.id}")
-        self.assertContains(resposta_canceladas, f"#{lista.id}")
+        listas_principal_ids = {lista_contexto.id for lista_contexto in resposta_principal.context["listas"]}
+        listas_mobile_principal_ids = {lista_contexto.id for lista_contexto in resposta_principal.context["listas_mobile"]}
+        listas_canceladas_ids = {lista_contexto.id for lista_contexto in resposta_canceladas.context["listas"]}
+        self.assertNotIn(lista.id, listas_principal_ids)
+        self.assertNotIn(lista.id, listas_mobile_principal_ids)
+        self.assertIn(lista.id, listas_canceladas_ids)
 
     def test_cancelar_lista_com_compra_rascunho_bloqueia(self):
         produto = self.criar_produto("Produto Bloqueio Rascunho")
