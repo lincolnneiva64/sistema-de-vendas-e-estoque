@@ -989,6 +989,10 @@
     display: none;
   }
 
+  .sugestao-salvar-mobile-rodape {
+    display: none;
+  }
+
   .sugestao-atalhos-lateral {
     position: fixed;
     top: 72px;
@@ -1105,6 +1109,34 @@
 
     .sugestao-mobile-grid {
       grid-template-columns: 1fr;
+    }
+
+    .sugestao-salvar-mobile-rodape {
+      position: sticky;
+      bottom: 10px;
+      z-index: 80;
+      display: grid;
+      gap: 6px;
+      margin-top: 12px;
+      padding: 10px;
+      border: 1px solid #f3b5bf;
+      border-radius: 12px;
+      background: #fff8f9;
+      box-shadow: 0 14px 30px rgba(127, 29, 29, .18);
+    }
+
+    .sugestao-salvar-mobile-rodape .sugestao-btn {
+      width: 100%;
+      min-height: 52px;
+      font-size: 1rem;
+    }
+
+    .sugestao-salvar-mobile-rodape span {
+      color: #64748b;
+      font-size: .78rem;
+      font-weight: 850;
+      line-height: 1.25;
+      text-align: center;
     }
 
     .sugestao-atalhos-lateral {
@@ -1400,6 +1432,12 @@
         {% endfor %}
         {% endif %}
       </div>
+      {% if modo_edicao_lista %}
+        <div class="sugestao-salvar-mobile-rodape">
+          <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-salvar-lista-extra" id="btnSalvarAlteracoesListaMobile">Salvar alterações</button>
+          <span>As alteracoes dos campos so sao gravadas depois de salvar.</span>
+        </div>
+      {% endif %}
       <div class="sugestao-empty {% if linhas %}oculto{% endif %}" id="sugestaoListaVazia">
         {% if fornecedor %}
           Nenhum produto ativo deste fornecedor esta dentro do limite de reposicao.
@@ -3153,6 +3191,9 @@
   const novoBtn = btnGravarListaFornecedor.cloneNode(true);
   btnGravarListaFornecedor.parentNode.replaceChild(novoBtn, btnGravarListaFornecedor);
   novoBtn.addEventListener("click", novoClique);
+  document.querySelectorAll(".sugestao-salvar-lista-extra").forEach(function(botaoExtra) {
+    botaoExtra.addEventListener("click", novoClique);
+  });
 
   // Listeners para atualizar dinamicamente quando mudar quantidade
   document.addEventListener("input", function(event) {

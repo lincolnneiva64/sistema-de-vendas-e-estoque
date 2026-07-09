@@ -2269,6 +2269,83 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertEqual(ItemListaCompraFornecedor.objects.count(), 0)
         self.assertEqual(Compra.objects.count(), 0)
 
+    def test_edicao_lista_exibe_botao_salvar_alteracoes(self):
+        produto = self.criar_produto("Produto Edicao Botao")
+        lista = ListaCompraFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_lista=timezone.localdate(),
+            data_inicio_periodo=timezone.localdate(),
+            data_fim_periodo=timezone.localdate(),
+            total_lista=Decimal("20.00"),
+        )
+        ItemListaCompraFornecedor.objects.create(
+            lista=lista,
+            produto=produto,
+            estoque_atual=Decimal("5.000"),
+            estoque_minimo=Decimal("1.000"),
+            quantidade_final=Decimal("2.000"),
+            unidade="UN",
+            preco_compra=Decimal("10.00"),
+            preco_unitario=Decimal("10.00"),
+            total=Decimal("20.00"),
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_editar", kwargs={"pk": lista.pk}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Salvar alterações")
+        self.assertContains(resposta, 'id="btnSalvarAlteracoesListaMobile"')
+        self.assertContains(resposta, "As alteracoes dos campos so sao gravadas depois de salvar.")
+
+    def test_edicao_lista_salva_itens_sem_gerar_compra_estoque_ou_financeiro(self):
+        produto = self.criar_produto("Produto Edicao Lista", quantidade=Decimal("5.000"))
+        lista = ListaCompraFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_lista=timezone.localdate(),
+            data_inicio_periodo=timezone.localdate(),
+            data_fim_periodo=timezone.localdate(),
+            total_lista=Decimal("20.00"),
+        )
+        ItemListaCompraFornecedor.objects.create(
+            lista=lista,
+            produto=produto,
+            estoque_atual=produto.quantidade,
+            estoque_minimo=Decimal("1.000"),
+            quantidade_final=Decimal("2.000"),
+            unidade="UN",
+            preco_compra=Decimal("10.00"),
+            preco_unitario=Decimal("10.00"),
+            total=Decimal("20.00"),
+        )
+        estoque_antes = produto.quantidade
+        compras_antes = Compra.objects.count()
+        contas_antes = ContaPagar.objects.count()
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_editar", kwargs={"pk": lista.pk}),
+            {"lista_payload": json.dumps(self.payload([self.criar_linha(produto, 3, total=Decimal("36.00"))]))},
+            secure=True,
+        )
+
+        lista.refresh_from_db()
+        produto.refresh_from_db()
+        item = lista.itens.get()
+        self.assertRedirects(resposta, reverse("estoque:compras_lista_fornecedor_ver", kwargs={"pk": lista.pk}), fetch_redirect_response=False)
+        self.assertEqual(item.produto, produto)
+        self.assertEqual(item.quantidade_final, Decimal("3.000"))
+        self.assertEqual(item.preco_compra, Decimal("10.00"))
+        self.assertEqual(item.preco_unitario, Decimal("10.00"))
+        self.assertEqual(item.total, Decimal("36.00"))
+        self.assertEqual(lista.total_lista, Decimal("36.00"))
+        self.assertEqual(produto.quantidade, estoque_antes)
+        self.assertEqual(Compra.objects.count(), compras_antes)
+        self.assertEqual(ContaPagar.objects.count(), contas_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+
 
 class ComprasSugestaoFornecedorGeracaoTests(TestCase):
     def setUp(self):
