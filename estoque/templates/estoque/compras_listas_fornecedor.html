@@ -1552,7 +1552,7 @@ td.listas-fornecedor-total {
       {% if mostrando_canceladas %}
         <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}">Listas ativas</a>
       {% else %}
-        <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}?status=cancelada">Listas canceladas</a>
+        <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}?mobile=canceladas&amp;status=cancelada">Listas canceladas</a>
       {% endif %}
       <a class="listas-fornecedor-btn primary" href="{% url 'estoque:sugestao_compra_fornecedor' %}">Nova Lista</a>
     </div>
@@ -1595,10 +1595,14 @@ td.listas-fornecedor-total {
   </section>
 
   <nav class="listas-fornecedor-mobile-toggle" aria-label="Filtro mobile de listas por fornecedor">
-    {% if mostrando_historico_mobile %}
+    {% if mostrando_historico_mobile or mostrando_canceladas %}
       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}">Listas pendentes</a>
-    {% else %}
+    {% endif %}
+    {% if not mostrando_historico_mobile %}
       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}?mobile=historico">Historico</a>
+    {% endif %}
+    {% if not mostrando_canceladas %}
+      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}?mobile=canceladas&amp;status=cancelada">Listas canceladas</a>
     {% endif %}
   </nav>
 
@@ -1684,7 +1688,7 @@ td.listas-fornecedor-total {
         </table>
       </div>
       {% endif %}
-      <div class="listas-fornecedor-mobile-cards" aria-label="Listas por fornecedor" data-mobile-modo="{% if mostrando_historico_mobile %}historico{% else %}pendentes{% endif %}">
+      <div class="listas-fornecedor-mobile-cards" aria-label="Listas por fornecedor" data-mobile-modo="{% if mostrando_canceladas %}canceladas{% elif mostrando_historico_mobile %}historico{% else %}pendentes{% endif %}">
         {% if listas_mobile %}
           {% for lista in listas_mobile %}
             <article class="listas-fornecedor-mobile-card{% if lista.compra_gerada %} com-compra{% endif %}" data-mobile-lista-id="{{ lista.id }}">
@@ -1744,7 +1748,7 @@ td.listas-fornecedor-total {
           {% endfor %}
         {% else %}
           <div class="listas-fornecedor-empty">
-            {% if mostrando_historico_mobile %}Nenhuma lista no historico mobile.{% else %}Nenhuma lista pendente para o celular.{% endif %}
+            {% if mostrando_canceladas %}Nenhuma lista cancelada.{% elif mostrando_historico_mobile %}Nenhuma lista no historico mobile.{% else %}Nenhuma lista pendente para o celular.{% endif %}
           </div>
         {% endif %}
       </div>

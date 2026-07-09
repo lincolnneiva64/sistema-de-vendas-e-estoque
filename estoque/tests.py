@@ -1275,6 +1275,33 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         listas_mobile_ids = {lista.id for lista in resposta.context["listas_mobile"]}
         self.assertIn(lista.id, listas_mobile_ids)
 
+    def test_consulta_mobile_canceladas_mostra_somente_canceladas(self):
+        lista_cancelada = self._criar_lista_fornecedor_conferencia(
+            "Produto Mobile Botao Canceladas",
+            status=ListaCompraFornecedor.STATUS_CANCELADA,
+        )
+        lista_aberta = self._criar_lista_fornecedor_conferencia("Produto Mobile Canceladas Aberta")
+        lista_com_compra = self._criar_lista_fornecedor_conferencia("Produto Mobile Canceladas Com Compra")
+        self._criar_compra_vinculada_lista_fornecedor(lista_com_compra)
+
+        resposta = self.client.get(
+            reverse("estoque:compras_listas_fornecedor"),
+            {"mobile": "canceladas", "status": ListaCompraFornecedor.STATUS_CANCELADA},
+            secure=True,
+        )
+
+        listas_mobile_ids = {lista.id for lista in resposta.context["listas_mobile"]}
+        self.assertContains(resposta, 'data-mobile-modo="canceladas"')
+        self.assertIn(lista_cancelada.id, listas_mobile_ids)
+        self.assertNotIn(lista_aberta.id, listas_mobile_ids)
+        self.assertNotIn(lista_com_compra.id, listas_mobile_ids)
+
+    def test_consulta_mobile_exibe_links_de_historico_e_canceladas_com_parametros_funcionais(self):
+        resposta = self.client.get(reverse("estoque:compras_listas_fornecedor"), secure=True)
+
+        self.assertContains(resposta, "?mobile=historico")
+        self.assertContains(resposta, "?mobile=canceladas&amp;status=cancelada")
+
     def test_consulta_desktop_mantem_regra_atual_do_filtro_de_status(self):
         lista_aberta = self._criar_lista_fornecedor_conferencia("Produto Desktop Aberta")
         lista_enviada = self._criar_lista_fornecedor_conferencia(
