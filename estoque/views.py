@@ -5343,6 +5343,8 @@ def compras_lista_fornecedor_gravar(request):
     except ValueError:
         total_original = total_lista
 
+    gerar_compra = str(request.POST.get("gerar_compra") or "").strip().lower() in {"1", "true", "sim", "on"}
+
     with transaction.atomic():
         lista = ListaCompraFornecedor.objects.create(
             fornecedor=fornecedor,
@@ -5358,6 +5360,9 @@ def compras_lista_fornecedor_gravar(request):
             ItemListaCompraFornecedor(lista=lista, **item)
             for item in itens_validos
         ])
+        if gerar_compra:
+            lista = ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto").get(pk=lista.pk)
+            compra = _criar_compra_rascunho_da_lista_fornecedor(lista, request)
 
     mensagem = f"Lista de compras #{lista.id} gravada com sucesso."
     if itens_zerados:
@@ -5366,6 +5371,9 @@ def compras_lista_fornecedor_gravar(request):
         if nomes_ignorados:
             mensagem += f" Itens ignorados: {', '.join(nomes_ignorados)}"
     messages.success(request, mensagem)
+    if gerar_compra:
+        messages.success(request, f"Compra #{compra.id} criada em rascunho a partir da Lista #{lista.id}. Confira antes de finalizar.")
+        return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
     return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
 
 
@@ -5418,6 +5426,56 @@ def compras_lista_fornecedor_whatsapp_imagem(request, pk):
     return response
 
 
+def _compra_existente_lista_fornecedor(lista):
+    marcador_origem = f"Gerada a partir da Lista de Compras #{lista.id}"
+    return (
+        Compra.objects.filter(
+            fornecedor=lista.fornecedor,
+            observacao__icontains=marcador_origem,
+            cancelada=False,
+        )
+        .exclude(status=Compra.STATUS_CANCELADA)
+        .order_by("-id")
+        .first()
+    )
+
+
+def _criar_compra_rascunho_da_lista_fornecedor(lista, request):
+    itens_validos = [
+        item
+        for item in lista.itens.all()
+        if item.produto_id and item.quantidade_final and item.quantidade_final > 0
+    ]
+    if not itens_validos:
+        raise ValueError("Esta lista nao tem itens validos para gerar compra.")
+
+    total_compra = sum((item.total for item in itens_validos), Decimal("0.00")).quantize(Decimal("0.01"))
+    marcador_origem = f"Gerada a partir da Lista de Compras #{lista.id}"
+    compra = Compra.objects.create(
+        fornecedor=lista.fornecedor,
+        data_compra=timezone.localdate(),
+        data_vencimento=None,
+        tipo_pagamento="",
+        operador=(request.user.get_username() if request.user.is_authenticated else ""),
+        total=total_compra,
+        status=Compra.STATUS_RASCUNHO,
+        observacao=marcador_origem,
+    )
+    ItemCompra.objects.bulk_create([
+        ItemCompra(
+            compra=compra,
+            produto=item.produto,
+            quantidade=item.quantidade_final,
+            unidade=item.unidade or "",
+            preco_unitario=item.preco_compra,
+            valor_total=item.total,
+            observacao=None,
+        )
+        for item in itens_validos
+    ])
+    return compra
+
+
 @require_POST
 def compras_lista_fornecedor_gerar_compra(request, pk):
     lista = get_object_or_404(
@@ -5433,58 +5491,18 @@ def compras_lista_fornecedor_gerar_compra(request, pk):
         messages.error(request, "Lista sem fornecedor nao pode gerar compra.")
         return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
 
-    marcador_origem = f"Gerada a partir da Lista de Compras #{lista.id}"
-    compra_existente = (
-        Compra.objects.filter(
-            fornecedor=lista.fornecedor,
-            observacao__icontains=marcador_origem,
-            cancelada=False,
-        )
-        .exclude(status=Compra.STATUS_CANCELADA)
-        .order_by("-id")
-        .first()
-    )
+    compra_existente = _compra_existente_lista_fornecedor(lista)
 
     if compra_existente:
         messages.warning(request, f"Esta lista ja gerou a Compra #{compra_existente.id}. Nao e possivel gerar outra compra pela mesma lista.")
         return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
 
-    itens_validos = [
-        item
-        for item in lista.itens.all()
-        if item.produto_id and item.quantidade_final and item.quantidade_final > 0
-    ]
-
-    if not itens_validos:
+    try:
+        with transaction.atomic():
+            compra = _criar_compra_rascunho_da_lista_fornecedor(lista, request)
+    except ValueError:
         messages.error(request, "Esta lista nao tem itens validos para gerar compra.")
         return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
-
-    total_compra = sum((item.total for item in itens_validos), Decimal("0.00")).quantize(Decimal("0.01"))
-
-    with transaction.atomic():
-        compra = Compra.objects.create(
-            fornecedor=lista.fornecedor,
-            data_compra=timezone.localdate(),
-            data_vencimento=None,
-            tipo_pagamento="",
-            operador=(request.user.get_username() if request.user.is_authenticated else ""),
-            total=total_compra,
-            status=Compra.STATUS_RASCUNHO,
-            observacao=marcador_origem,
-        )
-
-        ItemCompra.objects.bulk_create([
-            ItemCompra(
-                compra=compra,
-                produto=item.produto,
-                quantidade=item.quantidade_final,
-                unidade=item.unidade or "",
-                preco_unitario=item.preco_compra,
-                valor_total=item.total,
-                observacao=None,
-            )
-            for item in itens_validos
-        ])
 
     messages.success(request, f"Compra #{compra.id} criada em rascunho a partir da Lista #{lista.id}. Confira antes de finalizar.")
     return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")

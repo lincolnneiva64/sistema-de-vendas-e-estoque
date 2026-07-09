@@ -2404,9 +2404,48 @@ class ComprasListaFornecedorGravarTests(TestCase):
         resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)
 
         self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'id="btnGravarListaFornecedor"')
+        self.assertContains(resposta, 'id="btnGravarGerarCompraFornecedor"')
         self.assertContains(resposta, 'id="btnGravarListaMobile"')
+        self.assertContains(resposta, 'id="btnGravarGerarCompraMobile"')
+        self.assertContains(resposta, 'name="gerar_compra"')
         self.assertContains(resposta, "Gravar lista")
-        self.assertContains(resposta, "Revise os itens e toque em Gravar lista para salvar.")
+        self.assertContains(resposta, "Gravar e Gerar Compra")
+        self.assertContains(resposta, "Revise os itens e toque em Gravar lista para salvar, ou em Gravar e Gerar Compra")
+
+    def test_gravar_e_gerar_compra_cria_compra_rascunho_sem_finalizar(self):
+        produto = self.criar_produto("Produto Gerar Compra", quantidade=Decimal("5.000"))
+        estoque_antes = produto.quantidade
+        contas_antes = ContaPagar.objects.count()
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {
+                "lista_payload": json.dumps(self.payload([self.criar_linha(produto, 3)])),
+                "gerar_compra": "1",
+            },
+            secure=True,
+        )
+
+        lista = ListaCompraFornecedor.objects.get()
+        compra = Compra.objects.get()
+        produto.refresh_from_db()
+        self.assertRedirects(
+            resposta,
+            f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1",
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(lista.itens.count(), 1)
+        self.assertEqual(compra.status, Compra.STATUS_RASCUNHO)
+        self.assertEqual(compra.tipo_pagamento, "")
+        self.assertEqual(compra.total, Decimal("30.00"))
+        self.assertIn(f"Lista de Compras #{lista.id}", compra.observacao)
+        self.assertEqual(compra.itens.count(), 1)
+        self.assertEqual(compra.itens.get().produto, produto)
+        self.assertEqual(produto.quantidade, estoque_antes)
+        self.assertEqual(ContaPagar.objects.count(), contas_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
 
     def test_item_removido_nao_e_gravado_no_post(self):
         produto_valido = self.criar_produto("Produto Valido")

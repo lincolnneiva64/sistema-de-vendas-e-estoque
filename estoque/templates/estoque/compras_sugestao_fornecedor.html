@@ -1329,11 +1329,15 @@
     <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnVisualizarSintetica">Visualizar Sintetica</button>
     <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnImagemWhatsapp">Imagem / WhatsApp</button>
     <button type="button" class="sugestao-btn sugestao-btn-primary" id="btnGravarListaFornecedor">{% if modo_edicao_lista %}Salvar alterações{% else %}Gravar lista{% endif %}</button>
+    {% if not modo_edicao_lista %}
+      <button type="button" class="sugestao-btn sugestao-btn-primary" id="btnGravarGerarCompraFornecedor">Gravar e Gerar Compra</button>
+    {% endif %}
   </section>
 
   <form method="post" action="{% if modo_edicao_lista %}{% url 'estoque:compras_lista_fornecedor_editar' lista_edicao.id %}{% else %}{% url 'estoque:compras_lista_fornecedor_gravar' %}{% endif %}" id="formGravarListaFornecedor" hidden>
     {% csrf_token %}
     <input type="hidden" name="lista_payload" id="listaFornecedorPayload">
+    <input type="hidden" name="gerar_compra" id="listaFornecedorGerarCompra" value="0">
   </form>
 
   <div class="sugestao-modal-overlay" id="modalConfirmacaoZerados">
@@ -1434,7 +1438,10 @@
       </div>
       <div class="sugestao-salvar-mobile-rodape">
         <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-salvar-lista-extra" id="{% if modo_edicao_lista %}btnSalvarAlteracoesListaMobile{% else %}btnGravarListaMobile{% endif %}">{% if modo_edicao_lista %}Salvar alterações{% else %}Gravar lista{% endif %}</button>
-        <span>{% if modo_edicao_lista %}As alteracoes dos campos so sao gravadas depois de salvar.{% else %}Revise os itens e toque em Gravar lista para salvar.{% endif %}</span>
+        {% if not modo_edicao_lista %}
+          <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-gravar-gerar-extra" id="btnGravarGerarCompraMobile">Gravar e Gerar Compra</button>
+        {% endif %}
+        <span>{% if modo_edicao_lista %}As alteracoes dos campos so sao gravadas depois de salvar.{% else %}Revise os itens e toque em Gravar lista para salvar, ou em Gravar e Gerar Compra para abrir a compra em rascunho.{% endif %}</span>
       </div>
       <div class="sugestao-empty {% if linhas %}oculto{% endif %}" id="sugestaoListaVazia">
         {% if fornecedor %}
@@ -2818,8 +2825,11 @@
   const btnConfirmarGravar = document.getElementById("btnConfirmarGravar");
   const btnCancelarGravar = document.getElementById("btnCancelarGravar");
   const btnGravarListaFornecedor = document.getElementById("btnGravarListaFornecedor");
+  const btnGravarGerarCompraFornecedor = document.getElementById("btnGravarGerarCompraFornecedor");
   const formGravarListaFornecedor = document.getElementById("formGravarListaFornecedor");
   const listaFornecedorPayload = document.getElementById("listaFornecedorPayload");
+  const listaFornecedorGerarCompra = document.getElementById("listaFornecedorGerarCompra");
+  let gerarCompraAoGravar = false;
 
   if (!modalConfirmacao || !btnGravarListaFornecedor) return;
 
@@ -3071,6 +3081,9 @@
       return;
     }
     listaFornecedorPayload.value = JSON.stringify(payload);
+    if (listaFornecedorGerarCompra) {
+      listaFornecedorGerarCompra.value = gerarCompraAoGravar ? "1" : "0";
+    }
     formGravarListaFornecedor.submit();
   });
 
@@ -3151,7 +3164,8 @@
       .filter((linha) => quantidadeMaiorQueZero(linha.sugestao));
   }
 
-  const novoClique = function() {
+  const novoClique = function(gerarCompra) {
+    gerarCompraAoGravar = gerarCompra === true;
     const payload = {
       fornecedorId: document.getElementById("fornecedor")?.value || "",
       fornecedor: document.getElementById("fornecedorBuscaSugestao")?.value || "Fornecedor não informado",
@@ -3182,15 +3196,32 @@
       return;
     }
     listaFornecedorPayload.value = JSON.stringify(payload);
+    if (listaFornecedorGerarCompra) {
+      listaFornecedorGerarCompra.value = gerarCompraAoGravar ? "1" : "0";
+    }
     formGravarListaFornecedor.submit();
   };
 
   // Remover listener anterior e adicionar novo
   const novoBtn = btnGravarListaFornecedor.cloneNode(true);
   btnGravarListaFornecedor.parentNode.replaceChild(novoBtn, btnGravarListaFornecedor);
-  novoBtn.addEventListener("click", novoClique);
+  novoBtn.addEventListener("click", function() {
+    novoClique(false);
+  });
+  if (btnGravarGerarCompraFornecedor) {
+    btnGravarGerarCompraFornecedor.addEventListener("click", function() {
+      novoClique(true);
+    });
+  }
   document.querySelectorAll(".sugestao-salvar-lista-extra").forEach(function(botaoExtra) {
-    botaoExtra.addEventListener("click", novoClique);
+    botaoExtra.addEventListener("click", function() {
+      novoClique(false);
+    });
+  });
+  document.querySelectorAll(".sugestao-gravar-gerar-extra").forEach(function(botaoExtra) {
+    botaoExtra.addEventListener("click", function() {
+      novoClique(true);
+    });
   });
 
   // Listeners para atualizar dinamicamente quando mudar quantidade
