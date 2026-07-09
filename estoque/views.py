@@ -4671,36 +4671,7 @@ def _gerar_lista_fornecedor_whatsapp_imagem(lista):
     return png
 
 
-def compras_listas_fornecedor(request):
-    fornecedor_filtro = request.GET.get("fornecedor", "").strip()
-    status_filtro = request.GET.get("status", "").strip()
-    data_inicio_filtro = request.GET.get("data_inicio", "").strip()
-    data_fim_filtro = request.GET.get("data_fim", "").strip()
-
-    listas = (
-        ListaCompraFornecedor.objects
-        .select_related("fornecedor")
-        .prefetch_related("itens")
-        .order_by("-data_lista", "-id")
-    )
-
-    if fornecedor_filtro:
-        listas = listas.filter(fornecedor__nome__icontains=fornecedor_filtro)
-
-    if status_filtro:
-        listas = listas.filter(status=status_filtro)
-    else:
-        listas = listas.exclude(status=ListaCompraFornecedor.STATUS_CANCELADA)
-
-    data_inicio = parse_date(data_inicio_filtro) if data_inicio_filtro else None
-    data_fim = parse_date(data_fim_filtro) if data_fim_filtro else None
-
-    if data_inicio:
-        listas = listas.filter(data_lista__gte=data_inicio)
-
-    if data_fim:
-        listas = listas.filter(data_lista__lte=data_fim)
-
+def _anotar_compras_geradas_listas_fornecedor(listas):
     listas = list(listas)
     if listas:
         filtros_origem = Q()
@@ -4721,17 +4692,71 @@ def compras_listas_fornecedor(request):
 
         for lista in listas:
             lista.compra_gerada = compras_por_lista.get(lista.id)
+    return listas
+
+
+def compras_listas_fornecedor(request):
+    fornecedor_filtro = request.GET.get("fornecedor", "").strip()
+    status_filtro = request.GET.get("status", "").strip()
+    data_inicio_filtro = request.GET.get("data_inicio", "").strip()
+    data_fim_filtro = request.GET.get("data_fim", "").strip()
+    modo_mobile = request.GET.get("mobile", "").strip()
+
+    listas_base = (
+        ListaCompraFornecedor.objects
+        .select_related("fornecedor")
+        .prefetch_related("itens")
+        .order_by("-data_lista", "-id")
+    )
+
+    if fornecedor_filtro:
+        listas_base = listas_base.filter(fornecedor__nome__icontains=fornecedor_filtro)
+
+    data_inicio = parse_date(data_inicio_filtro) if data_inicio_filtro else None
+    data_fim = parse_date(data_fim_filtro) if data_fim_filtro else None
+
+    if data_inicio:
+        listas_base = listas_base.filter(data_lista__gte=data_inicio)
+
+    if data_fim:
+        listas_base = listas_base.filter(data_lista__lte=data_fim)
+
+    if status_filtro:
+        listas = listas_base.filter(status=status_filtro)
+    else:
+        listas = listas_base.exclude(status=ListaCompraFornecedor.STATUS_CANCELADA)
+
+    listas = _anotar_compras_geradas_listas_fornecedor(listas)
+    mostrando_canceladas = status_filtro == ListaCompraFornecedor.STATUS_CANCELADA
+    mostrando_historico_mobile = modo_mobile == "historico" or mostrando_canceladas
+
+    if mostrando_historico_mobile:
+        listas_mobile_base = listas_base if not status_filtro else listas_base.filter(status=status_filtro)
+        listas_mobile_compras = _anotar_compras_geradas_listas_fornecedor(listas_mobile_base)
+        listas_mobile = [
+            lista
+            for lista in listas_mobile_compras
+            if lista.status == ListaCompraFornecedor.STATUS_CANCELADA or lista.compra_gerada
+        ]
+    else:
+        listas_mobile = [
+            lista
+            for lista in listas
+            if lista.status != ListaCompraFornecedor.STATUS_CANCELADA and not lista.compra_gerada
+        ]
 
     return render(
         request,
         "estoque/compras_listas_fornecedor.html",
         {
             "listas": listas,
+            "listas_mobile": listas_mobile,
             "fornecedor_filtro": fornecedor_filtro,
             "status_filtro": status_filtro,
             "data_inicio_filtro": data_inicio_filtro,
             "data_fim_filtro": data_fim_filtro,
-            "mostrando_canceladas": status_filtro == ListaCompraFornecedor.STATUS_CANCELADA,
+            "mostrando_canceladas": mostrando_canceladas,
+            "mostrando_historico_mobile": mostrando_historico_mobile,
             "status_choices": ListaCompraFornecedor.STATUS_CHOICES,
         },
     )

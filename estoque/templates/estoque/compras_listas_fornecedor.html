@@ -1594,9 +1594,18 @@ td.listas-fornecedor-total {
     </form>
   </section>
 
+  <nav class="listas-fornecedor-mobile-toggle" aria-label="Filtro mobile de listas por fornecedor">
+    {% if mostrando_historico_mobile %}
+      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}">Listas pendentes</a>
+    {% else %}
+      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}?mobile=historico">Historico</a>
+    {% endif %}
+  </nav>
+
   <section class="listas-fornecedor-table-card">
-    {% if listas %}
-      <div class="listas-fornecedor-table-wrap">
+    {% if listas or listas_mobile %}
+      {% if listas %}
+        <div class="listas-fornecedor-table-wrap">
         <table class="listas-fornecedor-table">
           <thead>
             <tr>
@@ -1674,9 +1683,11 @@ td.listas-fornecedor-total {
           </tbody>
         </table>
       </div>
-      <div class="listas-fornecedor-mobile-cards" aria-label="Listas por fornecedor">
-        {% for lista in listas %}
-          <article class="listas-fornecedor-mobile-card{% if lista.compra_gerada %} com-compra{% endif %}">
+      {% endif %}
+      <div class="listas-fornecedor-mobile-cards" aria-label="Listas por fornecedor" data-mobile-modo="{% if mostrando_historico_mobile %}historico{% else %}pendentes{% endif %}">
+        {% if listas_mobile %}
+          {% for lista in listas_mobile %}
+            <article class="listas-fornecedor-mobile-card{% if lista.compra_gerada %} com-compra{% endif %}" data-mobile-lista-id="{{ lista.id }}">
             <div class="listas-fornecedor-mobile-card-topo">
               <strong>Lista #{{ lista.id }}</strong>
               {% if lista.compra_gerada %}
@@ -1730,7 +1741,12 @@ td.listas-fornecedor-total {
               {% endif %}
             </div>
           </article>
-        {% endfor %}
+          {% endfor %}
+        {% else %}
+          <div class="listas-fornecedor-empty">
+            {% if mostrando_historico_mobile %}Nenhuma lista no historico mobile.{% else %}Nenhuma lista pendente para o celular.{% endif %}
+          </div>
+        {% endif %}
       </div>
     {% else %}
       <div class="listas-fornecedor-empty">Nenhuma lista gravada encontrada.</div>
@@ -2536,7 +2552,24 @@ td.listas-fornecedor-total {
   display: none;
 }
 
+.listas-fornecedor-mobile-toggle {
+  display: none;
+}
+
 @media (max-width: 768px) {
+  .listas-fornecedor-mobile-toggle {
+    display: flex !important;
+    justify-content: flex-end !important;
+    gap: 8px !important;
+    margin: 0 0 10px !important;
+  }
+
+  .listas-fornecedor-mobile-toggle .listas-fornecedor-btn {
+    min-height: 36px !important;
+    padding: 7px 12px !important;
+    font-size: .82rem !important;
+  }
+
   .listas-fornecedor-table-wrap {
     display: none !important;
   }

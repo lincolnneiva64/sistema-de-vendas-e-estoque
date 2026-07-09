@@ -2564,6 +2564,71 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertNotContains(resposta, f"#{lista_aberta.id}")
         self.assertContains(resposta, "Listas ativas")
 
+    def test_mobile_principal_mostra_lista_aberta_sem_compra(self):
+        produto = self.criar_produto("Produto Mobile Pendente")
+        lista = self.criar_lista_com_item(produto)
+
+        resposta = self.client.get(reverse("estoque:compras_listas_fornecedor"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'data-mobile-modo="pendentes"')
+        self.assertContains(resposta, f'data-mobile-lista-id="{lista.id}"')
+        self.assertContains(resposta, "Historico")
+
+    def test_mobile_principal_nao_mostra_lista_que_virou_compra(self):
+        produto = self.criar_produto("Produto Mobile Compra")
+        lista = self.criar_lista_com_item(produto)
+        compra = self.criar_compra_vinculada(lista, status=Compra.STATUS_RASCUNHO)
+
+        resposta = self.client.get(reverse("estoque:compras_listas_fornecedor"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, f"Lista #{lista.id} virou Compra #{compra.id}")
+        self.assertNotContains(resposta, f'data-mobile-lista-id="{lista.id}"')
+        self.assertNotContains(resposta, 'data-gerar-compra-lista-form="1"')
+
+    def test_mobile_historico_mostra_lista_que_virou_compra(self):
+        produto = self.criar_produto("Produto Mobile Historico")
+        lista = self.criar_lista_com_item(produto)
+        self.criar_compra_vinculada(lista, status=Compra.STATUS_FINALIZADA)
+
+        resposta = self.client.get(
+            reverse("estoque:compras_listas_fornecedor"),
+            {"mobile": "historico"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'data-mobile-modo="historico"')
+        self.assertContains(resposta, f'data-mobile-lista-id="{lista.id}"')
+        self.assertContains(resposta, "Listas pendentes")
+
+    def test_mobile_principal_nao_mostra_lista_cancelada(self):
+        produto = self.criar_produto("Produto Mobile Cancelada")
+        lista = self.criar_lista_com_item(produto)
+        lista.status = ListaCompraFornecedor.STATUS_CANCELADA
+        lista.save(update_fields=["status", "atualizado_em"])
+
+        resposta = self.client.get(reverse("estoque:compras_listas_fornecedor"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotContains(resposta, f'data-mobile-lista-id="{lista.id}"')
+
+    def test_mobile_historico_mostra_lista_cancelada(self):
+        produto = self.criar_produto("Produto Historico Cancelada Mobile")
+        lista = self.criar_lista_com_item(produto)
+        lista.status = ListaCompraFornecedor.STATUS_CANCELADA
+        lista.save(update_fields=["status", "atualizado_em"])
+
+        resposta = self.client.get(
+            reverse("estoque:compras_listas_fornecedor"),
+            {"mobile": "historico"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, f'data-mobile-lista-id="{lista.id}"')
+
     def test_cancelar_lista_sem_compra_marca_cancelada_sem_efeitos_financeiros(self):
         produto = self.criar_produto("Produto Cancelar Sem Compra", quantidade=Decimal("8.000"))
         lista = self.criar_lista_com_item(produto)
