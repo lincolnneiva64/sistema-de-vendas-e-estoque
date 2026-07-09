@@ -19,7 +19,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
 from . import views
 
@@ -2438,6 +2438,97 @@ class FornecedorProdutosFormTests(TestCase):
         self.assertFalse(
             ProdutoFornecedor.objects.get(fornecedor=fornecedor, produto=produto_lixeira).ativo
         )
+
+
+class ProdutosIncompletosTests(TestCase):
+    def setUp(self):
+        Categoria.objects.get_or_create(nome="Bebidas", defaults={"ativa": True})
+        Unidade.objects.get_or_create(sigla="UN", defaults={"nome": "Unidade", "ativa": True})
+        self.produto = Produto.objects.create(
+            nome="Produto Incompleto",
+            categoria="Bebidas",
+            preco_compra=Decimal("3.33"),
+            preco_vista=Decimal("3.33"),
+            preco_prazo=Decimal("3.33"),
+            quantidade=Decimal("0.000"),
+            estoque_minimo=0,
+            unidade_compra="UN",
+            cadastro_incompleto=True,
+            permitir_prejuizo=True,
+            motivo_prejuizo="Cadastro rapido durante compra.",
+        )
+
+    def _url_edicao(self):
+        return reverse("estoque:produto_editar", kwargs={"pk": self.produto.pk})
+
+    def _dados_validos(self):
+        return {
+            "nome": "Produto Incompleto",
+            "codigo": "",
+            "categoria": "Bebidas",
+            "preco_compra": "3.33",
+            "unidade_compra": "UN",
+            "fator_conversao": "",
+            "preco_compra_fracionado": "",
+            "unidade_venda_1": "UN",
+            "preco_vista": "4.33",
+            "unidade_venda_2": "",
+            "preco_prazo": "4.99",
+            "vende_fracionado": "False",
+            "descricao_conversao": "",
+            "quantidade": "0.000",
+            "estoque_minimo": "0",
+            "fornecedor": "",
+            "percentual_vista_fracionado": "",
+            "preco_vista_fracionado": "",
+            "percentual_prazo_fracionado": "",
+            "preco_prazo_fracionado": "",
+        }
+
+    def test_tela_completar_produto_incompleto_tem_campos_de_preco_e_percentual(self):
+        resposta = self.client.get(self._url_edicao(), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'id="id_preco_compra"')
+        self.assertContains(resposta, 'id="percentual_vista"')
+        self.assertContains(resposta, 'id="id_preco_vista"')
+        self.assertContains(resposta, 'id="percentual_prazo"')
+        self.assertContains(resposta, 'id="id_preco_prazo"')
+
+    def test_tela_completar_produto_incompleto_tem_ordem_enter_de_precos(self):
+        resposta = self.client.get(self._url_edicao(), secure=True)
+
+        html = resposta.content.decode()
+        self.assertIn('"#id_preco_compra"', html)
+        self.assertIn('"#percentual_vista"', html)
+        self.assertIn('"#id_preco_vista"', html)
+        self.assertIn('"#percentual_prazo"', html)
+        self.assertIn('"#id_preco_prazo"', html)
+        self.assertLess(html.index('"#id_preco_compra"'), html.index('"#percentual_vista"'))
+        self.assertLess(html.index('"#percentual_vista"'), html.index('"#id_preco_vista"'))
+        self.assertLess(html.index('"#id_preco_vista"'), html.index('"#percentual_prazo"'))
+        self.assertLess(html.index('"#percentual_prazo"'), html.index('"#id_preco_prazo"'))
+        self.assertContains(resposta, "ev.stopImmediatePropagation();")
+        self.assertContains(resposta, 'document.getElementById("form-produto")?.requestSubmit();')
+
+    def test_tela_completar_produto_incompleto_calcula_percentual_e_preserva_preco_manual(self):
+        resposta = self.client.get(self._url_edicao(), secure=True)
+
+        self.assertContains(resposta, 'precoCampo.value = formatarDuasCasas(base * (1 + percentual / 100));')
+        self.assertContains(resposta, "function marcarPrecoFinalManual")
+        self.assertContains(resposta, 'precoCampo.dataset.precoFinalManual = "1";')
+        self.assertContains(resposta, "function atualizarPrecoFinalAoAlterarCompra")
+        self.assertContains(resposta, "precoFinalEditadoManual(precoCampo)")
+
+    def test_salvar_produto_incompleto_continua_funcionando(self):
+        resposta = self.client.post(self._url_edicao(), self._dados_validos(), secure=True)
+
+        self.produto.refresh_from_db()
+        self.assertEqual(resposta.status_code, 302)
+        self.assertFalse(self.produto.cadastro_incompleto)
+        self.assertEqual(self.produto.preco_compra, Decimal("3.33"))
+        self.assertEqual(self.produto.preco_vista, Decimal("4.33"))
+        self.assertEqual(self.produto.preco_prazo, Decimal("4.99"))
 
 
 class ComprasListaFinanceiroTests(TestCase):

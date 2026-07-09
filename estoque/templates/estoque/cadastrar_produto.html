@@ -1746,50 +1746,126 @@ const response = await fetch("{% url 'estoque:verificar_produto' %}?nome=" + enc
         campo.addEventListener("blur", callback);
     }
 
-    vincularEventos(campoPrecoVista, function () {
+    function marcarPrecoFinalManual(precoCampo, evento) {
+        if (!precoCampo) return;
+        if (evento && evento.isTrusted === false) return;
+        precoCampo.dataset.precoFinalManual = "1";
+    }
+
+    function limparPrecoFinalManual(precoCampo) {
+        if (!precoCampo) return;
+        precoCampo.dataset.precoFinalManual = "0";
+    }
+
+    function precoFinalEditadoManual(precoCampo) {
+        return precoCampo?.dataset.precoFinalManual === "1";
+    }
+
+    function guardarBasePrecoCompra(baseCampo, precoCampo) {
+        if (!baseCampo || !precoCampo) return;
+        precoCampo.dataset.precoCompraBaseAnterior = String(numero(baseCampo.value) || 0);
+    }
+
+    function atualizarPrecoFinalAoAlterarCompra(baseCampo, percentualCampo, precoCampo) {
+        if (!baseCampo || !percentualCampo || !precoCampo) return;
+
+        const base = numero(baseCampo.value);
+        if (base <= 0) {
+            return;
+        }
+
+        if (percentualCampo.value.trim() !== "") {
+            limparPrecoFinalManual(precoCampo);
+            sincronizarPrecoPercentual(baseCampo, percentualCampo, precoCampo, "percentual");
+            guardarBasePrecoCompra(baseCampo, precoCampo);
+            return;
+        }
+
+        const precoAtual = numero(precoCampo.value);
+        const baseAnterior = numero(precoCampo.dataset.precoCompraBaseAnterior || "0");
+        const deveUsarCompraComoInicial =
+            !precoFinalEditadoManual(precoCampo) ||
+            precoCampo.value.trim() === "" ||
+            (baseAnterior > 0 && Math.abs(precoAtual - baseAnterior) < 0.005);
+
+        if (deveUsarCompraComoInicial) {
+            precoCampo.value = formatarDuasCasas(base);
+            limparPrecoFinalManual(precoCampo);
+        }
+
+        guardarBasePrecoCompra(baseCampo, precoCampo);
+    }
+
+    function atualizarPrecosAoAlterarCompra() {
+        atualizarPrecoFinalAoAlterarCompra(campoPrecoCompra, campoPercentualVista, campoPrecoVista);
+        atualizarPrecoFinalAoAlterarCompra(campoPrecoCompra, campoPercentualPrazo, campoPrecoPrazo);
+        atualizarPrecoFinalAoAlterarCompra(campoPrecoCompraFracionado, campoPercentualVistaFracionado, campoPrecoVistaFracionado);
+        atualizarPrecoFinalAoAlterarCompra(campoPrecoCompraFracionado, campoPercentualPrazoFracionado, campoPrecoPrazoFracionado);
+    }
+
+    vincularEventos(campoPrecoVista, function (evento) {
+        marcarPrecoFinalManual(campoPrecoVista, evento);
         sincronizarPrecoPercentual(campoPrecoCompra, campoPercentualVista, campoPrecoVista, "preco");
     });
 
     vincularEventos(campoPercentualVista, function () {
+        limparPrecoFinalManual(campoPrecoVista);
         sincronizarPrecoPercentual(campoPrecoCompra, campoPercentualVista, campoPrecoVista, "percentual");
+        guardarBasePrecoCompra(campoPrecoCompra, campoPrecoVista);
     });
 
-    vincularEventos(campoPrecoPrazo, function () {
+    vincularEventos(campoPrecoPrazo, function (evento) {
+        marcarPrecoFinalManual(campoPrecoPrazo, evento);
         sincronizarPrecoPercentual(campoPrecoCompra, campoPercentualPrazo, campoPrecoPrazo, "preco");
     });
 
     vincularEventos(campoPercentualPrazo, function () {
+        limparPrecoFinalManual(campoPrecoPrazo);
         sincronizarPrecoPercentual(campoPrecoCompra, campoPercentualPrazo, campoPrecoPrazo, "percentual");
+        guardarBasePrecoCompra(campoPrecoCompra, campoPrecoPrazo);
     });
 
-    vincularEventos(campoPrecoVistaFracionado, function () {
+    vincularEventos(campoPrecoVistaFracionado, function (evento) {
+        marcarPrecoFinalManual(campoPrecoVistaFracionado, evento);
         sincronizarPrecoPercentual(campoPrecoCompraFracionado, campoPercentualVistaFracionado, campoPrecoVistaFracionado, "preco");
     });
 
     vincularEventos(campoPercentualVistaFracionado, function () {
+        limparPrecoFinalManual(campoPrecoVistaFracionado);
         sincronizarPrecoPercentual(campoPrecoCompraFracionado, campoPercentualVistaFracionado, campoPrecoVistaFracionado, "percentual");
+        guardarBasePrecoCompra(campoPrecoCompraFracionado, campoPrecoVistaFracionado);
     });
 
-    vincularEventos(campoPrecoPrazoFracionado, function () {
+    vincularEventos(campoPrecoPrazoFracionado, function (evento) {
+        marcarPrecoFinalManual(campoPrecoPrazoFracionado, evento);
         sincronizarPrecoPercentual(campoPrecoCompraFracionado, campoPercentualPrazoFracionado, campoPrecoPrazoFracionado, "preco");
     });
 
     vincularEventos(campoPercentualPrazoFracionado, function () {
+        limparPrecoFinalManual(campoPrecoPrazoFracionado);
         sincronizarPrecoPercentual(campoPrecoCompraFracionado, campoPercentualPrazoFracionado, campoPrecoPrazoFracionado, "percentual");
+        guardarBasePrecoCompra(campoPrecoCompraFracionado, campoPrecoPrazoFracionado);
     });
 
     vincularEventos(campoPrecoCompra, function () {
         atualizarPrecoCompraFracionado();
-        recalcularPrecosPorPercentual();
+        atualizarPrecosAoAlterarCompra();
     });
 
     vincularEventos(document.getElementById("id_fator_conversao"), function () {
         atualizarPrecoCompraFracionado();
-        sincronizarPrecoPercentual(campoPrecoCompraFracionado, campoPercentualVistaFracionado, campoPrecoVistaFracionado, "percentual");
-        sincronizarPrecoPercentual(campoPrecoCompraFracionado, campoPercentualPrazoFracionado, campoPrecoPrazoFracionado, "percentual");
+        atualizarPrecosAoAlterarCompra();
     });
 
     inicializarPrecos();
+    [
+        [campoPrecoCompra, campoPrecoVista],
+        [campoPrecoCompra, campoPrecoPrazo],
+        [campoPrecoCompraFracionado, campoPrecoVistaFracionado],
+        [campoPrecoCompraFracionado, campoPrecoPrazoFracionado]
+    ].forEach(function (par) {
+        guardarBasePrecoCompra(par[0], par[1]);
+    });
     if (campoVendeFracionado) {
     campoVendeFracionado.addEventListener("change", atualizarVisibilidadeFracionado);
 }
@@ -2751,11 +2827,14 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       ev.preventDefault();
+      ev.stopImmediatePropagation();
 
       var proximo = campos[indice + 1];
 
       if (proximo) {
         selecionarCampo(proximo);
+      } else {
+        document.getElementById("form-produto")?.requestSubmit();
       }
     }, true);
   }
