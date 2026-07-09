@@ -1200,13 +1200,14 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         )
         return lista
 
-    def _criar_compra_vinculada_lista_fornecedor(self, lista, status=Compra.STATUS_RASCUNHO):
+    def _criar_compra_vinculada_lista_fornecedor(self, lista, status=Compra.STATUS_RASCUNHO, cancelada=False):
         return Compra.objects.create(
             fornecedor=self.fornecedor,
             data_compra=timezone.localdate(),
             tipo_pagamento="",
             total=lista.total_lista,
             status=status,
+            cancelada=cancelada,
             observacao=f"Gerada a partir da Lista de Compras #{lista.id}",
         )
 
@@ -1235,6 +1236,26 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
 
         listas_mobile_ids = {lista.id for lista in resposta.context["listas_mobile"]}
         self.assertNotIn(lista.id, listas_mobile_ids)
+
+    def test_consulta_mobile_principal_mostra_lista_com_apenas_compra_cancelada_vinculada(self):
+        lista = self._criar_lista_fornecedor_conferencia("Produto Mobile Compra Cancelada Nao Bloqueia")
+        self._criar_compra_vinculada_lista_fornecedor(lista, status=Compra.STATUS_CANCELADA, cancelada=True)
+
+        resposta = self.client.get(reverse("estoque:compras_listas_fornecedor"), secure=True)
+
+        listas_mobile_ids = {lista.id for lista in resposta.context["listas_mobile"]}
+        lista_mobile = next(lista_mobile for lista_mobile in resposta.context["listas_mobile"] if lista_mobile.id == lista.id)
+        self.assertIn(lista.id, listas_mobile_ids)
+        self.assertIsNone(lista_mobile.compra_gerada)
+
+    def test_consulta_mobile_principal_usa_compra_nao_cancelada_mesmo_com_cancelada_mais_recente(self):
+        lista = self._criar_lista_fornecedor_conferencia("Produto Mobile Compra Ativa Mais Antiga")
+        compra_ativa = self._criar_compra_vinculada_lista_fornecedor(lista, status=Compra.STATUS_RASCUNHO)
+        self._criar_compra_vinculada_lista_fornecedor(lista, status=Compra.STATUS_CANCELADA, cancelada=True)
+
+        listas_anotadas = views._anotar_compras_geradas_listas_fornecedor([lista])
+
+        self.assertEqual(listas_anotadas[0].compra_gerada.id, compra_ativa.id)
 
     def test_consulta_mobile_principal_nao_mostra_lista_cancelada(self):
         lista = self._criar_lista_fornecedor_conferencia(

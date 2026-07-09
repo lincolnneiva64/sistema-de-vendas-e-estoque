@@ -4681,6 +4681,7 @@ def _anotar_compras_geradas_listas_fornecedor(listas):
         compras_geradas = (
             Compra.objects
             .filter(filtros_origem)
+            .exclude(Q(status=Compra.STATUS_CANCELADA) | Q(cancelada=True))
             .order_by("-id")
         )
 
