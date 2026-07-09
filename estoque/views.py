@@ -5430,7 +5430,6 @@ def _compra_existente_lista_fornecedor(lista):
     marcador_origem = f"Gerada a partir da Lista de Compras #{lista.id}"
     return (
         Compra.objects.filter(
-            fornecedor=lista.fornecedor,
             observacao__icontains=marcador_origem,
             cancelada=False,
         )
@@ -5669,6 +5668,7 @@ def compras_lista_fornecedor_editar(request, pk):
         return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
 
     if request.method == "POST":
+        gerar_compra = str(request.POST.get("gerar_compra") or "").strip().lower() in {"1", "true", "sim", "on"}
         payload_raw = request.POST.get("lista_payload", "")
         try:
             payload = json.loads(payload_raw or "{}")
@@ -5730,6 +5730,7 @@ def compras_lista_fornecedor_editar(request, pk):
         data_chegada = parse_date(payload.get("dataChegada") or "") or None
         total_original = _lista_fornecedor_decimal(payload.get("totalOriginal") or lista.total_sugerido_original)
 
+        compra_para_abrir = None
         with transaction.atomic():
             lista.fornecedor = fornecedor
             lista.data_inicio_periodo = data_inicio
@@ -5751,8 +5752,18 @@ def compras_lista_fornecedor_editar(request, pk):
             ])
             lista.itens.all().delete()
             ItemListaCompraFornecedor.objects.bulk_create(itens_validos)
+            if gerar_compra:
+                lista = ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto").get(pk=lista.pk)
+                compra_para_abrir = _compra_existente_lista_fornecedor(lista)
+                if not compra_para_abrir:
+                    compra_para_abrir = _criar_compra_rascunho_da_lista_fornecedor(lista, request)
 
         messages.success(request, f"Lista #{lista.id} atualizada com sucesso.")
+        if gerar_compra and compra_para_abrir:
+            if compra_para_abrir.status == Compra.STATUS_FINALIZADA:
+                return redirect("estoque:compras_detalhe", pk=compra_para_abrir.pk)
+            messages.success(request, f"Compra #{compra_para_abrir.id} criada em rascunho a partir da Lista #{lista.id}. Confira antes de finalizar.")
+            return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra_para_abrir.pk})}?continuar_itens=1")
         return redirect("estoque:compras_lista_fornecedor_ver", pk=lista.pk)
 
     fornecedor = lista.fornecedor
@@ -5881,6 +5892,8 @@ def compras_lista_fornecedor_editar(request, pk):
         "total_sugerido": lista.total_sugerido_original,
         "total_lista": lista.total_lista,
         "total_produtos_vinculados": len(produtos_sugestao),
+        "compra_gerada_lista": compra_gerada,
+        "can_gerar_compra_lista": compra_gerada is None,
     }
     return render(request, "estoque/compras_sugestao_fornecedor.html", context)
 

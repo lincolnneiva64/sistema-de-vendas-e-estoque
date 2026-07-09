@@ -1329,8 +1329,14 @@
     <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnVisualizarSintetica">Visualizar Sintetica</button>
     <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnImagemWhatsapp">Imagem / WhatsApp</button>
     <button type="button" class="sugestao-btn sugestao-btn-primary" id="btnGravarListaFornecedor">{% if modo_edicao_lista %}Salvar alterações{% else %}Gravar lista{% endif %}</button>
-    {% if not modo_edicao_lista %}
-      <button type="button" class="sugestao-btn sugestao-btn-primary" id="btnGravarGerarCompraFornecedor">Gravar e Gerar Compra</button>
+    {% if not modo_edicao_lista or can_gerar_compra_lista %}
+      <button type="button" class="sugestao-btn sugestao-btn-primary" id="btnGravarGerarCompraFornecedor">{% if modo_edicao_lista %}Salvar alterações e Gerar Compra{% else %}Gravar e Gerar Compra{% endif %}</button>
+    {% elif compra_gerada_lista %}
+      {% if compra_gerada_lista.status == "finalizada" %}
+        <a class="sugestao-btn sugestao-btn-primary" href="{% url 'estoque:compras_detalhe' compra_gerada_lista.id %}">Ver Compra</a>
+      {% else %}
+        <a class="sugestao-btn sugestao-btn-primary" href="{% url 'estoque:compra_editar' compra_gerada_lista.id %}?continuar_itens=1">Continuar Compra</a>
+      {% endif %}
     {% endif %}
   </section>
 
@@ -1438,10 +1444,16 @@
       </div>
       <div class="sugestao-salvar-mobile-rodape">
         <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-salvar-lista-extra" id="{% if modo_edicao_lista %}btnSalvarAlteracoesListaMobile{% else %}btnGravarListaMobile{% endif %}">{% if modo_edicao_lista %}Salvar alterações{% else %}Gravar lista{% endif %}</button>
-        {% if not modo_edicao_lista %}
-          <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-gravar-gerar-extra" id="btnGravarGerarCompraMobile">Gravar e Gerar Compra</button>
+        {% if not modo_edicao_lista or can_gerar_compra_lista %}
+          <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-gravar-gerar-extra" id="btnGravarGerarCompraMobile">{% if modo_edicao_lista %}Salvar alterações e Gerar Compra{% else %}Gravar e Gerar Compra{% endif %}</button>
+        {% elif compra_gerada_lista %}
+          {% if compra_gerada_lista.status == "finalizada" %}
+            <a class="sugestao-btn sugestao-btn-primary" href="{% url 'estoque:compras_detalhe' compra_gerada_lista.id %}">Ver Compra</a>
+          {% else %}
+            <a class="sugestao-btn sugestao-btn-primary" href="{% url 'estoque:compra_editar' compra_gerada_lista.id %}?continuar_itens=1">Continuar Compra</a>
+          {% endif %}
         {% endif %}
-        <span>{% if modo_edicao_lista %}As alteracoes dos campos so sao gravadas depois de salvar.{% else %}Revise os itens e toque em Gravar lista para salvar, ou em Gravar e Gerar Compra para abrir a compra em rascunho.{% endif %}</span>
+        <span>{% if modo_edicao_lista %}{% if can_gerar_compra_lista %}As alteracoes dos campos so sao gravadas depois de salvar. Use Salvar alterações e Gerar Compra para abrir a compra em rascunho.{% else %}As alteracoes dos campos so sao gravadas depois de salvar.{% endif %}{% else %}Revise os itens e toque em Gravar lista para salvar, ou em Gravar e Gerar Compra para abrir a compra em rascunho.{% endif %}</span>
       </div>
       <div class="sugestao-empty {% if linhas %}oculto{% endif %}" id="sugestaoListaVazia">
         {% if fornecedor %}
@@ -2413,11 +2425,37 @@
       renderizarSugestoes(false);
     }
 
+    function focarCampoSeguroDepoisDeRemover() {
+      const linhasRestantes = Array.from(tbody.querySelectorAll("tr[data-produto-id]"));
+      const proximaLinha = linhasRestantes[Math.min(indiceAtual, linhasRestantes.length - 1)] || linhasRestantes[linhasRestantes.length - 1];
+      const proximoCardMobile = document.querySelector("#mobileSugestaoProdutos .sugestao-mobile-card[data-produto-id]");
+      const focoSeguro = (
+        proximaLinha?.querySelector(".sugestao-qtd-input, .sugestao-preco-input, .sugestao-preco-unitario-input, .sugestao-total-input") ||
+        proximoCardMobile?.querySelector(".sugestao-qtd-input, .sugestao-preco-input, .sugestao-preco-unitario-input, .sugestao-total-input") ||
+        document.getElementById("produtoManualBuscaSugestao") ||
+        busca
+      );
+
+      if (document.activeElement && document.activeElement.matches && document.activeElement.matches(".sugestao-remover-item")) {
+        document.activeElement.blur();
+      }
+
+      if (focoSeguro && !focoSeguro.matches(".sugestao-remover-item")) {
+        window.setTimeout(function() {
+          focoSeguro.focus({ preventScroll: true });
+          if (typeof focoSeguro.select === "function") {
+            focoSeguro.select();
+          }
+        }, 0);
+      }
+    }
+
     if (estavaSelecionado && window.selecionarProdutoSugestao) {
       const linhasRestantes = Array.from(tbody.querySelectorAll("tr[data-produto-id]"));
       const proximaLinha = linhasRestantes[Math.min(indiceAtual, linhasRestantes.length - 1)] || linhasRestantes[linhasRestantes.length - 1];
       window.selecionarProdutoSugestao(proximaLinha?.dataset.produtoId || "", { rolar: false });
     }
+    focarCampoSeguroDepoisDeRemover();
   });
 })();
 </script>
