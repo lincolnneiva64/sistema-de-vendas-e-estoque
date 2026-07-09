@@ -117,6 +117,25 @@ class FechamentoCompraFinanceiroTests(TestCase):
         dados.update(campos)
         return Compra.objects.create(**dados)
 
+    def _criar_compra_rascunho_com_item(self, tipo_pagamento="avista", total=Decimal("100.00"), **campos):
+        compra = Compra.objects.create(
+            fornecedor=self.fornecedor,
+            data_compra=timezone.localdate(),
+            tipo_pagamento=tipo_pagamento,
+            total=total,
+            status=Compra.STATUS_RASCUNHO,
+            **campos,
+        )
+        ItemCompra.objects.create(
+            compra=compra,
+            produto=self.produto,
+            quantidade=Decimal("1.000"),
+            unidade="UN",
+            preco_unitario=total,
+            valor_total=total,
+        )
+        return compra
+
     def test_vendas_nao_exibe_aviso_compras_rascunho_sem_pendencia(self):
         resposta = self.client.get(reverse("estoque:vendas"), secure=True)
 
@@ -361,6 +380,10 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, 'id="origemCaixaCompra"')
         self.assertContains(resposta, 'id="origemReservaCompra"')
         self.assertContains(resposta, 'id="origemBancoCompra"')
+        self.assertContains(resposta, 'name="fluxo_mobile_compra"')
+        self.assertContains(resposta, "Use Salvar Rascunho para revisar depois.")
+        self.assertContains(resposta, "Salvar Rascunho")
+        self.assertContains(resposta, "Finalizar Compra")
         self.assertContains(resposta, ".compras-origem-campo-caixa { display:none !important; }")
         self.assertContains(resposta, ".compras-origem-nota-mobile { display:block; }")
         self.assertContains(resposta, "No celular, distribua o total entre Sangria/Reserva e Banco/Pix.")
@@ -368,6 +391,197 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, "definirCampoPorCentavos(origemCaixaCompra, 0);")
         self.assertContains(resposta, '<option value="cartao_credito"')
         self.assertContains(resposta, '<option value="cartao_debito"')
+
+    def test_mobile_salvar_rascunho_nao_altera_estoque_financeiro_ou_conta(self):
+        compra = self._criar_compra_rascunho_com_item()
+        estoque_antes = self.produto.quantidade
+
+        resposta = self.client.post(
+            reverse("estoque:compra_editar", kwargs={"pk": compra.pk}),
+            self._dados_finalizacao_compra_lista(
+                compra,
+                tipo_pagamento="avista",
+                acao_compra="salvar_rascunho",
+                fluxo_mobile_compra="1",
+                origem_caixa="0,00",
+                origem_reserva="0,00",
+                origem_banco="0,00",
+            ),
+            secure=True,
+        )
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        self.assertRedirects(
+            resposta,
+            f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?rascunho_salvo=1",
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(compra.status, Compra.STATUS_RASCUNHO)
+        self.assertEqual(self.produto.quantidade, estoque_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(compra=compra).count(), 0)
+        self.assertEqual(ContaPagar.objects.filter(compra=compra).count(), 0)
+
+    def test_mobile_finaliza_com_banco_pix_sem_usar_caixa(self):
+        compra = self._criar_compra_rascunho_com_item()
+        estoque_antes = self.produto.quantidade
+
+        resposta = self.client.post(
+            reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}),
+            self._dados_finalizacao_compra_lista(
+                compra,
+                tipo_pagamento="avista",
+                fluxo_mobile_compra="1",
+                origem_caixa="0,00",
+                origem_reserva="0,00",
+                origem_banco="100,00",
+            ),
+            secure=True,
+        )
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        movimento = compra.movimentos_financeiros.get()
+        self.assertRedirects(resposta, reverse("estoque:compras_lista"), fetch_redirect_response=False)
+        self.assertEqual(compra.status, Compra.STATUS_FINALIZADA)
+        self.assertEqual(self.produto.quantidade, estoque_antes + Decimal("1.000"))
+        self.assertEqual(movimento.conta, views._conta_financeira_padrao("banco"))
+        self.assertNotEqual(movimento.conta, views._conta_financeira_padrao("caixa"))
+        self.assertEqual(ContaPagar.objects.filter(compra=compra).count(), 0)
+
+    def test_mobile_finaliza_com_sangria_reserva_sem_usar_caixa(self):
+        compra = self._criar_compra_rascunho_com_item()
+        estoque_antes = self.produto.quantidade
+
+        resposta = self.client.post(
+            reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}),
+            self._dados_finalizacao_compra_lista(
+                compra,
+                tipo_pagamento="avista",
+                fluxo_mobile_compra="1",
+                origem_caixa="0,00",
+                origem_reserva="100,00",
+                origem_banco="0,00",
+            ),
+            secure=True,
+        )
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        movimento = compra.movimentos_financeiros.get()
+        self.assertRedirects(resposta, reverse("estoque:compras_lista"), fetch_redirect_response=False)
+        self.assertEqual(compra.status, Compra.STATUS_FINALIZADA)
+        self.assertEqual(self.produto.quantidade, estoque_antes + Decimal("1.000"))
+        self.assertEqual(movimento.conta, views._conta_financeira_padrao("reserva"))
+        self.assertNotEqual(movimento.conta, views._conta_financeira_padrao("caixa"))
+        self.assertEqual(ContaPagar.objects.filter(compra=compra).count(), 0)
+
+    def test_mobile_finaliza_cartao_debito_com_movimento_imediato(self):
+        compra = self._criar_compra_rascunho_com_item(tipo_pagamento="cartao_debito")
+        estoque_antes = self.produto.quantidade
+
+        resposta = self.client.post(
+            reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}),
+            self._dados_finalizacao_compra_lista(
+                compra,
+                tipo_pagamento="cartao_debito",
+                fluxo_mobile_compra="1",
+                origem_caixa="0,00",
+                origem_reserva="0,00",
+                origem_banco="100,00",
+            ),
+            secure=True,
+        )
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        self.assertRedirects(resposta, reverse("estoque:compras_lista"), fetch_redirect_response=False)
+        self.assertEqual(compra.status, Compra.STATUS_FINALIZADA)
+        self.assertEqual(compra.tipo_pagamento, "cartao_debito")
+        self.assertEqual(self.produto.quantidade, estoque_antes + Decimal("1.000"))
+        self.assertEqual(MovimentoFinanceiro.objects.filter(compra=compra, origem="compra_a_vista").count(), 1)
+        self.assertEqual(ContaPagar.objects.filter(compra=compra).count(), 0)
+
+    def test_mobile_bloqueia_caixa_na_finalizacao_imediata(self):
+        compra = self._criar_compra_rascunho_com_item()
+        estoque_antes = self.produto.quantidade
+
+        resposta = self.client.post(
+            reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}),
+            self._dados_finalizacao_compra_lista(
+                compra,
+                tipo_pagamento="avista",
+                fluxo_mobile_compra="1",
+                origem_caixa="100,00",
+                origem_reserva="0,00",
+                origem_banco="0,00",
+            ),
+            follow=True,
+            secure=True,
+        )
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        self.assertEqual(compra.status, Compra.STATUS_RASCUNHO)
+        self.assertEqual(self.produto.quantidade, estoque_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(compra=compra).count(), 0)
+        self.assertContains(resposta, "No celular, use Sangria/Reserva ou Banco/Pix.")
+
+    def test_mobile_cartao_credito_sem_vencimento_nao_finaliza(self):
+        compra = self._criar_compra_rascunho_com_item(tipo_pagamento="cartao_credito")
+        estoque_antes = self.produto.quantidade
+
+        resposta = self.client.post(
+            reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}),
+            self._dados_finalizacao_compra_lista(
+                compra,
+                tipo_pagamento="cartao_credito",
+                data_vencimento="",
+                fluxo_mobile_compra="1",
+                origem_caixa="0,00",
+                origem_reserva="0,00",
+                origem_banco="0,00",
+            ),
+            follow=True,
+            secure=True,
+        )
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        self.assertEqual(compra.status, Compra.STATUS_RASCUNHO)
+        self.assertEqual(self.produto.quantidade, estoque_antes)
+        self.assertEqual(ContaPagar.objects.filter(compra=compra).count(), 0)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(compra=compra).count(), 0)
+        self.assertContains(resposta, "Informe a data de vencimento da fatura do cartao antes de finalizar.")
+
+    def test_mobile_cartao_credito_com_vencimento_cria_conta_futura(self):
+        compra = self._criar_compra_rascunho_com_item(tipo_pagamento="cartao_credito")
+        estoque_antes = self.produto.quantidade
+
+        resposta = self.client.post(
+            reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}),
+            self._dados_finalizacao_compra_lista(
+                compra,
+                tipo_pagamento="cartao_credito",
+                data_vencimento="2026-07-21",
+                fluxo_mobile_compra="1",
+                origem_caixa="0,00",
+                origem_reserva="0,00",
+                origem_banco="0,00",
+            ),
+            secure=True,
+        )
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        conta = compra.conta_pagar
+        self.assertRedirects(resposta, reverse("estoque:compras_lista"), fetch_redirect_response=False)
+        self.assertEqual(compra.status, Compra.STATUS_FINALIZADA)
+        self.assertEqual(compra.tipo_pagamento, "cartao_credito")
+        self.assertEqual(self.produto.quantidade, estoque_antes + Decimal("1.000"))
+        self.assertEqual(conta.data_vencimento.isoformat(), "2026-07-21")
+        self.assertEqual(conta.valor_original, Decimal("100.00"))
+        self.assertEqual(MovimentoFinanceiro.objects.filter(compra=compra).count(), 0)
 
     def test_modal_exibe_saldos_financeiros_calculados_na_renderizacao(self):
         saldos = {

@@ -1673,6 +1673,16 @@ def _validar_origem_compra_a_vista(valores, total):
         )
 
 
+def _compra_post_mobile(request):
+    valor = str(request.POST.get("fluxo_mobile_compra") or "").strip().lower()
+    return valor in {"1", "true", "sim", "mobile", "on"}
+
+
+def _validar_origem_compra_mobile(valores):
+    if _financeiro_dinheiro(valores.get("caixa") or Decimal("0.00")) > Decimal("0.00"):
+        raise ValueError("No celular, use Sangria/Reserva ou Banco/Pix. O Caixa nao fica disponivel.")
+
+
 def _registrar_movimentos_compra_a_vista(compra, valores_origem=None):
     total = _financeiro_dinheiro(compra.total).quantize(Decimal("0.01"))
     if total <= Decimal("0.00"):
@@ -6508,6 +6518,8 @@ def compras_nova(request):
             valores_origem = None
             if acao == "confirmar_financeiro" and dados["compra_a_vista"]:
                 valores_origem = _valores_origem_compra_post(request)
+                if _compra_post_mobile(request):
+                    _validar_origem_compra_mobile(valores_origem)
                 _validar_origem_compra_a_vista(valores_origem, dados["total"])
         except (ValueError, IndexError) as exc:
             messages.error(request, str(exc))
@@ -6573,6 +6585,12 @@ def compra_editar(request, pk):
         try:
             dados = _dados_compra_post(request, exigir_itens=acao != "salvar_rascunho")
             status = Compra.STATUS_RASCUNHO
+            valores_origem = None
+            if acao == "confirmar_financeiro" and dados["compra_a_vista"]:
+                valores_origem = _valores_origem_compra_post(request)
+                if _compra_post_mobile(request):
+                    _validar_origem_compra_mobile(valores_origem)
+                _validar_origem_compra_a_vista(valores_origem, dados["total"])
             with transaction.atomic():
                 compra = Compra.objects.select_for_update().get(pk=compra.pk)
                 _salvar_compra_e_itens(compra, dados, status)
@@ -6581,6 +6599,8 @@ def compra_editar(request, pk):
                     _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos)
                     if dados["compra_conta_futura"]:
                         _finalizar_compra_com_financeiro(compra, None, atualizar_custo_produto_ids, atualizar_preco_venda_produtos)
+                if acao == "confirmar_financeiro":
+                    _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos)
         except (ValueError, IndexError) as exc:
             if str(exc) == ERRO_TIPO_PAGAMENTO_COMPRA:
                 return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?erro_tipo_pagamento=1")
@@ -6593,6 +6613,12 @@ def compra_editar(request, pk):
 
         if acao == "salvar_rascunho":
             return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?rascunho_salvo=1")
+        if acao == "confirmar_financeiro":
+            if dados["compra_conta_futura"]:
+                messages.success(request, "Compra finalizada e conta a pagar criada com sucesso.")
+            else:
+                messages.success(request, "Compra finalizada e valores lancados no financeiro com sucesso.")
+            return redirect("estoque:compras_lista")
         if acao == "finalizar" and dados["compra_conta_futura"]:
             messages.success(request, "Compra finalizada e conta a pagar criada com sucesso.")
             return redirect("estoque:compras_lista")
@@ -6630,6 +6656,8 @@ def compra_finalizar(request, pk):
                 valores_origem = None
                 if dados["compra_a_vista"]:
                     valores_origem = _valores_origem_compra_post(request)
+                    if _compra_post_mobile(request):
+                        _validar_origem_compra_mobile(valores_origem)
                     _validar_origem_compra_a_vista(valores_origem, dados["total"])
             except (ValueError, IndexError) as exc:
                 if str(exc) == ERRO_TIPO_PAGAMENTO_COMPRA:

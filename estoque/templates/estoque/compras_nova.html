@@ -356,6 +356,10 @@
   .compras-btn-primary { background:#2563eb; color:#fff; }
   .compras-btn:disabled { opacity:.65; cursor:not-allowed; filter:grayscale(.2); transform:none; }
   .compras-btn-secondary { background:#dbeafe; color:#164173; border:1px solid #7ea6d9; }
+  .compras-acoes-ajuda-mobile,
+  .compras-label-mobile {
+    display: none;
+  }
   @media (min-width: 821px) {
     .compras-rascunho-mobile-only { display:none !important; }
   }
@@ -1599,6 +1603,30 @@
       font-weight:800;
     }
     .compras-table-wrap { overflow:visible; }
+    .compras-actions {
+      display:grid;
+      grid-template-columns:1fr;
+      width:100%;
+    }
+    .compras-acoes-ajuda-mobile {
+      display:block;
+      grid-column:1 / -1;
+      margin:0 0 4px;
+      padding:8px 10px;
+      border:1px solid #bfdbfe;
+      border-radius:10px;
+      background:#eff6ff;
+      color:#1e3a5f;
+      font-size:.86rem;
+      font-weight:850;
+      line-height:1.35;
+    }
+    .compras-label-desktop {
+      display:none;
+    }
+    .compras-label-mobile {
+      display:inline;
+    }
     .produto-busca { font-size:.84rem; }
     .compras-origem-total { grid-template-columns:1fr; }
     .compras-origem-grid { grid-template-columns:1fr; }
@@ -1843,6 +1871,7 @@
     {% csrf_token %}
     <input type="hidden" name="fechamento_token" value="{{ fechamento_token }}">
     <input type="hidden" name="acao_compra" id="acaoCompra" value="{% if finalizando %}confirmar_financeiro{% else %}salvar_rascunho{% endif %}">
+    <input type="hidden" name="fluxo_mobile_compra" id="fluxoMobileCompra" value="0">
     <div id="camposAtualizarCustoCompra"></div>
 
     <section class="compras-precos-modal" id="modalConferenciaPrecosCompra" aria-hidden="true">
@@ -2067,9 +2096,11 @@
     <div class="compras-actions">
       <a href="{% url 'estoque:compras_lista' %}" class="compras-btn compras-btn-secondary">Cancelar</a>
       {% if finalizando %}
-        <button type="button" class="compras-btn compras-btn-secondary" id="btnVoltarRascunhoCompra">Continuar Editando</button>
+        <p class="compras-acoes-ajuda-mobile">Use Salvar Rascunho para revisar depois. Use Finalizar Compra quando ja estiver tudo conferido.</p>
+        <button type="button" class="compras-btn compras-btn-secondary" id="btnVoltarRascunhoCompra"><span class="compras-label-desktop">Continuar Editando</span><span class="compras-label-mobile">Salvar Rascunho</span></button>
         <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">Finalizar Compra</button>
       {% else %}
+        <p class="compras-acoes-ajuda-mobile">Use Salvar Rascunho para revisar depois. Use Finalizar Compra quando ja estiver tudo conferido.</p>
         <button type="button" class="compras-btn compras-btn-secondary compras-rascunho-mobile-only" id="btnSalvarRascunhoCompra">Salvar Rascunho</button>
         <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">Finalizar Compra</button>
       {% endif %}
@@ -2151,6 +2182,7 @@
   const btnVoltarRascunhoCompra = document.getElementById("btnVoltarRascunhoCompra");
   const btnContinuarLancandoItens = document.getElementById("btnContinuarLancandoItens");
   const acaoCompra = document.getElementById("acaoCompra");
+  const fluxoMobileCompra = document.getElementById("fluxoMobileCompra");
   const tabela = document.getElementById("tabelaItensCompra");
   const totalCompra = document.getElementById("totalCompra");
   const totalCompraCabecalho = document.getElementById("totalCompraCabecalho");
@@ -2467,6 +2499,12 @@
 
   function origemCompraMobileSemCaixa() {
     return window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
+  }
+
+  function atualizarFluxoMobileCompra() {
+    if (fluxoMobileCompra) {
+      fluxoMobileCompra.value = compraMobile() || origemCompraMobileSemCaixa() ? "1" : "0";
+    }
   }
 
   function camposOrigemCompraAtivos() {
@@ -3826,6 +3864,7 @@
 
   function enviarCompraComAcao(acao, botao) {
     sincronizarTodosPrecosUnitarios();
+    atualizarFluxoMobileCompra();
     if (acaoCompra) acaoCompra.value = acao;
     botaoEnvioAtual = botao || null;
     envioAcionadoPeloBotao = true;
@@ -3871,6 +3910,7 @@
       }
 
       sincronizarTodosPrecosUnitarios();
+      atualizarFluxoMobileCompra();
 
       if (acaoCompra && ["voltar_rascunho", "voltar_itens", "continuar_editando"].includes(acaoCompra.value)) {
         formCompra.dataset.enviando = "1";
@@ -3977,6 +4017,7 @@
     }
     fechamentoOrigemConfirmado = true;
     if (acaoCompra) acaoCompra.value = "confirmar_financeiro";
+    atualizarFluxoMobileCompra();
     if (formCompra.dataset.confirmarFinanceiroUrl) {
       formCompra.action = formCompra.dataset.confirmarFinanceiroUrl;
     }
@@ -4069,10 +4110,17 @@
   }
 
   organizarLayoutMobileCompra();
+  atualizarFluxoMobileCompra();
   if (typeof mobileQuery.addEventListener === "function") {
-    mobileQuery.addEventListener("change", organizarLayoutMobileCompra);
+    mobileQuery.addEventListener("change", function() {
+      organizarLayoutMobileCompra();
+      atualizarFluxoMobileCompra();
+    });
   } else if (typeof mobileQuery.addListener === "function") {
-    mobileQuery.addListener(organizarLayoutMobileCompra);
+    mobileQuery.addListener(function() {
+      organizarLayoutMobileCompra();
+      atualizarFluxoMobileCompra();
+    });
   }
   recalcular();
 
