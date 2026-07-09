@@ -2461,6 +2461,12 @@ class ProdutosIncompletosTests(TestCase):
     def _url_edicao(self):
         return reverse("estoque:produto_editar", kwargs={"pk": self.produto.pk})
 
+    def _valor_input_por_id(self, html, campo_id):
+        tag = re.search(rf'<input(?=[^>]*id="{campo_id}")[^>]*>', html, re.S)
+        self.assertIsNotNone(tag, f"Campo {campo_id} nao encontrado no HTML")
+        valor = re.search(r'value="([^"]*)"', tag.group(0))
+        return valor.group(1) if valor else ""
+
     def _dados_validos(self):
         return {
             "nome": "Produto Incompleto",
@@ -2495,6 +2501,14 @@ class ProdutosIncompletosTests(TestCase):
         self.assertContains(resposta, 'id="percentual_prazo"')
         self.assertContains(resposta, 'id="id_preco_prazo"')
 
+    def test_tela_completar_produto_incompleto_nao_inicializa_preco_final_com_compra(self):
+        resposta = self.client.get(self._url_edicao(), secure=True)
+
+        html = resposta.content.decode()
+        self.assertEqual(self._valor_input_por_id(html, "id_preco_compra"), "3.33")
+        self.assertEqual(self._valor_input_por_id(html, "id_preco_vista"), "")
+        self.assertEqual(self._valor_input_por_id(html, "id_preco_prazo"), "")
+
     def test_tela_completar_produto_incompleto_tem_ordem_enter_de_precos(self):
         resposta = self.client.get(self._url_edicao(), secure=True)
 
@@ -2519,6 +2533,7 @@ class ProdutosIncompletosTests(TestCase):
         self.assertContains(resposta, 'precoCampo.dataset.precoFinalManual = "1";')
         self.assertContains(resposta, "function atualizarPrecoFinalAoAlterarCompra")
         self.assertContains(resposta, "precoFinalEditadoManual(precoCampo)")
+        self.assertNotContains(resposta, "precoCampo.value = formatarDuasCasas(base);")
 
     def test_salvar_produto_incompleto_continua_funcionando(self):
         resposta = self.client.post(self._url_edicao(), self._dados_validos(), secure=True)
