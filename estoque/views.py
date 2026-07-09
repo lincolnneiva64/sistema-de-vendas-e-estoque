@@ -6261,18 +6261,12 @@ def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None,
         if match_lista_origem:
             lista_origem_compra = ListaCompraFornecedor.objects.filter(pk=match_lista_origem.group(1)).first()
 
-    precisa_saldos_financeiros = finalizando or compra is None or lista_origem_compra is not None
-    if precisa_saldos_financeiros:
-        conta_caixa = _conta_financeira_padrao("caixa")
-        conta_reserva = _conta_financeira_padrao("reserva")
-        conta_banco = _conta_financeira_padrao("banco")
-        saldo_caixa = _saldo_conta_financeira(conta_caixa) if conta_caixa else Decimal("0.00")
-        saldo_reserva = _saldo_conta_financeira(conta_reserva) if conta_reserva else Decimal("0.00")
-        saldo_banco = _saldo_conta_financeira(conta_banco) if conta_banco else Decimal("0.00")
-    else:
-        saldo_caixa = Decimal("0.00")
-        saldo_reserva = Decimal("0.00")
-        saldo_banco = Decimal("0.00")
+    conta_caixa = _conta_financeira_padrao("caixa")
+    conta_reserva = _conta_financeira_padrao("reserva")
+    conta_banco = _conta_financeira_padrao("banco")
+    saldo_caixa = _saldo_conta_financeira(conta_caixa) if conta_caixa else Decimal("0.00")
+    saldo_reserva = _saldo_conta_financeira(conta_reserva) if conta_reserva else Decimal("0.00")
+    saldo_banco = _saldo_conta_financeira(conta_banco) if conta_banco else Decimal("0.00")
 
     return {
         "fornecedores": Fornecedor.objects.filter(ativo=True).order_by("nome", "id"),

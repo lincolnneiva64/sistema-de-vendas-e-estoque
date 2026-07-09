@@ -2497,6 +2497,10 @@
     });
   }
 
+  function totalCompraCentavosOrigem() {
+    return Math.round(numero(totalCompra ? totalCompra.textContent : "0") * 100);
+  }
+
   function origemCompraMobileSemCaixa() {
     return window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
   }
@@ -2567,7 +2571,7 @@
   }
 
   function estadoOrigemDinheiroCompra() {
-    const total = Math.round(numero(totalCompra ? totalCompra.textContent : "0") * 100);
+    const total = totalCompraCentavosOrigem();
     if (origemCompraMobileSemCaixa()) {
       definirCampoPorCentavos(origemCaixaCompra, 0);
     }
@@ -2629,9 +2633,15 @@
 
   function abrirOrigemDinheiroCompra() {
     if (!origemDinheiroCompra) return;
-    definirCampoPorCentavos(origemCaixaCompra, 0);
-    definirCampoPorCentavos(origemReservaCompra, 0);
-    definirCampoPorCentavos(origemBancoCompra, 0);
+    if (origemCompraMobileSemCaixa()) {
+      definirCampoPorCentavos(origemCaixaCompra, 0);
+      definirCampoPorCentavos(origemReservaCompra, totalCompraCentavosOrigem());
+      definirCampoPorCentavos(origemBancoCompra, 0);
+    } else {
+      definirCampoPorCentavos(origemCaixaCompra, 0);
+      definirCampoPorCentavos(origemReservaCompra, 0);
+      definirCampoPorCentavos(origemBancoCompra, 0);
+    }
     mostrarErroOrigem("");
     atualizarResumoOrigemDinheiroCompra();
     origemDinheiroCompra.classList.add("visivel");
@@ -2696,6 +2706,14 @@
       return textoDistribuicaoOrigemCompra() + " J? distribu?do: " + moeda(estado.soma / 100) + ". Total: " + moeda(estado.total / 100) + ".";
     }
     return "";
+  }
+
+  function preencherBancoPixComRestanteMobile() {
+    if (!origemCompraMobileSemCaixa()) return;
+    const reserva = centavosCampoOrigem(origemReservaCompra);
+    if (reserva.invalido) return;
+    definirCampoPorCentavos(origemCaixaCompra, 0);
+    definirCampoPorCentavos(origemBancoCompra, totalCompraCentavosOrigem() - reserva.valor);
   }
 
   function normalizarBusca(valor) {
@@ -3973,6 +3991,9 @@
     });
     campo.addEventListener("input", function() {
       mostrarErroOrigem("");
+      if (campo === origemReservaCompra) {
+        preencherBancoPixComRestanteMobile();
+      }
       atualizarResumoOrigemDinheiroCompra();
     });
     campo.addEventListener("blur", function() {

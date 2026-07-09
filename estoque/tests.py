@@ -389,8 +389,35 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, "No celular, distribua o total entre Sangria/Reserva e Banco/Pix.")
         self.assertContains(resposta, "return [origemReservaCompra, origemBancoCompra].filter(Boolean);")
         self.assertContains(resposta, "definirCampoPorCentavos(origemCaixaCompra, 0);")
+        self.assertContains(resposta, "definirCampoPorCentavos(origemReservaCompra, totalCompraCentavosOrigem());")
+        self.assertContains(resposta, "definirCampoPorCentavos(origemBancoCompra, 0);")
+        self.assertContains(resposta, "focarSelecionando(primeiroCampoOrigemCompra());")
+        self.assertContains(resposta, "function preencherBancoPixComRestanteMobile()")
+        self.assertContains(resposta, "if (campo === origemReservaCompra)")
+        self.assertContains(resposta, "definirCampoPorCentavos(origemBancoCompra, totalCompraCentavosOrigem() - reserva.valor);")
         self.assertContains(resposta, '<option value="cartao_credito"')
         self.assertContains(resposta, '<option value="cartao_debito"')
+
+    def test_mobile_rascunho_exibe_saldos_reais_no_modal(self):
+        compra = self._criar_compra_rascunho_com_item()
+        for chave, valor in {
+            "reserva": Decimal("261.80"),
+            "banco": Decimal("985.35"),
+        }.items():
+            MovimentoFinanceiro.objects.create(
+                conta=views._conta_financeira_padrao(chave),
+                tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+                valor=valor,
+                data=timezone.localdate(),
+                origem="teste_saldo_mobile_compra",
+            )
+
+        resposta = self.client.get(reverse("estoque:compra_editar", kwargs={"pk": compra.pk}), secure=True)
+
+        self.assertContains(resposta, "Saldo atual: R$ 261,80")
+        self.assertContains(resposta, "Saldo atual: R$ 985,35")
+        self.assertContains(resposta, "Sangria / Reserva")
+        self.assertContains(resposta, "Banco/Pix")
 
     def test_mobile_salvar_rascunho_nao_altera_estoque_financeiro_ou_conta(self):
         compra = self._criar_compra_rascunho_com_item()
