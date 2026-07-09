@@ -105,6 +105,67 @@ class FechamentoCompraFinanceiroTests(TestCase):
         dados.update(alteracoes)
         return dados
 
+    def _criar_compra_para_alerta_rascunho(self, **campos):
+        dados = {
+            "fornecedor": self.fornecedor,
+            "data_compra": timezone.localdate(),
+            "tipo_pagamento": "avista",
+            "total": Decimal("100.00"),
+            "status": Compra.STATUS_RASCUNHO,
+            "cancelada": False,
+        }
+        dados.update(campos)
+        return Compra.objects.create(**dados)
+
+    def test_vendas_nao_exibe_aviso_compras_rascunho_sem_pendencia(self):
+        resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+
+        self.assertNotContains(resposta, "compra em rascunho aguardando finalização")
+        self.assertNotContains(resposta, "Continuar compra")
+
+    def test_vendas_exibe_aviso_para_uma_compra_rascunho(self):
+        compra = self._criar_compra_para_alerta_rascunho()
+
+        resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+
+        self.assertContains(resposta, "Aviso:")
+        self.assertContains(resposta, "1 compra em rascunho aguardando finalização")
+        self.assertContains(resposta, "Continuar compra")
+        self.assertContains(resposta, reverse("estoque:compra_editar", kwargs={"pk": compra.pk}))
+
+    def test_vendas_exibe_contador_para_multiplas_compras_rascunho(self):
+        self._criar_compra_para_alerta_rascunho()
+        self._criar_compra_para_alerta_rascunho()
+
+        resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+
+        self.assertContains(resposta, "2 compras em rascunho aguardando finalização")
+        self.assertContains(resposta, "Ver compras")
+        self.assertContains(resposta, reverse("estoque:compras_lista"))
+        self.assertNotContains(resposta, "Continuar compra")
+
+    def test_vendas_ignora_compras_finalizadas_e_canceladas_no_aviso_rascunho(self):
+        self._criar_compra_para_alerta_rascunho(status=Compra.STATUS_FINALIZADA)
+        self._criar_compra_para_alerta_rascunho(status=Compra.STATUS_RASCUNHO, cancelada=True)
+        self._criar_compra_para_alerta_rascunho(status=Compra.STATUS_CANCELADA, cancelada=True)
+
+        resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+
+        self.assertNotContains(resposta, "compra em rascunho aguardando finalização")
+        self.assertNotContains(resposta, "Continuar compra")
+
+    def test_home_e_compras_lista_exibem_aviso_compras_rascunho(self):
+        compra = self._criar_compra_para_alerta_rascunho()
+
+        resposta_home = self.client.get(reverse("estoque:home"), secure=True)
+        resposta_compras = self.client.get(reverse("estoque:compras_lista"), secure=True)
+
+        self.assertContains(resposta_home, "Compras em rascunho")
+        self.assertContains(resposta_home, "1 compra em rascunho aguardando finalização")
+        self.assertContains(resposta_home, reverse("estoque:compra_editar", kwargs={"pk": compra.pk}))
+        self.assertContains(resposta_compras, "1 compra em rascunho aguardando finalização")
+        self.assertContains(resposta_compras, "Continuar compra")
+
     def test_nova_compra_exibe_apenas_tipos_pagamento_simplificados(self):
         resposta = self.client.get(self.url, secure=True)
 

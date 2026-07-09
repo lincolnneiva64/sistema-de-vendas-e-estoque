@@ -1135,6 +1135,28 @@ def ordem_postada(valor, padrao=9999):
         return padrao
 
 
+def _contexto_compras_rascunho_alerta():
+    compras_qs = (
+        Compra.objects
+        .filter(status=Compra.STATUS_RASCUNHO, cancelada=False)
+        .order_by("-data_compra", "-id")
+    )
+    quantidade = compras_qs.count()
+    compra = compras_qs.first() if quantidade == 1 else None
+    if compra:
+        url = f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1"
+        texto_botao = "Continuar compra"
+    else:
+        url = reverse("estoque:compras_lista")
+        texto_botao = "Ver compras"
+    return {
+        "compras_rascunho_qtd": quantidade,
+        "compra_rascunho_unica": compra,
+        "compras_rascunho_url": url,
+        "compras_rascunho_botao": texto_botao,
+    }
+
+
 def home(request):
     produto_edicao = None
 
@@ -1260,9 +1282,10 @@ def home(request):
         request,
         "estoque/home.html",
         {
-        "produtos_incompletos_home": produtos_incompletos_home,
-        "produtos_incompletos_home_qtd": produtos_incompletos_home_qtd,
-        "mostrar_produtos_incompletos_home": mostrar_produtos_incompletos_home,
+            **_contexto_compras_rascunho_alerta(),
+            "produtos_incompletos_home": produtos_incompletos_home,
+            "produtos_incompletos_home_qtd": produtos_incompletos_home_qtd,
+            "mostrar_produtos_incompletos_home": mostrar_produtos_incompletos_home,
 
             "produtos": produtos,
             "produto_edicao": produto_edicao,
@@ -5921,6 +5944,7 @@ def compras_lista(request):
         request,
         "estoque/compras_lista.html",
         {
+            **_contexto_compras_rascunho_alerta(),
             "compras": compras_lista_filtrada,
             "termo": fornecedor_filtro,
             "compra_filtro": compra_filtro,
@@ -8395,6 +8419,7 @@ def vendas(request):
     mostrar_produtos_incompletos_vendas = request.GET.get("incompletos") == "1"
 
     return render(request, 'estoque/vendas_layout_teste.html', {
+        **_contexto_compras_rascunho_alerta(),
         'produtos_incompletos_vendas': produtos_incompletos_vendas,
         'produtos_incompletos_vendas_qtd': produtos_incompletos_vendas_qtd,
         'mostrar_produtos_incompletos_vendas': mostrar_produtos_incompletos_vendas,

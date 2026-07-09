@@ -1346,6 +1346,15 @@ td:first-child {
   {% endif %}
 </section>
 {% endif %}
+
+{% if compras_rascunho_qtd %}
+<section class="vendas-produtos-incompletos" id="vendas-compras-rascunho">
+  <div class="vendas-produtos-incompletos-topo">
+    <span><strong>Aviso:</strong> {{ compras_rascunho_qtd }} compra{{ compras_rascunho_qtd|pluralize }} em rascunho aguardando finalização.</span>
+    <a class="vendas-produtos-incompletos-btn" href="{{ compras_rascunho_url }}">{{ compras_rascunho_botao }}</a>
+  </div>
+</section>
+{% endif %}
 <!-- AVISO PRODUTOS INCOMPLETOS VENDAS - FIM -->
 
 

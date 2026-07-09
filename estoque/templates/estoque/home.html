@@ -115,6 +115,18 @@
   {% endif %}
 </section>
 {% endif %}
+
+{% if compras_rascunho_qtd %}
+<section class="produtos-incompletos-alerta" id="compras-rascunho-alerta">
+  <div class="produtos-incompletos-topo">
+    <div>
+      <h2>Compras em rascunho</h2>
+      <p>Aviso: {{ compras_rascunho_qtd }} compra{{ compras_rascunho_qtd|pluralize }} em rascunho aguardando finalização.</p>
+    </div>
+    <a class="produtos-incompletos-btn" href="{{ compras_rascunho_url }}">{{ compras_rascunho_botao }}</a>
+  </div>
+</section>
+{% endif %}
 <!-- AVISO PRODUTOS INCOMPLETOS - FIM -->
 
 

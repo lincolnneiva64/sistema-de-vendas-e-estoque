@@ -417,6 +417,37 @@
   color: #7c3f06 !important;
 }
 
+.compras-rascunho-alerta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 9px 11px;
+  border: 1.5px solid #f59e0b;
+  border-radius: 12px;
+  background: #fffbeb;
+  color: #172033;
+  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.10);
+  font-size: .9rem;
+  font-weight: 800;
+}
+
+.compras-rascunho-alerta strong {
+  color: #92400e;
+  font-weight: 950;
+}
+
+@media (max-width: 768px) {
+  .compras-rascunho-alerta {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .compras-rascunho-alerta .compras-lista-btn {
+    width: 100%;
+  }
+}
+
 </style>
 
 <div class="compras-lista-page">
@@ -432,6 +463,13 @@
 
     </div>
   </header>
+
+  {% if compras_rascunho_qtd %}
+    <section class="compras-rascunho-alerta" id="compras-rascunho-alerta">
+      <span><strong>Aviso:</strong> {{ compras_rascunho_qtd }} compra{{ compras_rascunho_qtd|pluralize }} em rascunho aguardando finalização.</span>
+      <a class="compras-lista-btn compras-lista-btn-secondary compras-lista-btn-compact" href="{{ compras_rascunho_url }}">{{ compras_rascunho_botao }}</a>
+    </section>
+  {% endif %}
 
   {% if messages %}
     {% for message in messages %}
