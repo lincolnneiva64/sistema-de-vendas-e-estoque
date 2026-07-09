@@ -1652,6 +1652,59 @@ td.listas-fornecedor-total {
           </tbody>
         </table>
       </div>
+      <div class="listas-fornecedor-mobile-cards" aria-label="Listas por fornecedor">
+        {% for lista in listas %}
+          <article class="listas-fornecedor-mobile-card{% if lista.compra_gerada %} com-compra{% endif %}">
+            <div class="listas-fornecedor-mobile-card-topo">
+              <strong>Lista #{{ lista.id }}</strong>
+              {% if lista.compra_gerada %}
+                <span class="listas-fornecedor-status-compra status-{{ lista.compra_gerada.status|default:'sem-status' }}">{{ lista.compra_gerada.get_status_display }}</span>
+              {% else %}
+                <span class="listas-fornecedor-status {{ lista.status }}">{{ lista.get_status_display }}</span>
+              {% endif %}
+            </div>
+
+            <dl class="listas-fornecedor-mobile-dados">
+              <div>
+                <dt>Fornecedor</dt>
+                <dd>{% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}</dd>
+              </div>
+              <div>
+                <dt>Data</dt>
+                <dd>{{ lista.data_lista|date:"d/m/Y" }}</dd>
+              </div>
+              <div>
+                <dt>Total</dt>
+                <dd class="listas-fornecedor-mobile-total">R$ {{ lista.total_lista|floatformat:2 }}</dd>
+              </div>
+              <div>
+                <dt>Situacao</dt>
+                <dd>
+                  {% if lista.compra_gerada %}
+                    Lista #{{ lista.id }} virou Compra #{{ lista.compra_gerada.id }} - {{ lista.compra_gerada.get_status_display }}
+                  {% else %}
+                    {{ lista.get_status_display }} - {{ lista.data_inicio_periodo|date:"d/m/Y" }} ate {{ lista.data_fim_periodo|date:"d/m/Y" }}
+                  {% endif %}
+                </dd>
+              </div>
+            </dl>
+
+            <div class="listas-fornecedor-mobile-acoes" aria-label="Acoes da Lista #{{ lista.id }}">
+              <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
+              {% if lista.status != "cancelada" %}<a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar Lista</a>{% endif %}
+              <a class="listas-fornecedor-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Enviar ao Vendedor</a>
+              <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
+              {% if lista.compra_gerada %}
+                {% if lista.compra_gerada.status == "finalizada" %}
+                  <a class="listas-fornecedor-btn listas-fornecedor-btn-compra" href="{% url 'estoque:compras_detalhe' lista.compra_gerada.id %}">Ver Compra</a>
+                {% else %}
+                  <a class="listas-fornecedor-btn listas-fornecedor-btn-compra" href="{% url 'estoque:compra_editar' lista.compra_gerada.id %}?continuar_itens=1">Ver Compra</a>
+                {% endif %}
+              {% endif %}
+            </div>
+          </article>
+        {% endfor %}
+      </div>
     {% else %}
       <div class="listas-fornecedor-empty">Nenhuma lista gravada encontrada.</div>
     {% endif %}
@@ -2449,6 +2502,124 @@ td.listas-fornecedor-total {
     height: 30px !important;
     padding: 0 8px !important;
     font-size: .80rem !important;
+  }
+}
+
+.listas-fornecedor-mobile-cards {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .listas-fornecedor-table-wrap {
+    display: none !important;
+  }
+
+  .listas-fornecedor-table-card {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  .listas-fornecedor-mobile-cards {
+    display: grid !important;
+    gap: 12px !important;
+  }
+
+  .listas-fornecedor-mobile-card {
+    display: grid !important;
+    gap: 12px !important;
+    width: 100% !important;
+    padding: 14px !important;
+    border: 1px solid #e9b8c0 !important;
+    border-radius: 12px !important;
+    background: #fff !important;
+    box-shadow: 0 8px 18px rgba(127, 29, 29, .08) !important;
+    box-sizing: border-box !important;
+  }
+
+  .listas-fornecedor-mobile-card.com-compra {
+    border-color: #f7a8b8 !important;
+    background: #fff8f9 !important;
+  }
+
+  .listas-fornecedor-mobile-card-topo {
+    display: flex !important;
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+  }
+
+  .listas-fornecedor-mobile-card-topo strong {
+    color: #7f1d1d !important;
+    font-size: 1rem !important;
+    font-weight: 950 !important;
+    line-height: 1.2 !important;
+  }
+
+  .listas-fornecedor-mobile-dados {
+    display: grid !important;
+    gap: 8px !important;
+    margin: 0 !important;
+  }
+
+  .listas-fornecedor-mobile-dados div {
+    display: grid !important;
+    grid-template-columns: 88px minmax(0, 1fr) !important;
+    gap: 8px !important;
+    align-items: start !important;
+  }
+
+  .listas-fornecedor-mobile-dados dt {
+    margin: 0 !important;
+    color: #64748b !important;
+    font-size: .76rem !important;
+    font-weight: 900 !important;
+    text-transform: uppercase !important;
+  }
+
+  .listas-fornecedor-mobile-dados dd {
+    min-width: 0 !important;
+    margin: 0 !important;
+    color: #172033 !important;
+    font-weight: 800 !important;
+    line-height: 1.25 !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .listas-fornecedor-mobile-total {
+    color: #991b1b !important;
+    font-weight: 950 !important;
+  }
+
+  .listas-fornecedor-mobile-acoes {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .listas-fornecedor-mobile-acoes .listas-fornecedor-btn,
+  .listas-fornecedor-mobile-acoes .listas-fornecedor-btn-compra {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 42px !important;
+    height: auto !important;
+    padding: 9px 8px !important;
+    font-size: .82rem !important;
+    line-height: 1.15 !important;
+    white-space: normal !important;
+    text-align: center !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .listas-fornecedor-mobile-dados div {
+    grid-template-columns: 1fr !important;
+    gap: 3px !important;
+  }
+
+  .listas-fornecedor-mobile-acoes {
+    grid-template-columns: 1fr !important;
   }
 }
 
