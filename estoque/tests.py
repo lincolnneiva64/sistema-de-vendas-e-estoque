@@ -1171,6 +1171,127 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.lista.refresh_from_db()
         return token
 
+    def _criar_lista_fornecedor_conferencia(self, nome_produto, status=ListaCompraFornecedor.STATUS_ABERTA):
+        produto = Produto.objects.create(
+            nome=nome_produto,
+            preco_compra=Decimal("10.00"),
+            preco_vista=Decimal("15.00"),
+            preco_prazo=Decimal("16.00"),
+            quantidade=Decimal("10.000"),
+        )
+        lista = ListaCompraFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_lista=timezone.localdate(),
+            data_inicio_periodo=timezone.localdate(),
+            data_fim_periodo=timezone.localdate(),
+            total_lista=Decimal("20.00"),
+            status=status,
+        )
+        ItemListaCompraFornecedor.objects.create(
+            lista=lista,
+            produto=produto,
+            estoque_atual=Decimal("10.000"),
+            estoque_minimo=Decimal("0.000"),
+            quantidade_final=Decimal("2.000"),
+            unidade="UN",
+            preco_compra=Decimal("10.00"),
+            preco_unitario=Decimal("10.00"),
+            total=Decimal("20.00"),
+        )
+        return lista
+
+    def _criar_compra_vinculada_lista_fornecedor(self, lista, status=Compra.STATUS_RASCUNHO):
+        return Compra.objects.create(
+            fornecedor=self.fornecedor,
+            data_compra=timezone.localdate(),
+            tipo_pagamento="",
+            total=lista.total_lista,
+            status=status,
+            observacao=f"Gerada a partir da Lista de Compras #{lista.id}",
+        )
+
+    def test_consulta_mobile_principal_mostra_lista_sem_compra_nao_cancelada_mesmo_com_status_filtrado(self):
+        lista_aberta = self._criar_lista_fornecedor_conferencia("Produto Mobile Aberta Sem Compra")
+        lista_enviada = self._criar_lista_fornecedor_conferencia(
+            "Produto Mobile Enviada Sem Compra",
+            status=ListaCompraFornecedor.STATUS_ENVIADA,
+        )
+        resposta = self.client.get(
+            reverse("estoque:compras_listas_fornecedor"),
+            {"status": ListaCompraFornecedor.STATUS_FINALIZADA},
+            secure=True,
+        )
+
+        listas_mobile_ids = {lista.id for lista in resposta.context["listas_mobile"]}
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(lista_aberta.id, listas_mobile_ids)
+        self.assertIn(lista_enviada.id, listas_mobile_ids)
+
+    def test_consulta_mobile_principal_nao_mostra_lista_com_compra_vinculada(self):
+        lista = self._criar_lista_fornecedor_conferencia("Produto Mobile Com Compra Vinculada")
+        self._criar_compra_vinculada_lista_fornecedor(lista)
+
+        resposta = self.client.get(reverse("estoque:compras_listas_fornecedor"), secure=True)
+
+        listas_mobile_ids = {lista.id for lista in resposta.context["listas_mobile"]}
+        self.assertNotIn(lista.id, listas_mobile_ids)
+
+    def test_consulta_mobile_principal_nao_mostra_lista_cancelada(self):
+        lista = self._criar_lista_fornecedor_conferencia(
+            "Produto Mobile Cancelada Fora Principal",
+            status=ListaCompraFornecedor.STATUS_CANCELADA,
+        )
+
+        resposta = self.client.get(reverse("estoque:compras_listas_fornecedor"), secure=True)
+
+        listas_mobile_ids = {lista.id for lista in resposta.context["listas_mobile"]}
+        self.assertNotIn(lista.id, listas_mobile_ids)
+
+    def test_consulta_mobile_historico_mostra_lista_com_compra_vinculada(self):
+        lista = self._criar_lista_fornecedor_conferencia("Produto Mobile Historico Com Compra")
+        self._criar_compra_vinculada_lista_fornecedor(lista, status=Compra.STATUS_FINALIZADA)
+
+        resposta = self.client.get(
+            reverse("estoque:compras_listas_fornecedor"),
+            {"mobile": "historico"},
+            secure=True,
+        )
+
+        listas_mobile_ids = {lista.id for lista in resposta.context["listas_mobile"]}
+        self.assertIn(lista.id, listas_mobile_ids)
+
+    def test_consulta_mobile_historico_mostra_lista_cancelada(self):
+        lista = self._criar_lista_fornecedor_conferencia(
+            "Produto Mobile Historico Cancelada",
+            status=ListaCompraFornecedor.STATUS_CANCELADA,
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:compras_listas_fornecedor"),
+            {"mobile": "historico"},
+            secure=True,
+        )
+
+        listas_mobile_ids = {lista.id for lista in resposta.context["listas_mobile"]}
+        self.assertIn(lista.id, listas_mobile_ids)
+
+    def test_consulta_desktop_mantem_regra_atual_do_filtro_de_status(self):
+        lista_aberta = self._criar_lista_fornecedor_conferencia("Produto Desktop Aberta")
+        lista_enviada = self._criar_lista_fornecedor_conferencia(
+            "Produto Desktop Enviada",
+            status=ListaCompraFornecedor.STATUS_ENVIADA,
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:compras_listas_fornecedor"),
+            {"status": ListaCompraFornecedor.STATUS_ENVIADA},
+            secure=True,
+        )
+
+        listas_ids = {lista.id for lista in resposta.context["listas"]}
+        self.assertIn(lista_enviada.id, listas_ids)
+        self.assertNotIn(lista_aberta.id, listas_ids)
+
     def test_detalhe_exibe_checklist_de_conferencia(self):
         resposta = self.client.get(
             reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": self.lista.pk}),

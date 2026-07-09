@@ -2683,6 +2683,53 @@ td.listas-fornecedor-total {
   }
 }
 
+@media (max-width: 640px) {
+  .listas-fornecedor-filter-card {
+    margin-bottom: 10px !important;
+    padding: 10px !important;
+    border-radius: 10px !important;
+  }
+
+  .listas-fornecedor-filter-card form {
+    display: grid !important;
+    gap: 8px !important;
+  }
+
+  .listas-fornecedor-filtros {
+    gap: 8px !important;
+  }
+
+  .listas-fornecedor-field label {
+    margin-bottom: 4px !important;
+    font-size: .70rem !important;
+  }
+
+  .listas-fornecedor-field input,
+  .listas-fornecedor-field select {
+    min-height: 38px !important;
+    padding: 7px 10px !important;
+    border-radius: 8px !important;
+  }
+
+  .listas-fornecedor-filter-actions {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    margin-top: 0 !important;
+  }
+
+  .listas-fornecedor-filter-actions .listas-fornecedor-btn {
+    width: 100% !important;
+    min-height: 40px !important;
+    height: 40px !important;
+    padding: 0 12px !important;
+    border-radius: 8px !important;
+    font-size: .86rem !important;
+    line-height: 1 !important;
+    box-shadow: none !important;
+  }
+}
+
 </style>
 
 {% endblock %}

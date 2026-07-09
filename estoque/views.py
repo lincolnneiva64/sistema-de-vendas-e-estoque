@@ -4739,10 +4739,12 @@ def compras_listas_fornecedor(request):
             if lista.status == ListaCompraFornecedor.STATUS_CANCELADA or lista.compra_gerada
         ]
     else:
+        listas_mobile_base = listas_base.exclude(status=ListaCompraFornecedor.STATUS_CANCELADA)
+        listas_mobile_compras = _anotar_compras_geradas_listas_fornecedor(listas_mobile_base)
         listas_mobile = [
             lista
-            for lista in listas
-            if lista.status != ListaCompraFornecedor.STATUS_CANCELADA and not lista.compra_gerada
+            for lista in listas_mobile_compras
+            if not lista.compra_gerada
         ]
 
     return render(
