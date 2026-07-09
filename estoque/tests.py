@@ -2421,6 +2421,24 @@ class ComprasListaFornecedorGravarTests(TestCase):
         )
         return lista
 
+    def criar_compra_vinculada(self, lista, status=Compra.STATUS_RASCUNHO, cancelada=False):
+        return Compra.objects.create(
+            fornecedor=self.fornecedor,
+            data_compra=timezone.localdate(),
+            tipo_pagamento="",
+            total=lista.total_lista,
+            status=status,
+            cancelada=cancelada,
+            observacao=f"Gerada a partir da Lista de Compras #{lista.id}",
+        )
+
+    def assert_mensagem_resposta(self, resposta, trecho):
+        mensagens = [str(mensagem) for mensagem in resposta.context["messages"]]
+        self.assertTrue(
+            any(trecho in mensagem for mensagem in mensagens),
+            f"Mensagem com trecho {trecho!r} nao encontrada em {mensagens!r}",
+        )
+
     def test_nova_lista_exibe_botao_mobile_gravar_lista(self):
         resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)
 
@@ -2434,6 +2452,10 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, "Gravar e Gerar Compra")
         self.assertContains(resposta, "Revise os itens e toque em Gravar lista para salvar, ou em Gravar e Gerar Compra")
         self.assertContains(resposta, "focarCampoSeguroDepoisDeRemover")
+        self.assertContains(resposta, "proximoItemSeguroAntesRemover")
+        self.assertContains(resposta, "nextElementSibling")
+        self.assertContains(resposta, "scrollIntoView")
+        self.assertContains(resposta, 'document.getElementById("produtoManualBuscaSugestao")')
         self.assertContains(resposta, '.matches(".sugestao-remover-item")')
 
     def test_gravar_e_gerar_compra_cria_compra_rascunho_sem_finalizar(self):
@@ -2478,19 +2500,14 @@ class ComprasListaFornecedorGravarTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "Gerar Compra")
+        self.assertContains(resposta, "Cancelar Lista")
+        self.assertNotContains(resposta, "Excluir Lista")
         self.assertContains(resposta, 'data-gerar-compra-lista-form="1"')
 
     def test_ver_lista_com_compra_rascunho_oferece_continuar_sem_duplicar(self):
         produto = self.criar_produto("Produto Ver Continuar")
         lista = self.criar_lista_com_item(produto)
-        compra = Compra.objects.create(
-            fornecedor=self.fornecedor,
-            data_compra=timezone.localdate(),
-            tipo_pagamento="",
-            total=Decimal("20.00"),
-            status=Compra.STATUS_RASCUNHO,
-            observacao=f"Gerada a partir da Lista de Compras #{lista.id}",
-        )
+        compra = self.criar_compra_vinculada(lista)
 
         resposta = self.client.get(reverse("estoque:compras_lista_fornecedor_ver", kwargs={"pk": lista.pk}), secure=True)
 
@@ -2498,6 +2515,157 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, "Continuar Compra")
         self.assertContains(resposta, reverse("estoque:compra_editar", kwargs={"pk": compra.pk}))
         self.assertNotContains(resposta, 'data-gerar-compra-lista-form="1"')
+        self.assertNotContains(resposta, "Cancelar Lista")
+
+    def test_consulta_listas_exibe_cancelar_para_lista_sem_compra(self):
+        produto = self.criar_produto("Produto Cancelar Lista")
+        lista = self.criar_lista_com_item(produto)
+
+        resposta = self.client.get(reverse("estoque:compras_listas_fornecedor"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Cancelar Lista")
+        self.assertNotContains(resposta, "Excluir Lista")
+        self.assertContains(resposta, reverse("estoque:compras_lista_fornecedor_cancelar", kwargs={"pk": lista.pk}))
+        self.assertContains(resposta, "Tem certeza que deseja cancelar esta lista?")
+        self.assertContains(resposta, "Listas canceladas")
+
+    def test_consulta_principal_mostra_aberta_e_esconde_cancelada(self):
+        produto_aberto = self.criar_produto("Produto Lista Aberta")
+        produto_cancelado = self.criar_produto("Produto Lista Cancelada")
+        lista_aberta = self.criar_lista_com_item(produto_aberto)
+        lista_cancelada = self.criar_lista_com_item(produto_cancelado)
+        lista_cancelada.status = ListaCompraFornecedor.STATUS_CANCELADA
+        lista_cancelada.save(update_fields=["status", "atualizado_em"])
+
+        resposta = self.client.get(reverse("estoque:compras_listas_fornecedor"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, f"#{lista_aberta.id}")
+        self.assertNotContains(resposta, f"#{lista_cancelada.id}")
+        self.assertContains(resposta, "Listas canceladas")
+
+    def test_consulta_canceladas_mostra_cancelada_sem_misturar_ativas(self):
+        produto_aberto = self.criar_produto("Produto Historico Aberta")
+        produto_cancelado = self.criar_produto("Produto Historico Cancelada")
+        lista_aberta = self.criar_lista_com_item(produto_aberto)
+        lista_cancelada = self.criar_lista_com_item(produto_cancelado)
+        lista_cancelada.status = ListaCompraFornecedor.STATUS_CANCELADA
+        lista_cancelada.save(update_fields=["status", "atualizado_em"])
+
+        resposta = self.client.get(
+            reverse("estoque:compras_listas_fornecedor"),
+            {"status": ListaCompraFornecedor.STATUS_CANCELADA},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, f"#{lista_cancelada.id}")
+        self.assertNotContains(resposta, f"#{lista_aberta.id}")
+        self.assertContains(resposta, "Listas ativas")
+
+    def test_cancelar_lista_sem_compra_marca_cancelada_sem_efeitos_financeiros(self):
+        produto = self.criar_produto("Produto Cancelar Sem Compra", quantidade=Decimal("8.000"))
+        lista = self.criar_lista_com_item(produto)
+        estoque_antes = produto.quantidade
+        compras_antes = Compra.objects.count()
+        contas_antes = ContaPagar.objects.count()
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_cancelar", kwargs={"pk": lista.pk}),
+            secure=True,
+        )
+
+        lista.refresh_from_db()
+        produto.refresh_from_db()
+        self.assertRedirects(resposta, reverse("estoque:compras_listas_fornecedor"), fetch_redirect_response=False)
+        self.assertEqual(lista.status, ListaCompraFornecedor.STATUS_CANCELADA)
+        self.assertEqual(lista.itens.count(), 1)
+        self.assertEqual(produto.quantidade, estoque_antes)
+        self.assertEqual(Compra.objects.count(), compras_antes)
+        self.assertEqual(ContaPagar.objects.count(), contas_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+
+        resposta_principal = self.client.get(reverse("estoque:compras_listas_fornecedor"), secure=True)
+        resposta_canceladas = self.client.get(
+            reverse("estoque:compras_listas_fornecedor"),
+            {"status": ListaCompraFornecedor.STATUS_CANCELADA},
+            secure=True,
+        )
+        self.assertNotContains(resposta_principal, f"#{lista.id}")
+        self.assertContains(resposta_canceladas, f"#{lista.id}")
+
+    def test_cancelar_lista_com_compra_rascunho_bloqueia(self):
+        produto = self.criar_produto("Produto Bloqueio Rascunho")
+        lista = self.criar_lista_com_item(produto)
+        self.criar_compra_vinculada(lista, status=Compra.STATUS_RASCUNHO)
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_cancelar", kwargs={"pk": lista.pk}),
+            secure=True,
+            follow=True,
+        )
+
+        lista.refresh_from_db()
+        self.assert_mensagem_resposta(resposta, "nao pode ser cancelada")
+        self.assertNotEqual(lista.status, ListaCompraFornecedor.STATUS_CANCELADA)
+        self.assertEqual(Compra.objects.count(), 1)
+
+    def test_cancelar_lista_com_compra_finalizada_bloqueia(self):
+        produto = self.criar_produto("Produto Bloqueio Finalizada")
+        lista = self.criar_lista_com_item(produto)
+        self.criar_compra_vinculada(lista, status=Compra.STATUS_FINALIZADA)
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_cancelar", kwargs={"pk": lista.pk}),
+            secure=True,
+            follow=True,
+        )
+
+        lista.refresh_from_db()
+        self.assert_mensagem_resposta(resposta, "nao pode ser cancelada")
+        self.assertNotEqual(lista.status, ListaCompraFornecedor.STATUS_CANCELADA)
+        self.assertEqual(Compra.objects.count(), 1)
+
+    def test_cancelar_lista_com_compra_cancelada_vinculada_bloqueia(self):
+        produto = self.criar_produto("Produto Bloqueio Cancelada")
+        lista = self.criar_lista_com_item(produto)
+        self.criar_compra_vinculada(lista, status=Compra.STATUS_CANCELADA, cancelada=True)
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_cancelar", kwargs={"pk": lista.pk}),
+            secure=True,
+            follow=True,
+        )
+
+        lista.refresh_from_db()
+        self.assert_mensagem_resposta(resposta, "nao pode ser cancelada")
+        self.assertNotEqual(lista.status, ListaCompraFornecedor.STATUS_CANCELADA)
+        self.assertEqual(Compra.objects.count(), 1)
+
+    def test_consulta_listas_nao_exibe_cancelar_para_lista_com_compra_gerada(self):
+        produto = self.criar_produto("Produto Sem Cancelar Com Compra")
+        lista = self.criar_lista_com_item(produto)
+        self.criar_compra_vinculada(lista, status=Compra.STATUS_RASCUNHO)
+
+        resposta = self.client.get(reverse("estoque:compras_listas_fornecedor"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Lista #")
+        self.assertNotContains(resposta, "Cancelar Lista")
+
+    def test_lista_cancelada_nao_oferece_gerar_compra(self):
+        produto = self.criar_produto("Produto Cancelado Sem Gerar")
+        lista = self.criar_lista_com_item(produto)
+        lista.status = ListaCompraFornecedor.STATUS_CANCELADA
+        lista.save(update_fields=["status", "atualizado_em"])
+
+        resposta = self.client.get(reverse("estoque:compras_lista_fornecedor_ver", kwargs={"pk": lista.pk}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotContains(resposta, "Gerar Compra")
+        self.assertNotContains(resposta, "Cancelar Lista")
 
     def test_item_removido_nao_e_gravado_no_post(self):
         produto_valido = self.criar_produto("Produto Valido")

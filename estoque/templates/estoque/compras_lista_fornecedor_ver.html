@@ -161,6 +161,12 @@
     color: #166534;
   }
 
+  .lista-ver-btn.danger {
+    background: #fff1f2;
+    border-color: #fecdd3;
+    color: #9f1239;
+  }
+
   .lista-ver-card {
     background: #fff;
     border: 1px solid #f0c9cf;
@@ -287,15 +293,19 @@
       <a class="lista-ver-btn primary" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
 
       {% if compra_gerada %}
-        {% if compra_gerada.status == "finalizada" %}
-          <a class="lista-ver-btn primary" href="{% url 'estoque:compras_detalhe' compra_gerada.id %}">Ver Compra</a>
-        {% else %}
+        {% if compra_gerada.status == "rascunho" %}
           <a class="lista-ver-btn primary" href="{% url 'estoque:compra_editar' compra_gerada.id %}?continuar_itens=1">Continuar Compra</a>
+        {% else %}
+          <a class="lista-ver-btn primary" href="{% url 'estoque:compras_detalhe' compra_gerada.id %}">Ver Compra</a>
         {% endif %}
       {% elif lista.status != "cancelada" and lista.status != "finalizada" %}
         <form method="post" action="{% url 'estoque:compras_lista_fornecedor_gerar_compra' lista.id %}" style="margin:0;" data-gerar-compra-lista-form="1">
           {% csrf_token %}
           <button type="submit" class="lista-ver-btn primary">Gerar Compra</button>
+        </form>
+        <form method="post" action="{% url 'estoque:compras_lista_fornecedor_cancelar' lista.id %}" style="margin:0;" onsubmit="return confirm('Tem certeza que deseja cancelar esta lista? Ela saira da consulta principal, mas ficara no historico de listas canceladas.');">
+          {% csrf_token %}
+          <button type="submit" class="lista-ver-btn danger">Cancelar Lista</button>
         </form>
       {% endif %}
 

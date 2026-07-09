@@ -1332,10 +1332,10 @@
     {% if not modo_edicao_lista or can_gerar_compra_lista %}
       <button type="button" class="sugestao-btn sugestao-btn-primary" id="btnGravarGerarCompraFornecedor">{% if modo_edicao_lista %}Salvar alterações e Gerar Compra{% else %}Gravar e Gerar Compra{% endif %}</button>
     {% elif compra_gerada_lista %}
-      {% if compra_gerada_lista.status == "finalizada" %}
-        <a class="sugestao-btn sugestao-btn-primary" href="{% url 'estoque:compras_detalhe' compra_gerada_lista.id %}">Ver Compra</a>
-      {% else %}
+      {% if compra_gerada_lista.status == "rascunho" %}
         <a class="sugestao-btn sugestao-btn-primary" href="{% url 'estoque:compra_editar' compra_gerada_lista.id %}?continuar_itens=1">Continuar Compra</a>
+      {% else %}
+        <a class="sugestao-btn sugestao-btn-primary" href="{% url 'estoque:compras_detalhe' compra_gerada_lista.id %}">Ver Compra</a>
       {% endif %}
     {% endif %}
   </section>
@@ -1447,10 +1447,10 @@
         {% if not modo_edicao_lista or can_gerar_compra_lista %}
           <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-gravar-gerar-extra" id="btnGravarGerarCompraMobile">{% if modo_edicao_lista %}Salvar alterações e Gerar Compra{% else %}Gravar e Gerar Compra{% endif %}</button>
         {% elif compra_gerada_lista %}
-          {% if compra_gerada_lista.status == "finalizada" %}
-            <a class="sugestao-btn sugestao-btn-primary" href="{% url 'estoque:compras_detalhe' compra_gerada_lista.id %}">Ver Compra</a>
-          {% else %}
+          {% if compra_gerada_lista.status == "rascunho" %}
             <a class="sugestao-btn sugestao-btn-primary" href="{% url 'estoque:compra_editar' compra_gerada_lista.id %}?continuar_itens=1">Continuar Compra</a>
+          {% else %}
+            <a class="sugestao-btn sugestao-btn-primary" href="{% url 'estoque:compras_detalhe' compra_gerada_lista.id %}">Ver Compra</a>
           {% endif %}
         {% endif %}
         <span>{% if modo_edicao_lista %}{% if can_gerar_compra_lista %}As alteracoes dos campos so sao gravadas depois de salvar. Use Salvar alterações e Gerar Compra para abrir a compra em rascunho.{% else %}As alteracoes dos campos so sao gravadas depois de salvar.{% endif %}{% else %}Revise os itens e toque em Gravar lista para salvar, ou em Gravar e Gerar Compra para abrir a compra em rascunho.{% endif %}</span>
@@ -2406,11 +2406,14 @@
 
     const produtoId = item.dataset.produtoId;
     window.__sugestaoProdutosRemovidos.add(String(produtoId));
-    const linhasAntes = Array.from(tbody.querySelectorAll("tr[data-produto-id]"));
-    const linhaAtual = item.closest("tr[data-produto-id]") || linhasAntes.find((linha) => {
-      return String(linha.dataset.produtoId) === String(produtoId);
-    });
-    const indiceAtual = linhasAntes.indexOf(linhaAtual);
+    function proximoItemSeguroAntesRemover(itemAtual) {
+      let proximo = itemAtual?.nextElementSibling || null;
+      while (proximo && (!proximo.matches || !proximo.matches("[data-produto-id]"))) {
+        proximo = proximo.nextElementSibling;
+      }
+      return proximo || null;
+    }
+    const proximoItemSeguro = proximoItemSeguroAntesRemover(item);
     const estavaSelecionado = Array.from(document.querySelectorAll("[data-produto-id]")).some((el) => {
       return String(el.dataset.produtoId) === String(produtoId) && el.classList.contains("selecionado");
     });
@@ -2425,13 +2428,9 @@
       renderizarSugestoes(false);
     }
 
-    function focarCampoSeguroDepoisDeRemover() {
-      const linhasRestantes = Array.from(tbody.querySelectorAll("tr[data-produto-id]"));
-      const proximaLinha = linhasRestantes[Math.min(indiceAtual, linhasRestantes.length - 1)] || linhasRestantes[linhasRestantes.length - 1];
-      const proximoCardMobile = document.querySelector("#mobileSugestaoProdutos .sugestao-mobile-card[data-produto-id]");
+    function focarCampoSeguroDepoisDeRemover(itemSeguro) {
       const focoSeguro = (
-        proximaLinha?.querySelector(".sugestao-qtd-input, .sugestao-preco-input, .sugestao-preco-unitario-input, .sugestao-total-input") ||
-        proximoCardMobile?.querySelector(".sugestao-qtd-input, .sugestao-preco-input, .sugestao-preco-unitario-input, .sugestao-total-input") ||
+        itemSeguro?.querySelector(".sugestao-qtd-input, .sugestao-preco-input, .sugestao-preco-unitario-input, .sugestao-total-input") ||
         document.getElementById("produtoManualBuscaSugestao") ||
         busca
       );
@@ -2442,6 +2441,10 @@
 
       if (focoSeguro && !focoSeguro.matches(".sugestao-remover-item")) {
         window.setTimeout(function() {
+          const itemParaRolar = focoSeguro.closest("[data-produto-id]");
+          if (itemParaRolar && typeof itemParaRolar.scrollIntoView === "function") {
+            itemParaRolar.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
           focoSeguro.focus({ preventScroll: true });
           if (typeof focoSeguro.select === "function") {
             focoSeguro.select();
@@ -2451,11 +2454,9 @@
     }
 
     if (estavaSelecionado && window.selecionarProdutoSugestao) {
-      const linhasRestantes = Array.from(tbody.querySelectorAll("tr[data-produto-id]"));
-      const proximaLinha = linhasRestantes[Math.min(indiceAtual, linhasRestantes.length - 1)] || linhasRestantes[linhasRestantes.length - 1];
-      window.selecionarProdutoSugestao(proximaLinha?.dataset.produtoId || "", { rolar: false });
+      window.selecionarProdutoSugestao(proximoItemSeguro?.dataset.produtoId || "", { rolar: false });
     }
-    focarCampoSeguroDepoisDeRemover();
+    focarCampoSeguroDepoisDeRemover(proximoItemSeguro);
   });
 })();
 </script>

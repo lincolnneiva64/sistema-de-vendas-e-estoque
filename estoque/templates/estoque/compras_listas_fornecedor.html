@@ -196,6 +196,11 @@ table.listas-fornecedor-tabela {
   overflow: visible !important;
 }
 
+.listas-fornecedor-excluir-form {
+  margin: 0 !important;
+  display: contents !important;
+}
+
 .listas-fornecedor-btn {
   min-height: 32px !important;
   padding: 6px 9px !important;
@@ -203,6 +208,12 @@ table.listas-fornecedor-tabela {
   line-height: 1.1 !important;
   border-radius: 9px !important;
   white-space: nowrap !important;
+}
+
+.listas-fornecedor-btn-excluir {
+  background: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+  color: #9f1239 !important;
 }
 
 .listas-fornecedor-status {
@@ -1538,6 +1549,11 @@ td.listas-fornecedor-total {
 
     <div class="listas-fornecedor-header-actions">
       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista' %}">Consultar Compras</a>
+      {% if mostrando_canceladas %}
+        <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}">Listas ativas</a>
+      {% else %}
+        <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}?status=cancelada">Listas canceladas</a>
+      {% endif %}
       <a class="listas-fornecedor-btn primary" href="{% url 'estoque:sugestao_compra_fornecedor' %}">Nova Lista</a>
     </div>
   </header>
@@ -1553,7 +1569,7 @@ td.listas-fornecedor-total {
         <div class="listas-fornecedor-field">
           <label for="status">Status</label>
           <select id="status" name="status">
-            <option value="">Todos</option>
+            <option value="">Listas ativas</option>
             {% for valor, rotulo in status_choices %}
               <option value="{{ valor }}" {% if status_filtro == valor %}selected{% endif %}>{{ rotulo }}</option>
             {% endfor %}
@@ -1615,10 +1631,10 @@ td.listas-fornecedor-total {
                       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
                       {% if lista.status != "cancelada" %}<a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar Lista</a>{% endif %}
                       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
-                      {% if lista.compra_gerada.status == "finalizada" %}
-                        <a class="listas-fornecedor-btn listas-fornecedor-btn-compra" href="{% url 'estoque:compras_detalhe' lista.compra_gerada.id %}">Ver Compra</a>
-                      {% else %}
+                      {% if lista.compra_gerada.status == "rascunho" %}
                         <a class="listas-fornecedor-btn listas-fornecedor-btn-compra" href="{% url 'estoque:compra_editar' lista.compra_gerada.id %}?continuar_itens=1">Ver Compra</a>
+                      {% else %}
+                        <a class="listas-fornecedor-btn listas-fornecedor-btn-compra" href="{% url 'estoque:compras_detalhe' lista.compra_gerada.id %}">Ver Compra</a>
                       {% endif %}
                     </div>
                   </td>
@@ -1644,6 +1660,12 @@ td.listas-fornecedor-total {
                       {% if lista.status != "cancelada" %}<a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar Lista</a>{% endif %}
                       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
                       <a class="listas-fornecedor-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Enviar ao Vendedor</a>
+                      {% if lista.status != "cancelada" %}
+                        <form method="post" action="{% url 'estoque:compras_lista_fornecedor_cancelar' lista.id %}" class="listas-fornecedor-excluir-form" onsubmit="return confirm('Tem certeza que deseja cancelar esta lista? Ela saira da consulta principal, mas ficara no historico de listas canceladas.');">
+                          {% csrf_token %}
+                          <button type="submit" class="listas-fornecedor-btn listas-fornecedor-btn-excluir">Cancelar Lista</button>
+                        </form>
+                      {% endif %}
                     </div>
                   </td>
                 </tr>
@@ -1695,11 +1717,16 @@ td.listas-fornecedor-total {
               <a class="listas-fornecedor-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Enviar ao Vendedor</a>
               <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
               {% if lista.compra_gerada %}
-                {% if lista.compra_gerada.status == "finalizada" %}
-                  <a class="listas-fornecedor-btn listas-fornecedor-btn-compra" href="{% url 'estoque:compras_detalhe' lista.compra_gerada.id %}">Ver Compra</a>
-                {% else %}
+                {% if lista.compra_gerada.status == "rascunho" %}
                   <a class="listas-fornecedor-btn listas-fornecedor-btn-compra" href="{% url 'estoque:compra_editar' lista.compra_gerada.id %}?continuar_itens=1">Ver Compra</a>
+                {% else %}
+                  <a class="listas-fornecedor-btn listas-fornecedor-btn-compra" href="{% url 'estoque:compras_detalhe' lista.compra_gerada.id %}">Ver Compra</a>
                 {% endif %}
+              {% elif lista.status != "cancelada" %}
+                <form method="post" action="{% url 'estoque:compras_lista_fornecedor_cancelar' lista.id %}" class="listas-fornecedor-excluir-form" onsubmit="return confirm('Tem certeza que deseja cancelar esta lista? Ela saira da consulta principal, mas ficara no historico de listas canceladas.');">
+                  {% csrf_token %}
+                  <button type="submit" class="listas-fornecedor-btn listas-fornecedor-btn-excluir">Cancelar Lista</button>
+                </form>
               {% endif %}
             </div>
           </article>

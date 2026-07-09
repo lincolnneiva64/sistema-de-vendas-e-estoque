@@ -4689,6 +4689,8 @@ def compras_listas_fornecedor(request):
 
     if status_filtro:
         listas = listas.filter(status=status_filtro)
+    else:
+        listas = listas.exclude(status=ListaCompraFornecedor.STATUS_CANCELADA)
 
     data_inicio = parse_date(data_inicio_filtro) if data_inicio_filtro else None
     data_fim = parse_date(data_fim_filtro) if data_fim_filtro else None
@@ -4707,8 +4709,7 @@ def compras_listas_fornecedor(request):
 
         compras_geradas = (
             Compra.objects
-            .filter(filtros_origem, cancelada=False)
-            .exclude(status=Compra.STATUS_CANCELADA)
+            .filter(filtros_origem)
             .order_by("-id")
         )
 
@@ -4730,6 +4731,7 @@ def compras_listas_fornecedor(request):
             "status_filtro": status_filtro,
             "data_inicio_filtro": data_inicio_filtro,
             "data_fim_filtro": data_fim_filtro,
+            "mostrando_canceladas": status_filtro == ListaCompraFornecedor.STATUS_CANCELADA,
             "status_choices": ListaCompraFornecedor.STATUS_CHOICES,
         },
     )
@@ -5020,16 +5022,7 @@ def compras_lista_fornecedor_detalhe(request, pk):
         ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto"),
         pk=pk,
     )
-    marcador_origem = f"Gerada a partir da Lista de Compras #{lista.id}"
-    compra_gerada = (
-        Compra.objects.filter(
-            observacao__icontains=marcador_origem,
-            cancelada=False,
-        )
-        .exclude(status=Compra.STATUS_CANCELADA)
-        .order_by("-id")
-        .first()
-    )
+    compra_gerada = _compra_existente_lista_fornecedor(lista)
     resumo = _resumo_conferencia_lista_fornecedor(lista)
     comparacao_conferencia = _comparacao_conferencia_lista_fornecedor(lista, resumo)
     if request.method == "POST" and request.POST.get("acao") == "salvar_comparacao_nota":
@@ -5383,16 +5376,7 @@ def compras_lista_fornecedor_ver(request, pk):
         ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto"),
         pk=pk,
     )
-    marcador_origem = f"Gerada a partir da Lista de Compras #{lista.id}"
-    compra_gerada = (
-        Compra.objects.filter(
-            observacao__icontains=marcador_origem,
-            cancelada=False,
-        )
-        .exclude(status=Compra.STATUS_CANCELADA)
-        .order_by("-id")
-        .first()
-    )
+    compra_gerada = _compra_existente_lista_fornecedor(lista)
     return render(
         request,
         "estoque/compras_lista_fornecedor_ver.html",
@@ -5431,9 +5415,7 @@ def _compra_existente_lista_fornecedor(lista):
     return (
         Compra.objects.filter(
             observacao__icontains=marcador_origem,
-            cancelada=False,
         )
-        .exclude(status=Compra.STATUS_CANCELADA)
         .order_by("-id")
         .first()
     )
@@ -5656,13 +5638,7 @@ def compras_lista_fornecedor_editar(request, pk):
         messages.error(request, "Lista cancelada nao pode ser editada.")
         return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
 
-    marcador_origem = f"Gerada a partir da Lista de Compras #{lista.id}"
-    compra_gerada = (
-        Compra.objects.filter(observacao__icontains=marcador_origem, cancelada=False)
-        .exclude(status=Compra.STATUS_CANCELADA)
-        .order_by("-id")
-        .first()
-    )
+    compra_gerada = _compra_existente_lista_fornecedor(lista)
     if compra_gerada and compra_gerada.status == Compra.STATUS_FINALIZADA:
         messages.error(request, "Esta lista ja gerou uma compra finalizada e nao pode mais ser editada.")
         return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
@@ -5760,7 +5736,7 @@ def compras_lista_fornecedor_editar(request, pk):
 
         messages.success(request, f"Lista #{lista.id} atualizada com sucesso.")
         if gerar_compra and compra_para_abrir:
-            if compra_para_abrir.status == Compra.STATUS_FINALIZADA:
+            if compra_para_abrir.status in {Compra.STATUS_FINALIZADA, Compra.STATUS_CANCELADA} or compra_para_abrir.cancelada:
                 return redirect("estoque:compras_detalhe", pk=compra_para_abrir.pk)
             messages.success(request, f"Compra #{compra_para_abrir.id} criada em rascunho a partir da Lista #{lista.id}. Confira antes de finalizar.")
             return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra_para_abrir.pk})}?continuar_itens=1")
@@ -5901,11 +5877,21 @@ def compras_lista_fornecedor_editar(request, pk):
 @require_POST
 def compras_lista_fornecedor_cancelar(request, pk):
     lista = get_object_or_404(ListaCompraFornecedor, pk=pk)
+    compra_vinculada = _compra_existente_lista_fornecedor(lista)
+    if compra_vinculada:
+        messages.error(
+            request,
+            f"Lista #{lista.id} ja tem a Compra #{compra_vinculada.id} vinculada e nao pode ser cancelada.",
+        )
+        return redirect("estoque:compras_listas_fornecedor")
+
     if lista.status != ListaCompraFornecedor.STATUS_CANCELADA:
         lista.status = ListaCompraFornecedor.STATUS_CANCELADA
         lista.save(update_fields=["status", "atualizado_em"])
-        messages.success(request, f"Lista #{lista.id} cancelada.")
-    return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
+        messages.success(request, f"Lista #{lista.id} cancelada com sucesso.")
+    else:
+        messages.warning(request, f"Lista #{lista.id} ja estava cancelada.")
+    return redirect("estoque:compras_listas_fornecedor")
 
 
 def compras_lista(request):
