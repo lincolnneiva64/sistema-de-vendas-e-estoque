@@ -2125,6 +2125,14 @@ class ComprasListaFornecedorGravarTests(TestCase):
         linha["ativo"] = False
         return linha
 
+    def test_nova_lista_exibe_botao_mobile_gravar_lista(self):
+        resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'id="btnGravarListaMobile"')
+        self.assertContains(resposta, "Gravar lista")
+        self.assertContains(resposta, "Revise os itens e toque em Gravar lista para salvar.")
+
     def test_item_removido_nao_e_gravado_no_post(self):
         produto_valido = self.criar_produto("Produto Valido")
         produto_removido = self.criar_produto("Produto Removido")
@@ -2202,6 +2210,10 @@ class ComprasListaFornecedorGravarTests(TestCase):
 
     def test_item_com_quantidade_final_maior_que_zero_e_gravado_normalmente(self):
         produto = self.criar_produto("Produto Positivo")
+        estoque_antes = produto.quantidade
+        compras_antes = Compra.objects.count()
+        contas_antes = ContaPagar.objects.count()
+        movimentos_antes = MovimentoFinanceiro.objects.count()
 
         resposta = self.client.post(
             reverse("estoque:compras_lista_fornecedor_gravar"),
@@ -2216,7 +2228,11 @@ class ComprasListaFornecedorGravarTests(TestCase):
         item = ItemListaCompraFornecedor.objects.get()
         self.assertEqual(item.produto, produto)
         self.assertEqual(item.quantidade_final, Decimal("3.000"))
-        self.assertEqual(Compra.objects.count(), 0)
+        produto.refresh_from_db()
+        self.assertEqual(produto.quantidade, estoque_antes)
+        self.assertEqual(Compra.objects.count(), compras_antes)
+        self.assertEqual(ContaPagar.objects.count(), contas_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
 
     def test_lista_com_itens_zerados_cria_apenas_itens_validos(self):
         produto_positivo = self.criar_produto("Produto Positivo")

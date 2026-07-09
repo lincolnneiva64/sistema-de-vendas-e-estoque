@@ -1432,12 +1432,10 @@
         {% endfor %}
         {% endif %}
       </div>
-      {% if modo_edicao_lista %}
-        <div class="sugestao-salvar-mobile-rodape">
-          <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-salvar-lista-extra" id="btnSalvarAlteracoesListaMobile">Salvar alterações</button>
-          <span>As alteracoes dos campos so sao gravadas depois de salvar.</span>
-        </div>
-      {% endif %}
+      <div class="sugestao-salvar-mobile-rodape">
+        <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-salvar-lista-extra" id="{% if modo_edicao_lista %}btnSalvarAlteracoesListaMobile{% else %}btnGravarListaMobile{% endif %}">{% if modo_edicao_lista %}Salvar alterações{% else %}Gravar lista{% endif %}</button>
+        <span>{% if modo_edicao_lista %}As alteracoes dos campos so sao gravadas depois de salvar.{% else %}Revise os itens e toque em Gravar lista para salvar.{% endif %}</span>
+      </div>
       <div class="sugestao-empty {% if linhas %}oculto{% endif %}" id="sugestaoListaVazia">
         {% if fornecedor %}
           Nenhum produto ativo deste fornecedor esta dentro do limite de reposicao.
