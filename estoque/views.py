@@ -4728,12 +4728,10 @@ def compras_listas_fornecedor(request):
 
     listas = _anotar_compras_geradas_listas_fornecedor(listas)
     mostrando_historico_mobile = modo_mobile == "historico"
-    mostrando_canceladas = (
-        status_filtro == ListaCompraFornecedor.STATUS_CANCELADA
-        or modo_mobile == "canceladas"
-    ) and not mostrando_historico_mobile
+    mostrando_canceladas_mobile = modo_mobile == "canceladas"
+    mostrando_canceladas = status_filtro == ListaCompraFornecedor.STATUS_CANCELADA
 
-    if mostrando_canceladas:
+    if mostrando_canceladas_mobile:
         listas_mobile_base = listas_base.filter(status=ListaCompraFornecedor.STATUS_CANCELADA)
         listas_mobile_compras = _anotar_compras_geradas_listas_fornecedor(listas_mobile_base)
         listas_mobile = list(listas_mobile_compras)
@@ -4764,6 +4762,7 @@ def compras_listas_fornecedor(request):
             "data_inicio_filtro": data_inicio_filtro,
             "data_fim_filtro": data_fim_filtro,
             "mostrando_canceladas": mostrando_canceladas,
+            "mostrando_canceladas_mobile": mostrando_canceladas_mobile,
             "mostrando_historico_mobile": mostrando_historico_mobile,
             "status_choices": ListaCompraFornecedor.STATUS_CHOICES,
         },

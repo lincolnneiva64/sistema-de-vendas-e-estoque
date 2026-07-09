@@ -599,6 +599,10 @@ td.listas-fornecedor-total {
     align-items: center;
   }
 
+  .listas-fornecedor-top-canceladas {
+    display: inline-flex;
+  }
+
   .listas-fornecedor-filter-card {
     margin-bottom: 14px;
     padding: 16px;
@@ -814,6 +818,10 @@ td.listas-fornecedor-total {
   }
 
   @media (max-width: 640px) {
+    .listas-fornecedor-top-canceladas {
+      display: none !important;
+    }
+
     .listas-fornecedor-page {
       margin-top: 14px;
       padding: 0 10px 80px;
@@ -1550,9 +1558,9 @@ td.listas-fornecedor-total {
     <div class="listas-fornecedor-header-actions">
       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista' %}">Consultar Compras</a>
       {% if mostrando_canceladas %}
-        <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}">Listas ativas</a>
+        <a class="listas-fornecedor-btn listas-fornecedor-top-canceladas" href="{% url 'estoque:compras_listas_fornecedor' %}">Listas ativas</a>
       {% else %}
-        <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}?mobile=canceladas&amp;status=cancelada">Listas canceladas</a>
+        <a class="listas-fornecedor-btn listas-fornecedor-top-canceladas" href="{% url 'estoque:compras_listas_fornecedor' %}?status=cancelada">Canceladas</a>
       {% endif %}
       <a class="listas-fornecedor-btn primary" href="{% url 'estoque:sugestao_compra_fornecedor' %}">Nova Lista</a>
     </div>
@@ -1595,14 +1603,14 @@ td.listas-fornecedor-total {
   </section>
 
   <nav class="listas-fornecedor-mobile-toggle" aria-label="Filtro mobile de listas por fornecedor">
-    {% if mostrando_historico_mobile or mostrando_canceladas %}
+    {% if mostrando_historico_mobile or mostrando_canceladas_mobile %}
       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}">Listas pendentes</a>
     {% endif %}
     {% if not mostrando_historico_mobile %}
       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}?mobile=historico">Historico</a>
     {% endif %}
-    {% if not mostrando_canceladas %}
-      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}?mobile=canceladas&amp;status=cancelada">Listas canceladas</a>
+    {% if not mostrando_canceladas_mobile %}
+      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_listas_fornecedor' %}?mobile=canceladas">Listas canceladas</a>
     {% endif %}
   </nav>
 
@@ -1688,7 +1696,7 @@ td.listas-fornecedor-total {
         </table>
       </div>
       {% endif %}
-      <div class="listas-fornecedor-mobile-cards" aria-label="Listas por fornecedor" data-mobile-modo="{% if mostrando_canceladas %}canceladas{% elif mostrando_historico_mobile %}historico{% else %}pendentes{% endif %}">
+      <div class="listas-fornecedor-mobile-cards" aria-label="Listas por fornecedor" data-mobile-modo="{% if mostrando_canceladas_mobile %}canceladas{% elif mostrando_historico_mobile %}historico{% else %}pendentes{% endif %}">
         {% if listas_mobile %}
           {% for lista in listas_mobile %}
             <article class="listas-fornecedor-mobile-card{% if lista.compra_gerada %} com-compra{% endif %}" data-mobile-lista-id="{{ lista.id }}">
@@ -1748,7 +1756,7 @@ td.listas-fornecedor-total {
           {% endfor %}
         {% else %}
           <div class="listas-fornecedor-empty">
-            {% if mostrando_canceladas %}Nenhuma lista cancelada.{% elif mostrando_historico_mobile %}Nenhuma lista no historico mobile.{% else %}Nenhuma lista pendente para o celular.{% endif %}
+            {% if mostrando_canceladas_mobile %}Nenhuma lista cancelada.{% elif mostrando_historico_mobile %}Nenhuma lista no historico mobile.{% else %}Nenhuma lista ativa sem compra para o celular.{% endif %}
           </div>
         {% endif %}
       </div>
@@ -2561,6 +2569,10 @@ td.listas-fornecedor-total {
 }
 
 @media (max-width: 768px) {
+  .listas-fornecedor-top-canceladas {
+    display: none !important;
+  }
+
   .listas-fornecedor-mobile-toggle {
     display: flex !important;
     justify-content: flex-end !important;
