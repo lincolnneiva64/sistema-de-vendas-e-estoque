@@ -2391,7 +2391,7 @@
         <button type="button" class="compras-btn compras-btn-secondary" id="btnVoltarRascunhoCompra"><span class="compras-label-desktop">Continuar Editando</span><span class="compras-label-mobile">Salvar Rascunho</span></button>
         <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">Finalizar Compra</button>
       {% else %}
-        <p class="compras-acoes-ajuda-mobile">Salve como rascunho para continuar depois ou finalize quando a compra estiver conferida.</p>
+        <p class="compras-acoes-ajuda-mobile">{% if rascunho_salvo %}Rascunho salvo. Para continuar adicionando produtos, toque em &lsquo;Lan&ccedil;ar itens&rsquo;. Quando a compra estiver conferida, finalize e lance o financeiro.{% else %}Salve como rascunho para continuar depois ou finalize quando a compra estiver conferida.{% endif %}</p>
         <button type="button" class="compras-btn compras-btn-secondary compras-rascunho-mobile-only{% if rascunho_salvo %} botao-continuar-rascunho-rodape{% endif %}" id="btnSalvarRascunhoCompra" data-lancar-itens="{% if rascunho_salvo %}1{% else %}0{% endif %}">{% if rascunho_salvo %}Lan&ccedil;ar itens{% else %}Salvar Rascunho{% endif %}</button>
         <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">Finalizar Compra</button>
       {% endif %}

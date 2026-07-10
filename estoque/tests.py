@@ -480,6 +480,15 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertEqual(MovimentoFinanceiro.objects.filter(compra=compra).count(), 0)
         self.assertEqual(ContaPagar.objects.filter(compra=compra).count(), 0)
 
+        resposta_reabrir = self.client.get(
+            f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?rascunho_salvo=1",
+            secure=True,
+        )
+        self.assertContains(resposta_reabrir, "Rascunho salvo")
+        self.assertContains(resposta_reabrir, "Para continuar adicionando produtos")
+        self.assertContains(resposta_reabrir, "Lan&ccedil;ar itens")
+        self.assertNotContains(resposta_reabrir, "Salve como rascunho para continuar depois")
+
     def test_mobile_item_editado_persiste_ao_salvar_rascunho(self):
         compra = self._criar_compra_rascunho_com_item()
         dados = self._dados_finalizacao_compra_lista(
