@@ -2391,7 +2391,7 @@
         <button type="button" class="compras-btn compras-btn-secondary" id="btnVoltarRascunhoCompra"><span class="compras-label-desktop">Continuar Editando</span><span class="compras-label-mobile">Salvar Rascunho</span></button>
         <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">Finalizar Compra</button>
       {% else %}
-        <p class="compras-acoes-ajuda-mobile">{% if rascunho_salvo %}Rascunho salvo. Para continuar adicionando produtos, toque em &lsquo;Lan&ccedil;ar itens&rsquo;. Quando a compra estiver conferida, finalize e lance o financeiro.{% else %}Salve como rascunho para continuar depois ou finalize quando a compra estiver conferida.{% endif %}</p>
+        <p class="compras-acoes-ajuda-mobile" id="mensagemProximosPassosCompra">{% if rascunho_salvo %}Rascunho salvo. Para continuar adicionando produtos, toque em &lsquo;Lan&ccedil;ar itens&rsquo;. Quando a compra estiver conferida, finalize e lance o financeiro.{% else %}Salve como rascunho para continuar depois ou finalize quando a compra estiver conferida.{% endif %}</p>
         <button type="button" class="compras-btn compras-btn-secondary compras-rascunho-mobile-only{% if rascunho_salvo %} botao-continuar-rascunho-rodape{% endif %}" id="btnSalvarRascunhoCompra" data-lancar-itens="{% if rascunho_salvo %}1{% else %}0{% endif %}">{% if rascunho_salvo %}Lan&ccedil;ar itens{% else %}Salvar Rascunho{% endif %}</button>
         <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">Finalizar Compra</button>
       {% endif %}
@@ -2473,6 +2473,7 @@
   const btnSalvarRascunhoCompra = document.getElementById("btnSalvarRascunhoCompra");
   const btnVoltarRascunhoCompra = document.getElementById("btnVoltarRascunhoCompra");
   const btnContinuarLancandoItens = document.getElementById("btnContinuarLancandoItens");
+  const mensagemProximosPassosCompra = document.getElementById("mensagemProximosPassosCompra");
   const acaoCompra = document.getElementById("acaoCompra");
   const fluxoMobileCompra = document.getElementById("fluxoMobileCompra");
   const tabela = document.getElementById("tabelaItensCompra");
@@ -2518,6 +2519,12 @@
   let botaoEnvioAtual = null;
   let scrollBodyConferenciaPrecos = 0;
   let linhaPendenteRemocaoCompra = null;
+  let rascunhoBloqueado = {% if rascunho_salvo %}true{% else %}false{% endif %};
+  const mensagemRascunhoEdicao = [
+    "Salve como rascunho para continuar",
+    " depois ou finalize quando a compra estiver conferida."
+  ].join("");
+  const mensagemRascunhoSalvo = "Rascunho salvo. Para continuar adicionando produtos, toque em 'Lancar itens'. Quando a compra estiver conferida, finalize e lance o financeiro.";
 
   function compraMobile() {
     return mobileQuery.matches;
@@ -2529,6 +2536,42 @@
 
   function mantendoItemMobileVisivel() {
     return compraMobile() && window.compraMobileMantendoItemVisivel === true;
+  }
+
+  function compraRascunhoBloqueado() {
+    return compraMobile() && rascunhoBloqueado === true;
+  }
+
+  function setBloqueadoRascunhoControle(el, bloqueado) {
+    if (!el) return;
+    el.disabled = bloqueado;
+    el.toggleAttribute("disabled", bloqueado);
+    if (bloqueado) {
+      el.setAttribute("aria-disabled", "true");
+      el.dataset.bloqueadoRascunho = "1";
+    } else {
+      el.removeAttribute("aria-disabled");
+      if (el.dataset.bloqueadoRascunho === "1") {
+        delete el.dataset.bloqueadoRascunho;
+      }
+    }
+  }
+
+  function atualizarControlesRascunhoBloqueado() {
+    if (!compraMobile()) return;
+    fecharEdicoesItensMobile();
+    document.querySelectorAll("#tabelaItensCompra .btn-editar-item-mobile, #tabelaItensCompra .btn-remover").forEach(function(botao) {
+      setBloqueadoRascunhoControle(botao, rascunhoBloqueado);
+    });
+    setBloqueadoRascunhoControle(btnAdicionar, rascunhoBloqueado);
+    setBloqueadoRascunhoControle(btnVoltarLancamentoProdutoMobile, rascunhoBloqueado);
+    document.querySelectorAll("#tabelaItensCompra [name='quantidade[]'], #tabelaItensCompra [name='unidade[]'], #tabelaItensCompra .campo-preco-unitario-compra").forEach(function(campo) {
+      campo.readOnly = rascunhoBloqueado;
+      campo.setAttribute("aria-disabled", rascunhoBloqueado ? "true" : "false");
+    });
+    if (mensagemProximosPassosCompra) {
+      mensagemProximosPassosCompra.textContent = rascunhoBloqueado ? mensagemRascunhoSalvo : mensagemRascunhoEdicao;
+    }
   }
 
   function linhaNoFormularioMobile(linha) {
@@ -2613,6 +2656,7 @@
     if (!compraMobile()) return;
 
     window.compraMobileMantendoItemVisivel = false;
+    rascunhoBloqueado = false;
     fecharEdicoesItensMobile();
 
     const dadosCompraCard = formCompra ? formCompra.querySelector(".compras-card") : null;
@@ -2686,6 +2730,8 @@
         produtoBusca.select();
       }
     }
+
+    atualizarControlesRascunhoBloqueado();
   }
 
   function organizarLayoutMobileCompra() {
@@ -3479,6 +3525,7 @@
   }
 
   function iniciarEdicaoItemMobile(linha) {
+    if (compraRascunhoBloqueado()) return;
     if (!compraMobile() || !linha || linhaNoFormularioMobile(linha)) return;
     guardarValoresEdicaoItemMobile(linha);
     linha.classList.add("item-editando-mobile");
@@ -3550,6 +3597,7 @@
   }
 
   function executarRemocaoLinhaItem(linha) {
+    if (compraRascunhoBloqueado()) return;
     if (!linha) return;
     cancelarEdicaoItemMobile(linha);
 
@@ -3571,6 +3619,7 @@
   }
 
   function abrirModalRemoverItemCompra(linha) {
+    if (compraRascunhoBloqueado()) return;
     if (!modalRemoverItemCompra || !linha) return;
     linhaPendenteRemocaoCompra = linha;
     if (produtoModalRemoverItemCompra) {
@@ -3835,6 +3884,7 @@
 
     if (btnEditarItemMobile) {
       btnEditarItemMobile.addEventListener("click", function() {
+        if (compraRascunhoBloqueado()) return;
         iniciarEdicaoItemMobile(linha);
       });
     }
@@ -3852,6 +3902,7 @@
     }
 
     linha.querySelector(".btn-remover").addEventListener("click", function() {
+      if (compraRascunhoBloqueado()) return;
       if (compraMobile() && modalRemoverItemCompra) {
         abrirModalRemoverItemCompra(linha);
         return;
@@ -3887,6 +3938,7 @@
   }
 
   btnAdicionar.addEventListener("click", function() {
+    if (compraRascunhoBloqueado()) return;
     if (compraMobile()) {
       const linhaAtual = linhaFormularioMobile();
 
@@ -3930,6 +3982,7 @@
 
   if (btnVoltarLancamentoProdutoMobile) {
     btnVoltarLancamentoProdutoMobile.addEventListener("click", function() {
+      if (compraRascunhoBloqueado()) return;
       voltarParaLancamentoProdutoMobile();
     });
   }
@@ -4647,14 +4700,17 @@
     mobileQuery.addEventListener("change", function() {
       organizarLayoutMobileCompra();
       atualizarFluxoMobileCompra();
+      atualizarControlesRascunhoBloqueado();
     });
   } else if (typeof mobileQuery.addListener === "function") {
     mobileQuery.addListener(function() {
       organizarLayoutMobileCompra();
       atualizarFluxoMobileCompra();
+      atualizarControlesRascunhoBloqueado();
     });
   }
   recalcular();
+  atualizarControlesRascunhoBloqueado();
 
   function focarContinuacaoItens(limparUrl) {
     setTimeout(function() {
