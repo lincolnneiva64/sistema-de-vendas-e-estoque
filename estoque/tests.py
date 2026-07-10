@@ -381,7 +381,7 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, 'id="origemReservaCompra"')
         self.assertContains(resposta, 'id="origemBancoCompra"')
         self.assertContains(resposta, 'name="fluxo_mobile_compra"')
-        self.assertContains(resposta, "Use Salvar Rascunho para revisar depois.")
+        self.assertContains(resposta, "Salve como rascunho para continuar depois ou finalize quando a compra estiver conferida.")
         self.assertContains(resposta, "Salvar Rascunho")
         self.assertContains(resposta, "Finalizar Compra")
         self.assertContains(resposta, ".compras-origem-campo-caixa { display:none !important; }")
