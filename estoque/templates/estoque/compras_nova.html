@@ -2613,6 +2613,7 @@
     if (!compraMobile()) return;
 
     window.compraMobileMantendoItemVisivel = false;
+    fecharEdicoesItensMobile();
 
     const dadosCompraCard = formCompra ? formCompra.querySelector(".compras-card") : null;
 
@@ -3495,6 +3496,12 @@
     recalcular();
   }
 
+  function fecharEdicoesItensMobile() {
+    document.querySelectorAll("#tabelaItensCompra .linha-item.item-editando-mobile").forEach(function(linha) {
+      cancelarEdicaoItemMobile(linha);
+    });
+  }
+
   function salvarEdicaoItemMobile(linha) {
     if (!linha || !linha.classList.contains("item-editando-mobile")) return;
     const campos = camposEdicaoItemMobile(linha);
@@ -4370,6 +4377,9 @@
 
   function enviarCompraComAcao(acao, botao) {
     if (compraMobile()) {
+      if (acao === "salvar_rascunho") {
+        fecharEdicoesItensMobile();
+      }
       const itemEmEdicao = document.querySelector("#tabelaItensCompra .linha-item.item-editando-mobile");
       if (itemEmEdicao) {
         mostrarErroEdicaoItemMobile(itemEmEdicao, "Salve ou cancele a edicao deste item antes de continuar.");

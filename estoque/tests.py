@@ -442,10 +442,13 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, "function iniciarEdicaoItemMobile")
         self.assertContains(resposta, "function salvarEdicaoItemMobile")
         self.assertContains(resposta, "function cancelarEdicaoItemMobile")
+        self.assertContains(resposta, "function fecharEdicoesItensMobile")
+        self.assertContains(resposta, 'acao === "salvar_rascunho"')
         self.assertContains(resposta, "linha.dataset.edicaoProdutoOriginal")
         self.assertContains(resposta, "O produto deste item nao pode ser alterado por aqui.")
         self.assertContains(resposta, "const subtotal = quantidade * preco;")
         self.assertContains(resposta, "totalCompra.textContent = moeda(total);")
+        self.assertNotContains(resposta, '<tr class="linha-item item-editando-mobile"')
 
     def test_mobile_salvar_rascunho_nao_altera_estoque_financeiro_ou_conta(self):
         compra = self._criar_compra_rascunho_com_item()
@@ -512,6 +515,64 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertEqual(item.preco_unitario, Decimal("12.34"))
         self.assertEqual(item.valor_total, Decimal("30.85"))
         self.assertEqual(compra.total, Decimal("30.85"))
+
+    def test_mobile_salvar_rascunho_com_varios_itens_reabre_fechado(self):
+        compra = self._criar_compra_rascunho_com_item()
+        produto_extra = Produto.objects.create(
+            nome="Produto Extra Compra",
+            preco_compra=Decimal("20.00"),
+            preco_vista=Decimal("35.00"),
+            preco_prazo=Decimal("40.00"),
+            quantidade=Decimal("5.000"),
+        )
+        dados = self._dados_finalizacao_compra_lista(
+            compra,
+            tipo_pagamento="avista",
+            acao_compra="salvar_rascunho",
+            fluxo_mobile_compra="1",
+            origem_caixa="0,00",
+            origem_reserva="0,00",
+            origem_banco="0,00",
+        )
+        dados["produto_id[]"] = [str(self.produto.id), str(produto_extra.id)]
+        dados["quantidade[]"] = ["2", "3"]
+        dados["unidade[]"] = ["UN", "CX"]
+        dados["preco_unitario[]"] = ["10,00", "15,00"]
+        dados["observacao_item[]"] = ["", ""]
+
+        resposta = self.client.post(
+            reverse("estoque:compra_editar", kwargs={"pk": compra.pk}),
+            dados,
+            secure=True,
+        )
+
+        self.assertRedirects(
+            resposta,
+            f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?rascunho_salvo=1",
+            fetch_redirect_response=False,
+        )
+        compra.refresh_from_db()
+        itens = list(compra.itens.order_by("produto__nome"))
+        self.assertEqual(compra.status, Compra.STATUS_RASCUNHO)
+        self.assertEqual(compra.total, Decimal("65.00"))
+        self.assertEqual(len(itens), 2)
+        self.assertEqual(itens[0].produto, self.produto)
+        self.assertEqual(itens[0].quantidade, Decimal("2.000"))
+        self.assertEqual(itens[0].unidade, "UN")
+        self.assertEqual(itens[0].valor_total, Decimal("20.00"))
+        self.assertEqual(itens[1].produto, produto_extra)
+        self.assertEqual(itens[1].quantidade, Decimal("3.000"))
+        self.assertEqual(itens[1].unidade, "CX")
+        self.assertEqual(itens[1].valor_total, Decimal("45.00"))
+
+        resposta_reabrir = self.client.get(
+            f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?rascunho_salvo=1",
+            secure=True,
+        )
+        self.assertContains(resposta_reabrir, "Rascunho salvo com sucesso.")
+        self.assertContains(resposta_reabrir, "Produto Compra")
+        self.assertContains(resposta_reabrir, "Produto Extra Compra")
+        self.assertNotContains(resposta_reabrir, '<tr class="linha-item item-editando-mobile"')
 
     def test_mobile_item_editado_e_usado_ao_finalizar(self):
         compra = self._criar_compra_rascunho_com_item()
