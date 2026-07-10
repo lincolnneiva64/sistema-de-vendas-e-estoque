@@ -419,6 +419,27 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, "Sangria / Reserva")
         self.assertContains(resposta, "Banco/Pix")
 
+    def test_mobile_edicao_inline_item_renderiza_controles_e_script(self):
+        Unidade.objects.create(nome="Caixa", sigla="CX")
+        compra = self._criar_compra_rascunho_com_item()
+
+        resposta = self.client.get(reverse("estoque:compra_editar", kwargs={"pk": compra.pk}), secure=True)
+
+        self.assertContains(resposta, "Itens lan&ccedil;ados")
+        self.assertContains(resposta, "Pr&oacute;ximos passos")
+        self.assertContains(resposta, "btn-editar-item-mobile")
+        self.assertContains(resposta, "Salvar altera&ccedil;&atilde;o")
+        self.assertContains(resposta, "Cancelar edi&ccedil;&atilde;o")
+        self.assertContains(resposta, 'list="unidadesCompraMobile"')
+        self.assertContains(resposta, '<option value="CX">Caixa</option>')
+        self.assertContains(resposta, "function iniciarEdicaoItemMobile")
+        self.assertContains(resposta, "function salvarEdicaoItemMobile")
+        self.assertContains(resposta, "function cancelarEdicaoItemMobile")
+        self.assertContains(resposta, "linha.dataset.edicaoProdutoOriginal")
+        self.assertContains(resposta, "O produto deste item nao pode ser alterado por aqui.")
+        self.assertContains(resposta, "const subtotal = quantidade * preco;")
+        self.assertContains(resposta, "totalCompra.textContent = moeda(total);")
+
     def test_mobile_salvar_rascunho_nao_altera_estoque_financeiro_ou_conta(self):
         compra = self._criar_compra_rascunho_com_item()
         estoque_antes = self.produto.quantidade
@@ -448,6 +469,78 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertEqual(self.produto.quantidade, estoque_antes)
         self.assertEqual(MovimentoFinanceiro.objects.filter(compra=compra).count(), 0)
         self.assertEqual(ContaPagar.objects.filter(compra=compra).count(), 0)
+
+    def test_mobile_item_editado_persiste_ao_salvar_rascunho(self):
+        compra = self._criar_compra_rascunho_com_item()
+        dados = self._dados_finalizacao_compra_lista(
+            compra,
+            tipo_pagamento="avista",
+            acao_compra="salvar_rascunho",
+            fluxo_mobile_compra="1",
+            origem_caixa="0,00",
+            origem_reserva="0,00",
+            origem_banco="0,00",
+        )
+        dados["quantidade[]"] = ["2,5"]
+        dados["unidade[]"] = ["CX"]
+        dados["preco_unitario[]"] = ["12,34"]
+
+        resposta = self.client.post(
+            reverse("estoque:compra_editar", kwargs={"pk": compra.pk}),
+            dados,
+            secure=True,
+        )
+
+        self.assertRedirects(
+            resposta,
+            f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?rascunho_salvo=1",
+            fetch_redirect_response=False,
+        )
+        item = compra.itens.get()
+        compra.refresh_from_db()
+        self.assertEqual(compra.status, Compra.STATUS_RASCUNHO)
+        self.assertEqual(item.produto_id, self.produto.id)
+        self.assertEqual(item.quantidade, Decimal("2.500"))
+        self.assertEqual(item.unidade, "CX")
+        self.assertEqual(item.preco_unitario, Decimal("12.34"))
+        self.assertEqual(item.valor_total, Decimal("30.85"))
+        self.assertEqual(compra.total, Decimal("30.85"))
+
+    def test_mobile_item_editado_e_usado_ao_finalizar(self):
+        compra = self._criar_compra_rascunho_com_item()
+        estoque_antes = self.produto.quantidade
+        dados = self._dados_finalizacao_compra_lista(
+            compra,
+            tipo_pagamento="avista",
+            fluxo_mobile_compra="1",
+            origem_caixa="0,00",
+            origem_reserva="0,00",
+            origem_banco="60,00",
+        )
+        dados["quantidade[]"] = ["2"]
+        dados["unidade[]"] = ["CX"]
+        dados["preco_unitario[]"] = ["30,00"]
+
+        resposta = self.client.post(
+            reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}),
+            dados,
+            secure=True,
+        )
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        item = compra.itens.get()
+        movimento = compra.movimentos_financeiros.get()
+        self.assertRedirects(resposta, reverse("estoque:compras_lista"), fetch_redirect_response=False)
+        self.assertEqual(compra.status, Compra.STATUS_FINALIZADA)
+        self.assertEqual(item.produto_id, self.produto.id)
+        self.assertEqual(item.quantidade, Decimal("2.000"))
+        self.assertEqual(item.unidade, "CX")
+        self.assertEqual(item.preco_unitario, Decimal("30.00"))
+        self.assertEqual(item.valor_total, Decimal("60.00"))
+        self.assertEqual(compra.total, Decimal("60.00"))
+        self.assertEqual(self.produto.quantidade, estoque_antes + Decimal("2.000"))
+        self.assertEqual(movimento.valor, Decimal("60.00"))
 
     def test_mobile_finaliza_com_banco_pix_sem_usar_caixa(self):
         compra = self._criar_compra_rascunho_com_item()

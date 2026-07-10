@@ -357,8 +357,16 @@
   .compras-btn:disabled { opacity:.65; cursor:not-allowed; filter:grayscale(.2); transform:none; }
   .compras-btn-secondary { background:#dbeafe; color:#164173; border:1px solid #7ea6d9; }
   .compras-acoes-ajuda-mobile,
-  .compras-label-mobile {
+  .compras-label-mobile,
+  .compras-mobile-inline-only {
     display: none;
+  }
+  .item-mobile-acoes {
+    display:inline;
+  }
+  .item-mobile-edicao-acoes,
+  .item-mobile-erro {
+    display:none;
   }
   @media (min-width: 821px) {
     .compras-rascunho-mobile-only { display:none !important; }
@@ -1461,6 +1469,30 @@
       min-width:0;
       max-width:100%;
     }
+    #secaoItensCompra {
+      border:1.5px solid #bfdbfe;
+      border-radius:14px;
+      background:#f8fbff;
+      box-shadow:0 10px 22px rgba(37,99,235,.08);
+      overflow:hidden;
+    }
+    #secaoItensCompra .compras-card-head {
+      background:#eff6ff;
+      color:#172554;
+      border-bottom:1px solid #bfdbfe;
+      font-size:.98rem;
+      font-weight:950;
+    }
+    #secaoItensCompra .compras-table-wrap {
+      padding:0 12px;
+      background:#fff;
+    }
+    #secaoItensCompra .compras-total {
+      margin:0 12px 8px;
+      border:1px solid #bfdbfe;
+      border-radius:10px;
+      background:#eff6ff;
+    }
     .compras-header { flex-direction:column; align-items:stretch; }
     .compras-actions { justify-content:flex-start; }
     .compras-grid { grid-template-columns:1fr; }
@@ -1558,8 +1590,12 @@
       width:100%;
     }
     #tabelaItensCompra .linha-item {
-      border-bottom:1px solid #e2e8f0;
-      padding:10px 0;
+      margin:10px 0;
+      padding:10px;
+      border:1px solid #e2e8f0;
+      border-radius:12px;
+      background:#ffffff;
+      box-shadow:0 6px 16px rgba(15,23,42,.05);
     }
     #tabelaItensCompra .linha-item.item-mobile-destacado {
       margin:8px 0;
@@ -1616,9 +1652,80 @@
     #tabelaItensCompra .linha-item td:last-child {
       margin-top:6px;
     }
-    #tabelaItensCompra .linha-item td:last-child .compras-btn {
-      min-height:34px;
-      padding:7px 10px;
+    #tabelaItensCompra .item-mobile-acoes {
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-top:8px;
+    }
+    #tabelaItensCompra .item-mobile-acoes .compras-btn {
+      flex:1 1 110px;
+      min-height:38px;
+      padding:8px 10px;
+      border-radius:9px;
+    }
+    #tabelaItensCompra .btn-editar-item-mobile {
+      background:#eff6ff;
+      border:1.5px solid #60a5fa;
+      color:#1d4ed8;
+    }
+    #tabelaItensCompra .btn-remover {
+      background:#fff7ed;
+      border:1.5px solid #fed7aa;
+      color:#9a3412;
+    }
+    #tabelaItensCompra .item-mobile-edicao-acoes {
+      display:none;
+      gap:8px;
+      flex-wrap:wrap;
+      width:100%;
+      margin-top:8px;
+    }
+    #tabelaItensCompra .linha-item.item-editando-mobile .item-mobile-edicao-acoes {
+      display:flex;
+    }
+    #tabelaItensCompra .linha-item.item-editando-mobile .item-mobile-acoes-principais {
+      display:none;
+    }
+    #tabelaItensCompra .btn-salvar-edicao-item-mobile {
+      background:#2563eb;
+      color:#fff;
+      border:1.5px solid #2563eb;
+    }
+    #tabelaItensCompra .btn-cancelar-edicao-item-mobile {
+      background:#fff;
+      color:#1d4ed8;
+      border:1.5px solid #93c5fd;
+    }
+    #tabelaItensCompra .linha-item.item-editando-mobile td:nth-child(2) input,
+    #tabelaItensCompra .linha-item.item-editando-mobile td:nth-child(3) input,
+    #tabelaItensCompra .linha-item.item-editando-mobile td:nth-child(4) input {
+      display:block;
+      width:100%;
+      max-width:100%;
+      min-height:44px;
+      margin-top:4px;
+      padding:9px 10px;
+      border:1.5px solid #93c5fd;
+      border-radius:9px;
+      background:#fff;
+      box-shadow:none;
+      pointer-events:auto;
+    }
+    #tabelaItensCompra .item-mobile-erro {
+      display:none;
+      width:100%;
+      margin-top:8px;
+      padding:8px 10px;
+      border:1px solid #fca5a5;
+      border-radius:9px;
+      background:#fee2e2;
+      color:#991b1b;
+      font-size:.8rem;
+      font-weight:850;
+    }
+    #tabelaItensCompra .item-mobile-erro.visivel {
+      display:block;
     }
     #tabelaItensCompra.itens-mobile-vazio tbody::before {
       content:"Nenhum item adicionado ainda.";
@@ -1636,6 +1743,18 @@
     .compras-actions-final {
       gap:9px;
       align-items:stretch;
+      margin-top:12px;
+      padding:12px;
+      border:1.5px solid #bfdbfe;
+      border-radius:14px;
+      background:#f8fbff;
+    }
+    .compras-actions-final-titulo {
+      display:block;
+      margin:0;
+      color:#172554;
+      font-size:.95rem;
+      font-weight:950;
     }
     .compras-actions-final .compras-btn {
       width:100%;
@@ -1672,6 +1791,12 @@
     }
     .compras-label-mobile {
       display:inline;
+    }
+    .compras-mobile-inline-only {
+      display:inline-flex;
+    }
+    .compras-actions-final-titulo.compras-mobile-inline-only {
+      display:block;
     }
     .produto-busca { font-size:.84rem; }
     .compras-origem-total { grid-template-columns:1fr; }
@@ -2062,7 +2187,7 @@
     {% endif %}
 
     <section class="compras-card" id="secaoItensCompra">
-      <div class="compras-card-head">Itens da compra</div>
+      <div class="compras-card-head"><span class="compras-label-desktop">Itens da compra</span><span class="compras-label-mobile">Itens lan&ccedil;ados</span></div>
       <div class="compras-table-wrap">
         <table class="compras-table" id="tabelaItensCompra">
           <thead>
@@ -2093,13 +2218,23 @@
                 </div>
               </td>
               <td data-label="Quantidade"><input type="text" name="quantidade[]" inputmode="decimal" value="{{ linha.quantidade }}"></td>
-              <td data-label="Unidade"><input type="text" name="unidade[]" placeholder="UN" value="{{ linha.unidade }}"></td>
+              <td data-label="Unidade"><input type="text" name="unidade[]" placeholder="UN" value="{{ linha.unidade }}" list="unidadesCompraMobile"></td>
               <td data-label="Valor">
                 <input type="hidden" name="preco_unitario[]" value="{{ linha.preco_unitario }}">
                 <input type="text" class="campo-preco-unitario-compra" inputmode="decimal" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" value="{{ linha.preco_unitario }}" placeholder="0,00">
               </td>
               <td data-label="Total do item" class="valor-total-item">R$ 0,00</td>
-              <td data-label="Acao"><button type="button" class="compras-btn compras-btn-secondary btn-remover">Remover</button></td>
+              <td data-label="Acao">
+                <div class="item-mobile-acoes item-mobile-acoes-principais">
+                  <button type="button" class="compras-btn compras-btn-secondary compras-mobile-inline-only btn-editar-item-mobile">Editar</button>
+                  <button type="button" class="compras-btn compras-btn-secondary btn-remover">Remover</button>
+                </div>
+                <div class="item-mobile-edicao-acoes">
+                  <button type="button" class="compras-btn btn-salvar-edicao-item-mobile">Salvar altera&ccedil;&atilde;o</button>
+                  <button type="button" class="compras-btn btn-cancelar-edicao-item-mobile">Cancelar edi&ccedil;&atilde;o</button>
+                </div>
+                <div class="item-mobile-erro" aria-live="polite"></div>
+              </td>
             </tr>
             {% endfor %}
           </tbody>
@@ -2114,6 +2249,12 @@
         <button type="button" id="btnAdicionarItem" class="compras-btn compras-btn-secondary">+ Adicionar item</button>
       </div>
     </section>
+
+    <datalist id="unidadesCompraMobile">
+      {% for unidade in unidades_produto %}
+        <option value="{{ unidade.sigla }}">{{ unidade.nome }}</option>
+      {% endfor %}
+    </datalist>
 
     {% if compra %}
     <section class="compras-card produto-rapido-destaque{% if rascunho_salvo %} compra-bloco-recolhido{% endif %}" id="secaoProdutoRapidoCompra">
@@ -2140,6 +2281,7 @@
     {% endif %}
 
     <div class="compras-actions compras-actions-final">
+      <h2 class="compras-actions-final-titulo compras-mobile-inline-only">Pr&oacute;ximos passos</h2>
       {% if finalizando %}
         <p class="compras-acoes-ajuda-mobile">Salve como rascunho para continuar depois ou finalize quando a compra estiver conferida.</p>
         <button type="button" class="compras-btn compras-btn-secondary" id="btnVoltarRascunhoCompra"><span class="compras-label-desktop">Continuar Editando</span><span class="compras-label-mobile">Salvar Rascunho</span></button>
@@ -3165,6 +3307,7 @@
 
   function limparLinhaItem(linha) {
     const produto = linha.querySelector('[name="produto_id[]"]');
+    cancelarEdicaoItemMobile(linha);
     produto.value = "";
     produto.selectedIndex = 0;
     linha.querySelector('[name="produto_busca[]"]').value = "";
@@ -3181,6 +3324,99 @@
     fecharSugestoes(linha);
     conferenciaPrecosConfirmada = false;
     definirCustosSelecionadosParaEnvio(false);
+  }
+
+  function camposEdicaoItemMobile(linha) {
+    return {
+      produto: linha.querySelector('[name="produto_id[]"]'),
+      quantidade: linha.querySelector('[name="quantidade[]"]'),
+      unidade: linha.querySelector('[name="unidade[]"]'),
+      preco: campoPrecoUnitario(linha),
+      erro: linha.querySelector(".item-mobile-erro")
+    };
+  }
+
+  function mostrarErroEdicaoItemMobile(linha, mensagem) {
+    const erro = linha.querySelector(".item-mobile-erro");
+    if (!erro) return;
+    erro.textContent = mensagem || "";
+    erro.classList.toggle("visivel", Boolean(mensagem));
+  }
+
+  function guardarValoresEdicaoItemMobile(linha) {
+    const campos = camposEdicaoItemMobile(linha);
+    linha.dataset.edicaoQuantidadeOriginal = campos.quantidade ? campos.quantidade.value : "";
+    linha.dataset.edicaoUnidadeOriginal = campos.unidade ? campos.unidade.value : "";
+    linha.dataset.edicaoPrecoOriginal = campos.preco ? campos.preco.value : "";
+    linha.dataset.edicaoProdutoOriginal = campos.produto ? campos.produto.value : "";
+  }
+
+  function limparEstadoEdicaoItemMobile(linha) {
+    [
+      "edicaoQuantidadeOriginal",
+      "edicaoUnidadeOriginal",
+      "edicaoPrecoOriginal",
+      "edicaoProdutoOriginal"
+    ].forEach(function(chave) {
+      delete linha.dataset[chave];
+    });
+    linha.classList.remove("item-editando-mobile");
+    mostrarErroEdicaoItemMobile(linha, "");
+  }
+
+  function iniciarEdicaoItemMobile(linha) {
+    if (!compraMobile() || !linha || linhaNoFormularioMobile(linha)) return;
+    guardarValoresEdicaoItemMobile(linha);
+    linha.classList.add("item-editando-mobile");
+    mostrarErroEdicaoItemMobile(linha, "");
+  }
+
+  function cancelarEdicaoItemMobile(linha) {
+    if (!linha || !linha.classList.contains("item-editando-mobile")) return;
+    const campos = camposEdicaoItemMobile(linha);
+    if (campos.quantidade) campos.quantidade.value = linha.dataset.edicaoQuantidadeOriginal || "";
+    if (campos.unidade) campos.unidade.value = linha.dataset.edicaoUnidadeOriginal || "";
+    if (campos.preco) campos.preco.value = linha.dataset.edicaoPrecoOriginal || "";
+    sincronizarPrecoUnitarioLinha(linha);
+    limparEstadoEdicaoItemMobile(linha);
+    recalcular();
+  }
+
+  function salvarEdicaoItemMobile(linha) {
+    if (!linha || !linha.classList.contains("item-editando-mobile")) return;
+    const campos = camposEdicaoItemMobile(linha);
+    const produtoOriginal = linha.dataset.edicaoProdutoOriginal || "";
+
+    if (!campos.produto || campos.produto.value !== produtoOriginal) {
+      mostrarErroEdicaoItemMobile(linha, "O produto deste item nao pode ser alterado por aqui.");
+      if (campos.produto) campos.produto.value = produtoOriginal;
+      return;
+    }
+
+    const quantidadeTexto = String(campos.quantidade && campos.quantidade.value || "").trim();
+    const precoTexto = String(campos.preco && campos.preco.value || "").trim();
+    const quantidadeValor = numero(quantidadeTexto);
+    const precoValor = numero(precoTexto);
+
+    if (!quantidadeTexto || !Number.isFinite(quantidadeValor) || quantidadeValor <= 0) {
+      mostrarErroEdicaoItemMobile(linha, "Informe uma quantidade maior que zero.");
+      return;
+    }
+
+    if (!precoTexto || !Number.isFinite(precoValor) || precoValor < 0) {
+      mostrarErroEdicaoItemMobile(linha, "Informe um valor unitario valido.");
+      return;
+    }
+
+    if (campos.quantidade) campos.quantidade.value = quantidadeTexto;
+    if (campos.unidade) campos.unidade.value = String(campos.unidade.value || "").trim();
+    if (campos.preco) campos.preco.value = precoCampo(precoValor);
+
+    sincronizarPrecoUnitarioLinha(linha);
+    conferenciaPrecosConfirmada = false;
+    definirCustosSelecionadosParaEnvio(false);
+    limparEstadoEdicaoItemMobile(linha);
+    recalcular();
   }
 
   function proximaLinhaVazia(linha) {
@@ -3250,6 +3486,9 @@
     const quantidade = linha.querySelector('[name="quantidade[]"]');
     const unidade = linha.querySelector('[name="unidade[]"]');
     const preco = campoPrecoUnitario(linha);
+    const btnEditarItemMobile = linha.querySelector(".btn-editar-item-mobile");
+    const btnSalvarEdicaoItemMobile = linha.querySelector(".btn-salvar-edicao-item-mobile");
+    const btnCancelarEdicaoItemMobile = linha.querySelector(".btn-cancelar-edicao-item-mobile");
 
     produtoBusca.addEventListener("focus", function() {
       marcarLinhaAtiva(linha);
@@ -3319,11 +3558,17 @@
       campo.addEventListener("input", function() {
         conferenciaPrecosConfirmada = false;
         definirCustosSelecionadosParaEnvio(false);
+        if (linha.classList.contains("item-editando-mobile") && !linhaNoFormularioMobile(linha)) {
+          return;
+        }
         recalcular();
       });
       campo.addEventListener("change", function() {
         conferenciaPrecosConfirmada = false;
         definirCustosSelecionadosParaEnvio(false);
+        if (linha.classList.contains("item-editando-mobile") && !linhaNoFormularioMobile(linha)) {
+          return;
+        }
         recalcular();
       });
 
@@ -3410,8 +3655,30 @@
     preco.addEventListener("keydown", function(event) {
       if (event.key !== "Enter") return;
       event.preventDefault();
+      if (linha.classList.contains("item-editando-mobile")) {
+        salvarEdicaoItemMobile(linha);
+        return;
+      }
       focarProximaLinha(linha);
     });
+
+    if (btnEditarItemMobile) {
+      btnEditarItemMobile.addEventListener("click", function() {
+        iniciarEdicaoItemMobile(linha);
+      });
+    }
+
+    if (btnSalvarEdicaoItemMobile) {
+      btnSalvarEdicaoItemMobile.addEventListener("click", function() {
+        salvarEdicaoItemMobile(linha);
+      });
+    }
+
+    if (btnCancelarEdicaoItemMobile) {
+      btnCancelarEdicaoItemMobile.addEventListener("click", function() {
+        cancelarEdicaoItemMobile(linha);
+      });
+    }
 
     linha.querySelector(".btn-remover").addEventListener("click", function() {
       if (compraMobile() && !linhaNoFormularioMobile(linha)) {
@@ -3922,6 +4189,14 @@
   }
 
   function enviarCompraComAcao(acao, botao) {
+    if (compraMobile()) {
+      const itemEmEdicao = document.querySelector("#tabelaItensCompra .linha-item.item-editando-mobile");
+      if (itemEmEdicao) {
+        mostrarErroEdicaoItemMobile(itemEmEdicao, "Salve ou cancele a edicao deste item antes de continuar.");
+        itemEmEdicao.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+    }
     sincronizarTodosPrecosUnitarios();
     atualizarFluxoMobileCompra();
     if (acaoCompra) acaoCompra.value = acao;
