@@ -427,6 +427,13 @@ class FechamentoCompraFinanceiroTests(TestCase):
 
         self.assertContains(resposta, "Itens lan&ccedil;ados")
         self.assertContains(resposta, "Pr&oacute;ximos passos")
+        self.assertContains(resposta, 'id="totalItensCompraMobile"')
+        self.assertContains(resposta, "Itens:")
+        self.assertContains(resposta, "Remover item")
+        self.assertContains(resposta, "Tem certeza que deseja remover este produto da compra?")
+        self.assertContains(resposta, 'id="produtoModalRemoverItemCompra"')
+        self.assertContains(resposta, "function abrirModalRemoverItemCompra")
+        self.assertContains(resposta, "function executarRemocaoLinhaItem")
         self.assertContains(resposta, "btn-editar-item-mobile")
         self.assertContains(resposta, "Salvar altera&ccedil;&atilde;o")
         self.assertContains(resposta, "Cancelar edi&ccedil;&atilde;o")
