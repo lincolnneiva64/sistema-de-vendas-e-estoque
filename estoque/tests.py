@@ -451,6 +451,9 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, "setBloqueadoRascunhoControle(btnVoltarLancamentoProdutoMobile, rascunhoBloqueado);")
         self.assertContains(resposta, "rascunhoBloqueado = false;")
         self.assertContains(resposta, "if (compraRascunhoBloqueado()) return;")
+        self.assertContains(resposta, 'btnSalvarRascunhoCompra.dataset.lancarItens === "1"')
+        self.assertContains(resposta, 'enviarCompraComAcao("salvar_rascunho", btnSalvarRascunhoCompra);')
+        self.assertNotContains(resposta, "#btnContinuarLancandoItens, #btnSalvarRascunhoCompra[data-lancar-itens='1']")
         self.assertContains(resposta, 'acao === "salvar_rascunho"')
         self.assertContains(resposta, "linha.dataset.edicaoProdutoOriginal")
         self.assertContains(resposta, "O produto deste item nao pode ser alterado por aqui.")
@@ -505,6 +508,46 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta_reabrir, "atualizarControlesRascunhoBloqueado();")
         self.assertNotContains(resposta_reabrir, '>Salvar Rascunho</button>')
         self.assertNotContains(resposta_reabrir, "Salve como rascunho para continuar depois")
+
+    def test_mobile_salvar_rascunho_suporta_ciclos_consecutivos(self):
+        compra = self._criar_compra_rascunho_com_item()
+        estoque_antes = self.produto.quantidade
+        url = reverse("estoque:compra_editar", kwargs={"pk": compra.pk})
+
+        for quantidade in ["1,50", "2,00", "3,25"]:
+            dados = self._dados_finalizacao_compra_lista(
+                compra,
+                tipo_pagamento="avista",
+                acao_compra="salvar_rascunho",
+                fluxo_mobile_compra="1",
+                origem_caixa="0,00",
+                origem_reserva="0,00",
+                origem_banco="0,00",
+            )
+            dados["quantidade[]"] = [quantidade]
+
+            resposta = self.client.post(
+                url,
+                dados,
+                secure=True,
+            )
+            self.assertRedirects(
+                resposta,
+                f"{url}?rascunho_salvo=1",
+                fetch_redirect_response=False,
+            )
+
+            compra.refresh_from_db()
+            self.produto.refresh_from_db()
+            self.assertEqual(compra.status, Compra.STATUS_RASCUNHO)
+            self.assertEqual(self.produto.quantidade, estoque_antes)
+            self.assertEqual(MovimentoFinanceiro.objects.filter(compra=compra).count(), 0)
+            self.assertEqual(ContaPagar.objects.filter(compra=compra).count(), 0)
+
+            resposta_reabrir = self.client.get(f"{url}?rascunho_salvo=1", secure=True)
+            self.assertContains(resposta_reabrir, "Rascunho salvo")
+            self.assertContains(resposta_reabrir, 'data-lancar-itens="1"')
+            self.assertContains(resposta_reabrir, "let rascunhoBloqueado = true;")
 
     def test_mobile_item_editado_persiste_ao_salvar_rascunho(self):
         compra = self._criar_compra_rascunho_com_item()

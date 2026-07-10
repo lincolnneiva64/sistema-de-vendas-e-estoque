@@ -2695,10 +2695,12 @@
       btnSalvarRascunhoCompra.disabled = false;
       btnSalvarRascunhoCompra.removeAttribute("disabled");
       btnSalvarRascunhoCompra.removeAttribute("aria-disabled");
+      btnSalvarRascunhoCompra.style.pointerEvents = "";
       btnSalvarRascunhoCompra.type = "button";
       btnSalvarRascunhoCompra.textContent = "Salvar Rascunho";
       btnSalvarRascunhoCompra.dataset.lancarItens = "0";
       btnSalvarRascunhoCompra.classList.remove("botao-continuar-rascunho-rodape");
+      btnSalvarRascunhoCompra.classList.remove("rascunho-protegido");
       if (btnSalvarRascunhoCompra.dataset.bloqueadoRascunho === "1") {
         delete btnSalvarRascunhoCompra.dataset.bloqueadoRascunho;
       }
@@ -3989,7 +3991,7 @@
 
   document.addEventListener("click", function(event) {
     const botaoContinuar = event.target.closest
-      ? event.target.closest("#btnContinuarLancandoItens, #btnSalvarRascunhoCompra[data-lancar-itens='1']")
+      ? event.target.closest("#btnContinuarLancandoItens")
       : null;
     if (!botaoContinuar || !compraMobile()) return;
 
@@ -4451,7 +4453,7 @@
   if (btnSalvarRascunhoCompra && formCompra) {
     btnSalvarRascunhoCompra.addEventListener("click", function(event) {
       if (compraMobile() && btnSalvarRascunhoCompra.dataset.lancarItens === "1") {
-        event.preventDefault();
+        pararEvento(event);
         voltarParaLancamentoProdutoMobile();
         return;
       }
