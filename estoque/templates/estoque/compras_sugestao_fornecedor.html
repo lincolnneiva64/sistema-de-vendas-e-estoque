@@ -49,6 +49,10 @@
     flex-wrap: wrap;
   }
 
+  .sugestao-topo-mobile-only {
+    display: none;
+  }
+
   .sugestao-btn {
     min-height: 40px;
     border: 0;
@@ -796,6 +800,22 @@
     margin-top: 10px;
   }
 
+  .sugestao-mobile-card.item-adicionado-lista {
+    border-left-color: #166534;
+    background: #f0fdf4;
+  }
+
+  .sugestao-mobile-card.item-adicionado-lista .sugestao-adicionar-lista-mobile {
+    background: #dcfce7;
+    border-color: #86efac;
+    color: #166534;
+    cursor: default;
+  }
+
+  .sugestao-itens-lista-mobile {
+    display: none;
+  }
+
   .sugestao-manual {
     margin-bottom: 14px;
     padding: 0;
@@ -1075,9 +1095,20 @@
 
   @media (max-width: 860px) {
     .sugestao-page {
+      display: flex;
+      flex-direction: column;
       margin-top: 10px;
       padding: 0 10px 100px;
     }
+
+    .sugestao-header { order: 1; }
+    .sugestao-filtros { order: 2; }
+    .sugestao-conferencia { order: 3; }
+    .sugestao-aviso { order: 4; }
+    .sugestao-manual { order: 5; }
+    .sugestao-card { order: 6; }
+    .sugestao-resumo-final { order: 7; }
+    .sugestao-visualizacao-acoes { order: 8; }
 
     .sugestao-header {
       align-items: stretch;
@@ -1095,6 +1126,14 @@
     .sugestao-resumo-final {
       display: grid;
       grid-template-columns: 1fr;
+    }
+
+    .sugestao-topo-mobile-hidden {
+      display: none !important;
+    }
+
+    .sugestao-topo-mobile-only {
+      display: inline-flex;
     }
 
     .sugestao-btn {
@@ -1144,6 +1183,79 @@
 
     .sugestao-mobile-card {
       padding: 14px;
+    }
+
+    .sugestao-mobile-edit-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin-top: 2px;
+    }
+
+    .sugestao-itens-lista-mobile {
+      display: grid;
+      gap: 10px;
+      margin: 12px;
+      padding: 12px;
+      border: 1px solid #bbf7d0;
+      border-radius: 10px;
+      background: #f8fff9;
+    }
+
+    .sugestao-itens-lista-mobile h2 {
+      margin: 0;
+      color: #14532d;
+      font-size: 1rem;
+      font-weight: 950;
+    }
+
+    .sugestao-itens-lista-vazia {
+      color: #64748b;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .sugestao-itens-lista-vazia.oculto {
+      display: none;
+    }
+
+    .sugestao-item-lista-mobile {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid #d9f99d;
+      border-left: 5px solid #16a34a;
+      border-radius: 9px;
+      background: #fff;
+    }
+
+    .sugestao-item-lista-mobile-topo {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      color: #172033;
+      font-weight: 950;
+    }
+
+    .sugestao-item-lista-mobile-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    .sugestao-item-lista-mobile .sugestao-input {
+      width: 100%;
+      max-width: none;
+      min-height: 42px;
+      padding: 9px 10px;
+      font-size: .98rem;
+      box-sizing: border-box;
+    }
+
+    .sugestao-item-lista-mobile-total {
+      color: #166534;
+      font-weight: 950;
+      text-align: right;
     }
 
     .sugestao-mobile-produto {
@@ -1234,17 +1346,7 @@
     }
 
     .sugestao-salvar-mobile-rodape {
-      position: sticky;
-      bottom: 10px;
-      z-index: 80;
-      display: grid;
-      gap: 6px;
-      margin-top: 12px;
-      padding: 10px;
-      border: 1px solid #f3b5bf;
-      border-radius: 12px;
-      background: #fff8f9;
-      box-shadow: 0 14px 30px rgba(127, 29, 29, .18);
+      display: none;
     }
 
     .sugestao-salvar-mobile-rodape .sugestao-btn {
@@ -1307,9 +1409,10 @@
       <p class="sugestao-subtitle">{% if modo_edicao_lista %}Altere os itens da lista salva e grave novamente a mesma lista. Não gera compra, estoque nem financeiro.{% else %}Gere sugestao de reposicao com base nas vendas do periodo e no estoque minimo.{% endif %}</p>
     </div>
     <div class="sugestao-actions">
-      <a href="{% url 'estoque:compras_lista' %}" class="sugestao-btn sugestao-btn-secondary">Consultar Compras</a>
+      <a href="{% url 'estoque:compras_lista' %}" class="sugestao-btn sugestao-btn-secondary sugestao-topo-mobile-hidden">Consultar Compras</a>
       <a href="{% url 'estoque:compras_listas_fornecedor' %}" class="sugestao-btn sugestao-btn-secondary">Consultar Listas</a>
-      <a href="{% url 'estoque:compras_nova' %}" class="sugestao-btn sugestao-btn-secondary">Nova compra</a>
+      <a href="{% url 'estoque:sugestao_compra_fornecedor' %}?nova=1" class="sugestao-btn sugestao-btn-secondary sugestao-topo-mobile-only">Nova Lista</a>
+      <a href="{% url 'estoque:compras_nova' %}" class="sugestao-btn sugestao-btn-secondary sugestao-topo-mobile-hidden">Nova compra</a>
     </div>
   </header>
 
@@ -1331,7 +1434,7 @@
         <div class="sugestao-field">
           <label for="periodo">Periodo</label>
           <div class="sugestao-periodo-input">
-            <input type="number" name="periodo" id="periodo" min="1" step="1" inputmode="numeric" value="{{ periodo|default:'14' }}">
+            <input type="number" name="periodo" id="periodo" min="1" step="1" inputmode="numeric" value="{{ periodo|default_if_none:'14' }}">
             <span class="sugestao-periodo-sufixo">dias</span>
           </div>
         </div>
@@ -1559,12 +1662,20 @@
               <input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-unitario-input" data-fator="{{ linha.fator_conversao|floatformat:3 }}" value="{{ linha.preco_unitario_calculado|floatformat:2 }}" aria-label="Preco unitario para {{ linha.produto.nome }}">
               <label class="sugestao-mobile-label">Total sugerido</label>
               <input type="text" inputmode="decimal" class="sugestao-input sugestao-total-input" value="{{ linha.total_sugerido|floatformat:2 }}" aria-label="Total sugerido para {{ linha.produto.nome }}">
-              <button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button>
+              <div class="sugestao-mobile-edit-actions">
+                <button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-adicionar-lista-mobile">Adicionar à lista</button>
+                <button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button>
+              </div>
             </div>
           </article>
         {% endfor %}
         {% endif %}
       </div>
+      <section class="sugestao-itens-lista-mobile" id="itensListaMobile" aria-label="Itens da lista">
+        <h2>Itens da lista</h2>
+      <div class="sugestao-itens-lista-vazia" id="itensListaMobileVazia">Toque em Adicionar à lista nos produtos sugeridos.</div>
+        <div id="itensListaMobileLista"></div>
+      </section>
       <div class="sugestao-salvar-mobile-rodape">
         <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-salvar-lista-extra" id="{% if modo_edicao_lista %}btnSalvarAlteracoesListaMobile{% else %}btnGravarListaMobile{% endif %}">{% if modo_edicao_lista %}Salvar alterações{% else %}Gravar lista{% endif %}</button>
         {% if not modo_edicao_lista or can_gerar_compra_lista %}
@@ -1607,21 +1718,68 @@
   const periodo = document.getElementById("periodo");
   const dataInicio = document.getElementById("data_inicio");
   const dataFim = document.getElementById("data_fim");
+  const dataChegada = document.getElementById("data_chegada");
+  const fornecedorBusca = document.getElementById("fornecedorBuscaSugestao");
+  const fornecedorId = document.getElementById("fornecedor");
 
   if (!periodo || !dataInicio || !dataFim) return;
+
+  const mobileQuery = window.matchMedia ? window.matchMedia("(max-width: 860px)") : null;
+  const modoEdicaoLista = {% if modo_edicao_lista %}true{% else %}false{% endif %};
+  const params = new URLSearchParams(window.location.search || "");
+  const novaListaMobileLimpa = !modoEdicaoLista && (
+    params.get("nova") === "1" ||
+    (!params.has("fornecedor") && !params.has("periodo") && !params.has("data_inicio") && !params.has("data_fim"))
+  );
+
+  function ehMobile() {
+    return mobileQuery ? mobileQuery.matches : window.innerWidth <= 860;
+  }
 
   function iso(data) {
     return data.toISOString().slice(0, 10);
   }
 
+  function hojeIso() {
+    return iso(new Date());
+  }
+
+  function prepararNovaListaMobileLimpa() {
+    if (!novaListaMobileLimpa || !ehMobile()) return;
+    if (fornecedorBusca) fornecedorBusca.value = "";
+    if (fornecedorId) fornecedorId.value = "";
+    periodo.value = "";
+    dataInicio.value = "";
+    dataFim.value = "";
+    if (dataChegada && !dataChegada.value) {
+      dataChegada.value = hojeIso();
+    }
+    window.setTimeout(function() {
+      fornecedorBusca?.focus();
+    }, 0);
+  }
+
   function atualizarDatasRapidas() {
+    if (novaListaMobileLimpa && ehMobile() && !String(periodo.value || "").trim()) {
+      dataInicio.value = "";
+      dataFim.value = "";
+      return;
+    }
+
     let dias = Number(periodo.value || 14);
     if (!Number.isFinite(dias) || dias <= 0) {
+      if (novaListaMobileLimpa && ehMobile()) {
+        dataInicio.value = "";
+        dataFim.value = "";
+        return;
+      }
       dias = 14;
       periodo.value = "14";
     }
 
-    const fim = dataFim.value ? new Date(dataFim.value + "T00:00:00") : new Date();
+    const fim = (dataFim.value && !(novaListaMobileLimpa && ehMobile()))
+      ? new Date(dataFim.value + "T00:00:00")
+      : new Date();
     const inicio = new Date(fim);
     inicio.setDate(fim.getDate() - dias);
     dataFim.value = iso(fim);
@@ -1630,6 +1788,7 @@
 
   periodo.addEventListener("input", atualizarDatasRapidas);
   periodo.addEventListener("change", atualizarDatasRapidas);
+  prepararNovaListaMobileLimpa();
 })();
 </script>
 
@@ -1940,7 +2099,11 @@
   }
 
   function atualizarTotalGeral() {
-    const total = Array.from(document.querySelectorAll(".sugestao-total-input"))
+    const listaMobileVisivel = visivel(document.getElementById("mobileSugestaoProdutos"));
+    const seletorTotais = listaMobileVisivel
+      ? "#mobileSugestaoProdutos .sugestao-mobile-card[data-na-lista='1'] .sugestao-total-input"
+      : ".sugestao-total-input";
+    const total = Array.from(document.querySelectorAll(seletorTotais))
       .filter(visivel)
       .reduce((soma, campo) => soma + paraNumero(campo.value), 0);
 
@@ -1950,7 +2113,10 @@
   }
 
   function atualizarContagemProdutos() {
-    const total = document.querySelectorAll("#tbodySugestaoProdutos tr[data-produto-id]").length;
+    const mobileVisivel = visivel(document.getElementById("mobileSugestaoProdutos"));
+    const total = mobileVisivel
+      ? document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-na-lista='1']").length
+      : document.querySelectorAll("#tbodySugestaoProdutos tr[data-produto-id]").length;
     document.querySelectorAll("[data-produtos-lista-total]").forEach((el) => {
       el.textContent = String(total);
     });
@@ -2041,6 +2207,8 @@
 
   atualizarTotalGeral();
   atualizarContagemProdutos();
+  window.atualizarTotaisSugestaoFornecedor = atualizarTotalGeral;
+  window.atualizarContagemSugestaoFornecedor = atualizarContagemProdutos;
 })();
 </script>
 
@@ -2299,14 +2467,21 @@
           <input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-unitario-input" data-fator="${escapeHtml(produto.fator_conversao)}" value="${escapeHtml(produto.preco_unitario_calculado)}" aria-label="Preco unitario para ${escapeHtml(produto.nome)}">
           <label class="sugestao-mobile-label">Total sugerido</label>
           <input type="text" inputmode="decimal" class="sugestao-input sugestao-total-input" value="${escapeHtml(produto.total_sugerido)}" aria-label="Total sugerido para ${escapeHtml(produto.nome)}">
-          <button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button>
+          <div class="sugestao-mobile-edit-actions">
+            <button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-adicionar-lista-mobile">Adicionar à lista</button>
+            <button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button>
+          </div>
         </div>
       </article>
     `;
   }
 
   function atualizarResumoDepoisDeAdicionar() {
-    const total = Array.from(document.querySelectorAll(".sugestao-total-input"))
+    const listaMobileVisivel = !!(mobile && (mobile.offsetWidth || mobile.offsetHeight || mobile.getClientRects().length));
+    const seletorTotais = listaMobileVisivel
+      ? "#mobileSugestaoProdutos .sugestao-mobile-card[data-na-lista='1'] .sugestao-total-input"
+      : ".sugestao-total-input";
+    const total = Array.from(document.querySelectorAll(seletorTotais))
       .filter((el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length))
       .reduce((soma, campo) => {
         let texto = String(campo.value || "0").replace(/[^\d,.-]/g, "");
@@ -2319,7 +2494,9 @@
       el.textContent = "R$ " + total.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     });
 
-    const totalProdutos = tbody.querySelectorAll("tr[data-produto-id]").length;
+    const totalProdutos = listaMobileVisivel
+      ? document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-na-lista='1']").length
+      : tbody.querySelectorAll("tr[data-produto-id]").length;
     document.querySelectorAll("[data-produtos-lista-total]").forEach((el) => {
       el.textContent = String(totalProdutos);
     });
@@ -2587,6 +2764,208 @@
 
 <script>
 (function () {
+  const mobile = document.getElementById("mobileSugestaoProdutos");
+  const lista = document.getElementById("itensListaMobileLista");
+  const vazio = document.getElementById("itensListaMobileVazia");
+  const modoEdicaoLista = {% if modo_edicao_lista %}true{% else %}false{% endif %};
+  if (!mobile || !lista) return;
+
+  window.sugestaoMobileCardsParaLista = function(cards) {
+    const colecao = Array.from(cards || []);
+    return colecao.filter((card) => card?.dataset?.naLista === "1");
+  };
+
+  function texto(el) {
+    return String(el?.textContent || "").trim();
+  }
+
+  function valor(seletor, raiz) {
+    return String(raiz.querySelector(seletor)?.value || "").trim();
+  }
+
+  function html(valorTexto) {
+    return String(valorTexto ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function numero(valorTexto) {
+    let limpo = String(valorTexto || "0").trim().replace(/[^\d,.-]/g, "");
+    if (limpo.includes(",")) limpo = limpo.replace(/\./g, "").replace(",", ".");
+    const numeroConvertido = Number(limpo);
+    return Number.isFinite(numeroConvertido) ? numeroConvertido : 0;
+  }
+
+  function decimal(valorNumero, casas) {
+    return Number(valorNumero || 0).toLocaleString("pt-BR", {
+      minimumFractionDigits: casas,
+      maximumFractionDigits: casas,
+    });
+  }
+
+  function cards() {
+    return Array.from(mobile.querySelectorAll(".sugestao-mobile-card[data-produto-id]"));
+  }
+
+  function cardPorId(produtoId) {
+    return cards().find((card) => String(card.dataset.produtoId || "") === String(produtoId || "")) || null;
+  }
+
+  function itemPorId(produtoId) {
+    return Array.from(lista.querySelectorAll(".sugestao-item-lista-mobile[data-produto-id]")).find((item) => {
+      return String(item.dataset.produtoId || "") === String(produtoId || "");
+    }) || null;
+  }
+
+  function valoresDoCard(card) {
+    const valores = Array.from(card.querySelectorAll(".sugestao-mobile-value")).map(texto);
+    return {
+      produtoId: card.dataset.produtoId || "",
+      produto: texto(card.querySelector(".sugestao-mobile-produto")),
+      quantidade: valor(".sugestao-qtd-input", card),
+      unidade: valores[4] || "",
+      precoCompra: valor(".sugestao-preco-input", card),
+      total: valor(".sugestao-total-input", card),
+    };
+  }
+
+  function atualizarVazio() {
+    const temItens = lista.querySelectorAll(".sugestao-item-lista-mobile[data-produto-id]").length > 0;
+    vazio?.classList.toggle("oculto", temItens);
+    if (window.atualizarTotaisSugestaoFornecedor) window.atualizarTotaisSugestaoFornecedor();
+    if (window.atualizarContagemSugestaoFornecedor) window.atualizarContagemSugestaoFornecedor();
+  }
+
+  function marcarBotao(card, adicionado) {
+    const botao = card.querySelector(".sugestao-adicionar-lista-mobile");
+    card.dataset.naLista = adicionado ? "1" : "0";
+    card.classList.toggle("item-adicionado-lista", adicionado);
+    if (!botao) return;
+    botao.disabled = adicionado;
+    botao.textContent = adicionado ? "Adicionado à lista" : "Adicionar à lista";
+  }
+
+  function renderItem(card) {
+    const dados = valoresDoCard(card);
+    const existente = itemPorId(dados.produtoId);
+    const conteudo = `
+      <div class="sugestao-item-lista-mobile-topo">
+        <span>${html(dados.produto)}</span>
+        <span>${html(dados.unidade)}</span>
+      </div>
+      <div class="sugestao-item-lista-mobile-grid">
+        <label class="sugestao-mobile-label">Quantidade</label>
+        <input type="text" inputmode="decimal" class="sugestao-input sugestao-item-lista-qtd-input" value="${html(dados.quantidade)}" aria-label="Quantidade de ${html(dados.produto)} na lista">
+        <label class="sugestao-mobile-label">Preco compra</label>
+        <input type="text" inputmode="decimal" class="sugestao-input sugestao-item-lista-preco-input" value="${html(dados.precoCompra)}" aria-label="Preco de ${html(dados.produto)} na lista">
+      </div>
+      <div class="sugestao-item-lista-mobile-total">Total: <span>${html(dados.total)}</span></div>
+      <div class="sugestao-mobile-edit-actions">
+        <button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-editar-lista-mobile">Editar</button>
+        <button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-lista-mobile">Remover</button>
+      </div>
+    `;
+
+    if (existente) {
+      existente.innerHTML = conteudo;
+      return existente;
+    }
+
+    lista.insertAdjacentHTML("beforeend", `<article class="sugestao-item-lista-mobile" data-produto-id="${html(dados.produtoId)}">${conteudo}</article>`);
+    return itemPorId(dados.produtoId);
+  }
+
+  function sincronizarItemComCard(item) {
+    const card = cardPorId(item.dataset.produtoId);
+    if (!card) return;
+
+    const qtd = item.querySelector(".sugestao-item-lista-qtd-input");
+    const preco = item.querySelector(".sugestao-item-lista-preco-input");
+    const qtdCard = card.querySelector(".sugestao-qtd-input");
+    const precoCard = card.querySelector(".sugestao-preco-input");
+    const unitarioCard = card.querySelector(".sugestao-preco-unitario-input");
+    const totalCard = card.querySelector(".sugestao-total-input");
+    const fator = Math.max(numero(unitarioCard?.dataset.fator || "1"), 1);
+    const total = numero(qtd?.value) * numero(preco?.value);
+
+    if (qtdCard && qtd) qtdCard.value = qtd.value;
+    if (precoCard && preco) precoCard.value = preco.value;
+    if (unitarioCard && preco) unitarioCard.value = decimal(numero(preco.value) / fator, 2);
+    if (totalCard) totalCard.value = decimal(total, 2);
+
+    const totalItem = item.querySelector(".sugestao-item-lista-mobile-total span");
+    if (totalItem) totalItem.textContent = decimal(total, 2);
+    if (window.atualizarTotaisSugestaoFornecedor) window.atualizarTotaisSugestaoFornecedor();
+  }
+
+  function adicionarCardNaLista(card) {
+    if (!card || card.dataset.naLista === "1") return;
+    marcarBotao(card, true);
+    renderItem(card);
+    atualizarVazio();
+  }
+
+  function removerItemDaLista(item) {
+    const card = cardPorId(item.dataset.produtoId);
+    if (card) marcarBotao(card, false);
+    item.remove();
+    atualizarVazio();
+  }
+
+  mobile.addEventListener("click", function(event) {
+    const botao = event.target.closest(".sugestao-adicionar-lista-mobile");
+    if (!botao) return;
+    const card = botao.closest(".sugestao-mobile-card[data-produto-id]");
+    adicionarCardNaLista(card);
+  });
+
+  mobile.addEventListener("input", function(event) {
+    const card = event.target.closest(".sugestao-mobile-card[data-produto-id]");
+    if (!card || card.dataset.naLista !== "1") return;
+    window.setTimeout(function() {
+      renderItem(card);
+      atualizarVazio();
+    }, 0);
+  });
+
+  lista.addEventListener("input", function(event) {
+    const item = event.target.closest(".sugestao-item-lista-mobile[data-produto-id]");
+    if (!item) return;
+    sincronizarItemComCard(item);
+  });
+
+  lista.addEventListener("blur", function(event) {
+    const campo = event.target;
+    if (!campo.matches(".sugestao-item-lista-qtd-input, .sugestao-item-lista-preco-input")) return;
+    campo.value = decimal(numero(campo.value), campo.classList.contains("sugestao-item-lista-qtd-input") ? 3 : 2);
+    const item = campo.closest(".sugestao-item-lista-mobile[data-produto-id]");
+    if (item) sincronizarItemComCard(item);
+  }, true);
+
+  lista.addEventListener("click", function(event) {
+    const item = event.target.closest(".sugestao-item-lista-mobile[data-produto-id]");
+    if (!item) return;
+    if (event.target.closest(".sugestao-editar-lista-mobile")) {
+      item.querySelector(".sugestao-item-lista-qtd-input")?.focus();
+      return;
+    }
+    if (event.target.closest(".sugestao-remover-lista-mobile")) {
+      removerItemDaLista(item);
+    }
+  });
+
+  if (modoEdicaoLista) {
+    cards().forEach(adicionarCardNaLista);
+  }
+  atualizarVazio();
+})();
+</script>
+
+<script>
+(function () {
   function itensSelecionaveis() {
     return Array.from(document.querySelectorAll("tr[data-produto-id], .sugestao-mobile-card[data-produto-id]"));
   }
@@ -2754,7 +3133,9 @@
   }
 
   function linhasMobile() {
-    return Array.from(document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-produto-id]")).map((card) => {
+    const cards = Array.from(document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-produto-id]"));
+    const cardsLista = window.sugestaoMobileCardsParaLista ? window.sugestaoMobileCardsParaLista(cards) : cards;
+    return cardsLista.map((card) => {
       const valores = Array.from(card.querySelectorAll(".sugestao-mobile-value")).map(texto);
       return {
         produto: texto(card.querySelector(".sugestao-mobile-produto")),
@@ -3043,7 +3424,23 @@
   }
 
   function cardsMobile() {
-    return Array.from(document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-produto-id]"));
+    const cards = Array.from(document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-produto-id]"));
+    return window.sugestaoMobileCardsParaLista ? window.sugestaoMobileCardsParaLista(cards) : cards;
+  }
+
+  function temItensEscolhidosMobile() {
+    return document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-na-lista='1']").length > 0;
+  }
+
+  function orientarAdicionarItensMobile() {
+    alert("Adicione pelo menos um produto à lista antes de gravar.");
+    const alvo = document.getElementById("mobileSugestaoProdutos") || document.getElementById("itensListaMobile");
+    if (alvo && typeof alvo.scrollIntoView === "function") {
+      alvo.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    window.setTimeout(function() {
+      document.querySelector("#mobileSugestaoProdutos .sugestao-adicionar-lista-mobile:not(:disabled)")?.focus();
+    }, 150);
   }
 
   function itensEditaveisAtuais() {
@@ -3341,6 +3738,10 @@
 
     if (!payload.fornecedorId) {
       alert("{% if modo_edicao_lista %}Selecione um fornecedor antes de salvar as alterações.{% else %}Selecione um fornecedor antes de gravar a lista.{% endif %}");
+      return;
+    }
+    if (!usarItensDesktop() && !temItensEscolhidosMobile()) {
+      orientarAdicionarItensMobile();
       return;
     }
     if (!linhasCandidatasAtuais().length) {

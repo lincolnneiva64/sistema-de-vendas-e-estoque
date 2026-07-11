@@ -3211,6 +3211,196 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, 'document.getElementById("produtoManualBuscaSugestao")')
         self.assertContains(resposta, '.matches(".sugestao-remover-item")')
 
+    def test_mobile_topo_mostra_consultar_listas_e_nova_lista_sem_alterar_desktop(self):
+        resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)
+        url_nova = reverse("estoque:sugestao_compra_fornecedor")
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "sugestao-topo-mobile-hidden")
+        self.assertContains(resposta, "sugestao-topo-mobile-only")
+        self.assertContains(resposta, f'href="{url_nova}?nova=1"')
+        self.assertContains(resposta, "Consultar Compras")
+        self.assertContains(resposta, "Nova compra")
+        self.assertContains(resposta, "@media (max-width: 860px)")
+
+    def test_nova_lista_mobile_tem_hooks_para_abrir_limpa_e_calcular_periodo(self):
+        hoje = timezone.localdate().isoformat()
+        resposta = self.client.get(
+            reverse("estoque:sugestao_compra_fornecedor"),
+            {"nova": "1"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'id="periodo" min="1" step="1" inputmode="numeric" value=""')
+        self.assertContains(resposta, 'id="data_inicio" value=""')
+        self.assertContains(resposta, 'id="data_fim" value=""')
+        self.assertContains(resposta, f'id="data_chegada" value="{hoje}"')
+        self.assertContains(resposta, "novaListaMobileLimpa")
+        self.assertContains(resposta, 'params.get("nova") === "1"')
+        self.assertContains(resposta, 'periodo.value = "";')
+        self.assertContains(resposta, 'dataInicio.value = "";')
+        self.assertContains(resposta, 'dataFim.value = "";')
+        self.assertContains(resposta, "dataChegada.value = hojeIso();")
+        self.assertContains(resposta, "fornecedorBusca?.focus();")
+        self.assertContains(resposta, "inicio.setDate(fim.getDate() - dias);")
+
+    def test_edicao_lista_preserva_periodo_e_datas_salvos(self):
+        produto = self.criar_produto("Produto Edicao Periodo")
+        inicio = timezone.localdate() - timedelta(days=9)
+        fim = timezone.localdate()
+        chegada = timezone.localdate() + timedelta(days=2)
+        lista = ListaCompraFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_lista=timezone.localdate(),
+            data_inicio_periodo=inicio,
+            data_fim_periodo=fim,
+            data_chegada_prevista=chegada,
+            total_lista=Decimal("20.00"),
+        )
+        ItemListaCompraFornecedor.objects.create(
+            lista=lista,
+            produto=produto,
+            estoque_atual=Decimal("5.000"),
+            estoque_minimo=Decimal("1.000"),
+            quantidade_final=Decimal("2.000"),
+            unidade="UN",
+            preco_compra=Decimal("10.00"),
+            preco_unitario=Decimal("10.00"),
+            total=Decimal("20.00"),
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_editar", kwargs={"pk": lista.pk}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, f'id="periodo" min="1" step="1" inputmode="numeric" value="9"')
+        self.assertContains(resposta, f'id="data_inicio" value="{inicio.isoformat()}"')
+        self.assertContains(resposta, f'id="data_fim" value="{fim.isoformat()}"')
+        self.assertContains(resposta, f'id="data_chegada" value="{chegada.isoformat()}"')
+
+    def test_mobile_produto_sugerido_tem_area_itens_adicionar_sem_duplicar_editar_remover(self):
+        produto = self.criar_produto("Produto Mobile Itens", quantidade=Decimal("0.000"))
+        produto.estoque_minimo = Decimal("5.000")
+        produto.unidade_compra = "UN"
+        produto.save(update_fields=["estoque_minimo", "unidade_compra"])
+        ProdutoFornecedor.objects.create(produto=produto, fornecedor=self.fornecedor, ativo=True)
+
+        resposta = self.client.get(
+            reverse("estoque:sugestao_compra_fornecedor"),
+            {"fornecedor": str(self.fornecedor.id), "periodo": "7"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'id="itensListaMobile"')
+        self.assertContains(resposta, 'id="itensListaMobileLista"')
+        self.assertContains(resposta, "sugestao-adicionar-lista-mobile")
+        self.assertContains(resposta, "sugestao-item-lista-mobile")
+        self.assertContains(resposta, "sugestao-item-lista-qtd-input")
+        self.assertContains(resposta, "sugestao-item-lista-preco-input")
+        self.assertContains(resposta, "sugestao-editar-lista-mobile")
+        self.assertContains(resposta, "sugestao-remover-lista-mobile")
+        self.assertContains(resposta, 'card.dataset.naLista === "1"')
+        self.assertContains(resposta, "marcarBotao(card, true)")
+        self.assertContains(resposta, "sincronizarItemComCard")
+
+    def test_mobile_payload_usa_itens_escolhidos_quando_existirem(self):
+        resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "window.sugestaoMobileCardsParaLista")
+        self.assertContains(resposta, 'return colecao.filter((card) => card?.dataset?.naLista === "1");')
+        self.assertContains(resposta, "const cardsLista = window.sugestaoMobileCardsParaLista")
+        self.assertContains(resposta, "cardsMobile()")
+        self.assertContains(resposta, "temItensEscolhidosMobile")
+        self.assertContains(resposta, "orientarAdicionarItensMobile")
+        self.assertContains(resposta, "Adicione pelo menos um produto à lista antes de gravar.")
+        self.assertContains(resposta, 'if (!usarItensDesktop() && !temItensEscolhidosMobile())')
+        self.assertContains(resposta, 'alvo.scrollIntoView({ behavior: "smooth", block: "start" });')
+
+    def test_mobile_gravar_e_gerar_compra_bloqueiam_sem_itens_escolhidos(self):
+        resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)
+        html = resposta.content.decode()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn("orientarAdicionarItensMobile();", html)
+        self.assertIn("novoClique(false);", html)
+        self.assertIn("novoClique(true);", html)
+        self.assertIn('document.querySelector("#mobileSugestaoProdutos .sugestao-adicionar-lista-mobile:not(:disabled)")?.focus();', html)
+        self.assertEqual(html.count("Adicione pelo menos um produto à lista antes de gravar."), 1)
+
+    def test_edicao_mobile_carrega_itens_salvos_em_itens_da_lista(self):
+        produto = self.criar_produto("Produto Edicao Mobile Lista")
+        lista = self.criar_lista_com_item(produto)
+
+        resposta = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_editar", kwargs={"pk": lista.pk}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "const modoEdicaoLista = true;")
+        self.assertContains(resposta, "cards().forEach(adicionarCardNaLista);")
+        self.assertContains(resposta, 'id="itensListaMobile"')
+
+    def test_gravar_lista_com_um_item_payload_salva_somente_esse_item(self):
+        produto_escolhido = self.criar_produto("Produto Escolhido")
+        produto_nao_escolhido = self.criar_produto("Produto Nao Escolhido")
+
+        self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(self.payload([self.criar_linha(produto_escolhido, 2)]))},
+            secure=True,
+        )
+
+        lista = ListaCompraFornecedor.objects.get()
+        self.assertEqual(lista.itens.count(), 1)
+        self.assertEqual(lista.itens.get().produto, produto_escolhido)
+        self.assertFalse(lista.itens.filter(produto=produto_nao_escolhido).exists())
+
+    def test_gravar_lista_com_varios_itens_payload_salva_somente_escolhidos(self):
+        produto_um = self.criar_produto("Produto Escolhido Um")
+        produto_dois = self.criar_produto("Produto Escolhido Dois")
+        produto_fora = self.criar_produto("Produto Fora da Lista")
+
+        self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(self.payload([
+                self.criar_linha(produto_um, 1),
+                self.criar_linha(produto_dois, 3),
+            ]))},
+            secure=True,
+        )
+
+        lista = ListaCompraFornecedor.objects.get()
+        produtos_ids = set(lista.itens.values_list("produto_id", flat=True))
+        self.assertEqual(lista.itens.count(), 2)
+        self.assertEqual(produtos_ids, {produto_um.id, produto_dois.id})
+        self.assertNotIn(produto_fora.id, produtos_ids)
+
+    def test_desktop_preserva_gravacao_de_todos_os_itens_do_payload(self):
+        produto_um = self.criar_produto("Produto Desktop Um")
+        produto_dois = self.criar_produto("Produto Desktop Dois")
+
+        self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(self.payload([
+                self.criar_linha(produto_um, 2),
+                self.criar_linha(produto_dois, 4),
+            ]))},
+            secure=True,
+        )
+
+        lista = ListaCompraFornecedor.objects.get()
+        self.assertEqual(lista.itens.count(), 2)
+        self.assertEqual(
+            set(lista.itens.values_list("produto_id", flat=True)),
+            {produto_um.id, produto_dois.id},
+        )
+
     def test_gravar_e_gerar_compra_cria_compra_rascunho_sem_finalizar(self):
         produto = self.criar_produto("Produto Gerar Compra", quantidade=Decimal("5.000"))
         estoque_antes = produto.quantidade

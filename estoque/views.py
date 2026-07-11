@@ -4120,6 +4120,12 @@ def sugestao_compra_fornecedor(request):
     fornecedor_id = (request.GET.get("fornecedor") or "").strip()
     periodo, data_inicial, data_final = _periodo_sugestao_compra(request)
     data_chegada = (request.GET.get("data_chegada") or "").strip()
+    nova_lista_limpa = request.GET.get("nova") == "1" and not fornecedor_id
+    if nova_lista_limpa:
+        periodo = ""
+        data_inicial = None
+        data_final = None
+        data_chegada = timezone.localdate().isoformat()
     fornecedor = None
     linhas = []
     total_sugerido = Decimal("0.00")
@@ -5881,6 +5887,7 @@ def compras_lista_fornecedor_editar(request, pk):
         produtos_manual.append(payload_produto)
 
     produtos_manual_json = json.dumps(produtos_sugestao + produtos_manual, ensure_ascii=False)
+    periodo_edicao = max((lista.data_fim_periodo - lista.data_inicio_periodo).days, 1)
 
     context = {
         "modo_edicao_lista": True,
@@ -5895,6 +5902,7 @@ def compras_lista_fornecedor_editar(request, pk):
         "produtos_manual_json": produtos_manual_json,
         "produtos_manual_sugestao_json": produtos_manual_json,
         "produtos_json": produtos_manual_json,
+        "periodo": str(periodo_edicao),
         "data_inicio": lista.data_inicio_periodo,
         "data_fim": lista.data_fim_periodo,
         "data_chegada": lista.data_chegada_prevista.isoformat() if lista.data_chegada_prevista else "",
