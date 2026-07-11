@@ -553,46 +553,6 @@ td.listas-fornecedor-total {
 }
 </style>
 
-<script>
-(function() {
-  const botao = document.getElementById("btnToggleFiltrosListasMobile");
-  const area = document.getElementById("areaFiltrosListasMobile");
-
-  if (!botao || !area) return;
-
-  const parametros = new URLSearchParams(window.location.search || "");
-  const nomesFiltros = [
-    "fornecedor",
-    "status",
-    "data_inicio",
-    "data_fim",
-    "mobile"
-  ];
-
-  function possuiFiltroAplicado() {
-    return nomesFiltros.some(function(nome) {
-      return String(parametros.get(nome) || "").trim() !== "";
-    });
-  }
-
-  function definirAberta(aberta) {
-    area.classList.toggle("aberta", aberta);
-    botao.textContent = aberta ? "Recolher filtros" : "Filtrar listas";
-    botao.setAttribute("aria-expanded", aberta ? "true" : "false");
-  }
-
-  botao.addEventListener("click", function() {
-    definirAberta(!area.classList.contains("aberta"));
-  });
-
-  if (
-    window.matchMedia("(max-width: 768px)").matches &&
-    possuiFiltroAplicado()
-  ) {
-    definirAberta(true);
-  }
-})();
-</script>
 
 {% endblock %}
 {% block content %}
@@ -2889,6 +2849,48 @@ td.listas-fornecedor-total {
     botao.classList.add("is-loading");
     botao.textContent = "Cancelando...";
   });
+})();
+</script>
+
+
+<script>
+(function() {
+  const botao = document.getElementById("btnToggleFiltrosListasMobile");
+  const area = document.getElementById("areaFiltrosListasMobile");
+
+  if (!botao || !area) return;
+
+  const parametros = new URLSearchParams(window.location.search || "");
+  const nomesFiltros = [
+    "fornecedor",
+    "status",
+    "data_inicio",
+    "data_fim",
+    "mobile"
+  ];
+
+  function possuiFiltroAplicado() {
+    return nomesFiltros.some(function(nome) {
+      return String(parametros.get(nome) || "").trim() !== "";
+    });
+  }
+
+  function definirAberta(aberta) {
+    area.classList.toggle("aberta", aberta);
+    botao.textContent = aberta ? "Recolher filtros" : "Filtrar listas";
+    botao.setAttribute("aria-expanded", aberta ? "true" : "false");
+  }
+
+  botao.addEventListener("click", function() {
+    definirAberta(!area.classList.contains("aberta"));
+  });
+
+  if (
+    window.matchMedia("(max-width: 768px)").matches &&
+    possuiFiltroAplicado()
+  ) {
+    definirAberta(true);
+  }
 })();
 </script>
 
