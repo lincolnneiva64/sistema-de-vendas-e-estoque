@@ -1829,6 +1829,19 @@
   }
 }
 
+
+@media (max-width: 768px) {
+    .pedido-criar-mobile-oculto,
+    .pedido-vendas-link,
+    .pedido-observacao-geral-mobile-oculta {
+        display: none !important;
+    }
+
+    .pedido-topo-acoes {
+        grid-template-columns: 1fr !important;
+    }
+}
+
 </style>
 </head>
 <body>
@@ -1858,7 +1871,7 @@
         <div class="pedido-topo">
             <div>
                 <h1 class="pedido-title">{% if pedido_modo_edicao %}Editar Pedido #{{ pedido.id }}{% else %}Criar Pedido{% endif %}</h1>
-                <p class="pedido-subtitle">
+                <p class="pedido-subtitle{% if not pedido_modo_edicao %} pedido-criar-mobile-oculto{% endif %}">
                     {% if pedido_modo_edicao and pedido.status == 'parcial' %}
                         Edite apenas o saldo pendente do pedido parcial. O que ja foi enviado para venda permanece preservado.
                     {% else %}
@@ -1868,11 +1881,11 @@
             </div>
             <div class="pedido-topo-acoes">
                 <a href="{% url 'estoque:vendas' %}" class="pedido-voltar pedido-vendas-link">Ir para Vendas</a>
-                <a href="{% url 'estoque:pedidos' %}" class="pedido-voltar">Voltar para Consulta de Pedidos</a>
+                <a href="{% url 'estoque:pedidos' %}" class="pedido-voltar">Consulta de Pedidos</a>
             </div>
         </div>
 
-        <div class="pedido-alerta">
+        <div class="pedido-alerta{% if not pedido_modo_edicao %} pedido-criar-mobile-oculto{% endif %}">
             {% if pedido_modo_edicao %}
                 Editar pedido nao baixa estoque, nao cria conta a receber e nao gera venda automaticamente.
             {% else %}
@@ -1972,10 +1985,10 @@
                             {% endif %}
                         </select>
                         <button type="button" class="operador-mobile-trigger" id="operador-mobile-trigger" aria-haspopup="dialog" aria-controls="modal-operador-mobile">Sem operador</button>
-                        <span class="campo-ajuda operador-ajuda">Apenas funcionarios ativos marcados como operadores aparecem aqui.</span>
+                        <span class="campo-ajuda operador-ajuda pedido-criar-mobile-oculto">Apenas funcionarios ativos marcados como operadores aparecem aqui.</span>
                     </div>
 
-                    <div class="form-group full">
+                    <div class="form-group full pedido-observacao-geral-mobile-oculta">
                         <label for="observacao">Observacao</label>
                         <textarea id="observacao" name="observacao" placeholder="Observacoes combinadas com o cliente">{% if pedido_modo_edicao %}{{ pedido.observacao|default:'' }}{% endif %}</textarea>
                     </div>
