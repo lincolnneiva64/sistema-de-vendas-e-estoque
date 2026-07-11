@@ -2838,7 +2838,6 @@
   let botaoRemoverOrigem = null;
   let remocaoEmAndamento = false;
   let focoPrecoPendentePorEnter = null;
-  let substituirPrecoNaPrimeiraDigitacao = null;
 
   window.sugestaoMobileCardsParaLista = function(cards) {
     const colecao = Array.from(cards || []);
@@ -3228,34 +3227,17 @@
     }
   });
 
-  lista.addEventListener("beforeinput", function(event) {
+  lista.addEventListener("focusin", function(event) {
     const campo = event.target;
-    if (campo !== substituirPrecoNaPrimeiraDigitacao) return;
-    if (!campo.matches(".sugestao-item-lista-preco-input")) return;
+    if (!campo.matches(".sugestao-item-lista-qtd-input, .sugestao-item-lista-preco-input")) return;
 
-    const tipo = String(event.inputType || "");
-
-    if (tipo.startsWith("delete")) {
-      event.preventDefault();
-      campo.value = "";
-      substituirPrecoNaPrimeiraDigitacao = null;
-      campo.dispatchEvent(new Event("input", { bubbles: true }));
-      return;
-    }
-
-    if (tipo.startsWith("insert") && event.data !== null) {
-      event.preventDefault();
-      campo.value = String(event.data);
-      substituirPrecoNaPrimeiraDigitacao = null;
-      campo.dispatchEvent(new Event("input", { bubbles: true }));
-    }
+    window.setTimeout(function() {
+      if (document.activeElement !== campo) return;
+      if (typeof campo.select === "function") {
+        campo.select();
+      }
+    }, 0);
   });
-
-  lista.addEventListener("blur", function(event) {
-    if (event.target === substituirPrecoNaPrimeiraDigitacao) {
-      substituirPrecoNaPrimeiraDigitacao = null;
-    }
-  }, true);
 
   lista.addEventListener("keydown", function(event) {
     if (event.key !== "Enter") return;
@@ -3271,7 +3253,6 @@
         focoPrecoPendentePorEnter = null;
         preco?.focus({ preventScroll: true });
         selecionarConteudoCampo(preco);
-        substituirPrecoNaPrimeiraDigitacao = preco;
       }, 0);
       return;
     }
