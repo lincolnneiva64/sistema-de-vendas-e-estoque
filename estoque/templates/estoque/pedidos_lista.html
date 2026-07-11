@@ -994,6 +994,32 @@
 }
 /* fim corrige novo pedido dentro do painel de atalhos */
 
+
+.filtros-pedidos-toggle-mobile {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .filtros-pedidos-toggle-mobile {
+    display: flex !important;
+    width: 100% !important;
+    min-height: 52px !important;
+    margin: 0 0 14px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 1rem !important;
+    font-weight: 800 !important;
+  }
+
+  .filtros-pedidos-area-mobile {
+    display: none;
+  }
+
+  .filtros-pedidos-area-mobile.aberta {
+    display: block;
+  }
+}
+
 </style>
 </head>
 <body>
@@ -1024,6 +1050,18 @@
             <h1>Consulta de Pedidos</h1>
             <a href="{% url 'estoque:pedido_criar' %}" class="btn-criar novo-pedido-estavel">+ Novo Pedido</a>
         </div>
+
+        <button
+            type="button"
+            class="btn-limpar filtros-pedidos-toggle-mobile"
+            id="btnToggleFiltrosPedidosMobile"
+            aria-expanded="false"
+            aria-controls="areaFiltrosPedidosMobile"
+        >
+            Filtrar pedidos
+        </button>
+
+        <div class="filtros-pedidos-area-mobile" id="areaFiltrosPedidosMobile">
         
         <div class="filtros">
             <form method="GET" class="filtros-form" id="form-filtros-pedidos">
@@ -1108,6 +1146,8 @@
                     <a href="{% url 'estoque:pedidos' %}" class="btn-limpar">Limpar</a>
                 </div>
             </form>
+        </div>
+
         </div>
         
         {% if pedidos %}
@@ -1368,6 +1408,48 @@
     });
 })();
 /* MODAIS MOBILE FILTROS PEDIDOS - FIM */
+</script>
+
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const botao = document.getElementById("btnToggleFiltrosPedidosMobile");
+  const area = document.getElementById("areaFiltrosPedidosMobile");
+
+  if (!botao || !area) return;
+
+  const parametros = new URLSearchParams(window.location.search || "");
+  const nomesFiltros = [
+    "status",
+    "cliente_id",
+    "localidade",
+    "data_inicio",
+    "data_fim"
+  ];
+
+  function possuiFiltroAplicado() {
+    return nomesFiltros.some(function(nome) {
+      return String(parametros.get(nome) || "").trim() !== "";
+    });
+  }
+
+  function definirAberta(aberta) {
+    area.classList.toggle("aberta", aberta);
+    botao.textContent = aberta ? "Recolher filtros" : "Filtrar pedidos";
+    botao.setAttribute("aria-expanded", aberta ? "true" : "false");
+  }
+
+  botao.addEventListener("click", function() {
+    definirAberta(!area.classList.contains("aberta"));
+  });
+
+  if (
+    window.matchMedia("(max-width: 768px)").matches &&
+    possuiFiltroAplicado()
+  ) {
+    definirAberta(true);
+  }
+});
 </script>
 
 </body>
