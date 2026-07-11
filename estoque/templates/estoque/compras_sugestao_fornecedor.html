@@ -1629,6 +1629,20 @@
     </div>
   </div>
 
+  <div class="sugestao-modal-overlay" id="modalRemoverItemListaMobile" aria-hidden="true">
+    <div class="sugestao-modal-content">
+      <div class="sugestao-modal-icon">!</div>
+      <h2 class="sugestao-modal-titulo">Remover item da lista?</h2>
+      <div class="sugestao-modal-msg" id="modalRemoverItemListaMobileMensagem">
+        O produto será removido desta lista.
+      </div>
+      <div class="sugestao-modal-acoes">
+        <button type="button" class="sugestao-modal-btn sugestao-modal-btn-cancelar" id="btnCancelarRemoverItemListaMobile">Cancelar</button>
+        <button type="button" class="sugestao-modal-btn sugestao-modal-btn-confirmar" id="btnConfirmarRemoverItemListaMobile">Remover item</button>
+      </div>
+    </div>
+  </div>
+
   <section class="sugestao-card">
       <div class="sugestao-table-wrap sugestao-desktop">
         <table class="sugestao-table">
@@ -2813,9 +2827,16 @@
   const lista = document.getElementById("itensListaMobileLista");
   const vazio = document.getElementById("itensListaMobileVazia");
   const contador = document.getElementById("contadorItensListaMobile");
+  const modalRemover = document.getElementById("modalRemoverItemListaMobile");
+  const modalRemoverMensagem = document.getElementById("modalRemoverItemListaMobileMensagem");
+  const btnCancelarRemover = document.getElementById("btnCancelarRemoverItemListaMobile");
+  const btnConfirmarRemover = document.getElementById("btnConfirmarRemoverItemListaMobile");
   const modoEdicaoLista = {% if modo_edicao_lista %}true{% else %}false{% endif %};
   if (!mobile || !lista) return;
   let itemEmEdicao = null;
+  let itemPendenteRemocao = null;
+  let botaoRemoverOrigem = null;
+  let remocaoEmAndamento = false;
 
   window.sugestaoMobileCardsParaLista = function(cards) {
     const colecao = Array.from(cards || []);
@@ -2855,6 +2876,23 @@
       minimumFractionDigits: casas,
       maximumFractionDigits: casas,
     });
+  }
+
+  function selecionarConteudoCampo(campo) {
+    if (!campo) return;
+    const selecionar = function() {
+      try {
+        campo.select();
+        campo.setSelectionRange(0, String(campo.value || "").length);
+      } catch (erro) {
+        // Alguns navegadores mobile podem ignorar selecao programatica.
+      }
+    };
+    if (window.requestAnimationFrame) {
+      window.requestAnimationFrame(selecionar);
+    } else {
+      window.setTimeout(selecionar, 0);
+    }
   }
 
   function cards() {
@@ -2993,7 +3031,7 @@
     }
     window.setTimeout(function() {
       campo?.focus();
-      campo?.select?.();
+      selecionarConteudoCampo(campo);
     }, 120);
   }
 
@@ -3034,7 +3072,7 @@
     window.setTimeout(function() {
       const qtd = item.querySelector(".sugestao-item-lista-qtd-input");
       qtd?.focus();
-      qtd?.select?.();
+      selecionarConteudoCampo(qtd);
     }, 0);
   }
 
@@ -3093,6 +3131,56 @@
     atualizarVazio();
   }
 
+  function abrirModalRemoverItem(item, botaoOrigem) {
+    if (!modalRemover || !btnConfirmarRemover || !btnCancelarRemover) {
+      removerItemDaLista(item);
+      return;
+    }
+    if (itemPendenteRemocao) return;
+    itemPendenteRemocao = item;
+    botaoRemoverOrigem = botaoOrigem || item.querySelector(".sugestao-remover-lista-mobile");
+    remocaoEmAndamento = false;
+    const nomeProduto = texto(item.querySelector(".sugestao-item-lista-mobile-topo span"));
+    if (modalRemoverMensagem) {
+      modalRemoverMensagem.textContent = `O produto '${nomeProduto}' será removido desta lista.`;
+    }
+    modalRemover.classList.add("aberto");
+    modalRemover.setAttribute("aria-hidden", "false");
+    window.setTimeout(function() {
+      btnCancelarRemover.focus();
+    }, 0);
+  }
+
+  function fecharModalRemoverItem() {
+    if (!modalRemover) return;
+    modalRemover.classList.remove("aberto");
+    modalRemover.setAttribute("aria-hidden", "true");
+  }
+
+  function cancelarRemocaoItem() {
+    const foco = botaoRemoverOrigem;
+    fecharModalRemoverItem();
+    itemPendenteRemocao = null;
+    botaoRemoverOrigem = null;
+    remocaoEmAndamento = false;
+    window.setTimeout(function() {
+      foco?.focus();
+    }, 0);
+  }
+
+  function confirmarRemocaoItem() {
+    if (!itemPendenteRemocao || remocaoEmAndamento) return;
+    remocaoEmAndamento = true;
+    const item = itemPendenteRemocao;
+    if (btnConfirmarRemover) btnConfirmarRemover.disabled = true;
+    removerItemDaLista(item);
+    fecharModalRemoverItem();
+    itemPendenteRemocao = null;
+    botaoRemoverOrigem = null;
+    remocaoEmAndamento = false;
+    if (btnConfirmarRemover) btnConfirmarRemover.disabled = false;
+  }
+
   mobile.addEventListener("click", function(event) {
     const botao = event.target.closest(".sugestao-adicionar-lista-mobile");
     if (!botao) return;
@@ -3141,7 +3229,7 @@
       return;
     }
     if (event.target.closest(".sugestao-remover-lista-mobile")) {
-      removerItemDaLista(item);
+      abrirModalRemoverItem(item, event.target.closest(".sugestao-remover-lista-mobile"));
     }
   });
 
@@ -3154,13 +3242,22 @@
     if (event.target === qtd) {
       event.preventDefault();
       preco?.focus();
-      preco?.select?.();
+      selecionarConteudoCampo(preco);
       return;
     }
     if (event.target === preco) {
       event.preventDefault();
       salvarEdicao(item);
     }
+  });
+
+  btnCancelarRemover?.addEventListener("click", cancelarRemocaoItem);
+  btnConfirmarRemover?.addEventListener("click", confirmarRemocaoItem);
+  document.addEventListener("keydown", function(event) {
+    if (event.key !== "Escape") return;
+    if (!modalRemover?.classList.contains("aberto")) return;
+    event.preventDefault();
+    cancelarRemocaoItem();
   });
 
   if (modoEdicaoLista) {
