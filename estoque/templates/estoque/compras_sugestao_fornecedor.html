@@ -2838,6 +2838,7 @@
   let botaoRemoverOrigem = null;
   let remocaoEmAndamento = false;
   let focoPrecoPendentePorEnter = null;
+  let substituirPrecoNaPrimeiraDigitacao = null;
 
   window.sugestaoMobileCardsParaLista = function(cards) {
     const colecao = Array.from(cards || []);
@@ -3227,6 +3228,35 @@
     }
   });
 
+  lista.addEventListener("beforeinput", function(event) {
+    const campo = event.target;
+    if (campo !== substituirPrecoNaPrimeiraDigitacao) return;
+    if (!campo.matches(".sugestao-item-lista-preco-input")) return;
+
+    const tipo = String(event.inputType || "");
+
+    if (tipo.startsWith("delete")) {
+      event.preventDefault();
+      campo.value = "";
+      substituirPrecoNaPrimeiraDigitacao = null;
+      campo.dispatchEvent(new Event("input", { bubbles: true }));
+      return;
+    }
+
+    if (tipo.startsWith("insert") && event.data !== null) {
+      event.preventDefault();
+      campo.value = String(event.data);
+      substituirPrecoNaPrimeiraDigitacao = null;
+      campo.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  });
+
+  lista.addEventListener("blur", function(event) {
+    if (event.target === substituirPrecoNaPrimeiraDigitacao) {
+      substituirPrecoNaPrimeiraDigitacao = null;
+    }
+  }, true);
+
   lista.addEventListener("keydown", function(event) {
     if (event.key !== "Enter") return;
     const item = event.target.closest(".sugestao-item-lista-mobile[data-produto-id]");
@@ -3241,6 +3271,7 @@
         focoPrecoPendentePorEnter = null;
         preco?.focus({ preventScroll: true });
         selecionarConteudoCampo(preco);
+        substituirPrecoNaPrimeiraDigitacao = preco;
       }, 0);
       return;
     }
