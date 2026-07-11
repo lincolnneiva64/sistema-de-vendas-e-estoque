@@ -5291,6 +5291,28 @@
     }
   }
 
+  function liberarEnvioProdutoRapido() {
+    if (!formProdutoRapido) return;
+    delete formProdutoRapido.dataset.enviando;
+    if (btnCadastrarProdutoRapido) {
+      btnCadastrarProdutoRapido.disabled = false;
+      btnCadastrarProdutoRapido.textContent = "Cadastrar Produto Rapido";
+    }
+  }
+
+  function bloquearEnvioProdutoRapido() {
+    if (!formProdutoRapido) return false;
+    if (formProdutoRapido.dataset.enviando === "1") {
+      return false;
+    }
+    formProdutoRapido.dataset.enviando = "1";
+    if (btnCadastrarProdutoRapido) {
+      btnCadastrarProdutoRapido.disabled = true;
+      btnCadastrarProdutoRapido.textContent = "Cadastrando...";
+    }
+    return true;
+  }
+
   function salvarRascunhoCompraNova() {
     const formCompra = document.getElementById("formCompra");
     if (!formCompra || !window.sessionStorage) return;
@@ -5564,11 +5586,20 @@
   }
 
   if (formProdutoRapido) {
-    formProdutoRapido.addEventListener("submit", function() {
+    formProdutoRapido.addEventListener("submit", function(event) {
+      if (!formProdutoRapido.checkValidity()) {
+        liberarEnvioProdutoRapido();
+        return;
+      }
+      if (!bloquearEnvioProdutoRapido()) {
+        event.preventDefault();
+        return;
+      }
       normalizarPrecoProdutoRapido();
       salvarRascunhoCompraNova();
     });
   }
+  window.addEventListener("pageshow", liberarEnvioProdutoRapido);
   const formCompraPrincipal = document.getElementById("formCompra");
   if (formCompraPrincipal) {
     formCompraPrincipal.addEventListener("submit", limparRascunhoCompraNova);
