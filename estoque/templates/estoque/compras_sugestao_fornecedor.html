@@ -1536,7 +1536,41 @@
     </div>
   {% endif %}
 
-  <section class="sugestao-manual" aria-label="Adicionar produto manualmente">
+  <style>
+    .sugestao-manual-toggle-mobile {
+      display: none;
+    }
+
+    @media (max-width: 760px) {
+      .sugestao-manual-toggle-mobile {
+        display: flex;
+        width: 100%;
+        min-height: 52px;
+        margin: 0 0 12px;
+        font-size: 1rem;
+      }
+
+      .sugestao-manual.sugestao-manual-recolhida-mobile {
+        display: none;
+      }
+    }
+  </style>
+
+  <button
+    type="button"
+    class="sugestao-btn sugestao-btn-secondary sugestao-manual-toggle-mobile"
+    id="btnToggleAdicionarProdutosMobile"
+    aria-expanded="false"
+    aria-controls="areaAdicionarProdutosManual"
+  >
+    Adicionar novos produtos
+  </button>
+
+  <section
+    class="sugestao-manual sugestao-manual-recolhida-mobile"
+    id="areaAdicionarProdutosManual"
+    aria-label="Adicionar produto manualmente"
+  >
     <div class="sugestao-manual-table-wrap">
       <table class="sugestao-table sugestao-manual-table">
         <colgroup>
@@ -1592,6 +1626,34 @@
     </div>
     <div class="sugestao-manual-msg" id="msgAdicionarProdutoSugestao"></div>
   </section>
+
+  <script>
+  (function () {
+    const botao = document.getElementById("btnToggleAdicionarProdutosMobile");
+    const area = document.getElementById("areaAdicionarProdutosManual");
+
+    if (!botao || !area) return;
+
+    botao.addEventListener("click", function () {
+      const vaiExpandir = area.classList.contains("sugestao-manual-recolhida-mobile");
+
+      area.classList.toggle("sugestao-manual-recolhida-mobile", !vaiExpandir);
+      botao.setAttribute("aria-expanded", vaiExpandir ? "true" : "false");
+      botao.textContent = vaiExpandir
+        ? "Recolher novos produtos"
+        : "Adicionar novos produtos";
+
+      if (vaiExpandir) {
+        window.setTimeout(function () {
+          const campoProduto = document.getElementById("produtoManualBuscaSugestao");
+          if (campoProduto) {
+            campoProduto.focus({ preventScroll: true });
+          }
+        }, 0);
+      }
+    });
+  })();
+  </script>
 
   <section class="sugestao-visualizacao-acoes" aria-label="Visualizacoes da lista">
     <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnVisualizarAnalitica">Visualizar Analitica</button>
