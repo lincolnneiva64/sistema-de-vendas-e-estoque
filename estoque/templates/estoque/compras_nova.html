@@ -374,6 +374,43 @@
   .compra-remover-modal {
     display:none;
   }
+  .nova-compra-confirmacao-modal {
+    display:none;
+  }
+  .nova-compra-confirmacao-modal.aberto {
+    position:fixed;
+    inset:0;
+    z-index:9400;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:18px;
+    background:rgba(15,23,42,.52);
+  }
+  .nova-compra-confirmacao-card {
+    width:min(420px, 100%);
+    overflow:hidden;
+    border:1px solid #bfdbfe;
+    border-radius:16px;
+    background:#fff;
+    box-shadow:0 18px 44px rgba(15,23,42,.22);
+  }
+  .nova-compra-confirmacao-topo,
+  .nova-compra-confirmacao-corpo,
+  .nova-compra-confirmacao-acoes {
+    padding:14px;
+  }
+  .nova-compra-confirmacao-topo h2 {
+    margin:0;
+    color:#0f172a;
+    font-size:1.15rem;
+  }
+  .nova-compra-confirmacao-acoes {
+    display:flex;
+    gap:8px;
+    justify-content:flex-end;
+    border-top:1px solid #e5e7eb;
+  }
   @media (min-width: 821px) {
     .compras-rascunho-mobile-only { display:none !important; }
   }
@@ -2073,8 +2110,7 @@
     </div>
     <div class="compras-actions">
       <a href="{% url 'estoque:compras_lista' %}" class="compras-btn compras-btn-secondary">Consultar Compras</a>
-      <a href="{% url 'estoque:contas_pagar' %}" class="compras-btn compras-btn-secondary">Contas a pagar</a>
-      <a href="{% url 'estoque:fornecedores' %}" class="compras-btn compras-btn-secondary">Fornecedores</a>
+      <a href="{% url 'estoque:compras_nova' %}" class="compras-btn compras-btn-secondary" id="btnNovaCompraTopo">Nova Compra</a>
     </div>
   </header>
 
@@ -2360,29 +2396,27 @@
       </div>
     </div>
 
-    {% if compra %}
     <section class="compras-card produto-rapido-destaque{% if rascunho_salvo %} compra-bloco-recolhido{% endif %}" id="secaoProdutoRapidoCompra">
       <div class="compras-card-head produto-rapido-destaque-head">Cadastrar Produto Rapido</div>
       <div class="compras-card-body">
         <div class="produto-rapido-ajuda">Use este bloco somente para cadastrar rapidamente produto que ainda nao existe. Depois complete o cadastro no painel de produtos.</div>
-        <div class="compras-grid">
-          <div class="compras-field"><label>Nome</label><input type="text" name="nome" form="formProdutoRapidoCompra" placeholder="Nome do produto" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" required></div>
+        <div class="compras-grid" id="camposProdutoRapidoCompra">
+          <div class="compras-field"><label>Nome</label><input type="text" name="nome" form="formProdutoRapidoCompra" id="produtoRapidoNome" placeholder="Nome do produto" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="next" required></div>
           <div class="compras-field">
             <label>Categoria</label>
             <input type="hidden" name="categoria" form="formProdutoRapidoCompra" id="produtoRapidoCategoria">
-            <button type="button" class="produto-rapido-escolha" id="abrirCategoriaProdutoRapido"><span>Escolher categoria</span></button>
+            <button type="button" class="produto-rapido-escolha" id="abrirCategoriaProdutoRapido" enterkeyhint="next"><span>Escolher categoria</span></button>
           </div>
           <div class="compras-field">
             <label>Unidade</label>
             <input type="hidden" name="unidade" form="formProdutoRapidoCompra" id="produtoRapidoUnidade">
-            <button type="button" class="produto-rapido-escolha" id="abrirUnidadeProdutoRapido"><span>Escolher unidade</span></button>
+            <button type="button" class="produto-rapido-escolha" id="abrirUnidadeProdutoRapido" enterkeyhint="next"><span>Escolher unidade</span></button>
           </div>
-          <div class="compras-field"><label>Preco compra</label><input type="text" name="preco_compra" form="formProdutoRapidoCompra" inputmode="decimal" placeholder="0,00"></div>
+          <div class="compras-field"><label>Preco compra</label><input type="text" name="preco_compra" form="formProdutoRapidoCompra" id="produtoRapidoPrecoCompra" class="campo-moeda-br-produto-rapido" inputmode="decimal" enterkeyhint="next" value="0,00" placeholder="0,00"></div>
         </div>
-        <button type="submit" form="formProdutoRapidoCompra" class="compras-btn compras-btn-secondary">Cadastrar Produto Rapido</button>
+        <button type="submit" form="formProdutoRapidoCompra" class="compras-btn compras-btn-secondary" id="btnCadastrarProdutoRapidoCompra">Cadastrar Produto Rapido</button>
       </div>
     </section>
-    {% endif %}
 
     <div class="compras-actions compras-actions-final">
       <h2 class="compras-actions-final-titulo compras-mobile-inline-only">Pr&oacute;ximos passos</h2>
@@ -2398,14 +2432,11 @@
       <a href="{% url 'estoque:compras_lista' %}" class="compras-btn compras-btn-secondary compras-cancelar">Cancelar</a>
     </div>
   </form>
-  {% if compra %}
-  <form method="post" action="{% url 'estoque:compra_produto_rapido' compra.id %}" id="formProdutoRapidoCompra">
+  <form method="post" action="{% if compra %}{% url 'estoque:compra_produto_rapido' compra.id %}{% else %}{% url 'estoque:compra_produto_rapido_nova' %}{% endif %}" id="formProdutoRapidoCompra">
     {% csrf_token %}
   </form>
-  {% endif %}
 </div>
 
-{% if compra %}
 <div class="produto-rapido-modal" id="modalCategoriaProdutoRapido" aria-hidden="true">
   <div class="produto-rapido-modal-card" role="dialog" aria-modal="true" aria-labelledby="tituloCategoriaProdutoRapido">
     <div class="produto-rapido-modal-topo">
@@ -2437,7 +2468,21 @@
     </div>
   </div>
 </div>
-{% endif %}
+
+<div class="nova-compra-confirmacao-modal" id="modalNovaCompraConfirmacao" aria-hidden="true">
+  <div class="nova-compra-confirmacao-card" role="dialog" aria-modal="true" aria-labelledby="tituloNovaCompraConfirmacao">
+    <div class="nova-compra-confirmacao-topo">
+      <h2 id="tituloNovaCompraConfirmacao">Iniciar uma nova compra?</h2>
+    </div>
+    <div class="nova-compra-confirmacao-corpo">
+      <div>As alteracoes desta compra que ainda nao foram salvas serao perdidas.</div>
+    </div>
+    <div class="nova-compra-confirmacao-acoes">
+      <button type="button" class="compras-btn compras-btn-secondary" id="btnContinuarCompraAtual">Continuar nesta compra</button>
+      <a href="{% url 'estoque:compras_nova' %}?descartar=1" class="compras-btn compras-btn-primary" id="btnDescartarNovaCompra">Descartar e iniciar nova compra</a>
+    </div>
+  </div>
+</div>
 
 <div id="modalContasPagarFornecedor" class="fornecedor-financeiro-modal">
   <div class="fornecedor-financeiro-caixa">
@@ -2789,6 +2834,9 @@
   function precoCampo(valor) {
     return numero(valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
+
+  window.compraNumeroMoeda = numero;
+  window.compraPrecoCampo = precoCampo;
 
   function percentual(valor) {
     return Number(valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
@@ -4714,6 +4762,16 @@
   recalcular();
   atualizarControlesRascunhoBloqueado();
 
+  window.compraCriarLinhaItem = criarLinhaItem;
+  window.compraFecharSugestoesLinha = fecharSugestoes;
+  window.compraRecalcularAposRestaurar = function() {
+    tabela.querySelectorAll(".linha-item").forEach(ligarLinha);
+    sincronizarTodosPrecosUnitarios();
+    recalcular();
+    organizarLayoutMobileCompra();
+    atualizarControlesRascunhoBloqueado();
+  };
+
   function focarContinuacaoItens(limparUrl) {
     setTimeout(function() {
       const alvoScroll = compraMobile() && areaAdicionarProdutoMobile ? areaAdicionarProdutoMobile : secaoItensCompra;
@@ -4770,6 +4828,7 @@
   const parametrosCompra = new URLSearchParams(window.location.search);
   const continuarItensAoAbrir = parametrosCompra.get("continuar_itens") === "1";
   const rascunhoSalvoAoAbrir = parametrosCompra.get("rascunho_salvo") === "1";
+  const descartarCompraNovaAoAbrir = parametrosCompra.get("descartar") === "1";
 
   const fornecedor = form.querySelector('[name="fornecedor_id"]');
   const fornecedorBusca = form.querySelector('[name="fornecedor_busca"]');
@@ -4802,6 +4861,57 @@
 
   function devePularFocoInicialFornecedor() {
     return compraContinuandoItensPelaUrl() || compraJaTemProdutoLancado();
+  }
+
+  function limparCompraDescartadaAoAbrir() {
+    if (!descartarCompraNovaAoAbrir) return;
+
+    if (fornecedor) {
+      fornecedor.value = "";
+      fornecedor.dispatchEvent(new Event("change", { bubbles:true }));
+    }
+    if (fornecedorBusca) {
+      fornecedorBusca.value = "";
+      fornecedorBusca.dispatchEvent(new Event("input", { bubbles:true }));
+    }
+    if (observacao) {
+      observacao.value = "";
+      observacao.dispatchEvent(new Event("input", { bubbles:true }));
+    }
+
+    document.querySelectorAll("#tbodyAdicionarProdutoMobile .linha-item").forEach(function(linha) {
+      const tbody = document.querySelector("#tabelaItensCompra tbody");
+      if (tbody) {
+        linha.classList.remove("linha-item-ativa");
+        tbody.appendChild(linha);
+      }
+    });
+
+    document.querySelectorAll("#tabelaItensCompra .linha-item").forEach(function(linha, indice) {
+      if (indice > 0) {
+        linha.remove();
+        return;
+      }
+      const produtoBusca = linha.querySelector('[name="produto_busca[]"]');
+      const produtoId = linha.querySelector('[name="produto_id[]"]');
+      const quantidade = linha.querySelector('[name="quantidade[]"]');
+      const unidade = linha.querySelector('[name="unidade[]"]');
+      const precoVisivel = linha.querySelector(".campo-preco-unitario-compra");
+      const precoOculto = linha.querySelector('input[type="hidden"][name="preco_unitario[]"]');
+      if (produtoBusca) produtoBusca.value = "";
+      if (produtoId) produtoId.value = "";
+      if (quantidade) quantidade.value = "";
+      if (unidade) unidade.value = "";
+      if (precoVisivel) precoVisivel.value = "";
+      if (precoOculto) precoOculto.value = "";
+    });
+
+    if (window.compraLimparRascunhoProdutoRapido) {
+      window.compraLimparRascunhoProdutoRapido();
+    }
+    if (window.compraRecalcularAposRestaurar) {
+      window.compraRecalcularAposRestaurar();
+    }
   }
 
   function focar(campo) {
@@ -5106,7 +5216,8 @@
 
   window.addEventListener("load", function() {
     atualizarVencimentoCompra();
-    if (!continuarItensAoAbrir && !rascunhoSalvoAoAbrir && !compraJaTemProdutoLancado()) {
+    limparCompraDescartadaAoAbrir();
+    if (!descartarCompraNovaAoAbrir && !continuarItensAoAbrir && !rascunhoSalvoAoAbrir && !compraJaTemProdutoLancado()) {
       selecionarPrimeiroFornecedor();
     }
     fecharSugestoesFornecedor();
@@ -5129,6 +5240,15 @@
   const campoUnidade = document.getElementById("produtoRapidoUnidade");
   const modalCategoria = document.getElementById("modalCategoriaProdutoRapido");
   const modalUnidade = document.getElementById("modalUnidadeProdutoRapido");
+  const secaoProdutoRapido = document.getElementById("secaoProdutoRapidoCompra");
+  const formProdutoRapido = document.getElementById("formProdutoRapidoCompra");
+  const nomeProdutoRapido = document.getElementById("produtoRapidoNome");
+  const precoProdutoRapido = document.getElementById("produtoRapidoPrecoCompra");
+  const btnCadastrarProdutoRapido = document.getElementById("btnCadastrarProdutoRapidoCompra");
+  const chaveRascunhoNovaCompra = "compraNovaRascunhoProdutoRapido";
+  const chaveRascunhoNovaCompraPendente = "compraNovaRascunhoProdutoRapidoPendente";
+  const parametrosProdutoRapido = new URLSearchParams(window.location.search);
+  const descartarCompraNovaAoAbrir = parametrosProdutoRapido.get("descartar") === "1";
 
   function abrirModal(modal) {
     if (!modal) return;
@@ -5138,6 +5258,194 @@
     if (primeiraOpcao) {
       setTimeout(function() { primeiraOpcao.focus(); }, 80);
     }
+  }
+
+  function focarProdutoRapido(el) {
+    if (!el || el.disabled || el.offsetParent === null) return;
+    setTimeout(function() {
+      el.focus();
+      if (el.tagName === "INPUT" && typeof el.select === "function") {
+        el.select();
+      }
+    }, 0);
+  }
+
+  function numeroMoedaProdutoRapido(valor) {
+    return window.compraNumeroMoeda(valor);
+  }
+
+  function moedaProdutoRapido(valor) {
+    return window.compraPrecoCampo(valor);
+  }
+
+  function normalizarPrecoProdutoRapido() {
+    if (!precoProdutoRapido) return;
+    precoProdutoRapido.value = moedaProdutoRapido(numeroMoedaProdutoRapido(precoProdutoRapido.value));
+  }
+
+  function limparEntradaPrecoProdutoRapido() {
+    if (!precoProdutoRapido) return;
+    var limpo = String(precoProdutoRapido.value || "").replace(/[^\d.,]/g, "");
+    if (precoProdutoRapido.value !== limpo) {
+      precoProdutoRapido.value = limpo;
+    }
+  }
+
+  function salvarRascunhoCompraNova() {
+    const formCompra = document.getElementById("formCompra");
+    if (!formCompra || !window.sessionStorage) return;
+    const dados = {
+      versao: 1,
+      origem: "produto_rapido_compra_nova",
+      campos: {},
+      itens: []
+    };
+
+    [
+      "fornecedor_busca",
+      "fornecedor_id",
+      "data_compra",
+      "tipo_pagamento",
+      "data_vencimento",
+      "observacao"
+    ].forEach(function(nome) {
+      const campo = formCompra.querySelector('[name="' + nome + '"]');
+      if (campo) dados.campos[nome] = campo.value || "";
+    });
+
+    const linhasCompra = Array.from(document.querySelectorAll("#tabelaItensCompra tbody .linha-item"))
+      .concat(Array.from(document.querySelectorAll("#tbodyAdicionarProdutoMobile .linha-item")));
+    linhasCompra.forEach(function(linha) {
+      const produtoBusca = linha.querySelector('[name="produto_busca[]"]');
+      const produtoId = linha.querySelector('[name="produto_id[]"]');
+      const quantidade = linha.querySelector('[name="quantidade[]"]');
+      const unidade = linha.querySelector('[name="unidade[]"]');
+      const precoVisivel = linha.querySelector(".campo-preco-unitario-compra");
+      const precoOculto = linha.querySelector('input[type="hidden"][name="preco_unitario[]"]');
+      const observacaoItem = linha.querySelector('[name="observacao_item[]"]');
+      const item = {
+        produto_busca: produtoBusca ? produtoBusca.value || "" : "",
+        produto_id: produtoId ? produtoId.value || "" : "",
+        quantidade: quantidade ? quantidade.value || "" : "",
+        unidade: unidade ? unidade.value || "" : "",
+        preco_unitario_visivel: precoVisivel ? precoVisivel.value || "" : "",
+        preco_unitario_oculto: precoOculto ? precoOculto.value || "" : "",
+        observacao_item: observacaoItem ? observacaoItem.value || "" : ""
+      };
+      if (
+        item.produto_busca ||
+        item.produto_id ||
+        item.quantidade ||
+        item.unidade ||
+        item.preco_unitario_visivel ||
+        item.preco_unitario_oculto ||
+        item.observacao_item
+      ) {
+        dados.itens.push(item);
+      }
+    });
+
+    sessionStorage.setItem(chaveRascunhoNovaCompraPendente, "1");
+    sessionStorage.setItem(chaveRascunhoNovaCompra, JSON.stringify(dados));
+  }
+
+  function restaurarRascunhoCompraNova() {
+    const formCompra = document.getElementById("formCompra");
+    if (!formCompra || !window.sessionStorage) return;
+    if (descartarCompraNovaAoAbrir) {
+      limparRascunhoCompraNova();
+      return;
+    }
+    if (sessionStorage.getItem(chaveRascunhoNovaCompraPendente) !== "1") {
+      sessionStorage.removeItem(chaveRascunhoNovaCompra);
+      return;
+    }
+    const bruto = sessionStorage.getItem(chaveRascunhoNovaCompra);
+    if (!bruto) {
+      limparRascunhoCompraNova();
+      return;
+    }
+    let dados = {};
+    try {
+      dados = JSON.parse(bruto) || {};
+    } catch (e) {
+      limparRascunhoCompraNova();
+      return;
+    }
+
+    if (dados.versao !== 1 || dados.origem !== "produto_rapido_compra_nova" || !dados.campos || !Array.isArray(dados.itens)) {
+      limparRascunhoCompraNova();
+      return;
+    }
+
+    Object.keys(dados.campos).forEach(function(nome) {
+      const campo = formCompra.querySelector('[name="' + nome + '"]');
+      if (!campo) return;
+      campo.value = dados.campos[nome] || "";
+      campo.dispatchEvent(new Event("input", { bubbles:true }));
+      campo.dispatchEvent(new Event("change", { bubbles:true }));
+    });
+
+    const tbody = document.querySelector("#tabelaItensCompra tbody");
+    if (!tbody) {
+      limparRascunhoCompraNova();
+      return;
+    }
+
+    document.querySelectorAll("#tbodyAdicionarProdutoMobile .linha-item").forEach(function(linha) {
+      linha.classList.remove("linha-item-ativa");
+      tbody.appendChild(linha);
+    });
+
+    while (tbody.querySelectorAll(".linha-item").length < dados.itens.length) {
+      window.compraCriarLinhaItem();
+    }
+
+    const linhas = Array.from(tbody.querySelectorAll(".linha-item"));
+    linhas.forEach(function(linha, indice) {
+      const item = dados.itens[indice];
+      if (!item) {
+        if (indice > 0) linha.remove();
+        return;
+      }
+
+      const produtoBusca = linha.querySelector('[name="produto_busca[]"]');
+      const produtoId = linha.querySelector('[name="produto_id[]"]');
+      const quantidade = linha.querySelector('[name="quantidade[]"]');
+      const unidade = linha.querySelector('[name="unidade[]"]');
+      const precoVisivel = linha.querySelector(".campo-preco-unitario-compra");
+      const precoOculto = linha.querySelector('input[type="hidden"][name="preco_unitario[]"]');
+      const observacaoItem = linha.querySelector('[name="observacao_item[]"]');
+      const estoqueValor = linha.querySelector(".produto-estoque-valor");
+      const optionProduto = produtoId && item.produto_id
+        ? Array.from(produtoId.options || []).find(function(opt) { return opt.value === String(item.produto_id); })
+        : null;
+
+      if (produtoBusca) produtoBusca.value = item.produto_busca || "";
+      if (produtoId) produtoId.value = item.produto_id || "";
+      if (quantidade) quantidade.value = item.quantidade || "";
+      if (unidade) unidade.value = item.unidade || "";
+      if (precoVisivel) precoVisivel.value = item.preco_unitario_visivel || item.preco_unitario_oculto || "";
+      if (precoOculto) precoOculto.value = item.preco_unitario_oculto || item.preco_unitario_visivel || "";
+      if (observacaoItem) observacaoItem.value = item.observacao_item || "";
+
+      if (estoqueValor && optionProduto) {
+        estoqueValor.textContent = window.estoqueCompraTextoSeguro
+          ? window.estoqueCompraTextoSeguro(optionProduto.dataset.estoque)
+          : (optionProduto.dataset.estoque || "0");
+      }
+      window.compraFecharSugestoesLinha(linha);
+      linha.classList.remove("linha-item-ativa");
+    });
+
+    limparRascunhoCompraNova();
+    window.compraRecalcularAposRestaurar();
+  }
+
+  function limparRascunhoCompraNova() {
+    if (!window.sessionStorage) return;
+    sessionStorage.removeItem(chaveRascunhoNovaCompra);
+    sessionStorage.removeItem(chaveRascunhoNovaCompraPendente);
   }
 
   function fecharModal(modal) {
@@ -5177,7 +5485,7 @@
       if (campoCategoria) campoCategoria.value = valor;
       atualizarBotao(botaoCategoria, valor);
       fecharModal(modalCategoria);
-      if (botaoUnidade) botaoUnidade.focus();
+      focarProdutoRapido(botaoUnidade);
     });
   });
 
@@ -5187,8 +5495,7 @@
       if (campoUnidade) campoUnidade.value = valor;
       atualizarBotao(botaoUnidade, valor);
       fecharModal(modalUnidade);
-      const preco = document.querySelector('[name="preco_compra"][form="formProdutoRapidoCompra"]');
-      if (preco) preco.focus();
+      focarProdutoRapido(precoProdutoRapido);
     });
   });
 
@@ -5205,6 +5512,176 @@
 
   document.addEventListener("keydown", function(event) {
     if (event.key === "Escape") fecharTodos();
+  });
+
+  if (secaoProdutoRapido) {
+    [
+      [nomeProdutoRapido, botaoCategoria],
+      [precoProdutoRapido, btnCadastrarProdutoRapido]
+    ].forEach(function(par) {
+      const atual = par[0];
+      const proximo = par[1];
+      if (!atual) return;
+      atual.addEventListener("keydown", function(event) {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        if (atual === precoProdutoRapido) {
+          normalizarPrecoProdutoRapido();
+        }
+        focarProdutoRapido(proximo);
+      });
+    });
+
+    if (botaoCategoria) {
+      botaoCategoria.addEventListener("keydown", function(event) {
+        if (event.key !== "Enter") return;
+        if (campoCategoria && campoCategoria.value) {
+          event.preventDefault();
+          focarProdutoRapido(botaoUnidade);
+        }
+      });
+    }
+
+    if (botaoUnidade) {
+      botaoUnidade.addEventListener("keydown", function(event) {
+        if (event.key !== "Enter") return;
+        if (campoUnidade && campoUnidade.value) {
+          event.preventDefault();
+          focarProdutoRapido(precoProdutoRapido);
+        }
+      });
+    }
+  }
+
+  if (precoProdutoRapido) {
+    precoProdutoRapido.addEventListener("focus", function() {
+      if (numeroMoedaProdutoRapido(precoProdutoRapido.value) === 0) {
+        precoProdutoRapido.select();
+      }
+    });
+    precoProdutoRapido.addEventListener("input", limparEntradaPrecoProdutoRapido);
+    precoProdutoRapido.addEventListener("blur", normalizarPrecoProdutoRapido);
+  }
+
+  if (formProdutoRapido) {
+    formProdutoRapido.addEventListener("submit", function() {
+      normalizarPrecoProdutoRapido();
+      salvarRascunhoCompraNova();
+    });
+  }
+  const formCompraPrincipal = document.getElementById("formCompra");
+  if (formCompraPrincipal) {
+    formCompraPrincipal.addEventListener("submit", limparRascunhoCompraNova);
+  }
+  document.querySelectorAll(".compras-cancelar").forEach(function(link) {
+    link.addEventListener("click", limparRascunhoCompraNova);
+  });
+  window.compraLimparRascunhoProdutoRapido = limparRascunhoCompraNova;
+  restaurarRascunhoCompraNova();
+})();
+</script>
+
+<script>
+(function() {
+  const formCompra = document.getElementById("formCompra");
+  const btnNovaCompraTopo = document.getElementById("btnNovaCompraTopo");
+  const modal = document.getElementById("modalNovaCompraConfirmacao");
+  const btnContinuar = document.getElementById("btnContinuarCompraAtual");
+  const btnDescartar = document.getElementById("btnDescartarNovaCompra");
+  if (!formCompra || !btnNovaCompraTopo || !modal) return;
+
+  const ignorarNomes = new Set([
+    "csrfmiddlewaretoken",
+    "fechamento_token",
+    "acao_compra",
+    "fluxo_mobile_compra",
+    "origem_caixa",
+    "origem_reserva",
+    "origem_banco"
+  ]);
+  let estadoLimpo = "";
+
+  function campoRelevante(campo) {
+    if (!campo || !campo.name || campo.disabled || ignorarNomes.has(campo.name)) return false;
+    if (campo.closest("#formProdutoRapidoCompra")) return false;
+    if (campo.name.indexOf("atualizar_") === 0 || campo.name.indexOf("novo_preco_venda_produto_") === 0) return false;
+    if (campo.type === "button" || campo.type === "submit" || campo.type === "reset") return false;
+    return true;
+  }
+
+  function valorCampo(campo) {
+    if (campo.type === "checkbox" || campo.type === "radio") {
+      return campo.checked ? campo.value : "";
+    }
+    return campo.value || "";
+  }
+
+  function serializarCompraAtual() {
+    return JSON.stringify(Array.from(formCompra.elements || [])
+      .filter(campoRelevante)
+      .map(function(campo) {
+        return [campo.name, valorCampo(campo)];
+      }));
+  }
+
+  function atualizarEstadoLimpoCompra() {
+    estadoLimpo = serializarCompraAtual();
+  }
+
+  function compraTemAlteracoesNaoSalvas() {
+    return serializarCompraAtual() !== estadoLimpo;
+  }
+
+  function abrirModal() {
+    modal.classList.add("aberto");
+    modal.setAttribute("aria-hidden", "false");
+    if (btnContinuar) {
+      setTimeout(function() { btnContinuar.focus(); }, 0);
+    }
+  }
+
+  function fecharModal() {
+    modal.classList.remove("aberto");
+    modal.setAttribute("aria-hidden", "true");
+  }
+
+  btnNovaCompraTopo.addEventListener("click", function(event) {
+    if (!compraTemAlteracoesNaoSalvas()) {
+      if (typeof window.compraLimparRascunhoProdutoRapido === "function") {
+        window.compraLimparRascunhoProdutoRapido();
+      }
+      return;
+    }
+    event.preventDefault();
+    abrirModal();
+  });
+
+  if (btnContinuar) {
+    btnContinuar.addEventListener("click", fecharModal);
+  }
+
+  if (btnDescartar) {
+    btnDescartar.addEventListener("click", function() {
+      if (typeof window.compraLimparRascunhoProdutoRapido === "function") {
+        window.compraLimparRascunhoProdutoRapido();
+      }
+      fecharModal();
+    });
+  }
+
+  modal.addEventListener("click", function(event) {
+    if (event.target === modal) fecharModal();
+  });
+
+  document.addEventListener("keydown", function(event) {
+    if (event.key === "Escape" && modal.classList.contains("aberto")) {
+      fecharModal();
+    }
+  });
+
+  window.compraAtualizarEstadoLimpo = atualizarEstadoLimpoCompra;
+  window.addEventListener("load", function() {
+    setTimeout(atualizarEstadoLimpoCompra, 350);
   });
 })();
 </script>
@@ -6713,9 +7190,9 @@
 
     if (!secaoProdutoRapido || !btnSalvar) return;
 
-    const acoes = btnSalvar.closest(".compras-actions, .form-actions, .acoes-compra, .botoes-compra") || btnSalvar.parentElement;
+    const acoes = btnSalvar.closest(".compras-actions-final");
 
-    if (!acoes || acoes.dataset.movidoAntesProdutoRapido === "1") return;
+    if (!acoes || acoes.dataset.movidoAntesProdutoRapido === "1" || acoes.parentNode !== secaoProdutoRapido.parentNode) return;
 
     acoes.dataset.movidoAntesProdutoRapido = "1";
     acoes.classList.add("acoes-compra-antes-produto-rapido");

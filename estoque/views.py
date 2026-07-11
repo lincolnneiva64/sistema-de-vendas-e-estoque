@@ -6743,23 +6743,18 @@ def compra_finalizar(request, pk):
     )
 
 
-@require_POST
-def compra_produto_rapido(request, pk):
-    compra = get_object_or_404(Compra, pk=pk)
-    if not _compra_editavel_ou_redireciona(compra):
-        messages.error(request, "Produto rapido so pode ser usado em compra em andamento.")
-        return redirect("estoque:compras_detalhe", pk=compra.pk)
-
+def _criar_produto_rapido_compra(request):
     nome = (request.POST.get("nome") or "").strip()
     categoria = (request.POST.get("categoria") or "").strip()
     unidade = (request.POST.get("unidade") or "").strip().upper()
-    preco_compra = _decimal_compra(request.POST.get("preco_compra") or "0", casas=2)
+    try:
+        preco_compra = _decimal_compra(request.POST.get("preco_compra") or "0", casas=2)
+    except ValueError:
+        return None, "Informe um preco de compra valido."
     if not nome:
-        messages.error(request, "Informe o nome do produto.")
-        return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
+        return None, "Informe o nome do produto."
     if _produto_existente_por_nome_normalizado(nome):
-        messages.error(request, "Ja existe um produto com esse nome.")
-        return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
+        return None, "Ja existe um produto com esse nome."
 
     preco_minimo = preco_compra if preco_compra > 0 else Decimal("0.01")
     try:
@@ -6777,8 +6772,33 @@ def compra_produto_rapido(request, pk):
             motivo_prejuizo="Cadastro rapido durante compra.",
         )
     except ValidationError as exc:
-        messages.error(request, "; ".join(exc.messages) if hasattr(exc, "messages") else str(exc))
+        mensagem = "; ".join(exc.messages) if hasattr(exc, "messages") else str(exc)
+        return None, mensagem
+    return produto, ""
+
+
+@require_POST
+def compra_produto_rapido_nova(request):
+    produto, erro = _criar_produto_rapido_compra(request)
+    if erro:
+        messages.error(request, erro)
+    else:
+        messages.success(request, f'Produto "{produto.nome}" criado como cadastro incompleto.')
+    return redirect("estoque:compras_nova")
+
+
+@require_POST
+def compra_produto_rapido(request, pk):
+    compra = get_object_or_404(Compra, pk=pk)
+    if not _compra_editavel_ou_redireciona(compra):
+        messages.error(request, "Produto rapido so pode ser usado em compra em andamento.")
+        return redirect("estoque:compras_detalhe", pk=compra.pk)
+
+    produto, erro = _criar_produto_rapido_compra(request)
+    if erro:
+        messages.error(request, erro)
         return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
+
     messages.success(request, f'Produto "{produto.nome}" criado como cadastro incompleto.')
     return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
 

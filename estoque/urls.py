@@ -30,6 +30,7 @@ urlpatterns = [
     path("meios-pagamento/", views.meios_pagamento, name="meios_pagamento"),
     path("compras/", views.compras_lista, name="compras_lista"),
     path("compras/nova/", views.compras_nova, name="compras_nova"),
+    path("compras/nova/produto-rapido/", views.compra_produto_rapido_nova, name="compra_produto_rapido_nova"),
     path("compras/sugestao-fornecedor/", views.sugestao_compra_fornecedor, name="sugestao_compra_fornecedor"),
     path("compras/sugestao-fornecedor/whatsapp/", views.sugestao_compra_fornecedor_whatsapp, name="sugestao_compra_fornecedor_whatsapp"),
     path("compras/listas-fornecedor/", views.compras_listas_fornecedor, name="compras_listas_fornecedor"),

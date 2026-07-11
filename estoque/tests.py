@@ -199,6 +199,130 @@ class FechamentoCompraFinanceiroTests(TestCase):
         for valor_antigo in ["pix", "dinheiro", "banco", "boleto", "cartao"]:
             self.assertNotContains(resposta, f'<option value="{valor_antigo}">')
 
+    def test_nova_compra_exibe_produto_rapido_botoes_topo_e_hooks(self):
+        resposta = self.client.get(reverse("estoque:compras_nova"), secure=True)
+        html = resposta.content.decode()
+        topo = re.search(r'<div class="compras-actions">(.*?)</div>', html, re.S).group(1)
+        bloco = re.search(r'<section class="compras-card produto-rapido-destaque.*?</section>', html, re.S).group(0)
+        modal_remover = html.split('id="modalRemoverItemCompra"', 1)[1].split('id="secaoProdutoRapidoCompra"', 1)[0]
+        restauracao = html.split("function restaurarRascunhoCompraNova()", 1)[1].split("function limparRascunhoCompraNova()", 1)[0]
+        restauracao_itens = restauracao.split('const linhas = Array.from(tbody.querySelectorAll(".linha-item"));', 1)[1]
+
+        self.assertContains(resposta, 'id="secaoProdutoRapidoCompra"')
+        self.assertContains(resposta, reverse("estoque:compra_produto_rapido_nova"))
+        self.assertIn("Consultar Compras", topo)
+        self.assertIn("Nova Compra", topo)
+        self.assertIn('id="btnNovaCompraTopo"', topo)
+        self.assertNotIn("Contas a pagar", topo)
+        self.assertNotIn("Fornecedores", topo)
+        self.assertContains(resposta, '<h2 class="compra-atalhos-titulo">Atalhos</h2>')
+        self.assertContains(resposta, 'class="compra-atalhos-btn">Fornecedores</a>')
+        self.assertLess(bloco.index('id="produtoRapidoNome"'), bloco.index('id="abrirCategoriaProdutoRapido"'))
+        self.assertLess(bloco.index('id="abrirCategoriaProdutoRapido"'), bloco.index('id="abrirUnidadeProdutoRapido"'))
+        self.assertLess(bloco.index('id="abrirUnidadeProdutoRapido"'), bloco.index('id="produtoRapidoPrecoCompra"'))
+        self.assertLess(bloco.index('id="produtoRapidoPrecoCompra"'), bloco.index('id="btnCadastrarProdutoRapidoCompra"'))
+        self.assertContains(resposta, 'id="produtoRapidoPrecoCompra" class="campo-moeda-br-produto-rapido" inputmode="decimal"')
+        self.assertContains(resposta, 'value="0,00" placeholder="0,00"')
+        self.assertContains(resposta, "function normalizarPrecoProdutoRapido()")
+        self.assertContains(resposta, "precoProdutoRapido.addEventListener(\"input\", limparEntradaPrecoProdutoRapido)")
+        self.assertContains(resposta, "precoProdutoRapido.addEventListener(\"blur\", normalizarPrecoProdutoRapido)")
+        self.assertContains(resposta, "window.compraPrecoCampo = precoCampo;")
+        self.assertContains(resposta, 'const chaveRascunhoNovaCompra = "compraNovaRascunhoProdutoRapido";')
+        self.assertContains(resposta, 'const chaveRascunhoNovaCompraPendente = "compraNovaRascunhoProdutoRapidoPendente";')
+        self.assertContains(resposta, 'sessionStorage.setItem(chaveRascunhoNovaCompraPendente, "1");')
+        self.assertContains(resposta, 'sessionStorage.getItem(chaveRascunhoNovaCompraPendente) !== "1"')
+        self.assertContains(resposta, 'sessionStorage.removeItem(chaveRascunhoNovaCompra);')
+        self.assertContains(resposta, 'sessionStorage.removeItem(chaveRascunhoNovaCompraPendente);')
+        self.assertContains(resposta, 'const linhasCompra = Array.from(document.querySelectorAll("#tabelaItensCompra tbody .linha-item"))')
+        self.assertContains(resposta, 'concat(Array.from(document.querySelectorAll("#tbodyAdicionarProdutoMobile .linha-item")))')
+        self.assertContains(resposta, 'preco_unitario_oculto: precoOculto ? precoOculto.value || "" : ""')
+        self.assertContains(resposta, 'input[type="hidden"][name="preco_unitario[]"]')
+        self.assertContains(resposta, '#tbodyAdicionarProdutoMobile .linha-item')
+        self.assertContains(resposta, 'window.compraFecharSugestoesLinha = fecharSugestoes;')
+        self.assertContains(resposta, 'window.compraFecharSugestoesLinha(linha);')
+        self.assertContains(resposta, 'linha.classList.remove("linha-item-ativa");')
+        self.assertNotIn('campo.dispatchEvent(new Event("input"', restauracao_itens)
+        self.assertNotIn('campo.dispatchEvent(new Event("change"', restauracao_itens)
+        self.assertContains(resposta, 'window.compraRecalcularAposRestaurar')
+        self.assertContains(resposta, 'window.compraLimparRascunhoProdutoRapido')
+        self.assertContains(resposta, "compraTemAlteracoesNaoSalvas")
+        self.assertContains(resposta, 'return [campo.name, valorCampo(campo)];')
+        self.assertContains(resposta, 'name="produto_id[]"')
+        self.assertContains(resposta, 'name="quantidade[]"')
+        self.assertContains(resposta, 'campo-preco-unitario-compra')
+        self.assertContains(resposta, "Iniciar uma nova compra?")
+        self.assertContains(resposta, "Descartar e iniciar nova compra")
+        self.assertContains(resposta, f'{reverse("estoque:compras_nova")}?descartar=1')
+        self.assertContains(resposta, 'const descartarCompraNovaAoAbrir = parametrosProdutoRapido.get("descartar") === "1";')
+        self.assertContains(resposta, 'if (descartarCompraNovaAoAbrir) {')
+        self.assertContains(resposta, 'function limparCompraDescartadaAoAbrir()')
+        self.assertContains(resposta, '!descartarCompraNovaAoAbrir && !continuarItensAoAbrir')
+        self.assertContains(resposta, 'fornecedor.value = "";')
+        self.assertContains(resposta, 'fornecedorBusca.value = "";')
+        self.assertContains(resposta, 'precoOculto.value = "";')
+        self.assertContains(resposta, "nova-compra-confirmacao-modal")
+        self.assertContains(resposta, "nova-compra-confirmacao-card")
+        self.assertNotIn("nova-compra-confirmacao-", modal_remover)
+        self.assertContains(resposta, 'btnSalvar.closest(".compras-actions-final")')
+        self.assertContains(resposta, "window.compraAtualizarEstadoLimpo = atualizarEstadoLimpoCompra;")
+
+    def test_edicao_compra_rascunho_continua_exibindo_produto_rapido(self):
+        compra = self._criar_compra_rascunho_com_item()
+
+        resposta = self.client.get(reverse("estoque:compra_editar", kwargs={"pk": compra.pk}), secure=True)
+
+        self.assertContains(resposta, 'id="secaoProdutoRapidoCompra"')
+        self.assertContains(resposta, reverse("estoque:compra_produto_rapido", kwargs={"pk": compra.pk}))
+        self.assertContains(resposta, 'id="produtoRapidoNome"')
+        self.assertContains(resposta, 'id="btnCadastrarProdutoRapidoCompra"')
+
+    def test_produto_rapido_na_compra_nova_cria_produto(self):
+        Categoria.objects.get_or_create(nome="Bebidas", defaults={"ativa": True})
+        Unidade.objects.get_or_create(sigla="UN", defaults={"nome": "Unidade", "ativa": True})
+        Produto.objects.filter(nome="Produto Rapido Nova").delete()
+
+        resposta = self.client.post(
+            reverse("estoque:compra_produto_rapido_nova"),
+            {
+                "nome": "Produto Rapido Nova",
+                "categoria": "Bebidas",
+                "unidade": "UN",
+                "preco_compra": "12,50",
+            },
+            secure=True,
+        )
+
+        produto = Produto.objects.get(nome="Produto Rapido Nova")
+        self.assertRedirects(resposta, reverse("estoque:compras_nova"), fetch_redirect_response=False)
+        self.assertEqual(produto.categoria, "Bebidas")
+        self.assertEqual(produto.unidade_compra, "UN")
+        self.assertEqual(produto.preco_compra, Decimal("12.50"))
+        self.assertTrue(produto.cadastro_incompleto)
+        self.assertTrue(produto.permitir_prejuizo)
+
+    def test_produto_rapido_na_compra_nova_aceita_moeda_brasileira(self):
+        casos = [
+            ("Produto Rapido 10", "10,00", Decimal("10.00")),
+            ("Produto Rapido 1050", "10,50", Decimal("10.50")),
+            ("Produto Rapido 123456", "1.234,56", Decimal("1234.56")),
+        ]
+        Produto.objects.filter(nome__in=[nome for nome, _, _ in casos]).delete()
+
+        for nome, preco, esperado in casos:
+            resposta = self.client.post(
+                reverse("estoque:compra_produto_rapido_nova"),
+                {
+                    "nome": nome,
+                    "categoria": "Bebidas",
+                    "unidade": "UN",
+                    "preco_compra": preco,
+                },
+                secure=True,
+            )
+
+            self.assertRedirects(resposta, reverse("estoque:compras_nova"), fetch_redirect_response=False)
+            self.assertEqual(Produto.objects.get(nome=nome).preco_compra, esperado)
+
     def test_rotulo_pagamento_compra_preserva_valores_antigos(self):
         self.assertEqual(Compra(tipo_pagamento="pix").tipo_pagamento_texto, "Pix")
         self.assertEqual(Compra(tipo_pagamento="cartao").tipo_pagamento_texto, "Cartão")
