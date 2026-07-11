@@ -448,6 +448,30 @@
   }
 }
 
+  .compras-filtros-toggle-mobile {
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    .compras-filtros-toggle-mobile {
+      display: flex;
+      width: 100%;
+      min-height: 50px;
+      margin: 0 0 12px;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+    }
+
+    .compras-filtros-area-mobile {
+      display: none;
+    }
+
+    .compras-filtros-area-mobile.aberta {
+      display: block;
+    }
+  }
+
 </style>
 
 <div class="compras-lista-page">
@@ -459,10 +483,20 @@
     </div>
     <div class="compras-lista-actions">
       <a href="{% url 'estoque:compras_nova' %}" class="compras-lista-btn compras-lista-btn-primary">Nova compra</a>
-      <a href="{% url 'estoque:sugestao_compra_fornecedor' %}" class="compras-lista-btn compras-lista-btn-secondary">Nova Lista por Fornecedor</a>
-
     </div>
   </header>
+
+  <button
+    type="button"
+    class="compras-lista-btn compras-lista-btn-secondary compras-filtros-toggle-mobile"
+    id="btnToggleFiltrosComprasMobile"
+    aria-expanded="false"
+    aria-controls="areaFiltrosComprasMobile"
+  >
+    Filtrar compras
+  </button>
+
+  <div class="compras-filtros-area-mobile" id="areaFiltrosComprasMobile">
 
   {% if compras_rascunho_qtd %}
     <section class="compras-rascunho-alerta" id="compras-rascunho-alerta">
@@ -531,6 +565,8 @@
       </div>
     </form>
   </section>
+
+  </div>
 
   <section class="compras-lista-card compras-lista-desktop">
     <table class="compras-lista-table">
@@ -633,6 +669,48 @@
     {% endfor %}
   </section>
 </div>
+
+<script>
+(function() {
+  const botao = document.getElementById("btnToggleFiltrosComprasMobile");
+  const area = document.getElementById("areaFiltrosComprasMobile");
+
+  if (!botao || !area) return;
+
+  const parametros = new URLSearchParams(window.location.search || "");
+  const nomesFiltros = [
+    "compra",
+    "fornecedor",
+    "data_inicio",
+    "data_fim",
+    "pagamento",
+    "financeiro"
+  ];
+
+  function possuiFiltroAplicado() {
+    return nomesFiltros.some(function(nome) {
+      return String(parametros.get(nome) || "").trim() !== "";
+    });
+  }
+
+  function definirAberta(aberta) {
+    area.classList.toggle("aberta", aberta);
+    botao.textContent = aberta ? "Recolher filtros" : "Filtrar compras";
+    botao.setAttribute("aria-expanded", aberta ? "true" : "false");
+  }
+
+  botao.addEventListener("click", function() {
+    definirAberta(!area.classList.contains("aberta"));
+  });
+
+  if (
+    window.matchMedia("(max-width: 768px)").matches &&
+    possuiFiltroAplicado()
+  ) {
+    definirAberta(true);
+  }
+})();
+</script>
 
 <script>
 (function() {
