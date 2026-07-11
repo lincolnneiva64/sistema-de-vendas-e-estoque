@@ -816,6 +816,10 @@
     display: none;
   }
 
+  .sugestao-contador-itens-mobile {
+    display: none;
+  }
+
   .sugestao-manual {
     margin-bottom: 14px;
     padding: 0;
@@ -1252,10 +1256,50 @@
       box-sizing: border-box;
     }
 
+    .sugestao-item-lista-mobile .sugestao-input[readonly] {
+      background: #f8fafc;
+      color: #334155;
+      border-color: #dbe5f0;
+      box-shadow: none;
+    }
+
     .sugestao-item-lista-mobile-total {
       color: #166534;
       font-weight: 950;
       text-align: right;
+    }
+
+    .sugestao-item-lista-mobile-erro {
+      display: none;
+      padding: 8px 10px;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      background: #fff1f2;
+      color: #991b1b;
+      font-weight: 850;
+    }
+
+    .sugestao-item-lista-mobile-erro.visivel {
+      display: block;
+    }
+
+    .sugestao-cancelar-edicao-lista-mobile[hidden] {
+      display: none !important;
+    }
+
+    .sugestao-contador-itens-mobile {
+      display: flex;
+      min-height: 58px;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 14px;
+      border: 1px solid #bbf7d0;
+      border-radius: 12px;
+      background: #f0fdf4;
+      color: #14532d;
+      font-weight: 950;
+      text-align: center;
+      box-shadow: 0 10px 24px rgba(22, 101, 52, .08);
     }
 
     .sugestao-mobile-produto {
@@ -1699,6 +1743,7 @@
   </section>
 
   <section class="sugestao-resumo-final" aria-label="Resumo final da lista por fornecedor">
+    <div class="sugestao-contador-itens-mobile" id="contadorItensListaMobile" data-itens-lista-mobile-contador data-count="0">Quantidade de itens da lista: 0</div>
     <div class="sugestao-resumo-final-item">
       <span class="sugestao-resumo-final-label">Total sugerido original</span>
       <span class="sugestao-resumo-final-valor">R$ {{ total_sugerido|floatformat:2 }}</span>
@@ -2767,12 +2812,18 @@
   const mobile = document.getElementById("mobileSugestaoProdutos");
   const lista = document.getElementById("itensListaMobileLista");
   const vazio = document.getElementById("itensListaMobileVazia");
+  const contador = document.getElementById("contadorItensListaMobile");
   const modoEdicaoLista = {% if modo_edicao_lista %}true{% else %}false{% endif %};
   if (!mobile || !lista) return;
+  let itemEmEdicao = null;
 
   window.sugestaoMobileCardsParaLista = function(cards) {
     const colecao = Array.from(cards || []);
     return colecao.filter((card) => card?.dataset?.naLista === "1");
+  };
+
+  window.sugestaoMobileItemEmEdicaoAberta = function() {
+    return itemEmEdicao;
   };
 
   function texto(el) {
@@ -2835,14 +2886,25 @@
   function atualizarVazio() {
     const temItens = lista.querySelectorAll(".sugestao-item-lista-mobile[data-produto-id]").length > 0;
     vazio?.classList.toggle("oculto", temItens);
+    atualizarContadorItensLista();
     if (window.atualizarTotaisSugestaoFornecedor) window.atualizarTotaisSugestaoFornecedor();
     if (window.atualizarContagemSugestaoFornecedor) window.atualizarContagemSugestaoFornecedor();
+  }
+
+  function atualizarContadorItensLista() {
+    const total = lista.querySelectorAll(".sugestao-item-lista-mobile[data-produto-id]").length;
+    if (!contador) return;
+    contador.dataset.count = String(total);
+    contador.textContent = "Quantidade de itens da lista: " + total;
   }
 
   function marcarBotao(card, adicionado) {
     const botao = card.querySelector(".sugestao-adicionar-lista-mobile");
     card.dataset.naLista = adicionado ? "1" : "0";
     card.classList.toggle("item-adicionado-lista", adicionado);
+    card.querySelectorAll(".sugestao-qtd-input, .sugestao-preco-input, .sugestao-preco-unitario-input, .sugestao-total-input").forEach((campo) => {
+      campo.readOnly = adicionado;
+    });
     if (!botao) return;
     botao.disabled = adicionado;
     botao.textContent = adicionado ? "Adicionado à lista" : "Adicionar à lista";
@@ -2851,6 +2913,7 @@
   function renderItem(card) {
     const dados = valoresDoCard(card);
     const existente = itemPorId(dados.produtoId);
+    if (existente && existente.dataset.editando === "1") return existente;
     const conteudo = `
       <div class="sugestao-item-lista-mobile-topo">
         <span>${html(dados.produto)}</span>
@@ -2858,24 +2921,35 @@
       </div>
       <div class="sugestao-item-lista-mobile-grid">
         <label class="sugestao-mobile-label">Quantidade</label>
-        <input type="text" inputmode="decimal" class="sugestao-input sugestao-item-lista-qtd-input" value="${html(dados.quantidade)}" aria-label="Quantidade de ${html(dados.produto)} na lista">
+        <input type="text" inputmode="decimal" class="sugestao-input sugestao-item-lista-qtd-input" value="${html(dados.quantidade)}" aria-label="Quantidade de ${html(dados.produto)} na lista" readonly>
         <label class="sugestao-mobile-label">Preco compra</label>
-        <input type="text" inputmode="decimal" class="sugestao-input sugestao-item-lista-preco-input" value="${html(dados.precoCompra)}" aria-label="Preco de ${html(dados.produto)} na lista">
+        <input type="text" inputmode="decimal" class="sugestao-input sugestao-item-lista-preco-input" value="${html(dados.precoCompra)}" aria-label="Preco de ${html(dados.produto)} na lista" readonly>
       </div>
       <div class="sugestao-item-lista-mobile-total">Total: <span>${html(dados.total)}</span></div>
+      <div class="sugestao-item-lista-mobile-erro" role="alert"></div>
       <div class="sugestao-mobile-edit-actions">
         <button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-editar-lista-mobile">Editar</button>
+        <button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-cancelar-edicao-lista-mobile" hidden>Cancelar edição</button>
         <button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-lista-mobile">Remover</button>
       </div>
     `;
 
     if (existente) {
       existente.innerHTML = conteudo;
+      confirmarValoresAtuais(existente);
       return existente;
     }
 
     lista.insertAdjacentHTML("beforeend", `<article class="sugestao-item-lista-mobile" data-produto-id="${html(dados.produtoId)}">${conteudo}</article>`);
-    return itemPorId(dados.produtoId);
+    const criado = itemPorId(dados.produtoId);
+    if (criado) confirmarValoresAtuais(criado);
+    return criado;
+  }
+
+  function confirmarValoresAtuais(item) {
+    item.dataset.qtdConfirmada = item.querySelector(".sugestao-item-lista-qtd-input")?.value || "";
+    item.dataset.precoConfirmado = item.querySelector(".sugestao-item-lista-preco-input")?.value || "";
+    item.dataset.totalConfirmado = item.querySelector(".sugestao-item-lista-mobile-total span")?.textContent || "";
   }
 
   function sincronizarItemComCard(item) {
@@ -2901,6 +2975,109 @@
     if (window.atualizarTotaisSugestaoFornecedor) window.atualizarTotaisSugestaoFornecedor();
   }
 
+  function limparErro(item) {
+    const erro = item.querySelector(".sugestao-item-lista-mobile-erro");
+    if (!erro) return;
+    erro.textContent = "";
+    erro.classList.remove("visivel");
+  }
+
+  function mostrarErro(item, mensagem, campo) {
+    const erro = item.querySelector(".sugestao-item-lista-mobile-erro");
+    if (erro) {
+      erro.textContent = mensagem;
+      erro.classList.add("visivel");
+    }
+    if (typeof item.scrollIntoView === "function") {
+      item.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    window.setTimeout(function() {
+      campo?.focus();
+      campo?.select?.();
+    }, 120);
+  }
+
+  function numeroValidoObrigatorio(valorTexto) {
+    const textoOriginal = String(valorTexto || "").trim();
+    if (!textoOriginal) return { ok: false, valor: 0 };
+    const limpo = textoOriginal.replace(/[^\d,.-]/g, "");
+    if (!limpo || !/\d/.test(limpo)) return { ok: false, valor: 0 };
+    let normalizado = limpo;
+    if (normalizado.includes(",")) normalizado = normalizado.replace(/\./g, "").replace(",", ".");
+    const convertido = Number(normalizado);
+    return { ok: Number.isFinite(convertido), valor: convertido };
+  }
+
+  function setModoEdicao(item, editando) {
+    const qtd = item.querySelector(".sugestao-item-lista-qtd-input");
+    const preco = item.querySelector(".sugestao-item-lista-preco-input");
+    const editar = item.querySelector(".sugestao-editar-lista-mobile");
+    const cancelar = item.querySelector(".sugestao-cancelar-edicao-lista-mobile");
+    item.dataset.editando = editando ? "1" : "0";
+    if (qtd) qtd.readOnly = !editando;
+    if (preco) preco.readOnly = !editando;
+    if (editar) editar.textContent = editando ? "Salvar edição" : "Editar";
+    if (cancelar) cancelar.hidden = !editando;
+  }
+
+  function abrirEdicao(item) {
+    if (itemEmEdicao && itemEmEdicao !== item) {
+      mostrarErro(itemEmEdicao, "Salve ou cancele a edição atual antes de editar outro item.", itemEmEdicao.querySelector(".sugestao-item-lista-qtd-input"));
+      return;
+    }
+    itemEmEdicao = item;
+    item.dataset.qtdAnterior = item.querySelector(".sugestao-item-lista-qtd-input")?.value || "";
+    item.dataset.precoAnterior = item.querySelector(".sugestao-item-lista-preco-input")?.value || "";
+    item.dataset.totalAnterior = item.querySelector(".sugestao-item-lista-mobile-total span")?.textContent || "";
+    limparErro(item);
+    setModoEdicao(item, true);
+    window.setTimeout(function() {
+      const qtd = item.querySelector(".sugestao-item-lista-qtd-input");
+      qtd?.focus();
+      qtd?.select?.();
+    }, 0);
+  }
+
+  function salvarEdicao(item) {
+    const qtd = item.querySelector(".sugestao-item-lista-qtd-input");
+    const preco = item.querySelector(".sugestao-item-lista-preco-input");
+    const qtdValidada = numeroValidoObrigatorio(qtd?.value);
+    const precoValidado = numeroValidoObrigatorio(preco?.value);
+
+    if (!qtdValidada.ok || qtdValidada.valor <= 0) {
+      mostrarErro(item, "Informe uma quantidade maior que zero.", qtd);
+      return false;
+    }
+    if (!precoValidado.ok || precoValidado.valor < 0) {
+      mostrarErro(item, "Informe um preço de compra válido.", preco);
+      return false;
+    }
+
+    if (qtd) qtd.value = decimal(qtdValidada.valor, 3);
+    if (preco) preco.value = decimal(precoValidado.valor, 2);
+    const totalItem = item.querySelector(".sugestao-item-lista-mobile-total span");
+    if (totalItem) totalItem.textContent = decimal(qtdValidada.valor * precoValidado.valor, 2);
+    sincronizarItemComCard(item);
+    confirmarValoresAtuais(item);
+    limparErro(item);
+    setModoEdicao(item, false);
+    if (itemEmEdicao === item) itemEmEdicao = null;
+    atualizarVazio();
+    return true;
+  }
+
+  function cancelarEdicao(item) {
+    const qtd = item.querySelector(".sugestao-item-lista-qtd-input");
+    const preco = item.querySelector(".sugestao-item-lista-preco-input");
+    const totalItem = item.querySelector(".sugestao-item-lista-mobile-total span");
+    if (qtd) qtd.value = item.dataset.qtdAnterior || item.dataset.qtdConfirmada || "";
+    if (preco) preco.value = item.dataset.precoAnterior || item.dataset.precoConfirmado || "";
+    if (totalItem) totalItem.textContent = item.dataset.totalAnterior || item.dataset.totalConfirmado || "";
+    limparErro(item);
+    setModoEdicao(item, false);
+    if (itemEmEdicao === item) itemEmEdicao = null;
+  }
+
   function adicionarCardNaLista(card) {
     if (!card || card.dataset.naLista === "1") return;
     marcarBotao(card, true);
@@ -2910,6 +3087,7 @@
 
   function removerItemDaLista(item) {
     const card = cardPorId(item.dataset.produtoId);
+    if (itemEmEdicao === item) itemEmEdicao = null;
     if (card) marcarBotao(card, false);
     item.remove();
     atualizarVazio();
@@ -2934,26 +3112,54 @@
   lista.addEventListener("input", function(event) {
     const item = event.target.closest(".sugestao-item-lista-mobile[data-produto-id]");
     if (!item) return;
-    sincronizarItemComCard(item);
+    if (item.dataset.editando !== "1") return;
+    limparErro(item);
   });
 
   lista.addEventListener("blur", function(event) {
     const campo = event.target;
     if (!campo.matches(".sugestao-item-lista-qtd-input, .sugestao-item-lista-preco-input")) return;
-    campo.value = decimal(numero(campo.value), campo.classList.contains("sugestao-item-lista-qtd-input") ? 3 : 2);
     const item = campo.closest(".sugestao-item-lista-mobile[data-produto-id]");
-    if (item) sincronizarItemComCard(item);
+    if (!item || item.dataset.editando !== "1") return;
+    const validado = numeroValidoObrigatorio(campo.value);
+    if (validado.ok) campo.value = decimal(validado.valor, campo.classList.contains("sugestao-item-lista-qtd-input") ? 3 : 2);
   }, true);
 
   lista.addEventListener("click", function(event) {
     const item = event.target.closest(".sugestao-item-lista-mobile[data-produto-id]");
     if (!item) return;
     if (event.target.closest(".sugestao-editar-lista-mobile")) {
-      item.querySelector(".sugestao-item-lista-qtd-input")?.focus();
+      if (item.dataset.editando === "1") {
+        salvarEdicao(item);
+      } else {
+        abrirEdicao(item);
+      }
+      return;
+    }
+    if (event.target.closest(".sugestao-cancelar-edicao-lista-mobile")) {
+      cancelarEdicao(item);
       return;
     }
     if (event.target.closest(".sugestao-remover-lista-mobile")) {
       removerItemDaLista(item);
+    }
+  });
+
+  lista.addEventListener("keydown", function(event) {
+    if (event.key !== "Enter") return;
+    const item = event.target.closest(".sugestao-item-lista-mobile[data-produto-id]");
+    if (!item || item.dataset.editando !== "1") return;
+    const qtd = item.querySelector(".sugestao-item-lista-qtd-input");
+    const preco = item.querySelector(".sugestao-item-lista-preco-input");
+    if (event.target === qtd) {
+      event.preventDefault();
+      preco?.focus();
+      preco?.select?.();
+      return;
+    }
+    if (event.target === preco) {
+      event.preventDefault();
+      salvarEdicao(item);
     }
   });
 
@@ -3443,6 +3649,20 @@
     }, 150);
   }
 
+  function itemMobileEmEdicaoAberta() {
+    return !usarItensDesktop() && window.sugestaoMobileItemEmEdicaoAberta && window.sugestaoMobileItemEmEdicaoAberta();
+  }
+
+  function orientarSalvarOuCancelarEdicao(item) {
+    alert("Salve ou cancele a edição do item antes de gravar a lista.");
+    if (item && typeof item.scrollIntoView === "function") {
+      item.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    window.setTimeout(function() {
+      item?.querySelector(".sugestao-editar-lista-mobile, .sugestao-cancelar-edicao-lista-mobile")?.focus();
+    }, 150);
+  }
+
   function itensEditaveisAtuais() {
     return usarItensDesktop() ? linhasDesktop() : cardsMobile();
   }
@@ -3742,6 +3962,11 @@
     }
     if (!usarItensDesktop() && !temItensEscolhidosMobile()) {
       orientarAdicionarItensMobile();
+      return;
+    }
+    const itemEmEdicaoAberta = itemMobileEmEdicaoAberta();
+    if (itemEmEdicaoAberta) {
+      orientarSalvarOuCancelarEdicao(itemEmEdicaoAberta);
       return;
     }
     if (!linhasCandidatasAtuais().length) {

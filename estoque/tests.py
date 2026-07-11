@@ -3306,6 +3306,9 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, 'card.dataset.naLista === "1"')
         self.assertContains(resposta, "marcarBotao(card, true)")
         self.assertContains(resposta, "sincronizarItemComCard")
+        self.assertContains(resposta, 'data-itens-lista-mobile-contador data-count="0"')
+        self.assertContains(resposta, "Quantidade de itens da lista: 0")
+        self.assertContains(resposta, "atualizarContadorItensLista")
 
     def test_mobile_payload_usa_itens_escolhidos_quando_existirem(self):
         resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)
@@ -3332,6 +3335,33 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertIn('document.querySelector("#mobileSugestaoProdutos .sugestao-adicionar-lista-mobile:not(:disabled)")?.focus();', html)
         self.assertEqual(html.count("Adicione pelo menos um produto à lista antes de gravar."), 1)
 
+    def test_mobile_itens_lista_tem_edicao_confirmada_contador_e_validacoes(self):
+        resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "readonly")
+        self.assertContains(resposta, "Salvar edição")
+        self.assertContains(resposta, "Cancelar edição")
+        self.assertContains(resposta, "itemEmEdicao")
+        self.assertContains(resposta, "abrirEdicao")
+        self.assertContains(resposta, "salvarEdicao")
+        self.assertContains(resposta, "cancelarEdicao")
+        self.assertContains(resposta, "numeroValidoObrigatorio")
+        self.assertContains(resposta, "Informe uma quantidade maior que zero.")
+        self.assertContains(resposta, "Informe um preço de compra válido.")
+        self.assertContains(resposta, "Salve ou cancele a edição atual antes de editar outro item.")
+        self.assertContains(resposta, "Salve ou cancele a edição do item antes de gravar a lista.")
+        self.assertContains(resposta, "window.sugestaoMobileItemEmEdicaoAberta")
+        self.assertContains(resposta, "itemMobileEmEdicaoAberta")
+        self.assertContains(resposta, "orientarSalvarOuCancelarEdicao")
+        self.assertContains(resposta, 'event.target === qtd')
+        self.assertContains(resposta, 'event.target === preco')
+        self.assertContains(resposta, "precoValidado.valor < 0")
+        self.assertContains(resposta, "qtdValidada.valor <= 0")
+        self.assertContains(resposta, "campo.readOnly = adicionado")
+        self.assertContains(resposta, "contador.dataset.count = String(total);")
+        self.assertContains(resposta, '"Quantidade de itens da lista: " + total')
+
     def test_edicao_mobile_carrega_itens_salvos_em_itens_da_lista(self):
         produto = self.criar_produto("Produto Edicao Mobile Lista")
         lista = self.criar_lista_com_item(produto)
@@ -3345,6 +3375,7 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, "const modoEdicaoLista = true;")
         self.assertContains(resposta, "cards().forEach(adicionarCardNaLista);")
         self.assertContains(resposta, 'id="itensListaMobile"')
+        self.assertContains(resposta, "atualizarContadorItensLista")
 
     def test_gravar_lista_com_um_item_payload_salva_somente_esse_item(self):
         produto_escolhido = self.criar_produto("Produto Escolhido")
