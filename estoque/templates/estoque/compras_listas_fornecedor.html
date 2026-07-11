@@ -553,6 +553,47 @@ td.listas-fornecedor-total {
 }
 </style>
 
+<script>
+(function() {
+  const botao = document.getElementById("btnToggleFiltrosListasMobile");
+  const area = document.getElementById("areaFiltrosListasMobile");
+
+  if (!botao || !area) return;
+
+  const parametros = new URLSearchParams(window.location.search || "");
+  const nomesFiltros = [
+    "fornecedor",
+    "status",
+    "data_inicio",
+    "data_fim",
+    "mobile"
+  ];
+
+  function possuiFiltroAplicado() {
+    return nomesFiltros.some(function(nome) {
+      return String(parametros.get(nome) || "").trim() !== "";
+    });
+  }
+
+  function definirAberta(aberta) {
+    area.classList.toggle("aberta", aberta);
+    botao.textContent = aberta ? "Recolher filtros" : "Filtrar listas";
+    botao.setAttribute("aria-expanded", aberta ? "true" : "false");
+  }
+
+  botao.addEventListener("click", function() {
+    definirAberta(!area.classList.contains("aberta"));
+  });
+
+  if (
+    window.matchMedia("(max-width: 768px)").matches &&
+    possuiFiltroAplicado()
+  ) {
+    definirAberta(true);
+  }
+})();
+</script>
+
 {% endblock %}
 {% block content %}
 
@@ -1562,6 +1603,30 @@ td.listas-fornecedor-total {
   }
 }
 
+  .listas-fornecedor-filtros-toggle-mobile {
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    .listas-fornecedor-filtros-toggle-mobile {
+      display: flex;
+      width: 100%;
+      min-height: 50px;
+      margin: 0 0 12px;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+    }
+
+    .listas-fornecedor-filtros-area-mobile {
+      display: none;
+    }
+
+    .listas-fornecedor-filtros-area-mobile.aberta {
+      display: block;
+    }
+  }
+
 </style>
 
 <main class="listas-fornecedor-page">
@@ -1581,6 +1646,18 @@ td.listas-fornecedor-total {
       <a class="listas-fornecedor-btn primary" href="{% url 'estoque:sugestao_compra_fornecedor' %}">Nova Lista</a>
     </div>
   </header>
+
+  <button
+    type="button"
+    class="listas-fornecedor-btn listas-fornecedor-filtros-toggle-mobile"
+    id="btnToggleFiltrosListasMobile"
+    aria-expanded="false"
+    aria-controls="areaFiltrosListasMobile"
+  >
+    Filtrar listas
+  </button>
+
+  <div class="listas-fornecedor-filtros-area-mobile" id="areaFiltrosListasMobile">
 
   <section class="listas-fornecedor-filter-card">
     <form method="get">
@@ -1629,6 +1706,8 @@ td.listas-fornecedor-total {
       <a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{% url 'estoque:compras_listas_fornecedor' %}?mobile=canceladas">Listas canceladas</a>
     {% endif %}
   </nav>
+
+  </div>
 
   <section class="listas-fornecedor-table-card">
     {% if listas or listas_mobile %}
