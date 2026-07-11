@@ -2888,11 +2888,13 @@
         // Alguns navegadores mobile podem ignorar selecao programatica.
       }
     };
+    selecionar();
     if (window.requestAnimationFrame) {
       window.requestAnimationFrame(selecionar);
     } else {
       window.setTimeout(selecionar, 0);
     }
+    window.setTimeout(selecionar, 80);
   }
 
   function cards() {
@@ -3241,7 +3243,7 @@
     const preco = item.querySelector(".sugestao-item-lista-preco-input");
     if (event.target === qtd) {
       event.preventDefault();
-      preco?.focus();
+      preco?.focus({ preventScroll: true });
       selecionarConteudoCampo(preco);
       return;
     }
