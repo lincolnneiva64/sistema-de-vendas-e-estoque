@@ -1107,7 +1107,10 @@
 
     .sugestao-header { order: 1; }
     .sugestao-filtros { order: 2; }
-    .sugestao-conferencia { order: 3; }
+    .sugestao-conferencia {
+      order: 3;
+      display: none !important;
+    }
     .sugestao-aviso { order: 4; }
     .sugestao-manual { order: 5; }
     .sugestao-card { order: 6; }
@@ -1290,6 +1293,8 @@
     .sugestao-contador-itens-mobile {
       display: flex;
       min-height: 58px;
+      flex-direction: column;
+      gap: 6px;
       align-items: center;
       justify-content: center;
       padding: 12px 14px;
@@ -1823,7 +1828,10 @@
   </section>
 
   <section class="sugestao-resumo-final" aria-label="Resumo final da lista por fornecedor">
-    <div class="sugestao-contador-itens-mobile" id="contadorItensListaMobile" data-itens-lista-mobile-contador data-count="0">Quantidade de itens da lista: 0</div>
+    <div class="sugestao-contador-itens-mobile" id="contadorItensListaMobile" data-itens-lista-mobile-contador data-count="0">
+      <span>Produtos vinculados ao fornecedor: {{ total_produtos_vinculados }}</span>
+      <span>Itens adicionados na lista: <strong data-itens-lista-mobile-total>0</strong></span>
+    </div>
     <div class="sugestao-resumo-final-item">
       <span class="sugestao-resumo-final-label">Total sugerido original</span>
       <span class="sugestao-resumo-final-valor">R$ {{ total_sugerido|floatformat:2 }}</span>
@@ -2993,7 +3001,10 @@
     const total = lista.querySelectorAll(".sugestao-item-lista-mobile[data-produto-id]").length;
     if (!contador) return;
     contador.dataset.count = String(total);
-    contador.textContent = "Quantidade de itens da lista: " + total;
+    const totalEl = contador.querySelector("[data-itens-lista-mobile-total]");
+    if (totalEl) {
+      totalEl.textContent = String(total);
+    }
   }
 
   function marcarBotao(card, adicionado) {

@@ -3307,7 +3307,9 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, "marcarBotao(card, true)")
         self.assertContains(resposta, "sincronizarItemComCard")
         self.assertContains(resposta, 'data-itens-lista-mobile-contador data-count="0"')
-        self.assertContains(resposta, "Quantidade de itens da lista: 0")
+        self.assertContains(resposta, "Produtos vinculados ao fornecedor:")
+        self.assertContains(resposta, "Itens adicionados na lista:")
+        self.assertContains(resposta, "data-itens-lista-mobile-total")
         self.assertContains(resposta, "atualizarContadorItensLista")
 
     def test_mobile_payload_usa_itens_escolhidos_quando_existirem(self):
@@ -3367,7 +3369,8 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, "qtdValidada.valor <= 0")
         self.assertContains(resposta, "campo.readOnly = adicionado")
         self.assertContains(resposta, "contador.dataset.count = String(total);")
-        self.assertContains(resposta, '"Quantidade de itens da lista: " + total')
+        self.assertContains(resposta, 'contador.querySelector("[data-itens-lista-mobile-total]")')
+        self.assertContains(resposta, "totalEl.textContent = String(total);")
 
     def test_mobile_remover_item_da_lista_usa_modal_de_confirmacao(self):
         resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)
