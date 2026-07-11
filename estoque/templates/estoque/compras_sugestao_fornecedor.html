@@ -1508,39 +1508,6 @@
     </form>
   </section>
 
-  <section class="sugestao-conferencia" aria-label="Conferencia da sugestao">
-    <div class="sugestao-conferencia-item">
-      <span class="sugestao-conferencia-label">Fornecedor selecionado</span>
-      <span class="sugestao-conferencia-valor">{% if fornecedor %}{{ fornecedor.nome }}{% else %}Nenhum{% endif %}</span>
-    </div>
-    <div class="sugestao-conferencia-item">
-      <span class="sugestao-conferencia-label">Periodo calculado</span>
-      <span class="sugestao-conferencia-valor">{{ data_inicio|date:"d/m/Y" }} ate {{ data_fim|date:"d/m/Y" }}</span>
-    </div>
-    <div class="sugestao-conferencia-item">
-      <span class="sugestao-conferencia-label">Produtos vinculados</span>
-      <span class="sugestao-conferencia-valor">{{ total_produtos_vinculados }}</span>
-    </div>
-    <div class="sugestao-conferencia-item">
-      <span class="sugestao-conferencia-label">Produtos na lista</span>
-      <span class="sugestao-conferencia-valor" data-produtos-lista-total>{{ total_produtos_sugeridos }}</span>
-    </div>
-    <div class="sugestao-conferencia-item total">
-      <span class="sugestao-conferencia-label">Total sugerido original</span>
-      <span class="sugestao-conferencia-valor total">R$ {{ total_sugerido|floatformat:2 }}</span>
-    </div>
-    <div class="sugestao-conferencia-item total">
-      <span class="sugestao-conferencia-label">Total da lista/pedido</span>
-      <span class="sugestao-conferencia-valor total" data-total-lista-pedido>R$ {{ total_sugerido|floatformat:2 }}</span>
-    </div>
-  </section>
-
-  {% if fornecedor and not linhas %}
-    <div class="sugestao-aviso">
-      Nenhum produto apareceu na lista. Confira se os produtos deste fornecedor estao ativos, fora da lixeira, abaixo/no minimo ou com pedido em aberto.
-    </div>
-  {% endif %}
-
   <style>
     .sugestao-manual-toggle-mobile {
       display: flex !important;
@@ -1663,6 +1630,39 @@
     });
   })();
   </script>
+
+  <section class="sugestao-conferencia" aria-label="Conferencia da sugestao">
+    <div class="sugestao-conferencia-item">
+      <span class="sugestao-conferencia-label">Fornecedor selecionado</span>
+      <span class="sugestao-conferencia-valor">{% if fornecedor %}{{ fornecedor.nome }}{% else %}Nenhum{% endif %}</span>
+    </div>
+    <div class="sugestao-conferencia-item">
+      <span class="sugestao-conferencia-label">Periodo calculado</span>
+      <span class="sugestao-conferencia-valor">{{ data_inicio|date:"d/m/Y" }} ate {{ data_fim|date:"d/m/Y" }}</span>
+    </div>
+    <div class="sugestao-conferencia-item">
+      <span class="sugestao-conferencia-label">Produtos vinculados</span>
+      <span class="sugestao-conferencia-valor">{{ total_produtos_vinculados }}</span>
+    </div>
+    <div class="sugestao-conferencia-item">
+      <span class="sugestao-conferencia-label">Produtos na lista</span>
+      <span class="sugestao-conferencia-valor" data-produtos-lista-total>{{ total_produtos_sugeridos }}</span>
+    </div>
+    <div class="sugestao-conferencia-item total">
+      <span class="sugestao-conferencia-label">Total sugerido original</span>
+      <span class="sugestao-conferencia-valor total">R$ {{ total_sugerido|floatformat:2 }}</span>
+    </div>
+    <div class="sugestao-conferencia-item total">
+      <span class="sugestao-conferencia-label">Total da lista/pedido</span>
+      <span class="sugestao-conferencia-valor total" data-total-lista-pedido>R$ {{ total_sugerido|floatformat:2 }}</span>
+    </div>
+  </section>
+
+  {% if fornecedor and not linhas %}
+    <div class="sugestao-aviso">
+      Nenhum produto apareceu na lista. Confira se os produtos deste fornecedor estao ativos, fora da lixeira, abaixo/no minimo ou com pedido em aberto.
+    </div>
+  {% endif %}
 
   <section class="sugestao-visualizacao-acoes" aria-label="Visualizacoes da lista">
     <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnVisualizarAnalitica">Visualizar Analitica</button>
