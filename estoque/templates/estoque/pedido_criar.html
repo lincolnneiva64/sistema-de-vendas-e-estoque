@@ -1842,6 +1842,17 @@
     }
 }
 
+
+@media (max-width: 768px) {
+    .pedido-consulta-mobile-destaque {
+        background: #155d2f !important;
+        border-color: #155d2f !important;
+        color: #ffffff !important;
+        font-weight: 800 !important;
+        box-shadow: 0 6px 16px rgba(21, 93, 47, .20) !important;
+    }
+}
+
 </style>
 </head>
 <body>
@@ -1881,7 +1892,7 @@
             </div>
             <div class="pedido-topo-acoes">
                 <a href="{% url 'estoque:vendas' %}" class="pedido-voltar pedido-vendas-link">Ir para Vendas</a>
-                <a href="{% url 'estoque:pedidos' %}" class="pedido-voltar">Consulta de Pedidos</a>
+                <a href="{% url 'estoque:pedidos' %}" class="pedido-voltar pedido-consulta-mobile-destaque">Consulta de Pedidos</a>
             </div>
         </div>
 
