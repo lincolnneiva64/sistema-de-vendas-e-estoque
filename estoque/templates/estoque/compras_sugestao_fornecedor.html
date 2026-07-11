@@ -2837,6 +2837,7 @@
   let itemPendenteRemocao = null;
   let botaoRemoverOrigem = null;
   let remocaoEmAndamento = false;
+  let focoPrecoPendentePorEnter = null;
 
   window.sugestaoMobileCardsParaLista = function(cards) {
     const colecao = Array.from(cards || []);
@@ -2880,21 +2881,12 @@
 
   function selecionarConteudoCampo(campo) {
     if (!campo) return;
-    const selecionar = function() {
-      try {
-        campo.select();
-        campo.setSelectionRange(0, String(campo.value || "").length);
-      } catch (erro) {
-        // Alguns navegadores mobile podem ignorar selecao programatica.
-      }
-    };
-    selecionar();
-    if (window.requestAnimationFrame) {
-      window.requestAnimationFrame(selecionar);
-    } else {
-      window.setTimeout(selecionar, 0);
+    try {
+      campo.select();
+      campo.setSelectionRange(0, String(campo.value || "").length);
+    } catch (erro) {
+      // Alguns navegadores mobile podem ignorar selecao programatica.
     }
-    window.setTimeout(selecionar, 80);
   }
 
   function cards() {
@@ -3243,8 +3235,13 @@
     const preco = item.querySelector(".sugestao-item-lista-preco-input");
     if (event.target === qtd) {
       event.preventDefault();
-      preco?.focus({ preventScroll: true });
-      selecionarConteudoCampo(preco);
+      focoPrecoPendentePorEnter = { item, campo: preco };
+      window.setTimeout(function() {
+        if (!focoPrecoPendentePorEnter || focoPrecoPendentePorEnter.item !== item) return;
+        focoPrecoPendentePorEnter = null;
+        preco?.focus({ preventScroll: true });
+        selecionarConteudoCampo(preco);
+      }, 0);
       return;
     }
     if (event.target === preco) {
