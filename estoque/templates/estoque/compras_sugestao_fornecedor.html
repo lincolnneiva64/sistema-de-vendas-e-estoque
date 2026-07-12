@@ -3322,6 +3322,18 @@
     const item = botaoRemover.closest("[data-produto-id]");
     if (!item) return;
 
+    if (
+      item.classList.contains("sugestao-mobile-card") &&
+      botaoRemover.dataset.remocaoConfirmada !== "1" &&
+      typeof window.abrirModalRemoverCardSugestao === "function"
+    ) {
+      event.preventDefault();
+      window.abrirModalRemoverCardSugestao(item, botaoRemover);
+      return;
+    }
+
+    delete botaoRemover.dataset.remocaoConfirmada;
+
     const produtoId = item.dataset.produtoId;
     window.__sugestaoProdutosRemovidos.add(String(produtoId));
     function proximoItemSeguroAntesRemover(itemAtual) {
@@ -3393,6 +3405,7 @@
   if (!mobile || !lista) return;
   let itemEmEdicao = null;
   let itemPendenteRemocao = null;
+  let cardPendenteRemocao = null;
   let botaoRemoverOrigem = null;
   let remocaoEmAndamento = false;
   let focoPrecoPendentePorEnter = null;
@@ -3473,6 +3486,20 @@
     };
   }
 
+  function historicoDoCardHtml(card) {
+    const origem = card.querySelector("[data-historico-lista-mobile]");
+    if (!origem) return "";
+
+    const copia = origem.cloneNode(true);
+    const botao = copia.querySelector("[data-historico-toggle]");
+    const conteudo = copia.querySelector("[data-historico-card]");
+
+    if (botao) botao.setAttribute("aria-expanded", "false");
+    if (conteudo) conteudo.hidden = true;
+
+    return copia.outerHTML;
+  }
+
   function atualizarVazio() {
     const temItens = lista.querySelectorAll(".sugestao-item-lista-mobile[data-produto-id]").length > 0;
     vazio?.classList.toggle("oculto", temItens);
@@ -3505,6 +3532,7 @@
 
   function renderItem(card) {
     const dados = valoresDoCard(card);
+    const historicoHtml = historicoDoCardHtml(card);
     const existente = itemPorId(dados.produtoId);
     if (existente && existente.dataset.editando === "1") return existente;
     const conteudo = `
@@ -3519,6 +3547,7 @@
         <input type="text" inputmode="decimal" class="sugestao-input sugestao-item-lista-preco-input" value="${html(dados.precoCompra)}" aria-label="Preco de ${html(dados.produto)} na lista" readonly>
       </div>
       <div class="sugestao-item-lista-mobile-total">Total: <span>${html(dados.total)}</span></div>
+      ${historicoHtml}
       <div class="sugestao-item-lista-mobile-erro" role="alert"></div>
       <div class="sugestao-mobile-edit-actions">
         <button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-editar-lista-mobile">Editar</button>
@@ -3691,7 +3720,7 @@
       removerItemDaLista(item);
       return;
     }
-    if (itemPendenteRemocao) return;
+    if (itemPendenteRemocao || cardPendenteRemocao) return;
     itemPendenteRemocao = item;
     botaoRemoverOrigem = botaoOrigem || item.querySelector(".sugestao-remover-lista-mobile");
     remocaoEmAndamento = false;
@@ -3706,6 +3735,36 @@
     }, 0);
   }
 
+  window.abrirModalRemoverCardSugestao = function(card, botaoOrigem) {
+    if (!card || !botaoOrigem) return;
+
+    if (!modalRemover || !btnConfirmarRemover || !btnCancelarRemover) {
+      botaoOrigem.dataset.remocaoConfirmada = "1";
+      botaoOrigem.click();
+      return;
+    }
+
+    if (itemPendenteRemocao || cardPendenteRemocao) return;
+
+    cardPendenteRemocao = card;
+    botaoRemoverOrigem = botaoOrigem;
+    remocaoEmAndamento = false;
+
+    const nomeProduto = texto(card.querySelector(".sugestao-mobile-produto"));
+
+    if (modalRemoverMensagem) {
+      modalRemoverMensagem.textContent =
+        `O produto '${nomeProduto}' será excluído desta lista.`;
+    }
+
+    modalRemover.classList.add("aberto");
+    modalRemover.setAttribute("aria-hidden", "false");
+
+    window.setTimeout(function() {
+      btnCancelarRemover.focus();
+    }, 0);
+  };
+
   function fecharModalRemoverItem() {
     if (!modalRemover) return;
     modalRemover.classList.remove("aberto");
@@ -3716,6 +3775,7 @@
     const foco = botaoRemoverOrigem;
     fecharModalRemoverItem();
     itemPendenteRemocao = null;
+    cardPendenteRemocao = null;
     botaoRemoverOrigem = null;
     remocaoEmAndamento = false;
     window.setTimeout(function() {
@@ -3724,16 +3784,30 @@
   }
 
   function confirmarRemocaoItem() {
-    if (!itemPendenteRemocao || remocaoEmAndamento) return;
+    if ((!itemPendenteRemocao && !cardPendenteRemocao) || remocaoEmAndamento) return;
+
     remocaoEmAndamento = true;
+
     const item = itemPendenteRemocao;
+    const card = cardPendenteRemocao;
+    const botaoCard = card ? botaoRemoverOrigem : null;
+
     if (btnConfirmarRemover) btnConfirmarRemover.disabled = true;
-    removerItemDaLista(item);
+    if (item) removerItemDaLista(item);
+
     fecharModalRemoverItem();
+
     itemPendenteRemocao = null;
+    cardPendenteRemocao = null;
     botaoRemoverOrigem = null;
     remocaoEmAndamento = false;
+
     if (btnConfirmarRemover) btnConfirmarRemover.disabled = false;
+
+    if (botaoCard) {
+      botaoCard.dataset.remocaoConfirmada = "1";
+      botaoCard.click();
+    }
   }
 
   function fecharHistoricosComprasMobile(exceto) {
@@ -3790,7 +3864,37 @@
     if (validado.ok) campo.value = decimal(validado.valor, campo.classList.contains("sugestao-item-lista-qtd-input") ? 3 : 2);
   }, true);
 
+  function fecharHistoricosComprasListaMobile(exceto) {
+    lista.querySelectorAll("[data-historico-card]").forEach(function(card) {
+      if (card === exceto) return;
+
+      card.hidden = true;
+
+      const wrapper = card.closest("[data-historico-lista-mobile]");
+      wrapper
+        ?.querySelector("[data-historico-toggle]")
+        ?.setAttribute("aria-expanded", "false");
+    });
+  }
+
   lista.addEventListener("click", function(event) {
+    const historicoToggle = event.target.closest("[data-historico-toggle]");
+
+    if (historicoToggle) {
+      event.preventDefault();
+
+      const wrapper = historicoToggle.closest("[data-historico-lista-mobile]");
+      const cardHistorico = wrapper?.querySelector("[data-historico-card]");
+
+      if (!cardHistorico) return;
+
+      const abrir = cardHistorico.hidden;
+      fecharHistoricosComprasListaMobile(cardHistorico);
+      cardHistorico.hidden = !abrir;
+      historicoToggle.setAttribute("aria-expanded", abrir ? "true" : "false");
+      return;
+    }
+
     const item = event.target.closest(".sugestao-item-lista-mobile[data-produto-id]");
     if (!item) return;
     if (event.target.closest(".sugestao-editar-lista-mobile")) {

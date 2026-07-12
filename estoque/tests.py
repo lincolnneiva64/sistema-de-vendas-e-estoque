@@ -4152,7 +4152,22 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, "confirmarRemocaoItem")
         self.assertContains(resposta, "itemPendenteRemocao")
         self.assertContains(resposta, "remocaoEmAndamento")
-        self.assertContains(resposta, "if (itemPendenteRemocao) return;")
+        self.assertContains(
+            resposta,
+            "if (itemPendenteRemocao || cardPendenteRemocao) return;",
+        )
+        self.assertContains(
+            resposta,
+            "window.abrirModalRemoverCardSugestao = function(card, botaoOrigem)",
+        )
+        self.assertContains(
+            resposta,
+            'botaoRemover.dataset.remocaoConfirmada !== "1"',
+        )
+        self.assertContains(
+            resposta,
+            'botaoCard.dataset.remocaoConfirmada = "1";',
+        )
         self.assertContains(resposta, "removerItemDaLista(item);")
         self.assertContains(resposta, "if (itemEmEdicao === item) itemEmEdicao = null;")
         self.assertContains(resposta, "foco?.focus();")
