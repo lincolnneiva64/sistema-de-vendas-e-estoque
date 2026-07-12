@@ -1765,6 +1765,19 @@
       </div>
     </div>
   </div>
+
+  <div class="sugestao-modal-overlay" id="modalListaVaziaRascunhoMobile" aria-hidden="true">
+    <div class="sugestao-modal-content">
+      <div class="sugestao-modal-icon">!</div>
+      <h2 class="sugestao-modal-titulo">Lista vazia</h2>
+      <div class="sugestao-modal-msg">
+        Adicione pelo menos um produto à lista antes de salvar o rascunho.
+      </div>
+      <div class="sugestao-modal-acoes">
+        <button type="button" class="sugestao-modal-btn sugestao-modal-btn-confirmar" id="btnFecharListaVaziaRascunhoMobile">Entendi</button>
+      </div>
+    </div>
+  </div>
   <section class="sugestao-card">
       <div class="sugestao-table-wrap sugestao-desktop">
         <table class="sugestao-table">
@@ -3821,6 +3834,8 @@
   const modalContinuarEditandoRascunhoLista = document.getElementById("modalContinuarEditandoRascunhoLista");
   const btnManterRascunhoProtegidoLista = document.getElementById("btnManterRascunhoProtegidoLista");
   const btnConfirmarContinuarEditandoRascunhoLista = document.getElementById("btnConfirmarContinuarEditandoRascunhoLista");
+  const modalListaVaziaRascunhoMobile = document.getElementById("modalListaVaziaRascunhoMobile");
+  const btnFecharListaVaziaRascunhoMobile = document.getElementById("btnFecharListaVaziaRascunhoMobile");
   const baseListasFornecedorUrl = "{% url 'estoque:compras_listas_fornecedor' %}";
   let gerarCompraAoGravar = false;
   let salvarRascunhoAoGravar = false;
@@ -3962,7 +3977,8 @@
     return document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-na-lista='1']").length > 0;
   }
 
-  function orientarAdicionarItensMobile() {
+  function orientarAdicionarItensMobile(opcoes) {
+    if (opcoes?.rascunho === true && abrirModalListaVaziaRascunhoMobile()) return;
     alert("Adicione pelo menos um produto à lista antes de gravar.");
     const alvo = document.getElementById("mobileSugestaoProdutos") || document.getElementById("itensListaMobile");
     if (alvo && typeof alvo.scrollIntoView === "function") {
@@ -4058,6 +4074,24 @@
     if (!modalContinuarEditandoRascunhoLista) return;
     modalContinuarEditandoRascunhoLista.classList.remove("aberto");
     modalContinuarEditandoRascunhoLista.setAttribute("aria-hidden", "true");
+  }
+
+  function abrirModalListaVaziaRascunhoMobile() {
+    if (!modalListaVaziaRascunhoMobile) return false;
+    if (modalListaVaziaRascunhoMobile.classList.contains("aberto")) return true;
+    modalListaVaziaRascunhoMobile.classList.add("aberto");
+    modalListaVaziaRascunhoMobile.setAttribute("aria-hidden", "false");
+    window.setTimeout(function() {
+      btnFecharListaVaziaRascunhoMobile?.focus();
+    }, 0);
+    return true;
+  }
+
+  function fecharModalListaVaziaRascunhoMobile() {
+    if (!modalListaVaziaRascunhoMobile) return;
+    modalListaVaziaRascunhoMobile.classList.remove("aberto");
+    modalListaVaziaRascunhoMobile.setAttribute("aria-hidden", "true");
+    btnSalvarRascunhoListaMobile?.focus();
   }
 
   function liberarEdicaoRascunhoProtegidoLista() {
@@ -4431,7 +4465,7 @@
       return;
     }
     if (!usarItensDesktop() && !temItensEscolhidosMobile()) {
-      orientarAdicionarItensMobile();
+      orientarAdicionarItensMobile({ rascunho: salvarRascunhoAoGravar });
       return;
     }
     const itemEmEdicaoAberta = itemMobileEmEdicaoAberta();
@@ -4500,6 +4534,9 @@
   }
   if (btnConfirmarContinuarEditandoRascunhoLista) {
     btnConfirmarContinuarEditandoRascunhoLista.addEventListener("click", liberarEdicaoRascunhoProtegidoLista);
+  }
+  if (btnFecharListaVaziaRascunhoMobile) {
+    btnFecharListaVaziaRascunhoMobile.addEventListener("click", fecharModalListaVaziaRascunhoMobile);
   }
   if (rascunhoProtegidoListaSalvo() && listaFornecedorMobile()) {
     aplicarRascunhoProtegidoLista(true);
