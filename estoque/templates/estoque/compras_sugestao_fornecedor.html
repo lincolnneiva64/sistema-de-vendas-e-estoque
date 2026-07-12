@@ -3025,6 +3025,39 @@
     `;
   }
 
+  function historicoMobileProdutoHtml(produto) {
+    const historico = Array.isArray(produto?.historico_ultimas_compras)
+      ? produto.historico_ultimas_compras.slice(0, 3)
+      : [];
+
+    if (!historico.length) return "";
+
+    const comprasHtml = historico.map((compra) => {
+      const quantidade = String(compra.quantidade || "0.000");
+      const unidade = String(compra.unidade || "").trim();
+      const preco = String(compra.preco || "0.00");
+
+      return `
+        <div class="sugestao-historico-item">
+          <div>${escapeHtml(compra.data || "-")}</div>
+          <div>${escapeHtml(compra.fornecedor || "-")}</div>
+          <div>${escapeHtml(quantidade)}${unidade ? " " + escapeHtml(unidade) : ""}</div>
+          <div class="sugestao-historico-preco">R$ ${escapeHtml(preco)}</div>
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <div class="sugestao-historico-mobile" data-historico-lista-mobile>
+        <button type="button" class="sugestao-historico-toggle" data-historico-toggle aria-expanded="false">Ver últimas compras</button>
+        <div class="sugestao-historico-card" data-historico-card hidden>
+          <div class="sugestao-historico-titulo">Últimas 3 compras deste produto</div>
+          ${comprasHtml}
+        </div>
+      </div>
+    `;
+  }
+
   function cardMobile(produto) {
     return `
       <article class="sugestao-mobile-card" data-produto-id="${produto.id}" data-sugestao-original="${escapeHtml(produto.sugestao)}">
@@ -3039,6 +3072,7 @@
           <div class="sugestao-mobile-static"><span class="sugestao-mobile-label">Sugestao compra</span><span>${escapeHtml(produto.sugestao)}</span></div>
           <div><span class="sugestao-mobile-label">Unidade</span><span class="sugestao-mobile-value">${escapeHtml(produto.unidade)}</span></div>
         </div>
+        ${historicoMobileProdutoHtml(produto)}
         <div class="sugestao-mobile-edit">
           <label class="sugestao-mobile-label">Quantidade/compra</label>
           <input type="text" inputmode="decimal" class="sugestao-input sugestao-qtd-input" value="${escapeHtml(produto.sugestao)}" aria-label="Quantidade de compra para ${escapeHtml(produto.nome)}">

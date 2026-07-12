@@ -3494,6 +3494,18 @@ class ComprasListaFornecedorGravarTests(TestCase):
             resposta,
             "renderizarHistoricoProdutoManual",
         )
+        self.assertContains(
+            resposta,
+            "function historicoMobileProdutoHtml(produto)",
+        )
+        self.assertContains(
+            resposta,
+            "${historicoMobileProdutoHtml(produto)}",
+        )
+        self.assertContains(
+            resposta,
+            'data-historico-toggle aria-expanded="false"',
+        )
 
     def test_edicao_payload_manual_traz_historico_para_produto_novo(self):
         fornecedor_compra = Fornecedor.objects.create(
@@ -3548,6 +3560,121 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(
             resposta,
             "Nenhuma compra anterior encontrada",
+        )
+        self.assertContains(
+            resposta,
+            "function historicoMobileProdutoHtml(produto)",
+        )
+        self.assertContains(
+            resposta,
+            'if (!historico.length) return "";',
+        )
+        self.assertContains(
+            resposta,
+            "${historicoMobileProdutoHtml(produto)}",
+        )
+
+    def test_edicao_manual_produto_novo_salva_historico_correto_e_nao_herda_sem_historico(self):
+        fornecedor_compra = Fornecedor.objects.create(
+            nome="Fornecedor Compra Manual Salvar Edicao"
+        )
+        produto_lista = self.criar_produto("Produto Ja Salvo Edicao Manual")
+        produto_com_historico = self.criar_produto(
+            "Produto Novo Edicao Com Historico"
+        )
+        produto_sem_historico = self.criar_produto(
+            "Produto Novo Edicao Sem Historico"
+        )
+        lista = self.criar_lista_com_item(produto_lista)
+
+        self.criar_compra_historico_produto(
+            produto_com_historico,
+            fornecedor=fornecedor_compra,
+            quantidade=Decimal("4.750"),
+            unidade="CX",
+            preco=Decimal("13.60"),
+        )
+
+        resposta_get = self.client.get(
+            reverse(
+                "estoque:compras_lista_fornecedor_editar",
+                kwargs={"pk": lista.pk},
+            ),
+            secure=True,
+        )
+        produtos_payload = resposta_get.context["produtos_manual_payload"]
+        payload_com_historico = next(
+            item for item in produtos_payload
+            if item["id"] == produto_com_historico.id
+        )
+        payload_sem_historico = next(
+            item for item in produtos_payload
+            if item["id"] == produto_sem_historico.id
+        )
+
+        self.assertEqual(resposta_get.status_code, 200)
+        self.assertEqual(
+            payload_com_historico["historico_ultimas_compras"][0]["fornecedor"],
+            fornecedor_compra.nome,
+        )
+        self.assertEqual(
+            payload_com_historico["historico_ultimas_compras"][0]["quantidade"],
+            "4.750",
+        )
+        self.assertEqual(payload_sem_historico["historico_ultimas_compras"], [])
+        self.assertContains(
+            resposta_get,
+            'if (!historico.length) return "";',
+        )
+
+        resposta_post = self.client.post(
+            reverse(
+                "estoque:compras_lista_fornecedor_editar",
+                kwargs={"pk": lista.pk},
+            ),
+            {
+                "lista_payload": json.dumps(
+                    self.payload([
+                        self.criar_linha(produto_lista, 2),
+                        self.criar_linha(
+                            produto_com_historico,
+                            5,
+                            total=Decimal("50.00"),
+                        ),
+                    ])
+                )
+            },
+            secure=True,
+        )
+
+        self.assertRedirects(
+            resposta_post,
+            reverse("estoque:compras_lista_fornecedor_ver", kwargs={"pk": lista.pk}),
+            fetch_redirect_response=False,
+        )
+        lista.refresh_from_db()
+        produtos_salvos = set(lista.itens.values_list("produto_id", flat=True))
+        self.assertEqual(produtos_salvos, {produto_lista.id, produto_com_historico.id})
+        item_adicionado = lista.itens.get(produto=produto_com_historico)
+        self.assertEqual(item_adicionado.quantidade_final, Decimal("5.000"))
+        self.assertEqual(item_adicionado.total, Decimal("50.00"))
+
+        resposta_reabrir = self.client.get(
+            reverse(
+                "estoque:compras_lista_fornecedor_editar",
+                kwargs={"pk": lista.pk},
+            ),
+            secure=True,
+        )
+        linha_adicionada = next(
+            linha for linha in resposta_reabrir.context["linhas"]
+            if linha["produto_id"] == produto_com_historico.id
+        )
+
+        self.assertEqual(resposta_reabrir.status_code, 200)
+        self.assertEqual(
+            linha_adicionada["historico_ultimas_compras"][0]["fornecedor"],
+            fornecedor_compra.nome,
         )
 
     def test_historico_desktop_mostra_cabecalhos_claros(self):
