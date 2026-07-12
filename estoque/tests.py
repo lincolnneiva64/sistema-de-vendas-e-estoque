@@ -3402,6 +3402,30 @@ class ComprasListaFornecedorGravarTests(TestCase):
             html,
         )
 
+    def test_autocomplete_nao_repete_selo_do_fornecedor(self):
+        resposta = self.client.get(
+            reverse("estoque:sugestao_compra_fornecedor"),
+            secure=True,
+        )
+        html = resposta.content.decode()
+
+        inicio = html.index("function tagFornecedor(produto)")
+        fim = html.index("function tagJaNaLista(produto)", inicio)
+        bloco_fornecedor = html[inicio:fim]
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn('produto.vinculado', bloco_fornecedor)
+        self.assertIn('? ""', bloco_fornecedor)
+        self.assertIn("Fora deste fornecedor", bloco_fornecedor)
+        self.assertNotIn(
+            '>fornecedor</span>',
+            bloco_fornecedor,
+        )
+        self.assertNotIn(
+            '>fora do fornecedor</span>',
+            bloco_fornecedor,
+        )
+
     def test_autocomplete_permite_consultar_produto_ja_presente_sem_duplicar(self):
         resposta = self.client.get(
             reverse("estoque:sugestao_compra_fornecedor"),
