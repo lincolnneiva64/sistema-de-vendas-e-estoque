@@ -3402,7 +3402,7 @@ class ComprasListaFornecedorGravarTests(TestCase):
             html,
         )
 
-    def test_autocomplete_nao_repete_selo_do_fornecedor(self):
+    def test_autocomplete_sem_selo_de_fornecedor(self):
         resposta = self.client.get(
             reverse("estoque:sugestao_compra_fornecedor"),
             secure=True,
@@ -3414,16 +3414,44 @@ class ComprasListaFornecedorGravarTests(TestCase):
         bloco_fornecedor = html[inicio:fim]
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertIn('produto.vinculado', bloco_fornecedor)
-        self.assertIn('? ""', bloco_fornecedor)
-        self.assertIn("Fora deste fornecedor", bloco_fornecedor)
+        self.assertIn('return "";', bloco_fornecedor)
+        self.assertNotIn("Fora deste fornecedor", bloco_fornecedor)
         self.assertNotIn(
-            '>fornecedor</span>',
+            "sugestao-autocomplete-tag",
             bloco_fornecedor,
         )
-        self.assertNotIn(
-            '>fora do fornecedor</span>',
-            bloco_fornecedor,
+
+    def test_mobile_produto_manual_entra_direto_em_itens_da_lista(self):
+        resposta = self.client.get(
+            reverse("estoque:sugestao_compra_fornecedor"),
+            secure=True,
+        )
+        html = resposta.content.decode()
+
+        inicio = html.index("function adicionarSelecionado()")
+        fim = html.index("function selecionarTextoBusca()", inicio)
+        bloco_adicionar = html[inicio:fim]
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(
+            'mobile.insertAdjacentHTML("beforeend", cardMobile(produto));',
+            bloco_adicionar,
+        )
+        self.assertIn(
+            "const mobileVisivel = Boolean(",
+            bloco_adicionar,
+        )
+        self.assertIn(
+            'typeof window.adicionarCardSugestaoNaLista === "function"',
+            bloco_adicionar,
+        )
+        self.assertIn(
+            "window.adicionarCardSugestaoNaLista(cardManual);",
+            bloco_adicionar,
+        )
+        self.assertIn(
+            "window.adicionarCardSugestaoNaLista = adicionarCardNaLista;",
+            html,
         )
 
     def test_autocomplete_permite_consultar_produto_ja_presente_sem_duplicar(self):

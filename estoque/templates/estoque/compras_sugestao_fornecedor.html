@@ -2810,9 +2810,7 @@
   }
 
   function tagFornecedor(produto) {
-    return produto.vinculado
-      ? ""
-      : '<span class="sugestao-autocomplete-tag fora-fornecedor">Fora deste fornecedor</span>';
+    return "";
   }
 
   function tagJaNaLista(produto) {
@@ -3248,6 +3246,29 @@
     const produto = produtoComValoresManuais(produtoBase);
     tbody.insertAdjacentHTML("beforeend", linhaDesktop(produto));
     mobile.insertAdjacentHTML("beforeend", cardMobile(produto));
+
+    const cardManual = Array.from(
+      mobile.querySelectorAll(".sugestao-mobile-card[data-produto-id]")
+    ).find((card) => {
+      return String(card.dataset.produtoId || "") === String(produto.id);
+    }) || null;
+
+    const mobileVisivel = Boolean(
+      mobile &&
+      (
+        mobile.offsetWidth ||
+        mobile.offsetHeight ||
+        mobile.getClientRects().length
+      )
+    );
+
+    if (
+      mobileVisivel &&
+      typeof window.adicionarCardSugestaoNaLista === "function"
+    ) {
+      window.adicionarCardSugestaoNaLista(cardManual);
+    }
+
     atualizarResumoDepoisDeAdicionar();
     prepararProximoProduto();
   }
@@ -3775,6 +3796,8 @@
     renderItem(card);
     atualizarVazio();
   }
+
+  window.adicionarCardSugestaoNaLista = adicionarCardNaLista;
 
   function removerItemDaLista(item) {
     const card = cardPorId(item.dataset.produtoId);
