@@ -4451,19 +4451,22 @@
   }
 
   function orientarAdicionarItensMobile(opcoes) {
-    if (opcoes?.rascunho === true && abrirModalListaVaziaRascunhoMobile(
+    const salvandoRascunho = opcoes?.rascunho === true;
+    const mensagem = salvandoRascunho
+      ? "Adicione pelo menos um produto \u00e0 lista antes de salvar o rascunho."
+      : "Adicione pelo menos um produto \u00e0 lista antes de gravar.";
+
+    const focoRetorno = salvandoRascunho
+      ? btnSalvarRascunhoListaMobile
+      : document.activeElement;
+
+    if (abrirModalListaVaziaRascunhoMobile(
       "Lista vazia",
-      "Adicione pelo menos um produto à lista antes de salvar o rascunho.",
-      btnSalvarRascunhoListaMobile
+      mensagem,
+      focoRetorno
     )) return;
-    alert("Adicione pelo menos um produto à lista antes de gravar.");
-    const alvo = document.getElementById("mobileSugestaoProdutos") || document.getElementById("itensListaMobile");
-    if (alvo && typeof alvo.scrollIntoView === "function") {
-      alvo.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-    window.setTimeout(function() {
-      document.querySelector("#mobileSugestaoProdutos .sugestao-adicionar-lista-mobile:not(:disabled)")?.focus();
-    }, 150);
+
+    alert(mensagem);
   }
 
   function itemMobileEmEdicaoAberta() {

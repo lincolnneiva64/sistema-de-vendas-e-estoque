@@ -3373,6 +3373,35 @@ class ComprasListaFornecedorGravarTests(TestCase):
             f'<a class="lista-ver-btn" href="{url_edicao}">Editar Lista</a>',
         )
 
+    def test_mobile_gravar_lista_vazia_usa_modal_padronizado(self):
+        resposta = self.client.get(
+            reverse("estoque:sugestao_compra_fornecedor"),
+            secure=True,
+        )
+        html = resposta.content.decode()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(
+            "const salvandoRascunho = opcoes?.rascunho === true;",
+            html,
+        )
+        self.assertIn(
+            r"Adicione pelo menos um produto \u00e0 lista antes de gravar.",
+            html,
+        )
+        self.assertIn(
+            "abrirModalListaVaziaRascunhoMobile(",
+            html,
+        )
+        self.assertIn(
+            '"Lista vazia",',
+            html,
+        )
+        self.assertNotIn(
+            'alert("Adicione pelo menos um produto ? lista antes de gravar.");',
+            html,
+        )
+
     def test_autocomplete_permite_consultar_produto_ja_presente_sem_duplicar(self):
         resposta = self.client.get(
             reverse("estoque:sugestao_compra_fornecedor"),
@@ -3738,10 +3767,16 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, "cardsMobile()")
         self.assertContains(resposta, "temItensEscolhidosMobile")
         self.assertContains(resposta, "orientarAdicionarItensMobile")
-        self.assertContains(resposta, "Adicione pelo menos um produto à lista antes de gravar.")
+        self.assertContains(
+            resposta,
+            r"Adicione pelo menos um produto \u00e0 lista antes de gravar.",
+        )
         self.assertContains(resposta, 'if (!usarItensDesktop() && !temItensEscolhidosMobile())')
         self.assertContains(resposta, 'orientarAdicionarItensMobile({ rascunho: salvarRascunhoAoGravar });')
-        self.assertContains(resposta, 'alvo.scrollIntoView({ behavior: "smooth", block: "start" });')
+        self.assertContains(
+            resposta,
+            "const focoRetorno = salvandoRascunho",
+        )
 
     def test_mobile_gravar_e_gerar_compra_bloqueiam_sem_itens_escolhidos(self):
         resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)
@@ -3751,8 +3786,14 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertIn("orientarAdicionarItensMobile({ rascunho: salvarRascunhoAoGravar });", html)
         self.assertIn("novoClique(false, novoBtn);", html)
         self.assertIn("novoClique(true, btnGravarGerarCompraFornecedor);", html)
-        self.assertIn('document.querySelector("#mobileSugestaoProdutos .sugestao-adicionar-lista-mobile:not(:disabled)")?.focus();', html)
-        self.assertEqual(html.count("Adicione pelo menos um produto à lista antes de gravar."), 1)
+        self.assertIn(
+            "abrirModalListaVaziaRascunhoMobile(",
+            html,
+        )
+        self.assertEqual(
+            html.count(r"Adicione pelo menos um produto \u00e0 lista antes de gravar."),
+            1,
+        )
 
     def test_mobile_salvar_rascunho_sem_itens_usa_modal_lista_vazia(self):
         resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)
@@ -3771,7 +3812,10 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, "btnFecharListaVaziaRascunhoMobile.addEventListener")
         self.assertContains(resposta, 'modalListaVaziaRascunhoMobileTitulo.textContent = titulo || "Lista vazia";')
         self.assertContains(resposta, "modalListaVaziaRascunhoMobileMensagem.textContent = mensagem")
-        self.assertContains(resposta, 'opcoes?.rascunho === true && abrirModalListaVaziaRascunhoMobile(')
+        self.assertContains(
+            resposta,
+            "const salvandoRascunho = opcoes?.rascunho === true;",
+        )
         self.assertNotIn('alert("Adicione pelo menos um produto à lista antes de salvar o rascunho.")', html)
 
     def test_mobile_sem_fornecedor_usa_modal_reaproveitado(self):
