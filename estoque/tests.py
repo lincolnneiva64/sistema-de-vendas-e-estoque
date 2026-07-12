@@ -3358,12 +3358,48 @@ class ComprasListaFornecedorGravarTests(TestCase):
         html = resposta.content.decode()
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, 'id="btnSalvarRascunhoListaMobile"')
+        bloco_acoes = re.search(
+            r'<section class="sugestao-visualizacao-acoes"[^>]*>(?P<conteudo>.*?)</section>',
+            html,
+            re.S,
+        )
+        self.assertIsNotNone(bloco_acoes)
+        conteudo_acoes = bloco_acoes.group("conteudo")
+        self.assertIn('id="btnSalvarRascunhoListaMobile"', conteudo_acoes)
+        self.assertIn('id="avisoRascunhoProtegidoLista"', conteudo_acoes)
+        self.assertIn('id="btnContinuarEditandoRascunhoLista"', conteudo_acoes)
+        self.assertLess(
+            conteudo_acoes.index('id="btnSalvarRascunhoListaMobile"'),
+            conteudo_acoes.index('id="btnVisualizarAnalitica"'),
+        )
+        self.assertLess(
+            conteudo_acoes.index('id="btnVisualizarAnalitica"'),
+            conteudo_acoes.index('id="btnVisualizarSintetica"'),
+        )
+        self.assertLess(
+            conteudo_acoes.index('id="btnVisualizarSintetica"'),
+            conteudo_acoes.index('id="btnImagemWhatsapp"'),
+        )
+        self.assertLess(
+            conteudo_acoes.index('id="btnImagemWhatsapp"'),
+            conteudo_acoes.index('id="btnGravarListaFornecedor"'),
+        )
+        self.assertLess(
+            conteudo_acoes.index('id="btnGravarListaFornecedor"'),
+            conteudo_acoes.index('id="btnGravarGerarCompraFornecedor"'),
+        )
+        rodape_mobile = re.search(
+            r'<div class="sugestao-salvar-mobile-rodape">(?P<conteudo>.*?)</div>',
+            html,
+            re.S,
+        )
+        self.assertIsNotNone(rodape_mobile)
+        self.assertNotIn("btnSalvarRascunhoListaMobile", rodape_mobile.group("conteudo"))
         self.assertContains(resposta, "Salvar rascunho")
         self.assertContains(resposta, "sugestao-rascunho-mobile-only")
-        self.assertContains(resposta, ".sugestao-rascunho-mobile-only")
-        self.assertContains(resposta, "display: none;")
+        self.assertContains(resposta, ".sugestao-rascunho-mobile-only {\n    display: none;\n  }")
         self.assertContains(resposta, '@media (max-width: 860px)')
+        self.assertContains(resposta, ".sugestao-rascunho-mobile-only {\n      display: grid;\n    }")
         self.assertContains(resposta, 'id="btnGravarListaMobile"')
         self.assertContains(resposta, 'id="btnGravarGerarCompraMobile"')
         self.assertContains(resposta, "Gravar lista")
