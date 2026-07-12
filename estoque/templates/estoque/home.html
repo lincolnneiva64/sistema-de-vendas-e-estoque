@@ -1306,8 +1306,15 @@ align-items: center;
           Funcionarios
         </a>
         <a
-          href="{% url 'estoque:sugestao_compra_fornecedor' %}"
+          href="{% url 'estoque:fornecedores' %}"
           id="btnFornecedoresPainel"
+          class="btn-acao-principal-painel"
+        >
+          Fornecedores
+        </a>
+        <a
+          href="{% url 'estoque:sugestao_compra_fornecedor' %}"
+          id="btnNovaListaFornecedorPainel"
           class="btn-acao-principal-painel"
         >
           Nova Lista por Fornecedor

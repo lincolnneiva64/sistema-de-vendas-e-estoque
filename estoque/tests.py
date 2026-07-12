@@ -2890,6 +2890,22 @@ class ProdutosIncompletosTests(TestCase):
         self.assertContains(resposta, 'id="percentual_prazo"')
         self.assertContains(resposta, 'id="id_preco_prazo"')
 
+    def test_painel_produtos_exibe_fornecedores_e_nova_lista_separados(self):
+        resposta = self.client.get(reverse("estoque:home"), secure=True)
+        html = resposta.content.decode()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Fornecedores")
+        self.assertContains(resposta, f'href="{reverse("estoque:fornecedores")}"')
+        self.assertContains(resposta, 'id="btnFornecedoresPainel"')
+        self.assertContains(resposta, "Nova Lista por Fornecedor")
+        self.assertContains(resposta, f'href="{reverse("estoque:sugestao_compra_fornecedor")}"')
+        self.assertContains(resposta, 'id="btnNovaListaFornecedorPainel"')
+        self.assertNotEqual(
+            html.index('id="btnFornecedoresPainel"'),
+            html.index('id="btnNovaListaFornecedorPainel"'),
+        )
+
     def test_tela_completar_produto_incompleto_nao_inicializa_preco_final_com_compra(self):
         resposta = self.client.get(self._url_edicao(), secure=True)
 
@@ -3332,10 +3348,119 @@ class ComprasListaFornecedorGravarTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         self.assertIn("orientarAdicionarItensMobile();", html)
-        self.assertIn("novoClique(false);", html)
-        self.assertIn("novoClique(true);", html)
+        self.assertIn("novoClique(false, novoBtn);", html)
+        self.assertIn("novoClique(true, btnGravarGerarCompraFornecedor);", html)
         self.assertIn('document.querySelector("#mobileSugestaoProdutos .sugestao-adicionar-lista-mobile:not(:disabled)")?.focus();', html)
         self.assertEqual(html.count("Adicione pelo menos um produto à lista antes de gravar."), 1)
+
+    def test_mobile_lista_fornecedor_tem_salvar_rascunho_protegido(self):
+        resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)
+        html = resposta.content.decode()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'id="btnSalvarRascunhoListaMobile"')
+        self.assertContains(resposta, "Salvar rascunho")
+        self.assertContains(resposta, "sugestao-rascunho-mobile-only")
+        self.assertContains(resposta, ".sugestao-rascunho-mobile-only")
+        self.assertContains(resposta, "display: none;")
+        self.assertContains(resposta, '@media (max-width: 860px)')
+        self.assertContains(resposta, 'id="btnGravarListaMobile"')
+        self.assertContains(resposta, 'id="btnGravarGerarCompraMobile"')
+        self.assertContains(resposta, "Gravar lista")
+        self.assertContains(resposta, "Gravar e Gerar Compra")
+        self.assertIn('novoClique(false, btnSalvarRascunhoListaMobile, { rascunho: true });', html)
+
+    def test_mobile_rascunho_lista_tem_bloqueio_modal_e_ajax(self):
+        resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Rascunho salvo e protegido.")
+        self.assertContains(resposta, 'id="btnContinuarEditandoRascunhoLista"')
+        self.assertContains(resposta, 'id="modalContinuarEditandoRascunhoLista"')
+        self.assertContains(resposta, "Continuar editando?")
+        self.assertContains(resposta, "Manter protegida")
+        self.assertContains(resposta, "Sim, continuar editando")
+        self.assertContains(resposta, "function aplicarRascunhoProtegidoLista(bloqueado)")
+        self.assertContains(resposta, "function abrirModalContinuarEditandoRascunhoLista()")
+        self.assertContains(resposta, "function liberarEdicaoRascunhoProtegidoLista()")
+        self.assertContains(resposta, "modalContinuarEditandoRascunhoLista.classList.contains(\"aberto\")")
+        self.assertContains(resposta, "setControleRascunhoProtegidoLista(controle, rascunhoProtegidoLista);")
+        self.assertContains(resposta, "#fornecedorBuscaSugestao")
+        self.assertContains(resposta, "#periodo")
+        self.assertContains(resposta, "#produtoManualBuscaSugestao")
+        self.assertContains(resposta, "#mobileSugestaoProdutos input")
+        self.assertContains(resposta, "#itensListaMobile button")
+        self.assertContains(resposta, "fetch(formGravarListaFornecedor.action")
+        self.assertContains(resposta, "listaFornecedorGerarCompra.value = \"0\";")
+        self.assertContains(resposta, "history.replaceState")
+        self.assertContains(resposta, "listaFornecedorRascunhoProtegido:")
+
+    def test_salvar_rascunho_lista_nova_nao_gera_compra_estoque_ou_financeiro(self):
+        produto = self.criar_produto("Produto Rascunho Lista", quantidade=Decimal("7.000"))
+        estoque_antes = produto.quantidade
+        compras_antes = Compra.objects.count()
+        contas_antes = ContaPagar.objects.count()
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(self.payload([self.criar_linha(produto, 2)]))},
+            secure=True,
+        )
+
+        produto.refresh_from_db()
+        self.assertRedirects(resposta, reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": ListaCompraFornecedor.objects.get().pk}), fetch_redirect_response=False)
+        self.assertEqual(ListaCompraFornecedor.objects.count(), 1)
+        self.assertEqual(ItemListaCompraFornecedor.objects.count(), 1)
+        self.assertEqual(produto.quantidade, estoque_antes)
+        self.assertEqual(Compra.objects.count(), compras_antes)
+        self.assertEqual(ContaPagar.objects.count(), contas_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+
+    def test_salvar_rascunho_edicao_atualiza_mesma_lista_sem_compra(self):
+        produto = self.criar_produto("Produto Rascunho Edicao", quantidade=Decimal("8.000"))
+        lista = self.criar_lista_com_item(produto)
+        estoque_antes = produto.quantidade
+        compras_antes = Compra.objects.count()
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_editar", kwargs={"pk": lista.pk}),
+            {"lista_payload": json.dumps(self.payload([self.criar_linha(produto, 5, total=Decimal("50.00"))]))},
+            secure=True,
+        )
+
+        lista.refresh_from_db()
+        produto.refresh_from_db()
+        self.assertRedirects(resposta, reverse("estoque:compras_lista_fornecedor_ver", kwargs={"pk": lista.pk}), fetch_redirect_response=False)
+        self.assertEqual(ListaCompraFornecedor.objects.count(), 1)
+        self.assertEqual(lista.itens.get().quantidade_final, Decimal("5.000"))
+        self.assertEqual(lista.total_lista, Decimal("50.00"))
+        self.assertEqual(produto.quantidade, estoque_antes)
+        self.assertEqual(Compra.objects.count(), compras_antes)
+
+    def test_salvamento_lista_tem_trava_contra_clique_repetido(self):
+        resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)
+        html = resposta.content.decode()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn("let salvamentoListaEmAndamento = false;", html)
+        self.assertIn("if (salvamentoListaEmAndamento) return;", html)
+        self.assertIn("function iniciarSalvamentoLista(botaoAcionado)", html)
+        self.assertIn("salvamentoListaEmAndamento = true;", html)
+        self.assertIn("bloquearBotoesSalvamentoLista(botaoAcionado);", html)
+        self.assertIn("function bloquearBotoesSalvamentoLista(botaoAcionado)", html)
+        self.assertIn("botao.disabled = true;", html)
+        self.assertIn('botaoAcionado.textContent = "Salvando...";', html)
+        self.assertIn('"#btnGravarListaFornecedor"', html)
+        self.assertIn('"#btnGravarGerarCompraFornecedor"', html)
+        self.assertIn('"#btnGravarListaMobile"', html)
+        self.assertIn('"#btnSalvarAlteracoesListaMobile"', html)
+        self.assertIn('"#btnGravarGerarCompraMobile"', html)
+        self.assertIn('"#btnSalvarRascunhoListaMobile"', html)
+        self.assertIn('"#btnConfirmarGravar"', html)
+        self.assertIn("if (!iniciarSalvamentoLista(btnConfirmarGravar)) return;", html)
+        self.assertIn("if (!iniciarSalvamentoLista(botaoAcionado)) return;", html)
+        self.assertIn('modalConfirmacao.classList.contains("aberto")', html)
 
     def test_mobile_itens_lista_tem_edicao_confirmada_contador_e_validacoes(self):
         resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)

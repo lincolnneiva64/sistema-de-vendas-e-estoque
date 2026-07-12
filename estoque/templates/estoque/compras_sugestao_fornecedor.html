@@ -1022,6 +1022,33 @@
     display: none;
   }
 
+  .sugestao-rascunho-mobile-only {
+    display: none;
+  }
+
+  .sugestao-rascunho-alerta {
+    gap: 10px;
+    margin: 12px;
+    padding: 12px;
+    border: 1px solid #86efac;
+    border-radius: 12px;
+    background: #f0fdf4;
+    color: #14532d;
+    font-weight: 900;
+    text-align: center;
+  }
+
+  .sugestao-rascunho-alerta[hidden] {
+    display: none !important;
+  }
+
+  .sugestao-page.rascunho-protegido-lista input,
+  .sugestao-page.rascunho-protegido-lista select,
+  .sugestao-page.rascunho-protegido-lista textarea,
+  .sugestao-page.rascunho-protegido-lista button[data-bloqueado-rascunho-lista="1"] {
+    opacity: .72;
+  }
+
   .sugestao-atalhos-lateral {
     position: fixed;
     top: 72px;
@@ -1413,6 +1440,10 @@
       text-align: center;
     }
 
+    .sugestao-rascunho-mobile-only {
+      display: grid;
+    }
+
     .sugestao-atalhos-lateral {
       top: auto;
       right: 8px;
@@ -1715,6 +1746,20 @@
     </div>
   </div>
 
+  <div class="sugestao-modal-overlay" id="modalContinuarEditandoRascunhoLista" aria-hidden="true">
+    <div class="sugestao-modal-content">
+      <div class="sugestao-modal-icon">!</div>
+      <h2 class="sugestao-modal-titulo">Continuar editando?</h2>
+      <div class="sugestao-modal-msg">
+        Deseja realmente liberar esta lista para alteracoes?<br>
+        Os campos e botoes voltarao a ficar ativos.
+      </div>
+      <div class="sugestao-modal-acoes">
+        <button type="button" class="sugestao-modal-btn sugestao-modal-btn-cancelar" id="btnManterRascunhoProtegidoLista">Manter protegida</button>
+        <button type="button" class="sugestao-modal-btn sugestao-modal-btn-confirmar" id="btnConfirmarContinuarEditandoRascunhoLista">Sim, continuar editando</button>
+      </div>
+    </div>
+  </div>
   <section class="sugestao-card">
       <div class="sugestao-table-wrap sugestao-desktop">
         <table class="sugestao-table">
@@ -1807,6 +1852,7 @@
         <div id="itensListaMobileLista"></div>
       </section>
       <div class="sugestao-salvar-mobile-rodape">
+        <button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-rascunho-mobile-only" id="btnSalvarRascunhoListaMobile">Salvar rascunho</button>
         <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-salvar-lista-extra" id="{% if modo_edicao_lista %}btnSalvarAlteracoesListaMobile{% else %}btnGravarListaMobile{% endif %}">{% if modo_edicao_lista %}Salvar alterações{% else %}Gravar lista{% endif %}</button>
         {% if not modo_edicao_lista or can_gerar_compra_lista %}
           <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-gravar-gerar-extra" id="btnGravarGerarCompraMobile">{% if modo_edicao_lista %}Salvar alterações e Gerar Compra{% else %}Gravar e Gerar Compra{% endif %}</button>
@@ -1818,6 +1864,10 @@
           {% endif %}
         {% endif %}
         <span>{% if modo_edicao_lista %}{% if can_gerar_compra_lista %}As alteracoes dos campos so sao gravadas depois de salvar. Use Salvar alterações e Gerar Compra para abrir a compra em rascunho.{% else %}As alteracoes dos campos so sao gravadas depois de salvar.{% endif %}{% else %}Revise os itens e toque em Gravar lista para salvar, ou em Gravar e Gerar Compra para abrir a compra em rascunho.{% endif %}</span>
+      </div>
+      <div class="sugestao-rascunho-alerta sugestao-rascunho-mobile-only" id="avisoRascunhoProtegidoLista" hidden>
+        <span>Rascunho salvo e protegido.</span>
+        <button type="button" class="sugestao-btn sugestao-btn-secondary" id="btnContinuarEditandoRascunhoLista">Continuar editando</button>
       </div>
       <div class="sugestao-empty {% if linhas %}oculto{% endif %}" id="sugestaoListaVazia">
         {% if fornecedor %}
@@ -3765,9 +3815,97 @@
   const formGravarListaFornecedor = document.getElementById("formGravarListaFornecedor");
   const listaFornecedorPayload = document.getElementById("listaFornecedorPayload");
   const listaFornecedorGerarCompra = document.getElementById("listaFornecedorGerarCompra");
+  const btnSalvarRascunhoListaMobile = document.getElementById("btnSalvarRascunhoListaMobile");
+  const avisoRascunhoProtegidoLista = document.getElementById("avisoRascunhoProtegidoLista");
+  const btnContinuarEditandoRascunhoLista = document.getElementById("btnContinuarEditandoRascunhoLista");
+  const modalContinuarEditandoRascunhoLista = document.getElementById("modalContinuarEditandoRascunhoLista");
+  const btnManterRascunhoProtegidoLista = document.getElementById("btnManterRascunhoProtegidoLista");
+  const btnConfirmarContinuarEditandoRascunhoLista = document.getElementById("btnConfirmarContinuarEditandoRascunhoLista");
+  const baseListasFornecedorUrl = "{% url 'estoque:compras_listas_fornecedor' %}";
   let gerarCompraAoGravar = false;
+  let salvarRascunhoAoGravar = false;
+  let salvamentoListaEmAndamento = false;
+  let listaFornecedorIdAtual = "{% if modo_edicao_lista %}{{ lista_edicao.id }}{% endif %}";
+  let rascunhoProtegidoLista = false;
+  const textosOriginaisBotoesSalvamento = new WeakMap();
 
   if (!modalConfirmacao || !btnGravarListaFornecedor) return;
+
+  function botoesSalvamentoLista() {
+    return Array.from(document.querySelectorAll([
+      "#btnGravarListaFornecedor",
+      "#btnGravarGerarCompraFornecedor",
+      "#btnGravarListaMobile",
+      "#btnSalvarAlteracoesListaMobile",
+      "#btnGravarGerarCompraMobile",
+      ".sugestao-salvar-lista-extra",
+      ".sugestao-gravar-gerar-extra",
+      "#btnSalvarRascunhoListaMobile",
+      "#btnConfirmarGravar"
+    ].join(","))).filter(Boolean);
+  }
+
+  function bloquearBotoesSalvamentoLista(botaoAcionado) {
+    botoesSalvamentoLista().forEach(function(botao) {
+      if (!textosOriginaisBotoesSalvamento.has(botao)) {
+        textosOriginaisBotoesSalvamento.set(botao, botao.textContent);
+      }
+      botao.disabled = true;
+    });
+
+    if (botaoAcionado) {
+      if (!textosOriginaisBotoesSalvamento.has(botaoAcionado)) {
+        textosOriginaisBotoesSalvamento.set(botaoAcionado, botaoAcionado.textContent);
+      }
+      botaoAcionado.textContent = "Salvando...";
+    }
+  }
+
+  function iniciarSalvamentoLista(botaoAcionado) {
+    if (salvamentoListaEmAndamento) return false;
+    salvamentoListaEmAndamento = true;
+    bloquearBotoesSalvamentoLista(botaoAcionado);
+    return true;
+  }
+
+  function restaurarBotoesSalvamentoLista() {
+    salvamentoListaEmAndamento = false;
+    botoesSalvamentoLista().forEach(function(botao) {
+      botao.disabled = false;
+      botao.removeAttribute("disabled");
+      botao.removeAttribute("aria-disabled");
+      if (textosOriginaisBotoesSalvamento.has(botao)) {
+        botao.textContent = textosOriginaisBotoesSalvamento.get(botao);
+      }
+    });
+  }
+
+  function listaFornecedorMobile() {
+    return window.matchMedia ? window.matchMedia("(max-width: 860px)").matches : window.innerWidth <= 860;
+  }
+
+  function chaveRascunhoProtegidoLista(id) {
+    return "listaFornecedorRascunhoProtegido:" + String(id || "");
+  }
+
+  function urlEdicaoListaFornecedor(id) {
+    return baseListasFornecedorUrl + String(id || "").replace(/[^\d]/g, "") + "/editar/";
+  }
+
+  function guardarRascunhoProtegidoLista() {
+    if (!listaFornecedorIdAtual || !window.sessionStorage) return;
+    sessionStorage.setItem(chaveRascunhoProtegidoLista(listaFornecedorIdAtual), "1");
+  }
+
+  function limparRascunhoProtegidoLista() {
+    if (!listaFornecedorIdAtual || !window.sessionStorage) return;
+    sessionStorage.removeItem(chaveRascunhoProtegidoLista(listaFornecedorIdAtual));
+  }
+
+  function rascunhoProtegidoListaSalvo() {
+    if (!listaFornecedorIdAtual || !window.sessionStorage) return false;
+    return sessionStorage.getItem(chaveRascunhoProtegidoLista(listaFornecedorIdAtual)) === "1";
+  }
 
   // Detectar se um valor é considerado zero
   function isZero(valor) {
@@ -3847,6 +3985,86 @@
     window.setTimeout(function() {
       item?.querySelector(".sugestao-editar-lista-mobile, .sugestao-cancelar-edicao-lista-mobile")?.focus();
     }, 150);
+  }
+
+  function controlesRascunhoProtegidoLista() {
+    return Array.from(document.querySelectorAll([
+      "#fornecedorBuscaSugestao",
+      "#fornecedor",
+      "#periodo",
+      "#data_inicio",
+      "#data_fim",
+      "#data_chegada",
+      "#btnToggleAdicionarProdutosMobile",
+      "#produtoManualBuscaSugestao",
+      "#produtoManualSugestao",
+      "#produtoManualQtd",
+      "#produtoManualPrecoCompra",
+      "#produtoManualPrecoUnitario",
+      "#produtoManualTotal",
+      "#btnAdicionarProdutoSugestao",
+      "#mobileSugestaoProdutos input",
+      "#mobileSugestaoProdutos button",
+      "#itensListaMobile input",
+      "#itensListaMobile button",
+      ".sugestao-salvar-lista-extra",
+      ".sugestao-gravar-gerar-extra",
+      "#btnSalvarRascunhoListaMobile"
+    ].join(","))).filter(function(el) {
+      return !el.closest("#modalContinuarEditandoRascunhoLista") && el !== btnContinuarEditandoRascunhoLista;
+    });
+  }
+
+  function setControleRascunhoProtegidoLista(el, bloqueado) {
+    if (!el) return;
+    el.disabled = bloqueado;
+    el.toggleAttribute("disabled", bloqueado);
+    el.setAttribute("aria-disabled", bloqueado ? "true" : "false");
+    if (bloqueado) {
+      el.dataset.bloqueadoRascunhoLista = "1";
+    } else if (el.dataset.bloqueadoRascunhoLista === "1") {
+      delete el.dataset.bloqueadoRascunhoLista;
+      el.removeAttribute("aria-disabled");
+    }
+  }
+
+  function aplicarRascunhoProtegidoLista(bloqueado) {
+    rascunhoProtegidoLista = bloqueado === true;
+    document.querySelector(".sugestao-page")?.classList.toggle("rascunho-protegido-lista", rascunhoProtegidoLista);
+    controlesRascunhoProtegidoLista().forEach(function(controle) {
+      setControleRascunhoProtegidoLista(controle, rascunhoProtegidoLista);
+    });
+    if (avisoRascunhoProtegidoLista) {
+      avisoRascunhoProtegidoLista.hidden = !rascunhoProtegidoLista;
+    }
+    if (btnContinuarEditandoRascunhoLista) {
+      btnContinuarEditandoRascunhoLista.disabled = false;
+      btnContinuarEditandoRascunhoLista.removeAttribute("disabled");
+      btnContinuarEditandoRascunhoLista.removeAttribute("aria-disabled");
+    }
+  }
+
+  function abrirModalContinuarEditandoRascunhoLista() {
+    if (!rascunhoProtegidoLista || !modalContinuarEditandoRascunhoLista) return;
+    if (modalContinuarEditandoRascunhoLista.classList.contains("aberto")) return;
+    modalContinuarEditandoRascunhoLista.classList.add("aberto");
+    modalContinuarEditandoRascunhoLista.setAttribute("aria-hidden", "false");
+    window.setTimeout(function() {
+      btnManterRascunhoProtegidoLista?.focus();
+    }, 0);
+  }
+
+  function fecharModalContinuarEditandoRascunhoLista() {
+    if (!modalContinuarEditandoRascunhoLista) return;
+    modalContinuarEditandoRascunhoLista.classList.remove("aberto");
+    modalContinuarEditandoRascunhoLista.setAttribute("aria-hidden", "true");
+  }
+
+  function liberarEdicaoRascunhoProtegidoLista() {
+    fecharModalContinuarEditandoRascunhoLista();
+    limparRascunhoProtegidoLista();
+    aplicarRascunhoProtegidoLista(false);
+    restaurarBotoesSalvamentoLista();
   }
 
   function itensEditaveisAtuais() {
@@ -3990,6 +4208,8 @@
 
   // Mostrar modal de confirmação
   function mostrarModalConfirmacao() {
+    if (salvamentoListaEmAndamento || modalConfirmacao.classList.contains("aberto")) return true;
+
     const zerados = getZeroItems();
     if (zerados.length === 0) return false;
 
@@ -4037,7 +4257,64 @@
     };
   }
 
+  function extrairIdListaFornecedorDaUrl(url) {
+    const match = String(url || "").match(/\/listas-fornecedor\/(\d+)\//);
+    return match ? match[1] : "";
+  }
+
+  function atualizarUrlEdicaoListaAposRascunho(id) {
+    if (!id) return;
+    listaFornecedorIdAtual = String(id);
+    const urlEdicao = urlEdicaoListaFornecedor(id);
+    formGravarListaFornecedor.action = urlEdicao;
+    if (!{% if modo_edicao_lista %}true{% else %}false{% endif %} && window.history && window.history.replaceState) {
+      window.history.replaceState({}, "", urlEdicao);
+    }
+  }
+
+  function salvarRascunhoListaComPayload(payload, botaoAcionado) {
+    if (!listaFornecedorMobile()) {
+      return false;
+    }
+    if (!formGravarListaFornecedor || !listaFornecedorPayload) return false;
+    if (!iniciarSalvamentoLista(botaoAcionado)) return false;
+
+    listaFornecedorPayload.value = JSON.stringify(payload);
+    if (listaFornecedorGerarCompra) {
+      listaFornecedorGerarCompra.value = "0";
+    }
+
+    const dados = new FormData(formGravarListaFornecedor);
+    fetch(formGravarListaFornecedor.action, {
+      method: "POST",
+      body: dados,
+      credentials: "same-origin",
+      headers: {
+        "X-Requested-With": "XMLHttpRequest"
+      }
+    }).then(function(resposta) {
+      if (!resposta.ok) {
+        throw new Error("Falha ao salvar rascunho.");
+      }
+      const listaId = extrairIdListaFornecedorDaUrl(resposta.url);
+      if (listaId) {
+        atualizarUrlEdicaoListaAposRascunho(listaId);
+      }
+      guardarRascunhoProtegidoLista();
+      restaurarBotoesSalvamentoLista();
+      aplicarRascunhoProtegidoLista(true);
+      if (avisoRascunhoProtegidoLista && typeof avisoRascunhoProtegidoLista.scrollIntoView === "function") {
+        avisoRascunhoProtegidoLista.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }).catch(function() {
+      restaurarBotoesSalvamentoLista();
+      alert("Nao foi possivel salvar o rascunho. Verifique a conexao e tente novamente.");
+    });
+    return true;
+  }
+
   btnConfirmarGravar.addEventListener("click", function() {
+    if (salvamentoListaEmAndamento) return;
     fecharModal();
     if (!formGravarListaFornecedor || !listaFornecedorPayload) return;
 
@@ -4050,6 +4327,11 @@
     if (listaFornecedorGerarCompra) {
       listaFornecedorGerarCompra.value = gerarCompraAoGravar ? "1" : "0";
     }
+    if (salvarRascunhoAoGravar) {
+      salvarRascunhoListaComPayload(payload, btnConfirmarGravar);
+      return;
+    }
+    if (!iniciarSalvamentoLista(btnConfirmarGravar)) return;
     formGravarListaFornecedor.submit();
   });
 
@@ -4130,8 +4412,10 @@
       .filter((linha) => quantidadeMaiorQueZero(linha.sugestao));
   }
 
-  const novoClique = function(gerarCompra) {
+  const novoClique = function(gerarCompra, botaoAcionado, opcoes) {
+    if (salvamentoListaEmAndamento) return;
     gerarCompraAoGravar = gerarCompra === true;
+    salvarRascunhoAoGravar = opcoes?.rascunho === true;
     const payload = {
       fornecedorId: document.getElementById("fornecedor")?.value || "",
       fornecedor: document.getElementById("fornecedorBuscaSugestao")?.value || "Fornecedor não informado",
@@ -4174,6 +4458,11 @@
     if (listaFornecedorGerarCompra) {
       listaFornecedorGerarCompra.value = gerarCompraAoGravar ? "1" : "0";
     }
+    if (salvarRascunhoAoGravar) {
+      salvarRascunhoListaComPayload(payload, botaoAcionado);
+      return;
+    }
+    if (!iniciarSalvamentoLista(botaoAcionado)) return;
     formGravarListaFornecedor.submit();
   };
 
@@ -4181,23 +4470,40 @@
   const novoBtn = btnGravarListaFornecedor.cloneNode(true);
   btnGravarListaFornecedor.parentNode.replaceChild(novoBtn, btnGravarListaFornecedor);
   novoBtn.addEventListener("click", function() {
-    novoClique(false);
+    novoClique(false, novoBtn);
   });
   if (btnGravarGerarCompraFornecedor) {
     btnGravarGerarCompraFornecedor.addEventListener("click", function() {
-      novoClique(true);
+      novoClique(true, btnGravarGerarCompraFornecedor);
     });
   }
   document.querySelectorAll(".sugestao-salvar-lista-extra").forEach(function(botaoExtra) {
     botaoExtra.addEventListener("click", function() {
-      novoClique(false);
+      novoClique(false, botaoExtra);
     });
   });
   document.querySelectorAll(".sugestao-gravar-gerar-extra").forEach(function(botaoExtra) {
     botaoExtra.addEventListener("click", function() {
-      novoClique(true);
+      novoClique(true, botaoExtra);
     });
   });
+  if (btnSalvarRascunhoListaMobile) {
+    btnSalvarRascunhoListaMobile.addEventListener("click", function() {
+      novoClique(false, btnSalvarRascunhoListaMobile, { rascunho: true });
+    });
+  }
+  if (btnContinuarEditandoRascunhoLista) {
+    btnContinuarEditandoRascunhoLista.addEventListener("click", abrirModalContinuarEditandoRascunhoLista);
+  }
+  if (btnManterRascunhoProtegidoLista) {
+    btnManterRascunhoProtegidoLista.addEventListener("click", fecharModalContinuarEditandoRascunhoLista);
+  }
+  if (btnConfirmarContinuarEditandoRascunhoLista) {
+    btnConfirmarContinuarEditandoRascunhoLista.addEventListener("click", liberarEdicaoRascunhoProtegidoLista);
+  }
+  if (rascunhoProtegidoListaSalvo() && listaFornecedorMobile()) {
+    aplicarRascunhoProtegidoLista(true);
+  }
 
   // Listeners para atualizar dinamicamente quando mudar quantidade
   document.addEventListener("input", function(event) {
@@ -4224,6 +4530,9 @@
 
   window.addEventListener("resize", function() {
     window.setTimeout(updateZeroItemsUI, 0);
+    if (rascunhoProtegidoListaSalvo() && listaFornecedorMobile()) {
+      aplicarRascunhoProtegidoLista(true);
+    }
   });
 
   if ("MutationObserver" in window) {
