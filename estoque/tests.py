@@ -3523,6 +3523,26 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertIn("if (!produto) {", bloco_historico)
         self.assertNotIn("telaMobile", bloco_historico)
+        self.assertIn(
+            'id="produtoManualHistoricoMobile"',
+            html,
+        )
+        self.assertLess(
+            html.index('id="produtoManualHistoricoMobile"'),
+            html.index('id="btnAdicionarProdutoSugestao"'),
+        )
+        self.assertIn(
+            "manualHistoricoMobile.hidden = false;",
+            html,
+        )
+        self.assertIn(
+            "manualHistoricoMobile.hidden = true;",
+            bloco_historico,
+        )
+        self.assertIn(
+            "exibirHistoricoManual(comprasHtml);",
+            bloco_historico,
+        )
 
     def test_edicao_payload_manual_traz_historico_para_produto_novo(self):
         fornecedor_compra = Fornecedor.objects.create(

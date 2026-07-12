@@ -1009,6 +1009,10 @@
     display: none;
   }
 
+  .produto-manual-historico-mobile {
+    display: none;
+  }
+
   .sugestao-manual {
     margin-bottom: 14px;
     padding: 0;
@@ -1614,6 +1618,35 @@
       white-space: normal;
     }
 
+    .produto-manual-historico-mobile:not([hidden]) {
+      display: block;
+      width: 100%;
+      margin-bottom: 10px;
+    }
+
+    #produtoManualHistoricoRow {
+      display: none !important;
+    }
+
+    .produto-manual-historico-mobile .sugestao-historico-desktop-card {
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .produto-manual-historico-mobile .sugestao-historico-desktop-cabecalho,
+    .produto-manual-historico-mobile .sugestao-historico-desktop-item {
+      grid-template-columns: .8fr 1.1fr .9fr .8fr;
+      width: 100%;
+      max-width: none;
+    }
+
+    .produto-manual-historico-mobile .sugestao-historico-desktop-cabecalho > div,
+    .produto-manual-historico-mobile .sugestao-historico-desktop-item > div {
+      min-width: 0;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
     .sugestao-autocomplete-lista {
       position: static;
       margin-top: 6px;
@@ -1825,7 +1858,14 @@
             <td data-label="Preco compra"><input type="text" inputmode="decimal" class="sugestao-input sugestao-manual-input sugestao-manual-preco-input" id="produtoManualPrecoCompra" aria-label="Preco de compra do produto manual"></td>
             <td data-label="Preco unitario"><input type="text" inputmode="decimal" class="sugestao-input sugestao-manual-input sugestao-manual-preco-unitario-input" id="produtoManualPrecoUnitario" data-fator="1" aria-label="Preco unitario do produto manual"></td>
             <td data-label="Total"><input type="text" inputmode="decimal" class="sugestao-input sugestao-manual-input sugestao-manual-total-input" id="produtoManualTotal" aria-label="Total do produto manual"></td>
-            <td class="sugestao-col-acao" data-label="Acao"><button type="button" class="sugestao-btn sugestao-btn-primary" id="btnAdicionarProdutoSugestao">Adicionar produto</button></td>
+            <td class="sugestao-col-acao" data-label="Acao">
+              <div
+                id="produtoManualHistoricoMobile"
+                class="produto-manual-historico-mobile"
+                hidden
+              ></div>
+              <button type="button" class="sugestao-btn sugestao-btn-primary" id="btnAdicionarProdutoSugestao">Adicionar produto</button>
+            </td>
           </tr>
 
           <tr
@@ -2711,6 +2751,7 @@
   const manualTotal = document.getElementById("produtoManualTotal");
   const manualHistoricoRow = document.getElementById("produtoManualHistoricoRow");
   const manualHistoricoConteudo = document.getElementById("produtoManualHistoricoConteudo");
+  const manualHistoricoMobile = document.getElementById("produtoManualHistoricoMobile");
   const camposManuais = [manualQtd, manualPreco, manualUnitario, manualTotal];
   const manualWrap = linhaManual?.closest(".sugestao-manual-table-wrap");
 
@@ -2725,6 +2766,7 @@
     !linhaManual ||
     !manualHistoricoRow ||
     !manualHistoricoConteudo ||
+    !manualHistoricoMobile ||
     camposManuais.some((campo) => !campo)
   ) return;
 
@@ -2792,10 +2834,41 @@
     );
   }
 
+  function htmlHistoricoManual(conteudoHtml) {
+    return `
+      <div class="sugestao-historico-desktop-card">
+        <div class="sugestao-historico-titulo">
+          &Uacute;ltimas 3 compras deste produto
+        </div>
+
+        <div
+          class="sugestao-historico-desktop-cabecalho"
+          aria-hidden="true"
+        >
+          <div>Data</div>
+          <div>Fornecedor</div>
+          <div>Qde comprada</div>
+          <div>Pre&ccedil;o comprado</div>
+        </div>
+
+        <div>${conteudoHtml}</div>
+      </div>
+    `;
+  }
+
+  function exibirHistoricoManual(conteudoHtml) {
+    manualHistoricoConteudo.innerHTML = conteudoHtml;
+    manualHistoricoMobile.innerHTML = htmlHistoricoManual(conteudoHtml);
+    manualHistoricoRow.hidden = false;
+    manualHistoricoMobile.hidden = false;
+  }
+
   function renderizarHistoricoProdutoManual(produto) {
     if (!produto) {
       manualHistoricoConteudo.innerHTML = "";
+      manualHistoricoMobile.innerHTML = "";
       manualHistoricoRow.hidden = true;
+      manualHistoricoMobile.hidden = true;
       return;
     }
 
@@ -2804,16 +2877,15 @@
       : [];
 
     if (!historico.length) {
-      manualHistoricoConteudo.innerHTML =
+      exibirHistoricoManual(
         '<div class="sugestao-historico-vazio">' +
         'Nenhuma compra anterior encontrada para este produto.' +
-        '</div>';
-
-      manualHistoricoRow.hidden = false;
+        '</div>'
+      );
       return;
     }
 
-    manualHistoricoConteudo.innerHTML = historico.map((compra) => {
+    const comprasHtml = historico.map((compra) => {
       const quantidade = String(compra.quantidade || "0.000");
       const unidade = String(compra.unidade || "").trim();
       const preco = String(compra.preco || "0.00");
@@ -2832,7 +2904,7 @@
       `;
     }).join("");
 
-    manualHistoricoRow.hidden = false;
+    exibirHistoricoManual(comprasHtml);
   }
 
   function limparLinhaManual(limparProduto) {
