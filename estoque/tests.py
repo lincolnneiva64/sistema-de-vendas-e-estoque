@@ -3373,6 +3373,37 @@ class ComprasListaFornecedorGravarTests(TestCase):
             f'<a class="lista-ver-btn" href="{url_edicao}">Editar Lista</a>',
         )
 
+    def test_historico_desktop_mostra_cabecalhos_claros(self):
+        fornecedor = Fornecedor.objects.create(nome="Fornecedor Cabecalho Historico")
+        produto = self.criar_produto("Produto Cabecalho Historico")
+        lista = self.criar_lista_com_item(produto)
+        self.criar_compra_historico_produto(
+            produto,
+            fornecedor=fornecedor,
+            quantidade=Decimal("3.000"),
+            unidade="CX",
+            preco=Decimal("15.50"),
+        )
+
+        resposta_ver = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_ver", kwargs={"pk": lista.pk}),
+            secure=True,
+        )
+        resposta_edicao = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_editar", kwargs={"pk": lista.pk}),
+            secure=True,
+        )
+
+        for resposta in (resposta_ver, resposta_edicao):
+            self.assertEqual(resposta.status_code, 200)
+            self.assertContains(resposta, "Qde comprada")
+            self.assertContains(resposta, "Pre&ccedil;o comprado", html=False)
+
+        self.assertContains(resposta_ver, "lista-ver-historico-desktop-cabecalho")
+        self.assertContains(resposta_edicao, "sugestao-historico-desktop-cabecalho")
+        self.assertContains(resposta_ver, "lista-ver-historico-desktop-quantidade")
+        self.assertContains(resposta_edicao, "sugestao-historico-desktop-quantidade")
+
     def test_mobile_historico_ultimas_compras_disponivel_na_edicao(self):
         fornecedor_recente = Fornecedor.objects.create(nome="Fornecedor Historico Recente")
         fornecedor_antigo = Fornecedor.objects.create(nome="Fornecedor Historico Antigo")

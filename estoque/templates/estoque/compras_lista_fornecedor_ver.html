@@ -430,11 +430,17 @@
                 <div class="lista-ver-historico-desktop-card">
                   {% if item.historico_ultimas_compras %}
                     <div class="lista-ver-historico-titulo">&Uacute;ltimas 3 compras deste produto</div>
+                    <div class="lista-ver-historico-desktop-cabecalho" aria-hidden="true">
+                      <div>Data</div>
+                      <div>Fornecedor</div>
+                      <div>Qde comprada</div>
+                      <div>Pre&ccedil;o comprado</div>
+                    </div>
                     {% for compra in item.historico_ultimas_compras %}
                       <div class="lista-ver-historico-desktop-item">
                         <div>{{ compra.data|default:"-" }}</div>
                         <div>{{ compra.fornecedor|default:"-" }}</div>
-                        <div>{{ compra.quantidade|floatformat:3 }} {{ compra.unidade|default:"" }}</div>
+                        <div class="lista-ver-historico-desktop-quantidade">{{ compra.quantidade|floatformat:3 }} {{ compra.unidade|default:"" }}</div>
                         <div class="lista-ver-historico-desktop-preco">R$ {{ compra.preco|floatformat:2 }}</div>
                       </div>
                     {% endfor %}
@@ -763,19 +769,66 @@
     font-size: .72rem;
   }
 
+  .lista-ver-historico-desktop-cabecalho,
   .lista-ver-historico-desktop-item {
     display: grid;
-    grid-template-columns: 105px minmax(200px, 1fr) 140px 105px;
-    gap: 8px;
+    grid-template-columns: 92px 118px 126px 104px;
+    gap: 3px;
     align-items: center;
-    padding-top: 5px;
+    justify-content: start;
+    width: max-content;
+    max-width: 100%;
+  }
+
+  .lista-ver-historico-desktop-cabecalho {
+    padding: 5px 7px;
+    border: 1px solid #f3d4d9;
+    border-radius: 6px;
+    background: #fff7f8;
+    color: #8f1d2c;
+    font-size: .66rem;
+    font-weight: 950;
+    letter-spacing: .025em;
+    text-transform: uppercase;
+  }
+
+  .lista-ver-historico-desktop-cabecalho > div {
+    width: 100%;
+    text-align: center;
+    justify-self: stretch;
+    white-space: nowrap;
+  }
+
+  .lista-ver-historico-desktop-item {
+    padding: 6px 7px 0;
     border-top: 1px solid #f3d4d9;
   }
 
+  .lista-ver-historico-desktop-item > div:nth-child(1),
+  .lista-ver-historico-desktop-item > div:nth-child(2) {
+    width: 100%;
+    text-align: center;
+    justify-self: stretch;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .lista-ver-historico-desktop-quantidade {
+    width: 100%;
+    text-align: center;
+    justify-self: stretch;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
   .lista-ver-historico-desktop-preco {
+    width: 100%;
     color: #166534;
     font-weight: 950;
-    text-align: right;
+    text-align: center;
+    justify-self: stretch;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
   }
 
   .lista-ver-mobile-itens {
