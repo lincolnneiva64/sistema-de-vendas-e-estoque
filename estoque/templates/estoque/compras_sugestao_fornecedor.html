@@ -1769,8 +1769,8 @@
   <div class="sugestao-modal-overlay" id="modalListaVaziaRascunhoMobile" aria-hidden="true">
     <div class="sugestao-modal-content">
       <div class="sugestao-modal-icon">!</div>
-      <h2 class="sugestao-modal-titulo">Lista vazia</h2>
-      <div class="sugestao-modal-msg">
+      <h2 class="sugestao-modal-titulo" id="modalListaVaziaRascunhoMobileTitulo">Lista vazia</h2>
+      <div class="sugestao-modal-msg" id="modalListaVaziaRascunhoMobileMensagem">
         Adicione pelo menos um produto à lista antes de salvar o rascunho.
       </div>
       <div class="sugestao-modal-acoes">
@@ -3835,6 +3835,8 @@
   const btnManterRascunhoProtegidoLista = document.getElementById("btnManterRascunhoProtegidoLista");
   const btnConfirmarContinuarEditandoRascunhoLista = document.getElementById("btnConfirmarContinuarEditandoRascunhoLista");
   const modalListaVaziaRascunhoMobile = document.getElementById("modalListaVaziaRascunhoMobile");
+  const modalListaVaziaRascunhoMobileTitulo = document.getElementById("modalListaVaziaRascunhoMobileTitulo");
+  const modalListaVaziaRascunhoMobileMensagem = document.getElementById("modalListaVaziaRascunhoMobileMensagem");
   const btnFecharListaVaziaRascunhoMobile = document.getElementById("btnFecharListaVaziaRascunhoMobile");
   const baseListasFornecedorUrl = "{% url 'estoque:compras_listas_fornecedor' %}";
   let gerarCompraAoGravar = false;
@@ -3842,6 +3844,7 @@
   let salvamentoListaEmAndamento = false;
   let listaFornecedorIdAtual = "{% if modo_edicao_lista %}{{ lista_edicao.id }}{% endif %}";
   let rascunhoProtegidoLista = false;
+  let focoRetornoModalRascunhoMobile = btnSalvarRascunhoListaMobile;
   const textosOriginaisBotoesSalvamento = new WeakMap();
 
   if (!modalConfirmacao || !btnGravarListaFornecedor) return;
@@ -3978,7 +3981,11 @@
   }
 
   function orientarAdicionarItensMobile(opcoes) {
-    if (opcoes?.rascunho === true && abrirModalListaVaziaRascunhoMobile()) return;
+    if (opcoes?.rascunho === true && abrirModalListaVaziaRascunhoMobile(
+      "Lista vazia",
+      "Adicione pelo menos um produto à lista antes de salvar o rascunho.",
+      btnSalvarRascunhoListaMobile
+    )) return;
     alert("Adicione pelo menos um produto à lista antes de gravar.");
     const alvo = document.getElementById("mobileSugestaoProdutos") || document.getElementById("itensListaMobile");
     if (alvo && typeof alvo.scrollIntoView === "function") {
@@ -4076,8 +4083,15 @@
     modalContinuarEditandoRascunhoLista.setAttribute("aria-hidden", "true");
   }
 
-  function abrirModalListaVaziaRascunhoMobile() {
+  function abrirModalListaVaziaRascunhoMobile(titulo, mensagem, focoRetorno) {
     if (!modalListaVaziaRascunhoMobile) return false;
+    if (modalListaVaziaRascunhoMobileTitulo) {
+      modalListaVaziaRascunhoMobileTitulo.textContent = titulo || "Lista vazia";
+    }
+    if (modalListaVaziaRascunhoMobileMensagem) {
+      modalListaVaziaRascunhoMobileMensagem.textContent = mensagem || "Adicione pelo menos um produto à lista antes de salvar o rascunho.";
+    }
+    focoRetornoModalRascunhoMobile = focoRetorno || btnSalvarRascunhoListaMobile;
     if (modalListaVaziaRascunhoMobile.classList.contains("aberto")) return true;
     modalListaVaziaRascunhoMobile.classList.add("aberto");
     modalListaVaziaRascunhoMobile.setAttribute("aria-hidden", "false");
@@ -4091,7 +4105,7 @@
     if (!modalListaVaziaRascunhoMobile) return;
     modalListaVaziaRascunhoMobile.classList.remove("aberto");
     modalListaVaziaRascunhoMobile.setAttribute("aria-hidden", "true");
-    btnSalvarRascunhoListaMobile?.focus();
+    focoRetornoModalRascunhoMobile?.focus();
   }
 
   function liberarEdicaoRascunhoProtegidoLista() {
@@ -4461,6 +4475,11 @@
     };
 
     if (!payload.fornecedorId) {
+      if (listaFornecedorMobile() && abrirModalListaVaziaRascunhoMobile(
+        "Fornecedor obrigatório",
+        "Selecione um fornecedor antes de salvar a lista.",
+        botaoAcionado
+      )) return;
       alert("{% if modo_edicao_lista %}Selecione um fornecedor antes de salvar as alterações.{% else %}Selecione um fornecedor antes de gravar a lista.{% endif %}");
       return;
     }

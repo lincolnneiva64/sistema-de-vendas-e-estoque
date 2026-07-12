@@ -3360,15 +3360,31 @@ class ComprasListaFornecedorGravarTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, 'id="modalListaVaziaRascunhoMobile"')
+        self.assertContains(resposta, 'id="modalListaVaziaRascunhoMobileTitulo"')
+        self.assertContains(resposta, 'id="modalListaVaziaRascunhoMobileMensagem"')
         self.assertContains(resposta, "Lista vazia")
         self.assertContains(resposta, "Adicione pelo menos um produto à lista antes de salvar o rascunho.")
         self.assertContains(resposta, 'id="btnFecharListaVaziaRascunhoMobile"')
         self.assertContains(resposta, "Entendi")
-        self.assertContains(resposta, "function abrirModalListaVaziaRascunhoMobile()")
+        self.assertContains(resposta, "function abrirModalListaVaziaRascunhoMobile(titulo, mensagem, focoRetorno)")
         self.assertContains(resposta, "function fecharModalListaVaziaRascunhoMobile()")
         self.assertContains(resposta, "btnFecharListaVaziaRascunhoMobile.addEventListener")
-        self.assertContains(resposta, 'opcoes?.rascunho === true && abrirModalListaVaziaRascunhoMobile()')
+        self.assertContains(resposta, 'modalListaVaziaRascunhoMobileTitulo.textContent = titulo || "Lista vazia";')
+        self.assertContains(resposta, "modalListaVaziaRascunhoMobileMensagem.textContent = mensagem")
+        self.assertContains(resposta, 'opcoes?.rascunho === true && abrirModalListaVaziaRascunhoMobile(')
         self.assertNotIn('alert("Adicione pelo menos um produto à lista antes de salvar o rascunho.")', html)
+
+    def test_mobile_sem_fornecedor_usa_modal_reaproveitado(self):
+        resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)
+        html = resposta.content.decode()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Fornecedor obrigatório")
+        self.assertContains(resposta, "Selecione um fornecedor antes de salvar a lista.")
+        self.assertContains(resposta, "listaFornecedorMobile() && abrirModalListaVaziaRascunhoMobile(")
+        self.assertContains(resposta, "botaoAcionado")
+        self.assertEqual(html.count('id="modalListaVaziaRascunhoMobile"'), 1)
+        self.assertNotIn('alert("Selecione um fornecedor antes de salvar a lista.")', html)
 
     def test_mobile_lista_fornecedor_tem_salvar_rascunho_protegido(self):
         resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)
