@@ -3609,6 +3609,49 @@ def produto_ultimas_compras(request, produto_id):
     return JsonResponse({"compras": compras})
 
 
+def _ultimas_compras_produtos_para_lista_fornecedor(produto_ids, limite=3):
+    produto_ids_unicos = []
+    vistos = set()
+    for produto_id in produto_ids:
+        if not produto_id or produto_id in vistos:
+            continue
+        vistos.add(produto_id)
+        produto_ids_unicos.append(produto_id)
+
+    historicos = {produto_id: [] for produto_id in produto_ids_unicos}
+    if not produto_ids_unicos:
+        return historicos
+
+    itens = (
+        ItemCompra.objects
+        .select_related("compra", "compra__fornecedor")
+        .filter(produto_id__in=produto_ids_unicos, compra__cancelada=False)
+        .exclude(compra__status__in=[
+            Compra.STATUS_CANCELADA,
+            Compra.STATUS_RASCUNHO,
+            Compra.STATUS_FINALIZACAO_INICIADA,
+        ])
+        .order_by("produto_id", "-compra__data_compra", "-compra_id", "-id")
+    )
+
+    for item in itens:
+        compras_produto = historicos.setdefault(item.produto_id, [])
+        if len(compras_produto) >= limite:
+            continue
+        compra = item.compra
+        fornecedor = compra.fornecedor.nome if compra and compra.fornecedor else "Fornecedor nao informado"
+        compras_produto.append({
+            "compra_id": compra.id if compra else "",
+            "data": compra.data_compra.strftime("%d/%m/%Y") if compra and compra.data_compra else "",
+            "fornecedor": fornecedor,
+            "quantidade": item.quantidade,
+            "unidade": item.unidade or "",
+            "preco": item.preco_unitario,
+        })
+
+    return historicos
+
+
 def fornecedor_contas_pagar_abertas(request, fornecedor_id):
     fornecedor = (
         Fornecedor.objects
@@ -4263,6 +4306,12 @@ def sugestao_compra_fornecedor(request):
             )
 
         produtos_manual_payload.sort(key=lambda item: (not item["vinculado"], item["nome"].casefold(), item["id"]))
+
+    historico_compras_produtos = _ultimas_compras_produtos_para_lista_fornecedor(
+        [linha["produto_id"] for linha in linhas]
+    )
+    for linha in linhas:
+        linha["historico_ultimas_compras"] = historico_compras_produtos.get(linha["produto_id"], [])
 
     return render(
         request,
@@ -5416,11 +5465,18 @@ def compras_lista_fornecedor_ver(request, pk):
         pk=pk,
     )
     compra_gerada = _compra_existente_lista_fornecedor(lista)
+    itens_lista = list(lista.itens.all())
+    historico_compras_produtos = _ultimas_compras_produtos_para_lista_fornecedor(
+        [item.produto_id for item in itens_lista if item.produto_id]
+    )
+    for item in itens_lista:
+        item.historico_ultimas_compras = historico_compras_produtos.get(item.produto_id, [])
     return render(
         request,
         "estoque/compras_lista_fornecedor_ver.html",
         {
             "lista": lista,
+            "itens_lista": itens_lista,
             "compra_gerada": compra_gerada,
         },
     )
@@ -5855,6 +5911,12 @@ def compras_lista_fornecedor_editar(request, pk):
             "preco_unitario_calculado": item.preco_unitario or Decimal("0"),
             "total_sugerido": item.total or Decimal("0"),
         })
+
+    historico_compras_produtos = _ultimas_compras_produtos_para_lista_fornecedor(
+        [linha["produto_id"] for linha in linhas_edicao]
+    )
+    for linha in linhas_edicao:
+        linha["historico_ultimas_compras"] = historico_compras_produtos.get(linha["produto_id"], [])
 
     for item in itens:
         if item.produto_id:

@@ -3201,6 +3201,35 @@ class ComprasListaFornecedorGravarTests(TestCase):
             observacao=f"Gerada a partir da Lista de Compras #{lista.id}",
         )
 
+    def criar_compra_historico_produto(
+        self,
+        produto,
+        fornecedor=None,
+        dias_atras=0,
+        quantidade=Decimal("1.000"),
+        unidade="UN",
+        preco=Decimal("10.00"),
+        status=Compra.STATUS_FINALIZADA,
+        cancelada=False,
+    ):
+        compra = Compra.objects.create(
+            fornecedor=fornecedor or self.fornecedor,
+            data_compra=timezone.localdate() - timedelta(days=dias_atras),
+            tipo_pagamento="avista",
+            total=(quantidade * preco).quantize(Decimal("0.01")),
+            status=status,
+            cancelada=cancelada,
+        )
+        ItemCompra.objects.create(
+            compra=compra,
+            produto=produto,
+            quantidade=quantidade,
+            unidade=unidade,
+            preco_unitario=preco,
+            valor_total=(quantidade * preco).quantize(Decimal("0.01")),
+        )
+        return compra
+
     def assert_mensagem_resposta(self, resposta, trecho):
         mensagens = [str(mensagem) for mensagem in resposta.context["messages"]]
         self.assertTrue(
@@ -3296,6 +3325,119 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, f'id="data_inicio" value="{inicio.isoformat()}"')
         self.assertContains(resposta, f'id="data_fim" value="{fim.isoformat()}"')
         self.assertContains(resposta, f'id="data_chegada" value="{chegada.isoformat()}"')
+
+    def test_mobile_historico_ultimas_compras_disponivel_na_edicao(self):
+        fornecedor_recente = Fornecedor.objects.create(nome="Fornecedor Historico Recente")
+        fornecedor_antigo = Fornecedor.objects.create(nome="Fornecedor Historico Antigo")
+        produto = self.criar_produto("Produto Historico Edicao")
+        lista = self.criar_lista_com_item(produto)
+        self.criar_compra_historico_produto(
+            produto,
+            fornecedor=fornecedor_antigo,
+            dias_atras=4,
+            quantidade=Decimal("4.000"),
+            unidade="CX",
+            preco=Decimal("12.34"),
+        )
+        self.criar_compra_historico_produto(
+            produto,
+            fornecedor=fornecedor_recente,
+            dias_atras=1,
+            quantidade=Decimal("2.500"),
+            unidade="UN",
+            preco=Decimal("9.87"),
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_editar", kwargs={"pk": lista.pk}),
+            secure=True,
+        )
+        html = resposta.content.decode()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'class="sugestao-historico-toggle" data-historico-toggle aria-expanded="false"')
+        self.assertContains(resposta, '<button type="button" class="sugestao-historico-toggle"')
+        self.assertContains(resposta, "Últimas 3 compras deste produto")
+        self.assertContains(resposta, fornecedor_recente.nome)
+        self.assertContains(resposta, fornecedor_antigo.nome)
+        self.assertContains(resposta, "2.500 UN")
+        self.assertContains(resposta, "4.000 CX")
+        self.assertContains(resposta, "R$ 9.87")
+        self.assertContains(resposta, "R$ 12.34")
+        self.assertLess(html.index(fornecedor_recente.nome), html.index(fornecedor_antigo.nome))
+        self.assertContains(resposta, "function fecharHistoricosComprasMobile(exceto)")
+
+    def test_mobile_historico_ultimas_compras_visualizacao_limita_ordena_e_ignora_cancelada(self):
+        produto = self.criar_produto("Produto Historico Ver")
+        lista = self.criar_lista_com_item(produto)
+        fornecedores = [
+            Fornecedor.objects.create(nome=f"Fornecedor Historico {indice}")
+            for indice in range(1, 6)
+        ]
+        self.criar_compra_historico_produto(produto, fornecedor=fornecedores[0], dias_atras=5, preco=Decimal("5.00"))
+        self.criar_compra_historico_produto(produto, fornecedor=fornecedores[1], dias_atras=3, preco=Decimal("6.00"))
+        self.criar_compra_historico_produto(produto, fornecedor=fornecedores[2], dias_atras=2, preco=Decimal("7.00"), cancelada=True)
+        self.criar_compra_historico_produto(produto, fornecedor=fornecedores[3], dias_atras=1, quantidade=Decimal("3.250"), unidade="FD", preco=Decimal("8.50"))
+        self.criar_compra_historico_produto(produto, fornecedor=fornecedores[4], dias_atras=0, quantidade=Decimal("1.750"), unidade="UN", preco=Decimal("9.25"))
+
+        resposta = self.client.get(reverse("estoque:compras_lista_fornecedor_ver", kwargs={"pk": lista.pk}), secure=True)
+        html = resposta.content.decode()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, '<button type="button" class="lista-ver-historico-toggle"')
+        self.assertContains(resposta, "Últimas 3 compras deste produto")
+        self.assertContains(resposta, fornecedores[4].nome)
+        self.assertContains(resposta, fornecedores[3].nome)
+        self.assertContains(resposta, fornecedores[1].nome)
+        self.assertNotContains(resposta, fornecedores[0].nome)
+        self.assertNotContains(resposta, fornecedores[2].nome)
+        self.assertContains(resposta, "1.750 UN")
+        self.assertContains(resposta, "3.250 FD")
+        self.assertContains(resposta, "R$ 9.25")
+        self.assertContains(resposta, "R$ 8.50")
+        self.assertLess(html.index(fornecedores[4].nome), html.index(fornecedores[3].nome))
+        self.assertLess(html.index(fornecedores[3].nome), html.index(fornecedores[1].nome))
+        self.assertContains(resposta, "function fecharHistoricosListaVer(exceto)")
+
+    def test_mobile_historico_produto_sem_compras_mostra_mensagem(self):
+        produto = self.criar_produto("Produto Sem Historico")
+        lista = self.criar_lista_com_item(produto)
+
+        resposta_ver = self.client.get(reverse("estoque:compras_lista_fornecedor_ver", kwargs={"pk": lista.pk}), secure=True)
+        resposta_edicao = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_editar", kwargs={"pk": lista.pk}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta_ver.status_code, 200)
+        self.assertEqual(resposta_edicao.status_code, 200)
+        self.assertContains(resposta_ver, "Nenhuma compra anterior encontrada para este produto.")
+        self.assertContains(resposta_edicao, "Nenhuma compra anterior encontrada para este produto.")
+
+    def test_historico_mobile_nao_altera_tabela_desktop_ou_campos_existentes(self):
+        produto = self.criar_produto("Produto Historico Desktop")
+        lista = self.criar_lista_com_item(produto)
+
+        resposta_ver = self.client.get(reverse("estoque:compras_lista_fornecedor_ver", kwargs={"pk": lista.pk}), secure=True)
+        resposta_edicao = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_editar", kwargs={"pk": lista.pk}),
+            secure=True,
+        )
+        html_ver = resposta_ver.content.decode()
+        html_edicao = resposta_edicao.content.decode()
+        tabela_desktop = re.search(r'<table class="lista-ver-table lista-ver-tabela">(?P<conteudo>.*?)</table>', html_ver, re.S)
+
+        self.assertEqual(resposta_ver.status_code, 200)
+        self.assertEqual(resposta_edicao.status_code, 200)
+        self.assertIsNotNone(tabela_desktop)
+        self.assertNotIn("data-lista-ver-historico-toggle", tabela_desktop.group("conteudo"))
+        self.assertContains(resposta_edicao, 'id="mobileSugestaoProdutos"')
+        self.assertContains(resposta_edicao, 'class="sugestao-mobile-card"')
+        self.assertContains(resposta_edicao, 'class="sugestao-input sugestao-qtd-input"')
+        self.assertContains(resposta_edicao, 'class="sugestao-input sugestao-preco-input"')
+        self.assertContains(resposta_edicao, 'class="sugestao-input sugestao-preco-unitario-input"')
+        self.assertContains(resposta_edicao, 'class="sugestao-input sugestao-total-input"')
+        self.assertNotIn("data-historico-toggle", re.search(r'<div class="sugestao-table-wrap sugestao-desktop">(?P<conteudo>.*?)</div>\s*<div class="sugestao-mobile"', html_edicao, re.S).group("conteudo"))
 
     def test_mobile_produto_sugerido_tem_area_itens_adicionar_sem_duplicar_editar_remover(self):
         produto = self.criar_produto("Produto Mobile Itens", quantidade=Decimal("0.000"))

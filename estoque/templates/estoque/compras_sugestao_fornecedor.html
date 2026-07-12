@@ -800,6 +800,68 @@
     margin-top: 10px;
   }
 
+  .sugestao-historico-mobile {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .sugestao-historico-toggle {
+    min-height: 38px;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    background: #eff6ff;
+    color: #164173;
+    font-weight: 950;
+    cursor: pointer;
+  }
+
+  .sugestao-historico-card {
+    display: grid;
+    gap: 7px;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    padding: 9px;
+    background: #f8fbff;
+    color: #0f172a;
+    font-size: .76rem;
+    font-weight: 800;
+  }
+
+  .sugestao-historico-card[hidden] {
+    display: none !important;
+  }
+
+  .sugestao-historico-titulo {
+    color: #164173;
+    font-weight: 950;
+  }
+
+  .sugestao-historico-item {
+    display: grid;
+    grid-template-columns: .8fr 1.1fr .7fr .8fr;
+    gap: 5px;
+    padding-top: 6px;
+    border-top: 1px solid #dbeafe;
+    align-items: center;
+  }
+
+  .sugestao-historico-item:first-of-type {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .sugestao-historico-preco {
+    color: #047857;
+    font-weight: 950;
+    text-align: right;
+  }
+
+  .sugestao-historico-vazio {
+    color: #64748b;
+    font-weight: 850;
+  }
+
   .sugestao-mobile-card.item-adicionado-lista {
     border-left-color: #166534;
     background: #f0fdf4;
@@ -1845,6 +1907,25 @@
               <div><span class="sugestao-mobile-label">Pedidos em aberto</span><span class="sugestao-mobile-value"><span class="sugestao-pedidos {% if linha.quantidade_pedidos_abertos > 0 %}tem-pedido{% endif %}">{{ linha.quantidade_pedidos_abertos|floatformat:3 }}</span></span></div>
               <div class="sugestao-mobile-static"><span class="sugestao-mobile-label">Sugestao compra</span><span>{{ linha.sugestao|floatformat:3 }}</span></div>
               <div><span class="sugestao-mobile-label">Unidade</span><span class="sugestao-mobile-value">{{ linha.unidade }}</span></div>
+            </div>
+            <div class="sugestao-historico-mobile" data-historico-lista-mobile>
+              <button type="button" class="sugestao-historico-toggle" data-historico-toggle aria-expanded="false">Ver últimas compras</button>
+              <div class="sugestao-historico-card" data-historico-card hidden>
+                {% if linha.historico_ultimas_compras %}
+                  <div class="sugestao-historico-titulo">Últimas 3 compras deste produto</div>
+                  {% for compra in linha.historico_ultimas_compras %}
+                    <div class="sugestao-historico-item">
+                      <div>{{ compra.data|default:"-" }}</div>
+                      <div>{{ compra.fornecedor|default:"-" }}</div>
+                      <div>{{ compra.quantidade|floatformat:3 }} {{ compra.unidade|default:"" }}</div>
+                      <div class="sugestao-historico-preco">R$ {{ compra.preco|floatformat:2 }}</div>
+                    </div>
+                  {% endfor %}
+                {% else %}
+                  <div class="sugestao-historico-titulo">Últimas compras</div>
+                  <div class="sugestao-historico-vazio">Nenhuma compra anterior encontrada para este produto.</div>
+                {% endif %}
+              </div>
             </div>
             <div class="sugestao-mobile-edit">
               <label class="sugestao-mobile-label">Quantidade/compra</label>
@@ -3316,7 +3397,29 @@
     if (btnConfirmarRemover) btnConfirmarRemover.disabled = false;
   }
 
+  function fecharHistoricosComprasMobile(exceto) {
+    mobile.querySelectorAll("[data-historico-card]").forEach(function(card) {
+      if (card === exceto) return;
+      card.hidden = true;
+      const wrapper = card.closest("[data-historico-lista-mobile]");
+      wrapper?.querySelector("[data-historico-toggle]")?.setAttribute("aria-expanded", "false");
+    });
+  }
+
   mobile.addEventListener("click", function(event) {
+    const historicoToggle = event.target.closest("[data-historico-toggle]");
+    if (historicoToggle) {
+      event.preventDefault();
+      const wrapper = historicoToggle.closest("[data-historico-lista-mobile]");
+      const cardHistorico = wrapper?.querySelector("[data-historico-card]");
+      if (!cardHistorico) return;
+      const abrir = cardHistorico.hidden;
+      fecharHistoricosComprasMobile(cardHistorico);
+      cardHistorico.hidden = !abrir;
+      historicoToggle.setAttribute("aria-expanded", abrir ? "true" : "false");
+      return;
+    }
+
     const botao = event.target.closest(".sugestao-adicionar-lista-mobile");
     if (!botao) return;
     const card = botao.closest(".sugestao-mobile-card[data-produto-id]");
