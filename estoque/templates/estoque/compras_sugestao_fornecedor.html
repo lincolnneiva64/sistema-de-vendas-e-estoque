@@ -1203,6 +1203,15 @@
     color: #3730a3;
   }
 
+  .sugestao-autocomplete-tag.ja-na-lista {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .sugestao-autocomplete-opcao.ja-na-lista {
+    background: #f8fff9;
+  }
+
   .sugestao-empty.oculto {
     display: none;
   }
@@ -1817,6 +1826,32 @@
             <td data-label="Preco unitario"><input type="text" inputmode="decimal" class="sugestao-input sugestao-manual-input sugestao-manual-preco-unitario-input" id="produtoManualPrecoUnitario" data-fator="1" aria-label="Preco unitario do produto manual"></td>
             <td data-label="Total"><input type="text" inputmode="decimal" class="sugestao-input sugestao-manual-input sugestao-manual-total-input" id="produtoManualTotal" aria-label="Total do produto manual"></td>
             <td class="sugestao-col-acao" data-label="Acao"><button type="button" class="sugestao-btn sugestao-btn-primary" id="btnAdicionarProdutoSugestao">Adicionar produto</button></td>
+          </tr>
+
+          <tr
+            id="produtoManualHistoricoRow"
+            class="sugestao-historico-desktop-row"
+            hidden
+          >
+            <td colspan="11">
+              <div class="sugestao-historico-desktop-card">
+                <div class="sugestao-historico-titulo">
+                  &Uacute;ltimas 3 compras deste produto
+                </div>
+
+                <div
+                  class="sugestao-historico-desktop-cabecalho"
+                  aria-hidden="true"
+                >
+                  <div>Data</div>
+                  <div>Fornecedor</div>
+                  <div>Qde comprada</div>
+                  <div>Pre&ccedil;o comprado</div>
+                </div>
+
+                <div id="produtoManualHistoricoConteudo"></div>
+              </div>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -2674,10 +2709,24 @@
   const manualPreco = document.getElementById("produtoManualPrecoCompra");
   const manualUnitario = document.getElementById("produtoManualPrecoUnitario");
   const manualTotal = document.getElementById("produtoManualTotal");
+  const manualHistoricoRow = document.getElementById("produtoManualHistoricoRow");
+  const manualHistoricoConteudo = document.getElementById("produtoManualHistoricoConteudo");
   const camposManuais = [manualQtd, manualPreco, manualUnitario, manualTotal];
   const manualWrap = linhaManual?.closest(".sugestao-manual-table-wrap");
 
-  if (!busca || !selecionado || !lista || !botao || !tbody || !mobile || !dadosEl || !linhaManual || camposManuais.some((campo) => !campo)) return;
+  if (
+    !busca ||
+    !selecionado ||
+    !lista ||
+    !botao ||
+    !tbody ||
+    !mobile ||
+    !dadosEl ||
+    !linhaManual ||
+    !manualHistoricoRow ||
+    !manualHistoricoConteudo ||
+    camposManuais.some((campo) => !campo)
+  ) return;
 
   const produtos = JSON.parse(dadosEl.textContent || "[]");
   const produtosPorId = new Map(produtos.map((produto) => [String(produto.id), produto]));
@@ -2724,6 +2773,71 @@
       : '<span class="sugestao-autocomplete-tag fora-fornecedor">fora do fornecedor</span>';
   }
 
+  function tagJaNaLista(produto) {
+    return existeNaLista(produto.id)
+      ? '<span class="sugestao-autocomplete-tag ja-na-lista">j\u00e1 est\u00e1 na lista</span>'
+      : '';
+  }
+
+  function atualizarEstadoBotaoProdutoManual(produto) {
+    const jaNaLista = Boolean(produto && existeNaLista(produto.id));
+
+    botao.disabled = jaNaLista;
+    botao.textContent = jaNaLista
+      ? "J\u00e1 est\u00e1 na lista"
+      : "Adicionar produto";
+    botao.setAttribute(
+      "aria-disabled",
+      jaNaLista ? "true" : "false"
+    );
+  }
+
+  function renderizarHistoricoProdutoManual(produto) {
+    const telaMobile = window.matchMedia &&
+      window.matchMedia("(max-width: 860px)").matches;
+
+    if (!produto || telaMobile) {
+      manualHistoricoConteudo.innerHTML = "";
+      manualHistoricoRow.hidden = true;
+      return;
+    }
+
+    const historico = Array.isArray(produto.historico_ultimas_compras)
+      ? produto.historico_ultimas_compras.slice(0, 3)
+      : [];
+
+    if (!historico.length) {
+      manualHistoricoConteudo.innerHTML =
+        '<div class="sugestao-historico-vazio">' +
+        'Nenhuma compra anterior encontrada para este produto.' +
+        '</div>';
+
+      manualHistoricoRow.hidden = false;
+      return;
+    }
+
+    manualHistoricoConteudo.innerHTML = historico.map((compra) => {
+      const quantidade = String(compra.quantidade || "0.000");
+      const unidade = String(compra.unidade || "").trim();
+      const preco = String(compra.preco || "0.00");
+
+      return `
+        <div class="sugestao-historico-desktop-item">
+          <div>${escapeHtml(compra.data || "-")}</div>
+          <div>${escapeHtml(compra.fornecedor || "-")}</div>
+          <div class="sugestao-historico-desktop-quantidade">
+            ${escapeHtml(quantidade)}${unidade ? " " + escapeHtml(unidade) : ""}
+          </div>
+          <div class="sugestao-historico-desktop-preco">
+            R$ ${escapeHtml(preco)}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    manualHistoricoRow.hidden = false;
+  }
+
   function limparLinhaManual(limparProduto) {
     const deveLimparProduto = limparProduto !== false;
     selecionado.value = "";
@@ -2740,6 +2854,8 @@
       campo.value = "";
     });
     manualUnitario.dataset.fator = "1";
+    renderizarHistoricoProdutoManual(null);
+    atualizarEstadoBotaoProdutoManual(null);
   }
 
   function preencherLinhaManual(produto) {
@@ -2760,6 +2876,8 @@
     manualUnitario.value = produto.preco_unitario_calculado || "0,00";
     manualUnitario.dataset.fator = produto.fator_conversao || "1";
     manualTotal.value = produto.total_sugerido || "0,00";
+    renderizarHistoricoProdutoManual(produto);
+    atualizarEstadoBotaoProdutoManual(produto);
   }
 
   function existeNaLista(produtoId) {
@@ -2805,8 +2923,18 @@
   function selecionarProduto(produtoId) {
     const produto = produtosPorId.get(String(produtoId));
     if (!produto) return;
+
     preencherLinhaManual(produto);
     fecharSugestoes();
+
+    if (existeNaLista(produto.id)) {
+      mostrarMsg(
+        "Produto j\u00e1 est\u00e1 na lista. Dados e \u00faltimas compras dispon\u00edveis para consulta."
+      );
+      busca.focus();
+      return;
+    }
+
     mostrarMsg("");
     manualQtd.focus();
   }
@@ -2815,7 +2943,7 @@
     const termo = busca.value.trim().toLowerCase();
     if (!termo) return null;
     return produtos.find((produto) => {
-      return !existeNaLista(produto.id) && String(produto.nome || "").trim().toLowerCase() === termo;
+      return String(produto.nome || "").trim().toLowerCase() === termo;
     }) || null;
   }
 
@@ -2825,23 +2953,35 @@
 
     const filtrados = produtos
       .filter((produto) => {
-        if (existeNaLista(produto.id)) return false;
-        return !termo || String(produto.nome || "").toLowerCase().includes(termo);
+        return !termo ||
+          String(produto.nome || "").toLowerCase().includes(termo);
       })
       .slice(0, 24);
 
     if (!filtrados.length) {
-      lista.innerHTML = '<button type="button" class="sugestao-autocomplete-opcao" disabled>Nenhum produto disponivel para adicionar</button>';
+      lista.innerHTML = '<button type="button" class="sugestao-autocomplete-opcao" disabled>Nenhum produto encontrado</button>';
       lista.classList.add("aberta");
       manualWrap?.classList.add("autocomplete-aberto");
       indiceAtivo = -1;
       limparLinhaManual(false);
-      mostrarMsg("Nenhum produto disponivel para adicionar.");
+      mostrarMsg("Nenhum produto encontrado.");
       return;
     }
 
     lista.innerHTML = filtrados.map((produto) => {
-      return `<button type="button" class="sugestao-autocomplete-opcao" data-produto-id="${produto.id}">${escapeHtml(produto.nome)}${tagFornecedor(produto)}</button>`;
+      const jaNaLista = existeNaLista(produto.id);
+
+      return `
+        <button
+          type="button"
+          class="sugestao-autocomplete-opcao${jaNaLista ? " ja-na-lista" : ""}"
+          data-produto-id="${produto.id}"
+        >
+          ${escapeHtml(produto.nome)}
+          ${tagFornecedor(produto)}
+          ${tagJaNaLista(produto)}
+        </button>
+      `;
     }).join("");
     lista.classList.add("aberta");
     manualWrap?.classList.add("autocomplete-aberto");
@@ -2995,8 +3135,10 @@
     }
 
     if (existeNaLista(produtoId)) {
-      mostrarMsg("Este produto ja esta na lista.");
-      prepararProximoProduto();
+      mostrarMsg(
+        "Produto j\u00e1 est\u00e1 na lista. Dados e \u00faltimas compras dispon\u00edveis para consulta."
+      );
+      atualizarEstadoBotaoProdutoManual(produtoBase);
       return;
     }
 

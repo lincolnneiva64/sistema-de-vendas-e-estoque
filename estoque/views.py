@@ -3652,6 +3652,25 @@ def _ultimas_compras_produtos_para_lista_fornecedor(produto_ids, limite=3):
     return historicos
 
 
+def _historico_compras_produto_para_payload(compras):
+    resultado = []
+
+    for compra in compras or []:
+        quantidade = Decimal(str(compra.get("quantidade") or "0"))
+        preco = Decimal(str(compra.get("preco") or "0"))
+
+        resultado.append({
+            "compra_id": compra.get("compra_id") or "",
+            "data": compra.get("data") or "",
+            "fornecedor": compra.get("fornecedor") or "Fornecedor nao informado",
+            "quantidade": f"{quantidade.quantize(Decimal('0.001')):.3f}",
+            "unidade": compra.get("unidade") or "",
+            "preco": f"{preco.quantize(Decimal('0.01')):.2f}",
+        })
+
+    return resultado
+
+
 def fornecedor_contas_pagar_abertas(request, fornecedor_id):
     fornecedor = (
         Fornecedor.objects
@@ -4306,6 +4325,16 @@ def sugestao_compra_fornecedor(request):
             )
 
         produtos_manual_payload.sort(key=lambda item: (not item["vinculado"], item["nome"].casefold(), item["id"]))
+
+        historico_produtos_manuais = _ultimas_compras_produtos_para_lista_fornecedor(
+            [produto_payload["id"] for produto_payload in produtos_manual_payload]
+        )
+        for produto_payload in produtos_manual_payload:
+            produto_payload["historico_ultimas_compras"] = (
+                _historico_compras_produto_para_payload(
+                    historico_produtos_manuais.get(produto_payload["id"], [])
+                )
+            )
 
     historico_compras_produtos = _ultimas_compras_produtos_para_lista_fornecedor(
         [linha["produto_id"] for linha in linhas]
@@ -5948,7 +5977,18 @@ def compras_lista_fornecedor_editar(request, pk):
         )
         produtos_manual.append(payload_produto)
 
-    produtos_manual_json = json.dumps(produtos_sugestao + produtos_manual, ensure_ascii=False)
+    produtos_manual_payload = produtos_sugestao + produtos_manual
+    historico_produtos_manuais = _ultimas_compras_produtos_para_lista_fornecedor(
+        [produto_payload["id"] for produto_payload in produtos_manual_payload]
+    )
+    for produto_payload in produtos_manual_payload:
+        produto_payload["historico_ultimas_compras"] = (
+            _historico_compras_produto_para_payload(
+                historico_produtos_manuais.get(produto_payload["id"], [])
+            )
+        )
+
+    produtos_manual_json = json.dumps(produtos_manual_payload, ensure_ascii=False)
     periodo_edicao = max((lista.data_fim_periodo - lista.data_inicio_periodo).days, 1)
 
     context = {
@@ -5960,7 +6000,7 @@ def compras_lista_fornecedor_editar(request, pk):
         "fornecedores_sugestao_json": fornecedores_json,
         "linhas": linhas_edicao,
         "produtos_sugestao": produtos_sugestao,
-        "produtos_manual_payload": produtos_sugestao + produtos_manual,
+        "produtos_manual_payload": produtos_manual_payload,
         "produtos_manual_json": produtos_manual_json,
         "produtos_manual_sugestao_json": produtos_manual_json,
         "produtos_json": produtos_manual_json,
