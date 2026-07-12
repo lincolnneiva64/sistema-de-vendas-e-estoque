@@ -2793,10 +2793,7 @@
   }
 
   function renderizarHistoricoProdutoManual(produto) {
-    const telaMobile = window.matchMedia &&
-      window.matchMedia("(max-width: 860px)").matches;
-
-    if (!produto || telaMobile) {
+    if (!produto) {
       manualHistoricoConteudo.innerHTML = "";
       manualHistoricoRow.hidden = true;
       return;

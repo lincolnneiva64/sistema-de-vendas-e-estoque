@@ -3507,6 +3507,23 @@ class ComprasListaFornecedorGravarTests(TestCase):
             'data-historico-toggle aria-expanded="false"',
         )
 
+    def test_historico_manual_nao_e_ocultado_no_mobile(self):
+        resposta = self.client.get(
+            reverse("estoque:sugestao_compra_fornecedor"),
+            secure=True,
+        )
+        html = resposta.content.decode()
+
+        inicio = html.index(
+            "function renderizarHistoricoProdutoManual(produto)"
+        )
+        fim = html.index("function limparLinhaManual", inicio)
+        bloco_historico = html[inicio:fim]
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn("if (!produto) {", bloco_historico)
+        self.assertNotIn("telaMobile", bloco_historico)
+
     def test_edicao_payload_manual_traz_historico_para_produto_novo(self):
         fornecedor_compra = Fornecedor.objects.create(
             nome="Fornecedor Compra Manual Edicao"
