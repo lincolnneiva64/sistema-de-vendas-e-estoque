@@ -3506,6 +3506,22 @@ class ComprasListaFornecedorGravarTests(TestCase):
             resposta,
             'data-historico-toggle aria-expanded="false"',
         )
+        self.assertContains(
+            resposta,
+            "const historicoHtml = historicoDoCardHtml(card);",
+        )
+        self.assertContains(
+            resposta,
+            "${historicoHtml}",
+        )
+        self.assertContains(
+            resposta,
+            "function historicoDoCardHtml(card)",
+        )
+        self.assertContains(
+            resposta,
+            "alternarHistoricoComprasMobile(historicoToggle, lista);",
+        )
 
     def test_edicao_payload_manual_traz_historico_para_produto_novo(self):
         fornecedor_compra = Fornecedor.objects.create(
@@ -3573,6 +3589,14 @@ class ComprasListaFornecedorGravarTests(TestCase):
             resposta,
             "${historicoMobileProdutoHtml(produto)}",
         )
+        self.assertContains(
+            resposta,
+            "const historicoHtml = historicoDoCardHtml(card);",
+        )
+        self.assertContains(
+            resposta,
+            "alternarHistoricoComprasMobile(historicoToggle, lista);",
+        )
 
     def test_edicao_manual_produto_novo_salva_historico_correto_e_nao_herda_sem_historico(self):
         fornecedor_compra = Fornecedor.objects.create(
@@ -3626,6 +3650,14 @@ class ComprasListaFornecedorGravarTests(TestCase):
             resposta_get,
             'if (!historico.length) return "";',
         )
+        self.assertContains(
+            resposta_get,
+            "const historicoHtml = historicoDoCardHtml(card);",
+        )
+        self.assertContains(
+            resposta_get,
+            "${historicoHtml}",
+        )
 
         resposta_post = self.client.post(
             reverse(
@@ -3676,6 +3708,51 @@ class ComprasListaFornecedorGravarTests(TestCase):
             linha_adicionada["historico_ultimas_compras"][0]["fornecedor"],
             fornecedor_compra.nome,
         )
+
+    def test_mobile_manual_sem_historico_limpa_bloco_ao_alternar_produto(self):
+        produto_com_historico = self.criar_produto("Produto Alternancia Com Historico")
+        produto_sem_historico = self.criar_produto("Produto Alternancia Sem Historico")
+        fornecedor_compra = Fornecedor.objects.create(nome="Fornecedor Alternancia Historico")
+
+        self.criar_compra_historico_produto(
+            produto_com_historico,
+            fornecedor=fornecedor_compra,
+            quantidade=Decimal("2.000"),
+            unidade="UN",
+            preco=Decimal("6.50"),
+        )
+
+        hoje = timezone.localdate()
+        resposta = self.client.get(
+            reverse("estoque:sugestao_compra_fornecedor"),
+            {
+                "fornecedor": self.fornecedor.pk,
+                "periodo": "7",
+                "data_inicio": (hoje - timedelta(days=7)).isoformat(),
+                "data_fim": hoje.isoformat(),
+            },
+            secure=True,
+        )
+        produtos_payload = resposta.context["produtos_manual_payload"]
+        payload_com_historico = next(
+            item for item in produtos_payload
+            if item["id"] == produto_com_historico.id
+        )
+        payload_sem_historico = next(
+            item for item in produtos_payload
+            if item["id"] == produto_sem_historico.id
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(
+            payload_com_historico["historico_ultimas_compras"][0]["fornecedor"],
+            fornecedor_compra.nome,
+        )
+        self.assertEqual(payload_sem_historico["historico_ultimas_compras"], [])
+        self.assertContains(resposta, "renderizarHistoricoProdutoManual(null);")
+        self.assertContains(resposta, 'if (!historico.length) return "";')
+        self.assertContains(resposta, "limparLinhaManual(false);")
+        self.assertContains(resposta, "preencherLinhaManual(exato);")
 
     def test_historico_desktop_mostra_cabecalhos_claros(self):
         fornecedor = Fornecedor.objects.create(nome="Fornecedor Cabecalho Historico")
@@ -3747,7 +3824,7 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, "R$ 9.87")
         self.assertContains(resposta, "R$ 12.34")
         self.assertLess(html.index(fornecedor_recente.nome), html.index(fornecedor_antigo.nome))
-        self.assertContains(resposta, "function fecharHistoricosComprasMobile(exceto)")
+        self.assertContains(resposta, "function fecharHistoricosComprasMobile(exceto, escopo)")
 
     def test_mobile_historico_ultimas_compras_visualizacao_limita_ordena_e_ignora_cancelada(self):
         produto = self.criar_produto("Produto Historico Ver")
@@ -4158,6 +4235,15 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, "foco?.focus();")
         self.assertContains(resposta, "Escape")
         self.assertNotContains(resposta, 'event.target === modalRemover')
+        self.assertContains(resposta, "window.sugestaoAbrirModalRemoverItemListaMobile")
+        self.assertContains(resposta, 'item.dataset.naLista === "1"')
+        self.assertContains(resposta, "event.stopImmediatePropagation();")
+        self.assertContains(resposta, "abrirModalRemoverItem(item, botaoOrigem);")
+
+        html = resposta.content.decode()
+        interceptacao = html.index("window.sugestaoAbrirModalRemoverItemListaMobile?.")
+        remocao_direta = html.index("window.__sugestaoProdutosRemovidos.add(String(produtoId));")
+        self.assertLess(interceptacao, remocao_direta)
 
     def test_edicao_mobile_carrega_itens_salvos_em_itens_da_lista(self):
         produto = self.criar_produto("Produto Edicao Mobile Lista")
@@ -4173,6 +4259,7 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, "cards().forEach(adicionarCardNaLista);")
         self.assertContains(resposta, 'id="itensListaMobile"')
         self.assertContains(resposta, "atualizarContadorItensLista")
+        self.assertContains(resposta, "window.sugestaoAbrirModalRemoverItemListaMobile")
 
     def test_gravar_lista_com_um_item_payload_salva_somente_esse_item(self):
         produto_escolhido = self.criar_produto("Produto Escolhido")

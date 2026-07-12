@@ -3322,6 +3322,16 @@
     const item = botaoRemover.closest("[data-produto-id]");
     if (!item) return;
 
+    if (
+      item.classList.contains("sugestao-mobile-card") &&
+      item.dataset.naLista === "1" &&
+      window.sugestaoAbrirModalRemoverItemListaMobile?.(item.dataset.produtoId, botaoRemover)
+    ) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+
     const produtoId = item.dataset.produtoId;
     window.__sugestaoProdutosRemovidos.add(String(produtoId));
     function proximoItemSeguroAntesRemover(itemAtual) {
@@ -3507,11 +3517,13 @@
     const dados = valoresDoCard(card);
     const existente = itemPorId(dados.produtoId);
     if (existente && existente.dataset.editando === "1") return existente;
+    const historicoHtml = historicoDoCardHtml(card);
     const conteudo = `
       <div class="sugestao-item-lista-mobile-topo">
         <span>${html(dados.produto)}</span>
         <span>${html(dados.unidade)}</span>
       </div>
+      ${historicoHtml}
       <div class="sugestao-item-lista-mobile-grid">
         <label class="sugestao-mobile-label">Quantidade</label>
         <input type="text" inputmode="decimal" class="sugestao-input sugestao-item-lista-qtd-input" value="${html(dados.quantidade)}" aria-label="Quantidade de ${html(dados.produto)} na lista" readonly>
@@ -3537,6 +3549,28 @@
     const criado = itemPorId(dados.produtoId);
     if (criado) confirmarValoresAtuais(criado);
     return criado;
+  }
+
+  function historicoDoCardHtml(card) {
+    const historico = card.querySelector("[data-historico-lista-mobile]");
+    if (!historico) return "";
+    const clone = historico.cloneNode(true);
+    clone.querySelector("[data-historico-toggle]")?.setAttribute("aria-expanded", "false");
+    const cardHistorico = clone.querySelector("[data-historico-card]");
+    if (cardHistorico) cardHistorico.hidden = true;
+    return clone.outerHTML;
+  }
+
+  function alternarHistoricoComprasMobile(historicoToggle, escopo) {
+    if (!historicoToggle) return false;
+    const wrapper = historicoToggle.closest("[data-historico-lista-mobile]");
+    const cardHistorico = wrapper?.querySelector("[data-historico-card]");
+    if (!cardHistorico) return false;
+    const abrir = cardHistorico.hidden;
+    fecharHistoricosComprasMobile(cardHistorico, escopo);
+    cardHistorico.hidden = !abrir;
+    historicoToggle.setAttribute("aria-expanded", abrir ? "true" : "false");
+    return true;
   }
 
   function confirmarValoresAtuais(item) {
@@ -3736,8 +3770,8 @@
     if (btnConfirmarRemover) btnConfirmarRemover.disabled = false;
   }
 
-  function fecharHistoricosComprasMobile(exceto) {
-    mobile.querySelectorAll("[data-historico-card]").forEach(function(card) {
+  function fecharHistoricosComprasMobile(exceto, escopo) {
+    (escopo || document).querySelectorAll("[data-historico-card]").forEach(function(card) {
       if (card === exceto) return;
       card.hidden = true;
       const wrapper = card.closest("[data-historico-lista-mobile]");
@@ -3749,13 +3783,7 @@
     const historicoToggle = event.target.closest("[data-historico-toggle]");
     if (historicoToggle) {
       event.preventDefault();
-      const wrapper = historicoToggle.closest("[data-historico-lista-mobile]");
-      const cardHistorico = wrapper?.querySelector("[data-historico-card]");
-      if (!cardHistorico) return;
-      const abrir = cardHistorico.hidden;
-      fecharHistoricosComprasMobile(cardHistorico);
-      cardHistorico.hidden = !abrir;
-      historicoToggle.setAttribute("aria-expanded", abrir ? "true" : "false");
+      alternarHistoricoComprasMobile(historicoToggle, mobile);
       return;
     }
 
@@ -3791,6 +3819,13 @@
   }, true);
 
   lista.addEventListener("click", function(event) {
+    const historicoToggle = event.target.closest("[data-historico-toggle]");
+    if (historicoToggle) {
+      event.preventDefault();
+      alternarHistoricoComprasMobile(historicoToggle, lista);
+      return;
+    }
+
     const item = event.target.closest(".sugestao-item-lista-mobile[data-produto-id]");
     if (!item) return;
     if (event.target.closest(".sugestao-editar-lista-mobile")) {
@@ -3809,6 +3844,13 @@
       abrirModalRemoverItem(item, event.target.closest(".sugestao-remover-lista-mobile"));
     }
   });
+
+  window.sugestaoAbrirModalRemoverItemListaMobile = function(produtoId, botaoOrigem) {
+    const item = itemPorId(produtoId);
+    if (!item) return false;
+    abrirModalRemoverItem(item, botaoOrigem);
+    return true;
+  };
 
   lista.addEventListener("focusin", function(event) {
     const campo = event.target;
