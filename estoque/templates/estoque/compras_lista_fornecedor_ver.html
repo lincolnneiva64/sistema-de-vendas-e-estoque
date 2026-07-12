@@ -290,6 +290,9 @@
 
     <div class="lista-ver-actions">
       <a class="lista-ver-btn" href="{% url 'estoque:compras_listas_fornecedor' %}">Voltar</a>
+      {% if lista.status != "cancelada" %}
+        <a class="lista-ver-btn" href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar Lista</a>
+      {% endif %}
       <a class="lista-ver-btn primary" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
 
       {% if compra_gerada %}

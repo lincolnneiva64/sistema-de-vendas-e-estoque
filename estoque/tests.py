@@ -3326,6 +3326,53 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, f'id="data_fim" value="{fim.isoformat()}"')
         self.assertContains(resposta, f'id="data_chegada" value="{chegada.isoformat()}"')
 
+    def test_visualizacao_lista_aberta_mostra_botao_editar_lista(self):
+        produto = self.criar_produto("Produto Botao Editar Ver Lista")
+        lista = self.criar_lista_com_item(produto)
+        url_edicao = reverse(
+            "estoque:compras_lista_fornecedor_editar",
+            kwargs={"pk": lista.pk},
+        )
+
+        resposta = self.client.get(
+            reverse(
+                "estoque:compras_lista_fornecedor_ver",
+                kwargs={"pk": lista.pk},
+            ),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(
+            resposta,
+            f'<a class="lista-ver-btn" href="{url_edicao}">Editar Lista</a>',
+        )
+
+    def test_visualizacao_lista_cancelada_nao_mostra_botao_editar_lista(self):
+        produto = self.criar_produto("Produto Sem Botao Editar Ver Lista")
+        lista = self.criar_lista_com_item(produto)
+        lista.status = ListaCompraFornecedor.STATUS_CANCELADA
+        lista.save(update_fields=["status"])
+
+        url_edicao = reverse(
+            "estoque:compras_lista_fornecedor_editar",
+            kwargs={"pk": lista.pk},
+        )
+
+        resposta = self.client.get(
+            reverse(
+                "estoque:compras_lista_fornecedor_ver",
+                kwargs={"pk": lista.pk},
+            ),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotContains(
+            resposta,
+            f'<a class="lista-ver-btn" href="{url_edicao}">Editar Lista</a>',
+        )
+
     def test_mobile_historico_ultimas_compras_disponivel_na_edicao(self):
         fornecedor_recente = Fornecedor.objects.create(nome="Fornecedor Historico Recente")
         fornecedor_antigo = Fornecedor.objects.create(nome="Fornecedor Historico Antigo")
