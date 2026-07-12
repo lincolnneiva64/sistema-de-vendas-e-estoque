@@ -3414,30 +3414,62 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta_ver, "Nenhuma compra anterior encontrada para este produto.")
         self.assertContains(resposta_edicao, "Nenhuma compra anterior encontrada para este produto.")
 
-    def test_historico_mobile_nao_altera_tabela_desktop_ou_campos_existentes(self):
+    def test_historico_desktop_disponivel_sem_alterar_mobile_ou_campos_existentes(self):
         produto = self.criar_produto("Produto Historico Desktop")
         lista = self.criar_lista_com_item(produto)
 
-        resposta_ver = self.client.get(reverse("estoque:compras_lista_fornecedor_ver", kwargs={"pk": lista.pk}), secure=True)
+        resposta_ver = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_ver", kwargs={"pk": lista.pk}),
+            secure=True,
+        )
         resposta_edicao = self.client.get(
             reverse("estoque:compras_lista_fornecedor_editar", kwargs={"pk": lista.pk}),
             secure=True,
         )
+
         html_ver = resposta_ver.content.decode()
         html_edicao = resposta_edicao.content.decode()
-        tabela_desktop = re.search(r'<table class="lista-ver-table lista-ver-tabela">(?P<conteudo>.*?)</table>', html_ver, re.S)
+
+        tabela_ver = re.search(
+            r'<table class="lista-ver-table lista-ver-tabela">(?P<conteudo>.*?)</table>',
+            html_ver,
+            re.S,
+        )
+        tabela_edicao = re.search(
+            r'<div class="sugestao-table-wrap sugestao-desktop">(?P<conteudo>.*?)</div>\s*<div class="sugestao-mobile"',
+            html_edicao,
+            re.S,
+        )
 
         self.assertEqual(resposta_ver.status_code, 200)
         self.assertEqual(resposta_edicao.status_code, 200)
-        self.assertIsNotNone(tabela_desktop)
-        self.assertNotIn("data-lista-ver-historico-toggle", tabela_desktop.group("conteudo"))
+        self.assertIsNotNone(tabela_ver)
+        self.assertIsNotNone(tabela_edicao)
+
+        self.assertIn("data-lista-ver-historico-desktop-toggle", tabela_ver.group("conteudo"))
+        self.assertIn("data-lista-ver-historico-desktop-row", tabela_ver.group("conteudo"))
+        self.assertIn('colspan="6"', tabela_ver.group("conteudo"))
+        self.assertIn('type="button"', tabela_ver.group("conteudo"))
+
+        self.assertIn("data-historico-desktop-toggle", tabela_edicao.group("conteudo"))
+        self.assertIn("data-historico-desktop-row", tabela_edicao.group("conteudo"))
+        self.assertIn('colspan="11"', tabela_edicao.group("conteudo"))
+        self.assertIn('type="button"', tabela_edicao.group("conteudo"))
+
+        self.assertContains(resposta_ver, 'class="lista-ver-mobile-itens"')
+        self.assertContains(resposta_ver, 'data-lista-ver-historico-toggle')
         self.assertContains(resposta_edicao, 'id="mobileSugestaoProdutos"')
         self.assertContains(resposta_edicao, 'class="sugestao-mobile-card"')
+        self.assertContains(resposta_edicao, 'data-historico-toggle')
+
         self.assertContains(resposta_edicao, 'class="sugestao-input sugestao-qtd-input"')
         self.assertContains(resposta_edicao, 'class="sugestao-input sugestao-preco-input"')
         self.assertContains(resposta_edicao, 'class="sugestao-input sugestao-preco-unitario-input"')
         self.assertContains(resposta_edicao, 'class="sugestao-input sugestao-total-input"')
-        self.assertNotIn("data-historico-toggle", re.search(r'<div class="sugestao-table-wrap sugestao-desktop">(?P<conteudo>.*?)</div>\s*<div class="sugestao-mobile"', html_edicao, re.S).group("conteudo"))
+        self.assertContains(resposta_edicao, 'class="sugestao-btn sugestao-btn-danger sugestao-remover-item"')
+
+        self.assertContains(resposta_edicao, "function fecharHistoricosComprasDesktop(exceto)")
+        self.assertContains(resposta_ver, "function fecharHistoricosListaVerDesktop(exceto)")
 
     def test_mobile_produto_sugerido_tem_area_itens_adicionar_sem_duplicar_editar_remover(self):
         produto = self.criar_produto("Produto Mobile Itens", quantidade=Decimal("0.000"))

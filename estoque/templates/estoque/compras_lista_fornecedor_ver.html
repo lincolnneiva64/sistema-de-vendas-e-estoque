@@ -405,12 +405,42 @@
         <tbody>
           {% for item in itens_lista %}
             <tr>
-              <td>{% if item.produto %}{{ item.produto.nome }}{% else %}{{ item.nome_produto|default:"-" }}{% endif %}</td>
+              <td>
+                <div>{% if item.produto %}{{ item.produto.nome }}{% else %}{{ item.nome_produto|default:"-" }}{% endif %}</div>
+                <div class="lista-ver-historico-desktop-acao">
+                  <button
+                    type="button"
+                    class="lista-ver-historico-desktop-toggle"
+                    data-lista-ver-historico-desktop-toggle
+                    aria-expanded="false"
+                  >Ver &uacute;ltimas compras</button>
+                </div>
+              </td>
               <td>{{ item.unidade|default:"-" }}</td>
               <td>{{ item.quantidade_sugerida|floatformat:2 }}</td>
               <td>{{ item.quantidade_final|floatformat:2 }}</td>
               <td>R$ {{ item.preco_compra|floatformat:2 }}</td>
               <td>R$ {{ item.total|floatformat:2 }}</td>
+            </tr>
+            <tr class="lista-ver-historico-desktop-row" data-lista-ver-historico-desktop-row hidden>
+              <td colspan="6">
+                <div class="lista-ver-historico-desktop-card">
+                  {% if item.historico_ultimas_compras %}
+                    <div class="lista-ver-historico-titulo">&Uacute;ltimas 3 compras deste produto</div>
+                    {% for compra in item.historico_ultimas_compras %}
+                      <div class="lista-ver-historico-desktop-item">
+                        <div>{{ compra.data|default:"-" }}</div>
+                        <div>{{ compra.fornecedor|default:"-" }}</div>
+                        <div>{{ compra.quantidade|floatformat:3 }} {{ compra.unidade|default:"" }}</div>
+                        <div class="lista-ver-historico-desktop-preco">R$ {{ compra.preco|floatformat:2 }}</div>
+                      </div>
+                    {% endfor %}
+                  {% else %}
+                    <div class="lista-ver-historico-titulo">&Uacute;ltimas compras</div>
+                    <div class="lista-ver-historico-vazio">Nenhuma compra anterior encontrada para este produto.</div>
+                  {% endif %}
+                </div>
+              </td>
             </tr>
           {% empty %}
             <tr>
@@ -667,6 +697,84 @@
     }
   }
 
+  .lista-ver-tabela tbody tr:not(.lista-ver-historico-desktop-row) td:first-child {
+    color: #172033;
+    font-weight: 950;
+  }
+
+  .lista-ver-historico-desktop-acao {
+    display: flex;
+    justify-content: flex-start;
+    margin-top: 5px;
+  }
+
+  .lista-ver-historico-desktop-toggle {
+    min-height: 24px;
+    width: auto;
+    border: 1px solid #e9b8c0;
+    border-radius: 6px;
+    padding: 3px 8px;
+    background: #fff7f8;
+    color: #8f1d2c;
+    font-size: .66rem;
+    font-weight: 900;
+    line-height: 1.15;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: none;
+  }
+
+  .lista-ver-historico-desktop-toggle:hover,
+  .lista-ver-historico-desktop-toggle:focus {
+    border-color: #d98b99;
+    background: #ffe8eb;
+    color: #7f1d1d;
+  }
+
+  .lista-ver-historico-desktop-row[hidden] {
+    display: none !important;
+  }
+
+  .lista-ver-historico-desktop-row td {
+    padding: 5px 10px 7px !important;
+    background: #fff7f8 !important;
+    text-align: left !important;
+    white-space: normal !important;
+  }
+
+  .lista-ver-historico-desktop-card {
+    display: grid;
+    gap: 5px;
+    padding: 7px 9px;
+    border: 1px solid #efc4cb;
+    border-radius: 7px;
+    background: #ffffff;
+    color: #172033;
+    font-size: .73rem;
+    font-weight: 800;
+    box-shadow: none;
+  }
+
+  .lista-ver-historico-desktop-card .lista-ver-historico-titulo {
+    color: #8f1d2c;
+    font-size: .72rem;
+  }
+
+  .lista-ver-historico-desktop-item {
+    display: grid;
+    grid-template-columns: 105px minmax(200px, 1fr) 140px 105px;
+    gap: 8px;
+    align-items: center;
+    padding-top: 5px;
+    border-top: 1px solid #f3d4d9;
+  }
+
+  .lista-ver-historico-desktop-preco {
+    color: #166534;
+    font-weight: 950;
+    text-align: right;
+  }
+
   .lista-ver-mobile-itens {
     display: none;
   }
@@ -903,6 +1011,40 @@
       if (event.key === "Escape" && modal && modal.classList.contains("aberto")) {
         fecharModal();
       }
+    });
+
+    function fecharHistoricosListaVerDesktop(exceto) {
+      document.querySelectorAll("[data-lista-ver-historico-desktop-row]").forEach(function (linhaHistorico) {
+        if (linhaHistorico === exceto) return;
+        linhaHistorico.hidden = true;
+
+        var linhaProduto = linhaHistorico.previousElementSibling;
+        var toggle = linhaProduto
+          ? linhaProduto.querySelector("[data-lista-ver-historico-desktop-toggle]")
+          : null;
+
+        if (toggle) {
+          toggle.setAttribute("aria-expanded", "false");
+        }
+      });
+    }
+
+    document.querySelectorAll("[data-lista-ver-historico-desktop-toggle]").forEach(function (botao) {
+      botao.addEventListener("click", function (event) {
+        event.preventDefault();
+
+        var linhaProduto = botao.closest("tr");
+        var linhaHistorico = linhaProduto ? linhaProduto.nextElementSibling : null;
+
+        if (!linhaHistorico || !linhaHistorico.matches("[data-lista-ver-historico-desktop-row]")) {
+          return;
+        }
+
+        var abrir = linhaHistorico.hidden;
+        fecharHistoricosListaVerDesktop(linhaHistorico);
+        linhaHistorico.hidden = !abrir;
+        botao.setAttribute("aria-expanded", abrir ? "true" : "false");
+      });
     });
 
     function fecharHistoricosListaVer(exceto) {

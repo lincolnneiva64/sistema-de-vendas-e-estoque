@@ -342,7 +342,7 @@
   }
 
   .sugestao-col-produto {
-    background: #edf5ff;
+    background: #ffffff;
     color: #172033;
     font-weight: 900;
     text-align: left;
@@ -354,16 +354,16 @@
   }
 
   .sugestao-table tbody tr:nth-child(even) .sugestao-col-produto {
-    background: #dfeeff;
+    background: #fff8f9;
   }
 
   .sugestao-table tbody tr:hover .sugestao-col-produto {
-    background: #ffdce5;
+    background: #fff1f2;
   }
 
   .sugestao-table tbody tr.selecionado .sugestao-col-produto,
   .sugestao-table tbody tr.selecionado:hover .sugestao-col-produto {
-    background: #ffd7df;
+    background: #ffe1e7;
   }
 
   .sugestao-col-numero,
@@ -733,6 +733,86 @@
     color: #64748b;
     font-weight: 800;
     text-align: center;
+  }
+
+  .sugestao-col-produto > div:first-child {
+    color: #172033;
+    font-weight: 950;
+    line-height: 1.22;
+  }
+
+  .sugestao-historico-desktop-acao {
+    display: flex;
+    justify-content: flex-start;
+    margin-top: 5px;
+  }
+
+  .sugestao-historico-desktop-toggle {
+    min-height: 24px;
+    width: auto;
+    max-width: 100%;
+    border: 1px solid #e9b8c0;
+    border-radius: 6px;
+    padding: 3px 8px;
+    background: #fff7f8;
+    color: #8f1d2c;
+    font-size: .66rem;
+    font-weight: 900;
+    line-height: 1.15;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: none;
+  }
+
+  .sugestao-historico-desktop-toggle:hover,
+  .sugestao-historico-desktop-toggle:focus {
+    border-color: #d98b99;
+    background: #ffe8eb;
+    color: #7f1d1d;
+  }
+
+  .sugestao-historico-desktop-row[hidden] {
+    display: none !important;
+  }
+
+  .sugestao-historico-desktop-row td {
+    padding: 5px 10px 7px !important;
+    background: #fff7f8 !important;
+    border-top: 0;
+    border-bottom: 1px solid #e9b8c0;
+  }
+
+  .sugestao-historico-desktop-card {
+    display: grid;
+    gap: 5px;
+    padding: 7px 9px;
+    border: 1px solid #efc4cb;
+    border-radius: 7px;
+    background: #ffffff;
+    color: #172033;
+    font-size: .73rem;
+    font-weight: 800;
+    box-shadow: none;
+  }
+
+  .sugestao-historico-desktop-card .sugestao-historico-titulo {
+    color: #8f1d2c;
+    font-size: .72rem;
+  }
+
+  .sugestao-historico-desktop-item {
+    display: grid;
+    grid-template-columns: 105px minmax(180px, 1fr) 135px 105px;
+    gap: 8px;
+    align-items: center;
+    padding-top: 5px;
+    border-top: 1px solid #f3d4d9;
+  }
+
+  .sugestao-historico-desktop-preco {
+    color: #166534;
+    font-weight: 950;
+    text-align: right;
   }
 
   .sugestao-mobile {
@@ -1875,7 +1955,17 @@
             {% if linhas %}
             {% for linha in linhas %}
               <tr data-produto-id="{{ linha.produto_id }}" data-fator="{{ linha.fator_conversao|floatformat:3 }}" data-sugestao-original="{{ linha.sugestao|floatformat:3 }}">
-                <td class="sugestao-col-produto">{{ linha.produto.nome }}</td>
+                <td class="sugestao-col-produto">
+                  <div>{{ linha.produto.nome }}</div>
+                  <div class="sugestao-historico-desktop-acao">
+                    <button
+                      type="button"
+                      class="sugestao-historico-desktop-toggle"
+                      data-historico-desktop-toggle
+                      aria-expanded="false"
+                    >Ver &uacute;ltimas compras</button>
+                  </div>
+                </td>
                 <td class="sugestao-numero">{{ linha.estoque_atual|floatformat:3 }}</td>
                 <td class="sugestao-numero">{{ linha.estoque_minimo|floatformat:3 }}</td>
                 <td class="sugestao-numero">{{ linha.quantidade_vendida|floatformat:3 }}</td>
@@ -1886,6 +1976,26 @@
                 <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-unitario-input" data-fator="{{ linha.fator_conversao|floatformat:3 }}" value="{{ linha.preco_unitario_calculado|floatformat:2 }}" aria-label="Preco unitario para {{ linha.produto.nome }}"></td>
                 <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-total-input" value="{{ linha.total_sugerido|floatformat:2 }}" aria-label="Total sugerido para {{ linha.produto.nome }}"></td>
                 <td class="sugestao-col-acao"><button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button></td>
+              </tr>
+              <tr class="sugestao-historico-desktop-row" data-historico-desktop-row hidden>
+                <td colspan="11">
+                  <div class="sugestao-historico-desktop-card">
+                    {% if linha.historico_ultimas_compras %}
+                      <div class="sugestao-historico-titulo">&Uacute;ltimas 3 compras deste produto</div>
+                      {% for compra in linha.historico_ultimas_compras %}
+                        <div class="sugestao-historico-desktop-item">
+                          <div>{{ compra.data|default:"-" }}</div>
+                          <div>{{ compra.fornecedor|default:"-" }}</div>
+                          <div>{{ compra.quantidade|floatformat:3 }} {{ compra.unidade|default:"" }}</div>
+                          <div class="sugestao-historico-desktop-preco">R$ {{ compra.preco|floatformat:2 }}</div>
+                        </div>
+                      {% endfor %}
+                    {% else %}
+                      <div class="sugestao-historico-titulo">&Uacute;ltimas compras</div>
+                      <div class="sugestao-historico-vazio">Nenhuma compra anterior encontrada para este produto.</div>
+                    {% endif %}
+                  </div>
+                </td>
               </tr>
             {% endfor %}
             {% endif %}
@@ -3565,10 +3675,72 @@
     }
   }
 
+  function fecharHistoricosComprasDesktop(exceto) {
+    document.querySelectorAll("#tbodySugestaoProdutos [data-historico-desktop-row]").forEach(function(linhaHistorico) {
+      if (linhaHistorico === exceto) return;
+      linhaHistorico.hidden = true;
+
+      const linhaProduto = linhaHistorico.previousElementSibling;
+      linhaProduto?.querySelector("[data-historico-desktop-toggle]")?.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  function abrirHistoricoComprasDesktop(linhaProduto) {
+    const linhaHistorico = linhaProduto?.nextElementSibling;
+    if (!linhaHistorico?.matches("[data-historico-desktop-row]")) return;
+
+    fecharHistoricosComprasDesktop(linhaHistorico);
+    linhaHistorico.hidden = false;
+
+    linhaProduto
+      .querySelector("[data-historico-desktop-toggle]")
+      ?.setAttribute("aria-expanded", "true");
+  }
+
+  document.querySelectorAll("#tbodySugestaoProdutos [data-historico-desktop-toggle]").forEach(function(botao) {
+    botao.addEventListener("click", function(event) {
+      event.preventDefault();
+
+      const linhaProduto = botao.closest("tr[data-produto-id]");
+      const linhaHistorico = linhaProduto?.nextElementSibling;
+
+      if (!linhaHistorico?.matches("[data-historico-desktop-row]")) return;
+
+      if (linhaHistorico.hidden) {
+        abrirHistoricoComprasDesktop(linhaProduto);
+      } else {
+        linhaHistorico.hidden = true;
+        botao.setAttribute("aria-expanded", "false");
+      }
+    });
+  });
+
   window.selecionarProdutoSugestao = selecionarProduto;
 
   document.addEventListener("click", function(event) {
     if (event.target.closest(".sugestao-remover-item")) return;
+    if (event.target.closest("[data-historico-desktop-toggle]")) return;
+
+    const campoSugestao = event.target.closest(
+      "#tbodySugestaoProdutos .sugestao-qtd-input"
+    );
+
+    if (campoSugestao) {
+      const linhaProduto = campoSugestao.closest("tr[data-produto-id]");
+      const linhaHistorico = linhaProduto?.nextElementSibling;
+      const botaoHistorico = linhaProduto?.querySelector(
+        "[data-historico-desktop-toggle]"
+      );
+
+      if (linhaHistorico?.matches("[data-historico-desktop-row]")) {
+        if (linhaHistorico.hidden) {
+          abrirHistoricoComprasDesktop(linhaProduto);
+        } else {
+          linhaHistorico.hidden = true;
+          botaoHistorico?.setAttribute("aria-expanded", "false");
+        }
+      }
+    }
 
     const item = event.target.closest("tr[data-produto-id], .sugestao-mobile-card[data-produto-id]");
     if (!item) return;
