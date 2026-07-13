@@ -1018,9 +1018,19 @@ class FornecedorForm(forms.ModelForm):
             "cidade",
             "bairro",
             "prazos_pagamento_padrao",
+            "frequencia_visita_ativa",
+            "frequencia_visita_intervalo_dias",
+            "frequencia_visita_dia_semana",
+            "frequencia_visita_data_referencia",
             "observacao",
             "ativo",
         ]
+        labels = {
+            "frequencia_visita_ativa": "Controlar frequência de visita",
+            "frequencia_visita_intervalo_dias": "Intervalo entre visitas",
+            "frequencia_visita_dia_semana": "Dia habitual da visita",
+            "frequencia_visita_data_referencia": "Data de referência",
+        }
         widgets = {
             "nome": forms.TextInput(attrs={
                 "class": "form-control",
@@ -1059,6 +1069,30 @@ class FornecedorForm(forms.ModelForm):
                 "autocomplete": "off",
                 "onkeydown": "return fornecedorEnterAvanca(event);",
             }),
+            "frequencia_visita_ativa": forms.CheckboxInput(attrs={
+                "class": "form-check-input",
+                "data-fornecedor-frequencia-toggle": "1",
+            }),
+            "frequencia_visita_intervalo_dias": forms.NumberInput(attrs={
+                "class": "form-control",
+                "min": "7",
+                "step": "7",
+                "placeholder": "Ex.: 7, 14, 21",
+                "autocomplete": "off",
+                "onkeydown": "return fornecedorEnterAvanca(event);",
+            }),
+            "frequencia_visita_dia_semana": forms.Select(attrs={
+                "class": "form-control",
+                "onkeydown": "return fornecedorEnterAvanca(event);",
+            }),
+            "frequencia_visita_data_referencia": forms.DateInput(
+                format="%Y-%m-%d",
+                attrs={
+                    "class": "form-control",
+                    "type": "date",
+                    "onkeydown": "return fornecedorEnterAvanca(event);",
+                },
+            ),
             "observacao": forms.Textarea(attrs={
                 "class": "form-control",
                 "placeholder": "Observacoes sobre o fornecedor",
@@ -1071,6 +1105,11 @@ class FornecedorForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        instance = kwargs.get("instance")
+        if args:
+            args = self._preservar_frequencia_inativa_do_post(args, instance)
+        elif kwargs.get("data") is not None:
+            kwargs["data"] = self._preservar_frequencia_inativa_data(kwargs["data"], instance)
         args = self._remover_produtos_excluidos_do_post(args)
         super().__init__(*args, **kwargs)
         self.fields["produtos"].queryset = self.produtos_disponiveis_queryset()
@@ -1087,6 +1126,52 @@ class FornecedorForm(forms.ModelForm):
             self.fields["tipo"].choices = MeioPagamento.TIPO_CHOICES
         if "tipo" in self.fields:
             self.fields["tipo"].widget.choices = MeioPagamento.TIPO_CHOICES
+
+    @classmethod
+    def _preservar_frequencia_inativa_do_post(cls, args, instance):
+        if not args or not instance or not getattr(instance, "pk", None):
+            return args
+
+        data = args[0]
+        data_preservada = cls._preservar_frequencia_inativa_data(data, instance)
+        if data_preservada is data:
+            return args
+
+        return (data_preservada, *args[1:])
+
+    @classmethod
+    def _preservar_frequencia_inativa_data(cls, data, instance):
+        if not instance or not getattr(instance, "pk", None):
+            return data
+
+        if not hasattr(data, "copy"):
+            return data
+
+        frequencia_ativa = str(data.get("frequencia_visita_ativa") or "").lower() in {"1", "true", "on", "yes"}
+        if frequencia_ativa:
+            return data
+
+        campos = [
+            "frequencia_visita_intervalo_dias",
+            "frequencia_visita_dia_semana",
+            "frequencia_visita_data_referencia",
+        ]
+        if all((campo in data and str(data.get(campo) or "").strip()) for campo in campos):
+            return data
+
+        data_preservada = data.copy()
+        for campo in campos:
+            if campo in data and str(data.get(campo) or "").strip():
+                continue
+
+            valor = getattr(instance, campo, None)
+            if valor is None:
+                continue
+            if hasattr(valor, "isoformat"):
+                valor = valor.isoformat()
+            data_preservada[campo] = str(valor)
+
+        return data_preservada
 
     @staticmethod
     def produtos_disponiveis_queryset():

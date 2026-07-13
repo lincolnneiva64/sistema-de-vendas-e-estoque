@@ -2879,6 +2879,290 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
         self.assertEqual(self.item.observacao_conferencia, "Desktop")
 
 
+class FornecedorFrequenciaVisitaFormTests(TestCase):
+    def _produto_teste(self, nome="Produto Fornecedor Frequencia"):
+        return Produto.objects.create(
+            nome=nome,
+            preco_compra=Decimal("10.00"),
+            preco_vista=Decimal("15.00"),
+            preco_prazo=Decimal("16.00"),
+            quantidade=Decimal("1.000"),
+        )
+
+    def _dados_fornecedor(self, **alteracoes):
+        dados = {
+            "nome": "Fornecedor Frequencia",
+            "nome_fantasia": "",
+            "telefone_whatsapp": "",
+            "cidade": "",
+            "bairro": "",
+            "prazos_pagamento_padrao": "",
+            "observacao": "",
+            "ativo": "on",
+            "frequencia_visita_intervalo_dias": "",
+            "frequencia_visita_dia_semana": "",
+            "frequencia_visita_data_referencia": "",
+            "produtos": [],
+            "contatos-TOTAL_FORMS": "3",
+            "contatos-INITIAL_FORMS": "0",
+            "contatos-MIN_NUM_FORMS": "0",
+            "contatos-MAX_NUM_FORMS": "1000",
+        }
+        for indice in range(3):
+            dados.update({
+                f"contatos-{indice}-id": "",
+                f"contatos-{indice}-nome": "",
+                f"contatos-{indice}-cargo": "",
+                f"contatos-{indice}-telefone_whatsapp": "",
+                f"contatos-{indice}-principal": "",
+                f"contatos-{indice}-ativo": "",
+                f"contatos-{indice}-observacao": "",
+            })
+        dados.update(alteracoes)
+        return dados
+
+    def _dados_frequencia_valida(self, **alteracoes):
+        dados = self._dados_fornecedor(
+            frequencia_visita_ativa="on",
+            frequencia_visita_intervalo_dias="7",
+            frequencia_visita_dia_semana=str(Fornecedor.DIA_SEMANA_TERCA),
+            frequencia_visita_data_referencia="2026-07-07",
+        )
+        dados.update(alteracoes)
+        return dados
+
+    def test_fornecedor_form_tem_campos_de_frequencia(self):
+        form = FornecedorForm()
+
+        self.assertIn("frequencia_visita_ativa", form.fields)
+        self.assertIn("frequencia_visita_intervalo_dias", form.fields)
+        self.assertIn("frequencia_visita_dia_semana", form.fields)
+        self.assertIn("frequencia_visita_data_referencia", form.fields)
+
+    def test_fornecedor_form_tem_labels_de_frequencia(self):
+        form = FornecedorForm()
+
+        self.assertEqual(form.fields["frequencia_visita_ativa"].label, "Controlar frequência de visita")
+        self.assertEqual(form.fields["frequencia_visita_intervalo_dias"].label, "Intervalo entre visitas")
+        self.assertEqual(form.fields["frequencia_visita_dia_semana"].label, "Dia habitual da visita")
+        self.assertEqual(form.fields["frequencia_visita_data_referencia"].label, "Data de referência")
+
+    def test_cadastro_com_frequencia_desativada_funciona(self):
+        form = FornecedorForm(data=self._dados_fornecedor())
+
+        self.assertTrue(form.is_valid(), form.errors)
+        fornecedor = form.save()
+        self.assertFalse(fornecedor.frequencia_visita_ativa)
+        self.assertIsNone(fornecedor.frequencia_visita_intervalo_dias)
+        self.assertIsNone(fornecedor.frequencia_visita_dia_semana)
+        self.assertIsNone(fornecedor.frequencia_visita_data_referencia)
+
+    def test_cadastro_com_frequencia_semanal_valida_funciona(self):
+        form = FornecedorForm(data=self._dados_frequencia_valida())
+
+        self.assertTrue(form.is_valid(), form.errors)
+        fornecedor = form.save()
+        self.assertTrue(fornecedor.frequencia_visita_ativa)
+        self.assertEqual(fornecedor.frequencia_visita_intervalo_dias, 7)
+        self.assertEqual(fornecedor.frequencia_visita_dia_semana, Fornecedor.DIA_SEMANA_TERCA)
+        self.assertEqual(fornecedor.frequencia_visita_data_referencia, date(2026, 7, 7))
+
+    def test_cadastro_com_frequencia_quinzenal_valida_funciona(self):
+        form = FornecedorForm(data=self._dados_frequencia_valida(frequencia_visita_intervalo_dias="14"))
+
+        self.assertTrue(form.is_valid(), form.errors)
+        fornecedor = form.save()
+        self.assertEqual(fornecedor.frequencia_visita_intervalo_dias, 14)
+
+    def test_edicao_carrega_valores_salvos(self):
+        fornecedor = Fornecedor.objects.create(
+            nome="Fornecedor Editar Frequencia",
+            frequencia_visita_ativa=True,
+            frequencia_visita_intervalo_dias=14,
+            frequencia_visita_dia_semana=Fornecedor.DIA_SEMANA_TERCA,
+            frequencia_visita_data_referencia=date(2026, 7, 7),
+        )
+
+        form = FornecedorForm(instance=fornecedor)
+
+        self.assertEqual(form["frequencia_visita_intervalo_dias"].value(), 14)
+        self.assertEqual(form["frequencia_visita_dia_semana"].value(), Fornecedor.DIA_SEMANA_TERCA)
+        self.assertEqual(form["frequencia_visita_data_referencia"].value(), date(2026, 7, 7))
+
+    def test_edicao_altera_intervalo_dia_e_referencia(self):
+        fornecedor = Fornecedor.objects.create(
+            nome="Fornecedor Altera Frequencia",
+            frequencia_visita_ativa=True,
+            frequencia_visita_intervalo_dias=7,
+            frequencia_visita_dia_semana=Fornecedor.DIA_SEMANA_TERCA,
+            frequencia_visita_data_referencia=date(2026, 7, 7),
+        )
+        dados = self._dados_frequencia_valida(
+            nome=fornecedor.nome,
+            frequencia_visita_intervalo_dias="14",
+            frequencia_visita_dia_semana=str(Fornecedor.DIA_SEMANA_QUARTA),
+            frequencia_visita_data_referencia="2026-07-08",
+        )
+
+        form = FornecedorForm(data=dados, instance=fornecedor)
+
+        self.assertTrue(form.is_valid(), form.errors)
+        fornecedor = form.save()
+        self.assertEqual(fornecedor.frequencia_visita_intervalo_dias, 14)
+        self.assertEqual(fornecedor.frequencia_visita_dia_semana, Fornecedor.DIA_SEMANA_QUARTA)
+        self.assertEqual(fornecedor.frequencia_visita_data_referencia, date(2026, 7, 8))
+
+    def test_desativar_frequencia_preserva_valores_auxiliares(self):
+        fornecedor = Fornecedor.objects.create(
+            nome="Fornecedor Preserva Frequencia",
+            frequencia_visita_ativa=True,
+            frequencia_visita_intervalo_dias=14,
+            frequencia_visita_dia_semana=Fornecedor.DIA_SEMANA_TERCA,
+            frequencia_visita_data_referencia=date(2026, 7, 7),
+        )
+
+        form = FornecedorForm(data=self._dados_fornecedor(nome=fornecedor.nome), instance=fornecedor)
+
+        self.assertTrue(form.is_valid(), form.errors)
+        fornecedor = form.save()
+        self.assertFalse(fornecedor.frequencia_visita_ativa)
+        self.assertEqual(fornecedor.frequencia_visita_intervalo_dias, 14)
+        self.assertEqual(fornecedor.frequencia_visita_dia_semana, Fornecedor.DIA_SEMANA_TERCA)
+        self.assertEqual(fornecedor.frequencia_visita_data_referencia, date(2026, 7, 7))
+
+    def test_reativar_frequencia_recupera_valores_preservados(self):
+        fornecedor = Fornecedor.objects.create(
+            nome="Fornecedor Reativa Frequencia",
+            frequencia_visita_ativa=True,
+            frequencia_visita_intervalo_dias=14,
+            frequencia_visita_dia_semana=Fornecedor.DIA_SEMANA_TERCA,
+            frequencia_visita_data_referencia=date(2026, 7, 7),
+        )
+        form = FornecedorForm(data=self._dados_fornecedor(nome=fornecedor.nome), instance=fornecedor)
+        self.assertTrue(form.is_valid(), form.errors)
+        fornecedor = form.save()
+
+        dados = self._dados_frequencia_valida(
+            nome=fornecedor.nome,
+            frequencia_visita_intervalo_dias=str(fornecedor.frequencia_visita_intervalo_dias),
+            frequencia_visita_dia_semana=str(fornecedor.frequencia_visita_dia_semana),
+            frequencia_visita_data_referencia=fornecedor.frequencia_visita_data_referencia.isoformat(),
+        )
+        form = FornecedorForm(data=dados, instance=fornecedor)
+
+        self.assertTrue(form.is_valid(), form.errors)
+        fornecedor = form.save()
+        self.assertTrue(fornecedor.frequencia_visita_ativa)
+        self.assertEqual(fornecedor.frequencia_visita_intervalo_dias, 14)
+
+    def test_frequencia_ativa_sem_intervalo_mostra_erro_no_campo(self):
+        form = FornecedorForm(data=self._dados_frequencia_valida(frequencia_visita_intervalo_dias=""))
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("frequencia_visita_intervalo_dias", form.errors)
+
+    def test_frequencia_ativa_com_campo_vazio_nao_preserva_valor_antigo(self):
+        fornecedor = Fornecedor.objects.create(
+            nome="Fornecedor Campo Vazio Frequencia",
+            frequencia_visita_ativa=True,
+            frequencia_visita_intervalo_dias=14,
+            frequencia_visita_dia_semana=Fornecedor.DIA_SEMANA_TERCA,
+            frequencia_visita_data_referencia=date(2026, 7, 7),
+        )
+        dados = self._dados_frequencia_valida(
+            nome=fornecedor.nome,
+            frequencia_visita_intervalo_dias="",
+        )
+
+        form = FornecedorForm(data=dados, instance=fornecedor)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("frequencia_visita_intervalo_dias", form.errors)
+        fornecedor.refresh_from_db()
+        self.assertEqual(fornecedor.frequencia_visita_intervalo_dias, 14)
+
+    def test_intervalo_nao_multiplo_de_sete_mostra_erro_no_campo(self):
+        form = FornecedorForm(data=self._dados_frequencia_valida(frequencia_visita_intervalo_dias="10"))
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("frequencia_visita_intervalo_dias", form.errors)
+
+    def test_frequencia_ativa_sem_dia_mostra_erro_no_campo(self):
+        form = FornecedorForm(data=self._dados_frequencia_valida(frequencia_visita_dia_semana=""))
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("frequencia_visita_dia_semana", form.errors)
+
+    def test_frequencia_ativa_sem_referencia_mostra_erro_no_campo(self):
+        form = FornecedorForm(data=self._dados_frequencia_valida(frequencia_visita_data_referencia=""))
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("frequencia_visita_data_referencia", form.errors)
+
+    def test_referencia_em_dia_diferente_mostra_erro_no_campo(self):
+        form = FornecedorForm(data=self._dados_frequencia_valida(frequencia_visita_dia_semana=str(Fornecedor.DIA_SEMANA_SEGUNDA)))
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("frequencia_visita_data_referencia", form.errors)
+
+    def test_pagina_novo_fornecedor_renderiza_secao(self):
+        resposta = self.client.get(reverse("estoque:fornecedor_novo"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Frequência de visita")
+        self.assertContains(resposta, "Controlar frequência de visita")
+        self.assertContains(resposta, 'id="fornecedorFrequenciaVisitaCampos"')
+
+    def test_pagina_edicao_renderiza_valores_existentes(self):
+        fornecedor = Fornecedor.objects.create(
+            nome="Fornecedor Pagina Frequencia",
+            frequencia_visita_ativa=True,
+            frequencia_visita_intervalo_dias=14,
+            frequencia_visita_dia_semana=Fornecedor.DIA_SEMANA_TERCA,
+            frequencia_visita_data_referencia=date(2026, 7, 7),
+        )
+
+        resposta = self.client.get(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        form = resposta.context["form"]
+        self.assertEqual(form["frequencia_visita_intervalo_dias"].value(), 14)
+        self.assertEqual(form["frequencia_visita_data_referencia"].value(), date(2026, 7, 7))
+        self.assertContains(resposta, 'value="2026-07-07"')
+
+    def test_post_invalido_nao_salva_dados_incorretos(self):
+        fornecedor = Fornecedor.objects.create(nome="Fornecedor Nao Salva Invalido")
+        dados = self._dados_frequencia_valida(nome=fornecedor.nome, frequencia_visita_intervalo_dias="10")
+
+        resposta = self.client.post(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), dados, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        fornecedor.refresh_from_db()
+        self.assertFalse(fornecedor.frequencia_visita_ativa)
+        self.assertIsNone(fornecedor.frequencia_visita_intervalo_dias)
+
+    def test_produtos_e_contatos_continuam_funcionando(self):
+        produto = self._produto_teste()
+        dados = self._dados_frequencia_valida(
+            produtos=[str(produto.pk)],
+            **{
+                "contatos-0-nome": "Maria Compras",
+                "contatos-0-cargo": "Vendedora",
+                "contatos-0-telefone_whatsapp": "85999990000",
+                "contatos-0-principal": "on",
+                "contatos-0-ativo": "on",
+            },
+        )
+
+        resposta = self.client.post(reverse("estoque:fornecedor_novo"), dados, secure=True, follow=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        fornecedor = Fornecedor.objects.get(nome="Fornecedor Frequencia")
+        self.assertTrue(ProdutoFornecedor.objects.filter(fornecedor=fornecedor, produto=produto, ativo=True).exists())
+        self.assertEqual(fornecedor.contatos.count(), 1)
+        self.assertEqual(fornecedor.contatos.first().nome, "Maria Compras")
+
+
 class FornecedorProdutosFormTests(TestCase):
     def _produto_teste(self, nome, excluido=False, excluido_em=None):
         return Produto.objects.create(

@@ -224,6 +224,9 @@ function fornecedorEnterAvanca(event) {
   }
   .fornecedor-section-title { margin: 0 0 5px; color: #172033; font-size: 1rem; font-weight: 950; }
   .fornecedor-section-note { margin: 0 0 12px; color: #64748b; font-size: 0.8rem; font-weight: 700; }
+  .fornecedor-field-note { margin: 7px 0 0; color: #64748b; font-size: 0.78rem; font-weight: 700; }
+  .fornecedor-field-error { margin: 7px 0 0; color: #991b1b; font-size: 0.78rem; font-weight: 850; }
+  .fornecedor-visita-campos[hidden] { display: none !important; }
   .fornecedor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .fornecedor-produtos-card {
     margin: 16px 0;
@@ -473,6 +476,53 @@ function fornecedorEnterAvanca(event) {
         {{ form.bairro }}
       </div>
 
+      <section class="fornecedor-section" id="fornecedorFrequenciaVisita">
+        <h3 class="fornecedor-section-title">Frequência de visita</h3>
+        <p class="fornecedor-section-note">Configure quando este fornecedor costuma visitar a empresa. Os alertas serão adicionados em uma próxima etapa.</p>
+
+        <label class="fornecedor-check" for="{{ form.frequencia_visita_ativa.id_for_label }}">
+          <span>{{ form.frequencia_visita_ativa.label }}</span>
+          {{ form.frequencia_visita_ativa }}
+        </label>
+        {% if form.frequencia_visita_ativa.errors %}
+          <div class="fornecedor-field-error">{{ form.frequencia_visita_ativa.errors|join:", " }}</div>
+        {% endif %}
+
+        <div
+          class="fornecedor-visita-campos"
+          id="fornecedorFrequenciaVisitaCampos"
+          {% if not form.frequencia_visita_ativa.value and not form.frequencia_visita_intervalo_dias.errors and not form.frequencia_visita_dia_semana.errors and not form.frequencia_visita_data_referencia.errors %}hidden{% endif %}
+        >
+          <div class="fornecedor-grid" style="margin-top: 12px;">
+            <div class="fornecedores-field">
+              <label for="{{ form.frequencia_visita_intervalo_dias.id_for_label }}">{{ form.frequencia_visita_intervalo_dias.label }}</label>
+              {{ form.frequencia_visita_intervalo_dias }}
+              <p class="fornecedor-field-note">Use 7, 14, 21, 28 dias ou outro múltiplo de 7.</p>
+              {% if form.frequencia_visita_intervalo_dias.errors %}
+                <div class="fornecedor-field-error">{{ form.frequencia_visita_intervalo_dias.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+
+            <div class="fornecedores-field">
+              <label for="{{ form.frequencia_visita_dia_semana.id_for_label }}">{{ form.frequencia_visita_dia_semana.label }}</label>
+              {{ form.frequencia_visita_dia_semana }}
+              {% if form.frequencia_visita_dia_semana.errors %}
+                <div class="fornecedor-field-error">{{ form.frequencia_visita_dia_semana.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="fornecedores-field">
+            <label for="{{ form.frequencia_visita_data_referencia.id_for_label }}">{{ form.frequencia_visita_data_referencia.label }}</label>
+            {{ form.frequencia_visita_data_referencia }}
+            <p class="fornecedor-field-note">Informe uma data em que o fornecedor visita ou visitará. A data deve cair no dia habitual selecionado.</p>
+            {% if form.frequencia_visita_data_referencia.errors %}
+              <div class="fornecedor-field-error">{{ form.frequencia_visita_data_referencia.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+
       <section class="fornecedor-section">
         <h3 class="fornecedor-section-title">Financeiro do fornecedor</h3>
         <p class="fornecedor-section-note">Defina o padrão que será puxado automaticamente na compra. Pode ser alterado na hora de salvar.</p>
@@ -601,6 +651,20 @@ function fornecedorEnterAvanca(event) {
     </form>
   </div>
 </div>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const toggle = document.querySelector("[data-fornecedor-frequencia-toggle]");
+  const campos = document.getElementById("fornecedorFrequenciaVisitaCampos");
+  if (!toggle || !campos) return;
+
+  function atualizarFrequenciaVisita() {
+    campos.hidden = !toggle.checked;
+  }
+
+  toggle.addEventListener("change", atualizarFrequenciaVisita);
+  atualizarFrequenciaVisita();
+});
+</script>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const card = document.getElementById("fornecedorProdutosCard");
