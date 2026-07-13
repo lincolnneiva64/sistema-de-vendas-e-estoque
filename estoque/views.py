@@ -30,6 +30,7 @@ from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalF
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
 from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
+from .services.fornecedor_contatos import contato_tem_telefone_no_post, preparar_telefones_contatos, salvar_telefones_contatos, validar_telefones_contatos
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.utils.dateparse import parse_date, parse_datetime
@@ -7946,9 +7947,10 @@ def _limpar_contatos_vazios_fornecedor(post_data):
         nome = (post_data.get(f"{prefixo}-nome") or "").strip()
         cargo = (post_data.get(f"{prefixo}-cargo") or "").strip()
         telefone = (post_data.get(f"{prefixo}-telefone_whatsapp") or "").strip()
+        telefone_estruturado = contato_tem_telefone_no_post(post_data, indice)
         observacao_contato = (post_data.get(f"{prefixo}-observacao") or "").strip()
 
-        if not contato_id and not nome and not cargo and not telefone and not observacao_contato:
+        if not contato_id and not nome and not cargo and not telefone and not telefone_estruturado and not observacao_contato:
             post_data[f"{prefixo}-DELETE"] = "on"
 
     return post_data
@@ -7960,12 +7962,17 @@ def fornecedor_novo(request):
         form = FornecedorForm(post_data)
         fornecedor_base = Fornecedor()
         contatos_formset = FornecedorContatoFormSet(post_data, instance=fornecedor_base, prefix="contatos")
+        form_valido = form.is_valid()
+        formset_valido = contatos_formset.is_valid()
+        telefones_validos = validar_telefones_contatos(post_data, contatos_formset)
 
-        if form.is_valid() and contatos_formset.is_valid():
-            fornecedor = form.save()
-            contatos_formset.instance = fornecedor
-            contatos_formset.save()
-            form.salvar_produtos(fornecedor)
+        if form_valido and formset_valido and telefones_validos:
+            with transaction.atomic():
+                fornecedor = form.save()
+                contatos_formset.instance = fornecedor
+                contatos_formset.save()
+                salvar_telefones_contatos(post_data, contatos_formset)
+                form.salvar_produtos(fornecedor)
             messages.success(request, f'Fornecedor "{fornecedor.nome}" salvo com sucesso.')
             return redirect(f"{reverse('estoque:fornecedores')}?fornecedor_salvo={fornecedor.id}")
 
@@ -7973,6 +7980,7 @@ def fornecedor_novo(request):
     else:
         form = FornecedorForm(initial={"ativo": True})
         contatos_formset = FornecedorContatoFormSet(instance=Fornecedor(), prefix="contatos")
+        preparar_telefones_contatos(contatos_formset)
 
     return render(
         request,
@@ -7993,12 +8001,17 @@ def fornecedor_editar(request, pk):
         post_data = _limpar_contatos_vazios_fornecedor(request.POST.copy())
         form = FornecedorForm(post_data, instance=fornecedor)
         contatos_formset = FornecedorContatoFormSet(post_data, instance=fornecedor, prefix="contatos")
+        form_valido = form.is_valid()
+        formset_valido = contatos_formset.is_valid()
+        telefones_validos = validar_telefones_contatos(post_data, contatos_formset)
 
-        if form.is_valid() and contatos_formset.is_valid():
-            fornecedor = form.save()
-            contatos_formset.instance = fornecedor
-            contatos_formset.save()
-            form.salvar_produtos(fornecedor)
+        if form_valido and formset_valido and telefones_validos:
+            with transaction.atomic():
+                fornecedor = form.save()
+                contatos_formset.instance = fornecedor
+                contatos_formset.save()
+                salvar_telefones_contatos(post_data, contatos_formset)
+                form.salvar_produtos(fornecedor)
             messages.success(request, f'Fornecedor "{fornecedor.nome}" salvo com sucesso.')
             return redirect(f"{reverse('estoque:fornecedores')}?fornecedor_salvo={fornecedor.id}")
 
@@ -8006,6 +8019,7 @@ def fornecedor_editar(request, pk):
     else:
         form = FornecedorForm(instance=fornecedor)
         contatos_formset = FornecedorContatoFormSet(instance=fornecedor, prefix="contatos")
+        preparar_telefones_contatos(contatos_formset)
 
     return render(
         request,

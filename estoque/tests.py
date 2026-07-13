@@ -3219,9 +3219,9 @@ class FornecedorMascaraNormalizacaoTests(TestCase):
     def test_campos_de_telefone_tem_atributos_de_mascara_no_formset(self):
         resposta = self.client.get(reverse("estoque:fornecedor_novo"), secure=True)
 
-        self.assertContains(resposta, 'data-fornecedor-telefone="1"', count=4)
-        self.assertContains(resposta, 'inputmode="tel"', count=4)
-        self.assertContains(resposta, 'maxlength="15"', count=4)
+        self.assertContains(resposta, 'data-fornecedor-telefone="1"', count=10)
+        self.assertContains(resposta, 'inputmode="tel"', count=10)
+        self.assertContains(resposta, 'maxlength="15"', count=10)
 
     def test_telefone_11_digitos_e_apresentado_formatado(self):
         fornecedor = Fornecedor.objects.create(nome="Fornecedor Telefone 11", telefone_whatsapp="91999999999")
@@ -3638,6 +3638,407 @@ class FornecedorContatoTelefoneTests(TestCase):
         self.assertTrue(telefone.principal)
         self.assertTrue(telefone.ativo)
         self.assertEqual(telefone.ordem, 1)
+
+
+class FornecedorContatoTelefonesFormTests(TestCase):
+    def _produto_teste(self, nome="Produto Telefones Form"):
+        return Produto.objects.create(
+            nome=nome,
+            preco_compra=Decimal("10.00"),
+            preco_vista=Decimal("15.00"),
+            preco_prazo=Decimal("16.00"),
+            quantidade=Decimal("1.000"),
+        )
+
+    def _dados_fornecedor(self, nome="Fornecedor Telefones Form", **alteracoes):
+        dados = {
+            "nome": nome,
+            "nome_fantasia": "",
+            "telefone_whatsapp": "",
+            "cidade": "",
+            "bairro": "",
+            "prazos_pagamento_padrao": "",
+            "observacao": "",
+            "ativo": "on",
+            "frequencia_visita_intervalo_dias": "",
+            "frequencia_visita_dia_semana": "",
+            "frequencia_visita_data_referencia": "",
+            "produtos": [],
+            "contatos-TOTAL_FORMS": "3",
+            "contatos-INITIAL_FORMS": "0",
+            "contatos-MIN_NUM_FORMS": "0",
+            "contatos-MAX_NUM_FORMS": "1000",
+        }
+        for contato_indice in range(3):
+            dados.update({
+                f"contatos-{contato_indice}-id": "",
+                f"contatos-{contato_indice}-nome": "",
+                f"contatos-{contato_indice}-cargo": "",
+                f"contatos-{contato_indice}-telefone_whatsapp": "",
+                f"contatos-{contato_indice}-principal": "",
+                f"contatos-{contato_indice}-ativo": "",
+                f"contatos-{contato_indice}-observacao": "",
+            })
+            for telefone_indice in range(3):
+                prefixo = f"contatos-{contato_indice}-telefones-{telefone_indice}"
+                dados.update({
+                    f"{prefixo}-id": "",
+                    f"{prefixo}-numero": "",
+                    f"{prefixo}-tipo": FornecedorContatoTelefone.TIPO_CELULAR,
+                    f"{prefixo}-whatsapp": "on",
+                    f"{prefixo}-principal": "",
+                    f"{prefixo}-ativo": "on",
+                    f"{prefixo}-DELETE": "",
+                })
+        dados.update(alteracoes)
+        return dados
+
+    def _telefone(self, contato_indice, telefone_indice, **alteracoes):
+        prefixo = f"contatos-{contato_indice}-telefones-{telefone_indice}"
+        dados = {
+            f"{prefixo}-numero": "91993152627",
+            f"{prefixo}-tipo": FornecedorContatoTelefone.TIPO_CELULAR,
+            f"{prefixo}-whatsapp": "on",
+            f"{prefixo}-principal": "",
+            f"{prefixo}-ativo": "on",
+            f"{prefixo}-DELETE": "",
+        }
+        dados.update(alteracoes)
+        return dados
+
+    def _post_novo(self, dados):
+        return self.client.post(reverse("estoque:fornecedor_novo"), dados, secure=True, follow=True)
+
+    def _fornecedor(self, nome):
+        return Fornecedor.objects.get(nome=nome)
+
+    def _criar_fornecedor_com_contato(self, nome="Fornecedor Edita Telefones"):
+        fornecedor = Fornecedor.objects.create(nome=nome)
+        contato = fornecedor.contatos.create(nome="Ana Paula", cargo="Vendedora", ativo=True)
+        return fornecedor, contato
+
+    def test_pagina_mostra_subsecao_de_telefones(self):
+        resposta = self.client.get(reverse("estoque:fornecedor_novo"), secure=True)
+
+        self.assertContains(resposta, "Telefones deste contato")
+        self.assertContains(resposta, "Adicionar outro telefone")
+
+    def test_contato_existente_mostra_telefone_migrado(self):
+        fornecedor, contato = self._criar_fornecedor_com_contato("Fornecedor Telefone Migrado")
+        FornecedorContatoTelefone.objects.create(contato=contato, numero="91993152627", whatsapp=True, principal=True)
+
+        resposta = self.client.get(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), secure=True)
+
+        self.assertContains(resposta, 'value="(91) 99315-2627"')
+
+    def test_cadastro_com_um_telefone(self):
+        dados = self._dados_fornecedor(
+            nome="Fornecedor Um Telefone",
+            **{
+                "contatos-0-nome": "Ana Paula",
+                "contatos-0-ativo": "on",
+                **self._telefone(0, 0, **{"contatos-0-telefones-0-principal": "on"}),
+            },
+        )
+
+        self._post_novo(dados)
+
+        contato = self._fornecedor("Fornecedor Um Telefone").contatos.get()
+        self.assertEqual(contato.telefones.count(), 1)
+
+    def test_cadastro_com_dois_telefones(self):
+        dados = self._dados_fornecedor(
+            nome="Fornecedor Dois Telefones",
+            **{
+                "contatos-0-nome": "Ana Paula",
+                "contatos-0-ativo": "on",
+                **self._telefone(0, 0, **{"contatos-0-telefones-0-principal": "on"}),
+                **self._telefone(0, 1, **{"contatos-0-telefones-1-numero": "91991000720"}),
+            },
+        )
+
+        self._post_novo(dados)
+
+        self.assertEqual(self._fornecedor("Fornecedor Dois Telefones").contatos.get().telefones.count(), 2)
+
+    def test_cadastro_com_tres_telefones(self):
+        dados = self._dados_fornecedor(
+            nome="Fornecedor Tres Telefones",
+            **{
+                "contatos-0-nome": "Ana Paula",
+                "contatos-0-ativo": "on",
+                **self._telefone(0, 0, **{"contatos-0-telefones-0-principal": "on"}),
+                **self._telefone(0, 1, **{"contatos-0-telefones-1-numero": "91991000720"}),
+                **self._telefone(0, 2, **{"contatos-0-telefones-2-numero": "9132324444"}),
+            },
+        )
+
+        self._post_novo(dados)
+
+        self.assertEqual(self._fornecedor("Fornecedor Tres Telefones").contatos.get().telefones.count(), 3)
+
+    def test_bloqueio_visual_e_servidor_acima_de_tres(self):
+        dados = self._dados_fornecedor(
+            nome="Fornecedor Quatro Telefones",
+            **{
+                "contatos-0-nome": "Ana Paula",
+                "contatos-0-ativo": "on",
+                **self._telefone(0, 0, **{"contatos-0-telefones-0-principal": "on"}),
+                **self._telefone(0, 1, **{"contatos-0-telefones-1-numero": "91991000720"}),
+                **self._telefone(0, 2, **{"contatos-0-telefones-2-numero": "9132324444"}),
+                **self._telefone(0, 3, **{"contatos-0-telefones-3-numero": "9133335555"}),
+            },
+        )
+
+        resposta = self._post_novo(dados)
+
+        self.assertContains(resposta, "Cada contato pode ter no maximo 3 telefones ativos")
+        self.assertContains(resposta, "contatos-0-telefones-2-numero")
+        self.assertNotContains(resposta, "contatos-0-telefones-3-numero")
+
+    def test_telefone_de_10_digitos(self):
+        dados = self._dados_fornecedor(nome="Fornecedor Telefone 10", **{"contatos-0-nome": "Ana", "contatos-0-ativo": "on", **self._telefone(0, 0, **{"contatos-0-telefones-0-numero": "9132324444"})})
+
+        self._post_novo(dados)
+
+        self.assertEqual(self._fornecedor("Fornecedor Telefone 10").contatos.get().telefones.get().numero, "9132324444")
+
+    def test_telefone_de_11_digitos(self):
+        dados = self._dados_fornecedor(nome="Fornecedor Telefone 11", **{"contatos-0-nome": "Ana", "contatos-0-ativo": "on", **self._telefone(0, 0)})
+
+        self._post_novo(dados)
+
+        self.assertEqual(self._fornecedor("Fornecedor Telefone 11").contatos.get().telefones.get().numero, "91993152627")
+
+    def test_numero_formatado_e_salvo_somente_com_digitos(self):
+        dados = self._dados_fornecedor(nome="Fornecedor Numero Formatado", **{"contatos-0-nome": "Ana", "contatos-0-ativo": "on", **self._telefone(0, 0, **{"contatos-0-telefones-0-numero": "(91) 99315-2627"})})
+
+        self._post_novo(dados)
+
+        self.assertEqual(self._fornecedor("Fornecedor Numero Formatado").contatos.get().telefones.get().numero, "91993152627")
+
+    def test_tipo_celular(self):
+        dados = self._dados_fornecedor(nome="Fornecedor Tipo Celular", **{"contatos-0-nome": "Ana", "contatos-0-ativo": "on", **self._telefone(0, 0)})
+
+        self._post_novo(dados)
+
+        self.assertEqual(self._fornecedor("Fornecedor Tipo Celular").contatos.get().telefones.get().tipo, FornecedorContatoTelefone.TIPO_CELULAR)
+
+    def test_tipo_fixo(self):
+        dados = self._dados_fornecedor(nome="Fornecedor Tipo Fixo", **{"contatos-0-nome": "Ana", "contatos-0-ativo": "on", **self._telefone(0, 0, **{"contatos-0-telefones-0-tipo": FornecedorContatoTelefone.TIPO_FIXO, "contatos-0-telefones-0-numero": "9132324444"})})
+
+        self._post_novo(dados)
+
+        self.assertEqual(self._fornecedor("Fornecedor Tipo Fixo").contatos.get().telefones.get().tipo, FornecedorContatoTelefone.TIPO_FIXO)
+
+    def test_tipo_outro(self):
+        dados = self._dados_fornecedor(nome="Fornecedor Tipo Outro", **{"contatos-0-nome": "Ana", "contatos-0-ativo": "on", **self._telefone(0, 0, **{"contatos-0-telefones-0-tipo": FornecedorContatoTelefone.TIPO_OUTRO})})
+
+        self._post_novo(dados)
+
+        self.assertEqual(self._fornecedor("Fornecedor Tipo Outro").contatos.get().telefones.get().tipo, FornecedorContatoTelefone.TIPO_OUTRO)
+
+    def test_whatsapp_marcado(self):
+        dados = self._dados_fornecedor(nome="Fornecedor Whatsapp Marcado", **{"contatos-0-nome": "Ana", "contatos-0-ativo": "on", **self._telefone(0, 0)})
+
+        self._post_novo(dados)
+
+        self.assertTrue(self._fornecedor("Fornecedor Whatsapp Marcado").contatos.get().telefones.get().whatsapp)
+
+    def test_telefone_fixo_sem_whatsapp(self):
+        dados = self._dados_fornecedor(nome="Fornecedor Fixo Sem Whatsapp", **{"contatos-0-nome": "Ana", "contatos-0-ativo": "on", **self._telefone(0, 0, **{"contatos-0-telefones-0-numero": "9132324444", "contatos-0-telefones-0-tipo": FornecedorContatoTelefone.TIPO_FIXO, "contatos-0-telefones-0-whatsapp": ""})})
+
+        self._post_novo(dados)
+
+        telefone = self._fornecedor("Fornecedor Fixo Sem Whatsapp").contatos.get().telefones.get()
+        self.assertFalse(telefone.whatsapp)
+
+    def test_apenas_um_principal(self):
+        dados = self._dados_fornecedor(nome="Fornecedor Dois Principais", **{"contatos-0-nome": "Ana", "contatos-0-ativo": "on", **self._telefone(0, 0, **{"contatos-0-telefones-0-principal": "on"}), **self._telefone(0, 1, **{"contatos-0-telefones-1-numero": "91991000720", "contatos-0-telefones-1-principal": "on"})})
+
+        resposta = self._post_novo(dados)
+
+        self.assertContains(resposta, "Marque apenas um telefone principal por contato")
+
+    def test_troca_de_principal(self):
+        fornecedor, contato = self._criar_fornecedor_com_contato("Fornecedor Troca Principal")
+        telefone_1 = FornecedorContatoTelefone.objects.create(contato=contato, numero="91993152627", whatsapp=True, principal=True, ordem=1)
+        telefone_2 = FornecedorContatoTelefone.objects.create(contato=contato, numero="91991000720", whatsapp=True, principal=False, ordem=2)
+        dados = self._dados_fornecedor(nome=fornecedor.nome, **{
+            "contatos-INITIAL_FORMS": "1",
+            "contatos-0-id": str(contato.pk),
+            "contatos-0-nome": contato.nome,
+            "contatos-0-ativo": "on",
+            **self._telefone(0, 0, **{"contatos-0-telefones-0-id": str(telefone_1.pk), "contatos-0-telefones-0-principal": ""}),
+            **self._telefone(0, 1, **{"contatos-0-telefones-1-id": str(telefone_2.pk), "contatos-0-telefones-1-numero": "91991000720", "contatos-0-telefones-1-principal": "on"}),
+        })
+
+        self.client.post(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), dados, secure=True)
+        telefone_2.refresh_from_db()
+
+        self.assertTrue(telefone_2.principal)
+
+    def test_remocao_de_telefone(self):
+        fornecedor, contato = self._criar_fornecedor_com_contato("Fornecedor Remove Telefone")
+        telefone = FornecedorContatoTelefone.objects.create(contato=contato, numero="91993152627", whatsapp=True, principal=True)
+        dados = self._dados_fornecedor(nome=fornecedor.nome, **{"contatos-INITIAL_FORMS": "1", "contatos-0-id": str(contato.pk), "contatos-0-nome": contato.nome, "contatos-0-ativo": "on", **self._telefone(0, 0, **{"contatos-0-telefones-0-id": str(telefone.pk), "contatos-0-telefones-0-DELETE": "on"})})
+
+        self.client.post(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), dados, secure=True)
+        telefone.refresh_from_db()
+
+        self.assertFalse(telefone.ativo)
+
+    def test_desativacao_de_telefone(self):
+        fornecedor, contato = self._criar_fornecedor_com_contato("Fornecedor Desativa Telefone")
+        telefone = FornecedorContatoTelefone.objects.create(contato=contato, numero="91993152627", whatsapp=True, principal=False)
+        dados = self._dados_fornecedor(nome=fornecedor.nome, **{"contatos-INITIAL_FORMS": "1", "contatos-0-id": str(contato.pk), "contatos-0-nome": contato.nome, "contatos-0-ativo": "on", **self._telefone(0, 0, **{"contatos-0-telefones-0-id": str(telefone.pk), "contatos-0-telefones-0-ativo": ""})})
+
+        self.client.post(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), dados, secure=True)
+        telefone.refresh_from_db()
+
+        self.assertFalse(telefone.ativo)
+
+    def test_principal_removido_promove_outro_ativo(self):
+        fornecedor, contato = self._criar_fornecedor_com_contato("Fornecedor Promove Principal")
+        telefone_1 = FornecedorContatoTelefone.objects.create(contato=contato, numero="91993152627", whatsapp=True, principal=True, ordem=1)
+        telefone_2 = FornecedorContatoTelefone.objects.create(contato=contato, numero="91991000720", whatsapp=True, principal=False, ordem=2)
+        dados = self._dados_fornecedor(nome=fornecedor.nome, **{"contatos-INITIAL_FORMS": "1", "contatos-0-id": str(contato.pk), "contatos-0-nome": contato.nome, "contatos-0-ativo": "on", **self._telefone(0, 0, **{"contatos-0-telefones-0-id": str(telefone_1.pk), "contatos-0-telefones-0-DELETE": "on"}), **self._telefone(0, 1, **{"contatos-0-telefones-1-id": str(telefone_2.pk), "contatos-0-telefones-1-numero": "91991000720"})})
+
+        self.client.post(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), dados, secure=True)
+        telefone_2.refresh_from_db()
+
+        self.assertTrue(telefone_2.principal)
+
+    def test_numero_duplicado_mostra_erro(self):
+        dados = self._dados_fornecedor(nome="Fornecedor Telefone Duplicado", **{"contatos-0-nome": "Ana", "contatos-0-ativo": "on", **self._telefone(0, 0), **self._telefone(0, 1, **{"contatos-0-telefones-1-numero": "(91) 99315-2627"})})
+
+        resposta = self._post_novo(dados)
+
+        self.assertContains(resposta, "Este telefone ja esta cadastrado para este contato")
+
+    def test_telefone_sem_nome_de_contato_mostra_erro(self):
+        dados = self._dados_fornecedor(nome="Fornecedor Telefone Sem Nome", **self._telefone(0, 0))
+
+        resposta = self._post_novo(dados)
+
+        self.assertContains(resposta, "Informe o nome do responsavel")
+
+    def test_telefone_principal_whatsapp_sincroniza_legado(self):
+        dados = self._dados_fornecedor(nome="Fornecedor Sincroniza Principal", **{"contatos-0-nome": "Ana", "contatos-0-ativo": "on", **self._telefone(0, 0, **{"contatos-0-telefones-0-principal": "on"})})
+
+        self._post_novo(dados)
+        contato = self._fornecedor("Fornecedor Sincroniza Principal").contatos.get()
+
+        self.assertEqual(contato.telefone_whatsapp, "91993152627")
+        self.assertEqual(contato.telefone_whatsapp_normalizado, "91993152627")
+
+    def test_primeiro_whatsapp_ativo_usado_quando_nenhum_whatsapp_principal(self):
+        dados = self._dados_fornecedor(nome="Fornecedor Primeiro Whatsapp", **{"contatos-0-nome": "Ana", "contatos-0-ativo": "on", **self._telefone(0, 0, **{"contatos-0-telefones-0-principal": ""}), **self._telefone(0, 1, **{"contatos-0-telefones-1-numero": "91991000720", "contatos-0-telefones-1-principal": ""})})
+
+        self._post_novo(dados)
+        contato = self._fornecedor("Fornecedor Primeiro Whatsapp").contatos.get()
+
+        self.assertEqual(contato.telefone_whatsapp, "91993152627")
+
+    def test_telefone_nao_whatsapp_nao_sincroniza_legado(self):
+        dados = self._dados_fornecedor(nome="Fornecedor Sem Sync Fixo", **{"contatos-0-nome": "Ana", "contatos-0-ativo": "on", **self._telefone(0, 0, **{"contatos-0-telefones-0-numero": "9132324444", "contatos-0-telefones-0-whatsapp": ""})})
+
+        self._post_novo(dados)
+        contato = self._fornecedor("Fornecedor Sem Sync Fixo").contatos.get()
+
+        self.assertIsNone(contato.telefone_whatsapp)
+
+    def test_remocao_de_todos_os_whatsapps_limpa_legado_intencionalmente(self):
+        fornecedor, contato = self._criar_fornecedor_com_contato("Fornecedor Limpa Legado")
+        contato.telefone_whatsapp = "91993152627"
+        contato.telefone_whatsapp_normalizado = "91993152627"
+        contato.save()
+        telefone = FornecedorContatoTelefone.objects.create(contato=contato, numero="91993152627", whatsapp=True, principal=True)
+        dados = self._dados_fornecedor(nome=fornecedor.nome, **{"contatos-INITIAL_FORMS": "1", "contatos-0-id": str(contato.pk), "contatos-0-nome": contato.nome, "contatos-0-ativo": "on", **self._telefone(0, 0, **{"contatos-0-telefones-0-id": str(telefone.pk), "contatos-0-telefones-0-DELETE": "on"})})
+
+        self.client.post(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), dados, secure=True)
+        contato.refresh_from_db()
+
+        self.assertIsNone(contato.telefone_whatsapp)
+
+    def test_post_invalido_nao_apaga_telefones_existentes(self):
+        fornecedor, contato = self._criar_fornecedor_com_contato("Fornecedor Invalido Preserva")
+        telefone = FornecedorContatoTelefone.objects.create(contato=contato, numero="91993152627", whatsapp=True, principal=True)
+        dados = self._dados_fornecedor(nome="", **{"contatos-INITIAL_FORMS": "1", "contatos-0-id": str(contato.pk), "contatos-0-nome": contato.nome, "contatos-0-ativo": "on", **self._telefone(0, 0, **{"contatos-0-telefones-0-id": str(telefone.pk), "contatos-0-telefones-0-DELETE": "on"})})
+
+        self.client.post(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), dados, secure=True)
+        telefone.refresh_from_db()
+
+        self.assertTrue(telefone.ativo)
+
+    def test_contato_2_continua_outra_pessoa(self):
+        dados = self._dados_fornecedor(nome="Fornecedor Contato Dois", **{"contatos-0-nome": "Ana", "contatos-0-ativo": "on", "contatos-1-nome": "Bruno", "contatos-1-ativo": "on", **self._telefone(0, 0), **self._telefone(1, 0, **{"contatos-1-telefones-0-numero": "91991000720"})})
+
+        self._post_novo(dados)
+
+        self.assertEqual(self._fornecedor("Fornecedor Contato Dois").contatos.count(), 2)
+
+    def test_telefone_2_pertence_ao_mesmo_contato(self):
+        dados = self._dados_fornecedor(nome="Fornecedor Telefone Dois Mesmo Contato", **{"contatos-0-nome": "Ana", "contatos-0-ativo": "on", **self._telefone(0, 0), **self._telefone(0, 1, **{"contatos-0-telefones-1-numero": "91991000720"})})
+
+        self._post_novo(dados)
+        contato = self._fornecedor("Fornecedor Telefone Dois Mesmo Contato").contatos.get()
+
+        self.assertEqual(contato.telefones.count(), 2)
+
+    def test_contatos_vazios_continuam_descartados(self):
+        dados = self._dados_fornecedor(nome="Fornecedor Contatos Vazios")
+
+        self._post_novo(dados)
+
+        self.assertEqual(self._fornecedor("Fornecedor Contatos Vazios").contatos.count(), 0)
+
+    def test_produtos_do_fornecedor_continuam_preservados(self):
+        produto = self._produto_teste("Produto Preservado Telefones")
+        dados = self._dados_fornecedor(nome="Fornecedor Produto Preservado", produtos=[str(produto.pk)], **{"contatos-0-nome": "Ana", "contatos-0-ativo": "on", **self._telefone(0, 0)})
+
+        self._post_novo(dados)
+
+        fornecedor = self._fornecedor("Fornecedor Produto Preservado")
+        self.assertTrue(ProdutoFornecedor.objects.filter(fornecedor=fornecedor, produto=produto, ativo=True).exists())
+
+    def test_frequencia_de_visita_continua_salvando(self):
+        dados = self._dados_fornecedor(
+            nome="Fornecedor Frequencia Telefones",
+            frequencia_visita_ativa="on",
+            frequencia_visita_intervalo_dias="14",
+            frequencia_visita_dia_semana=str(Fornecedor.DIA_SEMANA_TERCA),
+            frequencia_visita_data_referencia="2026-07-07",
+            **{"contatos-0-nome": "Ana", "contatos-0-ativo": "on", **self._telefone(0, 0)},
+        )
+
+        self._post_novo(dados)
+
+        self.assertTrue(self._fornecedor("Fornecedor Frequencia Telefones").frequencia_visita_ativa)
+
+    def test_mascara_funciona_nas_tres_linhas(self):
+        resposta = self.client.get(reverse("estoque:fornecedor_novo"), secure=True)
+
+        self.assertContains(resposta, 'data-fornecedor-telefone="1"', count=10)
+        self.assertContains(resposta, 'maxlength="15"', count=10)
+
+    def test_layout_possui_regra_responsiva(self):
+        resposta = self.client.get(reverse("estoque:fornecedor_novo"), secure=True)
+
+        self.assertContains(resposta, "fornecedor-telefone-linha")
+        self.assertContains(resposta, ".fornecedor-telefone-linha { grid-template-columns: 1fr;")
+
+    def test_edicao_reabre_todos_os_numeros_salvos(self):
+        fornecedor, contato = self._criar_fornecedor_com_contato("Fornecedor Reabre Numeros")
+        FornecedorContatoTelefone.objects.create(contato=contato, numero="91993152627", whatsapp=True, principal=True, ordem=1)
+        FornecedorContatoTelefone.objects.create(contato=contato, numero="91991000720", whatsapp=True, principal=False, ordem=2)
+        FornecedorContatoTelefone.objects.create(contato=contato, numero="9132324444", whatsapp=False, principal=False, ordem=3)
+
+        resposta = self.client.get(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), secure=True)
+
+        self.assertContains(resposta, 'value="(91) 99315-2627"')
+        self.assertContains(resposta, 'value="(91) 99100-0720"')
+        self.assertContains(resposta, 'value="(91) 3232-4444"')
 
 
 class FornecedorProdutosFormTests(TestCase):

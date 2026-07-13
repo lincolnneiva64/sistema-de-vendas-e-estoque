@@ -386,6 +386,35 @@ function fornecedorEnterAvanca(event) {
     border: 1px solid #e1e7ef; border-radius: 9px; padding: 9px 11px; background: #fff;
     font-weight: 850;
   }
+  .fornecedor-telefones-bloco {
+    margin: 4px 0 12px; padding: 12px; border: 1px solid #dbe7f3;
+    border-radius: 11px; background: #f8fbff;
+  }
+  .fornecedor-telefones-titulo { margin: 0 0 3px; color: #172033; font-size: 0.9rem; font-weight: 950; }
+  .fornecedor-telefones-lista { display: grid; gap: 9px; margin-top: 10px; }
+  .fornecedor-telefone-linha {
+    display: grid;
+    grid-template-columns: minmax(150px, 1.25fr) minmax(100px, .75fr) auto auto auto;
+    gap: 8px; align-items: end; padding: 9px; border: 1px solid #e1e7ef;
+    border-radius: 10px; background: #fff;
+  }
+  .fornecedor-telefone-linha[hidden] { display: none !important; }
+  .fornecedor-telefone-checks { display: flex; gap: 8px; align-items: center; min-height: 41px; }
+  .fornecedor-telefone-check {
+    display: inline-flex; align-items: center; gap: 6px; min-height: 36px;
+    font-size: 0.78rem; font-weight: 850; color: #334155; white-space: nowrap;
+  }
+  .fornecedor-telefone-remover {
+    min-height: 38px; border: 1px solid #fecaca; border-radius: 9px;
+    background: #fff; color: #991b1b; font-size: 0.78rem; font-weight: 900;
+    cursor: pointer; padding: 8px 10px;
+  }
+  .fornecedor-telefone-add {
+    margin-top: 10px; min-height: 38px; border: 1px dashed #93c5fd;
+    border-radius: 9px; background: #eff6ff; color: #1d4ed8;
+    font-weight: 950; cursor: pointer; padding: 8px 12px;
+  }
+  .fornecedor-telefone-add[hidden] { display: none !important; }
   .fornecedores-form-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
   @media (max-width: 760px) {
     .fornecedor-form-header { flex-direction: column; align-items: stretch; }
@@ -407,6 +436,8 @@ function fornecedorEnterAvanca(event) {
       min-height: 50px;
       font-size: 0.96rem;
     }
+    .fornecedor-telefone-linha { grid-template-columns: 1fr; align-items: stretch; }
+    .fornecedor-telefone-checks { justify-content: space-between; }
     .fornecedores-form-actions { display: grid; grid-template-columns: 1fr 1fr; }
   }
 </style>
@@ -597,11 +628,11 @@ function fornecedorEnterAvanca(event) {
         {% for contato_form in contatos_formset.forms %}
           <details
             class="fornecedor-contato-details"
-            {% if contato_form.instance.pk or contato_form.nome.value or contato_form.cargo.value or contato_form.telefone_whatsapp.value or contato_form.observacao.value or contato_form.errors %}open{% endif %}
+            {% if contato_form.instance.pk or contato_form.nome.value or contato_form.cargo.value or contato_form.telefone_whatsapp.value or contato_form.telefones_tem_erro or contato_form.observacao.value or contato_form.errors %}open{% endif %}
           >
             <summary>
               {% if forloop.first %}Contato principal{% else %}Contato {{ forloop.counter }}{% endif %}
-              {% if contato_form.instance.pk or contato_form.nome.value or contato_form.cargo.value or contato_form.telefone_whatsapp.value %}
+              {% if contato_form.instance.pk or contato_form.nome.value or contato_form.cargo.value or contato_form.telefone_whatsapp.value or contato_form.telefones_tem_erro %}
                 - preenchido
               {% endif %}
             </summary>
@@ -619,10 +650,72 @@ function fornecedorEnterAvanca(event) {
                   <label for="{{ contato_form.cargo.id_for_label }}">Cargo / função</label>
                   {{ contato_form.cargo }}
                 </div>
-                <div class="fornecedores-field">
-                  <label for="{{ contato_form.telefone_whatsapp.id_for_label }}">WhatsApp</label>
-                  {{ contato_form.telefone_whatsapp }}
+              </div>
+
+              <div class="fornecedor-telefones-bloco" data-telefones-contato>
+                <p class="fornecedor-telefones-titulo">Telefones deste contato</p>
+                <p class="fornecedor-section-note">Cadastre ate tres numeros da mesma pessoa.</p>
+
+                <div class="fornecedor-telefones-lista">
+                  {% for linha in contato_form.telefones_linhas %}
+                    <div class="fornecedor-telefone-linha" data-telefone-linha {% if not linha.visivel %}hidden{% endif %}>
+                      <input type="hidden" name="{{ linha.id_name }}" value="{{ linha.id }}">
+                      <input type="hidden" name="{{ linha.delete_name }}" value="{% if linha.delete %}on{% endif %}" data-telefone-delete>
+
+                      <div class="fornecedores-field" style="margin-bottom:0;">
+                        <label for="{{ linha.prefixo }}-numero">Numero</label>
+                        <input
+                          type="text"
+                          id="{{ linha.prefixo }}-numero"
+                          name="{{ linha.numero_name }}"
+                          value="{{ linha.numero }}"
+                          class="form-control"
+                          placeholder="(00) 00000-0000"
+                          autocomplete="tel"
+                          inputmode="tel"
+                          maxlength="15"
+                          data-fornecedor-telefone="1"
+                          onkeydown="return fornecedorEnterAvanca(event);"
+                        >
+                      </div>
+
+                      <div class="fornecedores-field" style="margin-bottom:0;">
+                        <label for="{{ linha.prefixo }}-tipo">Tipo</label>
+                        <select id="{{ linha.prefixo }}-tipo" name="{{ linha.tipo_name }}" class="form-control" onkeydown="return fornecedorEnterAvanca(event);">
+                          {% for valor_tipo, rotulo_tipo in contato_form.telefones_tipos %}
+                            <option value="{{ valor_tipo }}" {% if valor_tipo == linha.tipo %}selected{% endif %}>{{ rotulo_tipo }}</option>
+                          {% endfor %}
+                        </select>
+                      </div>
+
+                      <div class="fornecedor-telefone-checks">
+                        <label class="fornecedor-telefone-check" for="{{ linha.prefixo }}-whatsapp">
+                          <input type="checkbox" id="{{ linha.prefixo }}-whatsapp" name="{{ linha.whatsapp_name }}" {% if linha.whatsapp %}checked{% endif %}>
+                          <span>WhatsApp</span>
+                        </label>
+                      </div>
+
+                      <div class="fornecedor-telefone-checks">
+                        <label class="fornecedor-telefone-check" for="{{ linha.prefixo }}-principal">
+                          <input type="checkbox" id="{{ linha.prefixo }}-principal" name="{{ linha.principal_name }}" {% if linha.principal %}checked{% endif %}>
+                          <span>Principal</span>
+                        </label>
+                        <label class="fornecedor-telefone-check" for="{{ linha.prefixo }}-ativo">
+                          <input type="checkbox" id="{{ linha.prefixo }}-ativo" name="{{ linha.ativo_name }}" {% if linha.ativo %}checked{% endif %}>
+                          <span>Ativo</span>
+                        </label>
+                      </div>
+
+                      <button type="button" class="fornecedor-telefone-remover" data-telefone-remover>Remover telefone</button>
+
+                      {% if linha.erros %}
+                        <div class="fornecedor-field-error" style="grid-column:1/-1;">{{ linha.erros|join:", " }}</div>
+                      {% endif %}
+                    </div>
+                  {% endfor %}
                 </div>
+
+                <button type="button" class="fornecedor-telefone-add" data-telefone-add>Adicionar outro telefone</button>
               </div>
 
               <div class="fornecedores-field">
@@ -703,6 +796,52 @@ document.addEventListener("DOMContentLoaded", function () {
   }, true);
 
   document.querySelectorAll("[data-fornecedor-telefone]").forEach(aplicarMascaraTelefone);
+
+  function atualizarBotaoAdicionarTelefones(bloco) {
+    const linhas = Array.from(bloco.querySelectorAll("[data-telefone-linha]"));
+    const botao = bloco.querySelector("[data-telefone-add]");
+    if (!botao) return;
+    botao.hidden = linhas.filter(function (linha) { return !linha.hidden; }).length >= 3;
+  }
+
+  document.querySelectorAll("[data-telefones-contato]").forEach(atualizarBotaoAdicionarTelefones);
+
+  document.addEventListener("click", function (event) {
+    const botaoAdicionar = event.target.closest("[data-telefone-add]");
+    if (botaoAdicionar) {
+      event.preventDefault();
+      const bloco = botaoAdicionar.closest("[data-telefones-contato]");
+      if (!bloco) return;
+      const linha = Array.from(bloco.querySelectorAll("[data-telefone-linha]")).find(function (item) {
+        return item.hidden;
+      });
+      if (!linha) {
+        atualizarBotaoAdicionarTelefones(bloco);
+        return;
+      }
+      linha.hidden = false;
+      const deleteInput = linha.querySelector("[data-telefone-delete]");
+      if (deleteInput) deleteInput.value = "";
+      const campoNumero = linha.querySelector("[data-fornecedor-telefone]");
+      if (campoNumero) campoNumero.focus();
+      atualizarBotaoAdicionarTelefones(bloco);
+      return;
+    }
+
+    const botaoRemover = event.target.closest("[data-telefone-remover]");
+    if (botaoRemover) {
+      event.preventDefault();
+      const linha = botaoRemover.closest("[data-telefone-linha]");
+      const bloco = botaoRemover.closest("[data-telefones-contato]");
+      if (!linha || !bloco) return;
+      const deleteInput = linha.querySelector("[data-telefone-delete]");
+      const ativoInput = linha.querySelector('input[name$="-ativo"]');
+      if (deleteInput) deleteInput.value = "on";
+      if (ativoInput) ativoInput.checked = false;
+      linha.hidden = true;
+      atualizarBotaoAdicionarTelefones(bloco);
+    }
+  });
 });
 </script>
 <script>
