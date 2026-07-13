@@ -227,6 +227,14 @@ function fornecedorEnterAvanca(event) {
   .fornecedor-field-note { margin: 7px 0 0; color: #64748b; font-size: 0.78rem; font-weight: 700; }
   .fornecedor-field-error { margin: 7px 0 0; color: #991b1b; font-size: 0.78rem; font-weight: 850; }
   .fornecedor-visita-campos[hidden] { display: none !important; }
+  .fornecedor-visita-grid {
+    display: grid;
+    grid-template-columns: minmax(120px, 0.7fr) minmax(180px, 1fr) minmax(220px, 280px);
+    gap: 10px;
+    align-items: start;
+    margin-top: 12px;
+  }
+  .fornecedor-visita-data { max-width: 280px; }
   .fornecedor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .fornecedor-produtos-card {
     margin: 16px 0;
@@ -382,6 +390,8 @@ function fornecedorEnterAvanca(event) {
   @media (max-width: 760px) {
     .fornecedor-form-header { flex-direction: column; align-items: stretch; }
     .fornecedor-grid { grid-template-columns: 1fr; }
+    .fornecedor-visita-grid { grid-template-columns: 1fr; }
+    .fornecedor-visita-data { max-width: none; }
     .fornecedor-produtos-topo { align-items: flex-start; }
     .fornecedor-produtos-resumo {
       flex-direction: column;
@@ -493,7 +503,7 @@ function fornecedorEnterAvanca(event) {
           id="fornecedorFrequenciaVisitaCampos"
           {% if not form.frequencia_visita_ativa.value and not form.frequencia_visita_intervalo_dias.errors and not form.frequencia_visita_dia_semana.errors and not form.frequencia_visita_data_referencia.errors %}hidden{% endif %}
         >
-          <div class="fornecedor-grid" style="margin-top: 12px;">
+          <div class="fornecedor-visita-grid">
             <div class="fornecedores-field">
               <label for="{{ form.frequencia_visita_intervalo_dias.id_for_label }}">{{ form.frequencia_visita_intervalo_dias.label }}</label>
               {{ form.frequencia_visita_intervalo_dias }}
@@ -510,15 +520,15 @@ function fornecedorEnterAvanca(event) {
                 <div class="fornecedor-field-error">{{ form.frequencia_visita_dia_semana.errors|join:", " }}</div>
               {% endif %}
             </div>
-          </div>
 
-          <div class="fornecedores-field">
-            <label for="{{ form.frequencia_visita_data_referencia.id_for_label }}">{{ form.frequencia_visita_data_referencia.label }}</label>
-            {{ form.frequencia_visita_data_referencia }}
-            <p class="fornecedor-field-note">Informe uma data em que o fornecedor visita ou visitará. A data deve cair no dia habitual selecionado.</p>
-            {% if form.frequencia_visita_data_referencia.errors %}
-              <div class="fornecedor-field-error">{{ form.frequencia_visita_data_referencia.errors|join:", " }}</div>
-            {% endif %}
+            <div class="fornecedores-field fornecedor-visita-data">
+              <label for="{{ form.frequencia_visita_data_referencia.id_for_label }}">{{ form.frequencia_visita_data_referencia.label }}</label>
+              {{ form.frequencia_visita_data_referencia }}
+              <p class="fornecedor-field-note">Informe uma data em que o fornecedor visita ou visitará. A data deve cair no dia habitual selecionado.</p>
+              {% if form.frequencia_visita_data_referencia.errors %}
+                <div class="fornecedor-field-error">{{ form.frequencia_visita_data_referencia.errors|join:", " }}</div>
+              {% endif %}
+            </div>
           </div>
         </div>
       </section>
@@ -651,6 +661,50 @@ function fornecedorEnterAvanca(event) {
     </form>
   </div>
 </div>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  function aplicarMascaraTelefone(campo) {
+    const digitos = String(campo.value || "").replace(/\D/g, "").slice(0, 11);
+    if (digitos.length > 10) {
+      campo.value = "(" + digitos.slice(0, 2) + ") " + digitos.slice(2, 7) + "-" + digitos.slice(7);
+    } else if (digitos.length > 6) {
+      campo.value = "(" + digitos.slice(0, 2) + ") " + digitos.slice(2, 6) + "-" + digitos.slice(6);
+    } else if (digitos.length > 2) {
+      campo.value = "(" + digitos.slice(0, 2) + ") " + digitos.slice(2);
+    } else if (digitos.length > 0) {
+      campo.value = "(" + digitos;
+    } else {
+      campo.value = "";
+    }
+  }
+
+  function normalizarNomeProprio(campo) {
+    campo.value = String(campo.value || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(function (parte) {
+        return parte.charAt(0).toUpperCase() + parte.slice(1).toLowerCase();
+      })
+      .join(" ");
+  }
+
+  document.addEventListener("input", function (event) {
+    const campo = event.target.closest("[data-fornecedor-telefone]");
+    if (campo) aplicarMascaraTelefone(campo);
+  });
+
+  document.addEventListener("blur", function (event) {
+    const campoNome = event.target.closest("[data-fornecedor-nome-proprio]");
+    if (campoNome) normalizarNomeProprio(campoNome);
+
+    const campoTelefone = event.target.closest("[data-fornecedor-telefone]");
+    if (campoTelefone) aplicarMascaraTelefone(campoTelefone);
+  }, true);
+
+  document.querySelectorAll("[data-fornecedor-telefone]").forEach(aplicarMascaraTelefone);
+});
+</script>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const toggle = document.querySelector("[data-fornecedor-frequencia-toggle]");

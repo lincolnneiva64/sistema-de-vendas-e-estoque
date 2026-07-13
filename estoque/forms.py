@@ -1037,6 +1037,7 @@ class FornecedorForm(forms.ModelForm):
                 "placeholder": "Nome do fornecedor",
                 "autocomplete": "off",
                 "onkeydown": "return fornecedorEnterAvanca(event);",
+                "data-fornecedor-nome-proprio": "1",
                 "autofocus": True,
             }),
             "nome_fantasia": forms.TextInput(attrs={
@@ -1044,24 +1045,30 @@ class FornecedorForm(forms.ModelForm):
                 "placeholder": "Nome fantasia / apelido",
                 "autocomplete": "off",
                 "onkeydown": "return fornecedorEnterAvanca(event);",
+                "data-fornecedor-nome-proprio": "1",
             }),
             "telefone_whatsapp": forms.TextInput(attrs={
                 "class": "form-control",
                 "placeholder": "(00) 00000-0000",
-                "autocomplete": "off",
+                "autocomplete": "tel",
+                "inputmode": "tel",
+                "maxlength": "15",
                 "onkeydown": "return fornecedorEnterAvanca(event);",
+                "data-fornecedor-telefone": "1",
             }),
             "cidade": forms.TextInput(attrs={
                 "class": "form-control",
                 "placeholder": "Cidade",
                 "autocomplete": "off",
                 "onkeydown": "return fornecedorEnterAvanca(event);",
+                "data-fornecedor-nome-proprio": "1",
             }),
             "bairro": forms.TextInput(attrs={
                 "class": "form-control",
                 "placeholder": "Bairro",
                 "autocomplete": "off",
                 "onkeydown": "return fornecedorEnterAvanca(event);",
+                "data-fornecedor-nome-proprio": "1",
             }),
             "prazos_pagamento_padrao": forms.TextInput(attrs={
                 "class": "form-control",
@@ -1112,6 +1119,7 @@ class FornecedorForm(forms.ModelForm):
             kwargs["data"] = self._preservar_frequencia_inativa_data(kwargs["data"], instance)
         args = self._remover_produtos_excluidos_do_post(args)
         super().__init__(*args, **kwargs)
+        self.fields["telefone_whatsapp"].widget.attrs["maxlength"] = "15"
         self.fields["produtos"].queryset = self.produtos_disponiveis_queryset()
         if self.instance and self.instance.pk:
             self.fields["produtos"].initial = ProdutoFornecedor.objects.filter(
@@ -1120,6 +1128,8 @@ class FornecedorForm(forms.ModelForm):
                 produto__excluido=False,
                 produto__excluido_em__isnull=True,
             ).values_list("produto_id", flat=True)
+            if not self.is_bound:
+                self.initial["telefone_whatsapp"] = self._formatar_telefone(self.instance.telefone_whatsapp)
         if "tipo" in self.fields:
             self.fields["tipo"].initial = MeioPagamento.TIPO_CREDITO
         if "tipo" in self.fields:
@@ -1215,6 +1225,19 @@ class FornecedorForm(forms.ModelForm):
             return valor
         return " ".join(parte[:1].upper() + parte[1:].lower() for parte in valor.split())
 
+    @staticmethod
+    def _somente_digitos(valor):
+        return "".join(caractere for caractere in str(valor or "") if caractere.isdigit())
+
+    @classmethod
+    def _formatar_telefone(cls, valor):
+        digitos = cls._somente_digitos(valor)
+        if len(digitos) == 11:
+            return f"({digitos[:2]}) {digitos[2:7]}-{digitos[7:]}"
+        if len(digitos) == 10:
+            return f"({digitos[:2]}) {digitos[2:6]}-{digitos[6:]}"
+        return valor or ""
+
     def clean_nome(self):
         nome = self._nome_proprio(self.cleaned_data.get("nome"))
         if not nome:
@@ -1237,6 +1260,10 @@ class FornecedorForm(forms.ModelForm):
 
     def clean_bairro(self):
         return self._nome_proprio(self.cleaned_data.get("bairro"))
+
+    def clean_telefone_whatsapp(self):
+        telefone = self._somente_digitos(self.cleaned_data.get("telefone_whatsapp"))
+        return telefone or None
 
 
 
@@ -1284,11 +1311,6 @@ class FornecedorForm(forms.ModelForm):
 
 
 class FornecedorContatoForm(forms.ModelForm):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if not self.instance.pk:
-            self.fields["ativo"].initial = True
-
     class Meta:
         model = FornecedorContato
         fields = [
@@ -1304,16 +1326,21 @@ class FornecedorContatoForm(forms.ModelForm):
                 "class": "form-control",
                 "placeholder": "Nome do responsavel",
                 "autocomplete": "off",
+                "data-fornecedor-nome-proprio": "1",
             }),
             "cargo": forms.TextInput(attrs={
                 "class": "form-control",
                 "placeholder": "Vendedor, financeiro, entrega...",
                 "autocomplete": "off",
+                "data-fornecedor-nome-proprio": "1",
             }),
             "telefone_whatsapp": forms.TextInput(attrs={
                 "class": "form-control",
                 "placeholder": "(00) 00000-0000",
-                "autocomplete": "off",
+                "autocomplete": "tel",
+                "inputmode": "tel",
+                "maxlength": "15",
+                "data-fornecedor-telefone": "1",
             }),
             "principal": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "ativo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
@@ -1329,14 +1356,43 @@ class FornecedorContatoForm(forms.ModelForm):
         valor = (valor or "").strip()
         return " ".join(valor.split()) or None
 
+    @staticmethod
+    def _nome_proprio(valor):
+        valor = (valor or "").strip()
+        if not valor:
+            return None
+        return " ".join(parte[:1].upper() + parte[1:].lower() for parte in valor.split())
+
+    @staticmethod
+    def _somente_digitos(valor):
+        return "".join(caractere for caractere in str(valor or "") if caractere.isdigit())
+
+    @classmethod
+    def _formatar_telefone(cls, valor):
+        digitos = cls._somente_digitos(valor)
+        if len(digitos) == 11:
+            return f"({digitos[:2]}) {digitos[2:7]}-{digitos[7:]}"
+        if len(digitos) == 10:
+            return f"({digitos[:2]}) {digitos[2:6]}-{digitos[6:]}"
+        return valor or ""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["telefone_whatsapp"].widget.attrs["maxlength"] = "15"
+        if not self.instance.pk:
+            self.fields["ativo"].initial = True
+        elif not self.is_bound:
+            self.initial["telefone_whatsapp"] = self._formatar_telefone(self.instance.telefone_whatsapp)
+
     def clean_nome(self):
-        return self._limpar_texto(self.cleaned_data.get("nome"))
+        return self._nome_proprio(self.cleaned_data.get("nome"))
 
     def clean_cargo(self):
-        return self._limpar_texto(self.cleaned_data.get("cargo"))
+        return self._nome_proprio(self.cleaned_data.get("cargo"))
 
     def clean_telefone_whatsapp(self):
-        return self._limpar_texto(self.cleaned_data.get("telefone_whatsapp"))
+        telefone = self._somente_digitos(self.cleaned_data.get("telefone_whatsapp"))
+        return telefone or None
 
 
 FornecedorContatoFormSet = forms.inlineformset_factory(

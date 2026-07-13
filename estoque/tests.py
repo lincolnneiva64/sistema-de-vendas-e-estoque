@@ -3163,6 +3163,184 @@ class FornecedorFrequenciaVisitaFormTests(TestCase):
         self.assertEqual(fornecedor.contatos.first().nome, "Maria Compras")
 
 
+class FornecedorMascaraNormalizacaoTests(TestCase):
+    def _produto_teste(self, nome="Produto Mascara Fornecedor"):
+        return Produto.objects.create(
+            nome=nome,
+            preco_compra=Decimal("10.00"),
+            preco_vista=Decimal("15.00"),
+            preco_prazo=Decimal("16.00"),
+            quantidade=Decimal("1.000"),
+        )
+
+    def _dados_fornecedor(self, **alteracoes):
+        dados = {
+            "nome": "Fornecedor Mascara",
+            "nome_fantasia": "",
+            "telefone_whatsapp": "",
+            "cidade": "",
+            "bairro": "",
+            "prazos_pagamento_padrao": "",
+            "observacao": "",
+            "ativo": "on",
+            "frequencia_visita_intervalo_dias": "",
+            "frequencia_visita_dia_semana": "",
+            "frequencia_visita_data_referencia": "",
+            "produtos": [],
+            "contatos-TOTAL_FORMS": "3",
+            "contatos-INITIAL_FORMS": "0",
+            "contatos-MIN_NUM_FORMS": "0",
+            "contatos-MAX_NUM_FORMS": "1000",
+        }
+        for indice in range(3):
+            dados.update({
+                f"contatos-{indice}-id": "",
+                f"contatos-{indice}-nome": "",
+                f"contatos-{indice}-cargo": "",
+                f"contatos-{indice}-telefone_whatsapp": "",
+                f"contatos-{indice}-principal": "",
+                f"contatos-{indice}-ativo": "",
+                f"contatos-{indice}-observacao": "",
+            })
+        dados.update(alteracoes)
+        return dados
+
+    def test_data_referencia_tem_estrutura_compacta_e_responsiva(self):
+        resposta = self.client.get(reverse("estoque:fornecedor_novo"), secure=True)
+
+        self.assertContains(resposta, "fornecedor-visita-grid")
+        self.assertContains(resposta, "fornecedor-visita-data")
+        self.assertContains(resposta, "minmax(220px, 280px)")
+        self.assertContains(resposta, ".fornecedor-visita-grid { grid-template-columns: 1fr; }")
+
+    def test_campos_de_telefone_tem_atributos_de_mascara_no_formset(self):
+        resposta = self.client.get(reverse("estoque:fornecedor_novo"), secure=True)
+
+        self.assertContains(resposta, 'data-fornecedor-telefone="1"', count=4)
+        self.assertContains(resposta, 'inputmode="tel"', count=4)
+        self.assertContains(resposta, 'maxlength="15"', count=4)
+
+    def test_telefone_11_digitos_e_apresentado_formatado(self):
+        fornecedor = Fornecedor.objects.create(nome="Fornecedor Telefone 11", telefone_whatsapp="91999999999")
+
+        resposta = self.client.get(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), secure=True)
+
+        self.assertContains(resposta, 'value="(91) 99999-9999"')
+
+    def test_telefone_10_digitos_e_apresentado_formatado(self):
+        fornecedor = Fornecedor.objects.create(nome="Fornecedor Telefone 10", telefone_whatsapp="9133334444")
+
+        resposta = self.client.get(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), secure=True)
+
+        self.assertContains(resposta, 'value="(91) 3333-4444"')
+
+    def test_telefone_pode_ser_apagado(self):
+        fornecedor = Fornecedor.objects.create(nome="Fornecedor Apaga Telefone", telefone_whatsapp="91999999999")
+
+        form = FornecedorForm(data=self._dados_fornecedor(nome=fornecedor.nome, telefone_whatsapp=""), instance=fornecedor)
+
+        self.assertTrue(form.is_valid(), form.errors)
+        fornecedor = form.save()
+        self.assertIsNone(fornecedor.telefone_whatsapp)
+
+    def test_edicao_de_numero_antigo_continua_funcionando(self):
+        fornecedor = Fornecedor.objects.create(nome="Fornecedor Numero Antigo", telefone_whatsapp="91 99999 9999")
+
+        resposta = self.client.get(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'value="(91) 99999-9999"')
+
+    def test_armazenamento_de_telefone_usa_digitos(self):
+        form = FornecedorForm(data=self._dados_fornecedor(telefone_whatsapp="(91) 99999-9999"))
+
+        self.assertTrue(form.is_valid(), form.errors)
+        fornecedor = form.save()
+        self.assertEqual(fornecedor.telefone_whatsapp, "91999999999")
+
+    def test_nome_fornecedor_e_normalizado(self):
+        form = FornecedorForm(data=self._dados_fornecedor(nome="  ana   paula  "))
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.save().nome, "Ana Paula")
+
+    def test_normalizacao_preserva_acentos_e_remove_espacos(self):
+        form = FornecedorForm(data=self._dados_fornecedor(nome="  joão   da   silva  "))
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.save().nome, "João Da Silva")
+
+    def test_nome_fantasia_e_normalizado(self):
+        form = FornecedorForm(data=self._dados_fornecedor(nome_fantasia="  mercadinho  bom   preco "))
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.save().nome_fantasia, "Mercadinho Bom Preco")
+
+    def test_cidade_e_bairro_sao_normalizados(self):
+        form = FornecedorForm(data=self._dados_fornecedor(cidade="  sao   paulo ", bairro=" vila   maria "))
+
+        self.assertTrue(form.is_valid(), form.errors)
+        fornecedor = form.save()
+        self.assertEqual(fornecedor.cidade, "Sao Paulo")
+        self.assertEqual(fornecedor.bairro, "Vila Maria")
+
+    def test_nome_e_cargo_do_contato_sao_normalizados(self):
+        dados = self._dados_fornecedor(**{
+            "contatos-0-nome": "  joao   silva ",
+            "contatos-0-cargo": " vendedor   externo ",
+            "contatos-0-telefone_whatsapp": "(91) 99999-9999",
+            "contatos-0-ativo": "on",
+        })
+
+        resposta = self.client.post(reverse("estoque:fornecedor_novo"), dados, secure=True, follow=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        contato = Fornecedor.objects.get(nome="Fornecedor Mascara").contatos.get()
+        self.assertEqual(contato.nome, "Joao Silva")
+        self.assertEqual(contato.cargo, "Vendedor Externo")
+        self.assertEqual(contato.telefone_whatsapp, "91999999999")
+        self.assertEqual(contato.telefone_whatsapp_normalizado, "91999999999")
+
+    def test_observacao_nao_e_capitalizada_automaticamente(self):
+        form = FornecedorForm(data=self._dados_fornecedor(observacao="observacao livre COM caixa misturada"))
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.save().observacao, "observacao livre COM caixa misturada")
+
+    def test_produtos_e_contatos_existentes_continuam_funcionando(self):
+        produto = self._produto_teste()
+        dados = self._dados_fornecedor(
+            produtos=[str(produto.pk)],
+            **{
+                "contatos-0-nome": "maria compras",
+                "contatos-0-cargo": "financeiro",
+                "contatos-0-telefone_whatsapp": "91999999999",
+                "contatos-0-principal": "on",
+                "contatos-0-ativo": "on",
+            },
+        )
+
+        resposta = self.client.post(reverse("estoque:fornecedor_novo"), dados, secure=True, follow=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        fornecedor = Fornecedor.objects.get(nome="Fornecedor Mascara")
+        self.assertTrue(ProdutoFornecedor.objects.filter(fornecedor=fornecedor, produto=produto, ativo=True).exists())
+        self.assertEqual(fornecedor.contatos.count(), 1)
+
+    def test_frequencia_de_visita_continua_salvando_normalmente(self):
+        form = FornecedorForm(data=self._dados_fornecedor(
+            frequencia_visita_ativa="on",
+            frequencia_visita_intervalo_dias="14",
+            frequencia_visita_dia_semana=str(Fornecedor.DIA_SEMANA_TERCA),
+            frequencia_visita_data_referencia="2026-07-07",
+        ))
+
+        self.assertTrue(form.is_valid(), form.errors)
+        fornecedor = form.save()
+        self.assertTrue(fornecedor.frequencia_visita_ativa)
+        self.assertEqual(fornecedor.frequencia_visita_intervalo_dias, 14)
+
+
 class FornecedorProdutosFormTests(TestCase):
     def _produto_teste(self, nome, excluido=False, excluido_em=None):
         return Produto.objects.create(
