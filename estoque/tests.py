@@ -1,4 +1,5 @@
 import io
+import importlib
 import json
 import os
 import re
@@ -11,6 +12,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlsplit
 from unittest.mock import patch
 
+from django.apps import apps as django_apps
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models import Sum
@@ -19,7 +21,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContatoTelefone, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
 from . import views
@@ -3339,6 +3342,302 @@ class FornecedorMascaraNormalizacaoTests(TestCase):
         fornecedor = form.save()
         self.assertTrue(fornecedor.frequencia_visita_ativa)
         self.assertEqual(fornecedor.frequencia_visita_intervalo_dias, 14)
+
+
+class FornecedorContatoTelefoneTests(TestCase):
+    def setUp(self):
+        self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Telefones")
+        self.contato = self.fornecedor.contatos.create(nome="Ana Paula", cargo="Vendedora")
+
+    def criar_telefone(self, contato=None, **alteracoes):
+        dados = {
+            "contato": contato or self.contato,
+            "numero": "91993152627",
+            "tipo": FornecedorContatoTelefone.TIPO_CELULAR,
+            "whatsapp": True,
+            "principal": False,
+            "ativo": True,
+            "ordem": 1,
+        }
+        dados.update(alteracoes)
+        return FornecedorContatoTelefone.objects.create(**dados)
+
+    def test_cria_telefone_celular_valido(self):
+        telefone = self.criar_telefone(principal=True)
+
+        self.assertEqual(telefone.tipo, FornecedorContatoTelefone.TIPO_CELULAR)
+        self.assertTrue(telefone.ativo)
+
+    def test_salva_somente_digitos(self):
+        telefone = self.criar_telefone(numero="(91) 99315-2627")
+
+        self.assertEqual(telefone.numero, "91993152627")
+
+    def test_aceita_numero_de_10_digitos(self):
+        telefone = self.criar_telefone(numero="9132324444")
+
+        self.assertEqual(telefone.numero, "9132324444")
+
+    def test_aceita_numero_de_11_digitos(self):
+        telefone = self.criar_telefone(numero="91993152627")
+
+        self.assertEqual(telefone.numero, "91993152627")
+
+    def test_rejeita_telefone_ativo_vazio(self):
+        with self.assertRaises(ValidationError) as erro:
+            self.criar_telefone(numero="")
+
+        self.assertIn("numero", erro.exception.message_dict)
+
+    def test_rejeita_numero_com_quantidade_invalida_de_digitos(self):
+        with self.assertRaises(ValidationError) as erro:
+            self.criar_telefone(numero="123456789")
+
+        self.assertIn("numero", erro.exception.message_dict)
+
+    def test_telefone_inativo_pode_permanecer_sem_numero(self):
+        telefone = self.criar_telefone(numero="", ativo=False)
+
+        self.assertEqual(telefone.numero, "")
+        self.assertFalse(telefone.ativo)
+
+    def test_rejeita_dois_numeros_ativos_iguais_no_mesmo_contato(self):
+        self.criar_telefone(numero="91993152627")
+
+        with self.assertRaises(ValidationError) as erro:
+            self.criar_telefone(numero="(91) 99315-2627")
+
+        self.assertIn("numero", erro.exception.message_dict)
+
+    def test_permite_mesmo_numero_em_contatos_diferentes(self):
+        outro_contato = self.fornecedor.contatos.create(nome="Joao", cargo="Financeiro")
+        self.criar_telefone(numero="91993152627")
+        telefone = self.criar_telefone(contato=outro_contato, numero="91993152627")
+
+        self.assertEqual(telefone.contato, outro_contato)
+
+    def test_rejeita_dois_principais_ativos_no_mesmo_contato(self):
+        self.criar_telefone(numero="91993152627", principal=True)
+
+        with self.assertRaises(ValidationError) as erro:
+            self.criar_telefone(numero="91991000720", principal=True, ordem=2)
+
+        self.assertIn("principal", erro.exception.message_dict)
+
+    def test_permite_um_principal_e_outros_nao_principais(self):
+        principal = self.criar_telefone(numero="91993152627", principal=True)
+        secundario = self.criar_telefone(numero="91991000720", principal=False, ordem=2)
+
+        self.assertTrue(principal.principal)
+        self.assertFalse(secundario.principal)
+
+    def test_rejeita_principal_inativo(self):
+        with self.assertRaises(ValidationError) as erro:
+            self.criar_telefone(ativo=False, principal=True)
+
+        self.assertIn("principal", erro.exception.message_dict)
+
+    def test_permite_telefone_fixo_sem_whatsapp(self):
+        telefone = self.criar_telefone(
+            numero="9132324444",
+            tipo=FornecedorContatoTelefone.TIPO_FIXO,
+            whatsapp=False,
+        )
+
+        self.assertEqual(telefone.tipo, FornecedorContatoTelefone.TIPO_FIXO)
+        self.assertFalse(telefone.whatsapp)
+
+    def test_maximo_de_3_telefones_ativos(self):
+        self.criar_telefone(numero="91993152627", ordem=1)
+        self.criar_telefone(numero="91991000720", ordem=2)
+        self.criar_telefone(numero="9132324444", ordem=3)
+
+        with self.assertRaises(ValidationError) as erro:
+            self.criar_telefone(numero="9133335555", ordem=4)
+
+        self.assertIn("ativo", erro.exception.message_dict)
+
+    def test_permite_substituir_telefone_apos_desativar_um_dos_tres(self):
+        telefone = self.criar_telefone(numero="91993152627", ordem=1)
+        self.criar_telefone(numero="91991000720", ordem=2)
+        self.criar_telefone(numero="9132324444", ordem=3)
+        telefone.ativo = False
+        telefone.save()
+
+        novo = self.criar_telefone(numero="9133335555", ordem=4)
+
+        self.assertTrue(novo.ativo)
+
+    def test_helper_retorna_ativos_na_ordem_correta(self):
+        self.criar_telefone(numero="91991000720", ordem=2)
+        principal = self.criar_telefone(numero="91993152627", principal=True, ordem=3)
+        primeiro = self.criar_telefone(numero="9132324444", ordem=1)
+
+        self.assertEqual(telefones_ativos_contato(self.contato), [principal, primeiro, FornecedorContatoTelefone.objects.get(numero="91991000720")])
+
+    def test_helper_prefere_principal(self):
+        self.criar_telefone(numero="91991000720", ordem=1)
+        principal = self.criar_telefone(numero="91993152627", principal=True, ordem=2)
+
+        self.assertEqual(telefone_principal_contato(self.contato), principal)
+
+    def test_helper_retorna_primeiro_ativo_quando_nao_existe_principal(self):
+        primeiro = self.criar_telefone(numero="91991000720", ordem=1)
+        self.criar_telefone(numero="91993152627", ordem=2)
+
+        self.assertEqual(telefone_principal_contato(self.contato), primeiro)
+
+    def test_helper_filtra_apenas_whatsapp(self):
+        whatsapp = self.criar_telefone(numero="91993152627", whatsapp=True, principal=True)
+        self.criar_telefone(numero="9132324444", tipo=FornecedorContatoTelefone.TIPO_FIXO, whatsapp=False, ordem=2)
+
+        self.assertEqual(telefones_whatsapp_contato(self.contato), [whatsapp])
+
+    def test_helper_whatsapp_nao_usa_legado_quando_existe_telefone_novo_sem_whatsapp(self):
+        self.contato.telefone_whatsapp = "91999990000"
+        self.contato.save()
+        self.criar_telefone(
+            numero="9132324444",
+            tipo=FornecedorContatoTelefone.TIPO_FIXO,
+            whatsapp=False,
+        )
+
+        self.assertEqual(telefones_whatsapp_contato(self.contato), [])
+
+    def test_helper_nao_altera_nem_salva_o_contato(self):
+        atualizado_em = self.contato.atualizado_em
+
+        telefone_principal_contato(self.contato)
+        self.contato.refresh_from_db()
+
+        self.assertEqual(self.contato.atualizado_em, atualizado_em)
+
+    def test_contato_antigo_sem_telefone_novo_continua_preservado(self):
+        self.contato.telefone_whatsapp = "91999990000"
+        self.contato.save()
+
+        telefone = telefone_principal_contato(self.contato)
+
+        self.assertEqual(telefone.numero, "91999990000")
+        self.assertEqual(self.contato.telefones.count(), 0)
+
+    def test_campo_telefone_whatsapp_antigo_nao_e_removido_nem_alterado(self):
+        self.contato.telefone_whatsapp = "91 99999 0000"
+        self.contato.save()
+        valor_antigo = self.contato.telefone_whatsapp
+        self.criar_telefone(numero="91993152627")
+        self.contato.refresh_from_db()
+
+        self.assertEqual(self.contato.telefone_whatsapp, valor_antigo)
+        self.assertEqual(self.contato.telefone_whatsapp_normalizado, "91999990000")
+
+    def _executar_migracao_dados(self, setup_callback):
+        FornecedorContatoTelefone.objects.all().delete()
+        setup_callback(django_apps)
+        migracao = importlib.import_module("estoque.migrations.0075_migrar_telefones_contatos_fornecedor")
+        migracao.migrar_telefones_contatos(django_apps, None)
+        return django_apps
+
+    def test_migration_de_dados_copia_telefone_normalizado(self):
+        def setup(apps):
+            Fornecedor = apps.get_model("estoque", "Fornecedor")
+            FornecedorContato = apps.get_model("estoque", "FornecedorContato")
+            fornecedor = Fornecedor.objects.create(nome="Fornecedor Migration Normalizado")
+            contato = FornecedorContato.objects.create(
+                fornecedor=fornecedor,
+                nome="Ana",
+            )
+            FornecedorContato.objects.filter(pk=contato.pk).update(
+                telefone_whatsapp="texto antigo",
+                telefone_whatsapp_normalizado="91993152627",
+            )
+
+        apps = self._executar_migracao_dados(setup)
+        Telefone = apps.get_model("estoque", "FornecedorContatoTelefone")
+
+        self.assertEqual(Telefone.objects.get().numero, "91993152627")
+
+    def test_migration_de_dados_usa_telefone_original_quando_normalizado_vazio(self):
+        def setup(apps):
+            Fornecedor = apps.get_model("estoque", "Fornecedor")
+            FornecedorContato = apps.get_model("estoque", "FornecedorContato")
+            fornecedor = Fornecedor.objects.create(nome="Fornecedor Migration Original")
+            contato = FornecedorContato.objects.create(
+                fornecedor=fornecedor,
+                nome="Ana",
+            )
+            FornecedorContato.objects.filter(pk=contato.pk).update(
+                telefone_whatsapp="(91) 99100-0720",
+                telefone_whatsapp_normalizado=None,
+            )
+
+        apps = self._executar_migracao_dados(setup)
+        Telefone = apps.get_model("estoque", "FornecedorContatoTelefone")
+
+        self.assertEqual(Telefone.objects.get().numero, "91991000720")
+
+    def test_migration_nao_cria_telefone_para_contato_sem_numero(self):
+        def setup(apps):
+            Fornecedor = apps.get_model("estoque", "Fornecedor")
+            FornecedorContato = apps.get_model("estoque", "FornecedorContato")
+            fornecedor = Fornecedor.objects.create(nome="Fornecedor Migration Sem Numero")
+            FornecedorContato.objects.create(fornecedor=fornecedor, nome="Ana")
+
+        apps = self._executar_migracao_dados(setup)
+        Telefone = apps.get_model("estoque", "FornecedorContatoTelefone")
+
+        self.assertEqual(Telefone.objects.count(), 0)
+
+    def test_migration_nao_duplica_telefone_equivalente(self):
+        def setup(apps):
+            Fornecedor = apps.get_model("estoque", "Fornecedor")
+            FornecedorContato = apps.get_model("estoque", "FornecedorContato")
+            Telefone = apps.get_model("estoque", "FornecedorContatoTelefone")
+            fornecedor = Fornecedor.objects.create(nome="Fornecedor Migration Duplicado")
+            contato = FornecedorContato.objects.create(
+                fornecedor=fornecedor,
+                nome="Ana",
+            )
+            FornecedorContato.objects.filter(pk=contato.pk).update(
+                telefone_whatsapp="(91) 99315-2627",
+                telefone_whatsapp_normalizado="91993152627",
+            )
+            Telefone.objects.create(
+                contato=contato,
+                numero="91993152627",
+                tipo="celular",
+                whatsapp=True,
+                principal=True,
+                ativo=True,
+                ordem=1,
+            )
+
+        apps = self._executar_migracao_dados(setup)
+        Telefone = apps.get_model("estoque", "FornecedorContatoTelefone")
+
+        self.assertEqual(Telefone.objects.count(), 1)
+
+    def test_telefone_migrado_fica_principal_ativo_e_whatsapp(self):
+        def setup(apps):
+            Fornecedor = apps.get_model("estoque", "Fornecedor")
+            FornecedorContato = apps.get_model("estoque", "FornecedorContato")
+            fornecedor = Fornecedor.objects.create(nome="Fornecedor Migration Flags")
+            contato = FornecedorContato.objects.create(
+                fornecedor=fornecedor,
+                nome="Ana",
+            )
+            FornecedorContato.objects.filter(pk=contato.pk).update(
+                telefone_whatsapp_normalizado="91993152627",
+            )
+
+        apps = self._executar_migracao_dados(setup)
+        telefone = apps.get_model("estoque", "FornecedorContatoTelefone").objects.get()
+
+        self.assertEqual(telefone.tipo, "celular")
+        self.assertTrue(telefone.whatsapp)
+        self.assertTrue(telefone.principal)
+        self.assertTrue(telefone.ativo)
+        self.assertEqual(telefone.ordem, 1)
 
 
 class FornecedorProdutosFormTests(TestCase):

@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.db import models
+from django.db.models import Q
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from .utils import normalize_category_name
@@ -924,6 +925,88 @@ class FornecedorContato(models.Model):
                 fornecedor=self.fornecedor,
                 principal=True,
             ).exclude(pk=self.pk).update(principal=False)
+
+
+class FornecedorContatoTelefone(models.Model):
+    TIPO_CELULAR = "celular"
+    TIPO_FIXO = "fixo"
+    TIPO_OUTRO = "outro"
+    TIPO_CHOICES = [
+        (TIPO_CELULAR, "Celular"),
+        (TIPO_FIXO, "Fixo"),
+        (TIPO_OUTRO, "Outro"),
+    ]
+
+    contato = models.ForeignKey(
+        FornecedorContato,
+        on_delete=models.CASCADE,
+        related_name="telefones",
+    )
+    numero = models.CharField(max_length=20, blank=True)
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, default=TIPO_CELULAR)
+    whatsapp = models.BooleanField(default=False)
+    principal = models.BooleanField(default=False)
+    ativo = models.BooleanField(default=True)
+    ordem = models.PositiveSmallIntegerField(default=1)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-principal", "ordem", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["contato", "numero"],
+                condition=Q(ativo=True),
+                name="uniq_fornecedor_contato_telefone_ativo",
+            ),
+            models.UniqueConstraint(
+                fields=["contato"],
+                condition=Q(ativo=True, principal=True),
+                name="uniq_fornecedor_contato_telefone_principal",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.numero} - {self.contato}"
+
+    @staticmethod
+    def normalizar_numero(valor):
+        return "".join(caractere for caractere in str(valor or "") if caractere.isdigit())
+
+    def clean(self):
+        super().clean()
+        erros = {}
+        numero = self.normalizar_numero(self.numero)
+
+        if self.ativo and not numero:
+            erros["numero"] = "Informe o numero do telefone."
+        if numero and len(numero) not in (10, 11):
+            erros["numero"] = "Informe um telefone com 10 ou 11 digitos."
+        if self.principal and not self.ativo:
+            erros["principal"] = "Um telefone principal precisa estar ativo."
+
+        if self.contato_id and self.ativo:
+            telefones_ativos = FornecedorContatoTelefone.objects.filter(
+                contato=self.contato,
+                ativo=True,
+            )
+            if self.pk:
+                telefones_ativos = telefones_ativos.exclude(pk=self.pk)
+
+            if telefones_ativos.count() >= 3:
+                erros["ativo"] = "Cada contato pode ter no maximo 3 telefones ativos."
+            if numero and telefones_ativos.filter(numero=numero).exists():
+                erros["numero"] = "Este telefone ja esta cadastrado para este contato."
+            if self.principal and telefones_ativos.filter(principal=True).exists():
+                erros["principal"] = "Este contato ja possui um telefone principal ativo."
+
+        if erros:
+            raise ValidationError(erros)
+
+    def save(self, *args, **kwargs):
+        self.numero = self.normalizar_numero(self.numero)
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class MeioPagamento(models.Model):
