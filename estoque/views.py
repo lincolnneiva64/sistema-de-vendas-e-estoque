@@ -7967,14 +7967,18 @@ def fornecedor_novo(request):
         telefones_validos = validar_telefones_contatos(post_data, contatos_formset)
 
         if form_valido and formset_valido and telefones_validos:
-            with transaction.atomic():
-                fornecedor = form.save()
-                contatos_formset.instance = fornecedor
-                contatos_formset.save()
-                salvar_telefones_contatos(post_data, contatos_formset)
-                form.salvar_produtos(fornecedor)
-            messages.success(request, f'Fornecedor "{fornecedor.nome}" salvo com sucesso.')
-            return redirect(f"{reverse('estoque:fornecedores')}?fornecedor_salvo={fornecedor.id}")
+            try:
+                with transaction.atomic():
+                    fornecedor = form.save()
+                    contatos_formset.instance = fornecedor
+                    contatos_formset.save()
+                    salvar_telefones_contatos(post_data, contatos_formset)
+                    form.salvar_produtos(fornecedor)
+            except ValidationError:
+                preparar_telefones_contatos(contatos_formset, post_data)
+            else:
+                messages.success(request, f'Fornecedor "{fornecedor.nome}" salvo com sucesso.')
+                return redirect(f"{reverse('estoque:fornecedores')}?fornecedor_salvo={fornecedor.id}")
 
         messages.error(request, "Revise os campos destacados para salvar o fornecedor.")
     else:
@@ -8006,14 +8010,18 @@ def fornecedor_editar(request, pk):
         telefones_validos = validar_telefones_contatos(post_data, contatos_formset)
 
         if form_valido and formset_valido and telefones_validos:
-            with transaction.atomic():
-                fornecedor = form.save()
-                contatos_formset.instance = fornecedor
-                contatos_formset.save()
-                salvar_telefones_contatos(post_data, contatos_formset)
-                form.salvar_produtos(fornecedor)
-            messages.success(request, f'Fornecedor "{fornecedor.nome}" salvo com sucesso.')
-            return redirect(f"{reverse('estoque:fornecedores')}?fornecedor_salvo={fornecedor.id}")
+            try:
+                with transaction.atomic():
+                    fornecedor = form.save()
+                    contatos_formset.instance = fornecedor
+                    contatos_formset.save()
+                    salvar_telefones_contatos(post_data, contatos_formset)
+                    form.salvar_produtos(fornecedor)
+            except ValidationError:
+                preparar_telefones_contatos(contatos_formset, post_data)
+            else:
+                messages.success(request, f'Fornecedor "{fornecedor.nome}" salvo com sucesso.')
+                return redirect(f"{reverse('estoque:fornecedores')}?fornecedor_salvo={fornecedor.id}")
 
         messages.error(request, "Revise os campos destacados para salvar o fornecedor.")
     else:

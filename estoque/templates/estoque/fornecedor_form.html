@@ -415,6 +415,12 @@ function fornecedorEnterAvanca(event) {
     font-weight: 950; cursor: pointer; padding: 8px 12px;
   }
   .fornecedor-telefone-add[hidden] { display: none !important; }
+  .fornecedor-form-card.is-submitting .fornecedores-btn-primary {
+    opacity: .72;
+    transform: translateY(1px);
+    cursor: wait;
+    box-shadow: inset 0 2px 5px rgba(15, 23, 42, .18);
+  }
   .fornecedores-form-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
   @media (max-width: 760px) {
     .fornecedor-form-header { flex-direction: column; align-items: stretch; }
@@ -749,7 +755,7 @@ function fornecedorEnterAvanca(event) {
 
       <div class="fornecedores-form-actions">
         <a href="{% url 'estoque:fornecedores' %}" class="fornecedores-btn fornecedores-btn-secondary">Cancelar</a>
-        <button type="submit" class="fornecedores-btn fornecedores-btn-primary">Salvar fornecedor</button>
+        <button type="submit" class="fornecedores-btn fornecedores-btn-primary" data-submit-loading-text="Salvando...">Salvar fornecedor</button>
       </div>
     </form>
   </div>
@@ -841,6 +847,44 @@ document.addEventListener("DOMContentLoaded", function () {
       linha.hidden = true;
       atualizarBotaoAdicionarTelefones(bloco);
     }
+  });
+
+  document.querySelectorAll("form.fornecedor-form-card").forEach(function (form) {
+    const botaoSalvar = form.querySelector('button[type="submit"][data-submit-loading-text]');
+    if (!botaoSalvar) return;
+    const textoOriginal = botaoSalvar.textContent;
+    let enviando = false;
+
+    function restaurar() {
+      enviando = false;
+      form.classList.remove("is-submitting");
+      botaoSalvar.disabled = false;
+      botaoSalvar.removeAttribute("aria-busy");
+      botaoSalvar.textContent = textoOriginal;
+    }
+
+    form.addEventListener("submit", function (event) {
+      if (enviando) {
+        event.preventDefault();
+        return;
+      }
+
+      if (typeof form.checkValidity === "function" && !form.checkValidity()) {
+        return;
+      }
+
+      enviando = true;
+      form.classList.add("is-submitting");
+      botaoSalvar.textContent = botaoSalvar.getAttribute("data-submit-loading-text") || "Salvando...";
+      botaoSalvar.setAttribute("aria-busy", "true");
+      botaoSalvar.disabled = true;
+
+      setTimeout(function () {
+        if (event.defaultPrevented) restaurar();
+      }, 0);
+    });
+
+    window.addEventListener("pageshow", restaurar);
   });
 });
 </script>

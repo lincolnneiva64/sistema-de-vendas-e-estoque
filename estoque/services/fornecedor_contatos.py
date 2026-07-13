@@ -211,6 +211,17 @@ def _adicionar_erro_telefone(contato_form, telefone_indice, mensagem):
     contato_form.add_error(None, mensagem)
 
 
+def _mensagens_validacao(erro):
+    if hasattr(erro, "message_dict"):
+        mensagens = []
+        for erros_campo in erro.message_dict.values():
+            mensagens.extend(erros_campo)
+        return mensagens
+    if hasattr(erro, "messages"):
+        return erro.messages
+    return [str(erro)]
+
+
 def validar_telefones_contatos(post_data, contatos_formset):
     valido = True
     for contato_indice, contato_form in enumerate(contatos_formset.forms):
@@ -301,6 +312,19 @@ def _sincronizar_telefone_legado(contato):
     contato.save(update_fields=["telefone_whatsapp", "telefone_whatsapp_normalizado", "atualizado_em"])
 
 
+def _localizar_telefone_para_linha(contato, linha):
+    if linha["id"]:
+        telefone = contato.telefones.filter(pk=linha["id"]).first()
+        if telefone:
+            return telefone
+
+    numero = linha.get("numero_normalizado")
+    if numero:
+        return contato.telefones.filter(numero=numero).order_by("-ativo", "id").first()
+
+    return None
+
+
 def salvar_telefones_contatos(post_data, contatos_formset):
     with transaction.atomic():
         for contato_indice, contato_form in enumerate(contatos_formset.forms):
@@ -316,17 +340,20 @@ def salvar_telefones_contatos(post_data, contatos_formset):
             ids_enviados = set()
 
             for linha in linhas:
-                telefone = None
-                if linha["id"]:
-                    telefone = contato.telefones.filter(pk=linha["id"]).first()
-                    if telefone:
-                        ids_enviados.add(telefone.pk)
+                telefone = _localizar_telefone_para_linha(contato, linha)
+                if telefone:
+                    ids_enviados.add(telefone.pk)
 
                 if linha["delete"]:
                     if telefone:
                         telefone.ativo = False
                         telefone.principal = False
-                        telefone.save()
+                        try:
+                            telefone.save()
+                        except ValidationError as erro:
+                            for mensagem in _mensagens_validacao(erro):
+                                _adicionar_erro_telefone(contato_form, linha["index"], mensagem)
+                            raise
                     continue
 
                 if not linha["numero_normalizado"]:
@@ -334,7 +361,12 @@ def salvar_telefones_contatos(post_data, contatos_formset):
                         telefone.ativo = False
                         telefone.principal = False
                         telefone.numero = ""
-                        telefone.save()
+                        try:
+                            telefone.save()
+                        except ValidationError as erro:
+                            for mensagem in _mensagens_validacao(erro):
+                                _adicionar_erro_telefone(contato_form, linha["index"], mensagem)
+                            raise
                     continue
 
                 if telefone is None:
@@ -349,7 +381,9 @@ def salvar_telefones_contatos(post_data, contatos_formset):
                 try:
                     telefone.save()
                 except ValidationError as erro:
-                    raise ValidationError(erro.message_dict if hasattr(erro, "message_dict") else erro.messages)
+                    for mensagem in _mensagens_validacao(erro):
+                        _adicionar_erro_telefone(contato_form, linha["index"], mensagem)
+                    raise
                 ids_enviados.add(telefone.pk)
 
             contato.telefones.filter(ativo=True).exclude(pk__in=ids_enviados).update(ativo=False, principal=False)
