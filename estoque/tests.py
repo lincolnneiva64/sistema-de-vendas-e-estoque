@@ -5,7 +5,7 @@ import re
 import tempfile
 import types
 from contextlib import redirect_stdout
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlsplit
@@ -20,8 +20,189 @@ from django.utils import timezone
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
 from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .services.fornecedor_visitas import calcular_proxima_visita
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
 from . import views
+
+
+class FornecedorFrequenciaVisitaTests(TestCase):
+    def fornecedor_frequencia(self, **alteracoes):
+        dados = {
+            "nome": "Fornecedor Visita",
+            "frequencia_visita_ativa": True,
+            "frequencia_visita_intervalo_dias": 7,
+            "frequencia_visita_dia_semana": Fornecedor.DIA_SEMANA_TERCA,
+            "frequencia_visita_data_referencia": date(2026, 7, 7),
+        }
+        dados.update(alteracoes)
+        return Fornecedor(**dados)
+
+    def test_frequencia_desativada_retorna_none(self):
+        fornecedor = Fornecedor(nome="Fornecedor Sem Frequencia")
+
+        self.assertIsNone(calcular_proxima_visita(fornecedor, data_base=date(2026, 7, 7)))
+
+    def test_referencia_igual_data_base_retorna_referencia(self):
+        fornecedor = self.fornecedor_frequencia()
+
+        self.assertEqual(calcular_proxima_visita(fornecedor, date(2026, 7, 7)), date(2026, 7, 7))
+
+    def test_referencia_futura_retorna_referencia(self):
+        fornecedor = self.fornecedor_frequencia(
+            frequencia_visita_intervalo_dias=14,
+            frequencia_visita_data_referencia=date(2026, 7, 21),
+        )
+
+        self.assertEqual(calcular_proxima_visita(fornecedor, date(2026, 7, 12)), date(2026, 7, 21))
+
+    def test_frequencia_semanal_calcula_proxima_ocorrencia(self):
+        fornecedor = self.fornecedor_frequencia()
+
+        self.assertEqual(calcular_proxima_visita(fornecedor, date(2026, 7, 8)), date(2026, 7, 14))
+
+    def test_frequencia_quinzenal_calcula_proxima_ocorrencia(self):
+        fornecedor = self.fornecedor_frequencia(
+            frequencia_visita_intervalo_dias=14,
+            frequencia_visita_data_referencia=date(2026, 6, 30),
+        )
+
+        self.assertEqual(calcular_proxima_visita(fornecedor, date(2026, 7, 12)), date(2026, 7, 14))
+
+    def test_calculo_funciona_apos_varios_ciclos(self):
+        fornecedor = self.fornecedor_frequencia(
+            frequencia_visita_intervalo_dias=14,
+            frequencia_visita_data_referencia=date(2026, 1, 6),
+        )
+
+        self.assertEqual(calcular_proxima_visita(fornecedor, date(2026, 7, 12)), date(2026, 7, 21))
+
+    def test_calculo_nao_altera_fornecedor(self):
+        fornecedor = self.fornecedor_frequencia()
+        estado_original = fornecedor.__dict__.copy()
+
+        calcular_proxima_visita(fornecedor, date(2026, 7, 8))
+
+        self.assertEqual(fornecedor.__dict__, estado_original)
+
+    def test_calculo_retorna_none_com_intervalo_ausente(self):
+        fornecedor = self.fornecedor_frequencia(frequencia_visita_intervalo_dias=None)
+
+        self.assertIsNone(calcular_proxima_visita(fornecedor, date(2026, 7, 8)))
+
+    def test_calculo_retorna_none_com_intervalo_menor_ou_igual_a_zero(self):
+        fornecedor = self.fornecedor_frequencia(frequencia_visita_intervalo_dias=0)
+
+        self.assertIsNone(calcular_proxima_visita(fornecedor, date(2026, 7, 8)))
+
+    def test_calculo_retorna_none_com_intervalo_nao_multiplo_de_sete(self):
+        fornecedor = self.fornecedor_frequencia(frequencia_visita_intervalo_dias=10)
+
+        self.assertIsNone(calcular_proxima_visita(fornecedor, date(2026, 7, 8)))
+
+    def test_calculo_retorna_none_com_dia_semana_ausente(self):
+        fornecedor = self.fornecedor_frequencia(frequencia_visita_dia_semana=None)
+
+        self.assertIsNone(calcular_proxima_visita(fornecedor, date(2026, 7, 8)))
+
+    def test_calculo_retorna_none_com_dia_semana_fora_da_faixa(self):
+        fornecedor = self.fornecedor_frequencia(frequencia_visita_dia_semana=7)
+
+        self.assertIsNone(calcular_proxima_visita(fornecedor, date(2026, 7, 8)))
+
+    def test_calculo_retorna_none_com_data_referencia_ausente(self):
+        fornecedor = self.fornecedor_frequencia(frequencia_visita_data_referencia=None)
+
+        self.assertIsNone(calcular_proxima_visita(fornecedor, date(2026, 7, 8)))
+
+    def test_calculo_retorna_none_com_referencia_em_dia_diferente_do_configurado(self):
+        fornecedor = self.fornecedor_frequencia(
+            frequencia_visita_dia_semana=Fornecedor.DIA_SEMANA_SEGUNDA,
+        )
+
+        self.assertIsNone(calcular_proxima_visita(fornecedor, date(2026, 7, 8)))
+
+    def test_full_clean_aceita_frequencia_desativada_com_campos_vazios(self):
+        fornecedor = Fornecedor(nome="Fornecedor Sem Frequencia")
+
+        fornecedor.full_clean()
+
+    def test_full_clean_rejeita_frequencia_ativa_sem_intervalo(self):
+        fornecedor = self.fornecedor_frequencia(frequencia_visita_intervalo_dias=None)
+
+        with self.assertRaises(ValidationError) as erro:
+            fornecedor.full_clean()
+
+        self.assertIn("frequencia_visita_intervalo_dias", erro.exception.message_dict)
+
+    def test_full_clean_rejeita_intervalo_nao_multiplo_de_sete(self):
+        fornecedor = self.fornecedor_frequencia(frequencia_visita_intervalo_dias=10)
+
+        with self.assertRaises(ValidationError) as erro:
+            fornecedor.full_clean()
+
+        self.assertIn("frequencia_visita_intervalo_dias", erro.exception.message_dict)
+
+    def test_full_clean_rejeita_ausencia_de_dia_semana(self):
+        fornecedor = self.fornecedor_frequencia(frequencia_visita_dia_semana=None)
+
+        with self.assertRaises(ValidationError) as erro:
+            fornecedor.full_clean()
+
+        self.assertIn("frequencia_visita_dia_semana", erro.exception.message_dict)
+
+    def test_full_clean_rejeita_ausencia_de_data_referencia(self):
+        fornecedor = self.fornecedor_frequencia(frequencia_visita_data_referencia=None)
+
+        with self.assertRaises(ValidationError) as erro:
+            fornecedor.full_clean()
+
+        self.assertIn("frequencia_visita_data_referencia", erro.exception.message_dict)
+
+    def test_full_clean_rejeita_referencia_em_dia_diferente_do_selecionado(self):
+        fornecedor = self.fornecedor_frequencia(
+            frequencia_visita_dia_semana=Fornecedor.DIA_SEMANA_SEGUNDA,
+        )
+
+        with self.assertRaises(ValidationError) as erro:
+            fornecedor.full_clean()
+
+        self.assertIn("frequencia_visita_data_referencia", erro.exception.message_dict)
+
+    def test_full_clean_aceita_configuracao_semanal_valida(self):
+        fornecedor = self.fornecedor_frequencia()
+
+        fornecedor.full_clean()
+
+    def test_full_clean_aceita_configuracao_quinzenal_valida(self):
+        fornecedor = self.fornecedor_frequencia(frequencia_visita_intervalo_dias=14)
+
+        fornecedor.full_clean()
+
+    def test_lista_compra_fornecedor_aceita_data_visita_vazia(self):
+        fornecedor = Fornecedor.objects.create(nome="Fornecedor Lista Sem Visita")
+
+        lista = ListaCompraFornecedor.objects.create(
+            fornecedor=fornecedor,
+            data_lista=date(2026, 7, 12),
+            data_inicio_periodo=date(2026, 7, 1),
+            data_fim_periodo=date(2026, 7, 12),
+        )
+
+        self.assertIsNone(lista.data_visita_fornecedor)
+
+    def test_lista_compra_fornecedor_persiste_data_visita_informada(self):
+        fornecedor = Fornecedor.objects.create(nome="Fornecedor Lista Com Visita")
+
+        lista = ListaCompraFornecedor.objects.create(
+            fornecedor=fornecedor,
+            data_lista=date(2026, 7, 12),
+            data_inicio_periodo=date(2026, 7, 1),
+            data_fim_periodo=date(2026, 7, 12),
+            data_visita_fornecedor=date(2026, 7, 14),
+        )
+
+        lista.refresh_from_db()
+        self.assertEqual(lista.data_visita_fornecedor, date(2026, 7, 14))
 
 
 class FechamentoCompraFinanceiroTests(TestCase):

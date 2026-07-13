@@ -792,6 +792,22 @@ class Fornecedor(models.Model):
         (FORMA_CARTAO, "Cartão de crédito"),
         (FORMA_APRAZO, "Boleto / a prazo"),
     ]
+    DIA_SEMANA_SEGUNDA = 0
+    DIA_SEMANA_TERCA = 1
+    DIA_SEMANA_QUARTA = 2
+    DIA_SEMANA_QUINTA = 3
+    DIA_SEMANA_SEXTA = 4
+    DIA_SEMANA_SABADO = 5
+    DIA_SEMANA_DOMINGO = 6
+    DIA_SEMANA_CHOICES = [
+        (DIA_SEMANA_SEGUNDA, "Segunda-feira"),
+        (DIA_SEMANA_TERCA, "Terca-feira"),
+        (DIA_SEMANA_QUARTA, "Quarta-feira"),
+        (DIA_SEMANA_QUINTA, "Quinta-feira"),
+        (DIA_SEMANA_SEXTA, "Sexta-feira"),
+        (DIA_SEMANA_SABADO, "Sabado"),
+        (DIA_SEMANA_DOMINGO, "Domingo"),
+    ]
 
     nome = models.CharField(max_length=140)
     nome_fantasia = models.CharField(max_length=140, blank=True, null=True)
@@ -806,6 +822,14 @@ class Fornecedor(models.Model):
     forma_pagamento_padrao = models.CharField(max_length=20, choices=FORMA_PAGAMENTO_CHOICES, default=FORMA_AVISTA)
     prazos_pagamento_padrao = models.CharField(max_length=120, blank=True, null=True, help_text="Exemplo: 7, 14, 21")
     dia_vencimento_cartao = models.PositiveSmallIntegerField(blank=True, null=True)
+    frequencia_visita_ativa = models.BooleanField(default=False)
+    frequencia_visita_intervalo_dias = models.PositiveSmallIntegerField(blank=True, null=True)
+    frequencia_visita_dia_semana = models.PositiveSmallIntegerField(
+        choices=DIA_SEMANA_CHOICES,
+        blank=True,
+        null=True,
+    )
+    frequencia_visita_data_referencia = models.DateField(blank=True, null=True)
     observacao = models.TextField(blank=True, null=True)
     ativo = models.BooleanField(default=True)
     criado_em = models.DateTimeField(auto_now_add=True)
@@ -816,6 +840,34 @@ class Fornecedor(models.Model):
 
     def __str__(self):
         return self.nome
+
+    def clean(self):
+        super().clean()
+        if not self.frequencia_visita_ativa:
+            return
+
+        erros = {}
+        intervalo = self.frequencia_visita_intervalo_dias
+        dia_semana = self.frequencia_visita_dia_semana
+        data_referencia = self.frequencia_visita_data_referencia
+
+        if intervalo is None:
+            erros["frequencia_visita_intervalo_dias"] = "Informe o intervalo da frequencia de visita."
+        elif intervalo <= 0:
+            erros["frequencia_visita_intervalo_dias"] = "O intervalo da frequencia de visita deve ser maior que zero."
+        elif intervalo % 7 != 0:
+            erros["frequencia_visita_intervalo_dias"] = "O intervalo da frequencia de visita deve ser multiplo de 7."
+
+        if dia_semana is None:
+            erros["frequencia_visita_dia_semana"] = "Informe o dia habitual da visita."
+
+        if data_referencia is None:
+            erros["frequencia_visita_data_referencia"] = "Informe a data de referencia da visita."
+        elif dia_semana is not None and data_referencia.weekday() != dia_semana:
+            erros["frequencia_visita_data_referencia"] = "A data de referencia deve cair no dia da semana selecionado."
+
+        if erros:
+            raise ValidationError(erros)
 
 
 class FornecedorContato(models.Model):
@@ -1086,6 +1138,7 @@ class ListaCompraFornecedor(models.Model):
     data_inicio_periodo = models.DateField()
     data_fim_periodo = models.DateField()
     data_chegada_prevista = models.DateField(blank=True, null=True)
+    data_visita_fornecedor = models.DateField(blank=True, null=True, db_index=True)
     total_sugerido_original = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total_lista = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     valor_nota_boleto = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
