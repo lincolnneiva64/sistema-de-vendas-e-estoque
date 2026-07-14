@@ -10077,7 +10077,10 @@ class PixRecebidoTests(TestCase):
     def test_adicionar_item_na_nota_atualiza_conta_receber_parcial_preservando_recebido(self):
         cliente = Cliente.objects.create(nome="Cliente Conta Aumento", ativo=True)
         produto_base = self._produto_teste("Produto Base Aumento")
-        produto_novo = self._produto_teste("Produto Novo Aumento")
+        produto_novo = self._produto_teste(
+            "Produto Novo Aumento",
+            quantidade=Decimal("5.000"),
+        )
         venda = Venda.objects.create(
             cliente=cliente,
             data_venda=timezone.localdate(),
@@ -10904,6 +10907,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "window.location.replace(onlineUrl)")
 
     @override_settings(
+        ALLOWED_HOSTS=["10.0.0.154"],
         PIX_LOCAL_URL="http://10.0.0.154:8000/central-pix/enviar-comprovante/",
         PIX_ONLINE_URL="https://sistema-de-vendas-e-estoque.onrender.com/central-pix/enviar-comprovante/",
     )
@@ -10918,6 +10922,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "LOCAL / Wi-Fi")
 
     @override_settings(
+        ALLOWED_HOSTS=["sistema-de-vendas-e-estoque.onrender.com"],
         PIX_LOCAL_URL="http://10.0.0.154:8000/central-pix/enviar-comprovante/",
         PIX_ONLINE_URL="https://sistema-de-vendas-e-estoque.onrender.com/central-pix/enviar-comprovante/",
     )
@@ -10942,6 +10947,7 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "AMBIENTE NÃO IDENTIFICADO")
 
+    @override_settings(ALLOWED_HOSTS=["10.0.0.154"])
     def test_pagina_sucesso_comprovante_pix_mostra_ambiente_local(self):
         pix = PixRecebido.objects.create(valor=Decimal("0.00"), data_pagamento=timezone.now())
 
@@ -10954,6 +10960,7 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "LOCAL / Wi-Fi")
 
+    @override_settings(ALLOWED_HOSTS=["sistema-de-vendas-e-estoque.onrender.com"])
     def test_pagina_sucesso_comprovante_pix_mostra_ambiente_online(self):
         pix = PixRecebido.objects.create(valor=Decimal("0.00"), data_pagamento=timezone.now())
 
@@ -10966,6 +10973,7 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "ONLINE / Render")
 
+    @override_settings(ALLOWED_HOSTS=["10.0.0.154"])
     def test_rota_antiga_envio_pix_post_sem_arquivo_mantem_selo_local(self):
         resposta = self.client.post(
             reverse("estoque:central_pix_enviar_comprovante"),
@@ -10978,6 +10986,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "LOCAL / Wi-Fi")
         self.assertContains(resposta, "Escolha uma imagem ou arquivo de comprovante Pix.")
 
+    @override_settings(ALLOWED_HOSTS=["sistema-de-vendas-e-estoque.onrender.com"])
     def test_rota_antiga_envio_pix_sucesso_mantem_selo_online(self):
         arquivo = SimpleUploadedFile("comprovante.txt", b"Comprovante Pix", content_type="text/plain")
 
@@ -14364,7 +14373,7 @@ class PedidoTests(TestCase):
                 "unidade": "Un",
                 "preco_unitario": "100.00",
                 "valor_total": "200.00",
-                "estoque_no_momento": self.produto.quantidade,
+                "estoque_no_momento": str(self.produto.quantidade),
                 "observacao": "",
             }
         ]
@@ -14626,14 +14635,14 @@ class PedidoTests(TestCase):
         resposta = self.client.get(reverse("estoque:pedido_detalhe", args=[pedido.id]), secure=True)
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "Enviar para Venda")
+        self.assertContains(resposta, "Gerar Venda")
         self.assertContains(resposta, f'{reverse("estoque:vendas")}?pedido_id={pedido.id}')
-        self.assertNotContains(resposta, "Enviar pend")
+        self.assertNotContains(resposta, "Gerar Venda da Pend?ncia")
         self.assertContains(resposta, "Itens do Pedido")
         self.assertContains(resposta, "Total do Pedido")
         self.assertNotContains(resposta, "Itens pendentes")
         self.assertContains(resposta, "Editar Pedido")
-        self.assertContains(resposta, "Enviar este pedido para venda? Confira os dados antes de continuar.")
+        self.assertContains(resposta, "Gerar venda a partir deste pedido? Confira os dados antes de continuar.")
         self.assertContains(resposta, "Tem certeza que deseja cancelar este pedido? O historico sera preservado, mas o pedido deixara de ficar ativo.")
 
     def test_editar_pedido_aberto_atualiza_itens_sem_baixar_estoque_ou_criar_financeiro(self):
@@ -15308,7 +15317,7 @@ class PedidoTests(TestCase):
         self.assertNotContains(resposta, "3.000")
         self.assertContains(resposta, "R$ 31.50")
         self.assertNotContains(resposta, "Produto Vendido Pedido Parcial")
-        self.assertContains(resposta, "Enviar pend")
+        self.assertContains(resposta, "Gerar Venda da Pend&ecirc;ncia")
         self.assertContains(resposta, f'{reverse("estoque:vendas")}?pedido_id={pedido.id}')
         self.assertNotContains(resposta, ">Ir para Venda<")
 

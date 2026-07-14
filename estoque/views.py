@@ -16,6 +16,7 @@ from io import BytesIO
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from datetime import date, timedelta
+import time
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -8946,6 +8947,8 @@ def central_pix(request):
         termo_normalizado = normalizar_texto_cliente(termo_busca_pix)
         termo_documento = normalizar_documento_cliente(termo_busca_pix)
         termo_valor = termo_busca_pix.replace("R$", "").strip().replace(".", "").replace(",", ".")
+        termo_id = termo_busca_pix.lstrip("#").strip()
+        busca_por_id_exato = termo_id.isdigit()
         cliente_normalizado = normalizar_texto_cliente(cliente_pix)
         cliente_documento = normalizar_documento_cliente(cliente_pix)
         resultado = []
@@ -8994,7 +8997,10 @@ def central_pix(request):
                 if parte
             )
             campos_normalizados = normalizar_texto_cliente(campos_busca)
-            if termo_busca_pix and not (
+            if busca_por_id_exato:
+                if pix.id != int(termo_id):
+                    continue
+            elif termo_busca_pix and not (
                 termo_normalizado in campos_normalizados
                 or (termo_documento and termo_documento in normalizar_documento_cliente(campos_busca))
                 or (termo_valor and termo_valor in str(pix.valor or ""))
@@ -10254,9 +10260,7 @@ def receber_cliente(request, cliente_id):
         }
         for conta in contas
     ]
-    tem_pix_em_atencao = False
-    if pix_recebido_escolhido or feedback_recebimento or request.GET.get("pix_alerta") == "1":
-        tem_pix_em_atencao = _tem_pix_em_atencao()
+    tem_pix_em_atencao = _tem_pix_em_atencao()
 
     contexto = {
         "cliente": cliente,
@@ -11523,8 +11527,8 @@ def _quantidade_estoque_para_unidade_base(produto, quantidade, unidade=None):
             raise ValueError(f"Fator de conversao invalido para {produto.nome}.")
         return (quantidade_decimal / fator).quantize(Decimal("0.001")), unidade_base
 
-    if not unidade_recebida:
-        return quantidade_decimal, unidade_base
+    if not unidade_recebida or not unidade_base_norm:
+        return quantidade_decimal, unidade_base or str(unidade or "").strip()
 
     unidades_validas = [u for u in [unidade_base, unidade_fracionada if produto.vende_fracionado else ""] if u]
     raise ValueError(
@@ -11817,10 +11821,16 @@ def gravar_venda(request):
 
     tipo_pagamento_venda = str(dados.get("tipo_pagamento") or "").strip()
     valores_origem_venda = None
-    if _venda_pagamento_imediato(tipo_pagamento_venda):
+    if (
+        _venda_pagamento_imediato(tipo_pagamento_venda)
+        and "origem_recebimento" in dados
+    ):
         try:
             valores_origem_venda = _valores_origem_venda_post(dados)
-            _validar_origem_venda_a_vista(valores_origem_venda, total_calculado.quantize(Decimal("0.01")))
+            _validar_origem_venda_a_vista(
+                valores_origem_venda,
+                total_calculado.quantize(Decimal("0.01")),
+            )
         except ValueError as exc:
             return JsonResponse({"sucesso": False, "mensagem": str(exc)}, status=400)
 
