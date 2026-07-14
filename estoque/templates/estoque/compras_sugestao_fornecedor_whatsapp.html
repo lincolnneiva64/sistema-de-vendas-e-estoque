@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <title>Lista de Compras - WhatsApp</title>
   <style>
     :root {
@@ -283,7 +284,7 @@
 
     .mensagem-controles {
       display: grid;
-      grid-template-columns: minmax(180px, 1fr) auto;
+      grid-template-columns: minmax(160px, 1fr) minmax(150px, .8fr) auto;
       gap: 8px;
       align-items: end;
       margin-bottom: 10px;
@@ -369,6 +370,111 @@
 
     .destinatario-aviso.visivel {
       display: block;
+    }
+
+    .destinatario-status {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      margin-top: 9px;
+      border: 1px solid #ead7dc;
+      border-radius: 999px;
+      background: #fff;
+      color: var(--suave);
+      padding: 5px 9px;
+      font-size: .72rem;
+      font-weight: 900;
+    }
+
+    .destinatario-status.padrao {
+      border-color: #d5e3f4;
+      background: #f5f9ff;
+      color: #244c74;
+    }
+
+    .destinatario-status.recente {
+      border-color: #d5e8dd;
+      background: #f4fbf6;
+      color: #285f3b;
+    }
+
+    .destinatario-status.personalizado {
+      border-color: #efd8c8;
+      background: #fff8f2;
+      color: #8a4c22;
+    }
+
+    .destinatarios-recentes {
+      margin-top: 10px;
+      border: 1px solid #f0e0e3;
+      border-radius: 10px;
+      background: #fffaf8;
+      padding: 9px;
+    }
+
+    .destinatarios-recentes[hidden] {
+      display: none !important;
+    }
+
+    .destinatarios-recentes-titulo {
+      margin: 0 0 7px;
+      color: var(--vinho-escuro);
+      font-size: .7rem;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .destinatarios-recentes-lista {
+      display: grid;
+      gap: 6px;
+    }
+
+    .destinatario-recente-btn {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 4px 10px;
+      width: 100%;
+      border: 1px solid #ecd3d8;
+      border-radius: 8px;
+      background: #fff;
+      color: var(--texto);
+      padding: 8px 9px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .destinatario-recente-btn:hover,
+    .destinatario-recente-btn:focus {
+      outline: 2px solid rgba(138, 47, 61, .14);
+      border-color: var(--vinho);
+      background: #fff8f9;
+    }
+
+    .destinatario-recente-btn.selecionado,
+    .destinatario-recente-btn[aria-pressed="true"] {
+      border-color: var(--vinho);
+      background: #fff0f3;
+      box-shadow: 0 0 0 2px rgba(138, 47, 61, .12);
+    }
+
+    .destinatario-recente-nome {
+      font-size: .84rem;
+      font-weight: 900;
+      overflow-wrap: anywhere;
+    }
+
+    .destinatario-recente-telefone {
+      color: var(--vinho-escuro);
+      font-size: .8rem;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .destinatario-recente-usos {
+      grid-column: 1 / -1;
+      color: var(--suave);
+      font-size: .68rem;
+      font-weight: 800;
     }
 
     .mensagem-curta {
@@ -492,6 +598,14 @@
       .destinatario-btn {
         width: 100%;
         border-radius: 8px;
+      }
+
+      .destinatario-recente-btn {
+        grid-template-columns: 1fr;
+      }
+
+      .destinatario-recente-telefone {
+        white-space: normal;
       }
 
       .cabecalho {
@@ -686,12 +800,21 @@
           <label for="whatsappDestinatario">WhatsApp do destinatario</label>
           <input type="tel" id="whatsappDestinatario" inputmode="tel" autocomplete="tel" placeholder="Opcional">
         </div>
+        <div class="mensagem-campo">
+          <label for="whatsappDestinatarioNome">Nome (opcional)</label>
+          <input type="text" id="whatsappDestinatarioNome" autocomplete="off" placeholder="Opcional">
+        </div>
         <div class="mensagem-acoes-envio">
           <a class="acao-btn imagem-lista" id="btnImagemLista" href="#" target="_blank" rel="noopener" hidden>Imagem da lista</a>
           <button type="button" class="acao-btn" id="btnEnviarWhatsapp">Abrir conversa no WhatsApp</button>
         </div>
       </div>
       <div class="destinatarios-rapidos" id="destinatariosRapidos"></div>
+      <div class="destinatario-status personalizado" id="destinatarioStatus" data-destinatario-status>Destinatário personalizado</div>
+      <section class="destinatarios-recentes" id="destinatariosRecentes" hidden>
+        <h2 class="destinatarios-recentes-titulo">Destinatários recentes</h2>
+        <div class="destinatarios-recentes-lista" id="destinatariosRecentesLista"></div>
+      </section>
       <div class="destinatario-aviso" id="destinatarioAviso"></div>
     </section>
 
@@ -726,9 +849,16 @@
     const btnImagemLista = document.getElementById("btnImagemLista");
     const btnEnviarWhatsapp = document.getElementById("btnEnviarWhatsapp");
     const whatsappDestinatario = document.getElementById("whatsappDestinatario");
+    const whatsappDestinatarioNome = document.getElementById("whatsappDestinatarioNome");
     const destinatariosRapidos = document.getElementById("destinatariosRapidos");
+    const destinatariosRecentes = document.getElementById("destinatariosRecentes");
+    const destinatariosRecentesLista = document.getElementById("destinatariosRecentesLista");
     const destinatarioAviso = document.getElementById("destinatarioAviso");
+    const destinatarioStatus = document.getElementById("destinatarioStatus");
     const btnImprimir = document.getElementById("btnImprimir");
+    let payloadAtual = null;
+    let destinatarioPadraoAtual = null;
+    let destinatarioRecenteSelecionado = null;
 
     function html(valor) {
       return String(valor ?? "")
@@ -755,12 +885,181 @@
     }
 
     function normalizarWhatsapp(valor) {
-      let numero = String(valor || "").replace(/\D/g, "");
+      const textoOriginal = String(valor || "").trim();
+      let numero = textoOriginal.replace(/\D/g, "");
+      if (textoOriginal.startsWith("+") && !textoOriginal.startsWith("+55")) {
+        return numero;
+      }
       if ((numero.length === 10 || numero.length === 11) && !numero.startsWith("55")) {
         numero = "55" + numero;
       }
       return numero;
     }
+
+    function formatarWhatsappCampo(valor) {
+      const textoOriginal = String(valor || "");
+      const textoLimpo = textoOriginal.trim();
+      const digitos = textoOriginal.replace(/\D/g, "");
+      if (!digitos) return "";
+      if (textoLimpo.startsWith("+") && !textoLimpo.startsWith("+55")) return textoOriginal;
+
+      if (digitos.startsWith("55") && (digitos.length === 12 || digitos.length === 13)) {
+        const numero = digitos.slice(2);
+        if (numero.length === 11) return "+55 (" + numero.slice(0, 2) + ") " + numero.slice(2, 7) + "-" + numero.slice(7);
+        return "+55 (" + numero.slice(0, 2) + ") " + numero.slice(2, 6) + "-" + numero.slice(6);
+      }
+
+      if (digitos.length === 11) {
+        return "(" + digitos.slice(0, 2) + ") " + digitos.slice(2, 7) + "-" + digitos.slice(7);
+      }
+
+      if (digitos.length === 10) {
+        return "(" + digitos.slice(0, 2) + ") " + digitos.slice(2, 6) + "-" + digitos.slice(6);
+      }
+
+      return textoOriginal;
+    }
+
+    function aplicarMascaraWhatsappCampo(campo) {
+      if (!campo) return;
+      const formatado = formatarWhatsappCampo(campo.value);
+      if (formatado !== campo.value) campo.value = formatado;
+    }
+
+    function normalizarNomeDestinatario(valor) {
+      const nome = String(valor || "").trim().split(/\s+/).filter(Boolean).join(" ");
+      if (nome && nome === nome.toLowerCase()) {
+        return nome.split(" ").map(function (parte) {
+          return parte.charAt(0).toUpperCase() + parte.slice(1);
+        }).join(" ");
+      }
+      return nome;
+    }
+
+    function chaveTelefoneDestinatario(valor) {
+      const numero = normalizarWhatsapp(valor);
+      if (numero.startsWith("55") && (numero.length === 12 || numero.length === 13)) {
+        return numero.slice(2);
+      }
+      return numero;
+    }
+
+    function chaveNomeDestinatario(valor) {
+      return normalizarNomeDestinatario(valor).toLocaleLowerCase("pt-BR");
+    }
+
+    function camposEquivalemDestinatario(destinatario) {
+      if (!destinatario) return false;
+      const telefoneAtual = chaveTelefoneDestinatario(whatsappDestinatario?.value || "");
+      const telefoneBase = chaveTelefoneDestinatario(destinatario.telefone || destinatario.whatsapp || "");
+      const nomeAtual = chaveNomeDestinatario(whatsappDestinatarioNome?.value || "");
+      const nomeBase = chaveNomeDestinatario(destinatario.nome || "");
+      return telefoneAtual === telefoneBase && nomeAtual === nomeBase;
+    }
+
+    function atualizarSelecaoRecentes() {
+      if (!destinatariosRecentesLista) return;
+      destinatariosRecentesLista.querySelectorAll(".destinatario-recente-btn").forEach(function (botao) {
+        const selecionado = Boolean(
+          destinatarioRecenteSelecionado &&
+          camposEquivalemDestinatario({
+            nome: botao.dataset.nome || "",
+            telefone: botao.dataset.whatsapp || ""
+          })
+        );
+        botao.classList.toggle("selecionado", selecionado);
+        botao.setAttribute("aria-pressed", selecionado ? "true" : "false");
+      });
+    }
+
+    function atualizarStatusDestinatario() {
+      if (!destinatarioStatus) return;
+
+      let textoStatus = "Destinatário personalizado";
+      let classe = "personalizado";
+
+      if (camposEquivalemDestinatario(destinatarioPadraoAtual)) {
+        textoStatus = destinatarioPadraoAtual.nome || "Destinatário padrão";
+        classe = "padrao";
+        destinatarioRecenteSelecionado = null;
+      } else if (camposEquivalemDestinatario(destinatarioRecenteSelecionado)) {
+        const nome = normalizarNomeDestinatario(destinatarioRecenteSelecionado.nome || "") || "Sem nome";
+        textoStatus = nome + " (Recente)";
+        classe = "recente";
+      } else {
+        destinatarioRecenteSelecionado = null;
+      }
+
+      destinatarioStatus.textContent = textoStatus;
+      destinatarioStatus.classList.remove("padrao", "recente", "personalizado");
+      destinatarioStatus.classList.add(classe);
+      atualizarSelecaoRecentes();
+    }
+
+    function marcarEdicaoManual() {
+      destinatarioRecenteSelecionado = null;
+      atualizarStatusDestinatario();
+    }
+
+    function csrfToken() {
+      const match = document.cookie.match(/(?:^|;)\s*csrftoken=([^;]+)/);
+      if (match) return decodeURIComponent(match[1]);
+      return document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
+    }
+
+    function habilitarSelecaoAoFocar(campo) {
+      if (!campo) return function () {};
+
+      let preservarSelecaoNoMouseUp = false;
+
+      function selecionarTudo() {
+        if (document.activeElement !== campo) return;
+        if (typeof campo.select === "function") campo.select();
+      }
+
+      campo.addEventListener("focus", function () {
+        setTimeout(selecionarTudo, 0);
+      });
+
+      campo.addEventListener("mousedown", function () {
+        preservarSelecaoNoMouseUp = document.activeElement !== campo;
+      });
+
+      campo.addEventListener("mouseup", function (event) {
+        if (!preservarSelecaoNoMouseUp) return;
+        event.preventDefault();
+        preservarSelecaoNoMouseUp = false;
+      });
+
+      campo.addEventListener("touchend", function () {
+        setTimeout(selecionarTudo, 0);
+      }, { passive: true });
+
+      return function () {
+        campo.focus();
+        setTimeout(selecionarTudo, 0);
+      };
+    }
+
+    const selecionarWhatsappDestinatario = habilitarSelecaoAoFocar(whatsappDestinatario);
+    const selecionarWhatsappDestinatarioNome = habilitarSelecaoAoFocar(whatsappDestinatarioNome);
+    whatsappDestinatario?.addEventListener("input", function () {
+      aplicarMascaraWhatsappCampo(whatsappDestinatario);
+      marcarEdicaoManual();
+    });
+    whatsappDestinatario?.addEventListener("paste", function () {
+      setTimeout(function () {
+        aplicarMascaraWhatsappCampo(whatsappDestinatario);
+        marcarEdicaoManual();
+      }, 0);
+    });
+    whatsappDestinatarioNome?.addEventListener("input", function () {
+      marcarEdicaoManual();
+    });
+    whatsappDestinatarioNome?.addEventListener("blur", function () {
+      whatsappDestinatarioNome.value = normalizarNomeDestinatario(whatsappDestinatarioNome.value);
+      atualizarStatusDestinatario();
+    });
 
     function carregarPayload() {
       const payloadSalvo = document.getElementById("listaFornecedorWhatsappPayload");
@@ -838,19 +1137,23 @@
     function renderizarDestinatarios(payload) {
       const opcoes = Array.isArray(payload.destinatarios) ? payload.destinatarios : [];
       if (destinatariosRapidos) {
-        destinatariosRapidos.innerHTML = opcoes.map((destinatario) => {
-          const nome = texto(destinatario.nome, "Vendedor");
-          const numero = texto(destinatario.numero || destinatario.whatsapp, "");
-          return `<button type="button" class="destinatario-btn" data-whatsapp="${html(numero)}">${html(nome)}</button>`;
-        }).join("");
+        destinatariosRapidos.innerHTML = "";
+        destinatariosRapidos.hidden = true;
       }
 
       const vendedorPadrao = opcoes.length ? opcoes[0] : null;
+      destinatarioPadraoAtual = vendedorPadrao ? {
+        nome: texto(vendedorPadrao.nome, ""),
+        telefone: texto(vendedorPadrao.numero || vendedorPadrao.whatsapp, "")
+      } : null;
       if (whatsappDestinatario && vendedorPadrao) {
-        whatsappDestinatario.value = texto(
+        whatsappDestinatario.value = formatarWhatsappCampo(texto(
           vendedorPadrao.numero || vendedorPadrao.whatsapp,
           ""
-        );
+        ));
+      }
+      if (whatsappDestinatarioNome && vendedorPadrao) {
+        whatsappDestinatarioNome.value = texto(vendedorPadrao.nome, "");
       }
 
       if (destinatarioAviso) {
@@ -858,9 +1161,55 @@
         destinatarioAviso.textContent = mostrarAviso ? "Nenhum vendedor principal cadastrado para este fornecedor." : "";
         destinatarioAviso.classList.toggle("visivel", mostrarAviso);
       }
+      atualizarStatusDestinatario();
+    }
+
+    function renderizarRecentes(payload) {
+      const recentes = Array.isArray(payload.destinatariosRecentes) ? payload.destinatariosRecentes : [];
+      if (!destinatariosRecentes || !destinatariosRecentesLista) return;
+      destinatariosRecentes.hidden = !recentes.length;
+      destinatariosRecentesLista.innerHTML = recentes.map((destinatario) => {
+        const nome = texto(destinatario.nome, "Sem nome");
+        const telefone = texto(destinatario.telefone, "");
+        const telefoneFormatado = texto(destinatario.telefoneFormatado || destinatario.telefone, "");
+        const usos = Number(destinatario.quantidadeUtilizacoes || 0);
+        const textoUsos = usos === 1 ? "Usado 1 vez" : `Usado ${usos} vezes`;
+        return `
+          <button type="button" class="destinatario-recente-btn" data-origem="recente" data-whatsapp="${html(telefone)}" data-nome="${html(destinatario.nome || "")}" tabindex="0" aria-pressed="false">
+            <span class="destinatario-recente-nome">${html(nome)}</span>
+            <span class="destinatario-recente-telefone">${html(telefoneFormatado)}</span>
+            <span class="destinatario-recente-usos">${html(textoUsos)}</span>
+          </button>
+        `;
+      }).join("");
+      atualizarSelecaoRecentes();
+    }
+
+    async function registrarDestinatarioRecente(numero, nome) {
+      if (!payloadAtual || !payloadAtual.registrarDestinatarioUrl || !numero) return;
+      try {
+        const resposta = await fetch(payloadAtual.registrarDestinatarioUrl, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrfToken()
+          },
+          body: JSON.stringify({ telefone: numero, nome: nome || "" })
+        });
+        if (!resposta.ok) return;
+        const dados = await resposta.json();
+        if (dados && Array.isArray(dados.destinatariosRecentes)) {
+          payloadAtual.destinatariosRecentes = dados.destinatariosRecentes;
+          renderizarRecentes(payloadAtual);
+        }
+      } catch (erro) {
+        return;
+      }
     }
 
     function renderizar(payload) {
+      payloadAtual = payload;
       const linhas = Array.isArray(payload.linhas) ? payload.linhas.filter((linha) => texto(linha.produto, "")) : [];
       if (!linhas.length) return;
 
@@ -932,6 +1281,7 @@
         btnImagemLista.hidden = false;
       }
       renderizarDestinatarios(payload);
+      renderizarRecentes(payload);
     }
 
     painelMensagem?.addEventListener("toggle", function () {
@@ -977,6 +1327,8 @@
       const mensagem = (textoMensagemCurta?.textContent || "").trim();
       if (!mensagem) return;
       const numero = normalizarWhatsapp(whatsappDestinatario?.value || "");
+      const nome = normalizarNomeDestinatario(whatsappDestinatarioNome?.value || "");
+      registrarDestinatarioRecente(numero, nome);
       const url = numero
         ? `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`
         : `https://wa.me/?text=${encodeURIComponent(mensagem)}`;
@@ -986,8 +1338,35 @@
     destinatariosRapidos?.addEventListener("click", function(event) {
       const botao = event.target.closest(".destinatario-btn[data-whatsapp]");
       if (!botao || !whatsappDestinatario) return;
-      whatsappDestinatario.value = botao.dataset.whatsapp || "";
-      whatsappDestinatario.focus();
+      whatsappDestinatario.value = formatarWhatsappCampo(botao.dataset.whatsapp || "");
+      if (whatsappDestinatarioNome) whatsappDestinatarioNome.value = botao.dataset.nome || "";
+      destinatarioRecenteSelecionado = null;
+      atualizarStatusDestinatario();
+      selecionarWhatsappDestinatario();
+    });
+
+    function selecionarDestinatarioRecente(botao) {
+      if (!botao || !whatsappDestinatario) return;
+      const nome = botao.dataset.nome || "";
+      const telefone = botao.dataset.whatsapp || "";
+      whatsappDestinatario.value = formatarWhatsappCampo(telefone);
+      if (whatsappDestinatarioNome) whatsappDestinatarioNome.value = nome;
+      destinatarioRecenteSelecionado = { nome, telefone };
+      atualizarStatusDestinatario();
+      selecionarWhatsappDestinatario();
+    }
+
+    destinatariosRecentesLista?.addEventListener("click", function(event) {
+      const botao = event.target.closest(".destinatario-recente-btn[data-whatsapp]");
+      selecionarDestinatarioRecente(botao);
+    });
+
+    destinatariosRecentesLista?.addEventListener("keydown", function(event) {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const botao = event.target.closest(".destinatario-recente-btn[data-whatsapp]");
+      if (!botao) return;
+      event.preventDefault();
+      selecionarDestinatarioRecente(botao);
     });
 
     btnImprimir.addEventListener("click", function () {

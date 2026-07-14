@@ -15,13 +15,14 @@ from unittest.mock import patch
 from django.apps import apps as django_apps
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.contrib.auth import get_user_model
 from django.db.models import Sum
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
@@ -4973,6 +4974,11 @@ class ComprasListaConferenciaTests(TestCase):
 
 class ComprasListaFornecedorEnvioVendedorTests(TestCase):
     def setUp(self):
+        self.usuario = get_user_model().objects.create_user(
+            username="compras_whatsapp",
+            password="senha-teste",
+        )
+        self.client.force_login(self.usuario)
         self.fornecedor = Fornecedor.objects.create(
             nome="Fornecedor Envio Vendedor",
             telefone_whatsapp="91999990000",
@@ -5276,9 +5282,255 @@ class ComprasListaFornecedorEnvioVendedorTests(TestCase):
             resposta,
             "Nenhum vendedor principal cadastrado para este fornecedor.",
         )
+        self.assertContains(resposta, 'id="destinatarioStatus"')
+        self.assertContains(resposta, 'data-destinatario-status')
+        self.assertContains(resposta, 'destinatariosRapidos.hidden = true;')
+        self.assertNotContains(resposta, 'class="destinatario-btn" data-origem="padrao"')
         self.assertContains(resposta, "const vendedorPadrao = opcoes.length ? opcoes[0] : null;")
         self.assertNotContains(resposta, '"nome": "Lincoln"')
         self.assertNotContains(resposta, '"nome": "Roseli"')
+
+    def _url_destinatario_recente(self, lista=None):
+        return reverse(
+            "estoque:compras_lista_fornecedor_whatsapp_destinatario_recente",
+            kwargs={"pk": (lista or self.lista).pk},
+        )
+
+    def _post_destinatario_recente(self, telefone, nome="", lista=None):
+        return self.client.post(
+            self._url_destinatario_recente(lista),
+            data=json.dumps({"telefone": telefone, "nome": nome}),
+            content_type="application/json",
+            secure=True,
+        )
+
+    def test_cria_primeiro_destinatario_recente(self):
+        resposta = self._post_destinatario_recente("(91) 98888-8888", "lincoln")
+
+        self.assertEqual(resposta.status_code, 200)
+        recente = FornecedorDestinatarioRecente.objects.get(fornecedor=self.fornecedor)
+        self.assertEqual(recente.nome, "Lincoln")
+        self.assertEqual(recente.telefone, "5591988888888")
+        self.assertEqual(recente.quantidade_utilizacoes, 1)
+
+    def test_destinatario_recente_normaliza_multiplos_nomes_e_espacos_extras(self):
+        self._post_destinatario_recente("91977777777", "  ana   maria  ")
+
+        recente = FornecedorDestinatarioRecente.objects.get(fornecedor=self.fornecedor)
+        self.assertEqual(recente.nome, "Ana Maria")
+
+    def test_reutiliza_mesmo_numero_incrementa_quantidade_atualiza_ultima_utilizacao_sem_duplicar(self):
+        primeiro_momento = datetime(2026, 7, 14, 10, 0, tzinfo=timezone.get_current_timezone())
+        segundo_momento = datetime(2026, 7, 14, 11, 30, tzinfo=timezone.get_current_timezone())
+
+        with patch("estoque.views.timezone.now", return_value=primeiro_momento):
+            self._post_destinatario_recente("91988888888", "carlos")
+        with patch("estoque.views.timezone.now", return_value=segundo_momento):
+            self._post_destinatario_recente("(91) 98888-8888", "carlos silva")
+
+        self.assertEqual(FornecedorDestinatarioRecente.objects.filter(fornecedor=self.fornecedor).count(), 1)
+        recente = FornecedorDestinatarioRecente.objects.get(fornecedor=self.fornecedor)
+        self.assertEqual(recente.quantidade_utilizacoes, 2)
+        self.assertEqual(recente.ultima_utilizacao, segundo_momento)
+        self.assertEqual(recente.nome, "Carlos Silva")
+
+    def test_reutilizar_telefone_com_nome_em_caixa_diferente_atualiza_registro_existente(self):
+        self._post_destinatario_recente("91988888888", "carlos silva")
+        self._post_destinatario_recente("+55 (91) 98888-8888", "Carlos Silva")
+
+        self.assertEqual(FornecedorDestinatarioRecente.objects.filter(fornecedor=self.fornecedor).count(), 1)
+        recente = FornecedorDestinatarioRecente.objects.get(fornecedor=self.fornecedor)
+        self.assertEqual(recente.nome, "Carlos Silva")
+        self.assertEqual(recente.quantidade_utilizacoes, 2)
+
+    def test_nome_ja_formatado_nao_sofre_transformacao_destrutiva(self):
+        self._post_destinatario_recente("91988887777", "Joao McDonald LTDA")
+
+        recente = FornecedorDestinatarioRecente.objects.get(fornecedor=self.fornecedor)
+        self.assertEqual(recente.nome, "Joao McDonald LTDA")
+
+    def test_historico_nao_duplica_mesmo_numero_por_diferenca_de_mascara(self):
+        self._post_destinatario_recente("91993643215", "Leandro")
+        self._post_destinatario_recente("(91) 99364-3215", "Leandro")
+        self._post_destinatario_recente("+55 (91) 99364-3215", "Leandro")
+
+        self.assertEqual(FornecedorDestinatarioRecente.objects.filter(fornecedor=self.fornecedor).count(), 1)
+        recente = FornecedorDestinatarioRecente.objects.get(fornecedor=self.fornecedor)
+        self.assertEqual(recente.telefone, "5591993643215")
+        self.assertEqual(recente.quantidade_utilizacoes, 3)
+
+    def test_lista_mostra_apenas_ultimos_cinco_recentes_ordenados(self):
+        base = datetime(2026, 7, 14, 8, 0, tzinfo=timezone.get_current_timezone())
+        for indice in range(6):
+            FornecedorDestinatarioRecente.objects.create(
+                fornecedor=self.fornecedor,
+                nome=f"Pessoa {indice}",
+                telefone=f"9198888800{indice}",
+                ultima_utilizacao=base + timedelta(minutes=indice),
+                quantidade_utilizacoes=indice + 1,
+            )
+
+        payload = views._payload_lista_fornecedor(self.lista)
+
+        recentes = payload["destinatariosRecentes"]
+        self.assertEqual(len(recentes), 5)
+        self.assertEqual(
+            [item["nome"] for item in recentes],
+            ["Pessoa 5", "Pessoa 4", "Pessoa 3", "Pessoa 2", "Pessoa 1"],
+        )
+        self.assertNotIn("Pessoa 0", [item["nome"] for item in recentes])
+
+    def test_destinatarios_recentes_sao_separados_por_fornecedor(self):
+        outro_fornecedor = Fornecedor.objects.create(nome="Outro Fornecedor Recente")
+        outra_lista = ListaCompraFornecedor.objects.create(
+            fornecedor=outro_fornecedor,
+            data_lista=date(2026, 7, 14),
+            data_inicio_periodo=date(2026, 7, 1),
+            data_fim_periodo=date(2026, 7, 14),
+            total_sugerido_original=Decimal("10.00"),
+            total_lista=Decimal("10.00"),
+        )
+        FornecedorDestinatarioRecente.objects.create(
+            fornecedor=self.fornecedor,
+            nome="Carlos",
+            telefone="91988888888",
+            ultima_utilizacao=timezone.now(),
+        )
+        FornecedorDestinatarioRecente.objects.create(
+            fornecedor=outro_fornecedor,
+            nome="Ana",
+            telefone="91977777777",
+            ultima_utilizacao=timezone.now(),
+        )
+
+        payload_atual = views._payload_lista_fornecedor(self.lista)
+        payload_outro = views._payload_lista_fornecedor(outra_lista)
+
+        self.assertEqual([item["nome"] for item in payload_atual["destinatariosRecentes"]], ["Carlos"])
+        self.assertEqual([item["nome"] for item in payload_outro["destinatariosRecentes"]], ["Ana"])
+
+    def test_numero_manual_entra_no_historico(self):
+        resposta = self._post_destinatario_recente("5591987654321", "")
+
+        self.assertEqual(resposta.status_code, 200)
+        recente = FornecedorDestinatarioRecente.objects.get(fornecedor=self.fornecedor)
+        self.assertEqual(recente.telefone, "5591987654321")
+        self.assertEqual(recente.nome, "")
+
+    def test_numero_internacional_com_mais_nao_recebe_prefixo_brasileiro(self):
+        resposta = self._post_destinatario_recente("+1 (415) 555-2671", "Fornecedor EUA")
+
+        self.assertEqual(resposta.status_code, 200)
+        recente = FornecedorDestinatarioRecente.objects.get(fornecedor=self.fornecedor)
+        self.assertEqual(recente.telefone, "14155552671")
+        self.assertFalse(recente.telefone.startswith("55"))
+
+    def test_endpoint_destinatario_recente_rejeita_dados_grandes_sem_erro_tecnico(self):
+        resposta = self._post_destinatario_recente("9" * 21, "A" * 141)
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertEqual(resposta.json()["erro"], "Dados do destinatario invalidos.")
+        self.assertFalse(FornecedorDestinatarioRecente.objects.filter(fornecedor=self.fornecedor).exists())
+
+    def test_endpoint_destinatario_recente_aceita_apenas_post(self):
+        resposta = self.client.get(self._url_destinatario_recente(), secure=True)
+
+        self.assertEqual(resposta.status_code, 405)
+
+    def test_endpoint_destinatario_recente_exige_usuario_autenticado(self):
+        self.client.logout()
+
+        resposta = self._post_destinatario_recente("91988888888", "Carlos")
+
+        self.assertEqual(resposta.status_code, 403)
+        self.assertEqual(resposta.json()["erro"], "Autenticacao necessaria.")
+        self.assertFalse(FornecedorDestinatarioRecente.objects.filter(fornecedor=self.fornecedor).exists())
+
+    def test_payload_formata_telefone_recente_com_codigo_do_pais(self):
+        FornecedorDestinatarioRecente.objects.create(
+            fornecedor=self.fornecedor,
+            nome="Leandro",
+            telefone="5591993643215",
+            ultima_utilizacao=timezone.now(),
+        )
+
+        payload = views._payload_lista_fornecedor(self.lista)
+
+        recente = payload["destinatariosRecentes"][0]
+        self.assertEqual(recente["telefone"], "5591993643215")
+        self.assertEqual(recente["telefoneFormatado"], "+55 (91) 99364-3215")
+
+    def test_destinatario_padrao_permanece_inalterado_ao_registrar_recente(self):
+        contato = FornecedorContato.objects.create(
+            fornecedor=self.fornecedor,
+            nome="Vendedor Padrao",
+            principal=True,
+            ativo=True,
+        )
+        telefone = FornecedorContatoTelefone.objects.create(
+            contato=contato,
+            numero="91955554444",
+            whatsapp=True,
+            principal=True,
+            ativo=True,
+        )
+        destinatario = FornecedorDestinatarioLista.objects.create(
+            fornecedor=self.fornecedor,
+            contato=contato,
+            telefone=telefone,
+        )
+
+        self._post_destinatario_recente("91988888888", "Carlos")
+
+        destinatario.refresh_from_db()
+        self.assertEqual(destinatario.contato, contato)
+        self.assertEqual(destinatario.telefone, telefone)
+        self.assertEqual(FornecedorDestinatarioLista.objects.filter(fornecedor=self.fornecedor).count(), 1)
+
+    def test_tela_exibe_destinatarios_recentes_e_mantem_abertura_whatsapp(self):
+        FornecedorDestinatarioRecente.objects.create(
+            fornecedor=self.fornecedor,
+            nome="Carlos",
+            telefone="91988888888",
+            ultima_utilizacao=timezone.now(),
+            quantidade_utilizacoes=3,
+        )
+
+        resposta = self.client.get(self.url, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Destinatários recentes")
+        self.assertContains(resposta, "Carlos")
+        self.assertContains(resposta, "+55 (91) 98888-8888")
+        self.assertContains(resposta, 'class="destinatario-recente-btn"')
+        self.assertContains(resposta, 'data-origem="recente"')
+        self.assertContains(resposta, 'tabindex="0"')
+        self.assertContains(resposta, 'aria-pressed="false"')
+        self.assertContains(resposta, "registrarDestinatarioRecente")
+        self.assertContains(resposta, "window.open(url")
+
+    def test_tela_inclui_mascara_visual_e_abertura_normalizada_do_whatsapp(self):
+        contato = FornecedorContato.objects.create(
+            fornecedor=self.fornecedor,
+            nome="Leandro",
+            principal=True,
+            ativo=True,
+        )
+        FornecedorContatoTelefone.objects.create(
+            contato=contato,
+            numero="91993643215",
+            whatsapp=True,
+            principal=True,
+            ativo=True,
+        )
+
+        resposta = self.client.get(self.url, secure=True)
+
+        self.assertContains(resposta, "formatarWhatsappCampo")
+        self.assertContains(resposta, "aplicarMascaraWhatsappCampo")
+        self.assertContains(resposta, "normalizarWhatsapp(whatsappDestinatario?.value")
+        self.assertContains(resposta, 'textoOriginal.startsWith("+") && !textoOriginal.startsWith("+55")')
+        self.assertContains(resposta, '"numero": "91993643215"')
 
 
 class ComprasListaFornecedorGravarTests(TestCase):

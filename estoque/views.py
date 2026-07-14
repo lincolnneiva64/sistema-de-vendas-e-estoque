@@ -29,7 +29,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
     contato_tem_telefone_no_post,
@@ -4584,6 +4584,88 @@ def _normalizar_whatsapp_fornecedor(valor):
     return "".join(caractere for caractere in str(valor or "") if caractere.isdigit())
 
 
+def _formatar_whatsapp_recente_fornecedor(valor):
+    digitos = _normalizar_whatsapp_fornecedor(valor)
+    if digitos.startswith("55") and len(digitos) in (12, 13):
+        numero = digitos[2:]
+        if len(numero) == 11:
+            return f"+55 ({numero[:2]}) {numero[2:7]}-{numero[7:]}"
+        if len(numero) == 10:
+            return f"+55 ({numero[:2]}) {numero[2:6]}-{numero[6:]}"
+    if len(digitos) == 11:
+        return f"({digitos[:2]}) {digitos[2:7]}-{digitos[7:]}"
+    if len(digitos) == 10:
+        return f"({digitos[:2]}) {digitos[2:6]}-{digitos[6:]}"
+    return valor or ""
+
+
+def _destinatarios_recentes_lista_fornecedor(fornecedor, limite=5):
+    if not fornecedor:
+        return []
+
+    recentes = (
+        FornecedorDestinatarioRecente.objects
+        .filter(fornecedor=fornecedor)
+        .order_by("-ultima_utilizacao", "-id")[:limite]
+    )
+    return [
+        {
+            "id": recente.id,
+            "nome": recente.nome,
+            "telefone": recente.telefone,
+            "telefoneFormatado": _formatar_whatsapp_recente_fornecedor(recente.telefone),
+            "ultimaUtilizacao": recente.ultima_utilizacao.isoformat(),
+            "quantidadeUtilizacoes": recente.quantidade_utilizacoes,
+        }
+        for recente in recentes
+    ]
+
+
+def _registrar_destinatario_recente_fornecedor(fornecedor, telefone, nome=""):
+    telefone_normalizado = FornecedorDestinatarioRecente.normalizar_telefone(telefone)
+    if not fornecedor or not telefone_normalizado:
+        return None
+
+    nome_limpo = FornecedorDestinatarioRecente.normalizar_nome(nome)
+    agora = timezone.now()
+
+    def atualizar_existente():
+        campos = {
+            "ultima_utilizacao": agora,
+            "quantidade_utilizacoes": F("quantidade_utilizacoes") + 1,
+        }
+        if nome_limpo:
+            campos["nome"] = nome_limpo
+        return (
+            FornecedorDestinatarioRecente.objects
+            .filter(fornecedor=fornecedor, telefone=telefone_normalizado)
+            .update(**campos)
+        )
+
+    with transaction.atomic():
+        if atualizar_existente():
+            return FornecedorDestinatarioRecente.objects.get(
+                fornecedor=fornecedor,
+                telefone=telefone_normalizado,
+            )
+
+        try:
+            with transaction.atomic():
+                return FornecedorDestinatarioRecente.objects.create(
+                    fornecedor=fornecedor,
+                    nome=nome_limpo,
+                    telefone=telefone,
+                    ultima_utilizacao=agora,
+                    quantidade_utilizacoes=1,
+                )
+        except IntegrityError:
+            atualizar_existente()
+            return FornecedorDestinatarioRecente.objects.get(
+                fornecedor=fornecedor,
+                telefone=telefone_normalizado,
+            )
+
+
 def _payload_destinatarios_lista_fornecedor(fornecedor):
     destinatarios = []
 
@@ -4696,8 +4778,10 @@ def _payload_lista_fornecedor(lista):
     destinatarios = _payload_destinatarios_lista_fornecedor(lista.fornecedor)
     return {
         "tipo": "sintetica",
+        "listaId": lista.pk,
         "titulo": "Lista de Compras",
         "imagemUrl": reverse("estoque:compras_lista_fornecedor_whatsapp_imagem", kwargs={"pk": lista.pk}),
+        "registrarDestinatarioUrl": reverse("estoque:compras_lista_fornecedor_whatsapp_destinatario_recente", kwargs={"pk": lista.pk}),
         "fornecedor": lista.fornecedor.nome if lista.fornecedor else "Fornecedor nao informado",
         "periodo": f"{lista.data_inicio_periodo.strftime('%d/%m/%Y')} ate {lista.data_fim_periodo.strftime('%d/%m/%Y')}",
         "chegada": lista.data_chegada_prevista.strftime("%d/%m/%Y") if lista.data_chegada_prevista else "",
@@ -4715,6 +4799,7 @@ def _payload_lista_fornecedor(lista):
             for item in lista.itens.all()
         ],
         "destinatarios": destinatarios["opcoes"],
+        "destinatariosRecentes": _destinatarios_recentes_lista_fornecedor(lista.fornecedor),
         "temContatoFornecedor": destinatarios["temContatoFornecedor"],
     }
 
@@ -5596,6 +5681,41 @@ def compras_lista_fornecedor_whatsapp(request, pk):
         "estoque/compras_sugestao_fornecedor_whatsapp.html",
         {"whatsapp_payload": _payload_lista_fornecedor(lista)},
     )
+
+
+@require_POST
+def compras_lista_fornecedor_whatsapp_destinatario_recente(request, pk):
+    if not request.user.is_authenticated:
+        return JsonResponse({"ok": False, "erro": "Autenticacao necessaria."}, status=403)
+
+    lista = get_object_or_404(
+        ListaCompraFornecedor.objects.select_related("fornecedor"),
+        pk=pk,
+    )
+
+    try:
+        dados = json.loads(request.body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        dados = request.POST
+
+    telefone = dados.get("telefone") or dados.get("numero") or ""
+    nome = dados.get("nome") or ""
+    telefone_normalizado = FornecedorDestinatarioRecente.normalizar_telefone(telefone)
+    nome_normalizado = FornecedorDestinatarioRecente.normalizar_nome(nome)
+    if not telefone_normalizado:
+        return JsonResponse({"ok": True, "registrado": False})
+    if len(telefone_normalizado) > 20 or len(nome_normalizado) > 140:
+        return JsonResponse({"ok": False, "erro": "Dados do destinatario invalidos."}, status=400)
+
+    try:
+        recente = _registrar_destinatario_recente_fornecedor(lista.fornecedor, telefone, nome)
+    except ValidationError:
+        return JsonResponse({"ok": False, "erro": "Dados do destinatario invalidos."}, status=400)
+    return JsonResponse({
+        "ok": True,
+        "registrado": bool(recente),
+        "destinatariosRecentes": _destinatarios_recentes_lista_fornecedor(lista.fornecedor),
+    })
 
 
 def compras_lista_fornecedor_whatsapp_imagem(request, pk):

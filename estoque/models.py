@@ -1107,6 +1107,63 @@ class FornecedorDestinatarioLista(models.Model):
         )
 
 
+class FornecedorDestinatarioRecente(models.Model):
+    fornecedor = models.ForeignKey(
+        Fornecedor,
+        on_delete=models.CASCADE,
+        related_name="destinatarios_recentes_lista",
+    )
+    nome = models.CharField(max_length=140, blank=True, default="")
+    telefone = models.CharField(max_length=20)
+    ultima_utilizacao = models.DateTimeField(db_index=True)
+    quantidade_utilizacoes = models.PositiveIntegerField(default=1)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-ultima_utilizacao", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["fornecedor", "telefone"],
+                name="uniq_destinatario_recente_fornecedor_telefone",
+            ),
+        ]
+
+    @staticmethod
+    def normalizar_telefone(valor):
+        texto = str(valor or "").strip()
+        digitos = "".join(caractere for caractere in texto if caractere.isdigit())
+        if texto.startswith("+") and not texto.startswith("+55"):
+            return digitos
+        if len(digitos) in (10, 11):
+            return f"55{digitos}"
+        return digitos
+
+    @staticmethod
+    def normalizar_nome(valor):
+        nome = " ".join(str(valor or "").strip().split())
+        if nome and nome == nome.lower():
+            return " ".join(parte[:1].upper() + parte[1:] for parte in nome.split())
+        return nome
+
+    def clean(self):
+        super().clean()
+        self.telefone = self.normalizar_telefone(self.telefone)
+        self.nome = self.normalizar_nome(self.nome)
+        if not self.telefone:
+            raise ValidationError({"telefone": "Informe o telefone do destinatario recente."})
+        if self.quantidade_utilizacoes < 1:
+            raise ValidationError({"quantidade_utilizacoes": "A quantidade de utilizacoes deve ser maior que zero."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        nome = self.nome or "Sem nome"
+        return f"{self.fornecedor} - {nome} - {self.telefone}"
+
+
 class MeioPagamento(models.Model):
     TIPO_DEBITO = "debito"
     TIPO_CREDITO = "credito"
