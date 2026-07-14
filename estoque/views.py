@@ -29,7 +29,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, FornecedorDestinatarioLista, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
     contato_tem_telefone_no_post,
@@ -4586,47 +4586,108 @@ def _normalizar_whatsapp_fornecedor(valor):
 def _payload_destinatarios_lista_fornecedor(fornecedor):
     destinatarios = []
 
-    if fornecedor:
-        contato_principal = (
-            fornecedor.contatos.filter(
-                ativo=True,
-                principal=True,
-            )
-            .order_by("id")
-            .first()
+    if not fornecedor:
+        return {
+            "opcoes": destinatarios,
+            "temContatoFornecedor": False,
+            "destinatarioConfigurado": False,
+        }
+
+    destinatario_padrao = (
+        FornecedorDestinatarioLista.objects
+        .select_related("contato", "telefone")
+        .filter(
+            fornecedor=fornecedor,
+            tipo=FornecedorDestinatarioLista.TIPO_PADRAO,
+            ativo=True,
+            contato__ativo=True,
+            telefone__ativo=True,
+            telefone__whatsapp=True,
+        )
+        .order_by("-criado_em", "-id")
+        .first()
+    )
+
+    contato_vendedor = (
+        destinatario_padrao.contato
+        if destinatario_padrao
+        else fornecedor.contatos.filter(
+            ativo=True,
+            principal=True,
+        ).order_by("id").first()
+    )
+
+    if contato_vendedor:
+        telefones_whatsapp = telefones_whatsapp_contato(contato_vendedor)
+        cargo = f" ({contato_vendedor.cargo})" if contato_vendedor.cargo else ""
+        telefone_padrao_id = (
+            destinatario_padrao.telefone_id
+            if destinatario_padrao
+            else None
         )
 
-        if contato_principal:
-            telefones_whatsapp = telefones_whatsapp_contato(contato_principal)
-            cargo = f" ({contato_principal.cargo})" if contato_principal.cargo else ""
-
-            for indice, telefone in enumerate(telefones_whatsapp):
-                numero = _normalizar_whatsapp_fornecedor(telefone.numero)
-                if not numero:
-                    continue
-
-                if len(telefones_whatsapp) > 1:
-                    if telefone.principal:
-                        complemento = " - WhatsApp principal"
-                    else:
-                        complemento = f" - WhatsApp {indice + 1}"
-                else:
-                    complemento = ""
-
-                destinatarios.append(
-                    {
-                        "tipo": "vendedor",
-                        "nome": f"{contato_principal.nome}{cargo}{complemento}",
-                        "whatsapp": telefone.numero,
-                        "numero": numero,
-                        "telefoneId": getattr(telefone, "id", None),
-                        "principal": bool(telefone.principal),
-                    }
+        if telefone_padrao_id:
+            telefones_whatsapp.sort(
+                key=lambda telefone: (
+                    telefone.id != telefone_padrao_id,
+                    not telefone.principal,
+                    telefone.ordem,
+                    telefone.id or 0,
                 )
+            )
+
+        for indice, telefone in enumerate(telefones_whatsapp):
+            numero = _normalizar_whatsapp_fornecedor(telefone.numero)
+            if not numero:
+                continue
+
+            selecionado = (
+                telefone.id == telefone_padrao_id
+                if telefone_padrao_id
+                else bool(telefone.principal or indice == 0)
+            )
+
+            if len(telefones_whatsapp) > 1:
+                if selecionado and destinatario_padrao:
+                    complemento = " - WhatsApp das listas"
+                elif selecionado:
+                    complemento = " - WhatsApp principal"
+                else:
+                    complemento = f" - Outro WhatsApp {indice + 1}"
+            else:
+                complemento = ""
+
+            destinatarios.append(
+                {
+                    "tipo": (
+                        "vendedor_padrao"
+                        if selecionado and destinatario_padrao
+                        else "vendedor"
+                    ),
+                    "nome": f"{contato_vendedor.nome}{cargo}{complemento}",
+                    "whatsapp": telefone.numero,
+                    "numero": numero,
+                    "telefoneId": getattr(telefone, "id", None),
+                    "contatoId": contato_vendedor.id,
+                    "principal": selecionado,
+                    "configurado": bool(
+                        destinatario_padrao
+                        and telefone.id == telefone_padrao_id
+                    ),
+                }
+            )
+
+    destinatarios.sort(
+        key=lambda destinatario: (
+            not destinatario["principal"],
+            destinatario["nome"],
+        )
+    )
 
     return {
         "opcoes": destinatarios,
         "temContatoFornecedor": bool(destinatarios),
+        "destinatarioConfigurado": bool(destinatario_padrao),
     }
 
 

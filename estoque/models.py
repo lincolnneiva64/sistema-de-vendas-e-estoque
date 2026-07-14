@@ -1009,6 +1009,104 @@ class FornecedorContatoTelefone(models.Model):
         super().save(*args, **kwargs)
 
 
+class FornecedorDestinatarioLista(models.Model):
+    TIPO_PADRAO = "padrao"
+    TIPO_TEMPORARIO = "temporario"
+    TIPO_CHOICES = [
+        (TIPO_PADRAO, "Padr?o"),
+        (TIPO_TEMPORARIO, "Tempor?rio"),
+    ]
+
+    fornecedor = models.ForeignKey(
+        Fornecedor,
+        on_delete=models.CASCADE,
+        related_name="destinatarios_lista",
+    )
+    contato = models.ForeignKey(
+        FornecedorContato,
+        on_delete=models.PROTECT,
+        related_name="destinatarios_lista",
+    )
+    telefone = models.ForeignKey(
+        FornecedorContatoTelefone,
+        on_delete=models.PROTECT,
+        related_name="destinatarios_lista",
+    )
+    tipo = models.CharField(
+        max_length=20,
+        choices=TIPO_CHOICES,
+        default=TIPO_PADRAO,
+    )
+    ativo = models.BooleanField(default=True)
+    vigencia_inicio = models.DateField(blank=True, null=True)
+    vigencia_fim = models.DateField(blank=True, null=True)
+    motivo = models.CharField(max_length=255, blank=True, default="")
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-ativo", "tipo", "-criado_em", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["fornecedor"],
+                condition=Q(tipo="padrao", ativo=True),
+                name="uniq_destinatario_lista_padrao_ativo",
+            ),
+            models.UniqueConstraint(
+                fields=["fornecedor"],
+                condition=Q(tipo="temporario", ativo=True),
+                name="uniq_destinatario_lista_temporario_ativo",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        erros = {}
+
+        if self.contato_id and self.contato.fornecedor_id != self.fornecedor_id:
+            erros["contato"] = (
+                "O contato escolhido precisa pertencer a este fornecedor."
+            )
+
+        if self.telefone_id:
+            if self.telefone.contato_id != self.contato_id:
+                erros["telefone"] = (
+                    "O telefone escolhido precisa pertencer ao contato informado."
+                )
+            elif not self.telefone.ativo:
+                erros["telefone"] = (
+                    "O telefone escolhido precisa estar ativo."
+                )
+            elif not self.telefone.whatsapp:
+                erros["telefone"] = (
+                    "O telefone escolhido precisa estar marcado como WhatsApp."
+                )
+
+        if self.tipo == self.TIPO_TEMPORARIO:
+            if self.vigencia_inicio and self.vigencia_fim:
+                if self.vigencia_fim < self.vigencia_inicio:
+                    erros["vigencia_fim"] = (
+                        "A data final n?o pode ser anterior ? data inicial."
+                    )
+        else:
+            self.vigencia_inicio = None
+            self.vigencia_fim = None
+            self.motivo = ""
+
+        if erros:
+            raise ValidationError(erros)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return (
+            f"{self.fornecedor} - {self.contato} - "
+            f"{self.telefone.numero} ({self.get_tipo_display()})"
+        )
+
+
 class MeioPagamento(models.Model):
     TIPO_DEBITO = "debito"
     TIPO_CREDITO = "credito"
