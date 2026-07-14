@@ -31,7 +31,13 @@ from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalF
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
 from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
-from .services.fornecedor_contatos import contato_tem_telefone_no_post, preparar_telefones_contatos, salvar_telefones_contatos, validar_telefones_contatos
+from .services.fornecedor_contatos import (
+    contato_tem_telefone_no_post,
+    preparar_telefones_contatos,
+    salvar_telefones_contatos,
+    telefones_whatsapp_contato,
+    validar_telefones_contatos,
+)
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.utils.dateparse import parse_date, parse_datetime
@@ -4591,21 +4597,30 @@ def _payload_destinatarios_lista_fornecedor(fornecedor):
         )
 
         if contato_principal:
-            numero = _normalizar_whatsapp_fornecedor(
-                contato_principal.telefone_whatsapp_normalizado
-                or contato_principal.telefone_whatsapp
-            )
-            if numero:
-                cargo = f" ({contato_principal.cargo})" if contato_principal.cargo else ""
+            telefones_whatsapp = telefones_whatsapp_contato(contato_principal)
+            cargo = f" ({contato_principal.cargo})" if contato_principal.cargo else ""
+
+            for indice, telefone in enumerate(telefones_whatsapp):
+                numero = _normalizar_whatsapp_fornecedor(telefone.numero)
+                if not numero:
+                    continue
+
+                if len(telefones_whatsapp) > 1:
+                    if telefone.principal:
+                        complemento = " - WhatsApp principal"
+                    else:
+                        complemento = f" - WhatsApp {indice + 1}"
+                else:
+                    complemento = ""
+
                 destinatarios.append(
                     {
                         "tipo": "vendedor",
-                        "nome": f"{contato_principal.nome}{cargo}",
-                        "whatsapp": (
-                            contato_principal.telefone_whatsapp_normalizado
-                            or contato_principal.telefone_whatsapp
-                        ),
+                        "nome": f"{contato_principal.nome}{cargo}{complemento}",
+                        "whatsapp": telefone.numero,
                         "numero": numero,
+                        "telefoneId": getattr(telefone, "id", None),
+                        "principal": bool(telefone.principal),
                     }
                 )
 

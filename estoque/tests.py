@@ -4608,6 +4608,97 @@ class ComprasListaFornecedorEnvioVendedorTests(TestCase):
             kwargs={"pk": self.lista.pk},
         )
 
+    def test_payload_lista_todos_whatsapps_ativos_do_vendedor_principal(self):
+        contato = FornecedorContato.objects.create(
+            fornecedor=self.fornecedor,
+            nome="Vendedor Multiplos Telefones",
+            principal=True,
+            ativo=True,
+        )
+        telefone_secundario = FornecedorContatoTelefone.objects.create(
+            contato=contato,
+            numero="91922223333",
+            tipo=FornecedorContatoTelefone.TIPO_CELULAR,
+            whatsapp=True,
+            principal=False,
+            ativo=True,
+            ordem=2,
+        )
+        telefone_principal = FornecedorContatoTelefone.objects.create(
+            contato=contato,
+            numero="91999998888",
+            tipo=FornecedorContatoTelefone.TIPO_CELULAR,
+            whatsapp=True,
+            principal=True,
+            ativo=True,
+            ordem=1,
+        )
+        FornecedorContatoTelefone.objects.create(
+            contato=contato,
+            numero="9133334444",
+            tipo=FornecedorContatoTelefone.TIPO_FIXO,
+            whatsapp=False,
+            principal=False,
+            ativo=True,
+            ordem=3,
+        )
+
+        payload = views._payload_destinatarios_lista_fornecedor(
+            self.fornecedor
+        )
+
+        self.assertEqual(len(payload["opcoes"]), 2)
+        self.assertEqual(
+            [opcao["numero"] for opcao in payload["opcoes"]],
+            [telefone_principal.numero, telefone_secundario.numero],
+        )
+        self.assertTrue(payload["opcoes"][0]["principal"])
+        self.assertFalse(payload["opcoes"][1]["principal"])
+        self.assertIn(
+            "WhatsApp principal",
+            payload["opcoes"][0]["nome"],
+        )
+        self.assertNotIn(
+            "9133334444",
+            [opcao["numero"] for opcao in payload["opcoes"]],
+        )
+
+    def test_payload_ignora_whatsapp_inativo_do_vendedor_principal(self):
+        contato = FornecedorContato.objects.create(
+            fornecedor=self.fornecedor,
+            nome="Vendedor Com Telefone Inativo",
+            principal=True,
+            ativo=True,
+        )
+        telefone_ativo = FornecedorContatoTelefone.objects.create(
+            contato=contato,
+            numero="91955556666",
+            whatsapp=True,
+            principal=True,
+            ativo=True,
+        )
+        FornecedorContatoTelefone.objects.create(
+            contato=contato,
+            numero="91977778888",
+            whatsapp=True,
+            principal=False,
+            ativo=False,
+        )
+
+        payload = views._payload_destinatarios_lista_fornecedor(
+            self.fornecedor
+        )
+
+        self.assertEqual(len(payload["opcoes"]), 1)
+        self.assertEqual(
+            payload["opcoes"][0]["numero"],
+            telefone_ativo.numero,
+        )
+        self.assertNotEqual(
+            payload["opcoes"][0]["numero"],
+            "91977778888",
+        )
+
     def test_payload_usa_somente_contato_principal_ativo(self):
         FornecedorContato.objects.create(
             fornecedor=self.fornecedor,
