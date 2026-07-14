@@ -4341,6 +4341,221 @@ class FornecedorContatoTelefonesFormTests(TestCase):
         self.assertContains(resposta, 'value="(91) 99100-0720"')
         self.assertContains(resposta, 'value="(91) 3232-4444"')
 
+    def test_pagina_novo_fornecedor_exibe_destinatario_das_listas(self):
+        resposta = self.client.get(reverse("estoque:fornecedor_novo"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Destinatário das listas")
+        self.assertContains(resposta, 'name="destinatario_lista_contato"')
+        self.assertContains(resposta, 'name="destinatario_lista_telefone"')
+
+    def test_edicao_carrega_destinatario_padrao_configurado(self):
+        fornecedor, contato = self._criar_fornecedor_com_contato("Fornecedor Destinatario Carrega")
+        telefone = FornecedorContatoTelefone.objects.create(contato=contato, numero="91993152627", whatsapp=True, principal=True)
+        FornecedorDestinatarioLista.objects.create(fornecedor=fornecedor, contato=contato, telefone=telefone)
+
+        resposta = self.client.get(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), secure=True)
+        payload = resposta.context["destinatario_lista_payload"]
+
+        self.assertEqual(payload["selecionadoContato"], f"pk:{contato.pk}")
+        self.assertEqual(payload["selecionadoTelefone"], f"pk:{telefone.pk}")
+        self.assertTrue(payload["temConfiguracaoAtual"])
+
+    def test_fornecedor_antigo_sem_destinatario_continua_abrindo(self):
+        fornecedor = Fornecedor.objects.create(nome="Fornecedor Antigo Sem Destinatario")
+
+        resposta = self.client.get(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertFalse(resposta.context["destinatario_lista_payload"]["temConfiguracaoAtual"])
+
+    def test_edicao_sugere_contato_principal_sem_criar_destinatario(self):
+        fornecedor, contato = self._criar_fornecedor_com_contato("Fornecedor Sugere Destinatario")
+        contato.principal = True
+        contato.save()
+        telefone = FornecedorContatoTelefone.objects.create(contato=contato, numero="91993152627", whatsapp=True, principal=True)
+
+        resposta = self.client.get(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), secure=True)
+
+        payload = resposta.context["destinatario_lista_payload"]
+        self.assertEqual(payload["selecionadoContato"], f"pk:{contato.pk}")
+        self.assertEqual(payload["selecionadoTelefone"], f"pk:{telefone.pk}")
+        self.assertFalse(FornecedorDestinatarioLista.objects.filter(fornecedor=fornecedor).exists())
+
+    def test_salvamento_cria_destinatario_padrao(self):
+        fornecedor, contato = self._criar_fornecedor_com_contato("Fornecedor Cria Destinatario")
+        telefone = FornecedorContatoTelefone.objects.create(contato=contato, numero="91993152627", whatsapp=True, principal=True)
+        dados = self._dados_fornecedor(nome=fornecedor.nome, **{
+            "contatos-INITIAL_FORMS": "1",
+            "contatos-0-id": str(contato.pk),
+            "contatos-0-nome": contato.nome,
+            "contatos-0-ativo": "on",
+            **self._telefone(0, 0, **{"contatos-0-telefones-0-id": str(telefone.pk), "contatos-0-telefones-0-principal": "on"}),
+            "destinatario_lista_contato": f"pk:{contato.pk}",
+            "destinatario_lista_telefone": f"pk:{telefone.pk}",
+        })
+
+        resposta = self.client.post(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), dados, secure=True)
+
+        self.assertEqual(resposta.status_code, 302)
+        destinatario = FornecedorDestinatarioLista.objects.get(fornecedor=fornecedor)
+        self.assertEqual(destinatario.contato, contato)
+        self.assertEqual(destinatario.telefone, telefone)
+        self.assertEqual(destinatario.tipo, FornecedorDestinatarioLista.TIPO_PADRAO)
+
+    def test_novo_salvamento_atualiza_destinatario_sem_duplicar(self):
+        fornecedor, contato = self._criar_fornecedor_com_contato("Fornecedor Atualiza Destinatario")
+        telefone_1 = FornecedorContatoTelefone.objects.create(contato=contato, numero="91993152627", whatsapp=True, principal=True, ordem=1)
+        telefone_2 = FornecedorContatoTelefone.objects.create(contato=contato, numero="91991000720", whatsapp=True, principal=False, ordem=2)
+        FornecedorDestinatarioLista.objects.create(fornecedor=fornecedor, contato=contato, telefone=telefone_1)
+        dados = self._dados_fornecedor(nome=fornecedor.nome, **{
+            "contatos-INITIAL_FORMS": "1",
+            "contatos-0-id": str(contato.pk),
+            "contatos-0-nome": contato.nome,
+            "contatos-0-ativo": "on",
+            **self._telefone(0, 0, **{"contatos-0-telefones-0-id": str(telefone_1.pk), "contatos-0-telefones-0-principal": "on"}),
+            **self._telefone(0, 1, **{"contatos-0-telefones-1-id": str(telefone_2.pk), "contatos-0-telefones-1-numero": telefone_2.numero}),
+            "destinatario_lista_contato": f"pk:{contato.pk}",
+            "destinatario_lista_telefone": f"pk:{telefone_2.pk}",
+        })
+
+        resposta = self.client.post(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), dados, secure=True)
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(FornecedorDestinatarioLista.objects.filter(fornecedor=fornecedor, tipo=FornecedorDestinatarioLista.TIPO_PADRAO, ativo=True).count(), 1)
+        self.assertEqual(FornecedorDestinatarioLista.objects.get(fornecedor=fornecedor).telefone, telefone_2)
+
+    def test_destinatario_rejeita_contato_de_outro_fornecedor(self):
+        fornecedor, contato = self._criar_fornecedor_com_contato("Fornecedor Rejeita Contato")
+        telefone = FornecedorContatoTelefone.objects.create(contato=contato, numero="91993152627", whatsapp=True, principal=True)
+        outro_fornecedor, outro_contato = self._criar_fornecedor_com_contato("Fornecedor Outro Contato")
+        dados = self._dados_fornecedor(nome=fornecedor.nome, **{
+            "contatos-INITIAL_FORMS": "1",
+            "contatos-0-id": str(contato.pk),
+            "contatos-0-nome": contato.nome,
+            "contatos-0-ativo": "on",
+            **self._telefone(0, 0, **{"contatos-0-telefones-0-id": str(telefone.pk), "contatos-0-telefones-0-principal": "on"}),
+            "destinatario_lista_contato": f"pk:{outro_contato.pk}",
+            "destinatario_lista_telefone": f"pk:{telefone.pk}",
+        })
+
+        resposta = self.client.post(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), dados, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "O contato escolhido precisa pertencer a este fornecedor.")
+        self.assertFalse(FornecedorDestinatarioLista.objects.filter(fornecedor=fornecedor).exists())
+        self.assertTrue(outro_fornecedor.pk)
+
+    def test_destinatario_rejeita_telefone_de_outro_contato(self):
+        fornecedor, contato = self._criar_fornecedor_com_contato("Fornecedor Rejeita Telefone")
+        telefone = FornecedorContatoTelefone.objects.create(contato=contato, numero="91993152627", whatsapp=True, principal=True)
+        outro_contato = fornecedor.contatos.create(nome="Bruno", ativo=True)
+        outro_telefone = FornecedorContatoTelefone.objects.create(contato=outro_contato, numero="91991000720", whatsapp=True, principal=True)
+        dados = self._dados_fornecedor(nome=fornecedor.nome, **{
+            "contatos-INITIAL_FORMS": "2",
+            "contatos-0-id": str(contato.pk),
+            "contatos-0-nome": contato.nome,
+            "contatos-0-ativo": "on",
+            **self._telefone(0, 0, **{"contatos-0-telefones-0-id": str(telefone.pk), "contatos-0-telefones-0-principal": "on"}),
+            "contatos-1-id": str(outro_contato.pk),
+            "contatos-1-nome": outro_contato.nome,
+            "contatos-1-ativo": "on",
+            **self._telefone(1, 0, **{"contatos-1-telefones-0-id": str(outro_telefone.pk), "contatos-1-telefones-0-numero": outro_telefone.numero, "contatos-1-telefones-0-principal": "on"}),
+            "destinatario_lista_contato": f"pk:{contato.pk}",
+            "destinatario_lista_telefone": f"pk:{outro_telefone.pk}",
+        })
+
+        resposta = self.client.post(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), dados, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "O telefone escolhido precisa pertencer ao contato informado.")
+
+    def test_destinatario_rejeita_telefone_nao_whatsapp(self):
+        fornecedor, contato = self._criar_fornecedor_com_contato("Fornecedor Rejeita Nao Whatsapp")
+        telefone = FornecedorContatoTelefone.objects.create(contato=contato, numero="9132324444", whatsapp=False, principal=True)
+        dados = self._dados_fornecedor(nome=fornecedor.nome, **{
+            "contatos-INITIAL_FORMS": "1",
+            "contatos-0-id": str(contato.pk),
+            "contatos-0-nome": contato.nome,
+            "contatos-0-ativo": "on",
+            **self._telefone(0, 0, **{
+                "contatos-0-telefones-0-id": str(telefone.pk),
+                "contatos-0-telefones-0-numero": telefone.numero,
+                "contatos-0-telefones-0-whatsapp": "",
+                "contatos-0-telefones-0-principal": "on",
+            }),
+            "destinatario_lista_contato": f"pk:{contato.pk}",
+            "destinatario_lista_telefone": f"pk:{telefone.pk}",
+        })
+
+        resposta = self.client.post(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), dados, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "O telefone escolhido precisa estar marcado como WhatsApp.")
+
+    def test_destinatario_rejeita_telefone_inativo(self):
+        fornecedor, contato = self._criar_fornecedor_com_contato("Fornecedor Rejeita Inativo")
+        telefone = FornecedorContatoTelefone.objects.create(contato=contato, numero="91993152627", whatsapp=True, principal=False, ativo=True)
+        dados = self._dados_fornecedor(nome=fornecedor.nome, **{
+            "contatos-INITIAL_FORMS": "1",
+            "contatos-0-id": str(contato.pk),
+            "contatos-0-nome": contato.nome,
+            "contatos-0-ativo": "on",
+            **self._telefone(0, 0, **{
+                "contatos-0-telefones-0-id": str(telefone.pk),
+                "contatos-0-telefones-0-ativo": "",
+            }),
+            "destinatario_lista_contato": f"pk:{contato.pk}",
+            "destinatario_lista_telefone": f"pk:{telefone.pk}",
+        })
+
+        resposta = self.client.post(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), dados, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "O telefone escolhido precisa estar ativo.")
+
+    def test_telefones_do_destinatario_sao_ordenados_com_principal_primeiro(self):
+        fornecedor, contato = self._criar_fornecedor_com_contato("Fornecedor Ordena Telefones")
+        telefone_secundario = FornecedorContatoTelefone.objects.create(contato=contato, numero="91991000720", whatsapp=True, principal=False, ordem=1)
+        telefone_principal = FornecedorContatoTelefone.objects.create(contato=contato, numero="91993152627", whatsapp=True, principal=True, ordem=2)
+
+        resposta = self.client.get(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), secure=True)
+
+        telefones = resposta.context["destinatario_lista_payload"]["contatos"][0]["telefones"]
+        self.assertEqual([item["id"] for item in telefones], [f"pk:{telefone_principal.pk}", f"pk:{telefone_secundario.pk}"])
+
+    def test_fornecedor_sem_whatsapp_valido_continua_editavel(self):
+        fornecedor, contato = self._criar_fornecedor_com_contato("Fornecedor Sem Whatsapp Valido")
+        FornecedorContatoTelefone.objects.create(contato=contato, numero="9132324444", whatsapp=False, principal=False)
+        dados = self._dados_fornecedor(nome=fornecedor.nome, **{
+            "contatos-INITIAL_FORMS": "1",
+            "contatos-0-id": str(contato.pk),
+            "contatos-0-nome": contato.nome,
+            "contatos-0-ativo": "on",
+        })
+
+        resposta = self.client.post(reverse("estoque:fornecedor_editar", kwargs={"pk": fornecedor.pk}), dados, secure=True)
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertFalse(FornecedorDestinatarioLista.objects.filter(fornecedor=fornecedor).exists())
+
+    def test_cadastro_cria_destinatario_com_contato_e_telefone_novos(self):
+        dados = self._dados_fornecedor(nome="Fornecedor Novo Destinatario", **{
+            "contatos-0-nome": "Ana Paula",
+            "contatos-0-ativo": "on",
+            **self._telefone(0, 0, **{"contatos-0-telefones-0-principal": "on"}),
+            "destinatario_lista_contato": "form:0",
+            "destinatario_lista_telefone": "form:0:0",
+        })
+
+        resposta = self.client.post(reverse("estoque:fornecedor_novo"), dados, secure=True)
+
+        self.assertEqual(resposta.status_code, 302)
+        fornecedor = Fornecedor.objects.get(nome="Fornecedor Novo Destinatario")
+        destinatario = FornecedorDestinatarioLista.objects.get(fornecedor=fornecedor)
+        self.assertEqual(destinatario.contato.nome, "Ana Paula")
+        self.assertEqual(destinatario.telefone.numero, "91993152627")
+
 
 class FornecedorProdutosFormTests(TestCase):
     def _produto_teste(self, nome, excluido=False, excluido_em=None):
@@ -5052,7 +5267,7 @@ class ComprasListaFornecedorEnvioVendedorTests(TestCase):
             ativo=True,
         )
 
-        resposta = self.client.get(self.url)
+        resposta = self.client.get(self.url, secure=True)
 
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "Representante Padrao")

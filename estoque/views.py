@@ -29,12 +29,13 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, FornecedorDestinatarioLista, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
     contato_tem_telefone_no_post,
     preparar_telefones_contatos,
     salvar_telefones_contatos,
+    telefone_principal_contato,
     telefones_whatsapp_contato,
     validar_telefones_contatos,
 )
@@ -8029,6 +8030,216 @@ def _limpar_contatos_vazios_fornecedor(post_data):
     return post_data
 
 
+def _formatar_telefone_fornecedor_form(valor):
+    digitos = _normalizar_whatsapp_fornecedor(valor)
+    if len(digitos) == 11:
+        return f"({digitos[:2]}) {digitos[2:7]}-{digitos[7:]}"
+    if len(digitos) == 10:
+        return f"({digitos[:2]}) {digitos[2:6]}-{digitos[6:]}"
+    return valor or ""
+
+
+def _token_pk(pk):
+    return f"pk:{pk}" if pk else ""
+
+
+def _destinatario_padrao_fornecedor(fornecedor):
+    if not fornecedor or not getattr(fornecedor, "pk", None):
+        return None
+    return (
+        FornecedorDestinatarioLista.objects
+        .select_related("contato", "telefone")
+        .filter(
+            fornecedor=fornecedor,
+            tipo=FornecedorDestinatarioLista.TIPO_PADRAO,
+            ativo=True,
+        )
+        .order_by("-criado_em", "-id")
+        .first()
+    )
+
+
+def _sugestao_destinatario_fornecedor(fornecedor):
+    if not fornecedor or not getattr(fornecedor, "pk", None):
+        return None, None
+    contato = fornecedor.contatos.filter(ativo=True, principal=True).order_by("id").first()
+    telefone = telefone_principal_contato(contato) if contato else None
+    if telefone and getattr(telefone, "pk", None) and getattr(telefone, "whatsapp", False) and getattr(telefone, "ativo", False):
+        return contato, telefone
+    telefones = telefones_whatsapp_contato(contato) if contato else []
+    telefone = next((item for item in telefones if getattr(item, "pk", None)), None)
+    return contato, telefone
+
+
+def _payload_destinatario_form_fornecedor(fornecedor, post_data=None):
+    contatos_payload = []
+    selecionado_contato = ""
+    selecionado_telefone = ""
+    configuracao_atual = ""
+    destinatario_padrao = _destinatario_padrao_fornecedor(fornecedor)
+
+    if post_data is not None:
+        selecionado_contato = (post_data.get("destinatario_lista_contato") or "").strip()
+        selecionado_telefone = (post_data.get("destinatario_lista_telefone") or "").strip()
+    elif destinatario_padrao:
+        selecionado_contato = _token_pk(destinatario_padrao.contato_id)
+        selecionado_telefone = _token_pk(destinatario_padrao.telefone_id)
+    else:
+        contato_sugerido, telefone_sugerido = _sugestao_destinatario_fornecedor(fornecedor)
+        selecionado_contato = _token_pk(getattr(contato_sugerido, "pk", None))
+        selecionado_telefone = _token_pk(getattr(telefone_sugerido, "pk", None))
+
+    if destinatario_padrao:
+        configuracao_atual = (
+            f"{destinatario_padrao.contato.nome} - "
+            f"{_formatar_telefone_fornecedor_form(destinatario_padrao.telefone.numero)}"
+        )
+
+    if fornecedor and getattr(fornecedor, "pk", None):
+        telefones_validos = Prefetch(
+            "telefones",
+            queryset=FornecedorContatoTelefone.objects.filter(
+                ativo=True,
+                whatsapp=True,
+            ).order_by("-principal", "ordem", "id"),
+            to_attr="telefones_destinatario_validos",
+        )
+        contatos = (
+            fornecedor.contatos
+            .filter(ativo=True)
+            .prefetch_related(telefones_validos)
+            .order_by("-principal", "nome", "id")
+        )
+        for contato in contatos:
+            telefones = getattr(contato, "telefones_destinatario_validos", [])
+            contatos_payload.append({
+                "id": _token_pk(contato.pk),
+                "nome": contato.nome,
+                "principal": contato.principal,
+                "telefones": [
+                    {
+                        "id": _token_pk(telefone.pk),
+                        "numero": _formatar_telefone_fornecedor_form(telefone.numero),
+                        "principal": telefone.principal,
+                    }
+                    for telefone in telefones
+                ],
+            })
+
+    return {
+        "contatos": contatos_payload,
+        "selecionadoContato": selecionado_contato,
+        "selecionadoTelefone": selecionado_telefone,
+        "configuracaoAtual": configuracao_atual,
+        "temConfiguracaoAtual": bool(destinatario_padrao),
+    }
+
+
+def _mensagens_validation_error(erro):
+    if hasattr(erro, "message_dict"):
+        mensagens = []
+        for mensagens_campo in erro.message_dict.values():
+            mensagens.extend(mensagens_campo)
+        return mensagens
+    if hasattr(erro, "messages"):
+        return erro.messages
+    return [str(erro)]
+
+
+def _resolver_contato_destinatario(token, fornecedor, contatos_formset):
+    token = (token or "").strip()
+    if token.startswith("pk:"):
+        contato_id = token[3:]
+        if not contato_id.isdigit():
+            raise ValidationError("O contato escolhido deixou de existir.")
+        contato = FornecedorContato.objects.filter(pk=contato_id).first()
+    elif token.startswith("form:"):
+        indice = token[5:]
+        if not indice.isdigit() or int(indice) >= len(contatos_formset.forms):
+            raise ValidationError("O contato escolhido deixou de existir.")
+        contato_form = contatos_formset.forms[int(indice)]
+        if contato_form.cleaned_data.get("DELETE"):
+            raise ValidationError("O contato escolhido deixou de existir.")
+        contato = contato_form.instance
+    else:
+        raise ValidationError("Escolha um contato valido para o destinatario das listas.")
+
+    if not contato or not getattr(contato, "pk", None):
+        raise ValidationError("O contato escolhido deixou de existir.")
+    if contato.fornecedor_id != fornecedor.pk:
+        raise ValidationError("O contato escolhido precisa pertencer a este fornecedor.")
+    if hasattr(contato, "ativo") and not contato.ativo:
+        raise ValidationError("O contato escolhido precisa estar ativo.")
+    return contato
+
+
+def _resolver_telefone_destinatario(token, contato, post_data):
+    token = (token or "").strip()
+    if token.startswith("pk:"):
+        telefone_id = token[3:]
+        if not telefone_id.isdigit():
+            raise ValidationError("O telefone escolhido deixou de existir.")
+        telefone = FornecedorContatoTelefone.objects.filter(pk=telefone_id).first()
+    elif token.startswith("form:"):
+        partes = token.split(":")
+        if len(partes) != 3 or not partes[1].isdigit() or not partes[2].isdigit():
+            raise ValidationError("Escolha um WhatsApp valido para o destinatario das listas.")
+        contato_indice, telefone_indice = partes[1], partes[2]
+        prefixo = f"contatos-{contato_indice}-telefones-{telefone_indice}"
+        telefone_id = (post_data.get(f"{prefixo}-id") or "").strip()
+        numero = FornecedorContatoTelefone.normalizar_numero(post_data.get(f"{prefixo}-numero"))
+        if telefone_id:
+            telefone = contato.telefones.filter(pk=telefone_id).first()
+        else:
+            telefone = contato.telefones.filter(numero=numero, ativo=True).order_by("-principal", "ordem", "id").first()
+    else:
+        raise ValidationError("Escolha um WhatsApp valido para o destinatario das listas.")
+
+    if not telefone or not getattr(telefone, "pk", None):
+        raise ValidationError("O telefone escolhido deixou de existir.")
+    return telefone
+
+
+def _salvar_destinatario_padrao_fornecedor(fornecedor, post_data, contatos_formset):
+    contato_token = (post_data.get("destinatario_lista_contato") or "").strip()
+    telefone_token = (post_data.get("destinatario_lista_telefone") or "").strip()
+
+    if not contato_token and not telefone_token:
+        return
+    if not contato_token or not telefone_token:
+        raise ValidationError("Escolha o contato e o WhatsApp do destinatario das listas.")
+
+    contato = _resolver_contato_destinatario(contato_token, fornecedor, contatos_formset)
+    telefone = _resolver_telefone_destinatario(telefone_token, contato, post_data)
+
+    destinatario = (
+        FornecedorDestinatarioLista.objects
+        .select_for_update()
+        .filter(
+            fornecedor=fornecedor,
+            tipo=FornecedorDestinatarioLista.TIPO_PADRAO,
+            ativo=True,
+        )
+        .order_by("-criado_em", "-id")
+        .first()
+    )
+    if destinatario is None:
+        destinatario = FornecedorDestinatarioLista(
+            fornecedor=fornecedor,
+            tipo=FornecedorDestinatarioLista.TIPO_PADRAO,
+            ativo=True,
+        )
+
+    destinatario.contato = contato
+    destinatario.telefone = telefone
+    try:
+        destinatario.save()
+    except IntegrityError as erro:
+        raise ValidationError(
+            "Nao foi possivel salvar o destinatario das listas porque ja existe um destinatario padrao ativo para este fornecedor."
+        ) from erro
+
+
 def fornecedor_novo(request):
     if request.method == "POST":
         post_data = _limpar_contatos_vazios_fornecedor(request.POST.copy())
@@ -8047,7 +8258,10 @@ def fornecedor_novo(request):
                     contatos_formset.save()
                     salvar_telefones_contatos(post_data, contatos_formset)
                     form.salvar_produtos(fornecedor)
-            except ValidationError:
+                    _salvar_destinatario_padrao_fornecedor(fornecedor, post_data, contatos_formset)
+            except ValidationError as erro:
+                for mensagem in _mensagens_validation_error(erro):
+                    form.add_error(None, mensagem)
                 preparar_telefones_contatos(contatos_formset, post_data)
             else:
                 messages.success(request, f'Fornecedor "{fornecedor.nome}" salvo com sucesso.')
@@ -8067,6 +8281,7 @@ def fornecedor_novo(request):
             "contatos_formset": contatos_formset,
             "fornecedor": None,
             "titulo_formulario": "Novo fornecedor",
+            "destinatario_lista_payload": _payload_destinatario_form_fornecedor(None, request.POST if request.method == "POST" else None),
         },
     )
 
@@ -8090,7 +8305,10 @@ def fornecedor_editar(request, pk):
                     contatos_formset.save()
                     salvar_telefones_contatos(post_data, contatos_formset)
                     form.salvar_produtos(fornecedor)
-            except ValidationError:
+                    _salvar_destinatario_padrao_fornecedor(fornecedor, post_data, contatos_formset)
+            except ValidationError as erro:
+                for mensagem in _mensagens_validation_error(erro):
+                    form.add_error(None, mensagem)
                 preparar_telefones_contatos(contatos_formset, post_data)
             else:
                 messages.success(request, f'Fornecedor "{fornecedor.nome}" salvo com sucesso.')
@@ -8110,6 +8328,10 @@ def fornecedor_editar(request, pk):
             "contatos_formset": contatos_formset,
             "fornecedor": fornecedor,
             "titulo_formulario": "Editar fornecedor",
+            "destinatario_lista_payload": _payload_destinatario_form_fornecedor(
+                fornecedor,
+                request.POST if request.method == "POST" else None,
+            ),
         },
     )
 
