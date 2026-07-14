@@ -4579,43 +4579,39 @@ def _normalizar_whatsapp_fornecedor(valor):
 
 def _payload_destinatarios_lista_fornecedor(fornecedor):
     destinatarios = []
-    vistos = set()
 
-    def adicionar(tipo, nome, whatsapp):
-        numero = _normalizar_whatsapp_fornecedor(whatsapp)
-        if not nome or not numero or numero in vistos:
-            return
-        vistos.add(numero)
-        destinatarios.append({
-            "tipo": tipo,
-            "nome": nome,
-            "whatsapp": whatsapp,
-            "numero": numero,
-        })
-
-    funcionarios = Funcionario.objects.filter(
-        ativo=True,
-        telefone_whatsapp_normalizado__isnull=False,
-    ).filter(Q(nome__icontains="lincoln") | Q(nome__icontains="roseli")).order_by("nome", "id")
-    for funcionario in funcionarios:
-        adicionar("funcionario", funcionario.nome, funcionario.telefone_whatsapp_normalizado or funcionario.telefone_whatsapp)
-
-    contatos_fornecedor = []
     if fornecedor:
-        contatos_fornecedor = list(
+        contato_principal = (
             fornecedor.contatos.filter(
                 ativo=True,
-                telefone_whatsapp_normalizado__isnull=False,
-            ).order_by("-principal", "nome", "id")
+                principal=True,
+            )
+            .order_by("id")
+            .first()
         )
-        for contato in contatos_fornecedor:
-            cargo = f" ({contato.cargo})" if contato.cargo else ""
-            adicionar("fornecedor", f"{contato.nome}{cargo}", contato.telefone_whatsapp_normalizado or contato.telefone_whatsapp)
-        adicionar("fornecedor", f"{fornecedor.nome} - WhatsApp principal", fornecedor.telefone_whatsapp)
+
+        if contato_principal:
+            numero = _normalizar_whatsapp_fornecedor(
+                contato_principal.telefone_whatsapp_normalizado
+                or contato_principal.telefone_whatsapp
+            )
+            if numero:
+                cargo = f" ({contato_principal.cargo})" if contato_principal.cargo else ""
+                destinatarios.append(
+                    {
+                        "tipo": "vendedor",
+                        "nome": f"{contato_principal.nome}{cargo}",
+                        "whatsapp": (
+                            contato_principal.telefone_whatsapp_normalizado
+                            or contato_principal.telefone_whatsapp
+                        ),
+                        "numero": numero,
+                    }
+                )
 
     return {
         "opcoes": destinatarios,
-        "temContatoFornecedor": bool(contatos_fornecedor or (fornecedor and _normalizar_whatsapp_fornecedor(fornecedor.telefone_whatsapp))),
+        "temContatoFornecedor": bool(destinatarios),
     }
 
 

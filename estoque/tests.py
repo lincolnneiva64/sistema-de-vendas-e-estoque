@@ -21,7 +21,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContatoTelefone, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, FornecedorContatoTelefone, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
@@ -4587,6 +4587,132 @@ class ComprasListaConferenciaTests(TestCase):
         self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
         for produto_id, quantidade_antes in estoques_antes.items():
             self.assertEqual(Produto.objects.get(pk=produto_id).quantidade, quantidade_antes)
+
+
+class ComprasListaFornecedorEnvioVendedorTests(TestCase):
+    def setUp(self):
+        self.fornecedor = Fornecedor.objects.create(
+            nome="Fornecedor Envio Vendedor",
+            telefone_whatsapp="91999990000",
+        )
+        self.lista = ListaCompraFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_lista=date(2026, 7, 14),
+            data_inicio_periodo=date(2026, 7, 1),
+            data_fim_periodo=date(2026, 7, 14),
+            total_sugerido_original=Decimal("100.00"),
+            total_lista=Decimal("90.00"),
+        )
+        self.url = reverse(
+            "estoque:compras_lista_fornecedor_whatsapp",
+            kwargs={"pk": self.lista.pk},
+        )
+
+    def test_payload_usa_somente_contato_principal_ativo(self):
+        FornecedorContato.objects.create(
+            fornecedor=self.fornecedor,
+            nome="Contato Secundario",
+            cargo="Financeiro",
+            telefone_whatsapp="91911112222",
+            principal=False,
+            ativo=True,
+        )
+        principal = FornecedorContato.objects.create(
+            fornecedor=self.fornecedor,
+            nome="Vendedor Principal",
+            cargo="Representante",
+            telefone_whatsapp="91933334444",
+            principal=True,
+            ativo=True,
+        )
+
+        payload = views._payload_destinatarios_lista_fornecedor(self.fornecedor)
+
+        self.assertTrue(payload["temContatoFornecedor"])
+        self.assertEqual(len(payload["opcoes"]), 1)
+        self.assertEqual(payload["opcoes"][0]["tipo"], "vendedor")
+        self.assertEqual(
+            payload["opcoes"][0]["nome"],
+            "Vendedor Principal (Representante)",
+        )
+        self.assertEqual(
+            payload["opcoes"][0]["numero"],
+            principal.telefone_whatsapp_normalizado,
+        )
+        self.assertNotEqual(
+            payload["opcoes"][0]["numero"],
+            "91911112222",
+        )
+
+    def test_payload_nao_inclui_lincoln_roseli_nem_funcionarios(self):
+        Funcionario.objects.create(
+            nome="Lincoln",
+            telefone_whatsapp="91955556666",
+            ativo=True,
+        )
+        Funcionario.objects.create(
+            nome="Roseli",
+            telefone_whatsapp="91977778888",
+            ativo=True,
+        )
+        FornecedorContato.objects.create(
+            fornecedor=self.fornecedor,
+            nome="Vendedor Fornecedor",
+            telefone_whatsapp="91922223333",
+            principal=True,
+            ativo=True,
+        )
+
+        payload = views._payload_destinatarios_lista_fornecedor(self.fornecedor)
+        nomes = [opcao["nome"] for opcao in payload["opcoes"]]
+        numeros = [opcao["numero"] for opcao in payload["opcoes"]]
+
+        self.assertEqual(nomes, ["Vendedor Fornecedor"])
+        self.assertNotIn("Lincoln", nomes)
+        self.assertNotIn("Roseli", nomes)
+        self.assertNotIn("91955556666", numeros)
+        self.assertNotIn("91977778888", numeros)
+
+    def test_payload_nao_usa_telefone_geral_do_fornecedor_como_fallback(self):
+        payload = views._payload_destinatarios_lista_fornecedor(self.fornecedor)
+
+        self.assertFalse(payload["temContatoFornecedor"])
+        self.assertEqual(payload["opcoes"], [])
+
+    def test_contato_principal_sem_whatsapp_nao_eh_oferecido(self):
+        FornecedorContato.objects.create(
+            fornecedor=self.fornecedor,
+            nome="Vendedor Sem Telefone",
+            principal=True,
+            ativo=True,
+        )
+
+        payload = views._payload_destinatarios_lista_fornecedor(self.fornecedor)
+
+        self.assertFalse(payload["temContatoFornecedor"])
+        self.assertEqual(payload["opcoes"], [])
+
+    def test_tela_recebe_apenas_vendedor_principal_e_preenche_numero(self):
+        FornecedorContato.objects.create(
+            fornecedor=self.fornecedor,
+            nome="Representante Padrao",
+            telefone_whatsapp="91944445555",
+            principal=True,
+            ativo=True,
+        )
+
+        resposta = self.client.get(self.url)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Representante Padrao")
+        self.assertContains(resposta, "91944445555")
+        self.assertContains(
+            resposta,
+            "Nenhum vendedor principal cadastrado para este fornecedor.",
+        )
+        self.assertContains(resposta, "const vendedorPadrao = opcoes.length ? opcoes[0] : null;")
+        self.assertNotContains(resposta, '"nome": "Lincoln"')
+        self.assertNotContains(resposta, '"nome": "Roseli"')
 
 
 class ComprasListaFornecedorGravarTests(TestCase):

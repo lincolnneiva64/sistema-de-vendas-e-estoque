@@ -839,15 +839,23 @@
       const opcoes = Array.isArray(payload.destinatarios) ? payload.destinatarios : [];
       if (destinatariosRapidos) {
         destinatariosRapidos.innerHTML = opcoes.map((destinatario) => {
-          const nome = texto(destinatario.nome, "Contato");
+          const nome = texto(destinatario.nome, "Vendedor");
           const numero = texto(destinatario.numero || destinatario.whatsapp, "");
           return `<button type="button" class="destinatario-btn" data-whatsapp="${html(numero)}">${html(nome)}</button>`;
         }).join("");
       }
 
+      const vendedorPadrao = opcoes.length ? opcoes[0] : null;
+      if (whatsappDestinatario && vendedorPadrao) {
+        whatsappDestinatario.value = texto(
+          vendedorPadrao.numero || vendedorPadrao.whatsapp,
+          ""
+        );
+      }
+
       if (destinatarioAviso) {
         const mostrarAviso = payload.temContatoFornecedor === false;
-        destinatarioAviso.textContent = mostrarAviso ? "Nenhum vendedor cadastrado para este fornecedor." : "";
+        destinatarioAviso.textContent = mostrarAviso ? "Nenhum vendedor principal cadastrado para este fornecedor." : "";
         destinatarioAviso.classList.toggle("visivel", mostrarAviso);
       }
     }
