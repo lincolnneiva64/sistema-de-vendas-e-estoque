@@ -198,9 +198,9 @@
   bottom: 8px;
   width: 11px;
   box-sizing: border-box;
-  border-left: 2px solid #94a3b8;
-  border-top: 2px solid #94a3b8;
-  border-bottom: 2px solid #94a3b8;
+  border-left: 3px solid #94a3b8;
+  border-top: 3px solid #94a3b8;
+  border-bottom: 3px solid #94a3b8;
   border-radius: 7px 0 0 7px;
   background: transparent;
   pointer-events: none;
@@ -209,29 +209,29 @@
   background: rgba(239, 246, 255, .62);
 }
 .vendas-pendencias-item.prioridade-critica {
-  background: #fff8f8;
+  background: linear-gradient(90deg, #fff1f3 0%, #ffe4e8 100%);
 }
 .vendas-pendencias-item.prioridade-alta {
-  background: #fff8f1;
+  background: linear-gradient(90deg, #fff5eb 0%, #ffe6cf 100%);
 }
 .vendas-pendencias-item.prioridade-media {
-  background: #fffbed;
+  background: linear-gradient(90deg, #fff9df 0%, #ffefb5 100%);
 }
 .vendas-pendencias-item.prioridade-baixa {
-  background: #f6f9fc;
+  background: linear-gradient(90deg, #fff1f2 0%, #ffd6dc 100%);
 }
 .vendas-pendencias-item.prioridade-cadastro {
-  background: #f4f8ff;
+  background: linear-gradient(90deg, #eaf3ff 0%, #c9dcff 100%);
 }
 .vendas-pendencias-item.prioridade-rascunho {
-  background: #fffbed;
+  background: linear-gradient(90deg, #fff4df 0%, #ffd79a 100%);
 }
-.vendas-pendencias-item.prioridade-critica::before { border-color: #ef4444; }
+.vendas-pendencias-item.prioridade-critica::before { border-color: #e11d48; }
 .vendas-pendencias-item.prioridade-alta::before { border-color: #f97316; }
-.vendas-pendencias-item.prioridade-media::before { border-color: #d97706; }
-.vendas-pendencias-item.prioridade-baixa::before { border-color: #475569; }
-.vendas-pendencias-item.prioridade-cadastro::before { border-color: #2563eb; }
-.vendas-pendencias-item.prioridade-rascunho::before { border-color: #d97706; }
+.vendas-pendencias-item.prioridade-media::before { border-color: #e0a000; }
+.vendas-pendencias-item.prioridade-baixa::before { border-color: #ef1b2d; }
+.vendas-pendencias-item.prioridade-cadastro::before { border-color: #1261ff; }
+.vendas-pendencias-item.prioridade-rascunho::before { border-color: #ff7a00; }
 .vendas-pendencias-item:hover::before {
   filter: saturate(1.24) brightness(.96);
 }
@@ -262,12 +262,12 @@
   text-transform: uppercase;
   white-space: nowrap;
 }
-.prioridade-critica .vendas-pendencias-rotulo { color: #b91c1c; background: #fff1f2; }
-.prioridade-alta .vendas-pendencias-rotulo { color: #c2410c; background: #fff7ed; }
-.prioridade-media .vendas-pendencias-rotulo { color: #92400e; background: #fffbeb; }
-.prioridade-baixa .vendas-pendencias-rotulo { color: #334155; background: #f1f5f9; }
-.prioridade-cadastro .vendas-pendencias-rotulo { color: #1d4ed8; background: #eff6ff; }
-.prioridade-rascunho .vendas-pendencias-rotulo { color: #92400e; background: #fffbeb; }
+.prioridade-critica .vendas-pendencias-rotulo { color: #be123c; background: #ffe4e6; }
+.prioridade-alta .vendas-pendencias-rotulo { color: #c2410c; background: #ffedd5; }
+.prioridade-media .vendas-pendencias-rotulo { color: #9a6700; background: #fef3c7; }
+.prioridade-baixa .vendas-pendencias-rotulo { color: #d90429; background: #ffe0e5; }
+.prioridade-cadastro .vendas-pendencias-rotulo { color: #004de6; background: #cfe0ff; }
+.prioridade-rascunho .vendas-pendencias-rotulo { color: #d95f00; background: #ffe2b8; }
 .vendas-pendencias-item-corpo {
   display: grid;
   gap: 3px;
@@ -329,37 +329,42 @@
   background: #bfdbfe;
 }
 .prioridade-critica .vendas-pendencias-item-acao {
-  border-color: #ef4444;
-  background: #fff5f5;
-  color: #991b1b !important;
+  border-color: #e11d48;
+  background: linear-gradient(180deg, #fff5f6 0%, #ffcdd5 100%);
+  color: #be123c !important;
 }
-.prioridade-critica .vendas-pendencias-item-acao:hover { background: #fff1f2; border-color: #ef4444; box-shadow: 0 3px 8px rgba(239, 68, 68, .10); }
+.prioridade-critica .vendas-pendencias-item-acao:hover { background: linear-gradient(180deg, #fff1f2 0%, #fecdd3 100%); border-color: #e11d48; box-shadow: 0 3px 8px rgba(225, 29, 72, .14); }
 .prioridade-alta .vendas-pendencias-item-acao {
-  border-color: #fb923c;
-  background: #fff3e8;
-  color: #9a3412 !important;
+  border-color: #f97316;
+  background: linear-gradient(180deg, #fff5eb 0%, #ffd7b0 100%);
+  color: #c2410c !important;
 }
-.prioridade-alta .vendas-pendencias-item-acao:hover { background: #fff7ed; border-color: #f97316; box-shadow: 0 3px 8px rgba(249, 115, 22, .10); }
-.prioridade-media .vendas-pendencias-item-acao,
+.prioridade-alta .vendas-pendencias-item-acao:hover { background: linear-gradient(180deg, #fff7ed 0%, #fed7aa 100%); border-color: #f97316; box-shadow: 0 3px 8px rgba(249, 115, 22, .14); }
+.prioridade-media .vendas-pendencias-item-acao {
+  border-color: #d4a000;
+  background: linear-gradient(180deg, #fff9df 0%, #ffe58a 100%);
+  color: #9a6700 !important;
+}
+.prioridade-media .vendas-pendencias-item-acao:hover { background: linear-gradient(180deg, #fffbeb 0%, #fde68a 100%); border-color: #d4a000; box-shadow: 0 3px 8px rgba(212, 160, 0, .14); }
+
 .prioridade-rascunho .vendas-pendencias-item-acao {
-  border-color: #eab308;
-  background: #fff8dc;
-  color: #713f12 !important;
+  border-color: #ff7a00;
+  background: linear-gradient(180deg, #fff1d6 0%, #ffbd68 100%);
+  color: #c95000 !important;
 }
-.prioridade-media .vendas-pendencias-item-acao:hover,
-.prioridade-rascunho .vendas-pendencias-item-acao:hover { background: #fffbeb; border-color: #d97706; box-shadow: 0 3px 8px rgba(217, 119, 6, .10); }
+.prioridade-rascunho .vendas-pendencias-item-acao:hover { background: linear-gradient(180deg, #fff7ed 0%, #fed7aa 100%); border-color: #e8790c; box-shadow: 0 3px 8px rgba(232, 121, 12, .14); }
 .prioridade-baixa .vendas-pendencias-item-acao {
-  border-color: #64748b;
-  background: #eef4fb;
-  color: #1e3a5f !important;
+  border-color: #ff4055;
+  background: linear-gradient(180deg, #fff1f3 0%, #ffbdc6 100%);
+  color: #d90429 !important;
 }
-.prioridade-baixa .vendas-pendencias-item-acao:hover { background: #f8fafc; border-color: #64748b; box-shadow: 0 3px 8px rgba(100, 116, 139, .10); }
+.prioridade-baixa .vendas-pendencias-item-acao:hover { background: linear-gradient(180deg, #ffe4e8 0%, #ff9baa 100%); border-color: #ef1b2d; box-shadow: 0 3px 8px rgba(239, 27, 45, .20); }
 .prioridade-cadastro .vendas-pendencias-item-acao {
-  border-color: #60a5fa;
-  background: #eff6ff;
-  color: #1d4ed8 !important;
+  border-color: #1261ff;
+  background: linear-gradient(180deg, #edf5ff 0%, #9fc5ff 100%);
+  color: #004de6 !important;
 }
-.prioridade-cadastro .vendas-pendencias-item-acao:hover { background: #dbeafe; border-color: #2563eb; box-shadow: 0 3px 8px rgba(37, 99, 235, .10); }
+.prioridade-cadastro .vendas-pendencias-item-acao:hover { background: linear-gradient(180deg, #eff6ff 0%, #bfdbfe 100%); border-color: #2563eb; box-shadow: 0 3px 8px rgba(37, 99, 235, .14); }
 .vendas-pendencias-produtos {
   grid-column: 1 / -1;
   display: grid;
