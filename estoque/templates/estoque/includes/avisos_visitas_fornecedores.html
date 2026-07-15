@@ -14,21 +14,38 @@
   pointer-events: auto;
 }
 .vendas-pendencias-toggle {
-  width: 42px;
-  min-height: 132px;
-  padding: 10px 6px;
+  width: 34px;
+  min-height: 96px;
+  padding: 8px 4px;
   border: 1px solid #64748b;
   border-left: 0;
-  border-radius: 0 12px 12px 0;
+  border-radius: 0 10px 10px 0;
   background: #475569;
   color: #fff;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 950;
   writing-mode: vertical-rl;
   text-orientation: mixed;
   cursor: pointer;
   box-shadow: 0 10px 24px rgba(15, 23, 42, .20);
   pointer-events: auto;
+}
+.vendas-pendencias-toggle-texto {
+  display: inline-block;
+}
+.vendas-pendencias-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  min-height: 22px;
+  margin-top: 7px;
+  border-radius: 999px;
+  background: #fff;
+  color: #172033;
+  font-size: 12px;
+  font-weight: 950;
+  writing-mode: horizontal-tb;
 }
 .vendas-pendencias-toggle:focus-visible,
 .vendas-pendencias-fechar:focus-visible,
@@ -67,11 +84,11 @@
   display: none;
 }
 .vendas-pendencias-painel {
-  width: min(390px, calc(100vw - 54px));
+  width: min(340px, calc(100vw - 48px));
   max-height: min(78vh, 680px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 12px;
+  padding: 10px;
   border: 1px solid #cbd5e1;
   border-left: 0;
   border-radius: 0 14px 14px 0;
@@ -83,24 +100,24 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 .vendas-pendencias-titulo {
   margin: 0;
   color: #0f172a;
-  font-size: 1rem;
+  font-size: .95rem;
   font-weight: 950;
 }
 .vendas-pendencias-subtitulo {
   margin: 2px 0 0;
   color: #475569;
-  font-size: .82rem;
+  font-size: .78rem;
   font-weight: 750;
 }
 .vendas-pendencias-fechar {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border: 1px solid #cbd5e1;
   border-radius: 9px;
   background: #f8fafc;
@@ -112,15 +129,15 @@
 }
 .vendas-pendencias-lista {
   display: grid;
-  gap: 9px;
+  gap: 7px;
 }
 .vendas-pendencias-item {
   display: grid;
-  gap: 7px;
-  padding: 10px;
+  gap: 5px;
+  padding: 8px;
   border: 1px solid #e2e8f0;
   border-left-width: 5px;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #f8fafc;
 }
 .vendas-pendencias-item.prioridade-critica {
@@ -143,20 +160,20 @@
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 4px 8px;
+  gap: 3px 6px;
 }
 .vendas-pendencias-item-titulo {
   color: #0f172a;
-  font-size: .92rem;
+  font-size: .86rem;
   font-weight: 950;
   overflow-wrap: anywhere;
 }
 .vendas-pendencias-rotulo {
-  padding: 2px 7px;
+  padding: 1px 6px;
   border-radius: 999px;
   border: 1px solid currentColor;
   color: #475569;
-  font-size: .7rem;
+  font-size: .66rem;
   font-weight: 950;
   text-transform: uppercase;
 }
@@ -166,7 +183,7 @@
 .vendas-pendencias-mensagem {
   margin: 0;
   color: #334155;
-  font-size: .84rem;
+  font-size: .8rem;
   font-weight: 750;
   line-height: 1.32;
 }
@@ -174,13 +191,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
-  padding: 7px 10px;
-  border-radius: 9px;
+  justify-self: end;
+  min-height: 30px;
+  padding: 5px 9px;
+  border-radius: 8px;
   border: 1px solid #2563eb;
   background: #2563eb;
   color: #fff !important;
-  font-size: .84rem;
+  font-size: .8rem;
   font-weight: 950;
   text-decoration: none;
 }
@@ -207,11 +225,12 @@
     top: 82px;
   }
   .vendas-pendencias-painel {
-    width: min(340px, calc(100vw - 48px));
+    width: min(320px, calc(100vw - 44px));
     max-height: 74vh;
   }
   .vendas-pendencias-item-acao {
     width: 100%;
+    justify-self: stretch;
   }
 }
 </style>
@@ -229,7 +248,8 @@
     aria-expanded="false"
     aria-controls="vendasPendenciasPainel"
   >
-    Pendencias {{ pendencias_vendas_qtd }}
+    <span class="vendas-pendencias-toggle-texto">Pendencias</span>
+    <span class="vendas-pendencias-badge" aria-label="{{ pendencias_vendas_qtd }} pendencia{{ pendencias_vendas_qtd|pluralize }}">{{ pendencias_vendas_qtd }}</span>
   </button>
   <aside class="vendas-pendencias-painel" id="vendasPendenciasPainel" hidden>
     <div class="vendas-pendencias-topo">
@@ -241,12 +261,12 @@
     </div>
 
     <div class="vendas-pendencias-lista">
-      {% for aviso in avisos_visitas_fornecedores %}
+      {% for aviso in avisos_visitas_fornecedores_painel %}
         {% if aviso.dias_para_visita == 0 %}
           <article class="vendas-pendencias-item prioridade-critica" data-pendencia-fornecedor>
             <div class="vendas-pendencias-item-topo">
               <strong class="vendas-pendencias-item-titulo">{{ aviso.fornecedor_nome }}</strong>
-              <span class="vendas-pendencias-rotulo">Critica</span>
+              <span class="vendas-pendencias-rotulo">Hoje</span>
             </div>
             <p class="vendas-pendencias-mensagem">Ultimo dia: prepare e envie a lista hoje.</p>
             <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">{% if aviso.estado == "lista_preparada_falta_enviar" %}Enviar ao vendedor{% else %}Preparar lista{% endif %}</a>
@@ -255,7 +275,7 @@
           <article class="vendas-pendencias-item prioridade-alta" data-pendencia-fornecedor>
             <div class="vendas-pendencias-item-topo">
               <strong class="vendas-pendencias-item-titulo">{{ aviso.fornecedor_nome }}</strong>
-              <span class="vendas-pendencias-rotulo">Alta</span>
+              <span class="vendas-pendencias-rotulo">Falta enviar</span>
             </div>
             <p class="vendas-pendencias-mensagem">Lista preparada, falta enviar ao vendedor.</p>
             <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Enviar ao vendedor</a>
@@ -264,7 +284,7 @@
           <article class="vendas-pendencias-item prioridade-media" data-pendencia-fornecedor>
             <div class="vendas-pendencias-item-topo">
               <strong class="vendas-pendencias-item-titulo">{{ aviso.fornecedor_nome }}</strong>
-              <span class="vendas-pendencias-rotulo">Media</span>
+              <span class="vendas-pendencias-rotulo">Amanha</span>
             </div>
             <p class="vendas-pendencias-mensagem">Visita amanha.</p>
             <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Preparar lista</a>
@@ -273,7 +293,7 @@
           <article class="vendas-pendencias-item prioridade-baixa" data-pendencia-fornecedor>
             <div class="vendas-pendencias-item-topo">
               <strong class="vendas-pendencias-item-titulo">{{ aviso.fornecedor_nome }}</strong>
-              <span class="vendas-pendencias-rotulo">Baixa</span>
+              <span class="vendas-pendencias-rotulo">Atrasada</span>
             </div>
             <p class="vendas-pendencias-mensagem">
               {% if aviso.dias_para_visita < 0 %}
@@ -291,7 +311,7 @@
         <article class="vendas-pendencias-item prioridade-baixa" id="vendas-produtos-incompletos">
           <div class="vendas-pendencias-item-topo">
             <strong class="vendas-pendencias-item-titulo">Produtos incompletos</strong>
-            <span class="vendas-pendencias-rotulo">Baixa</span>
+            <span class="vendas-pendencias-rotulo">Cadastro</span>
           </div>
           <p class="vendas-pendencias-mensagem">{{ produtos_incompletos_vendas_qtd }} produto{{ produtos_incompletos_vendas_qtd|pluralize }} com cadastro incompleto.</p>
           <a class="vendas-pendencias-item-acao" href="?incompletos=1#vendas-produtos-incompletos">Ver / completar</a>
@@ -312,7 +332,7 @@
         <article class="vendas-pendencias-item prioridade-baixa" id="vendas-compras-rascunho">
           <div class="vendas-pendencias-item-topo">
             <strong class="vendas-pendencias-item-titulo">Compras em rascunho</strong>
-            <span class="vendas-pendencias-rotulo">Baixa</span>
+            <span class="vendas-pendencias-rotulo">Rascunho</span>
           </div>
           <p class="vendas-pendencias-mensagem">{{ compras_rascunho_qtd }} compra{{ compras_rascunho_qtd|pluralize }} em rascunho aguardando finalizacao.</p>
           <a class="vendas-pendencias-item-acao" href="{{ compras_rascunho_url }}">{{ compras_rascunho_botao }}</a>

@@ -1186,6 +1186,32 @@ def _prioridade_pendencias_vendas(avisos_visitas_fornecedores):
     return "baixa"
 
 
+def _ordem_aviso_painel_vendas(aviso):
+    if aviso.get("dias_para_visita") == 0:
+        return 0
+    if aviso.get("estado") == ESTADO_LISTA_PREPARADA_FALTA_ENVIAR:
+        return 1
+    if aviso.get("dias_para_visita") == 1:
+        return 2
+    if aviso.get("dias_para_visita", 0) < 0:
+        return 3
+    return 99
+
+
+def _avisos_visitas_painel_vendas(avisos_visitas_fornecedores):
+    avisos_visiveis = [
+        (indice, aviso)
+        for indice, aviso in enumerate(avisos_visitas_fornecedores)
+        if (
+            aviso.get("estado") == ESTADO_LISTA_PREPARADA_FALTA_ENVIAR
+            or aviso.get("dias_para_visita") in {0, 1}
+            or aviso.get("dias_para_visita", 0) < 0
+        )
+    ]
+    avisos_visiveis.sort(key=lambda item: (_ordem_aviso_painel_vendas(item[1]), item[0]))
+    return [aviso for _, aviso in avisos_visiveis]
+
+
 def home(request):
     produto_edicao = None
 
@@ -9422,17 +9448,19 @@ def vendas(request):
     produtos_incompletos_vendas = list(produtos_incompletos_vendas_qs[:5])
     mostrar_produtos_incompletos_vendas = request.GET.get("incompletos") == "1"
     avisos_visitas_fornecedores = obter_avisos_visitas_fornecedores()
+    avisos_visitas_fornecedores_painel = _avisos_visitas_painel_vendas(avisos_visitas_fornecedores)
     contexto_rascunho = _contexto_compras_rascunho_alerta()
     pendencias_vendas_qtd = (
-        len(avisos_visitas_fornecedores)
+        len(avisos_visitas_fornecedores_painel)
         + (1 if produtos_incompletos_vendas_qtd else 0)
         + (1 if contexto_rascunho["compras_rascunho_qtd"] else 0)
     )
-    pendencias_vendas_prioridade = _prioridade_pendencias_vendas(avisos_visitas_fornecedores)
+    pendencias_vendas_prioridade = _prioridade_pendencias_vendas(avisos_visitas_fornecedores_painel)
 
     return render(request, 'estoque/vendas_layout_teste.html', {
         **contexto_rascunho,
         'avisos_visitas_fornecedores': avisos_visitas_fornecedores,
+        'avisos_visitas_fornecedores_painel': avisos_visitas_fornecedores_painel,
         'pendencias_vendas_qtd': pendencias_vendas_qtd,
         'pendencias_vendas_prioridade': pendencias_vendas_prioridade,
         'produtos_incompletos_vendas': produtos_incompletos_vendas,

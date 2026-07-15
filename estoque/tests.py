@@ -853,6 +853,9 @@ class FechamentoCompraFinanceiroTests(TestCase):
             ("Fornecedor Hoje", "2026-07-15", 0, "preparar_lista", "Visita prevista para hoje: prepare a lista.", "/compras/sugestao-fornecedor/?fornecedor=2&data_visita=2026-07-15"),
             ("Fornecedor Amanha", "2026-07-16", 1, "preparar_lista", "Prepare a lista para a visita de amanha.", "/compras/sugestao-fornecedor/?fornecedor=3&data_visita=2026-07-16"),
             ("Fornecedor Futuro", "2026-07-18", 3, "lista_preparada_falta_enviar", "Lista preparada, falta enviar ao vendedor.", "/compras/listas-fornecedor/10/whatsapp/"),
+            ("Fornecedor Dois Dias", "2026-07-17", 2, "preparar_lista", "Prepare a lista para a visita em 2 dias.", "/compras/sugestao-fornecedor/?fornecedor=5&data_visita=2026-07-17"),
+            ("Fornecedor Seis Dias", "2026-07-21", 6, "preparar_lista", "Prepare a lista para a visita em 6 dias.", "/compras/sugestao-fornecedor/?fornecedor=6&data_visita=2026-07-21"),
+            ("Fornecedor Sete Dias", "2026-07-22", 7, "preparar_lista", "Prepare a lista para a visita em 7 dias.", "/compras/sugestao-fornecedor/?fornecedor=7&data_visita=2026-07-22"),
         ]
         avisos = []
         for indice, (nome, data_visita, dias, estado, mensagem, url) in enumerate(base[:quantidade], start=1):
@@ -927,16 +930,24 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, 'class="vendas-pendencias-lateral prioridade-critica pulsar"')
         self.assertContains(resposta, 'id="btnVendasPendencias"')
         self.assertContains(resposta, 'aria-controls="vendasPendenciasPainel"')
-        self.assertContains(resposta, "Pendencias 6")
+        self.assertContains(resposta, '<span class="vendas-pendencias-toggle-texto">Pendencias</span>')
+        self.assertContains(resposta, 'class="vendas-pendencias-badge" aria-label="6 pendencias">6</span>')
         self.assertContains(resposta, 'id="vendasPendenciasPainel" hidden')
         self.assertContains(resposta, 'id="btnFecharVendasPendencias"')
-        self.assertContains(resposta, "Fornecedor Atrasado")
-        self.assertContains(resposta, "Fornecedor Hoje")
-        self.assertContains(resposta, "Fornecedor Amanha")
-        self.assertContains(resposta, "Fornecedor Futuro")
+        indice_hoje = conteudo.index("Fornecedor Hoje")
+        indice_falta_enviar = conteudo.index("Fornecedor Futuro")
+        indice_amanha = conteudo.index("Fornecedor Amanha")
+        indice_atrasado = conteudo.index("Fornecedor Atrasado")
+        self.assertLess(indice_hoje, indice_falta_enviar)
+        self.assertLess(indice_falta_enviar, indice_amanha)
+        self.assertLess(indice_amanha, indice_atrasado)
         self.assertContains(resposta, "Visita atrasada.")
         self.assertContains(resposta, "Ultimo dia: prepare e envie a lista hoje.")
         self.assertContains(resposta, "Visita amanha.")
+        self.assertContains(resposta, "Hoje</span>")
+        self.assertContains(resposta, "Falta enviar</span>")
+        self.assertContains(resposta, "Amanha</span>")
+        self.assertContains(resposta, "Atrasada</span>")
         self.assertContains(resposta, "Preparar lista")
         self.assertContains(resposta, "Lista preparada, falta enviar ao vendedor.")
         self.assertContains(resposta, "Enviar ao vendedor")
@@ -961,6 +972,10 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, 'event.key === "Escape"')
         self.assertContains(resposta, "backdrop?.addEventListener")
         self.assertContains(resposta, "max-width: calc(100vw - 12px)")
+        self.assertContains(resposta, "width: 34px;")
+        self.assertContains(resposta, "min-height: 96px;")
+        self.assertContains(resposta, "width: min(340px, calc(100vw - 48px));")
+        self.assertContains(resposta, "justify-self: end;")
         self.assertNotContains(resposta, "Pendência 1 de")
 
     def test_vendas_nao_exibe_bloco_visitas_sem_avisos(self):
@@ -971,13 +986,44 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertEqual(resposta.context["pendencias_vendas_qtd"], 0)
         self.assertNotContains(resposta, 'id="vendasPendenciasLateral"')
 
+    def test_vendas_filtra_avisos_futuros_distantes_do_painel(self):
+        avisos = self._avisos_visitas_vendas(quantidade=7)
+
+        with patch("estoque.views.obter_avisos_visitas_fornecedores", return_value=avisos):
+            resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+        conteudo = resposta.content.decode()
+
+        self.assertEqual(resposta.context["avisos_visitas_fornecedores"], avisos)
+        self.assertEqual(len(resposta.context["avisos_visitas_fornecedores_painel"]), 4)
+        self.assertEqual(resposta.context["pendencias_vendas_qtd"], 4)
+        self.assertContains(resposta, 'class="vendas-pendencias-badge" aria-label="4 pendencias">4</span>')
+        self.assertContains(resposta, "Fornecedor Amanha")
+        self.assertNotIn("Fornecedor Dois Dias", conteudo)
+        self.assertNotIn("Fornecedor Seis Dias", conteudo)
+        self.assertNotIn("Fornecedor Sete Dias", conteudo)
+        self.assertNotIn("Visita em 2 dias", conteudo)
+        self.assertNotIn("Visita em 6 dias", conteudo)
+        self.assertNotIn("Visita em 7 dias", conteudo)
+
+    def test_vendas_avisos_distantes_sozinhos_nao_ativam_aba_nem_pulso(self):
+        avisos = self._avisos_visitas_vendas(quantidade=7)[4:]
+
+        with patch("estoque.views.obter_avisos_visitas_fornecedores", return_value=avisos):
+            resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+
+        self.assertEqual(resposta.context["avisos_visitas_fornecedores"], avisos)
+        self.assertEqual(resposta.context["avisos_visitas_fornecedores_painel"], [])
+        self.assertEqual(resposta.context["pendencias_vendas_qtd"], 0)
+        self.assertNotContains(resposta, 'id="vendasPendenciasLateral"')
+        self.assertNotContains(resposta, "pulsar")
+
     def test_vendas_um_aviso_exibe_aba_sem_controles_de_rotacao(self):
         avisos = self._avisos_visitas_vendas(quantidade=1)
 
         with patch("estoque.views.obter_avisos_visitas_fornecedores", return_value=avisos):
             resposta = self.client.get(reverse("estoque:vendas"), secure=True)
 
-        self.assertContains(resposta, "Pendencias 1")
+        self.assertContains(resposta, 'class="vendas-pendencias-badge" aria-label="1 pendencia">1</span>')
         self.assertContains(resposta, "Fornecedor Atrasado")
         self.assertNotContains(resposta, 'id="btnAvisoVisitaAnterior"')
         self.assertNotContains(resposta, 'id="btnAvisoVisitaProximo"')
