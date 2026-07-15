@@ -17,12 +17,12 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth import get_user_model
 from django.db.models import Sum
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
@@ -5304,6 +5304,56 @@ class ComprasListaFornecedorEnvioVendedorTests(TestCase):
             secure=True,
         )
 
+    def _url_confirmar_envio_vendedor(self, lista=None):
+        return reverse(
+            "estoque:compras_lista_fornecedor_confirmar_envio_vendedor",
+            kwargs={"pk": (lista or self.lista).pk},
+        )
+
+    def _post_confirmar_envio_vendedor(
+        self,
+        telefone="91988888888",
+        nome="Carlos",
+        origem="personalizado",
+        chave="chave-confirmacao-1",
+        lista=None,
+        client=None,
+    ):
+        cliente = client or self.client
+        return cliente.post(
+            self._url_confirmar_envio_vendedor(lista),
+            data=json.dumps({
+                "telefone": telefone,
+                "nome": nome,
+                "origem": origem,
+                "chaveConfirmacao": chave,
+            }),
+            content_type="application/json",
+            secure=True,
+        )
+
+    def _criar_destinatario_padrao_envio(self, nome="Vendedor Padrao", telefone="91988888888", fornecedor=None):
+        fornecedor = fornecedor or self.fornecedor
+        contato = FornecedorContato.objects.create(
+            fornecedor=fornecedor,
+            nome=nome,
+            principal=True,
+            ativo=True,
+        )
+        telefone_obj = FornecedorContatoTelefone.objects.create(
+            contato=contato,
+            numero=telefone,
+            whatsapp=True,
+            principal=True,
+            ativo=True,
+        )
+        FornecedorDestinatarioLista.objects.create(
+            fornecedor=fornecedor,
+            contato=contato,
+            telefone=telefone_obj,
+        )
+        return contato, telefone_obj
+
     def test_cria_primeiro_destinatario_recente(self):
         resposta = self._post_destinatario_recente("(91) 98888-8888", "lincoln")
 
@@ -5445,6 +5495,374 @@ class ComprasListaFornecedorEnvioVendedorTests(TestCase):
         self.assertEqual(resposta.status_code, 403)
         self.assertEqual(resposta.json()["erro"], "Autenticacao necessaria.")
         self.assertFalse(FornecedorDestinatarioRecente.objects.filter(fornecedor=self.fornecedor).exists())
+
+    def test_endpoint_confirmacao_envio_exige_usuario_autenticado(self):
+        self.client.logout()
+
+        resposta = self._post_confirmar_envio_vendedor()
+
+        self.assertEqual(resposta.status_code, 403)
+        self.assertEqual(resposta.json()["erro"], "Autenticacao necessaria.")
+        self.assertFalse(EnvioListaCompraFornecedor.objects.filter(lista=self.lista).exists())
+
+    def test_endpoint_confirmacao_envio_aceita_apenas_post(self):
+        resposta = self.client.get(self._url_confirmar_envio_vendedor(), secure=True)
+
+        self.assertEqual(resposta.status_code, 405)
+
+    def test_endpoint_confirmacao_envio_mantem_csrf_protegido(self):
+        cliente = Client(enforce_csrf_checks=True)
+        cliente.force_login(self.usuario)
+
+        resposta = self._post_confirmar_envio_vendedor(client=cliente)
+
+        self.assertEqual(resposta.status_code, 403)
+        self.assertFalse(EnvioListaCompraFornecedor.objects.filter(lista=self.lista).exists())
+
+    def test_confirma_envio_com_destinatario_padrao(self):
+        self._criar_destinatario_padrao_envio(nome="Vendedor Persistente", telefone="91988888888")
+
+        resposta = self._post_confirmar_envio_vendedor(
+            telefone="(91) 98888-8888",
+            nome="Nome Alterado no Navegador",
+            origem="padrao",
+            chave="padrao-1",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        envio = EnvioListaCompraFornecedor.objects.get(lista=self.lista)
+        self.assertEqual(envio.fornecedor, self.fornecedor)
+        self.assertEqual(envio.nome_destinatario, "Vendedor Persistente")
+        self.assertEqual(envio.telefone_destinatario, "5591988888888")
+        self.assertEqual(envio.origem_destinatario, EnvioListaCompraFornecedor.ORIGEM_PADRAO)
+
+    def test_confirmacao_rejeita_telefone_arbitrario_classificado_como_padrao(self):
+        self._criar_destinatario_padrao_envio(nome="Vendedor Persistente", telefone="91988888888")
+
+        resposta = self._post_confirmar_envio_vendedor(
+            telefone="91977777777",
+            nome="Outro",
+            origem="padrao",
+            chave="padrao-invalido-1",
+        )
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertFalse(EnvioListaCompraFornecedor.objects.filter(lista=self.lista).exists())
+
+    def test_confirmacao_rejeita_padrao_de_outro_fornecedor(self):
+        outro_fornecedor = Fornecedor.objects.create(nome="Fornecedor Outro Padrao")
+        self._criar_destinatario_padrao_envio(
+            nome="Padrao Outro Fornecedor",
+            telefone="91977777777",
+            fornecedor=outro_fornecedor,
+        )
+
+        resposta = self._post_confirmar_envio_vendedor(
+            telefone="91977777777",
+            nome="Padrao Outro Fornecedor",
+            origem="padrao",
+            chave="padrao-outro-fornecedor-1",
+        )
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertFalse(EnvioListaCompraFornecedor.objects.filter(lista=self.lista).exists())
+
+    def test_confirma_envio_com_destinatario_recente(self):
+        FornecedorDestinatarioRecente.objects.create(
+            fornecedor=self.fornecedor,
+            nome="Lincoln",
+            telefone="5591999999999",
+            ultima_utilizacao=timezone.now(),
+        )
+
+        resposta = self._post_confirmar_envio_vendedor(
+            telefone="+55 (91) 99999-9999",
+            nome="Nome Alterado no Navegador",
+            origem="recente",
+            chave="recente-1",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        envio = EnvioListaCompraFornecedor.objects.get(lista=self.lista)
+        self.assertEqual(envio.origem_destinatario, EnvioListaCompraFornecedor.ORIGEM_RECENTE)
+        self.assertEqual(envio.telefone_destinatario, "5591999999999")
+        self.assertEqual(envio.nome_destinatario, "Lincoln")
+
+    def test_confirmacao_rejeita_recente_de_outro_fornecedor(self):
+        outro_fornecedor = Fornecedor.objects.create(nome="Fornecedor Outro Recente")
+        FornecedorDestinatarioRecente.objects.create(
+            fornecedor=outro_fornecedor,
+            nome="Recente Outro Fornecedor",
+            telefone="5591999999999",
+            ultima_utilizacao=timezone.now(),
+        )
+
+        resposta = self._post_confirmar_envio_vendedor(
+            telefone="+55 (91) 99999-9999",
+            nome="Recente Outro Fornecedor",
+            origem="recente",
+            chave="recente-outro-fornecedor-1",
+        )
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertFalse(EnvioListaCompraFornecedor.objects.filter(lista=self.lista).exists())
+
+    def test_confirma_envio_com_destinatario_personalizado_e_nome_opcional(self):
+        resposta = self._post_confirmar_envio_vendedor(
+            telefone="91977777777",
+            nome="",
+            origem="personalizado",
+            chave="personalizado-1",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        envio = EnvioListaCompraFornecedor.objects.get(lista=self.lista)
+        self.assertEqual(envio.nome_destinatario, "")
+        self.assertEqual(envio.origem_destinatario, EnvioListaCompraFornecedor.ORIGEM_PERSONALIZADO)
+
+    def test_confirmacao_normaliza_telefone_e_equivale_numero_brasileiro_com_mais_55(self):
+        self._post_confirmar_envio_vendedor(
+            telefone="91993643215",
+            nome="Leandro",
+            origem="personalizado",
+            chave="br-1",
+        )
+        self._post_confirmar_envio_vendedor(
+            telefone="+55 (91) 99364-3215",
+            nome="Leandro",
+            origem="personalizado",
+            chave="br-2",
+        )
+
+        telefones = list(
+            EnvioListaCompraFornecedor.objects
+            .filter(lista=self.lista)
+            .order_by("id")
+            .values_list("telefone_destinatario", flat=True)
+        )
+        self.assertEqual(telefones, ["5591993643215", "5591993643215"])
+
+    def test_confirmacao_preserva_numero_internacional_explicito(self):
+        resposta = self._post_confirmar_envio_vendedor(
+            telefone="+1 (415) 555-2671",
+            nome="Fornecedor EUA",
+            origem="personalizado",
+            chave="internacional-1",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        envio = EnvioListaCompraFornecedor.objects.get(lista=self.lista)
+        self.assertEqual(envio.telefone_destinatario, "14155552671")
+        self.assertFalse(envio.telefone_destinatario.startswith("55"))
+
+    def test_confirmacao_rejeita_telefone_invalido(self):
+        resposta = self._post_confirmar_envio_vendedor(
+            telefone="123",
+            nome="Carlos",
+            origem="personalizado",
+            chave="invalido-1",
+        )
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertFalse(EnvioListaCompraFornecedor.objects.filter(lista=self.lista).exists())
+
+    def test_confirmacao_rejeita_lista_cancelada(self):
+        self.lista.status = ListaCompraFornecedor.STATUS_CANCELADA
+        self.lista.save(update_fields=["status", "atualizado_em"])
+
+        resposta = self._post_confirmar_envio_vendedor(chave="cancelada-1")
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn("cancelada", resposta.json()["erro"])
+        self.assertFalse(EnvioListaCompraFornecedor.objects.filter(lista=self.lista).exists())
+
+    def test_confirmacao_lista_aberta_passa_para_enviada(self):
+        resposta = self._post_confirmar_envio_vendedor(chave="aberta-1")
+
+        self.assertEqual(resposta.status_code, 200)
+        self.lista.refresh_from_db()
+        self.assertEqual(self.lista.status, ListaCompraFornecedor.STATUS_ENVIADA)
+
+    def test_confirmacao_lista_finalizada_nao_e_rebaixada(self):
+        self.lista.status = ListaCompraFornecedor.STATUS_FINALIZADA
+        self.lista.save(update_fields=["status", "atualizado_em"])
+
+        resposta = self._post_confirmar_envio_vendedor(chave="finalizada-1")
+
+        self.assertEqual(resposta.status_code, 200)
+        self.lista.refresh_from_db()
+        self.assertEqual(self.lista.status, ListaCompraFornecedor.STATUS_FINALIZADA)
+
+    def test_abrir_whatsapp_nao_marca_lista_como_enviada(self):
+        resposta = self.client.get(self.url, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "window.open(url")
+        self.lista.refresh_from_db()
+        self.assertEqual(self.lista.status, ListaCompraFornecedor.STATUS_ABERTA)
+        self.assertFalse(EnvioListaCompraFornecedor.objects.filter(lista=self.lista).exists())
+
+    def test_registrar_destinatario_recente_nao_marca_lista_como_enviada(self):
+        resposta = self._post_destinatario_recente("91988888888", "Carlos")
+
+        self.assertEqual(resposta.status_code, 200)
+        self.lista.refresh_from_db()
+        self.assertEqual(self.lista.status, ListaCompraFornecedor.STATUS_ABERTA)
+        self.assertFalse(EnvioListaCompraFornecedor.objects.filter(lista=self.lista).exists())
+
+    def test_gerar_imagem_ou_compartilhamento_visual_nao_marca_lista_como_enviada(self):
+        resposta = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_whatsapp_imagem", kwargs={"pk": self.lista.pk}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.lista.refresh_from_db()
+        self.assertEqual(self.lista.status, ListaCompraFornecedor.STATUS_ABERTA)
+        self.assertFalse(EnvioListaCompraFornecedor.objects.filter(lista=self.lista).exists())
+
+    def test_confirmacao_duplicada_com_mesma_chave_nao_cria_dois_registros(self):
+        primeira = self._post_confirmar_envio_vendedor(chave="duplicada-1")
+        segunda = self._post_confirmar_envio_vendedor(chave="duplicada-1")
+
+        self.assertEqual(primeira.status_code, 200)
+        self.assertEqual(segunda.status_code, 200)
+        self.assertEqual(EnvioListaCompraFornecedor.objects.filter(lista=self.lista).count(), 1)
+        self.assertTrue(primeira.json()["criado"])
+        self.assertFalse(segunda.json()["criado"])
+        self.assertEqual(primeira.json()["envio"]["id"], segunda.json()["envio"]["id"])
+
+    def test_confirmacao_mesma_chave_em_outra_lista_nao_reaproveita_envio(self):
+        outro_fornecedor = Fornecedor.objects.create(nome="Fornecedor Outra Lista")
+        outra_lista = ListaCompraFornecedor.objects.create(
+            fornecedor=outro_fornecedor,
+            data_lista=date(2026, 7, 14),
+            data_inicio_periodo=date(2026, 7, 1),
+            data_fim_periodo=date(2026, 7, 14),
+            total_sugerido_original=Decimal("20.00"),
+            total_lista=Decimal("20.00"),
+        )
+
+        primeira = self._post_confirmar_envio_vendedor(chave="mesma-chave-listas")
+        segunda = self._post_confirmar_envio_vendedor(
+            telefone="91977777777",
+            nome="Ana",
+            origem="personalizado",
+            chave="mesma-chave-listas",
+            lista=outra_lista,
+        )
+
+        self.assertEqual(primeira.status_code, 200)
+        self.assertEqual(segunda.status_code, 200)
+        self.assertNotEqual(primeira.json()["envio"]["id"], segunda.json()["envio"]["id"])
+        self.assertEqual(EnvioListaCompraFornecedor.objects.count(), 2)
+        self.assertEqual(
+            EnvioListaCompraFornecedor.objects.get(lista=outra_lista).fornecedor,
+            outro_fornecedor,
+        )
+
+    def test_confirmacao_mesma_chave_mesma_lista_telefone_diferente_retorna_conflito(self):
+        primeira = self._post_confirmar_envio_vendedor(chave="conflito-telefone")
+        segunda = self._post_confirmar_envio_vendedor(
+            telefone="91977777777",
+            nome="Carlos",
+            origem="personalizado",
+            chave="conflito-telefone",
+        )
+
+        self.assertEqual(primeira.status_code, 200)
+        self.assertEqual(segunda.status_code, 409)
+        self.assertEqual(segunda.json()["erro"], "Confirmacao duplicada com dados divergentes.")
+        self.assertEqual(EnvioListaCompraFornecedor.objects.filter(lista=self.lista).count(), 1)
+
+    def test_confirmacao_mesma_chave_mesma_lista_origem_diferente_retorna_conflito(self):
+        primeira = self._post_confirmar_envio_vendedor(chave="conflito-origem")
+        self._criar_destinatario_padrao_envio(nome="Carlos", telefone="91988888888")
+        segunda = self._post_confirmar_envio_vendedor(
+            telefone="91988888888",
+            nome="Carlos",
+            origem="padrao",
+            chave="conflito-origem",
+        )
+
+        self.assertEqual(primeira.status_code, 200)
+        self.assertEqual(segunda.status_code, 409)
+        self.assertEqual(EnvioListaCompraFornecedor.objects.filter(lista=self.lista).count(), 1)
+
+    def test_confirmacao_idempotente_em_lista_enviada_permanece_enviada(self):
+        primeira = self._post_confirmar_envio_vendedor(chave="enviada-idempotente")
+        segunda = self._post_confirmar_envio_vendedor(chave="enviada-idempotente")
+
+        self.assertEqual(primeira.status_code, 200)
+        self.assertEqual(segunda.status_code, 200)
+        self.lista.refresh_from_db()
+        self.assertEqual(self.lista.status, ListaCompraFornecedor.STATUS_ENVIADA)
+        self.assertEqual(EnvioListaCompraFornecedor.objects.filter(lista=self.lista).count(), 1)
+
+    def test_confirmacao_registra_usuario_autenticado(self):
+        self._post_confirmar_envio_vendedor(chave="usuario-1")
+
+        envio = EnvioListaCompraFornecedor.objects.get(lista=self.lista)
+        self.assertEqual(envio.confirmado_por, self.usuario)
+
+    def test_payload_informa_ultimo_envio_confirmado(self):
+        self._post_confirmar_envio_vendedor(
+            telefone="91988888888",
+            nome="Carlos",
+            origem="personalizado",
+            chave="payload-1",
+        )
+
+        payload = views._payload_lista_fornecedor(self.lista)
+
+        self.assertTrue(payload["envioVendedorConfirmado"])
+        self.assertEqual(payload["ultimoEnvioVendedor"]["nomeDestinatario"], "Carlos")
+        self.assertEqual(payload["ultimoEnvioVendedor"]["telefoneDestinatario"], "5591988888888")
+        self.assertEqual(payload["ultimoEnvioVendedor"]["origemDestinatario"], "personalizado")
+
+    def test_tela_ja_confirmada_exibe_dados_do_envio(self):
+        self._post_confirmar_envio_vendedor(
+            telefone="91988888888",
+            nome="Carlos",
+            origem="personalizado",
+            chave="tela-confirmada-1",
+        )
+
+        resposta = self.client.get(self.url, secure=True)
+
+        self.assertContains(resposta, "Envio ao vendedor confirmado")
+        self.assertContains(resposta, "Carlos")
+        self.assertContains(resposta, "+55 (91) 98888-8888")
+        self.assertContains(resposta, "confirmadoEmTexto")
+
+    def test_javascript_nao_mostra_sucesso_quando_endpoint_retorna_erro(self):
+        resposta = self.client.get(self.url, secure=True)
+
+        self.assertContains(resposta, "throw new Error(resultado.erro")
+        self.assertContains(resposta, "Falha de rede ao confirmar")
+        self.assertContains(resposta, "Confirmacao registrada com sucesso.")
+
+    def test_confirmacao_usa_transaction_atomic_e_select_for_update(self):
+        from pathlib import Path
+
+        conteudo = Path("estoque/views.py").read_text(encoding="utf-8")
+        self.assertIn("with transaction.atomic():", conteudo)
+        self.assertIn(".select_for_update()", conteudo)
+
+    def test_fornecedor_da_confirmacao_corresponde_ao_fornecedor_da_lista(self):
+        outro_fornecedor = Fornecedor.objects.create(nome="Fornecedor Incorreto")
+
+        envio = EnvioListaCompraFornecedor(
+            lista=self.lista,
+            fornecedor=outro_fornecedor,
+            telefone_destinatario="91988888888",
+            confirmado_em=timezone.now(),
+            origem_destinatario=EnvioListaCompraFornecedor.ORIGEM_PERSONALIZADO,
+            chave_idempotencia="fornecedor-incorreto",
+        )
+
+        with self.assertRaises(ValidationError):
+            envio.full_clean()
 
     def test_payload_formata_telefone_recente_com_codigo_do_pais(self):
         FornecedorDestinatarioRecente.objects.create(

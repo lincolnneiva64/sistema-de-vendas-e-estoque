@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Categoria, Fornecedor, FornecedorContato, Funcionario, ItemVenda, PixRecebido, Produto, ProdutoFornecedor, Unidade, Venda
+from .models import Categoria, EnvioListaCompraFornecedor, Fornecedor, FornecedorContato, Funcionario, ItemVenda, PixRecebido, Produto, ProdutoFornecedor, Unidade, Venda
 
 admin.site.register(Produto)
 admin.site.register(Unidade)
@@ -29,3 +29,11 @@ class ProdutoFornecedorAdmin(admin.ModelAdmin):
     list_display = ("produto", "fornecedor", "ativo", "criado_em")
     search_fields = ("produto__nome", "fornecedor__nome", "fornecedor__nome_fantasia")
     list_filter = ("ativo",)
+
+
+@admin.register(EnvioListaCompraFornecedor)
+class EnvioListaCompraFornecedorAdmin(admin.ModelAdmin):
+    list_display = ("lista", "fornecedor", "nome_destinatario", "telefone_destinatario", "origem_destinatario", "confirmado_em", "confirmado_por")
+    search_fields = ("lista__id", "fornecedor__nome", "nome_destinatario", "telefone_destinatario")
+    list_filter = ("origem_destinatario", "confirmado_em")
+    readonly_fields = ("criado_em", "atualizado_em")

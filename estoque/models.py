@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import models
 from django.db.models import Q
 from django.core.exceptions import ValidationError
@@ -1162,6 +1163,80 @@ class FornecedorDestinatarioRecente(models.Model):
     def __str__(self):
         nome = self.nome or "Sem nome"
         return f"{self.fornecedor} - {nome} - {self.telefone}"
+
+
+class EnvioListaCompraFornecedor(models.Model):
+    ORIGEM_PADRAO = "padrao"
+    ORIGEM_RECENTE = "recente"
+    ORIGEM_PERSONALIZADO = "personalizado"
+    ORIGEM_CHOICES = [
+        (ORIGEM_PADRAO, "Destinatario padrao"),
+        (ORIGEM_RECENTE, "Destinatario recente"),
+        (ORIGEM_PERSONALIZADO, "Destinatario personalizado"),
+    ]
+
+    lista = models.ForeignKey(
+        "ListaCompraFornecedor",
+        on_delete=models.CASCADE,
+        related_name="envios_vendedor",
+    )
+    fornecedor = models.ForeignKey(
+        Fornecedor,
+        on_delete=models.PROTECT,
+        related_name="envios_listas_compra",
+    )
+    nome_destinatario = models.CharField(max_length=140, blank=True, default="")
+    telefone_destinatario = models.CharField(max_length=20)
+    confirmado_em = models.DateTimeField(db_index=True)
+    confirmado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="envios_listas_compra_confirmados",
+    )
+    origem_destinatario = models.CharField(
+        max_length=20,
+        choices=ORIGEM_CHOICES,
+        default=ORIGEM_PERSONALIZADO,
+    )
+    chave_idempotencia = models.CharField(max_length=80, unique=True, db_index=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-confirmado_em", "-id"]
+        indexes = [
+            models.Index(fields=["lista", "-confirmado_em"], name="idx_envio_lista_conf_em"),
+            models.Index(fields=["fornecedor", "-confirmado_em"], name="idx_envio_forn_conf_em"),
+        ]
+
+    @staticmethod
+    def normalizar_telefone(valor):
+        return FornecedorDestinatarioRecente.normalizar_telefone(valor)
+
+    @staticmethod
+    def normalizar_nome(valor):
+        return FornecedorDestinatarioRecente.normalizar_nome(valor)
+
+    def clean(self):
+        super().clean()
+        self.telefone_destinatario = self.normalizar_telefone(self.telefone_destinatario)
+        self.nome_destinatario = self.normalizar_nome(self.nome_destinatario)
+        if not self.telefone_destinatario:
+            raise ValidationError({"telefone_destinatario": "Informe o telefone do destinatario."})
+        if self.origem_destinatario not in dict(self.ORIGEM_CHOICES):
+            raise ValidationError({"origem_destinatario": "Origem do destinatario invalida."})
+        if self.lista_id and self.fornecedor_id and self.lista.fornecedor_id != self.fornecedor_id:
+            raise ValidationError({"fornecedor": "Fornecedor deve corresponder ao fornecedor da lista."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        nome = self.nome_destinatario or "Sem nome"
+        return f"Envio da Lista #{self.lista_id} para {nome} - {self.telefone_destinatario}"
 
 
 class MeioPagamento(models.Model):

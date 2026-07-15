@@ -29,7 +29,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
     contato_tem_telefone_no_post,
@@ -4621,6 +4621,35 @@ def _destinatarios_recentes_lista_fornecedor(fornecedor, limite=5):
     ]
 
 
+def _payload_envio_lista_fornecedor(envio):
+    if not envio:
+        return None
+    return {
+        "id": envio.id,
+        "confirmado": True,
+        "nomeDestinatario": envio.nome_destinatario,
+        "telefoneDestinatario": envio.telefone_destinatario,
+        "telefoneFormatado": _formatar_whatsapp_recente_fornecedor(envio.telefone_destinatario),
+        "confirmadoEm": envio.confirmado_em.isoformat(),
+        "confirmadoEmTexto": timezone.localtime(envio.confirmado_em).strftime("%d/%m/%Y %H:%M"),
+        "origemDestinatario": envio.origem_destinatario,
+        "origemDestinatarioTexto": envio.get_origem_destinatario_display(),
+        "confirmadoPor": envio.confirmado_por.get_username() if envio.confirmado_por else "",
+    }
+
+
+def _ultimo_envio_lista_fornecedor(lista):
+    if not lista or not lista.pk:
+        return None
+    return (
+        EnvioListaCompraFornecedor.objects
+        .select_related("fornecedor", "confirmado_por")
+        .filter(lista=lista)
+        .order_by("-confirmado_em", "-id")
+        .first()
+    )
+
+
 def _registrar_destinatario_recente_fornecedor(fornecedor, telefone, nome=""):
     telefone_normalizado = FornecedorDestinatarioRecente.normalizar_telefone(telefone)
     if not fornecedor or not telefone_normalizado:
@@ -4664,6 +4693,142 @@ def _registrar_destinatario_recente_fornecedor(fornecedor, telefone, nome=""):
                 fornecedor=fornecedor,
                 telefone=telefone_normalizado,
             )
+
+
+class ConflitoIdempotenciaEnvioLista(Exception):
+    pass
+
+
+def _destinatario_confirmacao_lista_fornecedor(lista, telefone_normalizado, nome_limpo, origem):
+    if origem == EnvioListaCompraFornecedor.ORIGEM_PADRAO:
+        destinatarios = _payload_destinatarios_lista_fornecedor(lista.fornecedor)["opcoes"]
+        destinatario_padrao = destinatarios[0] if destinatarios else None
+        if not destinatario_padrao:
+            raise ValidationError("Destinatario padrao nao encontrado para esta lista.")
+        telefone_padrao = EnvioListaCompraFornecedor.normalizar_telefone(
+            destinatario_padrao.get("numero") or destinatario_padrao.get("whatsapp") or ""
+        )
+        if telefone_padrao != telefone_normalizado:
+            raise ValidationError("Telefone nao corresponde ao destinatario padrao da lista.")
+        return telefone_padrao, EnvioListaCompraFornecedor.normalizar_nome(destinatario_padrao.get("nome") or "")
+
+    if origem == EnvioListaCompraFornecedor.ORIGEM_RECENTE:
+        destinatario_recente = (
+            FornecedorDestinatarioRecente.objects
+            .filter(fornecedor=lista.fornecedor, telefone=telefone_normalizado)
+            .order_by("-ultima_utilizacao", "-id")
+            .first()
+        )
+        if not destinatario_recente:
+            raise ValidationError("Telefone nao corresponde a um destinatario recente deste fornecedor.")
+        return destinatario_recente.telefone, destinatario_recente.nome
+
+    return telefone_normalizado, nome_limpo
+
+
+def _envio_idempotente_compativel(envio, lista, telefone, nome, origem):
+    return (
+        envio.lista_id == lista.pk
+        and envio.fornecedor_id == lista.fornecedor_id
+        and envio.telefone_destinatario == telefone
+        and envio.nome_destinatario == nome
+        and envio.origem_destinatario == origem
+    )
+
+
+def _confirmar_envio_lista_fornecedor(lista, usuario, telefone, nome="", origem="", chave_idempotencia=""):
+    telefone_normalizado = EnvioListaCompraFornecedor.normalizar_telefone(telefone)
+    nome_limpo = EnvioListaCompraFornecedor.normalizar_nome(nome)
+    origem = str(origem or "").strip().lower()
+    origem_valida = dict(EnvioListaCompraFornecedor.ORIGEM_CHOICES)
+
+    if not lista or not lista.pk:
+        raise ValidationError("Lista invalida.")
+    if not lista.fornecedor_id:
+        raise ValidationError("Fornecedor da lista nao informado.")
+    if origem not in origem_valida:
+        raise ValidationError("Origem do destinatario invalida.")
+    if not telefone_normalizado or len(telefone_normalizado) < 8 or len(telefone_normalizado) > 20:
+        raise ValidationError("Telefone do destinatario invalido.")
+    if len(nome_limpo) > 140:
+        raise ValidationError("Nome do destinatario invalido.")
+    if not chave_idempotencia:
+        raise ValidationError("Chave de confirmacao invalida.")
+
+    chave_final = hashlib.sha256(f"{lista.pk}:{chave_idempotencia}".encode("utf-8")).hexdigest()
+    agora = timezone.now()
+
+    with transaction.atomic():
+        lista_bloqueada = (
+            ListaCompraFornecedor.objects
+            .select_for_update()
+            .get(pk=lista.pk)
+        )
+        if lista_bloqueada.status == ListaCompraFornecedor.STATUS_CANCELADA:
+            raise ValidationError("Lista cancelada nao pode ter envio confirmado.")
+        if not lista_bloqueada.fornecedor_id:
+            raise ValidationError("Fornecedor da lista nao informado.")
+
+        telefone_confirmado, nome_confirmado = _destinatario_confirmacao_lista_fornecedor(
+            lista_bloqueada,
+            telefone_normalizado,
+            nome_limpo,
+            origem,
+        )
+
+        envio_existente = (
+            EnvioListaCompraFornecedor.objects
+            .select_related("fornecedor", "confirmado_por")
+            .filter(chave_idempotencia=chave_final)
+            .first()
+        )
+        if envio_existente:
+            if not _envio_idempotente_compativel(
+                envio_existente,
+                lista_bloqueada,
+                telefone_confirmado,
+                nome_confirmado,
+                origem,
+            ):
+                raise ConflitoIdempotenciaEnvioLista()
+            return envio_existente, False
+
+        try:
+            envio = EnvioListaCompraFornecedor.objects.create(
+                lista=lista_bloqueada,
+                fornecedor=lista_bloqueada.fornecedor,
+                nome_destinatario=nome_confirmado,
+                telefone_destinatario=(
+                    telefone
+                    if origem == EnvioListaCompraFornecedor.ORIGEM_PERSONALIZADO
+                    else telefone_confirmado
+                ),
+                confirmado_em=agora,
+                confirmado_por=usuario if getattr(usuario, "is_authenticated", False) else None,
+                origem_destinatario=origem,
+                chave_idempotencia=chave_final,
+            )
+        except IntegrityError:
+            envio = (
+                EnvioListaCompraFornecedor.objects
+                .select_related("fornecedor", "confirmado_por")
+                .get(chave_idempotencia=chave_final)
+            )
+            if not _envio_idempotente_compativel(
+                envio,
+                lista_bloqueada,
+                telefone_confirmado,
+                nome_confirmado,
+                origem,
+            ):
+                raise ConflitoIdempotenciaEnvioLista()
+            return envio, False
+
+        if lista_bloqueada.status == ListaCompraFornecedor.STATUS_ABERTA:
+            lista_bloqueada.status = ListaCompraFornecedor.STATUS_ENVIADA
+            lista_bloqueada.save(update_fields=["status", "atualizado_em"])
+
+        return envio, True
 
 
 def _payload_destinatarios_lista_fornecedor(fornecedor):
@@ -4776,13 +4941,16 @@ def _payload_destinatarios_lista_fornecedor(fornecedor):
 
 def _payload_lista_fornecedor(lista):
     destinatarios = _payload_destinatarios_lista_fornecedor(lista.fornecedor)
+    ultimo_envio = _ultimo_envio_lista_fornecedor(lista)
     return {
         "tipo": "sintetica",
         "listaId": lista.pk,
         "titulo": "Lista de Compras",
         "imagemUrl": reverse("estoque:compras_lista_fornecedor_whatsapp_imagem", kwargs={"pk": lista.pk}),
         "registrarDestinatarioUrl": reverse("estoque:compras_lista_fornecedor_whatsapp_destinatario_recente", kwargs={"pk": lista.pk}),
+        "confirmarEnvioVendedorUrl": reverse("estoque:compras_lista_fornecedor_confirmar_envio_vendedor", kwargs={"pk": lista.pk}),
         "fornecedor": lista.fornecedor.nome if lista.fornecedor else "Fornecedor nao informado",
+        "statusLista": lista.status,
         "periodo": f"{lista.data_inicio_periodo.strftime('%d/%m/%Y')} ate {lista.data_fim_periodo.strftime('%d/%m/%Y')}",
         "chegada": lista.data_chegada_prevista.strftime("%d/%m/%Y") if lista.data_chegada_prevista else "",
         "totalOriginal": f"R$ {lista.total_sugerido_original:.2f}",
@@ -4800,6 +4968,8 @@ def _payload_lista_fornecedor(lista):
         ],
         "destinatarios": destinatarios["opcoes"],
         "destinatariosRecentes": _destinatarios_recentes_lista_fornecedor(lista.fornecedor),
+        "envioVendedorConfirmado": bool(ultimo_envio),
+        "ultimoEnvioVendedor": _payload_envio_lista_fornecedor(ultimo_envio),
         "temContatoFornecedor": destinatarios["temContatoFornecedor"],
     }
 
@@ -5715,6 +5885,47 @@ def compras_lista_fornecedor_whatsapp_destinatario_recente(request, pk):
         "ok": True,
         "registrado": bool(recente),
         "destinatariosRecentes": _destinatarios_recentes_lista_fornecedor(lista.fornecedor),
+    })
+
+
+@require_POST
+def compras_lista_fornecedor_confirmar_envio_vendedor(request, pk):
+    if not request.user.is_authenticated:
+        return JsonResponse({"ok": False, "erro": "Autenticacao necessaria."}, status=403)
+
+    lista = get_object_or_404(
+        ListaCompraFornecedor.objects.select_related("fornecedor"),
+        pk=pk,
+    )
+
+    try:
+        dados = json.loads(request.body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        dados = request.POST
+
+    try:
+        envio, criado = _confirmar_envio_lista_fornecedor(
+            lista=lista,
+            usuario=request.user,
+            telefone=dados.get("telefone") or dados.get("numero") or "",
+            nome=dados.get("nome") or "",
+            origem=dados.get("origem") or "",
+            chave_idempotencia=dados.get("chaveConfirmacao") or dados.get("chave_idempotencia") or "",
+        )
+    except ConflitoIdempotenciaEnvioLista:
+        return JsonResponse({"ok": False, "erro": "Confirmacao duplicada com dados divergentes."}, status=409)
+    except ValidationError as exc:
+        mensagem = "Nao foi possivel confirmar o envio."
+        if exc.messages:
+            mensagem = exc.messages[0]
+        return JsonResponse({"ok": False, "erro": mensagem}, status=400)
+
+    lista.refresh_from_db(fields=["status", "atualizado_em"])
+    return JsonResponse({
+        "ok": True,
+        "criado": criado,
+        "statusLista": lista.status,
+        "envio": _payload_envio_lista_fornecedor(envio),
     })
 
 

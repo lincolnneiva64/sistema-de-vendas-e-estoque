@@ -51,6 +51,7 @@ urlpatterns = [
     path("compras/listas-fornecedor/<int:pk>/conferencia/salvar/", views.compras_lista_fornecedor_conferencia_salvar, name="compras_lista_fornecedor_conferencia_salvar"),
     path("compras/listas-fornecedor/<int:pk>/whatsapp/", views.compras_lista_fornecedor_whatsapp, name="compras_lista_fornecedor_whatsapp"),
     path("compras/listas-fornecedor/<int:pk>/whatsapp/destinatario-recente/", views.compras_lista_fornecedor_whatsapp_destinatario_recente, name="compras_lista_fornecedor_whatsapp_destinatario_recente"),
+    path("compras/listas-fornecedor/<int:pk>/confirmar-envio-vendedor/", views.compras_lista_fornecedor_confirmar_envio_vendedor, name="compras_lista_fornecedor_confirmar_envio_vendedor"),
     path("compras/listas-fornecedor/<int:pk>/whatsapp-imagem/", views.compras_lista_fornecedor_whatsapp_imagem, name="compras_lista_fornecedor_whatsapp_imagem"),
     path("compras/listas-fornecedor/<int:pk>/gerar-compra/", views.compras_lista_fornecedor_gerar_compra, name="compras_lista_fornecedor_gerar_compra"),
     path("compras/listas-fornecedor/<int:pk>/descartar-compra/", views.compras_lista_fornecedor_descartar_compra, name="compras_lista_fornecedor_descartar_compra"),

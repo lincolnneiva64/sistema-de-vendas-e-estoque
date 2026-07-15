@@ -477,6 +477,57 @@
       font-weight: 800;
     }
 
+    .confirmacao-envio {
+      margin-top: 10px;
+      border: 1px solid #e7d7dc;
+      border-radius: 10px;
+      background: #fffdf9;
+      padding: 10px;
+    }
+
+    .confirmacao-envio.confirmado {
+      border-color: #cfe4d5;
+      background: #f5fbf6;
+    }
+
+    .confirmacao-envio-texto {
+      margin: 0 0 8px;
+      color: var(--texto);
+      font-size: .78rem;
+      font-weight: 800;
+      line-height: 1.35;
+    }
+
+    .confirmacao-envio-meta {
+      display: none;
+      margin-top: 8px;
+      color: #285f3b;
+      font-size: .74rem;
+      font-weight: 850;
+      line-height: 1.35;
+    }
+
+    .confirmacao-envio-meta.visivel {
+      display: block;
+    }
+
+    .confirmacao-envio-status {
+      display: block;
+      min-height: 16px;
+      margin-top: 7px;
+      color: var(--suave);
+      font-size: .72rem;
+      font-weight: 850;
+    }
+
+    .confirmacao-envio-status.erro {
+      color: #9b1c1c;
+    }
+
+    .confirmacao-envio-status.sucesso {
+      color: #285f3b;
+    }
+
     .mensagem-curta {
       margin-top: 10px;
       border: 1px solid #eee1e3;
@@ -816,6 +867,12 @@
         <div class="destinatarios-recentes-lista" id="destinatariosRecentesLista"></div>
       </section>
       <div class="destinatario-aviso" id="destinatarioAviso"></div>
+      <section class="confirmacao-envio" id="confirmacaoEnvioVendedor" aria-label="Confirmacao do envio ao vendedor">
+        <p class="confirmacao-envio-texto" id="confirmacaoEnvioTexto">Depois de enviar a mensagem no WhatsApp, volte a esta tela e confirme abaixo.</p>
+        <button type="button" class="acao-btn" id="btnConfirmarEnvioVendedor">Confirmar que enviei ao vendedor</button>
+        <span class="confirmacao-envio-status" id="confirmacaoEnvioStatus" aria-live="polite"></span>
+        <div class="confirmacao-envio-meta" id="confirmacaoEnvioMeta"></div>
+      </section>
     </section>
 
     <details class="mensagem-whatsapp" aria-label="Mensagem para WhatsApp">
@@ -855,10 +912,19 @@
     const destinatariosRecentesLista = document.getElementById("destinatariosRecentesLista");
     const destinatarioAviso = document.getElementById("destinatarioAviso");
     const destinatarioStatus = document.getElementById("destinatarioStatus");
+    const confirmacaoEnvioVendedor = document.getElementById("confirmacaoEnvioVendedor");
+    const confirmacaoEnvioTexto = document.getElementById("confirmacaoEnvioTexto");
+    const btnConfirmarEnvioVendedor = document.getElementById("btnConfirmarEnvioVendedor");
+    const confirmacaoEnvioStatus = document.getElementById("confirmacaoEnvioStatus");
+    const confirmacaoEnvioMeta = document.getElementById("confirmacaoEnvioMeta");
     const btnImprimir = document.getElementById("btnImprimir");
     let payloadAtual = null;
     let destinatarioPadraoAtual = null;
     let destinatarioRecenteSelecionado = null;
+    const confirmacaoEnvioToken = (
+      window.crypto?.randomUUID?.() ||
+      ("envio-" + Date.now() + "-" + Math.random().toString(16).slice(2))
+    );
 
     function html(valor) {
       return String(valor ?? "")
@@ -994,6 +1060,52 @@
       destinatarioStatus.classList.remove("padrao", "recente", "personalizado");
       destinatarioStatus.classList.add(classe);
       atualizarSelecaoRecentes();
+    }
+
+    function origemDestinatarioAtual() {
+      if (camposEquivalemDestinatario(destinatarioPadraoAtual)) return "padrao";
+      if (camposEquivalemDestinatario(destinatarioRecenteSelecionado)) return "recente";
+      return "personalizado";
+    }
+
+    function dadosDestinatarioAtual() {
+      return {
+        telefone: normalizarWhatsapp(whatsappDestinatario?.value || ""),
+        nome: normalizarNomeDestinatario(whatsappDestinatarioNome?.value || ""),
+        origem: origemDestinatarioAtual()
+      };
+    }
+
+    function textoDestinatarioConfirmado(envio) {
+      if (!envio) return "";
+      const nome = texto(envio.nomeDestinatario, "Sem nome");
+      const telefone = texto(envio.telefoneFormatado || envio.telefoneDestinatario, "");
+      const data = texto(envio.confirmadoEmTexto, "");
+      return `Envio ao vendedor confirmado em ${html(data)} para ${html(nome)} - ${html(telefone)}.`;
+    }
+
+    function aplicarEnvioConfirmado(envio) {
+      if (!confirmacaoEnvioVendedor || !envio) return;
+      confirmacaoEnvioVendedor.classList.add("confirmado");
+      if (confirmacaoEnvioTexto) confirmacaoEnvioTexto.textContent = "Envio ao vendedor confirmado";
+      if (btnConfirmarEnvioVendedor) {
+        btnConfirmarEnvioVendedor.disabled = true;
+        btnConfirmarEnvioVendedor.textContent = "Envio confirmado";
+      }
+      if (confirmacaoEnvioStatus) {
+        confirmacaoEnvioStatus.textContent = "Confirmacao registrada com sucesso.";
+        confirmacaoEnvioStatus.classList.remove("erro");
+        confirmacaoEnvioStatus.classList.add("sucesso");
+      }
+      if (confirmacaoEnvioMeta) {
+        confirmacaoEnvioMeta.innerHTML = textoDestinatarioConfirmado(envio);
+        confirmacaoEnvioMeta.classList.add("visivel");
+      }
+    }
+
+    function renderizarConfirmacaoEnvio(payload) {
+      const envio = payload?.ultimoEnvioVendedor || null;
+      if (envio) aplicarEnvioConfirmado(envio);
     }
 
     function marcarEdicaoManual() {
@@ -1282,6 +1394,7 @@
       }
       renderizarDestinatarios(payload);
       renderizarRecentes(payload);
+      renderizarConfirmacaoEnvio(payload);
     }
 
     painelMensagem?.addEventListener("toggle", function () {
@@ -1333,6 +1446,60 @@
         ? `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`
         : `https://wa.me/?text=${encodeURIComponent(mensagem)}`;
       window.open(url, "_blank", "noopener");
+    });
+
+    btnConfirmarEnvioVendedor?.addEventListener("click", async function () {
+      if (!payloadAtual || !payloadAtual.confirmarEnvioVendedorUrl) return;
+      const dados = dadosDestinatarioAtual();
+      if (!dados.telefone || dados.telefone.length < 8) {
+        if (confirmacaoEnvioStatus) {
+          confirmacaoEnvioStatus.textContent = "Informe um WhatsApp valido antes de confirmar.";
+          confirmacaoEnvioStatus.classList.add("erro");
+          confirmacaoEnvioStatus.classList.remove("sucesso");
+        }
+        whatsappDestinatario?.focus();
+        return;
+      }
+
+      btnConfirmarEnvioVendedor.disabled = true;
+      btnConfirmarEnvioVendedor.textContent = "Confirmando...";
+      if (confirmacaoEnvioStatus) {
+        confirmacaoEnvioStatus.textContent = "";
+        confirmacaoEnvioStatus.classList.remove("erro", "sucesso");
+      }
+
+      try {
+        const resposta = await fetch(payloadAtual.confirmarEnvioVendedorUrl, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrfToken()
+          },
+          body: JSON.stringify({
+            telefone: dados.telefone,
+            nome: dados.nome,
+            origem: dados.origem,
+            chaveConfirmacao: confirmacaoEnvioToken
+          })
+        });
+        const resultado = await resposta.json().catch(() => ({}));
+        if (!resposta.ok || !resultado.ok || !resultado.envio) {
+          throw new Error(resultado.erro || "Nao foi possivel confirmar o envio.");
+        }
+        payloadAtual.ultimoEnvioVendedor = resultado.envio;
+        payloadAtual.envioVendedorConfirmado = true;
+        payloadAtual.statusLista = resultado.statusLista || payloadAtual.statusLista;
+        aplicarEnvioConfirmado(resultado.envio);
+      } catch (erro) {
+        btnConfirmarEnvioVendedor.disabled = false;
+        btnConfirmarEnvioVendedor.textContent = "Confirmar que enviei ao vendedor";
+        if (confirmacaoEnvioStatus) {
+          confirmacaoEnvioStatus.textContent = erro.message || "Falha de rede ao confirmar. Tente novamente.";
+          confirmacaoEnvioStatus.classList.add("erro");
+          confirmacaoEnvioStatus.classList.remove("sucesso");
+        }
+      }
     });
 
     destinatariosRapidos?.addEventListener("click", function(event) {
