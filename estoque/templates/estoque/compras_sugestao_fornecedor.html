@@ -2247,6 +2247,7 @@
   const mobileQuery = window.matchMedia ? window.matchMedia("(max-width: 860px)") : null;
   const modoEdicaoLista = {% if modo_edicao_lista %}true{% else %}false{% endif %};
   const params = new URLSearchParams(window.location.search || "");
+  const abrirPorCicloFornecedor = !modoEdicaoLista && params.has("fornecedor_ciclo") && params.has("data_visita");
   const novaListaMobileLimpa = !modoEdicaoLista && (
     params.get("nova") === "1" ||
     (!params.has("fornecedor") && !params.has("periodo") && !params.has("data_inicio") && !params.has("data_fim"))
@@ -2309,6 +2310,12 @@
   periodo.addEventListener("input", atualizarDatasRapidas);
   periodo.addEventListener("change", atualizarDatasRapidas);
   prepararNovaListaMobileLimpa();
+  if (abrirPorCicloFornecedor) {
+    window.setTimeout(function() {
+      periodo.focus();
+      periodo.select();
+    }, 0);
+  }
 })();
 </script>
 

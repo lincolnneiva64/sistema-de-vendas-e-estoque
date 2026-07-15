@@ -39,7 +39,11 @@ from .services.fornecedor_contatos import (
     telefones_whatsapp_contato,
     validar_telefones_contatos,
 )
-from .services.avisos_fornecedores import data_ciclo_visita_valida, obter_avisos_visitas_fornecedores
+from .services.avisos_fornecedores import (
+    ESTADO_LISTA_PREPARADA_FALTA_ENVIAR,
+    data_ciclo_visita_valida,
+    obter_avisos_visitas_fornecedores,
+)
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.utils.dateparse import parse_date, parse_datetime
@@ -1165,6 +1169,21 @@ def _contexto_compras_rascunho_alerta():
         "compras_rascunho_url": url,
         "compras_rascunho_botao": texto_botao,
     }
+
+
+def _prioridade_pendencias_vendas(avisos_visitas_fornecedores):
+    for aviso in avisos_visitas_fornecedores:
+        if aviso.get("dias_para_visita") == 0:
+            return "critica"
+    for aviso in avisos_visitas_fornecedores:
+        if aviso.get("estado") == ESTADO_LISTA_PREPARADA_FALTA_ENVIAR:
+            return "alta"
+    for aviso in avisos_visitas_fornecedores:
+        if aviso.get("dias_para_visita") == 1:
+            return "media"
+    if avisos_visitas_fornecedores:
+        return "baixa"
+    return "baixa"
 
 
 def home(request):
@@ -4275,6 +4294,8 @@ def sugestao_compra_fornecedor(request):
         fornecedor_ciclo_id = ""
         messages.error(request, "A data da visita foi ignorada porque nao pertence ao fornecedor selecionado.")
     data_chegada = (request.GET.get("data_chegada") or "").strip()
+    if data_visita_fornecedor and not data_chegada:
+        data_chegada = data_visita_fornecedor.isoformat()
     nova_lista_limpa = request.GET.get("nova") == "1" and not fornecedor_id
     if nova_lista_limpa:
         periodo = ""
@@ -9401,10 +9422,19 @@ def vendas(request):
     produtos_incompletos_vendas = list(produtos_incompletos_vendas_qs[:5])
     mostrar_produtos_incompletos_vendas = request.GET.get("incompletos") == "1"
     avisos_visitas_fornecedores = obter_avisos_visitas_fornecedores()
+    contexto_rascunho = _contexto_compras_rascunho_alerta()
+    pendencias_vendas_qtd = (
+        len(avisos_visitas_fornecedores)
+        + (1 if produtos_incompletos_vendas_qtd else 0)
+        + (1 if contexto_rascunho["compras_rascunho_qtd"] else 0)
+    )
+    pendencias_vendas_prioridade = _prioridade_pendencias_vendas(avisos_visitas_fornecedores)
 
     return render(request, 'estoque/vendas_layout_teste.html', {
-        **_contexto_compras_rascunho_alerta(),
+        **contexto_rascunho,
         'avisos_visitas_fornecedores': avisos_visitas_fornecedores,
+        'pendencias_vendas_qtd': pendencias_vendas_qtd,
+        'pendencias_vendas_prioridade': pendencias_vendas_prioridade,
         'produtos_incompletos_vendas': produtos_incompletos_vendas,
         'produtos_incompletos_vendas_qtd': produtos_incompletos_vendas_qtd,
         'mostrar_produtos_incompletos_vendas': mostrar_produtos_incompletos_vendas,

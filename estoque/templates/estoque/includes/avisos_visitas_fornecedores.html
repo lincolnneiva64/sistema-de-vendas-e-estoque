@@ -1,414 +1,387 @@
+{% if pendencias_vendas_qtd %}
 <style>
-.vendas-avisos-visitas {
-  display: grid;
-  gap: 7px;
-  margin: 5px 24px 7px;
-}
-.vendas-avisos-visitas-topo {
+.vendas-pendencias-lateral {
+  position: fixed;
+  left: 0;
+  top: 96px;
+  z-index: 9988;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-  font-size: .78rem;
-  font-weight: 900;
-  color: #475569;
+  align-items: flex-start;
+  max-width: calc(100vw - 12px);
+  pointer-events: none;
 }
-.vendas-aviso-visita-indicador {
-  color: #172033;
+.vendas-pendencias-lateral.aberto {
+  pointer-events: auto;
 }
-.vendas-aviso-visita-controles {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.vendas-aviso-visita-controle,
-.vendas-aviso-visita-todas summary {
-  min-height: 28px;
-  padding: 4px 8px;
-  border-radius: 8px;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  color: #172033;
-  font-size: .78rem;
-  font-weight: 900;
+.vendas-pendencias-toggle {
+  width: 42px;
+  min-height: 132px;
+  padding: 10px 6px;
+  border: 1px solid #64748b;
+  border-left: 0;
+  border-radius: 0 12px 12px 0;
+  background: #475569;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 950;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
   cursor: pointer;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .20);
+  pointer-events: auto;
 }
-.vendas-aviso-visita-controle:focus-visible,
-.vendas-aviso-visita-todas summary:focus-visible,
-.vendas-aviso-visita-card:focus-visible {
+.vendas-pendencias-toggle:focus-visible,
+.vendas-pendencias-fechar:focus-visible,
+.vendas-pendencias-item-acao:focus-visible {
   outline: 3px solid #2563eb;
   outline-offset: 2px;
 }
-.vendas-aviso-visita-card {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 9px;
-  min-height: 48px;
-  padding: 8px 11px;
-  border-radius: 10px;
-  border: 1px solid #f59e0b;
-  border-left-width: 5px;
-  background: #fffbeb;
-  color: #172033 !important;
-  text-decoration: none;
-  box-shadow: 0 5px 14px rgba(245, 158, 11, .12);
+.vendas-pendencias-lateral.prioridade-critica .vendas-pendencias-toggle {
+  border-color: #b91c1c;
+  background: #b91c1c;
 }
-.vendas-aviso-visita-card[hidden] {
+.vendas-pendencias-lateral.prioridade-alta .vendas-pendencias-toggle {
+  border-color: #c2410c;
+  background: #c2410c;
+}
+.vendas-pendencias-lateral.prioridade-media .vendas-pendencias-toggle {
+  border-color: #d97706;
+  background: #d97706;
+  color: #111827;
+}
+.vendas-pendencias-lateral.pulsar .vendas-pendencias-toggle {
+  animation: vendasPendenciasPulso 720ms ease-in-out 8;
+}
+@keyframes vendasPendenciasPulso {
+  0%, 100% { box-shadow: 0 10px 24px rgba(15, 23, 42, .20); transform: scale(1); }
+  50% { box-shadow: 0 12px 30px rgba(185, 28, 28, .34); transform: scale(1.015); }
+}
+.vendas-pendencias-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9987;
+  background: rgba(15, 23, 42, .18);
+}
+.vendas-pendencias-backdrop[hidden],
+.vendas-pendencias-painel[hidden] {
   display: none;
 }
-.vendas-aviso-visita-card.estado-lista_preparada_falta_enviar {
-  border-color: #dc2626;
-  background: #fff1f2;
-  box-shadow: 0 6px 16px rgba(220, 38, 38, .14);
+.vendas-pendencias-painel {
+  width: min(390px, calc(100vw - 54px));
+  max-height: min(78vh, 680px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-left: 0;
+  border-radius: 0 14px 14px 0;
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .24);
+  pointer-events: auto;
 }
-.vendas-aviso-visita-card.prioridade-0 {
-  border-color: #b91c1c;
-}
-.vendas-aviso-visita-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 18px rgba(15, 23, 42, .16);
-}
-.vendas-aviso-visita-icone {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  background: #ffffff;
-  border: 1px solid currentColor;
-  font-size: 15px;
-  font-weight: 950;
-}
-.vendas-aviso-visita-corpo,
-.vendas-aviso-visita-item-info {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-.vendas-aviso-visita-topo {
+.vendas-pendencias-topo {
   display: flex;
-  flex-wrap: wrap;
-  gap: 5px 9px;
-  align-items: baseline;
-  font-size: .88rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.vendas-pendencias-titulo {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1rem;
   font-weight: 950;
 }
-.vendas-aviso-visita-fornecedor,
-.vendas-aviso-visita-item-fornecedor {
-  overflow-wrap: anywhere;
-}
-.vendas-aviso-visita-situacao {
-  color: #92400e;
-  font-size: .78rem;
-  text-transform: uppercase;
-}
-.estado-lista_preparada_falta_enviar .vendas-aviso-visita-situacao {
-  color: #b91c1c;
-}
-.vendas-aviso-visita-mensagem {
+.vendas-pendencias-subtitulo {
+  margin: 2px 0 0;
+  color: #475569;
   font-size: .82rem;
   font-weight: 750;
-  color: #475569;
-  line-height: 1.25;
 }
-.vendas-aviso-visita-acao {
-  justify-self: end;
-  padding: 5px 8px;
-  border-radius: 8px;
-  background: #ffffff;
-  border: 1px solid currentColor;
-  color: #92400e;
-  font-size: .78rem;
-  font-weight: 950;
-  white-space: nowrap;
-}
-.estado-lista_preparada_falta_enviar .vendas-aviso-visita-acao {
-  color: #b91c1c;
-}
-.vendas-aviso-visita-todas {
-  border-radius: 10px;
-}
-.vendas-aviso-visita-todas[open] {
-  padding: 7px;
+.vendas-pendencias-fechar {
+  width: 34px;
+  height: 34px;
   border: 1px solid #cbd5e1;
-  background: #ffffff;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
 }
-.vendas-aviso-visita-lista {
+.vendas-pendencias-lista {
+  display: grid;
+  gap: 9px;
+}
+.vendas-pendencias-item {
   display: grid;
   gap: 7px;
-  margin-top: 7px;
-}
-.vendas-aviso-visita-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: center;
-  padding: 8px;
-  border-radius: 8px;
+  padding: 10px;
   border: 1px solid #e2e8f0;
+  border-left-width: 5px;
+  border-radius: 10px;
   background: #f8fafc;
-  font-size: .82rem;
 }
-.vendas-aviso-visita-item-fornecedor {
+.vendas-pendencias-item.prioridade-critica {
+  border-left-color: #b91c1c;
+  background: #fff5f5;
+}
+.vendas-pendencias-item.prioridade-alta {
+  border-left-color: #c2410c;
+  background: #fff7ed;
+}
+.vendas-pendencias-item.prioridade-media {
+  border-left-color: #d97706;
+  background: #fffbeb;
+}
+.vendas-pendencias-item.prioridade-baixa {
+  border-left-color: #64748b;
+}
+.vendas-pendencias-item-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
+.vendas-pendencias-item-titulo {
+  color: #0f172a;
+  font-size: .92rem;
   font-weight: 950;
+  overflow-wrap: anywhere;
 }
-.vendas-aviso-visita-item-meta {
+.vendas-pendencias-rotulo {
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
   color: #475569;
-  font-weight: 750;
+  font-size: .7rem;
+  font-weight: 950;
+  text-transform: uppercase;
 }
-.vendas-aviso-visita-item-acao {
+.prioridade-critica .vendas-pendencias-rotulo { color: #b91c1c; }
+.prioridade-alta .vendas-pendencias-rotulo { color: #c2410c; }
+.prioridade-media .vendas-pendencias-rotulo { color: #92400e; }
+.vendas-pendencias-mensagem {
+  margin: 0;
+  color: #334155;
+  font-size: .84rem;
+  font-weight: 750;
+  line-height: 1.32;
+}
+.vendas-pendencias-item-acao {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 28px;
-  padding: 4px 8px;
-  border-radius: 8px;
-  border: 1px solid #d97706;
-  background: #fffbeb;
-  color: #92400e;
+  min-height: 36px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  border: 1px solid #2563eb;
+  background: #2563eb;
+  color: #fff !important;
+  font-size: .84rem;
+  font-weight: 950;
   text-decoration: none;
-  font-size: .78rem;
-  font-weight: 950;
-  white-space: nowrap;
 }
-.vendas-aviso-visita-atrasada {
-  color: #b91c1c;
-  font-weight: 950;
+.vendas-pendencias-produtos {
+  display: grid;
+  gap: 6px;
+}
+.vendas-pendencias-produto {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid #e2e8f0;
+  font-size: .8rem;
+  font-weight: 800;
 }
 @media (prefers-reduced-motion: reduce) {
-  .vendas-aviso-visita-card:hover {
-    transform: none;
+  .vendas-pendencias-lateral.pulsar .vendas-pendencias-toggle {
+    animation: none;
   }
 }
 @media (max-width: 768px) {
-  .vendas-avisos-visitas {
-    margin: 5px 8px 7px;
+  .vendas-pendencias-lateral {
+    top: 82px;
   }
-  .vendas-avisos-visitas-topo,
-  .vendas-aviso-visita-controles {
-    align-items: stretch;
-    flex-direction: column;
+  .vendas-pendencias-painel {
+    width: min(340px, calc(100vw - 48px));
+    max-height: 74vh;
   }
-  .vendas-aviso-visita-card {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-  .vendas-aviso-visita-acao {
-    grid-column: 1 / -1;
-    justify-self: stretch;
-    text-align: center;
-  }
-  .vendas-aviso-visita-item {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .vendas-aviso-visita-item-acao,
-  .vendas-aviso-visita-controle,
-  .vendas-aviso-visita-todas summary {
+  .vendas-pendencias-item-acao {
     width: 100%;
-    box-sizing: border-box;
-    text-align: center;
   }
 }
 </style>
 
-{% if avisos_visitas_fornecedores %}
-<section
-  class="vendas-avisos-visitas"
-  id="vendas-avisos-visitas"
-  aria-label="Avisos de visita dos fornecedores"
-  data-total="{{ avisos_visitas_fornecedores|length }}"
-  data-interval-ms="15000"
+<div
+  class="vendas-pendencias-lateral prioridade-{{ pendencias_vendas_prioridade }}{% if pendencias_vendas_prioridade == 'critica' or pendencias_vendas_prioridade == 'alta' %} pulsar{% endif %}"
+  id="vendasPendenciasLateral"
+  data-pulso-ms="7000"
+  aria-label="Pendencias operacionais"
 >
-  <div class="vendas-avisos-visitas-topo">
-    <span class="vendas-aviso-visita-indicador" id="vendasAvisoVisitaIndicador">
-      Pendência 1 de {{ avisos_visitas_fornecedores|length }}
-    </span>
-    <div class="vendas-aviso-visita-controles" aria-label="Controles dos avisos de visita">
-      {% if avisos_visitas_fornecedores|length > 1 %}
-        <button type="button" class="vendas-aviso-visita-controle" id="btnAvisoVisitaAnterior">Anterior</button>
-        <button type="button" class="vendas-aviso-visita-controle" id="btnAvisoVisitaProximo">Próximo</button>
+  <button
+    type="button"
+    class="vendas-pendencias-toggle"
+    id="btnVendasPendencias"
+    aria-expanded="false"
+    aria-controls="vendasPendenciasPainel"
+  >
+    Pendencias {{ pendencias_vendas_qtd }}
+  </button>
+  <aside class="vendas-pendencias-painel" id="vendasPendenciasPainel" hidden>
+    <div class="vendas-pendencias-topo">
+      <div>
+        <h2 class="vendas-pendencias-titulo">Pendencias operacionais</h2>
+        <p class="vendas-pendencias-subtitulo">{{ pendencias_vendas_qtd }} pendencia{{ pendencias_vendas_qtd|pluralize }} para acompanhar.</p>
+      </div>
+      <button type="button" class="vendas-pendencias-fechar" id="btnFecharVendasPendencias" aria-label="Fechar pendencias">&times;</button>
+    </div>
+
+    <div class="vendas-pendencias-lista">
+      {% for aviso in avisos_visitas_fornecedores %}
+        {% if aviso.dias_para_visita == 0 %}
+          <article class="vendas-pendencias-item prioridade-critica" data-pendencia-fornecedor>
+            <div class="vendas-pendencias-item-topo">
+              <strong class="vendas-pendencias-item-titulo">{{ aviso.fornecedor_nome }}</strong>
+              <span class="vendas-pendencias-rotulo">Critica</span>
+            </div>
+            <p class="vendas-pendencias-mensagem">Ultimo dia: prepare e envie a lista hoje.</p>
+            <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">{% if aviso.estado == "lista_preparada_falta_enviar" %}Enviar ao vendedor{% else %}Preparar lista{% endif %}</a>
+          </article>
+        {% elif aviso.estado == "lista_preparada_falta_enviar" %}
+          <article class="vendas-pendencias-item prioridade-alta" data-pendencia-fornecedor>
+            <div class="vendas-pendencias-item-topo">
+              <strong class="vendas-pendencias-item-titulo">{{ aviso.fornecedor_nome }}</strong>
+              <span class="vendas-pendencias-rotulo">Alta</span>
+            </div>
+            <p class="vendas-pendencias-mensagem">Lista preparada, falta enviar ao vendedor.</p>
+            <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Enviar ao vendedor</a>
+          </article>
+        {% elif aviso.dias_para_visita == 1 %}
+          <article class="vendas-pendencias-item prioridade-media" data-pendencia-fornecedor>
+            <div class="vendas-pendencias-item-topo">
+              <strong class="vendas-pendencias-item-titulo">{{ aviso.fornecedor_nome }}</strong>
+              <span class="vendas-pendencias-rotulo">Media</span>
+            </div>
+            <p class="vendas-pendencias-mensagem">Visita amanha.</p>
+            <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Preparar lista</a>
+          </article>
+        {% else %}
+          <article class="vendas-pendencias-item prioridade-baixa" data-pendencia-fornecedor>
+            <div class="vendas-pendencias-item-topo">
+              <strong class="vendas-pendencias-item-titulo">{{ aviso.fornecedor_nome }}</strong>
+              <span class="vendas-pendencias-rotulo">Baixa</span>
+            </div>
+            <p class="vendas-pendencias-mensagem">
+              {% if aviso.dias_para_visita < 0 %}
+                Visita atrasada.
+              {% else %}
+                Visita em {{ aviso.dias_para_visita }} dias.
+              {% endif %}
+            </p>
+            <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Preparar lista</a>
+          </article>
+        {% endif %}
+      {% endfor %}
+
+      {% if produtos_incompletos_vendas_qtd %}
+        <article class="vendas-pendencias-item prioridade-baixa" id="vendas-produtos-incompletos">
+          <div class="vendas-pendencias-item-topo">
+            <strong class="vendas-pendencias-item-titulo">Produtos incompletos</strong>
+            <span class="vendas-pendencias-rotulo">Baixa</span>
+          </div>
+          <p class="vendas-pendencias-mensagem">{{ produtos_incompletos_vendas_qtd }} produto{{ produtos_incompletos_vendas_qtd|pluralize }} com cadastro incompleto.</p>
+          <a class="vendas-pendencias-item-acao" href="?incompletos=1#vendas-produtos-incompletos">Ver / completar</a>
+          {% if mostrar_produtos_incompletos_vendas %}
+            <div class="vendas-pendencias-produtos">
+              {% for produto in produtos_incompletos_vendas %}
+                <span class="vendas-pendencias-produto">
+                  <span>{{ produto.nome }}</span>
+                  <a href="{% url 'estoque:home' %}{% url 'estoque:produto_editar' produto.id %}?next={% url 'estoque:home' %}%3Fincompletos%3D1%23produtos-incompletos-alerta">Completar</a>
+                </span>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </article>
+      {% endif %}
+
+      {% if compras_rascunho_qtd %}
+        <article class="vendas-pendencias-item prioridade-baixa" id="vendas-compras-rascunho">
+          <div class="vendas-pendencias-item-topo">
+            <strong class="vendas-pendencias-item-titulo">Compras em rascunho</strong>
+            <span class="vendas-pendencias-rotulo">Baixa</span>
+          </div>
+          <p class="vendas-pendencias-mensagem">{{ compras_rascunho_qtd }} compra{{ compras_rascunho_qtd|pluralize }} em rascunho aguardando finalizacao.</p>
+          <a class="vendas-pendencias-item-acao" href="{{ compras_rascunho_url }}">{{ compras_rascunho_botao }}</a>
+        </article>
       {% endif %}
     </div>
-  </div>
-
-  <div class="vendas-aviso-visita-rotativo" id="vendasAvisoVisitaRotativo">
-    {% for aviso in avisos_visitas_fornecedores %}
-      <a
-        class="vendas-aviso-visita-card estado-{{ aviso.estado }} prioridade-{{ aviso.prioridade }}"
-        href="{{ aviso.acao.url }}"
-        data-aviso-visita-card
-        data-index="{{ forloop.counter0 }}"
-        {% if not forloop.first %}hidden{% endif %}
-      >
-        <span class="vendas-aviso-visita-icone" aria-hidden="true">{% if aviso.estado == "lista_preparada_falta_enviar" %}!{% else %}+{% endif %}</span>
-        <span class="vendas-aviso-visita-corpo">
-          <span class="vendas-aviso-visita-topo">
-            <span class="vendas-aviso-visita-fornecedor">{{ aviso.fornecedor_nome }}</span>
-            <span class="vendas-aviso-visita-situacao{% if aviso.dias_para_visita < 0 %} vendas-aviso-visita-atrasada{% endif %}">
-              {% if aviso.dias_para_visita < 0 %}
-                Visita atrasada
-              {% elif aviso.dias_para_visita == 0 %}
-                Visita hoje
-              {% elif aviso.dias_para_visita == 1 %}
-                Visita amanhã
-              {% else %}
-                Visita em {{ aviso.dias_para_visita }} dias
-              {% endif %}
-            </span>
-          </span>
-          <span class="vendas-aviso-visita-mensagem">{{ aviso.mensagem }}</span>
-        </span>
-        <span class="vendas-aviso-visita-acao">
-          {% if aviso.estado == "lista_preparada_falta_enviar" %}Enviar ao vendedor{% else %}Preparar lista{% endif %}
-        </span>
-      </a>
-    {% endfor %}
-  </div>
-
-  <details class="vendas-aviso-visita-todas" id="vendasAvisoVisitaTodas">
-    <summary>Ver todas as pendências</summary>
-    <div class="vendas-aviso-visita-lista">
-      {% for aviso in avisos_visitas_fornecedores %}
-        <div class="vendas-aviso-visita-item">
-          <span class="vendas-aviso-visita-item-info">
-            <span class="vendas-aviso-visita-item-fornecedor">{{ aviso.fornecedor_nome }}</span>
-            <span class="vendas-aviso-visita-item-meta">
-              {{ aviso.data_visita }}
-              -
-              {% if aviso.dias_para_visita < 0 %}
-                <span class="vendas-aviso-visita-atrasada">Visita atrasada</span>
-              {% elif aviso.dias_para_visita == 0 %}
-                Visita hoje
-              {% elif aviso.dias_para_visita == 1 %}
-                Visita amanhã
-              {% else %}
-                Visita em {{ aviso.dias_para_visita }} dias
-              {% endif %}
-            </span>
-            <span class="vendas-aviso-visita-mensagem">{{ aviso.mensagem }}</span>
-          </span>
-          <a class="vendas-aviso-visita-item-acao" href="{{ aviso.acao.url }}">
-            {% if aviso.estado == "lista_preparada_falta_enviar" %}Enviar ao vendedor{% else %}Preparar lista{% endif %}
-          </a>
-        </div>
-      {% endfor %}
-    </div>
-  </details>
-</section>
+  </aside>
+</div>
+<button type="button" class="vendas-pendencias-backdrop" id="vendasPendenciasBackdrop" aria-label="Fechar pendencias" hidden></button>
 
 <script>
 (function () {
-  const raiz = document.getElementById("vendas-avisos-visitas");
-  if (!raiz) return;
+  const lateral = document.getElementById("vendasPendenciasLateral");
+  const botao = document.getElementById("btnVendasPendencias");
+  const painel = document.getElementById("vendasPendenciasPainel");
+  const fechar = document.getElementById("btnFecharVendasPendencias");
+  const backdrop = document.getElementById("vendasPendenciasBackdrop");
+  if (!lateral || !botao || !painel) return;
 
-  const cards = Array.from(raiz.querySelectorAll("[data-aviso-visita-card]"));
-  const total = cards.length;
-  const indicador = document.getElementById("vendasAvisoVisitaIndicador");
-  const btnAnterior = document.getElementById("btnAvisoVisitaAnterior");
-  const btnProximo = document.getElementById("btnAvisoVisitaProximo");
-  const painelTodas = document.getElementById("vendasAvisoVisitaTodas");
-  const intervaloMs = Number(raiz.dataset.intervalMs || 15000);
-  const pausaToqueMs = 8000;
   const reduzMovimento = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  let indiceAtual = 0;
-  let temporizador = null;
-  let retomadaToque = null;
-  let pausadoPorInteracao = false;
+  const pulsoMs = Number(lateral.dataset.pulsoMs || 7000);
+  let temporizadorPulso = null;
 
-  function atualizarIndicador() {
-    if (indicador) {
-      indicador.textContent = "Pendência " + String(indiceAtual + 1) + " de " + String(total);
+  function pararPulso() {
+    lateral.classList.remove("pulsar");
+    if (temporizadorPulso) {
+      window.clearTimeout(temporizadorPulso);
+      temporizadorPulso = null;
     }
   }
 
-  function mostrar(indice) {
-    if (!total) return;
-    indiceAtual = (indice + total) % total;
-    cards.forEach(function(card, posicao) {
-      card.hidden = posicao !== indiceAtual;
-    });
-    atualizarIndicador();
+  function abrirPendencias() {
+    pararPulso();
+    lateral.classList.add("aberto");
+    painel.hidden = false;
+    if (backdrop) backdrop.hidden = false;
+    botao.setAttribute("aria-expanded", "true");
+    fechar?.focus();
   }
 
-  function pararRotacao() {
-    if (temporizador) {
-      window.clearInterval(temporizador);
-      temporizador = null;
-    }
+  function fecharPendencias() {
+    lateral.classList.remove("aberto");
+    painel.hidden = true;
+    if (backdrop) backdrop.hidden = true;
+    botao.setAttribute("aria-expanded", "false");
   }
 
-  function podeRotacionar() {
-    return total > 1 && !reduzMovimento && !pausadoPorInteracao && !document.hidden && !painelTodas?.open;
+  if (reduzMovimento) {
+    pararPulso();
+  } else if (lateral.classList.contains("pulsar")) {
+    temporizadorPulso = window.setTimeout(pararPulso, pulsoMs);
   }
 
-  function iniciarRotacao() {
-    pararRotacao();
-    if (!podeRotacionar()) return;
-    temporizador = window.setInterval(function() {
-      mostrar(indiceAtual + 1);
-    }, intervaloMs);
-  }
-
-  function pausarInteracao() {
-    pausadoPorInteracao = true;
-    pararRotacao();
-  }
-
-  function retomarInteracao() {
-    pausadoPorInteracao = false;
-    iniciarRotacao();
-  }
-
-  function pausarPorToque() {
-    pausarInteracao();
-    if (retomadaToque) {
-      window.clearTimeout(retomadaToque);
-    }
-    retomadaToque = window.setTimeout(function() {
-      retomadaToque = null;
-      retomarInteracao();
-    }, pausaToqueMs);
-  }
-
-  btnProximo?.addEventListener("click", function(event) {
-    event.preventDefault();
-    mostrar(indiceAtual + 1);
-    iniciarRotacao();
-  });
-  btnAnterior?.addEventListener("click", function(event) {
-    event.preventDefault();
-    mostrar(indiceAtual - 1);
-    iniciarRotacao();
-  });
-
-  raiz.addEventListener("mouseenter", pausarInteracao);
-  raiz.addEventListener("mouseleave", retomarInteracao);
-  raiz.addEventListener("focusin", pausarInteracao);
-  raiz.addEventListener("focusout", function(event) {
-    if (!raiz.contains(event.relatedTarget)) {
-      retomarInteracao();
-    }
-  });
-  raiz.addEventListener("touchstart", pausarPorToque, { passive: true });
-  painelTodas?.addEventListener("toggle", function() {
-    if (painelTodas.open) {
-      pausarInteracao();
+  botao.addEventListener("click", function(event) {
+    event.stopPropagation();
+    if (painel.hidden) {
+      abrirPendencias();
     } else {
-      retomarInteracao();
+      fecharPendencias();
     }
   });
-  document.addEventListener("visibilitychange", function() {
-    if (document.hidden) {
-      pararRotacao();
-    } else {
-      iniciarRotacao();
+  fechar?.addEventListener("click", fecharPendencias);
+  backdrop?.addEventListener("click", fecharPendencias);
+  document.addEventListener("keydown", function(event) {
+    if (event.key === "Escape") {
+      fecharPendencias();
+      botao.focus();
     }
   });
-
-  mostrar(0);
-  iniciarRotacao();
 })();
 </script>
 {% endif %}
