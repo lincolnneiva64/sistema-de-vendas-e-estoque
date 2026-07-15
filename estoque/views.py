@@ -39,6 +39,7 @@ from .services.fornecedor_contatos import (
     telefones_whatsapp_contato,
     validar_telefones_contatos,
 )
+from .services.avisos_fornecedores import data_ciclo_visita_valida
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.utils.dateparse import parse_date, parse_datetime
@@ -4185,11 +4186,94 @@ def _periodo_sugestao_compra(request):
     return periodo, data_inicial, data_final
 
 
+def _data_visita_fornecedor_da_requisicao(request, payload=None):
+    payload = payload or {}
+    valor = (
+        payload.get("dataVisitaFornecedor")
+        or payload.get("data_visita_fornecedor")
+        or request.POST.get("data_visita_fornecedor")
+        or request.POST.get("data_visita")
+        or request.GET.get("data_visita")
+        or ""
+    )
+    valor = str(valor or "").strip()
+    if not valor:
+        return None, False
+    try:
+        data_visita = parse_date(valor)
+    except ValueError:
+        data_visita = None
+    return data_visita, data_visita is None
+
+
+def _parametros_ciclo_visita_fornecedor(request, payload=None):
+    payload = payload or {}
+    fornecedor_ciclo_id = str(
+        payload.get("fornecedorCicloId")
+        or payload.get("fornecedor_ciclo")
+        or request.POST.get("fornecedor_ciclo")
+        or request.GET.get("fornecedor_ciclo")
+        or ""
+    ).strip()
+    data_visita, data_invalida = _data_visita_fornecedor_da_requisicao(request, payload)
+    tem_fornecedor_ciclo = bool(fornecedor_ciclo_id)
+    tem_data = bool(
+        payload.get("dataVisitaFornecedor")
+        or payload.get("data_visita_fornecedor")
+        or request.POST.get("data_visita_fornecedor")
+        or request.POST.get("data_visita")
+        or request.GET.get("data_visita")
+    )
+    return fornecedor_ciclo_id, data_visita, data_invalida, tem_fornecedor_ciclo, tem_data
+
+
+def _validar_ciclo_visita_para_criacao(fornecedor, fornecedor_ciclo_id, data_visita, data_invalida, tem_fornecedor_ciclo, tem_data):
+    if not tem_fornecedor_ciclo and not tem_data:
+        return None
+    if not tem_fornecedor_ciclo or not tem_data:
+        return "Informe fornecedor e data da visita para vincular a lista ao ciclo."
+    if data_invalida or not data_visita:
+        return "Data da visita do fornecedor invalida."
+    if fornecedor_ciclo_id != str(fornecedor.id):
+        return "A data da visita informada nao pertence ao fornecedor selecionado."
+    if not data_ciclo_visita_valida(fornecedor, data_visita):
+        return "A data da visita informada nao corresponde a um ciclo valido deste fornecedor."
+    return None
+
+
+def _redirect_sugestao_fornecedor_com_ciclo(fornecedor_id=None, data_visita_fornecedor=None):
+    parametros = {}
+    if fornecedor_id:
+        parametros["fornecedor"] = fornecedor_id
+    if fornecedor_id and data_visita_fornecedor:
+        parametros["fornecedor_ciclo"] = fornecedor_id
+        parametros["data_visita"] = data_visita_fornecedor.isoformat()
+    url = reverse("estoque:sugestao_compra_fornecedor")
+    if parametros:
+        url = f"{url}?{urlencode(parametros)}"
+    return redirect(url)
+
+
 def sugestao_compra_fornecedor(request):
     fornecedores = Fornecedor.objects.filter(ativo=True).order_by("nome", "id")
     fornecedores_payload = [{"id": item.id, "nome": item.nome} for item in fornecedores]
     fornecedor_id = (request.GET.get("fornecedor") or "").strip()
     periodo, data_inicial, data_final = _periodo_sugestao_compra(request)
+    fornecedor_ciclo_id, data_visita_fornecedor, data_visita_invalida, tem_fornecedor_ciclo, tem_data_ciclo = (
+        _parametros_ciclo_visita_fornecedor(request)
+    )
+    if data_visita_invalida:
+        data_visita_fornecedor = None
+        fornecedor_ciclo_id = ""
+        messages.error(request, "Data da visita do fornecedor invalida.")
+    elif tem_fornecedor_ciclo != tem_data_ciclo:
+        data_visita_fornecedor = None
+        fornecedor_ciclo_id = ""
+        messages.error(request, "Informe fornecedor e data da visita para vincular a lista ao ciclo.")
+    elif data_visita_fornecedor and fornecedor_ciclo_id and fornecedor_id and fornecedor_ciclo_id != fornecedor_id:
+        data_visita_fornecedor = None
+        fornecedor_ciclo_id = ""
+        messages.error(request, "A data da visita foi ignorada porque nao pertence ao fornecedor selecionado.")
     data_chegada = (request.GET.get("data_chegada") or "").strip()
     nova_lista_limpa = request.GET.get("nova") == "1" and not fornecedor_id
     if nova_lista_limpa:
@@ -4197,6 +4281,8 @@ def sugestao_compra_fornecedor(request):
         data_inicial = None
         data_final = None
         data_chegada = timezone.localdate().isoformat()
+        data_visita_fornecedor = None
+        fornecedor_ciclo_id = ""
     fornecedor = None
     linhas = []
     total_sugerido = Decimal("0.00")
@@ -4207,6 +4293,10 @@ def sugestao_compra_fornecedor(request):
 
     if fornecedor_id and fornecedor_id.isdigit():
         fornecedor = get_object_or_404(Fornecedor, pk=fornecedor_id, ativo=True)
+        if data_visita_fornecedor and not data_ciclo_visita_valida(fornecedor, data_visita_fornecedor):
+            data_visita_fornecedor = None
+            fornecedor_ciclo_id = ""
+            messages.error(request, "A data da visita informada nao corresponde a um ciclo valido deste fornecedor.")
         status_pedidos_abertos = [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL]
         vinculos_base = ProdutoFornecedor.objects.select_related("produto", "fornecedor").filter(
             fornecedor=fornecedor,
@@ -4363,6 +4453,8 @@ def sugestao_compra_fornecedor(request):
             "data_inicio": data_inicial,
             "data_fim": data_final,
             "data_chegada": data_chegada,
+            "data_visita_fornecedor": data_visita_fornecedor,
+            "fornecedor_ciclo_id": fornecedor_ciclo_id if data_visita_fornecedor else "",
             "linhas": linhas,
             "total_produtos_vinculados": total_produtos_vinculados,
             "total_produtos_sugeridos": len(linhas),
@@ -5709,12 +5801,27 @@ def compras_lista_fornecedor_gravar(request):
         messages.error(request, "Selecione um fornecedor ativo antes de gravar a lista.")
         return redirect("estoque:sugestao_compra_fornecedor")
 
+    fornecedor_ciclo_id, data_visita_fornecedor, data_visita_invalida, tem_fornecedor_ciclo, tem_data_ciclo = (
+        _parametros_ciclo_visita_fornecedor(request, payload)
+    )
+    erro_ciclo = _validar_ciclo_visita_para_criacao(
+        fornecedor,
+        fornecedor_ciclo_id,
+        data_visita_fornecedor,
+        data_visita_invalida,
+        tem_fornecedor_ciclo,
+        tem_data_ciclo,
+    )
+    if erro_ciclo:
+        messages.error(request, erro_ciclo)
+        return redirect("estoque:sugestao_compra_fornecedor")
+
     data_inicio = parse_date(str(payload.get("dataInicio") or ""))
     data_fim = parse_date(str(payload.get("dataFim") or ""))
     data_chegada = parse_date(str(payload.get("dataChegada") or ""))
     if not data_inicio or not data_fim:
         messages.error(request, "Informe periodo valido antes de gravar a lista.")
-        return redirect("estoque:sugestao_compra_fornecedor")
+        return _redirect_sugestao_fornecedor_com_ciclo(fornecedor.id, data_visita_fornecedor)
     if data_inicio > data_fim:
         data_inicio, data_fim = data_fim, data_inicio
 
@@ -5768,14 +5875,14 @@ def compras_lista_fornecedor_gravar(request):
                 itens_zerados.append({"nome": produto.nome, "item_data": item_data})
     except ValueError as exc:
         messages.error(request, str(exc))
-        return redirect("estoque:sugestao_compra_fornecedor")
+        return _redirect_sugestao_fornecedor_com_ciclo(fornecedor.id, data_visita_fornecedor)
 
     if not itens_validos:
         if itens_zerados:
             messages.error(request, "Nenhum item com quantidade maior que zero para gravar. Ajuste as quantidades antes de gravar a lista.")
         else:
             messages.error(request, "Inclua pelo menos um produto antes de gravar a lista.")
-        return redirect("estoque:sugestao_compra_fornecedor")
+        return _redirect_sugestao_fornecedor_com_ciclo(fornecedor.id, data_visita_fornecedor)
 
     total_lista = sum((item["total"] for item in itens_validos), Decimal("0.00")).quantize(Decimal("0.01"))
     try:
@@ -5792,6 +5899,7 @@ def compras_lista_fornecedor_gravar(request):
             data_inicio_periodo=data_inicio,
             data_fim_periodo=data_fim,
             data_chegada_prevista=data_chegada,
+            data_visita_fornecedor=data_visita_fornecedor,
             total_sugerido_original=total_original,
             total_lista=total_lista,
             status=ListaCompraFornecedor.STATUS_ABERTA,
@@ -6187,6 +6295,27 @@ def compras_lista_fornecedor_editar(request, pk):
         if not fornecedor:
             messages.error(request, "Selecione um fornecedor antes de salvar as alteracoes.")
             return redirect("estoque:compras_lista_fornecedor_editar", pk=lista.pk)
+        if lista.data_visita_fornecedor and fornecedor.id != lista.fornecedor_id:
+            messages.error(request, "Lista com data de visita nao pode ser associada a outro fornecedor.")
+            return redirect("estoque:compras_lista_fornecedor_editar", pk=lista.pk)
+
+        data_visita_fornecedor, data_visita_invalida = _data_visita_fornecedor_da_requisicao(request, payload)
+        if data_visita_invalida:
+            messages.error(request, "Data da visita do fornecedor invalida.")
+            return redirect("estoque:compras_lista_fornecedor_editar", pk=lista.pk)
+        fornecedor_ciclo_id = str(
+            payload.get("fornecedorCicloId")
+            or payload.get("fornecedor_ciclo")
+            or request.POST.get("fornecedor_ciclo")
+            or ""
+        ).strip()
+        if data_visita_fornecedor and fornecedor_ciclo_id and fornecedor_ciclo_id != str(fornecedor.id):
+            messages.error(request, "A data da visita informada nao pertence ao fornecedor selecionado.")
+            return redirect("estoque:compras_lista_fornecedor_editar", pk=lista.pk)
+        if lista.data_visita_fornecedor and data_visita_fornecedor and data_visita_fornecedor != lista.data_visita_fornecedor:
+            messages.error(request, "A data da visita de uma lista existente nao pode ser substituida.")
+            return redirect("estoque:compras_lista_fornecedor_editar", pk=lista.pk)
+        data_visita_para_salvar = lista.data_visita_fornecedor or data_visita_fornecedor
 
         linhas = payload.get("linhas") or []
         itens_validos = []
@@ -6242,6 +6371,7 @@ def compras_lista_fornecedor_editar(request, pk):
             lista.data_inicio_periodo = data_inicio
             lista.data_fim_periodo = data_fim
             lista.data_chegada_prevista = data_chegada
+            lista.data_visita_fornecedor = data_visita_para_salvar
             lista.total_sugerido_original = total_original
             lista.total_lista = total_lista.quantize(Decimal("0.01"))
             if lista.status == ListaCompraFornecedor.STATUS_FINALIZADA and not compra_gerada:
@@ -6251,6 +6381,7 @@ def compras_lista_fornecedor_editar(request, pk):
                 "data_inicio_periodo",
                 "data_fim_periodo",
                 "data_chegada_prevista",
+                "data_visita_fornecedor",
                 "total_sugerido_original",
                 "total_lista",
                 "status",
@@ -6414,6 +6545,8 @@ def compras_lista_fornecedor_editar(request, pk):
         "data_inicio": lista.data_inicio_periodo,
         "data_fim": lista.data_fim_periodo,
         "data_chegada": lista.data_chegada_prevista.isoformat() if lista.data_chegada_prevista else "",
+        "data_visita_fornecedor": lista.data_visita_fornecedor,
+        "fornecedor_ciclo_id": fornecedor_id if lista.data_visita_fornecedor else "",
         "total_sugerido": lista.total_sugerido_original,
         "total_lista": lista.total_lista,
         "total_produtos_vinculados": len(produtos_sugestao),

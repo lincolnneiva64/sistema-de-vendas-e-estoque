@@ -23,6 +23,7 @@ from django.utils import timezone
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
 from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
@@ -374,6 +375,364 @@ class FornecedorFrequenciaVisitaTests(TestCase):
 
         lista.refresh_from_db()
         self.assertEqual(lista.data_visita_fornecedor, date(2026, 7, 14))
+
+
+class AvisosVisitasFornecedoresServiceTests(TestCase):
+    def setUp(self):
+        self.data_base = date(2026, 7, 15)
+
+    def criar_fornecedor(self, nome="Fornecedor Aviso", referencia=None, intervalo=7, **alteracoes):
+        referencia = referencia or self.data_base
+        dados = {
+            "nome": nome,
+            "ativo": True,
+            "frequencia_visita_ativa": True,
+            "frequencia_visita_intervalo_dias": intervalo,
+            "frequencia_visita_dia_semana": referencia.weekday(),
+            "frequencia_visita_data_referencia": referencia,
+        }
+        dados.update(alteracoes)
+        return Fornecedor.objects.create(**dados)
+
+    def criar_lista(self, fornecedor, data_visita=None, status=ListaCompraFornecedor.STATUS_ABERTA):
+        data_visita = data_visita if data_visita is not None else self.data_base
+        return ListaCompraFornecedor.objects.create(
+            fornecedor=fornecedor,
+            data_lista=self.data_base,
+            data_inicio_periodo=self.data_base - timedelta(days=14),
+            data_fim_periodo=self.data_base,
+            data_visita_fornecedor=data_visita,
+            status=status,
+            total_sugerido_original=Decimal("10.00"),
+            total_lista=Decimal("10.00"),
+        )
+
+    def confirmar_envio(self, lista, chave=None):
+        return EnvioListaCompraFornecedor.objects.create(
+            lista=lista,
+            fornecedor=lista.fornecedor,
+            nome_destinatario="Vendedor",
+            telefone_destinatario="5591999999999",
+            confirmado_em=timezone.make_aware(datetime(2026, 7, 15, 10, 0)),
+            origem_destinatario=EnvioListaCompraFornecedor.ORIGEM_PERSONALIZADO,
+            chave_idempotencia=chave or f"teste-aviso-{lista.id}-{EnvioListaCompraFornecedor.objects.count()}",
+        )
+
+    def unico_aviso(self, data_referencia=None):
+        avisos = obter_avisos_visitas_fornecedores(data_referencia or self.data_base)
+        self.assertEqual(len(avisos), 1)
+        return avisos[0]
+
+    def test_fornecedor_inativo_nao_gera_aviso(self):
+        self.criar_fornecedor(ativo=False)
+
+        self.assertEqual(obter_avisos_visitas_fornecedores(self.data_base), [])
+
+    def test_frequencia_desativada_nao_gera_aviso(self):
+        self.criar_fornecedor(frequencia_visita_ativa=False)
+
+        self.assertEqual(obter_avisos_visitas_fornecedores(self.data_base), [])
+
+    def test_configuracao_incompleta_nao_quebra_servico(self):
+        self.criar_fornecedor(
+            frequencia_visita_intervalo_dias=None,
+            frequencia_visita_dia_semana=None,
+            frequencia_visita_data_referencia=None,
+        )
+
+        self.assertEqual(obter_avisos_visitas_fornecedores(self.data_base), [])
+
+    def test_visita_alem_de_sete_dias_nao_gera_aviso(self):
+        self.criar_fornecedor(referencia=self.data_base + timedelta(days=8))
+
+        self.assertEqual(obter_avisos_visitas_fornecedores(self.data_base), [])
+
+    def test_visita_em_sete_dias_gera_aviso(self):
+        self.criar_fornecedor(referencia=self.data_base + timedelta(days=DIAS_ANTECEDENCIA_AVISO_VISITA))
+
+        aviso = self.unico_aviso()
+        self.assertEqual(aviso["dias_para_visita"], DIAS_ANTECEDENCIA_AVISO_VISITA)
+        self.assertEqual(aviso["estado"], ESTADO_PREPARAR_LISTA)
+
+    def test_visita_amanha_gera_preparar_lista_sem_lista(self):
+        self.criar_fornecedor(referencia=self.data_base + timedelta(days=1))
+
+        aviso = self.unico_aviso()
+        self.assertEqual(aviso["estado"], ESTADO_PREPARAR_LISTA)
+        self.assertEqual(aviso["dias_para_visita"], 1)
+
+    def test_visita_hoje_gera_preparar_lista_sem_lista(self):
+        self.criar_fornecedor()
+
+        aviso = self.unico_aviso()
+        self.assertEqual(aviso["estado"], ESTADO_PREPARAR_LISTA)
+        self.assertEqual(aviso["dias_para_visita"], 0)
+
+    def test_visita_atrasada_pendente_continua_aparecendo(self):
+        self.criar_fornecedor(referencia=self.data_base - timedelta(days=7), intervalo=14)
+
+        aviso = self.unico_aviso()
+        self.assertEqual(aviso["data_visita"], (self.data_base - timedelta(days=7)).isoformat())
+        self.assertEqual(aviso["dias_para_visita"], -7)
+        self.assertEqual(aviso["estado"], ESTADO_PREPARAR_LISTA)
+
+    def test_lista_do_ciclo_gera_falta_enviar(self):
+        fornecedor = self.criar_fornecedor()
+        lista = self.criar_lista(fornecedor)
+
+        aviso = self.unico_aviso()
+        self.assertEqual(aviso["estado"], ESTADO_LISTA_PREPARADA_FALTA_ENVIAR)
+        self.assertEqual(aviso["lista_id"], lista.id)
+
+    def test_lista_de_outra_data_nao_atende_ciclo_atual(self):
+        fornecedor = self.criar_fornecedor()
+        self.criar_lista(fornecedor, data_visita=self.data_base + timedelta(days=7))
+
+        aviso = self.unico_aviso()
+        self.assertEqual(aviso["estado"], ESTADO_PREPARAR_LISTA)
+        self.assertIsNone(aviso["lista_id"])
+
+    def test_lista_de_outro_fornecedor_nao_atende_ciclo(self):
+        fornecedor = self.criar_fornecedor(nome="Fornecedor Principal")
+        outro = self.criar_fornecedor(nome="Outro Fornecedor")
+        self.criar_lista(outro)
+
+        avisos = obter_avisos_visitas_fornecedores(self.data_base)
+        aviso_principal = [aviso for aviso in avisos if aviso["fornecedor_id"] == fornecedor.id][0]
+        self.assertEqual(aviso_principal["estado"], ESTADO_PREPARAR_LISTA)
+        self.assertIsNone(aviso_principal["lista_id"])
+
+    def test_lista_cancelada_nao_atende_ciclo(self):
+        fornecedor = self.criar_fornecedor()
+        self.criar_lista(fornecedor, status=ListaCompraFornecedor.STATUS_CANCELADA)
+
+        aviso = self.unico_aviso()
+        self.assertEqual(aviso["estado"], ESTADO_PREPARAR_LISTA)
+        self.assertIsNone(aviso["lista_id"])
+
+    def test_lista_aberta_sem_confirmacao_gera_falta_enviar(self):
+        fornecedor = self.criar_fornecedor()
+        self.criar_lista(fornecedor, status=ListaCompraFornecedor.STATUS_ABERTA)
+
+        aviso = self.unico_aviso()
+        self.assertEqual(aviso["lista_status"], ListaCompraFornecedor.STATUS_ABERTA)
+        self.assertEqual(aviso["estado"], ESTADO_LISTA_PREPARADA_FALTA_ENVIAR)
+
+    def test_lista_enviada_sem_confirmacao_auditavel_gera_falta_enviar(self):
+        fornecedor = self.criar_fornecedor()
+        self.criar_lista(fornecedor, status=ListaCompraFornecedor.STATUS_ENVIADA)
+
+        aviso = self.unico_aviso()
+        self.assertEqual(aviso["lista_status"], ListaCompraFornecedor.STATUS_ENVIADA)
+        self.assertEqual(aviso["estado"], ESTADO_LISTA_PREPARADA_FALTA_ENVIAR)
+
+    def test_lista_finalizada_sem_confirmacao_auditavel_gera_falta_enviar(self):
+        fornecedor = self.criar_fornecedor()
+        self.criar_lista(fornecedor, status=ListaCompraFornecedor.STATUS_FINALIZADA)
+
+        aviso = self.unico_aviso()
+        self.assertEqual(aviso["lista_status"], ListaCompraFornecedor.STATUS_FINALIZADA)
+        self.assertEqual(aviso["estado"], ESTADO_LISTA_PREPARADA_FALTA_ENVIAR)
+
+    def test_confirmacao_auditavel_encerra_aviso_do_ciclo(self):
+        fornecedor = self.criar_fornecedor(intervalo=14)
+        lista = self.criar_lista(fornecedor)
+        self.confirmar_envio(lista)
+
+        self.assertEqual(obter_avisos_visitas_fornecedores(self.data_base), [])
+
+    def test_confirmacao_auditavel_permite_avancar_para_proximo_ciclo(self):
+        fornecedor = self.criar_fornecedor()
+        lista = self.criar_lista(fornecedor)
+        self.confirmar_envio(lista)
+
+        aviso = self.unico_aviso(self.data_base + timedelta(days=1))
+        self.assertEqual(aviso["data_visita"], (self.data_base + timedelta(days=7)).isoformat())
+        self.assertEqual(aviso["estado"], ESTADO_PREPARAR_LISTA)
+
+    def test_destinatario_recente_nao_encerra_aviso(self):
+        fornecedor = self.criar_fornecedor()
+        lista = self.criar_lista(fornecedor)
+        FornecedorDestinatarioRecente.objects.create(
+            fornecedor=fornecedor,
+            nome="Vendedor",
+            telefone="(91) 99999-9999",
+            ultima_utilizacao=timezone.now(),
+        )
+
+        aviso = self.unico_aviso()
+        self.assertEqual(aviso["lista_id"], lista.id)
+        self.assertEqual(aviso["estado"], ESTADO_LISTA_PREPARADA_FALTA_ENVIAR)
+
+    def test_compartilhamento_interno_nao_encerra_aviso(self):
+        fornecedor = self.criar_fornecedor()
+        lista = self.criar_lista(fornecedor)
+        lista.checklist_externa_token_hash = "a" * 64
+        lista.checklist_externa_token_usado_em = timezone.now()
+        lista.save(update_fields=["checklist_externa_token_hash", "checklist_externa_token_usado_em"])
+
+        aviso = self.unico_aviso()
+        self.assertEqual(aviso["lista_id"], lista.id)
+        self.assertEqual(aviso["estado"], ESTADO_LISTA_PREPARADA_FALTA_ENVIAR)
+
+    def test_duas_listas_no_mesmo_ciclo_usam_mais_recente(self):
+        fornecedor = self.criar_fornecedor()
+        lista_antiga = self.criar_lista(fornecedor)
+        lista_recente = self.criar_lista(fornecedor)
+
+        aviso = self.unico_aviso()
+        self.assertNotEqual(aviso["lista_id"], lista_antiga.id)
+        self.assertEqual(aviso["lista_id"], lista_recente.id)
+
+    def test_lista_sem_data_visita_nao_atende_ciclo_com_data(self):
+        fornecedor = self.criar_fornecedor()
+        ListaCompraFornecedor.objects.create(
+            fornecedor=fornecedor,
+            data_lista=self.data_base,
+            data_inicio_periodo=self.data_base - timedelta(days=14),
+            data_fim_periodo=self.data_base,
+            status=ListaCompraFornecedor.STATUS_ABERTA,
+        )
+
+        aviso = self.unico_aviso()
+        self.assertEqual(aviso["estado"], ESTADO_PREPARAR_LISTA)
+        self.assertIsNone(aviso["lista_id"])
+
+    def test_payload_contem_campos_obrigatorios(self):
+        fornecedor = self.criar_fornecedor()
+
+        aviso = self.unico_aviso()
+        self.assertEqual(set(aviso.keys()), {
+            "fornecedor_id",
+            "fornecedor_nome",
+            "data_visita",
+            "dias_para_visita",
+            "estado",
+            "prioridade",
+            "titulo",
+            "mensagem",
+            "lista_id",
+            "lista_status",
+            "tem_envio_confirmado",
+            "acao",
+        })
+        self.assertEqual(aviso["fornecedor_id"], fornecedor.id)
+        self.assertIn("tipo", aviso["acao"])
+        self.assertIn("url", aviso["acao"])
+
+    def test_rota_preparar_lista_contem_fornecedor_e_data(self):
+        fornecedor = self.criar_fornecedor()
+
+        aviso = self.unico_aviso()
+        partes = urlsplit(aviso["acao"]["url"])
+        parametros = parse_qs(partes.query)
+        self.assertEqual(partes.path, reverse("estoque:sugestao_compra_fornecedor"))
+        self.assertEqual(parametros["fornecedor"], [str(fornecedor.id)])
+        self.assertEqual(parametros["fornecedor_ciclo"], [str(fornecedor.id)])
+        self.assertEqual(parametros["data_visita"], [self.data_base.isoformat()])
+
+    def test_visita_de_ontem_sem_lista_gera_preparar_lista_atrasado(self):
+        ontem = self.data_base - timedelta(days=1)
+        self.criar_fornecedor(referencia=ontem)
+
+        aviso = self.unico_aviso()
+        self.assertEqual(aviso["data_visita"], ontem.isoformat())
+        self.assertEqual(aviso["dias_para_visita"], -1)
+        self.assertEqual(aviso["estado"], ESTADO_PREPARAR_LISTA)
+
+    def test_visita_de_ontem_com_lista_sem_confirmacao_gera_falta_enviar(self):
+        ontem = self.data_base - timedelta(days=1)
+        fornecedor = self.criar_fornecedor(referencia=ontem)
+        lista = self.criar_lista(fornecedor, data_visita=ontem)
+
+        aviso = self.unico_aviso()
+        self.assertEqual(aviso["data_visita"], ontem.isoformat())
+        self.assertEqual(aviso["lista_id"], lista.id)
+        self.assertEqual(aviso["estado"], ESTADO_LISTA_PREPARADA_FALTA_ENVIAR)
+
+    def test_visita_de_ontem_confirmada_nao_reaparece(self):
+        ontem = self.data_base - timedelta(days=1)
+        fornecedor = self.criar_fornecedor(referencia=ontem, intervalo=14)
+        lista = self.criar_lista(fornecedor, data_visita=ontem)
+        self.confirmar_envio(lista)
+
+        self.assertEqual(obter_avisos_visitas_fornecedores(self.data_base), [])
+
+    def test_nao_gera_varios_ciclos_historicos_atrasados_para_mesmo_fornecedor(self):
+        referencia_antiga = self.data_base - timedelta(days=28)
+        self.criar_fornecedor(referencia=referencia_antiga)
+
+        avisos = obter_avisos_visitas_fornecedores(self.data_base)
+
+        self.assertEqual(len(avisos), 1)
+        self.assertEqual(avisos[0]["data_visita"], self.data_base.isoformat())
+        self.assertNotEqual(avisos[0]["data_visita"], referencia_antiga.isoformat())
+
+    def test_ciclo_atrasado_respeita_configuracao_atual_da_frequencia(self):
+        fornecedor = self.criar_fornecedor(referencia=self.data_base - timedelta(days=1))
+        fornecedor.frequencia_visita_data_referencia = self.data_base
+        fornecedor.frequencia_visita_dia_semana = self.data_base.weekday()
+        fornecedor.save()
+
+        aviso = self.unico_aviso()
+        self.assertEqual(aviso["data_visita"], self.data_base.isoformat())
+        self.assertEqual(aviso["dias_para_visita"], 0)
+
+    def test_rota_enviar_aponta_para_lista_correta(self):
+        fornecedor = self.criar_fornecedor()
+        lista = self.criar_lista(fornecedor)
+
+        aviso = self.unico_aviso()
+        self.assertEqual(aviso["acao"]["tipo"], "enviar_ao_vendedor")
+        self.assertEqual(
+            aviso["acao"]["url"],
+            reverse("estoque:compras_lista_fornecedor_whatsapp", kwargs={"pk": lista.id}),
+        )
+
+    def test_ordenacao_por_urgencia_e_deterministica(self):
+        atrasado = self.criar_fornecedor(nome="Fornecedor Atrasado", referencia=self.data_base - timedelta(days=7), intervalo=14)
+        hoje = self.criar_fornecedor(nome="Fornecedor Hoje")
+        amanha = self.criar_fornecedor(nome="Fornecedor Amanha", referencia=self.data_base + timedelta(days=1))
+
+        avisos = obter_avisos_visitas_fornecedores(self.data_base)
+
+        self.assertEqual(
+            [aviso["fornecedor_id"] for aviso in avisos],
+            [atrasado.id, hoje.id, amanha.id],
+        )
+
+    def test_data_referencia_explicita_independe_do_dia_atual(self):
+        referencia = date(2026, 8, 3)
+        self.criar_fornecedor(referencia=referencia)
+
+        aviso = self.unico_aviso(referencia)
+        self.assertEqual(aviso["data_visita"], referencia.isoformat())
+
+    def test_ausencia_total_de_fornecedores_retorna_lista_vazia(self):
+        self.assertEqual(obter_avisos_visitas_fornecedores(self.data_base), [])
+
+    def test_servico_nao_altera_dados_no_banco(self):
+        fornecedor = self.criar_fornecedor()
+        lista = self.criar_lista(fornecedor)
+        estado_fornecedor = Fornecedor.objects.values("atualizado_em").get(pk=fornecedor.pk)
+        estado_lista = ListaCompraFornecedor.objects.values("atualizado_em").get(pk=lista.pk)
+
+        obter_avisos_visitas_fornecedores(self.data_base)
+
+        self.assertEqual(Fornecedor.objects.values("atualizado_em").get(pk=fornecedor.pk), estado_fornecedor)
+        self.assertEqual(ListaCompraFornecedor.objects.values("atualizado_em").get(pk=lista.pk), estado_lista)
+        self.assertEqual(EnvioListaCompraFornecedor.objects.count(), 0)
+
+    def test_data_local_padrao_nao_desloca_data_da_visita(self):
+        referencia = date(2026, 7, 16)
+        self.criar_fornecedor(referencia=referencia)
+
+        with patch("estoque.services.avisos_fornecedores.timezone.localdate", return_value=referencia):
+            avisos = obter_avisos_visitas_fornecedores()
+
+        self.assertEqual(len(avisos), 1)
+        aviso = avisos[0]
+        self.assertEqual(aviso["data_visita"], referencia.isoformat())
 
 
 class FechamentoCompraFinanceiroTests(TestCase):
@@ -5964,6 +6323,15 @@ class ComprasListaFornecedorGravarTests(TestCase):
             quantidade=quantidade,
         )
 
+    def ativar_frequencia_fornecedor(self, fornecedor=None, referencia=date(2026, 7, 14), intervalo=7):
+        fornecedor = fornecedor or self.fornecedor
+        fornecedor.frequencia_visita_ativa = True
+        fornecedor.frequencia_visita_intervalo_dias = intervalo
+        fornecedor.frequencia_visita_dia_semana = referencia.weekday()
+        fornecedor.frequencia_visita_data_referencia = referencia
+        fornecedor.save()
+        return fornecedor
+
     def payload(self, linhas):
         return {
             "fornecedorId": str(self.fornecedor.id),
@@ -6127,7 +6495,282 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, 'dataFim.value = "";')
         self.assertContains(resposta, "dataChegada.value = hojeIso();")
         self.assertContains(resposta, "fornecedorBusca?.focus();")
-        self.assertContains(resposta, "inicio.setDate(fim.getDate() - dias);")
+
+    def test_abrir_tela_pelo_aviso_preserva_fornecedor_e_data_visita(self):
+        data_visita = date(2026, 7, 14)
+        self.ativar_frequencia_fornecedor(referencia=data_visita)
+
+        resposta = self.client.get(
+            reverse("estoque:sugestao_compra_fornecedor"),
+            {
+                "fornecedor": str(self.fornecedor.id),
+                "fornecedor_ciclo": str(self.fornecedor.id),
+                "data_visita": data_visita.isoformat(),
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.context["fornecedor"], self.fornecedor)
+        self.assertEqual(resposta.context["data_visita_fornecedor"], data_visita)
+        self.assertContains(resposta, f'id="fornecedorCicloLista" value="{self.fornecedor.id}"')
+        self.assertContains(resposta, f'id="dataVisitaFornecedor" value="{data_visita.isoformat()}"')
+        self.assertContains(resposta, f'id="listaFornecedorDataVisita" value="{data_visita.isoformat()}"')
+
+    def test_gravar_lista_pelo_aviso_persiste_data_visita_fornecedor(self):
+        produto = self.criar_produto("Produto Ciclo")
+        data_visita = date(2026, 7, 14)
+        self.ativar_frequencia_fornecedor(referencia=data_visita)
+        payload = self.payload([self.criar_linha(produto, "2.000")])
+        payload["dataVisitaFornecedor"] = data_visita.isoformat()
+        payload["fornecedorCicloId"] = str(self.fornecedor.id)
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {
+                "lista_payload": json.dumps(payload),
+                "fornecedor_ciclo": str(self.fornecedor.id),
+                "data_visita_fornecedor": data_visita.isoformat(),
+            },
+            secure=True,
+        )
+
+        lista = ListaCompraFornecedor.objects.get()
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(lista.fornecedor, self.fornecedor)
+        self.assertEqual(lista.data_visita_fornecedor, data_visita)
+
+    def test_erro_de_validacao_preserva_data_visita_no_redirecionamento(self):
+        data_visita = date(2026, 7, 14)
+        self.ativar_frequencia_fornecedor(referencia=data_visita)
+        payload = self.payload([])
+        payload["dataVisitaFornecedor"] = data_visita.isoformat()
+        payload["fornecedorCicloId"] = str(self.fornecedor.id)
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {
+                "lista_payload": json.dumps(payload),
+                "fornecedor_ciclo": str(self.fornecedor.id),
+                "data_visita_fornecedor": data_visita.isoformat(),
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertIn(f"fornecedor={self.fornecedor.id}", resposta["Location"])
+        self.assertIn(f"fornecedor_ciclo={self.fornecedor.id}", resposta["Location"])
+        self.assertIn(f"data_visita={data_visita.isoformat()}", resposta["Location"])
+        self.assertFalse(ListaCompraFornecedor.objects.exists())
+
+    def test_rascunho_mobile_preserva_data_visita_na_lista_salva(self):
+        produto = self.criar_produto("Produto Rascunho Ciclo")
+        data_visita = date(2026, 7, 14)
+        self.ativar_frequencia_fornecedor(referencia=data_visita)
+        payload = self.payload([self.criar_linha(produto, "1.000")])
+        payload["dataVisitaFornecedor"] = data_visita.isoformat()
+        payload["fornecedorCicloId"] = str(self.fornecedor.id)
+
+        self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {
+                "lista_payload": json.dumps(payload),
+                "gerar_compra": "0",
+                "fornecedor_ciclo": str(self.fornecedor.id),
+                "data_visita_fornecedor": data_visita.isoformat(),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+
+        self.assertEqual(ListaCompraFornecedor.objects.get().data_visita_fornecedor, data_visita)
+
+    def test_edicao_preserva_data_visita_existente(self):
+        produto = self.criar_produto("Produto Editar Ciclo")
+        data_visita = date(2026, 7, 14)
+        lista = self.criar_lista_com_item(produto)
+        lista.data_visita_fornecedor = data_visita
+        lista.save(update_fields=["data_visita_fornecedor"])
+        payload = self.payload([self.criar_linha(produto, "3.000")])
+
+        self.client.post(
+            reverse("estoque:compras_lista_fornecedor_editar", kwargs={"pk": lista.pk}),
+            {"lista_payload": json.dumps(payload)},
+            secure=True,
+        )
+
+        lista.refresh_from_db()
+        self.assertEqual(lista.data_visita_fornecedor, data_visita)
+
+    def test_data_visita_invalida_nao_e_gravada(self):
+        produto = self.criar_produto("Produto Data Invalida")
+        payload = self.payload([self.criar_linha(produto, "2.000")])
+        payload["dataVisitaFornecedor"] = "2026-99-99"
+        payload["fornecedorCicloId"] = str(self.fornecedor.id)
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(payload)},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertFalse(ListaCompraFornecedor.objects.exists())
+
+    def test_criacao_manual_sem_ciclo_continua_permitida(self):
+        produto = self.criar_produto("Produto Manual Sem Ciclo")
+
+        self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(self.payload([self.criar_linha(produto, "2.000")]))},
+            secure=True,
+        )
+
+        self.assertIsNone(ListaCompraFornecedor.objects.get().data_visita_fornecedor)
+
+    def test_fornecedor_do_ciclo_nao_pode_ser_trocado_no_payload(self):
+        produto = self.criar_produto("Produto Ciclo Trocado")
+        outro = Fornecedor.objects.create(nome="Fornecedor Indevido")
+        data_visita = date(2026, 7, 14)
+        self.ativar_frequencia_fornecedor(referencia=data_visita)
+        payload = self.payload([self.criar_linha(produto, "2.000")])
+        payload["fornecedorId"] = str(outro.id)
+        payload["dataVisitaFornecedor"] = data_visita.isoformat()
+        payload["fornecedorCicloId"] = str(self.fornecedor.id)
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {
+                "lista_payload": json.dumps(payload),
+                "fornecedor_ciclo": str(self.fornecedor.id),
+                "data_visita_fornecedor": data_visita.isoformat(),
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertFalse(ListaCompraFornecedor.objects.exists())
+
+    def test_ids_adulterados_para_outro_fornecedor_nao_bastam_para_vincular_ciclo(self):
+        produto = self.criar_produto("Produto Outro Fornecedor")
+        outro = Fornecedor.objects.create(nome="Fornecedor Sem Frequencia")
+        data_visita = date(2026, 7, 14)
+        payload = self.payload([self.criar_linha(produto, "2.000")])
+        payload["fornecedorId"] = str(outro.id)
+        payload["dataVisitaFornecedor"] = data_visita.isoformat()
+        payload["fornecedorCicloId"] = str(outro.id)
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(payload)},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertFalse(ListaCompraFornecedor.objects.exists())
+
+    def test_data_arbitraria_fora_da_frequencia_e_rejeitada(self):
+        produto = self.criar_produto("Produto Data Fora Frequencia")
+        data_visita = date(2026, 7, 15)
+        self.ativar_frequencia_fornecedor(referencia=date(2026, 7, 14))
+        payload = self.payload([self.criar_linha(produto, "2.000")])
+        payload["dataVisitaFornecedor"] = data_visita.isoformat()
+        payload["fornecedorCicloId"] = str(self.fornecedor.id)
+
+        self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(payload)},
+            secure=True,
+        )
+
+        self.assertFalse(ListaCompraFornecedor.objects.exists())
+
+    def test_data_distante_do_ciclo_e_rejeitada(self):
+        produto = self.criar_produto("Produto Data Distante")
+        data_visita = date(2026, 8, 25)
+        self.ativar_frequencia_fornecedor(referencia=date(2026, 7, 14))
+        payload = self.payload([self.criar_linha(produto, "2.000")])
+        payload["dataVisitaFornecedor"] = data_visita.isoformat()
+        payload["fornecedorCicloId"] = str(self.fornecedor.id)
+
+        self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(payload)},
+            secure=True,
+        )
+
+        self.assertFalse(ListaCompraFornecedor.objects.exists())
+
+    def test_data_do_proximo_ciclo_usada_pelo_servico_e_aceita(self):
+        produto = self.criar_produto("Produto Proximo Ciclo")
+        data_visita = date(2026, 7, 22)
+        self.ativar_frequencia_fornecedor(referencia=date(2026, 7, 15))
+        payload = self.payload([self.criar_linha(produto, "2.000")])
+        payload["dataVisitaFornecedor"] = data_visita.isoformat()
+        payload["fornecedorCicloId"] = str(self.fornecedor.id)
+
+        self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(payload)},
+            secure=True,
+        )
+
+        self.assertEqual(ListaCompraFornecedor.objects.get().data_visita_fornecedor, data_visita)
+
+    def test_somente_fornecedor_ciclo_sem_data_e_rejeitado(self):
+        produto = self.criar_produto("Produto Ciclo Sem Data")
+        payload = self.payload([self.criar_linha(produto, "2.000")])
+        payload["fornecedorCicloId"] = str(self.fornecedor.id)
+
+        self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(payload)},
+            secure=True,
+        )
+
+        self.assertFalse(ListaCompraFornecedor.objects.exists())
+
+    def test_somente_data_sem_fornecedor_ciclo_e_rejeitada(self):
+        produto = self.criar_produto("Produto Data Sem Ciclo")
+        payload = self.payload([self.criar_linha(produto, "2.000")])
+        payload["dataVisitaFornecedor"] = date(2026, 7, 14).isoformat()
+
+        self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(payload)},
+            secure=True,
+        )
+
+        self.assertFalse(ListaCompraFornecedor.objects.exists())
+
+    def test_alteracao_posterior_da_frequencia_nao_impede_edicao_historica(self):
+        produto = self.criar_produto("Produto Historico Ciclo")
+        data_visita = date(2026, 7, 14)
+        lista = self.criar_lista_com_item(produto)
+        lista.data_visita_fornecedor = data_visita
+        lista.save(update_fields=["data_visita_fornecedor"])
+        self.ativar_frequencia_fornecedor(referencia=date(2026, 7, 16))
+        payload = self.payload([self.criar_linha(produto, "3.000")])
+
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_editar", kwargs={"pk": lista.pk}),
+            {"lista_payload": json.dumps(payload)},
+            secure=True,
+        )
+
+        lista.refresh_from_db()
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(lista.data_visita_fornecedor, data_visita)
+
+    def test_validacao_do_servico_e_da_view_usa_mesma_regra_de_calendario(self):
+        data_visita = date(2026, 7, 14)
+        self.ativar_frequencia_fornecedor(referencia=data_visita)
+
+        datas_validas = datas_validas_ciclo_visita_fornecedor(self.fornecedor, data_referencia=date(2026, 7, 15))
+
+        self.assertIn(data_visita, datas_validas)
+        self.assertTrue(data_ciclo_visita_valida(self.fornecedor, data_visita, data_referencia=date(2026, 7, 15)))
+        self.assertFalse(data_ciclo_visita_valida(self.fornecedor, date(2026, 7, 15), data_referencia=date(2026, 7, 15)))
 
     def test_edicao_lista_preserva_periodo_e_datas_salvos(self):
         produto = self.criar_produto("Produto Edicao Periodo")

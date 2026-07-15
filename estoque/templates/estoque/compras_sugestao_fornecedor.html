@@ -1738,6 +1738,8 @@
           <div class="sugestao-autocomplete">
             <input type="text" id="fornecedorBuscaSugestao" autocomplete="off" placeholder="Digite o fornecedor" value="{% if fornecedor %}{{ fornecedor.nome }}{% endif %}" required>
             <input type="hidden" name="fornecedor" id="fornecedor" value="{% if fornecedor %}{{ fornecedor.id }}{% endif %}">
+            <input type="hidden" name="fornecedor_ciclo" id="fornecedorCicloLista" value="{{ fornecedor_ciclo_id|default:'' }}">
+            <input type="hidden" name="data_visita" id="dataVisitaFornecedor" value="{{ data_visita_fornecedor|date:'Y-m-d' }}">
             <div class="sugestao-autocomplete-lista" id="fornecedorSugestoes"></div>
           </div>
           <div class="sugestao-manual-msg" id="msgFornecedorSugestao"></div>
@@ -1985,6 +1987,8 @@
     {% csrf_token %}
     <input type="hidden" name="lista_payload" id="listaFornecedorPayload">
     <input type="hidden" name="gerar_compra" id="listaFornecedorGerarCompra" value="0">
+    <input type="hidden" name="fornecedor_ciclo" id="listaFornecedorCicloFornecedor" value="{{ fornecedor_ciclo_id|default:'' }}">
+    <input type="hidden" name="data_visita_fornecedor" id="listaFornecedorDataVisita" value="{{ data_visita_fornecedor|date:'Y-m-d' }}">
   </form>
 
   <div class="sugestao-modal-overlay" id="modalConfirmacaoZerados">
@@ -4324,6 +4328,8 @@
       dataInicio: valor("#data_inicio"),
       dataFim: valor("#data_fim"),
       dataChegada: valor("#data_chegada"),
+      dataVisitaFornecedor: valor("#dataVisitaFornecedor"),
+      fornecedorCicloId: valor("#fornecedorCicloLista"),
       periodo: dataBr(valor("#data_inicio")) + " ate " + dataBr(valor("#data_fim")),
       chegada: dataBr(valor("#data_chegada")),
       totalOriginal: texto(document.querySelector(".sugestao-conferencia-item.total .sugestao-conferencia-valor.total")),
@@ -5003,6 +5009,8 @@
       dataInicio: document.getElementById("data_inicio")?.value || "",
       dataFim: document.getElementById("data_fim")?.value || "",
       dataChegada: document.getElementById("data_chegada")?.value || "",
+      dataVisitaFornecedor: document.getElementById("dataVisitaFornecedor")?.value || "",
+      fornecedorCicloId: document.getElementById("fornecedorCicloLista")?.value || "",
       totalOriginal: document.querySelector(".sugestao-conferencia-item.total .sugestao-conferencia-valor.total")?.textContent?.replace("R$ ", "") || "0,00",
       linhas: linhas || linhasPayloadAtuais()
     };
@@ -5173,6 +5181,8 @@
       dataInicio: document.getElementById("data_inicio")?.value || "",
       dataFim: document.getElementById("data_fim")?.value || "",
       dataChegada: document.getElementById("data_chegada")?.value || "",
+      dataVisitaFornecedor: document.getElementById("dataVisitaFornecedor")?.value || "",
+      fornecedorCicloId: document.getElementById("fornecedorCicloLista")?.value || "",
       totalOriginal: document.querySelector(".sugestao-conferencia-item.total .sugestao-conferencia-valor.total")?.textContent?.replace("R$ ", "") || "0,00",
       linhas: linhasPayloadAtuais()
     };
