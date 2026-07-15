@@ -14,21 +14,29 @@
   pointer-events: auto;
 }
 .vendas-pendencias-toggle {
-  width: 34px;
-  min-height: 96px;
-  padding: 8px 4px;
-  border: 1px solid #64748b;
+  width: 36px;
+  min-height: 102px;
+  padding: 9px 4px 8px;
+  border: 1px solid #1d4ed8;
   border-left: 0;
-  border-radius: 0 10px 10px 0;
-  background: #475569;
+  border-radius: 0 12px 12px 0;
+  background: linear-gradient(180deg, #2563eb 0%, #1e40af 100%);
   color: #fff;
   font-size: 12px;
   font-weight: 950;
   writing-mode: vertical-rl;
   text-orientation: mixed;
   cursor: pointer;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, .20);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, .22);
   pointer-events: auto;
+  transition: box-shadow 160ms ease, filter 160ms ease, transform 160ms ease;
+}
+.vendas-pendencias-toggle:hover {
+  filter: brightness(1.04);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, .26);
+}
+.vendas-pendencias-toggle:active {
+  transform: translateX(1px);
 }
 .vendas-pendencias-toggle-texto {
   display: inline-block;
@@ -37,15 +45,18 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 22px;
-  min-height: 22px;
-  margin-top: 7px;
+  min-width: 19px;
+  min-height: 19px;
+  margin-top: 6px;
+  padding: 0 4px;
   border-radius: 999px;
-  background: #fff;
-  color: #172033;
-  font-size: 12px;
+  border: 1px solid rgba(255, 255, 255, .62);
+  background: rgba(255, 255, 255, .94);
+  color: #1e3a8a;
+  font-size: 11px;
   font-weight: 950;
   writing-mode: horizontal-tb;
+  box-shadow: 0 3px 8px rgba(15, 23, 42, .18);
 }
 .vendas-pendencias-toggle:focus-visible,
 .vendas-pendencias-fechar:focus-visible,
@@ -54,157 +65,306 @@
   outline-offset: 2px;
 }
 .vendas-pendencias-lateral.prioridade-critica .vendas-pendencias-toggle {
-  border-color: #b91c1c;
-  background: #b91c1c;
+  border-color: #991b1b;
+  background: linear-gradient(180deg, #dc2626 0%, #991b1b 100%);
 }
 .vendas-pendencias-lateral.prioridade-alta .vendas-pendencias-toggle {
   border-color: #c2410c;
-  background: #c2410c;
+  background: linear-gradient(180deg, #ea580c 0%, #c2410c 100%);
 }
 .vendas-pendencias-lateral.prioridade-media .vendas-pendencias-toggle {
   border-color: #d97706;
-  background: #d97706;
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
   color: #111827;
 }
 .vendas-pendencias-lateral.pulsar .vendas-pendencias-toggle {
-  animation: vendasPendenciasPulso 720ms ease-in-out 8;
+  animation: vendasPendenciasPulso 760ms ease-in-out 8;
 }
 @keyframes vendasPendenciasPulso {
-  0%, 100% { box-shadow: 0 10px 24px rgba(15, 23, 42, .20); transform: scale(1); }
-  50% { box-shadow: 0 12px 30px rgba(185, 28, 28, .34); transform: scale(1.015); }
+  0%, 100% { box-shadow: 0 12px 26px rgba(15, 23, 42, .22), inset 0 1px 0 rgba(255, 255, 255, .16); filter: brightness(1); }
+  50% { box-shadow: 0 14px 34px rgba(37, 99, 235, .32), 0 0 0 4px rgba(59, 130, 246, .10), inset 0 1px 0 rgba(255, 255, 255, .28); filter: brightness(1.07); }
 }
 .vendas-pendencias-backdrop {
   position: fixed;
   inset: 0;
   z-index: 9987;
-  background: rgba(15, 23, 42, .18);
+  background: rgba(15, 23, 42, .14);
 }
 .vendas-pendencias-backdrop[hidden],
 .vendas-pendencias-painel[hidden] {
   display: none;
 }
 .vendas-pendencias-painel {
-  width: min(340px, calc(100vw - 48px));
+  width: min(330px, calc(100vw - 48px));
   max-height: min(78vh, 680px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 10px;
-  border: 1px solid #cbd5e1;
+  padding: 9px;
+  border: 1px solid #bfdbfe;
   border-left: 0;
   border-radius: 0 14px 14px 0;
-  background: #fff;
-  box-shadow: 0 18px 42px rgba(15, 23, 42, .24);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 20px 46px rgba(15, 23, 42, .24);
   pointer-events: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9;
 }
 .vendas-pendencias-topo {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 7px;
+  padding: 7px 7px 8px;
+  border-bottom: 1px solid #e2e8f0;
+  border-radius: 10px 10px 8px 8px;
+  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+}
+.vendas-pendencias-topo-info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.vendas-pendencias-topo-linha {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
 }
 .vendas-pendencias-titulo {
   margin: 0;
   color: #0f172a;
-  font-size: .95rem;
+  font-size: .94rem;
   font-weight: 950;
 }
 .vendas-pendencias-subtitulo {
   margin: 2px 0 0;
   color: #475569;
-  font-size: .78rem;
+  font-size: .76rem;
   font-weight: 750;
 }
+.vendas-pendencias-contador {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 21px;
+  height: 21px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1e40af;
+  font-size: .72rem;
+  font-weight: 950;
+}
 .vendas-pendencias-fechar {
-  width: 30px;
-  height: 30px;
-  border: 1px solid #cbd5e1;
-  border-radius: 9px;
-  background: #f8fafc;
+  width: 29px;
+  height: 29px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #ffffff;
   color: #0f172a;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 900;
   line-height: 1;
   cursor: pointer;
+  box-shadow: 0 5px 12px rgba(15, 23, 42, .11);
+  transition: background 150ms ease, box-shadow 150ms ease;
+}
+.vendas-pendencias-fechar:hover {
+  background: #eff6ff;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, .14);
 }
 .vendas-pendencias-lista {
   display: grid;
-  gap: 7px;
+  gap: 0;
 }
 .vendas-pendencias-item {
+  position: relative;
   display: grid;
   gap: 5px;
-  padding: 8px;
-  border: 1px solid #e2e8f0;
-  border-left-width: 5px;
-  border-radius: 8px;
-  background: #f8fafc;
+  padding: 8px 8px 8px 11px;
+  border: 0;
+  border-bottom: 1px solid #e2e8f0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transition: background 150ms ease;
+}
+.vendas-pendencias-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 11px;
+  box-sizing: border-box;
+  border-left: 2px solid #94a3b8;
+  border-top: 2px solid #94a3b8;
+  border-bottom: 2px solid #94a3b8;
+  border-radius: 7px 0 0 7px;
+  background: transparent;
+  pointer-events: none;
+}
+.vendas-pendencias-item:hover {
+  background: rgba(239, 246, 255, .62);
 }
 .vendas-pendencias-item.prioridade-critica {
-  border-left-color: #b91c1c;
-  background: #fff5f5;
+  background: #fff8f8;
 }
 .vendas-pendencias-item.prioridade-alta {
-  border-left-color: #c2410c;
-  background: #fff7ed;
+  background: #fff8f1;
 }
 .vendas-pendencias-item.prioridade-media {
-  border-left-color: #d97706;
-  background: #fffbeb;
+  background: #fffbed;
 }
 .vendas-pendencias-item.prioridade-baixa {
-  border-left-color: #64748b;
+  background: #f6f9fc;
+}
+.vendas-pendencias-item.prioridade-cadastro {
+  background: #f4f8ff;
+}
+.vendas-pendencias-item.prioridade-rascunho {
+  background: #fffbed;
+}
+.vendas-pendencias-item.prioridade-critica::before { border-color: #ef4444; }
+.vendas-pendencias-item.prioridade-alta::before { border-color: #f97316; }
+.vendas-pendencias-item.prioridade-media::before { border-color: #d97706; }
+.vendas-pendencias-item.prioridade-baixa::before { border-color: #475569; }
+.vendas-pendencias-item.prioridade-cadastro::before { border-color: #2563eb; }
+.vendas-pendencias-item.prioridade-rascunho::before { border-color: #d97706; }
+.vendas-pendencias-item:hover::before {
+  filter: saturate(1.24) brightness(.96);
 }
 .vendas-pendencias-item-topo {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
+  flex-wrap: nowrap;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 3px 6px;
+  gap: 8px;
+  min-width: 0;
 }
 .vendas-pendencias-item-titulo {
   color: #0f172a;
   font-size: .86rem;
   font-weight: 950;
   overflow-wrap: anywhere;
+  min-width: 0;
 }
 .vendas-pendencias-rotulo {
-  padding: 1px 6px;
+  flex: 0 0 auto;
+  padding: 1px 5px;
   border-radius: 999px;
   border: 1px solid currentColor;
+  background: rgba(255, 255, 255, .86);
   color: #475569;
-  font-size: .66rem;
+  font-size: .62rem;
   font-weight: 950;
   text-transform: uppercase;
+  white-space: nowrap;
 }
-.prioridade-critica .vendas-pendencias-rotulo { color: #b91c1c; }
-.prioridade-alta .vendas-pendencias-rotulo { color: #c2410c; }
-.prioridade-media .vendas-pendencias-rotulo { color: #92400e; }
+.prioridade-critica .vendas-pendencias-rotulo { color: #b91c1c; background: #fff1f2; }
+.prioridade-alta .vendas-pendencias-rotulo { color: #c2410c; background: #fff7ed; }
+.prioridade-media .vendas-pendencias-rotulo { color: #92400e; background: #fffbeb; }
+.prioridade-baixa .vendas-pendencias-rotulo { color: #334155; background: #f1f5f9; }
+.prioridade-cadastro .vendas-pendencias-rotulo { color: #1d4ed8; background: #eff6ff; }
+.prioridade-rascunho .vendas-pendencias-rotulo { color: #92400e; background: #fffbeb; }
+.vendas-pendencias-item-corpo {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.vendas-pendencias-item-rodape {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .vendas-pendencias-mensagem {
   margin: 0;
   color: #334155;
-  font-size: .8rem;
-  font-weight: 750;
-  line-height: 1.32;
+  font-size: .79rem;
+  font-weight: 730;
+  line-height: 1.28;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .vendas-pendencias-item-acao {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   justify-self: end;
-  min-height: 30px;
-  padding: 5px 9px;
-  border-radius: 8px;
-  border: 1px solid #2563eb;
-  background: #2563eb;
-  color: #fff !important;
-  font-size: .8rem;
+  width: 144px;
+  min-width: 144px;
+  max-width: 144px;
+  box-sizing: border-box;
+  min-height: 26px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid #93c5fd;
+  background: #f8fbff;
+  color: #1d4ed8 !important;
+  font-size: .76rem;
   font-weight: 950;
   text-decoration: none;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 2px 5px rgba(37, 99, 235, .08);
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
 }
+.vendas-pendencias-item-acao::after {
+  content: ">";
+  margin-left: 5px;
+  font-weight: 950;
+}
+.vendas-pendencias-item-acao:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1e40af !important;
+  box-shadow: 0 3px 8px rgba(37, 99, 235, .10);
+}
+.vendas-pendencias-item-acao:active {
+  background: #bfdbfe;
+}
+.prioridade-critica .vendas-pendencias-item-acao {
+  border-color: #ef4444;
+  background: #fff5f5;
+  color: #991b1b !important;
+}
+.prioridade-critica .vendas-pendencias-item-acao:hover { background: #fff1f2; border-color: #ef4444; box-shadow: 0 3px 8px rgba(239, 68, 68, .10); }
+.prioridade-alta .vendas-pendencias-item-acao {
+  border-color: #fb923c;
+  background: #fff3e8;
+  color: #9a3412 !important;
+}
+.prioridade-alta .vendas-pendencias-item-acao:hover { background: #fff7ed; border-color: #f97316; box-shadow: 0 3px 8px rgba(249, 115, 22, .10); }
+.prioridade-media .vendas-pendencias-item-acao,
+.prioridade-rascunho .vendas-pendencias-item-acao {
+  border-color: #eab308;
+  background: #fff8dc;
+  color: #713f12 !important;
+}
+.prioridade-media .vendas-pendencias-item-acao:hover,
+.prioridade-rascunho .vendas-pendencias-item-acao:hover { background: #fffbeb; border-color: #d97706; box-shadow: 0 3px 8px rgba(217, 119, 6, .10); }
+.prioridade-baixa .vendas-pendencias-item-acao {
+  border-color: #64748b;
+  background: #eef4fb;
+  color: #1e3a5f !important;
+}
+.prioridade-baixa .vendas-pendencias-item-acao:hover { background: #f8fafc; border-color: #64748b; box-shadow: 0 3px 8px rgba(100, 116, 139, .10); }
+.prioridade-cadastro .vendas-pendencias-item-acao {
+  border-color: #60a5fa;
+  background: #eff6ff;
+  color: #1d4ed8 !important;
+}
+.prioridade-cadastro .vendas-pendencias-item-acao:hover { background: #dbeafe; border-color: #2563eb; box-shadow: 0 3px 8px rgba(37, 99, 235, .10); }
 .vendas-pendencias-produtos {
+  grid-column: 1 / -1;
   display: grid;
-  gap: 6px;
+  gap: 5px;
+  margin-top: 2px;
 }
 .vendas-pendencias-produto {
   display: flex;
@@ -225,12 +385,23 @@
     top: 82px;
   }
   .vendas-pendencias-painel {
-    width: min(320px, calc(100vw - 44px));
+    width: min(318px, calc(100vw - 44px));
     max-height: 74vh;
   }
   .vendas-pendencias-item-acao {
-    width: 100%;
-    justify-self: stretch;
+    justify-self: end;
+    min-height: 32px;
+  }
+  .vendas-pendencias-item {
+    gap: 7px;
+  }
+  .vendas-pendencias-item-rodape {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+  .vendas-pendencias-mensagem {
+    white-space: normal;
   }
 }
 </style>
@@ -253,8 +424,11 @@
   </button>
   <aside class="vendas-pendencias-painel" id="vendasPendenciasPainel" hidden>
     <div class="vendas-pendencias-topo">
-      <div>
-        <h2 class="vendas-pendencias-titulo">Pendencias operacionais</h2>
+      <div class="vendas-pendencias-topo-info">
+        <div class="vendas-pendencias-topo-linha">
+          <h2 class="vendas-pendencias-titulo">Pendencias operacionais</h2>
+          <span class="vendas-pendencias-contador">{{ pendencias_vendas_qtd }}</span>
+        </div>
         <p class="vendas-pendencias-subtitulo">{{ pendencias_vendas_qtd }} pendencia{{ pendencias_vendas_qtd|pluralize }} para acompanhar.</p>
       </div>
       <button type="button" class="vendas-pendencias-fechar" id="btnFecharVendasPendencias" aria-label="Fechar pendencias">&times;</button>
@@ -264,57 +438,77 @@
       {% for aviso in avisos_visitas_fornecedores_painel %}
         {% if aviso.dias_para_visita == 0 %}
           <article class="vendas-pendencias-item prioridade-critica" data-pendencia-fornecedor>
-            <div class="vendas-pendencias-item-topo">
-              <strong class="vendas-pendencias-item-titulo">{{ aviso.fornecedor_nome }}</strong>
-              <span class="vendas-pendencias-rotulo">Hoje</span>
+            <div class="vendas-pendencias-item-corpo">
+              <div class="vendas-pendencias-item-topo">
+                <strong class="vendas-pendencias-item-titulo">{{ aviso.fornecedor_nome }}</strong>
+                <span class="vendas-pendencias-rotulo">Hoje</span>
+              </div>
             </div>
-            <p class="vendas-pendencias-mensagem">Ultimo dia: prepare e envie a lista hoje.</p>
-            <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">{% if aviso.estado == "lista_preparada_falta_enviar" %}Enviar ao vendedor{% else %}Preparar lista{% endif %}</a>
+            <div class="vendas-pendencias-item-rodape">
+              <p class="vendas-pendencias-mensagem">Ultimo dia: prepare e envie a lista hoje.</p>
+              <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">{% if aviso.estado == "lista_preparada_falta_enviar" %}Enviar ao vendedor{% else %}Preparar lista{% endif %}</a>
+            </div>
           </article>
         {% elif aviso.estado == "lista_preparada_falta_enviar" %}
           <article class="vendas-pendencias-item prioridade-alta" data-pendencia-fornecedor>
-            <div class="vendas-pendencias-item-topo">
-              <strong class="vendas-pendencias-item-titulo">{{ aviso.fornecedor_nome }}</strong>
-              <span class="vendas-pendencias-rotulo">Falta enviar</span>
+            <div class="vendas-pendencias-item-corpo">
+              <div class="vendas-pendencias-item-topo">
+                <strong class="vendas-pendencias-item-titulo">{{ aviso.fornecedor_nome }}</strong>
+                <span class="vendas-pendencias-rotulo">Falta enviar</span>
+              </div>
             </div>
-            <p class="vendas-pendencias-mensagem">Lista preparada, falta enviar ao vendedor.</p>
-            <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Enviar ao vendedor</a>
+            <div class="vendas-pendencias-item-rodape">
+              <p class="vendas-pendencias-mensagem">Lista preparada, falta enviar ao vendedor.</p>
+              <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Enviar ao vendedor</a>
+            </div>
           </article>
         {% elif aviso.dias_para_visita == 1 %}
           <article class="vendas-pendencias-item prioridade-media" data-pendencia-fornecedor>
-            <div class="vendas-pendencias-item-topo">
-              <strong class="vendas-pendencias-item-titulo">{{ aviso.fornecedor_nome }}</strong>
-              <span class="vendas-pendencias-rotulo">Amanha</span>
+            <div class="vendas-pendencias-item-corpo">
+              <div class="vendas-pendencias-item-topo">
+                <strong class="vendas-pendencias-item-titulo">{{ aviso.fornecedor_nome }}</strong>
+                <span class="vendas-pendencias-rotulo">Amanha</span>
+              </div>
             </div>
-            <p class="vendas-pendencias-mensagem">Visita amanha.</p>
-            <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Preparar lista</a>
+            <div class="vendas-pendencias-item-rodape">
+              <p class="vendas-pendencias-mensagem">Visita amanha.</p>
+              <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Preparar lista</a>
+            </div>
           </article>
         {% else %}
           <article class="vendas-pendencias-item prioridade-baixa" data-pendencia-fornecedor>
-            <div class="vendas-pendencias-item-topo">
-              <strong class="vendas-pendencias-item-titulo">{{ aviso.fornecedor_nome }}</strong>
-              <span class="vendas-pendencias-rotulo">Atrasada</span>
+            <div class="vendas-pendencias-item-corpo">
+              <div class="vendas-pendencias-item-topo">
+                <strong class="vendas-pendencias-item-titulo">{{ aviso.fornecedor_nome }}</strong>
+                <span class="vendas-pendencias-rotulo">Atrasada</span>
+              </div>
             </div>
-            <p class="vendas-pendencias-mensagem">
-              {% if aviso.dias_para_visita < 0 %}
-                Visita atrasada.
-              {% else %}
-                Visita em {{ aviso.dias_para_visita }} dias.
-              {% endif %}
-            </p>
-            <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Preparar lista</a>
+            <div class="vendas-pendencias-item-rodape">
+              <p class="vendas-pendencias-mensagem">
+                {% if aviso.dias_para_visita < 0 %}
+                  Visita atrasada.
+                {% else %}
+                  Visita em {{ aviso.dias_para_visita }} dias.
+                {% endif %}
+              </p>
+              <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Preparar lista</a>
+            </div>
           </article>
         {% endif %}
       {% endfor %}
 
       {% if produtos_incompletos_vendas_qtd %}
-        <article class="vendas-pendencias-item prioridade-baixa" id="vendas-produtos-incompletos">
-          <div class="vendas-pendencias-item-topo">
-            <strong class="vendas-pendencias-item-titulo">Produtos incompletos</strong>
-            <span class="vendas-pendencias-rotulo">Cadastro</span>
+        <article class="vendas-pendencias-item prioridade-cadastro" id="vendas-produtos-incompletos">
+            <div class="vendas-pendencias-item-corpo">
+              <div class="vendas-pendencias-item-topo">
+              <strong class="vendas-pendencias-item-titulo">Produtos incompletos</strong>
+              <span class="vendas-pendencias-rotulo">Cadastro</span>
+            </div>
           </div>
-          <p class="vendas-pendencias-mensagem">{{ produtos_incompletos_vendas_qtd }} produto{{ produtos_incompletos_vendas_qtd|pluralize }} com cadastro incompleto.</p>
-          <a class="vendas-pendencias-item-acao" href="?incompletos=1#vendas-produtos-incompletos">Ver / completar</a>
+          <div class="vendas-pendencias-item-rodape">
+            <p class="vendas-pendencias-mensagem">{{ produtos_incompletos_vendas_qtd }} produto{{ produtos_incompletos_vendas_qtd|pluralize }} com cadastro incompleto.</p>
+            <a class="vendas-pendencias-item-acao" href="?incompletos=1#vendas-produtos-incompletos">Ver / completar</a>
+          </div>
           {% if mostrar_produtos_incompletos_vendas %}
             <div class="vendas-pendencias-produtos">
               {% for produto in produtos_incompletos_vendas %}
@@ -329,13 +523,17 @@
       {% endif %}
 
       {% if compras_rascunho_qtd %}
-        <article class="vendas-pendencias-item prioridade-baixa" id="vendas-compras-rascunho">
-          <div class="vendas-pendencias-item-topo">
-            <strong class="vendas-pendencias-item-titulo">Compras em rascunho</strong>
-            <span class="vendas-pendencias-rotulo">Rascunho</span>
+        <article class="vendas-pendencias-item prioridade-rascunho" id="vendas-compras-rascunho">
+            <div class="vendas-pendencias-item-corpo">
+              <div class="vendas-pendencias-item-topo">
+              <strong class="vendas-pendencias-item-titulo">Compras em rascunho</strong>
+              <span class="vendas-pendencias-rotulo">Rascunho</span>
+            </div>
           </div>
-          <p class="vendas-pendencias-mensagem">{{ compras_rascunho_qtd }} compra{{ compras_rascunho_qtd|pluralize }} em rascunho aguardando finalizacao.</p>
-          <a class="vendas-pendencias-item-acao" href="{{ compras_rascunho_url }}">{{ compras_rascunho_botao }}</a>
+          <div class="vendas-pendencias-item-rodape">
+            <p class="vendas-pendencias-mensagem">{{ compras_rascunho_qtd }} compra{{ compras_rascunho_qtd|pluralize }} em rascunho aguardando finalizacao.</p>
+            <a class="vendas-pendencias-item-acao" href="{{ compras_rascunho_url }}">{{ compras_rascunho_botao }}</a>
+          </div>
         </article>
       {% endif %}
     </div>
