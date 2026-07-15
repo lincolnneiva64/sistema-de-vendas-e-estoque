@@ -1,0 +1,414 @@
+<style>
+.vendas-avisos-visitas {
+  display: grid;
+  gap: 7px;
+  margin: 5px 24px 7px;
+}
+.vendas-avisos-visitas-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: .78rem;
+  font-weight: 900;
+  color: #475569;
+}
+.vendas-aviso-visita-indicador {
+  color: #172033;
+}
+.vendas-aviso-visita-controles {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.vendas-aviso-visita-controle,
+.vendas-aviso-visita-todas summary {
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #172033;
+  font-size: .78rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+.vendas-aviso-visita-controle:focus-visible,
+.vendas-aviso-visita-todas summary:focus-visible,
+.vendas-aviso-visita-card:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+}
+.vendas-aviso-visita-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 48px;
+  padding: 8px 11px;
+  border-radius: 10px;
+  border: 1px solid #f59e0b;
+  border-left-width: 5px;
+  background: #fffbeb;
+  color: #172033 !important;
+  text-decoration: none;
+  box-shadow: 0 5px 14px rgba(245, 158, 11, .12);
+}
+.vendas-aviso-visita-card[hidden] {
+  display: none;
+}
+.vendas-aviso-visita-card.estado-lista_preparada_falta_enviar {
+  border-color: #dc2626;
+  background: #fff1f2;
+  box-shadow: 0 6px 16px rgba(220, 38, 38, .14);
+}
+.vendas-aviso-visita-card.prioridade-0 {
+  border-color: #b91c1c;
+}
+.vendas-aviso-visita-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, .16);
+}
+.vendas-aviso-visita-icone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid currentColor;
+  font-size: 15px;
+  font-weight: 950;
+}
+.vendas-aviso-visita-corpo,
+.vendas-aviso-visita-item-info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.vendas-aviso-visita-topo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 9px;
+  align-items: baseline;
+  font-size: .88rem;
+  font-weight: 950;
+}
+.vendas-aviso-visita-fornecedor,
+.vendas-aviso-visita-item-fornecedor {
+  overflow-wrap: anywhere;
+}
+.vendas-aviso-visita-situacao {
+  color: #92400e;
+  font-size: .78rem;
+  text-transform: uppercase;
+}
+.estado-lista_preparada_falta_enviar .vendas-aviso-visita-situacao {
+  color: #b91c1c;
+}
+.vendas-aviso-visita-mensagem {
+  font-size: .82rem;
+  font-weight: 750;
+  color: #475569;
+  line-height: 1.25;
+}
+.vendas-aviso-visita-acao {
+  justify-self: end;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid currentColor;
+  color: #92400e;
+  font-size: .78rem;
+  font-weight: 950;
+  white-space: nowrap;
+}
+.estado-lista_preparada_falta_enviar .vendas-aviso-visita-acao {
+  color: #b91c1c;
+}
+.vendas-aviso-visita-todas {
+  border-radius: 10px;
+}
+.vendas-aviso-visita-todas[open] {
+  padding: 7px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+}
+.vendas-aviso-visita-lista {
+  display: grid;
+  gap: 7px;
+  margin-top: 7px;
+}
+.vendas-aviso-visita-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: .82rem;
+}
+.vendas-aviso-visita-item-fornecedor {
+  font-weight: 950;
+}
+.vendas-aviso-visita-item-meta {
+  color: #475569;
+  font-weight: 750;
+}
+.vendas-aviso-visita-item-acao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid #d97706;
+  background: #fffbeb;
+  color: #92400e;
+  text-decoration: none;
+  font-size: .78rem;
+  font-weight: 950;
+  white-space: nowrap;
+}
+.vendas-aviso-visita-atrasada {
+  color: #b91c1c;
+  font-weight: 950;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vendas-aviso-visita-card:hover {
+    transform: none;
+  }
+}
+@media (max-width: 768px) {
+  .vendas-avisos-visitas {
+    margin: 5px 8px 7px;
+  }
+  .vendas-avisos-visitas-topo,
+  .vendas-aviso-visita-controles {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .vendas-aviso-visita-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .vendas-aviso-visita-acao {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    text-align: center;
+  }
+  .vendas-aviso-visita-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .vendas-aviso-visita-item-acao,
+  .vendas-aviso-visita-controle,
+  .vendas-aviso-visita-todas summary {
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+  }
+}
+</style>
+
+{% if avisos_visitas_fornecedores %}
+<section
+  class="vendas-avisos-visitas"
+  id="vendas-avisos-visitas"
+  aria-label="Avisos de visita dos fornecedores"
+  data-total="{{ avisos_visitas_fornecedores|length }}"
+  data-interval-ms="15000"
+>
+  <div class="vendas-avisos-visitas-topo">
+    <span class="vendas-aviso-visita-indicador" id="vendasAvisoVisitaIndicador">
+      Pendência 1 de {{ avisos_visitas_fornecedores|length }}
+    </span>
+    <div class="vendas-aviso-visita-controles" aria-label="Controles dos avisos de visita">
+      {% if avisos_visitas_fornecedores|length > 1 %}
+        <button type="button" class="vendas-aviso-visita-controle" id="btnAvisoVisitaAnterior">Anterior</button>
+        <button type="button" class="vendas-aviso-visita-controle" id="btnAvisoVisitaProximo">Próximo</button>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="vendas-aviso-visita-rotativo" id="vendasAvisoVisitaRotativo">
+    {% for aviso in avisos_visitas_fornecedores %}
+      <a
+        class="vendas-aviso-visita-card estado-{{ aviso.estado }} prioridade-{{ aviso.prioridade }}"
+        href="{{ aviso.acao.url }}"
+        data-aviso-visita-card
+        data-index="{{ forloop.counter0 }}"
+        {% if not forloop.first %}hidden{% endif %}
+      >
+        <span class="vendas-aviso-visita-icone" aria-hidden="true">{% if aviso.estado == "lista_preparada_falta_enviar" %}!{% else %}+{% endif %}</span>
+        <span class="vendas-aviso-visita-corpo">
+          <span class="vendas-aviso-visita-topo">
+            <span class="vendas-aviso-visita-fornecedor">{{ aviso.fornecedor_nome }}</span>
+            <span class="vendas-aviso-visita-situacao{% if aviso.dias_para_visita < 0 %} vendas-aviso-visita-atrasada{% endif %}">
+              {% if aviso.dias_para_visita < 0 %}
+                Visita atrasada
+              {% elif aviso.dias_para_visita == 0 %}
+                Visita hoje
+              {% elif aviso.dias_para_visita == 1 %}
+                Visita amanhã
+              {% else %}
+                Visita em {{ aviso.dias_para_visita }} dias
+              {% endif %}
+            </span>
+          </span>
+          <span class="vendas-aviso-visita-mensagem">{{ aviso.mensagem }}</span>
+        </span>
+        <span class="vendas-aviso-visita-acao">
+          {% if aviso.estado == "lista_preparada_falta_enviar" %}Enviar ao vendedor{% else %}Preparar lista{% endif %}
+        </span>
+      </a>
+    {% endfor %}
+  </div>
+
+  <details class="vendas-aviso-visita-todas" id="vendasAvisoVisitaTodas">
+    <summary>Ver todas as pendências</summary>
+    <div class="vendas-aviso-visita-lista">
+      {% for aviso in avisos_visitas_fornecedores %}
+        <div class="vendas-aviso-visita-item">
+          <span class="vendas-aviso-visita-item-info">
+            <span class="vendas-aviso-visita-item-fornecedor">{{ aviso.fornecedor_nome }}</span>
+            <span class="vendas-aviso-visita-item-meta">
+              {{ aviso.data_visita }}
+              -
+              {% if aviso.dias_para_visita < 0 %}
+                <span class="vendas-aviso-visita-atrasada">Visita atrasada</span>
+              {% elif aviso.dias_para_visita == 0 %}
+                Visita hoje
+              {% elif aviso.dias_para_visita == 1 %}
+                Visita amanhã
+              {% else %}
+                Visita em {{ aviso.dias_para_visita }} dias
+              {% endif %}
+            </span>
+            <span class="vendas-aviso-visita-mensagem">{{ aviso.mensagem }}</span>
+          </span>
+          <a class="vendas-aviso-visita-item-acao" href="{{ aviso.acao.url }}">
+            {% if aviso.estado == "lista_preparada_falta_enviar" %}Enviar ao vendedor{% else %}Preparar lista{% endif %}
+          </a>
+        </div>
+      {% endfor %}
+    </div>
+  </details>
+</section>
+
+<script>
+(function () {
+  const raiz = document.getElementById("vendas-avisos-visitas");
+  if (!raiz) return;
+
+  const cards = Array.from(raiz.querySelectorAll("[data-aviso-visita-card]"));
+  const total = cards.length;
+  const indicador = document.getElementById("vendasAvisoVisitaIndicador");
+  const btnAnterior = document.getElementById("btnAvisoVisitaAnterior");
+  const btnProximo = document.getElementById("btnAvisoVisitaProximo");
+  const painelTodas = document.getElementById("vendasAvisoVisitaTodas");
+  const intervaloMs = Number(raiz.dataset.intervalMs || 15000);
+  const pausaToqueMs = 8000;
+  const reduzMovimento = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let indiceAtual = 0;
+  let temporizador = null;
+  let retomadaToque = null;
+  let pausadoPorInteracao = false;
+
+  function atualizarIndicador() {
+    if (indicador) {
+      indicador.textContent = "Pendência " + String(indiceAtual + 1) + " de " + String(total);
+    }
+  }
+
+  function mostrar(indice) {
+    if (!total) return;
+    indiceAtual = (indice + total) % total;
+    cards.forEach(function(card, posicao) {
+      card.hidden = posicao !== indiceAtual;
+    });
+    atualizarIndicador();
+  }
+
+  function pararRotacao() {
+    if (temporizador) {
+      window.clearInterval(temporizador);
+      temporizador = null;
+    }
+  }
+
+  function podeRotacionar() {
+    return total > 1 && !reduzMovimento && !pausadoPorInteracao && !document.hidden && !painelTodas?.open;
+  }
+
+  function iniciarRotacao() {
+    pararRotacao();
+    if (!podeRotacionar()) return;
+    temporizador = window.setInterval(function() {
+      mostrar(indiceAtual + 1);
+    }, intervaloMs);
+  }
+
+  function pausarInteracao() {
+    pausadoPorInteracao = true;
+    pararRotacao();
+  }
+
+  function retomarInteracao() {
+    pausadoPorInteracao = false;
+    iniciarRotacao();
+  }
+
+  function pausarPorToque() {
+    pausarInteracao();
+    if (retomadaToque) {
+      window.clearTimeout(retomadaToque);
+    }
+    retomadaToque = window.setTimeout(function() {
+      retomadaToque = null;
+      retomarInteracao();
+    }, pausaToqueMs);
+  }
+
+  btnProximo?.addEventListener("click", function(event) {
+    event.preventDefault();
+    mostrar(indiceAtual + 1);
+    iniciarRotacao();
+  });
+  btnAnterior?.addEventListener("click", function(event) {
+    event.preventDefault();
+    mostrar(indiceAtual - 1);
+    iniciarRotacao();
+  });
+
+  raiz.addEventListener("mouseenter", pausarInteracao);
+  raiz.addEventListener("mouseleave", retomarInteracao);
+  raiz.addEventListener("focusin", pausarInteracao);
+  raiz.addEventListener("focusout", function(event) {
+    if (!raiz.contains(event.relatedTarget)) {
+      retomarInteracao();
+    }
+  });
+  raiz.addEventListener("touchstart", pausarPorToque, { passive: true });
+  painelTodas?.addEventListener("toggle", function() {
+    if (painelTodas.open) {
+      pausarInteracao();
+    } else {
+      retomarInteracao();
+    }
+  });
+  document.addEventListener("visibilitychange", function() {
+    if (document.hidden) {
+      pararRotacao();
+    } else {
+      iniciarRotacao();
+    }
+  });
+
+  mostrar(0);
+  iniciarRotacao();
+})();
+</script>
+{% endif %}

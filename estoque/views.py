@@ -39,7 +39,7 @@ from .services.fornecedor_contatos import (
     telefones_whatsapp_contato,
     validar_telefones_contatos,
 )
-from .services.avisos_fornecedores import data_ciclo_visita_valida
+from .services.avisos_fornecedores import data_ciclo_visita_valida, obter_avisos_visitas_fornecedores
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.utils.dateparse import parse_date, parse_datetime
@@ -9400,9 +9400,11 @@ def vendas(request):
     produtos_incompletos_vendas_qtd = produtos_incompletos_vendas_qs.count()
     produtos_incompletos_vendas = list(produtos_incompletos_vendas_qs[:5])
     mostrar_produtos_incompletos_vendas = request.GET.get("incompletos") == "1"
+    avisos_visitas_fornecedores = obter_avisos_visitas_fornecedores()
 
     return render(request, 'estoque/vendas_layout_teste.html', {
         **_contexto_compras_rascunho_alerta(),
+        'avisos_visitas_fornecedores': avisos_visitas_fornecedores,
         'produtos_incompletos_vendas': produtos_incompletos_vendas,
         'produtos_incompletos_vendas_qtd': produtos_incompletos_vendas_qtd,
         'mostrar_produtos_incompletos_vendas': mostrar_produtos_incompletos_vendas,

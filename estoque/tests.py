@@ -847,6 +847,31 @@ class FechamentoCompraFinanceiroTests(TestCase):
         )
         return compra
 
+    def _avisos_visitas_vendas(self, quantidade=4):
+        base = [
+            ("Fornecedor Atrasado", "2026-07-14", -1, "preparar_lista", "Visita atrasada: lista ainda nao preparada.", "/compras/sugestao-fornecedor/?fornecedor=1&data_visita=2026-07-14"),
+            ("Fornecedor Hoje", "2026-07-15", 0, "preparar_lista", "Visita prevista para hoje: prepare a lista.", "/compras/sugestao-fornecedor/?fornecedor=2&data_visita=2026-07-15"),
+            ("Fornecedor Amanha", "2026-07-16", 1, "preparar_lista", "Prepare a lista para a visita de amanha.", "/compras/sugestao-fornecedor/?fornecedor=3&data_visita=2026-07-16"),
+            ("Fornecedor Futuro", "2026-07-18", 3, "lista_preparada_falta_enviar", "Lista preparada, falta enviar ao vendedor.", "/compras/listas-fornecedor/10/whatsapp/"),
+        ]
+        avisos = []
+        for indice, (nome, data_visita, dias, estado, mensagem, url) in enumerate(base[:quantidade], start=1):
+            avisos.append({
+                "fornecedor_id": indice,
+                "fornecedor_nome": nome,
+                "data_visita": data_visita,
+                "dias_para_visita": dias,
+                "estado": estado,
+                "prioridade": 0 if dias < 0 else indice,
+                "titulo": "Lista preparada" if estado == "lista_preparada_falta_enviar" else "Visita",
+                "mensagem": mensagem,
+                "lista_id": 10 if estado == "lista_preparada_falta_enviar" else None,
+                "lista_status": ListaCompraFornecedor.STATUS_ABERTA if estado == "lista_preparada_falta_enviar" else None,
+                "tem_envio_confirmado": False,
+                "acao": {"tipo": "enviar_ao_vendedor" if estado == "lista_preparada_falta_enviar" else "preparar_lista", "url": url},
+            })
+        return avisos
+
     def test_vendas_nao_exibe_aviso_compras_rascunho_sem_pendencia(self):
         resposta = self.client.get(reverse("estoque:vendas"), secure=True)
 
@@ -883,6 +908,94 @@ class FechamentoCompraFinanceiroTests(TestCase):
 
         self.assertNotContains(resposta, "compra em rascunho aguardando finalização")
         self.assertNotContains(resposta, "Continuar compra")
+
+    def test_vendas_exibe_avisos_visitas_fornecedores_do_servico(self):
+        avisos = self._avisos_visitas_vendas()
+
+        with patch("estoque.views.obter_avisos_visitas_fornecedores", return_value=avisos) as obter_avisos:
+            resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+        conteudo = resposta.content.decode()
+
+        obter_avisos.assert_called_once_with()
+        self.assertEqual(resposta.context["avisos_visitas_fornecedores"], avisos)
+        self.assertContains(resposta, 'id="vendas-avisos-visitas"')
+        self.assertContains(resposta, 'data-total="4"')
+        self.assertContains(resposta, 'data-interval-ms="15000"')
+        self.assertContains(resposta, "Pendência 1 de 4")
+        self.assertContains(resposta, "Fornecedor Atrasado")
+        self.assertContains(resposta, "Fornecedor Hoje")
+        self.assertContains(resposta, "Fornecedor Amanha")
+        self.assertContains(resposta, "Fornecedor Futuro")
+        self.assertContains(resposta, "Visita atrasada")
+        self.assertContains(resposta, "Visita hoje")
+        self.assertContains(resposta, "Visita amanhã")
+        self.assertContains(resposta, "Visita em 3 dias")
+        self.assertContains(resposta, "Preparar lista")
+        self.assertContains(resposta, "Lista preparada, falta enviar ao vendedor.")
+        self.assertContains(resposta, "Enviar ao vendedor")
+        self.assertContains(resposta, 'href="/compras/listas-fornecedor/10/whatsapp/"')
+        self.assertEqual(conteudo.count('class="vendas-aviso-visita-card'), 4)
+        self.assertEqual(conteudo.count("data-aviso-visita-card\n        data-index="), 4)
+        self.assertIn('data-index="1"\n        hidden', conteudo)
+        self.assertContains(resposta, ":focus-visible")
+        self.assertContains(resposta, "prefers-reduced-motion: reduce")
+        self.assertContains(resposta, "btnAvisoVisitaAnterior")
+        self.assertContains(resposta, "btnAvisoVisitaProximo")
+        self.assertContains(resposta, "function iniciarRotacao()")
+        self.assertContains(resposta, "function pararRotacao()")
+        self.assertContains(resposta, "setInterval(function()")
+        self.assertContains(resposta, "mostrar(indiceAtual + 1)")
+        self.assertContains(resposta, "mostrar(indiceAtual - 1)")
+        self.assertContains(resposta, "(indice + total) % total")
+        self.assertContains(resposta, 'mouseenter", pausarInteracao')
+        self.assertContains(resposta, 'focusin", pausarInteracao')
+        self.assertContains(resposta, 'touchstart", pausarPorToque')
+        self.assertContains(resposta, "pausaToqueMs = 8000")
+        self.assertContains(resposta, 'visibilitychange')
+        self.assertContains(resposta, "painelTodas.open")
+        self.assertContains(resposta, "total > 1 && !reduzMovimento")
+        self.assertContains(resposta, "<summary>Ver todas as pendências</summary>")
+        self.assertNotContains(resposta, "avisoVisitaPulso")
+
+    def test_vendas_nao_exibe_bloco_visitas_sem_avisos(self):
+        with patch("estoque.views.obter_avisos_visitas_fornecedores", return_value=[]):
+            resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+
+        self.assertEqual(resposta.context["avisos_visitas_fornecedores"], [])
+        self.assertNotContains(resposta, 'id="vendas-avisos-visitas"')
+
+    def test_vendas_um_aviso_nao_exibe_controles_de_rotacao(self):
+        avisos = self._avisos_visitas_vendas(quantidade=1)
+
+        with patch("estoque.views.obter_avisos_visitas_fornecedores", return_value=avisos):
+            resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+
+        self.assertContains(resposta, "Pendência 1 de 1")
+        self.assertContains(resposta, "Fornecedor Atrasado")
+        self.assertNotContains(resposta, 'id="btnAvisoVisitaAnterior"')
+        self.assertNotContains(resposta, 'id="btnAvisoVisitaProximo"')
+        self.assertContains(resposta, "total > 1 && !reduzMovimento")
+
+    def test_vendas_controles_ficam_fora_do_link_principal(self):
+        avisos = self._avisos_visitas_vendas()
+
+        with patch("estoque.views.obter_avisos_visitas_fornecedores", return_value=avisos):
+            resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+        conteudo = resposta.content.decode()
+
+        indice_botao = conteudo.index('id="btnAvisoVisitaProximo"')
+        indice_primeiro_link = conteudo.index('data-aviso-visita-card')
+        self.assertLess(indice_botao, indice_primeiro_link)
+
+    def test_vendas_escapa_nome_fornecedor_no_aviso_visita(self):
+        avisos = self._avisos_visitas_vendas(quantidade=1)
+        avisos[0]["fornecedor_nome"] = 'Fornecedor <script>alert("x")</script>'
+
+        with patch("estoque.views.obter_avisos_visitas_fornecedores", return_value=avisos):
+            resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+
+        self.assertContains(resposta, "Fornecedor &lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;")
+        self.assertNotContains(resposta, '<script>alert("x")</script>')
 
     def test_home_e_compras_lista_exibem_aviso_compras_rascunho(self):
         compra = self._criar_compra_para_alerta_rascunho()
