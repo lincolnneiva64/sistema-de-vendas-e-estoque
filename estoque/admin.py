@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Categoria, EnvioListaCompraFornecedor, Fornecedor, FornecedorContato, Funcionario, ItemVenda, PixRecebido, Produto, ProdutoFornecedor, Unidade, Venda
+from .models import Categoria, EnvioListaCompraFornecedor, Fornecedor, FornecedorContato, Funcionario, ItemVenda, PixRecebido, Produto, ProdutoFornecedor, ResolucaoVisitaFornecedor, Unidade, Venda
 
 admin.site.register(Produto)
 admin.site.register(Unidade)
@@ -29,6 +29,34 @@ class ProdutoFornecedorAdmin(admin.ModelAdmin):
     list_display = ("produto", "fornecedor", "ativo", "criado_em")
     search_fields = ("produto__nome", "fornecedor__nome", "fornecedor__nome_fantasia")
     list_filter = ("ativo",)
+
+
+
+
+@admin.register(ResolucaoVisitaFornecedor)
+class ResolucaoVisitaFornecedorAdmin(admin.ModelAdmin):
+    list_display = (
+        "fornecedor",
+        "data_visita_original",
+        "tipo_resolucao",
+        "nova_data_visita",
+        "responsavel",
+        "resolvido_em",
+    )
+    search_fields = (
+        "fornecedor__nome",
+        "observacao",
+        "responsavel__username",
+    )
+    list_filter = (
+        "tipo_resolucao",
+        "data_visita_original",
+        "resolvido_em",
+    )
+    readonly_fields = (
+        "resolvido_em",
+        "atualizado_em",
+    )
 
 
 @admin.register(EnvioListaCompraFornecedor)

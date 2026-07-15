@@ -22,7 +22,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
 from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
@@ -377,6 +377,130 @@ class FornecedorFrequenciaVisitaTests(TestCase):
         self.assertEqual(lista.data_visita_fornecedor, date(2026, 7, 14))
 
 
+class ResolucaoVisitaFornecedorModelTests(TestCase):
+    def setUp(self):
+        self.fornecedor = Fornecedor.objects.create(
+            nome="Fornecedor Resolucao Visita"
+        )
+        self.usuario = get_user_model().objects.create_user(
+            username="responsavel_resolucao",
+            password="senha-segura",
+        )
+        self.data_original = date(2026, 7, 14)
+
+    def test_grava_visita_nao_ocorreu_com_responsavel_e_historico(self):
+        resolucao = ResolucaoVisitaFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_visita_original=self.data_original,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_NAO_OCORREU,
+            observacao="Representante nao passou.",
+            responsavel=self.usuario,
+        )
+
+        self.assertEqual(resolucao.fornecedor, self.fornecedor)
+        self.assertEqual(resolucao.data_visita_original, self.data_original)
+        self.assertEqual(
+            resolucao.tipo_resolucao,
+            ResolucaoVisitaFornecedor.TIPO_NAO_OCORREU,
+        )
+        self.assertIsNone(resolucao.nova_data_visita)
+        self.assertEqual(resolucao.observacao, "Representante nao passou.")
+        self.assertEqual(resolucao.responsavel, self.usuario)
+        self.assertIsNotNone(resolucao.resolvido_em)
+
+    def test_visita_adiada_exige_nova_data(self):
+        resolucao = ResolucaoVisitaFornecedor(
+            fornecedor=self.fornecedor,
+            data_visita_original=self.data_original,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_ADIADA,
+            responsavel=self.usuario,
+        )
+
+        with self.assertRaises(ValidationError) as erro:
+            resolucao.save()
+
+        self.assertIn("nova_data_visita", erro.exception.message_dict)
+
+    def test_nova_data_deve_ser_posterior_a_data_original(self):
+        resolucao = ResolucaoVisitaFornecedor(
+            fornecedor=self.fornecedor,
+            data_visita_original=self.data_original,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_ADIADA,
+            nova_data_visita=self.data_original,
+            responsavel=self.usuario,
+        )
+
+        with self.assertRaises(ValidationError) as erro:
+            resolucao.save()
+
+        self.assertIn("nova_data_visita", erro.exception.message_dict)
+
+    def test_visita_adiada_aceita_nova_data_futura(self):
+        nova_data = self.data_original + timedelta(days=3)
+
+        resolucao = ResolucaoVisitaFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_visita_original=self.data_original,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_ADIADA,
+            nova_data_visita=nova_data,
+            responsavel=self.usuario,
+        )
+
+        self.assertEqual(resolucao.nova_data_visita, nova_data)
+
+    def test_nova_data_nao_pode_ser_usada_em_outro_tipo(self):
+        resolucao = ResolucaoVisitaFornecedor(
+            fornecedor=self.fornecedor,
+            data_visita_original=self.data_original,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_IGNORAR_CICLO,
+            nova_data_visita=self.data_original + timedelta(days=2),
+            responsavel=self.usuario,
+        )
+
+        with self.assertRaises(ValidationError) as erro:
+            resolucao.save()
+
+        self.assertIn("nova_data_visita", erro.exception.message_dict)
+
+    def test_nao_permite_duas_resolucoes_para_mesmo_ciclo(self):
+        ResolucaoVisitaFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_visita_original=self.data_original,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_NAO_OCORREU,
+            responsavel=self.usuario,
+        )
+
+        duplicada = ResolucaoVisitaFornecedor(
+            fornecedor=self.fornecedor,
+            data_visita_original=self.data_original,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_IGNORAR_CICLO,
+            responsavel=self.usuario,
+        )
+
+        with self.assertRaises(ValidationError):
+            duplicada.save()
+
+    def test_mesma_data_pode_ser_resolvida_para_fornecedores_diferentes(self):
+        outro_fornecedor = Fornecedor.objects.create(
+            nome="Outro Fornecedor Resolucao"
+        )
+
+        primeira = ResolucaoVisitaFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_visita_original=self.data_original,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_NAO_OCORREU,
+            responsavel=self.usuario,
+        )
+        segunda = ResolucaoVisitaFornecedor.objects.create(
+            fornecedor=outro_fornecedor,
+            data_visita_original=self.data_original,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_IGNORAR_CICLO,
+            responsavel=self.usuario,
+        )
+
+        self.assertNotEqual(primeira.fornecedor_id, segunda.fornecedor_id)
+
+
 class AvisosVisitasFornecedoresServiceTests(TestCase):
     def setUp(self):
         self.data_base = date(2026, 7, 15)
@@ -475,6 +599,112 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
         self.assertEqual(aviso["data_visita"], (self.data_base - timedelta(days=7)).isoformat())
         self.assertEqual(aviso["dias_para_visita"], -7)
         self.assertEqual(aviso["estado"], ESTADO_PREPARAR_LISTA)
+
+    def test_visita_nao_ocorreu_encerra_apenas_o_ciclo_original(self):
+        data_original = self.data_base - timedelta(days=1)
+        fornecedor = self.criar_fornecedor(
+            referencia=data_original,
+            intervalo=14,
+        )
+        ResolucaoVisitaFornecedor.objects.create(
+            fornecedor=fornecedor,
+            data_visita_original=data_original,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_NAO_OCORREU,
+            observacao="O representante nao compareceu.",
+        )
+
+        avisos = obter_avisos_visitas_fornecedores(self.data_base)
+
+        self.assertEqual(avisos, [])
+
+    def test_ignorar_ciclo_impede_reapresentacao_da_ocorrencia(self):
+        data_original = self.data_base - timedelta(days=1)
+        fornecedor = self.criar_fornecedor(
+            referencia=data_original,
+            intervalo=14,
+        )
+        ResolucaoVisitaFornecedor.objects.create(
+            fornecedor=fornecedor,
+            data_visita_original=data_original,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_IGNORAR_CICLO,
+            observacao="Ciclo ignorado por decisao operacional.",
+        )
+
+        avisos = obter_avisos_visitas_fornecedores(self.data_base)
+
+        self.assertEqual(avisos, [])
+
+    def test_visita_adiada_substitui_data_original_no_aviso(self):
+        data_original = self.data_base - timedelta(days=1)
+        nova_data = self.data_base + timedelta(days=3)
+        fornecedor = self.criar_fornecedor(
+            referencia=data_original,
+            intervalo=14,
+        )
+        ResolucaoVisitaFornecedor.objects.create(
+            fornecedor=fornecedor,
+            data_visita_original=data_original,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_ADIADA,
+            nova_data_visita=nova_data,
+            observacao="Representante solicitou nova data.",
+        )
+
+        aviso = self.unico_aviso()
+
+        self.assertEqual(aviso["data_visita"], nova_data.isoformat())
+        self.assertEqual(aviso["dias_para_visita"], 3)
+        self.assertEqual(aviso["estado"], ESTADO_PREPARAR_LISTA)
+        self.assertIn(
+            f"data_visita={nova_data.isoformat()}",
+            aviso["acao"]["url"],
+        )
+
+    def test_visita_adiada_para_fora_da_janela_nao_aparece_antes_da_hora(self):
+        data_original = self.data_base - timedelta(days=1)
+        nova_data = self.data_base + timedelta(days=10)
+        fornecedor = self.criar_fornecedor(
+            referencia=data_original,
+            intervalo=21,
+        )
+        ResolucaoVisitaFornecedor.objects.create(
+            fornecedor=fornecedor,
+            data_visita_original=data_original,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_ADIADA,
+            nova_data_visita=nova_data,
+        )
+
+        avisos = obter_avisos_visitas_fornecedores(self.data_base)
+
+        self.assertEqual(avisos, [])
+
+    def test_adiamentos_sucessivos_usam_a_ultima_data(self):
+        data_original = self.data_base - timedelta(days=1)
+        primeira_nova_data = self.data_base + timedelta(days=2)
+        segunda_nova_data = self.data_base + timedelta(days=4)
+        fornecedor = self.criar_fornecedor(
+            referencia=data_original,
+            intervalo=21,
+        )
+        ResolucaoVisitaFornecedor.objects.create(
+            fornecedor=fornecedor,
+            data_visita_original=data_original,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_ADIADA,
+            nova_data_visita=primeira_nova_data,
+        )
+        ResolucaoVisitaFornecedor.objects.create(
+            fornecedor=fornecedor,
+            data_visita_original=primeira_nova_data,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_ADIADA,
+            nova_data_visita=segunda_nova_data,
+        )
+
+        aviso = self.unico_aviso()
+
+        self.assertEqual(
+            aviso["data_visita"],
+            segunda_nova_data.isoformat(),
+        )
+        self.assertEqual(aviso["dias_para_visita"], 4)
 
     def test_lista_do_ciclo_gera_falta_enviar(self):
         fornecedor = self.criar_fornecedor()
@@ -733,6 +963,263 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
         self.assertEqual(len(avisos), 1)
         aviso = avisos[0]
         self.assertEqual(aviso["data_visita"], referencia.isoformat())
+
+
+class ResolucaoVisitaFornecedorViewTests(TestCase):
+    def setUp(self):
+        self.hoje = date(2026, 7, 15)
+        self.data_original = self.hoje - timedelta(days=1)
+        self.usuario = get_user_model().objects.create_user(
+            username="usuario_resolve_visita",
+            password="senha-teste",
+        )
+        self.fornecedor = Fornecedor.objects.create(
+            nome="Fornecedor Visita Atrasada",
+            ativo=True,
+            frequencia_visita_ativa=True,
+            frequencia_visita_intervalo_dias=14,
+            frequencia_visita_dia_semana=self.data_original.weekday(),
+            frequencia_visita_data_referencia=self.data_original,
+        )
+        self.url = reverse(
+            "estoque:resolver_visita_fornecedor_atrasada"
+        )
+
+    def dados(self, **alteracoes):
+        dados = {
+            "fornecedor_id": str(self.fornecedor.id),
+            "data_visita_original": self.data_original.isoformat(),
+            "tipo_resolucao": ResolucaoVisitaFornecedor.TIPO_NAO_OCORREU,
+            "nova_data_visita": "",
+            "observacao": "Representante nao compareceu.",
+        }
+        dados.update(alteracoes)
+        return dados
+
+    def postar(self, **alteracoes):
+        self.client.force_login(self.usuario)
+        with patch(
+            "estoque.views.timezone.localdate",
+            return_value=self.hoje,
+        ):
+            return self.client.post(
+                self.url,
+                self.dados(**alteracoes),
+                secure=True,
+            )
+
+    def test_exige_usuario_autenticado(self):
+        with patch(
+            "estoque.views.timezone.localdate",
+            return_value=self.hoje,
+        ):
+            resposta = self.client.post(
+                self.url,
+                self.dados(),
+                secure=True,
+            )
+
+        self.assertEqual(resposta.status_code, 403)
+        self.assertEqual(
+            ResolucaoVisitaFornecedor.objects.count(),
+            0,
+        )
+
+    def test_registra_visita_nao_ocorrida_com_usuario(self):
+        resposta = self.postar()
+
+        self.assertRedirects(
+            resposta,
+            reverse("estoque:vendas"),
+            fetch_redirect_response=False,
+        )
+        resolucao = ResolucaoVisitaFornecedor.objects.get()
+        self.assertEqual(
+            resolucao.tipo_resolucao,
+            ResolucaoVisitaFornecedor.TIPO_NAO_OCORREU,
+        )
+        self.assertEqual(resolucao.responsavel, self.usuario)
+        self.assertEqual(
+            resolucao.observacao,
+            "Representante nao compareceu.",
+        )
+
+    def test_visita_adiada_exige_nova_data(self):
+        resposta = self.postar(
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_ADIADA,
+            nova_data_visita="",
+        )
+
+        self.assertRedirects(
+            resposta,
+            reverse("estoque:vendas"),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(
+            ResolucaoVisitaFornecedor.objects.count(),
+            0,
+        )
+
+    def test_visita_adiada_registra_nova_data(self):
+        nova_data = self.hoje + timedelta(days=3)
+
+        resposta = self.postar(
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_ADIADA,
+            nova_data_visita=nova_data.isoformat(),
+        )
+
+        self.assertRedirects(
+            resposta,
+            reverse("estoque:vendas"),
+            fetch_redirect_response=False,
+        )
+        resolucao = ResolucaoVisitaFornecedor.objects.get()
+        self.assertEqual(
+            resolucao.tipo_resolucao,
+            ResolucaoVisitaFornecedor.TIPO_ADIADA,
+        )
+        self.assertEqual(
+            resolucao.nova_data_visita,
+            nova_data,
+        )
+
+    def test_nao_resolve_visita_de_hoje(self):
+        resposta = self.postar(
+            data_visita_original=self.hoje.isoformat(),
+        )
+
+        self.assertRedirects(
+            resposta,
+            reverse("estoque:vendas"),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(
+            ResolucaoVisitaFornecedor.objects.count(),
+            0,
+        )
+
+    def test_repeticao_identica_nao_cria_duplicidade(self):
+        self.postar()
+        segunda_resposta = self.postar()
+
+        self.assertRedirects(
+            segunda_resposta,
+            reverse("estoque:vendas"),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(
+            ResolucaoVisitaFornecedor.objects.count(),
+            1,
+        )
+
+    def test_resolucao_diferente_nao_substitui_historico(self):
+        self.postar()
+        nova_data = self.hoje + timedelta(days=2)
+
+        segunda_resposta = self.postar(
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_ADIADA,
+            nova_data_visita=nova_data.isoformat(),
+        )
+
+        self.assertRedirects(
+            segunda_resposta,
+            reverse("estoque:vendas"),
+            fetch_redirect_response=False,
+        )
+        resolucao = ResolucaoVisitaFornecedor.objects.get()
+        self.assertEqual(
+            resolucao.tipo_resolucao,
+            ResolucaoVisitaFornecedor.TIPO_NAO_OCORREU,
+        )
+        self.assertIsNone(resolucao.nova_data_visita)
+
+    def _aviso_tela(self, dias_para_visita=-1):
+        return {
+            "fornecedor_id": self.fornecedor.id,
+            "fornecedor_nome": self.fornecedor.nome,
+            "data_visita": self.data_original.isoformat(),
+            "dias_para_visita": dias_para_visita,
+            "estado": ESTADO_PREPARAR_LISTA,
+            "prioridade": 0,
+            "titulo": "Visita atrasada",
+            "mensagem": "Visita atrasada.",
+            "lista_id": None,
+            "lista_status": None,
+            "tem_envio_confirmado": False,
+            "acao": {
+                "tipo": "preparar_lista",
+                "url": "/compras/sugestao-fornecedor/",
+            },
+        }
+
+    def test_painel_mostra_formulario_nas_visitas_atrasadas(self):
+        self.client.force_login(self.usuario)
+
+        with patch(
+            "estoque.views.obter_avisos_visitas_fornecedores",
+            return_value=[self._aviso_tela()],
+        ):
+            resposta = self.client.get(
+                reverse("estoque:vendas"),
+                secure=True,
+            )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Resolver visita atrasada")
+        self.assertContains(
+            resposta,
+            reverse("estoque:resolver_visita_fornecedor_atrasada"),
+        )
+        self.assertContains(
+            resposta,
+            f'value="{self.fornecedor.id}"',
+        )
+        self.assertContains(
+            resposta,
+            f'value="{self.data_original.isoformat()}"',
+        )
+        self.assertContains(resposta, 'value="nao_ocorreu"')
+        self.assertContains(resposta, 'value="adiada"')
+        self.assertContains(resposta, 'value="ignorar_ciclo"')
+        self.assertContains(resposta, 'name="nova_data_visita"')
+        self.assertContains(resposta, 'name="observacao"')
+
+    def test_painel_nao_mostra_resolucao_para_visita_de_hoje(self):
+        self.client.force_login(self.usuario)
+
+        with patch(
+            "estoque.views.obter_avisos_visitas_fornecedores",
+            return_value=[self._aviso_tela(dias_para_visita=0)],
+        ):
+            resposta = self.client.get(
+                reverse("estoque:vendas"),
+                secure=True,
+            )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotContains(
+            resposta,
+            "Resolver visita atrasada",
+        )
+        self.assertNotContains(
+            resposta,
+            'name="tipo_resolucao"',
+        )
+
+    def test_tipo_invalido_nao_cria_resolucao(self):
+        resposta = self.postar(
+            tipo_resolucao="tipo_inexistente",
+        )
+
+        self.assertRedirects(
+            resposta,
+            reverse("estoque:vendas"),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(
+            ResolucaoVisitaFornecedor.objects.count(),
+            0,
+        )
 
 
 class FechamentoCompraFinanceiroTests(TestCase):

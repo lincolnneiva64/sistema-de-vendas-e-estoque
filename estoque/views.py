@@ -29,7 +29,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
     contato_tem_telefone_no_post,
@@ -9374,6 +9374,166 @@ def _calcular_resumo_vendas(vendas):
 
 
 @ensure_csrf_cookie
+
+@require_POST
+def resolver_visita_fornecedor_atrasada(request):
+    if not request.user.is_authenticated:
+        return HttpResponse(
+            "Autenticacao necessaria.",
+            status=403,
+        )
+
+    fornecedor_id = str(request.POST.get("fornecedor_id") or "").strip()
+    data_original = parse_date(
+        str(request.POST.get("data_visita_original") or "").strip()
+    )
+    tipo_resolucao = str(
+        request.POST.get("tipo_resolucao") or ""
+    ).strip()
+    nova_data = parse_date(
+        str(request.POST.get("nova_data_visita") or "").strip()
+    )
+    observacao = str(
+        request.POST.get("observacao") or ""
+    ).strip()
+
+    fornecedor = Fornecedor.objects.filter(
+        pk=fornecedor_id,
+        ativo=True,
+        frequencia_visita_ativa=True,
+    ).first()
+
+    if not fornecedor:
+        messages.error(
+            request,
+            "Fornecedor ativo nao encontrado.",
+        )
+        return redirect("estoque:vendas")
+
+    hoje = timezone.localdate()
+
+    if not data_original:
+        messages.error(
+            request,
+            "Data original da visita invalida.",
+        )
+        return redirect("estoque:vendas")
+
+    if data_original >= hoje:
+        messages.error(
+            request,
+            "Somente visitas atrasadas podem ser resolvidas por esta acao.",
+        )
+        return redirect("estoque:vendas")
+
+    tipos_validos = dict(
+        ResolucaoVisitaFornecedor.TIPO_RESOLUCAO_CHOICES
+    )
+    if tipo_resolucao not in tipos_validos:
+        messages.error(
+            request,
+            "Tipo de resolucao invalido.",
+        )
+        return redirect("estoque:vendas")
+
+    if tipo_resolucao == ResolucaoVisitaFornecedor.TIPO_ADIADA:
+        if not nova_data:
+            messages.error(
+                request,
+                "Informe a nova data da visita adiada.",
+            )
+            return redirect("estoque:vendas")
+        if nova_data <= hoje:
+            messages.error(
+                request,
+                "A nova data da visita deve ser posterior a hoje.",
+            )
+            return redirect("estoque:vendas")
+    else:
+        nova_data = None
+
+    existente = ResolucaoVisitaFornecedor.objects.filter(
+        fornecedor=fornecedor,
+        data_visita_original=data_original,
+    ).first()
+
+    if existente:
+        mesma_resolucao = (
+            existente.tipo_resolucao == tipo_resolucao
+            and existente.nova_data_visita == nova_data
+        )
+        if mesma_resolucao:
+            messages.info(
+                request,
+                "Esta visita ja havia sido resolvida. Nenhum registro duplicado foi criado.",
+            )
+        else:
+            messages.error(
+                request,
+                "Esta visita ja possui uma resolucao registrada e o historico nao pode ser substituido.",
+            )
+        return redirect("estoque:vendas")
+
+    if not data_ciclo_visita_valida(
+        fornecedor,
+        data_original,
+        data_referencia=hoje,
+    ):
+        messages.error(
+            request,
+            "A data informada nao corresponde a uma visita valida deste fornecedor.",
+        )
+        return redirect("estoque:vendas")
+
+    resolucao = ResolucaoVisitaFornecedor(
+        fornecedor=fornecedor,
+        data_visita_original=data_original,
+        tipo_resolucao=tipo_resolucao,
+        nova_data_visita=nova_data,
+        observacao=observacao,
+        responsavel=request.user,
+    )
+
+    try:
+        with transaction.atomic():
+            resolucao.save()
+    except ValidationError as exc:
+        mensagem = (
+            exc.messages[0]
+            if exc.messages
+            else "Nao foi possivel registrar a resolucao da visita."
+        )
+        messages.error(request, mensagem)
+        return redirect("estoque:vendas")
+    except IntegrityError:
+        messages.info(
+            request,
+            "Esta visita ja havia sido resolvida. Nenhum registro duplicado foi criado.",
+        )
+        return redirect("estoque:vendas")
+
+    if tipo_resolucao == ResolucaoVisitaFornecedor.TIPO_ADIADA:
+        messages.success(
+            request,
+            (
+                f"Visita de {fornecedor.nome} adiada para "
+                f"{nova_data:%d/%m/%Y}."
+            ),
+        )
+    elif tipo_resolucao == ResolucaoVisitaFornecedor.TIPO_NAO_OCORREU:
+        messages.success(
+            request,
+            f"Visita de {fornecedor.nome} encerrada como nao ocorrida.",
+        )
+    else:
+        messages.success(
+            request,
+            f"Ciclo de visita de {fornecedor.nome} ignorado.",
+        )
+
+    return redirect("estoque:vendas")
+
+
 def vendas(request):
     produtos = Produto.objects.filter(excluido=False).order_by('nome')
     cliente_inicial = None

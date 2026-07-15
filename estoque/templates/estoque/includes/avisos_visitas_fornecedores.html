@@ -380,6 +380,73 @@
   font-size: .8rem;
   font-weight: 800;
 }
+.vendas-pendencias-acoes-atraso {
+  display: grid;
+  gap: 6px;
+}
+.vendas-pendencias-resolver {
+  border-top: 1px solid rgba(239, 27, 45, .22);
+  padding-top: 6px;
+}
+.vendas-pendencias-resolver summary {
+  cursor: pointer;
+  color: #b91c1c;
+  font-size: .74rem;
+  font-weight: 900;
+  list-style-position: inside;
+}
+.vendas-pendencias-resolver-form {
+  display: grid;
+  gap: 6px;
+  margin-top: 7px;
+  padding: 8px;
+  border: 1px solid #fecdd3;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .84);
+}
+.vendas-pendencias-resolver-campo {
+  display: grid;
+  gap: 3px;
+}
+.vendas-pendencias-resolver-campo label {
+  color: #475569;
+  font-size: .68rem;
+  font-weight: 850;
+}
+.vendas-pendencias-resolver-campo select,
+.vendas-pendencias-resolver-campo input,
+.vendas-pendencias-resolver-campo textarea {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 7px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+  font-size: .75rem;
+}
+.vendas-pendencias-resolver-campo textarea {
+  min-height: 58px;
+  resize: vertical;
+}
+.vendas-pendencias-resolver-enviar {
+  min-height: 34px;
+  border: 1px solid #b91c1c;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
+  color: #fff;
+  font-size: .75rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+.vendas-pendencias-resolver-enviar:hover {
+  filter: brightness(1.04);
+}
+.vendas-pendencias-nova-data[hidden] {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .vendas-pendencias-lateral.pulsar .vendas-pendencias-toggle {
     animation: none;
@@ -488,15 +555,94 @@
                 <span class="vendas-pendencias-rotulo">Atrasada</span>
               </div>
             </div>
-            <div class="vendas-pendencias-item-rodape">
-              <p class="vendas-pendencias-mensagem">
-                {% if aviso.dias_para_visita < 0 %}
-                  Visita atrasada.
-                {% else %}
-                  Visita em {{ aviso.dias_para_visita }} dias.
-                {% endif %}
-              </p>
-              <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Preparar lista</a>
+            <div class="vendas-pendencias-acoes-atraso">
+              <div class="vendas-pendencias-item-rodape">
+                <p class="vendas-pendencias-mensagem">
+                  {% if aviso.dias_para_visita < 0 %}
+                    Visita atrasada.
+                  {% else %}
+                    Visita em {{ aviso.dias_para_visita }} dias.
+                  {% endif %}
+                </p>
+                <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Preparar lista</a>
+              </div>
+
+              {% if aviso.dias_para_visita < 0 %}
+                <details class="vendas-pendencias-resolver">
+                  <summary>Resolver visita atrasada</summary>
+
+                  <form
+                    method="post"
+                    action="{% url 'estoque:resolver_visita_fornecedor_atrasada' %}"
+                    class="vendas-pendencias-resolver-form"
+                    data-form-resolucao-visita
+                  >
+                    {% csrf_token %}
+                    <input
+                      type="hidden"
+                      name="fornecedor_id"
+                      value="{{ aviso.fornecedor_id }}"
+                    >
+                    <input
+                      type="hidden"
+                      name="data_visita_original"
+                      value="{{ aviso.data_visita }}"
+                    >
+
+                    <div class="vendas-pendencias-resolver-campo">
+                      <label for="tipoResolucaoVisita{{ aviso.fornecedor_id }}">
+                        O que aconteceu?
+                      </label>
+                      <select
+                        id="tipoResolucaoVisita{{ aviso.fornecedor_id }}"
+                        name="tipo_resolucao"
+                        required
+                        data-tipo-resolucao-visita
+                      >
+                        <option value="">Selecione</option>
+                        <option value="nao_ocorreu">Visita n?o ocorreu</option>
+                        <option value="adiada">Visita adiada</option>
+                        <option value="ignorar_ciclo">Ignorar este ciclo</option>
+                      </select>
+                    </div>
+
+                    <div
+                      class="vendas-pendencias-resolver-campo vendas-pendencias-nova-data"
+                      data-nova-data-visita
+                      hidden
+                    >
+                      <label for="novaDataVisita{{ aviso.fornecedor_id }}">
+                        Nova data
+                      </label>
+                      <input
+                        id="novaDataVisita{{ aviso.fornecedor_id }}"
+                        type="date"
+                        name="nova_data_visita"
+                        data-input-nova-data-visita
+                      >
+                    </div>
+
+                    <div class="vendas-pendencias-resolver-campo">
+                      <label for="observacaoVisita{{ aviso.fornecedor_id }}">
+                        Motivo ou observa??o
+                      </label>
+                      <textarea
+                        id="observacaoVisita{{ aviso.fornecedor_id }}"
+                        name="observacao"
+                        maxlength="1000"
+                        placeholder="Informe um motivo ou uma observa??o."
+                      ></textarea>
+                    </div>
+
+                    <button
+                      type="submit"
+                      class="vendas-pendencias-resolver-enviar"
+                    >
+                      Registrar resolu??o
+                    </button>
+                  </form>
+                </details>
+              {% endif %}
             </div>
           </article>
         {% endif %}
@@ -554,6 +700,29 @@
   const fechar = document.getElementById("btnFecharVendasPendencias");
   const backdrop = document.getElementById("vendasPendenciasBackdrop");
   if (!lateral || !botao || !painel) return;
+
+  document.querySelectorAll("[data-form-resolucao-visita]").forEach(function(formulario) {
+    const tipo = formulario.querySelector("[data-tipo-resolucao-visita]");
+    const blocoNovaData = formulario.querySelector("[data-nova-data-visita]");
+    const inputNovaData = formulario.querySelector("[data-input-nova-data-visita]");
+
+    function atualizarNovaData() {
+      const visitaAdiada = tipo && tipo.value === "adiada";
+
+      if (blocoNovaData) {
+        blocoNovaData.hidden = !visitaAdiada;
+      }
+      if (inputNovaData) {
+        inputNovaData.required = visitaAdiada;
+        if (!visitaAdiada) {
+          inputNovaData.value = "";
+        }
+      }
+    }
+
+    tipo?.addEventListener("change", atualizarNovaData);
+    atualizarNovaData();
+  });
 
   const reduzMovimento = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const pulsoMs = Number(lateral.dataset.pulsoMs || 7000);

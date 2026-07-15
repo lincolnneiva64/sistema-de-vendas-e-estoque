@@ -1239,6 +1239,96 @@ class EnvioListaCompraFornecedor(models.Model):
         return f"Envio da Lista #{self.lista_id} para {nome} - {self.telefone_destinatario}"
 
 
+class ResolucaoVisitaFornecedor(models.Model):
+    TIPO_NAO_OCORREU = "nao_ocorreu"
+    TIPO_ADIADA = "adiada"
+    TIPO_IGNORAR_CICLO = "ignorar_ciclo"
+
+    TIPO_RESOLUCAO_CHOICES = [
+        (TIPO_NAO_OCORREU, "Visita nao ocorreu"),
+        (TIPO_ADIADA, "Visita adiada"),
+        (TIPO_IGNORAR_CICLO, "Ignorar este ciclo"),
+    ]
+
+    fornecedor = models.ForeignKey(
+        Fornecedor,
+        on_delete=models.PROTECT,
+        related_name="resolucoes_visitas",
+    )
+    data_visita_original = models.DateField(db_index=True)
+    tipo_resolucao = models.CharField(
+        max_length=20,
+        choices=TIPO_RESOLUCAO_CHOICES,
+    )
+    nova_data_visita = models.DateField(blank=True, null=True)
+    observacao = models.TextField(blank=True, default="")
+    responsavel = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="resolucoes_visitas_fornecedores",
+    )
+    resolvido_em = models.DateTimeField(auto_now_add=True, db_index=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-resolvido_em", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["fornecedor", "data_visita_original"],
+                name="uniq_resolucao_ciclo_visita_fornecedor",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["fornecedor", "data_visita_original"],
+                name="idx_resolucao_visita_ciclo",
+            ),
+            models.Index(
+                fields=["tipo_resolucao", "-resolvido_em"],
+                name="idx_resolucao_tipo_data",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        erros = {}
+
+        if self.tipo_resolucao == self.TIPO_ADIADA:
+            if not self.nova_data_visita:
+                erros["nova_data_visita"] = (
+                    "Informe a nova data quando a visita for adiada."
+                )
+            elif (
+                self.data_visita_original
+                and self.nova_data_visita <= self.data_visita_original
+            ):
+                erros["nova_data_visita"] = (
+                    "A nova data deve ser posterior a data original da visita."
+                )
+        elif self.nova_data_visita:
+            erros["nova_data_visita"] = (
+                "Nova data somente pode ser informada para visita adiada."
+            )
+
+        if erros:
+            raise ValidationError(erros)
+
+    def save(self, *args, **kwargs):
+        if isinstance(self.observacao, str):
+            self.observacao = self.observacao.strip()
+
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return (
+            f"{self.fornecedor} - {self.data_visita_original:%d/%m/%Y} - "
+            f"{self.get_tipo_resolucao_display()}"
+        )
+
+
 class MeioPagamento(models.Model):
     TIPO_DEBITO = "debito"
     TIPO_CREDITO = "credito"

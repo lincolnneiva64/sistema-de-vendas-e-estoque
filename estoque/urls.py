@@ -71,6 +71,11 @@ urlpatterns = [
     path("produto/<int:pk>/", views.produto_detalhe, name="produto_detalhe"),
     path("produto/<int:pk>/editar/", views.produto_editar, name="produto_editar"),
     path("vendas/", views.vendas, name="vendas"),
+    path(
+        "vendas/visitas-fornecedores/resolver/",
+        views.resolver_visita_fornecedor_atrasada,
+        name="resolver_visita_fornecedor_atrasada",
+    ),
     path("vendas/consultar/", views.consultar_vendas, name="consultar_vendas"),
     path("vendas/consultar/canceladas/", views.consultar_vendas_canceladas, name="consultar_vendas_canceladas"),
     path("vendas/cliente-produto-historico/", views.vendas_cliente_produto_historico, name="vendas_cliente_produto_historico"),

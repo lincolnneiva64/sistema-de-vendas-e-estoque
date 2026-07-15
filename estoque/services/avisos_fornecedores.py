@@ -4,7 +4,7 @@ from urllib.parse import urlencode
 from django.urls import reverse
 from django.utils import timezone
 
-from estoque.models import EnvioListaCompraFornecedor, Fornecedor, ListaCompraFornecedor
+from estoque.models import EnvioListaCompraFornecedor, Fornecedor, ListaCompraFornecedor, ResolucaoVisitaFornecedor
 from estoque.services.fornecedor_visitas import calcular_proxima_visita
 
 
@@ -55,16 +55,96 @@ def _candidatos_de_visita(fornecedor, data_referencia):
     return list(dict.fromkeys(candidatos))
 
 
-def datas_validas_ciclo_visita_fornecedor(fornecedor, data_referencia=None):
+def _resolucoes_visitas_por_ciclo(fornecedor_ids):
+    if not fornecedor_ids:
+        return {}
+
+    resolucoes = (
+        ResolucaoVisitaFornecedor.objects
+        .filter(fornecedor_id__in=fornecedor_ids)
+        .only(
+            "fornecedor_id",
+            "data_visita_original",
+            "tipo_resolucao",
+            "nova_data_visita",
+        )
+        .order_by("fornecedor_id", "data_visita_original", "-id")
+    )
+
+    por_ciclo = {}
+    for resolucao in resolucoes:
+        chave = (resolucao.fornecedor_id, resolucao.data_visita_original)
+        if chave not in por_ciclo:
+            por_ciclo[chave] = resolucao
+    return por_ciclo
+
+
+def _data_visita_apos_resolucoes(fornecedor_id, data_visita, resolucoes_por_ciclo):
+    data_atual = data_visita
+    ciclos_visitados = set()
+
+    while data_atual:
+        chave = (fornecedor_id, data_atual)
+        if chave in ciclos_visitados:
+            return None
+        ciclos_visitados.add(chave)
+
+        resolucao = resolucoes_por_ciclo.get(chave)
+        if not resolucao:
+            return data_atual
+
+        if (
+            resolucao.tipo_resolucao
+            == ResolucaoVisitaFornecedor.TIPO_ADIADA
+            and resolucao.nova_data_visita
+        ):
+            data_atual = resolucao.nova_data_visita
+            continue
+
+        return None
+
+    return None
+
+
+def datas_validas_ciclo_visita_fornecedor(
+    fornecedor,
+    data_referencia=None,
+    resolucoes_por_ciclo=None,
+):
     if data_referencia is None:
         data_referencia = timezone.localdate()
     if not _configuracao_visita_valida(fornecedor):
         return []
-    return [
+
+    candidatos = [
         data
         for data in _candidatos_de_visita(fornecedor, data_referencia)
-        if data <= data_referencia or (data - data_referencia).days <= DIAS_ANTECEDENCIA_AVISO_VISITA
+        if data <= data_referencia
+        or (data - data_referencia).days <= DIAS_ANTECEDENCIA_AVISO_VISITA
     ]
+
+    if resolucoes_por_ciclo is None:
+        resolucoes_por_ciclo = _resolucoes_visitas_por_ciclo([fornecedor.id])
+
+    datas_efetivas = []
+    for data_visita in candidatos:
+        data_efetiva = _data_visita_apos_resolucoes(
+            fornecedor.id,
+            data_visita,
+            resolucoes_por_ciclo,
+        )
+        if not data_efetiva:
+            continue
+
+        dentro_da_janela = (
+            data_efetiva <= data_referencia
+            or (data_efetiva - data_referencia).days
+            <= DIAS_ANTECEDENCIA_AVISO_VISITA
+        )
+        if dentro_da_janela and data_efetiva not in datas_efetivas:
+            datas_efetivas.append(data_efetiva)
+
+    return datas_efetivas
 
 
 def data_ciclo_visita_valida(fornecedor, data_visita, data_referencia=None):
@@ -165,10 +245,18 @@ def obter_avisos_visitas_fornecedores(data_referencia=None):
     if not fornecedores:
         return []
 
+    resolucoes_por_ciclo = _resolucoes_visitas_por_ciclo(
+        [fornecedor.id for fornecedor in fornecedores]
+    )
+
     candidatos_por_fornecedor = {}
     datas_consulta = set()
     for fornecedor in fornecedores:
-        candidatos = datas_validas_ciclo_visita_fornecedor(fornecedor, data_referencia=data_referencia)
+        candidatos = datas_validas_ciclo_visita_fornecedor(
+            fornecedor,
+            data_referencia=data_referencia,
+            resolucoes_por_ciclo=resolucoes_por_ciclo,
+        )
         if candidatos:
             candidatos_por_fornecedor[fornecedor.id] = candidatos
             datas_consulta.update(candidatos)
