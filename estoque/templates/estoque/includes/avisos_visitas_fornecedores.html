@@ -476,12 +476,62 @@
     white-space: normal;
   }
 }
+
+/* Alerta preventivo de fornecedor: visita amanha, visita hoje ou lista pronta sem envio. */
+.vendas-pendencias-lateral.tem-alerta .vendas-pendencias-toggle {
+  background: linear-gradient(180deg, #ff1f1f 0%, #dc2626 55%, #991b1b 100%) !important;
+  border-color: #7f1d1d !important;
+  color: #ffffff !important;
+  box-shadow: 0 18px 38px rgba(220, 38, 38, 0.55), 0 0 0 5px rgba(239, 68, 68, 0.22) !important;
+  animation: vendasPendenciasCicloAlerta 310s linear infinite !important;
+  transform-origin: left center;
+  will-change: transform, box-shadow, filter;
+}
+
+.vendas-pendencias-lateral.tem-alerta .vendas-pendencias-badge {
+  background: #ffffff !important;
+  color: #b91c1c !important;
+  border-color: rgba(255, 255, 255, 0.88) !important;
+}
+
+.vendas-pendencias-lateral.tem-alerta .vendas-pendencias-toggle:hover,
+.vendas-pendencias-lateral.tem-alerta .vendas-pendencias-toggle:focus-visible {
+  background: linear-gradient(180deg, #ff4a4a 0%, #dc2626 55%, #991b1b 100%) !important;
+}
+
+.vendas-pendencias-lateral.is-aberto.tem-alerta .vendas-pendencias-toggle {
+  animation: none !important;
+  transform: translateX(0) scale(1) !important;
+}
+
+/* Ciclo: aproximadamente 10s pulsando + 5min parado. */
+@keyframes vendasPendenciasCicloAlerta {
+  0%, 1.1%, 2.2%, 3.2% {
+    transform: translateX(0) scale(1);
+    filter: brightness(1);
+    box-shadow: 0 18px 38px rgba(220, 38, 38, 0.55), 0 0 0 5px rgba(239, 68, 68, 0.22);
+  }
+
+  0.55%, 1.65%, 2.75% {
+    transform: translateX(9px) scale(1.08);
+    filter: brightness(1.35) saturate(1.25);
+    box-shadow: 0 24px 55px rgba(220, 38, 38, 0.9), 0 0 0 12px rgba(239, 68, 68, 0.34);
+  }
+
+  3.3%, 100% {
+    transform: translateX(0) scale(1);
+    filter: brightness(1);
+    box-shadow: 0 18px 38px rgba(220, 38, 38, 0.55), 0 0 0 5px rgba(239, 68, 68, 0.22);
+  }
+}
+
 </style>
 
 <div
   class="vendas-pendencias-lateral prioridade-{{ pendencias_vendas_prioridade }}{% if pendencias_vendas_prioridade == 'critica' or pendencias_vendas_prioridade == 'alta' %} pulsar{% endif %}"
   id="vendasPendenciasLateral"
-  data-pulso-ms="7000"
+  data-pulso-ms="10000"
+  data-pausa-pulso-ms="300000"
   aria-label="Pendencias operacionais"
 >
   <button
@@ -600,7 +650,7 @@
                         data-tipo-resolucao-visita
                       >
                         <option value="">Selecione</option>
-                        <option value="nao_ocorreu">Visita n?o ocorreu</option>
+                        <option value="nao_ocorreu">Visita não ocorreu</option>
                         <option value="adiada">Visita adiada</option>
                         <option value="ignorar_ciclo">Ignorar este ciclo</option>
                       </select>
@@ -624,21 +674,22 @@
 
                     <div class="vendas-pendencias-resolver-campo">
                       <label for="observacaoVisita{{ aviso.fornecedor_id }}">
-                        Motivo ou observa??o
+                        Motivo ou observação
                       </label>
                       <textarea
                         id="observacaoVisita{{ aviso.fornecedor_id }}"
                         name="observacao"
                         maxlength="1000"
-                        placeholder="Informe um motivo ou uma observa??o."
+                        placeholder="Informe um motivo ou uma observação."
                       ></textarea>
                     </div>
 
                     <button
-                      type="submit"
+                      type="button"
                       class="vendas-pendencias-resolver-enviar"
+                      data-registrar-resolucao-visita
                     >
-                      Registrar resolu??o
+                      Registrar resolução
                     </button>
                   </form>
                 </details>
@@ -701,10 +752,93 @@
   const backdrop = document.getElementById("vendasPendenciasBackdrop");
   if (!lateral || !botao || !painel) return;
 
+  const itensPendenciasAlerta = Array.from(painel.querySelectorAll(".vendas-pendencias-item"));
+  const possuiAlertaPreventivoFornecedor = itensPendenciasAlerta.some(function (item) {
+    const textoItem = (item.textContent || "").toUpperCase();
+
+    return (
+      textoItem.includes("AMANH")
+      || textoItem.includes("HOJE")
+      || textoItem.includes("LISTA PREPARADA")
+      || textoItem.includes("FALTA ENVIAR")
+    );
+  });
+
+  if (possuiAlertaPreventivoFornecedor) {
+    lateral.classList.add("tem-alerta");
+  } else {
+    lateral.classList.remove("tem-alerta");
+  }
+
+  // O painel est? dentro da tela de Vendas, mas n?o faz parte da venda.
+  // Intera??es aqui n?o podem acionar valida??es da venda, como operador obrigat?rio.
+  function ignorarValidacaoOperadorVendaTemporariamente() {
+    window.__ignorarValidacaoOperadorVenda = true;
+
+    if (window.__ignorarValidacaoOperadorVendaTimer) {
+      window.clearTimeout(window.__ignorarValidacaoOperadorVendaTimer);
+    }
+
+    window.__ignorarValidacaoOperadorVendaTimer = window.setTimeout(function() {
+      window.__ignorarValidacaoOperadorVenda = false;
+    }, 1500);
+  }
+
+  painel.addEventListener("pointerdown", ignorarValidacaoOperadorVendaTemporariamente, true);
+  painel.addEventListener("keydown", ignorarValidacaoOperadorVendaTemporariamente, true);
+
+  painel.addEventListener("click", function(event) {
+    ignorarValidacaoOperadorVendaTemporariamente();
+    event.stopPropagation();
+  });
+
+  painel.addEventListener("submit", function(event) {
+    ignorarValidacaoOperadorVendaTemporariamente();
+    event.stopPropagation();
+  });
+
   document.querySelectorAll("[data-form-resolucao-visita]").forEach(function(formulario) {
     const tipo = formulario.querySelector("[data-tipo-resolucao-visita]");
     const blocoNovaData = formulario.querySelector("[data-nova-data-visita]");
     const inputNovaData = formulario.querySelector("[data-input-nova-data-visita]");
+    const botaoRegistrar = formulario.querySelector("[data-registrar-resolucao-visita]");
+    let resolucaoEmEnvio = false;
+
+    function enviarResolucaoVisita(event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (typeof event.stopImmediatePropagation === "function") {
+          event.stopImmediatePropagation();
+        }
+      }
+
+      ignorarValidacaoOperadorVendaTemporariamente();
+
+      if (resolucaoEmEnvio) {
+        return;
+      }
+
+      if (
+        typeof formulario.reportValidity === "function"
+        && !formulario.reportValidity()
+      ) {
+        return;
+      }
+
+      resolucaoEmEnvio = true;
+
+      if (botaoRegistrar) {
+        botaoRegistrar.disabled = true;
+        botaoRegistrar.textContent = "Registrando...";
+      }
+
+      HTMLFormElement.prototype.submit.call(formulario);
+    }
+
+    botaoRegistrar?.addEventListener("click", enviarResolucaoVisita, true);
+    formulario.addEventListener("submit", enviarResolucaoVisita, true);
 
     function atualizarNovaData() {
       const visitaAdiada = tipo && tipo.value === "adiada";
@@ -738,6 +872,7 @@
 
   function abrirPendencias() {
     pararPulso();
+    lateral.classList.add("is-aberto");
     lateral.classList.add("aberto");
     painel.hidden = false;
     if (backdrop) backdrop.hidden = false;
@@ -746,6 +881,7 @@
   }
 
   function fecharPendencias() {
+    lateral.classList.remove("is-aberto");
     lateral.classList.remove("aberto");
     painel.hidden = true;
     if (backdrop) backdrop.hidden = true;
@@ -767,13 +903,18 @@
     }
   });
   fechar?.addEventListener("click", fecharPendencias);
-  backdrop?.addEventListener("click", fecharPendencias);
+  backdrop?.addEventListener("click", function(event) {
+    event.stopPropagation();
+    fecharPendencias();
+  });
   document.addEventListener("keydown", function(event) {
     if (event.key === "Escape") {
       fecharPendencias();
       botao.focus();
     }
   });
+
 })();
 </script>
+
 {% endif %}

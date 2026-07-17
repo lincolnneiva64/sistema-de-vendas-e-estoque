@@ -164,7 +164,7 @@
     width: 100%;
     table-layout: fixed;
     border-collapse: collapse;
-    
+
 }
 
 .grade-itens-head th {
@@ -1097,7 +1097,7 @@ select:focus {
         background: #dbeafe;
     }
 
-    
+
 
 
 th:first-child,
@@ -2164,7 +2164,7 @@ td:first-child {
     </div>
 
     <div class="bloco-venda">
-    
+
     <div class="grade-itens">
     <div class="grade-itens-head-wrap">
         <table class="grade-itens-head" aria-hidden="true">
@@ -3542,7 +3542,7 @@ preco.value = valor;setTimeout(() => {
 }, 50);
 produtoBusca.focus();
 produtoBusca.select();
-    
+
 });
 function mostrarAviso(mensagem, campo = null, selecionar = false) {
     let aviso = document.getElementById("aviso-validacao");
@@ -3648,7 +3648,7 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
     if (contadorItens) {
         contadorItens.textContent = "Itens: " + linhas.length;
     }
-} 
+}
 
 function limparTipoPagamentoVenda() {
     if (!tipoVenda) return;
@@ -4457,13 +4457,13 @@ quantidade.addEventListener("keydown", (e) => {
                 </div>
 
                 <div style="padding:24px 22px 22px 22px;">
-                    
+
 
 <div style="font-size:21px;font-weight:700;color:#111827;line-height:1.35;">
     Confirmar exclusão de<br>
 <span style="color:#7c2d12;">${nomeProduto}</span>?
 </div>
-                    
+
 
                     <div style="
                         margin-top:12px;
@@ -4562,7 +4562,7 @@ quantidade.addEventListener("keydown", (e) => {
         document.addEventListener("keydown", teclaModal, true);
         btnConfirmar.focus();
     });
-} 
+}
   document.addEventListener("keydown", async function (e) {
 if (e.key === "Delete") {
 
@@ -5129,7 +5129,7 @@ produtoBusca.addEventListener("blur", () => {
     }, 150);
 });
 produtoBusca.addEventListener("keydown", (e) => {
-    
+
 
     if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -5178,7 +5178,7 @@ produtoBusca.addEventListener("keydown", (e) => {
         quantidade.select();
     }
 }
-    
+
 
     else if (e.key === "Escape") {
         sugestoesBox.style.display = "none";
@@ -5570,7 +5570,11 @@ atualizarTotalGeral();
     }
 
     window.operadorVendaObrigatorioOk = function operadorVendaObrigatorioOk() {
-        const operador = buscarCampoOperadorVenda();
+
+    if (window.__ignorarValidacaoOperadorVenda) {
+        return true;
+    }
+const operador = buscarCampoOperadorVenda();
 
         if (!operador || !operador.value) {
             mostrarErroOperadorVenda(operador);
