@@ -40,6 +40,7 @@ from .services.fornecedor_contatos import (
     validar_telefones_contatos,
 )
 from .services.avisos_fornecedores import (
+    ESTADO_LISTA_ALTERADA_FALTA_REENVIAR,
     ESTADO_LISTA_PREPARADA_FALTA_ENVIAR,
     data_ciclo_visita_valida,
     obter_avisos_visitas_fornecedores,
@@ -1176,7 +1177,10 @@ def _prioridade_pendencias_vendas(avisos_visitas_fornecedores):
         if aviso.get("dias_para_visita") == 0:
             return "critica"
     for aviso in avisos_visitas_fornecedores:
-        if aviso.get("estado") == ESTADO_LISTA_PREPARADA_FALTA_ENVIAR:
+        if aviso.get("estado") in {
+            ESTADO_LISTA_PREPARADA_FALTA_ENVIAR,
+            ESTADO_LISTA_ALTERADA_FALTA_REENVIAR,
+        }:
             return "alta"
     for aviso in avisos_visitas_fornecedores:
         if aviso.get("dias_para_visita") == 1:
@@ -1189,7 +1193,10 @@ def _prioridade_pendencias_vendas(avisos_visitas_fornecedores):
 def _ordem_aviso_painel_vendas(aviso):
     if aviso.get("dias_para_visita") == 0:
         return 0
-    if aviso.get("estado") == ESTADO_LISTA_PREPARADA_FALTA_ENVIAR:
+    if aviso.get("estado") in {
+        ESTADO_LISTA_PREPARADA_FALTA_ENVIAR,
+        ESTADO_LISTA_ALTERADA_FALTA_REENVIAR,
+    }:
         return 1
     if aviso.get("dias_para_visita") == 1:
         return 2
@@ -1203,14 +1210,16 @@ def _avisos_visitas_painel_vendas(avisos_visitas_fornecedores):
         (indice, aviso)
         for indice, aviso in enumerate(avisos_visitas_fornecedores)
         if (
-            aviso.get("estado") == ESTADO_LISTA_PREPARADA_FALTA_ENVIAR
+            aviso.get("estado") in {
+                ESTADO_LISTA_PREPARADA_FALTA_ENVIAR,
+                ESTADO_LISTA_ALTERADA_FALTA_REENVIAR,
+            }
             or aviso.get("dias_para_visita") in {0, 1}
             or aviso.get("dias_para_visita", 0) < 0
         )
     ]
     avisos_visiveis.sort(key=lambda item: (_ordem_aviso_painel_vendas(item[1]), item[0]))
     return [aviso for _, aviso in avisos_visiveis]
-
 
 def home(request):
     produto_edicao = None

@@ -1120,6 +1120,54 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
         aviso = avisos[0]
         self.assertEqual(aviso["data_visita"], referencia.isoformat())
 
+    def test_painel_vendas_nao_exibe_visita_em_dois_dias(self):
+        aviso = {
+            "fornecedor_id": 1,
+            "fornecedor_nome": "Fornecedor Futuro",
+            "data_visita": (self.data_base + timedelta(days=2)).isoformat(),
+            "dias_para_visita": 2,
+            "estado": ESTADO_PREPARAR_LISTA,
+            "prioridade": 3,
+            "titulo": "Visita em 2 dias",
+            "mensagem": "Prepare a lista para a visita em 2 dias.",
+            "lista_id": None,
+            "lista_status": None,
+            "tem_envio_confirmado": False,
+            "acao": {
+                "tipo": "preparar_lista",
+                "url": "/compras/sugestao-fornecedor/",
+            },
+        }
+
+        avisos_painel = views._avisos_visitas_painel_vendas([aviso])
+
+        self.assertEqual(avisos_painel, [])
+        self.assertEqual(views._prioridade_pendencias_vendas(avisos_painel), "baixa")
+
+    def test_painel_vendas_prioriza_reenvio_como_alta(self):
+        aviso = {
+            "fornecedor_id": 1,
+            "fornecedor_nome": "Fornecedor Reenvio",
+            "data_visita": self.data_base.isoformat(),
+            "dias_para_visita": 2,
+            "estado": ESTADO_LISTA_ALTERADA_FALTA_REENVIAR,
+            "prioridade": 3,
+            "titulo": "Lista alterada",
+            "mensagem": "Lista alterada depois do envio, falta reenviar ao vendedor.",
+            "lista_id": 1,
+            "lista_status": ListaCompraFornecedor.STATUS_ABERTA,
+            "tem_envio_confirmado": False,
+            "acao": {
+                "tipo": "enviar_ao_vendedor",
+                "url": "/compras/listas-fornecedor/1/whatsapp/",
+            },
+        }
+
+        avisos_painel = views._avisos_visitas_painel_vendas([aviso])
+
+        self.assertEqual(avisos_painel, [aviso])
+        self.assertEqual(views._prioridade_pendencias_vendas(avisos_painel), "alta")
+
 
 class ResolucaoVisitaFornecedorViewTests(TestCase):
     def setUp(self):
