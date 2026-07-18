@@ -490,6 +490,52 @@
       background: #f5fbf6;
     }
 
+    .confirmacao-envio.aguardando-confirmacao {
+      border: 2px solid #dc2626;
+      background: #fff1f2;
+      box-shadow: 0 0 0 5px rgba(220, 38, 38, .16), 0 18px 34px rgba(127, 29, 45, .22);
+      animation: pulsoConfirmacaoEnvio 1.05s ease-in-out infinite;
+    }
+
+    .confirmacao-envio.aguardando-confirmacao .confirmacao-envio-texto {
+      color: #7f1d1d;
+      font-size: .9rem;
+      font-weight: 950;
+    }
+
+    .confirmacao-envio.aguardando-confirmacao #btnConfirmarEnvioVendedor {
+      background: #dc2626;
+      box-shadow: 0 0 0 4px rgba(220, 38, 38, .18), 0 12px 24px rgba(127, 29, 45, .28);
+      animation: pulsoBotaoConfirmacaoEnvio .82s ease-in-out infinite;
+    }
+
+    @keyframes pulsoConfirmacaoEnvio {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 4px rgba(220, 38, 38, .13), 0 18px 34px rgba(127, 29, 45, .20);
+      }
+      50% {
+        transform: scale(1.015);
+        box-shadow: 0 0 0 8px rgba(220, 38, 38, .24), 0 22px 42px rgba(127, 29, 45, .30);
+      }
+    }
+
+    @keyframes pulsoBotaoConfirmacaoEnvio {
+      0%, 100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.06);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .confirmacao-envio.aguardando-confirmacao,
+      .confirmacao-envio.aguardando-confirmacao #btnConfirmarEnvioVendedor {
+        animation: none;
+      }
+    }
+
     .confirmacao-envio-texto {
       margin: 0 0 8px;
       color: var(--texto);
@@ -1086,6 +1132,7 @@
 
     function aplicarEnvioConfirmado(envio) {
       if (!confirmacaoEnvioVendedor || !envio) return;
+      confirmacaoEnvioVendedor.classList.remove("aguardando-confirmacao");
       confirmacaoEnvioVendedor.classList.add("confirmado");
       if (confirmacaoEnvioTexto) confirmacaoEnvioTexto.textContent = "Envio ao vendedor confirmado";
       if (btnConfirmarEnvioVendedor) {
@@ -1106,6 +1153,26 @@
     function renderizarConfirmacaoEnvio(payload) {
       const envio = payload?.ultimoEnvioVendedor || null;
       if (envio) aplicarEnvioConfirmado(envio);
+    }
+
+    function destacarConfirmacaoEnvioPendente() {
+      if (!confirmacaoEnvioVendedor || !btnConfirmarEnvioVendedor || btnConfirmarEnvioVendedor.disabled) return;
+
+      confirmacaoEnvioVendedor.classList.add("aguardando-confirmacao");
+
+      if (confirmacaoEnvioTexto) {
+        confirmacaoEnvioTexto.textContent = "WhatsApp aberto. Depois de enviar, confirme aqui para encerrar o aviso da tela de Vendas.";
+      }
+
+      if (confirmacaoEnvioStatus) {
+        confirmacaoEnvioStatus.textContent = "Clique em Confirmar que enviei ao vendedor apos mandar a lista.";
+        confirmacaoEnvioStatus.classList.remove("erro", "sucesso");
+      }
+
+      setTimeout(function () {
+        confirmacaoEnvioVendedor.scrollIntoView({ behavior: "smooth", block: "center" });
+        btnConfirmarEnvioVendedor.focus({ preventScroll: true });
+      }, 220);
     }
 
     function marcarEdicaoManual() {
@@ -1446,6 +1513,11 @@
         ? `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`
         : `https://wa.me/?text=${encodeURIComponent(mensagem)}`;
       window.open(url, "_blank", "noopener");
+      destacarConfirmacaoEnvioPendente();
+    });
+
+    btnImagemLista?.addEventListener("click", function () {
+      setTimeout(destacarConfirmacaoEnvioPendente, 350);
     });
 
     btnConfirmarEnvioVendedor?.addEventListener("click", async function () {

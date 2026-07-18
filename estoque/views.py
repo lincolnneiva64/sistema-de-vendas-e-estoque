@@ -4974,7 +4974,7 @@ def _confirmar_envio_lista_fornecedor(lista, usuario, telefone, nome="", origem=
 
         if lista_bloqueada.status == ListaCompraFornecedor.STATUS_ABERTA:
             lista_bloqueada.status = ListaCompraFornecedor.STATUS_ENVIADA
-            lista_bloqueada.save(update_fields=["status", "atualizado_em"])
+            lista_bloqueada.save(update_fields=["status"])
 
         return envio, True
 

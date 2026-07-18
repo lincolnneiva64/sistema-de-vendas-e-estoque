@@ -6302,6 +6302,28 @@ class ComprasListaFornecedorEnvioVendedorTests(TestCase):
             kwargs={"pk": self.lista.pk},
         )
 
+    def test_confirmar_envio_nao_atualiza_atualizado_em_da_lista(self):
+        atualizado_em_original = self.lista.atualizado_em
+
+        envio, criado = views._confirmar_envio_lista_fornecedor(
+            lista=self.lista,
+            usuario=self.usuario,
+            telefone="91999990000",
+            nome="Vendedor Teste",
+            origem=views.EnvioListaCompraFornecedor.ORIGEM_PERSONALIZADO,
+            chave_idempotencia="teste-nao-atualiza-lista",
+        )
+
+        self.assertTrue(criado)
+        self.assertIsNotNone(envio.pk)
+
+        self.lista.refresh_from_db()
+        self.assertEqual(
+            self.lista.status,
+            ListaCompraFornecedor.STATUS_ENVIADA,
+        )
+        self.assertEqual(self.lista.atualizado_em, atualizado_em_original)
+
     def test_payload_prioriza_destinatario_padrao_persistente(self):
         contato_principal = FornecedorContato.objects.create(
             fornecedor=self.fornecedor,
