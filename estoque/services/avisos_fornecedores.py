@@ -12,6 +12,8 @@ DIAS_ANTECEDENCIA_AVISO_VISITA = 7
 
 ESTADO_PREPARAR_LISTA = "preparar_lista"
 ESTADO_LISTA_PREPARADA_FALTA_ENVIAR = "lista_preparada_falta_enviar"
+ESTADO_LISTA_ALTERADA_FALTA_REENVIAR = "lista_alterada_falta_reenviar"
+ESTADO_LISTA_ALTERADA_FALTA_REENVIAR = "lista_alterada_falta_reenviar"
 
 
 def _configuracao_visita_valida(fornecedor):
@@ -166,6 +168,8 @@ def _prioridade(dias_para_visita):
 
 
 def _titulo_mensagem(estado, dias_para_visita):
+    if estado == ESTADO_LISTA_ALTERADA_FALTA_REENVIAR:
+        return "Lista alterada", "Lista alterada depois do envio, falta reenviar ao vendedor."
     if estado == ESTADO_LISTA_PREPARADA_FALTA_ENVIAR:
         return "Lista preparada", "Lista preparada, falta enviar ao vendedor."
     if dias_para_visita < 0:
@@ -186,9 +190,44 @@ def _url_preparar_lista(fornecedor_id, data_visita):
     return f"{reverse('estoque:sugestao_compra_fornecedor')}?{parametros}"
 
 
-def _montar_aviso(fornecedor, data_visita, lista, tem_envio_confirmado, data_referencia):
+
+def _estado_envio_lista(lista, ultimo_envio):
+    if not lista:
+        return ESTADO_PREPARAR_LISTA, False
+
+    if not ultimo_envio:
+        return ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, False
+
+    if lista.atualizado_em and ultimo_envio.confirmado_em < lista.atualizado_em:
+        return ESTADO_LISTA_ALTERADA_FALTA_REENVIAR, False
+
+    return "", True
+
+
+
+def _estado_envio_lista(lista, ultimo_envio):
+    if not lista:
+        return ESTADO_PREPARAR_LISTA, False
+
+    if not ultimo_envio:
+        return ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, False
+
+    if lista.atualizado_em and ultimo_envio.confirmado_em < lista.atualizado_em:
+        return ESTADO_LISTA_ALTERADA_FALTA_REENVIAR, False
+
+    return "", True
+
+
+def _montar_aviso(
+    fornecedor,
+    data_visita,
+    lista,
+    tem_envio_confirmado,
+    data_referencia,
+    estado_lista=None,
+):
     dias_para_visita = (data_visita - data_referencia).days
-    estado = (
+    estado = estado_lista or (
         ESTADO_LISTA_PREPARADA_FALTA_ENVIAR
         if lista and not tem_envio_confirmado
         else ESTADO_PREPARAR_LISTA
@@ -221,7 +260,6 @@ def _montar_aviso(fornecedor, data_visita, lista, tem_envio_confirmado, data_ref
         "tem_envio_confirmado": tem_envio_confirmado,
         "acao": acao,
     }
-
 
 def obter_avisos_visitas_fornecedores(data_referencia=None):
     if data_referencia is None:
@@ -279,21 +317,37 @@ def obter_avisos_visitas_fornecedores(data_referencia=None):
         if chave not in listas_por_ciclo:
             listas_por_ciclo[chave] = lista
 
-    envios_confirmados = set(
+    ids_listas = [lista.id for lista in listas_por_ciclo.values()]
+    ultimo_envio_por_lista = {}
+    envios = (
         EnvioListaCompraFornecedor.objects
-        .filter(lista_id__in=[lista.id for lista in listas_por_ciclo.values()])
-        .values_list("lista_id", flat=True)
+        .filter(lista_id__in=ids_listas)
+        .only("lista_id", "confirmado_em")
+        .order_by("lista_id", "-confirmado_em", "-id")
     )
+    for envio in envios:
+        if envio.lista_id not in ultimo_envio_por_lista:
+            ultimo_envio_por_lista[envio.lista_id] = envio
 
     avisos = []
     for fornecedor in fornecedores:
         candidatos = candidatos_por_fornecedor.get(fornecedor.id, [])
         for data_visita in candidatos:
             lista = listas_por_ciclo.get((fornecedor.id, data_visita))
-            tem_envio_confirmado = bool(lista and lista.id in envios_confirmados)
+            ultimo_envio = ultimo_envio_por_lista.get(lista.id) if lista else None
+            estado_lista, tem_envio_confirmado = _estado_envio_lista(lista, ultimo_envio)
             if tem_envio_confirmado:
                 continue
-            avisos.append(_montar_aviso(fornecedor, data_visita, lista, tem_envio_confirmado, data_referencia))
+            avisos.append(
+                _montar_aviso(
+                    fornecedor,
+                    data_visita,
+                    lista,
+                    tem_envio_confirmado,
+                    data_referencia,
+                    estado_lista=estado_lista,
+                )
+            )
             break
 
     avisos.sort(key=lambda aviso: (

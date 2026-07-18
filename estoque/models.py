@@ -1663,6 +1663,23 @@ class ItemListaCompraFornecedor(models.Model):
             return None
         return self.quantidade_recebida - (self.quantidade_final or 0)
 
+    def _atualizar_lista_mae(self, lista_id=None):
+        lista_id = lista_id or self.lista_id
+        if lista_id:
+            ListaCompraFornecedor.objects.filter(pk=lista_id).update(
+                atualizado_em=timezone.now()
+            )
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self._atualizar_lista_mae()
+
+    def delete(self, *args, **kwargs):
+        lista_id = self.lista_id
+        resultado = super().delete(*args, **kwargs)
+        self._atualizar_lista_mae(lista_id)
+        return resultado
+
 
 class ContaPagar(models.Model):
     STATUS_ABERTA = "aberta"

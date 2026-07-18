@@ -23,7 +23,7 @@ from django.utils import timezone
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
 from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
-from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
+from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_ALTERADA_FALTA_REENVIAR, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
@@ -531,13 +531,13 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
             total_lista=Decimal("10.00"),
         )
 
-    def confirmar_envio(self, lista, chave=None):
+    def confirmar_envio(self, lista, chave=None, confirmado_em=None):
         return EnvioListaCompraFornecedor.objects.create(
             lista=lista,
             fornecedor=lista.fornecedor,
             nome_destinatario="Vendedor",
             telefone_destinatario="5591999999999",
-            confirmado_em=timezone.make_aware(datetime(2026, 7, 15, 10, 0)),
+            confirmado_em=confirmado_em or timezone.now() + timedelta(minutes=1),
             origem_destinatario=EnvioListaCompraFornecedor.ORIGEM_PERSONALIZADO,
             chave_idempotencia=chave or f"teste-aviso-{lista.id}-{EnvioListaCompraFornecedor.objects.count()}",
         )
@@ -779,6 +779,162 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
         aviso = self.unico_aviso(self.data_base + timedelta(days=1))
         self.assertEqual(aviso["data_visita"], (self.data_base + timedelta(days=7)).isoformat())
         self.assertEqual(aviso["estado"], ESTADO_PREPARAR_LISTA)
+
+    def test_lista_alterada_depois_do_envio_gera_falta_reenviar(self):
+        fornecedor = self.criar_fornecedor()
+        lista = self.criar_lista(fornecedor)
+        self.confirmar_envio(lista)
+
+        novo_horario_alteracao = timezone.now() + timedelta(minutes=5)
+        ListaCompraFornecedor.objects.filter(pk=lista.pk).update(
+            total_lista=Decimal("12.00"),
+            atualizado_em=novo_horario_alteracao,
+        )
+        lista.refresh_from_db()
+
+        aviso = self.unico_aviso()
+
+        self.assertEqual(aviso["lista_id"], lista.id)
+        self.assertEqual(aviso["estado"], ESTADO_LISTA_ALTERADA_FALTA_REENVIAR)
+        self.assertEqual(
+            aviso["mensagem"],
+            "Lista alterada depois do envio, falta reenviar ao vendedor.",
+        )
+        self.assertFalse(aviso["tem_envio_confirmado"])
+        self.assertEqual(aviso["acao"]["tipo"], "enviar_ao_vendedor")
+
+    def test_reenvio_depois_da_alteracao_encerra_aviso(self):
+        fornecedor = self.criar_fornecedor(intervalo=14)
+        lista = self.criar_lista(fornecedor)
+        self.confirmar_envio(lista)
+
+        novo_horario_alteracao = timezone.now() + timedelta(minutes=5)
+        ListaCompraFornecedor.objects.filter(pk=lista.pk).update(
+            total_lista=Decimal("12.00"),
+            atualizado_em=novo_horario_alteracao,
+        )
+        lista.refresh_from_db()
+
+        self.confirmar_envio(
+            lista,
+            chave="teste-reenvio-apos-alteracao",
+            confirmado_em=lista.atualizado_em + timedelta(minutes=1),
+        )
+
+        self.assertEqual(obter_avisos_visitas_fornecedores(self.data_base), [])
+
+    def test_item_alterado_depois_do_envio_gera_falta_reenviar(self):
+        fornecedor = self.criar_fornecedor()
+        lista = self.criar_lista(fornecedor)
+        item = ItemListaCompraFornecedor.objects.create(
+            lista=lista,
+            estoque_atual=Decimal("0.000"),
+            estoque_minimo=Decimal("0.000"),
+            quantidade_final=Decimal("1.000"),
+            unidade="UN",
+            preco_compra=Decimal("10.00"),
+            total=Decimal("10.00"),
+        )
+        horario_original = timezone.make_aware(datetime(2026, 7, 15, 9, 0))
+        ListaCompraFornecedor.objects.filter(pk=lista.pk).update(
+            atualizado_em=horario_original,
+        )
+        self.confirmar_envio(
+            lista,
+            chave="teste-envio-antes-alterar-item",
+            confirmado_em=horario_original + timedelta(hours=1),
+        )
+
+        item.quantidade_final = Decimal("2.000")
+        item.total = Decimal("20.00")
+        item.save()
+        lista.refresh_from_db()
+
+        aviso = self.unico_aviso()
+
+        self.assertEqual(aviso["lista_id"], lista.id)
+        self.assertEqual(aviso["estado"], ESTADO_LISTA_ALTERADA_FALTA_REENVIAR)
+        self.assertGreater(
+            lista.atualizado_em,
+            horario_original + timedelta(hours=1),
+        )
+
+    def test_item_removido_depois_do_envio_gera_falta_reenviar(self):
+        fornecedor = self.criar_fornecedor()
+        lista = self.criar_lista(fornecedor)
+        item = ItemListaCompraFornecedor.objects.create(
+            lista=lista,
+            estoque_atual=Decimal("0.000"),
+            estoque_minimo=Decimal("0.000"),
+            quantidade_final=Decimal("1.000"),
+            unidade="UN",
+            preco_compra=Decimal("10.00"),
+            total=Decimal("10.00"),
+        )
+        horario_original = timezone.make_aware(datetime(2026, 7, 15, 9, 0))
+        ListaCompraFornecedor.objects.filter(pk=lista.pk).update(
+            atualizado_em=horario_original,
+        )
+        self.confirmar_envio(
+            lista,
+            chave="teste-envio-antes-remover-item",
+            confirmado_em=horario_original + timedelta(hours=1),
+        )
+
+        item.delete()
+        lista.refresh_from_db()
+
+        aviso = self.unico_aviso()
+
+        self.assertEqual(aviso["lista_id"], lista.id)
+        self.assertEqual(aviso["estado"], ESTADO_LISTA_ALTERADA_FALTA_REENVIAR)
+        self.assertGreater(
+            lista.atualizado_em,
+            horario_original + timedelta(hours=1),
+        )
+
+    def test_lista_alterada_depois_do_envio_gera_falta_reenviar(self):
+        fornecedor = self.criar_fornecedor()
+        lista = self.criar_lista(fornecedor)
+        self.confirmar_envio(lista)
+
+        novo_horario_alteracao = timezone.now() + timedelta(minutes=5)
+        ListaCompraFornecedor.objects.filter(pk=lista.pk).update(
+            total_lista=Decimal("12.00"),
+            atualizado_em=novo_horario_alteracao,
+        )
+        lista.refresh_from_db()
+
+        aviso = self.unico_aviso()
+
+        self.assertEqual(aviso["lista_id"], lista.id)
+        self.assertEqual(aviso["estado"], ESTADO_LISTA_ALTERADA_FALTA_REENVIAR)
+        self.assertEqual(
+            aviso["mensagem"],
+            "Lista alterada depois do envio, falta reenviar ao vendedor.",
+        )
+        self.assertFalse(aviso["tem_envio_confirmado"])
+        self.assertEqual(aviso["acao"]["tipo"], "enviar_ao_vendedor")
+
+    def test_reenvio_depois_da_alteracao_encerra_aviso(self):
+        fornecedor = self.criar_fornecedor(intervalo=14)
+        lista = self.criar_lista(fornecedor)
+        self.confirmar_envio(lista)
+
+        novo_horario_alteracao = timezone.now() + timedelta(minutes=5)
+        ListaCompraFornecedor.objects.filter(pk=lista.pk).update(
+            total_lista=Decimal("12.00"),
+            atualizado_em=novo_horario_alteracao,
+        )
+        lista.refresh_from_db()
+
+        self.confirmar_envio(
+            lista,
+            chave="teste-reenvio-apos-alteracao",
+            confirmado_em=lista.atualizado_em + timedelta(minutes=1),
+        )
+
+        self.assertEqual(obter_avisos_visitas_fornecedores(self.data_base), [])
 
     def test_destinatario_recente_nao_encerra_aviso(self):
         fornecedor = self.criar_fornecedor()

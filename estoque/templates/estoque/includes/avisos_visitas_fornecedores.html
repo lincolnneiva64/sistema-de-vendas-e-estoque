@@ -477,7 +477,7 @@
   }
 }
 
-/* Alerta preventivo de fornecedor: visita amanha, visita hoje ou lista pronta sem envio. */
+/* Alerta preventivo de fornecedor: visita amanha, visita hoje, lista pronta sem envio ou lista alterada sem reenvio. */
 .vendas-pendencias-lateral.tem-alerta .vendas-pendencias-toggle {
   background: linear-gradient(180deg, #ff1f1f 0%, #dc2626 55%, #991b1b 100%) !important;
   border-color: #7f1d1d !important;
@@ -567,21 +567,35 @@
               </div>
             </div>
             <div class="vendas-pendencias-item-rodape">
-              <p class="vendas-pendencias-mensagem">Ultimo dia: prepare e envie a lista hoje.</p>
-              <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">{% if aviso.estado == "lista_preparada_falta_enviar" %}Enviar ao vendedor{% else %}Preparar lista{% endif %}</a>
+              <p class="vendas-pendencias-mensagem">
+                {% if aviso.estado == "lista_alterada_falta_reenviar" %}
+                  Lista alterada depois do envio, reenvie ao vendedor hoje.
+                {% elif aviso.estado == "lista_preparada_falta_enviar" or aviso.estado == "lista_alterada_falta_reenviar" %}
+                  Lista preparada, envie ao vendedor hoje.
+                {% else %}
+                  Ultimo dia: prepare e envie a lista hoje.
+                {% endif %}
+              </p>
+              <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">{% if aviso.estado == "lista_alterada_falta_reenviar" %}Reenviar ao vendedor{% elif aviso.estado == "lista_preparada_falta_enviar" %}Enviar ao vendedor{% else %}Preparar lista{% endif %}</a>
             </div>
           </article>
-        {% elif aviso.estado == "lista_preparada_falta_enviar" %}
+        {% elif aviso.estado == "lista_preparada_falta_enviar" or aviso.estado == "lista_alterada_falta_reenviar" %}
           <article class="vendas-pendencias-item prioridade-alta" data-pendencia-fornecedor>
             <div class="vendas-pendencias-item-corpo">
               <div class="vendas-pendencias-item-topo">
                 <strong class="vendas-pendencias-item-titulo">{{ aviso.fornecedor_nome }}</strong>
-                <span class="vendas-pendencias-rotulo">Falta enviar</span>
+                <span class="vendas-pendencias-rotulo">{% if aviso.estado == "lista_alterada_falta_reenviar" %}Falta reenviar{% else %}Falta enviar{% endif %}</span>
               </div>
             </div>
             <div class="vendas-pendencias-item-rodape">
-              <p class="vendas-pendencias-mensagem">Lista preparada, falta enviar ao vendedor.</p>
-              <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Enviar ao vendedor</a>
+              <p class="vendas-pendencias-mensagem">
+                {% if aviso.estado == "lista_alterada_falta_reenviar" %}
+                  Lista alterada depois do envio, falta reenviar ao vendedor.
+                {% else %}
+                  Lista preparada, falta enviar ao vendedor.
+                {% endif %}
+              </p>
+              <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">{% if aviso.estado == "lista_alterada_falta_reenviar" %}Reenviar ao vendedor{% else %}Enviar ao vendedor{% endif %}</a>
             </div>
           </article>
         {% elif aviso.dias_para_visita == 1 %}
@@ -761,6 +775,8 @@
       || textoItem.includes("HOJE")
       || textoItem.includes("LISTA PREPARADA")
       || textoItem.includes("FALTA ENVIAR")
+      || textoItem.includes("FALTA REENVIAR")
+      || textoItem.includes("FALTA REENVIAR")
     );
   });
 
