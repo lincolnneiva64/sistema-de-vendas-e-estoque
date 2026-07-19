@@ -6302,6 +6302,22 @@ class ComprasListaFornecedorEnvioVendedorTests(TestCase):
             kwargs={"pk": self.lista.pk},
         )
 
+    def test_ver_lista_mostra_envio_interno(self):
+        resposta = self.client.get(f"/compras/listas-fornecedor/{self.lista.pk}/ver/")
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Enviar ao Vendedor")
+        self.assertContains(resposta, "Envio Interno")
+        self.assertContains(resposta, f"/compras/listas-fornecedor/{self.lista.pk}/interno/")
+
+    def test_consulta_listas_mostra_envio_interno(self):
+        resposta = self.client.get("/compras/listas-fornecedor/")
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Ver Lista")
+        self.assertContains(resposta, "Envio Interno")
+        self.assertContains(resposta, f"/compras/listas-fornecedor/{self.lista.pk}/interno/")
+
     def test_tela_interna_lista_fornecedor_abre_sem_confirmar_envio(self):
         status_original = self.lista.status
 

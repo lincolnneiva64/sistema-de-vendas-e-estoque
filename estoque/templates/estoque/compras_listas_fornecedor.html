@@ -1693,6 +1693,7 @@ td.listas-fornecedor-total {
                   <td class="listas-fornecedor-fornecedor-cell">
                     {% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}
                     <a class="listas-fornecedor-btn listas-fornecedor-mobile-abrir" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
+                      <a class="listas-fornecedor-btn listas-fornecedor-mobile-abrir" href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}" target="_blank" rel="noopener">Envio Interno</a>
                   </td>
                   <td>{{ lista.data_lista|date:"d/m/Y" }}</td>
                   <td class="listas-fornecedor-total">R$ {{ lista.total_lista|floatformat:2 }}</td>
@@ -1705,6 +1706,7 @@ td.listas-fornecedor-total {
                   <td>
                     <div class="listas-fornecedor-acoes">
                       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
+                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}" target="_blank" rel="noopener">Envio Interno</a>
                       {% if lista.status != "cancelada" %}<a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar Lista</a>{% endif %}
                       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
                       {% if lista.compra_gerada.status == "rascunho" %}
@@ -1721,6 +1723,7 @@ td.listas-fornecedor-total {
                   <td class="listas-fornecedor-fornecedor-cell">
                     {% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}
                     <a class="listas-fornecedor-btn listas-fornecedor-mobile-abrir" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
+                      <a class="listas-fornecedor-btn listas-fornecedor-mobile-abrir" href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}" target="_blank" rel="noopener">Envio Interno</a>
                   </td>
                   <td>{{ lista.data_lista|date:"d/m/Y" }}</td>
                   <td class="listas-fornecedor-total">R$ {{ lista.total_lista|floatformat:2 }}</td>
@@ -1733,6 +1736,7 @@ td.listas-fornecedor-total {
                   <td>
                     <div class="listas-fornecedor-acoes">
                       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
+                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}" target="_blank" rel="noopener">Envio Interno</a>
                       {% if lista.status != "cancelada" %}<a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar Lista</a>{% endif %}
                       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
                       <a class="listas-fornecedor-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Enviar ao Vendedor</a>
@@ -1791,6 +1795,7 @@ td.listas-fornecedor-total {
 
             <div class="listas-fornecedor-mobile-acoes" aria-label="Acoes da Lista #{{ lista.id }}">
               <a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
+                      <a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}" target="_blank" rel="noopener">Envio Interno</a>
               {% if lista.status != "cancelada" %}<a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar Lista</a>{% endif %}
               <a class="listas-fornecedor-btn listas-fornecedor-mobile-action whatsapp" data-mobile-action-feedback href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Enviar ao Vendedor</a>
               <a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>

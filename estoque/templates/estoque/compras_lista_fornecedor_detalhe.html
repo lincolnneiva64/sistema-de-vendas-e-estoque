@@ -1921,7 +1921,7 @@
       <div class="lista-fornecedor-acoes-normais">
         <a class="lista-fornecedor-btn neutro" href="{% url 'estoque:compras_listas_fornecedor' %}">Consultar Listas</a>
         <a class="lista-fornecedor-btn neutro" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
-        <a class="lista-fornecedor-btn neutro" href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}" target="_blank" rel="noopener">Uso Interno</a>
+        <a class="lista-fornecedor-btn neutro" href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}" target="_blank" rel="noopener">Envio Interno</a>
         {% if lista.status != "cancelada" %}<a class="lista-fornecedor-btn neutro" href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar Lista</a>{% endif %}
         <a class="lista-fornecedor-btn principal" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Enviar ao Vendedor</a>
       </div>

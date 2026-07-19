@@ -313,6 +313,7 @@
       {% endif %}
 
       <a class="lista-ver-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Enviar ao Vendedor</a>
+      <a class="lista-ver-btn" href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}" target="_blank" rel="noopener">Envio Interno</a>
       <a class="lista-ver-btn" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Imprimir</a>
       <button type="button" class="lista-ver-btn" onclick="window.print()">Imprimir tela</button>
     </div>
