@@ -81,6 +81,75 @@
     text-align: center !important;
   }
 }
+
+/* Ajuste compacto da tabela de consulta de listas por fornecedor */
+.listas-fornecedor-table,
+.listas-fornecedor-tabela {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.listas-fornecedor-table th:nth-child(1),
+.listas-fornecedor-table td:nth-child(1),
+.listas-fornecedor-tabela th:nth-child(1),
+.listas-fornecedor-tabela td:nth-child(1) {
+  width: 70px;
+}
+
+.listas-fornecedor-table th:nth-child(2),
+.listas-fornecedor-table td:nth-child(2),
+.listas-fornecedor-tabela th:nth-child(2),
+.listas-fornecedor-tabela td:nth-child(2) {
+  width: 260px;
+}
+
+.listas-fornecedor-table th:nth-child(3),
+.listas-fornecedor-table td:nth-child(3),
+.listas-fornecedor-tabela th:nth-child(3),
+.listas-fornecedor-tabela td:nth-child(3) {
+  width: 145px;
+}
+
+.listas-fornecedor-table th:nth-child(4),
+.listas-fornecedor-table td:nth-child(4),
+.listas-fornecedor-tabela th:nth-child(4),
+.listas-fornecedor-tabela td:nth-child(4) {
+  width: 150px;
+}
+
+.listas-fornecedor-table th:nth-child(5),
+.listas-fornecedor-table td:nth-child(5),
+.listas-fornecedor-tabela th:nth-child(5),
+.listas-fornecedor-tabela td:nth-child(5) {
+  width: 210px;
+}
+
+.listas-fornecedor-table th:nth-child(6),
+.listas-fornecedor-table td:nth-child(6),
+.listas-fornecedor-tabela th:nth-child(6),
+.listas-fornecedor-tabela td:nth-child(6) {
+  width: 520px;
+}
+
+.listas-fornecedor-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
+
+.listas-fornecedor-acoes .listas-fornecedor-btn,
+.listas-fornecedor-acoes button.listas-fornecedor-btn {
+  padding: 8px 10px;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+
+.listas-fornecedor-acoes form {
+  margin: 0;
+}
+
 </style>
 
 
@@ -1692,8 +1761,8 @@ td.listas-fornecedor-total {
                   <td class="listas-fornecedor-numero">#{{ lista.id }}</td>
                   <td class="listas-fornecedor-fornecedor-cell">
                     {% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}
-                    <a class="listas-fornecedor-btn listas-fornecedor-mobile-abrir" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
-                      <a class="listas-fornecedor-btn listas-fornecedor-mobile-abrir" href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}" target="_blank" rel="noopener">Envio Interno</a>
+                    <a class="listas-fornecedor-btn listas-fornecedor-mobile-abrir" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver</a>
+                      <a class="listas-fornecedor-btn listas-fornecedor-mobile-abrir" href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}" target="_blank" rel="noopener">Interno</a>
                   </td>
                   <td>{{ lista.data_lista|date:"d/m/Y" }}</td>
                   <td class="listas-fornecedor-total">R$ {{ lista.total_lista|floatformat:2 }}</td>
@@ -1705,9 +1774,9 @@ td.listas-fornecedor-total {
                   </td>
                   <td>
                     <div class="listas-fornecedor-acoes">
-                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
-                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}" target="_blank" rel="noopener">Envio Interno</a>
-                      {% if lista.status != "cancelada" %}<a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar Lista</a>{% endif %}
+                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver</a>
+                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}" target="_blank" rel="noopener">Interno</a>
+                      {% if lista.status != "cancelada" %}<a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar</a>{% endif %}
                       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
                       {% if lista.compra_gerada.status == "rascunho" %}
                         <a class="listas-fornecedor-btn listas-fornecedor-btn-compra" href="{% url 'estoque:compra_editar' lista.compra_gerada.id %}?continuar_itens=1">Ver Compra</a>
@@ -1722,8 +1791,8 @@ td.listas-fornecedor-total {
                   <td class="listas-fornecedor-numero">#{{ lista.id }}</td>
                   <td class="listas-fornecedor-fornecedor-cell">
                     {% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}
-                    <a class="listas-fornecedor-btn listas-fornecedor-mobile-abrir" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
-                      <a class="listas-fornecedor-btn listas-fornecedor-mobile-abrir" href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}" target="_blank" rel="noopener">Envio Interno</a>
+                    <a class="listas-fornecedor-btn listas-fornecedor-mobile-abrir" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver</a>
+                      <a class="listas-fornecedor-btn listas-fornecedor-mobile-abrir" href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}" target="_blank" rel="noopener">Interno</a>
                   </td>
                   <td>{{ lista.data_lista|date:"d/m/Y" }}</td>
                   <td class="listas-fornecedor-total">R$ {{ lista.total_lista|floatformat:2 }}</td>
@@ -1735,15 +1804,15 @@ td.listas-fornecedor-total {
                   </td>
                   <td>
                     <div class="listas-fornecedor-acoes">
-                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
-                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}" target="_blank" rel="noopener">Envio Interno</a>
-                      {% if lista.status != "cancelada" %}<a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar Lista</a>{% endif %}
+                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver</a>
+                      <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}" target="_blank" rel="noopener">Interno</a>
+                      {% if lista.status != "cancelada" %}<a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar</a>{% endif %}
                       <a class="listas-fornecedor-btn" href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
-                      <a class="listas-fornecedor-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Enviar ao Vendedor</a>
+                      <a class="listas-fornecedor-btn whatsapp" href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Vendedor</a>
                       {% if lista.status != "cancelada" %}
                         <form method="post" action="{% url 'estoque:compras_lista_fornecedor_cancelar' lista.id %}" class="listas-fornecedor-excluir-form" onsubmit="return confirm('Tem certeza que deseja cancelar esta lista? Ela saira da consulta principal, mas ficara no historico de listas canceladas.');">
                           {% csrf_token %}
-                          <button type="submit" class="listas-fornecedor-btn listas-fornecedor-btn-excluir">Cancelar Lista</button>
+                          <button type="submit" class="listas-fornecedor-btn listas-fornecedor-btn-excluir">Cancelar</button>
                         </form>
                       {% endif %}
                     </div>
@@ -1794,10 +1863,10 @@ td.listas-fornecedor-total {
             </dl>
 
             <div class="listas-fornecedor-mobile-acoes" aria-label="Acoes da Lista #{{ lista.id }}">
-              <a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver Lista</a>
-                      <a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}" target="_blank" rel="noopener">Envio Interno</a>
-              {% if lista.status != "cancelada" %}<a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar Lista</a>{% endif %}
-              <a class="listas-fornecedor-btn listas-fornecedor-mobile-action whatsapp" data-mobile-action-feedback href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Enviar ao Vendedor</a>
+              <a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{% url 'estoque:compras_lista_fornecedor_ver' lista.id %}">Ver</a>
+                      <a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}" target="_blank" rel="noopener">Interno</a>
+              {% if lista.status != "cancelada" %}<a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{% url 'estoque:compras_lista_fornecedor_editar' lista.id %}">Editar</a>{% endif %}
+              <a class="listas-fornecedor-btn listas-fornecedor-mobile-action whatsapp" data-mobile-action-feedback href="{% url 'estoque:compras_lista_fornecedor_whatsapp' lista.id %}" target="_blank" rel="noopener">Vendedor</a>
               <a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{% url 'estoque:compras_lista_fornecedor_detalhe' lista.id %}">Conferir</a>
               {% if lista.compra_gerada %}
                 {% if lista.compra_gerada.status == "rascunho" %}
@@ -1808,7 +1877,7 @@ td.listas-fornecedor-total {
               {% elif lista.status != "cancelada" %}
                 <form method="post" action="{% url 'estoque:compras_lista_fornecedor_cancelar' lista.id %}" class="listas-fornecedor-excluir-form" onsubmit="return confirm('Tem certeza que deseja cancelar esta lista? Ela saira da consulta principal, mas ficara no historico de listas canceladas.');">
                   {% csrf_token %}
-                  <button type="submit" class="listas-fornecedor-btn listas-fornecedor-mobile-action listas-fornecedor-btn-excluir" data-mobile-action-feedback>Cancelar Lista</button>
+                  <button type="submit" class="listas-fornecedor-btn listas-fornecedor-mobile-action listas-fornecedor-btn-excluir" data-mobile-action-feedback>Cancelar</button>
                 </form>
               {% endif %}
             </div>
@@ -2810,6 +2879,94 @@ td.listas-fornecedor-total {
     line-height: 1 !important;
     box-shadow: none !important;
   }
+}
+
+
+/* Ajuste final da coluna de acoes na consulta de listas */
+.listas-fornecedor-acoes {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+.listas-fornecedor-acoes .listas-fornecedor-btn,
+.listas-fornecedor-acoes button.listas-fornecedor-btn {
+  padding: 7px 8px !important;
+  font-size: 0.82rem !important;
+  white-space: nowrap !important;
+}
+
+.listas-fornecedor-acoes form {
+  margin: 0 !important;
+}
+
+.listas-fornecedor-lista th,
+.listas-fornecedor-lista td,
+.listas-fornecedor-table th,
+.listas-fornecedor-table td,
+.listas-fornecedor-tabela th,
+.listas-fornecedor-tabela td {
+  padding-left: 10px !important;
+  padding-right: 10px !important;
+}
+
+
+/* Refinamento de largura das colunas da consulta de listas */
+.listas-fornecedor-table,
+.listas-fornecedor-tabela {
+  table-layout: fixed !important;
+}
+
+.listas-fornecedor-table th:nth-child(1),
+.listas-fornecedor-table td:nth-child(1),
+.listas-fornecedor-tabela th:nth-child(1),
+.listas-fornecedor-tabela td:nth-child(1) {
+  width: 70px !important;
+}
+
+.listas-fornecedor-table th:nth-child(2),
+.listas-fornecedor-table td:nth-child(2),
+.listas-fornecedor-tabela th:nth-child(2),
+.listas-fornecedor-tabela td:nth-child(2) {
+  width: 280px !important;
+}
+
+.listas-fornecedor-table th:nth-child(3),
+.listas-fornecedor-table td:nth-child(3),
+.listas-fornecedor-tabela th:nth-child(3),
+.listas-fornecedor-tabela td:nth-child(3) {
+  width: 130px !important;
+}
+
+.listas-fornecedor-table th:nth-child(4),
+.listas-fornecedor-table td:nth-child(4),
+.listas-fornecedor-tabela th:nth-child(4),
+.listas-fornecedor-tabela td:nth-child(4) {
+  width: 145px !important;
+}
+
+.listas-fornecedor-table th:nth-child(5),
+.listas-fornecedor-table td:nth-child(5),
+.listas-fornecedor-tabela th:nth-child(5),
+.listas-fornecedor-tabela td:nth-child(5) {
+  width: 220px !important;
+}
+
+.listas-fornecedor-table th:nth-child(6),
+.listas-fornecedor-table td:nth-child(6),
+.listas-fornecedor-tabela th:nth-child(6),
+.listas-fornecedor-tabela td:nth-child(6) {
+  width: 480px !important;
+}
+
+.listas-fornecedor-table th,
+.listas-fornecedor-table td,
+.listas-fornecedor-tabela th,
+.listas-fornecedor-tabela td {
+  padding-left: 8px !important;
+  padding-right: 8px !important;
 }
 
 </style>

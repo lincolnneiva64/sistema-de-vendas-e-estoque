@@ -6314,8 +6314,12 @@ class ComprasListaFornecedorEnvioVendedorTests(TestCase):
         resposta = self.client.get("/compras/listas-fornecedor/")
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "Ver Lista")
-        self.assertContains(resposta, "Envio Interno")
+        self.assertContains(resposta, "Ver")
+        self.assertContains(resposta, "Interno")
+        self.assertContains(resposta, "Editar")
+        self.assertContains(resposta, "Conferir")
+        self.assertContains(resposta, "Vendedor")
+        self.assertContains(resposta, "Cancelar")
         self.assertContains(resposta, f"/compras/listas-fornecedor/{self.lista.pk}/interno/")
 
     def test_tela_interna_lista_fornecedor_abre_sem_confirmar_envio(self):
