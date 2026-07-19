@@ -6302,6 +6302,43 @@ class ComprasListaFornecedorEnvioVendedorTests(TestCase):
             kwargs={"pk": self.lista.pk},
         )
 
+    def test_tela_interna_lista_fornecedor_abre_sem_confirmar_envio(self):
+        status_original = self.lista.status
+
+        resposta = self.client.get(f"/compras/listas-fornecedor/{self.lista.pk}/interno/")
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Lista interna")
+        self.assertContains(resposta, "Analitica")
+        self.assertContains(resposta, "Sintetica")
+        self.assertContains(resposta, "Abrir imagem")
+        self.assertContains(resposta, "Abrir WhatsApp")
+
+        self.lista.refresh_from_db()
+        self.assertEqual(self.lista.status, status_original)
+
+    def test_imagem_interna_analitica_lista_fornecedor_retorna_png(self):
+        resposta = self.client.get(
+            f"/compras/listas-fornecedor/{self.lista.pk}/interno-imagem/?tipo=analitica"
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta["Content-Type"], "image/png")
+
+        conteudo = b"".join(resposta.streaming_content)
+        self.assertTrue(conteudo.startswith(b"\x89PNG"))
+
+    def test_imagem_interna_sintetica_lista_fornecedor_retorna_png(self):
+        resposta = self.client.get(
+            f"/compras/listas-fornecedor/{self.lista.pk}/interno-imagem/?tipo=sintetica"
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta["Content-Type"], "image/png")
+
+        conteudo = b"".join(resposta.streaming_content)
+        self.assertTrue(conteudo.startswith(b"\x89PNG"))
+
     def test_payload_exige_reenvio_quando_lista_foi_alterada_depois_do_envio(self):
         from datetime import timedelta
 

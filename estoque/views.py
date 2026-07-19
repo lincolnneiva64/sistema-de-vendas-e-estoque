@@ -6013,6 +6013,226 @@ def compras_lista_fornecedor_ver(request, pk):
     )
 
 
+
+def compras_lista_fornecedor_interno(request, pk):
+    lista = get_object_or_404(
+        ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+    itens = lista.itens.all().order_by("produto__nome", "id")
+    funcionarios_internos = (
+        Funcionario.objects
+        .filter(ativo=True)
+        .exclude(telefone_whatsapp__isnull=True)
+        .exclude(telefone_whatsapp="")
+        .order_by("nome", "id")
+    )
+    return render(
+        request,
+        "estoque/compras_lista_fornecedor_interno.html",
+        {
+            "lista": lista,
+            "itens": itens,
+            "funcionarios_internos": funcionarios_internos,
+        },
+    )
+
+
+def _texto_linhas_imagem(draw, texto, fonte, largura_maxima):
+    palavras = str(texto or "").split()
+    linhas = []
+    linha = ""
+
+    for palavra in palavras:
+        teste = f"{linha} {palavra}".strip()
+        caixa = draw.textbbox((0, 0), teste, font=fonte)
+        if caixa[2] - caixa[0] <= largura_maxima:
+            linha = teste
+        else:
+            if linha:
+                linhas.append(linha)
+            linha = palavra
+
+    if linha:
+        linhas.append(linha)
+
+    return linhas or [""]
+
+
+def _desenhar_texto_quebrado(draw, xy, texto, fonte, cor, largura_maxima, altura_linha):
+    x, y = xy
+    linhas = _texto_linhas_imagem(draw, texto, fonte, largura_maxima)
+    for linha in linhas:
+        draw.text((x, y), linha, fill=cor, font=fonte)
+        y += altura_linha
+    return y
+
+
+def _gerar_lista_fornecedor_interno_imagem(lista, tipo="analitica"):
+    tipo = "sintetica" if tipo == "sintetica" else "analitica"
+
+    largura = 1080
+    margem = 42
+    fundo = "#f6f8fc"
+    card = "#ffffff"
+    azul = "#1e3a8a"
+    texto = "#172033"
+    suave = "#64748b"
+    verde = "#166534"
+    laranja = "#9a3412"
+    borda = "#dbe5f0"
+    destaque_suave = "#fff7ed"
+    verde_suave = "#ecfdf5"
+
+    fonte_titulo = _fonte_nota_whatsapp(44, True)
+    fonte_subtitulo = _fonte_nota_whatsapp(27, True)
+    fonte_label = _fonte_nota_whatsapp(20, True)
+    fonte_texto = _fonte_nota_whatsapp(26)
+    fonte_texto_negrito = _fonte_nota_whatsapp(27, True)
+    fonte_numero = _fonte_nota_whatsapp(31, True)
+    fonte_total = _fonte_nota_whatsapp(36, True)
+    fonte_rodape = _fonte_nota_whatsapp(22, True)
+
+    itens = list(lista.itens.select_related("produto").all())
+    altura_card = 262 if tipo == "analitica" else 150
+    altura = 300 + (max(len(itens), 1) * altura_card) + 160
+    imagem = Image.new("RGB", (largura, altura), fundo)
+    draw = ImageDraw.Draw(imagem)
+
+    y = margem
+
+    draw.rounded_rectangle(
+        (margem, y, largura - margem, y + 160),
+        radius=28,
+        fill="#eff6ff",
+        outline="#bfdbfe",
+        width=2,
+    )
+    draw.text((margem + 26, y + 22), f"Lista interna {'analitica' if tipo == 'analitica' else 'sintetica'} #{lista.id}", fill=azul, font=fonte_titulo)
+    fornecedor_nome = lista.fornecedor.nome if lista.fornecedor else "Fornecedor nao informado"
+    draw.text((margem + 26, y + 82), fornecedor_nome, fill=texto, font=fonte_subtitulo)
+    periodo = f"{lista.data_inicio_periodo:%d/%m/%Y} a {lista.data_fim_periodo:%d/%m/%Y}"
+    chegada = lista.data_chegada_prevista.strftime("%d/%m/%Y") if lista.data_chegada_prevista else "-"
+    draw.text((margem + 26, y + 120), f"Periodo: {periodo}  |  Chegada: {chegada}", fill=suave, font=fonte_texto)
+    y += 185
+
+    draw.rounded_rectangle(
+        (margem, y, largura - margem, y + 68),
+        radius=22,
+        fill=card,
+        outline=borda,
+        width=2,
+    )
+    draw.text((margem + 24, y + 18), "Total da lista", fill=suave, font=fonte_label)
+    total = _formatar_moeda(lista.total_lista)
+    total_largura = draw.textbbox((0, 0), total, font=fonte_total)[2]
+    draw.text((largura - margem - 24 - total_largura, y + 12), total, fill=verde, font=fonte_total)
+    y += 92
+
+    if not itens:
+        draw.rounded_rectangle((margem, y, largura - margem, y + 110), radius=24, fill=card, outline=borda, width=2)
+        draw.text((margem + 24, y + 36), "Nenhum item nesta lista.", fill=texto, font=fonte_texto_negrito)
+        y += 130
+
+    for indice, item in enumerate(itens, start=1):
+        produto_nome = item.produto.nome if item.produto else "Produto nao identificado"
+
+        if tipo == "analitica":
+            card_y1 = y
+            card_y2 = y + 232
+            draw.rounded_rectangle((margem, card_y1, largura - margem, card_y2), radius=24, fill=card, outline=borda, width=2)
+
+            nome_y = _desenhar_texto_quebrado(
+                draw,
+                (margem + 24, y + 18),
+                f"{indice}. {produto_nome}",
+                fonte_texto_negrito,
+                texto,
+                largura - (margem * 2) - 48,
+                34,
+            )
+
+            linha_y = max(nome_y + 8, y + 72)
+            col_w = 236
+            gap = 12
+            x1 = margem + 24
+            x2 = x1 + col_w + gap
+            x3 = x2 + col_w + gap
+            x4 = x3 + col_w + gap
+
+            valores = [
+                ("Estoque", f"{_formatar_quantidade(item.estoque_atual)} {item.unidade}", card, texto, x1),
+                ("Minimo", f"{_formatar_quantidade(item.estoque_minimo)} {item.unidade}", card, texto, x2),
+                ("Vendido", f"{_formatar_quantidade(item.vendido_periodo)} {item.unidade}", card, texto, x3),
+                ("Pedidos", f"{_formatar_quantidade(item.pedidos_abertos)} {item.unidade}", card, texto, x4),
+            ]
+
+            for label, valor, fundo_box, cor_valor, x in valores:
+                draw.rounded_rectangle((x, linha_y, x + col_w, linha_y + 58), radius=14, fill="#f8fafc", outline="#e2e8f0", width=1)
+                draw.text((x + 12, linha_y + 8), label, fill=suave, font=fonte_label)
+                draw.text((x + 12, linha_y + 30), valor, fill=cor_valor, font=fonte_texto_negrito)
+
+            linha_y += 74
+
+            destaques = [
+                ("Sugestao", f"{_formatar_quantidade(item.quantidade_sugerida)} {item.unidade}", destaque_suave, laranja, x1),
+                ("Final", f"{_formatar_quantidade(item.quantidade_final)} {item.unidade}", verde_suave, verde, x2),
+                ("Preco", _formatar_moeda(item.preco_unitario), "#f8fafc", texto, x3),
+                ("Total", _formatar_moeda(item.total), verde_suave, verde, x4),
+            ]
+
+            for label, valor, fundo_box, cor_valor, x in destaques:
+                draw.rounded_rectangle((x, linha_y, x + col_w, linha_y + 70), radius=16, fill=fundo_box, outline="#dbeafe", width=1)
+                draw.text((x + 12, linha_y + 9), label, fill=suave, font=fonte_label)
+                draw.text((x + 12, linha_y + 34), valor, fill=cor_valor, font=fonte_numero)
+
+            y += altura_card
+
+        else:
+            draw.rounded_rectangle((margem, y, largura - margem, y + 122), radius=24, fill=card, outline="#bfdbfe", width=2)
+
+            _desenhar_texto_quebrado(
+                draw,
+                (margem + 24, y + 24),
+                f"{indice}. {produto_nome}",
+                fonte_texto_negrito,
+                texto,
+                560,
+                34,
+            )
+
+            qtd = f"{_formatar_quantidade(item.quantidade_final)} {item.unidade}"
+            total_item = _formatar_moeda(item.total)
+
+            draw.rounded_rectangle((largura - margem - 410, y + 32, largura - margem - 190, y + 88), radius=28, fill=verde_suave, outline="#bbf7d0", width=1)
+            qtd_largura = draw.textbbox((0, 0), qtd, font=fonte_numero)[2]
+            draw.text((largura - margem - 300 - (qtd_largura / 2), y + 43), qtd, fill=verde, font=fonte_numero)
+
+            total_largura = draw.textbbox((0, 0), total_item, font=fonte_numero)[2]
+            draw.text((largura - margem - 24 - total_largura, y + 43), total_item, fill=verde, font=fonte_numero)
+
+            y += altura_card
+
+    draw.text((margem, altura - 70), "Uso interno - nao confirma envio ao vendedor.", fill=suave, font=fonte_rodape)
+
+    png = BytesIO()
+    imagem.save(png, format="PNG")
+    png.seek(0)
+    return png
+
+
+def compras_lista_fornecedor_interno_imagem(request, pk):
+    lista = get_object_or_404(
+        ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto"),
+        pk=pk,
+    )
+    tipo = (request.GET.get("tipo") or "analitica").strip().lower()
+    buffer = _gerar_lista_fornecedor_interno_imagem(lista, tipo)
+    response = FileResponse(buffer, content_type="image/png")
+    response["Content-Disposition"] = f'inline; filename="lista-interna-{tipo}-fornecedor-{lista.id}.png"'
+    return response
+
+
 def compras_lista_fornecedor_whatsapp(request, pk):
     lista = get_object_or_404(
         ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("fornecedor__contatos", "itens__produto"),
