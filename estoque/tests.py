@@ -6302,6 +6302,31 @@ class ComprasListaFornecedorEnvioVendedorTests(TestCase):
             kwargs={"pk": self.lista.pk},
         )
 
+    def test_payload_exige_reenvio_quando_lista_foi_alterada_depois_do_envio(self):
+        from datetime import timedelta
+
+        envio, criado = views._confirmar_envio_lista_fornecedor(
+            lista=self.lista,
+            usuario=self.usuario,
+            telefone="91999990000",
+            nome="Vendedor Teste",
+            origem=views.EnvioListaCompraFornecedor.ORIGEM_PERSONALIZADO,
+            chave_idempotencia="teste-payload-reenvio",
+        )
+
+        self.assertTrue(criado)
+
+        ListaCompraFornecedor.objects.filter(pk=self.lista.pk).update(
+            atualizado_em=envio.confirmado_em + timedelta(minutes=1)
+        )
+        self.lista.refresh_from_db()
+
+        payload = views._payload_lista_fornecedor(self.lista)
+
+        self.assertFalse(payload["envioVendedorConfirmado"])
+        self.assertTrue(payload["envioVendedorRequerReenvio"])
+        self.assertIsNone(payload["ultimoEnvioVendedor"])
+
     def test_confirmar_envio_nao_atualiza_atualizado_em_da_lista(self):
         atualizado_em_original = self.lista.atualizado_em
 

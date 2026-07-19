@@ -5090,6 +5090,13 @@ def _payload_destinatarios_lista_fornecedor(fornecedor):
 def _payload_lista_fornecedor(lista):
     destinatarios = _payload_destinatarios_lista_fornecedor(lista.fornecedor)
     ultimo_envio = _ultimo_envio_lista_fornecedor(lista)
+    envio_atualizado = bool(
+        ultimo_envio
+        and (
+            not lista.atualizado_em
+            or ultimo_envio.confirmado_em >= lista.atualizado_em
+        )
+    )
     return {
         "tipo": "sintetica",
         "listaId": lista.pk,
@@ -5116,8 +5123,9 @@ def _payload_lista_fornecedor(lista):
         ],
         "destinatarios": destinatarios["opcoes"],
         "destinatariosRecentes": _destinatarios_recentes_lista_fornecedor(lista.fornecedor),
-        "envioVendedorConfirmado": bool(ultimo_envio),
-        "ultimoEnvioVendedor": _payload_envio_lista_fornecedor(ultimo_envio),
+        "envioVendedorConfirmado": envio_atualizado,
+        "envioVendedorRequerReenvio": bool(ultimo_envio and not envio_atualizado),
+        "ultimoEnvioVendedor": _payload_envio_lista_fornecedor(ultimo_envio) if envio_atualizado else None,
         "temContatoFornecedor": destinatarios["temContatoFornecedor"],
     }
 

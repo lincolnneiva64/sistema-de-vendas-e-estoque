@@ -1152,20 +1152,35 @@
 
     function renderizarConfirmacaoEnvio(payload) {
       const envio = payload?.ultimoEnvioVendedor || null;
-      if (envio) aplicarEnvioConfirmado(envio);
+      if (envio) {
+        aplicarEnvioConfirmado(envio);
+        return;
+      }
+
+      if (payload?.envioVendedorRequerReenvio) {
+        destacarConfirmacaoEnvioPendente(true);
+      }
     }
 
-    function destacarConfirmacaoEnvioPendente() {
+    function destacarConfirmacaoEnvioPendente(reenvio = false) {
       if (!confirmacaoEnvioVendedor || !btnConfirmarEnvioVendedor || btnConfirmarEnvioVendedor.disabled) return;
 
       confirmacaoEnvioVendedor.classList.add("aguardando-confirmacao");
 
       if (confirmacaoEnvioTexto) {
-        confirmacaoEnvioTexto.textContent = "WhatsApp aberto. Depois de enviar, confirme aqui para encerrar o aviso da tela de Vendas.";
+        confirmacaoEnvioTexto.textContent = reenvio
+          ? "WhatsApp aberto. Depois de reenviar, confirme aqui para encerrar o aviso de reenvio da tela de Vendas."
+          : "WhatsApp aberto. Depois de enviar, confirme aqui para encerrar o aviso da tela de Vendas.";
       }
 
+      btnConfirmarEnvioVendedor.textContent = reenvio
+        ? "Confirmar que reenviei ao vendedor"
+        : "Confirmar que enviei ao vendedor";
+
       if (confirmacaoEnvioStatus) {
-        confirmacaoEnvioStatus.textContent = "Clique em Confirmar que enviei ao vendedor apos mandar a lista.";
+        confirmacaoEnvioStatus.textContent = reenvio
+          ? "Clique em Confirmar que reenviei ao vendedor apos reenviar a lista."
+          : "Clique em Confirmar que enviei ao vendedor apos mandar a lista.";
         confirmacaoEnvioStatus.classList.remove("erro", "sucesso");
       }
 
@@ -1513,11 +1528,13 @@
         ? `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`
         : `https://wa.me/?text=${encodeURIComponent(mensagem)}`;
       window.open(url, "_blank", "noopener");
-      destacarConfirmacaoEnvioPendente();
+      destacarConfirmacaoEnvioPendente(Boolean(payloadAtual?.envioVendedorRequerReenvio));
     });
 
     btnImagemLista?.addEventListener("click", function () {
-      setTimeout(destacarConfirmacaoEnvioPendente, 350);
+      setTimeout(function () {
+        destacarConfirmacaoEnvioPendente(Boolean(payloadAtual?.envioVendedorRequerReenvio));
+      }, 350);
     });
 
     btnConfirmarEnvioVendedor?.addEventListener("click", async function () {
@@ -1565,7 +1582,9 @@
         aplicarEnvioConfirmado(resultado.envio);
       } catch (erro) {
         btnConfirmarEnvioVendedor.disabled = false;
-        btnConfirmarEnvioVendedor.textContent = "Confirmar que enviei ao vendedor";
+        btnConfirmarEnvioVendedor.textContent = payloadAtual?.envioVendedorRequerReenvio
+          ? "Confirmar que reenviei ao vendedor"
+          : "Confirmar que enviei ao vendedor";
         if (confirmacaoEnvioStatus) {
           confirmacaoEnvioStatus.textContent = erro.message || "Falha de rede ao confirmar. Tente novamente.";
           confirmacaoEnvioStatus.classList.add("erro");
