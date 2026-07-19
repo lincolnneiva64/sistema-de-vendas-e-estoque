@@ -78,7 +78,7 @@
   color: #111827;
 }
 .vendas-pendencias-lateral.pulsar .vendas-pendencias-toggle {
-  animation: vendasPendenciasPulso 760ms ease-in-out 8;
+  animation: vendasPendenciasPulso 520ms ease-in-out 12;
 }
 @keyframes vendasPendenciasPulso {
   0%, 100% { box-shadow: 0 12px 26px rgba(15, 23, 42, .22), inset 0 1px 0 rgba(255, 255, 255, .16); filter: brightness(1); }
@@ -483,7 +483,7 @@
   border-color: #7f1d1d !important;
   color: #ffffff !important;
   box-shadow: 0 18px 38px rgba(220, 38, 38, 0.55), 0 0 0 5px rgba(239, 68, 68, 0.22) !important;
-  animation: vendasPendenciasCicloAlerta 310s linear infinite !important;
+  animation: vendasPendenciasCicloAlerta 315s linear infinite !important;
   transform-origin: left center;
   will-change: transform, box-shadow, filter;
 }
@@ -504,21 +504,21 @@
   transform: translateX(0) scale(1) !important;
 }
 
-/* Ciclo: aproximadamente 10s pulsando + 5min parado. */
+/* Ciclo: aproximadamente 15s pulsando + 5min parado. */
 @keyframes vendasPendenciasCicloAlerta {
-  0%, 1.1%, 2.2%, 3.2% {
+  0%, 0.9%, 1.8%, 2.7%, 3.6%, 4.5% {
     transform: translateX(0) scale(1);
     filter: brightness(1);
     box-shadow: 0 18px 38px rgba(220, 38, 38, 0.55), 0 0 0 5px rgba(239, 68, 68, 0.22);
   }
 
-  0.55%, 1.65%, 2.75% {
+  0.45%, 1.35%, 2.25%, 3.15%, 4.05% {
     transform: translateX(9px) scale(1.08);
     filter: brightness(1.35) saturate(1.25);
     box-shadow: 0 24px 55px rgba(220, 38, 38, 0.9), 0 0 0 12px rgba(239, 68, 68, 0.34);
   }
 
-  3.3%, 100% {
+  4.8%, 100% {
     transform: translateX(0) scale(1);
     filter: brightness(1);
     box-shadow: 0 18px 38px rgba(220, 38, 38, 0.55), 0 0 0 5px rgba(239, 68, 68, 0.22);
@@ -530,7 +530,7 @@
 <div
   class="vendas-pendencias-lateral prioridade-{{ pendencias_vendas_prioridade }}{% if pendencias_vendas_prioridade == 'critica' or pendencias_vendas_prioridade == 'alta' %} pulsar{% endif %}"
   id="vendasPendenciasLateral"
-  data-pulso-ms="10000"
+  data-pulso-ms="15000"
   data-pausa-pulso-ms="300000"
   aria-label="Pendencias operacionais"
 >
