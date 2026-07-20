@@ -421,7 +421,11 @@
       <select id="funcionarioInternoLista">
         <option value="">Selecionar funcionario com WhatsApp</option>
         {% for funcionario in funcionarios_internos %}
-          <option value="{{ funcionario.telefone_whatsapp_normalizado|default:funcionario.telefone_whatsapp }}">
+          <option
+            value="{{ funcionario.telefone_whatsapp_normalizado|default:funcionario.telefone_whatsapp }}"
+            data-funcionario-id="{{ funcionario.id }}"
+            data-nome="{{ funcionario.nome }}"
+          >
             {{ funcionario.nome }} - {{ funcionario.telefone_whatsapp }}
           </option>
         {% endfor %}
@@ -481,6 +485,8 @@ Total: R$ {{ lista.total_lista|floatformat:2 }}
   const btnImagem = document.getElementById("btnImagemInterna");
   const btnWhatsapp = document.getElementById("btnWhatsappInterno");
   const feedback = document.getElementById("feedbackInternoLista");
+  const registrarEnvioInternoUrl = "{% url 'estoque:compras_lista_fornecedor_registrar_envio_interno' lista.id %}";
+  const csrfToken = "{{ csrf_token }}";
   let modoAtual = "analitica";
 
   function aplicarModo(modo) {
@@ -547,6 +553,54 @@ Total: R$ {{ lista.total_lista|floatformat:2 }}
     }
   }
 
+  function dadosEnvioInternoAtual(numero) {
+    const telefoneAvulso = telefoneInput ? telefoneInput.value.trim() : "";
+    const opcaoFuncionario = funcionarioSelect?.selectedOptions?.[0] || null;
+    const funcionarioId = opcaoFuncionario?.dataset?.funcionarioId || "";
+    const nomeFuncionario = opcaoFuncionario?.dataset?.nome || "";
+    let origem = "sem_numero";
+    let nome = "";
+
+    if (telefoneAvulso) {
+      origem = "avulso";
+    } else if (funcionarioId) {
+      origem = "funcionario";
+      nome = nomeFuncionario;
+    }
+
+    return {
+      versao: modoAtual === "sintetica" ? "sintetica" : "analitica",
+      origem: origem,
+      nome: nome,
+      telefone: numero || "",
+      funcionario_id: funcionarioId || ""
+    };
+  }
+
+  function registrarEnvioInterno(numero) {
+    if (!registrarEnvioInternoUrl) return;
+
+    fetch(registrarEnvioInternoUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrfToken
+      },
+      body: JSON.stringify(dadosEnvioInternoAtual(numero))
+    }).then(function(resposta) {
+      if (!resposta.ok) {
+        throw new Error("Falha ao registrar envio interno.");
+      }
+      return resposta.json();
+    }).then(function(resultado) {
+      if (resultado?.ok) {
+        mostrarFeedback("Envio interno registrado.");
+      }
+    }).catch(function() {
+      mostrarFeedback("WhatsApp aberto, mas o registro interno nao foi confirmado.");
+    });
+  }
+
   function abrirWhatsappAtual() {
     const mensagem = "Segue a lista interna " + (modoAtual === "sintetica" ? "sintetica" : "analitica") + " em imagem.";
     const telefoneAvulso = telefoneInput ? telefoneInput.value : "";
@@ -557,6 +611,7 @@ Total: R$ {{ lista.total_lista|floatformat:2 }}
       : "https://web.whatsapp.com/send";
 
     const url = base + "&text=" + encodeURIComponent(mensagem);
+    registrarEnvioInterno(numero);
     window.open(url, "_blank", "noopener");
   }
 

@@ -1506,6 +1506,79 @@ class ItemCompra(models.Model):
         return f"{nome_produto} - Compra #{self.compra_id}"
 
 
+
+class EnvioInternoListaCompraFornecedor(models.Model):
+    VERSAO_ANALITICA = "analitica"
+    VERSAO_SINTETICA = "sintetica"
+    VERSAO_CHOICES = [
+        (VERSAO_ANALITICA, "Analitica"),
+        (VERSAO_SINTETICA, "Sintetica"),
+    ]
+
+    ORIGEM_FUNCIONARIO = "funcionario"
+    ORIGEM_AVULSO = "avulso"
+    ORIGEM_SEM_NUMERO = "sem_numero"
+    ORIGEM_CHOICES = [
+        (ORIGEM_FUNCIONARIO, "Funcionario"),
+        (ORIGEM_AVULSO, "Numero avulso"),
+        (ORIGEM_SEM_NUMERO, "Sem numero"),
+    ]
+
+    lista = models.ForeignKey(
+        "ListaCompraFornecedor",
+        on_delete=models.CASCADE,
+        related_name="envios_internos",
+    )
+    fornecedor = models.ForeignKey(
+        Fornecedor,
+        on_delete=models.PROTECT,
+        related_name="envios_internos_listas_compra",
+    )
+    funcionario = models.ForeignKey(
+        "Funcionario",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="envios_internos_listas_compra",
+    )
+    versao = models.CharField(
+        max_length=20,
+        choices=VERSAO_CHOICES,
+        default=VERSAO_ANALITICA,
+    )
+    nome_destinatario = models.CharField(max_length=140, blank=True, default="")
+    telefone_destinatario = models.CharField(max_length=20, blank=True, default="")
+    origem_destinatario = models.CharField(
+        max_length=20,
+        choices=ORIGEM_CHOICES,
+        default=ORIGEM_SEM_NUMERO,
+    )
+    registrado_em = models.DateTimeField(db_index=True)
+    registrado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="envios_internos_listas_compra_registrados",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-registrado_em", "-id"]
+        indexes = [
+            models.Index(fields=["lista", "-registrado_em"], name="idx_envio_int_lista_em"),
+            models.Index(fields=["fornecedor", "-registrado_em"], name="idx_envio_int_forn_em"),
+        ]
+
+    @staticmethod
+    def normalizar_telefone(valor):
+        return EnvioListaCompraFornecedor.normalizar_telefone(valor)
+
+    def __str__(self):
+        destino = self.nome_destinatario or self.telefone_destinatario or "Destino interno"
+        return f"Envio interno Lista #{self.lista_id} - {destino}"
+
+
 class ListaCompraFornecedor(models.Model):
     STATUS_ABERTA = "aberta"
     STATUS_ENVIADA = "enviada"

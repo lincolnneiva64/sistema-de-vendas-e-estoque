@@ -22,7 +22,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
 from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_ALTERADA_FALTA_REENVIAR, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
@@ -6336,6 +6336,87 @@ class ComprasListaFornecedorEnvioVendedorTests(TestCase):
 
         self.lista.refresh_from_db()
         self.assertEqual(self.lista.status, status_original)
+
+    def _url_registrar_envio_interno(self, lista=None):
+        return reverse(
+            "estoque:compras_lista_fornecedor_registrar_envio_interno",
+            kwargs={"pk": (lista or self.lista).pk},
+        )
+
+    def _post_registrar_envio_interno(self, dados=None, lista=None, client=None):
+        cliente = client or self.client
+        return cliente.post(
+            self._url_registrar_envio_interno(lista),
+            data=json.dumps(dados or {}),
+            content_type="application/json",
+            secure=True,
+        )
+
+    def test_registrar_envio_interno_com_funcionario_nao_confirma_envio_vendedor(self):
+        funcionario = Funcionario.objects.create(
+            nome="Lincoln",
+            telefone_whatsapp="91955556666",
+            ativo=True,
+        )
+        status_original = self.lista.status
+
+        resposta = self._post_registrar_envio_interno({
+            "versao": "sintetica",
+            "origem": "funcionario",
+            "funcionario_id": funcionario.id,
+        })
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["ok"])
+
+        envio = EnvioInternoListaCompraFornecedor.objects.get(lista=self.lista)
+        self.assertEqual(envio.fornecedor, self.fornecedor)
+        self.assertEqual(envio.funcionario, funcionario)
+        self.assertEqual(envio.versao, EnvioInternoListaCompraFornecedor.VERSAO_SINTETICA)
+        self.assertEqual(envio.origem_destinatario, EnvioInternoListaCompraFornecedor.ORIGEM_FUNCIONARIO)
+        self.assertEqual(envio.nome_destinatario, "Lincoln")
+        self.assertTrue(envio.telefone_destinatario.endswith("91955556666"))
+        self.assertEqual(envio.registrado_por, self.usuario)
+
+        self.lista.refresh_from_db()
+        self.assertEqual(self.lista.status, status_original)
+        self.assertFalse(EnvioListaCompraFornecedor.objects.filter(lista=self.lista).exists())
+
+    def test_registrar_envio_interno_com_numero_avulso_nao_muda_status_da_lista(self):
+        status_original = self.lista.status
+
+        resposta = self._post_registrar_envio_interno({
+            "versao": "analitica",
+            "origem": "avulso",
+            "nome": "Roseli",
+            "telefone": "+55 (91) 98888-7777",
+        })
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["ok"])
+
+        envio = EnvioInternoListaCompraFornecedor.objects.get(lista=self.lista)
+        self.assertEqual(envio.versao, EnvioInternoListaCompraFornecedor.VERSAO_ANALITICA)
+        self.assertEqual(envio.origem_destinatario, EnvioInternoListaCompraFornecedor.ORIGEM_AVULSO)
+        self.assertEqual(envio.nome_destinatario, "Roseli")
+        self.assertTrue(envio.telefone_destinatario.endswith("91988887777"))
+
+        self.lista.refresh_from_db()
+        self.assertEqual(self.lista.status, status_original)
+        self.assertFalse(EnvioListaCompraFornecedor.objects.filter(lista=self.lista).exists())
+
+    def test_registrar_envio_interno_exige_autenticacao(self):
+        self.client.logout()
+
+        resposta = self._post_registrar_envio_interno({
+            "versao": "analitica",
+            "origem": "avulso",
+            "telefone": "91988887777",
+        })
+
+        self.assertEqual(resposta.status_code, 403)
+        self.assertFalse(EnvioInternoListaCompraFornecedor.objects.filter(lista=self.lista).exists())
+        self.assertFalse(EnvioListaCompraFornecedor.objects.filter(lista=self.lista).exists())
 
     def test_imagem_interna_analitica_lista_fornecedor_retorna_png(self):
         resposta = self.client.get(

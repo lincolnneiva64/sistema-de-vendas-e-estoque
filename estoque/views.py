@@ -29,7 +29,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
     contato_tem_telefone_no_post,
@@ -6219,6 +6219,76 @@ def _gerar_lista_fornecedor_interno_imagem(lista, tipo="analitica"):
     imagem.save(png, format="PNG")
     png.seek(0)
     return png
+
+
+
+@require_POST
+def compras_lista_fornecedor_registrar_envio_interno(request, pk):
+    if not request.user.is_authenticated:
+        return JsonResponse({"ok": False, "erro": "Autenticacao necessaria."}, status=403)
+
+    lista = get_object_or_404(
+        ListaCompraFornecedor.objects.select_related("fornecedor"),
+        pk=pk,
+    )
+
+    if not lista.fornecedor_id:
+        return JsonResponse({"ok": False, "erro": "Lista sem fornecedor."}, status=400)
+
+    try:
+        dados = json.loads(request.body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return JsonResponse({"ok": False, "erro": "Dados invalidos."}, status=400)
+
+    versao = str(dados.get("versao") or "").strip().lower()
+    if versao not in {
+        EnvioInternoListaCompraFornecedor.VERSAO_ANALITICA,
+        EnvioInternoListaCompraFornecedor.VERSAO_SINTETICA,
+    }:
+        versao = EnvioInternoListaCompraFornecedor.VERSAO_ANALITICA
+
+    origem = str(dados.get("origem") or "").strip().lower()
+    origem_valida = dict(EnvioInternoListaCompraFornecedor.ORIGEM_CHOICES)
+    if origem not in origem_valida:
+        origem = EnvioInternoListaCompraFornecedor.ORIGEM_SEM_NUMERO
+
+    nome = str(dados.get("nome") or "").strip()[:140]
+    telefone = EnvioInternoListaCompraFornecedor.normalizar_telefone(
+        dados.get("telefone") or dados.get("numero") or ""
+    )
+
+    funcionario = None
+    funcionario_id = dados.get("funcionario_id") or dados.get("funcionarioId") or ""
+    if funcionario_id:
+        funcionario = Funcionario.objects.filter(pk=funcionario_id, ativo=True).first()
+        if funcionario and not nome:
+            nome = funcionario.nome
+        if funcionario and not telefone:
+            telefone = funcionario.telefone_whatsapp_normalizado or funcionario.telefone_whatsapp or ""
+
+    if telefone and origem == EnvioInternoListaCompraFornecedor.ORIGEM_SEM_NUMERO:
+        origem = EnvioInternoListaCompraFornecedor.ORIGEM_AVULSO
+
+    envio = EnvioInternoListaCompraFornecedor.objects.create(
+        lista=lista,
+        fornecedor=lista.fornecedor,
+        funcionario=funcionario,
+        versao=versao,
+        nome_destinatario=nome,
+        telefone_destinatario=telefone,
+        origem_destinatario=origem,
+        registrado_em=timezone.now(),
+        registrado_por=request.user,
+    )
+
+    return JsonResponse({
+        "ok": True,
+        "envioId": envio.id,
+        "registradoEm": envio.registrado_em.isoformat(),
+        "versao": envio.versao,
+        "origem": envio.origem_destinatario,
+    })
+
 
 
 def compras_lista_fornecedor_interno_imagem(request, pk):
@@ -16848,5 +16918,3 @@ def contas_pagar(request):
             "status_choices": ContaPagar.STATUS_CHOICES,
         },
     )
-
-
