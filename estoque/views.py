@@ -5996,6 +5996,11 @@ def compras_lista_fornecedor_ver(request, pk):
         pk=pk,
     )
     compra_gerada = _compra_existente_lista_fornecedor(lista)
+    ultimo_envio_interno = (
+        lista.envios_internos
+        .select_related("funcionario", "registrado_por")
+        .first()
+    )
     itens_lista = list(lista.itens.all())
     historico_compras_produtos = _ultimas_compras_produtos_para_lista_fornecedor(
         [item.produto_id for item in itens_lista if item.produto_id]
@@ -6009,6 +6014,7 @@ def compras_lista_fornecedor_ver(request, pk):
             "lista": lista,
             "itens_lista": itens_lista,
             "compra_gerada": compra_gerada,
+            "ultimo_envio_interno": ultimo_envio_interno,
         },
     )
 

@@ -201,6 +201,44 @@
     font-size: 1rem;
   }
 
+  .lista-ver-envio-interno-resumo {
+    border-color: #bfdbfe;
+    background: linear-gradient(135deg, #eff6ff, #f8fbff);
+  }
+
+  .lista-ver-envio-interno-resumo h2 {
+    margin: 0 0 10px;
+    color: #164173;
+    font-size: 1rem;
+    font-weight: 950;
+  }
+
+  .lista-ver-envio-interno-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    gap: 8px;
+  }
+
+  .lista-ver-envio-interno-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: 6px 12px;
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    background: #fff;
+    color: #164173;
+    font-weight: 950;
+    text-decoration: none;
+  }
+
+  @media (max-width: 720px) {
+    .lista-ver-envio-interno-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
   .lista-ver-table-wrap {
     width: 100%;
     overflow-x: auto;
@@ -338,6 +376,43 @@
         <strong>{{ lista.get_status_display }}</strong>
       </div>
     </div>
+  </section>
+
+  <section class="lista-ver-card lista-ver-envio-interno-resumo">
+    <h2>Envio interno</h2>
+    {% if ultimo_envio_interno %}
+      <div class="lista-ver-envio-interno-grid">
+        <div class="lista-ver-info">
+          <small>Ultimo envio</small>
+          <strong>{{ ultimo_envio_interno.registrado_em|date:"d/m/Y H:i" }}</strong>
+        </div>
+        <div class="lista-ver-info">
+          <small>Destino</small>
+          <strong>{{ ultimo_envio_interno.nome_destinatario|default:"Sem nome" }}</strong>
+        </div>
+        <div class="lista-ver-info">
+          <small>Versao</small>
+          <strong>{{ ultimo_envio_interno.get_versao_display }}</strong>
+        </div>
+        <div class="lista-ver-info">
+          <small>Registrado por</small>
+          <strong>{{ ultimo_envio_interno.registrado_por|default:"Usuario nao identificado" }}</strong>
+        </div>
+        <a class="lista-ver-envio-interno-link" href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}">
+          Ver historico completo
+        </a>
+      </div>
+    {% else %}
+      <div class="lista-ver-envio-interno-grid">
+        <div class="lista-ver-info">
+          <small>Status interno</small>
+          <strong>Nenhum envio interno registrado</strong>
+        </div>
+        <a class="lista-ver-envio-interno-link" href="{% url 'estoque:compras_lista_fornecedor_interno' lista.id %}">
+          Abrir envio interno
+        </a>
+      </div>
+    {% endif %}
   </section>
 
   <section class="lista-ver-card">
