@@ -6352,6 +6352,27 @@ class ComprasListaFornecedorEnvioVendedorTests(TestCase):
             secure=True,
         )
 
+    def test_tela_interna_lista_fornecedor_mostra_historico_de_envios_internos(self):
+        EnvioInternoListaCompraFornecedor.objects.create(
+            lista=self.lista,
+            fornecedor=self.fornecedor,
+            versao=EnvioInternoListaCompraFornecedor.VERSAO_ANALITICA,
+            nome_destinatario="Lincoln",
+            telefone_destinatario="5591999999999",
+            origem_destinatario=EnvioInternoListaCompraFornecedor.ORIGEM_FUNCIONARIO,
+            registrado_em=timezone.now(),
+            registrado_por=self.usuario,
+        )
+
+        resposta = self.client.get(f"/compras/listas-fornecedor/{self.lista.pk}/interno/")
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Historico de envios internos")
+        self.assertContains(resposta, "Lincoln")
+        self.assertContains(resposta, "5591999999999")
+        self.assertContains(resposta, "Analitica")
+        self.assertContains(resposta, self.usuario.username)
+
     def test_registrar_envio_interno_com_funcionario_nao_confirma_envio_vendedor(self):
         funcionario = Funcionario.objects.create(
             nome="Lincoln",

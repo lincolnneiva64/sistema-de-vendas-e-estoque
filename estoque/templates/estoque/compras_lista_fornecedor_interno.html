@@ -288,6 +288,40 @@
     display: block;
   }
 
+  .lista-interna-historico {
+    margin-top: 18px;
+  }
+
+  .lista-interna-historico-lista {
+    display: grid;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .lista-interna-historico-item {
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 12px;
+    background: #f9fafb;
+  }
+
+  .lista-interna-historico-item strong {
+    display: block;
+    color: #111827;
+    margin-bottom: 4px;
+  }
+
+  .lista-interna-historico-item span {
+    display: block;
+    color: #4b5563;
+    font-size: 0.92rem;
+  }
+
+  .lista-interna-historico-vazio {
+    margin-top: 10px;
+    color: #6b7280;
+  }
+
   textarea.lista-interna-texto {
     position: fixed;
     left: -9999px;
@@ -440,6 +474,29 @@
       <button type="button" class="lista-interna-btn principal" id="btnWhatsappInterno">Abrir WhatsApp</button>
     </div>
     <div class="lista-interna-feedback" id="feedbackInternoLista">Texto copiado.</div>
+  </section>
+
+  <section class="lista-interna-card lista-interna-historico">
+    <h2>Historico de envios internos</h2>
+    {% if envios_internos %}
+      <div class="lista-interna-historico-lista">
+        {% for envio in envios_internos %}
+          <div class="lista-interna-historico-item">
+            <strong>
+              {{ envio.registrado_em|date:"d/m/Y H:i" }}
+              -
+              {{ envio.get_versao_display }}
+            </strong>
+            <span>Destino: {{ envio.nome_destinatario|default:"Sem nome informado" }}</span>
+            <span>Telefone: {{ envio.telefone_destinatario|default:"Sem telefone informado" }}</span>
+            <span>Origem: {{ envio.get_origem_destinatario_display }}</span>
+            <span>Registrado por: {{ envio.registrado_por|default:"Usuario nao identificado" }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="lista-interna-historico-vazio">Nenhum envio interno registrado para esta lista.</p>
+    {% endif %}
   </section>
 
   <textarea class="lista-interna-texto" id="textoAnalitico" readonly>

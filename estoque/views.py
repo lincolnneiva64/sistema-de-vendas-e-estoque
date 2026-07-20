@@ -6027,6 +6027,11 @@ def compras_lista_fornecedor_interno(request, pk):
         .exclude(telefone_whatsapp="")
         .order_by("nome", "id")
     )
+    envios_internos = (
+        lista.envios_internos
+        .select_related("funcionario", "registrado_por")
+        .all()[:10]
+    )
     return render(
         request,
         "estoque/compras_lista_fornecedor_interno.html",
@@ -6034,6 +6039,7 @@ def compras_lista_fornecedor_interno(request, pk):
             "lista": lista,
             "itens": itens,
             "funcionarios_internos": funcionarios_internos,
+            "envios_internos": envios_internos,
         },
     )
 
