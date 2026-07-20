@@ -1968,9 +1968,16 @@
       <span>Rascunho salvo e protegido.</span>
       <button type="button" class="sugestao-btn sugestao-btn-secondary" id="btnContinuarEditandoRascunhoLista">Continuar editando</button>
     </div>
-    <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnVisualizarAnalitica">Previa Analitica</button>
-    <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnVisualizarSintetica">Previa Sintetica</button>
-    <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnImagemWhatsapp" hidden>Imagem / WhatsApp</button>
+    {% if modo_edicao_lista and lista_edicao %}
+      <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnVisualizarAnalitica" hidden>Previa Analitica</button>
+      <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnVisualizarSintetica" hidden>Previa Sintetica</button>
+      <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnImagemWhatsapp" hidden>Imagem / WhatsApp</button>
+      <a class="sugestao-btn sugestao-btn-primary" href="{% url 'estoque:compras_lista_fornecedor_interno' lista_edicao.id %}" target="_blank" rel="noopener">Interno</a>
+    {% else %}
+      <button type="button" class="sugestao-btn sugestao-btn-primary" id="btnVisualizarAnalitica">Interno</button>
+      <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnVisualizarSintetica" hidden>Previa Sintetica</button>
+      <button type="button" class="sugestao-btn sugestao-btn-visualizacao" id="btnImagemWhatsapp" hidden>Imagem / WhatsApp</button>
+    {% endif %}
     <button type="button" class="sugestao-btn sugestao-btn-primary" id="btnGravarListaFornecedor">{% if modo_edicao_lista %}Salvar alterações{% else %}Gravar lista{% endif %}</button>
     {% if not modo_edicao_lista or can_gerar_compra_lista %}
       <button type="button" class="sugestao-btn sugestao-btn-primary" id="btnGravarGerarCompraFornecedor">{% if modo_edicao_lista %}Salvar alterações e Gerar Compra{% else %}Gravar e Gerar Compra{% endif %}</button>
@@ -4474,6 +4481,9 @@
       }
     });
   <\/script>
+
+
+
 </body>
 </html>`;
 
