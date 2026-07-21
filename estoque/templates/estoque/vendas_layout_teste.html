@@ -2144,7 +2144,7 @@ td:first-child {
                 <div class="atalhos-venda-lista">
             <a href="{% url 'estoque:pedidos' %}" class="acao-venda-btn secundaria">Consultar Pedidos</a>
         <a href="/compras/" class="acao-venda-btn secundaria">Consultar Compras</a>
-            <a href="{% url 'estoque:contas_receber' %}" id="btnContasReceberVenda" class="acao-venda-btn secundaria">Receber do cliente</a>
+            <a href="{% url 'estoque:contas_receber' %}" id="btnContasReceberVenda" class="acao-venda-btn secundaria">Receber contas do cliente</a>
             <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="acao-venda-btn secundaria {% if tem_pix_em_atencao %}pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
             <a href="{% url 'estoque:entregas_dia' %}" class="acao-venda-btn secundaria">Ir para Entregas</a>
             <a href="{% url 'estoque:painel_financeiro' %}" class="acao-venda-btn secundaria">Central Financeira</a>
@@ -2805,7 +2805,7 @@ function atualizarResumoFinanceiroCliente(cliente) {
         clienteResumoFinanceiro.appendChild(linhaCredito);
     }
     if (abertasQtd > 0) {
-        const linhaAbertas = criarLinhaFinanceira("aberto", "Contas em aberto: " + abertasQtd + " / " + formatarMoedaCliente(abertasTotal), linkReceberCliente, "Receber do cliente");
+        const linhaAbertas = criarLinhaFinanceira("aberto", "Contas em aberto: " + abertasQtd + " / " + formatarMoedaCliente(abertasTotal), linkReceberCliente, "Receber contas do cliente");
         linhaAbertas.clientePreview = cliente;
         clienteResumoFinanceiro.appendChild(linhaAbertas);
     }

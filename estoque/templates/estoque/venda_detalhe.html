@@ -1628,7 +1628,7 @@
                         {% endif %}
                         <a href="{% url 'estoque:venda_cancelar' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}" class="cancelar-venda-acao">Cancelar venda</a>
                         {% if venda.cliente %}
-                        <a href="{% url 'estoque:receber_cliente' venda.cliente.id %}?next={{ request.get_full_path|urlencode }}" class="whatsapp-acao">Receber deste cliente</a>
+                        <a href="{% url 'estoque:receber_cliente' venda.cliente.id %}?next={{ request.get_full_path|urlencode }}" class="whatsapp-acao">Receber contas do cliente</a>
                         {% endif %}
                         {% endif %}
                         <button type="button" id="btnImprimir">Imprimir</button>

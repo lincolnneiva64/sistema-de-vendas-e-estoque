@@ -771,7 +771,7 @@
                       {% if not venda.cancelada %}
                       <button type="button" class="vendas-consulta-action-btn edit js-editar-venda">Editar</button>
                       {% if venda.cliente_id %}
-                      <a class="vendas-consulta-action-link whatsapp" href="{% url 'estoque:receber_cliente' venda.cliente_id %}?next={{ request.get_full_path|urlencode }}">Receber cliente</a>
+                      <a class="vendas-consulta-action-link whatsapp" href="{% url 'estoque:receber_cliente' venda.cliente_id %}?next={{ request.get_full_path|urlencode }}">Receber contas do cliente</a>
                       {% endif %}
                       <a class="vendas-consulta-action-link whatsapp" href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}">PDF para WhatsApp</a>
                       <button type="button" class="vendas-consulta-action-btn whatsapp-pendente js-whatsapp-pendente {% if venda.whatsapp_status == 'aberto' %}visivel{% endif %}" data-venda-id="{{ venda.id }}" data-whatsapp-status="{{ venda.whatsapp_status }}" data-confirmar-url="{% url 'estoque:confirmar_whatsapp' venda.id %}">Confirmar WhatsApp</button>
