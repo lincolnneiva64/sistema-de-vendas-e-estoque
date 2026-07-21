@@ -1627,6 +1627,9 @@
                         <a href="{% url 'estoque:venda_adicionar_produto_item' venda.id %}{% if itens_adicionados_param or retorno_querystring %}?{% if itens_adicionados_param %}itens_adicionados={{ itens_adicionados_param }}{% if retorno_querystring %}&{% endif %}{% endif %}{% if retorno_querystring %}{{ retorno_querystring }}{% endif %}{% endif %}" class="editar-nota-acao">Adicionar produto</a>
                         {% endif %}
                         <a href="{% url 'estoque:venda_cancelar' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}" class="cancelar-venda-acao">Cancelar venda</a>
+                        {% if venda.cliente %}
+                        <a href="{% url 'estoque:receber_cliente' venda.cliente.id %}?next={{ request.get_full_path|urlencode }}" class="whatsapp-acao">Receber deste cliente</a>
+                        {% endif %}
                         {% endif %}
                         <button type="button" id="btnImprimir">Imprimir</button>
                         {% if not venda.cancelada %}
