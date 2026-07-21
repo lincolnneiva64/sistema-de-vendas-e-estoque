@@ -11219,8 +11219,11 @@ def central_pix_analisar_comprovante(request):
 @ensure_csrf_cookie
 def receber_cliente_escolher(request):
     cliente_id = request.GET.get("cliente_id", "").strip()
+    rota_filtro = request.GET.get("rota", "").strip()
     retorno_url = _url_retorno_segura(request) or reverse("estoque:home")
     retorno_recebimento_url = reverse("estoque:receber_cliente_escolher")
+    if rota_filtro:
+        retorno_recebimento_url = f"{retorno_recebimento_url}?{urlencode({'rota': rota_filtro})}"
 
     if cliente_id.isdigit():
         cliente = Cliente.objects.filter(pk=cliente_id, ativo=True).first()
@@ -11230,18 +11233,43 @@ def receber_cliente_escolher(request):
         messages.warning(request, "Cliente nao encontrado ou inativo.")
 
     hoje = timezone.localdate()
-    contas_abertas_resumo = ContaReceber.objects.filter(
+    contas_abertas_base = ContaReceber.objects.filter(
         status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
         valor_em_aberto__gt=0,
     )
+    rotas_opcoes = list(
+        contas_abertas_base.exclude(cliente__bairro__isnull=True)
+        .exclude(cliente__bairro="")
+        .values_list("cliente__bairro", flat=True)
+        .distinct()
+        .order_by("cliente__bairro")
+    )
+
+    contas_abertas_resumo = contas_abertas_base
+    if rota_filtro:
+        contas_abertas_resumo = contas_abertas_resumo.filter(cliente__bairro__iexact=rota_filtro)
+
     resumo_receber = {
         "clientes_devendo": contas_abertas_resumo.values("cliente_id").distinct().count(),
         "contas_abertas": contas_abertas_resumo.count(),
         "total_a_receber": contas_abertas_resumo.aggregate(total=Sum("valor_em_aberto")).get("total") or Decimal("0.00"),
+        "contas_vencidas": contas_abertas_resumo.filter(data_vencimento__lt=hoje).count(),
         "total_vencido": contas_abertas_resumo.filter(
             data_vencimento__lt=hoje
         ).aggregate(total=Sum("valor_em_aberto")).get("total") or Decimal("0.00"),
     }
+
+    clientes_devedores_rota = list(
+        contas_abertas_resumo.exclude(cliente__isnull=True)
+        .values("cliente_id", "cliente__nome", "cliente__bairro")
+        .annotate(
+            contas_abertas=Count("id"),
+            total_em_aberto=Sum("valor_em_aberto"),
+            contas_vencidas=Count("id", filter=Q(data_vencimento__lt=hoje)),
+            total_vencido=Sum("valor_em_aberto", filter=Q(data_vencimento__lt=hoje)),
+        )
+        .order_by("cliente__nome")
+    )
 
     formas_pagamento = (
         "Dinheiro",
@@ -11264,6 +11292,10 @@ def receber_cliente_escolher(request):
         {
             "cliente": None,
             "resumo_receber": resumo_receber,
+            "rota_filtro": rota_filtro,
+            "rotas_opcoes": rotas_opcoes,
+            "clientes_devedores_rota": clientes_devedores_rota,
+            "retorno_recebimento_url": retorno_recebimento_url,
             "contas": [],
             "contas_preview": [],
             "total_contas": 0,

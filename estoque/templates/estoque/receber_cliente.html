@@ -800,6 +800,93 @@
   box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.18) !important;
 }
 
+
+  .rc-rota-receber-card {
+    background: #ffffff;
+    border: 1px solid #d7e1ee;
+    border-radius: 16px;
+    padding: 14px;
+    margin: 0 0 14px;
+    box-shadow: 0 10px 24px rgba(15, 35, 69, 0.05);
+  }
+  .rc-rota-form {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) auto;
+    gap: 10px;
+    align-items: end;
+    margin-bottom: 12px;
+  }
+  .rc-rota-field label {
+    display: block;
+    margin-bottom: 6px;
+    color: #526782;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .rc-rota-field select {
+    width: 100%;
+    height: 48px;
+    border-radius: 12px;
+    border: 1.5px solid #c9d7e8;
+    background: #ffffff;
+    color: #111827;
+    font-size: 16px;
+    font-weight: 800;
+    padding: 0 12px;
+    outline: none;
+  }
+  .rc-rota-clientes {
+    display: grid;
+    gap: 8px;
+  }
+  .rc-rota-cliente-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: center;
+    padding: 11px 12px;
+    border-radius: 13px;
+    border: 1px solid #dbeafe;
+    background: #f8fbff;
+    text-decoration: none;
+    color: #172033;
+  }
+  .rc-rota-cliente-nome {
+    display: block;
+    font-size: 15px;
+    font-weight: 950;
+  }
+  .rc-rota-cliente-meta {
+    display: block;
+    margin-top: 3px;
+    color: #526782;
+    font-size: 13px;
+    font-weight: 800;
+  }
+  .rc-rota-cliente-total {
+    color: #166534;
+    font-size: 15px;
+    font-weight: 950;
+    white-space: nowrap;
+  }
+  .rc-rota-empty {
+    padding: 12px;
+    border-radius: 12px;
+    background: #fff7ed;
+    color: #9a3412;
+    font-weight: 850;
+  }
+  @media (max-width: 700px) {
+    .rc-rota-form {
+      grid-template-columns: 1fr;
+    }
+    .rc-rota-cliente-item {
+      grid-template-columns: 1fr;
+    }
+  }
+
 </style>
 
 <div class="receber-cliente-page {% if feedback_recebimento %}recebimento-confirmado{% endif %}">
@@ -833,6 +920,44 @@
         <div class="rc-resumo-geral-card">
           <span class="rc-resumo-geral-label">Total vencido</span>
           <span class="rc-resumo-geral-valor vencido">R$ {{ resumo_receber.total_vencido|floatformat:2 }}</span>
+        </div>
+      </section>
+    {% endif %}
+
+    {% if not cliente %}
+      <section class="rc-rota-receber-card" aria-label="Filtro de rota para recebimento">
+        <form method="get" class="rc-rota-form">
+          {% if retorno_url %}
+            <input type="hidden" name="next" value="{{ retorno_url }}">
+          {% endif %}
+          <div class="rc-rota-field">
+            <label for="rotaReceberCliente">Rota/Bairro</label>
+            <select id="rotaReceberCliente" name="rota">
+              <option value="">Todas</option>
+              {% for rota in rotas_opcoes %}
+                <option value="{{ rota }}" {% if rota_filtro == rota %}selected{% endif %}>{{ rota }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="rc-btn rc-btn-primary">Filtrar rota</button>
+        </form>
+
+        <div class="rc-rota-clientes">
+          {% for item in clientes_devedores_rota %}
+            <a class="rc-rota-cliente-item" href="{% url 'estoque:receber_cliente' item.cliente_id %}?next={{ retorno_recebimento_url|urlencode }}">
+              <span>
+                <span class="rc-rota-cliente-nome">{{ item.cliente__nome }}</span>
+                <span class="rc-rota-cliente-meta">
+                  {{ item.contas_abertas }} conta{{ item.contas_abertas|pluralize }} em aberto
+                  {% if item.contas_vencidas %} / {{ item.contas_vencidas }} atrasada{{ item.contas_vencidas|pluralize }}{% endif %}
+                  {% if item.cliente__bairro %} / {{ item.cliente__bairro }}{% endif %}
+                </span>
+              </span>
+              <strong class="rc-rota-cliente-total">R$ {{ item.total_em_aberto|floatformat:2 }}</strong>
+            </a>
+          {% empty %}
+            <div class="rc-rota-empty">Nenhum cliente com contas abertas para esta rota.</div>
+          {% endfor %}
         </div>
       </section>
     {% endif %}
