@@ -1,0 +1,492 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Recebimento confirmado{% endblock %}
+{% block content %}
+
+<style>
+  .rcp-page {
+    min-height: calc(100vh - 24px);
+    background: #f8fafc;
+    color: #172033;
+    padding: 10px 12px 18px;
+  }
+  .rcp-shell {
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+    display: grid;
+    gap: 8px;
+  }
+  .rcp-top {
+    border: 1px solid #bbf7d0;
+    border-left: 7px solid #16a34a;
+    border-radius: 10px;
+    background: #f0fdf4;
+    padding: 10px 12px;
+    display: grid;
+    gap: 6px;
+  }
+  .rcp-headline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .rcp-title { margin: 0; color: #111827; font-size: 1.16rem; font-weight: 950; }
+  .rcp-status {
+    border: 1px solid #86efac;
+    border-radius: 999px;
+    background: #dcfce7;
+    color: #166534;
+    padding: 4px 9px;
+    font-size: 0.72rem;
+    font-weight: 950;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .rcp-status.enviado { border-color: #22c55e; background: #bbf7d0; }
+  .rcp-status.dispensado { border-color: #fdba74; background: #fff7ed; color: #9a3412; }
+  .rcp-client { margin: 0; color: #14532d; font-size: 1rem; font-weight: 950; }
+  .rcp-line {
+    margin: 0;
+    color: #334155;
+    font-size: 0.9rem;
+    font-weight: 820;
+  }
+  .rcp-paid { color: #052e16; font-size: 1.18rem; font-weight: 950; }
+  .rcp-panel {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 5px 14px rgba(15, 23, 42, 0.05);
+    overflow: hidden;
+  }
+  .rcp-panel-body { padding: 10px; }
+  .rcp-section-title { margin: 0 0 6px; color: #111827; font-size: 0.9rem; font-weight: 950; }
+  .rcp-finance {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+  }
+  .rcp-item {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fbfdff;
+    padding: 7px 8px;
+    min-width: 0;
+  }
+  .rcp-item.destaque { background: #ecfdf3; border-color: #bbf7d0; }
+  .rcp-label {
+    display: block;
+    color: #64748b;
+    font-size: 0.64rem;
+    font-weight: 950;
+    text-transform: uppercase;
+  }
+  .rcp-value {
+    display: block;
+    margin-top: 2px;
+    color: #111827;
+    font-size: 0.9rem;
+    font-weight: 900;
+  }
+  .rcp-item.destaque .rcp-value { color: #14532d; }
+  .rcp-actions-panel { order: 3; }
+  .rcp-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 7px;
+  }
+  .rcp-btn {
+    min-height: 38px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    color: #0f172a;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 900;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    text-align: center;
+  }
+  .rcp-btn.whatsapp { border-color: #15803d; background: #15803d; color: #fff; }
+  #btn-ver-comprovante-visual { flex: 0 1 230px; max-width: 230px; }
+  #btn-enviar-confirmacao-whatsapp { flex: 0 1 300px; max-width: 300px; }
+  #btn-confirmar-recibo-enviado { flex: 0 1 250px; max-width: 250px; }
+  .rcp-btn.primary {
+    border-color: #2563eb;
+    background: #1d4ed8;
+    color: #fff;
+    transform-origin: center;
+    will-change: transform, box-shadow, filter;
+  }
+  .rcp-btn.success { border-color: #16a34a; background: #16a34a; color: #fff; }
+  .rcp-btn.secondary { background: #f8fafc; }
+  .rcp-btn.back {
+    flex: 0 0 auto;
+    min-height: 34px;
+    padding-inline: 8px;
+    color: #475569;
+    font-size: 0.78rem;
+    font-weight: 820;
+  }
+  .rcp-btn:disabled { opacity: 0.92; cursor: default; }
+  .rcp-btn.pulsando { animation: rcp-confirmar-pulse 1.2s ease-in-out infinite; }
+  @keyframes rcp-confirmar-pulse {
+    0%, 100% {
+      transform: scale(1);
+      filter: brightness(1);
+      box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.55), 0 8px 18px rgba(29, 78, 216, 0.24);
+    }
+    50% {
+      transform: scale(1.06);
+      filter: brightness(1.1);
+      box-shadow: 0 0 0 12px rgba(37, 99, 235, 0), 0 12px 26px rgba(29, 78, 216, 0.34);
+    }
+  }
+  .rcp-recibo-status {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: #166534;
+    font-size: 0.8rem;
+    font-weight: 850;
+  }
+  .rcp-recibo-status.erro { color: #991b1b; }
+  .rcp-recibo-pill {
+    display: inline-flex;
+    min-height: 34px;
+    align-items: center;
+    border-radius: 999px;
+    padding: 6px 11px;
+    background: #dcfce7;
+    color: #166534;
+    font-size: 0.82rem;
+    font-weight: 950;
+  }
+  .rcp-recibo-pill.dispensado { background: #fff7ed; color: #9a3412; }
+  .rcp-accounts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .rcp-account-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: #111827;
+    font-size: 0.9rem;
+    font-weight: 950;
+    cursor: pointer;
+  }
+  .rcp-account-summary::-webkit-details-marker { display: none; }
+  .rcp-account-summary::after {
+    content: "mostrar detalhes";
+    color: #2563eb;
+    font-size: 0.72rem;
+    font-weight: 950;
+    white-space: nowrap;
+  }
+  details[open] > .rcp-account-summary::after { content: "recolher"; }
+  .rcp-count {
+    color: #64748b;
+    font-size: 0.78rem;
+    font-weight: 850;
+  }
+  .rcp-account-list {
+    display: grid;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .rcp-account {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fff;
+    padding: 7px 8px;
+    display: grid;
+    gap: 3px;
+  }
+  .rcp-account-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    color: #111827;
+    font-size: 0.84rem;
+    font-weight: 920;
+  }
+  .rcp-account-meta { color: #475569; font-size: 0.77rem; font-weight: 760; }
+  .rcp-tag {
+    border-radius: 999px;
+    padding: 2px 7px;
+    background: #dcfce7;
+    color: #166534;
+    font-size: 0.67rem;
+    font-weight: 950;
+  }
+  .rcp-tag.parcial { background: #fef3c7; color: #92400e; }
+  .rcp-open-summary {
+    margin: 6px 0 0;
+    color: #334155;
+    font-size: 0.8rem;
+    font-weight: 850;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rcp-btn.pulsando {
+      animation: none;
+      border-color: #1d4ed8;
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.22), 0 10px 24px rgba(29, 78, 216, 0.32);
+      filter: brightness(1.08);
+    }
+  }
+  @media (max-width: 860px) {
+    .rcp-accounts { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 820px) {
+    .rcp-finance { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 720px) {
+    .rcp-page { padding: 8px 8px 92px; }
+    .rcp-shell { gap: 7px; }
+    .rcp-headline { align-items: flex-start; }
+    .rcp-title { font-size: 1.04rem; }
+    .rcp-line { font-size: 0.84rem; }
+    .rcp-paid { font-size: 1.05rem; }
+    .rcp-accounts { grid-template-columns: 1fr; }
+    .rcp-actions-panel {
+      position: sticky;
+      bottom: 0;
+      z-index: 20;
+      margin: 0 -8px;
+      border-radius: 10px 10px 0 0;
+      box-shadow: 0 -8px 22px rgba(15, 23, 42, 0.16);
+    }
+    .rcp-actions-panel .rcp-panel-body { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+    .rcp-btn { width: 100%; }
+    #btn-ver-comprovante-visual,
+    #btn-enviar-confirmacao-whatsapp,
+    #btn-confirmar-recibo-enviado,
+    .rcp-btn.back {
+      flex-basis: 100%;
+      max-width: none;
+    }
+    .rcp-btn.back { min-height: 32px; }
+  }
+</style>
+
+<main
+  class="rcp-page"
+  data-operacao-id="{{ operacao.id }}"
+  data-status-recibo="{{ operacao.status_recibo }}"
+>
+  <div class="rcp-shell">
+    <header class="rcp-top">
+      <div class="rcp-headline">
+        <h1 class="rcp-title">Recebimento confirmado</h1>
+        <span class="rcp-status {{ operacao.status_recibo }}" id="statusReciboLabel">
+          {{ operacao.get_status_recibo_display }}
+        </span>
+      </div>
+      <p class="rcp-client">{{ operacao.cliente_nome_snapshot }}</p>
+      <p class="rcp-line">
+        <span class="rcp-paid">{{ valor_pago_formatado }}</span>
+        &middot; {{ operacao.forma_pagamento|default:"-" }}
+        &middot; {{ comprovante_dados.data_recebimento|default:"-" }}
+        {% if operacao.rota_snapshot %}&middot; {{ operacao.rota_snapshot }}{% endif %}
+      </p>
+    </header>
+
+    <section class="rcp-panel">
+      <div class="rcp-panel-body">
+        <h2 class="rcp-section-title">Resumo financeiro</h2>
+        <div class="rcp-finance">
+          <div class="rcp-item">
+            <span class="rcp-label">Saldo anterior</span>
+            <span class="rcp-value">{{ saldo_anterior_formatado }}</span>
+          </div>
+          <div class="rcp-item">
+            <span class="rcp-label">Valor aplicado</span>
+            <span class="rcp-value">{{ valor_aplicado_formatado }}</span>
+          </div>
+          <div class="rcp-item">
+            <span class="rcp-label">Credito gerado</span>
+            <span class="rcp-value">{{ credito_gerado_formatado }}</span>
+          </div>
+          <div class="rcp-item destaque">
+            <span class="rcp-label">Saldo atual</span>
+            <span class="rcp-value">{{ saldo_atual_formatado }}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="rcp-panel rcp-actions-panel">
+      <div class="rcp-panel-body">
+        <h2 class="rcp-section-title">Acoes do recibo</h2>
+        <div class="rcp-actions">
+          <a class="rcp-btn secondary" id="btn-ver-comprovante-visual" href="{{ comprovante_imagem_url }}" target="_blank" rel="noopener">Visualizar comprovante</a>
+          {% if whatsapp_confirmacao.tem_whatsapp and operacao.status_recibo == "pendente" %}
+            <a class="rcp-btn whatsapp" id="btn-enviar-confirmacao-whatsapp" href="{{ whatsapp_confirmacao.url }}" target="_blank" rel="noopener">Enviar recibo pelo WhatsApp</a>
+          {% elif whatsapp_confirmacao.tem_whatsapp %}
+            <a class="rcp-btn secondary" id="btn-enviar-confirmacao-whatsapp" href="{{ whatsapp_confirmacao.url }}" target="_blank" rel="noopener">WhatsApp</a>
+          {% else %}
+            <p class="rcp-recibo-status">Cliente sem WhatsApp cadastrado.</p>
+          {% endif %}
+          {% if operacao.status_recibo == "pendente" %}
+            <button
+              type="button"
+              class="rcp-btn primary"
+              id="btn-confirmar-recibo-enviado"
+              data-confirmar-recibo-url="{{ confirmar_recibo_url }}"
+              data-operacao-id="{{ operacao.id }}"
+              hidden
+            >Confirmar recibo enviado</button>
+            <p class="rcp-recibo-status" id="confirmar-recibo-status" aria-live="polite" hidden>Depois de enviar pelo WhatsApp, confirme o envio.</p>
+          {% elif operacao.status_recibo == "enviado" %}
+            <span class="rcp-recibo-pill" id="confirmar-recibo-status" aria-live="polite">Recibo enviado</span>
+          {% elif operacao.status_recibo == "dispensado" %}
+            <span class="rcp-recibo-pill dispensado" id="confirmar-recibo-status" aria-live="polite">Recibo dispensado</span>
+          {% endif %}
+          <a class="rcp-btn secondary back" href="{{ voltar_receber_url }}">Voltar</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="rcp-accounts">
+      <div class="rcp-panel">
+        <div class="rcp-panel-body">
+          <details {% if contas_abatidas_qtd <= 1 %}open{% endif %}>
+            <summary class="rcp-account-summary">
+              <span>Contas abatidas</span>
+              <span class="rcp-count">{{ contas_abatidas_qtd }}</span>
+            </summary>
+            <div class="rcp-account-list">
+              {% for conta in contas_abatidas %}
+                <article class="rcp-account">
+                  <div class="rcp-account-top">
+                    <span>Venda/Nota #{{ conta.venda_id|default:conta.conta_id }}</span>
+                    <span class="rcp-tag {% if not conta.quitada %}parcial{% endif %}">
+                      {% if conta.quitada %}Quitada{% else %}Parcial{% endif %}
+                    </span>
+                  </div>
+                  <div class="rcp-account-meta">
+                    Data: {{ conta.data_nota|default:"-" }} &middot; Abatido: R$ {{ conta.valor_aplicado }} &middot; Saldo restante: R$ {{ conta.saldo_restante }}
+                  </div>
+                </article>
+              {% empty %}
+                <p class="rcp-account-meta">Nenhuma conta abatida registrada no recibo.</p>
+              {% endfor %}
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div class="rcp-panel">
+        <div class="rcp-panel-body">
+          <details>
+            <summary class="rcp-account-summary">
+              <span>Contas ainda abertas</span>
+              <span class="rcp-count">{{ contas_abertas_qtd }} &middot; {{ contas_abertas_total_formatado }}</span>
+            </summary>
+            {% if contas_abertas_qtd %}
+              <p class="rcp-open-summary">Saldo restante resumido: {{ saldo_atual_formatado }}</p>
+            {% else %}
+              <p class="rcp-open-summary">Nao ficou nenhuma conta em aberto apos este pagamento.</p>
+            {% endif %}
+            <div class="rcp-account-list">
+              {% for conta in contas_abertas %}
+                <article class="rcp-account">
+                  <div class="rcp-account-top">
+                    <span>Venda/Nota #{{ conta.venda_id|default:conta.conta_id }}</span>
+                    <span class="rcp-tag parcial">Em aberto</span>
+                  </div>
+                  <div class="rcp-account-meta">
+                    Data: {{ conta.data_nota|default:"-" }} &middot; Saldo: R$ {{ conta.saldo_atual }} &middot; {{ conta.dias_aberto }} dia(s) em aberto{% if conta.em_atraso %} &middot; em atraso{% endif %}
+                  </div>
+                </article>
+              {% endfor %}
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+(function () {
+  const page = document.querySelector(".rcp-page");
+  const btnWhatsapp = document.getElementById("btn-enviar-confirmacao-whatsapp");
+  const btnConfirmar = document.getElementById("btn-confirmar-recibo-enviado");
+  const statusMensagem = document.getElementById("confirmar-recibo-status");
+  const statusLabel = document.getElementById("statusReciboLabel");
+
+  function csrfToken() {
+    const cookie = document.cookie.split(";").map(function (item) { return item.trim(); })
+      .find(function (item) { return item.startsWith("csrftoken="); });
+    return cookie ? decodeURIComponent(cookie.slice("csrftoken=".length)) : "";
+  }
+
+  function atualizarMensagem(texto, erro) {
+    if (!statusMensagem) return;
+    statusMensagem.textContent = texto || "";
+    statusMensagem.hidden = !texto;
+    statusMensagem.classList.toggle("erro", Boolean(erro));
+  }
+
+  function revelarConfirmacao() {
+    if (!btnConfirmar || btnConfirmar.disabled || page?.dataset.statusRecibo !== "pendente") return;
+    btnConfirmar.hidden = false;
+    btnConfirmar.classList.add("pulsando");
+    atualizarMensagem("Depois de enviar pelo WhatsApp, confirme o envio.", false);
+  }
+
+  async function confirmarRecibo() {
+    const url = btnConfirmar?.dataset.confirmarReciboUrl;
+    if (!url || btnConfirmar.disabled) return;
+    btnConfirmar.disabled = true;
+    btnConfirmar.textContent = "Confirmando...";
+    atualizarMensagem("", false);
+    try {
+      const resposta = await fetch(url, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "X-CSRFToken": csrfToken(),
+          "X-Requested-With": "XMLHttpRequest",
+          "Accept": "application/json"
+        }
+      });
+      const dados = await resposta.json().catch(function () { return {}; });
+      if (!resposta.ok || !dados.ok) {
+        throw new Error(dados.mensagem || "Nao foi possivel confirmar o envio. Tente novamente.");
+      }
+      btnConfirmar.classList.remove("pulsando", "primary");
+      btnConfirmar.classList.add("success");
+      btnConfirmar.textContent = "Recibo enviado";
+      page?.setAttribute("data-status-recibo", dados.status_recibo || "enviado");
+      if (statusLabel) {
+        statusLabel.textContent = "Enviado";
+        statusLabel.className = "rcp-status enviado";
+      }
+      atualizarMensagem(dados.mensagem || "Recibo confirmado como enviado.", false);
+    } catch (erro) {
+      btnConfirmar.disabled = false;
+      btnConfirmar.textContent = "Confirmar recibo enviado";
+      btnConfirmar.classList.add("pulsando");
+      atualizarMensagem(erro.message || "Nao foi possivel confirmar o envio. Tente novamente.", true);
+    }
+  }
+
+  btnWhatsapp?.addEventListener("click", revelarConfirmacao);
+  btnConfirmar?.addEventListener("click", confirmarRecibo);
+})();
+</script>
+
+{% endblock %}

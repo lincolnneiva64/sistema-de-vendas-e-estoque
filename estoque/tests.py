@@ -16532,6 +16532,141 @@ class PixRecebidoTests(TestCase):
             follow=follow,
         )
 
+    def _criar_operacao_recebimento_cliente(self, cliente, status=OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE):
+        return OperacaoRecebimentoCliente.objects.create(
+            cliente=cliente,
+            cliente_nome_snapshot=cliente.nome,
+            valor_recebido=Decimal("100.00"),
+            valor_aplicado=Decimal("100.00"),
+            credito_gerado=Decimal("0.00"),
+            saldo_anterior=Decimal("100.00"),
+            saldo_atual=Decimal("0.00"),
+            data_recebimento=timezone.localdate(),
+            forma_pagamento="PIX",
+            status_recibo=status,
+        )
+
+    def _url_confirmar_recibo(self, cliente, operacao):
+        return reverse(
+            "estoque:receber_cliente_confirmar_recibo",
+            kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
+        )
+
+    def _url_recebimento_confirmado(self, cliente, operacao):
+        return reverse(
+            "estoque:receber_cliente_confirmado",
+            kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
+        )
+
+    def test_confirmar_recibo_valido_marca_enviado_com_usuario(self):
+        usuario = get_user_model().objects.create_user(username="confirmador", password="senha")
+        self.client.force_login(usuario)
+        cliente = Cliente.objects.create(nome="Cliente Recibo Confirmado", ativo=True)
+        operacao = self._criar_operacao_recebimento_cliente(cliente)
+
+        resposta = self.client.post(self._url_confirmar_recibo(cliente, operacao), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["ok"])
+        self.assertEqual(dados["status_recibo"], OperacaoRecebimentoCliente.STATUS_RECIBO_ENVIADO)
+        self.assertEqual(dados["mensagem"], "Recibo confirmado como enviado.")
+        self.assertIn("confirmado_em", dados)
+        self.assertEqual(dados["confirmado_por"], "confirmador")
+        operacao.refresh_from_db()
+        self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_ENVIADO)
+        self.assertIsNotNone(operacao.recibo_confirmado_em)
+        self.assertEqual(operacao.recibo_confirmado_por, usuario)
+
+    def test_confirmar_recibo_anonimo_marca_enviado_sem_usuario(self):
+        cliente = Cliente.objects.create(nome="Cliente Recibo Anonimo", ativo=True)
+        operacao = self._criar_operacao_recebimento_cliente(cliente)
+
+        resposta = self.client.post(self._url_confirmar_recibo(cliente, operacao), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        operacao.refresh_from_db()
+        self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_ENVIADO)
+        self.assertIsNotNone(operacao.recibo_confirmado_em)
+        self.assertIsNone(operacao.recibo_confirmado_por)
+        self.assertEqual(resposta.json()["confirmado_por"], "")
+
+    def test_confirmar_recibo_idempotente_preserva_confirmacao_original(self):
+        usuario = get_user_model().objects.create_user(username="primeiro", password="senha")
+        self.client.force_login(usuario)
+        cliente = Cliente.objects.create(nome="Cliente Recibo Idempotente", ativo=True)
+        operacao = self._criar_operacao_recebimento_cliente(cliente)
+
+        primeira = self.client.post(self._url_confirmar_recibo(cliente, operacao), secure=True)
+        operacao.refresh_from_db()
+        confirmado_em = operacao.recibo_confirmado_em
+        confirmado_por = operacao.recibo_confirmado_por
+        segunda = self.client.post(self._url_confirmar_recibo(cliente, operacao), secure=True)
+
+        self.assertEqual(primeira.status_code, 200)
+        self.assertEqual(segunda.status_code, 200)
+        dados = segunda.json()
+        self.assertTrue(dados["ok"])
+        self.assertTrue(dados["ja_confirmado"])
+        self.assertEqual(dados["mensagem"], "Este recibo ja estava confirmado como enviado.")
+        operacao.refresh_from_db()
+        self.assertEqual(operacao.recibo_confirmado_em, confirmado_em)
+        self.assertEqual(operacao.recibo_confirmado_por, confirmado_por)
+
+    def test_confirmar_recibo_operacao_de_outro_cliente_retorna_404(self):
+        cliente_a = Cliente.objects.create(nome="Cliente Operacao A", ativo=True)
+        cliente_b = Cliente.objects.create(nome="Cliente Operacao B", ativo=True)
+        operacao = self._criar_operacao_recebimento_cliente(cliente_a)
+
+        resposta = self.client.post(self._url_confirmar_recibo(cliente_b, operacao), secure=True)
+
+        self.assertEqual(resposta.status_code, 404)
+        operacao.refresh_from_db()
+        self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
+        self.assertIsNone(operacao.recibo_confirmado_em)
+
+    def test_confirmar_recibo_operacao_inexistente_retorna_404(self):
+        cliente = Cliente.objects.create(nome="Cliente Operacao Inexistente", ativo=True)
+
+        resposta = self.client.post(
+            reverse(
+                "estoque:receber_cliente_confirmar_recibo",
+                kwargs={"cliente_id": cliente.id, "operacao_id": 999999},
+            ),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 404)
+
+    def test_confirmar_recibo_get_retorna_405_sem_alterar_status(self):
+        cliente = Cliente.objects.create(nome="Cliente Recibo GET", ativo=True)
+        operacao = self._criar_operacao_recebimento_cliente(cliente)
+
+        resposta = self.client.get(self._url_confirmar_recibo(cliente, operacao), secure=True)
+
+        self.assertEqual(resposta.status_code, 405)
+        operacao.refresh_from_db()
+        self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
+        self.assertIsNone(operacao.recibo_confirmado_em)
+
+    def test_confirmar_recibo_dispensado_nao_marca_enviado(self):
+        cliente = Cliente.objects.create(nome="Cliente Recibo Dispensado", ativo=True)
+        operacao = self._criar_operacao_recebimento_cliente(
+            cliente,
+            status=OperacaoRecebimentoCliente.STATUS_RECIBO_DISPENSADO,
+        )
+
+        resposta = self.client.post(self._url_confirmar_recibo(cliente, operacao), secure=True)
+
+        self.assertEqual(resposta.status_code, 409)
+        dados = resposta.json()
+        self.assertFalse(dados["ok"])
+        self.assertEqual(dados["status_recibo"], OperacaoRecebimentoCliente.STATUS_RECIBO_DISPENSADO)
+        operacao.refresh_from_db()
+        self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_DISPENSADO)
+        self.assertIsNone(operacao.recibo_confirmado_em)
+        self.assertIsNone(operacao.recibo_confirmado_por)
+
     def test_receber_cliente_uma_conta_cria_operacao_e_relaciona_baixa(self):
         usuario = get_user_model().objects.create_user(username="operador", password="senha")
         self.client.force_login(usuario)
@@ -16556,6 +16691,17 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(operacao.saldo_atual, Decimal("40.00"))
         self.assertEqual(operacao.forma_pagamento, "PIX")
         self.assertEqual(operacao.criado_por, usuario)
+
+    def test_receber_cliente_post_redireciona_para_tela_confirmada_da_operacao(self):
+        cliente = Cliente.objects.create(nome="Cliente Redireciona Confirmado", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+
+        resposta = self._post_receber_cliente(cliente, "100,00")
+
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(resposta["Location"], self._url_recebimento_confirmado(cliente, operacao))
+        self.assertIn(f"/cliente/{cliente.id}/operacao/{operacao.id}/recebimento-confirmado/", resposta["Location"])
 
     def test_receber_cliente_anonimo_cria_operacao_sem_criado_por(self):
         cliente = Cliente.objects.create(nome="Cliente Operacao Anonima", ativo=True)
@@ -16645,6 +16791,8 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(dados["contas"][0]["valor_aplicado"], "100.00")
         feedback = self.client.session["receber_cliente_feedback"]
         self.assertEqual(feedback["operacao_id"], operacao.id)
+        self.assertEqual(feedback["status_recibo"], OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
+        self.assertEqual(feedback["confirmar_recibo_url"], self._url_confirmar_recibo(cliente, operacao))
         self.assertIn("comprovante_imagem_url", feedback)
         self.assertIn("whatsapp_confirmacao", feedback)
         comprovantes_sessao = self.client.session["receber_cliente_comprovantes"]
@@ -16677,15 +16825,131 @@ class PixRecebidoTests(TestCase):
         self.assertNotEqual(feedback["operacao_id"], operacao_anterior.id)
         self.assertEqual(operacao_nova.comprovante_dados["operacao_id"], operacao_nova.id)
 
-    def test_receber_cliente_template_exibe_data_operacao_id_do_feedback(self):
-        cliente = Cliente.objects.create(nome="Cliente Data Operacao", ativo=True)
+    def test_receber_cliente_confirmado_renderiza_dados_persistidos_da_operacao(self):
+        cliente = Cliente.objects.create(
+            nome="Cliente Data Operacao",
+            whatsapp="(85) 99999-0000",
+            ativo=True,
+        )
         self._criar_conta_receber_pix(cliente, "100.00")
 
         resposta = self._post_receber_cliente(cliente, "100,00", follow=True)
 
         self.assertEqual(resposta.status_code, 200)
         operacao = OperacaoRecebimentoCliente.objects.get()
+        self.assertTemplateUsed(resposta, "estoque/receber_cliente_confirmado.html")
         self.assertContains(resposta, f'data-operacao-id="{operacao.id}"')
+        self.assertContains(resposta, "max-width: 900px")
+        self.assertContains(resposta, "Recebimento confirmado")
+        self.assertContains(resposta, "Cliente Data Operacao")
+        self.assertContains(resposta, "R$ 100.00")
+        self.assertContains(resposta, "Saldo anterior")
+        self.assertContains(resposta, "Saldo atual")
+        self.assertContains(resposta, "Contas abatidas")
+        self.assertContains(resposta, "Contas ainda abertas")
+        self.assertContains(resposta, "<details", html=False)
+        self.assertContains(resposta, "Visualizar comprovante")
+        self.assertContains(resposta, "Enviar recibo pelo WhatsApp")
+        self.assertContains(resposta, "Confirmar recibo enviado")
+        self.assertContains(resposta, f'data-confirmar-recibo-url="{self._url_confirmar_recibo(cliente, operacao)}"')
+        self.assertContains(resposta, 'id="btn-confirmar-recibo-enviado"')
+        self.assertContains(resposta, "hidden")
+        self.assertContains(resposta, 'btnConfirmar.classList.add("pulsando")')
+        self.assertContains(resposta, 'btnConfirmar.classList.remove("pulsando", "primary")')
+        self.assertContains(resposta, "@media (prefers-reduced-motion: reduce)")
+        self.assertContains(resposta, "#btn-enviar-confirmacao-whatsapp { flex: 0 1 300px; max-width: 300px; }")
+        self.assertContains(resposta, "#btn-confirmar-recibo-enviado { flex: 0 1 250px; max-width: 250px; }")
+        self.assertNotContains(resposta, "grid-template-columns: 1fr 1.35fr auto")
+        conteudo = resposta.content.decode()
+        self.assertLess(conteudo.find("Acoes do recibo"), conteudo.find("Contas abatidas"))
+        self.assertNotContains(resposta, 'id="formReceberCliente"')
+        self.assertNotContains(resposta, 'id="clienteBuscaReceberDireto"')
+
+    def test_receber_cliente_confirmado_resume_contas_abertas_em_details(self):
+        cliente = Cliente.objects.create(nome="Cliente Details Contas", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+        self._criar_conta_receber_pix(cliente, "80.00")
+        self._criar_conta_receber_pix(cliente, "70.00")
+
+        resposta = self._post_receber_cliente(cliente, "100,00", follow=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Contas abatidas")
+        self.assertContains(resposta, "Contas ainda abertas")
+        self.assertContains(resposta, '<span class="rcp-count">2 &middot; R$ 150,00</span>', html=True)
+        self.assertContains(resposta, "Saldo restante resumido: R$ 150,00")
+        self.assertContains(resposta, "<details", count=2, html=False)
+
+    def test_receber_cliente_confirmado_reload_mantem_previa_sem_sessao(self):
+        cliente = Cliente.objects.create(nome="Cliente Reload Confirmado", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+        resposta_post = self._post_receber_cliente(cliente, "100,00")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        session = self.client.session
+        session.pop("receber_cliente_feedback", None)
+        session.pop("receber_cliente_comprovantes", None)
+        session.save()
+
+        primeira = self.client.get(self._url_recebimento_confirmado(cliente, operacao), secure=True)
+        segunda = self.client.get(self._url_recebimento_confirmado(cliente, operacao), secure=True)
+
+        self.assertEqual(resposta_post.status_code, 302)
+        self.assertEqual(primeira.status_code, 200)
+        self.assertEqual(segunda.status_code, 200)
+        self.assertContains(segunda, "Cliente Reload Confirmado")
+        self.assertContains(segunda, "R$ 100.00")
+        self.assertContains(segunda, "Nao ficou nenhuma conta em aberto apos este pagamento.")
+
+    def test_receber_cliente_confirmado_operacao_de_outro_cliente_retorna_404(self):
+        cliente_a = Cliente.objects.create(nome="Cliente Confirmado A", ativo=True)
+        cliente_b = Cliente.objects.create(nome="Cliente Confirmado B", ativo=True)
+        operacao = self._criar_operacao_recebimento_cliente(cliente_a)
+
+        resposta = self.client.get(self._url_recebimento_confirmado(cliente_b, operacao), secure=True)
+
+        self.assertEqual(resposta.status_code, 404)
+
+    def test_receber_cliente_confirmado_operacao_inexistente_retorna_404(self):
+        cliente = Cliente.objects.create(nome="Cliente Confirmado Inexistente", ativo=True)
+
+        resposta = self.client.get(
+            reverse(
+                "estoque:receber_cliente_confirmado",
+                kwargs={"cliente_id": cliente.id, "operacao_id": 999999},
+            ),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 404)
+
+    def test_receber_cliente_confirmado_status_enviado_mostra_estado_confirmado(self):
+        cliente = Cliente.objects.create(nome="Cliente Confirmado Enviado", ativo=True)
+        operacao = self._criar_operacao_recebimento_cliente(
+            cliente,
+            status=OperacaoRecebimentoCliente.STATUS_RECIBO_ENVIADO,
+        )
+
+        resposta = self.client.get(self._url_recebimento_confirmado(cliente, operacao), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Recibo enviado")
+        self.assertContains(resposta, 'class="rcp-recibo-pill" id="confirmar-recibo-status"')
+        self.assertNotContains(resposta, 'id="btn-confirmar-recibo-enviado"')
+        self.assertNotContains(resposta, "data-confirmar-recibo-url")
+
+    def test_receber_cliente_confirmado_status_dispensado_nao_mostra_botao_confirmar(self):
+        cliente = Cliente.objects.create(nome="Cliente Confirmado Dispensado", ativo=True)
+        operacao = self._criar_operacao_recebimento_cliente(
+            cliente,
+            status=OperacaoRecebimentoCliente.STATUS_RECIBO_DISPENSADO,
+        )
+
+        resposta = self.client.get(self._url_recebimento_confirmado(cliente, operacao), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Recibo dispensado")
+        self.assertNotContains(resposta, 'id="btn-confirmar-recibo-enviado"')
+        self.assertNotContains(resposta, "data-confirmar-recibo-url")
 
     def test_receber_cliente_sem_feedback_nao_exige_operacao_id_no_template(self):
         cliente = Cliente.objects.create(nome="Cliente Sem Feedback Operacao", ativo=True)
@@ -16698,6 +16962,8 @@ class PixRecebidoTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         self.assertNotContains(resposta, "data-operacao-id")
+        self.assertNotContains(resposta, "Recebimento confirmado com sucesso.")
+        self.assertNotContains(resposta, "Confirmar recibo enviado")
         self.assertNotContains(resposta, "None")
 
     def test_visualizar_comprovante_nao_altera_status_recibo(self):
@@ -16708,9 +16974,60 @@ class PixRecebidoTests(TestCase):
 
         self.assertEqual(resposta.status_code, 302)
         operacao = OperacaoRecebimentoCliente.objects.get()
-        feedback = self.client.session["receber_cliente_feedback"]
-        resposta_comprovante = self.client.get(feedback["comprovante_imagem_url"], secure=True)
+        resposta_comprovante = self.client.get(
+            reverse(
+                "estoque:receber_cliente_operacao_comprovante_imagem",
+                kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
+            ),
+            secure=True,
+        )
         self.assertEqual(resposta_comprovante.status_code, 200)
+        self.assertEqual(resposta_comprovante["Content-Type"], "image/png")
+        operacao.refresh_from_db()
+        self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
+        self.assertIsNone(operacao.recibo_confirmado_em)
+        self.assertIsNone(operacao.recibo_confirmado_por)
+
+    def test_comprovante_recebimento_imagem_compacta_mantem_dados_essenciais(self):
+        cliente = Cliente.objects.create(nome="Cliente Imagem Compacta", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+        self._criar_conta_receber_pix(cliente, "80.00")
+        self._criar_conta_receber_pix(cliente, "70.00")
+
+        resposta = self._post_receber_cliente(cliente, "100,00")
+
+        self.assertEqual(resposta.status_code, 302)
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        dados = operacao.comprovante_dados
+        self.assertEqual(dados["cliente_nome"], "Cliente Imagem Compacta")
+        self.assertEqual(dados["valor_pago"], "100.00")
+        self.assertEqual(dados["saldo_atual"], "150.00")
+        self.assertEqual(len(dados["contas"]), 1)
+        self.assertEqual(len(dados["contas_abertas"]), 2)
+        resposta_comprovante = self.client.get(
+            reverse(
+                "estoque:receber_cliente_operacao_comprovante_imagem",
+                kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
+            ),
+            secure=True,
+        )
+        from PIL import Image
+
+        imagem = Image.open(io.BytesIO(resposta_comprovante.content))
+        self.assertEqual(imagem.width, 800)
+        self.assertGreater(imagem.height, imagem.width)
+        self.assertLess(imagem.height, 1200)
+
+    def test_receber_cliente_sair_da_tela_sem_confirmar_mantem_recibo_pendente(self):
+        cliente = Cliente.objects.create(nome="Cliente Recibo Saiu", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+
+        resposta = self._post_receber_cliente(cliente, "100,00")
+        self.assertEqual(resposta.status_code, 302)
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        resposta_home = self.client.get(reverse("estoque:home"), secure=True)
+
+        self.assertEqual(resposta_home.status_code, 200)
         operacao.refresh_from_db()
         self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
         self.assertIsNone(operacao.recibo_confirmado_em)

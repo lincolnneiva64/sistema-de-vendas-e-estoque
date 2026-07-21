@@ -104,6 +104,21 @@ urlpatterns = [
     path("central-pix/<int:pix_id>/", views.central_pix_detalhe, name="central_pix_detalhe"),
     path("central-pix/analisar-comprovante/", views.central_pix_analisar_comprovante, name="central_pix_analisar_comprovante"),
     path("contas-a-receber/cliente/<int:cliente_id>/receber/", views.receber_cliente, name="receber_cliente"),
+    path(
+        "contas-a-receber/cliente/<int:cliente_id>/operacao/<int:operacao_id>/recebimento-confirmado/",
+        views.receber_cliente_confirmado,
+        name="receber_cliente_confirmado",
+    ),
+    path(
+        "contas-a-receber/cliente/<int:cliente_id>/operacao/<int:operacao_id>/confirmar-recibo/",
+        views.receber_cliente_confirmar_recibo,
+        name="receber_cliente_confirmar_recibo",
+    ),
+    path(
+        "contas-a-receber/cliente/<int:cliente_id>/operacao/<int:operacao_id>/comprovante/imagem/",
+        views.receber_cliente_operacao_comprovante_imagem,
+        name="receber_cliente_operacao_comprovante_imagem",
+    ),
     path("contas-a-receber/cliente/<int:cliente_id>/comprovante/<str:token>/imagem/", views.receber_cliente_comprovante_imagem, name="receber_cliente_comprovante_imagem"),
     path("contas-a-receber/creditos/cliente/<int:cliente_id>/", views.cliente_credito_detalhe, name="cliente_credito_detalhe"),
     path("contas-a-receber/<int:pk>/receber/", views.conta_receber_receber, name="conta_receber_receber"),

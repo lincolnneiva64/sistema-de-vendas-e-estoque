@@ -1376,69 +1376,6 @@
           </form>
         {% endif %}
 
-        {% if feedback_recebimento %}
-          <section id="recebimento-confirmado" class="rc-confirmacao-sucesso" role="status" aria-live="polite"{% if feedback_recebimento.operacao_id %} data-operacao-id="{{ feedback_recebimento.operacao_id }}"{% endif %}>
-            <p class="rc-confirmacao-titulo">Recebimento confirmado com sucesso.</p>
-            <div class="rc-confirmacao-grid">
-              <div class="rc-confirmacao-item">
-                <span class="rc-confirmacao-label">Valor aplicado</span>
-                <span class="rc-confirmacao-valor destaque">{{ feedback_recebimento.valor_aplicado }}</span>
-              </div>
-              <div class="rc-confirmacao-item">
-                <span class="rc-confirmacao-label">Novo saldo em aberto</span>
-                <span class="rc-confirmacao-valor">R$ {{ total_em_aberto|floatformat:2 }}</span>
-              </div>
-              <div class="rc-confirmacao-item">
-                <span class="rc-confirmacao-label">Contas afetadas</span>
-                <span class="rc-confirmacao-valor">{{ feedback_recebimento.contas_afetadas }}</span>
-              </div>
-              <div class="rc-confirmacao-item">
-                <span class="rc-confirmacao-label">Forma</span>
-                <span class="rc-confirmacao-valor">{{ feedback_recebimento.forma_pagamento|default:"-" }}</span>
-              </div>
-            </div>
-            <div class="rc-whatsapp-confirmacao">
-              {% if feedback_recebimento.whatsapp_confirmacao.tem_whatsapp %}
-                <a
-                  href="{{ feedback_recebimento.whatsapp_confirmacao.url }}"
-                  target="_blank"
-                  rel="noopener"
-                  class="rc-btn rc-whatsapp-confirmacao-btn"
-                  id="btn-enviar-confirmacao-whatsapp"
-                >
-                  Enviar comprovante pelo WhatsApp
-                </a>
-              {% else %}
-                <p class="rc-whatsapp-confirmacao-aviso">
-                  Cliente sem WhatsApp cadastrado. Cadastre o WhatsApp do cliente para enviar a confirmacao.
-                </p>
-              {% endif %}
-              {% if feedback_recebimento.comprovante_imagem_url %}
-                <button
-                  type="button"
-                  class="rc-btn rc-compartilhar-imagem-btn"
-                  id="btn-compartilhar-comprovante-imagem"
-                  data-comprovante-url="{{ feedback_recebimento.comprovante_imagem_url }}"
-                >
-                  Compartilhar imagem do comprovante
-                </button>
-                <a
-                  href="{{ feedback_recebimento.comprovante_imagem_url }}"
-                  target="_blank"
-                  rel="noopener"
-                  class="rc-btn rc-comprovante-visual-btn"
-                  id="btn-ver-comprovante-visual"
-                >
-                  Ver imagem do comprovante
-                </a>
-                <p class="rc-comprovante-orientacao">
-                  Primeiro envie o comprovante pelo WhatsApp. Use a imagem quando quiser mandar o comprovante visual.
-                </p>
-              {% endif %}
-              {% if cliente %}<a href="{% url 'estoque:vendas' %}?cliente_id={{ cliente.id }}" class="rc-btn rc-voltar-cliente-btn" id="btn-voltar-tela-venda">Voltar para tela de venda</a>{% endif %}
-            </div>
-          </section>
-        {% endif %}
       </div>
 
       <div class="rc-pos-confirmacao-direita">
