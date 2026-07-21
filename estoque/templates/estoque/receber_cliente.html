@@ -1168,7 +1168,10 @@
               {% endfor %}
             </div>
           {% else %}
-            <div class="rc-empty">Nenhuma conta aberta para este cliente.</div>
+            <div class="rc-empty">
+              Este cliente nao possui contas a receber em aberto.<br>
+              Nao ha notas pendentes para baixar neste momento. O recebimento desta tela e feito pelo total pago pelo cliente e aplicado automaticamente nas contas abertas, da mais antiga para a mais nova.
+            </div>
           {% endif %}
           <div class="rc-saldo-total">
             <span>Saldo atual em aberto: R$ {{ total_em_aberto|floatformat:2 }}</span>
