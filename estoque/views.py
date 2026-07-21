@@ -9542,22 +9542,91 @@ def _numero_whatsapp_cliente(cliente):
 
 
 def _montar_mensagem_confirmacao_recebimento(dados):
-    forma_pagamento = str(dados.get("forma_pagamento") or "").strip().upper()
+    forma_pagamento = str(dados.get("forma_pagamento") or "").strip()
+    forma_pagamento_normalizada = forma_pagamento.upper()
     texto_comprovante = (
         "Segue o comprovante de pagamento realizado por Pix."
-        if forma_pagamento == "PIX"
+        if forma_pagamento_normalizada == "PIX"
         else "Segue comprovante de pagamento."
     )
+
+    valor_pago = _decimal_comprovante(dados.get("valor_pago"))
+    saldo_anterior = _decimal_comprovante(dados.get("saldo_anterior"))
+    saldo_atual = _decimal_comprovante(dados.get("saldo_atual"))
+    credito_gerado = _decimal_comprovante(dados.get("credito_gerado"))
+
     linhas = [
-        f"Olá, {dados['cliente_nome']}.",
+        f"Ola, {dados['cliente_nome']}.",
         "",
         texto_comprovante,
         "",
+        f"Total pago: {_formatar_moeda(valor_pago)}",
+        f"Forma de pagamento: {forma_pagamento or '-'}",
+        f"Data: {dados.get('data_recebimento') or '-'}",
+        f"Saldo anterior: {_formatar_moeda(saldo_anterior)}",
+        "",
+        "Contas abatidas:",
+    ]
+
+    contas = dados.get("contas", [])
+    if contas:
+        for conta in contas:
+            venda = conta.get("venda_id") or conta.get("conta_id") or "-"
+            data_nota = conta.get("data_nota") or "-"
+            valor_aplicado = _decimal_comprovante(conta.get("valor_aplicado"))
+            saldo_restante = _decimal_comprovante(conta.get("saldo_restante"))
+
+            if conta.get("quitada"):
+                status = "quitada"
+                complemento = "sem saldo restante"
+            else:
+                status = "parcial"
+                complemento = f"falta {_formatar_moeda(saldo_restante)}"
+
+            linhas.append(
+                f"- Venda/Nota #{venda} ({data_nota}): "
+                f"abatido {_formatar_moeda(valor_aplicado)}; "
+                f"{status}; {complemento}."
+            )
+    else:
+        linhas.append("- Nenhuma conta identificada com seguranca.")
+
+    contas_abertas = dados.get("contas_abertas", [])
+    linhas.append("")
+
+    if contas_abertas:
+        linhas.append("Contas que ainda faltam pagar:")
+        for conta in contas_abertas:
+            venda = conta.get("venda_id") or conta.get("conta_id") or "-"
+            data_nota = conta.get("data_nota") or "-"
+            saldo_conta = _decimal_comprovante(conta.get("saldo_atual"))
+            dias_aberto = int(conta.get("dias_aberto") or 0)
+            atraso = " - em atraso" if conta.get("em_atraso") else ""
+            plural = "s" if dias_aberto != 1 else ""
+
+            linhas.append(
+                f"- Venda/Nota #{venda} ({data_nota}): "
+                f"falta {_formatar_moeda(saldo_conta)} "
+                f"({dias_aberto} dia{plural} em aberto{atraso})."
+            )
+    else:
+        linhas.append("Nao ficou nenhuma conta em aberto apos este pagamento.")
+
+    linhas.extend([
+        "",
+        f"Total que ainda falta pagar: {_formatar_moeda(saldo_atual)}",
+    ])
+
+    if credito_gerado > Decimal("0.00"):
+        linhas.append(f"Credito gerado para proximas compras: {_formatar_moeda(credito_gerado)}")
+
+    linhas.extend([
+        "",
         "Obrigado.",
         "L A Neiva",
-    ]
-    return "\n".join(linhas)
+    ])
 
+    return "\n".join(linhas)
 
 def _montar_whatsapp_confirmacao_recebimento(cliente, dados):
     numero = _numero_whatsapp_cliente(cliente)
