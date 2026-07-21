@@ -11406,6 +11406,37 @@ def receber_cliente(request, cliente_id):
     if retorno_url:
         destino_pos_recebimento = f"{destino_pos_recebimento}?{urlencode({'next': retorno_url})}"
     hoje = timezone.localdate()
+
+    contas_abertas_rota = ContaReceber.objects.filter(
+        status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+        valor_em_aberto__gt=0,
+    )
+    aliases_rota_filtro = _aliases_rota_cliente(rota_filtro)
+    if aliases_rota_filtro:
+        contas_abertas_rota = contas_abertas_rota.filter(cliente__bairro__in=aliases_rota_filtro)
+
+    resumo_receber = {
+        "clientes_devendo": contas_abertas_rota.values("cliente_id").distinct().count(),
+        "contas_abertas": contas_abertas_rota.count(),
+        "total_a_receber": contas_abertas_rota.aggregate(total=Sum("valor_em_aberto")).get("total") or Decimal("0.00"),
+        "contas_vencidas": contas_abertas_rota.filter(data_vencimento__lt=hoje).count(),
+        "total_vencido": contas_abertas_rota.filter(
+            data_vencimento__lt=hoje
+        ).aggregate(total=Sum("valor_em_aberto")).get("total") or Decimal("0.00"),
+    }
+
+    clientes_devedores_rota = list(
+        contas_abertas_rota.exclude(cliente__isnull=True)
+        .values("cliente_id", "cliente__nome", "cliente__bairro")
+        .annotate(
+            contas_abertas=Count("id"),
+            total_em_aberto=Sum("valor_em_aberto"),
+            contas_vencidas=Count("id", filter=Q(data_vencimento__lt=hoje)),
+            total_vencido=Sum("valor_em_aberto", filter=Q(data_vencimento__lt=hoje)),
+        )
+        .order_by("cliente__nome")
+    )
+
     formas_pagamento = (
         "Dinheiro",
         "PIX",
@@ -11761,8 +11792,8 @@ def receber_cliente(request, cliente_id):
         "cliente": cliente,
         "rota_filtro": rota_filtro,
         "rotas_opcoes": rotas_opcoes,
-        "clientes_devedores_rota": [],
-        "resumo_receber": None,
+        "clientes_devedores_rota": clientes_devedores_rota,
+        "resumo_receber": resumo_receber,
         "retorno_recebimento_url": reverse("estoque:receber_cliente_escolher"),
         "contas": contas,
         "contas_preview": contas_preview,
