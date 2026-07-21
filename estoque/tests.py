@@ -16511,7 +16511,7 @@ class PixRecebidoTests(TestCase):
             status=ContaReceber.STATUS_ABERTA,
         )
 
-    def _post_receber_cliente(self, cliente, valor, destino_diferenca="troco", rota="", next_url=""):
+    def _post_receber_cliente(self, cliente, valor, destino_diferenca="troco", rota="", next_url="", follow=False):
         url = reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id})
         parametros = {}
         if rota:
@@ -16529,6 +16529,7 @@ class PixRecebidoTests(TestCase):
                 "destino_diferenca": destino_diferenca,
             },
             secure=True,
+            follow=follow,
         )
 
     def test_receber_cliente_uma_conta_cria_operacao_e_relaciona_baixa(self):
@@ -16643,9 +16644,77 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(len(dados["contas"]), 1)
         self.assertEqual(dados["contas"][0]["valor_aplicado"], "100.00")
         feedback = self.client.session["receber_cliente_feedback"]
+        self.assertEqual(feedback["operacao_id"], operacao.id)
         self.assertIn("comprovante_imagem_url", feedback)
         self.assertIn("whatsapp_confirmacao", feedback)
-        self.assertTrue(self.client.session["receber_cliente_comprovantes"])
+        comprovantes_sessao = self.client.session["receber_cliente_comprovantes"]
+        self.assertTrue(comprovantes_sessao)
+        comprovante_sessao = next(iter(comprovantes_sessao.values()))
+        self.assertEqual(dados["operacao_id"], operacao.id)
+        self.assertEqual(comprovante_sessao["operacao_id"], operacao.id)
+
+    def test_receber_cliente_feedback_referencia_operacao_nova_mesmo_com_operacao_anterior(self):
+        cliente = Cliente.objects.create(nome="Cliente Operacao Atual", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+        operacao_anterior = OperacaoRecebimentoCliente.objects.create(
+            cliente=cliente,
+            cliente_nome_snapshot=cliente.nome,
+            valor_recebido=Decimal("10.00"),
+            valor_aplicado=Decimal("10.00"),
+            credito_gerado=Decimal("0.00"),
+            saldo_anterior=Decimal("110.00"),
+            saldo_atual=Decimal("100.00"),
+            data_recebimento=timezone.localdate(),
+            forma_pagamento="PIX",
+        )
+
+        resposta = self._post_receber_cliente(cliente, "40,00")
+
+        self.assertEqual(resposta.status_code, 302)
+        operacao_nova = OperacaoRecebimentoCliente.objects.exclude(pk=operacao_anterior.pk).get()
+        feedback = self.client.session["receber_cliente_feedback"]
+        self.assertEqual(feedback["operacao_id"], operacao_nova.id)
+        self.assertNotEqual(feedback["operacao_id"], operacao_anterior.id)
+        self.assertEqual(operacao_nova.comprovante_dados["operacao_id"], operacao_nova.id)
+
+    def test_receber_cliente_template_exibe_data_operacao_id_do_feedback(self):
+        cliente = Cliente.objects.create(nome="Cliente Data Operacao", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+
+        resposta = self._post_receber_cliente(cliente, "100,00", follow=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        self.assertContains(resposta, f'data-operacao-id="{operacao.id}"')
+
+    def test_receber_cliente_sem_feedback_nao_exige_operacao_id_no_template(self):
+        cliente = Cliente.objects.create(nome="Cliente Sem Feedback Operacao", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+
+        resposta = self.client.get(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotContains(resposta, "data-operacao-id")
+        self.assertNotContains(resposta, "None")
+
+    def test_visualizar_comprovante_nao_altera_status_recibo(self):
+        cliente = Cliente.objects.create(nome="Cliente Status Recibo", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+
+        resposta = self._post_receber_cliente(cliente, "100,00")
+
+        self.assertEqual(resposta.status_code, 302)
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        feedback = self.client.session["receber_cliente_feedback"]
+        resposta_comprovante = self.client.get(feedback["comprovante_imagem_url"], secure=True)
+        self.assertEqual(resposta_comprovante.status_code, 200)
+        operacao.refresh_from_db()
+        self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
+        self.assertIsNone(operacao.recibo_confirmado_em)
+        self.assertIsNone(operacao.recibo_confirmado_por)
 
     def test_recebimento_conta_receber_direto_continua_sem_operacao(self):
         cliente = Cliente.objects.create(nome="Cliente Historico Direto", ativo=True)

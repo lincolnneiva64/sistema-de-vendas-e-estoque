@@ -11782,6 +11782,7 @@ def receber_cliente(request, cliente_id):
                             dados_confirmacao_whatsapp,
                         )
                         if operacao_recebimento:
+                            comprovante_dados["operacao_id"] = operacao_recebimento.id
                             operacao_recebimento.comprovante_dados = comprovante_dados
                             operacao_recebimento.save(update_fields=["comprovante_dados", "atualizado_em"])
                         comprovantes_sessao = request.session.get("receber_cliente_comprovantes", {})
@@ -11794,6 +11795,7 @@ def receber_cliente(request, cliente_id):
                             kwargs={"cliente_id": cliente.id, "token": comprovante_token},
                         )
                         request.session["receber_cliente_feedback"] = {
+                            "operacao_id": operacao_recebimento.id if operacao_recebimento else "",
                             "cliente": cliente.nome,
                             "valor_aplicado": _formatar_moeda(valor_aplicado_total),
                             "valor_pago": _formatar_moeda(valor_recebido),

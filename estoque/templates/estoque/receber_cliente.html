@@ -1377,7 +1377,7 @@
         {% endif %}
 
         {% if feedback_recebimento %}
-          <section id="recebimento-confirmado" class="rc-confirmacao-sucesso" role="status" aria-live="polite">
+          <section id="recebimento-confirmado" class="rc-confirmacao-sucesso" role="status" aria-live="polite"{% if feedback_recebimento.operacao_id %} data-operacao-id="{{ feedback_recebimento.operacao_id }}"{% endif %}>
             <p class="rc-confirmacao-titulo">Recebimento confirmado com sucesso.</p>
             <div class="rc-confirmacao-grid">
               <div class="rc-confirmacao-item">
