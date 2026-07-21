@@ -996,28 +996,6 @@
               </div>
             </div>
             <div class="rc-whatsapp-confirmacao">
-              {% if feedback_recebimento.comprovante_imagem_url %}
-                <a
-                  href="{{ feedback_recebimento.comprovante_imagem_url }}"
-                  target="_blank"
-                  rel="noopener"
-                  class="rc-btn rc-comprovante-visual-btn"
-                  id="btn-ver-comprovante-visual"
-                >
-                  Ver comprovante visual
-                </a>
-                <button
-                  type="button"
-                  class="rc-btn rc-compartilhar-imagem-btn"
-                  id="btn-compartilhar-comprovante-imagem"
-                  data-comprovante-url="{{ feedback_recebimento.comprovante_imagem_url }}"
-                >
-                  Compartilhar imagem no WhatsApp
-                </button>
-                <p class="rc-comprovante-orientacao">
-                  Use o botão Compartilhar imagem no WhatsApp para enviar só a imagem, sem colar o link.
-                </p>
-              {% endif %}
               {% if feedback_recebimento.whatsapp_confirmacao.tem_whatsapp %}
                 <a
                   href="{{ feedback_recebimento.whatsapp_confirmacao.url }}"
@@ -1026,11 +1004,33 @@
                   class="rc-btn rc-whatsapp-confirmacao-btn"
                   id="btn-enviar-confirmacao-whatsapp"
                 >
-                  Enviar confirmação pelo WhatsApp
+                  Enviar comprovante pelo WhatsApp
                 </a>
               {% else %}
                 <p class="rc-whatsapp-confirmacao-aviso">
-                  Cliente sem WhatsApp cadastrado. Cadastre o WhatsApp do cliente para enviar a confirmação.
+                  Cliente sem WhatsApp cadastrado. Cadastre o WhatsApp do cliente para enviar a confirmacao.
+                </p>
+              {% endif %}
+              {% if feedback_recebimento.comprovante_imagem_url %}
+                <button
+                  type="button"
+                  class="rc-btn rc-compartilhar-imagem-btn"
+                  id="btn-compartilhar-comprovante-imagem"
+                  data-comprovante-url="{{ feedback_recebimento.comprovante_imagem_url }}"
+                >
+                  Compartilhar imagem do comprovante
+                </button>
+                <a
+                  href="{{ feedback_recebimento.comprovante_imagem_url }}"
+                  target="_blank"
+                  rel="noopener"
+                  class="rc-btn rc-comprovante-visual-btn"
+                  id="btn-ver-comprovante-visual"
+                >
+                  Ver imagem do comprovante
+                </a>
+                <p class="rc-comprovante-orientacao">
+                  Primeiro envie o comprovante pelo WhatsApp. Use a imagem quando quiser mandar o comprovante visual.
                 </p>
               {% endif %}
               {% if cliente %}<a href="{% url 'estoque:vendas' %}?cliente_id={{ cliente.id }}" class="rc-btn rc-voltar-cliente-btn" id="btn-voltar-tela-venda">Voltar para tela de venda</a>{% endif %}
