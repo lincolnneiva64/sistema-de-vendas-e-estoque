@@ -500,6 +500,26 @@
     color: #0f8f3f;
     text-align: right;
   }
+
+  .rc-cliente-rota-aviso {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    margin: 0 0 8px;
+    padding: 8px 12px;
+    border: 1px solid #f3c56b;
+    border-radius: 12px;
+    background: #fff7d6;
+    color: #a54b07;
+    font-size: 0.88rem;
+    font-weight: 900;
+    line-height: 1.2;
+  }
+
+  .rc-cliente-rota-aviso[hidden] {
+    display: none;
+  }
+
   .rc-cliente-busca-wrap {
     position: relative;
   }
@@ -887,6 +907,78 @@
     }
   }
 
+  .rc-rota-busca-wrap {
+    position: relative;
+  }
+
+  .rc-rota-busca-input {
+    width: 100%;
+    min-height: 58px;
+    padding: 0 20px;
+    border: 1px solid #c7d7ee;
+    border-radius: 14px;
+    background: #fff;
+    color: #111a31;
+    font: inherit;
+    font-size: 18px;
+    font-weight: 800;
+    outline: none;
+  }
+
+  .rc-rota-busca-input:focus {
+    border-color: #2459ed;
+    box-shadow: 0 0 0 3px rgba(36, 89, 237, 0.14);
+  }
+
+  .rc-rota-sugestoes {
+    position: absolute;
+    z-index: 40;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    display: none;
+    max-height: 280px;
+    overflow-y: auto;
+    border: 1px solid #c7d7ee;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 14px 30px rgba(17, 26, 49, 0.18);
+  }
+
+  .rc-rota-sugestoes.visivel {
+    display: block;
+  }
+
+  .rc-rota-sugestao {
+    display: block;
+    width: 100%;
+    padding: 13px 16px;
+    border: 0;
+    border-bottom: 1px solid #edf2f8;
+    background: #fff;
+    color: #111a31;
+    text-align: left;
+    font: inherit;
+    font-size: 17px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .rc-rota-sugestao:last-child {
+    border-bottom: 0;
+  }
+
+  .rc-rota-sugestao:hover,
+  .rc-rota-sugestao.ativa {
+    background: #edf4ff;
+  }
+
+  .rc-rota-sem-resultado {
+    padding: 13px 16px;
+    color: #7a3d00;
+    font-weight: 700;
+  }
+
 </style>
 
 <div class="receber-cliente-page {% if feedback_recebimento %}recebimento-confirmado{% endif %}">
@@ -924,25 +1016,33 @@
       </section>
     {% endif %}
 
-    {% if not cliente %}
-      <section class="rc-rota-receber-card" aria-label="Filtro de rota para recebimento">
-        <form method="get" class="rc-rota-form">
-          {% if retorno_url %}
-            <input type="hidden" name="next" value="{{ retorno_url }}">
-          {% endif %}
-          <div class="rc-rota-field">
+    <section class="rc-rota-receber-card" aria-label="Filtro de rota para recebimento">
+        <div class="rc-rota-form" id="formRotaReceberCliente">
+          <div class="rc-rota-field rc-rota-busca-wrap">
             <label for="rotaReceberCliente">Rota/Bairro</label>
-            <select id="rotaReceberCliente" name="rota">
-              <option value="">Todas</option>
+            <input
+              id="rotaReceberCliente"
+              class="rc-rota-busca-input"
+              type="text"
+              autocomplete="off"
+              value="{% if rota_filtro %}{{ rota_filtro }}{% else %}Todas{% endif %}"
+              placeholder="Digite ou escolha a rota"
+            >
+            <div id="rotaSugestoesReceberCliente" class="rc-rota-sugestoes">
+              <button type="button" class="rc-rota-sugestao" data-rota="">Todas</button>
               {% for rota in rotas_opcoes %}
-                <option value="{{ rota }}" {% if rota_filtro == rota %}selected{% endif %}>{{ rota }}</option>
+                <button type="button" class="rc-rota-sugestao" data-rota="{{ rota }}">{{ rota }}</button>
               {% endfor %}
-            </select>
+            </div>
           </div>
-          <button type="submit" class="rc-btn rc-btn-primary">Filtrar rota</button>
-        </form>
+        </div>
 
-        <div class="rc-rota-clientes">
+        {% if not cliente %}
+        <details class="rc-rota-clientes-detalhes">
+          <summary class="rc-rota-clientes-resumo">
+            Ver clientes com contas em aberto - {{ resumo_receber.clientes_devendo }}
+          </summary>
+          <div class="rc-rota-clientes">
           {% for item in clientes_devedores_rota %}
             <a class="rc-rota-cliente-item" href="{% url 'estoque:receber_cliente' item.cliente_id %}?next={{ retorno_recebimento_url|urlencode }}">
               <span>
@@ -958,9 +1058,179 @@
           {% empty %}
             <div class="rc-rota-empty">Nenhum cliente com contas abertas para esta rota.</div>
           {% endfor %}
-        </div>
+          </div>
+        </details>
+        {% endif %}
       </section>
-    {% endif %}
+
+
+<script>
+(function () {
+  const input = document.getElementById("rotaReceberCliente");
+  const box = document.getElementById("rotaSugestoesReceberCliente");
+  if (!input || !box) return;
+
+  const opcoes = Array.from(box.querySelectorAll(".rc-rota-sugestao"));
+  let opcoesVisiveis = opcoes.slice();
+  let indiceAtivo = -1;
+
+  function normalizar(valor) {
+    return String(valor || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
+  function mostrarBox() {
+    box.classList.add("visivel");
+  }
+
+  function fecharBox() {
+    box.classList.remove("visivel");
+    indiceAtivo = -1;
+    opcoes.forEach((opcao) => opcao.classList.remove("ativa"));
+  }
+
+  function marcarAtiva() {
+    opcoes.forEach((opcao) => opcao.classList.remove("ativa"));
+    const atual = opcoesVisiveis[indiceAtivo];
+    if (atual) {
+      atual.classList.add("ativa");
+      atual.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  function filtrar() {
+    const termo = normalizar(input.value);
+    box.querySelector(".rc-rota-sem-resultado")?.remove();
+
+    opcoesVisiveis = opcoes.filter((opcao) => {
+      const nome = normalizar(opcao.textContent);
+      const rota = normalizar(opcao.dataset.rota || "");
+      const visivel = !termo || nome.includes(termo) || rota.includes(termo);
+      opcao.hidden = !visivel;
+      return visivel;
+    });
+
+    indiceAtivo = opcoesVisiveis.length ? 0 : -1;
+    marcarAtiva();
+
+    if (!opcoesVisiveis.length) {
+      const aviso = document.createElement("div");
+      aviso.className = "rc-rota-sem-resultado";
+      aviso.textContent = "Rota nao encontrada.";
+      box.appendChild(aviso);
+    }
+
+    mostrarBox();
+  }
+
+  function aplicarRota(opcao) {
+    if (!opcao) return;
+
+    const rota = opcao.dataset.rota || "";
+    input.value = rota || "Todas";
+    fecharBox();
+
+    const url = new URL("{% url 'estoque:receber_cliente_escolher' %}", window.location.origin);
+    if (rota) {
+      url.searchParams.set("rota", rota);
+    }
+
+    window.location.href = url.toString();
+  }
+
+  function aplicarMelhorRotaDigitada() {
+    const termo = normalizar(input.value);
+    if (!termo) {
+      aplicarRota(opcoes.find((opcao) => !opcao.dataset.rota));
+      return;
+    }
+
+    const exata = opcoes.find((opcao) =>
+      normalizar(opcao.textContent) === termo || normalizar(opcao.dataset.rota || "") === termo
+    );
+
+    if (exata) {
+      aplicarRota(exata);
+      return;
+    }
+
+    const parcial = opcoes.find((opcao) => {
+      const nome = normalizar(opcao.textContent);
+      const rota = normalizar(opcao.dataset.rota || "");
+      return nome.includes(termo) || rota.includes(termo);
+    });
+
+    if (parcial) {
+      aplicarRota(parcial);
+      return;
+    }
+
+    filtrar();
+  }
+
+  input.addEventListener("focus", () => {
+    input.select();
+    filtrar();
+  });
+
+  input.addEventListener("input", filtrar);
+
+  input.addEventListener("blur", () => {
+    window.setTimeout(() => {
+      if (document.activeElement && document.activeElement.closest(".rc-rota-busca-wrap")) {
+        return;
+      }
+
+      const termo = normalizar(input.value);
+      const rotaAtualVisivel = normalizar("{% if rota_filtro %}{{ rota_filtro }}{% else %}Todas{% endif %}");
+      if (termo && termo !== rotaAtualVisivel) {
+        aplicarMelhorRotaDigitada();
+      }
+    }, 160);
+  });
+
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (!opcoesVisiveis.length) return;
+      indiceAtivo = (indiceAtivo + 1) % opcoesVisiveis.length;
+      marcarAtiva();
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!opcoesVisiveis.length) return;
+      indiceAtivo = (indiceAtivo - 1 + opcoesVisiveis.length) % opcoesVisiveis.length;
+      marcarAtiva();
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      aplicarMelhorRotaDigitada();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      fecharBox();
+    }
+  });
+
+  opcoes.forEach((opcao) => {
+    opcao.addEventListener("click", () => aplicarRota(opcao));
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".rc-rota-busca-wrap")) {
+      fecharBox();
+    }
+  });
+})();
+</script>
 
     {% if messages %}
       {% for message in messages %}
@@ -978,6 +1248,13 @@
           <div class="rc-cliente-busca-atual">Selecionado: {% if cliente %}{{ cliente.nome }}{% else %}Nenhum cliente selecionado{% endif %}</div>
         {% endif %}
       </div>
+      <div
+        id="avisoBuscaClienteRota"
+        class="rc-cliente-rota-aviso"
+        role="status"
+        aria-live="polite"
+        {% if not cliente or total_contas > 0 %}hidden{% endif %}
+      >{% if cliente and total_contas == 0 %}Cliente sem contas em aberto.{% endif %}</div>
       <div class="rc-cliente-busca-wrap">
         <input
           id="clienteBuscaReceberDireto"
@@ -1294,8 +1571,7 @@
             </div>
           {% else %}
             <div class="rc-empty">
-              Este cliente nao possui contas a receber em aberto.<br>
-              Nao ha notas pendentes para baixar neste momento. O recebimento desta tela e feito pelo total pago pelo cliente e aplicado automaticamente nas contas abertas, da mais antiga para a mais nova.
+              Nenhuma conta em aberto.
             </div>
           {% endif %}
           <div class="rc-saldo-total">
@@ -1386,11 +1662,18 @@
 (function () {
   const input = document.getElementById("clienteBuscaReceberDireto");
   const box = document.getElementById("clienteSugestoesReceberDireto");
+  const avisoRota = document.getElementById("avisoBuscaClienteRota");
   if (!input || !box) return;
 
   const clientesUrl = "{% url 'estoque:clientes_autocomplete' %}";
   const receberUrlBase = "{% url 'estoque:receber_cliente' 0 %}";
-  const retornoUrl = "{% url 'estoque:receber_cliente_escolher' %}";
+  const rotaSelect = document.getElementById("rotaReceberCliente");
+  const rotaDigitada = rotaSelect ? rotaSelect.value.trim() : "";
+  const rotaAtual = rotaDigitada === "Todas" ? "" : rotaDigitada;
+  const retornoUrlBase = "{% url 'estoque:receber_cliente_escolher' %}";
+  const retornoUrl = rotaAtual
+    ? retornoUrlBase + "?rota=" + encodeURIComponent(rotaAtual)
+    : retornoUrlBase;
   const atrasoAutoSelecaoCliente = 450;
   let clientes = [];
   let timer = null;
@@ -1416,6 +1699,22 @@
     indiceAtivo = -1;
     box.innerHTML = "";
     box.style.display = "none";
+  }
+
+  function mostrarAvisoRota(texto) {
+    if (!avisoRota) return;
+
+    avisoRota.textContent = texto || "";
+    avisoRota.hidden = !texto;
+  }
+
+  function limparClienteAnterior() {
+    document.querySelector(".rc-cliente-busca-atual")?.remove();
+
+    const layout = document.querySelector(".rc-pos-confirmacao-layout");
+    if (layout) {
+      layout.style.display = "none";
+    }
   }
 
   function cancelarAutoSelecao() {
@@ -1625,7 +1924,15 @@
     ultimoTermo = termo;
     const idBuscaAtual = ++buscaId;
 
-    fetch(clientesUrl + "?contexto=receber_rapido&q=" + encodeURIComponent(termo), {
+    const parametrosBusca = new URLSearchParams({
+      contexto: "receber_rapido",
+      q: termo
+    });
+    if (rotaAtual) {
+      parametrosBusca.set("rota", rotaAtual);
+    }
+
+    fetch(clientesUrl + "?" + parametrosBusca.toString(), {
       headers: { "X-Requested-With": "XMLHttpRequest" }
     })
       .then((resposta) => resposta.ok ? resposta.json() : Promise.reject())
@@ -1634,6 +1941,15 @@
         if (termoBuscaAtual() !== ultimoTermo) return;
         clientes = ordenarClientes(dados.clientes || [], termo);
         indiceAtivo = clientes.length ? 0 : -1;
+
+        if (!clientes.length && dados.cliente_fora_rota) {
+          mostrarAvisoRota("Cliente fora desta rota.");
+        } else if (!clientes.length && termo) {
+          mostrarAvisoRota("Cliente nao encontrado nesta rota.");
+        } else {
+          mostrarAvisoRota("");
+        }
+
         renderizar();
         if (permitirAutoSelecao && clientes.length === 1) {
           agendarAutoSelecao(clientes[0], termo, idBuscaAtual);
@@ -1646,15 +1962,22 @@
         cancelarAutoSelecao();
         clientes = [];
         indiceAtivo = -1;
+        mostrarAvisoRota("");
         renderizar();
       });
   }
 
   input.addEventListener("input", () => {
     if (selecionandoCliente) return;
+
+    if (clienteSelecionado) {
+      limparClienteAnterior();
+    }
+
     clienteSelecionado = false;
     input.dataset.clienteSelecionado = "false";
     textoInicialSelecionado = false;
+    mostrarAvisoRota("");
     buscaId += 1;
     clearTimeout(timer);
     cancelarAutoSelecao();

@@ -24,7 +24,7 @@ from django.core import signing
 from django.db import IntegrityError, transaction
 from django.db.models import Q, Sum, Max, Prefetch
 from django.db.models.functions import Coalesce
-from urllib.parse import quote, unquote, urlencode
+from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
@@ -9323,11 +9323,56 @@ def _resumo_cliente_venda(cliente, hoje=None):
     }
 
 
+def _aliases_rota_cliente(rota):
+    rota = (rota or "").strip()
+    if not rota:
+        return []
+
+    aliases = {
+        "furo": ["Furo", "Furo da Marinha"],
+        "furo da marinha": ["Furo", "Furo da Marinha"],
+    }
+
+    return aliases.get(rota.lower(), [rota])
+
+
+def _rotas_clientes_opcoes():
+    rotas = list(
+        Cliente.objects.filter(ativo=True)
+        .exclude(bairro__isnull=True)
+        .exclude(bairro="")
+        .values_list("bairro", flat=True)
+        .distinct()
+        .order_by("bairro")
+    )
+
+    rotas_normalizadas = []
+    for rota in rotas:
+        nome = (rota or "").strip()
+        if not nome:
+            continue
+
+        if nome.lower() == "furo":
+            nome = "Furo da Marinha"
+
+        if nome not in rotas_normalizadas:
+            rotas_normalizadas.append(nome)
+
+    return sorted(rotas_normalizadas)
+
+
 def clientes_autocomplete(request):
     termo = request.GET.get("q", "").strip()
     contexto = request.GET.get("contexto", "").strip()
+    rota = request.GET.get("rota", "").strip()
     cliente_id = request.GET.get("cliente_id", "").strip()
-    clientes_qs = Cliente.objects.filter(ativo=True).order_by("nome")
+    clientes_base_qs = Cliente.objects.filter(ativo=True).order_by("nome")
+    clientes_qs = clientes_base_qs
+
+    aliases_rota = _aliases_rota_cliente(rota)
+
+    if contexto == "receber_rapido" and aliases_rota:
+        clientes_qs = clientes_qs.filter(bairro__in=aliases_rota)
     hoje = timezone.localdate()
 
     if cliente_id.isdigit():
@@ -9415,7 +9460,24 @@ def clientes_autocomplete(request):
         dados_cliente["telefone"] = cliente.whatsapp or cliente.telefone_alternativo or ""
         clientes.append(dados_cliente)
 
-    return JsonResponse({"clientes": clientes})
+    cliente_fora_rota = False
+    if contexto == "receber_rapido" and aliases_rota and termo and not clientes:
+        clientes_fora_rota_qs = clientes_base_qs.exclude(bairro__in=aliases_rota)
+
+        for parte in termo.split():
+            clientes_fora_rota_qs = clientes_fora_rota_qs.filter(
+                Q(nome__icontains=parte)
+                | Q(apelido_nome_conhecido__icontains=parte)
+                | Q(whatsapp__icontains=parte)
+                | Q(whatsapp_normalizado__icontains=parte)
+            )
+
+        cliente_fora_rota = clientes_fora_rota_qs.exists()
+
+    return JsonResponse({
+        "clientes": clientes,
+        "cliente_fora_rota": cliente_fora_rota,
+    })
 
 
 def _clientes_pix_autocomplete_local(limite=500):
@@ -11237,17 +11299,12 @@ def receber_cliente_escolher(request):
         status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
         valor_em_aberto__gt=0,
     )
-    rotas_opcoes = list(
-        contas_abertas_base.exclude(cliente__bairro__isnull=True)
-        .exclude(cliente__bairro="")
-        .values_list("cliente__bairro", flat=True)
-        .distinct()
-        .order_by("cliente__bairro")
-    )
+    rotas_opcoes = _rotas_clientes_opcoes()
 
     contas_abertas_resumo = contas_abertas_base
-    if rota_filtro:
-        contas_abertas_resumo = contas_abertas_resumo.filter(cliente__bairro__iexact=rota_filtro)
+    aliases_rota_filtro = _aliases_rota_cliente(rota_filtro)
+    if aliases_rota_filtro:
+        contas_abertas_resumo = contas_abertas_resumo.filter(cliente__bairro__in=aliases_rota_filtro)
 
     resumo_receber = {
         "clientes_devendo": contas_abertas_resumo.values("cliente_id").distinct().count(),
@@ -11335,6 +11392,14 @@ def receber_cliente(request, cliente_id):
     )
     feedback_recebimento = request.session.pop("receber_cliente_feedback", None)
     retorno_url = _url_retorno_segura(request)
+
+    rota_filtro = request.GET.get("rota", "").strip()
+    if not rota_filtro and retorno_url:
+        parametros_retorno = parse_qs(urlparse(retorno_url).query)
+        rota_filtro = (parametros_retorno.get("rota") or [""])[0].strip()
+
+    rotas_opcoes = _rotas_clientes_opcoes()
+
     contas_url = reverse("estoque:contas_receber")
     destino_retorno = retorno_url or f"{contas_url}?{urlencode({'cliente': cliente.nome, 'status': 'em_aberto'})}"
     destino_pos_recebimento = reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id})
@@ -11694,6 +11759,11 @@ def receber_cliente(request, cliente_id):
 
     contexto = {
         "cliente": cliente,
+        "rota_filtro": rota_filtro,
+        "rotas_opcoes": rotas_opcoes,
+        "clientes_devedores_rota": [],
+        "resumo_receber": None,
+        "retorno_recebimento_url": reverse("estoque:receber_cliente_escolher"),
         "contas": contas,
         "contas_preview": contas_preview,
         "total_contas": len(contas),
