@@ -16,13 +16,14 @@ from django.apps import apps as django_apps
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import Sum
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, OperacaoRecebimentoCliente, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
 from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_ALTERADA_FALTA_REENVIAR, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
@@ -16509,6 +16510,203 @@ class PixRecebidoTests(TestCase):
             valor_em_aberto=valor,
             status=ContaReceber.STATUS_ABERTA,
         )
+
+    def _post_receber_cliente(self, cliente, valor, destino_diferenca="troco", rota="", next_url=""):
+        url = reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id})
+        parametros = {}
+        if rota:
+            parametros["rota"] = rota
+        if next_url:
+            parametros["next"] = next_url
+        if parametros:
+            url = f"{url}?{urlencode(parametros)}"
+        return self.client.post(
+            url,
+            {
+                "data_recebimento": timezone.localdate().isoformat(),
+                "valor": valor,
+                "forma_pagamento": "PIX",
+                "destino_diferenca": destino_diferenca,
+            },
+            secure=True,
+        )
+
+    def test_receber_cliente_uma_conta_cria_operacao_e_relaciona_baixa(self):
+        usuario = get_user_model().objects.create_user(username="operador", password="senha")
+        self.client.force_login(usuario)
+        cliente = Cliente.objects.create(nome="Cliente Operacao Unica", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+
+        resposta = self._post_receber_cliente(cliente, "60,00")
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(OperacaoRecebimentoCliente.objects.count(), 1)
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 1)
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        recebimento = RecebimentoContaReceber.objects.get()
+        self.assertEqual(recebimento.operacao, operacao)
+        self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
+        self.assertEqual(operacao.cliente, cliente)
+        self.assertEqual(operacao.cliente_nome_snapshot, "Cliente Operacao Unica")
+        self.assertEqual(operacao.valor_recebido, Decimal("60.00"))
+        self.assertEqual(operacao.valor_aplicado, Decimal("60.00"))
+        self.assertEqual(operacao.credito_gerado, Decimal("0.00"))
+        self.assertEqual(operacao.saldo_anterior, Decimal("100.00"))
+        self.assertEqual(operacao.saldo_atual, Decimal("40.00"))
+        self.assertEqual(operacao.forma_pagamento, "PIX")
+        self.assertEqual(operacao.criado_por, usuario)
+
+    def test_receber_cliente_anonimo_cria_operacao_sem_criado_por(self):
+        cliente = Cliente.objects.create(nome="Cliente Operacao Anonima", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+
+        resposta = self._post_receber_cliente(cliente, "60,00")
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertIsNone(OperacaoRecebimentoCliente.objects.get().criado_por)
+
+    def test_receber_cliente_varias_contas_cria_uma_operacao_para_todas_baixas(self):
+        cliente = Cliente.objects.create(nome="Cliente Varias Contas", ativo=True)
+        self._criar_conta_receber_pix(cliente, "80.00")
+        self._criar_conta_receber_pix(cliente, "70.00")
+
+        resposta = self._post_receber_cliente(cliente, "120,00")
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(OperacaoRecebimentoCliente.objects.count(), 1)
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        recebimentos = list(RecebimentoContaReceber.objects.order_by("id"))
+        self.assertEqual(len(recebimentos), 2)
+        self.assertEqual({recebimento.operacao_id for recebimento in recebimentos}, {operacao.id})
+        self.assertEqual(operacao.valor_recebido, Decimal("120.00"))
+        self.assertEqual(operacao.valor_aplicado, Decimal("120.00"))
+        self.assertEqual(operacao.saldo_anterior, Decimal("150.00"))
+        self.assertEqual(operacao.saldo_atual, Decimal("30.00"))
+        self.assertEqual(sum((recebimento.valor for recebimento in recebimentos), Decimal("0.00")), Decimal("120.00"))
+
+    def test_receber_cliente_com_sobra_em_credito_registra_operacao(self):
+        cliente = Cliente.objects.create(nome="Cliente Sobra Credito", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+
+        resposta = self._post_receber_cliente(cliente, "125,00", destino_diferenca="credito")
+
+        self.assertEqual(resposta.status_code, 302)
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        self.assertEqual(operacao.valor_recebido, Decimal("125.00"))
+        self.assertEqual(operacao.valor_aplicado, Decimal("100.00"))
+        self.assertEqual(operacao.credito_gerado, Decimal("25.00"))
+        self.assertEqual(operacao.saldo_atual, Decimal("0.00"))
+        self.assertEqual(CreditoCliente.objects.get().valor, Decimal("25.00"))
+
+    def test_receber_cliente_com_sobra_em_troco_nao_registra_credito(self):
+        cliente = Cliente.objects.create(nome="Cliente Sobra Troco", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+
+        resposta = self._post_receber_cliente(cliente, "125,00", destino_diferenca="troco")
+
+        self.assertEqual(resposta.status_code, 302)
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        recebimento = RecebimentoContaReceber.objects.get()
+        self.assertEqual(operacao.valor_recebido, Decimal("125.00"))
+        self.assertEqual(operacao.valor_aplicado, Decimal("100.00"))
+        self.assertEqual(operacao.credito_gerado, Decimal("0.00"))
+        self.assertEqual(operacao.saldo_atual, Decimal("0.00"))
+        self.assertEqual(recebimento.valor, Decimal("100.00"))
+        self.assertEqual(CreditoCliente.objects.count(), 0)
+
+    def test_receber_cliente_erro_durante_baixa_nao_deixa_operacao_orfa(self):
+        cliente = Cliente.objects.create(nome="Cliente Rollback Operacao", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+
+        with patch("estoque.views._aplicar_recebimento_conta", side_effect=RuntimeError("falha baixa")):
+            with self.assertRaises(RuntimeError):
+                self._post_receber_cliente(cliente, "50,00")
+
+        self.assertEqual(OperacaoRecebimentoCliente.objects.count(), 0)
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
+
+    def test_receber_cliente_persiste_comprovante_dados_e_mantem_feedback(self):
+        cliente = Cliente.objects.create(nome="Cliente Comprovante Operacao", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+
+        resposta = self._post_receber_cliente(cliente, "100,00")
+
+        self.assertEqual(resposta.status_code, 302)
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        dados = operacao.comprovante_dados
+        self.assertEqual(dados["cliente_id"], cliente.id)
+        self.assertEqual(dados["cliente_nome"], "Cliente Comprovante Operacao")
+        self.assertEqual(dados["valor_pago"], "100.00")
+        self.assertEqual(dados["forma_pagamento"], "PIX")
+        self.assertEqual(dados["saldo_atual"], "0.00")
+        self.assertEqual(len(dados["contas"]), 1)
+        self.assertEqual(dados["contas"][0]["valor_aplicado"], "100.00")
+        feedback = self.client.session["receber_cliente_feedback"]
+        self.assertIn("comprovante_imagem_url", feedback)
+        self.assertIn("whatsapp_confirmacao", feedback)
+        self.assertTrue(self.client.session["receber_cliente_comprovantes"])
+
+    def test_recebimento_conta_receber_direto_continua_sem_operacao(self):
+        cliente = Cliente.objects.create(nome="Cliente Historico Direto", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "100.00")
+
+        recebimento = RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=timezone.localdate(),
+            valor=Decimal("10.00"),
+            forma_pagamento="Dinheiro",
+        )
+
+        self.assertIsNone(recebimento.operacao)
+        self.assertEqual(OperacaoRecebimentoCliente.objects.count(), 0)
+
+    def test_aplicar_recebimento_conta_sem_operacao_continua_compativel(self):
+        cliente = Cliente.objects.create(nome="Cliente Funcao Sem Operacao", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "100.00")
+
+        with transaction.atomic():
+            conta_bloqueada = ContaReceber.objects.select_for_update().get(pk=conta.pk)
+            resultado = views._aplicar_recebimento_conta(
+                conta_bloqueada,
+                timezone.localdate(),
+                Decimal("30.00"),
+                "Dinheiro",
+                "Recebimento direto em teste.",
+                "troco",
+            )
+
+        self.assertEqual(resultado["valor_aplicado"], Decimal("30.00"))
+        self.assertIsNone(resultado["recebimento"].operacao)
+        self.assertEqual(OperacaoRecebimentoCliente.objects.count(), 0)
+
+    def test_receber_cliente_grava_rota_snapshot_quando_informada(self):
+        cliente = Cliente.objects.create(nome="Cliente Rota Snapshot", bairro="Centro", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+
+        resposta = self._post_receber_cliente(cliente, "40,00", rota="Centro")
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(OperacaoRecebimentoCliente.objects.get().rota_snapshot, "Centro")
+
+    def test_receber_cliente_grava_rota_snapshot_recuperada_do_next(self):
+        cliente = Cliente.objects.create(nome="Cliente Rota Next Snapshot", bairro="Jardim", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+        next_url = f"{reverse('estoque:receber_cliente_escolher')}?{urlencode({'rota': 'Jardim'})}"
+
+        resposta = self._post_receber_cliente(cliente, "40,00", next_url=next_url)
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(OperacaoRecebimentoCliente.objects.get().rota_snapshot, "Jardim")
+
+    def test_receber_cliente_sem_rota_snapshot_fica_vazio(self):
+        cliente = Cliente.objects.create(nome="Cliente Sem Rota Snapshot", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+
+        resposta = self._post_receber_cliente(cliente, "40,00")
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(OperacaoRecebimentoCliente.objects.get().rota_snapshot, "")
 
     def test_receber_cliente_mostra_credito_disponivel_com_origem_e_saldo_resultante(self):
         cliente = Cliente.objects.create(nome="Cliente Com Credito", ativo=True)

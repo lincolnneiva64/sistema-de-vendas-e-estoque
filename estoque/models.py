@@ -516,10 +516,84 @@ class ContaReceber(models.Model):
         return f"Conta a receber - Venda #{self.venda_id}"
 
 
+class OperacaoRecebimentoCliente(models.Model):
+    STATUS_RECIBO_PENDENTE = "pendente"
+    STATUS_RECIBO_ENVIADO = "enviado"
+    STATUS_RECIBO_DISPENSADO = "dispensado"
+    STATUS_RECIBO_CHOICES = [
+        (STATUS_RECIBO_PENDENTE, "Pendente"),
+        (STATUS_RECIBO_ENVIADO, "Enviado"),
+        (STATUS_RECIBO_DISPENSADO, "Dispensado"),
+    ]
+
+    cliente = models.ForeignKey(
+        Cliente,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="operacoes_recebimento",
+    )
+    cliente_nome_snapshot = models.CharField(max_length=160)
+    valor_recebido = models.DecimalField(max_digits=12, decimal_places=2)
+    valor_aplicado = models.DecimalField(max_digits=12, decimal_places=2)
+    credito_gerado = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    saldo_anterior = models.DecimalField(max_digits=12, decimal_places=2)
+    saldo_atual = models.DecimalField(max_digits=12, decimal_places=2)
+    data_recebimento = models.DateField()
+    forma_pagamento = models.CharField(max_length=80)
+    rota_snapshot = models.CharField(max_length=160, blank=True)
+    status_recibo = models.CharField(
+        max_length=20,
+        choices=STATUS_RECIBO_CHOICES,
+        default=STATUS_RECIBO_PENDENTE,
+    )
+    comprovante_dados = models.JSONField(default=dict, blank=True)
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="operacoes_recebimento_criadas",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+    recibo_confirmado_em = models.DateTimeField(null=True, blank=True)
+    recibo_confirmado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="operacoes_recebimento_confirmadas",
+    )
+    recibo_dispensado_em = models.DateTimeField(null=True, blank=True)
+    recibo_dispensado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="operacoes_recebimento_dispensadas",
+    )
+    motivo_dispensa = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-criado_em", "-id"]
+        verbose_name = "Operacao de recebimento de cliente"
+        verbose_name_plural = "Operacoes de recebimento de clientes"
+
+    def __str__(self):
+        return f"Recebimento cliente R$ {self.valor_recebido} - {self.cliente_nome_snapshot}"
+
+
 class RecebimentoContaReceber(models.Model):
     conta = models.ForeignKey(
         ContaReceber,
         on_delete=models.CASCADE,
+        related_name="recebimentos",
+    )
+    operacao = models.ForeignKey(
+        OperacaoRecebimentoCliente,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="recebimentos",
     )
     data_recebimento = models.DateField()

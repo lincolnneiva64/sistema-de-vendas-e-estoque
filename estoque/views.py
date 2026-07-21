@@ -29,7 +29,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
     contato_tem_telefone_no_post,
@@ -11610,6 +11610,7 @@ def receber_cliente(request, cliente_id):
                 elif not contas:
                     messages.warning(request, "Nao ha contas abertas para receber deste cliente.")
                 else:
+                    operacao_recebimento = None
                     try:
                         with transaction.atomic():
                             contas_atualizadas = list(
@@ -11643,6 +11644,34 @@ def receber_cliente(request, cliente_id):
                             contas_atualizadas_ids = []
                             contas_atualizadas_feedback = {}
                             contas_confirmacao_whatsapp = []
+                            saldo_anterior_operacao = sum(
+                                (
+                                    (conta_atual.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
+                                    for conta_atual in contas_atualizadas
+                                ),
+                                Decimal("0.00"),
+                            ).quantize(Decimal("0.01"))
+                            valor_aplicado_operacao = sum(
+                                (valor_aplicar for _, valor_aplicar, _ in distribuicao),
+                                Decimal("0.00"),
+                            ).quantize(Decimal("0.01"))
+                            saldo_atual_operacao = max(
+                                (saldo_anterior_operacao - valor_aplicado_operacao).quantize(Decimal("0.01")),
+                                Decimal("0.00"),
+                            )
+                            operacao_recebimento = OperacaoRecebimentoCliente.objects.create(
+                                cliente=cliente,
+                                cliente_nome_snapshot=cliente.nome,
+                                valor_recebido=valor_recebido,
+                                valor_aplicado=valor_aplicado_operacao,
+                                credito_gerado=Decimal("0.00"),
+                                saldo_anterior=saldo_anterior_operacao,
+                                saldo_atual=saldo_atual_operacao,
+                                data_recebimento=data_recebimento,
+                                forma_pagamento=valores["forma_pagamento"],
+                                rota_snapshot=rota_filtro,
+                                criado_por=request.user if request.user.is_authenticated else None,
+                            )
                             for conta_atual, valor_aplicar, sobra_conta in distribuicao:
                                 valor_entregue_conta = (valor_aplicar + sobra_conta).quantize(Decimal("0.01"))
                                 observacao = (
@@ -11657,6 +11686,7 @@ def receber_cliente(request, cliente_id):
                                     valores["forma_pagamento"],
                                     observacao,
                                     valores["destino_diferenca"],
+                                    operacao=operacao_recebimento,
                                 )
                                 valor_aplicado_total = (valor_aplicado_total + valor_aplicar).quantize(Decimal("0.01"))
                                 credito_gerado_total = (
@@ -11698,6 +11728,9 @@ def receber_cliente(request, cliente_id):
                                 data_recebimento,
                                 valores["forma_pagamento"],
                             )
+                            if credito_gerado_total != operacao_recebimento.credito_gerado:
+                                operacao_recebimento.credito_gerado = credito_gerado_total
+                                operacao_recebimento.save(update_fields=["credito_gerado", "atualizado_em"])
                     except RecebimentoContaErro as exc:
                         messages.warning(request, str(exc))
                     else:
@@ -11748,6 +11781,9 @@ def receber_cliente(request, cliente_id):
                             cliente,
                             dados_confirmacao_whatsapp,
                         )
+                        if operacao_recebimento:
+                            operacao_recebimento.comprovante_dados = comprovante_dados
+                            operacao_recebimento.save(update_fields=["comprovante_dados", "atualizado_em"])
                         comprovantes_sessao = request.session.get("receber_cliente_comprovantes", {})
                         comprovantes_sessao[comprovante_token] = comprovante_dados
                         if len(comprovantes_sessao) > 8:
@@ -11935,6 +11971,7 @@ def _aplicar_recebimento_conta(
     observacao,
     destino_diferenca,
     credito_utilizado=Decimal("0.00"),
+    operacao=None,
 ):
     # Deve ser chamado dentro de transaction.atomic(); a conta deve estar bloqueada com select_for_update().
     if conta.status == ContaReceber.STATUS_CANCELADA:
@@ -12003,6 +12040,7 @@ def _aplicar_recebimento_conta(
 
     recebimento = RecebimentoContaReceber.objects.create(
         conta=conta,
+        operacao=operacao,
         data_recebimento=data_recebimento,
         valor=valor_aplicado,
         forma_pagamento=(

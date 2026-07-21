@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Categoria, EnvioListaCompraFornecedor, Fornecedor, FornecedorContato, Funcionario, ItemVenda, PixRecebido, Produto, ProdutoFornecedor, ResolucaoVisitaFornecedor, Unidade, Venda
+from .models import Categoria, EnvioListaCompraFornecedor, Fornecedor, FornecedorContato, Funcionario, ItemVenda, OperacaoRecebimentoCliente, PixRecebido, Produto, ProdutoFornecedor, ResolucaoVisitaFornecedor, Unidade, Venda
 
 admin.site.register(Produto)
 admin.site.register(Unidade)
@@ -9,6 +9,32 @@ admin.site.register(Funcionario)
 admin.site.register(Venda)
 admin.site.register(ItemVenda)
 admin.site.register(PixRecebido)
+
+
+@admin.register(OperacaoRecebimentoCliente)
+class OperacaoRecebimentoClienteAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "cliente",
+        "cliente_nome_snapshot",
+        "valor_recebido",
+        "data_recebimento",
+        "forma_pagamento",
+        "rota_snapshot",
+        "status_recibo",
+        "criado_por",
+        "criado_em",
+    )
+    list_filter = (
+        "status_recibo",
+        "data_recebimento",
+        "forma_pagamento",
+        "rota_snapshot",
+    )
+    search_fields = (
+        "cliente__nome",
+        "cliente_nome_snapshot",
+    )
 
 
 class FornecedorContatoInline(admin.TabularInline):
