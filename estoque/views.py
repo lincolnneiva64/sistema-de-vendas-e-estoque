@@ -10154,6 +10154,7 @@ def consultar_vendas_canceladas(request):
 @ensure_csrf_cookie
 def contas_receber(request):
     cliente_texto = request.GET.get("cliente", "").strip()
+    rota_filtro = request.GET.get("rota", "").strip()
     data_inicial_texto = request.GET.get("data_inicial", "").strip()
     data_final_texto = request.GET.get("data_final", "").strip()
     status_filtro = request.GET.get("status", "em_aberto").strip() or "em_aberto"
@@ -10202,6 +10203,21 @@ def contas_receber(request):
             | Q(cliente__whatsapp__icontains=cliente_texto)
         )
 
+    if rota_filtro:
+        contas_qs = contas_qs.filter(cliente__bairro__iexact=rota_filtro)
+
+    rotas_opcoes = list(
+        ContaReceber.objects.filter(
+            status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+            valor_em_aberto__gt=0,
+        )
+        .exclude(cliente__bairro__isnull=True)
+        .exclude(cliente__bairro="")
+        .values_list("cliente__bairro", flat=True)
+        .distinct()
+        .order_by("cliente__bairro")
+    )
+
     contas_recebimento_cliente = None
     contas_recebimento_cliente_total = Decimal("0.00")
     contas_recebimento_cliente_qtd = 0
@@ -10225,6 +10241,8 @@ def contas_receber(request):
             | Q(cliente__cpf_cnpj__icontains=cliente_texto)
             | Q(cliente__whatsapp__icontains=cliente_texto)
         )
+    if rota_filtro:
+        creditos_qs = creditos_qs.filter(cliente__bairro__iexact=rota_filtro)
 
     clientes_com_credito = []
     creditos_agrupados = (
@@ -10249,6 +10267,14 @@ def contas_receber(request):
             }
         )
 
+    hoje = timezone.localdate()
+    resumo_contas = contas_qs.aggregate(
+        total_a_receber=Sum("valor_em_aberto"),
+        contas_atrasadas=Count("id", filter=Q(data_vencimento__lt=hoje)),
+        total_atrasado=Sum("valor_em_aberto", filter=Q(data_vencimento__lt=hoje)),
+        clientes_com_contas=Count("cliente_id", distinct=True),
+    )
+
     contas = list(contas_qs)
     return render(
         request,
@@ -10258,6 +10284,12 @@ def contas_receber(request):
             "total_contas": len(contas),
             "clientes_com_credito": clientes_com_credito,
             "cliente": cliente_texto,
+            "rota_filtro": rota_filtro,
+            "rotas_opcoes": rotas_opcoes,
+            "resumo_total_a_receber": resumo_contas["total_a_receber"] or Decimal("0.00"),
+            "resumo_contas_atrasadas": resumo_contas["contas_atrasadas"] or 0,
+            "resumo_total_atrasado": resumo_contas["total_atrasado"] or Decimal("0.00"),
+            "resumo_clientes_com_contas": resumo_contas["clientes_com_contas"] or 0,
             "data_inicial": data_inicial_texto,
             "data_final": data_final_texto,
             "retorno_url": retorno_url,

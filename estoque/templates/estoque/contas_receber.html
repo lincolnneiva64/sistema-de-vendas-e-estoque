@@ -40,9 +40,36 @@
   }
   .contas-search form {
     display: grid;
-    grid-template-columns: minmax(180px, 1.2fr) repeat(2, minmax(130px, 0.7fr)) minmax(130px, 0.7fr) auto auto;
+    grid-template-columns: minmax(180px, 1.2fr) minmax(150px, 0.8fr) repeat(2, minmax(130px, 0.7fr)) minmax(130px, 0.7fr) auto auto;
     gap: 9px;
     align-items: end;
+  }
+  .contas-resumo-rota {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(140px, 1fr));
+    gap: 9px;
+    margin-bottom: 12px;
+  }
+  .contas-resumo-card {
+    background: #fff;
+    border: 1px solid #e1e7ef;
+    border-radius: 12px;
+    padding: 10px 12px;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+  }
+  .contas-resumo-label {
+    display: block;
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 850;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .contas-resumo-valor {
+    color: #172033;
+    font-size: 1.08rem;
+    font-weight: 950;
   }
   .contas-field label {
     display: block; margin-bottom: 5px; color: #64748b; font-size: 0.74rem;
@@ -218,7 +245,7 @@
           {% endif %}
         </span>
         {% if contas_recebimento_cliente %}
-          <a href="{% url 'estoque:receber_cliente' contas_recebimento_cliente.cliente_id %}?next={{ detalhe_credito_retorno_url|urlencode }}" class="contas-btn contas-btn-primary">Receber do cliente</a>
+          <a href="{% url 'estoque:receber_cliente' contas_recebimento_cliente.cliente_id %}?next={{ detalhe_credito_retorno_url|urlencode }}" class="contas-btn contas-btn-primary">Receber contas do cliente</a>
         {% endif %}
       </div>
     {% endif %}
@@ -231,6 +258,15 @@
         <div class="contas-field">
           <label for="cliente">Cliente</label>
           <input id="cliente" name="cliente" type="text" value="{{ cliente }}" placeholder="Nome, apelido, CPF/CNPJ ou WhatsApp">
+        </div>
+        <div class="contas-field">
+          <label for="rota">Rota/Bairro</label>
+          <select id="rota" name="rota">
+            <option value="">Todas</option>
+            {% for rota in rotas_opcoes %}
+              <option value="{{ rota }}" {% if rota_filtro == rota %}selected{% endif %}>{{ rota }}</option>
+            {% endfor %}
+          </select>
         </div>
         <div class="contas-field">
           <label for="data_inicial">Data inicial</label>
@@ -251,6 +287,25 @@
         <button type="submit" class="contas-btn contas-btn-primary">Filtrar</button>
         <a href="{% url 'estoque:contas_receber' %}{% if retorno_url %}?next={{ retorno_url|urlencode }}{% endif %}" class="contas-btn contas-btn-secondary">Limpar</a>
       </form>
+    </section>
+
+    <section class="contas-resumo-rota" aria-label="Resumo das contas filtradas">
+      <div class="contas-resumo-card">
+        <span class="contas-resumo-label">Clientes com contas</span>
+        <strong class="contas-resumo-valor">{{ resumo_clientes_com_contas }}</strong>
+      </div>
+      <div class="contas-resumo-card">
+        <span class="contas-resumo-label">Total a receber</span>
+        <strong class="contas-resumo-valor">R$ {{ resumo_total_a_receber|floatformat:2 }}</strong>
+      </div>
+      <div class="contas-resumo-card">
+        <span class="contas-resumo-label">Contas atrasadas</span>
+        <strong class="contas-resumo-valor">{{ resumo_contas_atrasadas }}</strong>
+      </div>
+      <div class="contas-resumo-card">
+        <span class="contas-resumo-label">Total atrasado</span>
+        <strong class="contas-resumo-valor">R$ {{ resumo_total_atrasado|floatformat:2 }}</strong>
+      </div>
     </section>
 
     {% if clientes_com_credito %}
@@ -311,8 +366,10 @@
                 <td>
                   <div class="contas-actions-cell">
                     <a href="{% url 'estoque:venda_detalhe' conta.venda_id %}?next={{ detalhe_credito_retorno_url|urlencode }}" class="contas-action-link">Abrir nota</a>
-                    {% if conta.status == "aberta" or conta.status == "parcial" %}
-                      <a href="{% url 'estoque:conta_receber_receber' conta.id %}?next={{ detalhe_credito_retorno_url|urlencode }}" class="contas-action-link receber">Receber</a>
+                    {% if conta.cliente_id %}
+                      {% if conta.status == "aberta" or conta.status == "parcial" %}
+                        <a href="{% url 'estoque:receber_cliente' conta.cliente_id %}?next={{ detalhe_credito_retorno_url|urlencode }}" class="contas-action-link receber">Receber contas do cliente</a>
+                      {% endif %}
                     {% endif %}
                   </div>
                 </td>
