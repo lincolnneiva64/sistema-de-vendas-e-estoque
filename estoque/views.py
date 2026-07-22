@@ -16543,6 +16543,8 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
     texto_cor = "#111827"
     suave = "#374151"
     borda = "#cbd5e1"
+    verde_fundo = "#eaf7ee"
+    verde_borda = "#a8d5b5"
     verde = "#14532d"
     verde_escuro = "#052e16"
     amarelo = "#854d0e"
@@ -16552,8 +16554,8 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
     fonte_label = _fonte_nota_whatsapp(21, True)
     fonte_texto = _fonte_nota_whatsapp(25)
     fonte_texto_negrito = _fonte_nota_whatsapp(28, True)
-    fonte_valor = _fonte_nota_whatsapp(38, True)
-    fonte_total = _fonte_nota_whatsapp(48, True)
+    fonte_valor = _fonte_nota_whatsapp(42, True)
+    fonte_total = _fonte_nota_whatsapp(54, True)
     fonte_fim = _fonte_nota_whatsapp(24, True)
 
     contas = list(dados.get("contas", []))
@@ -16601,18 +16603,18 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
     saldo_atual = _decimal_comprovante(dados.get("saldo_atual"))
     credito = credito_previsto
 
-    draw.rounded_rectangle((margem, y, largura - margem, y + 122), radius=20, fill=verde_escuro, outline=verde_escuro, width=3)
-    draw.text((margem + 22, y + 20), "TOTAL PAGO", fill="#dcfce7", font=fonte_label)
+    draw.rounded_rectangle((margem, y, largura - margem, y + 124), radius=20, fill=verde_fundo, outline=verde_borda, width=3)
+    draw.text((margem + 22, y + 18), "TOTAL PAGO", fill=suave, font=fonte_label)
     total_texto = _formatar_moeda(valor_pago)
     total_largura = _texto_largura(draw, total_texto, fonte_total)
-    draw.text((largura - margem - 22 - total_largura, y + 45), total_texto, fill="#ffffff", font=fonte_total)
-    y += 142
+    draw.text((largura - margem - 22 - total_largura, y + 46), total_texto, fill=verde_escuro, font=fonte_total)
+    y += 144
 
     def campo(x1, y1, largura_campo, label, valor, destaque=False):
-        fundo_campo = verde_escuro if destaque else "#ffffff"
-        borda_campo = verde_escuro if destaque else "#cbd5e1"
-        label_cor = "#dcfce7" if destaque else "#4b5563"
-        valor_cor = "#ffffff" if destaque else texto_cor
+        fundo_campo = verde_fundo if destaque else "#ffffff"
+        borda_campo = verde_borda if destaque else "#cbd5e1"
+        label_cor = suave if destaque else "#4b5563"
+        valor_cor = verde_escuro if destaque else texto_cor
         draw.rounded_rectangle(
             (x1, y1, x1 + largura_campo, y1 + 86),
             radius=16,
