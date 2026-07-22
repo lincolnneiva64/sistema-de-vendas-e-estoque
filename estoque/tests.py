@@ -17267,7 +17267,7 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(resposta_card["Content-Type"], "image/png")
         self.assertIn("recibo-whatsapp", resposta_card["Content-Disposition"])
         imagem = Image.open(io.BytesIO(resposta_card.content))
-        self.assertEqual(imagem.width, 540)
+        self.assertEqual(imagem.width, 500)
         self.assertGreater(imagem.height, imagem.width)
         self.assertLess(imagem.height, 1400)
         self.assertEqual(resposta_comprovante.status_code, 200)
