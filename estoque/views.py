@@ -16562,29 +16562,30 @@ def _gerar_comprovante_recebimento_imagem(dados):
 
 
 def _gerar_recibo_recebimento_whatsapp_card(dados):
-    largura = 500
-    margem = 10
+    largura = 450
+    margem = 8
     conteudo_largura = largura - (margem * 2)
-    fundo = "#f3f4f6"
-    papel = "#ffffff"
+    fundo = "#f8fafc"
+    papel = "#fffefc"
     vinho_escuro = "#1f0710"
-    texto_cor = "#06070a"
+    texto_cor = "#020617"
     label_cor = "#111827"
-    borda = "#7f8a9a"
-    borda_suave = "#b7c2cf"
+    borda = "#667085"
+    borda_suave = "#aeb8c5"
     verde_fundo = "#eaf7ee"
-    verde_borda = "#74b88a"
+    verde_borda = "#5ca775"
     verde_escuro = "#052e16"
     amarelo_fundo = "#fff7d6"
 
-    fonte_titulo = _fonte_recibo_card_bold(50)
-    fonte_subtitulo = _fonte_recibo_card_bold(30)
-    fonte_label = _fonte_recibo_card_bold(26)
-    fonte_texto = _fonte_recibo_card_bold(36)
+    fonte_titulo = _fonte_recibo_card_bold(32)
+    fonte_subtitulo = _fonte_recibo_card_bold(26)
+    fonte_label = _fonte_recibo_card_bold(22)
+    fonte_texto = _fonte_recibo_card_bold(24)
     fonte_cliente = _fonte_recibo_card_bold(24)
-    fonte_total = _fonte_recibo_card_bold(68)
-    fonte_saldo_atual = _fonte_recibo_card_bold(60)
-    fonte_fim = _fonte_recibo_card_bold(32)
+    fonte_nota = _fonte_recibo_card_regular(22)
+    fonte_total = _fonte_recibo_card_bold(52)
+    fonte_saldo_atual = _fonte_recibo_card_bold(46)
+    fonte_fim = _fonte_recibo_card_bold(22)
 
     contas = list(dados.get("contas", []))
     contas_abertas = list(dados.get("contas_abertas", []))
@@ -16596,24 +16597,25 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
     imagem = Image.new("RGB", (largura, altura), fundo)
     draw = ImageDraw.Draw(imagem)
 
-    draw.rectangle((0, 0, largura, altura), fill=papel)
-    draw.rectangle((0, 0, largura, 90), fill="#fff7ed")
-    draw.text((margem, 8), "L A Neiva", fill=vinho_escuro, font=fonte_titulo)
-    draw.text((margem, 56), "COMPROVANTE DE PAGAMENTO", fill=texto_cor, font=fonte_subtitulo)
+    draw.rectangle((0, 0, largura, altura), fill=fundo)
+    draw.rectangle((margem, margem, largura - margem, 68), fill=papel, outline=borda, width=1)
+    draw.rectangle((margem, margem, largura - margem, 68), fill="#fff7ed")
+    draw.text((margem + 8, 12), "L A Neiva", fill=vinho_escuro, font=fonte_titulo)
+    draw.text((margem + 8, 40), "COMPROVANTE DE PAGAMENTO", fill=texto_cor, font=fonte_subtitulo)
 
     tabela_x = margem
     tabela_direita = largura - margem
-    label_largura = 205
+    label_largura = 164
     valor_x = tabela_x + label_largura
     valor_largura = tabela_direita - valor_x
-    y = 98
+    y = 72
     draw.rectangle((tabela_x, y, tabela_direita, y), fill=borda)
 
     valor_pago = _decimal_comprovante(dados.get("valor_pago"))
     saldo_anterior = _decimal_comprovante(dados.get("saldo_anterior"))
     saldo_atual = _decimal_comprovante(dados.get("saldo_atual"))
 
-    def fonte_para_caber(texto, fonte_base, largura_maxima, tamanho_minimo=42):
+    def fonte_para_caber(texto, fonte_base, largura_maxima, tamanho_minimo=20):
         tamanho = getattr(fonte_base, "size", 64)
         while tamanho > tamanho_minimo:
             fonte = _fonte_recibo_card_bold(tamanho)
@@ -16631,21 +16633,23 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
             draw.text((x, y1), linha, fill=cor, font=fonte)
             y1 += altura_texto(fonte) + entrelinhas
 
-    def desenhar_linha(y1, label, valor, destaque=False, fundo_linha=None, fonte_valor_base=None):
-        padding_y = 5
+    def desenhar_linha(y1, label, valor, destaque=False, fundo_linha=None, fonte_valor_base=None, fonte_valor_regular=None):
+        padding_y = 4 if not destaque else 3
         fonte_label_linha = fonte_label if destaque else fonte_label
         fonte_valor_linha = fonte_valor_base or (fonte_total if destaque else fonte_texto)
         fonte_valor_linha = fonte_para_caber(
             valor,
             fonte_valor_linha,
-            valor_largura - 16,
-            46 if destaque else 20,
+            valor_largura - 8,
+            40 if destaque else 20,
         )
-        linhas_valor = _quebrar_texto(draw, valor, fonte_valor_linha, valor_largura - 16)
-        linhas_label = _quebrar_texto(draw, label, fonte_label_linha, label_largura - 12)
+        if fonte_valor_regular is not None and not destaque:
+            fonte_valor_linha = fonte_valor_regular
+        linhas_valor = _quebrar_texto(draw, valor, fonte_valor_linha, valor_largura - 8)
+        linhas_label = _quebrar_texto(draw, label, fonte_label_linha, label_largura - 6)
         altura_label = len(linhas_label) * altura_texto(fonte_label_linha) + max(len(linhas_label) - 1, 0) * 2
         altura_valor = len(linhas_valor) * altura_texto(fonte_valor_linha) + max(len(linhas_valor) - 1, 0) * 2
-        altura_linha = max(40 if not destaque else 66, altura_label, altura_valor) + (padding_y * 2)
+        altura_linha = max(30 if not destaque else 50, altura_label, altura_valor) + (padding_y * 2)
         fundo_usado = fundo_linha or (verde_fundo if destaque else papel)
         borda_usada = verde_borda if destaque else borda_suave
 
@@ -16653,8 +16657,8 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
         draw.line((valor_x, y1, valor_x, y1 + altura_linha), fill=borda_usada, width=1)
         label_y = y1 + ((altura_linha - altura_label) / 2)
         valor_y = y1 + ((altura_linha - altura_valor) / 2)
-        desenhar_linhas_texto(tabela_x + 8, label_y, linhas_label, fonte_label_linha, label_cor)
-        desenhar_linhas_texto(valor_x + 8, valor_y, linhas_valor, fonte_valor_linha, verde_escuro if destaque else texto_cor)
+        desenhar_linhas_texto(tabela_x + 6, label_y, linhas_label, fonte_label_linha, label_cor)
+        desenhar_linhas_texto(valor_x + 6, valor_y, linhas_valor, fonte_valor_linha, verde_escuro if destaque else texto_cor)
         return y1 + altura_linha
 
     cliente = dados.get("cliente_nome") or "Cliente"
@@ -16666,9 +16670,9 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
     y = desenhar_linha(y, "Cliente", cliente, fonte_valor_base=fonte_cliente)
     y = desenhar_linha(y, "Data", data_recebimento)
     y = desenhar_linha(y, "Forma", forma_pagamento)
+    y = desenhar_linha(y, "Saldo anterior", _formatar_moeda(saldo_anterior))
     y = desenhar_linha(y, "TOTAL PAGO", _formatar_moeda(valor_pago), destaque=True, fonte_valor_base=fonte_total)
     y = desenhar_linha(y, "SALDO ATUAL", _formatar_moeda(saldo_atual), destaque=True, fonte_valor_base=fonte_saldo_atual)
-    y = desenhar_linha(y, "Saldo anterior", _formatar_moeda(saldo_anterior))
 
     if credito > Decimal("0.00"):
         y = desenhar_linha(y, "Credito gerado", _formatar_moeda(credito), fundo_linha=amarelo_fundo)
@@ -16684,8 +16688,9 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
             status = "Quitada" if conta.get("quitada") else "Parcial"
             y = desenhar_linha(
                 y,
-                f"Nota #{venda}",
-                f"{data_nota}\nAbatido {abatido} | Restante {restante} | {status}",
+                "Nota abatida",
+                f"Nota #{venda} - {data_nota}\nAbatido {abatido} | Restante {restante} | {status}",
+                fonte_valor_regular=fonte_nota,
             )
     if contas_extra:
         y = desenhar_linha(y, "Contas abatidas", f"+ {contas_extra} no comprovante detalhado")
@@ -16693,9 +16698,9 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
     y = desenhar_linha(y, "Contas abertas", str(total_abertas), fundo_linha="#f8fafc")
     y = desenhar_linha(y, "Saldo restante", _formatar_moeda(saldo_aberto), fundo_linha="#f8fafc")
 
-    y += 8
-    draw.text((margem, y), "Obrigado. L A Neiva", fill=vinho_escuro, font=fonte_fim)
-    altura_final = min(altura, max(y + 42, 560))
+    y += 6
+    draw.text((margem + 6, y), "Obrigado. L A Neiva", fill=vinho_escuro, font=fonte_fim)
+    altura_final = min(altura, max(y + 32, 440))
     if altura_final < altura:
         imagem = imagem.crop((0, 0, largura, altura_final))
 
