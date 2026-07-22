@@ -16996,6 +16996,24 @@ class PixRecebidoTests(TestCase):
             ),
         )
         self.assertContains(resposta, "Abrir WhatsApp com mensagem")
+        self.assertContains(resposta, "Compartilhar card")
+        self.assertContains(resposta, 'id="btn-compartilhar-recibo-card"')
+        self.assertContains(
+            resposta,
+            'data-card-url="{}"'.format(
+                reverse(
+                    "estoque:receber_cliente_operacao_recibo_card_imagem",
+                    kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
+                )
+            ),
+        )
+        self.assertContains(resposta, "Segue seu comprovante de pagamento.")
+        self.assertContains(resposta, "navigator.share")
+        self.assertContains(resposta, "navigator.canShare")
+        self.assertContains(resposta, 'new File([blob], "recibo-pagamento.png", { type: "image/png" })')
+        self.assertContains(resposta, "await fetch(cardUrl")
+        self.assertContains(resposta, "Compartilhamento cancelado.")
+        self.assertContains(resposta, "Este navegador nao conseguiu compartilhar a imagem automaticamente.")
         self.assertContains(
             resposta,
             "Para enviar o recibo: abra o card, anexe a imagem no WhatsApp e depois confirme o envio.",
@@ -17014,6 +17032,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "#btn-enviar-confirmacao-whatsapp { flex: 0 1 300px; max-width: 300px; }")
         self.assertContains(resposta, "#btn-confirmar-recibo-enviado { flex: 0 1 250px; max-width: 250px; }")
         self.assertContains(resposta, "#btn-ver-recibo-card { flex: 0 1 210px; max-width: 210px; }")
+        self.assertContains(resposta, "#btn-compartilhar-recibo-card { flex: 0 1 210px; max-width: 210px; }")
         self.assertNotContains(resposta, "grid-template-columns: 1fr 1.35fr auto")
         conteudo = resposta.content.decode()
         self.assertLess(conteudo.find("Acoes do recibo"), conteudo.find("Contas abatidas"))
@@ -17058,6 +17077,9 @@ class PixRecebidoTests(TestCase):
         self.assertNotIn("Contas que ainda faltam pagar", mensagem)
         self.assertNotIn("Venda/Nota", mensagem)
         self.assertContains(resposta, 'btnWhatsapp?.addEventListener("click", revelarConfirmacao)')
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        operacao.refresh_from_db()
+        self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
 
     def test_receber_cliente_confirmado_reload_mantem_previa_sem_sessao(self):
         cliente = Cliente.objects.create(nome="Cliente Reload Confirmado", ativo=True)
@@ -17114,6 +17136,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "Recibo enviado")
         self.assertContains(resposta, 'class="rcp-recibo-pill" id="confirmar-recibo-status"')
         self.assertNotContains(resposta, "Para enviar o recibo: abra o card")
+        self.assertNotContains(resposta, 'id="btn-compartilhar-recibo-card"')
         self.assertNotContains(resposta, 'id="btn-confirmar-recibo-enviado"')
         self.assertNotContains(resposta, "data-confirmar-recibo-url")
 
@@ -17129,6 +17152,7 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "Recibo dispensado")
         self.assertNotContains(resposta, "Para enviar o recibo: abra o card")
+        self.assertNotContains(resposta, 'id="btn-compartilhar-recibo-card"')
         self.assertNotContains(resposta, 'id="btn-confirmar-recibo-enviado"')
         self.assertNotContains(resposta, "data-confirmar-recibo-url")
 

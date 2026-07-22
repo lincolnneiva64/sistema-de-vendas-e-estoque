@@ -117,6 +117,7 @@
   }
   .rcp-btn.whatsapp { border-color: #15803d; background: #15803d; color: #fff; }
   #btn-ver-comprovante-visual { flex: 0 1 230px; max-width: 230px; }
+  #btn-compartilhar-recibo-card { flex: 0 1 210px; max-width: 210px; }
   #btn-ver-recibo-card { flex: 0 1 210px; max-width: 210px; }
   #btn-enviar-confirmacao-whatsapp { flex: 0 1 300px; max-width: 300px; }
   #btn-confirmar-recibo-enviado { flex: 0 1 250px; max-width: 250px; }
@@ -283,6 +284,7 @@
     .rcp-actions-panel .rcp-panel-body { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
     .rcp-btn { width: 100%; }
     #btn-ver-comprovante-visual,
+    #btn-compartilhar-recibo-card,
     #btn-ver-recibo-card,
     #btn-enviar-confirmacao-whatsapp,
     #btn-confirmar-recibo-enviado,
@@ -348,6 +350,15 @@
             <p class="rcp-recibo-orientacao" id="recibo-orientacao-envio">Para enviar o recibo: abra o card, anexe a imagem no WhatsApp e depois confirme o envio.</p>
           {% endif %}
           <a class="rcp-btn secondary" id="btn-ver-comprovante-visual" href="{{ comprovante_imagem_url }}" target="_blank" rel="noopener">Ver comprovante detalhado</a>
+          {% if operacao.status_recibo == "pendente" %}
+            <button
+              type="button"
+              class="rcp-btn primary"
+              id="btn-compartilhar-recibo-card"
+              data-card-url="{{ recibo_card_imagem_url }}"
+              data-share-text="{{ whatsapp_confirmacao.mensagem }}"
+            >Compartilhar card</button>
+          {% endif %}
           <a class="rcp-btn secondary" id="btn-ver-recibo-card" href="{{ recibo_card_imagem_url }}" target="_blank" rel="noopener">Abrir card para enviar</a>
           {% if whatsapp_confirmacao.tem_whatsapp and operacao.status_recibo == "pendente" %}
             <a class="rcp-btn whatsapp" id="btn-enviar-confirmacao-whatsapp" href="{{ whatsapp_confirmacao.url }}" target="_blank" rel="noopener">Abrir WhatsApp com mensagem</a>
@@ -441,6 +452,7 @@
 (function () {
   const page = document.querySelector(".rcp-page");
   const btnWhatsapp = document.getElementById("btn-enviar-confirmacao-whatsapp");
+  const btnCompartilharCard = document.getElementById("btn-compartilhar-recibo-card");
   const btnConfirmar = document.getElementById("btn-confirmar-recibo-enviado");
   const statusMensagem = document.getElementById("confirmar-recibo-status");
   const statusLabel = document.getElementById("statusReciboLabel");
@@ -463,6 +475,49 @@
     btnConfirmar.hidden = false;
     btnConfirmar.classList.add("pulsando");
     atualizarMensagem("Depois de anexar e enviar a imagem no WhatsApp, confirme o envio aqui.", false);
+  }
+
+  async function compartilharCard() {
+    const cardUrl = btnCompartilharCard?.dataset.cardUrl;
+    const texto = btnCompartilharCard?.dataset.shareText || "Segue seu comprovante de pagamento.";
+    if (!cardUrl || page?.dataset.statusRecibo !== "pendente") return;
+
+    if (!navigator.share || !navigator.canShare) {
+      atualizarMensagem("Este navegador nao conseguiu compartilhar a imagem automaticamente. Abra o card, salve ou compartilhe a imagem manualmente e depois abra o WhatsApp com a mensagem.", true);
+      return;
+    }
+
+    btnCompartilharCard.disabled = true;
+    btnCompartilharCard.textContent = "Preparando...";
+    try {
+      const resposta = await fetch(cardUrl, { credentials: "same-origin" });
+      if (!resposta.ok) {
+        throw new Error("Nao foi possivel carregar o card do recibo.");
+      }
+      const blob = await resposta.blob();
+      const arquivo = new File([blob], "recibo-pagamento.png", { type: "image/png" });
+      const payload = {
+        files: [arquivo],
+        title: "Comprovante de pagamento",
+        text: texto
+      };
+      if (!navigator.canShare(payload)) {
+        atualizarMensagem("Este navegador nao conseguiu compartilhar a imagem automaticamente. Abra o card, salve ou compartilhe a imagem manualmente e depois abra o WhatsApp com a mensagem.", true);
+        return;
+      }
+      await navigator.share(payload);
+      revelarConfirmacao();
+      atualizarMensagem("Depois de enviar o card no WhatsApp, confirme o envio.", false);
+    } catch (erro) {
+      if (erro && erro.name === "AbortError") {
+        atualizarMensagem("Compartilhamento cancelado.", false);
+      } else {
+        atualizarMensagem(erro.message || "Nao foi possivel compartilhar o card automaticamente. Abra o card e envie a imagem manualmente.", true);
+      }
+    } finally {
+      btnCompartilharCard.disabled = false;
+      btnCompartilharCard.textContent = "Compartilhar card";
+    }
   }
 
   async function confirmarRecibo() {
@@ -503,6 +558,7 @@
   }
 
   btnWhatsapp?.addEventListener("click", revelarConfirmacao);
+  btnCompartilharCard?.addEventListener("click", compartilharCard);
   btnConfirmar?.addEventListener("click", confirmarRecibo);
 })();
 </script>
