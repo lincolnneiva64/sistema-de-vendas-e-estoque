@@ -16986,8 +16986,8 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "Contas abatidas")
         self.assertContains(resposta, "Contas ainda abertas")
         self.assertContains(resposta, "<details", html=False)
-        self.assertContains(resposta, "Visualizar comprovante")
-        self.assertContains(resposta, "Abrir card do recibo")
+        self.assertContains(resposta, "Ver comprovante detalhado")
+        self.assertContains(resposta, "Abrir card para enviar")
         self.assertContains(
             resposta,
             reverse(
@@ -16995,7 +16995,15 @@ class PixRecebidoTests(TestCase):
                 kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
             ),
         )
-        self.assertContains(resposta, "Enviar recibo pelo WhatsApp")
+        self.assertContains(resposta, "Abrir WhatsApp com mensagem")
+        self.assertContains(
+            resposta,
+            "Para enviar o recibo: abra o card, anexe a imagem no WhatsApp e depois confirme o envio.",
+        )
+        self.assertContains(resposta, "Depois de anexar e enviar a imagem no WhatsApp, confirme o envio aqui.")
+        self.assertNotContains(resposta, "Enviar recibo pelo WhatsApp")
+        self.assertNotContains(resposta, "envia o card automaticamente")
+        self.assertNotContains(resposta, "anexa automaticamente")
         self.assertContains(resposta, "Confirmar recibo enviado")
         self.assertContains(resposta, f'data-confirmar-recibo-url="{self._url_confirmar_recibo(cliente, operacao)}"')
         self.assertContains(resposta, 'id="btn-confirmar-recibo-enviado"')
@@ -17105,6 +17113,7 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "Recibo enviado")
         self.assertContains(resposta, 'class="rcp-recibo-pill" id="confirmar-recibo-status"')
+        self.assertNotContains(resposta, "Para enviar o recibo: abra o card")
         self.assertNotContains(resposta, 'id="btn-confirmar-recibo-enviado"')
         self.assertNotContains(resposta, "data-confirmar-recibo-url")
 
@@ -17119,6 +17128,7 @@ class PixRecebidoTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "Recibo dispensado")
+        self.assertNotContains(resposta, "Para enviar o recibo: abra o card")
         self.assertNotContains(resposta, 'id="btn-confirmar-recibo-enviado"')
         self.assertNotContains(resposta, "data-confirmar-recibo-url")
 

@@ -159,6 +159,18 @@
     font-weight: 850;
   }
   .rcp-recibo-status.erro { color: #991b1b; }
+  .rcp-recibo-orientacao {
+    flex-basis: 100%;
+    margin: 0 0 3px;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    background: #eff6ff;
+    color: #1e3a8a;
+    padding: 7px 9px;
+    font-size: 0.79rem;
+    font-weight: 850;
+    line-height: 1.28;
+  }
   .rcp-recibo-pill {
     display: inline-flex;
     min-height: 34px;
@@ -332,10 +344,13 @@
       <div class="rcp-panel-body">
         <h2 class="rcp-section-title">Acoes do recibo</h2>
         <div class="rcp-actions">
-          <a class="rcp-btn secondary" id="btn-ver-comprovante-visual" href="{{ comprovante_imagem_url }}" target="_blank" rel="noopener">Visualizar comprovante</a>
-          <a class="rcp-btn secondary" id="btn-ver-recibo-card" href="{{ recibo_card_imagem_url }}" target="_blank" rel="noopener">Abrir card do recibo</a>
+          {% if operacao.status_recibo == "pendente" %}
+            <p class="rcp-recibo-orientacao" id="recibo-orientacao-envio">Para enviar o recibo: abra o card, anexe a imagem no WhatsApp e depois confirme o envio.</p>
+          {% endif %}
+          <a class="rcp-btn secondary" id="btn-ver-comprovante-visual" href="{{ comprovante_imagem_url }}" target="_blank" rel="noopener">Ver comprovante detalhado</a>
+          <a class="rcp-btn secondary" id="btn-ver-recibo-card" href="{{ recibo_card_imagem_url }}" target="_blank" rel="noopener">Abrir card para enviar</a>
           {% if whatsapp_confirmacao.tem_whatsapp and operacao.status_recibo == "pendente" %}
-            <a class="rcp-btn whatsapp" id="btn-enviar-confirmacao-whatsapp" href="{{ whatsapp_confirmacao.url }}" target="_blank" rel="noopener">Enviar recibo pelo WhatsApp</a>
+            <a class="rcp-btn whatsapp" id="btn-enviar-confirmacao-whatsapp" href="{{ whatsapp_confirmacao.url }}" target="_blank" rel="noopener">Abrir WhatsApp com mensagem</a>
           {% elif whatsapp_confirmacao.tem_whatsapp %}
             <a class="rcp-btn secondary" id="btn-enviar-confirmacao-whatsapp" href="{{ whatsapp_confirmacao.url }}" target="_blank" rel="noopener">WhatsApp</a>
           {% else %}
@@ -350,7 +365,7 @@
               data-operacao-id="{{ operacao.id }}"
               hidden
             >Confirmar recibo enviado</button>
-            <p class="rcp-recibo-status" id="confirmar-recibo-status" aria-live="polite" hidden>Depois de enviar pelo WhatsApp, confirme o envio.</p>
+            <p class="rcp-recibo-status" id="confirmar-recibo-status" aria-live="polite" hidden>Depois de anexar e enviar a imagem no WhatsApp, confirme o envio aqui.</p>
           {% elif operacao.status_recibo == "enviado" %}
             <span class="rcp-recibo-pill" id="confirmar-recibo-status" aria-live="polite">Recibo enviado</span>
           {% elif operacao.status_recibo == "dispensado" %}
@@ -447,7 +462,7 @@
     if (!btnConfirmar || btnConfirmar.disabled || page?.dataset.statusRecibo !== "pendente") return;
     btnConfirmar.hidden = false;
     btnConfirmar.classList.add("pulsando");
-    atualizarMensagem("Depois de enviar pelo WhatsApp, confirme o envio.", false);
+    atualizarMensagem("Depois de anexar e enviar a imagem no WhatsApp, confirme o envio aqui.", false);
   }
 
   async function confirmarRecibo() {
