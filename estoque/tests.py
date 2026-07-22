@@ -16558,6 +16558,9 @@ class PixRecebidoTests(TestCase):
             kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
         )
 
+    def _url_recibos_pendentes(self):
+        return reverse("estoque:recebimentos_recibos_pendentes")
+
     def test_confirmar_recibo_valido_marca_enviado_com_usuario(self):
         usuario = get_user_model().objects.create_user(username="confirmador", password="senha")
         self.client.force_login(usuario)
@@ -16702,6 +16705,141 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(resposta.status_code, 302)
         self.assertEqual(resposta["Location"], self._url_recebimento_confirmado(cliente, operacao))
         self.assertIn(f"/cliente/{cliente.id}/operacao/{operacao.id}/recebimento-confirmado/", resposta["Location"])
+
+    def test_recibos_pendentes_lista_apenas_status_pendente(self):
+        cliente_pendente = Cliente.objects.create(nome="Cliente Recibo Pendente", ativo=True)
+        cliente_enviado = Cliente.objects.create(nome="Cliente Recibo Enviado", ativo=True)
+        cliente_dispensado = Cliente.objects.create(nome="Cliente Recibo Dispensado", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente_pendente)
+        self._criar_operacao_recebimento_cliente(
+            cliente_enviado,
+            status=OperacaoRecebimentoCliente.STATUS_RECIBO_ENVIADO,
+        )
+        self._criar_operacao_recebimento_cliente(
+            cliente_dispensado,
+            status=OperacaoRecebimentoCliente.STATUS_RECIBO_DISPENSADO,
+        )
+
+        resposta = self.client.get(self._url_recibos_pendentes(), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, "estoque/recebimentos_recibos_pendentes.html")
+        self.assertContains(resposta, "Cliente Recibo Pendente")
+        self.assertNotContains(resposta, "Cliente Recibo Enviado")
+        self.assertNotContains(resposta, "Cliente Recibo Dispensado")
+        self.assertContains(resposta, 'id="recibosPendentesQtd">1</strong>')
+
+    def test_recibos_pendentes_mostra_dados_e_acoes_da_operacao(self):
+        cliente = Cliente.objects.create(
+            nome="Cliente Recibo Acao",
+            whatsapp="(85) 97777-1111",
+            ativo=True,
+        )
+        operacao = self._criar_operacao_recebimento_cliente(cliente)
+        operacao.rota_snapshot = "Furo da Marinha"
+        operacao.comprovante_dados = {
+            "cliente_id": cliente.id,
+            "cliente_nome": cliente.nome,
+            "valor_pago": "100.00",
+            "saldo_atual": "0.00",
+            "contas": [{"conta_id": 10, "valor_aplicado": "100.00"}],
+            "contas_abertas": [],
+        }
+        operacao.save(update_fields=["rota_snapshot", "comprovante_dados"])
+
+        resposta = self.client.get(self._url_recibos_pendentes(), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Cliente Recibo Acao")
+        self.assertContains(resposta, "R$ 100,00")
+        self.assertContains(resposta, "PIX")
+        self.assertContains(resposta, "Furo da Marinha")
+        self.assertContains(resposta, "Pendente")
+        self.assertContains(resposta, "Contas abatidas")
+        self.assertContains(resposta, ">1</strong>", html=False)
+        self.assertContains(resposta, 'href="{}"'.format(self._url_recebimento_confirmado(cliente, operacao)))
+        self.assertContains(
+            resposta,
+            reverse(
+                "estoque:receber_cliente_operacao_recibo_card_imagem",
+                kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
+            ),
+        )
+        self.assertContains(resposta, "Enviar WhatsApp")
+        self.assertContains(resposta, f'data-confirmar-recibo-url="{self._url_confirmar_recibo(cliente, operacao)}"')
+
+    def test_recibos_pendentes_whatsapp_usa_mensagem_curta_e_nao_altera_status(self):
+        cliente = Cliente.objects.create(
+            nome="Cliente Recibo WhatsApp Curto",
+            whatsapp="(85) 96666-2222",
+            ativo=True,
+        )
+        operacao = self._criar_operacao_recebimento_cliente(cliente)
+        operacao.comprovante_dados = {
+            "cliente_id": cliente.id,
+            "cliente_nome": cliente.nome,
+            "valor_pago": "100.00",
+            "saldo_atual": "0.00",
+            "contas": [{"conta_id": 10, "venda_id": 99, "valor_aplicado": "100.00"}],
+            "contas_abertas": [{"conta_id": 11, "venda_id": 100, "saldo_atual": "40.00"}],
+        }
+        operacao.save(update_fields=["comprovante_dados"])
+
+        resposta = self.client.get(self._url_recibos_pendentes(), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        conteudo = resposta.content.decode()
+        match = re.search(r'<a(?=[^>]+data-whatsapp-pendente)(?=[^>]+href="([^"]+)")[^>]+>', conteudo)
+        self.assertIsNotNone(match)
+        url_whatsapp = match.group(1).replace("&amp;", "&")
+        mensagem = parse_qs(urlsplit(url_whatsapp).query)["text"][0]
+        self.assertIn("Segue seu comprovante de pagamento.", mensagem)
+        self.assertIn("Total pago:", mensagem)
+        self.assertIn("Saldo atual:", mensagem)
+        self.assertNotIn("Venda/Nota", mensagem)
+        self.assertNotIn("Contas que ainda faltam pagar", mensagem)
+        operacao.refresh_from_db()
+        self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
+
+    def test_recibos_pendentes_confirmar_usa_endpoint_existente_e_template_remove_card(self):
+        cliente = Cliente.objects.create(nome="Cliente Recibo Confirmar Lista", ativo=True)
+        operacao = self._criar_operacao_recebimento_cliente(cliente)
+        pagina = self.client.get(self._url_recibos_pendentes(), secure=True)
+
+        resposta = self.client.post(self._url_confirmar_recibo(cliente, operacao), secure=True)
+
+        self.assertContains(pagina, "card.remove()")
+        self.assertContains(pagina, "atualizarQuantidade(-1)")
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["ok"])
+        operacao.refresh_from_db()
+        self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_ENVIADO)
+        pagina_atualizada = self.client.get(self._url_recibos_pendentes(), secure=True)
+        self.assertNotContains(pagina_atualizada, "Cliente Recibo Confirmar Lista")
+        self.assertContains(pagina_atualizada, "Nenhum recibo pendente.")
+
+    def test_recibos_pendentes_estado_vazio(self):
+        resposta = self.client.get(self._url_recibos_pendentes(), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Nenhum recibo pendente.")
+        self.assertContains(resposta, "Receber de cliente")
+        self.assertContains(resposta, "Voltar ao painel")
+
+    def test_home_mostra_atalho_recibos_pendentes_com_contador(self):
+        cliente_pendente = Cliente.objects.create(nome="Cliente Painel Pendente", ativo=True)
+        cliente_enviado = Cliente.objects.create(nome="Cliente Painel Enviado", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente_pendente)
+        self._criar_operacao_recebimento_cliente(
+            cliente_enviado,
+            status=OperacaoRecebimentoCliente.STATUS_RECIBO_ENVIADO,
+        )
+
+        resposta = self.client.get(reverse("estoque:home"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, reverse("estoque:recebimentos_recibos_pendentes"))
+        self.assertContains(resposta, "Recibos pendentes (1)")
 
     def test_receber_cliente_anonimo_cria_operacao_sem_criado_por(self):
         cliente = Cliente.objects.create(nome="Cliente Operacao Anonima", ativo=True)

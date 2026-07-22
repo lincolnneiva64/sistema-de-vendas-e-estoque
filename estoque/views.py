@@ -1341,6 +1341,9 @@ def home(request):
 
     mostrar_produtos_incompletos_home = request.GET.get("incompletos") == "1"
 
+    recibos_pendentes_qtd = OperacaoRecebimentoCliente.objects.filter(
+        status_recibo=OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE,
+    ).count()
 
     return render(
         request,
@@ -1350,6 +1353,7 @@ def home(request):
             "produtos_incompletos_home": produtos_incompletos_home,
             "produtos_incompletos_home_qtd": produtos_incompletos_home_qtd,
             "mostrar_produtos_incompletos_home": mostrar_produtos_incompletos_home,
+            "recibos_pendentes_qtd": recibos_pendentes_qtd,
 
             "produtos": produtos,
             "produto_edicao": produto_edicao,
@@ -11923,6 +11927,65 @@ def _dados_comprovante_operacao_recebimento(operacao):
     dados.setdefault("contas", [])
     dados.setdefault("contas_abertas", [])
     return dados
+
+
+@ensure_csrf_cookie
+def recebimentos_recibos_pendentes(request):
+    operacoes_qs = (
+        OperacaoRecebimentoCliente.objects
+        .select_related("cliente", "criado_por", "recibo_confirmado_por")
+        .filter(status_recibo=OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
+        .order_by("-criado_em", "-id")
+    )
+    operacoes = list(operacoes_qs)
+    pendencias = []
+    total_recebido = sum((operacao.valor_recebido for operacao in operacoes), Decimal("0.00"))
+
+    for operacao in operacoes:
+        cliente = operacao.cliente
+        comprovante_dados = _dados_comprovante_operacao_recebimento(operacao)
+        cliente_id = operacao.cliente_id
+        contas_abatidas = comprovante_dados.get("contas", [])
+        whatsapp_confirmacao = _montar_whatsapp_confirmacao_recebimento(cliente, comprovante_dados) if cliente else {
+            "tem_whatsapp": False,
+            "numero": "",
+            "url": "",
+            "mensagem": "",
+        }
+
+        pendencias.append({
+            "operacao": operacao,
+            "cliente": cliente,
+            "cliente_nome": operacao.cliente_nome_snapshot or (cliente.nome if cliente else "Cliente nao informado"),
+            "valor_recebido_formatado": _formatar_moeda(operacao.valor_recebido),
+            "saldo_atual_formatado": _formatar_moeda(operacao.saldo_atual),
+            "contas_abatidas_qtd": len(contas_abatidas),
+            "whatsapp_confirmacao": whatsapp_confirmacao,
+            "recebimento_url": reverse(
+                "estoque:receber_cliente_confirmado",
+                kwargs={"cliente_id": cliente_id, "operacao_id": operacao.id},
+            ) if cliente_id else "",
+            "recibo_card_url": reverse(
+                "estoque:receber_cliente_operacao_recibo_card_imagem",
+                kwargs={"cliente_id": cliente_id, "operacao_id": operacao.id},
+            ) if cliente_id else "",
+            "confirmar_recibo_url": reverse(
+                "estoque:receber_cliente_confirmar_recibo",
+                kwargs={"cliente_id": cliente_id, "operacao_id": operacao.id},
+            ) if cliente_id else "",
+        })
+
+    return render(
+        request,
+        "estoque/recebimentos_recibos_pendentes.html",
+        {
+            "pendencias": pendencias,
+            "pendencias_qtd": len(pendencias),
+            "total_recebido_pendente": _formatar_moeda(total_recebido),
+            "receber_cliente_url": reverse("estoque:receber_cliente_escolher"),
+            "home_url": reverse("estoque:home"),
+        },
+    )
 
 
 @ensure_csrf_cookie

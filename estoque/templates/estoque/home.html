@@ -1373,6 +1373,13 @@ align-items: center;
           Receber Cliente
         </a>
         <a
+          href="{% url 'estoque:recebimentos_recibos_pendentes' %}"
+          id="btnRecibosPendentesPainel"
+          class="btn-acao-principal-painel"
+        >
+          Recibos pendentes{% if recibos_pendentes_qtd %} ({{ recibos_pendentes_qtd }}){% endif %}
+        </a>
+        <a
           href="{% url 'estoque:contas_receber' %}"
           class="btn-acao-principal-painel"
         >
