@@ -15976,6 +15976,21 @@ def _fonte_nota_whatsapp(tamanho, negrito=False):
     return ImageFont.load_default()
 
 
+def _fonte_nota_whatsapp_forte(tamanho):
+    nomes = [
+        "seguibl.ttf",
+        "arialbd.ttf",
+        "tahomabd.ttf",
+        "verdanab.ttf",
+        "seguisb.ttf",
+    ]
+    for nome in nomes:
+        caminho = Path("C:/Windows/Fonts") / nome
+        if caminho.exists():
+            return ImageFont.truetype(str(caminho), tamanho)
+    return _fonte_nota_whatsapp(tamanho, True)
+
+
 def _texto_largura(draw, texto, fonte):
     caixa = draw.textbbox((0, 0), str(texto), font=fonte)
     return caixa[2] - caixa[0]
@@ -16539,9 +16554,9 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
     conteudo_largura = largura - (margem * 2)
     fundo = "#f3f4f6"
     papel = "#ffffff"
-    vinho_escuro = "#4a111b"
-    texto_cor = "#111827"
-    suave = "#1f2937"
+    vinho_escuro = "#2b0710"
+    texto_cor = "#050505"
+    suave = "#111827"
     borda = "#b8c2d0"
     verde_fundo = "#eaf7ee"
     verde_borda = "#a8d5b5"
@@ -16549,14 +16564,14 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
     verde_escuro = "#052e16"
     amarelo = "#854d0e"
 
-    fonte_titulo = _fonte_nota_whatsapp(56, True)
-    fonte_subtitulo = _fonte_nota_whatsapp(38, True)
-    fonte_label = _fonte_nota_whatsapp(24, True)
-    fonte_texto = _fonte_nota_whatsapp(30, True)
-    fonte_texto_negrito = _fonte_nota_whatsapp(34, True)
-    fonte_valor = _fonte_nota_whatsapp(52, True)
-    fonte_total = _fonte_nota_whatsapp(66, True)
-    fonte_fim = _fonte_nota_whatsapp(28, True)
+    fonte_titulo = _fonte_nota_whatsapp_forte(56)
+    fonte_subtitulo = _fonte_nota_whatsapp_forte(38)
+    fonte_label = _fonte_nota_whatsapp_forte(24)
+    fonte_texto = _fonte_nota_whatsapp_forte(30)
+    fonte_texto_negrito = _fonte_nota_whatsapp_forte(34)
+    fonte_valor = _fonte_nota_whatsapp_forte(52)
+    fonte_total = _fonte_nota_whatsapp_forte(66)
+    fonte_fim = _fonte_nota_whatsapp_forte(28)
 
     contas = list(dados.get("contas", []))
     contas_abertas = list(dados.get("contas_abertas", []))
@@ -16614,7 +16629,7 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
     def campo(y1, label, valor, destaque=False):
         fundo_campo = verde_fundo if destaque else "#ffffff"
         borda_campo = verde_borda if destaque else "#cbd5e1"
-        label_cor = suave if destaque else "#4b5563"
+        label_cor = suave if destaque else "#1f2937"
         valor_cor = verde_escuro if destaque else texto_cor
         draw.rounded_rectangle(
             (margem, y1, largura - margem, y1 + 112),
