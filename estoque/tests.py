@@ -17225,16 +17225,38 @@ class PixRecebidoTests(TestCase):
 
     def test_recibo_whatsapp_card_retorna_png_vertical_sem_alterar_status(self):
         cliente = Cliente.objects.create(nome="Cliente Card WhatsApp", ativo=True)
-        self._criar_conta_receber_pix(cliente, "100.00")
-        self._criar_conta_receber_pix(cliente, "80.00")
+        for _ in range(10):
+            self._criar_conta_receber_pix(cliente, "100.00")
 
-        resposta = self._post_receber_cliente(cliente, "100,00")
+        resposta = self._post_receber_cliente(cliente, "250,00")
 
         self.assertEqual(resposta.status_code, 302)
         operacao = OperacaoRecebimentoCliente.objects.get()
-        resposta_card = self.client.get(
+        url_card = reverse(
+            "estoque:receber_cliente_operacao_recibo_card_imagem",
+            kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
+        )
+
+        textos_renderizados = []
+        draw_original = views.ImageDraw.Draw
+
+        class DrawComTextoCapturado:
+            def __init__(self, draw):
+                self.draw = draw
+
+            def text(self, posicao, texto, *args, **kwargs):
+                textos_renderizados.append(str(texto))
+                return self.draw.text(posicao, texto, *args, **kwargs)
+
+            def __getattr__(self, nome):
+                return getattr(self.draw, nome)
+
+        with patch.object(views.ImageDraw, "Draw", side_effect=lambda imagem: DrawComTextoCapturado(draw_original(imagem))):
+            resposta_card = self.client.get(url_card, secure=True)
+
+        resposta_comprovante = self.client.get(
             reverse(
-                "estoque:receber_cliente_operacao_recibo_card_imagem",
+                "estoque:receber_cliente_operacao_comprovante_imagem",
                 kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
             ),
             secure=True,
@@ -17247,6 +17269,19 @@ class PixRecebidoTests(TestCase):
         imagem = Image.open(io.BytesIO(resposta_card.content))
         self.assertEqual(imagem.width, 800)
         self.assertGreater(imagem.height, imagem.width)
+        self.assertLess(imagem.height, 1200)
+        self.assertEqual(resposta_comprovante.status_code, 200)
+        self.assertEqual(resposta_comprovante["Content-Type"], "image/png")
+        self.assertIn("Comprovante de Pagamento", textos_renderizados)
+        self.assertIn("Cliente Card Whatsapp", textos_renderizados)
+        self.assertIn("TOTAL PAGO", textos_renderizados)
+        self.assertIn("R$ 250,00", textos_renderizados)
+        self.assertIn("SALDO ATUAL", textos_renderizados)
+        self.assertIn("R$ 750,00", textos_renderizados)
+        self.assertIn("Restam 8 conta(s) em aberto", textos_renderizados)
+        self.assertIn("Saldo restante: R$ 750,00", textos_renderizados)
+        self.assertIn("Veja o comprovante detalhado para a listagem completa.", textos_renderizados)
+        self.assertEqual(sum(1 for texto in textos_renderizados if texto.startswith("Nota #")), 2)
         operacao.refresh_from_db()
         self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
 
