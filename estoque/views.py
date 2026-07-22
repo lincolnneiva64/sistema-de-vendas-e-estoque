@@ -16562,28 +16562,28 @@ def _gerar_comprovante_recebimento_imagem(dados):
 
 
 def _gerar_recibo_recebimento_whatsapp_card(dados):
-    largura = 580
-    margem = 24
+    largura = 540
+    margem = 18
     conteudo_largura = largura - (margem * 2)
-    fundo = "#f3f4f6"
+    fundo = "#eef1f4"
     papel = "#ffffff"
     vinho_escuro = "#1f0710"
-    texto_cor = "#0f172a"
-    suave = "#111827"
-    borda = "#b8c2d0"
+    texto_cor = "#06070a"
+    suave = "#121722"
+    borda = "#8f9aaa"
     verde_fundo = "#eaf7ee"
-    verde_borda = "#a8d5b5"
-    verde = "#14532d"
+    verde_borda = "#6fb984"
+    verde = "#0f3f23"
     verde_escuro = "#052e16"
-    amarelo = "#854d0e"
+    amarelo = "#713f12"
 
-    fonte_titulo = _fonte_recibo_card_bold(62)
-    fonte_subtitulo = _fonte_recibo_card_bold(42)
-    fonte_label = _fonte_recibo_card_bold(27)
-    fonte_texto = _fonte_recibo_card_bold(32)
-    fonte_texto_negrito = _fonte_recibo_card_bold(36)
-    fonte_valor = _fonte_recibo_card_bold(58)
-    fonte_total = _fonte_recibo_card_bold(74)
+    fonte_titulo = _fonte_recibo_card_bold(60)
+    fonte_subtitulo = _fonte_recibo_card_bold(38)
+    fonte_label = _fonte_recibo_card_bold(29)
+    fonte_texto = _fonte_recibo_card_bold(34)
+    fonte_texto_negrito = _fonte_recibo_card_bold(38)
+    fonte_valor = _fonte_recibo_card_bold(62)
+    fonte_total = _fonte_recibo_card_bold(80)
     fonte_fim = _fonte_recibo_card_bold(30)
 
     contas = list(dados.get("contas", []))
@@ -16592,83 +16592,96 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
     contas_extra = max(len(contas) - len(contas_card), 0)
     credito_previsto = _decimal_comprovante(dados.get("credito_gerado"))
 
-    altura = 1060 + max(len(contas_card), 1) * 112
+    altura = 900 + max(len(contas_card), 1) * 88
     if credito_previsto > Decimal("0.00"):
-        altura += 98
+        altura += 78
     if contas_extra:
-        altura += 28
+        altura += 26
     if contas_abertas:
-        altura += 34
+        altura += 28
 
     imagem = Image.new("RGB", (largura, altura), fundo)
     draw = ImageDraw.Draw(imagem)
 
-    draw.rounded_rectangle((14, 14, largura - 14, altura - 14), radius=28, fill=papel, outline=borda, width=3)
-    draw.rounded_rectangle((14, 14, largura - 14, 174), radius=28, fill="#fffaf4", outline="#e7d2c2", width=3)
-    draw.rectangle((14, 122, largura - 14, 174), fill="#fffaf4")
-    draw.line((margem, 154, largura - margem, 154), fill="#e7d2c2", width=3)
-    draw.text((margem, 30), "L A Neiva", fill=vinho_escuro, font=fonte_titulo)
-    draw.text((margem, 100), "Comprovante de Pagamento", fill=texto_cor, font=fonte_subtitulo)
+    draw.rounded_rectangle((8, 8, largura - 8, altura - 8), radius=20, fill=papel, outline=borda, width=2)
+    draw.rounded_rectangle((8, 8, largura - 8, 146), radius=20, fill="#fffaf4", outline="#d3b9a8", width=2)
+    draw.rectangle((8, 112, largura - 8, 146), fill="#fffaf4")
+    draw.line((margem, 128, largura - margem, 128), fill="#d3b9a8", width=2)
+    draw.text((margem, 20), "L A Neiva", fill=vinho_escuro, font=fonte_titulo)
+    draw.text((margem, 82), "Comprovante de Pagamento", fill=texto_cor, font=fonte_subtitulo)
 
-    y = 202
+    y = 166
     cliente = dados.get("cliente_nome") or "Cliente"
     y = _desenhar_texto_quebrado_lista(draw, (margem, y), cliente, fonte_texto_negrito, texto_cor, conteudo_largura, 4)
     y += 8
 
     data_recebimento = dados.get("data_recebimento") or "-"
     forma_pagamento = dados.get("forma_pagamento") or "-"
-    draw.rounded_rectangle((margem, y, largura - margem, y + 94), radius=16, fill="#f8fafc", outline=borda, width=2)
-    draw.text((margem + 18, y + 12), f"DATA  {data_recebimento}", fill=texto_cor, font=fonte_texto)
-    draw.text((margem + 18, y + 52), f"FORMA  {forma_pagamento}", fill=texto_cor, font=fonte_texto)
-    y += 112
+    draw.rounded_rectangle((margem, y, largura - margem, y + 78), radius=12, fill="#f8fafc", outline=borda, width=2)
+    draw.text((margem + 12, y + 6), f"DATA  {data_recebimento}", fill=texto_cor, font=fonte_texto)
+    draw.text((margem + 12, y + 40), f"FORMA  {forma_pagamento}", fill=texto_cor, font=fonte_texto)
+    y += 88
 
     valor_pago = _decimal_comprovante(dados.get("valor_pago"))
     saldo_anterior = _decimal_comprovante(dados.get("saldo_anterior"))
     saldo_atual = _decimal_comprovante(dados.get("saldo_atual"))
     credito = credito_previsto
 
-    draw.rounded_rectangle((margem, y, largura - margem, y + 160), radius=22, fill=verde_fundo, outline=verde_borda, width=4)
-    draw.text((margem + 22, y + 18), "TOTAL PAGO", fill=suave, font=fonte_label)
+    def fonte_para_caber(texto, fonte_base, largura_maxima):
+        tamanho = getattr(fonte_base, "size", 64)
+        while tamanho > 42:
+            fonte = _fonte_recibo_card_bold(tamanho)
+            if _texto_largura(draw, texto, fonte) <= largura_maxima:
+                return fonte
+            tamanho -= 4
+        return _fonte_recibo_card_bold(tamanho)
+
+    draw.rounded_rectangle((margem, y, largura - margem, y + 134), radius=18, fill=verde_fundo, outline=verde_borda, width=3)
+    draw.text((margem + 16, y + 12), "TOTAL PAGO", fill=suave, font=fonte_label)
     total_texto = _formatar_moeda(valor_pago)
-    total_largura = _texto_largura(draw, total_texto, fonte_total)
-    draw.text((largura - margem - 22 - total_largura, y + 66), total_texto, fill=verde_escuro, font=fonte_total)
-    y += 178
+    fonte_total_ajustada = fonte_para_caber(total_texto, fonte_total, conteudo_largura - 32)
+    total_largura = _texto_largura(draw, total_texto, fonte_total_ajustada)
+    draw.text((largura - margem - 16 - total_largura, y + 48), total_texto, fill=verde_escuro, font=fonte_total_ajustada)
+    y += 146
 
     def campo(y1, label, valor, destaque=False):
         fundo_campo = verde_fundo if destaque else "#ffffff"
         borda_campo = verde_borda if destaque else "#cbd5e1"
-        label_cor = suave if destaque else "#1f2937"
+        label_cor = suave if destaque else texto_cor
         valor_cor = verde_escuro if destaque else texto_cor
+        altura_campo = 114 if destaque else 74
         draw.rounded_rectangle(
-            (margem, y1, largura - margem, y1 + (132 if destaque else 92)),
-            radius=18,
+            (margem, y1, largura - margem, y1 + altura_campo),
+            radius=14,
             fill=fundo_campo,
             outline=borda_campo,
-            width=4 if destaque else 3,
+            width=3 if destaque else 2,
         )
-        draw.text((margem + 18, y1 + 14), label.upper(), fill=label_cor, font=fonte_label)
+        draw.text((margem + 14, y1 + 8), label.upper(), fill=label_cor, font=fonte_label)
         fonte = fonte_valor if destaque else fonte_texto_negrito
+        fonte = fonte_para_caber(valor, fonte, conteudo_largura - 28)
         valor_largura = _texto_largura(draw, valor, fonte)
-        draw.text((largura - margem - 18 - valor_largura, y1 + (58 if destaque else 42)), valor, fill=valor_cor, font=fonte)
+        draw.text((largura - margem - 14 - valor_largura, y1 + (42 if destaque else 34)), valor, fill=valor_cor, font=fonte)
 
     campo(y, "Saldo atual", _formatar_moeda(saldo_atual), True)
-    y += 150
+    y += 124
     campo(y, "Saldo anterior", _formatar_moeda(saldo_anterior))
-    y += 108
+    y += 84
 
     if credito > Decimal("0.00"):
-        draw.rounded_rectangle((margem, y, largura - margem, y + 92), radius=18, fill="#fefce8", outline="#ca8a04", width=3)
-        draw.text((margem + 18, y + 14), "CREDITO GERADO", fill=amarelo, font=fonte_label)
+        draw.rounded_rectangle((margem, y, largura - margem, y + 78), radius=14, fill="#fefce8", outline="#ca8a04", width=2)
+        draw.text((margem + 14, y + 8), "CREDITO GERADO", fill=amarelo, font=fonte_label)
         credito_texto = _formatar_moeda(credito)
-        credito_largura = _texto_largura(draw, credito_texto, fonte_valor)
-        draw.text((largura - margem - 18 - credito_largura, y + 36), credito_texto, fill=texto_cor, font=fonte_valor)
-        y += 112
+        fonte_credito = fonte_para_caber(credito_texto, fonte_valor, conteudo_largura - 28)
+        credito_largura = _texto_largura(draw, credito_texto, fonte_credito)
+        draw.text((largura - margem - 14 - credito_largura, y + 30), credito_texto, fill=texto_cor, font=fonte_credito)
+        y += 88
 
     draw.text((margem, y), "Contas abatidas", fill=vinho_escuro, font=fonte_texto_negrito)
-    y += 46
+    y += 42
     if not contas_card:
         draw.text((margem, y), "Nenhuma conta abatida registrada.", fill=suave, font=fonte_texto)
-        y += 52
+        y += 44
     else:
         for conta in contas_card:
             venda = conta.get("venda_id") or conta.get("conta_id") or "-"
@@ -16677,36 +16690,36 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
             restante = _formatar_moeda(_decimal_comprovante(conta.get("saldo_restante")))
             status = "Quitada" if conta.get("quitada") else "Parcial"
             status_cor = verde if conta.get("quitada") else amarelo
-            draw.rounded_rectangle((margem, y, largura - margem, y + 106), radius=16, fill="#ffffff", outline="#cbd5e1", width=3)
-            draw.text((margem + 16, y + 12), f"Nota #{venda} - {data_nota}", fill=texto_cor, font=fonte_texto_negrito)
-            draw.text((margem + 16, y + 58), f"Abatido {abatido}", fill=texto_cor, font=fonte_label)
-            draw.text((margem + 16, y + 86), f"Restante {restante}", fill=texto_cor, font=fonte_label)
+            draw.rounded_rectangle((margem, y, largura - margem, y + 98), radius=12, fill="#ffffff", outline="#cbd5e1", width=2)
+            draw.text((margem + 12, y + 8), f"Nota #{venda} - {data_nota}", fill=texto_cor, font=fonte_texto_negrito)
+            draw.text((margem + 12, y + 50), f"Abatido {abatido}", fill=texto_cor, font=fonte_label)
+            draw.text((margem + 12, y + 70), f"Restante {restante}", fill=texto_cor, font=fonte_label)
             status_largura = _texto_largura(draw, status, fonte_label)
-            draw.text((largura - margem - status_largura - 16, y + 22), status, fill=status_cor, font=fonte_label)
-            y += 120
+            draw.text((largura - margem - status_largura - 12, y + 16), status, fill=status_cor, font=fonte_label)
+            y += 108
     if contas_extra:
         draw.text((margem + 8, y), f"+ {contas_extra} conta(s) abatida(s) no comprovante detalhado", fill=texto_cor, font=fonte_label)
-        y += 30
+        y += 28
 
-    y += 12
+    y += 8
     total_abertas = len(contas_abertas)
     saldo_aberto = sum((_decimal_comprovante(conta.get("saldo_atual")) for conta in contas_abertas), Decimal("0.00"))
-    draw.rounded_rectangle((margem, y, largura - margem, y + 154), radius=20, fill="#f8fafc", outline=borda, width=3)
-    draw.text((margem + 20, y + 18), "RESUMO DAS CONTAS", fill=vinho_escuro, font=fonte_label)
+    draw.rounded_rectangle((margem, y, largura - margem, y + 128), radius=14, fill="#f8fafc", outline=borda, width=2)
+    draw.text((margem + 14, y + 10), "RESUMO DAS CONTAS", fill=vinho_escuro, font=fonte_label)
     if total_abertas:
-        draw.text((margem + 20, y + 56), f"Restam {total_abertas} conta(s) em aberto", fill=texto_cor, font=fonte_texto_negrito)
+        draw.text((margem + 14, y + 44), f"Restam {total_abertas} conta(s) em aberto", fill=texto_cor, font=fonte_texto_negrito)
         saldo_aberto_texto = f"Saldo restante: {_formatar_moeda(saldo_aberto)}"
-        draw.text((margem + 20, y + 98), saldo_aberto_texto, fill=verde_escuro, font=fonte_texto_negrito)
+        draw.text((margem + 14, y + 84), saldo_aberto_texto, fill=verde_escuro, font=fonte_texto_negrito)
     else:
-        draw.text((margem + 20, y + 62), "Nenhuma conta em aberto apos este pagamento.", fill=verde_escuro, font=fonte_texto_negrito)
-    y += 174
+        draw.text((margem + 14, y + 54), "Nenhuma conta em aberto apos este pagamento.", fill=verde_escuro, font=fonte_texto_negrito)
+    y += 144
 
     if total_abertas:
         draw.text((margem, y), "Veja o comprovante detalhado para a listagem completa.", fill=texto_cor, font=fonte_label)
-        y += 34
+        y += 32
 
     draw.text((margem, y), "Obrigado. L A Neiva", fill=vinho_escuro, font=fonte_fim)
-    altura_final = min(altura, max(y + 76, 960))
+    altura_final = min(altura, max(y + 48, 860))
     if altura_final < altura:
         imagem = imagem.crop((0, 0, largura, altura_final))
 
