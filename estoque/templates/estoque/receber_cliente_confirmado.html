@@ -117,6 +117,7 @@
   }
   .rcp-btn.whatsapp { border-color: #15803d; background: #15803d; color: #fff; }
   #btn-ver-comprovante-visual { flex: 0 1 230px; max-width: 230px; }
+  #btn-ver-recibo-card { flex: 0 1 210px; max-width: 210px; }
   #btn-enviar-confirmacao-whatsapp { flex: 0 1 300px; max-width: 300px; }
   #btn-confirmar-recibo-enviado { flex: 0 1 250px; max-width: 250px; }
   .rcp-btn.primary {
@@ -270,6 +271,7 @@
     .rcp-actions-panel .rcp-panel-body { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
     .rcp-btn { width: 100%; }
     #btn-ver-comprovante-visual,
+    #btn-ver-recibo-card,
     #btn-enviar-confirmacao-whatsapp,
     #btn-confirmar-recibo-enviado,
     .rcp-btn.back {
@@ -331,6 +333,7 @@
         <h2 class="rcp-section-title">Acoes do recibo</h2>
         <div class="rcp-actions">
           <a class="rcp-btn secondary" id="btn-ver-comprovante-visual" href="{{ comprovante_imagem_url }}" target="_blank" rel="noopener">Visualizar comprovante</a>
+          <a class="rcp-btn secondary" id="btn-ver-recibo-card" href="{{ recibo_card_imagem_url }}" target="_blank" rel="noopener">Abrir card do recibo</a>
           {% if whatsapp_confirmacao.tem_whatsapp and operacao.status_recibo == "pendente" %}
             <a class="rcp-btn whatsapp" id="btn-enviar-confirmacao-whatsapp" href="{{ whatsapp_confirmacao.url }}" target="_blank" rel="noopener">Enviar recibo pelo WhatsApp</a>
           {% elif whatsapp_confirmacao.tem_whatsapp %}

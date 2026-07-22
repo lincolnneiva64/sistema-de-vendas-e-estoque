@@ -16849,6 +16849,14 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "Contas ainda abertas")
         self.assertContains(resposta, "<details", html=False)
         self.assertContains(resposta, "Visualizar comprovante")
+        self.assertContains(resposta, "Abrir card do recibo")
+        self.assertContains(
+            resposta,
+            reverse(
+                "estoque:receber_cliente_operacao_recibo_card_imagem",
+                kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
+            ),
+        )
         self.assertContains(resposta, "Enviar recibo pelo WhatsApp")
         self.assertContains(resposta, "Confirmar recibo enviado")
         self.assertContains(resposta, f'data-confirmar-recibo-url="{self._url_confirmar_recibo(cliente, operacao)}"')
@@ -16859,6 +16867,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "@media (prefers-reduced-motion: reduce)")
         self.assertContains(resposta, "#btn-enviar-confirmacao-whatsapp { flex: 0 1 300px; max-width: 300px; }")
         self.assertContains(resposta, "#btn-confirmar-recibo-enviado { flex: 0 1 250px; max-width: 250px; }")
+        self.assertContains(resposta, "#btn-ver-recibo-card { flex: 0 1 210px; max-width: 210px; }")
         self.assertNotContains(resposta, "grid-template-columns: 1fr 1.35fr auto")
         conteudo = resposta.content.decode()
         self.assertLess(conteudo.find("Acoes do recibo"), conteudo.find("Contas abatidas"))
@@ -16879,6 +16888,30 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, '<span class="rcp-count">2 &middot; R$ 150,00</span>', html=True)
         self.assertContains(resposta, "Saldo restante resumido: R$ 150,00")
         self.assertContains(resposta, "<details", count=2, html=False)
+
+    def test_receber_cliente_whatsapp_usa_mensagem_curta_sem_listagem_de_contas(self):
+        cliente = Cliente.objects.create(
+            nome="Cliente Mensagem Curta",
+            whatsapp="(85) 98888-7777",
+            ativo=True,
+        )
+        self._criar_conta_receber_pix(cliente, "100.00")
+        self._criar_conta_receber_pix(cliente, "70.00")
+
+        resposta = self._post_receber_cliente(cliente, "100,00", follow=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        conteudo = resposta.content.decode()
+        match = re.search(r'<a[^>]+id="btn-enviar-confirmacao-whatsapp"[^>]+href="([^"]+)"', conteudo)
+        self.assertIsNotNone(match)
+        url_whatsapp = match.group(1).replace("&amp;", "&")
+        mensagem = parse_qs(urlsplit(url_whatsapp).query)["text"][0]
+        self.assertIn("Segue seu comprovante de pagamento.", mensagem)
+        self.assertIn("Total pago:", mensagem)
+        self.assertIn("Saldo atual:", mensagem)
+        self.assertNotIn("Contas que ainda faltam pagar", mensagem)
+        self.assertNotIn("Venda/Nota", mensagem)
+        self.assertContains(resposta, 'btnWhatsapp?.addEventListener("click", revelarConfirmacao)')
 
     def test_receber_cliente_confirmado_reload_mantem_previa_sem_sessao(self):
         cliente = Cliente.objects.create(nome="Cliente Reload Confirmado", ativo=True)
@@ -17017,6 +17050,33 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(imagem.width, 800)
         self.assertGreater(imagem.height, imagem.width)
         self.assertLess(imagem.height, 1200)
+
+    def test_recibo_whatsapp_card_retorna_png_vertical_sem_alterar_status(self):
+        cliente = Cliente.objects.create(nome="Cliente Card WhatsApp", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+        self._criar_conta_receber_pix(cliente, "80.00")
+
+        resposta = self._post_receber_cliente(cliente, "100,00")
+
+        self.assertEqual(resposta.status_code, 302)
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        resposta_card = self.client.get(
+            reverse(
+                "estoque:receber_cliente_operacao_recibo_card_imagem",
+                kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
+            ),
+            secure=True,
+        )
+        from PIL import Image
+
+        self.assertEqual(resposta_card.status_code, 200)
+        self.assertEqual(resposta_card["Content-Type"], "image/png")
+        self.assertIn("recibo-whatsapp", resposta_card["Content-Disposition"])
+        imagem = Image.open(io.BytesIO(resposta_card.content))
+        self.assertEqual(imagem.width, 800)
+        self.assertGreater(imagem.height, imagem.width)
+        operacao.refresh_from_db()
+        self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
 
     def test_receber_cliente_sair_da_tela_sem_confirmar_mantem_recibo_pendente(self):
         cliente = Cliente.objects.create(nome="Cliente Recibo Saiu", ativo=True)

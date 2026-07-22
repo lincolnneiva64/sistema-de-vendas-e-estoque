@@ -119,6 +119,11 @@ urlpatterns = [
         views.receber_cliente_operacao_comprovante_imagem,
         name="receber_cliente_operacao_comprovante_imagem",
     ),
+    path(
+        "contas-a-receber/cliente/<int:cliente_id>/operacao/<int:operacao_id>/recibo-card/imagem/",
+        views.receber_cliente_operacao_recibo_card_imagem,
+        name="receber_cliente_operacao_recibo_card_imagem",
+    ),
     path("contas-a-receber/cliente/<int:cliente_id>/comprovante/<str:token>/imagem/", views.receber_cliente_comprovante_imagem, name="receber_cliente_comprovante_imagem"),
     path("contas-a-receber/creditos/cliente/<int:cliente_id>/", views.cliente_credito_detalhe, name="cliente_credito_detalhe"),
     path("contas-a-receber/<int:pk>/receber/", views.conta_receber_receber, name="conta_receber_receber"),
