@@ -15976,19 +15976,32 @@ def _fonte_nota_whatsapp(tamanho, negrito=False):
     return ImageFont.load_default()
 
 
-def _fonte_nota_whatsapp_forte(tamanho):
+def _fonte_recibo_card_regular(tamanho):
     nomes = [
-        "seguibl.ttf",
-        "arialbd.ttf",
-        "tahomabd.ttf",
-        "verdanab.ttf",
-        "seguisb.ttf",
+        "segoeui.ttf",
+        "arial.ttf",
+        "tahoma.ttf",
+        "verdana.ttf",
     ]
     for nome in nomes:
         caminho = Path("C:/Windows/Fonts") / nome
         if caminho.exists():
             return ImageFont.truetype(str(caminho), tamanho)
-    return _fonte_nota_whatsapp(tamanho, True)
+    return ImageFont.load_default()
+
+
+def _fonte_recibo_card_bold(tamanho):
+    nomes = [
+        "segoeuib.ttf",
+        "arialbd.ttf",
+        "tahomabd.ttf",
+        "verdanab.ttf",
+    ]
+    for nome in nomes:
+        caminho = Path("C:/Windows/Fonts") / nome
+        if caminho.exists():
+            return ImageFont.truetype(str(caminho), tamanho)
+    return _fonte_recibo_card_regular(tamanho)
 
 
 def _texto_largura(draw, texto, fonte):
@@ -16554,8 +16567,8 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
     conteudo_largura = largura - (margem * 2)
     fundo = "#f3f4f6"
     papel = "#ffffff"
-    vinho_escuro = "#2b0710"
-    texto_cor = "#050505"
+    vinho_escuro = "#1f0710"
+    texto_cor = "#0f172a"
     suave = "#111827"
     borda = "#b8c2d0"
     verde_fundo = "#eaf7ee"
@@ -16564,14 +16577,14 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
     verde_escuro = "#052e16"
     amarelo = "#854d0e"
 
-    fonte_titulo = _fonte_nota_whatsapp_forte(56)
-    fonte_subtitulo = _fonte_nota_whatsapp_forte(38)
-    fonte_label = _fonte_nota_whatsapp_forte(24)
-    fonte_texto = _fonte_nota_whatsapp_forte(30)
-    fonte_texto_negrito = _fonte_nota_whatsapp_forte(34)
-    fonte_valor = _fonte_nota_whatsapp_forte(52)
-    fonte_total = _fonte_nota_whatsapp_forte(66)
-    fonte_fim = _fonte_nota_whatsapp_forte(28)
+    fonte_titulo = _fonte_recibo_card_bold(58)
+    fonte_subtitulo = _fonte_recibo_card_bold(40)
+    fonte_label = _fonte_recibo_card_bold(25)
+    fonte_texto = _fonte_recibo_card_bold(30)
+    fonte_texto_negrito = _fonte_recibo_card_bold(34)
+    fonte_valor = _fonte_recibo_card_bold(54)
+    fonte_total = _fonte_recibo_card_bold(68)
+    fonte_fim = _fonte_recibo_card_bold(29)
 
     contas = list(dados.get("contas", []))
     contas_abertas = list(dados.get("contas_abertas", []))
@@ -16670,12 +16683,12 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
             status_cor = verde if conta.get("quitada") else amarelo
             draw.rounded_rectangle((margem, y, largura - margem, y + 90), radius=16, fill="#ffffff", outline="#cbd5e1", width=3)
             draw.text((margem + 16, y + 12), f"Nota #{venda} - {data_nota}", fill=texto_cor, font=fonte_texto_negrito)
-            draw.text((margem + 16, y + 52), f"Abatido {abatido} | Restante {restante}", fill=suave, font=fonte_label)
+            draw.text((margem + 16, y + 52), f"Abatido {abatido} | Restante {restante}", fill=texto_cor, font=fonte_label)
             status_largura = _texto_largura(draw, status, fonte_label)
             draw.text((largura - margem - status_largura - 16, y + 28), status, fill=status_cor, font=fonte_label)
             y += 104
     if contas_extra:
-        draw.text((margem + 8, y), f"+ {contas_extra} conta(s) abatida(s) no comprovante detalhado", fill=suave, font=fonte_label)
+        draw.text((margem + 8, y), f"+ {contas_extra} conta(s) abatida(s) no comprovante detalhado", fill=texto_cor, font=fonte_label)
         y += 30
 
     y += 12
@@ -16692,7 +16705,7 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
     y += 172
 
     if total_abertas:
-        draw.text((margem, y), "Veja o comprovante detalhado para a listagem completa.", fill=suave, font=fonte_label)
+        draw.text((margem, y), "Veja o comprovante detalhado para a listagem completa.", fill=texto_cor, font=fonte_label)
         y += 34
 
     draw.text((margem, y), "Obrigado. L A Neiva", fill=vinho_escuro, font=fonte_fim)
