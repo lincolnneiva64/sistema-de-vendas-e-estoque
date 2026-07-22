@@ -17267,7 +17267,7 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(resposta_card["Content-Type"], "image/png")
         self.assertIn("recibo-whatsapp", resposta_card["Content-Disposition"])
         imagem = Image.open(io.BytesIO(resposta_card.content))
-        self.assertEqual(imagem.width, 620)
+        self.assertEqual(imagem.width, 580)
         self.assertGreater(imagem.height, imagem.width)
         self.assertLess(imagem.height, 1400)
         self.assertEqual(resposta_comprovante.status_code, 200)
@@ -17281,7 +17281,7 @@ class PixRecebidoTests(TestCase):
         self.assertIn("Restam 8 conta(s) em aberto", textos_renderizados)
         self.assertIn("Saldo restante: R$ 750,00", textos_renderizados)
         self.assertIn("Veja o comprovante detalhado para a listagem completa.", textos_renderizados)
-        self.assertEqual(sum(1 for texto in textos_renderizados if texto.startswith("Nota #")), 2)
+        self.assertEqual(sum(1 for texto in textos_renderizados if texto.startswith("Nota #")), 1)
         operacao.refresh_from_db()
         self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
 
