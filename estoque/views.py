@@ -9346,6 +9346,16 @@ def _normalizar_rota_recebimento(valor):
     return re.sub(r"\s+", " ", texto).strip().casefold()
 
 
+def _nome_usuario_recebimento(usuario):
+    if not usuario:
+        return ""
+    nome = ""
+    if hasattr(usuario, "get_full_name"):
+        nome = usuario.get_full_name()
+    nome = (nome or getattr(usuario, "username", "") or "").strip()
+    return nome.title() if nome else ""
+
+
 def _rotas_clientes_opcoes():
     rotas = list(
         Cliente.objects.filter(ativo=True)
@@ -12110,6 +12120,8 @@ def _montar_historico_recebimentos_rota(rota, data_referencia=None, operacao_atu
             "total_confirmado": Decimal("0.00"),
             "total_inferido": Decimal("0.00"),
             "clientes_qtd": 0,
+            "usuarios_recebimentos": [],
+            "usuarios_recebimentos_texto": "",
             "operacoes_qtd": 0,
             "operacoes_confirmadas_qtd": 0,
             "operacoes_inferidas_qtd": 0,
@@ -12127,6 +12139,8 @@ def _montar_historico_recebimentos_rota(rota, data_referencia=None, operacao_atu
     total_confirmado = Decimal("0.00")
     total_inferido = Decimal("0.00")
     clientes_ids = set()
+    usuarios_recebimentos = []
+    usuarios_recebimentos_chaves = set()
     operacoes_confirmadas_qtd = 0
     operacoes_inferidas_qtd = 0
     for item in operacoes:
@@ -12141,7 +12155,7 @@ def _montar_historico_recebimentos_rota(rota, data_referencia=None, operacao_atu
             operacoes_confirmadas_qtd += 1
         elif item.cliente and _normalizar_rota_recebimento(item.cliente.bairro) == rota_normalizada:
             categoria_rota = "inferida"
-            selo_rota = "Rota inferida pelo bairro"
+            selo_rota = "Rota identificada pelo bairro"
             total_inferido += item.valor_recebido or Decimal("0.00")
             operacoes_inferidas_qtd += 1
         else:
@@ -12150,6 +12164,11 @@ def _montar_historico_recebimentos_rota(rota, data_referencia=None, operacao_atu
         total_recebido += item.valor_recebido or Decimal("0.00")
         if item.cliente_id:
             clientes_ids.add(item.cliente_id)
+        usuario_nome = _nome_usuario_recebimento(item.criado_por)
+        usuario_chave = usuario_nome.casefold()
+        if usuario_nome and usuario_chave not in usuarios_recebimentos_chaves:
+            usuarios_recebimentos_chaves.add(usuario_chave)
+            usuarios_recebimentos.append(usuario_nome)
 
         historico.append({
             "hora": timezone.localtime(item.criado_em).strftime("%H:%M") if item.criado_em else "",
@@ -12163,7 +12182,7 @@ def _montar_historico_recebimentos_rota(rota, data_referencia=None, operacao_atu
             "credito_gerado_formatado": _formatar_moeda(item.credito_gerado),
             "forma_pagamento": item.forma_pagamento or "-",
             "status_recibo": item.get_status_recibo_display(),
-            "usuario": item.criado_por.get_username() if item.criado_por else "",
+            "usuario": usuario_nome,
             "rota_snapshot": item.rota_snapshot,
             "categoria_rota": categoria_rota,
             "rota_inferida": categoria_rota == "inferida",
@@ -12177,6 +12196,8 @@ def _montar_historico_recebimentos_rota(rota, data_referencia=None, operacao_atu
         "total_confirmado": total_confirmado,
         "total_inferido": total_inferido,
         "clientes_qtd": len(clientes_ids),
+        "usuarios_recebimentos": usuarios_recebimentos,
+        "usuarios_recebimentos_texto": ", ".join(usuarios_recebimentos),
         "operacoes_qtd": len(historico),
         "operacoes_confirmadas_qtd": operacoes_confirmadas_qtd,
         "operacoes_inferidas_qtd": operacoes_inferidas_qtd,
@@ -12214,6 +12235,11 @@ def receber_cliente_recebimentos_rota(request):
     hoje = timezone.localdate()
     resumo = _montar_historico_recebimentos_rota(rota_filtro, data_referencia=hoje)
     voltar_url = _url_retorno_segura(request) or f"{reverse('estoque:receber_cliente_escolher')}?{urlencode({'rota': rota_filtro})}"
+    usuario_consulta_nome = (
+        _nome_usuario_recebimento(request.user)
+        if getattr(request.user, "is_authenticated", False)
+        else ""
+    )
 
     return render(
         request,
@@ -12226,14 +12252,15 @@ def receber_cliente_recebimentos_rota(request):
             "operacoes_recebidas_qtd": resumo["operacoes_qtd"],
             "operacoes_confirmadas_qtd": resumo["operacoes_confirmadas_qtd"],
             "operacoes_inferidas_qtd": resumo["operacoes_inferidas_qtd"],
+            "usuario_consulta_nome": usuario_consulta_nome,
+            "usuarios_recebimentos_texto": resumo["usuarios_recebimentos_texto"],
             "total_confirmado_rota_formatado": _formatar_moeda(resumo["total_confirmado"]),
             "total_inferido_rota_formatado": _formatar_moeda(resumo["total_inferido"]),
             "total_recebimentos_rota_dia_formatado": _formatar_moeda(resumo["total_recebido"]),
             "voltar_receber_url": voltar_url,
             "regra_rota_recebimentos": (
-                "Operacoes confirmadas usam rota_snapshot igual a rota selecionada. "
-                "Operacoes sem rota_snapshot entram apenas quando o bairro atual do cliente coincide com a rota "
-                "e aparecem marcadas como rota inferida pelo bairro."
+                "Recebimentos com rota registrada aparecem como confirmados. "
+                "Recebimentos antigos sem rota registrada sao identificados pelo bairro atual do cliente."
             ),
         },
     )

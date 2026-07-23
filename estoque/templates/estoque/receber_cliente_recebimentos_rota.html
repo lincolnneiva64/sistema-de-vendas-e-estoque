@@ -57,6 +57,15 @@
       font-weight: 700;
     }
 
+    .rcr-route-meta {
+      display: grid;
+      gap: 3px;
+      margin-top: 7px;
+      color: #334155;
+      font-size: .92rem;
+      font-weight: 800;
+    }
+
     .rcr-btn {
       display: inline-flex;
       align-items: center;
@@ -130,11 +139,14 @@
     }
 
     .rcr-row {
-      display: grid;
-      grid-template-columns: 72px minmax(0, 1fr) auto;
-      gap: 12px;
-      align-items: center;
       padding: 12px;
+    }
+
+    .rcr-row-main {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr) 140px;
+      gap: 12px;
+      align-items: start;
     }
 
     .rcr-time {
@@ -150,31 +162,41 @@
       overflow-wrap: anywhere;
     }
 
-    .rcr-meta {
+    .rcr-row-detail,
+    .rcr-row-values {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 7px;
       margin-top: 7px;
-    }
-
-    .rcr-pill {
-      display: inline-flex;
-      align-items: center;
-      min-height: 24px;
-      padding: 4px 8px;
-      border-radius: 999px;
-      background: #eef4f8;
+      padding-left: 84px;
       color: #334155;
-      font-size: .8rem;
-      font-weight: 800;
+      font-size: .9rem;
+      font-weight: 700;
     }
 
-    .rcr-pill.credito {
+    .rcr-row-values {
+      align-items: baseline;
+      color: var(--rc-muted);
+    }
+
+    .rcr-value-line {
+      min-width: 190px;
+    }
+
+    .rcr-highlight {
+      padding: 2px 7px;
+      border-radius: 6px;
       background: #fff4d6;
       color: var(--rc-warn);
+      font-weight: 900;
     }
 
-    .rcr-pill.inferida {
+    .rcr-highlight.pending {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .rcr-highlight.credito {
       background: #fff4d6;
       color: var(--rc-warn);
     }
@@ -207,11 +229,16 @@
       .rcr-summary {
         grid-template-columns: 1fr;
       }
-      .rcr-row {
-        grid-template-columns: 1fr;
+      .rcr-row-main {
+        grid-template-columns: 60px minmax(0, 1fr);
       }
       .rcr-money {
+        grid-column: 2;
         text-align: left;
+      }
+      .rcr-row-detail,
+      .rcr-row-values {
+        padding-left: 72px;
       }
     }
   </style>
@@ -223,6 +250,14 @@
         <div>
           <h1 class="rcr-title">Recebimentos desta rota</h1>
           <p class="rcr-subtitle">{{ rota_filtro }} - {{ data_referencia|date:"d/m/Y" }}</p>
+          <div class="rcr-route-meta">
+            {% if usuario_consulta_nome %}
+              <span>Usuario desta consulta: {{ usuario_consulta_nome }}</span>
+            {% endif %}
+            {% if usuarios_recebimentos_texto %}
+              <span>Recebimentos registrados por: {{ usuarios_recebimentos_texto }}</span>
+            {% endif %}
+          </div>
         </div>
         <a class="rcr-btn" href="{{ voltar_receber_url }}">Voltar para receber clientes</a>
       </header>
@@ -242,7 +277,7 @@
           <span class="rcr-label">{{ operacoes_confirmadas_qtd }} operacao(oes)</span>
         </div>
         <div class="rcr-card">
-          <span class="rcr-label">Inferidas</span>
+          <span class="rcr-label">Identificadas pelo bairro</span>
           <span class="rcr-value money">{{ total_inferido_rota_formatado }}</span>
           <span class="rcr-label">{{ operacoes_inferidas_qtd }} operacao(oes)</span>
         </div>
@@ -258,29 +293,30 @@
         <section class="rcr-list" aria-label="Recebimentos da rota no dia">
           {% for item in historico_recebimentos_rota_dia %}
             <article class="rcr-row">
-              <div class="rcr-time">{{ item.hora|default:"--:--" }}</div>
-              <div>
+              <div class="rcr-row-main">
+                <div class="rcr-time">{{ item.hora|default:"--:--" }}</div>
                 <strong class="rcr-client">{{ item.cliente_nome }}</strong>
-                <div class="rcr-meta">
-                  <span class="rcr-pill">{{ item.forma_pagamento }}</span>
-                  <span class="rcr-pill">{{ item.status_recibo }}</span>
-                  {% if item.rota_inferida %}
-                    <span class="rcr-pill inferida">{{ item.selo_rota }}</span>
-                  {% else %}
-                    <span class="rcr-pill">Confirmada pela rota_snapshot</span>
-                  {% endif %}
-                  <span class="rcr-pill">Aplicado: {{ item.valor_aplicado_formatado }}</span>
-                  {% if item.credito_gerado > 0 %}
-                    <span class="rcr-pill credito">Credito gerado: {{ item.credito_gerado_formatado }}</span>
-                  {% endif %}
-                  {% if item.usuario %}
-                    <span class="rcr-pill">Recebido por {{ item.usuario }}</span>
-                  {% endif %}
+                <div class="rcr-money">
+                  {{ item.valor_recebido_formatado }}
+                  <small>Total recebido</small>
                 </div>
               </div>
-              <div class="rcr-money">
-                {{ item.valor_recebido_formatado }}
-                <small>valor recebido</small>
+              <div class="rcr-row-detail">
+                <span>{{ item.forma_pagamento }}</span>
+                <span>&middot;</span>
+                {% if item.status_recibo == "Pendente" %}
+                  <span class="rcr-highlight pending">Recibo pendente</span>
+                {% elif item.status_recibo == "Enviado" %}
+                  <span>Recibo enviado</span>
+                {% else %}
+                  <span>Recibo {{ item.status_recibo|lower }}</span>
+                {% endif %}
+              </div>
+              <div class="rcr-row-values">
+                <span class="rcr-value-line">Usado nas contas: {{ item.valor_aplicado_formatado }}</span>
+                {% if item.credito_gerado > 0 %}
+                  <span class="rcr-value-line rcr-highlight credito">Credito gerado: {{ item.credito_gerado_formatado }}</span>
+                {% endif %}
               </div>
             </article>
           {% endfor %}

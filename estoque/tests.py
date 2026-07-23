@@ -17393,9 +17393,9 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "R$ 70,00")
         self.assertContains(resposta, "R$ 40,00")
         self.assertContains(resposta, "R$ 90,00")
-        self.assertContains(resposta, "Aplicado: R$ 50,00")
+        self.assertContains(resposta, "Usado nas contas: R$ 50,00")
         self.assertContains(resposta, "Credito gerado: R$ 20,00")
-        self.assertContains(resposta, "Pendente")
+        self.assertContains(resposta, "Recibo pendente")
         self.assertContains(resposta, "Clientes recebidos")
         self.assertContains(resposta, '<span class="rcr-value">2</span>', html=True)
         self.assertContains(resposta, '<span class="rcr-value">3</span>', html=True)
@@ -17404,8 +17404,18 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, '<span class="rcr-value money">R$ 200,00</span>', html=True)
         self.assertContains(resposta, "2 operacao(oes)")
         self.assertContains(resposta, "1 operacao(oes)")
-        self.assertContains(resposta, "Confirmada pela rota_snapshot")
-        self.assertContains(resposta, "Rota inferida pelo bairro")
+        self.assertContains(resposta, "Total recebido")
+        self.assertContains(
+            resposta,
+            "Recebimentos com rota registrada aparecem como confirmados. "
+            "Recebimentos antigos sem rota registrada sao identificados pelo bairro atual do cliente.",
+        )
+        self.assertNotContains(resposta, "Confirmada pela rota_snapshot")
+        self.assertNotContains(resposta, "Rota inferida pelo bairro")
+        self.assertNotContains(resposta, "Rota confirmada")
+        self.assertNotContains(resposta, "Rota identificada pelo bairro")
+        self.assertNotContains(resposta, "Aplicado:")
+        self.assertNotContains(resposta, "valor recebido")
         self.assertNotContains(resposta, "Cliente Outra Rota Consulta")
         self.assertNotContains(resposta, "Cliente Deposito Consulta")
         self.assertNotContains(resposta, "R$ 500,00")
@@ -17440,6 +17450,7 @@ class PixRecebidoTests(TestCase):
 
     def test_recebimentos_rota_mostra_usuario_e_preserva_volta(self):
         usuario = get_user_model().objects.create_user(username="cobrador", password="senha")
+        self.client.force_login(usuario)
         cliente = Cliente.objects.create(nome="Cliente Usuario Rota", bairro="Jardim", ativo=True)
         operacao = self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="55.00")
         operacao.criado_por = usuario
@@ -17450,9 +17461,52 @@ class PixRecebidoTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "Cliente Usuario Rota")
-        self.assertContains(resposta, "Recebido por cobrador")
+        self.assertContains(resposta, "Usuario desta consulta: Cobrador")
+        self.assertContains(resposta, "Recebimentos registrados por: Cobrador")
+        self.assertNotContains(resposta, "Recebido por cobrador")
         self.assertContains(resposta, f'href="{voltar_url}"')
         self.assertContains(resposta, "Voltar para receber clientes")
+        operacao.refresh_from_db()
+        self.assertEqual(operacao.criado_por, usuario)
+
+    def test_recebimentos_rota_lista_dois_usuarios_no_cabecalho_sem_repetir_nas_linhas(self):
+        usuario_um = get_user_model().objects.create_user(username="lincoln", password="senha")
+        usuario_dois = get_user_model().objects.create_user(username="roseli", password="senha")
+        self.client.force_login(usuario_um)
+        cliente_um = Cliente.objects.create(nome="Cliente Usuario Um", bairro="Jardim", ativo=True)
+        cliente_dois = Cliente.objects.create(nome="Cliente Usuario Dois", bairro="Jardim", ativo=True)
+        operacao_um = self._criar_operacao_recebimento_cliente(cliente_um, rota="Jardim", valor="15.00")
+        operacao_dois = self._criar_operacao_recebimento_cliente(cliente_dois, rota="Jardim", valor="25.00")
+        operacao_um.criado_por = usuario_um
+        operacao_dois.criado_por = usuario_dois
+        operacao_um.save(update_fields=["criado_por"])
+        operacao_dois.save(update_fields=["criado_por"])
+
+        resposta = self.client.get(self._url_recebimentos_rota("Jardim"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Usuario desta consulta: Lincoln")
+        self.assertContains(resposta, "Recebimentos registrados por: Lincoln, Roseli")
+        self.assertNotContains(resposta, "Recebido por Lincoln")
+        self.assertNotContains(resposta, "Recebido por Roseli")
+        operacao_um.refresh_from_db()
+        operacao_dois.refresh_from_db()
+        self.assertEqual(operacao_um.criado_por, usuario_um)
+        self.assertEqual(operacao_dois.criado_por, usuario_dois)
+
+    def test_recebimentos_rota_usuario_vazio_nao_quebra_cabecalho(self):
+        cliente = Cliente.objects.create(nome="Cliente Sem Usuario Rota", bairro="Jardim", ativo=True)
+        operacao = self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="18.00")
+
+        resposta = self.client.get(self._url_recebimentos_rota("Jardim"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Cliente Sem Usuario Rota")
+        self.assertNotContains(resposta, "Recebido por")
+        self.assertNotContains(resposta, "Recebimentos registrados por:")
+        self.assertNotContains(resposta, "Usuario desta consulta:")
+        operacao.refresh_from_db()
+        self.assertIsNone(operacao.criado_por)
 
     def test_recebimentos_rota_funciona_com_mais_de_uma_operacao_mesma_rota(self):
         cliente_um = Cliente.objects.create(nome="Cliente Multi Um", bairro="Jardim", ativo=True)
