@@ -98,6 +98,11 @@ urlpatterns = [
     path("emprestimos-dividas/<int:pk>/", views.emprestimo_divida_detalhe, name="emprestimo_divida_detalhe"),
     path("emprestimos-dividas/<int:pk>/baixar/", views.emprestimo_divida_baixar, name="emprestimo_divida_baixar"),
     path("receber-cliente/", views.receber_cliente_escolher, name="receber_cliente_escolher"),
+    path(
+        "receber-cliente/recebimentos-rota/",
+        views.receber_cliente_recebimentos_rota,
+        name="receber_cliente_recebimentos_rota",
+    ),
     path("central-pix/", views.central_pix, name="central_pix"),
     path("pix/enviar/", views.pix_enviar_inteligente, name="pix_enviar_inteligente"),
     path("central-pix/enviar-comprovante/", views.central_pix_enviar_comprovante, name="central_pix_enviar_comprovante"),

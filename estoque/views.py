@@ -9340,6 +9340,12 @@ def _aliases_rota_cliente(rota):
     return aliases.get(rota.lower(), [rota])
 
 
+def _normalizar_rota_recebimento(valor):
+    texto = unicodedata.normalize("NFKD", str(valor or ""))
+    texto = "".join(char for char in texto if not unicodedata.combining(char))
+    return re.sub(r"\s+", " ", texto).strip().casefold()
+
+
 def _rotas_clientes_opcoes():
     rotas = list(
         Cliente.objects.filter(ativo=True)
@@ -11360,6 +11366,7 @@ def receber_cliente_escolher(request):
         "forma_pagamento": "Dinheiro",
         "destino_diferenca": "troco",
     }
+    recebimentos_rota_url = _url_recebimentos_rota(rota_filtro, request.get_full_path())
 
     return render(
         request,
@@ -11392,6 +11399,7 @@ def receber_cliente_escolher(request):
             "pix_detalhe_url": "",
             "pix_trocar_cliente_url": "",
             "pix_remover_cliente_url": "",
+            "recebimentos_rota_url": recebimentos_rota_url,
         },
     )
 
@@ -11875,6 +11883,7 @@ def receber_cliente(request, cliente_id):
         for conta in contas
     ]
     tem_pix_em_atencao = _tem_pix_em_atencao()
+    recebimentos_rota_url = _url_recebimentos_rota(rota_filtro, request.get_full_path())
 
     contexto = {
         "cliente": cliente,
@@ -11912,6 +11921,7 @@ def receber_cliente(request, cliente_id):
         "pix_detalhe_url": pix_detalhe_url,
         "pix_trocar_cliente_url": pix_trocar_cliente_url,
         "pix_remover_cliente_url": pix_remover_cliente_url,
+        "recebimentos_rota_url": recebimentos_rota_url,
     }
     response = render(request, "estoque/receber_cliente.html", contexto)
     return response
@@ -12090,29 +12100,143 @@ def _proximo_cliente_recebimento_rota(cliente, operacao):
     }
 
 
-def _historico_recebimentos_dia_rota(cliente, operacao, contexto_rota):
-    data_referencia = operacao.data_recebimento or timezone.localdate()
+def _montar_historico_recebimentos_rota(rota, data_referencia=None, operacao_atual_id=None):
+    rota_normalizada = _normalizar_rota_recebimento(rota)
+    data_referencia = data_referencia or timezone.localdate()
+    if not rota_normalizada:
+        return {
+            "itens": [],
+            "total_recebido": Decimal("0.00"),
+            "total_confirmado": Decimal("0.00"),
+            "total_inferido": Decimal("0.00"),
+            "clientes_qtd": 0,
+            "operacoes_qtd": 0,
+            "operacoes_confirmadas_qtd": 0,
+            "operacoes_inferidas_qtd": 0,
+        }
+
     operacoes = (
         OperacaoRecebimentoCliente.objects
-        .select_related("cliente")
+        .select_related("cliente", "criado_por")
         .filter(data_recebimento=data_referencia)
-        .filter(contexto_rota["operacoes_q"])
         .order_by("criado_em", "id")
     )
 
     historico = []
     total_recebido = Decimal("0.00")
+    total_confirmado = Decimal("0.00")
+    total_inferido = Decimal("0.00")
+    clientes_ids = set()
+    operacoes_confirmadas_qtd = 0
+    operacoes_inferidas_qtd = 0
     for item in operacoes:
+        rota_snapshot = (item.rota_snapshot or "").strip()
+        categoria_rota = ""
+        selo_rota = ""
+        if rota_snapshot:
+            if _normalizar_rota_recebimento(rota_snapshot) != rota_normalizada:
+                continue
+            categoria_rota = "confirmada"
+            total_confirmado += item.valor_recebido or Decimal("0.00")
+            operacoes_confirmadas_qtd += 1
+        elif item.cliente and _normalizar_rota_recebimento(item.cliente.bairro) == rota_normalizada:
+            categoria_rota = "inferida"
+            selo_rota = "Rota inferida pelo bairro"
+            total_inferido += item.valor_recebido or Decimal("0.00")
+            operacoes_inferidas_qtd += 1
+        else:
+            continue
+
         total_recebido += item.valor_recebido or Decimal("0.00")
+        if item.cliente_id:
+            clientes_ids.add(item.cliente_id)
+
         historico.append({
             "hora": timezone.localtime(item.criado_em).strftime("%H:%M") if item.criado_em else "",
+            "criado_em": item.criado_em,
             "cliente_nome": item.cliente_nome_snapshot or (item.cliente.nome if item.cliente else "Cliente nao informado"),
+            "valor_recebido": item.valor_recebido or Decimal("0.00"),
             "valor_recebido_formatado": _formatar_moeda(item.valor_recebido),
+            "valor_aplicado": item.valor_aplicado or Decimal("0.00"),
+            "valor_aplicado_formatado": _formatar_moeda(item.valor_aplicado),
+            "credito_gerado": item.credito_gerado or Decimal("0.00"),
+            "credito_gerado_formatado": _formatar_moeda(item.credito_gerado),
             "forma_pagamento": item.forma_pagamento or "-",
             "status_recibo": item.get_status_recibo_display(),
-            "atual": item.pk == operacao.pk,
+            "usuario": item.criado_por.get_username() if item.criado_por else "",
+            "rota_snapshot": item.rota_snapshot,
+            "categoria_rota": categoria_rota,
+            "rota_inferida": categoria_rota == "inferida",
+            "selo_rota": selo_rota,
+            "atual": item.pk == operacao_atual_id,
         })
-    return historico, total_recebido
+
+    return {
+        "itens": historico,
+        "total_recebido": total_recebido,
+        "total_confirmado": total_confirmado,
+        "total_inferido": total_inferido,
+        "clientes_qtd": len(clientes_ids),
+        "operacoes_qtd": len(historico),
+        "operacoes_confirmadas_qtd": operacoes_confirmadas_qtd,
+        "operacoes_inferidas_qtd": operacoes_inferidas_qtd,
+    }
+
+
+def _url_recebimentos_rota(rota, url_voltar=""):
+    rota = (rota or "").strip()
+    if not rota:
+        return ""
+    parametros_url = {"rota": rota}
+    if url_voltar:
+        parametros_url["next"] = url_voltar
+    return f"{reverse('estoque:receber_cliente_recebimentos_rota')}?{urlencode(parametros_url)}"
+
+
+def _historico_recebimentos_dia_rota(cliente, operacao, contexto_rota):
+    data_referencia = operacao.data_recebimento or timezone.localdate()
+    rota = contexto_rota["nome"] if contexto_rota["tipo"] in {"rota", "bairro"} else ""
+    resumo = _montar_historico_recebimentos_rota(
+        rota,
+        data_referencia=data_referencia,
+        operacao_atual_id=operacao.pk,
+    )
+    return resumo["itens"], resumo["total_recebido"]
+
+
+@ensure_csrf_cookie
+def receber_cliente_recebimentos_rota(request):
+    rota_filtro = request.GET.get("rota", "").strip()
+    if not rota_filtro:
+        messages.warning(request, "Selecione uma rota para consultar os recebimentos do dia.")
+        return redirect(reverse("estoque:receber_cliente_escolher"))
+
+    hoje = timezone.localdate()
+    resumo = _montar_historico_recebimentos_rota(rota_filtro, data_referencia=hoje)
+    voltar_url = _url_retorno_segura(request) or f"{reverse('estoque:receber_cliente_escolher')}?{urlencode({'rota': rota_filtro})}"
+
+    return render(
+        request,
+        "estoque/receber_cliente_recebimentos_rota.html",
+        {
+            "rota_filtro": rota_filtro,
+            "data_referencia": hoje,
+            "historico_recebimentos_rota_dia": resumo["itens"],
+            "clientes_recebidos_qtd": resumo["clientes_qtd"],
+            "operacoes_recebidas_qtd": resumo["operacoes_qtd"],
+            "operacoes_confirmadas_qtd": resumo["operacoes_confirmadas_qtd"],
+            "operacoes_inferidas_qtd": resumo["operacoes_inferidas_qtd"],
+            "total_confirmado_rota_formatado": _formatar_moeda(resumo["total_confirmado"]),
+            "total_inferido_rota_formatado": _formatar_moeda(resumo["total_inferido"]),
+            "total_recebimentos_rota_dia_formatado": _formatar_moeda(resumo["total_recebido"]),
+            "voltar_receber_url": voltar_url,
+            "regra_rota_recebimentos": (
+                "Operacoes confirmadas usam rota_snapshot igual a rota selecionada. "
+                "Operacoes sem rota_snapshot entram apenas quando o bairro atual do cliente coincide com a rota "
+                "e aparecem marcadas como rota inferida pelo bairro."
+            ),
+        },
+    )
 
 
 @ensure_csrf_cookie

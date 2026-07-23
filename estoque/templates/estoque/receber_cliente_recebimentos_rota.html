@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recebimentos da rota</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --rc-bg: #f6f8fb;
+      --rc-text: #172033;
+      --rc-muted: #637083;
+      --rc-border: #d7dee8;
+      --rc-primary: #0f766e;
+      --rc-primary-dark: #115e59;
+      --rc-surface: #fff;
+      --rc-green: #157347;
+      --rc-warn: #9a5a00;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--rc-bg);
+      color: var(--rc-text);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .rcr-page {
+      min-height: 100vh;
+      padding: 14px;
+    }
+
+    .rcr-shell {
+      width: min(980px, 100%);
+      margin: 0 auto;
+    }
+
+    .rcr-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .rcr-title {
+      margin: 0;
+      font-size: 1.45rem;
+      line-height: 1.15;
+    }
+
+    .rcr-subtitle {
+      margin: 5px 0 0;
+      color: var(--rc-muted);
+      font-weight: 700;
+    }
+
+    .rcr-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: var(--rc-primary);
+      color: #fff;
+      font-weight: 800;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .rcr-btn:hover,
+    .rcr-btn:focus {
+      background: var(--rc-primary-dark);
+    }
+
+    .rcr-summary {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .rcr-card,
+    .rcr-rule,
+    .rcr-empty,
+    .rcr-row {
+      border: 1px solid var(--rc-border);
+      border-radius: 8px;
+      background: var(--rc-surface);
+    }
+
+    .rcr-card {
+      padding: 13px;
+    }
+
+    .rcr-label {
+      display: block;
+      color: var(--rc-muted);
+      font-size: .82rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .rcr-value {
+      display: block;
+      margin-top: 6px;
+      font-size: 1.25rem;
+      font-weight: 900;
+    }
+
+    .rcr-value.money {
+      color: var(--rc-green);
+    }
+
+    .rcr-rule,
+    .rcr-empty {
+      padding: 12px;
+      margin-bottom: 12px;
+      color: var(--rc-muted);
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    .rcr-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .rcr-row {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+    }
+
+    .rcr-time {
+      font-size: 1.05rem;
+      font-weight: 900;
+      color: var(--rc-primary-dark);
+    }
+
+    .rcr-client {
+      display: block;
+      font-size: 1.02rem;
+      font-weight: 900;
+      overflow-wrap: anywhere;
+    }
+
+    .rcr-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 7px;
+    }
+
+    .rcr-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #eef4f8;
+      color: #334155;
+      font-size: .8rem;
+      font-weight: 800;
+    }
+
+    .rcr-pill.credito {
+      background: #fff4d6;
+      color: var(--rc-warn);
+    }
+
+    .rcr-pill.inferida {
+      background: #fff4d6;
+      color: var(--rc-warn);
+    }
+
+    .rcr-money {
+      text-align: right;
+      font-size: 1.05rem;
+      font-weight: 900;
+      color: var(--rc-green);
+      white-space: nowrap;
+    }
+
+    .rcr-money small {
+      display: block;
+      margin-top: 5px;
+      color: var(--rc-muted);
+      font-size: .78rem;
+      font-weight: 800;
+    }
+
+    @media (max-width: 720px) {
+      .rcr-page { padding: 10px; }
+      .rcr-top {
+        display: block;
+      }
+      .rcr-btn {
+        width: 100%;
+        margin-top: 12px;
+      }
+      .rcr-summary {
+        grid-template-columns: 1fr;
+      }
+      .rcr-row {
+        grid-template-columns: 1fr;
+      }
+      .rcr-money {
+        text-align: left;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="rcr-page">
+    <div class="rcr-shell">
+      <header class="rcr-top">
+        <div>
+          <h1 class="rcr-title">Recebimentos desta rota</h1>
+          <p class="rcr-subtitle">{{ rota_filtro }} - {{ data_referencia|date:"d/m/Y" }}</p>
+        </div>
+        <a class="rcr-btn" href="{{ voltar_receber_url }}">Voltar para receber clientes</a>
+      </header>
+
+      <section class="rcr-summary" aria-label="Resumo dos recebimentos da rota">
+        <div class="rcr-card">
+          <span class="rcr-label">Clientes recebidos</span>
+          <span class="rcr-value">{{ clientes_recebidos_qtd }}</span>
+        </div>
+        <div class="rcr-card">
+          <span class="rcr-label">Operacoes</span>
+          <span class="rcr-value">{{ operacoes_recebidas_qtd }}</span>
+        </div>
+        <div class="rcr-card">
+          <span class="rcr-label">Confirmadas</span>
+          <span class="rcr-value money">{{ total_confirmado_rota_formatado }}</span>
+          <span class="rcr-label">{{ operacoes_confirmadas_qtd }} operacao(oes)</span>
+        </div>
+        <div class="rcr-card">
+          <span class="rcr-label">Inferidas</span>
+          <span class="rcr-value money">{{ total_inferido_rota_formatado }}</span>
+          <span class="rcr-label">{{ operacoes_inferidas_qtd }} operacao(oes)</span>
+        </div>
+        <div class="rcr-card">
+          <span class="rcr-label">Total exibido</span>
+          <span class="rcr-value money">{{ total_recebimentos_rota_dia_formatado }}</span>
+        </div>
+      </section>
+
+      <div class="rcr-rule">{{ regra_rota_recebimentos }}</div>
+
+      {% if historico_recebimentos_rota_dia %}
+        <section class="rcr-list" aria-label="Recebimentos da rota no dia">
+          {% for item in historico_recebimentos_rota_dia %}
+            <article class="rcr-row">
+              <div class="rcr-time">{{ item.hora|default:"--:--" }}</div>
+              <div>
+                <strong class="rcr-client">{{ item.cliente_nome }}</strong>
+                <div class="rcr-meta">
+                  <span class="rcr-pill">{{ item.forma_pagamento }}</span>
+                  <span class="rcr-pill">{{ item.status_recibo }}</span>
+                  {% if item.rota_inferida %}
+                    <span class="rcr-pill inferida">{{ item.selo_rota }}</span>
+                  {% else %}
+                    <span class="rcr-pill">Confirmada pela rota_snapshot</span>
+                  {% endif %}
+                  <span class="rcr-pill">Aplicado: {{ item.valor_aplicado_formatado }}</span>
+                  {% if item.credito_gerado > 0 %}
+                    <span class="rcr-pill credito">Credito gerado: {{ item.credito_gerado_formatado }}</span>
+                  {% endif %}
+                  {% if item.usuario %}
+                    <span class="rcr-pill">Recebido por {{ item.usuario }}</span>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="rcr-money">
+                {{ item.valor_recebido_formatado }}
+                <small>valor recebido</small>
+              </div>
+            </article>
+          {% endfor %}
+        </section>
+      {% else %}
+        <div class="rcr-empty">Nenhum recebimento de hoje encontrado para esta rota.</div>
+      {% endif %}
+    </div>
+  </main>
+</body>
+</html>

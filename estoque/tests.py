@@ -16660,6 +16660,12 @@ class PixRecebidoTests(TestCase):
     def _url_recibos_pendentes(self):
         return reverse("estoque:recebimentos_recibos_pendentes")
 
+    def _url_recebimentos_rota(self, rota, next_url=""):
+        parametros = {"rota": rota}
+        if next_url:
+            parametros["next"] = next_url
+        return f"{reverse('estoque:receber_cliente_recebimentos_rota')}?{urlencode(parametros)}"
+
     def test_confirmar_recibo_valido_marca_enviado_com_usuario(self):
         usuario = get_user_model().objects.create_user(username="confirmador", password="senha")
         self.client.force_login(usuario)
@@ -17314,6 +17320,152 @@ class PixRecebidoTests(TestCase):
         self.assertNotContains(resposta, "Cliente Historico Fora")
         self.assertNotContains(resposta, "R$ 30,00")
         self.assertNotContains(resposta, "R$ 25,00")
+
+    def test_receber_cliente_mostra_botao_recebimentos_rota_quando_tem_rota(self):
+        cliente = Cliente.objects.create(nome="Cliente Botao Rota", bairro="Centro", ativo=True)
+        self._criar_conta_receber_pix(cliente, "80.00")
+        self._criar_operacao_recebimento_cliente(cliente, rota="Centro", valor="33.00")
+
+        resposta = self.client.get(
+            f"{reverse('estoque:receber_cliente', kwargs={'cliente_id': cliente.id})}?rota=Centro",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Ver recebimentos desta rota")
+        self.assertContains(resposta, reverse("estoque:receber_cliente_recebimentos_rota"))
+        self.assertContains(resposta, "rota=Centro")
+        self.assertNotContains(resposta, "Recebimentos de hoje - Centro")
+        self.assertNotContains(resposta, "R$ 33,00")
+
+    def test_receber_cliente_nao_mostra_botao_recebimentos_rota_sem_rota(self):
+        resposta = self.client.get(reverse("estoque:receber_cliente_escolher"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotContains(resposta, "Ver recebimentos desta rota")
+        self.assertNotContains(resposta, "Recebimentos de hoje -")
+
+    def test_receber_cliente_escolher_mantem_botao_recebimentos_ao_voltar_com_rota(self):
+        cliente = Cliente.objects.create(nome="Cliente Resumo Volta", bairro="Jardim", ativo=True)
+        self._criar_conta_receber_pix(cliente, "80.00")
+        self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="44.00")
+
+        resposta = self.client.get(f"{reverse('estoque:receber_cliente_escolher')}?rota=Jardim", secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Ver recebimentos desta rota")
+        self.assertContains(resposta, "rota=Jardim")
+        self.assertNotContains(resposta, "Recebimentos de hoje - Jardim")
+        self.assertNotContains(resposta, "R$ 44,00")
+
+    def test_recebimentos_rota_separa_confirmadas_inferidas_e_exclui_outras_rotas(self):
+        cliente_um = Cliente.objects.create(nome="Rubem Arruda", bairro="Furo da Marinha", ativo=True)
+        cliente_dois = Cliente.objects.create(nome="Tamara Cliente", bairro="Furo da Marinha", ativo=True)
+        cliente_outra_rota = Cliente.objects.create(nome="Cliente Outra Rota Consulta", bairro="Centro", ativo=True)
+        cliente_deposito = Cliente.objects.create(nome="Cliente Deposito Consulta", bairro="Deposito", ativo=True)
+        operacao_um = self._criar_operacao_recebimento_cliente(
+            cliente_um,
+            rota=" Furo   da Marinha ",
+            valor="70.00",
+        )
+        operacao_um.valor_aplicado = Decimal("50.00")
+        operacao_um.credito_gerado = Decimal("20.00")
+        operacao_um.save(update_fields=["valor_aplicado", "credito_gerado"])
+        self._criar_operacao_recebimento_cliente(cliente_dois, rota="FURO DA MARINHA", valor="40.00")
+        self._criar_operacao_recebimento_cliente(cliente_dois, rota="", valor="90.00")
+        self._criar_operacao_recebimento_cliente(cliente_outra_rota, rota="Centro", valor="30.00")
+        self._criar_operacao_recebimento_cliente(cliente_deposito, rota="", valor="500.00")
+        operacao_outro_dia = self._criar_operacao_recebimento_cliente(
+            cliente_dois,
+            rota="Furo da Marinha",
+            valor="25.00",
+        )
+        operacao_outro_dia.data_recebimento = timezone.localdate() - timedelta(days=1)
+        operacao_outro_dia.save(update_fields=["data_recebimento"])
+
+        resposta = self.client.get(self._url_recebimentos_rota("furo da marinha"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, "estoque/receber_cliente_recebimentos_rota.html")
+        self.assertContains(resposta, "Recebimentos desta rota")
+        self.assertContains(resposta, "Rubem Arruda")
+        self.assertContains(resposta, "Tamara Cliente")
+        self.assertContains(resposta, "R$ 70,00")
+        self.assertContains(resposta, "R$ 40,00")
+        self.assertContains(resposta, "R$ 90,00")
+        self.assertContains(resposta, "Aplicado: R$ 50,00")
+        self.assertContains(resposta, "Credito gerado: R$ 20,00")
+        self.assertContains(resposta, "Pendente")
+        self.assertContains(resposta, "Clientes recebidos")
+        self.assertContains(resposta, '<span class="rcr-value">2</span>', html=True)
+        self.assertContains(resposta, '<span class="rcr-value">3</span>', html=True)
+        self.assertContains(resposta, '<span class="rcr-value money">R$ 110,00</span>', html=True)
+        self.assertContains(resposta, '<span class="rcr-value money">R$ 90,00</span>', html=True)
+        self.assertContains(resposta, '<span class="rcr-value money">R$ 200,00</span>', html=True)
+        self.assertContains(resposta, "2 operacao(oes)")
+        self.assertContains(resposta, "1 operacao(oes)")
+        self.assertContains(resposta, "Confirmada pela rota_snapshot")
+        self.assertContains(resposta, "Rota inferida pelo bairro")
+        self.assertNotContains(resposta, "Cliente Outra Rota Consulta")
+        self.assertNotContains(resposta, "Cliente Deposito Consulta")
+        self.assertNotContains(resposta, "R$ 500,00")
+        self.assertNotContains(resposta, "R$ 25,00")
+
+    def test_recebimentos_rota_total_usa_operacao_sem_duplicar_baixas(self):
+        cliente = Cliente.objects.create(nome="Cliente Total Operacao", bairro="Jardim", ativo=True)
+        conta_um = self._criar_conta_receber_pix(cliente, "80.00")
+        conta_dois = self._criar_conta_receber_pix(cliente, "70.00")
+        operacao = self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="120.00")
+        RecebimentoContaReceber.objects.create(
+            conta=conta_um,
+            operacao=operacao,
+            data_recebimento=timezone.localdate(),
+            valor=Decimal("80.00"),
+            forma_pagamento="PIX",
+        )
+        RecebimentoContaReceber.objects.create(
+            conta=conta_dois,
+            operacao=operacao,
+            data_recebimento=timezone.localdate(),
+            valor=Decimal("40.00"),
+            forma_pagamento="PIX",
+        )
+
+        resposta = self.client.get(self._url_recebimentos_rota("Jardim"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Cliente Total Operacao")
+        self.assertContains(resposta, '<span class="rcr-value money">R$ 120,00</span>', count=2, html=True)
+        self.assertNotContains(resposta, "R$ 240,00")
+
+    def test_recebimentos_rota_mostra_usuario_e_preserva_volta(self):
+        usuario = get_user_model().objects.create_user(username="cobrador", password="senha")
+        cliente = Cliente.objects.create(nome="Cliente Usuario Rota", bairro="Jardim", ativo=True)
+        operacao = self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="55.00")
+        operacao.criado_por = usuario
+        operacao.save(update_fields=["criado_por"])
+        voltar_url = f"{reverse('estoque:receber_cliente_escolher')}?rota=Jardim"
+
+        resposta = self.client.get(self._url_recebimentos_rota("Jardim", next_url=voltar_url), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Cliente Usuario Rota")
+        self.assertContains(resposta, "Recebido por cobrador")
+        self.assertContains(resposta, f'href="{voltar_url}"')
+        self.assertContains(resposta, "Voltar para receber clientes")
+
+    def test_recebimentos_rota_funciona_com_mais_de_uma_operacao_mesma_rota(self):
+        cliente_um = Cliente.objects.create(nome="Cliente Multi Um", bairro="Jardim", ativo=True)
+        cliente_dois = Cliente.objects.create(nome="Cliente Multi Dois", bairro="Jardim", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente_um, rota="Jardim", valor="15.00")
+        self._criar_operacao_recebimento_cliente(cliente_dois, rota="Jardim", valor="25.00")
+
+        resposta = self.client.get(self._url_recebimentos_rota("Jardim"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Cliente Multi Um")
+        self.assertContains(resposta, "Cliente Multi Dois")
+        self.assertContains(resposta, '<span class="rcr-value money">R$ 40,00</span>', html=True)
 
     def test_receber_cliente_confirmado_resume_contas_abertas_em_details(self):
         cliente = Cliente.objects.create(nome="Cliente Details Contas", ativo=True)

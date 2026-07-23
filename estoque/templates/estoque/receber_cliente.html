@@ -979,6 +979,37 @@
     font-weight: 700;
   }
 
+  .rc-rota-acoes {
+    display: flex;
+    justify-content: flex-start;
+    margin-top: 12px;
+  }
+
+  .rc-rota-historico-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: #0f766e;
+    color: #fff;
+    font-weight: 800;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .rc-rota-historico-btn:focus,
+  .rc-rota-historico-btn:hover {
+    background: #115e59;
+  }
+
+  @media (max-width: 720px) {
+    .rc-rota-historico-btn {
+      width: 100%;
+    }
+  }
+
 </style>
 
 <div class="receber-cliente-page {% if feedback_recebimento %}recebimento-confirmado{% endif %}">
@@ -1036,6 +1067,12 @@
             </div>
           </div>
         </div>
+
+        {% if recebimentos_rota_url %}
+          <div class="rc-rota-acoes">
+            <a class="rc-rota-historico-btn" href="{{ recebimentos_rota_url }}">Ver recebimentos desta rota</a>
+          </div>
+        {% endif %}
 
         {% if resumo_receber %}
         <details class="rc-rota-clientes-detalhes">
