@@ -3541,6 +3541,30 @@ function bloquearProdutoDuplicadoVenda(produtoId, produtoNome, linhaIgnorada = n
     return true;
 }
 
+function bloquearProdutoDuplicadoNoCampoProdutoVenda(produtoOption = null) {
+    const produtoNome = (produtoOption?.value || produtoBusca.value || produto.value || "").trim();
+    if (!produtoNome) return false;
+
+    const optionEncontrada = produtoOption || obterProdutoOptionVenda(produtoNome);
+    const produtoId = optionEncontrada?.dataset?.produtoId || "";
+
+    if (!bloquearProdutoDuplicadoVenda(produtoId, produtoNome, linhaSelecionada)) {
+        return false;
+    }
+
+    sugestoesBox.style.display = "none";
+    autocompleteAberto = false;
+    indexAtivo = -1;
+
+    produtoBusca.value = produtoNome;
+    setTimeout(() => {
+        produtoBusca.focus();
+        produtoBusca.select();
+    }, 50);
+
+    return true;
+}
+
 tabelaBody.addEventListener("click", function (e) {
   const linha = e.target.closest("tr");
   linhaSelecionada = linha;
@@ -5050,6 +5074,10 @@ if (itemAtivo) {
 }
 }
 function selecionarProduto(opt) {
+if (bloquearProdutoDuplicadoNoCampoProdutoVenda(opt)) {
+    return;
+}
+
 produto.value = opt.value;
 produtoBusca.value = opt.value;
 
@@ -5261,6 +5289,10 @@ produtoBusca.addEventListener("keydown", (e) => {
     e.preventDefault();
     e.stopPropagation();
 
+    if (bloquearProdutoDuplicadoNoCampoProdutoVenda()) {
+        return;
+    }
+
     if (sugestoesBox.style.display !== "block") {
         autocompleteAberto = true;
         const textoProduto = produtoBusca.value.trim();
@@ -5276,6 +5308,10 @@ produtoBusca.addEventListener("keydown", (e) => {
     if (indexAtivo >= 0 && sugestoes[indexAtivo]) {
         selecionarProduto(sugestoes[indexAtivo]);
     } else if (produtoBusca.value.trim()) {
+        if (bloquearProdutoDuplicadoNoCampoProdutoVenda()) {
+            return;
+        }
+
         quantidade.focus();
         quantidade.select();
     }
