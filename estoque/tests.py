@@ -17117,6 +17117,12 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "hidden")
         self.assertContains(resposta, 'btnConfirmar.classList.add("pulsando")')
         self.assertContains(resposta, 'btnConfirmar.classList.remove("pulsando", "primary")')
+        self.assertContains(resposta, "Recibo enviado com sucesso.")
+        self.assertContains(resposta, "esconderAcoesReciboAposConfirmacao")
+        self.assertContains(resposta, "setTimeout(function ()")
+        self.assertContains(resposta, "}, 3000);")
+        self.assertContains(resposta, 'painelAcoesRecibo?.classList.add("ocultando");')
+        self.assertContains(resposta, 'continuidadeRota?.classList.add("destacado");')
         self.assertContains(resposta, "@media (prefers-reduced-motion: reduce)")
         self.assertContains(resposta, "#btn-enviar-confirmacao-whatsapp { flex: 0 1 300px; max-width: 300px; }")
         self.assertContains(resposta, "#btn-confirmar-recibo-enviado { flex: 0 1 250px; max-width: 250px; }")
@@ -17136,8 +17142,9 @@ class PixRecebidoTests(TestCase):
         resposta = self.client.get(self._url_recebimento_confirmado(cliente, operacao), secure=True)
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "Continuidade da rota")
+        self.assertContains(resposta, "Proximo cliente da rota")
         self.assertContains(resposta, "Nao ha proximo cliente pendente para esta rota.")
+        self.assertContains(resposta, "Escolher outro cliente")
         self.assertNotContains(resposta, "Cobrar proximo cliente")
 
     def test_receber_cliente_confirmado_sugere_proximo_cliente_pendente_da_mesma_rota(self):
@@ -17284,12 +17291,41 @@ class PixRecebidoTests(TestCase):
         resposta = self.client.get(self._url_recebimento_confirmado(cliente, operacao), secure=True)
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "Recibo enviado")
-        self.assertContains(resposta, 'class="rcp-recibo-pill" id="confirmar-recibo-status"')
+        self.assertContains(resposta, "Recibo ja enviado. A rota esta pronta para continuar.")
+        self.assertContains(resposta, "Proximo cliente da rota")
+        self.assertContains(resposta, 'class="rcp-panel rcp-route-panel destacado"')
+        self.assertNotContains(resposta, "Acoes do recibo")
         self.assertNotContains(resposta, "Para enviar o recibo: abra o card")
+        self.assertNotContains(resposta, "Compartilhar card")
+        self.assertNotContains(resposta, "Abrir card para enviar")
+        self.assertNotContains(resposta, "Abrir WhatsApp com mensagem")
+        self.assertNotContains(resposta, "Confirmar recibo enviado")
         self.assertNotContains(resposta, 'id="btn-compartilhar-recibo-card"')
+        self.assertNotContains(resposta, 'id="btn-ver-recibo-card"')
+        self.assertNotContains(resposta, 'id="btn-enviar-confirmacao-whatsapp"')
         self.assertNotContains(resposta, 'id="btn-confirmar-recibo-enviado"')
         self.assertNotContains(resposta, "data-confirmar-recibo-url")
+
+    def test_receber_cliente_confirmado_enviado_destaca_proximo_cliente_da_rota(self):
+        cliente_atual = Cliente.objects.create(nome="Cliente Enviado Atual", bairro="Centro", ativo=True)
+        cliente_proximo = Cliente.objects.create(nome="Cliente Enviado Proximo", bairro="Centro", ativo=True)
+        self._criar_conta_receber_pix(cliente_proximo, "60.00")
+        operacao = self._criar_operacao_recebimento_cliente(
+            cliente_atual,
+            status=OperacaoRecebimentoCliente.STATUS_RECIBO_ENVIADO,
+            rota="Centro",
+        )
+
+        resposta = self.client.get(self._url_recebimento_confirmado(cliente_atual, operacao), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'class="rcp-panel rcp-route-panel destacado"')
+        self.assertContains(resposta, "Cliente Enviado Proximo")
+        self.assertContains(resposta, "Cobrar proximo cliente")
+        self.assertContains(
+            resposta,
+            f"{reverse('estoque:receber_cliente', kwargs={'cliente_id': cliente_proximo.id})}?rota=Centro",
+        )
 
     def test_receber_cliente_confirmado_status_dispensado_nao_mostra_botao_confirmar(self):
         cliente = Cliente.objects.create(nome="Cliente Confirmado Dispensado", ativo=True)

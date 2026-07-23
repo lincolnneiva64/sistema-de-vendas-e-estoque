@@ -90,7 +90,18 @@
     font-weight: 900;
   }
   .rcp-item.destaque .rcp-value { color: #14532d; }
-  .rcp-actions-panel { order: 3; }
+  .rcp-actions-panel {
+    order: 3;
+    transition: opacity .24s ease, max-height .24s ease, margin .24s ease;
+    max-height: 260px;
+  }
+  .rcp-actions-panel.ocultando {
+    opacity: 0;
+    max-height: 0;
+    margin: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
   .rcp-actions {
     display: flex;
     flex-wrap: wrap;
@@ -241,6 +252,16 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
     gap: 8px;
   }
+  .rcp-route-panel {
+    border-color: #bfdbfe;
+    border-left: 7px solid #2563eb;
+    transition: box-shadow .24s ease, border-color .24s ease, background .24s ease;
+  }
+  .rcp-route-panel.destacado {
+    border-color: #93c5fd;
+    background: #eff6ff;
+    box-shadow: 0 14px 34px rgba(37, 99, 235, 0.18);
+  }
   .rcp-route-box {
     border: 1px solid #e2e8f0;
     border-radius: 8px;
@@ -264,13 +285,22 @@
   }
   .rcp-route-next {
     color: #111827;
-    font-size: 1rem;
+    font-size: 1.08rem;
     font-weight: 950;
+  }
+  .rcp-route-box.proximo {
+    border-color: #bfdbfe;
+    background: #ffffff;
   }
   .rcp-route-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 7px;
+  }
+  .rcp-route-actions .rcp-btn.primary {
+    min-height: 44px;
+    padding-inline: 16px;
+    font-size: 0.92rem;
   }
   .rcp-route-history {
     display: grid;
@@ -357,6 +387,8 @@
     }
     .rcp-actions-panel .rcp-panel-body { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
     .rcp-btn { width: 100%; }
+    .rcp-route-panel { border-left-width: 5px; }
+    .rcp-route-actions .rcp-btn.primary { min-height: 50px; font-size: 1rem; }
     #btn-ver-comprovante-visual,
     #btn-compartilhar-recibo-card,
     #btn-ver-recibo-card,
@@ -416,56 +448,51 @@
       </div>
     </section>
 
-    <section class="rcp-panel rcp-actions-panel">
+    {% if operacao.status_recibo == "pendente" %}
+    <section class="rcp-panel rcp-actions-panel" id="acoes-recibo-recebimento">
       <div class="rcp-panel-body">
         <h2 class="rcp-section-title">Acoes do recibo</h2>
         <div class="rcp-actions">
-          {% if operacao.status_recibo == "pendente" %}
-            <p class="rcp-recibo-orientacao" id="recibo-orientacao-envio">Para enviar o recibo: abra o card, anexe a imagem no WhatsApp e depois confirme o envio.</p>
-          {% endif %}
+          <p class="rcp-recibo-orientacao" id="recibo-orientacao-envio">Para enviar o recibo: abra o card, anexe a imagem no WhatsApp e depois confirme o envio.</p>
           <a class="rcp-btn secondary" id="btn-ver-comprovante-visual" href="{{ comprovante_imagem_url }}" target="_blank" rel="noopener">Ver comprovante detalhado</a>
-          {% if operacao.status_recibo == "pendente" %}
-            <button
-              type="button"
-              class="rcp-btn primary"
-              id="btn-compartilhar-recibo-card"
-              data-card-url="{{ recibo_card_imagem_url }}"
-              data-share-text="{{ whatsapp_confirmacao.mensagem }}"
-            >Compartilhar card</button>
-          {% endif %}
+          <button
+            type="button"
+            class="rcp-btn primary"
+            id="btn-compartilhar-recibo-card"
+            data-card-url="{{ recibo_card_imagem_url }}"
+            data-share-text="{{ whatsapp_confirmacao.mensagem }}"
+          >Compartilhar card</button>
           <a class="rcp-btn secondary" id="btn-ver-recibo-card" href="{{ recibo_card_imagem_url }}" target="_blank" rel="noopener">Abrir card para enviar</a>
-          {% if whatsapp_confirmacao.tem_whatsapp and operacao.status_recibo == "pendente" %}
+          {% if whatsapp_confirmacao.tem_whatsapp %}
             <a class="rcp-btn whatsapp" id="btn-enviar-confirmacao-whatsapp" href="{{ whatsapp_confirmacao.url }}" target="_blank" rel="noopener">Abrir WhatsApp com mensagem</a>
-          {% elif whatsapp_confirmacao.tem_whatsapp %}
-            <a class="rcp-btn secondary" id="btn-enviar-confirmacao-whatsapp" href="{{ whatsapp_confirmacao.url }}" target="_blank" rel="noopener">WhatsApp</a>
           {% else %}
             <p class="rcp-recibo-status">Cliente sem WhatsApp cadastrado.</p>
           {% endif %}
-          {% if operacao.status_recibo == "pendente" %}
-            <button
-              type="button"
-              class="rcp-btn primary"
-              id="btn-confirmar-recibo-enviado"
-              data-confirmar-recibo-url="{{ confirmar_recibo_url }}"
-              data-operacao-id="{{ operacao.id }}"
-              hidden
-            >Confirmar recibo enviado</button>
-            <p class="rcp-recibo-status" id="confirmar-recibo-status" aria-live="polite" hidden>Depois de anexar e enviar a imagem no WhatsApp, confirme o envio aqui.</p>
-          {% elif operacao.status_recibo == "enviado" %}
-            <span class="rcp-recibo-pill" id="confirmar-recibo-status" aria-live="polite">Recibo enviado</span>
-          {% elif operacao.status_recibo == "dispensado" %}
-            <span class="rcp-recibo-pill dispensado" id="confirmar-recibo-status" aria-live="polite">Recibo dispensado</span>
-          {% endif %}
+          <button
+            type="button"
+            class="rcp-btn primary"
+            id="btn-confirmar-recibo-enviado"
+            data-confirmar-recibo-url="{{ confirmar_recibo_url }}"
+            data-operacao-id="{{ operacao.id }}"
+            hidden
+          >Confirmar recibo enviado</button>
+          <p class="rcp-recibo-status" id="confirmar-recibo-status" aria-live="polite" hidden>Depois de anexar e enviar a imagem no WhatsApp, confirme o envio aqui.</p>
           <a class="rcp-btn secondary back" href="{{ voltar_receber_url }}">Voltar</a>
         </div>
       </div>
     </section>
+    {% endif %}
 
-    <section class="rcp-panel" id="continuidade-rota-recebimento">
+    <section class="rcp-panel rcp-route-panel {% if operacao.status_recibo != 'pendente' %}destacado{% endif %}" id="continuidade-rota-recebimento">
       <div class="rcp-panel-body">
-        <h2 class="rcp-section-title">Continuidade da rota</h2>
+        <h2 class="rcp-section-title">Proximo cliente da rota</h2>
+        {% if operacao.status_recibo == "enviado" %}
+          <p class="rcp-route-text">Recibo ja enviado. A rota esta pronta para continuar.</p>
+        {% elif operacao.status_recibo == "dispensado" %}
+          <p class="rcp-route-text">Recibo dispensado. A rota esta pronta para continuar.</p>
+        {% endif %}
         <div class="rcp-route-grid">
-          <div class="rcp-route-box">
+          <div class="rcp-route-box proximo">
             <p class="rcp-route-title">Recebimento atual</p>
             <p class="rcp-route-text">
               {{ operacao.cliente_nome_snapshot }} recebeu {{ valor_pago_formatado }}
@@ -491,7 +518,7 @@
             {% else %}
               <p class="rcp-route-text">Nao ha proximo cliente pendente para esta rota.</p>
               <div class="rcp-route-actions">
-                <a class="rcp-btn secondary" href="{{ contexto_rota_recebimento.escolher_url }}">Escolher outro cliente</a>
+                <a class="rcp-btn primary" href="{{ contexto_rota_recebimento.escolher_url }}">Escolher outro cliente</a>
               </div>
             {% endif %}
           </div>
@@ -577,6 +604,7 @@
   </div>
 </main>
 
+{% if operacao.status_recibo == "pendente" %}
 <script>
 (function () {
   const page = document.querySelector(".rcp-page");
@@ -585,6 +613,8 @@
   const btnConfirmar = document.getElementById("btn-confirmar-recibo-enviado");
   const statusMensagem = document.getElementById("confirmar-recibo-status");
   const statusLabel = document.getElementById("statusReciboLabel");
+  const painelAcoesRecibo = document.getElementById("acoes-recibo-recebimento");
+  const continuidadeRota = document.getElementById("continuidade-rota-recebimento");
 
   function csrfToken() {
     const cookie = document.cookie.split(";").map(function (item) { return item.trim(); })
@@ -604,6 +634,22 @@
     btnConfirmar.hidden = false;
     btnConfirmar.classList.add("pulsando");
     atualizarMensagem("Depois de anexar e enviar a imagem no WhatsApp, confirme o envio aqui.", false);
+  }
+
+  function destacarContinuidadeRota() {
+    continuidadeRota?.classList.add("destacado");
+    continuidadeRota?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const acaoPrincipal = continuidadeRota?.querySelector(".rcp-route-actions .rcp-btn.primary");
+    setTimeout(function () {
+      acaoPrincipal?.focus({ preventScroll: true });
+    }, 360);
+  }
+
+  function esconderAcoesReciboAposConfirmacao() {
+    setTimeout(function () {
+      painelAcoesRecibo?.classList.add("ocultando");
+      destacarContinuidadeRota();
+    }, 3000);
   }
 
   async function compartilharCard() {
@@ -677,7 +723,8 @@
         statusLabel.textContent = "Enviado";
         statusLabel.className = "rcp-status enviado";
       }
-      atualizarMensagem(dados.mensagem || "Recibo confirmado como enviado.", false);
+      atualizarMensagem("Recibo enviado com sucesso.", false);
+      esconderAcoesReciboAposConfirmacao();
     } catch (erro) {
       btnConfirmar.disabled = false;
       btnConfirmar.textContent = "Confirmar recibo enviado";
@@ -691,5 +738,6 @@
   btnConfirmar?.addEventListener("click", confirmarRecibo);
 })();
 </script>
+{% endif %}
 
 {% endblock %}
