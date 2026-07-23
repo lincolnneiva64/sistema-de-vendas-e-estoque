@@ -151,6 +151,13 @@
   }
   .rcp-btn:disabled { opacity: 0.92; cursor: default; }
   .rcp-btn.pulsando { animation: rcp-confirmar-pulse 1.2s ease-in-out infinite; }
+  .rcp-btn.recibo-confirmado-pulso {
+    animation: rcp-recibo-confirmado-pulse 1s ease-in-out infinite;
+    border-color: #15803d;
+    background: #16a34a;
+    color: #ffffff;
+    box-shadow: 0 10px 26px rgba(22, 163, 74, 0.28);
+  }
   @keyframes rcp-confirmar-pulse {
     0%, 100% {
       transform: scale(1);
@@ -161,6 +168,18 @@
       transform: scale(1.06);
       filter: brightness(1.1);
       box-shadow: 0 0 0 12px rgba(37, 99, 235, 0), 0 12px 26px rgba(29, 78, 216, 0.34);
+    }
+  }
+  @keyframes rcp-recibo-confirmado-pulse {
+    0%, 100% {
+      transform: scale(1);
+      filter: brightness(1);
+      box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.58), 0 10px 26px rgba(22, 163, 74, 0.28);
+    }
+    50% {
+      transform: scale(1.05);
+      filter: brightness(1.08);
+      box-shadow: 0 0 0 12px rgba(22, 163, 74, 0), 0 14px 30px rgba(22, 163, 74, 0.36);
     }
   }
   .rcp-recibo-status {
@@ -359,6 +378,13 @@
       animation: none;
       border-color: #1d4ed8;
       box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.22), 0 10px 24px rgba(29, 78, 216, 0.32);
+      filter: brightness(1.08);
+    }
+    .rcp-btn.recibo-confirmado-pulso {
+      animation: none;
+      border-color: #15803d;
+      background: #16a34a;
+      box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.22), 0 10px 24px rgba(22, 163, 74, 0.32);
       filter: brightness(1.08);
     }
   }
@@ -716,8 +742,8 @@
         throw new Error(dados.mensagem || "Nao foi possivel confirmar o envio. Tente novamente.");
       }
       btnConfirmar.classList.remove("pulsando", "primary");
-      btnConfirmar.classList.add("success");
-      btnConfirmar.textContent = "Recibo enviado";
+      btnConfirmar.classList.add("success", "recibo-confirmado-pulso");
+      btnConfirmar.textContent = "Recibo enviado com sucesso.";
       page?.setAttribute("data-status-recibo", dados.status_recibo || "enviado");
       if (statusLabel) {
         statusLabel.textContent = "Enviado";

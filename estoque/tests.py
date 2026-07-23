@@ -17117,7 +17117,11 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "hidden")
         self.assertContains(resposta, 'btnConfirmar.classList.add("pulsando")')
         self.assertContains(resposta, 'btnConfirmar.classList.remove("pulsando", "primary")')
+        self.assertContains(resposta, 'btnConfirmar.classList.add("success", "recibo-confirmado-pulso")')
+        self.assertContains(resposta, 'btnConfirmar.textContent = "Recibo enviado com sucesso.";')
         self.assertContains(resposta, "Recibo enviado com sucesso.")
+        self.assertContains(resposta, ".rcp-btn.recibo-confirmado-pulso")
+        self.assertContains(resposta, "@keyframes rcp-recibo-confirmado-pulse")
         self.assertContains(resposta, "esconderAcoesReciboAposConfirmacao")
         self.assertContains(resposta, "setTimeout(function ()")
         self.assertContains(resposta, "}, 3000);")
@@ -17131,6 +17135,14 @@ class PixRecebidoTests(TestCase):
         self.assertNotContains(resposta, "grid-template-columns: 1fr 1.35fr auto")
         conteudo = resposta.content.decode()
         self.assertLess(conteudo.find("Acoes do recibo"), conteudo.find("Contas abatidas"))
+        self.assertLess(
+            conteudo.find('btnConfirmar.textContent = "Recibo enviado com sucesso.";'),
+            conteudo.find("esconderAcoesReciboAposConfirmacao();"),
+        )
+        self.assertLess(
+            conteudo.find("setTimeout(function ()"),
+            conteudo.find('painelAcoesRecibo?.classList.add("ocultando");'),
+        )
         self.assertNotContains(resposta, 'id="formReceberCliente"')
         self.assertNotContains(resposta, 'id="clienteBuscaReceberDireto"')
 
