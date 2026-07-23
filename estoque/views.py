@@ -12252,6 +12252,34 @@ def receber_cliente_recebimentos_rota(request):
             "total_inferido_rota_formatado": _formatar_moeda(resumo["total_inferido"]),
             "total_recebimentos_rota_dia_formatado": _formatar_moeda(resumo["total_recebido"]),
             "voltar_receber_url": voltar_url,
+            "conferir_recebimentos_url": (
+                f"{reverse('estoque:conferencia_recebimentos_rota')}?"
+                f"{urlencode({'rota': rota_filtro, 'data': hoje.isoformat(), 'next': request.get_full_path()})}"
+            ),
+        },
+    )
+
+
+@ensure_csrf_cookie
+def conferencia_recebimentos_rota(request):
+    rota_filtro = request.GET.get("rota", "").strip()
+    data_parametro = request.GET.get("data", "").strip()
+    data_referencia = parse_date(data_parametro) if data_parametro else timezone.localdate()
+    data_referencia = data_referencia or timezone.localdate()
+    voltar_url = _url_retorno_segura(request) or (
+        f"{reverse('estoque:receber_cliente_recebimentos_rota')}?"
+        f"{urlencode({'rota': rota_filtro})}"
+        if rota_filtro
+        else reverse("estoque:receber_cliente_escolher")
+    )
+
+    return render(
+        request,
+        "estoque/conferencia_recebimentos_rota.html",
+        {
+            "rota_filtro": rota_filtro,
+            "data_referencia": data_referencia,
+            "voltar_url": voltar_url,
         },
     )
 

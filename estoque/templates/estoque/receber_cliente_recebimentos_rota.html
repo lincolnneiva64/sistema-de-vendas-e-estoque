@@ -123,6 +123,10 @@
       color: var(--rc-green);
     }
 
+    .rcr-conferencia-action {
+      margin-bottom: 12px;
+    }
+
     .rcr-empty {
       padding: 12px;
       margin-bottom: 12px;
@@ -233,6 +237,9 @@
       .rcr-summary {
         grid-template-columns: 1fr;
       }
+      .rcr-conferencia-action .rcr-btn {
+        margin-top: 0;
+      }
       .rcr-row-main {
         grid-template-columns: 60px minmax(0, 1fr);
       }
@@ -278,6 +285,10 @@
           <span class="rcr-value money">{{ total_recebimentos_rota_dia_formatado }}</span>
         </div>
       </section>
+
+      <div class="rcr-conferencia-action">
+        <a class="rcr-btn" href="{{ conferir_recebimentos_url }}">Conferir recebimentos</a>
+      </div>
 
       {% if historico_recebimentos_rota_dia %}
         <section class="rcr-list" aria-label="Recebimentos da rota no dia">

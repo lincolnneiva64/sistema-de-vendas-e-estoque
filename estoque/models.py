@@ -609,6 +609,57 @@ class RecebimentoContaReceber(models.Model):
         return f"Recebimento R$ {self.valor} - Conta #{self.conta_id}"
 
 
+class FechamentoRotaRecebimento(models.Model):
+    METODO_CEDULAS = "cedulas"
+    METODO_DIRETA = "direta"
+    METODO_CHOICES = [
+        (METODO_CEDULAS, "Cedulas"),
+        (METODO_DIRETA, "Direta"),
+    ]
+
+    STATUS_ABERTO = "aberto"
+    STATUS_CONFERIDO = "conferido"
+    STATUS_FINALIZADO = "finalizado"
+    STATUS_CHOICES = [
+        (STATUS_ABERTO, "Aberto"),
+        (STATUS_CONFERIDO, "Conferido"),
+        (STATUS_FINALIZADO, "Finalizado"),
+    ]
+
+    rota = models.CharField(max_length=160)
+    data_referencia = models.DateField()
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="fechamentos_rota_recebimento",
+    )
+    metodo_conferencia = models.CharField(max_length=20, choices=METODO_CHOICES, default=METODO_DIRETA)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ABERTO)
+    total_sistema = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    total_conferido = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    diferenca = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    observacao = models.TextField(blank=True)
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="fechamentos_rota_recebimento_criados",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-data_referencia", "rota", "-id"]
+        verbose_name = "Fechamento de recebimentos da rota"
+        verbose_name_plural = "Fechamentos de recebimentos da rota"
+
+    def __str__(self):
+        return f"Fechamento {self.rota} - {self.data_referencia:%d/%m/%Y}"
+
+
 class PixRecebido(models.Model):
     STATUS_PENDENTE = "pendente"
     STATUS_IDENTIFICADO = "identificado"

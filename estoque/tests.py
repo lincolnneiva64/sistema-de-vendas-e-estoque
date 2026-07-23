@@ -23,7 +23,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, OperacaoRecebimentoCliente, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, OperacaoRecebimentoCliente, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
 from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_ALTERADA_FALTA_REENVIAR, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
@@ -17516,6 +17516,45 @@ class PixRecebidoTests(TestCase):
         self.assertNotContains(resposta, "Usuario desta consulta:")
         operacao.refresh_from_db()
         self.assertIsNone(operacao.criado_por)
+
+    def test_recebimentos_rota_mostra_botao_conferir_recebimentos(self):
+        cliente = Cliente.objects.create(nome="Cliente Conferencia Rota", bairro="Jardim", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="18.00")
+
+        resposta = self.client.get(self._url_recebimentos_rota("Jardim"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Conferir recebimentos")
+        self.assertContains(resposta, reverse("estoque:conferencia_recebimentos_rota"))
+        self.assertContains(resposta, "rota=Jardim")
+
+    def test_conferencia_recebimentos_rota_renderiza_estrutura_inicial(self):
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
+
+        resposta = self.client.get(url, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, "estoque/conferencia_recebimentos_rota.html")
+        self.assertContains(resposta, "Conferência de Recebimentos")
+        self.assertContains(resposta, "Jardim")
+
+    def test_fechamento_rota_recebimento_defaults(self):
+        usuario = get_user_model().objects.create_user(username="conferente", password="senha")
+
+        fechamento = FechamentoRotaRecebimento.objects.create(
+            rota="Jardim",
+            data_referencia=timezone.localdate(),
+            usuario=usuario,
+            criado_por=usuario,
+        )
+
+        self.assertEqual(fechamento.metodo_conferencia, FechamentoRotaRecebimento.METODO_DIRETA)
+        self.assertEqual(fechamento.status, FechamentoRotaRecebimento.STATUS_ABERTO)
+        self.assertEqual(fechamento.total_sistema, Decimal("0.00"))
+        self.assertEqual(fechamento.total_conferido, Decimal("0.00"))
+        self.assertEqual(fechamento.diferenca, Decimal("0.00"))
+        self.assertEqual(fechamento.usuario, usuario)
+        self.assertEqual(fechamento.criado_por, usuario)
 
     def test_recebimentos_rota_funciona_com_mais_de_uma_operacao_mesma_rota(self):
         cliente_um = Cliente.objects.create(nome="Cliente Multi Um", bairro="Jardim", ativo=True)
