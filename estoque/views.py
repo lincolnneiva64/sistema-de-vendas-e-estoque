@@ -12325,6 +12325,7 @@ def conferencia_recebimentos_rota(request):
             "total_cartao_formatado": _formatar_moeda(resumo["total_cartao"]),
             "credito_gerado_formatado": _formatar_moeda(resumo["credito_gerado"]),
             "total_recebido_formatado": _formatar_moeda(resumo["total_recebido"]),
+            "total_recebido_centavos": int((resumo["total_recebido"] * 100).quantize(Decimal("1"))),
             "voltar_url": voltar_url,
         },
     )

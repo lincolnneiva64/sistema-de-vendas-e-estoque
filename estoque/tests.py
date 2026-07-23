@@ -17621,6 +17621,37 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, 'addEventListener("input", atualizarTotal)')
         self.assertNotContains(resposta, "<form")
 
+    def test_conferencia_recebimentos_rota_compara_total_esperado_com_total_contado(self):
+        cliente = Cliente.objects.create(nome="Cliente Conferencia Comparacao", bairro="Jardim", ativo=True)
+        self._criar_operacao_recebimento_cliente(
+            cliente,
+            rota="Jardim",
+            valor="50.00",
+            forma_pagamento="Dinheiro",
+        )
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
+
+        resposta = self.client.get(url, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'id="resumoComparacaoConferencia"')
+        self.assertContains(resposta, 'data-valor-esperado-centavos="5000"')
+        self.assertContains(resposta, "Valor esperado")
+        self.assertContains(resposta, "Valor contado")
+        self.assertContains(resposta, "Diferen")
+        self.assertContains(resposta, 'id="valorEsperadoConferencia"')
+        self.assertContains(resposta, 'id="valorContadoComparacao"')
+        self.assertContains(resposta, 'id="diferencaConferencia"')
+        self.assertContains(resposta, 'id="statusConferencia"')
+        self.assertContains(resposta, "Falta de R$ 50,00.")
+        self.assertContains(resposta, "atualizarComparacao(total)")
+        self.assertContains(resposta, 'classList.add("correta")')
+        self.assertContains(resposta, 'classList.add("falta")')
+        self.assertContains(resposta, 'classList.add("sobra")')
+        self.assertContains(resposta, "Confer")
+        self.assertContains(resposta, "Sobra de ")
+        self.assertNotContains(resposta, "<form")
+
     def test_fechamento_rota_recebimento_defaults(self):
         usuario = get_user_model().objects.create_user(username="conferente", password="senha")
 

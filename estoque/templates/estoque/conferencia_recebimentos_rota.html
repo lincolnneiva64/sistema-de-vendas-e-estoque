@@ -158,6 +158,57 @@
       font-size: 1.45rem;
       font-weight: 900;
     }
+    .conf-compare {
+      margin-top: 14px;
+      border: 1px solid #d7dee8;
+      border-left: 6px solid #157347;
+      border-radius: 8px;
+      background: #f7fbf8;
+      padding: 12px;
+    }
+    .conf-compare.falta {
+      border-left-color: #dc2626;
+      background: #fff7f7;
+    }
+    .conf-compare.sobra {
+      border-left-color: #2563eb;
+      background: #f7fbff;
+    }
+    .conf-compare.correta {
+      border-left-color: #157347;
+      background: #f7fbf8;
+    }
+    .conf-compare-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .conf-compare-item {
+      min-width: 0;
+    }
+    .conf-compare-value {
+      display: block;
+      margin-top: 5px;
+      font-size: 1.14rem;
+      font-weight: 900;
+      overflow-wrap: anywhere;
+    }
+    .conf-compare-status {
+      margin: 10px 0 0;
+      font-weight: 900;
+    }
+    .conf-compare.falta .conf-compare-status,
+    .conf-compare.falta #diferencaConferencia {
+      color: #b91c1c;
+    }
+    .conf-compare.sobra .conf-compare-status,
+    .conf-compare.sobra #diferencaConferencia {
+      color: #1d4ed8;
+    }
+    .conf-compare.correta .conf-compare-status,
+    .conf-compare.correta #diferencaConferencia {
+      color: #157347;
+    }
     @media (max-width: 720px) {
       .conf-top { display: block; }
       .conf-btn {
@@ -172,6 +223,9 @@
       }
       .conf-money-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .conf-compare-grid {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -294,6 +348,24 @@
             <span class="conf-label">Total contado</span>
             <strong id="totalContadoCedulas">R$ 0,00</strong>
           </div>
+
+          <div id="resumoComparacaoConferencia" class="conf-compare {% if total_recebido_centavos > 0 %}falta{% else %}correta{% endif %}" data-valor-esperado-centavos="{{ total_recebido_centavos }}" aria-live="polite">
+            <div class="conf-compare-grid">
+              <div class="conf-compare-item">
+                <span class="conf-label">Valor esperado</span>
+                <strong id="valorEsperadoConferencia" class="conf-compare-value">{{ total_recebido_formatado }}</strong>
+              </div>
+              <div class="conf-compare-item">
+                <span class="conf-label">Valor contado</span>
+                <strong id="valorContadoComparacao" class="conf-compare-value">R$ 0,00</strong>
+              </div>
+              <div class="conf-compare-item">
+                <span class="conf-label">DiferenÃ§a</span>
+                <strong id="diferencaConferencia" class="conf-compare-value">{% if total_recebido_centavos > 0 %}{{ total_recebido_formatado }}{% else %}R$ 0,00{% endif %}</strong>
+              </div>
+            </div>
+            <p id="statusConferencia" class="conf-compare-status">{% if total_recebido_centavos > 0 %}Falta de {{ total_recebido_formatado }}.{% else %}ConferÃªncia correta.{% endif %}</p>
+          </div>
         </div>
       </section>
     </div>
@@ -302,7 +374,14 @@
   (function () {
     const inputs = Array.from(document.querySelectorAll(".conf-money-input"));
     const totalEl = document.getElementById("totalContadoCedulas");
+    const resumoComparacaoEl = document.getElementById("resumoComparacaoConferencia");
+    const valorContadoComparacaoEl = document.getElementById("valorContadoComparacao");
+    const diferencaEl = document.getElementById("diferencaConferencia");
+    const statusEl = document.getElementById("statusConferencia");
     if (!inputs.length || !totalEl) return;
+    const valorEsperadoCentavos = resumoComparacaoEl
+      ? Number.parseInt(resumoComparacaoEl.dataset.valorEsperadoCentavos || "0", 10)
+      : 0;
 
     function formatarMoeda(centavos) {
       return (centavos / 100).toLocaleString("pt-BR", {
@@ -327,6 +406,27 @@
         return soma + quantidade * valorCentavos;
       }, 0);
       totalEl.textContent = formatarMoeda(total);
+      atualizarComparacao(total);
+    }
+
+    function atualizarComparacao(totalContadoCentavos) {
+      if (!resumoComparacaoEl || !valorContadoComparacaoEl || !diferencaEl || !statusEl) return;
+      const diferenca = totalContadoCentavos - valorEsperadoCentavos;
+      const diferencaAbsoluta = Math.abs(diferenca);
+      valorContadoComparacaoEl.textContent = formatarMoeda(totalContadoCentavos);
+      diferencaEl.textContent = formatarMoeda(diferencaAbsoluta);
+      resumoComparacaoEl.classList.remove("correta", "falta", "sobra");
+
+      if (diferenca === 0) {
+        resumoComparacaoEl.classList.add("correta");
+        statusEl.textContent = "ConferÃªncia correta.";
+      } else if (diferenca < 0) {
+        resumoComparacaoEl.classList.add("falta");
+        statusEl.textContent = "Falta de " + formatarMoeda(diferencaAbsoluta) + ".";
+      } else {
+        resumoComparacaoEl.classList.add("sobra");
+        statusEl.textContent = "Sobra de " + formatarMoeda(diferencaAbsoluta) + ".";
+      }
     }
 
     inputs.forEach((input) => {
