@@ -424,7 +424,7 @@
           <div id="painelContagemDireta" class="conf-direct-panel" {% if metodo_selecionado != "direta" %}hidden{% endif %}>
             <div class="conf-money-field">
               <label for="valorConferenciaDireta">Valor total contado</label>
-              <input id="valorConferenciaDireta" name="valor_conferencia_direta" class="conf-direct-input" type="number" inputmode="decimal" min="0" step="0.01" value="{{ valor_direto_inicial }}" placeholder="0,00">
+              <input id="valorConferenciaDireta" name="valor_conferencia_direta" class="conf-direct-input" type="text" inputmode="decimal" value="{{ valor_direto_inicial }}" placeholder="0,00">
             </div>
           </div>
 
