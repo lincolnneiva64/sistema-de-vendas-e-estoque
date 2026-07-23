@@ -29,7 +29,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
     contato_tem_telefone_no_post,
@@ -12258,6 +12258,49 @@ def _resumo_conferencia_recebimentos_rota(rota, data_referencia):
     }
 
 
+def _centavos_para_decimal(centavos):
+    return (Decimal(centavos) / Decimal("100")).quantize(Decimal("0.01"))
+
+
+def _total_cedulas_conferencia_post(post_data):
+    denominacoes = {
+        "qtd_cedula_200": 20000,
+        "qtd_cedula_100": 10000,
+        "qtd_cedula_50": 5000,
+        "qtd_cedula_20": 2000,
+        "qtd_cedula_10": 1000,
+        "qtd_cedula_5": 500,
+        "qtd_cedula_2": 200,
+        "qtd_moeda_100": 100,
+        "qtd_moeda_50": 50,
+        "qtd_moeda_25": 25,
+        "qtd_moeda_10": 10,
+        "qtd_moeda_5": 5,
+    }
+    total_centavos = 0
+    for campo, valor_centavos in denominacoes.items():
+        texto = str(post_data.get(campo, "0") or "0").strip()
+        try:
+            quantidade = int(texto)
+        except ValueError:
+            raise ValueError("Informe apenas quantidades inteiras na contagem por cedulas.")
+        if quantidade < 0:
+            raise ValueError("Informe apenas quantidades positivas na contagem por cedulas.")
+        total_centavos += quantidade * valor_centavos
+    return _centavos_para_decimal(total_centavos)
+
+
+def _total_conferido_post(post_data, metodo_conferencia):
+    if metodo_conferencia == FechamentoRotaRecebimento.METODO_CEDULAS:
+        return _total_cedulas_conferencia_post(post_data)
+    if metodo_conferencia == FechamentoRotaRecebimento.METODO_DIRETA:
+        total_conferido = _parse_decimal_financeiro(post_data.get("valor_conferencia_direta"))
+        if total_conferido is None or total_conferido < Decimal("0.00"):
+            raise ValueError("Informe um valor total contado valido.")
+        return total_conferido
+    raise ValueError("Selecione um metodo de conferencia valido.")
+
+
 @ensure_csrf_cookie
 def receber_cliente_recebimentos_rota(request):
     rota_filtro = request.GET.get("rota", "").strip()
@@ -12312,6 +12355,39 @@ def conferencia_recebimentos_rota(request):
         else reverse("estoque:receber_cliente_escolher")
     )
     resumo = _resumo_conferencia_recebimentos_rota(rota_filtro, data_referencia)
+    metodo_selecionado = FechamentoRotaRecebimento.METODO_CEDULAS
+    valor_direto_inicial = ""
+    observacao_inicial = ""
+
+    if request.method == "POST":
+        metodo_selecionado = request.POST.get("metodo_conferencia_visual", "").strip()
+        valor_direto_inicial = request.POST.get("valor_conferencia_direta", "").strip()
+        observacao_inicial = request.POST.get("observacao_conferencia", "").strip()
+        try:
+            total_conferido = _total_conferido_post(request.POST, metodo_selecionado)
+        except ValueError as exc:
+            messages.warning(request, str(exc))
+        else:
+            total_sistema = (resumo["total_recebido"] or Decimal("0.00")).quantize(Decimal("0.01"))
+            diferenca = (total_conferido - total_sistema).quantize(Decimal("0.01"))
+            if diferenca != Decimal("0.00") and not observacao_inicial:
+                messages.warning(request, "Informe uma observacao para finalizar com falta ou sobra.")
+            else:
+                usuario = request.user if getattr(request.user, "is_authenticated", False) else None
+                FechamentoRotaRecebimento.objects.create(
+                    rota=rota_filtro,
+                    data_referencia=data_referencia,
+                    usuario=usuario,
+                    criado_por=usuario,
+                    metodo_conferencia=metodo_selecionado,
+                    status=FechamentoRotaRecebimento.STATUS_FINALIZADO,
+                    total_sistema=total_sistema,
+                    total_conferido=total_conferido,
+                    diferenca=diferenca,
+                    observacao=observacao_inicial,
+                )
+                messages.success(request, "Conferencia finalizada com sucesso.")
+                return redirect(request.get_full_path())
 
     return render(
         request,
@@ -12326,6 +12402,9 @@ def conferencia_recebimentos_rota(request):
             "credito_gerado_formatado": _formatar_moeda(resumo["credito_gerado"]),
             "total_recebido_formatado": _formatar_moeda(resumo["total_recebido"]),
             "total_recebido_centavos": int((resumo["total_recebido"] * 100).quantize(Decimal("1"))),
+            "metodo_selecionado": metodo_selecionado,
+            "valor_direto_inicial": valor_direto_inicial,
+            "observacao_inicial": observacao_inicial,
             "voltar_url": voltar_url,
         },
     )

@@ -17588,17 +17588,20 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, '<span class="conf-value money">R$ 15,00</span>', html=True)
         self.assertContains(resposta, '<span class="conf-value money">R$ 200,00</span>', html=True)
         self.assertNotContains(resposta, "R$ 900,00")
-        self.assertNotContains(resposta, "<form")
 
-    def test_conferencia_recebimentos_rota_exibe_contagem_por_cedulas_sem_formulario(self):
+    def test_conferencia_recebimentos_rota_exibe_contagem_por_cedulas_e_direta(self):
         url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
 
         resposta = self.client.get(url, secure=True)
 
         self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, '<form method="post" id="formConferenciaRecebimentos">')
         self.assertContains(resposta, 'name="metodo_conferencia_visual"')
         self.assertContains(resposta, 'value="cedulas" checked')
-        self.assertContains(resposta, 'value="direta" disabled')
+        self.assertContains(resposta, 'value="direta"')
+        self.assertNotContains(resposta, 'value="direta" disabled')
+        self.assertContains(resposta, 'id="painelContagemDireta"')
+        self.assertContains(resposta, 'name="valor_conferencia_direta"')
         self.assertContains(resposta, "Total contado")
         self.assertContains(resposta, 'id="totalContadoCedulas"')
         self.assertContains(resposta, "R$ 0,00")
@@ -17614,12 +17617,13 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, 'data-valor-centavos="25"')
         self.assertContains(resposta, 'data-valor-centavos="10"')
         self.assertContains(resposta, 'data-valor-centavos="5"')
-        self.assertContains(resposta, 'type="number"', count=12)
-        self.assertContains(resposta, 'min="0"', count=12)
+        self.assertContains(resposta, 'type="number"', count=13)
+        self.assertContains(resposta, 'min="0"', count=13)
         self.assertContains(resposta, 'step="1"', count=12)
+        self.assertContains(resposta, 'step="0.01"')
         self.assertContains(resposta, "atualizarTotal")
         self.assertContains(resposta, 'addEventListener("input", atualizarTotal)')
-        self.assertNotContains(resposta, "<form")
+        self.assertContains(resposta, "Finalizar conferencia")
 
     def test_conferencia_recebimentos_rota_compara_total_esperado_com_total_contado(self):
         cliente = Cliente.objects.create(nome="Cliente Conferencia Comparacao", bairro="Jardim", ativo=True)
@@ -17650,7 +17654,81 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, 'classList.add("sobra")')
         self.assertContains(resposta, "Confer")
         self.assertContains(resposta, "Sobra de ")
-        self.assertNotContains(resposta, "<form")
+        self.assertContains(resposta, "campoObservacaoDiferenca")
+
+    def test_conferencia_recebimentos_rota_finaliza_contagem_direta_sem_diferenca(self):
+        usuario = get_user_model().objects.create_user(username="conferente-direto", password="senha")
+        self.client.force_login(usuario)
+        cliente = Cliente.objects.create(nome="Cliente Direta OK", bairro="Jardim", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="50.00", forma_pagamento="Dinheiro")
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
+
+        resposta = self.client.post(
+            url,
+            {
+                "metodo_conferencia_visual": "direta",
+                "valor_conferencia_direta": "50,00",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        fechamento = FechamentoRotaRecebimento.objects.get()
+        self.assertEqual(fechamento.rota, "Jardim")
+        self.assertEqual(fechamento.data_referencia, timezone.localdate())
+        self.assertEqual(fechamento.usuario, usuario)
+        self.assertEqual(fechamento.criado_por, usuario)
+        self.assertEqual(fechamento.metodo_conferencia, FechamentoRotaRecebimento.METODO_DIRETA)
+        self.assertEqual(fechamento.status, FechamentoRotaRecebimento.STATUS_FINALIZADO)
+        self.assertEqual(fechamento.total_sistema, Decimal("50.00"))
+        self.assertEqual(fechamento.total_conferido, Decimal("50.00"))
+        self.assertEqual(fechamento.diferenca, Decimal("0.00"))
+        self.assertEqual(fechamento.observacao, "")
+
+    def test_conferencia_recebimentos_rota_exige_observacao_quando_ha_diferenca(self):
+        cliente = Cliente.objects.create(nome="Cliente Falta Obs", bairro="Jardim", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="50.00", forma_pagamento="Dinheiro")
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
+
+        resposta = self.client.post(
+            url,
+            {
+                "metodo_conferencia_visual": "cedulas",
+                "qtd_cedula_20": "2",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Informe uma observacao para finalizar com falta ou sobra.")
+        self.assertEqual(FechamentoRotaRecebimento.objects.count(), 0)
+
+    def test_conferencia_recebimentos_rota_finaliza_cedulas_com_observacao_de_diferenca(self):
+        usuario = get_user_model().objects.create_user(username="conferente-cedulas", password="senha")
+        self.client.force_login(usuario)
+        cliente = Cliente.objects.create(nome="Cliente Cedulas Sobra", bairro="Jardim", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="50.00", forma_pagamento="Dinheiro")
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
+
+        resposta = self.client.post(
+            url,
+            {
+                "metodo_conferencia_visual": "cedulas",
+                "qtd_cedula_20": "3",
+                "observacao_conferencia": "Sobra conferida no caixa.",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        fechamento = FechamentoRotaRecebimento.objects.get()
+        self.assertEqual(fechamento.usuario, usuario)
+        self.assertEqual(fechamento.metodo_conferencia, FechamentoRotaRecebimento.METODO_CEDULAS)
+        self.assertEqual(fechamento.status, FechamentoRotaRecebimento.STATUS_FINALIZADO)
+        self.assertEqual(fechamento.total_sistema, Decimal("50.00"))
+        self.assertEqual(fechamento.total_conferido, Decimal("60.00"))
+        self.assertEqual(fechamento.diferenca, Decimal("10.00"))
+        self.assertEqual(fechamento.observacao, "Sobra conferida no caixa.")
 
     def test_fechamento_rota_recebimento_defaults(self):
         usuario = get_user_model().objects.create_user(username="conferente", password="senha")

@@ -146,6 +146,14 @@
       font: inherit;
       font-weight: 800;
     }
+    .conf-direct-panel {
+      margin-top: 12px;
+    }
+    .conf-direct-panel[hidden],
+    #painelContagemCedulas[hidden],
+    .conf-observation[hidden] {
+      display: none !important;
+    }
     .conf-count-total {
       margin-top: 14px;
       padding-top: 12px;
@@ -209,6 +217,59 @@
     .conf-compare.correta #diferencaConferencia {
       color: #157347;
     }
+    .conf-observation {
+      margin-top: 14px;
+    }
+    .conf-observation label {
+      display: block;
+      margin-bottom: 6px;
+      color: #334155;
+      font-weight: 900;
+    }
+    .conf-observation textarea {
+      width: 100%;
+      min-height: 92px;
+      border: 1px solid #b8c2d1;
+      border-radius: 8px;
+      padding: 10px;
+      font: inherit;
+      resize: vertical;
+    }
+    .conf-actions {
+      margin-top: 14px;
+      display: flex;
+      justify-content: flex-end;
+    }
+    .conf-submit {
+      min-height: 44px;
+      border: 0;
+      border-radius: 8px;
+      background: #0f766e;
+      color: #fff;
+      padding: 11px 16px;
+      font: inherit;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .conf-submit:hover,
+    .conf-submit:focus {
+      background: #115e59;
+    }
+    .conf-alert {
+      margin-bottom: 12px;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      background: #eff6ff;
+      color: #1e3a8a;
+      padding: 10px 12px;
+      font-weight: 800;
+    }
+    .conf-alert.warning,
+    .conf-alert.error {
+      border-color: #fecaca;
+      background: #fff7f7;
+      color: #991b1b;
+    }
     @media (max-width: 720px) {
       .conf-top { display: block; }
       .conf-btn {
@@ -227,6 +288,12 @@
       .conf-compare-grid {
         grid-template-columns: 1fr;
       }
+      .conf-actions {
+        display: block;
+      }
+      .conf-submit {
+        width: 100%;
+      }
     }
   </style>
 </head>
@@ -242,6 +309,12 @@
         </div>
         <a class="conf-btn" href="{{ voltar_url }}">Voltar</a>
       </header>
+
+      {% if messages %}
+        {% for message in messages %}
+          <div class="conf-alert {{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
 
       <section class="conf-summary" aria-label="Resumo da conferencia">
         <div class="conf-card">
@@ -271,49 +344,51 @@
       </section>
 
       <section class="conf-count-panel" aria-label="Contagem por cedulas e moedas">
+        <form method="post" id="formConferenciaRecebimentos">
+          {% csrf_token %}
         <h2 class="conf-section-title">Metodo de conferencia</h2>
         <div class="conf-methods">
           <label class="conf-method">
-            <input type="radio" name="metodo_conferencia_visual" value="cedulas" checked>
+            <input type="radio" name="metodo_conferencia_visual" value="cedulas" {% if metodo_selecionado != "direta" %}checked{% endif %}>
             <span>Contagem por cédulas</span>
           </label>
           <label class="conf-method">
-            <input type="radio" name="metodo_conferencia_visual" value="direta" disabled>
+            <input type="radio" name="metodo_conferencia_visual" value="direta" {% if metodo_selecionado == "direta" %}checked{% endif %}>
             <span>Contagem direta</span>
           </label>
         </div>
 
-        <div id="painelContagemCedulas">
+        <div id="painelContagemCedulas" {% if metodo_selecionado == "direta" %}hidden{% endif %}>
           <div class="conf-money-group">
             <h3 class="conf-money-title">Cédulas</h3>
             <div class="conf-money-grid">
               <div class="conf-money-field">
                 <label for="qtdCedula200">R$ 200</label>
-                <input id="qtdCedula200" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="20000">
+                <input id="qtdCedula200" name="qtd_cedula_200" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="20000">
               </div>
               <div class="conf-money-field">
                 <label for="qtdCedula100">R$ 100</label>
-                <input id="qtdCedula100" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="10000">
+                <input id="qtdCedula100" name="qtd_cedula_100" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="10000">
               </div>
               <div class="conf-money-field">
                 <label for="qtdCedula50">R$ 50</label>
-                <input id="qtdCedula50" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="5000">
+                <input id="qtdCedula50" name="qtd_cedula_50" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="5000">
               </div>
               <div class="conf-money-field">
                 <label for="qtdCedula20">R$ 20</label>
-                <input id="qtdCedula20" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="2000">
+                <input id="qtdCedula20" name="qtd_cedula_20" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="2000">
               </div>
               <div class="conf-money-field">
                 <label for="qtdCedula10">R$ 10</label>
-                <input id="qtdCedula10" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="1000">
+                <input id="qtdCedula10" name="qtd_cedula_10" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="1000">
               </div>
               <div class="conf-money-field">
                 <label for="qtdCedula5">R$ 5</label>
-                <input id="qtdCedula5" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="500">
+                <input id="qtdCedula5" name="qtd_cedula_5" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="500">
               </div>
               <div class="conf-money-field">
                 <label for="qtdCedula2">R$ 2</label>
-                <input id="qtdCedula2" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="200">
+                <input id="qtdCedula2" name="qtd_cedula_2" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="200">
               </div>
             </div>
           </div>
@@ -323,24 +398,33 @@
             <div class="conf-money-grid">
               <div class="conf-money-field">
                 <label for="qtdMoeda100">R$ 1,00</label>
-                <input id="qtdMoeda100" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="100">
+                <input id="qtdMoeda100" name="qtd_moeda_100" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="100">
               </div>
               <div class="conf-money-field">
                 <label for="qtdMoeda50">R$ 0,50</label>
-                <input id="qtdMoeda50" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="50">
+                <input id="qtdMoeda50" name="qtd_moeda_50" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="50">
               </div>
               <div class="conf-money-field">
                 <label for="qtdMoeda25">R$ 0,25</label>
-                <input id="qtdMoeda25" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="25">
+                <input id="qtdMoeda25" name="qtd_moeda_25" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="25">
               </div>
               <div class="conf-money-field">
                 <label for="qtdMoeda10">R$ 0,10</label>
-                <input id="qtdMoeda10" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="10">
+                <input id="qtdMoeda10" name="qtd_moeda_10" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="10">
               </div>
               <div class="conf-money-field">
                 <label for="qtdMoeda5">R$ 0,05</label>
-                <input id="qtdMoeda5" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="5">
+                <input id="qtdMoeda5" name="qtd_moeda_5" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="5">
               </div>
+            </div>
+          </div>
+
+        </div>
+
+          <div id="painelContagemDireta" class="conf-direct-panel" {% if metodo_selecionado != "direta" %}hidden{% endif %}>
+            <div class="conf-money-field">
+              <label for="valorConferenciaDireta">Valor total contado</label>
+              <input id="valorConferenciaDireta" name="valor_conferencia_direta" class="conf-direct-input" type="number" inputmode="decimal" min="0" step="0.01" value="{{ valor_direto_inicial }}" placeholder="0,00">
             </div>
           </div>
 
@@ -366,18 +450,33 @@
             </div>
             <p id="statusConferencia" class="conf-compare-status">{% if total_recebido_centavos > 0 %}Falta de {{ total_recebido_formatado }}.{% else %}ConferÃªncia correta.{% endif %}</p>
           </div>
-        </div>
+
+          <div id="campoObservacaoDiferenca" class="conf-observation" hidden>
+            <label for="observacaoConferencia">Observacao da diferenca</label>
+            <textarea id="observacaoConferencia" name="observacao_conferencia" rows="3">{{ observacao_inicial }}</textarea>
+          </div>
+
+          <div class="conf-actions">
+            <button type="submit" class="conf-submit">Finalizar conferencia</button>
+          </div>
+        </form>
       </section>
     </div>
   </main>
   <script>
   (function () {
     const inputs = Array.from(document.querySelectorAll(".conf-money-input"));
+    const metodoInputs = Array.from(document.querySelectorAll('input[name="metodo_conferencia_visual"]'));
+    const painelCedulas = document.getElementById("painelContagemCedulas");
+    const painelDireta = document.getElementById("painelContagemDireta");
+    const valorDiretoEl = document.getElementById("valorConferenciaDireta");
     const totalEl = document.getElementById("totalContadoCedulas");
     const resumoComparacaoEl = document.getElementById("resumoComparacaoConferencia");
     const valorContadoComparacaoEl = document.getElementById("valorContadoComparacao");
     const diferencaEl = document.getElementById("diferencaConferencia");
     const statusEl = document.getElementById("statusConferencia");
+    const observacaoWrapperEl = document.getElementById("campoObservacaoDiferenca");
+    const observacaoEl = document.getElementById("observacaoConferencia");
     if (!inputs.length || !totalEl) return;
     const valorEsperadoCentavos = resumoComparacaoEl
       ? Number.parseInt(resumoComparacaoEl.dataset.valorEsperadoCentavos || "0", 10)
@@ -399,12 +498,43 @@
       return numero;
     }
 
-    function atualizarTotal() {
-      const total = inputs.reduce((soma, input) => {
+    function metodoSelecionado() {
+      const selecionado = metodoInputs.find((input) => input.checked);
+      return selecionado ? selecionado.value : "cedulas";
+    }
+
+    function valorDiretoCentavos() {
+      if (!valorDiretoEl) return 0;
+      let texto = String(valorDiretoEl.value || "").trim().replace("R$", "").replace(/\s/g, "");
+      if (!texto) return 0;
+      if (texto.includes(",")) {
+        texto = texto.replace(/\./g, "").replace(",", ".");
+      }
+      const valor = Number.parseFloat(texto);
+      if (!Number.isFinite(valor) || valor < 0) {
+        valorDiretoEl.value = "";
+        return 0;
+      }
+      return Math.round(valor * 100);
+    }
+
+    function totalCedulasCentavos() {
+      return inputs.reduce((soma, input) => {
         const quantidade = quantidadeValida(input);
         const valorCentavos = Number.parseInt(input.dataset.valorCentavos || "0", 10);
         return soma + quantidade * valorCentavos;
       }, 0);
+    }
+
+    function atualizarPaineis() {
+      const direta = metodoSelecionado() === "direta";
+      if (painelCedulas) painelCedulas.hidden = direta;
+      if (painelDireta) painelDireta.hidden = !direta;
+    }
+
+    function atualizarTotal() {
+      atualizarPaineis();
+      const total = metodoSelecionado() === "direta" ? valorDiretoCentavos() : totalCedulasCentavos();
       totalEl.textContent = formatarMoeda(total);
       atualizarComparacao(total);
     }
@@ -419,12 +549,18 @@
 
       if (diferenca === 0) {
         resumoComparacaoEl.classList.add("correta");
+        if (observacaoWrapperEl) observacaoWrapperEl.hidden = true;
+        if (observacaoEl) observacaoEl.required = false;
         statusEl.textContent = "ConferÃªncia correta.";
       } else if (diferenca < 0) {
         resumoComparacaoEl.classList.add("falta");
+        if (observacaoWrapperEl) observacaoWrapperEl.hidden = false;
+        if (observacaoEl) observacaoEl.required = true;
         statusEl.textContent = "Falta de " + formatarMoeda(diferencaAbsoluta) + ".";
       } else {
         resumoComparacaoEl.classList.add("sobra");
+        if (observacaoWrapperEl) observacaoWrapperEl.hidden = false;
+        if (observacaoEl) observacaoEl.required = true;
         statusEl.textContent = "Sobra de " + formatarMoeda(diferencaAbsoluta) + ".";
       }
     }
@@ -433,6 +569,13 @@
       input.addEventListener("input", atualizarTotal);
       input.addEventListener("change", atualizarTotal);
     });
+    metodoInputs.forEach((input) => {
+      input.addEventListener("change", atualizarTotal);
+    });
+    if (valorDiretoEl) {
+      valorDiretoEl.addEventListener("input", atualizarTotal);
+      valorDiretoEl.addEventListener("change", atualizarTotal);
+    }
     atualizarTotal();
   })();
   </script>
