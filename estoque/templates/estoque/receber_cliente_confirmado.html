@@ -236,6 +236,79 @@
     font-weight: 920;
   }
   .rcp-account-meta { color: #475569; font-size: 0.77rem; font-weight: 760; }
+  .rcp-route-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: 8px;
+  }
+  .rcp-route-box {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fbfdff;
+    padding: 8px;
+    display: grid;
+    gap: 6px;
+  }
+  .rcp-route-title {
+    margin: 0;
+    color: #0f172a;
+    font-size: 0.82rem;
+    font-weight: 950;
+  }
+  .rcp-route-text {
+    margin: 0;
+    color: #475569;
+    font-size: 0.78rem;
+    font-weight: 780;
+    line-height: 1.3;
+  }
+  .rcp-route-next {
+    color: #111827;
+    font-size: 1rem;
+    font-weight: 950;
+  }
+  .rcp-route-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+  .rcp-route-history {
+    display: grid;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .rcp-route-history-row {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 6px 8px;
+    background: #fff;
+    color: #334155;
+    font-size: 0.76rem;
+    font-weight: 780;
+  }
+  .rcp-route-history-row.atual {
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+  }
+  .rcp-route-history-main {
+    min-width: 0;
+    display: grid;
+    gap: 1px;
+  }
+  .rcp-route-history-main strong {
+    color: #111827;
+    font-size: 0.79rem;
+    overflow-wrap: anywhere;
+  }
+  .rcp-route-history-value {
+    color: #14532d;
+    font-weight: 950;
+    white-space: nowrap;
+  }
   .rcp-tag {
     border-radius: 999px;
     padding: 2px 7px;
@@ -261,6 +334,7 @@
   }
   @media (max-width: 860px) {
     .rcp-accounts { grid-template-columns: 1fr; }
+    .rcp-route-grid { grid-template-columns: 1fr; }
   }
   @media (max-width: 820px) {
     .rcp-finance { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -383,6 +457,61 @@
             <span class="rcp-recibo-pill dispensado" id="confirmar-recibo-status" aria-live="polite">Recibo dispensado</span>
           {% endif %}
           <a class="rcp-btn secondary back" href="{{ voltar_receber_url }}">Voltar</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="rcp-panel" id="continuidade-rota-recebimento">
+      <div class="rcp-panel-body">
+        <h2 class="rcp-section-title">Continuidade da rota</h2>
+        <div class="rcp-route-grid">
+          <div class="rcp-route-box">
+            <p class="rcp-route-title">Recebimento atual</p>
+            <p class="rcp-route-text">
+              {{ operacao.cliente_nome_snapshot }} recebeu {{ valor_pago_formatado }}
+              via {{ operacao.forma_pagamento|default:"-" }}.
+              {% if contexto_rota_recebimento.nome %}
+                Contexto: {{ contexto_rota_recebimento.nome }}.
+              {% else %}
+                Sem rota identificada para sugerir uma sequencia.
+              {% endif %}
+            </p>
+            {% if proximo_cliente_recebimento %}
+              <p class="rcp-route-title">Proximo cliente sugerido</p>
+              <div class="rcp-route-next">{{ proximo_cliente_recebimento.cliente_nome }}</div>
+              <p class="rcp-route-text">
+                {{ proximo_cliente_recebimento.contas_abertas }} conta(s) em aberto
+                &middot; {{ proximo_cliente_recebimento.total_em_aberto_formatado }}
+                {% if proximo_cliente_recebimento.bairro %}&middot; {{ proximo_cliente_recebimento.bairro }}{% endif %}
+              </p>
+              <div class="rcp-route-actions">
+                <a class="rcp-btn primary" href="{{ proximo_cliente_recebimento.receber_url }}">Cobrar proximo cliente</a>
+                <a class="rcp-btn secondary" href="{{ contexto_rota_recebimento.escolher_url }}">Escolher outro cliente</a>
+              </div>
+            {% else %}
+              <p class="rcp-route-text">Nao ha proximo cliente pendente para esta rota.</p>
+              <div class="rcp-route-actions">
+                <a class="rcp-btn secondary" href="{{ contexto_rota_recebimento.escolher_url }}">Escolher outro cliente</a>
+              </div>
+            {% endif %}
+          </div>
+          <div class="rcp-route-box">
+            <p class="rcp-route-title">Recebimentos do dia</p>
+            <div class="rcp-route-history">
+              {% for item in historico_recebimentos_rota_dia %}
+                <div class="rcp-route-history-row {% if item.atual %}atual{% endif %}">
+                  <span>{{ item.hora|default:"--:--" }}</span>
+                  <span class="rcp-route-history-main">
+                    <strong>{{ item.cliente_nome }}</strong>
+                    <span>{{ item.forma_pagamento }} &middot; {{ item.status_recibo }}</span>
+                  </span>
+                  <span class="rcp-route-history-value">{{ item.valor_recebido_formatado }}</span>
+                </div>
+              {% empty %}
+                <p class="rcp-route-text">Nenhum recebimento do dia encontrado para este contexto.</p>
+              {% endfor %}
+            </div>
+          </div>
         </div>
       </div>
     </section>

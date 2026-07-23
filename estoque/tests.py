@@ -16614,17 +16614,24 @@ class PixRecebidoTests(TestCase):
             follow=follow,
         )
 
-    def _criar_operacao_recebimento_cliente(self, cliente, status=OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE):
+    def _criar_operacao_recebimento_cliente(
+        self,
+        cliente,
+        status=OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE,
+        rota="",
+        valor="100.00",
+    ):
         return OperacaoRecebimentoCliente.objects.create(
             cliente=cliente,
             cliente_nome_snapshot=cliente.nome,
-            valor_recebido=Decimal("100.00"),
-            valor_aplicado=Decimal("100.00"),
+            valor_recebido=Decimal(valor),
+            valor_aplicado=Decimal(valor),
             credito_gerado=Decimal("0.00"),
             saldo_anterior=Decimal("100.00"),
             saldo_atual=Decimal("0.00"),
             data_recebimento=timezone.localdate(),
             forma_pagamento="PIX",
+            rota_snapshot=rota,
             status_recibo=status,
         )
 
@@ -17120,6 +17127,68 @@ class PixRecebidoTests(TestCase):
         self.assertLess(conteudo.find("Acoes do recibo"), conteudo.find("Contas abatidas"))
         self.assertNotContains(resposta, 'id="formReceberCliente"')
         self.assertNotContains(resposta, 'id="clienteBuscaReceberDireto"')
+
+    def test_receber_cliente_confirmado_nao_sugere_proprio_cliente_atual(self):
+        cliente = Cliente.objects.create(nome="Cliente Atual Rota", bairro="Centro", ativo=True)
+        self._criar_conta_receber_pix(cliente, "50.00")
+        operacao = self._criar_operacao_recebimento_cliente(cliente, rota="Centro")
+
+        resposta = self.client.get(self._url_recebimento_confirmado(cliente, operacao), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Continuidade da rota")
+        self.assertContains(resposta, "Nao ha proximo cliente pendente para esta rota.")
+        self.assertNotContains(resposta, "Cobrar proximo cliente")
+
+    def test_receber_cliente_confirmado_sugere_proximo_cliente_pendente_da_mesma_rota(self):
+        cliente_atual = Cliente.objects.create(nome="Cliente Atual Centro", bairro="Centro", ativo=True)
+        cliente_proximo = Cliente.objects.create(nome="Cliente Proximo Centro", bairro="Centro", ativo=True)
+        cliente_outra_rota = Cliente.objects.create(nome="Cliente Outra Rota", bairro="Praia", ativo=True)
+        self._criar_conta_receber_pix(cliente_proximo, "80.00")
+        self._criar_conta_receber_pix(cliente_outra_rota, "90.00")
+        operacao = self._criar_operacao_recebimento_cliente(cliente_atual, rota="Centro")
+
+        resposta = self.client.get(self._url_recebimento_confirmado(cliente_atual, operacao), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Cliente Proximo Centro")
+        self.assertContains(resposta, "R$ 80,00")
+        self.assertContains(resposta, "Cobrar proximo cliente")
+        self.assertContains(
+            resposta,
+            f"{reverse('estoque:receber_cliente', kwargs={'cliente_id': cliente_proximo.id})}?rota=Centro",
+        )
+        self.assertNotContains(resposta, "Cliente Outra Rota")
+
+    def test_receber_cliente_confirmado_mostra_ausencia_de_proximo_cliente_pendente(self):
+        cliente = Cliente.objects.create(nome="Cliente Sem Proximo Rota", bairro="Jardim", ativo=True)
+        operacao = self._criar_operacao_recebimento_cliente(cliente, rota="Jardim")
+
+        resposta = self.client.get(self._url_recebimento_confirmado(cliente, operacao), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Nao ha proximo cliente pendente para esta rota.")
+        self.assertContains(resposta, "Escolher outro cliente")
+        self.assertContains(resposta, f"{reverse('estoque:receber_cliente_escolher')}?rota=Jardim")
+
+    def test_receber_cliente_confirmado_mostra_historico_do_dia_da_rota(self):
+        cliente_um = Cliente.objects.create(nome="Cliente Historico Um", bairro="Centro", ativo=True)
+        cliente_dois = Cliente.objects.create(nome="Cliente Historico Dois", bairro="Centro", ativo=True)
+        cliente_fora = Cliente.objects.create(nome="Cliente Historico Fora", bairro="Praia", ativo=True)
+        operacao_um = self._criar_operacao_recebimento_cliente(cliente_um, rota="Centro", valor="70.00")
+        self._criar_operacao_recebimento_cliente(cliente_dois, rota="Centro", valor="40.00")
+        self._criar_operacao_recebimento_cliente(cliente_fora, rota="Praia", valor="30.00")
+
+        resposta = self.client.get(self._url_recebimento_confirmado(cliente_um, operacao_um), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Recebimentos do dia")
+        self.assertContains(resposta, "Cliente Historico Um")
+        self.assertContains(resposta, "Cliente Historico Dois")
+        self.assertContains(resposta, "R$ 70,00")
+        self.assertContains(resposta, "R$ 40,00")
+        self.assertContains(resposta, "Pendente")
+        self.assertNotContains(resposta, "Cliente Historico Fora")
 
     def test_receber_cliente_confirmado_resume_contas_abertas_em_details(self):
         cliente = Cliente.objects.create(nome="Cliente Details Contas", ativo=True)

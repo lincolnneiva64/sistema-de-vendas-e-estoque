@@ -11988,6 +11988,115 @@ def recebimentos_recibos_pendentes(request):
     )
 
 
+def _contexto_rota_recebimento(cliente, operacao):
+    rota_snapshot = (getattr(operacao, "rota_snapshot", "") or "").strip()
+    if rota_snapshot:
+        return {
+            "nome": rota_snapshot,
+            "tipo": "rota",
+            "clientes_q": Q(cliente__bairro__in=_aliases_rota_cliente(rota_snapshot)),
+            "operacoes_q": Q(rota_snapshot=rota_snapshot) | Q(cliente__bairro__in=_aliases_rota_cliente(rota_snapshot)),
+            "escolher_url": f"{reverse('estoque:receber_cliente_escolher')}?{urlencode({'rota': rota_snapshot})}",
+        }
+
+    bairro = (getattr(cliente, "bairro", "") or "").strip()
+    if bairro:
+        aliases = _aliases_rota_cliente(bairro)
+        return {
+            "nome": bairro,
+            "tipo": "bairro",
+            "clientes_q": Q(cliente__bairro__in=aliases),
+            "operacoes_q": Q(cliente__bairro__in=aliases),
+            "escolher_url": f"{reverse('estoque:receber_cliente_escolher')}?{urlencode({'rota': bairro})}",
+        }
+
+    cidade = (getattr(cliente, "cidade", "") or "").strip()
+    if cidade:
+        return {
+            "nome": cidade,
+            "tipo": "cidade",
+            "clientes_q": Q(cliente__cidade__iexact=cidade),
+            "operacoes_q": Q(cliente__cidade__iexact=cidade),
+            "escolher_url": reverse("estoque:receber_cliente_escolher"),
+        }
+
+    return {
+        "nome": "",
+        "tipo": "",
+        "clientes_q": Q(pk__isnull=True),
+        "operacoes_q": Q(pk__isnull=True),
+        "escolher_url": reverse("estoque:receber_cliente_escolher"),
+    }
+
+
+def _proximo_cliente_recebimento_rota(cliente, operacao):
+    contexto_rota = _contexto_rota_recebimento(cliente, operacao)
+    data_referencia = operacao.data_recebimento or timezone.localdate()
+    clientes_recebidos_hoje = OperacaoRecebimentoCliente.objects.filter(
+        data_recebimento=data_referencia,
+        cliente_id__isnull=False,
+    ).values_list("cliente_id", flat=True)
+
+    proximo = (
+        ContaReceber.objects.filter(
+            status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+            valor_em_aberto__gt=Decimal("0.00"),
+            cliente__ativo=True,
+        )
+        .filter(contexto_rota["clientes_q"])
+        .exclude(cliente_id=cliente.id)
+        .exclude(cliente_id__in=clientes_recebidos_hoje)
+        .values("cliente_id", "cliente__nome", "cliente__bairro", "cliente__cidade")
+        .annotate(
+            contas_abertas=Count("id"),
+            total_em_aberto=Sum("valor_em_aberto"),
+        )
+        .order_by("cliente__nome", "cliente_id")
+        .first()
+    )
+
+    if not proximo:
+        return contexto_rota, None
+
+    receber_url = reverse("estoque:receber_cliente", kwargs={"cliente_id": proximo["cliente_id"]})
+    if contexto_rota["nome"] and contexto_rota["tipo"] in {"rota", "bairro"}:
+        receber_url = f"{receber_url}?{urlencode({'rota': contexto_rota['nome']})}"
+
+    return contexto_rota, {
+        "cliente_id": proximo["cliente_id"],
+        "cliente_nome": proximo["cliente__nome"],
+        "bairro": proximo["cliente__bairro"] or "",
+        "cidade": proximo["cliente__cidade"] or "",
+        "contas_abertas": proximo["contas_abertas"] or 0,
+        "total_em_aberto": proximo["total_em_aberto"] or Decimal("0.00"),
+        "total_em_aberto_formatado": _formatar_moeda(proximo["total_em_aberto"] or Decimal("0.00")),
+        "receber_url": receber_url,
+    }
+
+
+def _historico_recebimentos_dia_rota(cliente, operacao, contexto_rota):
+    data_referencia = operacao.data_recebimento or timezone.localdate()
+    operacoes = (
+        OperacaoRecebimentoCliente.objects
+        .select_related("cliente")
+        .filter(data_recebimento=data_referencia)
+        .filter(contexto_rota["operacoes_q"])
+        .order_by("criado_em", "id")
+    )
+
+    historico = []
+    for item in operacoes:
+        historico.append({
+            "hora": timezone.localtime(item.criado_em).strftime("%H:%M") if item.criado_em else "",
+            "cliente_nome": item.cliente_nome_snapshot or (item.cliente.nome if item.cliente else "Cliente nao informado"),
+            "valor_recebido_formatado": _formatar_moeda(item.valor_recebido),
+            "forma_pagamento": item.forma_pagamento or "-",
+            "status_recibo": item.get_status_recibo_display(),
+            "atual": item.pk == operacao.pk,
+        })
+    return historico
+
+
 @ensure_csrf_cookie
 def receber_cliente_confirmado(request, cliente_id, operacao_id):
     operacao = get_object_or_404(
@@ -12017,6 +12126,12 @@ def receber_cliente_confirmado(request, cliente_id, operacao_id):
         (_decimal_comprovante(conta.get("saldo_atual")) for conta in contas_abertas),
         Decimal("0.00"),
     )
+    contexto_rota_recebimento, proximo_cliente_recebimento = _proximo_cliente_recebimento_rota(cliente, operacao)
+    historico_recebimentos_rota_dia = _historico_recebimentos_dia_rota(
+        cliente,
+        operacao,
+        contexto_rota_recebimento,
+    )
 
     contexto = {
         "operacao": operacao,
@@ -12038,6 +12153,9 @@ def receber_cliente_confirmado(request, cliente_id, operacao_id):
         "recibo_card_imagem_url": recibo_card_imagem_url,
         "confirmar_recibo_url": confirmar_recibo_url,
         "voltar_receber_url": voltar_receber_url,
+        "contexto_rota_recebimento": contexto_rota_recebimento,
+        "proximo_cliente_recebimento": proximo_cliente_recebimento,
+        "historico_recebimentos_rota_dia": historico_recebimentos_rota_dia,
     }
     return render(request, "estoque/receber_cliente_confirmado.html", contexto)
 
