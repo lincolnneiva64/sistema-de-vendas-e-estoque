@@ -1594,6 +1594,88 @@ class FechamentoCompraFinanceiroTests(TestCase):
             })
         return avisos
 
+    def _html_vendas(self):
+        resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+        self.assertEqual(resposta.status_code, 200)
+        return resposta.content.decode()
+
+    def test_vendas_template_controla_edicao_de_item_sem_duplicar(self):
+        html = self._html_vendas()
+
+        self.assertIn("let linhaSelecionada = null;", html)
+        self.assertIn('btnAdicionarItemVenda.textContent = linhaSelecionada ? "Atualizar Item" : "Adicionar Item";', html)
+        self.assertIn("function atualizarLinhaItemVenda(linha, item)", html)
+        self.assertIn("if (linhaSelecionada) {", html)
+        self.assertIn("atualizarLinhaItemVenda(linhaEditada, item);", html)
+        self.assertIn("limparEstadoEdicaoItemVenda();", html)
+        self.assertRegex(
+            html,
+            r"if \(linhaSelecionada\) \{[\s\S]*?atualizarLinhaItemVenda\(linhaEditada, item\);[\s\S]*?return true;",
+        )
+
+    def test_vendas_template_bloqueia_produto_duplicado_ignorando_linha_em_edicao(self):
+        html = self._html_vendas()
+
+        self.assertIn("function encontrarLinhaProdutoDuplicadoVenda(produtoId, produtoNome, linhaIgnorada = null)", html)
+        self.assertIn("if (linha === linhaIgnorada) return false;", html)
+        self.assertIn("linha.dataset.produtoId", html)
+        self.assertIn("const idLinha = obterProdutoIdLinhaVenda(linha);", html)
+        self.assertIn('normalizarTextoVendaEstoque(linha.children[0]?.textContent || "");', html)
+        self.assertIn('mostrarAviso("Esse produto já foi lançado.", produtoBusca, true);', html)
+
+    def test_vendas_template_bloqueia_duplicidade_no_enter_do_produto(self):
+        html = self._html_vendas()
+
+        self.assertIn('produtoBusca.addEventListener("keydown", (e) => {', html)
+        self.assertIn('else if (e.key === "Enter")', html)
+        self.assertIn("if (bloquearProdutoDuplicadoNoCampoProdutoVenda()) {", html)
+        self.assertIn("function bloquearProdutoDuplicadoNoCampoProdutoVenda(produtoOption = null)", html)
+        self.assertIn("produtoBusca.focus();", html)
+        self.assertIn("produtoBusca.select();", html)
+        self.assertRegex(
+            html,
+            r"else if \(e\.key === \"Enter\"\) \{[\s\S]*?bloquearProdutoDuplicadoNoCampoProdutoVenda\(\)[\s\S]*?return;",
+        )
+
+    def test_vendas_template_valida_duplicidade_ao_adicionar_ou_atualizar(self):
+        html = self._html_vendas()
+
+        self.assertIn("function adicionarItemVendaAtual()", html)
+        self.assertIn("if (bloquearProdutoDuplicadoVenda(produtoId, produtoNome, linhaSelecionada)) {", html)
+        self.assertIn("return false;", html)
+        self.assertRegex(
+            html,
+            r"function adicionarItemVendaAtual\(\) \{[\s\S]*?bloquearProdutoDuplicadoVenda\(produtoId, produtoNome, linhaSelecionada\)[\s\S]*?const item = \{",
+        )
+
+    def test_vendas_template_limpar_itens_limpa_estado_de_edicao(self):
+        html = self._html_vendas()
+
+        self.assertIn("function limparItensVenda()", html)
+        self.assertIn('tabelaBody.innerHTML = "";', html)
+        self.assertIn("function limparEstadoEdicaoItemVenda()", html)
+        self.assertIn("linhaSelecionada = null;", html)
+        self.assertIn("atualizarBotaoEdicaoItemVenda();", html)
+        self.assertRegex(
+            html,
+            r"function limparItensVenda\(\) \{[\s\S]*?tabelaBody\.innerHTML = \"\";[\s\S]*?limparEstadoEdicaoItemVenda\(\);",
+        )
+
+    def test_vendas_template_valida_estoque_antes_de_gravar_venda(self):
+        html = self._html_vendas()
+
+        self.assertIn("function estoqueDisponivelNaUnidadeVenda(produtoOption, unidadeTexto)", html)
+        self.assertIn("function validarEstoqueItemVendaAtual(mostrarAvisoErro = false)", html)
+        self.assertIn("function mensagemEstoqueInsuficienteVenda(produtoOption, quantidadeSolicitada, unidadeTexto, estoqueDisponivel)", html)
+        self.assertIn('"Estoque insuficiente para "', html)
+        self.assertIn("quantidade.addEventListener(\"keydown\", (e) => {", html)
+        self.assertIn('if (e.key !== "Tab") return;', html)
+        self.assertIn("} else if (ativo === quantidade) {", html)
+        self.assertIn("} else if (ativo === preco) {", html)
+        self.assertIn('unidade.addEventListener("change", () => {', html)
+        self.assertIn("function adicionarItemVendaAtual()", html)
+        self.assertGreaterEqual(html.count("validarEstoqueItemVendaAtual(true)"), 5)
+
     def test_vendas_nao_exibe_aviso_compras_rascunho_sem_pendencia(self):
         resposta = self.client.get(reverse("estoque:vendas"), secure=True)
 
