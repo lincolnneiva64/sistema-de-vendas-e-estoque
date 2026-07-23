@@ -149,11 +149,10 @@
     .conf-direct-panel {
       margin-top: 12px;
     }
-    .conf-direct-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: end;
-      gap: 10px;
+    .conf-tool-row {
+      display: flex;
+      justify-content: flex-end;
+      margin: 0 0 12px;
     }
     .conf-calc-open {
       min-height: 40px;
@@ -404,9 +403,6 @@
       .conf-submit {
         width: 100%;
       }
-      .conf-direct-row {
-        grid-template-columns: 1fr;
-      }
       .conf-calc-modal {
         align-items: stretch;
         padding: 8px;
@@ -417,6 +413,12 @@
         display: flex;
         flex-direction: column;
         justify-content: center;
+      }
+    }
+    @media (min-width: 1640px) {
+      .conf-calc-modal {
+        place-items: center end;
+        padding-right: max(24px, calc((100vw - 1580px) / 2));
       }
     }
   </style>
@@ -480,6 +482,10 @@
             <input type="radio" name="metodo_conferencia_visual" value="direta" {% if metodo_selecionado == "direta" %}checked{% endif %}>
             <span>Contagem direta</span>
           </label>
+        </div>
+
+        <div class="conf-tool-row">
+          <button type="button" id="abrirCalculadoraConferencia" class="conf-calc-open">🧮 Calculadora</button>
         </div>
 
         <div id="painelContagemCedulas" {% if metodo_selecionado == "direta" %}hidden{% endif %}>
@@ -546,12 +552,9 @@
         </div>
 
           <div id="painelContagemDireta" class="conf-direct-panel" {% if metodo_selecionado != "direta" %}hidden{% endif %}>
-            <div class="conf-direct-row">
-              <div class="conf-money-field">
+            <div class="conf-money-field">
                 <label for="valorConferenciaDireta">Valor total contado</label>
                 <input id="valorConferenciaDireta" name="valor_conferencia_direta" class="conf-direct-input" type="text" inputmode="decimal" value="{{ valor_direto_inicial }}" placeholder="0,00">
-              </div>
-              <button type="button" id="abrirCalculadoraConferencia" class="conf-calc-open">🧮 Calculadora</button>
             </div>
           </div>
 
@@ -591,7 +594,7 @@
     </div>
   </main>
   <div id="modalCalculadoraConferencia" class="conf-calc-modal" hidden>
-    <div class="conf-calc-dialog" role="dialog" aria-modal="true" aria-labelledby="tituloCalculadoraConferencia">
+    <div id="dialogCalculadoraConferencia" class="conf-calc-dialog" role="dialog" aria-modal="true" aria-labelledby="tituloCalculadoraConferencia" tabindex="-1">
       <div class="conf-calc-header">
         <h2 id="tituloCalculadoraConferencia" class="conf-calc-title">Calculadora</h2>
         <button type="button" id="fecharCalculadoraConferencia" class="conf-calc-close" aria-label="Fechar calculadora">×</button>
@@ -637,6 +640,7 @@
     const botaoFinalizarEl = document.getElementById("botaoFinalizarConferencia");
     const abrirCalculadoraEl = document.getElementById("abrirCalculadoraConferencia");
     const modalCalculadoraEl = document.getElementById("modalCalculadoraConferencia");
+    const dialogCalculadoraEl = document.getElementById("dialogCalculadoraConferencia");
     const fecharCalculadoraEl = document.getElementById("fecharCalculadoraConferencia");
     const visorCalculadoraEl = document.getElementById("visorCalculadoraConferencia");
     const usarResultadoCalculadoraEl = document.getElementById("usarResultadoCalculadoraConferencia");
@@ -695,6 +699,7 @@
       const direta = metodoSelecionado() === "direta";
       if (painelCedulas) painelCedulas.hidden = direta;
       if (painelDireta) painelDireta.hidden = !direta;
+      atualizarTextoUsoCalculadora();
     }
 
     function atualizarTotal() {
@@ -745,6 +750,15 @@
       if (input.value === "0") input.select();
     }
 
+    function calculadoraAberta() {
+      return modalCalculadoraEl && !modalCalculadoraEl.hidden;
+    }
+
+    function atualizarTextoUsoCalculadora() {
+      if (!usarResultadoCalculadoraEl) return;
+      usarResultadoCalculadoraEl.textContent = metodoSelecionado() === "direta" ? "Usar resultado" : "Copiar resultado";
+    }
+
     function normalizarEntradaCalculadora(valor) {
       const texto = String(valor || "").trim();
       return texto ? texto : "0";
@@ -764,6 +778,8 @@
 
     function adicionarValorCalculadora(valor) {
       if (!valor) return;
+      if (valor === "×") valor = "\u00c3\u2014";
+      if (valor === "÷") valor = "\u00c3\u00b7";
       const ultimo = expressaoCalculadora.slice(-1);
       if (operadorCalculadora(valor)) {
         expressaoCalculadora = operadorCalculadora(ultimo)
@@ -821,24 +837,67 @@
       if (!modalCalculadoraEl) return;
       expressaoCalculadora = normalizarEntradaCalculadora(valorDiretoEl ? valorDiretoEl.value : "");
       atualizarVisorCalculadora();
+      atualizarTextoUsoCalculadora();
       modalCalculadoraEl.hidden = false;
-      if (fecharCalculadoraEl) fecharCalculadoraEl.focus();
+      document.removeEventListener("keydown", controlarTecladoCalculadora);
+      document.addEventListener("keydown", controlarTecladoCalculadora);
+      if (dialogCalculadoraEl) dialogCalculadoraEl.focus();
     }
 
     function fecharCalculadora() {
       if (modalCalculadoraEl) modalCalculadoraEl.hidden = true;
+      document.removeEventListener("keydown", controlarTecladoCalculadora);
       if (abrirCalculadoraEl) abrirCalculadoraEl.focus();
     }
 
     function usarResultadoCalculadora() {
       const resultadoTexto = resolverCalculadora();
       if (resultadoTexto === null) return;
-      if (!valorDiretoEl) return;
-      valorDiretoEl.value = resultadoTexto;
-      valorDiretoEl.dispatchEvent(new Event("input", { bubbles: true }));
-      valorDiretoEl.dispatchEvent(new Event("change", { bubbles: true }));
-      if (modalCalculadoraEl) modalCalculadoraEl.hidden = true;
-      valorDiretoEl.focus();
+      if (metodoSelecionado() === "direta") {
+        if (!valorDiretoEl) return;
+        valorDiretoEl.value = resultadoTexto;
+        valorDiretoEl.dispatchEvent(new Event("input", { bubbles: true }));
+        valorDiretoEl.dispatchEvent(new Event("change", { bubbles: true }));
+        fecharCalculadora();
+        valorDiretoEl.focus();
+      } else if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(resultadoTexto);
+      }
+    }
+
+    function controlarTecladoCalculadora(event) {
+      if (!calculadoraAberta()) return;
+      const tecla = event.key;
+      if (/^[0-9]$/.test(tecla)) {
+        event.preventDefault();
+        adicionarValorCalculadora(tecla);
+      } else if (tecla === "," || tecla === ".") {
+        event.preventDefault();
+        adicionarValorCalculadora(",");
+      } else if (["+", "-"].includes(tecla)) {
+        event.preventDefault();
+        adicionarValorCalculadora(tecla);
+      } else if (tecla === "*") {
+        event.preventDefault();
+        adicionarValorCalculadora("×");
+      } else if (tecla === "/") {
+        event.preventDefault();
+        adicionarValorCalculadora("÷");
+      } else if (tecla === "Enter") {
+        event.preventDefault();
+        resolverCalculadora();
+      } else if (tecla === "Backspace") {
+        event.preventDefault();
+        apagarCalculadora();
+      } else if (tecla === "Delete" || tecla.toLowerCase() === "c") {
+        event.preventDefault();
+        limparCalculadora();
+      } else if (tecla === "Escape") {
+        event.preventDefault();
+        fecharCalculadora();
+      } else if (tecla.length === 1) {
+        event.preventDefault();
+      }
     }
 
     inputs.forEach((input, indice) => {
