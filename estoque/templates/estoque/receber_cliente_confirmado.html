@@ -131,7 +131,12 @@
   #btn-compartilhar-recibo-card { flex: 0 1 210px; max-width: 210px; }
   #btn-ver-recibo-card { flex: 0 1 210px; max-width: 210px; }
   #btn-enviar-confirmacao-whatsapp { flex: 0 1 300px; max-width: 300px; }
-  #btn-confirmar-recibo-enviado { flex: 0 1 250px; max-width: 250px; }
+  #btn-confirmar-recibo-enviado {
+    flex: 1 1 320px;
+    max-width: 420px;
+    min-height: 46px;
+    font-size: 0.92rem;
+  }
   .rcp-btn.primary {
     border-color: #2563eb;
     background: #1d4ed8;
@@ -157,6 +162,7 @@
     background: #16a34a;
     color: #ffffff;
     box-shadow: 0 10px 26px rgba(22, 163, 74, 0.28);
+    min-height: 48px;
   }
   @keyframes rcp-confirmar-pulse {
     0%, 100% {
@@ -500,8 +506,7 @@
             id="btn-confirmar-recibo-enviado"
             data-confirmar-recibo-url="{{ confirmar_recibo_url }}"
             data-operacao-id="{{ operacao.id }}"
-            hidden
-          >Confirmar recibo enviado</button>
+          >{% if whatsapp_confirmacao.tem_whatsapp %}Confirmar recibo enviado{% else %}Confirmar recibo enviado por outro meio{% endif %}</button>
           <p class="rcp-recibo-status" id="confirmar-recibo-status" aria-live="polite" hidden>Depois de anexar e enviar a imagem no WhatsApp, confirme o envio aqui.</p>
           <a class="rcp-btn secondary back" href="{{ voltar_receber_url }}">Voltar</a>
         </div>
@@ -641,6 +646,7 @@
   const statusLabel = document.getElementById("statusReciboLabel");
   const painelAcoesRecibo = document.getElementById("acoes-recibo-recebimento");
   const continuidadeRota = document.getElementById("continuidade-rota-recebimento");
+  const textoOriginalBotaoConfirmar = btnConfirmar?.textContent || "Confirmar recibo enviado";
 
   function csrfToken() {
     const cookie = document.cookie.split(";").map(function (item) { return item.trim(); })
@@ -753,7 +759,7 @@
       esconderAcoesReciboAposConfirmacao();
     } catch (erro) {
       btnConfirmar.disabled = false;
-      btnConfirmar.textContent = "Confirmar recibo enviado";
+      btnConfirmar.textContent = textoOriginalBotaoConfirmar;
       btnConfirmar.classList.add("pulsando");
       atualizarMensagem(erro.message || "Nao foi possivel confirmar o envio. Tente novamente.", true);
     }

@@ -17114,7 +17114,8 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "Confirmar recibo enviado")
         self.assertContains(resposta, f'data-confirmar-recibo-url="{self._url_confirmar_recibo(cliente, operacao)}"')
         self.assertContains(resposta, 'id="btn-confirmar-recibo-enviado"')
-        self.assertContains(resposta, "hidden")
+        self.assertContains(resposta, 'textoOriginalBotaoConfirmar = btnConfirmar?.textContent || "Confirmar recibo enviado"')
+        self.assertContains(resposta, "btnConfirmar.textContent = textoOriginalBotaoConfirmar;")
         self.assertContains(resposta, 'btnConfirmar.classList.add("pulsando")')
         self.assertContains(resposta, 'btnConfirmar.classList.remove("pulsando", "primary")')
         self.assertContains(resposta, 'btnConfirmar.classList.add("success", "recibo-confirmado-pulso")')
@@ -17129,7 +17130,8 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, 'continuidadeRota?.classList.add("destacado");')
         self.assertContains(resposta, "@media (prefers-reduced-motion: reduce)")
         self.assertContains(resposta, "#btn-enviar-confirmacao-whatsapp { flex: 0 1 300px; max-width: 300px; }")
-        self.assertContains(resposta, "#btn-confirmar-recibo-enviado { flex: 0 1 250px; max-width: 250px; }")
+        self.assertContains(resposta, "flex: 1 1 320px;")
+        self.assertContains(resposta, "max-width: 420px;")
         self.assertContains(resposta, "#btn-ver-recibo-card { flex: 0 1 210px; max-width: 210px; }")
         self.assertContains(resposta, "#btn-compartilhar-recibo-card { flex: 0 1 210px; max-width: 210px; }")
         self.assertNotContains(resposta, "grid-template-columns: 1fr 1.35fr auto")
@@ -17145,6 +17147,21 @@ class PixRecebidoTests(TestCase):
         )
         self.assertNotContains(resposta, 'id="formReceberCliente"')
         self.assertNotContains(resposta, 'id="clienteBuscaReceberDireto"')
+
+    def test_receber_cliente_confirmado_sem_whatsapp_mostra_confirmacao_por_outro_meio(self):
+        cliente = Cliente.objects.create(nome="Cliente Sem WhatsApp Confirmacao", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+
+        resposta = self._post_receber_cliente(cliente, "100,00", follow=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Cliente sem WhatsApp cadastrado.")
+        self.assertNotContains(resposta, "Abrir WhatsApp com mensagem")
+        self.assertNotContains(resposta, 'id="btn-enviar-confirmacao-whatsapp"')
+        self.assertContains(resposta, 'id="btn-confirmar-recibo-enviado"')
+        self.assertContains(resposta, "Confirmar recibo enviado por outro meio")
+        self.assertContains(resposta, 'btnConfirmar.textContent = "Recibo enviado com sucesso.";')
+        self.assertContains(resposta, 'btnConfirmar.classList.add("success", "recibo-confirmado-pulso")')
 
     def test_receber_cliente_confirmado_nao_sugere_proprio_cliente_atual(self):
         cliente = Cliente.objects.create(nome="Cliente Atual Rota", bairro="Centro", ativo=True)
