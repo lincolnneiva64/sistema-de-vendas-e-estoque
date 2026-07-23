@@ -3500,6 +3500,47 @@ function atualizarLinhaItemVenda(linha, item) {
     linha.children[4].textContent = normalizarNumeroVenda(item.valor_total);
 }
 
+function obterProdutoOptionVenda(valorProduto) {
+    const valorNormalizado = String(valorProduto || "").trim();
+    return Array.from(produto.options).find((opt) => (opt.value || "").trim() === valorNormalizado) || null;
+}
+
+function obterProdutoIdLinhaVenda(linha) {
+    if (!linha) return "";
+    return String(linha.dataset.produtoId || "").trim();
+}
+
+function linhaTemProdutoVenda(linha, produtoId, produtoNome) {
+    if (!linha) return false;
+
+    const idLinha = obterProdutoIdLinhaVenda(linha);
+    const idProduto = String(produtoId || "").trim();
+
+    if (idLinha && idProduto) {
+        return idLinha === idProduto;
+    }
+
+    const nomeLinha = normalizarTextoVendaEstoque(linha.children[0]?.textContent || "");
+    const nomeProduto = normalizarTextoVendaEstoque(produtoNome || "");
+    return !!nomeLinha && nomeLinha === nomeProduto;
+}
+
+function encontrarLinhaProdutoDuplicadoVenda(produtoId, produtoNome, linhaIgnorada = null) {
+    return Array.from(tabelaBody.querySelectorAll("tr")).find((linha) => {
+        if (linha === linhaIgnorada) return false;
+        return linhaTemProdutoVenda(linha, produtoId, produtoNome);
+    }) || null;
+}
+
+function bloquearProdutoDuplicadoVenda(produtoId, produtoNome, linhaIgnorada = null) {
+    if (!encontrarLinhaProdutoDuplicadoVenda(produtoId, produtoNome, linhaIgnorada)) {
+        return false;
+    }
+
+    mostrarAviso("Esse produto já foi lançado.", produtoBusca, true);
+    return true;
+}
+
 tabelaBody.addEventListener("click", function (e) {
   const linha = e.target.closest("tr");
   linhaSelecionada = linha;
@@ -4069,7 +4110,7 @@ function preencherProximoProdutoDepoisDeAdicionar(produtoValorAtual, produtoNome
 function adicionarItemVendaAtual() {
     const produtoNome = (produtoBusca.value || "").trim();
     const produtoValor = (produto.value || "").trim();
-    const produtoOption = Array.from(produto.options).find((opt) => (opt.value || "").trim() === produtoValor);
+    const produtoOption = obterProdutoOptionVenda(produtoValor);
     const produtoId = produtoOption?.dataset?.produtoId || "";
     const qtdTexto = (quantidade.value || "").trim();
     const unidadeTexto = (unidade.value || "").trim();
@@ -4111,6 +4152,10 @@ function adicionarItemVendaAtual() {
     if (isNaN(precoNumero) || precoNumero <= 0) {
         mostrarToastVenda("Preço invalido.");
         focarProximoCampo(preco);
+        return false;
+    }
+
+    if (bloquearProdutoDuplicadoVenda(produtoId, produtoNome, linhaSelecionada)) {
         return false;
     }
 
@@ -4719,13 +4764,8 @@ console.log("LINHAS RESTANTES:", tabelaBody.querySelectorAll("tr").length);
         const qtd = quantidade.value.trim();
         const un = unidade.value.trim();
         const valor = preco.value.trim();
-        const jaExiste = Array.from(tabelaBody.querySelectorAll("tr"))
-.some(tr => tr.children[0].textContent.trim() === nomeProduto);
-
-if (jaExiste && !linhaSelecionada) {
-    mostrarAviso("Esse produto já foi lançado.", produtoBusca, true);
-    return;
-}
+        const produtoOptionEnter = obterProdutoOptionVenda(nomeProduto);
+        const produtoIdEnter = produtoOptionEnter?.dataset?.produtoId || "";
         if (!nomeProduto) {
     mostrarAviso("Informe o produto.", produto);
     return;
@@ -4746,8 +4786,17 @@ if (!valor) {
     return;
 }
 
+if (bloquearProdutoDuplicadoVenda(produtoIdEnter, nomeProduto, linhaSelecionada)) {
+    return;
+}
+
         if (linhaSelecionada) {
             // EDITAR LINHA EXISTENTE
+            if (produtoIdEnter) {
+                linhaSelecionada.dataset.produtoId = String(produtoIdEnter);
+            } else {
+                delete linhaSelecionada.dataset.produtoId;
+            }
             linhaSelecionada.children[0].textContent = nomeProduto;
             linhaSelecionada.children[1].textContent = qtd;
             linhaSelecionada.children[2].textContent = un;
@@ -4773,6 +4822,9 @@ return;
 } else {
     // CRIAR NOVA LINHA
     const novaLinha = document.createElement("tr");
+    if (produtoIdEnter) {
+        novaLinha.dataset.produtoId = String(produtoIdEnter);
+    }
     const total = parseFloat(qtd) * parseFloat(valor);
 
     novaLinha.innerHTML =
