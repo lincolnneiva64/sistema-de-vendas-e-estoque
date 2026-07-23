@@ -17283,6 +17283,20 @@ class PixRecebidoTests(TestCase):
         )
         self.assertNotContains(resposta, "Cliente Outra Rota")
 
+    def test_receber_cliente_confirmado_sugere_cliente_recebido_hoje_com_pendencia_restante(self):
+        cliente_atual = Cliente.objects.create(nome="Cliente Atual Sugestao", bairro="Centro", ativo=True)
+        cliente_proximo = Cliente.objects.create(nome="Cliente Parcial Ainda Deve", bairro="Centro", ativo=True)
+        self._criar_conta_receber_pix(cliente_proximo, "80.00")
+        self._criar_operacao_recebimento_cliente(cliente_proximo, rota="Centro", valor="20.00")
+        operacao = self._criar_operacao_recebimento_cliente(cliente_atual, rota="Centro")
+
+        resposta = self.client.get(self._url_recebimento_confirmado(cliente_atual, operacao), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Cliente Parcial Ainda Deve")
+        self.assertContains(resposta, "R$ 80,00")
+        self.assertContains(resposta, "Cobrar proximo cliente")
+
     def test_receber_cliente_confirmado_mostra_ausencia_de_proximo_cliente_pendente(self):
         cliente = Cliente.objects.create(nome="Cliente Sem Proximo Rota", bairro="Jardim", ativo=True)
         operacao = self._criar_operacao_recebimento_cliente(cliente, rota="Jardim")
@@ -17393,27 +17407,21 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "R$ 70,00")
         self.assertContains(resposta, "R$ 40,00")
         self.assertContains(resposta, "R$ 90,00")
-        self.assertContains(resposta, "Usado nas contas: R$ 50,00")
         self.assertContains(resposta, "Credito gerado: R$ 20,00")
         self.assertContains(resposta, "Recibo pendente")
         self.assertContains(resposta, "Clientes recebidos")
-        self.assertContains(resposta, '<span class="rcr-value">2</span>', html=True)
-        self.assertContains(resposta, '<span class="rcr-value">3</span>', html=True)
-        self.assertContains(resposta, '<span class="rcr-value money">R$ 110,00</span>', html=True)
-        self.assertContains(resposta, '<span class="rcr-value money">R$ 90,00</span>', html=True)
-        self.assertContains(resposta, '<span class="rcr-value money">R$ 200,00</span>', html=True)
-        self.assertContains(resposta, "2 operacao(oes)")
-        self.assertContains(resposta, "1 operacao(oes)")
         self.assertContains(resposta, "Total recebido")
-        self.assertContains(
-            resposta,
-            "Recebimentos com rota registrada aparecem como confirmados. "
-            "Recebimentos antigos sem rota registrada sao identificados pelo bairro atual do cliente.",
-        )
+        self.assertContains(resposta, '<span class="rcr-value">2</span>', html=True)
+        self.assertContains(resposta, '<span class="rcr-value money">R$ 200,00</span>', html=True)
+        self.assertNotContains(resposta, "Operacoes")
+        self.assertNotContains(resposta, "Confirmadas")
+        self.assertNotContains(resposta, "Identificadas pelo bairro")
+        self.assertNotContains(resposta, "Recebimentos com rota registrada aparecem como confirmados.")
         self.assertNotContains(resposta, "Confirmada pela rota_snapshot")
         self.assertNotContains(resposta, "Rota inferida pelo bairro")
         self.assertNotContains(resposta, "Rota confirmada")
         self.assertNotContains(resposta, "Rota identificada pelo bairro")
+        self.assertNotContains(resposta, "Usado nas contas:")
         self.assertNotContains(resposta, "Aplicado:")
         self.assertNotContains(resposta, "valor recebido")
         self.assertNotContains(resposta, "Cliente Outra Rota Consulta")
@@ -17445,7 +17453,8 @@ class PixRecebidoTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "Cliente Total Operacao")
-        self.assertContains(resposta, '<span class="rcr-value money">R$ 120,00</span>', count=2, html=True)
+        self.assertContains(resposta, '<span class="rcr-value money">R$ 120,00</span>', html=True)
+        self.assertContains(resposta, "R$ 120,00", count=2)
         self.assertNotContains(resposta, "R$ 240,00")
 
     def test_recebimentos_rota_mostra_usuario_e_preserva_volta(self):

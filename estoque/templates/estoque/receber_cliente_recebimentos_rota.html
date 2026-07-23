@@ -87,13 +87,12 @@
 
     .rcr-summary {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
       margin-bottom: 12px;
     }
 
     .rcr-card,
-    .rcr-rule,
     .rcr-empty,
     .rcr-row {
       border: 1px solid var(--rc-border);
@@ -124,7 +123,6 @@
       color: var(--rc-green);
     }
 
-    .rcr-rule,
     .rcr-empty {
       padding: 12px;
       margin-bottom: 12px;
@@ -162,8 +160,7 @@
       overflow-wrap: anywhere;
     }
 
-    .rcr-row-detail,
-    .rcr-row-values {
+    .rcr-row-detail {
       display: flex;
       flex-wrap: wrap;
       gap: 7px;
@@ -174,9 +171,16 @@
       font-weight: 700;
     }
 
-    .rcr-row-values {
+    .rcr-row-credit {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 7px;
+      padding-left: 84px;
       align-items: baseline;
       color: var(--rc-muted);
+      font-size: .9rem;
+      font-weight: 700;
     }
 
     .rcr-value-line {
@@ -237,7 +241,7 @@
         text-align: left;
       }
       .rcr-row-detail,
-      .rcr-row-values {
+      .rcr-row-credit {
         padding-left: 72px;
       }
     }
@@ -250,14 +254,16 @@
         <div>
           <h1 class="rcr-title">Recebimentos desta rota</h1>
           <p class="rcr-subtitle">{{ rota_filtro }} - {{ data_referencia|date:"d/m/Y" }}</p>
-          <div class="rcr-route-meta">
-            {% if usuario_consulta_nome %}
-              <span>Usuario desta consulta: {{ usuario_consulta_nome }}</span>
-            {% endif %}
-            {% if usuarios_recebimentos_texto %}
-              <span>Recebimentos registrados por: {{ usuarios_recebimentos_texto }}</span>
-            {% endif %}
-          </div>
+          {% if usuario_consulta_nome or usuarios_recebimentos_texto %}
+            <div class="rcr-route-meta">
+              {% if usuario_consulta_nome %}
+                <span>Usuario desta consulta: {{ usuario_consulta_nome }}</span>
+              {% endif %}
+              {% if usuarios_recebimentos_texto %}
+                <span>Recebimentos registrados por: {{ usuarios_recebimentos_texto }}</span>
+              {% endif %}
+            </div>
+          {% endif %}
         </div>
         <a class="rcr-btn" href="{{ voltar_receber_url }}">Voltar para receber clientes</a>
       </header>
@@ -268,26 +274,10 @@
           <span class="rcr-value">{{ clientes_recebidos_qtd }}</span>
         </div>
         <div class="rcr-card">
-          <span class="rcr-label">Operacoes</span>
-          <span class="rcr-value">{{ operacoes_recebidas_qtd }}</span>
-        </div>
-        <div class="rcr-card">
-          <span class="rcr-label">Confirmadas</span>
-          <span class="rcr-value money">{{ total_confirmado_rota_formatado }}</span>
-          <span class="rcr-label">{{ operacoes_confirmadas_qtd }} operacao(oes)</span>
-        </div>
-        <div class="rcr-card">
-          <span class="rcr-label">Identificadas pelo bairro</span>
-          <span class="rcr-value money">{{ total_inferido_rota_formatado }}</span>
-          <span class="rcr-label">{{ operacoes_inferidas_qtd }} operacao(oes)</span>
-        </div>
-        <div class="rcr-card">
-          <span class="rcr-label">Total exibido</span>
+          <span class="rcr-label">Total recebido</span>
           <span class="rcr-value money">{{ total_recebimentos_rota_dia_formatado }}</span>
         </div>
       </section>
-
-      <div class="rcr-rule">{{ regra_rota_recebimentos }}</div>
 
       {% if historico_recebimentos_rota_dia %}
         <section class="rcr-list" aria-label="Recebimentos da rota no dia">
@@ -312,12 +302,11 @@
                   <span>Recibo {{ item.status_recibo|lower }}</span>
                 {% endif %}
               </div>
-              <div class="rcr-row-values">
-                <span class="rcr-value-line">Usado nas contas: {{ item.valor_aplicado_formatado }}</span>
-                {% if item.credito_gerado > 0 %}
+              {% if item.credito_gerado > 0 %}
+                <div class="rcr-row-credit">
                   <span class="rcr-value-line rcr-highlight credito">Credito gerado: {{ item.credito_gerado_formatado }}</span>
-                {% endif %}
-              </div>
+                </div>
+              {% endif %}
             </article>
           {% endfor %}
         </section>

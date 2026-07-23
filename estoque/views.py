@@ -12067,11 +12067,6 @@ def _contexto_rota_recebimento(cliente, operacao):
 
 def _proximo_cliente_recebimento_rota(cliente, operacao):
     contexto_rota = _contexto_rota_recebimento(cliente, operacao)
-    data_referencia = operacao.data_recebimento or timezone.localdate()
-    clientes_recebidos_hoje = OperacaoRecebimentoCliente.objects.filter(
-        data_recebimento=data_referencia,
-        cliente_id__isnull=False,
-    ).values_list("cliente_id", flat=True)
 
     proximo = (
         ContaReceber.objects.filter(
@@ -12081,7 +12076,6 @@ def _proximo_cliente_recebimento_rota(cliente, operacao):
         )
         .filter(contexto_rota["clientes_q"])
         .exclude(cliente_id=cliente.id)
-        .exclude(cliente_id__in=clientes_recebidos_hoje)
         .values("cliente_id", "cliente__nome", "cliente__bairro", "cliente__cidade")
         .annotate(
             contas_abertas=Count("id"),
@@ -12258,10 +12252,6 @@ def receber_cliente_recebimentos_rota(request):
             "total_inferido_rota_formatado": _formatar_moeda(resumo["total_inferido"]),
             "total_recebimentos_rota_dia_formatado": _formatar_moeda(resumo["total_recebido"]),
             "voltar_receber_url": voltar_url,
-            "regra_rota_recebimentos": (
-                "Recebimentos com rota registrada aparecem como confirmados. "
-                "Recebimentos antigos sem rota registrada sao identificados pelo bairro atual do cliente."
-            ),
         },
     )
 
