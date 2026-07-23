@@ -3924,6 +3924,62 @@ function formatarEstoqueProdutoVenda(estoqueBase, unidadeBase, fator, unidadeFra
     return `${formatarNumeroEstoqueVenda(estoque)} ${unidade1}`.trim();
 }
 
+function normalizarUnidadeEstoqueVenda(valor) {
+    return String(valor || "").trim().toUpperCase();
+}
+
+function estoqueDisponivelNaUnidadeVenda(produtoOption, unidadeTexto) {
+    if (!produtoOption) return null;
+
+    const estoqueBase = Number(String(produtoOption.dataset.estoque || "0").replace(",", "."));
+    const unidadeSelecionada = normalizarUnidadeEstoqueVenda(unidadeTexto);
+    const unidadeFracionada = normalizarUnidadeEstoqueVenda(produtoOption.dataset.unidade2 || "");
+    const fracionado = produtoOption.dataset.fracionado === "true";
+    const fator = Number(String(produtoOption.dataset.fator || "0").replace(",", "."));
+
+    if (!Number.isFinite(estoqueBase)) return null;
+
+    if (unidadeSelecionada && fracionado && unidadeFracionada && unidadeSelecionada === unidadeFracionada && fator > 0) {
+        return Number((estoqueBase * fator).toFixed(3));
+    }
+
+    return Number(estoqueBase.toFixed(3));
+}
+
+function mensagemEstoqueInsuficienteVenda(produtoOption, quantidadeSolicitada, unidadeTexto, estoqueDisponivel) {
+    const nomeProduto = produtoOption?.value || produtoBusca.value || produto.value || "Produto";
+    const unidadeSufixo = unidadeTexto ? " " + unidadeTexto : "";
+    return "Estoque insuficiente para " + nomeProduto + ". "
+        + "Solicitado: " + formatarNumeroEstoqueVenda(quantidadeSolicitada) + unidadeSufixo + ". "
+        + "Disponivel: " + formatarNumeroEstoqueVenda(estoqueDisponivel) + unidadeSufixo + ".";
+}
+
+function validarEstoqueItemVendaAtual(mostrarAvisoErro = false) {
+    const produtoNome = (produto.value || produtoBusca.value || "").trim();
+    const produtoOption = obterProdutoOptionVenda(produtoNome);
+    const qtdNumero = parseFloat(normalizarNumeroVenda(quantidade.value));
+    const unidadeTexto = (unidade.value || "").trim();
+
+    if (!produtoOption || !Number.isFinite(qtdNumero) || qtdNumero <= 0 || !unidadeTexto) {
+        return true;
+    }
+
+    const disponivel = estoqueDisponivelNaUnidadeVenda(produtoOption, unidadeTexto);
+    if (disponivel === null || qtdNumero <= disponivel + 0.0001) {
+        return true;
+    }
+
+    if (mostrarAvisoErro) {
+        mostrarAviso(
+            mensagemEstoqueInsuficienteVenda(produtoOption, qtdNumero, unidadeTexto, disponivel),
+            quantidade,
+            true
+        );
+    }
+
+    return false;
+}
+
 function coletarItensVenda() {
     return Array.from(tabelaBody.querySelectorAll("tr")).map((tr) => ({
         produto_id: tr.dataset.produtoId || "",
@@ -4176,6 +4232,10 @@ function adicionarItemVendaAtual() {
     if (isNaN(precoNumero) || precoNumero <= 0) {
         mostrarToastVenda("Preço invalido.");
         focarProximoCampo(preco);
+        return false;
+    }
+
+    if (!validarEstoqueItemVendaAtual(true)) {
         return false;
     }
 
@@ -4514,6 +4574,11 @@ quantidade.addEventListener("keydown", (e) => {
     if (produto.value.trim() && !quantidadeInformadaValida()) {
         e.preventDefault();
         bloquearQuantidadeInvalida();
+        return;
+    }
+
+    if (!validarEstoqueItemVendaAtual(true)) {
+        e.preventDefault();
     }
 });
 
@@ -4763,6 +4828,10 @@ console.log("LINHAS RESTANTES:", tabelaBody.querySelectorAll("tr").length);
         return;
     }
 
+    if (!validarEstoqueItemVendaAtual(true)) {
+        return;
+    }
+
     const optionSelecionada = produto.options[produto.selectedIndex];
 
     if (!optionSelecionada) return;
@@ -4807,6 +4876,10 @@ if (!un) {
 
 if (!valor) {
     mostrarAviso("Informe o preço.", preco, true);
+    return;
+}
+
+if (!validarEstoqueItemVendaAtual(true)) {
     return;
 }
 
@@ -5168,12 +5241,14 @@ let precoFracionado = opt.dataset.preco2 || "";
     estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBase, unidade1, fator, unidade2, fracionado)}`;
 }
         preco.value = precoBase;
+        validarEstoqueItemVendaAtual(true);
         return;
     }
 
     if (fracionado && unidade.value === unidade2) {
         estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBase, unidade1, fator, unidade2, fracionado)}`;
         preco.value = precoFracionado;
+        validarEstoqueItemVendaAtual(true);
     }
 });
 
