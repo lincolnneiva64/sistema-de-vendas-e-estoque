@@ -17590,6 +17590,37 @@ class PixRecebidoTests(TestCase):
         self.assertNotContains(resposta, "R$ 900,00")
         self.assertNotContains(resposta, "<form")
 
+    def test_conferencia_recebimentos_rota_exibe_contagem_por_cedulas_sem_formulario(self):
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
+
+        resposta = self.client.get(url, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'name="metodo_conferencia_visual"')
+        self.assertContains(resposta, 'value="cedulas" checked')
+        self.assertContains(resposta, 'value="direta" disabled')
+        self.assertContains(resposta, "Total contado")
+        self.assertContains(resposta, 'id="totalContadoCedulas"')
+        self.assertContains(resposta, "R$ 0,00")
+        self.assertContains(resposta, 'data-valor-centavos="20000"')
+        self.assertContains(resposta, 'data-valor-centavos="10000"')
+        self.assertContains(resposta, 'data-valor-centavos="5000"')
+        self.assertContains(resposta, 'data-valor-centavos="2000"')
+        self.assertContains(resposta, 'data-valor-centavos="1000"')
+        self.assertContains(resposta, 'data-valor-centavos="500"')
+        self.assertContains(resposta, 'data-valor-centavos="200"')
+        self.assertContains(resposta, 'data-valor-centavos="100"')
+        self.assertContains(resposta, 'data-valor-centavos="50"')
+        self.assertContains(resposta, 'data-valor-centavos="25"')
+        self.assertContains(resposta, 'data-valor-centavos="10"')
+        self.assertContains(resposta, 'data-valor-centavos="5"')
+        self.assertContains(resposta, 'type="number"', count=12)
+        self.assertContains(resposta, 'min="0"', count=12)
+        self.assertContains(resposta, 'step="1"', count=12)
+        self.assertContains(resposta, "atualizarTotal")
+        self.assertContains(resposta, 'addEventListener("input", atualizarTotal)')
+        self.assertNotContains(resposta, "<form")
+
     def test_fechamento_rota_recebimento_defaults(self):
         usuario = get_user_model().objects.create_user(username="conferente", password="senha")
 

@@ -58,6 +58,7 @@
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 10px;
+      margin-bottom: 12px;
     }
     .conf-card {
       border: 1px solid #d7dee8;
@@ -81,6 +82,82 @@
     .conf-value.money {
       color: #157347;
     }
+    .conf-count-panel {
+      border: 1px solid #d7dee8;
+      border-radius: 8px;
+      background: #fff;
+      padding: 13px;
+    }
+    .conf-section-title {
+      margin: 0 0 10px;
+      font-size: 1.05rem;
+      font-weight: 900;
+    }
+    .conf-methods {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .conf-method {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 38px;
+      padding: 8px 10px;
+      border: 1px solid #d7dee8;
+      border-radius: 8px;
+      font-weight: 800;
+    }
+    .conf-method input {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+    }
+    .conf-money-group {
+      margin-top: 12px;
+    }
+    .conf-money-title {
+      margin: 0 0 8px;
+      color: #334155;
+      font-size: .92rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+    .conf-money-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .conf-money-field {
+      display: grid;
+      gap: 5px;
+    }
+    .conf-money-field label {
+      color: #334155;
+      font-weight: 800;
+    }
+    .conf-money-field input {
+      width: 100%;
+      min-height: 40px;
+      border: 1px solid #b8c2d1;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font: inherit;
+      font-weight: 800;
+    }
+    .conf-count-total {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid #d7dee8;
+    }
+    .conf-count-total strong {
+      display: block;
+      margin-top: 4px;
+      color: #157347;
+      font-size: 1.45rem;
+      font-weight: 900;
+    }
     @media (max-width: 720px) {
       .conf-top { display: block; }
       .conf-btn {
@@ -89,6 +166,12 @@
       }
       .conf-summary {
         grid-template-columns: 1fr;
+      }
+      .conf-methods {
+        display: grid;
+      }
+      .conf-money-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
   </style>
@@ -132,7 +215,126 @@
           <span class="conf-value money">{{ total_recebido_formatado }}</span>
         </div>
       </section>
+
+      <section class="conf-count-panel" aria-label="Contagem por cedulas e moedas">
+        <h2 class="conf-section-title">Metodo de conferencia</h2>
+        <div class="conf-methods">
+          <label class="conf-method">
+            <input type="radio" name="metodo_conferencia_visual" value="cedulas" checked>
+            <span>Contagem por cédulas</span>
+          </label>
+          <label class="conf-method">
+            <input type="radio" name="metodo_conferencia_visual" value="direta" disabled>
+            <span>Contagem direta</span>
+          </label>
+        </div>
+
+        <div id="painelContagemCedulas">
+          <div class="conf-money-group">
+            <h3 class="conf-money-title">Cédulas</h3>
+            <div class="conf-money-grid">
+              <div class="conf-money-field">
+                <label for="qtdCedula200">R$ 200</label>
+                <input id="qtdCedula200" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="20000">
+              </div>
+              <div class="conf-money-field">
+                <label for="qtdCedula100">R$ 100</label>
+                <input id="qtdCedula100" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="10000">
+              </div>
+              <div class="conf-money-field">
+                <label for="qtdCedula50">R$ 50</label>
+                <input id="qtdCedula50" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="5000">
+              </div>
+              <div class="conf-money-field">
+                <label for="qtdCedula20">R$ 20</label>
+                <input id="qtdCedula20" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="2000">
+              </div>
+              <div class="conf-money-field">
+                <label for="qtdCedula10">R$ 10</label>
+                <input id="qtdCedula10" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="1000">
+              </div>
+              <div class="conf-money-field">
+                <label for="qtdCedula5">R$ 5</label>
+                <input id="qtdCedula5" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="500">
+              </div>
+              <div class="conf-money-field">
+                <label for="qtdCedula2">R$ 2</label>
+                <input id="qtdCedula2" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="200">
+              </div>
+            </div>
+          </div>
+
+          <div class="conf-money-group">
+            <h3 class="conf-money-title">Moedas</h3>
+            <div class="conf-money-grid">
+              <div class="conf-money-field">
+                <label for="qtdMoeda100">R$ 1,00</label>
+                <input id="qtdMoeda100" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="100">
+              </div>
+              <div class="conf-money-field">
+                <label for="qtdMoeda50">R$ 0,50</label>
+                <input id="qtdMoeda50" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="50">
+              </div>
+              <div class="conf-money-field">
+                <label for="qtdMoeda25">R$ 0,25</label>
+                <input id="qtdMoeda25" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="25">
+              </div>
+              <div class="conf-money-field">
+                <label for="qtdMoeda10">R$ 0,10</label>
+                <input id="qtdMoeda10" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="10">
+              </div>
+              <div class="conf-money-field">
+                <label for="qtdMoeda5">R$ 0,05</label>
+                <input id="qtdMoeda5" class="conf-money-input" type="number" inputmode="numeric" min="0" step="1" value="0" data-valor-centavos="5">
+              </div>
+            </div>
+          </div>
+
+          <div class="conf-count-total" aria-live="polite">
+            <span class="conf-label">Total contado</span>
+            <strong id="totalContadoCedulas">R$ 0,00</strong>
+          </div>
+        </div>
+      </section>
     </div>
   </main>
+  <script>
+  (function () {
+    const inputs = Array.from(document.querySelectorAll(".conf-money-input"));
+    const totalEl = document.getElementById("totalContadoCedulas");
+    if (!inputs.length || !totalEl) return;
+
+    function formatarMoeda(centavos) {
+      return (centavos / 100).toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "BRL"
+      });
+    }
+
+    function quantidadeValida(input) {
+      const numero = Number.parseInt(input.value || "0", 10);
+      if (!Number.isFinite(numero) || numero < 0) {
+        input.value = "0";
+        return 0;
+      }
+      return numero;
+    }
+
+    function atualizarTotal() {
+      const total = inputs.reduce((soma, input) => {
+        const quantidade = quantidadeValida(input);
+        const valorCentavos = Number.parseInt(input.dataset.valorCentavos || "0", 10);
+        return soma + quantidade * valorCentavos;
+      }, 0);
+      totalEl.textContent = formatarMoeda(total);
+    }
+
+    inputs.forEach((input) => {
+      input.addEventListener("input", atualizarTotal);
+      input.addEventListener("change", atualizarTotal);
+    });
+    atualizarTotal();
+  })();
+  </script>
 </body>
 </html>
