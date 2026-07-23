@@ -12219,6 +12219,45 @@ def _historico_recebimentos_dia_rota(cliente, operacao, contexto_rota):
     return resumo["itens"], resumo["total_recebido"]
 
 
+def _grupo_forma_pagamento_conferencia(forma_pagamento):
+    forma = _texto_sem_acentos(forma_pagamento).lower().strip()
+    forma_compacta = re.sub(r"\s+", "", forma)
+    if any(termo in forma_compacta for termo in {"dinheiro", "especie"}):
+        return "dinheiro"
+    if "pix" in forma_compacta:
+        return "pix"
+    if any(termo in forma_compacta for termo in {"cartao", "debito", "credito"}):
+        return "cartao"
+    return "outro"
+
+
+def _resumo_conferencia_recebimentos_rota(rota, data_referencia):
+    historico = _montar_historico_recebimentos_rota(rota, data_referencia=data_referencia)
+    totais_forma = {
+        "dinheiro": Decimal("0.00"),
+        "pix": Decimal("0.00"),
+        "cartao": Decimal("0.00"),
+        "outro": Decimal("0.00"),
+    }
+    credito_gerado = Decimal("0.00")
+
+    for item in historico["itens"]:
+        grupo = _grupo_forma_pagamento_conferencia(item["forma_pagamento"])
+        valor = item["valor_recebido"] or Decimal("0.00")
+        totais_forma[grupo] = (totais_forma[grupo] + valor).quantize(Decimal("0.01"))
+        credito_gerado = (credito_gerado + (item["credito_gerado"] or Decimal("0.00"))).quantize(Decimal("0.01"))
+
+    return {
+        "rota": rota,
+        "clientes_qtd": historico["clientes_qtd"],
+        "total_dinheiro": totais_forma["dinheiro"],
+        "total_pix": totais_forma["pix"],
+        "total_cartao": totais_forma["cartao"],
+        "credito_gerado": credito_gerado,
+        "total_recebido": historico["total_recebido"],
+    }
+
+
 @ensure_csrf_cookie
 def receber_cliente_recebimentos_rota(request):
     rota_filtro = request.GET.get("rota", "").strip()
@@ -12272,6 +12311,7 @@ def conferencia_recebimentos_rota(request):
         if rota_filtro
         else reverse("estoque:receber_cliente_escolher")
     )
+    resumo = _resumo_conferencia_recebimentos_rota(rota_filtro, data_referencia)
 
     return render(
         request,
@@ -12279,6 +12319,12 @@ def conferencia_recebimentos_rota(request):
         {
             "rota_filtro": rota_filtro,
             "data_referencia": data_referencia,
+            "clientes_recebidos_qtd": resumo["clientes_qtd"],
+            "total_dinheiro_formatado": _formatar_moeda(resumo["total_dinheiro"]),
+            "total_pix_formatado": _formatar_moeda(resumo["total_pix"]),
+            "total_cartao_formatado": _formatar_moeda(resumo["total_cartao"]),
+            "credito_gerado_formatado": _formatar_moeda(resumo["credito_gerado"]),
+            "total_recebido_formatado": _formatar_moeda(resumo["total_recebido"]),
             "voltar_url": voltar_url,
         },
     )

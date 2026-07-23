@@ -25,6 +25,7 @@
       align-items: flex-start;
       justify-content: space-between;
       gap: 14px;
+      margin-bottom: 14px;
     }
     .conf-title {
       margin: 0;
@@ -53,11 +54,41 @@
     .conf-btn:focus {
       background: #115e59;
     }
+    .conf-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .conf-card {
+      border: 1px solid #d7dee8;
+      border-radius: 8px;
+      background: #fff;
+      padding: 13px;
+    }
+    .conf-label {
+      display: block;
+      color: #637083;
+      font-size: .82rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .conf-value {
+      display: block;
+      margin-top: 6px;
+      font-size: 1.25rem;
+      font-weight: 900;
+    }
+    .conf-value.money {
+      color: #157347;
+    }
     @media (max-width: 720px) {
       .conf-top { display: block; }
       .conf-btn {
         width: 100%;
         margin-top: 12px;
+      }
+      .conf-summary {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -74,6 +105,33 @@
         </div>
         <a class="conf-btn" href="{{ voltar_url }}">Voltar</a>
       </header>
+
+      <section class="conf-summary" aria-label="Resumo da conferencia">
+        <div class="conf-card">
+          <span class="conf-label">Clientes recebidos</span>
+          <span class="conf-value">{{ clientes_recebidos_qtd }}</span>
+        </div>
+        <div class="conf-card">
+          <span class="conf-label">Dinheiro</span>
+          <span class="conf-value money">{{ total_dinheiro_formatado }}</span>
+        </div>
+        <div class="conf-card">
+          <span class="conf-label">Pix</span>
+          <span class="conf-value money">{{ total_pix_formatado }}</span>
+        </div>
+        <div class="conf-card">
+          <span class="conf-label">Cartao</span>
+          <span class="conf-value money">{{ total_cartao_formatado }}</span>
+        </div>
+        <div class="conf-card">
+          <span class="conf-label">Credito gerado</span>
+          <span class="conf-value money">{{ credito_gerado_formatado }}</span>
+        </div>
+        <div class="conf-card">
+          <span class="conf-label">Total geral recebido</span>
+          <span class="conf-value money">{{ total_recebido_formatado }}</span>
+        </div>
+      </section>
     </div>
   </main>
 </body>

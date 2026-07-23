@@ -16630,6 +16630,7 @@ class PixRecebidoTests(TestCase):
         status=OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE,
         rota="",
         valor="100.00",
+        forma_pagamento="PIX",
     ):
         return OperacaoRecebimentoCliente.objects.create(
             cliente=cliente,
@@ -16640,7 +16641,7 @@ class PixRecebidoTests(TestCase):
             saldo_anterior=Decimal("100.00"),
             saldo_atual=Decimal("0.00"),
             data_recebimento=timezone.localdate(),
-            forma_pagamento="PIX",
+            forma_pagamento=forma_pagamento,
             rota_snapshot=rota,
             status_recibo=status,
         )
@@ -17537,6 +17538,57 @@ class PixRecebidoTests(TestCase):
         self.assertTemplateUsed(resposta, "estoque/conferencia_recebimentos_rota.html")
         self.assertContains(resposta, "Conferência de Recebimentos")
         self.assertContains(resposta, "Jardim")
+
+    def test_conferencia_recebimentos_rota_exibe_resumo_por_forma_pagamento(self):
+        cliente_dinheiro = Cliente.objects.create(nome="Cliente Conferencia Dinheiro", bairro="Jardim", ativo=True)
+        cliente_pix = Cliente.objects.create(nome="Cliente Conferencia Pix", bairro="Jardim", ativo=True)
+        cliente_cartao = Cliente.objects.create(nome="Cliente Conferencia Cartao", bairro="Jardim", ativo=True)
+        cliente_fora = Cliente.objects.create(nome="Cliente Conferencia Fora", bairro="Centro", ativo=True)
+        self._criar_operacao_recebimento_cliente(
+            cliente_dinheiro,
+            rota="Jardim",
+            valor="50.00",
+            forma_pagamento="Dinheiro",
+        )
+        operacao_pix = self._criar_operacao_recebimento_cliente(
+            cliente_pix,
+            rota="Jardim",
+            valor="70.00",
+            forma_pagamento="PIX",
+        )
+        operacao_pix.credito_gerado = Decimal("15.00")
+        operacao_pix.save(update_fields=["credito_gerado"])
+        self._criar_operacao_recebimento_cliente(
+            cliente_cartao,
+            rota="Jardim",
+            valor="80.00",
+            forma_pagamento="Cartao de credito",
+        )
+        self._criar_operacao_recebimento_cliente(
+            cliente_fora,
+            rota="Centro",
+            valor="900.00",
+            forma_pagamento="Dinheiro",
+        )
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
+
+        resposta = self.client.get(url, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Clientes recebidos")
+        self.assertContains(resposta, '<span class="conf-value">3</span>', html=True)
+        self.assertContains(resposta, "Dinheiro")
+        self.assertContains(resposta, "Pix")
+        self.assertContains(resposta, "Cartao")
+        self.assertContains(resposta, "Credito gerado")
+        self.assertContains(resposta, "Total geral recebido")
+        self.assertContains(resposta, '<span class="conf-value money">R$ 50,00</span>', html=True)
+        self.assertContains(resposta, '<span class="conf-value money">R$ 70,00</span>', html=True)
+        self.assertContains(resposta, '<span class="conf-value money">R$ 80,00</span>', html=True)
+        self.assertContains(resposta, '<span class="conf-value money">R$ 15,00</span>', html=True)
+        self.assertContains(resposta, '<span class="conf-value money">R$ 200,00</span>', html=True)
+        self.assertNotContains(resposta, "R$ 900,00")
+        self.assertNotContains(resposta, "<form")
 
     def test_fechamento_rota_recebimento_defaults(self):
         usuario = get_user_model().objects.create_user(username="conferente", password="senha")
