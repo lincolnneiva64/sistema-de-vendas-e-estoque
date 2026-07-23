@@ -3470,10 +3470,43 @@ clienteBusca.addEventListener("keydown", (e) => {
 });
 let linhaSelecionada = null;
 let ultimoItemRemovido = null;
+
+function atualizarBotaoEdicaoItemVenda() {
+    if (!btnAdicionarItemVenda) return;
+    btnAdicionarItemVenda.textContent = linhaSelecionada ? "Atualizar Item" : "Adicionar Item";
+}
+
+function limparEstadoEdicaoItemVenda() {
+    if (linhaSelecionada) {
+        linhaSelecionada.style.background = "";
+    }
+    linhaSelecionada = null;
+    atualizarBotaoEdicaoItemVenda();
+}
+
+function atualizarLinhaItemVenda(linha, item) {
+    if (!linha || !item) return;
+
+    if (item.produto_id) {
+        linha.dataset.produtoId = String(item.produto_id);
+    } else {
+        delete linha.dataset.produtoId;
+    }
+
+    linha.children[0].textContent = item.produto_nome || "";
+    linha.children[1].textContent = normalizarNumeroVenda(item.quantidade);
+    linha.children[2].textContent = item.unidade || "";
+    linha.children[3].textContent = normalizarNumeroVenda(item.preco_unitario);
+    linha.children[4].textContent = normalizarNumeroVenda(item.valor_total);
+}
+
 tabelaBody.addEventListener("click", function (e) {
   const linha = e.target.closest("tr");
   linhaSelecionada = linha;
-if (!linha) return;
+if (!linha) {
+    atualizarBotaoEdicaoItemVenda();
+    return;
+}
 
 // limpa seleção primeiro
 tabelaBody.querySelectorAll("tr").forEach(function (tr) {
@@ -3483,6 +3516,7 @@ tabelaBody.querySelectorAll("tr").forEach(function (tr) {
 // marca a linha clicada
 linha.style.background = "#e8f1ff";
 mostrarMsgEdicao();
+atualizarBotaoEdicaoItemVenda();
 // pega dados
 const nome = linha.children[0].textContent.trim();
 const qtd = linha.children[1].textContent.trim();
@@ -3683,7 +3717,7 @@ function limparCabecalhoVenda(resetarTipo = false) {
 
 function limparItensVenda() {
     tabelaBody.innerHTML = "";
-    linhaSelecionada = null;
+    limparEstadoEdicaoItemVenda();
     ultimoItemRemovido = null;
     limparCamposProdutoVenda();
     atualizarTotalGeral();
@@ -3742,7 +3776,7 @@ function prepararVendaComPedidoImportado() {
     if (!pedidoImportadoVenda || !Array.isArray(pedidoImportadoVenda.itens)) return;
 
     tabelaBody.innerHTML = "";
-    linhaSelecionada = null;
+    limparEstadoEdicaoItemVenda();
     ultimoItemRemovido = null;
     pedidoImportadoVenda.itens.forEach((item) => {
         if (!item || !item.produto_nome) return;
@@ -4088,6 +4122,22 @@ function adicionarItemVendaAtual() {
         preco_unitario: precoNumero.toFixed(2),
         valor_total: (qtdNumero * precoNumero).toFixed(2),
     };
+
+    if (linhaSelecionada) {
+        const linhaEditada = linhaSelecionada;
+        atualizarLinhaItemVenda(linhaEditada, item);
+        ultimoProdutoLancadoVenda = produtoNome;
+        atualizarTotalGeral();
+
+        if (typeof scrollLinhaDentroDaLista === "function") {
+            scrollLinhaDentroDaLista(linhaEditada, "smooth");
+        }
+
+        limparEstadoEdicaoItemVenda();
+        limparCamposProdutoVenda();
+        focarProximoCampo(produtoBusca);
+        return true;
+    }
 
     const novaLinha = criarLinhaItemVenda(item);
     tabelaBody.appendChild(novaLinha);
@@ -4577,7 +4627,7 @@ ultimoItemRemovido = {
     index: Array.from(tabelaBody.children).indexOf(linhaSelecionada)
 };
 linhaSelecionada.remove();
-        linhaSelecionada = null;
+        limparEstadoEdicaoItemVenda();
 
         atualizarTotalGeral();
 
@@ -4706,7 +4756,7 @@ if (!valor) {
 linhaSelecionada.children[4].textContent = isNaN(totalEdit) ? "" : totalEdit.toFixed(2);
 atualizarTotalGeral();
 scrollLinhaDentroDaLista(linhaSelecionada);
-linhaSelecionada = null;
+limparEstadoEdicaoItemVenda();
 estoquePreview.innerText = "";
 estoquePreview.style.display = "none";
 ocultarHistoricoProdutoCliente();
