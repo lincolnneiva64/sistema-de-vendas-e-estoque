@@ -16593,7 +16593,16 @@ class PixRecebidoTests(TestCase):
             status=ContaReceber.STATUS_ABERTA,
         )
 
-    def _post_receber_cliente(self, cliente, valor, destino_diferenca="troco", rota="", next_url="", follow=False):
+    def _post_receber_cliente(
+        self,
+        cliente,
+        valor,
+        destino_diferenca="troco",
+        rota="",
+        next_url="",
+        follow=False,
+        confirmar_credito="",
+    ):
         url = reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id})
         parametros = {}
         if rota:
@@ -16609,6 +16618,7 @@ class PixRecebidoTests(TestCase):
                 "valor": valor,
                 "forma_pagamento": "PIX",
                 "destino_diferenca": destino_diferenca,
+                "confirmar_credito": confirmar_credito,
             },
             secure=True,
             follow=follow,
@@ -16763,7 +16773,7 @@ class PixRecebidoTests(TestCase):
         usuario = get_user_model().objects.create_user(username="operador", password="senha")
         self.client.force_login(usuario)
         cliente = Cliente.objects.create(nome="Cliente Operacao Unica", ativo=True)
-        self._criar_conta_receber_pix(cliente, "100.00")
+        conta = self._criar_conta_receber_pix(cliente, "100.00")
 
         resposta = self._post_receber_cliente(cliente, "60,00")
 
@@ -16783,6 +16793,8 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(operacao.saldo_atual, Decimal("40.00"))
         self.assertEqual(operacao.forma_pagamento, "PIX")
         self.assertEqual(operacao.criado_por, usuario)
+        conta.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("40.00"))
 
     def test_receber_cliente_post_redireciona_para_tela_confirmada_da_operacao(self):
         cliente = Cliente.objects.create(nome="Cliente Redireciona Confirmado", ativo=True)
@@ -16958,34 +16970,96 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(operacao.saldo_atual, Decimal("30.00"))
         self.assertEqual(sum((recebimento.valor for recebimento in recebimentos), Decimal("0.00")), Decimal("120.00"))
 
-    def test_receber_cliente_com_sobra_em_credito_registra_operacao(self):
-        cliente = Cliente.objects.create(nome="Cliente Sobra Credito", ativo=True)
-        self._criar_conta_receber_pix(cliente, "100.00")
+    def test_receber_cliente_recebimento_exato_quita_sem_credito(self):
+        cliente = Cliente.objects.create(nome="Cliente Recebimento Exato", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "500.00")
 
-        resposta = self._post_receber_cliente(cliente, "125,00", destino_diferenca="credito")
+        resposta = self._post_receber_cliente(cliente, "500,00")
 
         self.assertEqual(resposta.status_code, 302)
         operacao = OperacaoRecebimentoCliente.objects.get()
-        self.assertEqual(operacao.valor_recebido, Decimal("125.00"))
-        self.assertEqual(operacao.valor_aplicado, Decimal("100.00"))
-        self.assertEqual(operacao.credito_gerado, Decimal("25.00"))
+        recebimento = RecebimentoContaReceber.objects.get()
+        conta.refresh_from_db()
+        self.assertEqual(operacao.valor_recebido, Decimal("500.00"))
+        self.assertEqual(operacao.valor_aplicado, Decimal("500.00"))
+        self.assertEqual(operacao.credito_gerado, Decimal("0.00"))
         self.assertEqual(operacao.saldo_atual, Decimal("0.00"))
-        self.assertEqual(CreditoCliente.objects.get().valor, Decimal("25.00"))
+        self.assertEqual(recebimento.valor, Decimal("500.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(CreditoCliente.objects.count(), 0)
 
-    def test_receber_cliente_com_sobra_em_troco_nao_registra_credito(self):
+    def test_receber_cliente_recebimento_parcial_grava_sem_credito(self):
+        cliente = Cliente.objects.create(nome="Cliente Recebimento Parcial", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "500.00")
+
+        resposta = self._post_receber_cliente(cliente, "100,00")
+
+        self.assertEqual(resposta.status_code, 302)
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        recebimento = RecebimentoContaReceber.objects.get()
+        conta.refresh_from_db()
+        self.assertEqual(operacao.valor_recebido, Decimal("100.00"))
+        self.assertEqual(operacao.valor_aplicado, Decimal("100.00"))
+        self.assertEqual(operacao.credito_gerado, Decimal("0.00"))
+        self.assertEqual(operacao.saldo_atual, Decimal("400.00"))
+        self.assertEqual(recebimento.valor, Decimal("100.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("400.00"))
+        self.assertEqual(CreditoCliente.objects.count(), 0)
+
+    def test_receber_cliente_com_sobra_sem_confirmacao_bloqueia_sem_gravar(self):
+        cliente = Cliente.objects.create(nome="Cliente Sobra Credito", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "427.50")
+
+        resposta = self._post_receber_cliente(cliente, "450,00")
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Valor recebido maior que o saldo em aberto.")
+        self.assertContains(resposta, "R$ 427,50")
+        self.assertContains(resposta, "R$ 450,00")
+        self.assertContains(resposta, "R$ 22,50")
+        self.assertEqual(OperacaoRecebimentoCliente.objects.count(), 0)
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
+        self.assertEqual(CreditoCliente.objects.count(), 0)
+        conta.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("427.50"))
+
+    def test_receber_cliente_com_sobra_confirmada_registra_credito(self):
+        cliente = Cliente.objects.create(nome="Cliente Sobra Credito", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "427.50")
+
+        resposta = self._post_receber_cliente(
+            cliente,
+            "450,00",
+            destino_diferenca="troco",
+            confirmar_credito="1",
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        recebimento = RecebimentoContaReceber.objects.get()
+        credito = CreditoCliente.objects.get()
+        conta.refresh_from_db()
+        self.assertEqual(operacao.valor_recebido, Decimal("450.00"))
+        self.assertEqual(operacao.valor_aplicado, Decimal("427.50"))
+        self.assertEqual(operacao.credito_gerado, Decimal("22.50"))
+        self.assertEqual(operacao.saldo_atual, Decimal("0.00"))
+        self.assertEqual(recebimento.valor, Decimal("427.50"))
+        self.assertEqual(credito.valor, Decimal("22.50"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(operacao.comprovante_dados["valor_pago"], "450.00")
+        self.assertEqual(operacao.comprovante_dados["credito_gerado"], "22.50")
+        self.assertEqual(operacao.comprovante_dados["contas"][0]["valor_aplicado"], "427.50")
+
+    def test_receber_cliente_com_sobra_em_troco_exige_confirmacao_credito(self):
         cliente = Cliente.objects.create(nome="Cliente Sobra Troco", ativo=True)
         self._criar_conta_receber_pix(cliente, "100.00")
 
         resposta = self._post_receber_cliente(cliente, "125,00", destino_diferenca="troco")
 
-        self.assertEqual(resposta.status_code, 302)
-        operacao = OperacaoRecebimentoCliente.objects.get()
-        recebimento = RecebimentoContaReceber.objects.get()
-        self.assertEqual(operacao.valor_recebido, Decimal("125.00"))
-        self.assertEqual(operacao.valor_aplicado, Decimal("100.00"))
-        self.assertEqual(operacao.credito_gerado, Decimal("0.00"))
-        self.assertEqual(operacao.saldo_atual, Decimal("0.00"))
-        self.assertEqual(recebimento.valor, Decimal("100.00"))
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Valor recebido maior que o saldo em aberto.")
+        self.assertEqual(OperacaoRecebimentoCliente.objects.count(), 0)
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
         self.assertEqual(CreditoCliente.objects.count(), 0)
 
     def test_receber_cliente_erro_durante_baixa_nao_deixa_operacao_orfa(self):
@@ -17401,6 +17475,12 @@ class PixRecebidoTests(TestCase):
         self.assertNotContains(resposta, "Recebimento confirmado com sucesso.")
         self.assertNotContains(resposta, "Confirmar recibo enviado")
         self.assertNotContains(resposta, "None")
+        self.assertContains(resposta, 'name="confirmar_credito"')
+        self.assertContains(resposta, "Confirmar credito para o cliente")
+        self.assertContains(resposta, "Gerar credito e continuar")
+        self.assertContains(resposta, "Corrigir valor")
+        self.assertContains(resposta, 'confirmarCredito.value = "1";')
+        self.assertContains(resposta, "Valor recebido maior que o saldo em aberto.")
 
     def test_visualizar_comprovante_nao_altera_status_recibo(self):
         cliente = Cliente.objects.create(nome="Cliente Status Recibo", ativo=True)
@@ -17516,6 +17596,48 @@ class PixRecebidoTests(TestCase):
         self.assertIn("Nota abatida", textos_renderizados)
         operacao.refresh_from_db()
         self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
+
+    def test_recibo_e_card_mostram_credito_gerado_quando_recebimento_maior_confirmado(self):
+        cliente = Cliente.objects.create(nome="Cliente Card Credito", ativo=True)
+        self._criar_conta_receber_pix(cliente, "427.50")
+        resposta = self._post_receber_cliente(cliente, "450,00", confirmar_credito="1")
+
+        self.assertEqual(resposta.status_code, 302)
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        textos_renderizados = []
+        draw_original = views.ImageDraw.Draw
+
+        class DrawComTextoCapturado:
+            def __init__(self, draw):
+                self.draw = draw
+
+            def text(self, posicao, texto, *args, **kwargs):
+                textos_renderizados.append(str(texto))
+                return self.draw.text(posicao, texto, *args, **kwargs)
+
+            def __getattr__(self, nome):
+                return getattr(self.draw, nome)
+
+        with patch.object(views.ImageDraw, "Draw", side_effect=lambda imagem: DrawComTextoCapturado(draw_original(imagem))):
+            resposta_comprovante = self.client.get(
+                reverse(
+                    "estoque:receber_cliente_operacao_comprovante_imagem",
+                    kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
+                ),
+                secure=True,
+            )
+            resposta_card = self.client.get(
+                reverse(
+                    "estoque:receber_cliente_operacao_recibo_card_imagem",
+                    kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
+                ),
+                secure=True,
+            )
+
+        self.assertEqual(resposta_comprovante.status_code, 200)
+        self.assertEqual(resposta_card.status_code, 200)
+        self.assertIn("Credito gerado", textos_renderizados)
+        self.assertIn("R$ 22,50", textos_renderizados)
 
     def test_receber_cliente_sair_da_tela_sem_confirmar_mantem_recibo_pendente(self):
         cliente = Cliente.objects.create(nome="Cliente Recibo Saiu", ativo=True)

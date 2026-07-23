@@ -11609,6 +11609,7 @@ def receber_cliente(request, cliente_id):
             "valor": request.POST.get("valor", "").strip(),
             "forma_pagamento": request.POST.get("forma_pagamento", "").strip(),
             "destino_diferenca": request.POST.get("destino_diferenca", "troco").strip(),
+            "confirmar_credito": request.POST.get("confirmar_credito", "").strip(),
         }
         data_recebimento = parse_date(valores["data_recebimento"])
         if not data_recebimento:
@@ -11628,227 +11629,242 @@ def receber_cliente(request, cliente_id):
                 elif not contas:
                     messages.warning(request, "Nao ha contas abertas para receber deste cliente.")
                 else:
-                    operacao_recebimento = None
-                    try:
-                        with transaction.atomic():
-                            contas_atualizadas = list(
-                                _contas_receber_abertas_cliente_qs(cliente.id, hoje, bloquear=True)
-                            )
-                            if not contas_atualizadas:
-                                raise RecebimentoContaErro("Nao ha contas abertas para receber deste cliente.")
-
-                            restante = valor_recebido
-                            distribuicao = []
-                            for conta_atual in contas_atualizadas:
-                                if restante <= Decimal("0.00"):
-                                    break
-                                saldo_conta = (conta_atual.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
-                                valor_aplicar = min(restante, saldo_conta).quantize(Decimal("0.01"))
-                                if valor_aplicar <= Decimal("0.00"):
-                                    continue
-                                distribuicao.append([conta_atual, valor_aplicar, Decimal("0.00")])
-                                restante = (restante - valor_aplicar).quantize(Decimal("0.01"))
-
-                            if not distribuicao:
-                                raise RecebimentoContaErro("Informe um valor recebido maior que zero.")
-
-                            sobra = max(restante, Decimal("0.00")).quantize(Decimal("0.01"))
-                            if sobra > Decimal("0.00"):
-                                distribuicao[-1][2] = sobra
-
-                            valor_aplicado_total = Decimal("0.00")
-                            credito_gerado_total = Decimal("0.00")
-                            contas_afetadas = 0
-                            contas_atualizadas_ids = []
-                            contas_atualizadas_feedback = {}
-                            contas_confirmacao_whatsapp = []
-                            saldo_anterior_operacao = sum(
-                                (
-                                    (conta_atual.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
-                                    for conta_atual in contas_atualizadas
-                                ),
-                                Decimal("0.00"),
-                            ).quantize(Decimal("0.01"))
-                            valor_aplicado_operacao = sum(
-                                (valor_aplicar for _, valor_aplicar, _ in distribuicao),
-                                Decimal("0.00"),
-                            ).quantize(Decimal("0.01"))
-                            saldo_atual_operacao = max(
-                                (saldo_anterior_operacao - valor_aplicado_operacao).quantize(Decimal("0.01")),
-                                Decimal("0.00"),
-                            )
-                            operacao_recebimento = OperacaoRecebimentoCliente.objects.create(
-                                cliente=cliente,
-                                cliente_nome_snapshot=cliente.nome,
-                                valor_recebido=valor_recebido,
-                                valor_aplicado=valor_aplicado_operacao,
-                                credito_gerado=Decimal("0.00"),
-                                saldo_anterior=saldo_anterior_operacao,
-                                saldo_atual=saldo_atual_operacao,
-                                data_recebimento=data_recebimento,
-                                forma_pagamento=valores["forma_pagamento"],
-                                rota_snapshot=rota_filtro,
-                                criado_por=request.user if request.user.is_authenticated else None,
-                            )
-                            for conta_atual, valor_aplicar, sobra_conta in distribuicao:
-                                valor_entregue_conta = (valor_aplicar + sobra_conta).quantize(Decimal("0.01"))
-                                observacao = (
-                                    "Recebimento geral do cliente. "
-                                    f"Total recebido: {_formatar_moeda(valor_recebido)}. "
-                                    f"Aplicado nesta conta: {_formatar_moeda(valor_aplicar)}."
-                                )
-                                resultado_recebimento = _aplicar_recebimento_conta(
-                                    conta_atual,
-                                    data_recebimento,
-                                    valor_entregue_conta,
-                                    valores["forma_pagamento"],
-                                    observacao,
-                                    valores["destino_diferenca"],
-                                    operacao=operacao_recebimento,
-                                )
-                                valor_aplicado_total = (valor_aplicado_total + valor_aplicar).quantize(Decimal("0.01"))
-                                credito_gerado_total = (
-                                    credito_gerado_total + resultado_recebimento["credito_gerado"]
-                                ).quantize(Decimal("0.01"))
-                                contas_afetadas += 1
-                                contas_atualizadas_ids.append(conta_atual.id)
-                                contas_atualizadas_feedback[str(conta_atual.id)] = {
-                                    "valor_aplicado": _formatar_moeda(valor_aplicar),
-                                    "saldo_restante": _formatar_moeda(resultado_recebimento["saldo_restante"]),
-                                    "quitada": resultado_recebimento["saldo_restante"] <= Decimal("0.00"),
-                                }
-                                contas_confirmacao_whatsapp.append({
-                                    "conta_id": conta_atual.id,
-                                    "venda_id": conta_atual.venda_id,
-                                    "data_nota": conta_atual.data_emissao.strftime("%d/%m/%Y") if conta_atual.data_emissao else "",
-                                    "saldo_antes": (valor_aplicar + resultado_recebimento["saldo_restante"]).quantize(Decimal("0.01")),
-                                    "nota_inteira_antes": abs(
-                                        (
-                                            (valor_aplicar + resultado_recebimento["saldo_restante"])
-                                            - (conta_atual.valor_original or Decimal("0.00"))
-                                        ).quantize(Decimal("0.01"))
-                                    ) <= Decimal("0.01"),
-                                    "valor_aplicado": valor_aplicar,
-                                    "saldo_restante": resultado_recebimento["saldo_restante"],
-                                    "quitada": resultado_recebimento["saldo_restante"] <= Decimal("0.00"),
-                                })
-                            pix_baixado = None
-                            duplicados_marcados = 0
-                            if pix_recebido_id:
-                                pix_baixado, duplicados_marcados = _marcar_pix_baixado_com_duplicados(
-                                    pix_recebido_id,
-                                    contas_atualizadas_ids,
-                                    valor_recebido,
-                                )
-                            _registrar_movimento_recebimento_cliente(
-                                cliente,
-                                valor_recebido,
-                                data_recebimento,
-                                valores["forma_pagamento"],
-                            )
-                            if credito_gerado_total != operacao_recebimento.credito_gerado:
-                                operacao_recebimento.credito_gerado = credito_gerado_total
-                                operacao_recebimento.save(update_fields=["credito_gerado", "atualizado_em"])
-                    except RecebimentoContaErro as exc:
-                        messages.warning(request, str(exc))
+                    saldo_aberto_confirmacao = total_em_aberto.quantize(Decimal("0.01"))
+                    excedente_confirmacao = (valor_recebido - saldo_aberto_confirmacao).quantize(Decimal("0.01"))
+                    if excedente_confirmacao > Decimal("0.00") and valores["confirmar_credito"] != "1":
+                        messages.warning(
+                            request,
+                            "Valor recebido maior que o saldo em aberto. "
+                            f"O cliente deve {_formatar_moeda(saldo_aberto_confirmacao)} e foi informado "
+                            f"{_formatar_moeda(valor_recebido)}. A diferenca de "
+                            f"{_formatar_moeda(excedente_confirmacao)} sera registrada como credito para o cliente. "
+                            "Confirme para continuar.",
+                        )
+                        valores["destino_diferenca"] = "credito"
                     else:
-                        if pix_baixado:
-                            messages.success(
-                                request,
-                                f"Pix #{pix_baixado.id} marcado como baixado. Duplicados/inativos marcados: {duplicados_marcados}.",
+                        if excedente_confirmacao > Decimal("0.00"):
+                            valores["destino_diferenca"] = "credito"
+                        operacao_recebimento = None
+                        try:
+                            with transaction.atomic():
+                                contas_atualizadas = list(
+                                    _contas_receber_abertas_cliente_qs(cliente.id, hoje, bloquear=True)
+                                )
+                                if not contas_atualizadas:
+                                    raise RecebimentoContaErro("Nao ha contas abertas para receber deste cliente.")
+
+                                restante = valor_recebido
+                                distribuicao = []
+                                for conta_atual in contas_atualizadas:
+                                    if restante <= Decimal("0.00"):
+                                        break
+                                    saldo_conta = (conta_atual.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
+                                    valor_aplicar = min(restante, saldo_conta).quantize(Decimal("0.01"))
+                                    if valor_aplicar <= Decimal("0.00"):
+                                        continue
+                                    distribuicao.append([conta_atual, valor_aplicar, Decimal("0.00")])
+                                    restante = (restante - valor_aplicar).quantize(Decimal("0.01"))
+
+                                if not distribuicao:
+                                    raise RecebimentoContaErro("Informe um valor recebido maior que zero.")
+
+                                sobra = max(restante, Decimal("0.00")).quantize(Decimal("0.01"))
+                                if sobra > Decimal("0.00"):
+                                    distribuicao[-1][2] = sobra
+
+                                valor_aplicado_total = Decimal("0.00")
+                                credito_gerado_total = Decimal("0.00")
+                                contas_afetadas = 0
+                                contas_atualizadas_ids = []
+                                contas_atualizadas_feedback = {}
+                                contas_confirmacao_whatsapp = []
+                                saldo_anterior_operacao = sum(
+                                    (
+                                        (conta_atual.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
+                                        for conta_atual in contas_atualizadas
+                                    ),
+                                    Decimal("0.00"),
+                                ).quantize(Decimal("0.01"))
+                                valor_aplicado_operacao = sum(
+                                    (valor_aplicar for _, valor_aplicar, _ in distribuicao),
+                                    Decimal("0.00"),
+                                ).quantize(Decimal("0.01"))
+                                saldo_atual_operacao = max(
+                                    (saldo_anterior_operacao - valor_aplicado_operacao).quantize(Decimal("0.01")),
+                                    Decimal("0.00"),
+                                )
+                                operacao_recebimento = OperacaoRecebimentoCliente.objects.create(
+                                    cliente=cliente,
+                                    cliente_nome_snapshot=cliente.nome,
+                                    valor_recebido=valor_recebido,
+                                    valor_aplicado=valor_aplicado_operacao,
+                                    credito_gerado=Decimal("0.00"),
+                                    saldo_anterior=saldo_anterior_operacao,
+                                    saldo_atual=saldo_atual_operacao,
+                                    data_recebimento=data_recebimento,
+                                    forma_pagamento=valores["forma_pagamento"],
+                                    rota_snapshot=rota_filtro,
+                                    criado_por=request.user if request.user.is_authenticated else None,
+                                )
+                                for conta_atual, valor_aplicar, sobra_conta in distribuicao:
+                                    valor_entregue_conta = (valor_aplicar + sobra_conta).quantize(Decimal("0.01"))
+                                    observacao = (
+                                        "Recebimento geral do cliente. "
+                                        f"Total recebido: {_formatar_moeda(valor_recebido)}. "
+                                        f"Aplicado nesta conta: {_formatar_moeda(valor_aplicar)}."
+                                    )
+                                    resultado_recebimento = _aplicar_recebimento_conta(
+                                        conta_atual,
+                                        data_recebimento,
+                                        valor_entregue_conta,
+                                        valores["forma_pagamento"],
+                                        observacao,
+                                        valores["destino_diferenca"],
+                                        operacao=operacao_recebimento,
+                                    )
+                                    valor_aplicado_total = (valor_aplicado_total + valor_aplicar).quantize(Decimal("0.01"))
+                                    credito_gerado_total = (
+                                        credito_gerado_total + resultado_recebimento["credito_gerado"]
+                                    ).quantize(Decimal("0.01"))
+                                    contas_afetadas += 1
+                                    contas_atualizadas_ids.append(conta_atual.id)
+                                    contas_atualizadas_feedback[str(conta_atual.id)] = {
+                                        "valor_aplicado": _formatar_moeda(valor_aplicar),
+                                        "saldo_restante": _formatar_moeda(resultado_recebimento["saldo_restante"]),
+                                        "quitada": resultado_recebimento["saldo_restante"] <= Decimal("0.00"),
+                                    }
+                                    contas_confirmacao_whatsapp.append({
+                                        "conta_id": conta_atual.id,
+                                        "venda_id": conta_atual.venda_id,
+                                        "data_nota": conta_atual.data_emissao.strftime("%d/%m/%Y") if conta_atual.data_emissao else "",
+                                        "saldo_antes": (valor_aplicar + resultado_recebimento["saldo_restante"]).quantize(Decimal("0.01")),
+                                        "nota_inteira_antes": abs(
+                                            (
+                                                (valor_aplicar + resultado_recebimento["saldo_restante"])
+                                                - (conta_atual.valor_original or Decimal("0.00"))
+                                            ).quantize(Decimal("0.01"))
+                                        ) <= Decimal("0.01"),
+                                        "valor_aplicado": valor_aplicar,
+                                        "saldo_restante": resultado_recebimento["saldo_restante"],
+                                        "quitada": resultado_recebimento["saldo_restante"] <= Decimal("0.00"),
+                                    })
+                                pix_baixado = None
+                                duplicados_marcados = 0
+                                if pix_recebido_id:
+                                    pix_baixado, duplicados_marcados = _marcar_pix_baixado_com_duplicados(
+                                        pix_recebido_id,
+                                        contas_atualizadas_ids,
+                                        valor_recebido,
+                                    )
+                                _registrar_movimento_recebimento_cliente(
+                                    cliente,
+                                    valor_recebido,
+                                    data_recebimento,
+                                    valores["forma_pagamento"],
+                                )
+                                if credito_gerado_total != operacao_recebimento.credito_gerado:
+                                    operacao_recebimento.credito_gerado = credito_gerado_total
+                                    operacao_recebimento.save(update_fields=["credito_gerado", "atualizado_em"])
+                        except RecebimentoContaErro as exc:
+                            messages.warning(request, str(exc))
+                        else:
+                            if pix_baixado:
+                                messages.success(
+                                    request,
+                                    f"Pix #{pix_baixado.id} marcado como baixado. Duplicados/inativos marcados: {duplicados_marcados}.",
+                                )
+                            saldo_atual_confirmacao = max(
+                                (total_em_aberto - valor_aplicado_total).quantize(Decimal("0.01")),
+                                Decimal("0.00"),
                             )
-                        saldo_atual_confirmacao = max(
-                            (total_em_aberto - valor_aplicado_total).quantize(Decimal("0.01")),
-                            Decimal("0.00"),
-                        )
-                        prazo_cliente = cliente.prazo_padrao_dias or 0
-                        contas_abertas_confirmacao = []
-                        contas_abertas_atuais = (
-                            ContaReceber.objects.filter(
-                                cliente_id=cliente.id,
-                                status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
-                                valor_em_aberto__gt=Decimal("0.00"),
+                            prazo_cliente = cliente.prazo_padrao_dias or 0
+                            contas_abertas_confirmacao = []
+                            contas_abertas_atuais = (
+                                ContaReceber.objects.filter(
+                                    cliente_id=cliente.id,
+                                    status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+                                    valor_em_aberto__gt=Decimal("0.00"),
+                                )
+                                .only("id", "venda_id", "data_emissao", "valor_original", "valor_em_aberto")
+                                .order_by("data_emissao", "id")
                             )
-                            .only("id", "venda_id", "data_emissao", "valor_original", "valor_em_aberto")
-                            .order_by("data_emissao", "id")
-                        )
-                        for conta_aberta in contas_abertas_atuais:
-                            data_nota = conta_aberta.data_emissao
-                            dias_aberto = max((hoje - data_nota).days, 0) if data_nota else 0
-                            contas_abertas_confirmacao.append({
-                                "conta_id": conta_aberta.id,
-                                "venda_id": conta_aberta.venda_id,
-                                "data_nota": data_nota.strftime("%d/%m/%Y") if data_nota else "",
-                                "saldo_atual": (conta_aberta.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01")),
-                                "dias_aberto": dias_aberto,
-                                "em_atraso": bool(prazo_cliente and dias_aberto > prazo_cliente),
-                            })
-                        dados_confirmacao_whatsapp = {
-                            "cliente_nome": cliente.nome,
-                            "data_recebimento": data_recebimento.strftime("%d/%m/%Y"),
-                            "saldo_anterior": total_em_aberto,
-                            "valor_pago": valor_recebido,
-                            "forma_pagamento": valores["forma_pagamento"],
-                            "contas": contas_confirmacao_whatsapp,
-                            "contas_abertas": contas_abertas_confirmacao,
-                            "saldo_atual": saldo_atual_confirmacao,
-                            "credito_gerado": credito_gerado_total,
-                        }
-                        comprovante_token = uuid4().hex
-                        comprovante_dados = _serializar_dados_comprovante_recebimento(
-                            cliente,
-                            dados_confirmacao_whatsapp,
-                        )
-                        if operacao_recebimento:
-                            comprovante_dados["operacao_id"] = operacao_recebimento.id
-                            operacao_recebimento.comprovante_dados = comprovante_dados
-                            operacao_recebimento.save(update_fields=["comprovante_dados", "atualizado_em"])
-                        comprovantes_sessao = request.session.get("receber_cliente_comprovantes", {})
-                        comprovantes_sessao[comprovante_token] = comprovante_dados
-                        if len(comprovantes_sessao) > 8:
-                            comprovantes_sessao = dict(list(comprovantes_sessao.items())[-8:])
-                        request.session["receber_cliente_comprovantes"] = comprovantes_sessao
-                        comprovante_url = reverse(
-                            "estoque:receber_cliente_comprovante_imagem",
-                            kwargs={"cliente_id": cliente.id, "token": comprovante_token},
-                        )
-                        request.session["receber_cliente_feedback"] = {
-                            "operacao_id": operacao_recebimento.id if operacao_recebimento else "",
-                            "status_recibo": operacao_recebimento.status_recibo if operacao_recebimento else "",
-                            "confirmar_recibo_url": reverse(
-                                "estoque:receber_cliente_confirmar_recibo",
-                                kwargs={
-                                    "cliente_id": cliente.id,
-                                    "operacao_id": operacao_recebimento.id,
-                                },
-                            ) if operacao_recebimento else "",
-                            "cliente": cliente.nome,
-                            "valor_aplicado": _formatar_moeda(valor_aplicado_total),
-                            "valor_pago": _formatar_moeda(valor_recebido),
-                            "saldo_anterior": _formatar_moeda(total_em_aberto),
-                            "saldo_atual": _formatar_moeda(saldo_atual_confirmacao),
-                            "credito_gerado": _formatar_moeda(credito_gerado_total),
-                            "tem_credito_gerado": credito_gerado_total > Decimal("0.00"),
-                            "forma_pagamento": valores["forma_pagamento"],
-                            "data_recebimento": data_recebimento.strftime("%d/%m/%Y"),
-                            "contas_afetadas": contas_afetadas,
-                            "contas_atualizadas_ids": contas_atualizadas_ids,
-                            "contas_atualizadas": contas_atualizadas_feedback,
-                            "whatsapp_confirmacao": _montar_whatsapp_confirmacao_recebimento(
+                            for conta_aberta in contas_abertas_atuais:
+                                data_nota = conta_aberta.data_emissao
+                                dias_aberto = max((hoje - data_nota).days, 0) if data_nota else 0
+                                contas_abertas_confirmacao.append({
+                                    "conta_id": conta_aberta.id,
+                                    "venda_id": conta_aberta.venda_id,
+                                    "data_nota": data_nota.strftime("%d/%m/%Y") if data_nota else "",
+                                    "saldo_atual": (conta_aberta.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01")),
+                                    "dias_aberto": dias_aberto,
+                                    "em_atraso": bool(prazo_cliente and dias_aberto > prazo_cliente),
+                                })
+                            dados_confirmacao_whatsapp = {
+                                "cliente_nome": cliente.nome,
+                                "data_recebimento": data_recebimento.strftime("%d/%m/%Y"),
+                                "saldo_anterior": total_em_aberto,
+                                "valor_pago": valor_recebido,
+                                "forma_pagamento": valores["forma_pagamento"],
+                                "contas": contas_confirmacao_whatsapp,
+                                "contas_abertas": contas_abertas_confirmacao,
+                                "saldo_atual": saldo_atual_confirmacao,
+                                "credito_gerado": credito_gerado_total,
+                            }
+                            comprovante_token = uuid4().hex
+                            comprovante_dados = _serializar_dados_comprovante_recebimento(
                                 cliente,
                                 dados_confirmacao_whatsapp,
-                            ),
-                            "comprovante_imagem_url": comprovante_url,
-                        }
-                        return redirect(
-                            reverse(
-                                "estoque:receber_cliente_confirmado",
-                                kwargs={
-                                    "cliente_id": cliente.id,
-                                    "operacao_id": operacao_recebimento.id,
-                                },
                             )
-                        )
+                            if operacao_recebimento:
+                                comprovante_dados["operacao_id"] = operacao_recebimento.id
+                                operacao_recebimento.comprovante_dados = comprovante_dados
+                                operacao_recebimento.save(update_fields=["comprovante_dados", "atualizado_em"])
+                            comprovantes_sessao = request.session.get("receber_cliente_comprovantes", {})
+                            comprovantes_sessao[comprovante_token] = comprovante_dados
+                            if len(comprovantes_sessao) > 8:
+                                comprovantes_sessao = dict(list(comprovantes_sessao.items())[-8:])
+                            request.session["receber_cliente_comprovantes"] = comprovantes_sessao
+                            comprovante_url = reverse(
+                                "estoque:receber_cliente_comprovante_imagem",
+                                kwargs={"cliente_id": cliente.id, "token": comprovante_token},
+                            )
+                            request.session["receber_cliente_feedback"] = {
+                                "operacao_id": operacao_recebimento.id if operacao_recebimento else "",
+                                "status_recibo": operacao_recebimento.status_recibo if operacao_recebimento else "",
+                                "confirmar_recibo_url": reverse(
+                                    "estoque:receber_cliente_confirmar_recibo",
+                                    kwargs={
+                                        "cliente_id": cliente.id,
+                                        "operacao_id": operacao_recebimento.id,
+                                    },
+                                ) if operacao_recebimento else "",
+                                "cliente": cliente.nome,
+                                "valor_aplicado": _formatar_moeda(valor_aplicado_total),
+                                "valor_pago": _formatar_moeda(valor_recebido),
+                                "saldo_anterior": _formatar_moeda(total_em_aberto),
+                                "saldo_atual": _formatar_moeda(saldo_atual_confirmacao),
+                                "credito_gerado": _formatar_moeda(credito_gerado_total),
+                                "tem_credito_gerado": credito_gerado_total > Decimal("0.00"),
+                                "forma_pagamento": valores["forma_pagamento"],
+                                "data_recebimento": data_recebimento.strftime("%d/%m/%Y"),
+                                "contas_afetadas": contas_afetadas,
+                                "contas_atualizadas_ids": contas_atualizadas_ids,
+                                "contas_atualizadas": contas_atualizadas_feedback,
+                                "whatsapp_confirmacao": _montar_whatsapp_confirmacao_recebimento(
+                                    cliente,
+                                    dados_confirmacao_whatsapp,
+                                ),
+                                "comprovante_imagem_url": comprovante_url,
+                            }
+                            return redirect(
+                                reverse(
+                                    "estoque:receber_cliente_confirmado",
+                                    kwargs={
+                                        "cliente_id": cliente.id,
+                                        "operacao_id": operacao_recebimento.id,
+                                    },
+                                )
+                            )
 
     contas_preview = [
         {

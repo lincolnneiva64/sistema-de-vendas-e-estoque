@@ -1297,6 +1297,7 @@
           {% if pix_recebido_escolhido %}
             <input type="hidden" name="pix_recebido" value="{{ pix_recebido_escolhido.id }}">
           {% endif %}
+          <input type="hidden" id="confirmarCreditoRecebimentoCliente" name="confirmar_credito" value="">
           <section class="rc-panel">
             <div class="rc-panel-head">
               <h2 class="rc-panel-title">Dados para recebimento</h2>
@@ -2013,6 +2014,7 @@
     const formaModalFechar = document.getElementById("formaPagamentoModalFechar");
     const formaModalOpcoes = Array.from(document.querySelectorAll("[data-forma-pagamento]"));
     const confirmar = document.getElementById("btnConfirmarRecebimentoCliente");
+    const confirmarCredito = document.getElementById("confirmarCreditoRecebimentoCliente");
     const resumo = document.getElementById("resumoPreviaCliente");
     const sobraBox = document.getElementById("sobraRecebimentoCliente");
     const destinoSobra = document.getElementById("destinoSobraCliente");
@@ -2396,6 +2398,9 @@
       }
       atualizarAlertaDuplicidade();
       atualizarOrdemFocoSobra(sobra > 0.009);
+      if (confirmarCredito) {
+        confirmarCredito.value = "";
+      }
     }
 
     function atualizarOrdemFocoSobra(temSobra) {
@@ -2572,6 +2577,35 @@
       }
       const mensagem = "Confirmar recebimento de " + moeda(recebido)
         + " para " + nomeClienteAtual() + "? O valor sera aplicado nas contas conforme a previa.";
+      const excedenteCredito = Math.max(recebido - totalAberto, 0);
+      if (excedenteCredito > 0.009 && confirmarCredito?.value !== "1") {
+        const confirmouCredito = await abrirModalReceber({
+          titulo: "Confirmar credito para o cliente",
+          texto: "Valor recebido maior que o saldo em aberto. O cliente deve "
+            + moeda(totalAberto)
+            + " e foi informado "
+            + moeda(recebido)
+            + ". A diferenca de "
+            + moeda(excedenteCredito)
+            + " sera registrada como credito para o cliente. Deseja continuar?",
+          cancelar: "Corrigir valor",
+          confirmar: "Gerar credito e continuar"
+        });
+        if (!confirmouCredito) {
+          if (confirmarCredito) confirmarCredito.value = "";
+          valor?.focus();
+          valor?.select();
+          return;
+        }
+        if (confirmarCredito) confirmarCredito.value = "1";
+        const opcaoCredito = opcoesSobra.find(function (opcao) {
+          return opcao.value === "credito";
+        });
+        if (opcaoCredito) opcaoCredito.checked = true;
+        form.dataset.confirmado = "1";
+        form.requestSubmit();
+        return;
+      }
       const possivelDuplicidade = pagamentosHoje.some(function (valorPago) {
         const numeroPago = Number(valorPago);
         return Number.isFinite(numeroPago) && Math.abs(numeroPago - recebido) <= 0.01;
