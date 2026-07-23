@@ -17221,6 +17221,9 @@ class PixRecebidoTests(TestCase):
         operacao_um = self._criar_operacao_recebimento_cliente(cliente_um, rota="Centro", valor="70.00")
         self._criar_operacao_recebimento_cliente(cliente_dois, rota="Centro", valor="40.00")
         self._criar_operacao_recebimento_cliente(cliente_fora, rota="Praia", valor="30.00")
+        operacao_outro_dia = self._criar_operacao_recebimento_cliente(cliente_dois, rota="Centro", valor="25.00")
+        operacao_outro_dia.data_recebimento = timezone.localdate() - timedelta(days=1)
+        operacao_outro_dia.save(update_fields=["data_recebimento"])
 
         resposta = self.client.get(self._url_recebimento_confirmado(cliente_um, operacao_um), secure=True)
 
@@ -17231,7 +17234,12 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "R$ 70,00")
         self.assertContains(resposta, "R$ 40,00")
         self.assertContains(resposta, "Pendente")
+        self.assertContains(resposta, "Total recebido no dia")
+        self.assertContains(resposta, '<strong>R$ 110,00</strong>', html=True)
+        self.assertContains(resposta, "rcp-route-history-total")
         self.assertNotContains(resposta, "Cliente Historico Fora")
+        self.assertNotContains(resposta, "R$ 30,00")
+        self.assertNotContains(resposta, "R$ 25,00")
 
     def test_receber_cliente_confirmado_resume_contas_abertas_em_details(self):
         cliente = Cliente.objects.create(nome="Cliente Details Contas", ativo=True)

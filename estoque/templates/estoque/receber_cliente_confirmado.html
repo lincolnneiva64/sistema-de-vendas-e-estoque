@@ -365,6 +365,24 @@
     font-weight: 950;
     white-space: nowrap;
   }
+  .rcp-route-history-total {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    background: #f0fdf4;
+    padding: 8px 10px;
+    color: #14532d;
+    font-size: 0.86rem;
+    font-weight: 950;
+  }
+  .rcp-route-history-total strong {
+    color: #052e16;
+    font-size: 0.98rem;
+    white-space: nowrap;
+  }
   .rcp-tag {
     border-radius: 999px;
     padding: 2px 7px;
@@ -569,6 +587,12 @@
               {% empty %}
                 <p class="rcp-route-text">Nenhum recebimento do dia encontrado para este contexto.</p>
               {% endfor %}
+              {% if historico_recebimentos_rota_dia %}
+                <div class="rcp-route-history-total">
+                  <span>Total recebido no dia</span>
+                  <strong>{{ total_recebimentos_rota_dia_formatado }}</strong>
+                </div>
+              {% endif %}
             </div>
           </div>
         </div>

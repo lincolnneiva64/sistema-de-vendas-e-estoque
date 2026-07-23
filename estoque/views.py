@@ -12085,7 +12085,9 @@ def _historico_recebimentos_dia_rota(cliente, operacao, contexto_rota):
     )
 
     historico = []
+    total_recebido = Decimal("0.00")
     for item in operacoes:
+        total_recebido += item.valor_recebido or Decimal("0.00")
         historico.append({
             "hora": timezone.localtime(item.criado_em).strftime("%H:%M") if item.criado_em else "",
             "cliente_nome": item.cliente_nome_snapshot or (item.cliente.nome if item.cliente else "Cliente nao informado"),
@@ -12094,7 +12096,7 @@ def _historico_recebimentos_dia_rota(cliente, operacao, contexto_rota):
             "status_recibo": item.get_status_recibo_display(),
             "atual": item.pk == operacao.pk,
         })
-    return historico
+    return historico, total_recebido
 
 
 @ensure_csrf_cookie
@@ -12127,7 +12129,7 @@ def receber_cliente_confirmado(request, cliente_id, operacao_id):
         Decimal("0.00"),
     )
     contexto_rota_recebimento, proximo_cliente_recebimento = _proximo_cliente_recebimento_rota(cliente, operacao)
-    historico_recebimentos_rota_dia = _historico_recebimentos_dia_rota(
+    historico_recebimentos_rota_dia, total_recebimentos_rota_dia = _historico_recebimentos_dia_rota(
         cliente,
         operacao,
         contexto_rota_recebimento,
@@ -12156,6 +12158,7 @@ def receber_cliente_confirmado(request, cliente_id, operacao_id):
         "contexto_rota_recebimento": contexto_rota_recebimento,
         "proximo_cliente_recebimento": proximo_cliente_recebimento,
         "historico_recebimentos_rota_dia": historico_recebimentos_rota_dia,
+        "total_recebimentos_rota_dia_formatado": _formatar_moeda(total_recebimentos_rota_dia),
     }
     return render(request, "estoque/receber_cliente_confirmado.html", contexto)
 
