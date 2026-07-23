@@ -132,8 +132,9 @@
   #btn-ver-recibo-card { flex: 0 1 210px; max-width: 210px; }
   #btn-enviar-confirmacao-whatsapp { flex: 0 1 300px; max-width: 300px; }
   #btn-confirmar-recibo-enviado {
-    flex: 1 1 320px;
-    max-width: 420px;
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: none;
     min-height: 46px;
     font-size: 0.92rem;
   }
@@ -661,11 +662,19 @@
     statusMensagem.classList.toggle("erro", Boolean(erro));
   }
 
-  function revelarConfirmacao() {
+  function destacarBotaoConfirmacao() {
     if (!btnConfirmar || btnConfirmar.disabled || page?.dataset.statusRecibo !== "pendente") return;
     btnConfirmar.hidden = false;
     btnConfirmar.classList.add("pulsando");
     atualizarMensagem("Depois de anexar e enviar a imagem no WhatsApp, confirme o envio aqui.", false);
+    btnConfirmar.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(function () {
+      btnConfirmar.focus({ preventScroll: true });
+    }, 320);
+  }
+
+  function revelarConfirmacao() {
+    destacarBotaoConfirmacao();
   }
 
   function destacarContinuidadeRota() {
@@ -691,6 +700,7 @@
 
     if (!navigator.share || !navigator.canShare) {
       atualizarMensagem("Este navegador nao conseguiu compartilhar a imagem automaticamente. Abra o card, salve ou compartilhe a imagem manualmente e depois abra o WhatsApp com a mensagem.", true);
+      destacarBotaoConfirmacao();
       return;
     }
 
@@ -710,10 +720,11 @@
       };
       if (!navigator.canShare(payload)) {
         atualizarMensagem("Este navegador nao conseguiu compartilhar a imagem automaticamente. Abra o card, salve ou compartilhe a imagem manualmente e depois abra o WhatsApp com a mensagem.", true);
+        destacarBotaoConfirmacao();
         return;
       }
       await navigator.share(payload);
-      revelarConfirmacao();
+      destacarBotaoConfirmacao();
       atualizarMensagem("Depois de enviar o card no WhatsApp, confirme o envio.", false);
     } catch (erro) {
       if (erro && erro.name === "AbortError") {
@@ -721,6 +732,7 @@
       } else {
         atualizarMensagem(erro.message || "Nao foi possivel compartilhar o card automaticamente. Abra o card e envie a imagem manualmente.", true);
       }
+      destacarBotaoConfirmacao();
     } finally {
       btnCompartilharCard.disabled = false;
       btnCompartilharCard.textContent = "Compartilhar card";
