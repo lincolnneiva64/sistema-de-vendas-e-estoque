@@ -17625,6 +17625,10 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, 'inputmode="decimal"')
         self.assertContains(resposta, "atualizarTotal")
         self.assertContains(resposta, 'addEventListener("input", atualizarTotal)')
+        self.assertContains(resposta, 'id="botaoFinalizarConferencia"')
+        self.assertContains(resposta, 'addEventListener("keydown"')
+        self.assertContains(resposta, 'window.matchMedia("(pointer: fine)")')
+        self.assertContains(resposta, "avancarCampoCedula")
         self.assertContains(resposta, "Finalizar conferencia")
 
     def test_conferencia_recebimentos_rota_compara_total_esperado_com_total_contado(self):

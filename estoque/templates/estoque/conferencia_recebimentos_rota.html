@@ -457,7 +457,7 @@
           </div>
 
           <div class="conf-actions">
-            <button type="submit" class="conf-submit">Finalizar conferencia</button>
+            <button type="submit" id="botaoFinalizarConferencia" class="conf-submit">Finalizar conferencia</button>
           </div>
         </form>
       </section>
@@ -477,6 +477,7 @@
     const statusEl = document.getElementById("statusConferencia");
     const observacaoWrapperEl = document.getElementById("campoObservacaoDiferenca");
     const observacaoEl = document.getElementById("observacaoConferencia");
+    const botaoFinalizarEl = document.getElementById("botaoFinalizarConferencia");
     if (!inputs.length || !totalEl) return;
     const valorEsperadoCentavos = resumoComparacaoEl
       ? Number.parseInt(resumoComparacaoEl.dataset.valorEsperadoCentavos || "0", 10)
@@ -565,9 +566,21 @@
       }
     }
 
-    inputs.forEach((input) => {
+    function tecladoDesktopAtivo() {
+      return window.matchMedia && window.matchMedia("(pointer: fine)").matches;
+    }
+
+    function avancarCampoCedula(event, indiceAtual) {
+      if (event.key !== "Enter" || !tecladoDesktopAtivo()) return;
+      event.preventDefault();
+      const proximoCampo = inputs[indiceAtual + 1] || botaoFinalizarEl;
+      if (proximoCampo) proximoCampo.focus();
+    }
+
+    inputs.forEach((input, indice) => {
       input.addEventListener("input", atualizarTotal);
       input.addEventListener("change", atualizarTotal);
+      input.addEventListener("keydown", (event) => avancarCampoCedula(event, indice));
     });
     metodoInputs.forEach((input) => {
       input.addEventListener("change", atualizarTotal);
