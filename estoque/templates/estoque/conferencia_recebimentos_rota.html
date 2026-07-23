@@ -149,9 +149,32 @@
     .conf-direct-panel {
       margin-top: 12px;
     }
+    .conf-direct-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 10px;
+    }
+    .conf-calc-open {
+      min-height: 40px;
+      border: 1px solid #0f766e;
+      border-radius: 8px;
+      background: #ecfdf5;
+      color: #115e59;
+      padding: 8px 12px;
+      font: inherit;
+      font-weight: 900;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .conf-calc-open:hover,
+    .conf-calc-open:focus {
+      background: #d1fae5;
+    }
     .conf-direct-panel[hidden],
     #painelContagemCedulas[hidden],
-    .conf-observation[hidden] {
+    .conf-observation[hidden],
+    .conf-calc-modal[hidden] {
       display: none !important;
     }
     .conf-count-total {
@@ -270,6 +293,93 @@
       background: #fff7f7;
       color: #991b1b;
     }
+    .conf-calc-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      display: grid;
+      place-items: center;
+      background: rgba(15, 23, 42, .55);
+      padding: 16px;
+    }
+    .conf-calc-dialog {
+      width: min(360px, 100%);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 20px 60px rgba(15, 23, 42, .28);
+      padding: 14px;
+    }
+    .conf-calc-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .conf-calc-title {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 900;
+    }
+    .conf-calc-close {
+      width: 38px;
+      min-height: 38px;
+      border: 0;
+      border-radius: 8px;
+      background: #e5e7eb;
+      font: inherit;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .conf-calc-display {
+      width: 100%;
+      min-height: 54px;
+      border: 1px solid #b8c2d1;
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 10px 12px;
+      color: #172033;
+      font-size: 1.55rem;
+      font-weight: 900;
+      text-align: right;
+      overflow-wrap: anywhere;
+    }
+    .conf-calc-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .conf-calc-key,
+    .conf-calc-use {
+      min-height: 46px;
+      border: 1px solid #d7dee8;
+      border-radius: 8px;
+      background: #fff;
+      font: inherit;
+      font-size: 1.05rem;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .conf-calc-key.operator {
+      background: #eef6ff;
+      color: #1d4ed8;
+    }
+    .conf-calc-key.action {
+      background: #fff7ed;
+      color: #9a3412;
+    }
+    .conf-calc-use {
+      width: 100%;
+      margin-top: 10px;
+      border-color: #0f766e;
+      background: #0f766e;
+      color: #fff;
+    }
+    .conf-calc-use:hover,
+    .conf-calc-use:focus {
+      background: #115e59;
+    }
     @media (max-width: 720px) {
       .conf-top { display: block; }
       .conf-btn {
@@ -293,6 +403,20 @@
       }
       .conf-submit {
         width: 100%;
+      }
+      .conf-direct-row {
+        grid-template-columns: 1fr;
+      }
+      .conf-calc-modal {
+        align-items: stretch;
+        padding: 8px;
+      }
+      .conf-calc-dialog {
+        width: 100%;
+        min-height: calc(100vh - 16px);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
       }
     }
   </style>
@@ -422,9 +546,12 @@
         </div>
 
           <div id="painelContagemDireta" class="conf-direct-panel" {% if metodo_selecionado != "direta" %}hidden{% endif %}>
-            <div class="conf-money-field">
-              <label for="valorConferenciaDireta">Valor total contado</label>
-              <input id="valorConferenciaDireta" name="valor_conferencia_direta" class="conf-direct-input" type="text" inputmode="decimal" value="{{ valor_direto_inicial }}" placeholder="0,00">
+            <div class="conf-direct-row">
+              <div class="conf-money-field">
+                <label for="valorConferenciaDireta">Valor total contado</label>
+                <input id="valorConferenciaDireta" name="valor_conferencia_direta" class="conf-direct-input" type="text" inputmode="decimal" value="{{ valor_direto_inicial }}" placeholder="0,00">
+              </div>
+              <button type="button" id="abrirCalculadoraConferencia" class="conf-calc-open">🧮 Calculadora</button>
             </div>
           </div>
 
@@ -463,6 +590,36 @@
       </section>
     </div>
   </main>
+  <div id="modalCalculadoraConferencia" class="conf-calc-modal" hidden>
+    <div class="conf-calc-dialog" role="dialog" aria-modal="true" aria-labelledby="tituloCalculadoraConferencia">
+      <div class="conf-calc-header">
+        <h2 id="tituloCalculadoraConferencia" class="conf-calc-title">Calculadora</h2>
+        <button type="button" id="fecharCalculadoraConferencia" class="conf-calc-close" aria-label="Fechar calculadora">×</button>
+      </div>
+      <div id="visorCalculadoraConferencia" class="conf-calc-display" aria-live="polite">0</div>
+      <div class="conf-calc-grid" aria-label="Teclas da calculadora">
+        <button type="button" class="conf-calc-key action" data-calc-action="clear">C</button>
+        <button type="button" class="conf-calc-key action" data-calc-action="backspace">⌫</button>
+        <button type="button" class="conf-calc-key operator" data-calc-value="÷">÷</button>
+        <button type="button" class="conf-calc-key operator" data-calc-value="×">×</button>
+        <button type="button" class="conf-calc-key" data-calc-value="7">7</button>
+        <button type="button" class="conf-calc-key" data-calc-value="8">8</button>
+        <button type="button" class="conf-calc-key" data-calc-value="9">9</button>
+        <button type="button" class="conf-calc-key operator" data-calc-value="-">-</button>
+        <button type="button" class="conf-calc-key" data-calc-value="4">4</button>
+        <button type="button" class="conf-calc-key" data-calc-value="5">5</button>
+        <button type="button" class="conf-calc-key" data-calc-value="6">6</button>
+        <button type="button" class="conf-calc-key operator" data-calc-value="+">+</button>
+        <button type="button" class="conf-calc-key" data-calc-value="1">1</button>
+        <button type="button" class="conf-calc-key" data-calc-value="2">2</button>
+        <button type="button" class="conf-calc-key" data-calc-value="3">3</button>
+        <button type="button" class="conf-calc-key operator" data-calc-action="equals">=</button>
+        <button type="button" class="conf-calc-key" data-calc-value="0">0</button>
+        <button type="button" class="conf-calc-key" data-calc-value=",">,</button>
+      </div>
+      <button type="button" id="usarResultadoCalculadoraConferencia" class="conf-calc-use">Usar resultado</button>
+    </div>
+  </div>
   <script>
   (function () {
     const inputs = Array.from(document.querySelectorAll(".conf-money-input"));
@@ -478,10 +635,17 @@
     const observacaoWrapperEl = document.getElementById("campoObservacaoDiferenca");
     const observacaoEl = document.getElementById("observacaoConferencia");
     const botaoFinalizarEl = document.getElementById("botaoFinalizarConferencia");
+    const abrirCalculadoraEl = document.getElementById("abrirCalculadoraConferencia");
+    const modalCalculadoraEl = document.getElementById("modalCalculadoraConferencia");
+    const fecharCalculadoraEl = document.getElementById("fecharCalculadoraConferencia");
+    const visorCalculadoraEl = document.getElementById("visorCalculadoraConferencia");
+    const usarResultadoCalculadoraEl = document.getElementById("usarResultadoCalculadoraConferencia");
+    const teclasCalculadora = Array.from(document.querySelectorAll("[data-calc-value], [data-calc-action]"));
     if (!inputs.length || !totalEl) return;
     const valorEsperadoCentavos = resumoComparacaoEl
       ? Number.parseInt(resumoComparacaoEl.dataset.valorEsperadoCentavos || "0", 10)
       : 0;
+    let expressaoCalculadora = "0";
 
     function formatarMoeda(centavos) {
       return (centavos / 100).toLocaleString("pt-BR", {
@@ -581,6 +745,102 @@
       if (input.value === "0") input.select();
     }
 
+    function normalizarEntradaCalculadora(valor) {
+      const texto = String(valor || "").trim();
+      return texto ? texto : "0";
+    }
+
+    function atualizarVisorCalculadora() {
+      if (visorCalculadoraEl) visorCalculadoraEl.textContent = expressaoCalculadora || "0";
+    }
+
+    function tokenAtualCalculadora() {
+      return expressaoCalculadora.split(/[+\-×÷]/).pop() || "";
+    }
+
+    function operadorCalculadora(valor) {
+      return ["+", "-", "×", "÷"].includes(valor);
+    }
+
+    function adicionarValorCalculadora(valor) {
+      if (!valor) return;
+      const ultimo = expressaoCalculadora.slice(-1);
+      if (operadorCalculadora(valor)) {
+        expressaoCalculadora = operadorCalculadora(ultimo)
+          ? expressaoCalculadora.slice(0, -1) + valor
+          : expressaoCalculadora + valor;
+      } else if (valor === ",") {
+        if (!tokenAtualCalculadora().includes(",")) expressaoCalculadora += ",";
+      } else {
+        expressaoCalculadora = expressaoCalculadora === "0" ? valor : expressaoCalculadora + valor;
+      }
+      atualizarVisorCalculadora();
+    }
+
+    function calcularExpressaoCalculadora() {
+      const normalizada = expressaoCalculadora
+        .replace(/,/g, ".")
+        .replace(/×/g, "*")
+        .replace(/÷/g, "/");
+      if (!/^[0-9+\-*/.]+$/.test(normalizada) || /[+\-*/.]$/.test(normalizada)) return null;
+      try {
+        const resultado = Function("return (" + normalizada + ")")();
+        return Number.isFinite(resultado) ? resultado : null;
+      } catch (erro) {
+        return null;
+      }
+    }
+
+    function formatarResultadoCalculadora(numero) {
+      const arredondado = Math.round(numero * 100) / 100;
+      return arredondado.toLocaleString("pt-BR", {
+        minimumFractionDigits: Number.isInteger(arredondado) ? 0 : 2,
+        maximumFractionDigits: 2
+      });
+    }
+
+    function resolverCalculadora() {
+      const resultado = calcularExpressaoCalculadora();
+      if (resultado === null) return null;
+      expressaoCalculadora = formatarResultadoCalculadora(resultado);
+      atualizarVisorCalculadora();
+      return expressaoCalculadora;
+    }
+
+    function limparCalculadora() {
+      expressaoCalculadora = "0";
+      atualizarVisorCalculadora();
+    }
+
+    function apagarCalculadora() {
+      expressaoCalculadora = expressaoCalculadora.length > 1 ? expressaoCalculadora.slice(0, -1) : "0";
+      atualizarVisorCalculadora();
+    }
+
+    function abrirCalculadora() {
+      if (!modalCalculadoraEl) return;
+      expressaoCalculadora = normalizarEntradaCalculadora(valorDiretoEl ? valorDiretoEl.value : "");
+      atualizarVisorCalculadora();
+      modalCalculadoraEl.hidden = false;
+      if (fecharCalculadoraEl) fecharCalculadoraEl.focus();
+    }
+
+    function fecharCalculadora() {
+      if (modalCalculadoraEl) modalCalculadoraEl.hidden = true;
+      if (abrirCalculadoraEl) abrirCalculadoraEl.focus();
+    }
+
+    function usarResultadoCalculadora() {
+      const resultadoTexto = resolverCalculadora();
+      if (resultadoTexto === null) return;
+      if (!valorDiretoEl) return;
+      valorDiretoEl.value = resultadoTexto;
+      valorDiretoEl.dispatchEvent(new Event("input", { bubbles: true }));
+      valorDiretoEl.dispatchEvent(new Event("change", { bubbles: true }));
+      if (modalCalculadoraEl) modalCalculadoraEl.hidden = true;
+      valorDiretoEl.focus();
+    }
+
     inputs.forEach((input, indice) => {
       input.addEventListener("input", atualizarTotal);
       input.addEventListener("change", atualizarTotal);
@@ -594,6 +854,22 @@
       valorDiretoEl.addEventListener("input", atualizarTotal);
       valorDiretoEl.addEventListener("change", atualizarTotal);
     }
+    if (abrirCalculadoraEl) abrirCalculadoraEl.addEventListener("click", abrirCalculadora);
+    if (fecharCalculadoraEl) fecharCalculadoraEl.addEventListener("click", fecharCalculadora);
+    if (usarResultadoCalculadoraEl) usarResultadoCalculadoraEl.addEventListener("click", usarResultadoCalculadora);
+    if (modalCalculadoraEl) {
+      modalCalculadoraEl.addEventListener("click", (event) => {
+        if (event.target === modalCalculadoraEl) fecharCalculadora();
+      });
+    }
+    teclasCalculadora.forEach((tecla) => {
+      tecla.addEventListener("click", () => {
+        if (tecla.dataset.calcAction === "clear") limparCalculadora();
+        else if (tecla.dataset.calcAction === "backspace") apagarCalculadora();
+        else if (tecla.dataset.calcAction === "equals") resolverCalculadora();
+        else adicionarValorCalculadora(tecla.dataset.calcValue);
+      });
+    });
     atualizarTotal();
   })();
   </script>
