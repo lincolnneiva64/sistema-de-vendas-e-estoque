@@ -577,9 +577,14 @@
       if (proximoCampo) proximoCampo.focus();
     }
 
+    function selecionarZeroAoFocar(input) {
+      if (input.value === "0") input.select();
+    }
+
     inputs.forEach((input, indice) => {
       input.addEventListener("input", atualizarTotal);
       input.addEventListener("change", atualizarTotal);
+      input.addEventListener("focus", () => selecionarZeroAoFocar(input));
       input.addEventListener("keydown", (event) => avancarCampoCedula(event, indice));
     });
     metodoInputs.forEach((input) => {
