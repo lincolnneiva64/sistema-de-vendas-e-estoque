@@ -301,12 +301,25 @@
       background: rgba(15, 23, 42, .55);
       padding: 16px;
     }
+    .conf-calc-modal.lateral {
+      display: block;
+      background: transparent;
+      pointer-events: none;
+      padding: 0;
+    }
     .conf-calc-dialog {
       width: min(360px, 100%);
       border-radius: 10px;
       background: #fff;
       box-shadow: 0 20px 60px rgba(15, 23, 42, .28);
       padding: 14px;
+    }
+    .conf-calc-modal.lateral .conf-calc-dialog {
+      position: fixed;
+      top: var(--conf-calc-top, 24px);
+      left: var(--conf-calc-left, auto);
+      width: 360px;
+      pointer-events: auto;
     }
     .conf-calc-header {
       display: flex;
@@ -407,18 +420,23 @@
         align-items: stretch;
         padding: 8px;
       }
+      .conf-calc-modal.lateral {
+        display: grid;
+        place-items: center;
+        background: rgba(15, 23, 42, .55);
+        pointer-events: auto;
+        padding: 8px;
+      }
+      .conf-calc-modal.lateral .conf-calc-dialog {
+        position: static;
+        width: 100%;
+      }
       .conf-calc-dialog {
         width: 100%;
         min-height: calc(100vh - 16px);
         display: flex;
         flex-direction: column;
         justify-content: center;
-      }
-    }
-    @media (min-width: 1640px) {
-      .conf-calc-modal {
-        place-items: center end;
-        padding-right: max(24px, calc((100vw - 1580px) / 2));
       }
     }
   </style>
@@ -641,6 +659,7 @@
     const abrirCalculadoraEl = document.getElementById("abrirCalculadoraConferencia");
     const modalCalculadoraEl = document.getElementById("modalCalculadoraConferencia");
     const dialogCalculadoraEl = document.getElementById("dialogCalculadoraConferencia");
+    const painelConferenciaEl = document.querySelector(".conf-count-panel");
     const fecharCalculadoraEl = document.getElementById("fecharCalculadoraConferencia");
     const visorCalculadoraEl = document.getElementById("visorCalculadoraConferencia");
     const usarResultadoCalculadoraEl = document.getElementById("usarResultadoCalculadoraConferencia");
@@ -754,6 +773,38 @@
       return modalCalculadoraEl && !modalCalculadoraEl.hidden;
     }
 
+    function limparPosicaoCalculadora() {
+      if (!modalCalculadoraEl) return;
+      modalCalculadoraEl.classList.remove("lateral");
+      modalCalculadoraEl.style.removeProperty("--conf-calc-left");
+      modalCalculadoraEl.style.removeProperty("--conf-calc-top");
+    }
+
+    function posicionarCalculadora() {
+      if (!calculadoraAberta() || !modalCalculadoraEl || !dialogCalculadoraEl || !painelConferenciaEl) return;
+
+      limparPosicaoCalculadora();
+      if (window.matchMedia && window.matchMedia("(max-width: 720px)").matches) return;
+
+      const margem = 24;
+      const painelRect = painelConferenciaEl.getBoundingClientRect();
+      const larguraViewport = document.documentElement.clientWidth || window.innerWidth;
+      const alturaViewport = document.documentElement.clientHeight || window.innerHeight;
+      const larguraDialog = dialogCalculadoraEl.offsetWidth || 360;
+      const alturaDialog = dialogCalculadoraEl.offsetHeight || 0;
+      const left = Math.ceil(painelRect.right + margem);
+
+      if (left + larguraDialog + margem > larguraViewport) return;
+
+      const topoIdeal = Math.max(margem, Math.floor(painelRect.top));
+      const topoMaximo = Math.max(margem, alturaViewport - alturaDialog - margem);
+      const top = Math.min(topoIdeal, topoMaximo);
+
+      modalCalculadoraEl.style.setProperty("--conf-calc-left", left + "px");
+      modalCalculadoraEl.style.setProperty("--conf-calc-top", top + "px");
+      modalCalculadoraEl.classList.add("lateral");
+    }
+
     function atualizarTextoUsoCalculadora() {
       if (!usarResultadoCalculadoraEl) return;
       usarResultadoCalculadoraEl.textContent = metodoSelecionado() === "direta" ? "Usar resultado" : "Copiar resultado";
@@ -839,14 +890,19 @@
       atualizarVisorCalculadora();
       atualizarTextoUsoCalculadora();
       modalCalculadoraEl.hidden = false;
+      posicionarCalculadora();
       document.removeEventListener("keydown", controlarTecladoCalculadora);
       document.addEventListener("keydown", controlarTecladoCalculadora);
+      window.removeEventListener("resize", posicionarCalculadora);
+      window.addEventListener("resize", posicionarCalculadora);
       if (dialogCalculadoraEl) dialogCalculadoraEl.focus();
     }
 
     function fecharCalculadora() {
       if (modalCalculadoraEl) modalCalculadoraEl.hidden = true;
+      limparPosicaoCalculadora();
       document.removeEventListener("keydown", controlarTecladoCalculadora);
+      window.removeEventListener("resize", posicionarCalculadora);
       if (abrirCalculadoraEl) abrirCalculadoraEl.focus();
     }
 
