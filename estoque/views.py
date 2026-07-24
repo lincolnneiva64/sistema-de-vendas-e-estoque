@@ -12198,14 +12198,61 @@ def _montar_historico_recebimentos_rota(rota, data_referencia=None, operacao_atu
     }
 
 
-def _url_recebimentos_rota(rota, url_voltar=""):
+def _url_recebimentos_rota(rota, url_voltar="", data_referencia=None):
     rota = (rota or "").strip()
     if not rota:
         return ""
-    parametros_url = {"rota": rota}
+    data_referencia = data_referencia or timezone.localdate()
+    parametros_url = {"rota": rota, "data": data_referencia.isoformat()}
     if url_voltar:
         parametros_url["next"] = url_voltar
     return f"{reverse('estoque:receber_cliente_recebimentos_rota')}?{urlencode(parametros_url)}"
+
+
+def _url_conferencia_recebimentos_rota(rota, data_referencia, url_voltar=""):
+    parametros_url = {"rota": (rota or "").strip(), "data": data_referencia.isoformat()}
+    if url_voltar:
+        parametros_url["next"] = url_voltar
+    return f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode(parametros_url)}"
+
+
+def _data_rota_recebimentos_request(request):
+    hoje = timezone.localdate()
+    data_texto = request.GET.get("data", "").strip()
+    if not data_texto:
+        return hoje, False
+    data_referencia = parse_date(data_texto)
+    if data_referencia:
+        return data_referencia, False
+    messages.warning(request, "Data inválida. Mostrando os recebimentos de hoje.")
+    return hoje, True
+
+
+def _fechamento_rota_data(rota, data_referencia):
+    return (
+        FechamentoRotaRecebimento.objects
+        .select_related("usuario", "criado_por")
+        .filter(rota=(rota or "").strip(), data_referencia=data_referencia)
+        .first()
+    )
+
+
+def _resumo_fechamento_rota(fechamento):
+    if not fechamento:
+        return None
+    usuario = fechamento.usuario or fechamento.criado_por
+    return {
+        "obj": fechamento,
+        "usuario_nome": _nome_usuario_recebimento(usuario) or "-",
+        "finalizado_em": timezone.localtime(fechamento.created_at) if fechamento.created_at else None,
+        "valor_esperado_formatado": _formatar_moeda(fechamento.total_sistema),
+        "valor_contado_formatado": _formatar_moeda(fechamento.total_conferido),
+        "diferenca_formatada": _formatar_moeda(abs(fechamento.diferenca or Decimal("0.00"))),
+        "metodo_texto": fechamento.get_metodo_conferencia_display(),
+        "observacao": fechamento.observacao or "",
+        "composicao": fechamento.composicao_cedulas or {},
+        "composicao_itens": _composicao_cedulas_lista(fechamento.composicao_cedulas or {}),
+    }
 
 
 def _historico_recebimentos_dia_rota(cliente, operacao, contexto_rota):
@@ -12249,7 +12296,10 @@ def _resumo_conferencia_recebimentos_rota(rota, data_referencia):
 
     return {
         "rota": rota,
+        "itens": historico["itens"],
+        "operacoes_qtd": historico["operacoes_qtd"],
         "clientes_qtd": historico["clientes_qtd"],
+        "usuarios_recebimentos_texto": historico["usuarios_recebimentos_texto"],
         "total_dinheiro": totais_forma["dinheiro"],
         "total_pix": totais_forma["pix"],
         "total_cartao": totais_forma["cartao"],
@@ -12258,27 +12308,53 @@ def _resumo_conferencia_recebimentos_rota(rota, data_referencia):
     }
 
 
+def _historico_recente_recebimentos_rota(rota, data_atual, url_voltar="", limite=10):
+    rota = (rota or "").strip()
+    aliases = _aliases_rota_cliente(rota)
+    if not aliases:
+        return []
+
+    datas = list(
+        OperacaoRecebimentoCliente.objects
+        .filter(Q(rota_snapshot__in=aliases) | Q(cliente__bairro__in=aliases))
+        .values("data_recebimento")
+        .annotate(
+            recebimentos=Count("id"),
+            total=Coalesce(Sum("valor_recebido"), Decimal("0.00"), output_field=DecimalField()),
+        )
+        .order_by("-data_recebimento")[:limite]
+    )
+    fechamentos = {
+        fechamento.data_referencia: fechamento
+        for fechamento in FechamentoRotaRecebimento.objects.filter(
+            rota=rota,
+            data_referencia__in=[item["data_recebimento"] for item in datas],
+        )
+    }
+    retorno = []
+    for item in datas:
+        data_item = item["data_recebimento"]
+        fechamento = fechamentos.get(data_item)
+        retorno.append({
+            "data": data_item,
+            "data_formatada": data_item.strftime("%d/%m/%Y") if data_item else "",
+            "recebimentos": item["recebimentos"] or 0,
+            "total_formatado": _formatar_moeda(item["total"] or Decimal("0.00")),
+            "status": "Conferido" if fechamento else "Não conferido",
+            "url": _url_recebimentos_rota(rota, url_voltar=url_voltar, data_referencia=data_item),
+            "ativo": data_item == data_atual,
+        })
+    return retorno
+
+
 def _centavos_para_decimal(centavos):
     return (Decimal(centavos) / Decimal("100")).quantize(Decimal("0.01"))
 
 
 def _total_cedulas_conferencia_post(post_data):
-    denominacoes = {
-        "qtd_cedula_200": 20000,
-        "qtd_cedula_100": 10000,
-        "qtd_cedula_50": 5000,
-        "qtd_cedula_20": 2000,
-        "qtd_cedula_10": 1000,
-        "qtd_cedula_5": 500,
-        "qtd_cedula_2": 200,
-        "qtd_moeda_100": 100,
-        "qtd_moeda_50": 50,
-        "qtd_moeda_25": 25,
-        "qtd_moeda_10": 10,
-        "qtd_moeda_5": 5,
-    }
+    denominacoes = _denominacoes_conferencia()
     total_centavos = 0
-    for campo, valor_centavos in denominacoes.items():
+    for campo, item in denominacoes.items():
         texto = str(post_data.get(campo, "0") or "0").strip()
         try:
             quantidade = int(texto)
@@ -12286,8 +12362,55 @@ def _total_cedulas_conferencia_post(post_data):
             raise ValueError("Informe apenas quantidades inteiras na contagem por cédulas.")
         if quantidade < 0:
             raise ValueError("Informe apenas quantidades positivas na contagem por cédulas.")
-        total_centavos += quantidade * valor_centavos
+        total_centavos += quantidade * item["centavos"]
     return _centavos_para_decimal(total_centavos)
+
+
+def _denominacoes_conferencia():
+    return {
+        "qtd_cedula_200": {"rotulo": "R$ 200", "centavos": 20000},
+        "qtd_cedula_100": {"rotulo": "R$ 100", "centavos": 10000},
+        "qtd_cedula_50": {"rotulo": "R$ 50", "centavos": 5000},
+        "qtd_cedula_20": {"rotulo": "R$ 20", "centavos": 2000},
+        "qtd_cedula_10": {"rotulo": "R$ 10", "centavos": 1000},
+        "qtd_cedula_5": {"rotulo": "R$ 5", "centavos": 500},
+        "qtd_cedula_2": {"rotulo": "R$ 2", "centavos": 200},
+        "qtd_moeda_100": {"rotulo": "R$ 1,00", "centavos": 100},
+        "qtd_moeda_50": {"rotulo": "R$ 0,50", "centavos": 50},
+        "qtd_moeda_25": {"rotulo": "R$ 0,25", "centavos": 25},
+        "qtd_moeda_10": {"rotulo": "R$ 0,10", "centavos": 10},
+        "qtd_moeda_5": {"rotulo": "R$ 0,05", "centavos": 5},
+    }
+
+
+def _composicao_cedulas_post(post_data):
+    composicao = {}
+    for campo, item in _denominacoes_conferencia().items():
+        quantidade = int(str(post_data.get(campo, "0") or "0").strip())
+        if quantidade > 0:
+            composicao[campo] = {
+                "rotulo": item["rotulo"],
+                "quantidade": quantidade,
+                "total": str(_centavos_para_decimal(quantidade * item["centavos"])),
+            }
+    return composicao
+
+
+def _composicao_cedulas_lista(composicao):
+    retorno = []
+    for campo, item in _denominacoes_conferencia().items():
+        dados = (composicao or {}).get(campo) or {}
+        quantidade = int(dados.get("quantidade") or 0)
+        if quantidade <= 0:
+            continue
+        total = Decimal(str(dados.get("total") or "0.00"))
+        retorno.append({
+            "campo": campo,
+            "rotulo": dados.get("rotulo") or item["rotulo"],
+            "quantidade": quantidade,
+            "total_formatado": _formatar_moeda(total),
+        })
+    return retorno
 
 
 def _total_conferido_post(post_data, metodo_conferencia):
@@ -12309,8 +12432,24 @@ def receber_cliente_recebimentos_rota(request):
         return redirect(reverse("estoque:receber_cliente_escolher"))
 
     hoje = timezone.localdate()
-    resumo = _montar_historico_recebimentos_rota(rota_filtro, data_referencia=hoje)
+    ontem = hoje - timedelta(days=1)
+    data_referencia, data_invalida = _data_rota_recebimentos_request(request)
+    resumo = _montar_historico_recebimentos_rota(rota_filtro, data_referencia=data_referencia)
     voltar_url = _url_retorno_segura(request) or f"{reverse('estoque:receber_cliente_escolher')}?{urlencode({'rota': rota_filtro})}"
+    url_base = reverse("estoque:receber_cliente_recebimentos_rota")
+    next_param = request.GET.get("next", "").strip()
+    filtro_params = {"rota": rota_filtro, "data": data_referencia.isoformat()}
+    if next_param:
+        filtro_params["next"] = next_param
+    hoje_params = {"rota": rota_filtro, "data": hoje.isoformat()}
+    ontem_params = {"rota": rota_filtro, "data": ontem.isoformat()}
+    if next_param:
+        hoje_params["next"] = next_param
+        ontem_params["next"] = next_param
+    resumo_conferencia = _resumo_conferencia_recebimentos_rota(rota_filtro, data_referencia)
+    fechamento = _fechamento_rota_data(rota_filtro, data_referencia)
+    fechamento_resumo = _resumo_fechamento_rota(fechamento)
+    tem_recebimentos = bool(resumo["itens"])
     usuario_consulta_nome = (
         _nome_usuario_recebimento(request.user)
         if getattr(request.user, "is_authenticated", False)
@@ -12322,7 +12461,13 @@ def receber_cliente_recebimentos_rota(request):
         "estoque/receber_cliente_recebimentos_rota.html",
         {
             "rota_filtro": rota_filtro,
-            "data_referencia": hoje,
+            "data_referencia": data_referencia,
+            "data_referencia_iso": data_referencia.isoformat(),
+            "data_referencia_formatada": data_referencia.strftime("%d/%m/%Y"),
+            "hoje_url": f"{url_base}?{urlencode(hoje_params)}",
+            "ontem_url": f"{url_base}?{urlencode(ontem_params)}",
+            "filtro_data_url": f"{url_base}?{urlencode(filtro_params)}",
+            "data_invalida": data_invalida,
             "historico_recebimentos_rota_dia": resumo["itens"],
             "clientes_recebidos_qtd": resumo["clientes_qtd"],
             "operacoes_recebidas_qtd": resumo["operacoes_qtd"],
@@ -12333,11 +12478,17 @@ def receber_cliente_recebimentos_rota(request):
             "total_confirmado_rota_formatado": _formatar_moeda(resumo["total_confirmado"]),
             "total_inferido_rota_formatado": _formatar_moeda(resumo["total_inferido"]),
             "total_recebimentos_rota_dia_formatado": _formatar_moeda(resumo["total_recebido"]),
+            "total_dinheiro_formatado": _formatar_moeda(resumo_conferencia["total_dinheiro"]),
+            "total_pix_formatado": _formatar_moeda(resumo_conferencia["total_pix"]),
+            "total_cartao_formatado": _formatar_moeda(resumo_conferencia["total_cartao"]),
+            "credito_gerado_formatado": _formatar_moeda(resumo_conferencia["credito_gerado"]),
             "voltar_receber_url": voltar_url,
-            "conferir_recebimentos_url": (
-                f"{reverse('estoque:conferencia_recebimentos_rota')}?"
-                f"{urlencode({'rota': rota_filtro, 'data': hoje.isoformat(), 'next': request.get_full_path()})}"
-            ),
+            "tem_recebimentos": tem_recebimentos,
+            "status_conferencia": "Conferido" if fechamento else "Não conferido",
+            "conferencia_concluida": bool(fechamento),
+            "fechamento_resumo": fechamento_resumo,
+            "conferir_recebimentos_url": _url_conferencia_recebimentos_rota(rota_filtro, data_referencia, request.get_full_path()),
+            "historico_recente_datas": _historico_recente_recebimentos_rota(rota_filtro, data_referencia, next_param),
         },
     )
 
@@ -12345,21 +12496,27 @@ def receber_cliente_recebimentos_rota(request):
 @ensure_csrf_cookie
 def conferencia_recebimentos_rota(request):
     rota_filtro = request.GET.get("rota", "").strip()
-    data_parametro = request.GET.get("data", "").strip()
-    data_referencia = parse_date(data_parametro) if data_parametro else timezone.localdate()
-    data_referencia = data_referencia or timezone.localdate()
+    data_referencia, _data_invalida = _data_rota_recebimentos_request(request)
     voltar_url = _url_retorno_segura(request) or (
         f"{reverse('estoque:receber_cliente_recebimentos_rota')}?"
-        f"{urlencode({'rota': rota_filtro})}"
+        f"{urlencode({'rota': rota_filtro, 'data': data_referencia.isoformat()})}"
         if rota_filtro
         else reverse("estoque:receber_cliente_escolher")
     )
     resumo = _resumo_conferencia_recebimentos_rota(rota_filtro, data_referencia)
+    fechamento_existente = _fechamento_rota_data(rota_filtro, data_referencia)
+    fechamento_resumo = _resumo_fechamento_rota(fechamento_existente)
     metodo_selecionado = FechamentoRotaRecebimento.METODO_CEDULAS
     valor_direto_inicial = ""
     observacao_inicial = ""
 
     if request.method == "POST":
+        if fechamento_existente:
+            messages.warning(request, "Esta conferência já foi finalizada e não pode ser alterada.")
+            return redirect(request.get_full_path())
+        if not resumo["itens"]:
+            messages.warning(request, "Não há recebimentos para conferir nesta rota e data.")
+            return redirect(voltar_url)
         metodo_selecionado = request.POST.get("metodo_conferencia_visual", "").strip()
         valor_direto_inicial = request.POST.get("valor_conferencia_direta", "").strip()
         observacao_inicial = request.POST.get("observacao_conferencia", "").strip()
@@ -12374,18 +12531,35 @@ def conferencia_recebimentos_rota(request):
                 messages.warning(request, "Informe uma observação para finalizar com falta ou sobra.")
             else:
                 usuario = request.user if getattr(request.user, "is_authenticated", False) else None
-                FechamentoRotaRecebimento.objects.create(
-                    rota=rota_filtro,
-                    data_referencia=data_referencia,
-                    usuario=usuario,
-                    criado_por=usuario,
-                    metodo_conferencia=metodo_selecionado,
-                    status=FechamentoRotaRecebimento.STATUS_FINALIZADO,
-                    total_sistema=total_sistema,
-                    total_conferido=total_conferido,
-                    diferenca=diferenca,
-                    observacao=observacao_inicial,
+                composicao_cedulas = (
+                    _composicao_cedulas_post(request.POST)
+                    if metodo_selecionado == FechamentoRotaRecebimento.METODO_CEDULAS
+                    else {}
                 )
+                try:
+                    with transaction.atomic():
+                        if FechamentoRotaRecebimento.objects.select_for_update().filter(
+                            rota=rota_filtro,
+                            data_referencia=data_referencia,
+                        ).exists():
+                            messages.warning(request, "Esta conferência já foi finalizada e não pode ser alterada.")
+                            return redirect(request.get_full_path())
+                        FechamentoRotaRecebimento.objects.create(
+                            rota=rota_filtro,
+                            data_referencia=data_referencia,
+                            usuario=usuario,
+                            criado_por=usuario,
+                            metodo_conferencia=metodo_selecionado,
+                            status=FechamentoRotaRecebimento.STATUS_FINALIZADO,
+                            total_sistema=total_sistema,
+                            total_conferido=total_conferido,
+                            diferenca=diferenca,
+                            observacao=observacao_inicial,
+                            composicao_cedulas=composicao_cedulas,
+                        )
+                except IntegrityError:
+                    messages.warning(request, "Esta conferência já foi finalizada e não pode ser alterada.")
+                    return redirect(request.get_full_path())
                 messages.success(request, "Conferência finalizada com sucesso.")
                 return redirect(request.get_full_path())
 
@@ -12405,6 +12579,9 @@ def conferencia_recebimentos_rota(request):
             "metodo_selecionado": metodo_selecionado,
             "valor_direto_inicial": valor_direto_inicial,
             "observacao_inicial": observacao_inicial,
+            "conferencia_concluida": bool(fechamento_existente),
+            "fechamento_resumo": fechamento_resumo,
+            "tem_recebimentos": bool(resumo["itens"]),
             "voltar_url": voltar_url,
         },
     )

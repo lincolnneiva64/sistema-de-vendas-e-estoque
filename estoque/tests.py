@@ -16631,6 +16631,7 @@ class PixRecebidoTests(TestCase):
         rota="",
         valor="100.00",
         forma_pagamento="PIX",
+        data_recebimento=None,
     ):
         return OperacaoRecebimentoCliente.objects.create(
             cliente=cliente,
@@ -16640,7 +16641,7 @@ class PixRecebidoTests(TestCase):
             credito_gerado=Decimal("0.00"),
             saldo_anterior=Decimal("100.00"),
             saldo_atual=Decimal("0.00"),
-            data_recebimento=timezone.localdate(),
+            data_recebimento=data_recebimento or timezone.localdate(),
             forma_pagamento=forma_pagamento,
             rota_snapshot=rota,
             status_recibo=status,
@@ -16661,8 +16662,10 @@ class PixRecebidoTests(TestCase):
     def _url_recibos_pendentes(self):
         return reverse("estoque:recebimentos_recibos_pendentes")
 
-    def _url_recebimentos_rota(self, rota, next_url=""):
+    def _url_recebimentos_rota(self, rota, next_url="", data_referencia=None):
         parametros = {"rota": rota}
+        if data_referencia:
+            parametros["data"] = data_referencia.isoformat()
         if next_url:
             parametros["next"] = next_url
         return f"{reverse('estoque:receber_cliente_recebimentos_rota')}?{urlencode(parametros)}"
@@ -17334,7 +17337,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "rcp-route-history-total")
         self.assertNotContains(resposta, "Cliente Historico Fora")
         self.assertNotContains(resposta, "R$ 30,00")
-        self.assertNotContains(resposta, "R$ 25,00")
+        self.assertContains(resposta, "Histórico recente por data")
 
     def test_receber_cliente_mostra_botao_recebimentos_rota_quando_tem_rota(self):
         cliente = Cliente.objects.create(nome="Cliente Botao Rota", bairro="Centro", ativo=True)
@@ -17347,9 +17350,10 @@ class PixRecebidoTests(TestCase):
         )
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "Ver recebimentos desta rota")
+        self.assertContains(resposta, "Ver recebimentos da rota")
         self.assertContains(resposta, reverse("estoque:receber_cliente_recebimentos_rota"))
         self.assertContains(resposta, "rota=Centro")
+        self.assertContains(resposta, f"data={timezone.localdate().isoformat()}")
         self.assertNotContains(resposta, "Recebimentos de hoje - Centro")
         self.assertNotContains(resposta, "R$ 33,00")
 
@@ -17357,7 +17361,7 @@ class PixRecebidoTests(TestCase):
         resposta = self.client.get(reverse("estoque:receber_cliente_escolher"), secure=True)
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertNotContains(resposta, "Ver recebimentos desta rota")
+        self.assertNotContains(resposta, "Ver recebimentos da rota")
         self.assertNotContains(resposta, "Recebimentos de hoje -")
 
     def test_receber_cliente_escolher_mantem_botao_recebimentos_ao_voltar_com_rota(self):
@@ -17368,7 +17372,7 @@ class PixRecebidoTests(TestCase):
         resposta = self.client.get(f"{reverse('estoque:receber_cliente_escolher')}?rota=Jardim", secure=True)
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "Ver recebimentos desta rota")
+        self.assertContains(resposta, "Ver recebimentos da rota")
         self.assertContains(resposta, "rota=Jardim")
         self.assertNotContains(resposta, "Recebimentos de hoje - Jardim")
         self.assertNotContains(resposta, "R$ 44,00")
@@ -17408,10 +17412,10 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "R$ 70,00")
         self.assertContains(resposta, "R$ 40,00")
         self.assertContains(resposta, "R$ 90,00")
-        self.assertContains(resposta, "Credito gerado: R$ 20,00")
+        self.assertContains(resposta, "Crédito gerado: R$ 20,00")
         self.assertContains(resposta, "Recibo pendente")
         self.assertContains(resposta, "Clientes recebidos")
-        self.assertContains(resposta, "Total recebido")
+        self.assertContains(resposta, "Total geral recebido")
         self.assertContains(resposta, '<span class="rcr-value">2</span>', html=True)
         self.assertContains(resposta, '<span class="rcr-value money">R$ 200,00</span>', html=True)
         self.assertNotContains(resposta, "Operacoes")
@@ -17428,7 +17432,7 @@ class PixRecebidoTests(TestCase):
         self.assertNotContains(resposta, "Cliente Outra Rota Consulta")
         self.assertNotContains(resposta, "Cliente Deposito Consulta")
         self.assertNotContains(resposta, "R$ 500,00")
-        self.assertNotContains(resposta, "R$ 25,00")
+        self.assertContains(resposta, "Histórico recente por data")
 
     def test_recebimentos_rota_total_usa_operacao_sem_duplicar_baixas(self):
         cliente = Cliente.objects.create(nome="Cliente Total Operacao", bairro="Jardim", ativo=True)
@@ -17455,7 +17459,7 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "Cliente Total Operacao")
         self.assertContains(resposta, '<span class="rcr-value money">R$ 120,00</span>', html=True)
-        self.assertContains(resposta, "R$ 120,00", count=2)
+        self.assertContains(resposta, "R$ 120,00")
         self.assertNotContains(resposta, "R$ 240,00")
 
     def test_recebimentos_rota_mostra_usuario_e_preserva_volta(self):
@@ -17518,16 +17522,155 @@ class PixRecebidoTests(TestCase):
         operacao.refresh_from_db()
         self.assertIsNone(operacao.criado_por)
 
-    def test_recebimentos_rota_mostra_botao_conferir_recebimentos(self):
+    def test_recebimentos_rota_mostra_botao_fazer_conferencia(self):
         cliente = Cliente.objects.create(nome="Cliente Conferencia Rota", bairro="Jardim", ativo=True)
         self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="18.00")
 
         resposta = self.client.get(self._url_recebimentos_rota("Jardim"), secure=True)
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "Conferir recebimentos")
+        self.assertContains(resposta, "Não conferido")
+        self.assertContains(resposta, "Fazer conferência")
         self.assertContains(resposta, reverse("estoque:conferencia_recebimentos_rota"))
         self.assertContains(resposta, "rota=Jardim")
+
+    def test_recebimentos_rota_filtra_hoje_ontem_e_data_especifica(self):
+        hoje = timezone.localdate()
+        ontem = hoje - timedelta(days=1)
+        antiga = hoje - timedelta(days=8)
+        cliente_hoje = Cliente.objects.create(nome="Cliente Datas Hoje", bairro="Jardim", ativo=True)
+        cliente_ontem = Cliente.objects.create(nome="Cliente Datas Ontem", bairro="Jardim", ativo=True)
+        cliente_antiga = Cliente.objects.create(nome="Cliente Datas Antiga", bairro="Jardim", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente_hoje, rota="Jardim", valor="10.00", data_recebimento=hoje)
+        self._criar_operacao_recebimento_cliente(cliente_ontem, rota="Jardim", valor="20.00", data_recebimento=ontem)
+        self._criar_operacao_recebimento_cliente(cliente_antiga, rota="Jardim", valor="30.00", data_recebimento=antiga)
+
+        pagina_hoje = self.client.get(self._url_recebimentos_rota("Jardim", data_referencia=hoje), secure=True)
+        pagina_ontem = self.client.get(self._url_recebimentos_rota("Jardim", data_referencia=ontem), secure=True)
+        pagina_antiga = self.client.get(self._url_recebimentos_rota("Jardim", data_referencia=antiga), secure=True)
+
+        self.assertContains(pagina_hoje, f'value="{hoje.isoformat()}"')
+        self.assertContains(pagina_hoje, f"data={hoje.isoformat()}")
+        self.assertContains(pagina_hoje, f"data={ontem.isoformat()}")
+        self.assertContains(pagina_hoje, "Cliente Datas Hoje")
+        self.assertNotContains(pagina_hoje, "Cliente Datas Ontem")
+        self.assertContains(pagina_ontem, "Cliente Datas Ontem")
+        self.assertNotContains(pagina_ontem, "Cliente Datas Hoje")
+        self.assertContains(pagina_antiga, "Cliente Datas Antiga")
+        self.assertNotContains(pagina_antiga, "Cliente Datas Hoje")
+
+    def test_recebimentos_rota_data_invalida_volta_para_hoje(self):
+        hoje = timezone.localdate()
+        cliente = Cliente.objects.create(nome="Cliente Data Invalida", bairro="Jardim", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="18.00", data_recebimento=hoje)
+
+        resposta = self.client.get(
+            f"{reverse('estoque:receber_cliente_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': 'invalida'})}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Data inválida. Mostrando os recebimentos de hoje.")
+        self.assertContains(resposta, f'value="{hoje.isoformat()}"')
+        self.assertContains(resposta, "Cliente Data Invalida")
+
+    def test_recebimentos_rota_mostra_apenas_rota_e_data_consultadas(self):
+        hoje = timezone.localdate()
+        ontem = hoje - timedelta(days=1)
+        cliente_rota = Cliente.objects.create(nome="Cliente Rota Data", bairro="Jardim", ativo=True)
+        cliente_outro_dia = Cliente.objects.create(nome="Cliente Outro Dia", bairro="Jardim", ativo=True)
+        cliente_outra = Cliente.objects.create(nome="Cliente Outra Data", bairro="Centro", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente_rota, rota="Jardim", valor="40.00", data_recebimento=hoje)
+        self._criar_operacao_recebimento_cliente(cliente_outra, rota="Centro", valor="50.00", data_recebimento=hoje)
+        self._criar_operacao_recebimento_cliente(cliente_outro_dia, rota="Jardim", valor="60.00", data_recebimento=ontem)
+
+        resposta = self.client.get(self._url_recebimentos_rota("Jardim", data_referencia=hoje), secure=True)
+
+        self.assertContains(resposta, "Cliente Rota Data")
+        self.assertContains(resposta, "R$ 40,00")
+        self.assertNotContains(resposta, "Cliente Outra Data")
+        self.assertNotContains(resposta, "R$ 50,00")
+        self.assertNotContains(resposta, "Cliente Outro Dia")
+
+    def test_recebimentos_rota_resumo_por_forma_e_estado_vazio(self):
+        hoje = timezone.localdate()
+        vazio = hoje - timedelta(days=3)
+        cliente_um = Cliente.objects.create(nome="Cliente Resumo Dinheiro", bairro="Jardim", ativo=True)
+        cliente_dois = Cliente.objects.create(nome="Cliente Resumo Pix", bairro="Jardim", ativo=True)
+        cliente_tres = Cliente.objects.create(nome="Cliente Resumo Cartao", bairro="Jardim", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente_um, rota="Jardim", valor="30.00", forma_pagamento="Dinheiro")
+        op_pix = self._criar_operacao_recebimento_cliente(cliente_dois, rota="Jardim", valor="40.00", forma_pagamento="PIX")
+        op_pix.credito_gerado = Decimal("5.00")
+        op_pix.save(update_fields=["credito_gerado"])
+        self._criar_operacao_recebimento_cliente(cliente_tres, rota="Jardim", valor="50.00", forma_pagamento="Cartao de credito")
+
+        resposta = self.client.get(self._url_recebimentos_rota("Jardim"), secure=True)
+        resposta_vazia = self.client.get(self._url_recebimentos_rota("Jardim", data_referencia=vazio), secure=True)
+
+        self.assertContains(resposta, "Recebimentos registrados")
+        self.assertContains(resposta, '<span class="rcr-value">3</span>', html=True)
+        self.assertContains(resposta, '<span class="rcr-value money">R$ 30,00</span>', html=True)
+        self.assertContains(resposta, '<span class="rcr-value money">R$ 40,00</span>', html=True)
+        self.assertContains(resposta, '<span class="rcr-value money">R$ 50,00</span>', html=True)
+        self.assertContains(resposta, '<span class="rcr-value money">R$ 5,00</span>', html=True)
+        self.assertContains(resposta, '<span class="rcr-value money">R$ 120,00</span>', html=True)
+        self.assertContains(resposta_vazia, "Nenhum recebimento registrado para esta rota nesta data")
+        self.assertContains(resposta_vazia, "Não há recebimentos nesta data para finalizar conferência.")
+        self.assertNotContains(resposta_vazia, "Fazer conferência")
+
+    def test_recebimentos_rota_status_conferido_e_botao_ver_conferencia(self):
+        hoje = timezone.localdate()
+        usuario = get_user_model().objects.create_user(username="conferente-status", password="senha")
+        cliente = Cliente.objects.create(nome="Cliente Status Conferido", bairro="Jardim", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="70.00")
+        FechamentoRotaRecebimento.objects.create(
+            rota="Jardim",
+            data_referencia=hoje,
+            usuario=usuario,
+            criado_por=usuario,
+            metodo_conferencia=FechamentoRotaRecebimento.METODO_DIRETA,
+            status=FechamentoRotaRecebimento.STATUS_FINALIZADO,
+            total_sistema=Decimal("70.00"),
+            total_conferido=Decimal("70.00"),
+        )
+
+        resposta = self.client.get(self._url_recebimentos_rota("Jardim"), secure=True)
+
+        self.assertContains(resposta, "Conferido")
+        self.assertContains(resposta, "Ver conferência")
+        self.assertContains(resposta, "Conferido por: Conferente-Status")
+        self.assertNotContains(resposta, "Fazer conferência")
+
+    def test_historico_recente_lista_datas_da_rota_ordenadas_com_status(self):
+        hoje = timezone.localdate()
+        ontem = hoje - timedelta(days=1)
+        antiga = hoje - timedelta(days=5)
+        cliente = Cliente.objects.create(nome="Cliente Historico Recente", bairro="Jardim", ativo=True)
+        outra_rota = Cliente.objects.create(nome="Cliente Historico Outra", bairro="Centro", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="10.00", data_recebimento=antiga)
+        self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="20.00", data_recebimento=hoje)
+        self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="30.00", data_recebimento=ontem)
+        self._criar_operacao_recebimento_cliente(outra_rota, rota="Centro", valor="900.00", data_recebimento=hoje)
+        FechamentoRotaRecebimento.objects.create(
+            rota="Jardim",
+            data_referencia=ontem,
+            status=FechamentoRotaRecebimento.STATUS_FINALIZADO,
+            total_sistema=Decimal("30.00"),
+            total_conferido=Decimal("30.00"),
+        )
+
+        resposta = self.client.get(self._url_recebimentos_rota("Jardim"), secure=True)
+        conteudo = resposta.content.decode()
+
+        self.assertContains(resposta, "Histórico recente por data")
+        self.assertLess(conteudo.index(hoje.strftime("%d/%m/%Y")), conteudo.index(ontem.strftime("%d/%m/%Y")))
+        self.assertLess(conteudo.index(ontem.strftime("%d/%m/%Y")), conteudo.index(antiga.strftime("%d/%m/%Y")))
+        self.assertContains(resposta, "R$ 20,00")
+        self.assertContains(resposta, "R$ 30,00")
+        self.assertContains(resposta, "R$ 10,00")
+        self.assertContains(resposta, "Conferido")
+        self.assertContains(resposta, "Não conferido")
+        self.assertNotContains(resposta, "R$ 900,00")
 
     def test_conferencia_recebimentos_rota_renderiza_estrutura_inicial(self):
         url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
@@ -17778,6 +17921,82 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(fechamento.total_conferido, Decimal("60.00"))
         self.assertEqual(fechamento.diferenca, Decimal("10.00"))
         self.assertEqual(fechamento.observacao, "Sobra conferida no caixa.")
+        self.assertIn("qtd_cedula_20", fechamento.composicao_cedulas)
+        self.assertEqual(fechamento.composicao_cedulas["qtd_cedula_20"]["quantidade"], 3)
+
+    def test_conferencia_concluida_abre_somente_leitura(self):
+        usuario = get_user_model().objects.create_user(username="leitor", password="senha")
+        cliente = Cliente.objects.create(nome="Cliente Readonly", bairro="Jardim", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="60.00", forma_pagamento="Dinheiro")
+        FechamentoRotaRecebimento.objects.create(
+            rota="Jardim",
+            data_referencia=timezone.localdate(),
+            usuario=usuario,
+            criado_por=usuario,
+            metodo_conferencia=FechamentoRotaRecebimento.METODO_CEDULAS,
+            status=FechamentoRotaRecebimento.STATUS_FINALIZADO,
+            total_sistema=Decimal("60.00"),
+            total_conferido=Decimal("60.00"),
+            composicao_cedulas={
+                "qtd_cedula_20": {"rotulo": "R$ 20", "quantidade": 3, "total": "60.00"},
+            },
+            observacao="Fechamento conferido.",
+        )
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
+
+        resposta = self.client.get(url, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Conferência realizada")
+        self.assertContains(resposta, "Resumo da conferência realizada")
+        self.assertContains(resposta, "Valor esperado")
+        self.assertContains(resposta, "R$ 60,00")
+        self.assertContains(resposta, "Método")
+        self.assertContains(resposta, "Cédulas")
+        self.assertContains(resposta, "Fechamento conferido.")
+        self.assertContains(resposta, "R$ 20: 3 un. - R$ 60,00")
+        self.assertContains(resposta, "Voltar aos recebimentos da rota")
+        self.assertNotContains(resposta, 'id="formConferenciaRecebimentos"')
+        self.assertNotContains(resposta, "Finalizar conferência")
+
+    def test_conferencia_concluida_nao_pode_ser_finalizada_novamente(self):
+        cliente = Cliente.objects.create(nome="Cliente Bloqueia Segunda Conferencia", bairro="Jardim", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="80.00", forma_pagamento="Dinheiro")
+        fechamento = FechamentoRotaRecebimento.objects.create(
+            rota="Jardim",
+            data_referencia=timezone.localdate(),
+            metodo_conferencia=FechamentoRotaRecebimento.METODO_DIRETA,
+            status=FechamentoRotaRecebimento.STATUS_FINALIZADO,
+            total_sistema=Decimal("80.00"),
+            total_conferido=Decimal("80.00"),
+            observacao="Original",
+        )
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
+
+        resposta = self.client.post(
+            url,
+            {"metodo_conferencia_visual": "direta", "valor_conferencia_direta": "10,00", "observacao_conferencia": "Alterado"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(FechamentoRotaRecebimento.objects.count(), 1)
+        fechamento.refresh_from_db()
+        self.assertEqual(fechamento.total_conferido, Decimal("80.00"))
+        self.assertEqual(fechamento.observacao, "Original")
+
+    def test_conferencia_sem_recebimentos_nao_cria_fechamento(self):
+        data_vazia = timezone.localdate() - timedelta(days=4)
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': data_vazia.isoformat()})}"
+
+        resposta = self.client.post(
+            url,
+            {"metodo_conferencia_visual": "direta", "valor_conferencia_direta": "0,00"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(FechamentoRotaRecebimento.objects.count(), 0)
 
     def test_fechamento_rota_recebimento_defaults(self):
         usuario = get_user_model().objects.create_user(username="conferente", password="senha")

@@ -103,6 +103,137 @@
     .rcr-card {
       padding: 13px;
     }
+    .rcr-alert {
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      background: #eff6ff;
+      color: #1e3a8a;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      font-weight: 800;
+    }
+    .rcr-alert.warning,
+    .rcr-alert.error {
+      border-color: #fecaca;
+      background: #fff7f7;
+      color: #991b1b;
+    }
+    .rcr-filter,
+    .rcr-conference,
+    .rcr-recent {
+      border: 1px solid var(--rc-border);
+      border-radius: 8px;
+      background: var(--rc-surface);
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .rcr-filter {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: end;
+    }
+    .rcr-filter-fields {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: end;
+    }
+    .rcr-field {
+      display: grid;
+      gap: 5px;
+    }
+    .rcr-field label {
+      color: #334155;
+      font-weight: 900;
+      font-size: .86rem;
+    }
+    .rcr-field input {
+      min-height: 40px;
+      border: 1px solid #b8c2d1;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font: inherit;
+      font-weight: 800;
+    }
+    .rcr-filter-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .rcr-btn.secondary {
+      border: 1px solid var(--rc-border);
+      background: #fff;
+      color: var(--rc-primary-dark);
+    }
+    .rcr-btn.secondary:hover,
+    .rcr-btn.secondary:focus {
+      background: #ecfdf5;
+    }
+    .rcr-status {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: #fee2e2;
+      color: #991b1b;
+      font-size: .85rem;
+      font-weight: 900;
+    }
+    .rcr-status.ok {
+      background: #dcfce7;
+      color: #166534;
+    }
+    .rcr-conference-head {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .rcr-conference-title,
+    .rcr-recent-title {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 900;
+    }
+    .rcr-conference-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+      color: #334155;
+      font-weight: 800;
+    }
+    .rcr-recent-list {
+      display: grid;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .rcr-recent-item {
+      display: grid;
+      grid-template-columns: 110px minmax(0, 1fr) 120px 120px;
+      gap: 8px;
+      align-items: center;
+      min-height: 40px;
+      border: 1px solid #e5eaf1;
+      border-radius: 8px;
+      padding: 8px 10px;
+      color: inherit;
+      text-decoration: none;
+      font-weight: 800;
+    }
+    .rcr-recent-item:hover,
+    .rcr-recent-item:focus {
+      border-color: var(--rc-primary);
+      background: #f0fdfa;
+    }
+    .rcr-recent-item.ativo {
+      border-color: var(--rc-primary);
+      background: #ecfdf5;
+    }
 
     .rcr-label {
       display: block;
@@ -237,6 +368,17 @@
       .rcr-summary {
         grid-template-columns: 1fr;
       }
+      .rcr-filter {
+        grid-template-columns: 1fr;
+      }
+      .rcr-filter-actions,
+      .rcr-filter-actions .rcr-btn {
+        width: 100%;
+      }
+      .rcr-conference-grid,
+      .rcr-recent-item {
+        grid-template-columns: 1fr;
+      }
       .rcr-conferencia-action .rcr-btn {
         margin-top: 0;
       }
@@ -275,20 +417,107 @@
         <a class="rcr-btn" href="{{ voltar_receber_url }}">Voltar para receber clientes</a>
       </header>
 
+      {% if messages %}
+        {% for message in messages %}
+          <div class="rcr-alert {{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+
+      <form class="rcr-filter" method="get" action="{% url 'estoque:receber_cliente_recebimentos_rota' %}">
+        <div class="rcr-filter-fields">
+          <div class="rcr-field">
+            <label>Rota selecionada</label>
+            <input type="text" value="{{ rota_filtro }}" readonly>
+            <input type="hidden" name="rota" value="{{ rota_filtro }}">
+            {% if request.GET.next %}<input type="hidden" name="next" value="{{ request.GET.next }}">{% endif %}
+          </div>
+          <div class="rcr-field">
+            <label for="dataHistoricoRota">Data consultada</label>
+            <input id="dataHistoricoRota" name="data" type="date" value="{{ data_referencia_iso }}">
+          </div>
+        </div>
+        <div class="rcr-filter-actions">
+          <a class="rcr-btn secondary" href="{{ hoje_url }}">Hoje</a>
+          <a class="rcr-btn secondary" href="{{ ontem_url }}">Ontem</a>
+          <button class="rcr-btn" type="submit">Buscar</button>
+        </div>
+      </form>
+
+      {% if historico_recente_datas %}
+        <section class="rcr-recent" aria-label="Histórico recente da rota">
+          <h2 class="rcr-recent-title">Histórico recente por data</h2>
+          <div class="rcr-recent-list">
+            {% for item in historico_recente_datas %}
+              <a class="rcr-recent-item{% if item.ativo %} ativo{% endif %}" href="{{ item.url }}">
+                <span>{{ item.data_formatada }}</span>
+                <span>{{ item.recebimentos }} recebimento{{ item.recebimentos|pluralize }}</span>
+                <span>{{ item.total_formatado }}</span>
+                <span>{{ item.status }}</span>
+              </a>
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+
       <section class="rcr-summary" aria-label="Resumo dos recebimentos da rota">
+        <div class="rcr-card">
+          <span class="rcr-label">Data consultada</span>
+          <span class="rcr-value">{{ data_referencia_formatada }}</span>
+        </div>
         <div class="rcr-card">
           <span class="rcr-label">Clientes recebidos</span>
           <span class="rcr-value">{{ clientes_recebidos_qtd }}</span>
         </div>
         <div class="rcr-card">
-          <span class="rcr-label">Total recebido</span>
+          <span class="rcr-label">Recebimentos registrados</span>
+          <span class="rcr-value">{{ operacoes_recebidas_qtd }}</span>
+        </div>
+        <div class="rcr-card">
+          <span class="rcr-label">Dinheiro</span>
+          <span class="rcr-value money">{{ total_dinheiro_formatado }}</span>
+        </div>
+        <div class="rcr-card">
+          <span class="rcr-label">Pix</span>
+          <span class="rcr-value money">{{ total_pix_formatado }}</span>
+        </div>
+        <div class="rcr-card">
+          <span class="rcr-label">Cartão</span>
+          <span class="rcr-value money">{{ total_cartao_formatado }}</span>
+        </div>
+        <div class="rcr-card">
+          <span class="rcr-label">Crédito gerado</span>
+          <span class="rcr-value money">{{ credito_gerado_formatado }}</span>
+        </div>
+        <div class="rcr-card">
+          <span class="rcr-label">Total geral recebido</span>
           <span class="rcr-value money">{{ total_recebimentos_rota_dia_formatado }}</span>
         </div>
       </section>
 
-      <div class="rcr-conferencia-action">
-        <a class="rcr-btn" href="{{ conferir_recebimentos_url }}">Conferir recebimentos</a>
-      </div>
+      <section class="rcr-conference" aria-label="Status da conferência">
+        <div class="rcr-conference-head">
+          <h2 class="rcr-conference-title">Conferência da rota e data</h2>
+          <span class="rcr-status{% if conferencia_concluida %} ok{% endif %}">{{ status_conferencia }}</span>
+        </div>
+        {% if conferencia_concluida %}
+          <div class="rcr-conference-grid">
+            <span>Conferido por: {{ fechamento_resumo.usuario_nome }}</span>
+            <span>Finalizado em: {{ fechamento_resumo.finalizado_em|date:"d/m/Y H:i" }}</span>
+            <span>Esperado: {{ fechamento_resumo.valor_esperado_formatado }}</span>
+            <span>Contado: {{ fechamento_resumo.valor_contado_formatado }}</span>
+            <span>Diferença: {{ fechamento_resumo.diferenca_formatada }}</span>
+          </div>
+          <div class="rcr-conferencia-action">
+            <a class="rcr-btn" href="{{ conferir_recebimentos_url }}">Ver conferência</a>
+          </div>
+        {% elif tem_recebimentos %}
+          <div class="rcr-conferencia-action">
+            <a class="rcr-btn" href="{{ conferir_recebimentos_url }}">Fazer conferência</a>
+          </div>
+        {% else %}
+          <p class="rcr-empty">Não há recebimentos nesta data para finalizar conferência.</p>
+        {% endif %}
+      </section>
 
       {% if historico_recebimentos_rota_dia %}
         <section class="rcr-list" aria-label="Recebimentos da rota no dia">
@@ -315,14 +544,14 @@
               </div>
               {% if item.credito_gerado > 0 %}
                 <div class="rcr-row-credit">
-                  <span class="rcr-value-line rcr-highlight credito">Credito gerado: {{ item.credito_gerado_formatado }}</span>
+                  <span class="rcr-value-line rcr-highlight credito">Crédito gerado: {{ item.credito_gerado_formatado }}</span>
                 </div>
               {% endif %}
             </article>
           {% endfor %}
         </section>
       {% else %}
-        <div class="rcr-empty">Nenhum recebimento de hoje encontrado para esta rota.</div>
+        <div class="rcr-empty">Nenhum recebimento registrado para esta rota nesta data</div>
       {% endif %}
     </div>
   </main>

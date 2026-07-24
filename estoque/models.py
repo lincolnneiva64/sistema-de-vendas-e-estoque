@@ -613,7 +613,7 @@ class FechamentoRotaRecebimento(models.Model):
     METODO_CEDULAS = "cedulas"
     METODO_DIRETA = "direta"
     METODO_CHOICES = [
-        (METODO_CEDULAS, "Cedulas"),
+        (METODO_CEDULAS, "Cédulas"),
         (METODO_DIRETA, "Direta"),
     ]
 
@@ -641,6 +641,7 @@ class FechamentoRotaRecebimento(models.Model):
     total_conferido = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     diferenca = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     observacao = models.TextField(blank=True)
+    composicao_cedulas = models.JSONField(default=dict, blank=True)
     criado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -655,6 +656,12 @@ class FechamentoRotaRecebimento(models.Model):
         ordering = ["-data_referencia", "rota", "-id"]
         verbose_name = "Fechamento de recebimentos da rota"
         verbose_name_plural = "Fechamentos de recebimentos da rota"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["rota", "data_referencia"],
+                name="uniq_fechamento_rota_recebimento_data",
+            ),
+        ]
 
     def __str__(self):
         return f"Fechamento {self.rota} - {self.data_referencia:%d/%m/%Y}"

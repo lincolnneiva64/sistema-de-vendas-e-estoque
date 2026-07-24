@@ -88,6 +88,42 @@
       background: #fff;
       padding: 13px;
     }
+    .conf-readonly-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .conf-readonly-item {
+      border: 1px solid #d7dee8;
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 10px;
+    }
+    .conf-readonly-value {
+      display: block;
+      margin-top: 5px;
+      font-weight: 900;
+      overflow-wrap: anywhere;
+    }
+    .conf-composition {
+      margin-top: 12px;
+    }
+    .conf-composition-list {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      padding: 0;
+      margin: 8px 0 0;
+      list-style: none;
+    }
+    .conf-composition-list li {
+      border: 1px solid #d7dee8;
+      border-radius: 8px;
+      padding: 9px;
+      font-weight: 800;
+      background: #fff;
+    }
     .conf-section-title {
       margin: 0 0 10px;
       font-size: 1.05rem;
@@ -397,6 +433,10 @@
       .conf-compare-grid {
         grid-template-columns: 1fr;
       }
+      .conf-readonly-grid,
+      .conf-composition-list {
+        grid-template-columns: 1fr;
+      }
       .conf-actions {
         display: block;
       }
@@ -437,7 +477,7 @@
     <div class="conf-shell">
       <header class="conf-top">
         <div>
-          <h1 class="conf-title">Conferência de Recebimentos</h1>
+          <h1 class="conf-title">{% if conferencia_concluida %}Conferência realizada{% else %}Conferência de Recebimentos{% endif %}</h1>
           {% if rota_filtro %}
             <p class="conf-subtitle">{{ rota_filtro }} - {{ data_referencia|date:"d/m/Y" }}</p>
           {% endif %}
@@ -478,6 +518,62 @@
         </div>
       </section>
 
+      {% if conferencia_concluida %}
+      <section class="conf-count-panel" aria-label="Conferência realizada">
+        <h2 class="conf-section-title">Resumo da conferência realizada</h2>
+        <div class="conf-readonly-grid">
+          <div class="conf-readonly-item">
+            <span class="conf-label">Rota</span>
+            <strong class="conf-readonly-value">{{ rota_filtro }}</strong>
+          </div>
+          <div class="conf-readonly-item">
+            <span class="conf-label">Data</span>
+            <strong class="conf-readonly-value">{{ data_referencia|date:"d/m/Y" }}</strong>
+          </div>
+          <div class="conf-readonly-item">
+            <span class="conf-label">Valor esperado</span>
+            <strong class="conf-readonly-value">{{ fechamento_resumo.valor_esperado_formatado }}</strong>
+          </div>
+          <div class="conf-readonly-item">
+            <span class="conf-label">Valor contado</span>
+            <strong class="conf-readonly-value">{{ fechamento_resumo.valor_contado_formatado }}</strong>
+          </div>
+          <div class="conf-readonly-item">
+            <span class="conf-label">Diferença</span>
+            <strong class="conf-readonly-value">{{ fechamento_resumo.diferenca_formatada }}</strong>
+          </div>
+          <div class="conf-readonly-item">
+            <span class="conf-label">Método</span>
+            <strong class="conf-readonly-value">{{ fechamento_resumo.metodo_texto }}</strong>
+          </div>
+          <div class="conf-readonly-item">
+            <span class="conf-label">Responsável</span>
+            <strong class="conf-readonly-value">{{ fechamento_resumo.usuario_nome }}</strong>
+          </div>
+          <div class="conf-readonly-item">
+            <span class="conf-label">Finalizada em</span>
+            <strong class="conf-readonly-value">{{ fechamento_resumo.finalizado_em|date:"d/m/Y H:i" }}</strong>
+          </div>
+          <div class="conf-readonly-item">
+            <span class="conf-label">Observação</span>
+            <strong class="conf-readonly-value">{{ fechamento_resumo.observacao|default:"-" }}</strong>
+          </div>
+        </div>
+        {% if fechamento_resumo.composicao_itens %}
+          <div class="conf-composition">
+            <h3 class="conf-money-title">Composição de cédulas e moedas</h3>
+            <ul class="conf-composition-list">
+              {% for item in fechamento_resumo.composicao_itens %}
+                <li>{{ item.rotulo }}: {{ item.quantidade }} un. - {{ item.total_formatado }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+        <div class="conf-actions">
+          <a class="conf-btn" href="{{ voltar_url }}">Voltar aos recebimentos da rota</a>
+        </div>
+      </section>
+      {% else %}
       <section class="conf-count-panel" aria-label="Contagem por cédulas e moedas">
         <form method="post" id="formConferenciaRecebimentos">
           {% csrf_token %}
@@ -600,6 +696,7 @@
           </div>
         </form>
       </section>
+      {% endif %}
     </div>
   </main>
   <div id="modalCalculadoraConferencia" class="conf-calc-modal" hidden>
