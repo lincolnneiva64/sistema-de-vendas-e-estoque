@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Conferencia de Recebimentos</title>
+  <title>Conferência de Recebimentos</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -301,25 +301,12 @@
       background: rgba(15, 23, 42, .55);
       padding: 16px;
     }
-    .conf-calc-modal.lateral {
-      display: block;
-      background: transparent;
-      pointer-events: none;
-      padding: 0;
-    }
     .conf-calc-dialog {
       width: min(360px, 100%);
       border-radius: 10px;
       background: #fff;
       box-shadow: 0 20px 60px rgba(15, 23, 42, .28);
       padding: 14px;
-    }
-    .conf-calc-modal.lateral .conf-calc-dialog {
-      position: fixed;
-      top: var(--conf-calc-top, 24px);
-      left: var(--conf-calc-left, auto);
-      width: 360px;
-      pointer-events: auto;
     }
     .conf-calc-header {
       display: flex;
@@ -420,23 +407,27 @@
         align-items: stretch;
         padding: 8px;
       }
-      .conf-calc-modal.lateral {
-        display: grid;
-        place-items: center;
-        background: rgba(15, 23, 42, .55);
-        pointer-events: auto;
-        padding: 8px;
-      }
-      .conf-calc-modal.lateral .conf-calc-dialog {
-        position: static;
-        width: 100%;
-      }
       .conf-calc-dialog {
         width: 100%;
         min-height: calc(100vh - 16px);
         display: flex;
         flex-direction: column;
         justify-content: center;
+      }
+    }
+    @media (min-width: 1100px) {
+      .conf-calc-modal {
+        display: block;
+        padding: 0;
+      }
+      .conf-calc-dialog {
+        position: fixed;
+        top: 80px;
+        right: 24px;
+        left: auto;
+        width: min(340px, calc(100vw - 32px));
+        max-height: calc(100vh - 100px);
+        overflow-y: auto;
       }
     }
   </style>
@@ -460,7 +451,7 @@
         {% endfor %}
       {% endif %}
 
-      <section class="conf-summary" aria-label="Resumo da conferencia">
+      <section class="conf-summary" aria-label="Resumo da conferência">
         <div class="conf-card">
           <span class="conf-label">Clientes recebidos</span>
           <span class="conf-value">{{ clientes_recebidos_qtd }}</span>
@@ -474,11 +465,11 @@
           <span class="conf-value money">{{ total_pix_formatado }}</span>
         </div>
         <div class="conf-card">
-          <span class="conf-label">Cartao</span>
+          <span class="conf-label">Cartão</span>
           <span class="conf-value money">{{ total_cartao_formatado }}</span>
         </div>
         <div class="conf-card">
-          <span class="conf-label">Credito gerado</span>
+          <span class="conf-label">Crédito gerado</span>
           <span class="conf-value money">{{ credito_gerado_formatado }}</span>
         </div>
         <div class="conf-card">
@@ -487,10 +478,10 @@
         </div>
       </section>
 
-      <section class="conf-count-panel" aria-label="Contagem por cedulas e moedas">
+      <section class="conf-count-panel" aria-label="Contagem por cédulas e moedas">
         <form method="post" id="formConferenciaRecebimentos">
           {% csrf_token %}
-        <h2 class="conf-section-title">Metodo de conferencia</h2>
+        <h2 class="conf-section-title">Método de conferência</h2>
         <div class="conf-methods">
           <label class="conf-method">
             <input type="radio" name="metodo_conferencia_visual" value="cedulas" {% if metodo_selecionado != "direta" %}checked{% endif %}>
@@ -592,20 +583,20 @@
                 <strong id="valorContadoComparacao" class="conf-compare-value">R$ 0,00</strong>
               </div>
               <div class="conf-compare-item">
-                <span class="conf-label">DiferenÃ§a</span>
+                <span class="conf-label">DIFERENÇA</span>
                 <strong id="diferencaConferencia" class="conf-compare-value">{% if total_recebido_centavos > 0 %}{{ total_recebido_formatado }}{% else %}R$ 0,00{% endif %}</strong>
               </div>
             </div>
-            <p id="statusConferencia" class="conf-compare-status">{% if total_recebido_centavos > 0 %}Falta de {{ total_recebido_formatado }}.{% else %}ConferÃªncia correta.{% endif %}</p>
+            <p id="statusConferencia" class="conf-compare-status">{% if total_recebido_centavos > 0 %}Falta de {{ total_recebido_formatado }}.{% else %}Conferência correta.{% endif %}</p>
           </div>
 
           <div id="campoObservacaoDiferenca" class="conf-observation" hidden>
-            <label for="observacaoConferencia">Observacao da diferenca</label>
+            <label for="observacaoConferencia">Observação da diferença</label>
             <textarea id="observacaoConferencia" name="observacao_conferencia" rows="3">{{ observacao_inicial }}</textarea>
           </div>
 
           <div class="conf-actions">
-            <button type="submit" id="botaoFinalizarConferencia" class="conf-submit">Finalizar conferencia</button>
+            <button type="submit" id="botaoFinalizarConferencia" class="conf-submit">Finalizar conferência</button>
           </div>
         </form>
       </section>
@@ -659,7 +650,6 @@
     const abrirCalculadoraEl = document.getElementById("abrirCalculadoraConferencia");
     const modalCalculadoraEl = document.getElementById("modalCalculadoraConferencia");
     const dialogCalculadoraEl = document.getElementById("dialogCalculadoraConferencia");
-    const painelConferenciaEl = document.querySelector(".conf-count-panel");
     const fecharCalculadoraEl = document.getElementById("fecharCalculadoraConferencia");
     const visorCalculadoraEl = document.getElementById("visorCalculadoraConferencia");
     const usarResultadoCalculadoraEl = document.getElementById("usarResultadoCalculadoraConferencia");
@@ -740,7 +730,7 @@
         resumoComparacaoEl.classList.add("correta");
         if (observacaoWrapperEl) observacaoWrapperEl.hidden = true;
         if (observacaoEl) observacaoEl.required = false;
-        statusEl.textContent = "ConferÃªncia correta.";
+        statusEl.textContent = "Conferência correta.";
       } else if (diferenca < 0) {
         resumoComparacaoEl.classList.add("falta");
         if (observacaoWrapperEl) observacaoWrapperEl.hidden = false;
@@ -773,38 +763,6 @@
       return modalCalculadoraEl && !modalCalculadoraEl.hidden;
     }
 
-    function limparPosicaoCalculadora() {
-      if (!modalCalculadoraEl) return;
-      modalCalculadoraEl.classList.remove("lateral");
-      modalCalculadoraEl.style.removeProperty("--conf-calc-left");
-      modalCalculadoraEl.style.removeProperty("--conf-calc-top");
-    }
-
-    function posicionarCalculadora() {
-      if (!calculadoraAberta() || !modalCalculadoraEl || !dialogCalculadoraEl || !painelConferenciaEl) return;
-
-      limparPosicaoCalculadora();
-      if (window.matchMedia && window.matchMedia("(max-width: 720px)").matches) return;
-
-      const margem = 24;
-      const painelRect = painelConferenciaEl.getBoundingClientRect();
-      const larguraViewport = document.documentElement.clientWidth || window.innerWidth;
-      const alturaViewport = document.documentElement.clientHeight || window.innerHeight;
-      const larguraDialog = dialogCalculadoraEl.offsetWidth || 360;
-      const alturaDialog = dialogCalculadoraEl.offsetHeight || 0;
-      const left = Math.ceil(painelRect.right + margem);
-
-      if (left + larguraDialog + margem > larguraViewport) return;
-
-      const topoIdeal = Math.max(margem, Math.floor(painelRect.top));
-      const topoMaximo = Math.max(margem, alturaViewport - alturaDialog - margem);
-      const top = Math.min(topoIdeal, topoMaximo);
-
-      modalCalculadoraEl.style.setProperty("--conf-calc-left", left + "px");
-      modalCalculadoraEl.style.setProperty("--conf-calc-top", top + "px");
-      modalCalculadoraEl.classList.add("lateral");
-    }
-
     function atualizarTextoUsoCalculadora() {
       if (!usarResultadoCalculadoraEl) return;
       usarResultadoCalculadoraEl.textContent = metodoSelecionado() === "direta" ? "Usar resultado" : "Copiar resultado";
@@ -829,8 +787,6 @@
 
     function adicionarValorCalculadora(valor) {
       if (!valor) return;
-      if (valor === "×") valor = "\u00c3\u2014";
-      if (valor === "÷") valor = "\u00c3\u00b7";
       const ultimo = expressaoCalculadora.slice(-1);
       if (operadorCalculadora(valor)) {
         expressaoCalculadora = operadorCalculadora(ultimo)
@@ -890,19 +846,14 @@
       atualizarVisorCalculadora();
       atualizarTextoUsoCalculadora();
       modalCalculadoraEl.hidden = false;
-      posicionarCalculadora();
       document.removeEventListener("keydown", controlarTecladoCalculadora);
       document.addEventListener("keydown", controlarTecladoCalculadora);
-      window.removeEventListener("resize", posicionarCalculadora);
-      window.addEventListener("resize", posicionarCalculadora);
       if (dialogCalculadoraEl) dialogCalculadoraEl.focus();
     }
 
     function fecharCalculadora() {
       if (modalCalculadoraEl) modalCalculadoraEl.hidden = true;
-      limparPosicaoCalculadora();
       document.removeEventListener("keydown", controlarTecladoCalculadora);
-      window.removeEventListener("resize", posicionarCalculadora);
       if (abrirCalculadoraEl) abrirCalculadoraEl.focus();
     }
 

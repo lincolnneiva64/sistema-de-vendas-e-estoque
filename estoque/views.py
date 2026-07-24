@@ -12283,9 +12283,9 @@ def _total_cedulas_conferencia_post(post_data):
         try:
             quantidade = int(texto)
         except ValueError:
-            raise ValueError("Informe apenas quantidades inteiras na contagem por cedulas.")
+            raise ValueError("Informe apenas quantidades inteiras na contagem por cédulas.")
         if quantidade < 0:
-            raise ValueError("Informe apenas quantidades positivas na contagem por cedulas.")
+            raise ValueError("Informe apenas quantidades positivas na contagem por cédulas.")
         total_centavos += quantidade * valor_centavos
     return _centavos_para_decimal(total_centavos)
 
@@ -12296,9 +12296,9 @@ def _total_conferido_post(post_data, metodo_conferencia):
     if metodo_conferencia == FechamentoRotaRecebimento.METODO_DIRETA:
         total_conferido = _parse_decimal_financeiro(post_data.get("valor_conferencia_direta"))
         if total_conferido is None or total_conferido < Decimal("0.00"):
-            raise ValueError("Informe um valor total contado valido.")
+            raise ValueError("Informe um valor total contado válido.")
         return total_conferido
-    raise ValueError("Selecione um metodo de conferencia valido.")
+    raise ValueError("Selecione um método de conferência válido.")
 
 
 @ensure_csrf_cookie
@@ -12371,7 +12371,7 @@ def conferencia_recebimentos_rota(request):
             total_sistema = (resumo["total_recebido"] or Decimal("0.00")).quantize(Decimal("0.01"))
             diferenca = (total_conferido - total_sistema).quantize(Decimal("0.01"))
             if diferenca != Decimal("0.00") and not observacao_inicial:
-                messages.warning(request, "Informe uma observacao para finalizar com falta ou sobra.")
+                messages.warning(request, "Informe uma observação para finalizar com falta ou sobra.")
             else:
                 usuario = request.user if getattr(request.user, "is_authenticated", False) else None
                 FechamentoRotaRecebimento.objects.create(
@@ -12386,7 +12386,7 @@ def conferencia_recebimentos_rota(request):
                     diferenca=diferenca,
                     observacao=observacao_inicial,
                 )
-                messages.success(request, "Conferencia finalizada com sucesso.")
+                messages.success(request, "Conferência finalizada com sucesso.")
                 return redirect(request.get_full_path())
 
     return render(
