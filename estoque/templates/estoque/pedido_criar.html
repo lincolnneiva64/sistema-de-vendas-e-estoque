@@ -140,6 +140,13 @@
             border-left: 5px solid #16a34a;
         }
 
+        .mensagem-tela.warning {
+            display: block;
+            background: #fff7ed;
+            color: #9a3412;
+            border-left: 5px solid #f97316;
+        }
+
         .pedido-card {
             background: #ffffff;
             border: 1px solid #cfe7d5;
@@ -1904,6 +1911,12 @@
             {% endif %}
         </div>
 
+        {% if messages %}
+            {% for message in messages %}
+                <div class="mensagem-tela {{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+
         <div id="mensagem-tela" class="mensagem-tela" aria-live="polite"></div>
 
         <div id="modal-confirmacao-saida" class="modal-confirmacao-saida">
@@ -1974,7 +1987,7 @@
                         <select id="cliente_id" name="cliente_id" class="cliente-select-mobile" required>
                             <option value="">Selecione um cliente</option>
                             {% for cliente in clientes %}
-                                <option value="{{ cliente.id }}" {% if pedido_modo_edicao and pedido.cliente_id == cliente.id %}selected{% endif %}>{{ cliente.nome }}</option>
+                                <option value="{{ cliente.id }}" {% if pedido_modo_edicao and pedido.cliente_id == cliente.id or cliente_preselecionado and cliente_preselecionado.id == cliente.id %}selected{% endif %}>{{ cliente.nome }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -2145,6 +2158,9 @@
 
             <input type="hidden" id="itens_json" name="itens_json" value="[]">
             <input type="hidden" id="proxima_acao" name="proxima_acao" value="">
+            {% if pedido_next_url %}
+                <input type="hidden" id="pedido_next" name="next" value="{{ pedido_next_url }}">
+            {% endif %}
 
             <footer class="rodape-pedido">
                 <div class="rodape-inner">
@@ -2153,7 +2169,7 @@
                         <span>Total do pedido: <strong id="resumo-total">R$ 0,00</strong></span>
                     </div>
                     <div class="acoes">
-                        <a href="{% if pedido_modo_edicao %}{% url 'estoque:pedido_detalhe' pedido.id %}{% else %}{% url 'estoque:pedidos' %}{% endif %}" class="btn-cancelar" id="btn-cancelar-form">Cancelar</a>
+                        <a href="{% if pedido_next_url %}{{ pedido_next_url }}{% elif pedido_modo_edicao %}{% url 'estoque:pedido_detalhe' pedido.id %}{% else %}{% url 'estoque:pedidos' %}{% endif %}" class="btn-cancelar" id="btn-cancelar-form">Cancelar</a>
                         <button type="submit" class="btn btn-salvar" id="btn-salvar" name="acao_pedido" value="salvar_pedido" data-proxima-acao="">{% if pedido_modo_edicao %}Salvar Alteracoes{% else %}Salvar Pedido{% endif %}</button>
                         {% if not pedido_modo_edicao %}
                             <button type="submit" class="btn btn-salvar-venda" id="btn-salvar-venda" name="acao_pedido" value="enviar_venda" data-proxima-acao="enviar_venda">Salvar e Enviar para Venda</button>

@@ -17287,6 +17287,26 @@ class PixRecebidoTests(TestCase):
         )
         self.assertNotContains(resposta, "Cliente Outra Rota")
 
+    def test_receber_cliente_confirmado_mostra_botao_pedido_para_cliente_atual_com_contexto(self):
+        cliente_atual = Cliente.objects.create(nome="Cliente Pedido Pos Recebimento", bairro="Centro", ativo=True)
+        cliente_proximo = Cliente.objects.create(nome="Cliente Pedido Proximo", bairro="Centro", ativo=True)
+        self._criar_conta_receber_pix(cliente_proximo, "80.00")
+        operacao = self._criar_operacao_recebimento_cliente(cliente_atual, rota="Centro")
+
+        resposta = self.client.get(self._url_recebimento_confirmado(cliente_atual, operacao), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Fazer pedido para este cliente")
+        self.assertContains(resposta, reverse("estoque:pedido_criar"))
+        self.assertContains(resposta, f"cliente_id={cliente_atual.id}")
+        self.assertContains(resposta, "origem=recebimento")
+        self.assertContains(resposta, "rota=Centro")
+        self.assertContains(resposta, f"data={timezone.localdate().isoformat()}")
+        self.assertContains(resposta, f"operacao_id={operacao.id}")
+        conteudo = resposta.content.decode("utf-8")
+        self.assertLess(conteudo.index("Cobrar proximo cliente"), conteudo.index("Fazer pedido para este cliente"))
+        self.assertIn("next=", conteudo)
+
     def test_receber_cliente_confirmado_sugere_cliente_recebido_hoje_com_pendencia_restante(self):
         cliente_atual = Cliente.objects.create(nome="Cliente Atual Sugestao", bairro="Centro", ativo=True)
         cliente_proximo = Cliente.objects.create(nome="Cliente Parcial Ainda Deve", bairro="Centro", ativo=True)
@@ -19463,30 +19483,35 @@ class PedidoTests(TestCase):
             secure=True,
         )
 
-    def _post_criar_pedido(self, proxima_acao="", operador="Operador Pedido"):
-        itens = [
-            {
-                "produto_id": self.produto.id,
-                "produto_nome": self.produto.nome,
-                "quantidade": "2.000",
-                "unidade": "Un",
-                "preco_unitario": "100.00",
-                "valor_total": "200.00",
-                "estoque_no_momento": str(self.produto.quantidade),
-                "observacao": "",
-            }
-        ]
+    def _post_criar_pedido(self, proxima_acao="", operador="Operador Pedido", cliente=None, next_url="", itens=None):
+        cliente = cliente or self.cliente
+        if itens is None:
+            itens = [
+                {
+                    "produto_id": self.produto.id,
+                    "produto_nome": self.produto.nome,
+                    "quantidade": "2.000",
+                    "unidade": "Un",
+                    "preco_unitario": "100.00",
+                    "valor_total": "200.00",
+                    "estoque_no_momento": str(self.produto.quantidade),
+                    "observacao": "",
+                }
+            ]
+        dados = {
+            "data_pedido": timezone.localdate().isoformat(),
+            "cliente_id": cliente.id,
+            "data_prevista_entrega": "",
+            "operador": operador,
+            "observacao": "",
+            "itens_json": json.dumps(itens),
+            "proxima_acao": proxima_acao,
+        }
+        if next_url:
+            dados["next"] = next_url
         return self.client.post(
             reverse("estoque:pedido_criar"),
-            data={
-                "data_pedido": timezone.localdate().isoformat(),
-                "cliente_id": self.cliente.id,
-                "data_prevista_entrega": "",
-                "operador": operador,
-                "observacao": "",
-                "itens_json": json.dumps(itens),
-                "proxima_acao": proxima_acao,
-            },
+            data=dados,
             secure=True,
         )
 
@@ -19535,6 +19560,154 @@ class PedidoTests(TestCase):
         self.assertIn("Salvar este pedido e abrir o envio para venda?", conteudo)
         self.assertIn("salvamentoEmAndamento", conteudo)
         self.assertIn('index === remocaoPendente ? "Confirmar" : "Remover"', conteudo)
+
+    def test_pedido_criar_abre_com_cliente_preselecionado_por_id_e_preserva_next(self):
+        next_url = "/contas-a-receber/cliente/99/operacao/88/recebimento-confirmado/?rota=Centro&data=2026-07-24"
+        resposta = self.client.get(
+            reverse("estoque:pedido_criar"),
+            {"cliente_id": self.cliente.id, "next": next_url, "origem": "recebimento"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(
+            resposta,
+            f'<option value="{self.cliente.id}" selected>{self.cliente.nome}</option>',
+            html=True,
+        )
+        self.assertContains(resposta, 'name="next"')
+        self.assertContains(resposta, "rota=Centro&amp;data=2026-07-24")
+        self.assertContains(resposta, 'class="btn-cancelar" id="btn-cancelar-form"')
+        self.assertContains(resposta, "recebimento-confirmado/?rota=Centro&amp;data=2026-07-24")
+
+    def test_pedido_criar_cliente_inexistente_nao_gera_erro_500(self):
+        resposta = self.client.get(
+            reverse("estoque:pedido_criar"),
+            {"cliente_id": "999999"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Cliente informado para o pedido nao foi encontrado.")
+        self.assertNotContains(resposta, "selected>Cliente Teste</option>")
+
+    def test_pedido_criar_rejeita_next_externo_e_mantem_cancelar_padrao(self):
+        resposta = self.client.get(
+            reverse("estoque:pedido_criar"),
+            {"cliente_id": self.cliente.id, "next": "https://evil.example/voltar"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotContains(resposta, 'name="next"')
+        self.assertContains(
+            resposta,
+            f'href="{reverse("estoque:pedidos")}" class="btn-cancelar" id="btn-cancelar-form"',
+        )
+
+    def test_pedido_criar_homonimo_preseleciona_cliente_pelo_id(self):
+        homonimo = Cliente.objects.create(nome=self.cliente.nome, ativo=True)
+
+        resposta = self.client.get(
+            reverse("estoque:pedido_criar"),
+            {"cliente_id": homonimo.id},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, f'<option value="{homonimo.id}" selected>{homonimo.nome}</option>', html=True)
+        self.assertContains(resposta, f'<option value="{self.cliente.id}">{self.cliente.nome}</option>', html=True)
+
+    def test_pedido_criar_post_invalido_nao_perde_next_nem_cria_pedido(self):
+        from .models import Pedido
+
+        next_url = "/contas-a-receber/cliente/1/operacao/2/recebimento-confirmado/?rota=Centro&data=2026-07-24"
+        resposta = self._post_criar_pedido(next_url=next_url, itens=[])
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertFalse(dados["sucesso"])
+        self.assertEqual(Pedido.objects.count(), 0)
+
+    def test_pedido_criar_sem_next_mantem_redirect_antigo(self):
+        from .models import Pedido
+
+        resposta = self._post_criar_pedido()
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        pedido = Pedido.objects.get()
+        self.assertTrue(dados["sucesso"])
+        self.assertEqual(dados["redirect_url"], reverse("estoque:pedido_detalhe", args=[pedido.id]))
+
+    def test_pedido_criar_com_next_retorna_pos_recebimento_sem_alterar_recebimento(self):
+        from .models import Pedido
+
+        cliente_proximo = Cliente.objects.create(nome="Cliente Proximo Depois Pedido", bairro="Centro", ativo=True)
+        self.cliente.bairro = "Centro"
+        self.cliente.save(update_fields=["bairro"])
+        venda_proximo = Venda.objects.create(
+            cliente=cliente_proximo,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("80.00"),
+        )
+        ContaReceber.objects.create(
+            venda=venda_proximo,
+            cliente=cliente_proximo,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("80.00"),
+            valor_em_aberto=Decimal("80.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+        operacao = OperacaoRecebimentoCliente.objects.create(
+            cliente=self.cliente,
+            cliente_nome_snapshot=self.cliente.nome,
+            valor_recebido=Decimal("100.00"),
+            valor_aplicado=Decimal("100.00"),
+            saldo_anterior=Decimal("100.00"),
+            saldo_atual=Decimal("0.00"),
+            data_recebimento=timezone.localdate(),
+            forma_pagamento="PIX",
+            rota_snapshot="Centro",
+            status_recibo=OperacaoRecebimentoCliente.STATUS_RECIBO_ENVIADO,
+        )
+        FechamentoRotaRecebimento.objects.create(
+            rota="Centro",
+            data_referencia=timezone.localdate(),
+            status=FechamentoRotaRecebimento.STATUS_FINALIZADO,
+            total_sistema=Decimal("100.00"),
+            total_conferido=Decimal("100.00"),
+        )
+        next_url = (
+            reverse(
+                "estoque:receber_cliente_confirmado",
+                kwargs={"cliente_id": self.cliente.id, "operacao_id": operacao.id},
+            )
+            + f"?{urlencode({'rota': 'Centro', 'data': timezone.localdate().isoformat(), 'origem': 'recebimento'})}"
+        )
+        operacoes_antes = OperacaoRecebimentoCliente.objects.count()
+        recibo_antes = operacao.status_recibo
+        fechamentos_antes = FechamentoRotaRecebimento.objects.count()
+
+        resposta = self._post_criar_pedido(next_url=next_url)
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["sucesso"])
+        self.assertEqual(dados["redirect_url"], next_url)
+        pedido = Pedido.objects.get()
+        self.assertEqual(pedido.cliente_id, self.cliente.id)
+        self.assertEqual(OperacaoRecebimentoCliente.objects.count(), operacoes_antes)
+        self.assertEqual(FechamentoRotaRecebimento.objects.count(), fechamentos_antes)
+        operacao.refresh_from_db()
+        self.assertEqual(operacao.status_recibo, recibo_antes)
+
+        retorno = self.client.get(next_url, secure=True)
+        self.assertContains(retorno, "Pedido do cliente registrado com sucesso")
+        self.assertContains(retorno, "Cliente Proximo Depois Pedido")
+        self.assertContains(retorno, "Cobrar proximo cliente")
+        self.assertContains(retorno, "Recebimentos do dia")
 
     def test_funcionario_marcado_na_tela_aparece_como_operador_no_pedido(self):
         resposta_funcionario = self.client.post(

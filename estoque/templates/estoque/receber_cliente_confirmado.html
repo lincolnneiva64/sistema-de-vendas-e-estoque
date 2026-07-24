@@ -209,6 +209,22 @@
     font-weight: 850;
     line-height: 1.28;
   }
+  .rcp-message {
+    margin-bottom: 8px;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    background: #f0fdf4;
+    color: #166534;
+    padding: 9px 11px;
+    font-size: 0.84rem;
+    font-weight: 900;
+  }
+  .rcp-message.warning,
+  .rcp-message.error {
+    border-color: #fed7aa;
+    background: #fff7ed;
+    color: #9a3412;
+  }
   .rcp-recibo-pill {
     display: inline-flex;
     min-height: 34px;
@@ -327,6 +343,12 @@
     min-height: 44px;
     padding-inline: 16px;
     font-size: 0.92rem;
+  }
+  .rcp-route-actions .rcp-btn.order {
+    flex-basis: 100%;
+    border-color: #99f6e4;
+    background: #ecfdf5;
+    color: #0f766e;
   }
   .rcp-route-history {
     display: grid;
@@ -475,6 +497,12 @@
       </p>
     </header>
 
+    {% if messages %}
+      {% for message in messages %}
+        <div class="rcp-message {{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
     <section class="rcp-panel">
       <div class="rcp-panel-body">
         <h2 class="rcp-section-title">Resumo financeiro</h2>
@@ -563,11 +591,17 @@
               </p>
               <div class="rcp-route-actions">
                 <a class="rcp-btn primary" href="{{ proximo_cliente_recebimento.receber_url }}">Cobrar proximo cliente</a>
+                {% if fazer_pedido_cliente_url %}
+                  <a class="rcp-btn secondary order" href="{{ fazer_pedido_cliente_url }}">Fazer pedido para este cliente</a>
+                {% endif %}
                 <a class="rcp-btn secondary" href="{{ contexto_rota_recebimento.escolher_url }}">Escolher outro cliente</a>
               </div>
             {% else %}
               <p class="rcp-route-text">Nao ha proximo cliente pendente para esta rota.</p>
               <div class="rcp-route-actions">
+                {% if fazer_pedido_cliente_url %}
+                  <a class="rcp-btn secondary order" href="{{ fazer_pedido_cliente_url }}">Fazer pedido para este cliente</a>
+                {% endif %}
                 <a class="rcp-btn primary" href="{{ contexto_rota_recebimento.escolher_url }}">Escolher outro cliente</a>
               </div>
             {% endif %}

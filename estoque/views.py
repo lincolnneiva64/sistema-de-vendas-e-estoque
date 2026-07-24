@@ -9558,6 +9558,17 @@ def _querystring_retorno(retorno_url):
     return urlencode({"next": retorno_url}) if retorno_url else ""
 
 
+def _url_next_segura_request(request):
+    proxima_url = (request.POST.get("next") or request.GET.get("next") or "").strip()
+    if proxima_url and url_has_allowed_host_and_scheme(
+        url=proxima_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return proxima_url
+    return ""
+
+
 def _formatar_data_cobranca(valor):
     return valor.strftime("%d/%m/%Y") if valor else ""
 
@@ -12622,6 +12633,27 @@ def receber_cliente_confirmado(request, cliente_id, operacao_id):
         operacao,
         contexto_rota_recebimento,
     )
+    data_recebimento = operacao.data_recebimento or timezone.localdate()
+    retorno_pedido_params = {
+        "origem": "recebimento",
+        "data": data_recebimento.isoformat(),
+    }
+    if contexto_rota_recebimento["nome"]:
+        retorno_pedido_params["rota"] = contexto_rota_recebimento["nome"]
+    retorno_pedido_recebimento_url = (
+        f"{reverse('estoque:receber_cliente_confirmado', kwargs={'cliente_id': cliente_id, 'operacao_id': operacao_id})}"
+        f"?{urlencode(retorno_pedido_params)}"
+    )
+    pedido_cliente_params = {
+        "cliente_id": cliente.id,
+        "next": retorno_pedido_recebimento_url,
+        "origem": "recebimento",
+        "data": data_recebimento.isoformat(),
+        "operacao_id": operacao.id,
+    }
+    if contexto_rota_recebimento["nome"]:
+        pedido_cliente_params["rota"] = contexto_rota_recebimento["nome"]
+    fazer_pedido_cliente_url = f"{reverse('estoque:pedido_criar')}?{urlencode(pedido_cliente_params)}"
 
     contexto = {
         "operacao": operacao,
@@ -12647,6 +12679,7 @@ def receber_cliente_confirmado(request, cliente_id, operacao_id):
         "proximo_cliente_recebimento": proximo_cliente_recebimento,
         "historico_recebimentos_rota_dia": historico_recebimentos_rota_dia,
         "total_recebimentos_rota_dia_formatado": _formatar_moeda(total_recebimentos_rota_dia),
+        "fazer_pedido_cliente_url": fazer_pedido_cliente_url,
     }
     return render(request, "estoque/receber_cliente_confirmado.html", contexto)
 
@@ -17864,6 +17897,7 @@ def pedido_criar(request):
     """Criar novo pedido."""
     from .models import Pedido, ItemPedido
 
+    pedido_next_url = _url_next_segura_request(request)
     sugestoes_cliente_id = request.GET.get("sugestoes_cliente_id")
     if request.method == "GET" and sugestoes_cliente_id:
         try:
@@ -17970,6 +18004,8 @@ def pedido_criar(request):
                         logger.exception(f"Erro ao criar item do pedido: {e}")
                         continue
 
+            if pedido_next_url and request.POST.get("proxima_acao") != "enviar_venda":
+                messages.success(request, "Pedido do cliente registrado com sucesso.")
             return JsonResponse({
                 "sucesso": True,
                 "pedido_id": pedido.id,
@@ -17977,7 +18013,7 @@ def pedido_criar(request):
                 "redirect_url": (
                     f"{reverse('estoque:vendas')}?pedido_id={pedido.id}"
                     if request.POST.get("proxima_acao") == "enviar_venda"
-                    else reverse("estoque:pedido_detalhe", args=[pedido.id])
+                    else pedido_next_url or reverse("estoque:pedido_detalhe", args=[pedido.id])
                 ),
             })
 
@@ -17989,11 +18025,20 @@ def pedido_criar(request):
     produtos = Produto.objects.filter(excluido=False).order_by("nome")
     clientes = Cliente.objects.filter(ativo=True).order_by("nome")
     operadores_pedido = list(_operadores_pedido_queryset())
+    cliente_preselecionado = None
+    cliente_id_param = request.GET.get("cliente_id", "").strip()
+    if cliente_id_param:
+        if cliente_id_param.isdigit():
+            cliente_preselecionado = Cliente.objects.filter(pk=int(cliente_id_param), ativo=True).first()
+        if not cliente_preselecionado:
+            messages.warning(request, "Cliente informado para o pedido nao foi encontrado. Selecione o cliente manualmente.")
 
     return render(request, "estoque/pedido_criar.html", {
         "produtos": produtos,
         "clientes": clientes,
         "operadores_pedido": operadores_pedido,
+        "cliente_preselecionado": cliente_preselecionado,
+        "pedido_next_url": pedido_next_url,
     })
 
 
