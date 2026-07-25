@@ -1420,6 +1420,45 @@
                 font-size: 14px;
             }
 
+            .sugestao-qtd-controle {
+                display: grid !important;
+                grid-template-columns: 52px minmax(0, 1fr) 52px !important;
+                gap: 8px !important;
+                width: 100% !important;
+                align-items: stretch !important;
+                position: relative !important;
+                z-index: 30 !important;
+            }
+
+            .sugestao-qtd-controle .btn-sugestao-qtd,
+            .sugestao-qtd-controle .sugestao-qtd-input {
+                width: 100% !important;
+                min-width: 0 !important;
+                position: relative !important;
+                z-index: 31 !important;
+                pointer-events: auto !important;
+                touch-action: manipulation !important;
+            }
+
+            .sugestao-acoes-linha {
+                display: grid !important;
+                grid-template-columns: minmax(0, 1fr) 56px !important;
+                gap: 8px !important;
+                width: 100% !important;
+                position: relative !important;
+                z-index: 30 !important;
+            }
+
+            .sugestao-acoes-linha .btn-sugestao-adicionar,
+            .sugestao-acoes-linha .btn-sugestao-ignorar {
+                width: 100% !important;
+                min-width: 0 !important;
+                position: relative !important;
+                z-index: 31 !important;
+                pointer-events: auto !important;
+                touch-action: manipulation !important;
+            }
+
             .pedido-topo-acoes {
                 align-items: stretch;
                 flex-direction: column;
