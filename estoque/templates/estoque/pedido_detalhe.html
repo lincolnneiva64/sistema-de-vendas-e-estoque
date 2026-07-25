@@ -482,21 +482,30 @@
 
         <div class="acoes acoes-topo">
             <a href="{% url 'estoque:pedidos' %}" class="btn btn-voltar">Voltar para Consulta de Pedidos</a>
+            {% if voltar_proxima_cobranca_url %}
+                <a href="{{ voltar_proxima_cobranca_url }}" class="btn btn-voltar">Voltar para a próxima cobrança</a>
+            {% endif %}
+            {% if pedido_next_url %}
+                <a href="{{ detalhe_self_url }}" class="btn btn-voltar">Ver pedido</a>
+            {% endif %}
             {% if pode_editar_pedido %}
-                <a href="{% url 'estoque:pedido_editar' pedido.id %}" class="btn btn-editar">Editar Pedido</a>
+                <a href="{{ editar_pedido_url }}" class="btn btn-editar">Editar Pedido</a>
             {% endif %}
             {% if pedido.status == 'aberto' %}
-                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar" onclick="return confirm('Gerar venda a partir deste pedido? Confira os dados antes de continuar.');">Gerar Venda</a>
+                <a href="{{ vender_pedido_url }}" class="btn btn-importar" onclick="return confirm('Gerar venda a partir deste pedido? Confira os dados antes de continuar.');">Gerar Venda</a>
             {% elif pedido.status == 'parcial' %}
-                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar" onclick="return confirm('Gerar venda da pendencia deste pedido? Confira os dados antes de continuar.');">Gerar Venda da Pend&ecirc;ncia</a>
+                <a href="{{ vender_pedido_url }}" class="btn btn-importar" onclick="return confirm('Gerar venda da pendencia deste pedido? Confira os dados antes de continuar.');">Gerar Venda da Pend&ecirc;ncia</a>
             {% elif pedido.status == 'convertido_em_venda' %}
                 <a href="{% url 'estoque:vendas' %}" class="btn btn-venda">Ir para Vendas</a>
             {% else %}
                 <a href="{% url 'estoque:vendas' %}" class="btn btn-venda">Ir para Vendas</a>
             {% endif %}
             {% if pode_cancelar_pedido %}
-                <form method="post" action="{% url 'estoque:pedido_cancelar' pedido.id %}" class="form-cancelar-pedido" onsubmit="return confirm('Tem certeza que deseja cancelar este pedido? O historico sera preservado, mas o pedido deixara de ficar ativo.');">
+                <form method="post" action="{% url 'estoque:pedido_cancelar' pedido.id %}" class="form-cancelar-pedido" onsubmit="return confirm('Cancelar este pedido?');">
                     {% csrf_token %}
+                    {% if voltar_proxima_cobranca_url %}
+                        <input type="hidden" name="next" value="{{ voltar_proxima_cobranca_url }}">
+                    {% endif %}
                     <button type="submit" class="btn btn-cancelar-pedido">Cancelar Pedido</button>
                 </form>
             {% endif %}
@@ -509,6 +518,16 @@
         {% if pedido_editado %}
             <div class="aviso">
                 <strong>Pedido atualizado com sucesso.</strong>
+            </div>
+        {% endif %}
+
+        {% if pedido_salvo %}
+            <div class="aviso">
+                <strong>Pedido salvo com sucesso.</strong>
+                Pedido #{{ pedido.id }} de {{ pedido.cliente.nome|default:"Cliente nao informado" }},
+                criado em {{ pedido.criado_em|date:"d/m/Y H:i" }},
+                com {{ itens_exibidos|length }} item{{ itens_exibidos|length|pluralize }},
+                total de R$ {{ total_exibido|floatformat:"2" }} e status {{ pedido.get_status_display }}.
             </div>
         {% endif %}
 
@@ -662,21 +681,30 @@
         
         <div class="acoes">
             <a href="{% url 'estoque:pedidos' %}" class="btn btn-voltar">Voltar para Consulta de Pedidos</a>
+            {% if voltar_proxima_cobranca_url %}
+                <a href="{{ voltar_proxima_cobranca_url }}" class="btn btn-voltar">Voltar para a próxima cobrança</a>
+            {% endif %}
+            {% if pedido_next_url %}
+                <a href="{{ detalhe_self_url }}" class="btn btn-voltar">Ver pedido</a>
+            {% endif %}
             {% if pode_editar_pedido %}
-                <a href="{% url 'estoque:pedido_editar' pedido.id %}" class="btn btn-editar">Editar Pedido</a>
+                <a href="{{ editar_pedido_url }}" class="btn btn-editar">Editar Pedido</a>
             {% endif %}
             {% if pedido.status == 'aberto' %}
-                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar" onclick="return confirm('Gerar venda a partir deste pedido? Confira os dados antes de continuar.');">Gerar Venda</a>
+                <a href="{{ vender_pedido_url }}" class="btn btn-importar" onclick="return confirm('Gerar venda a partir deste pedido? Confira os dados antes de continuar.');">Gerar Venda</a>
             {% elif pedido.status == 'parcial' %}
-                <a href="{% url 'estoque:vendas' %}?pedido_id={{ pedido.id }}" class="btn btn-importar" onclick="return confirm('Gerar venda da pendencia deste pedido? Confira os dados antes de continuar.');">Gerar Venda da Pend&ecirc;ncia</a>
+                <a href="{{ vender_pedido_url }}" class="btn btn-importar" onclick="return confirm('Gerar venda da pendencia deste pedido? Confira os dados antes de continuar.');">Gerar Venda da Pend&ecirc;ncia</a>
             {% elif pedido.status == 'convertido_em_venda' %}
                 <a href="{% url 'estoque:vendas' %}" class="btn btn-venda">Ir para Vendas</a>
             {% else %}
                 <a href="{% url 'estoque:vendas' %}" class="btn btn-venda">Ir para Vendas</a>
             {% endif %}
             {% if pode_cancelar_pedido %}
-                <form method="post" action="{% url 'estoque:pedido_cancelar' pedido.id %}" class="form-cancelar-pedido" onsubmit="return confirm('Tem certeza que deseja cancelar este pedido? O historico sera preservado, mas o pedido deixara de ficar ativo.');">
+                <form method="post" action="{% url 'estoque:pedido_cancelar' pedido.id %}" class="form-cancelar-pedido" onsubmit="return confirm('Cancelar este pedido?');">
                     {% csrf_token %}
+                    {% if voltar_proxima_cobranca_url %}
+                        <input type="hidden" name="next" value="{{ voltar_proxima_cobranca_url }}">
+                    {% endif %}
                     <button type="submit" class="btn btn-cancelar-pedido">Cancelar Pedido</button>
                 </form>
             {% endif %}

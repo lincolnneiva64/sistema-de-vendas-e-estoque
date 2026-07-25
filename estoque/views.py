@@ -24,7 +24,7 @@ from django.core import signing
 from django.db import IntegrityError, transaction
 from django.db.models import Q, Sum, Max, Prefetch
 from django.db.models.functions import Coalesce
-from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse, urlsplit, urlunsplit
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
@@ -54,7 +54,6 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 from PIL import Image, ImageDraw, ImageFont
 from uuid import uuid4
-from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -9569,6 +9568,31 @@ def _url_next_segura_request(request):
     return ""
 
 
+def _url_adicionar_query_params(url, params):
+    url = (url or "").strip()
+    if not url:
+        return ""
+    partes = urlsplit(url)
+    query = parse_qs(partes.query, keep_blank_values=True)
+    for chave, valor in params.items():
+        if valor is None or valor == "":
+            query.pop(chave, None)
+        else:
+            query[chave] = [str(valor)]
+    nova_query = urlencode(query, doseq=True)
+    return urlunsplit((partes.scheme, partes.netloc, partes.path, nova_query, partes.fragment))
+
+
+def _url_detalhe_pedido_fluxo(pedido_id, next_url="", **flags):
+    parametros = {chave: valor for chave, valor in flags.items() if valor}
+    if next_url:
+        parametros["next"] = next_url
+    url = reverse("estoque:pedido_detalhe", args=[pedido_id])
+    if parametros:
+        url = f"{url}?{urlencode(parametros)}"
+    return url
+
+
 def _formatar_data_cobranca(valor):
     return valor.strftime("%d/%m/%Y") if valor else ""
 
@@ -12654,6 +12678,35 @@ def receber_cliente_confirmado(request, cliente_id, operacao_id):
     if contexto_rota_recebimento["nome"]:
         pedido_cliente_params["rota"] = contexto_rota_recebimento["nome"]
     fazer_pedido_cliente_url = f"{reverse('estoque:pedido_criar')}?{urlencode(pedido_cliente_params)}"
+    pedido_fluxo = None
+    pedido_id_fluxo = request.GET.get("pedido_id", "").strip()
+    if pedido_id_fluxo.isdigit():
+        pedido_fluxo_obj = (
+            Pedido.objects
+            .select_related("cliente")
+            .filter(pk=int(pedido_id_fluxo), cliente_id=cliente.id)
+            .first()
+        )
+        if pedido_fluxo_obj:
+            detalhe_pedido_url = _url_detalhe_pedido_fluxo(
+                pedido_fluxo_obj.id,
+                next_url=retorno_pedido_recebimento_url,
+            )
+            editar_pedido_url = f"{reverse('estoque:pedido_editar', args=[pedido_fluxo_obj.id])}?{urlencode({'next': retorno_pedido_recebimento_url})}"
+            pedido_fluxo = {
+                "obj": pedido_fluxo_obj,
+                "id": pedido_fluxo_obj.id,
+                "status": pedido_fluxo_obj.status,
+                "status_texto": pedido_fluxo_obj.get_status_display(),
+                "total_formatado": _formatar_moeda(pedido_fluxo_obj.total),
+                "detalhe_url": detalhe_pedido_url,
+                "editar_url": editar_pedido_url,
+                "cancelar_url": reverse("estoque:pedido_cancelar", args=[pedido_fluxo_obj.id]),
+                "cancelar_next": _url_adicionar_query_params(retorno_pedido_recebimento_url, {"pedido_id": pedido_fluxo_obj.id}),
+                "aberto": pedido_fluxo_obj.status in [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL],
+                "faturado": pedido_fluxo_obj.status == Pedido.STATUS_CONVERTIDO_EM_VENDA,
+                "cancelado": pedido_fluxo_obj.status == Pedido.STATUS_CANCELADO,
+            }
 
     contexto = {
         "operacao": operacao,
@@ -12680,6 +12733,7 @@ def receber_cliente_confirmado(request, cliente_id, operacao_id):
         "historico_recebimentos_rota_dia": historico_recebimentos_rota_dia,
         "total_recebimentos_rota_dia_formatado": _formatar_moeda(total_recebimentos_rota_dia),
         "fazer_pedido_cliente_url": fazer_pedido_cliente_url,
+        "pedido_fluxo": pedido_fluxo,
     }
     return render(request, "estoque/receber_cliente_confirmado.html", contexto)
 
@@ -18004,17 +18058,20 @@ def pedido_criar(request):
                         logger.exception(f"Erro ao criar item do pedido: {e}")
                         continue
 
-            if pedido_next_url and request.POST.get("proxima_acao") != "enviar_venda":
-                messages.success(request, "Pedido do cliente registrado com sucesso.")
+            redirect_url = (
+                f"{reverse('estoque:vendas')}?pedido_id={pedido.id}"
+                if request.POST.get("proxima_acao") == "enviar_venda"
+                else (
+                    _url_detalhe_pedido_fluxo(pedido.id, next_url=pedido_next_url, pedido_salvo=1)
+                    if pedido_next_url
+                    else reverse("estoque:pedido_detalhe", args=[pedido.id])
+                )
+            )
             return JsonResponse({
                 "sucesso": True,
                 "pedido_id": pedido.id,
                 "mensagem": f"Pedido #{pedido.id} criado com sucesso.",
-                "redirect_url": (
-                    f"{reverse('estoque:vendas')}?pedido_id={pedido.id}"
-                    if request.POST.get("proxima_acao") == "enviar_venda"
-                    else pedido_next_url or reverse("estoque:pedido_detalhe", args=[pedido.id])
-                ),
+                "redirect_url": redirect_url,
             })
 
         except Exception as e:
@@ -18046,6 +18103,7 @@ def pedido_editar(request, pk):
     """Editar pedido aberto ou saldo pendente de pedido parcial."""
     from .models import Pedido
 
+    pedido_next_url = _url_next_segura_request(request)
     pedido = get_object_or_404(
         Pedido.objects.select_related("cliente").prefetch_related("itens__produto"),
         pk=pk,
@@ -18056,12 +18114,12 @@ def pedido_editar(request, pk):
             return JsonResponse(
                 {
                     "sucesso": False,
-                    "mensagem": "Pedido totalmente convertido em venda nao pode ser editado livremente.",
+                    "mensagem": "Este pedido ja foi faturado e nao pode mais ser alterado.",
                 },
                 status=400,
             )
-        messages.warning(request, "Pedido totalmente convertido em venda nao pode ser editado livremente.")
-        return redirect("estoque:pedido_detalhe", pk=pedido.pk)
+        messages.warning(request, "Este pedido ja foi faturado e nao pode mais ser alterado.")
+        return redirect(_url_detalhe_pedido_fluxo(pedido.pk, next_url=pedido_next_url))
 
     if pedido.status not in [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL]:
         if request.method == "POST":
@@ -18070,7 +18128,7 @@ def pedido_editar(request, pk):
                 status=400,
             )
         messages.warning(request, "Este pedido nao esta disponivel para edicao.")
-        return redirect("estoque:pedido_detalhe", pk=pedido.pk)
+        return redirect(_url_detalhe_pedido_fluxo(pedido.pk, next_url=pedido_next_url))
 
     itens_pedido = list(pedido.itens.all())
     if pedido.status == Pedido.STATUS_PARCIAL:
@@ -18099,7 +18157,7 @@ def pedido_editar(request, pk):
                     return JsonResponse(
                         {
                             "sucesso": False,
-                            "mensagem": "Pedido totalmente convertido em venda nao pode ser editado livremente.",
+                            "mensagem": "Este pedido ja foi faturado e nao pode mais ser alterado.",
                         },
                         status=400,
                     )
@@ -18137,7 +18195,7 @@ def pedido_editar(request, pk):
             "sucesso": True,
             "pedido_id": pedido.id,
             "mensagem": f"Pedido #{pedido.id} atualizado com sucesso.",
-            "redirect_url": f"{reverse('estoque:pedido_detalhe', args=[pedido.id])}?pedido_editado=1",
+            "redirect_url": _url_detalhe_pedido_fluxo(pedido.id, next_url=pedido_next_url, pedido_editado=1),
         })
 
     produtos = Produto.objects.filter(excluido=False).order_by("nome")
@@ -18156,6 +18214,7 @@ def pedido_editar(request, pk):
         "pedido_modo_edicao": True,
         "pedido_itens_iniciais": [_item_pedido_inicial(item) for item in itens_editaveis],
         "pedido_url_salvar": reverse("estoque:pedido_editar", args=[pedido.id]),
+        "pedido_next_url": pedido_next_url,
     })
 
 
@@ -18164,29 +18223,32 @@ def pedido_cancelar(request, pk):
     """Cancelar pedido sem apagar o registro nem os itens."""
     from .models import Pedido
 
+    pedido_next_url = _url_next_segura_request(request)
     with transaction.atomic():
         pedido = get_object_or_404(Pedido.objects.select_for_update(), pk=pk)
 
         if pedido.status == Pedido.STATUS_CANCELADO:
             messages.warning(request, f"Pedido #{pedido.id} ja esta cancelado.")
-            return redirect("estoque:pedido_detalhe", pk=pedido.pk)
+            return redirect(pedido_next_url or _url_detalhe_pedido_fluxo(pedido.pk))
 
         if pedido.status == Pedido.STATUS_CONVERTIDO_EM_VENDA:
             messages.warning(
                 request,
-                "Pedido totalmente convertido em venda nao pode ser cancelado livremente.",
+                "Este pedido ja foi faturado e nao pode mais ser alterado.",
             )
-            return redirect("estoque:pedido_detalhe", pk=pedido.pk)
+            return redirect(_url_detalhe_pedido_fluxo(pedido.pk, next_url=pedido_next_url))
 
         if pedido.status not in [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL]:
             messages.warning(request, "Este pedido nao esta disponivel para cancelamento.")
-            return redirect("estoque:pedido_detalhe", pk=pedido.pk)
+            return redirect(pedido_next_url or _url_detalhe_pedido_fluxo(pedido.pk))
 
         pedido.status = Pedido.STATUS_CANCELADO
         pedido.save(update_fields=["status", "atualizado_em"])
 
     messages.success(request, f"Pedido #{pedido.id} cancelado com sucesso. Histórico preservado.")
-    return redirect(f"{reverse('estoque:pedido_detalhe', args=[pedido.id])}?pedido_cancelado=1")
+    if pedido_next_url:
+        return redirect(pedido_next_url)
+    return redirect(_url_detalhe_pedido_fluxo(pedido.id, pedido_cancelado=1))
 
 
 def _itens_pendentes_exibicao_pedido_parcial(pedido, itens_pedido):
@@ -18264,6 +18326,7 @@ def pedido_detalhe(request, pk):
     """Mostrar detalhe do pedido."""
     from .models import Pedido
 
+    pedido_next_url = _url_next_segura_request(request)
     pedido = get_object_or_404(
         Pedido.objects.select_related("cliente").prefetch_related("itens__produto"),
         pk=pk,
@@ -18282,6 +18345,19 @@ def pedido_detalhe(request, pk):
     for item in itens_exibidos:
         item.quantidade_formatada = _formatar_decimal_pedido(item.quantidade)
 
+    voltar_proxima_cobranca_url = (
+        _url_adicionar_query_params(pedido_next_url, {"pedido_id": pedido.id})
+        if pedido_next_url and pedido.status != Pedido.STATUS_CANCELADO
+        else pedido_next_url
+    )
+    detalhe_self_url = _url_detalhe_pedido_fluxo(pedido.id, next_url=pedido_next_url)
+    editar_pedido_url = (
+        f"{reverse('estoque:pedido_editar', args=[pedido.id])}?{urlencode({'next': pedido_next_url})}"
+        if pedido_next_url
+        else reverse("estoque:pedido_editar", args=[pedido.id])
+    )
+    vender_pedido_url = f"{reverse('estoque:vendas')}?{urlencode({'pedido_id': pedido.id})}"
+
     return render(request, "estoque/pedido_detalhe.html", {
         "pedido": pedido,
         "itens_exibidos": itens_exibidos,
@@ -18292,6 +18368,12 @@ def pedido_detalhe(request, pk):
         "pode_cancelar_pedido": pedido.status in [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL],
         "pedido_editado": request.GET.get("pedido_editado") == "1",
         "pedido_cancelado": request.GET.get("pedido_cancelado") == "1",
+        "pedido_salvo": request.GET.get("pedido_salvo") == "1",
+        "pedido_next_url": pedido_next_url,
+        "voltar_proxima_cobranca_url": voltar_proxima_cobranca_url,
+        "detalhe_self_url": detalhe_self_url,
+        "editar_pedido_url": editar_pedido_url,
+        "vender_pedido_url": vender_pedido_url,
     })
 
 

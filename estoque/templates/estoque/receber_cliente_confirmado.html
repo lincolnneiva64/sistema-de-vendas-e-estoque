@@ -350,6 +350,26 @@
     background: #ecfdf5;
     color: #0f766e;
   }
+  .rcp-order-box {
+    border: 1px solid #99f6e4;
+    border-radius: 8px;
+    background: #f0fdfa;
+    padding: 8px;
+    display: grid;
+    gap: 7px;
+  }
+  .rcp-order-summary {
+    margin: 0;
+    color: #0f172a;
+    font-size: 0.82rem;
+    font-weight: 900;
+    line-height: 1.35;
+  }
+  .rcp-order-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
   .rcp-route-history {
     display: grid;
     gap: 6px;
@@ -581,6 +601,35 @@
                 Sem rota identificada para sugerir uma sequencia.
               {% endif %}
             </p>
+            <div class="rcp-order-box" aria-label="Pedido deste cliente">
+              <p class="rcp-route-title">Pedido deste cliente</p>
+              {% if pedido_fluxo and pedido_fluxo.cancelado %}
+                <p class="rcp-order-summary">Pedido #{{ pedido_fluxo.id }} cancelado. {{ pedido_fluxo.status_texto }}.</p>
+                <div class="rcp-order-actions">
+                  <a class="rcp-btn secondary order" href="{{ fazer_pedido_cliente_url }}">Fazer novo pedido para este cliente</a>
+                </div>
+              {% elif pedido_fluxo and pedido_fluxo.faturado %}
+                <p class="rcp-order-summary">Pedido #{{ pedido_fluxo.id }} - {{ pedido_fluxo.total_formatado }} - {{ pedido_fluxo.status_texto }}.</p>
+                <div class="rcp-order-actions">
+                  <a class="rcp-btn secondary order" href="{{ pedido_fluxo.detalhe_url }}">Ver pedido faturado</a>
+                </div>
+              {% elif pedido_fluxo and pedido_fluxo.aberto %}
+                <p class="rcp-order-summary">Pedido #{{ pedido_fluxo.id }} - {{ pedido_fluxo.total_formatado }} - {{ pedido_fluxo.status_texto }}.</p>
+                <div class="rcp-order-actions">
+                  <a class="rcp-btn secondary order" href="{{ pedido_fluxo.detalhe_url }}">Ver pedido</a>
+                  <a class="rcp-btn secondary order" href="{{ pedido_fluxo.editar_url }}">Editar pedido</a>
+                  <form method="post" action="{{ pedido_fluxo.cancelar_url }}" onsubmit="return confirm('Cancelar este pedido?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ pedido_fluxo.cancelar_next }}">
+                    <button type="submit" class="rcp-btn secondary order">Cancelar pedido</button>
+                  </form>
+                </div>
+              {% else %}
+                <div class="rcp-order-actions">
+                  <a class="rcp-btn secondary order" href="{{ fazer_pedido_cliente_url }}">Fazer pedido para este cliente</a>
+                </div>
+              {% endif %}
+            </div>
             {% if proximo_cliente_recebimento %}
               <p class="rcp-route-title">Proximo cliente sugerido</p>
               <div class="rcp-route-next">{{ proximo_cliente_recebimento.cliente_nome }}</div>
@@ -591,17 +640,11 @@
               </p>
               <div class="rcp-route-actions">
                 <a class="rcp-btn primary" href="{{ proximo_cliente_recebimento.receber_url }}">Cobrar proximo cliente</a>
-                {% if fazer_pedido_cliente_url %}
-                  <a class="rcp-btn secondary order" href="{{ fazer_pedido_cliente_url }}">Fazer pedido para este cliente</a>
-                {% endif %}
                 <a class="rcp-btn secondary" href="{{ contexto_rota_recebimento.escolher_url }}">Escolher outro cliente</a>
               </div>
             {% else %}
               <p class="rcp-route-text">Nao ha proximo cliente pendente para esta rota.</p>
               <div class="rcp-route-actions">
-                {% if fazer_pedido_cliente_url %}
-                  <a class="rcp-btn secondary order" href="{{ fazer_pedido_cliente_url }}">Fazer pedido para este cliente</a>
-                {% endif %}
                 <a class="rcp-btn primary" href="{{ contexto_rota_recebimento.escolher_url }}">Escolher outro cliente</a>
               </div>
             {% endif %}
