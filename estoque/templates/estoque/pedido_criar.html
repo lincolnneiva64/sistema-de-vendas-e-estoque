@@ -2484,7 +2484,6 @@
                     </td>
                 `;
                 sugestoesClienteTbody.appendChild(tr);
-                vincularControlesSugestao(tr);
             });
 
             if (sugestoesClienteLista.length > limiteSugestoesCliente) {
@@ -2655,47 +2654,6 @@
             const quantidadeAtual = Math.max(1, Math.trunc(numeroDaSugestao(inputQtd.value)) || 1);
             const proximaQuantidade = Math.max(1, quantidadeAtual + Number(direcao));
             inputQtd.value = String(proximaQuantidade);
-        }
-
-        function vincularControlesSugestao(cardSugestao) {
-            if (!cardSugestao) return;
-
-            const btnDiminuir = cardSugestao.querySelector("[data-suggestion-decrease]");
-            const btnAumentar = cardSugestao.querySelector("[data-suggestion-increase]");
-            const btnIgnorar = cardSugestao.querySelector("[data-suggestion-dismiss]");
-            const btnAdicionar = cardSugestao.querySelector("[data-suggestion-add]");
-
-            if (btnDiminuir) {
-                btnDiminuir.addEventListener("click", (event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    ajustarQuantidadeSugestao(cardSugestao, -1);
-                });
-            }
-
-            if (btnAumentar) {
-                btnAumentar.addEventListener("click", (event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    ajustarQuantidadeSugestao(cardSugestao, 1);
-                });
-            }
-
-            if (btnIgnorar) {
-                btnIgnorar.addEventListener("click", (event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    removerSugestaoClientePorProdutoId(cardSugestao.dataset.sugestaoProdutoId);
-                });
-            }
-
-            if (btnAdicionar) {
-                btnAdicionar.addEventListener("click", (event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    adicionarSugestaoAoPedido(cardSugestao.dataset.sugestaoProdutoId, btnAdicionar);
-                });
-            }
         }
 
         function mostrarItemPedidoAdicionado(index, opcoes = {}) {
