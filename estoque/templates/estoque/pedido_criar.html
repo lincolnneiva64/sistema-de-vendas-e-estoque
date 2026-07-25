@@ -2443,6 +2443,7 @@
             sugestoesVisiveis.forEach((sugestao, index) => {
                 const produtoSugestaoId = escaparHtml(sugestao.produto_id);
                 const tr = document.createElement("tr");
+                tr.setAttribute("data-suggestion-card", "");
                 tr.dataset.sugestaoProdutoId = String(sugestao.produto_id || "");
                 tr.dataset.sugestaoLabel = `Sugestao ${index + 1}`;
                 tr.innerHTML = `
@@ -2454,15 +2455,15 @@
                     <td class="sugestoes-col-estoque" data-label="Estoque atual">${escaparHtml(formatarEstoqueSugestao(sugestao.estoque))}</td>
                     <td class="sugestoes-col-qtd-pedido" data-label="Qtd pedido">
                         <span class="sugestao-qtd-controle">
-                            <button type="button" class="btn-sugestao-qtd" data-sugestao-qtd-ajuste="-1" data-sugestao-produto-id="${produtoSugestaoId}" aria-label="Diminuir quantidade">-</button>
-                            <input type="text" class="sugestao-qtd-input" value="${escaparHtml(sugestao.quantidade)}" inputmode="decimal" data-sugestao-qtd="${produtoSugestaoId}" aria-label="Quantidade do pedido para ${escaparHtml(sugestao.produto)}">
-                            <button type="button" class="btn-sugestao-qtd" data-sugestao-qtd-ajuste="1" data-sugestao-produto-id="${produtoSugestaoId}" aria-label="Aumentar quantidade">+</button>
+                            <button type="button" class="btn-sugestao-qtd" data-suggestion-decrease data-sugestao-qtd-ajuste="-1" data-sugestao-produto-id="${produtoSugestaoId}" aria-label="Diminuir quantidade">-</button>
+                            <input type="text" class="sugestao-qtd-input" value="${escaparHtml(quantidadeInteiraSugestao(sugestao.quantidade))}" inputmode="numeric" data-suggestion-quantity data-sugestao-qtd="${produtoSugestaoId}" aria-label="Quantidade do pedido para ${escaparHtml(sugestao.produto)}">
+                            <button type="button" class="btn-sugestao-qtd" data-suggestion-increase data-sugestao-qtd-ajuste="1" data-sugestao-produto-id="${produtoSugestaoId}" aria-label="Aumentar quantidade">+</button>
                         </span>
                     </td>
                     <td class="sugestoes-col-acao" data-label="Acao">
                         <span class="sugestao-acoes-linha">
-                            <button type="button" class="btn-sugestao-adicionar" data-sugestao-adicionar="${produtoSugestaoId}">Adicionar</button>
-                            <button type="button" class="btn-sugestao-ignorar" data-sugestao-ignorar="${produtoSugestaoId}" aria-label="Ignorar sugestao">X</button>
+                            <button type="button" class="btn-sugestao-adicionar" data-suggestion-add data-sugestao-adicionar="${produtoSugestaoId}">Adicionar</button>
+                            <button type="button" class="btn-sugestao-ignorar" data-suggestion-dismiss data-sugestao-ignorar="${produtoSugestaoId}" aria-label="Descartar sugestao">X</button>
                         </span>
                     </td>
                 `;
@@ -2577,6 +2578,11 @@
             return Number(valor || 0).toFixed(3).replace(/\.?0+$/, "").replace(".", ",") || "0";
         }
 
+        function quantidadeInteiraSugestao(valor) {
+            const quantidade = Math.trunc(numeroDaSugestao(valor));
+            return String(Math.max(1, Number.isFinite(quantidade) ? quantidade : 1));
+        }
+
         function formatarQuantidadeCampo(valor) {
             return String(formatarQuantidadeSugestao(valor));
         }
@@ -2625,17 +2631,13 @@
             renderizarSugestoesCliente();
         }
 
-        function ajustarQuantidadeSugestao(produtoId, direcao, origem) {
-            const linhaSugestao = origem ? origem.closest("tr") : null;
-            const inputQtd = linhaSugestao
-                ? linhaSugestao.querySelector(".sugestao-qtd-input")
-                : sugestoesClienteTbody.querySelector(`[data-sugestao-qtd="${produtoId}"]`);
+        function ajustarQuantidadeSugestao(cardSugestao, direcao) {
+            const inputQtd = cardSugestao ? cardSugestao.querySelector("[data-suggestion-quantity]") : null;
             if (!inputQtd) return;
 
-            const quantidadeAtual = Math.max(0, numeroDaSugestao(inputQtd.value) || 0);
-            const passo = quantidadeAtual > 0 && quantidadeAtual < 1 ? 0.5 : 1;
-            const proximaQuantidade = Math.max(0, quantidadeAtual + (Number(direcao) * passo));
-            inputQtd.value = formatarQuantidadeSugestao(proximaQuantidade);
+            const quantidadeAtual = Math.max(1, Math.trunc(numeroDaSugestao(inputQtd.value)) || 1);
+            const proximaQuantidade = Math.max(1, quantidadeAtual + Number(direcao));
+            inputQtd.value = String(proximaQuantidade);
         }
 
         function mostrarItemPedidoAdicionado(index, opcoes = {}) {
@@ -2670,11 +2672,11 @@
             if (!sugestao) return;
 
             const produtoIdReal = String(sugestao.produto_id || produtoId || "").trim();
-            const linhaSugestao = origem ? origem.closest("tr") : null;
+            const linhaSugestao = origem ? origem.closest("[data-suggestion-card]") : null;
             const inputQtd = linhaSugestao
-                ? linhaSugestao.querySelector(".sugestao-qtd-input")
+                ? linhaSugestao.querySelector("[data-suggestion-quantity]")
                 : sugestoesClienteTbody.querySelector(`[data-sugestao-qtd="${produtoIdReal}"]`);
-            const quantidade = numeroDaSugestao(inputQtd ? inputQtd.value : sugestao.quantidade);
+            const quantidade = Math.max(1, Math.trunc(numeroDaSugestao(inputQtd ? inputQtd.value : sugestao.quantidade)) || 1);
             const precoUnitario = numeroDaSugestao(sugestao.preco_valor);
             const produto = produtos.find((item) => String(item.id) === produtoIdReal) || {
                 id: produtoIdReal,
@@ -3738,21 +3740,30 @@
         });
 
         sugestoesClienteTbody.addEventListener("click", (event) => {
-            const btnQtd = event.target.closest("[data-sugestao-qtd-ajuste]");
-            if (btnQtd) {
-                ajustarQuantidadeSugestao(btnQtd.dataset.sugestaoProdutoId, Number(btnQtd.dataset.sugestaoQtdAjuste), btnQtd);
+            const cardSugestao = event.target.closest("[data-suggestion-card]");
+            if (!cardSugestao || !sugestoesClienteTbody.contains(cardSugestao)) return;
+
+            const btnDiminuir = event.target.closest("[data-suggestion-decrease]");
+            if (btnDiminuir) {
+                ajustarQuantidadeSugestao(cardSugestao, -1);
                 return;
             }
 
-            const btnIgnorar = event.target.closest("[data-sugestao-ignorar]");
+            const btnAumentar = event.target.closest("[data-suggestion-increase]");
+            if (btnAumentar) {
+                ajustarQuantidadeSugestao(cardSugestao, 1);
+                return;
+            }
+
+            const btnIgnorar = event.target.closest("[data-suggestion-dismiss]");
             if (btnIgnorar) {
-                removerSugestaoClientePorProdutoId(btnIgnorar.dataset.sugestaoIgnorar);
+                removerSugestaoClientePorProdutoId(cardSugestao.dataset.sugestaoProdutoId);
                 return;
             }
 
-            const btnAdicionar = event.target.closest("[data-sugestao-adicionar]");
+            const btnAdicionar = event.target.closest("[data-suggestion-add]");
             if (!btnAdicionar) return;
-            adicionarSugestaoAoPedido(btnAdicionar.dataset.sugestaoAdicionar, btnAdicionar);
+            adicionarSugestaoAoPedido(cardSugestao.dataset.sugestaoProdutoId, btnAdicionar);
         });
 
         clientePedido.addEventListener("change", () => {

@@ -17394,6 +17394,38 @@ class PixRecebidoTests(TestCase):
         self.assertNotContains(resposta, f"Pedido #{pedido_outro.id}")
         self.assertNotContains(resposta, "R$ 44,00")
 
+    def test_receber_cliente_confirmado_botoes_pedido_tem_acao_destacada(self):
+        from .models import Pedido
+
+        cliente = Cliente.objects.create(nome="Cliente Pedido Botao Destacado", bairro="Centro", ativo=True)
+        operacao = self._criar_operacao_recebimento_cliente(cliente, rota="Centro")
+
+        resposta_sem_pedido = self.client.get(self._url_recebimento_confirmado(cliente, operacao), secure=True)
+        self.assertContains(
+            resposta_sem_pedido,
+            'class="rcp-btn order order-action" href=',
+        )
+        self.assertContains(resposta_sem_pedido, "Fazer pedido para este cliente")
+        self.assertContains(resposta_sem_pedido, ".rcp-btn.order-action")
+        self.assertContains(resposta_sem_pedido, "background: #16a34a")
+        self.assertContains(resposta_sem_pedido, ".rcp-btn.order-action:hover")
+        self.assertContains(resposta_sem_pedido, ".rcp-btn.order-action:active")
+        self.assertContains(resposta_sem_pedido, ".rcp-btn.order-action:focus-visible")
+
+        pedido = Pedido.objects.create(
+            cliente=cliente,
+            data_pedido=timezone.localdate(),
+            total=Decimal("77.00"),
+        )
+        resposta_com_pedido = self.client.get(
+            f"{self._url_recebimento_confirmado(cliente, operacao)}?{urlencode({'pedido_id': pedido.id})}",
+            secure=True,
+        )
+
+        self.assertContains(resposta_com_pedido, 'class="rcp-btn order order-action" href=', count=2)
+        self.assertContains(resposta_com_pedido, "Ver pedido")
+        self.assertContains(resposta_com_pedido, "Editar pedido")
+
     def test_receber_cliente_confirmado_sugere_cliente_recebido_hoje_com_pendencia_restante(self):
         cliente_atual = Cliente.objects.create(nome="Cliente Atual Sugestao", bairro="Centro", ativo=True)
         cliente_proximo = Cliente.objects.create(nome="Cliente Parcial Ainda Deve", bairro="Centro", ativo=True)
@@ -19654,6 +19686,34 @@ class PedidoTests(TestCase):
         self.assertIn("Salvar este pedido e abrir o envio para venda?", conteudo)
         self.assertIn("salvamentoEmAndamento", conteudo)
         self.assertIn('index === remocaoPendente ? "Confirmar" : "Remover"', conteudo)
+
+    def test_pedido_criar_sugestoes_tem_controles_seguros_no_html_e_script(self):
+        resposta = self.client.get(reverse("estoque:pedido_criar"), secure=True)
+        conteudo = resposta.content.decode("utf-8")
+
+        self.assertIn('tr.setAttribute("data-suggestion-card", "")', conteudo)
+        self.assertIn('data-suggestion-decrease', conteudo)
+        self.assertIn('data-suggestion-increase', conteudo)
+        self.assertIn('data-suggestion-quantity', conteudo)
+        self.assertIn('data-suggestion-dismiss', conteudo)
+        self.assertIn('data-suggestion-add', conteudo)
+        self.assertIn('type="button" class="btn-sugestao-qtd"', conteudo)
+        self.assertIn('type="button" class="btn-sugestao-adicionar"', conteudo)
+        self.assertIn('type="button" class="btn-sugestao-ignorar"', conteudo)
+        self.assertIn('aria-label="Diminuir quantidade"', conteudo)
+        self.assertIn('aria-label="Aumentar quantidade"', conteudo)
+        self.assertIn('aria-label="Descartar sugestao"', conteudo)
+        self.assertIn('function ajustarQuantidadeSugestao(cardSugestao, direcao)', conteudo)
+        self.assertIn('Math.max(1, quantidadeAtual + Number(direcao))', conteudo)
+        self.assertIn('Math.max(1, Math.trunc(numeroDaSugestao(inputQtd.value)) || 1)', conteudo)
+        self.assertIn('event.target.closest("[data-suggestion-decrease]")', conteudo)
+        self.assertIn('event.target.closest("[data-suggestion-increase]")', conteudo)
+        self.assertIn('event.target.closest("[data-suggestion-dismiss]")', conteudo)
+        self.assertIn('event.target.closest("[data-suggestion-add]")', conteudo)
+        self.assertIn('removerSugestaoClientePorProdutoId(cardSugestao.dataset.sugestaoProdutoId)', conteudo)
+        self.assertIn('adicionarSugestaoAoPedido(cardSugestao.dataset.sugestaoProdutoId, btnAdicionar)', conteudo)
+        self.assertNotIn('id="sugestao-qtd-', conteudo)
+        self.assertNotIn('id="btn-sugestao-', conteudo)
 
     def test_pedido_criar_abre_com_cliente_preselecionado_por_id_e_preserva_next(self):
         next_url = "/contas-a-receber/cliente/99/operacao/88/recebimento-confirmado/?rota=Centro&data=2026-07-24"

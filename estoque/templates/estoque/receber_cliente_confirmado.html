@@ -344,11 +344,26 @@
     padding-inline: 16px;
     font-size: 0.92rem;
   }
-  .rcp-route-actions .rcp-btn.order {
-    flex-basis: 100%;
-    border-color: #99f6e4;
-    background: #ecfdf5;
-    color: #0f766e;
+  .rcp-btn.order-action {
+    flex: 1 1 220px;
+    min-height: 44px;
+    border-color: #15803d;
+    background: #16a34a;
+    color: #fff;
+    box-shadow: 0 8px 18px rgba(22, 163, 74, 0.2);
+  }
+  .rcp-btn.order-action:hover {
+    border-color: #166534;
+    background: #15803d;
+  }
+  .rcp-btn.order-action:active {
+    transform: translateY(1px);
+    background: #166534;
+    box-shadow: 0 4px 10px rgba(22, 101, 52, 0.22);
+  }
+  .rcp-btn.order-action:focus-visible {
+    outline: 3px solid #93c5fd;
+    outline-offset: 2px;
   }
   .rcp-order-box {
     border: 1px solid #99f6e4;
@@ -606,27 +621,27 @@
               {% if pedido_fluxo and pedido_fluxo.cancelado %}
                 <p class="rcp-order-summary">Pedido #{{ pedido_fluxo.id }} cancelado. {{ pedido_fluxo.status_texto }}.</p>
                 <div class="rcp-order-actions">
-                  <a class="rcp-btn secondary order" href="{{ fazer_pedido_cliente_url }}">Fazer novo pedido para este cliente</a>
+                  <a class="rcp-btn order order-action" href="{{ fazer_pedido_cliente_url }}">Fazer novo pedido para este cliente</a>
                 </div>
               {% elif pedido_fluxo and pedido_fluxo.faturado %}
                 <p class="rcp-order-summary">Pedido #{{ pedido_fluxo.id }} - {{ pedido_fluxo.total_formatado }} - {{ pedido_fluxo.status_texto }}.</p>
                 <div class="rcp-order-actions">
-                  <a class="rcp-btn secondary order" href="{{ pedido_fluxo.detalhe_url }}">Ver pedido faturado</a>
+                  <a class="rcp-btn order order-action" href="{{ pedido_fluxo.detalhe_url }}">Ver pedido faturado</a>
                 </div>
               {% elif pedido_fluxo and pedido_fluxo.aberto %}
                 <p class="rcp-order-summary">Pedido #{{ pedido_fluxo.id }} - {{ pedido_fluxo.total_formatado }} - {{ pedido_fluxo.status_texto }}.</p>
                 <div class="rcp-order-actions">
-                  <a class="rcp-btn secondary order" href="{{ pedido_fluxo.detalhe_url }}">Ver pedido</a>
-                  <a class="rcp-btn secondary order" href="{{ pedido_fluxo.editar_url }}">Editar pedido</a>
+                  <a class="rcp-btn order order-action" href="{{ pedido_fluxo.detalhe_url }}">Ver pedido</a>
+                  <a class="rcp-btn order order-action" href="{{ pedido_fluxo.editar_url }}">Editar pedido</a>
                   <form method="post" action="{{ pedido_fluxo.cancelar_url }}" onsubmit="return confirm('Cancelar este pedido?');">
                     {% csrf_token %}
                     <input type="hidden" name="next" value="{{ pedido_fluxo.cancelar_next }}">
-                    <button type="submit" class="rcp-btn secondary order">Cancelar pedido</button>
+                    <button type="submit" class="rcp-btn order order-action">Cancelar pedido</button>
                   </form>
                 </div>
               {% else %}
                 <div class="rcp-order-actions">
-                  <a class="rcp-btn secondary order" href="{{ fazer_pedido_cliente_url }}">Fazer pedido para este cliente</a>
+                  <a class="rcp-btn order order-action" href="{{ fazer_pedido_cliente_url }}">Fazer pedido para este cliente</a>
                 </div>
               {% endif %}
             </div>
