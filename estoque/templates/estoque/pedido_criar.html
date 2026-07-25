@@ -2393,7 +2393,14 @@
                 clienteBusca.classList.remove("campo-invalido");
             }
             clientePedido.classList.remove("campo-invalido");
-            atualizarDestaqueClienteSelecionado();
+    
+        document.addEventListener("click", (event) => {
+            const dentroPedido = event.target && event.target.closest && event.target.closest(".pedido-container");
+            if (!dentroPedido) return;
+            diagnosticoToquePedido(event, "CLICK");
+        }, true);
+
+        atualizarDestaqueClienteSelecionado();
             fecharSugestoesClientes();
             clientePedido.dispatchEvent(new Event("change", { bubbles: true }));
         }
@@ -2792,6 +2799,35 @@
         function limparMensagem() {
             mensagemTela.className = "mensagem-tela";
             mensagemTela.textContent = "";
+        }
+
+        function diagnosticoToquePedido(evento, origem) {
+            if (!mensagemTela || !evento || !evento.target) return;
+            const alvo = evento.target;
+            const botao = alvo.closest ? alvo.closest("button, input, td, tr, .rodape-pedido, .pedido-atalhos-lateral, .sugestoes-cliente-card") : null;
+            const partes = [];
+            if (botao) {
+                partes.push(botao.tagName.toLowerCase());
+                if (botao.id) partes.push("#" + botao.id);
+                if (botao.className && typeof botao.className === "string") {
+                    partes.push("." + botao.className.trim().replace(/\s+/g, "."));
+                }
+                if (botao.dataset) {
+                    if (botao.dataset.suggestionIncrease !== undefined) partes.push("[MAIS]");
+                    if (botao.dataset.suggestionDecrease !== undefined) partes.push("[MENOS]");
+                    if (botao.dataset.suggestionDismiss !== undefined) partes.push("[X]");
+                    if (botao.dataset.suggestionAdd !== undefined) partes.push("[ADICIONAR]");
+                    if (botao.dataset.sugestaoProdutoId) partes.push("produto=" + botao.dataset.sugestaoProdutoId);
+                    if (botao.dataset.sugestaoProdutoId === undefined && botao.closest) {
+                        const card = botao.closest("[data-suggestion-card]");
+                        if (card && card.dataset.sugestaoProdutoId) partes.push("cardProduto=" + card.dataset.sugestaoProdutoId);
+                    }
+                }
+            } else {
+                partes.push(String(alvo.tagName || alvo));
+            }
+            mensagemTela.className = "mensagem-tela aviso";
+            mensagemTela.textContent = "[DIAG TOQUE " + origem + "] " + partes.join(" ");
         }
 
         function validacaoVisualMobilePedidoAtiva() {
