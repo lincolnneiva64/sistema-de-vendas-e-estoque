@@ -3836,32 +3836,58 @@
             limparSugestoesCarregadas();
         });
 
-        sugestoesClienteTbody.addEventListener("click", (event) => {
-            const cardSugestao = event.target.closest("[data-suggestion-card]");
-            if (!cardSugestao || !sugestoesClienteTbody.contains(cardSugestao)) return;
+        let sugestaoPointerTratadoEm = 0;
 
-            const btnDiminuir = event.target.closest("[data-suggestion-decrease]");
-            if (btnDiminuir) {
+        function tratarAcaoSugestao(event) {
+            const alvo = event.target;
+            if (!alvo || !alvo.closest) return false;
+
+            const botao = alvo.closest("[data-suggestion-decrease], [data-suggestion-increase], [data-suggestion-dismiss], [data-suggestion-add]");
+            if (!botao || !sugestoesClienteTbody.contains(botao)) return false;
+
+            const cardSugestao = botao.closest("[data-suggestion-card]");
+            if (!cardSugestao || !sugestoesClienteTbody.contains(cardSugestao)) return false;
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (botao.matches("[data-suggestion-decrease]")) {
                 ajustarQuantidadeSugestao(cardSugestao, -1);
-                return;
+                return true;
             }
 
-            const btnAumentar = event.target.closest("[data-suggestion-increase]");
-            if (btnAumentar) {
+            if (botao.matches("[data-suggestion-increase]")) {
                 ajustarQuantidadeSugestao(cardSugestao, 1);
-                return;
+                return true;
             }
 
-            const btnIgnorar = event.target.closest("[data-suggestion-dismiss]");
-            if (btnIgnorar) {
+            if (botao.matches("[data-suggestion-dismiss]")) {
                 removerSugestaoClientePorProdutoId(cardSugestao.dataset.sugestaoProdutoId);
-                return;
+                return true;
             }
 
-            const btnAdicionar = event.target.closest("[data-suggestion-add]");
-            if (!btnAdicionar) return;
-            adicionarSugestaoAoPedido(cardSugestao.dataset.sugestaoProdutoId, btnAdicionar);
-        });
+            if (botao.matches("[data-suggestion-add]")) {
+                adicionarSugestaoAoPedido(cardSugestao.dataset.sugestaoProdutoId, botao);
+                return true;
+            }
+
+            return false;
+        }
+
+        sugestoesClienteTbody.addEventListener("pointerdown", (event) => {
+            if (tratarAcaoSugestao(event)) {
+                sugestaoPointerTratadoEm = Date.now();
+            }
+        }, true);
+
+        sugestoesClienteTbody.addEventListener("click", (event) => {
+            if (Date.now() - sugestaoPointerTratadoEm < 650) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+            tratarAcaoSugestao(event);
+        }, true);
 
         clientePedido.addEventListener("change", () => {
             operadorPedidoConfirmado = false;
