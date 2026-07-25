@@ -1749,7 +1749,7 @@
         .modal-confirmacao-saida-btn:active {
             transform: translateY(1px) scale(0.99);
         }
-    
+
 .pedido-atalhos-lateral {
   position: fixed;
   top: 56px;
@@ -2393,11 +2393,84 @@
                 clienteBusca.classList.remove("campo-invalido");
             }
             clientePedido.classList.remove("campo-invalido");
-    
+
         document.addEventListener("click", (event) => {
             const dentroPedido = event.target && event.target.closest && event.target.closest(".pedido-container");
             if (!dentroPedido) return;
             diagnosticoToquePedido(event, "CLICK");
+        }, true);
+
+        function mostrarDiagnosticoToqueGlobal(texto) {
+            let barra = document.getElementById("diag-toque-global");
+            if (!barra) {
+                barra = document.createElement("div");
+                barra.id = "diag-toque-global";
+                barra.style.position = "fixed";
+                barra.style.left = "0";
+                barra.style.right = "0";
+                barra.style.top = "0";
+                barra.style.zIndex = "99999";
+                barra.style.padding = "8px 10px";
+                barra.style.background = "#111827";
+                barra.style.color = "#ffffff";
+                barra.style.fontSize = "13px";
+                barra.style.fontWeight = "800";
+                barra.style.lineHeight = "1.25";
+                barra.style.pointerEvents = "none";
+                barra.style.whiteSpace = "normal";
+                document.body.appendChild(barra);
+            }
+            barra.textContent = texto;
+        }
+
+        function descreverElementoToqueGlobal(elemento) {
+            if (!elemento) return "sem elemento";
+            const partes = [elemento.tagName ? elemento.tagName.toLowerCase() : String(elemento)];
+
+            if (elemento.id) partes.push("#" + elemento.id);
+
+            if (elemento.className && typeof elemento.className === "string") {
+                partes.push("." + elemento.className.trim().replace(/\s+/g, "."));
+            }
+
+            if (elemento.matches && elemento.matches("[data-suggestion-increase]")) partes.push("[MAIS]");
+            if (elemento.matches && elemento.matches("[data-suggestion-decrease]")) partes.push("[MENOS]");
+            if (elemento.matches && elemento.matches("[data-suggestion-dismiss]")) partes.push("[X]");
+            if (elemento.matches && elemento.matches("[data-suggestion-add]")) partes.push("[ADICIONAR]");
+
+            const botao = elemento.closest ? elemento.closest("button") : null;
+            if (botao && botao !== elemento) {
+                partes.push("botao=" + descreverElementoToqueGlobal(botao));
+            }
+
+            const card = elemento.closest ? elemento.closest("[data-suggestion-card]") : null;
+            if (card && card.dataset.sugestaoProdutoId) {
+                partes.push("cardProduto=" + card.dataset.sugestaoProdutoId);
+            }
+
+            return partes.join(" ");
+        }
+
+        document.addEventListener("pointerdown", (event) => {
+            const x = event.clientX;
+            const y = event.clientY;
+            const direto = document.elementFromPoint(x, y);
+            const alvo = event.target;
+            mostrarDiagnosticoToqueGlobal(
+                "[DIAG POINTER] target: " + descreverElementoToqueGlobal(alvo) +
+                " | point: " + descreverElementoToqueGlobal(direto)
+            );
+        }, true);
+
+        document.addEventListener("touchstart", (event) => {
+            const toque = event.touches && event.touches[0];
+            if (!toque) return;
+            const direto = document.elementFromPoint(toque.clientX, toque.clientY);
+            const alvo = event.target;
+            mostrarDiagnosticoToqueGlobal(
+                "[DIAG TOUCH] target: " + descreverElementoToqueGlobal(alvo) +
+                " | point: " + descreverElementoToqueGlobal(direto)
+            );
         }, true);
 
         atualizarDestaqueClienteSelecionado();
