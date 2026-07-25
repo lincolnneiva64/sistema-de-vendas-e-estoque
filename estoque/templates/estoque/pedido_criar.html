@@ -1420,45 +1420,6 @@
                 font-size: 14px;
             }
 
-            .sugestao-qtd-controle {
-                display: grid !important;
-                grid-template-columns: 52px minmax(0, 1fr) 52px !important;
-                gap: 8px !important;
-                width: 100% !important;
-                align-items: stretch !important;
-                position: relative !important;
-                z-index: 30 !important;
-            }
-
-            .sugestao-qtd-controle .btn-sugestao-qtd,
-            .sugestao-qtd-controle .sugestao-qtd-input {
-                width: 100% !important;
-                min-width: 0 !important;
-                position: relative !important;
-                z-index: 31 !important;
-                pointer-events: auto !important;
-                touch-action: manipulation !important;
-            }
-
-            .sugestao-acoes-linha {
-                display: grid !important;
-                grid-template-columns: minmax(0, 1fr) 56px !important;
-                gap: 8px !important;
-                width: 100% !important;
-                position: relative !important;
-                z-index: 30 !important;
-            }
-
-            .sugestao-acoes-linha .btn-sugestao-adicionar,
-            .sugestao-acoes-linha .btn-sugestao-ignorar {
-                width: 100% !important;
-                min-width: 0 !important;
-                position: relative !important;
-                z-index: 31 !important;
-                pointer-events: auto !important;
-                touch-action: manipulation !important;
-            }
-
             .pedido-topo-acoes {
                 align-items: stretch;
                 flex-direction: column;
@@ -3836,58 +3797,32 @@
             limparSugestoesCarregadas();
         });
 
-        let sugestaoPointerTratadoEm = 0;
-
-        function tratarAcaoSugestao(event) {
-            const alvo = event.target;
-            if (!alvo || !alvo.closest) return false;
-
-            const botao = alvo.closest("[data-suggestion-decrease], [data-suggestion-increase], [data-suggestion-dismiss], [data-suggestion-add]");
-            if (!botao || !sugestoesClienteTbody.contains(botao)) return false;
-
-            const cardSugestao = botao.closest("[data-suggestion-card]");
-            if (!cardSugestao || !sugestoesClienteTbody.contains(cardSugestao)) return false;
-
-            event.preventDefault();
-            event.stopPropagation();
-
-            if (botao.matches("[data-suggestion-decrease]")) {
-                ajustarQuantidadeSugestao(cardSugestao, -1);
-                return true;
-            }
-
-            if (botao.matches("[data-suggestion-increase]")) {
-                ajustarQuantidadeSugestao(cardSugestao, 1);
-                return true;
-            }
-
-            if (botao.matches("[data-suggestion-dismiss]")) {
-                removerSugestaoClientePorProdutoId(cardSugestao.dataset.sugestaoProdutoId);
-                return true;
-            }
-
-            if (botao.matches("[data-suggestion-add]")) {
-                adicionarSugestaoAoPedido(cardSugestao.dataset.sugestaoProdutoId, botao);
-                return true;
-            }
-
-            return false;
-        }
-
-        sugestoesClienteTbody.addEventListener("pointerdown", (event) => {
-            if (tratarAcaoSugestao(event)) {
-                sugestaoPointerTratadoEm = Date.now();
-            }
-        }, true);
-
         sugestoesClienteTbody.addEventListener("click", (event) => {
-            if (Date.now() - sugestaoPointerTratadoEm < 650) {
-                event.preventDefault();
-                event.stopPropagation();
+            const cardSugestao = event.target.closest("[data-suggestion-card]");
+            if (!cardSugestao || !sugestoesClienteTbody.contains(cardSugestao)) return;
+
+            const btnDiminuir = event.target.closest("[data-suggestion-decrease]");
+            if (btnDiminuir) {
+                ajustarQuantidadeSugestao(cardSugestao, -1);
                 return;
             }
-            tratarAcaoSugestao(event);
-        }, true);
+
+            const btnAumentar = event.target.closest("[data-suggestion-increase]");
+            if (btnAumentar) {
+                ajustarQuantidadeSugestao(cardSugestao, 1);
+                return;
+            }
+
+            const btnIgnorar = event.target.closest("[data-suggestion-dismiss]");
+            if (btnIgnorar) {
+                removerSugestaoClientePorProdutoId(cardSugestao.dataset.sugestaoProdutoId);
+                return;
+            }
+
+            const btnAdicionar = event.target.closest("[data-suggestion-add]");
+            if (!btnAdicionar) return;
+            adicionarSugestaoAoPedido(cardSugestao.dataset.sugestaoProdutoId, btnAdicionar);
+        });
 
         clientePedido.addEventListener("change", () => {
             operadorPedidoConfirmado = false;
