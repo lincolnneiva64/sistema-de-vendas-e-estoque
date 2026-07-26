@@ -767,22 +767,24 @@
         .sugestao-qtd-controle-simples {
             display: flex;
             justify-content: center;
+            align-items: center;
             width: 100%;
         }
 
         .sugestao-qtd-controle-simples .sugestao-qtd-input {
-            width: min(180px, 100%);
-            min-height: 52px;
+            width: 110px;
+            min-height: 48px;
             margin: 0 auto;
             text-align: center;
-            font-size: 22px;
+            font-size: 20px;
             font-weight: 900;
+            border-width: 2px;
         }
 
         .sugestao-acoes-linha-simples {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(110px, 0.45fr);
-            gap: 8px;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 10px;
             width: 100%;
         }
 
@@ -791,10 +793,13 @@
             width: 100%;
             min-height: 48px;
             border-radius: 8px;
+            padding: 8px 10px;
             font-size: 15px;
             font-weight: 900;
+            line-height: 1.15;
             cursor: pointer;
             touch-action: manipulation;
+            white-space: nowrap;
         }
 
         .btn-sugestao-remover {
@@ -824,41 +829,26 @@
 
             .sugestao-qtd-controle-simples {
                 justify-content: center;
-                padding: 4px 0;
+                padding: 2px 0 4px;
             }
 
             .sugestao-qtd-controle-simples .sugestao-qtd-input {
-                width: min(220px, 70%);
-                min-height: 60px;
-                font-size: 26px;
-                border-width: 2px;
+                width: 120px;
+                min-height: 50px;
+                font-size: 22px;
             }
 
             .sugestao-acoes-linha-simples {
                 grid-template-columns: 1fr;
+                gap: 8px;
             }
 
             .sugestao-acoes-linha-simples .btn-sugestao-adicionar,
             .sugestao-acoes-linha-simples .btn-sugestao-remover {
-                min-height: 54px;
-                font-size: 17px;
+                min-height: 52px;
+                font-size: 16px;
+                padding: 10px 12px;
             }
-        }
-
-        .sugestao-qtd-controle,
-        .sugestao-acoes-linha {
-            position: relative;
-            z-index: 10;
-            pointer-events: auto;
-        }
-
-        .btn-sugestao-qtd,
-        .btn-sugestao-adicionar,
-        .btn-sugestao-ignorar {
-            position: relative;
-            z-index: 11;
-            pointer-events: auto;
-            touch-action: manipulation;
         }
 
         .btn {
@@ -2558,7 +2548,7 @@
                     <td class="sugestoes-col-acao" data-label="Acao">
                         <span class="sugestao-acoes-linha sugestao-acoes-linha-simples">
                             <button type="button" class="btn-sugestao-adicionar" data-suggestion-add data-sugestao-adicionar="${produtoSugestaoId}">Adicionar</button>
-                            <button type="button" class="btn-sugestao-remover" data-suggestion-dismiss data-sugestao-ignorar="${produtoSugestaoId}">Remover</button>
+                            <button type="button" class="btn-sugestao-remover" data-suggestion-remove data-suggestion-dismiss data-sugestao-ignorar="${produtoSugestaoId}">Remover</button>
                         </span>
                     </td>
                 `;
@@ -2575,7 +2565,6 @@
             const primeiroInputQtdSugestao = sugestoesClienteTbody.querySelector("[data-suggestion-quantity]");
             if (primeiroInputQtdSugestao) {
                 window.setTimeout(() => {
-                    primeiroInputQtdSugestao.focus({ preventScroll: true });
                     primeiroInputQtdSugestao.select();
                 }, 80);
             }
@@ -3858,8 +3847,9 @@
             const cardSugestao = event.target.closest("[data-suggestion-card]");
             if (!cardSugestao || !sugestoesClienteTbody.contains(cardSugestao)) return;
 
-            const btnIgnorar = event.target.closest("[data-suggestion-dismiss]");
+            const btnIgnorar = event.target.closest("[data-suggestion-remove], [data-suggestion-dismiss], .btn-sugestao-remover");
             if (btnIgnorar) {
+                event.preventDefault();
                 removerSugestaoClientePorProdutoId(cardSugestao.dataset.sugestaoProdutoId);
                 return;
             }
