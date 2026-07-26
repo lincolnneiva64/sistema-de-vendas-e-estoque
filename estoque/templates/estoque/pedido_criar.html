@@ -2869,7 +2869,21 @@
             atualizarTabela();
             removerSugestaoClientePorProdutoId(produtoIdReal);
             mostrarMensagem("sucesso", "Sugestao adicionada ao pedido.");
-            mostrarItemPedidoAdicionado(indexAdicionado, { rolar: false });
+            mostrarItemPedidoAdicionado(indexAdicionado);
+
+            window.setTimeout(() => {
+                if (sugestoesClienteCard) {
+                    sugestoesClienteCard.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
+
+                const proximoInputQtdSugestao = sugestoesClienteTbody.querySelector("[data-suggestion-quantity]");
+                if (proximoInputQtdSugestao) {
+                    window.setTimeout(() => {
+                        proximoInputQtdSugestao.focus({ preventScroll: true });
+                        proximoInputQtdSugestao.select();
+                    }, 250);
+                }
+            }, 3000);
         }
 
         function mostrarMensagem(tipo, texto) {
@@ -3898,6 +3912,25 @@
 
             removerSugestaoClientePorProdutoId(cardSugestao.dataset.sugestaoProdutoId);
         }, true);
+
+
+        sugestoesClienteTbody.addEventListener("keydown", (event) => {
+            const inputQtdSugestao = event.target.closest("[data-suggestion-quantity]");
+            if (!inputQtdSugestao || !sugestoesClienteTbody.contains(inputQtdSugestao)) return;
+            if (event.key !== "Enter") return;
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const cardSugestao = inputQtdSugestao.closest("[data-suggestion-card]");
+            if (!cardSugestao) return;
+
+            const btnAdicionarSugestao = cardSugestao.querySelector("[data-suggestion-add]");
+            if (!btnAdicionarSugestao) return;
+
+            btnAdicionarSugestao.focus({ preventScroll: true });
+            btnAdicionarSugestao.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
 
         sugestoesClienteTbody.addEventListener("focusin", (event) => {
             const inputQtdSugestao = event.target.closest("[data-suggestion-quantity]");
