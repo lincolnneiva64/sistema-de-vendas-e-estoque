@@ -2596,7 +2596,7 @@
                     <td class="sugestoes-col-estoque" data-label="Estoque atual">${escaparHtml(formatarEstoqueSugestao(sugestao.estoque))}</td>
                     <td class="sugestoes-col-qtd-pedido" data-label="Qtd pedido">
                         <span class="sugestao-qtd-controle sugestao-qtd-controle-simples">
-                            <input type="text" class="sugestao-qtd-input" value="${escaparHtml(quantidadeInteiraSugestao(sugestao.quantidade))}" inputmode="numeric" pattern="[0-9]*" data-suggestion-quantity data-sugestao-qtd="${produtoSugestaoId}" aria-label="Quantidade do pedido para ${escaparHtml(sugestao.produto)}">
+                            <input type="text" class="sugestao-qtd-input" value="${escaparHtml(quantidadeInteiraSugestao(sugestao.quantidade))}" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done" autocomplete="off" data-suggestion-quantity data-sugestao-qtd="${produtoSugestaoId}" aria-label="Quantidade do pedido para ${escaparHtml(sugestao.produto)}">
                         </span>
                     </td>
                     <td class="sugestoes-col-acao" data-label="Acao">
@@ -3914,6 +3914,23 @@
         }, true);
 
 
+
+
+        function focarAdicionarDaSugestao(inputQtdSugestao) {
+            const cardSugestao = inputQtdSugestao ? inputQtdSugestao.closest("[data-suggestion-card]") : null;
+            if (!cardSugestao || !sugestoesClienteTbody.contains(cardSugestao)) return;
+
+            const btnAdicionarSugestao = cardSugestao.querySelector("[data-suggestion-add]");
+            if (!btnAdicionarSugestao) return;
+
+            inputQtdSugestao.blur();
+
+            window.setTimeout(() => {
+                btnAdicionarSugestao.focus({ preventScroll: true });
+                btnAdicionarSugestao.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }, 0);
+        }
+
         sugestoesClienteTbody.addEventListener("keydown", (event) => {
             const inputQtdSugestao = event.target.closest("[data-suggestion-quantity]");
             if (!inputQtdSugestao || !sugestoesClienteTbody.contains(inputQtdSugestao)) return;
@@ -3921,16 +3938,22 @@
 
             event.preventDefault();
             event.stopPropagation();
+            event.stopImmediatePropagation();
 
-            const cardSugestao = inputQtdSugestao.closest("[data-suggestion-card]");
-            if (!cardSugestao) return;
+            focarAdicionarDaSugestao(inputQtdSugestao);
+        }, true);
 
-            const btnAdicionarSugestao = cardSugestao.querySelector("[data-suggestion-add]");
-            if (!btnAdicionarSugestao) return;
+        sugestoesClienteTbody.addEventListener("keyup", (event) => {
+            const inputQtdSugestao = event.target.closest("[data-suggestion-quantity]");
+            if (!inputQtdSugestao || !sugestoesClienteTbody.contains(inputQtdSugestao)) return;
+            if (event.key !== "Enter") return;
 
-            btnAdicionarSugestao.focus({ preventScroll: true });
-            btnAdicionarSugestao.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        });
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+
+            focarAdicionarDaSugestao(inputQtdSugestao);
+        }, true);
 
         sugestoesClienteTbody.addEventListener("focusin", (event) => {
             const inputQtdSugestao = event.target.closest("[data-suggestion-quantity]");
