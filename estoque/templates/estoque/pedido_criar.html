@@ -765,42 +765,83 @@
         }
 
         .sugestao-qtd-controle-simples {
-            display: block;
+            display: flex;
+            justify-content: center;
             width: 100%;
         }
 
         .sugestao-qtd-controle-simples .sugestao-qtd-input {
-            width: 100%;
-            max-width: 120px;
-            min-height: 44px;
+            width: min(180px, 100%);
+            min-height: 52px;
             margin: 0 auto;
             text-align: center;
-            font-size: 18px;
+            font-size: 22px;
             font-weight: 900;
         }
 
         .sugestao-acoes-linha-simples {
-            display: block;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(110px, 0.45fr);
+            gap: 8px;
             width: 100%;
         }
 
-        .sugestao-acoes-linha-simples .btn-sugestao-adicionar {
+        .sugestao-acoes-linha-simples .btn-sugestao-adicionar,
+        .sugestao-acoes-linha-simples .btn-sugestao-remover {
             width: 100%;
-            min-height: 44px;
+            min-height: 48px;
+            border-radius: 8px;
             font-size: 15px;
             font-weight: 900;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        .btn-sugestao-remover {
+            border: 1px solid #fecaca;
+            background: #fff1f2;
+            color: #991b1b;
+        }
+
+        .btn-sugestao-remover:hover {
+            background: #fee2e2;
         }
 
         @media (max-width: 768px) {
-            .sugestao-qtd-controle-simples .sugestao-qtd-input {
-                max-width: 100%;
-                min-height: 52px;
-                font-size: 20px;
+            .sugestoes-cliente-tabela td::before {
+                font-size: 12px;
+                letter-spacing: 0.02em;
             }
 
-            .sugestao-acoes-linha-simples .btn-sugestao-adicionar {
-                min-height: 52px;
-                font-size: 16px;
+            .sugestoes-cliente-tabela td {
+                font-size: 15px;
+            }
+
+            .sugestao-produto {
+                font-size: 19px;
+                line-height: 1.25;
+            }
+
+            .sugestao-qtd-controle-simples {
+                justify-content: center;
+                padding: 4px 0;
+            }
+
+            .sugestao-qtd-controle-simples .sugestao-qtd-input {
+                width: min(220px, 70%);
+                min-height: 60px;
+                font-size: 26px;
+                border-width: 2px;
+            }
+
+            .sugestao-acoes-linha-simples {
+                grid-template-columns: 1fr;
+            }
+
+            .sugestao-acoes-linha-simples .btn-sugestao-adicionar,
+            .sugestao-acoes-linha-simples .btn-sugestao-remover {
+                min-height: 54px;
+                font-size: 17px;
             }
         }
 
@@ -2517,6 +2558,7 @@
                     <td class="sugestoes-col-acao" data-label="Acao">
                         <span class="sugestao-acoes-linha sugestao-acoes-linha-simples">
                             <button type="button" class="btn-sugestao-adicionar" data-suggestion-add data-sugestao-adicionar="${produtoSugestaoId}">Adicionar</button>
+                            <button type="button" class="btn-sugestao-remover" data-suggestion-dismiss data-sugestao-ignorar="${produtoSugestaoId}">Remover</button>
                         </span>
                     </td>
                 `;
@@ -2528,6 +2570,14 @@
                 btnSugestoesToggle.textContent = sugestoesClienteExpandida ? "Mostrar menos" : "Ver mais sugestoes";
             } else {
                 btnSugestoesToggle.style.display = "none";
+            }
+
+            const primeiroInputQtdSugestao = sugestoesClienteTbody.querySelector("[data-suggestion-quantity]");
+            if (primeiroInputQtdSugestao) {
+                window.setTimeout(() => {
+                    primeiroInputQtdSugestao.focus({ preventScroll: true });
+                    primeiroInputQtdSugestao.select();
+                }, 80);
             }
         }
 
@@ -3807,6 +3857,12 @@
         sugestoesClienteTbody.addEventListener("click", (event) => {
             const cardSugestao = event.target.closest("[data-suggestion-card]");
             if (!cardSugestao || !sugestoesClienteTbody.contains(cardSugestao)) return;
+
+            const btnIgnorar = event.target.closest("[data-suggestion-dismiss]");
+            if (btnIgnorar) {
+                removerSugestaoClientePorProdutoId(cardSugestao.dataset.sugestaoProdutoId);
+                return;
+            }
 
             const btnAdicionar = event.target.closest("[data-suggestion-add]");
             if (!btnAdicionar) return;
