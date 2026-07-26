@@ -783,23 +783,25 @@
 
         .sugestao-acoes-linha-simples {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-            gap: 10px;
+            grid-template-columns: 1fr;
+            gap: 8px;
             width: 100%;
         }
 
         .sugestao-acoes-linha-simples .btn-sugestao-adicionar,
         .sugestao-acoes-linha-simples .btn-sugestao-remover {
             width: 100%;
-            min-height: 48px;
+            min-width: 0;
+            min-height: 52px;
             border-radius: 8px;
-            padding: 8px 10px;
-            font-size: 15px;
+            padding: 10px 12px;
+            font-size: 16px;
             font-weight: 900;
             line-height: 1.15;
             cursor: pointer;
             touch-action: manipulation;
-            white-space: nowrap;
+            white-space: normal;
+            text-align: center;
         }
 
         .btn-sugestao-remover {
@@ -845,9 +847,9 @@
 
             .sugestao-acoes-linha-simples .btn-sugestao-adicionar,
             .sugestao-acoes-linha-simples .btn-sugestao-remover {
-                min-height: 52px;
-                font-size: 16px;
-                padding: 10px 12px;
+                min-height: 54px;
+                font-size: 17px;
+                padding: 12px;
             }
         }
 
@@ -2548,7 +2550,7 @@
                     <td class="sugestoes-col-acao" data-label="Acao">
                         <span class="sugestao-acoes-linha sugestao-acoes-linha-simples">
                             <button type="button" class="btn-sugestao-adicionar" data-suggestion-add data-sugestao-adicionar="${produtoSugestaoId}">Adicionar</button>
-                            <button type="button" class="btn-sugestao-remover" data-suggestion-remove data-suggestion-dismiss data-sugestao-ignorar="${produtoSugestaoId}">Remover</button>
+                            <button type="button" class="btn-sugestao-remover" data-suggestion-remove data-suggestion-dismiss data-sugestao-ignorar="${produtoSugestaoId}" aria-label="Remover sugest?o">Remover</button>
                         </span>
                     </td>
                 `;
@@ -3830,6 +3832,20 @@
             }
             limparSugestoesCarregadas();
         });
+
+
+        sugestoesClienteTbody.addEventListener("click", (event) => {
+            const btnRemoverSugestao = event.target.closest("[data-suggestion-remove], .btn-sugestao-remover");
+            if (!btnRemoverSugestao || !sugestoesClienteTbody.contains(btnRemoverSugestao)) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const cardSugestao = btnRemoverSugestao.closest("[data-suggestion-card]");
+            if (!cardSugestao) return;
+
+            removerSugestaoClientePorProdutoId(cardSugestao.dataset.sugestaoProdutoId);
+        }, true);
 
         sugestoesClienteTbody.addEventListener("focusin", (event) => {
             const inputQtdSugestao = event.target.closest("[data-suggestion-quantity]");
