@@ -1949,6 +1949,58 @@
     }
 }
 
+
+        /* Ajuste final das a??es das sugest?es no mobile */
+        @media (max-width: 768px) {
+            .sugestoes-cliente-tabela .sugestao-acoes-linha-simples {
+                display: grid !important;
+                grid-template-columns: 1fr !important;
+                gap: 10px !important;
+                width: 100% !important;
+            }
+
+            .sugestoes-cliente-tabela .sugestao-acoes-linha-simples .btn-sugestao-adicionar,
+            .sugestoes-cliente-tabela .sugestao-acoes-linha-simples .btn-sugestao-remover {
+                display: block !important;
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                min-height: 54px !important;
+                padding: 12px 14px !important;
+                border-radius: 8px !important;
+                font-size: 17px !important;
+                font-weight: 900 !important;
+                line-height: 1.2 !important;
+                text-align: center !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                box-sizing: border-box !important;
+            }
+
+            .sugestoes-cliente-tabela .sugestao-acoes-linha-simples .btn-sugestao-remover {
+                border: 1px solid #fecaca !important;
+                background: #fff1f2 !important;
+                color: #991b1b !important;
+            }
+
+            .sugestoes-cliente-tabela .sugestao-qtd-controle-simples {
+                display: flex !important;
+                justify-content: center !important;
+                width: 100% !important;
+            }
+
+            .sugestoes-cliente-tabela .sugestao-qtd-controle-simples .sugestao-qtd-input {
+                width: 120px !important;
+                max-width: 120px !important;
+                min-height: 50px !important;
+                margin-inline: auto !important;
+                text-align: center !important;
+                font-size: 22px !important;
+                box-sizing: border-box !important;
+            }
+        }
+
 </style>
 </head>
 <body>
