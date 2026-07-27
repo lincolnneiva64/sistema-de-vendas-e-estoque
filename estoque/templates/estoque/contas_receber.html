@@ -357,7 +357,13 @@
             {% for conta in contas %}
               <tr class="contas-row">
                 <td class="contas-cliente">{{ conta.cliente.nome|default:"Consumidor" }}</td>
-                <td class="contas-venda">#{{ conta.venda_id }}</td>
+                <td class="contas-venda">
+                  {% if conta.venda_id %}
+                    Venda #{{ conta.venda_id }}
+                  {% else %}
+                    Conta antiga #{{ conta.numero_legado|default:conta.id }}
+                  {% endif %}
+                </td>
                 <td>{{ conta.data_emissao|date:"d/m/Y" }}</td>
                 <td>{{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</td>
                 <td class="contas-valor">R$ {{ conta.valor_original|floatformat:2 }}</td>
@@ -365,7 +371,9 @@
                 <td><span class="contas-status {{ conta.status }}">{{ conta.get_status_display }}</span></td>
                 <td>
                   <div class="contas-actions-cell">
-                    <a href="{% url 'estoque:venda_detalhe' conta.venda_id %}?next={{ detalhe_credito_retorno_url|urlencode }}" class="contas-action-link">Abrir nota</a>
+                    {% if conta.venda_id %}
+                      <a href="{% url 'estoque:venda_detalhe' conta.venda_id %}?next={{ detalhe_credito_retorno_url|urlencode }}" class="contas-action-link">Abrir nota</a>
+                    {% endif %}
                     {% if conta.cliente_id %}
                       {% if conta.status == "aberta" or conta.status == "parcial" %}
                         <a href="{% url 'estoque:receber_cliente' conta.cliente_id %}?next={{ detalhe_credito_retorno_url|urlencode }}" class="contas-action-link receber">Receber contas do cliente</a>

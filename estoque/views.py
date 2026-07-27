@@ -9608,9 +9608,14 @@ def _montar_contas_preview_cobranca(contas_qs, hoje):
             status_texto = f"Vencida há {atraso_dias} dias"
         else:
             status_texto = "Em dia"
-        venda = conta.venda
+        venda = conta.venda if conta.venda_id else None
+        referencia_legada = conta.numero_legado or conta.id
         contas.append({
-            "titulo": f"Venda #{venda.id}" if venda else f"Conta #{conta.id}",
+            "titulo": (
+                f"Venda #{venda.id}"
+                if venda
+                else f"Conta antiga #{referencia_legada}"
+            ),
             "data": _formatar_data_cobranca((venda.data_venda if venda else None) or conta.data_emissao),
             "vencimento": _formatar_data_cobranca(vencimento),
             "valor": _formatar_moeda(conta.valor_em_aberto or Decimal("0.00")),

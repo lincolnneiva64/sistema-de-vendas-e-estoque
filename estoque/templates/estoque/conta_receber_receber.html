@@ -347,8 +347,16 @@
             <span class="receber-valor">{{ conta.cliente.nome|default:"Consumidor" }}</span>
           </div>
           <div class="receber-dado">
-            <span class="receber-label">Venda</span>
-            <span class="receber-valor">#{{ conta.venda_id }}</span>
+            <span class="receber-label">
+              {% if conta.venda_id %}Venda{% else %}Conta antiga{% endif %}
+            </span>
+            <span class="receber-valor">
+              {% if conta.venda_id %}
+                #{{ conta.venda_id }}
+              {% else %}
+                #{{ conta.numero_legado|default:conta.id }}
+              {% endif %}
+            </span>
           </div>
           <div class="receber-dado">
             <span class="receber-label">Vencimento</span>
@@ -473,7 +481,7 @@
                     <span class="receber-historico-data">{{ pagamento.criado_em|date:"d/m/Y H:i" }}</span>
                     <span class="receber-historico-valor">R$ {{ pagamento.valor|floatformat:2 }}</span>
                     <span class="receber-historico-pill">{{ pagamento.forma_pagamento|default:"Forma nao informada" }}</span>
-                    <span class="receber-historico-pill">Conta #{{ pagamento.conta_id }} / Venda #{{ pagamento.venda_id }}</span>
+                    <span class="receber-historico-pill">Conta #{{ pagamento.conta_id }}{% if pagamento.venda_id %} / Venda #{{ pagamento.venda_id }}{% endif %}</span>
                   </div>
                   {% if pagamento.observacao %}
                     <div class="receber-historico-obs">{{ pagamento.observacao }}</div>

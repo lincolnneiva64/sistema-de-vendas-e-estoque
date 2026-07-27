@@ -515,6 +515,8 @@ class ContaReceber(models.Model):
         Venda,
         on_delete=models.CASCADE,
         related_name="conta_receber",
+        blank=True,
+        null=True,
     )
     cliente = models.ForeignKey(
         Cliente,
@@ -536,7 +538,11 @@ class ContaReceber(models.Model):
         ordering = ["data_vencimento", "id"]
 
     def __str__(self):
-        return f"Conta a receber - Venda #{self.venda_id}"
+        if self.venda_id:
+            return f"Conta a receber - Venda #{self.venda_id}"
+
+        referencia = self.numero_legado or self.id
+        return f"Conta a receber legada #{referencia}"
 
 
 class OperacaoRecebimentoCliente(models.Model):
