@@ -108,6 +108,14 @@ class Categoria(models.Model):
 
 
 class Cliente(models.Model):
+    codigo_legado = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        unique=True,
+        db_index=True,
+    )
+
     TIPO_CHAVE_PIX_CPF = "cpf"
     TIPO_CHAVE_PIX_CNPJ = "cnpj"
     TIPO_CHAVE_PIX_TELEFONE = "telefone"
@@ -477,6 +485,14 @@ class ItemVendaRemovido(models.Model):
 
 
 class ContaReceber(models.Model):
+    numero_legado = models.CharField(
+        max_length=40,
+        blank=True,
+        null=True,
+        unique=True,
+        db_index=True,
+    )
+
     STATUS_ABERTA = "aberta"
     STATUS_PARCIAL = "parcial"
     STATUS_PAGA = "paga"
@@ -912,6 +928,14 @@ class ItemPedido(models.Model):
 
 
 class Fornecedor(models.Model):
+    codigo_legado = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        unique=True,
+        db_index=True,
+    )
+
     FORMA_AVISTA = "avista"
     FORMA_PIX = "pix"
     FORMA_DINHEIRO = "dinheiro"
@@ -1887,6 +1911,14 @@ class ItemListaCompraFornecedor(models.Model):
 
 
 class ContaPagar(models.Model):
+    documento_legado = models.CharField(
+        max_length=40,
+        blank=True,
+        null=True,
+        unique=True,
+        db_index=True,
+    )
+
     STATUS_ABERTA = "aberta"
     STATUS_PARCIAL = "parcial"
     STATUS_PAGA = "paga"
