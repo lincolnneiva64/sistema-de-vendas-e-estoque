@@ -10,6 +10,13 @@ class Produto(models.Model):
 
     nome = models.CharField(max_length=120)
     codigo = models.CharField(max_length=50, blank=True, null=True)
+    codigo_legado = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        unique=True,
+        db_index=True,
+    )
     categoria = models.CharField(max_length=60, blank=True, null=True)
 
     preco_compra = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
