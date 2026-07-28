@@ -23,6 +23,7 @@ from django.core.exceptions import ValidationError
 from django.core import signing
 from django.db import IntegrityError, transaction
 from django.db.models import Q, Sum, Max, Prefetch
+from django.db.models.deletion import ProtectedError
 from django.db.models.functions import Coalesce
 from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse, urlsplit, urlunsplit
 from django.shortcuts import render, redirect, get_object_or_404
@@ -3518,6 +3519,70 @@ def clientes_consulta(request):
             cliente.save(update_fields=["ativo", "atualizado_em"])
             status = "ativado" if cliente.ativo else "desativado"
             messages.success(request, f'Cliente "{cliente.nome}" {status} com sucesso.')
+            return redirect(destino)
+
+        if acao == "excluir_selecionados":
+            cliente_ids = []
+            for valor in request.POST.getlist("cliente_ids"):
+                try:
+                    cliente_ids.append(int(valor))
+                except (TypeError, ValueError):
+                    continue
+            cliente_ids = sorted(set(cliente_ids))
+
+            if request.POST.get("confirmacao_exclusao_lote") != "1":
+                messages.warning(request, "Confirme a exclusao definitiva dos clientes selecionados antes de continuar.")
+                return redirect(destino)
+
+            if not cliente_ids:
+                messages.warning(request, "Marque pelo menos um cliente para excluir.")
+                return redirect(destino)
+
+            try:
+                with transaction.atomic():
+                    clientes_marcados = Cliente.objects.select_for_update().filter(pk__in=cliente_ids)
+                    total_clientes = clientes_marcados.count()
+                    if not total_clientes:
+                        messages.warning(request, "Nenhum cliente marcado foi encontrado para exclusao.")
+                        return redirect(destino)
+
+                    vendas_qs = Venda.objects.filter(cliente_id__in=cliente_ids)
+                    venda_ids = list(vendas_qs.values_list("id", flat=True))
+                    contas_qs = ContaReceber.objects.filter(
+                        Q(cliente_id__in=cliente_ids) | Q(venda_id__in=venda_ids)
+                    )
+                    conta_ids = list(contas_qs.values_list("id", flat=True))
+                    operacao_ids = list(
+                        OperacaoRecebimentoCliente.objects.filter(cliente_id__in=cliente_ids)
+                        .values_list("id", flat=True)
+                    )
+
+                    RecebimentoContaReceber.objects.filter(
+                        Q(conta_id__in=conta_ids) | Q(operacao_id__in=operacao_ids)
+                    ).delete()
+                    OperacaoRecebimentoCliente.objects.filter(pk__in=operacao_ids).delete()
+                    CreditoCliente.objects.filter(cliente_id__in=cliente_ids).delete()
+                    PixRecebido.objects.filter(cliente_sugerido_id__in=cliente_ids).exclude(
+                        cliente_id__in=cliente_ids
+                    ).update(cliente_sugerido=None)
+                    PixRecebido.objects.filter(cliente_id__in=cliente_ids).delete()
+                    Pedido.objects.filter(cliente_id__in=cliente_ids).delete()
+                    AjusteItemVendaQuitada.objects.filter(
+                        Q(cliente_id__in=cliente_ids) | Q(venda_id__in=venda_ids)
+                    ).delete()
+                    vendas_qs.delete()
+                    contas_qs.delete()
+                    clientes_marcados.delete()
+
+                messages.success(
+                    request,
+                    f"{total_clientes} cliente(s) selecionado(s) excluido(s) com os dados operacionais ligados a eles.",
+                )
+            except ProtectedError:
+                messages.error(
+                    request,
+                    "Nao foi possivel excluir os clientes selecionados porque ainda ha dados protegidos vinculados a eles.",
+                )
             return redirect(destino)
 
         if acao == "excluir" and cliente_id:

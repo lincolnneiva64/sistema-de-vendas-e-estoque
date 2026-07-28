@@ -30,6 +30,10 @@
     background: #dbeafe; color: #164173; border: 1px solid #7ea6d9;
     box-shadow: 0 3px 10px rgba(15, 23, 42, 0.07);
   }
+  .clientes-btn-danger {
+    background: #dc2626; color: #fff; border: 1px solid #ef4444;
+    box-shadow: 0 10px 24px rgba(220, 38, 38, 0.20);
+  }
   .clientes-search {
     background: #fff; border: 1px solid #e1e7ef; border-radius: 12px;
     box-shadow: 0 10px 24px rgba(15, 23, 42, 0.055);
@@ -54,6 +58,22 @@
   }
   .clientes-panel-title { margin: 0; font-size: 0.98rem; font-weight: 800; color: #111827; }
   .clientes-count { color: #64748b; font-size: 0.84rem; font-weight: 700; white-space: nowrap; }
+  .clientes-bulk-bar {
+    padding: 10px 16px; border-bottom: 1px solid #edf1f6;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: #f8fafc;
+  }
+  .clientes-bulk-info { color: #475569; font-size: 0.86rem; font-weight: 800; }
+  .clientes-select-cell { width: 46px; text-align: center; vertical-align: middle; }
+  .clientes-select-label {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 38px; height: 38px; border-radius: 10px; cursor: pointer;
+  }
+  .clientes-select-checkbox {
+    width: 18px; height: 18px; accent-color: #dc2626; cursor: pointer;
+  }
+  .clientes-row.cliente-marcado td,
+  .clientes-row.cliente-marcado:hover td { background: #fff7ed; }
   .clientes-table-wrap { overflow-x: auto; }
   .clientes-table { width: 100%; border-collapse: collapse; min-width: 980px; }
   .clientes-table th {
@@ -142,6 +162,7 @@
   .clientes-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
   .clientes-alert.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
   @media (max-width: 760px) {
+    .clientes-page { padding-bottom: 96px; }
     .clientes-header { align-items: stretch; flex-direction: column; }
     .clientes-header-actions { justify-content: flex-start; }
     .clientes-header-summary { width: fit-content; }
@@ -149,6 +170,30 @@
     .clientes-modal { padding: 14px; }
     .clientes-modal-actions { justify-content: stretch; }
     .clientes-modal-btn { flex: 1 1 auto; }
+    .clientes-bulk-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 45;
+      display: none;
+      align-items: stretch;
+      flex-direction: column;
+      padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+      border-top: 1px solid #fecaca;
+      border-bottom: 0;
+      background: rgba(255, 255, 255, 0.97);
+      box-shadow: 0 -14px 30px rgba(15, 23, 42, 0.18);
+    }
+    .clientes-bulk-bar.tem-selecao { display: flex; }
+    .clientes-bulk-info { text-align: center; color: #991b1b; }
+    .clientes-bulk-bar .clientes-btn {
+      width: 100%;
+      min-height: 54px;
+      border-radius: 14px;
+      font-size: 1rem;
+      font-weight: 900;
+    }
     .clientes-table-wrap { overflow-x: visible; }
     .clientes-table {
       min-width: 0;
@@ -167,6 +212,7 @@
       box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
       padding: 12px;
       margin: 0 0 10px;
+      position: relative;
     }
     .clientes-row:hover td { background: transparent; }
     .clientes-table td {
@@ -174,31 +220,52 @@
       padding: 3px 0;
       font-size: 0.92rem;
     }
-    .clientes-table td:nth-child(2),
-    .clientes-table td:nth-child(5),
     .clientes-table td:nth-child(6),
     .clientes-table td:nth-child(7),
-    .clientes-table td:nth-child(8) {
+    .clientes-table td:nth-child(8),
+    .clientes-table td:nth-child(9) {
       display: none;
+    }
+    .clientes-select-cell {
+      position: absolute;
+      right: 8px;
+      top: 8px;
+      width: 60px;
+      height: 60px;
+      padding: 0 !important;
+      z-index: 3;
+    }
+    .clientes-select-label {
+      width: 60px;
+      height: 60px;
+      border: 1px solid #fecaca;
+      border-radius: 14px;
+      background: #fff7ed;
+      box-shadow: 0 4px 12px rgba(220, 38, 38, 0.12);
+    }
+    .clientes-select-checkbox {
+      width: 28px;
+      height: 28px;
     }
     .cliente-nome {
       font-size: 1.02rem;
       line-height: 1.25;
+      padding-right: 64px;
     }
     .cliente-apelido {
       font-size: 0.86rem;
       line-height: 1.25;
       margin-top: 4px;
     }
-    .clientes-table td:nth-child(3),
-    .clientes-table td:nth-child(4) {
+    .clientes-table td:nth-child(4),
+    .clientes-table td:nth-child(5) {
       color: #475569;
       font-size: 0.88rem;
       font-weight: 750;
       margin-top: 7px;
       line-height: 1.3;
     }
-    .clientes-table td:nth-child(3)::before {
+    .clientes-table td:nth-child(4)::before {
       content: "WhatsApp";
       display: block;
       color: #94a3b8;
@@ -208,7 +275,7 @@
       letter-spacing: 0.05em;
       margin-bottom: 2px;
     }
-    .clientes-table td:nth-child(4)::before {
+    .clientes-table td:nth-child(5)::before {
       content: "Bairro/Cidade";
       display: block;
       color: #94a3b8;
@@ -218,7 +285,7 @@
       letter-spacing: 0.05em;
       margin-bottom: 2px;
     }
-    .clientes-table td:nth-child(9) {
+    .clientes-table td:nth-child(10) {
       margin-top: 10px;
       padding-top: 10px;
       border-top: 1px solid #edf1f6;
@@ -249,6 +316,11 @@
       pointer-events: auto;
       cursor: pointer;
     }
+    .clientes-row.cliente-marcado {
+      border-color: #fb923c;
+      box-shadow: 0 0 0 2px rgba(251, 146, 60, 0.24), 0 8px 20px rgba(15, 23, 42, 0.06);
+    }
+    .clientes-row.cliente-marcado td { background: transparent; }
     .clientes-action-link:active {
       transform: translateY(2px);
       background: #93c5fd;
@@ -316,7 +388,7 @@
 
   /* CPF/CNPJ visível no card mobile de clientes */
   @media (max-width: 768px) {
-    .clientes-table td:nth-child(2) {
+    .clientes-table td:nth-child(3) {
       display: block !important;
       color: #475569 !important;
       font-size: 18px !important;
@@ -324,7 +396,7 @@
       margin-top: 12px !important;
     }
 
-    .clientes-table td:nth-child(2)::before {
+    .clientes-table td:nth-child(3)::before {
       content: "CPF/CNPJ";
       display: block;
       color: #94a3b8;
@@ -339,9 +411,9 @@
 
   /* reforça os rótulos do card mobile de clientes */
   @media (max-width: 768px) {
-    .clientes-table td:nth-child(2)::before,
     .clientes-table td:nth-child(3)::before,
-    .clientes-table td:nth-child(4)::before {
+    .clientes-table td:nth-child(4)::before,
+    .clientes-table td:nth-child(5)::before {
       color: #64748b !important;
       font-size: 14px !important;
       font-weight: 900 !important;
@@ -350,9 +422,9 @@
       margin-bottom: 6px !important;
     }
 
-    .clientes-table td:nth-child(2),
     .clientes-table td:nth-child(3),
-    .clientes-table td:nth-child(4) {
+    .clientes-table td:nth-child(4),
+    .clientes-table td:nth-child(5) {
       color: #334155 !important;
       font-weight: 700 !important;
     }
@@ -411,10 +483,23 @@
       </div>
 
       {% if clientes %}
+        <form method="post" id="formExcluirClientesSelecionados">
+          {% csrf_token %}
+          <input type="hidden" name="acao" value="excluir_selecionados">
+          <input type="hidden" name="confirmacao_exclusao_lote" value="1">
+          <div id="clientesSelecionadosInputs"></div>
+        </form>
+        <div class="clientes-bulk-bar" aria-live="polite">
+          <span class="clientes-bulk-info" id="clientesSelecionadosResumo">0 cliente(s) selecionado(s)</span>
+          <button type="button" class="clientes-btn clientes-btn-danger" id="btnExcluirClientesSelecionados" disabled>
+            Excluir selecionados (0)
+          </button>
+        </div>
         <div class="clientes-table-wrap">
           <table class="clientes-table">
             <thead>
               <tr>
+                <th>Selecionar</th>
                 <th>Cliente</th>
                 <th>CPF/CNPJ</th>
                 <th>WhatsApp</th>
@@ -432,6 +517,16 @@
                   class="clientes-row {% if cliente_salvo_id == cliente.id|stringformat:'s' %}cliente-salvo-destaque{% endif %}"
                   data-cliente-search="{{ cliente.nome|lower }} {{ cliente.apelido_nome_conhecido|default:''|lower }} {{ cliente.cpf_cnpj|default:''|lower }} {{ cliente.whatsapp|default:''|lower }} {{ cliente.whatsapp_normalizado|default:''|lower }} {{ cliente.bairro|default:''|lower }} {{ cliente.cidade|default:''|lower }}"
                 >
+                  <td class="clientes-select-cell">
+                    <label class="clientes-select-label" aria-label="Selecionar {{ cliente.nome|escape }}">
+                      <input
+                        type="checkbox"
+                        class="clientes-select-checkbox"
+                        value="{{ cliente.id }}"
+                        data-cliente-checkbox
+                      >
+                    </label>
+                  </td>
                   <td>
                     <div class="cliente-nome">{{ cliente.nome }}</div>
                     {% if cliente.apelido_nome_conhecido %}
@@ -515,7 +610,7 @@
 <div class="clientes-modal-backdrop" id="modalExcluirCliente" aria-hidden="true">
   <div class="clientes-modal" role="dialog" aria-modal="true" aria-labelledby="modalExcluirClienteTitulo">
     <h2 class="clientes-modal-title" id="modalExcluirClienteTitulo">Excluir cliente?</h2>
-    <p class="clientes-modal-text">Este cliente nao possui vendas vinculadas. A exclusao sera definitiva.</p>
+    <p class="clientes-modal-text" id="modalExcluirClienteTexto">Este cliente nao possui vendas vinculadas. A exclusao sera definitiva.</p>
     <div class="clientes-modal-nome" id="modalExcluirClienteNome"></div>
     <div class="clientes-modal-actions">
       <button type="button" class="clientes-modal-btn cancelar" id="btnCancelarExclusaoCliente">Cancelar</button>
@@ -532,10 +627,19 @@
     const contador = document.getElementById("contadorClientes");
     const semResultado = document.getElementById("semClientesFiltrados");
     const modalExcluir = document.getElementById("modalExcluirCliente");
+    const modalTitulo = document.getElementById("modalExcluirClienteTitulo");
+    const modalTexto = document.getElementById("modalExcluirClienteTexto");
     const modalNome = document.getElementById("modalExcluirClienteNome");
     const btnCancelarExclusao = document.getElementById("btnCancelarExclusaoCliente");
     const btnConfirmarExclusao = document.getElementById("btnConfirmarExclusaoCliente");
+    const checkboxesClientes = Array.from(document.querySelectorAll("[data-cliente-checkbox]"));
+    const btnExcluirSelecionados = document.getElementById("btnExcluirClientesSelecionados");
+    const resumoSelecionados = document.getElementById("clientesSelecionadosResumo");
+    const barraExclusaoSelecionados = document.querySelector(".clientes-bulk-bar");
+    const formExcluirSelecionados = document.getElementById("formExcluirClientesSelecionados");
+    const clientesSelecionadosInputs = document.getElementById("clientesSelecionadosInputs");
     let formExclusaoSelecionado = null;
+    let modoExclusaoSelecionado = "individual";
     const chaveScrollExclusao = "clientesConsultaScrollY";
     const clienteSalvoDestacado = document.querySelector(".cliente-salvo-destaque");
     if (clienteSalvoDestacado) {
@@ -585,23 +689,92 @@
     buscaLocalidade?.addEventListener("input", filtrarClientes);
     filtrarClientes();
 
+    function clientesSelecionados() {
+      return checkboxesClientes.filter(function (checkbox) {
+        return checkbox.checked;
+      });
+    }
+
+    function atualizarSelecaoClientes() {
+      const selecionados = clientesSelecionados();
+      const total = selecionados.length;
+
+      checkboxesClientes.forEach(function (checkbox) {
+        checkbox.closest(".clientes-row")?.classList.toggle("cliente-marcado", checkbox.checked);
+      });
+
+      if (resumoSelecionados) {
+        resumoSelecionados.textContent = `${total} cliente(s) selecionado(s)`;
+      }
+      if (btnExcluirSelecionados) {
+        btnExcluirSelecionados.disabled = total === 0;
+        btnExcluirSelecionados.textContent = `Excluir selecionados (${total})`;
+      }
+      barraExclusaoSelecionados?.classList.toggle("tem-selecao", total > 0);
+    }
+
+    function preencherClientesSelecionados() {
+      if (!clientesSelecionadosInputs) return 0;
+      clientesSelecionadosInputs.innerHTML = "";
+      const selecionados = clientesSelecionados();
+      selecionados.forEach(function (checkbox) {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "cliente_ids";
+        input.value = checkbox.value;
+        clientesSelecionadosInputs.appendChild(input);
+      });
+      return selecionados.length;
+    }
+
     function fecharModalExclusao() {
       if (!modalExcluir) return;
       modalExcluir.classList.remove("aberto");
       modalExcluir.setAttribute("aria-hidden", "true");
       formExclusaoSelecionado = null;
+      modoExclusaoSelecionado = "individual";
     }
 
     document.querySelectorAll(".btn-abrir-modal-excluir").forEach(function (botao) {
       botao.addEventListener("click", function () {
         formExclusaoSelecionado = botao.closest("form");
+        modoExclusaoSelecionado = "individual";
+        if (modalTitulo) modalTitulo.textContent = "Excluir cliente?";
+        if (modalTexto) modalTexto.textContent = "Este cliente nao possui vendas vinculadas. A exclusao sera definitiva.";
         if (modalNome) modalNome.textContent = botao.dataset.clienteNome || "Cliente selecionado";
+        if (btnConfirmarExclusao) btnConfirmarExclusao.textContent = "Excluir definitivamente";
         if (modalExcluir) {
           modalExcluir.classList.add("aberto");
           modalExcluir.setAttribute("aria-hidden", "false");
         }
         btnCancelarExclusao?.focus();
       });
+    });
+
+    checkboxesClientes.forEach(function (checkbox) {
+      checkbox.addEventListener("change", atualizarSelecaoClientes);
+      checkbox.closest(".clientes-select-cell")?.addEventListener("click", function (evento) {
+        evento.stopPropagation();
+      });
+    });
+
+    btnExcluirSelecionados?.addEventListener("click", function () {
+      const total = preencherClientesSelecionados();
+      if (!total || !formExcluirSelecionados) return;
+
+      formExclusaoSelecionado = formExcluirSelecionados;
+      modoExclusaoSelecionado = "lote";
+      if (modalTitulo) modalTitulo.textContent = "Excluir clientes selecionados?";
+      if (modalTexto) {
+        modalTexto.textContent = `Esta exclusao e definitiva. Ao confirmar, somente os ${total} cliente(s) marcado(s) e os dados operacionais ligados a eles serao excluidos. Clientes nao marcados permanecerao intactos.`;
+      }
+      if (modalNome) modalNome.textContent = `${total} cliente(s) selecionado(s)`;
+      if (btnConfirmarExclusao) btnConfirmarExclusao.textContent = "Excluir selecionados";
+      if (modalExcluir) {
+        modalExcluir.classList.add("aberto");
+        modalExcluir.setAttribute("aria-hidden", "false");
+      }
+      btnCancelarExclusao?.focus();
     });
 
     btnCancelarExclusao?.addEventListener("click", fecharModalExclusao);
@@ -613,9 +786,11 @@
     });
     btnConfirmarExclusao?.addEventListener("click", function () {
       if (!formExclusaoSelecionado) return;
+      if (modoExclusaoSelecionado === "lote" && !preencherClientesSelecionados()) return;
       sessionStorage.setItem(chaveScrollExclusao, String(window.scrollY || 0));
       formExclusaoSelecionado.submit();
     });
+    atualizarSelecaoClientes();
   });
 </script>
 {% endblock %}
