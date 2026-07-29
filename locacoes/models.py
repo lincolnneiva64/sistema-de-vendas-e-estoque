@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.utils import timezone
 
-from estoque.models import Cliente
+from estoque.models import Cliente, ContaFinanceira, MovimentoFinanceiro
 
 
 class ConfiguracaoLocacao(models.Model):
@@ -289,6 +289,15 @@ class Locacao(models.Model):
         (TIPO_PESSOA_AVULSA, "Pessoa avulsa"),
     ]
 
+    FINANCEIRO_PENDENTE = "pendente"
+    FINANCEIRO_PARCIAL = "parcial"
+    FINANCEIRO_QUITADA = "quitada"
+    FINANCEIRO_CHOICES = [
+        (FINANCEIRO_PENDENTE, "Pendente"),
+        (FINANCEIRO_PARCIAL, "Parcialmente pago"),
+        (FINANCEIRO_QUITADA, "Quitada"),
+    ]
+
     cliente = models.ForeignKey(
         Cliente,
         on_delete=models.SET_NULL,
@@ -316,6 +325,25 @@ class Locacao(models.Model):
     observacao = models.TextField(blank=True)
     motivo_cancelamento = models.TextField(blank=True)
     total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    total_pago = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    saldo_devedor = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    status_financeiro = models.CharField(
+        max_length=20,
+        choices=FINANCEIRO_CHOICES,
+        default=FINANCEIRO_PENDENTE,
+    )
+    valor_reposicao_mesa_snapshot = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+    )
+    valor_reposicao_cadeira_snapshot = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+    )
+    termo_gerado_em = models.DateTimeField(blank=True, null=True)
+    termo_gerado_por = models.CharField(max_length=120, blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
     cancelada_em = models.DateTimeField(blank=True, null=True)
@@ -344,6 +372,49 @@ class Locacao(models.Model):
         if self.cliente_id and self.cliente:
             return self.cliente.nome
         return self.pessoa_avulsa_nome or "Pessoa avulsa"
+
+    @property
+    def telefone_contratante(self):
+        if self.cliente_id and self.cliente:
+            return self.cliente.whatsapp or self.cliente.telefone_alternativo or ""
+        return self.pessoa_avulsa_telefone
+
+    @property
+    def endereco_contratante(self):
+        if self.cliente_id and self.cliente:
+            partes = [
+                self.cliente.logradouro,
+                self.cliente.numero,
+                self.cliente.complemento,
+                self.cliente.bairro,
+                self.cliente.cidade,
+                self.cliente.uf,
+            ]
+            return ", ".join(str(parte).strip() for parte in partes if parte)
+        return self.pessoa_avulsa_endereco
+
+    def atualizar_financeiro(self):
+        total_pago = (
+            self.pagamentos.aggregate(total=models.Sum("valor")).get("total")
+            or Decimal("0.00")
+        ).quantize(Decimal("0.01"))
+        total = (self.total or Decimal("0.00")).quantize(Decimal("0.01"))
+        saldo = max(total - total_pago, Decimal("0.00")).quantize(Decimal("0.01"))
+        if total_pago <= Decimal("0.00"):
+            status = self.FINANCEIRO_PENDENTE
+        elif saldo > Decimal("0.00"):
+            status = self.FINANCEIRO_PARCIAL
+        else:
+            status = self.FINANCEIRO_QUITADA
+        self.total_pago = total_pago
+        self.saldo_devedor = saldo
+        self.status_financeiro = status
+        self.save(update_fields=["total_pago", "saldo_devedor", "status_financeiro", "atualizado_em"])
+        return {
+            "total_pago": total_pago,
+            "saldo_devedor": saldo,
+            "status_financeiro": status,
+        }
 
     @classmethod
     def calcular_diarias(cls, data_entrega, data_prevista_devolucao):
@@ -442,6 +513,7 @@ class Locacao(models.Model):
         cls.validar_disponibilidade(dados["data_entrega"], dados["data_prevista_devolucao"], itens_validos)
 
         with transaction.atomic():
+            configuracao = ConfiguracaoLocacao.obter()
             locacao = cls.objects.create(
                 cliente=dados.get("cliente"),
                 tipo_pessoa=dados["tipo_pessoa"],
@@ -457,6 +529,8 @@ class Locacao(models.Model):
                 faixa_preco=dados["faixa_preco"],
                 faixa_preco_nome_snapshot=dados["faixa_preco"].nome,
                 observacao=dados.get("observacao", ""),
+                valor_reposicao_mesa_snapshot=configuracao.valor_reposicao_mesa,
+                valor_reposicao_cadeira_snapshot=configuracao.valor_reposicao_cadeira,
             )
             total = Decimal("0.00")
             for item in itens_validos:
@@ -474,7 +548,9 @@ class Locacao(models.Model):
                 )
                 total += valor_total
             locacao.total = total.quantize(Decimal("0.01"))
-            locacao.save(update_fields=["total", "atualizado_em"])
+            locacao.saldo_devedor = locacao.total
+            locacao.status_financeiro = cls.FINANCEIRO_PENDENTE
+            locacao.save(update_fields=["total", "saldo_devedor", "status_financeiro", "atualizado_em"])
             EventoLocacao.objects.create(
                 locacao=locacao,
                 tipo="criada",
@@ -482,6 +558,51 @@ class Locacao(models.Model):
                 responsavel=responsavel,
             )
             return locacao
+
+    def registrar_pagamento(self, valor, forma_pagamento, data_hora=None, observacao="", responsavel=""):
+        valor = Decimal(valor or "0").quantize(Decimal("0.01"))
+        if valor <= Decimal("0.00"):
+            raise ValidationError("Informe um valor de pagamento maior que zero.")
+        saldo_atual = (self.saldo_devedor or self.total or Decimal("0.00")).quantize(Decimal("0.01"))
+        if valor > saldo_atual:
+            raise ValidationError("Pagamento nao pode superar o saldo devedor da locacao.")
+        if forma_pagamento not in dict(PagamentoLocacao.FORMA_CHOICES):
+            raise ValidationError("Forma de pagamento invalida.")
+
+        with transaction.atomic():
+            locacao = Locacao.objects.select_for_update().get(pk=self.pk)
+            locacao.atualizar_financeiro()
+            if valor > locacao.saldo_devedor:
+                raise ValidationError("Pagamento nao pode superar o saldo devedor da locacao.")
+            pagamento = PagamentoLocacao.objects.create(
+                locacao=locacao,
+                valor=valor,
+                data_hora=data_hora or timezone.now(),
+                forma_pagamento=forma_pagamento,
+                observacao=str(observacao or "").strip(),
+                responsavel=str(responsavel or "").strip(),
+            )
+            pagamento.criar_movimento_financeiro()
+            locacao.atualizar_financeiro()
+            EventoLocacao.objects.create(
+                locacao=locacao,
+                tipo="pagamento",
+                descricao=f"Pagamento de locacao registrado: R$ {valor:.2f}.",
+                responsavel=responsavel,
+            )
+            self.refresh_from_db()
+            return pagamento
+
+    def registrar_termo_gerado(self, responsavel=""):
+        self.termo_gerado_em = timezone.now()
+        self.termo_gerado_por = str(responsavel or "").strip()
+        self.save(update_fields=["termo_gerado_em", "termo_gerado_por", "atualizado_em"])
+        EventoLocacao.objects.create(
+            locacao=self,
+            tipo="termo_gerado",
+            descricao="Termo de compromisso gerado para impressao.",
+            responsavel=self.termo_gerado_por,
+        )
 
     def cancelar(self, motivo="", responsavel=""):
         if self.status == self.STATUS_CANCELADA:
@@ -696,3 +817,148 @@ class EventoLocacao(models.Model):
 
     def __str__(self):
         return f"{self.tipo} - Locacao #{self.locacao_id}"
+
+
+class PagamentoLocacao(models.Model):
+    FORMA_DINHEIRO = "dinheiro"
+    FORMA_PIX = "pix"
+    FORMA_CARTAO = "cartao"
+    FORMA_OUTRO = "outro"
+    FORMA_CHOICES = [
+        (FORMA_DINHEIRO, "Dinheiro"),
+        (FORMA_PIX, "Pix"),
+        (FORMA_CARTAO, "Cartao"),
+        (FORMA_OUTRO, "Outro"),
+    ]
+
+    RECIBO_PENDENTE = "pendente"
+    RECIBO_ENVIADO = "enviado"
+    RECIBO_DISPENSADO = "dispensado"
+    RECIBO_STATUS_CHOICES = [
+        (RECIBO_PENDENTE, "Pendente"),
+        (RECIBO_ENVIADO, "Enviado"),
+        (RECIBO_DISPENSADO, "Dispensado / Nao enviado"),
+    ]
+
+    locacao = models.ForeignKey(Locacao, on_delete=models.CASCADE, related_name="pagamentos")
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+    data_hora = models.DateTimeField(default=timezone.now)
+    forma_pagamento = models.CharField(max_length=20, choices=FORMA_CHOICES)
+    observacao = models.TextField(blank=True)
+    responsavel = models.CharField(max_length=120, blank=True)
+    movimento_financeiro = models.OneToOneField(
+        MovimentoFinanceiro,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="pagamento_locacao",
+    )
+    recibo_status = models.CharField(max_length=20, choices=RECIBO_STATUS_CHOICES, default=RECIBO_PENDENTE)
+    recibo_enviado_em = models.DateTimeField(blank=True, null=True)
+    recibo_enviado_por = models.CharField(max_length=120, blank=True)
+    recibo_dispensado_em = models.DateTimeField(blank=True, null=True)
+    recibo_dispensado_por = models.CharField(max_length=120, blank=True)
+    recibo_dispensa_observacao = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-data_hora", "-id"]
+        verbose_name = "Pagamento de locacao"
+        verbose_name_plural = "Pagamentos de locacao"
+
+    def __str__(self):
+        return f"Pagamento locacao #{self.locacao_id} - R$ {self.valor}"
+
+    def clean(self):
+        if self.valor is not None and self.valor <= Decimal("0.00"):
+            raise ValidationError({"valor": "Informe um valor maior que zero."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @staticmethod
+    def conta_financeira_para_forma(forma_pagamento):
+        if forma_pagamento == PagamentoLocacao.FORMA_DINHEIRO:
+            conta = (
+                ContaFinanceira.objects
+                .filter(
+                    ativo=True,
+                    tipo=ContaFinanceira.TIPO_CAIXA,
+                    nome__in=["Caixa em especie", "Caixa em espécie"],
+                )
+                .order_by("id")
+                .first()
+            )
+            if conta:
+                return conta
+            return ContaFinanceira.objects.create(
+                nome="Caixa em especie",
+                tipo=ContaFinanceira.TIPO_CAIXA,
+                saldo_inicial=Decimal("0.00"),
+                ativo=True,
+            )
+        conta = ContaFinanceira.objects.filter(
+            ativo=True,
+            tipo=ContaFinanceira.TIPO_BANCO,
+            nome="Banco/Pix",
+        ).order_by("id").first()
+        if conta:
+            return conta
+        return ContaFinanceira.objects.create(
+            nome="Banco/Pix",
+            tipo=ContaFinanceira.TIPO_BANCO,
+            saldo_inicial=Decimal("0.00"),
+            ativo=True,
+        )
+
+    def criar_movimento_financeiro(self):
+        if self.movimento_financeiro_id:
+            return self.movimento_financeiro
+        conta = self.conta_financeira_para_forma(self.forma_pagamento)
+        if not conta:
+            return None
+        movimento = MovimentoFinanceiro.objects.create(
+            conta=conta,
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            valor=self.valor,
+            data=timezone.localtime(self.data_hora).date(),
+            descricao=f"Receita de locacao #{self.locacao_id} - {self.locacao.nome_contratante}",
+            operador=self.responsavel,
+            origem="locacao",
+        )
+        self.movimento_financeiro = movimento
+        self.save(update_fields=["movimento_financeiro"])
+        return movimento
+
+    def confirmar_recibo_enviado(self, responsavel=""):
+        if self.recibo_status == self.RECIBO_ENVIADO:
+            return
+        self.recibo_status = self.RECIBO_ENVIADO
+        self.recibo_enviado_em = timezone.now()
+        self.recibo_enviado_por = str(responsavel or "").strip()
+        self.save(update_fields=["recibo_status", "recibo_enviado_em", "recibo_enviado_por"])
+        EventoLocacao.objects.create(
+            locacao=self.locacao,
+            tipo="recibo_enviado",
+            descricao=f"Recibo do pagamento #{self.id} confirmado como enviado.",
+            responsavel=self.recibo_enviado_por,
+        )
+
+    def dispensar_recibo(self, responsavel="", observacao=""):
+        self.recibo_status = self.RECIBO_DISPENSADO
+        self.recibo_dispensado_em = timezone.now()
+        self.recibo_dispensado_por = str(responsavel or "").strip()
+        self.recibo_dispensa_observacao = str(observacao or "").strip()
+        self.save(update_fields=[
+            "recibo_status",
+            "recibo_dispensado_em",
+            "recibo_dispensado_por",
+            "recibo_dispensa_observacao",
+        ])
+        EventoLocacao.objects.create(
+            locacao=self.locacao,
+            tipo="recibo_dispensado",
+            descricao=self.recibo_dispensa_observacao or f"Recibo do pagamento #{self.id} dispensado.",
+            responsavel=self.recibo_dispensado_por,
+        )

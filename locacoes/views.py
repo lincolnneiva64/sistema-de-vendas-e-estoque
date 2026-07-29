@@ -5,6 +5,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.dateparse import parse_date
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
+from urllib.parse import quote
 
 from .forms import (
     AcaoOperacionalLocacaoForm,
@@ -15,12 +16,46 @@ from .forms import (
     ItensLocacaoReservaForm,
     LocacaoForm,
     MovimentoEstoqueLocacaoForm,
+    PagamentoLocacaoForm,
+    ReciboStatusForm,
+    TermoLocacaoForm,
 )
-from .models import ConfiguracaoLocacao, FaixaPrecoLocacao, Locacao, MovimentoEstoqueLocacao
+from .models import ConfiguracaoLocacao, FaixaPrecoLocacao, Locacao, MovimentoEstoqueLocacao, PagamentoLocacao
 
 
 def _faixa_padrao():
     return FaixaPrecoLocacao.objects.filter(ativa=True).order_by("ordem", "id").first()
+
+
+def _mensagem_recibo_whatsapp(pagamento):
+    locacao = pagamento.locacao
+    saldo = locacao.saldo_devedor
+    status = "QUITADA" if saldo <= 0 else "SALDO PENDENTE"
+    itens = ", ".join(
+        f"{item.quantidade} {item.get_tipo_display()}"
+        for item in locacao.itens.all()
+    )
+    return "\n".join([
+        f"Recibo de pagamento - Locacao #{locacao.id}",
+        f"Cliente/Pessoa: {locacao.nome_contratante}",
+        f"Valor pago agora: R$ {pagamento.valor:.2f}",
+        f"Forma: {pagamento.get_forma_pagamento_display()}",
+        f"Total contratado: R$ {locacao.total:.2f}",
+        f"Total pago: R$ {locacao.total_pago:.2f}",
+        f"Saldo restante: R$ {saldo:.2f} ({status})",
+        f"Materiais: {itens}",
+        f"Entrega: {locacao.data_entrega:%d/%m/%Y}",
+        f"Devolucao prevista: {locacao.data_prevista_devolucao:%d/%m/%Y}",
+    ])
+
+
+def _whatsapp_recibo_url(pagamento):
+    telefone = "".join(caractere for caractere in pagamento.locacao.telefone_contratante if caractere.isdigit())
+    if len(telefone) in {10, 11}:
+        telefone = f"55{telefone}"
+    if not telefone:
+        return ""
+    return f"https://web.whatsapp.com/send?phone={telefone}&text={quote(_mensagem_recibo_whatsapp(pagamento))}"
 
 
 def lista(request):
@@ -103,6 +138,16 @@ def nova(request):
                     itens,
                     responsavel=locacao_form.cleaned_data.get("responsavel", ""),
                 )
+                sinal_valor = locacao_form.cleaned_data.get("sinal_valor")
+                if sinal_valor and sinal_valor > 0:
+                    pagamento = locacao.registrar_pagamento(
+                        sinal_valor,
+                        locacao_form.cleaned_data.get("sinal_forma_pagamento"),
+                        observacao=locacao_form.cleaned_data.get("sinal_observacao", "") or "Sinal da locacao.",
+                        responsavel=locacao_form.cleaned_data.get("responsavel", ""),
+                    )
+                    messages.success(request, f"Reserva #{locacao.id} criada com sinal registrado.")
+                    return redirect("locacoes:recibo_pagamento", pk=pagamento.pk)
             except ValidationError as exc:
                 if hasattr(exc, "message_dict"):
                     for campo, erros in exc.message_dict.items():
@@ -136,7 +181,7 @@ def nova(request):
 
 def detalhe(request, pk):
     locacao = get_object_or_404(
-        Locacao.objects.select_related("cliente", "faixa_preco").prefetch_related("itens", "eventos"),
+        Locacao.objects.select_related("cliente", "faixa_preco").prefetch_related("itens", "eventos", "pagamentos"),
         pk=pk,
     )
     necessidade = Locacao.necessidades_itens(
@@ -156,8 +201,107 @@ def detalhe(request, pk):
             "disponibilidade": disponibilidade,
             "cancelar_form": CancelarLocacaoForm(),
             "acao_form": AcaoOperacionalLocacaoForm(),
+            "pagamento_form": PagamentoLocacaoForm(),
         },
     )
+
+
+@ensure_csrf_cookie
+def registrar_pagamento(request, pk):
+    locacao = get_object_or_404(Locacao.objects.prefetch_related("itens").select_related("cliente"), pk=pk)
+    if request.method == "POST":
+        form = PagamentoLocacaoForm(request.POST)
+        if form.is_valid():
+            try:
+                pagamento = locacao.registrar_pagamento(
+                    form.cleaned_data["valor"],
+                    form.cleaned_data["forma_pagamento"],
+                    data_hora=form.cleaned_data.get("data_hora"),
+                    observacao=form.cleaned_data.get("observacao", ""),
+                    responsavel=form.cleaned_data.get("responsavel", ""),
+                )
+            except ValidationError as exc:
+                messages.warning(request, "; ".join(exc.messages))
+            else:
+                messages.success(request, "Pagamento de locacao registrado.")
+                return redirect("locacoes:recibo_pagamento", pk=pagamento.pk)
+        else:
+            messages.warning(request, "Revise o pagamento antes de salvar.")
+    else:
+        form = PagamentoLocacaoForm()
+    return render(request, "locacoes/pagamento.html", {"locacao": locacao, "form": form})
+
+
+def recibo_pagamento(request, pk):
+    pagamento = get_object_or_404(
+        PagamentoLocacao.objects.select_related("locacao", "locacao__cliente").prefetch_related("locacao__itens"),
+        pk=pk,
+    )
+    return render(
+        request,
+        "locacoes/recibo.html",
+        {
+            "pagamento": pagamento,
+            "locacao": pagamento.locacao,
+            "whatsapp_url": _whatsapp_recibo_url(pagamento),
+            "confirmar_form": ReciboStatusForm(),
+            "dispensar_form": ReciboStatusForm(),
+        },
+    )
+
+
+@require_POST
+def confirmar_recibo_enviado(request, pk):
+    pagamento = get_object_or_404(PagamentoLocacao.objects.select_related("locacao"), pk=pk)
+    form = ReciboStatusForm(request.POST)
+    if form.is_valid():
+        pagamento.confirmar_recibo_enviado(responsavel=form.cleaned_data.get("responsavel", ""))
+        messages.success(request, "Recibo confirmado como enviado.")
+    return redirect("locacoes:recibo_pagamento", pk=pagamento.pk)
+
+
+@require_POST
+def dispensar_recibo(request, pk):
+    pagamento = get_object_or_404(PagamentoLocacao.objects.select_related("locacao"), pk=pk)
+    form = ReciboStatusForm(request.POST)
+    if form.is_valid():
+        pagamento.dispensar_recibo(
+            responsavel=form.cleaned_data.get("responsavel", ""),
+            observacao=form.cleaned_data.get("observacao", ""),
+        )
+        messages.success(request, "Recibo dispensado.")
+    return redirect("locacoes:recibo_pagamento", pk=pagamento.pk)
+
+
+def recibos_pendentes(request):
+    pagamentos = (
+        PagamentoLocacao.objects.select_related("locacao", "locacao__cliente")
+        .filter(recibo_status=PagamentoLocacao.RECIBO_PENDENTE)
+        .order_by("-data_hora", "-id")
+    )
+    return render(
+        request,
+        "locacoes/recibos_pendentes.html",
+        {
+            "pagamentos": pagamentos,
+            "confirmar_form": ReciboStatusForm(),
+            "dispensar_form": ReciboStatusForm(),
+        },
+    )
+
+
+@ensure_csrf_cookie
+def termo(request, pk):
+    locacao = get_object_or_404(
+        Locacao.objects.select_related("cliente").prefetch_related("itens"),
+        pk=pk,
+    )
+    form = TermoLocacaoForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        locacao.registrar_termo_gerado(responsavel=form.cleaned_data.get("responsavel", ""))
+        messages.success(request, "Termo de compromisso registrado como gerado.")
+        return redirect("locacoes:termo", pk=locacao.pk)
+    return render(request, "locacoes/termo.html", {"locacao": locacao, "form": form})
 
 
 @require_POST

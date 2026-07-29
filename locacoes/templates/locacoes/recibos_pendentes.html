@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recibos pendentes de locacoes</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f5f7fb; color: #172033; }
+    .page { max-width: 1040px; margin: 0 auto; padding: 26px 16px 46px; }
+    .cardx { background: #fff; border: 1px solid #dbe3ef; border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+    .muted { color: #64748b; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="d-flex justify-content-between align-items-start mb-3">
+      <div>
+        <h1>Recibos pendentes de locacoes</h1>
+        <p class="muted">Abrir ou compartilhar nao confirma envio automaticamente.</p>
+      </div>
+      <a class="btn btn-outline-secondary" href="{% url 'locacoes:lista' %}">Voltar</a>
+    </div>
+    {% if messages %}
+      {% for message in messages %}<div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>{% endfor %}
+    {% endif %}
+    <section class="cardx table-responsive">
+      <table class="table align-middle">
+        <thead><tr><th>Locacao</th><th>Pessoa/cliente</th><th>Valor</th><th>Saldo</th><th></th></tr></thead>
+        <tbody>
+          {% for pagamento in pagamentos %}
+            <tr>
+              <td>#{{ pagamento.locacao_id }}</td>
+              <td>{{ pagamento.locacao.nome_contratante }}</td>
+              <td>R$ {{ pagamento.valor|floatformat:2 }}</td>
+              <td>R$ {{ pagamento.locacao.saldo_devedor|floatformat:2 }}</td>
+              <td><a class="btn btn-primary btn-sm" href="{% url 'locacoes:recibo_pagamento' pagamento.id %}">Abrir / reenviar</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="muted">Nenhum recibo pendente.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>

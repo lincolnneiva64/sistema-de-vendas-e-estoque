@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Termo de compromisso #{{ locacao.id }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #fff; color: #172033; }
+    .page { max-width: 920px; margin: 0 auto; padding: 26px 18px 46px; }
+    .box { border: 1px solid #d1d5db; border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .assinatura { margin-top: 42px; border-top: 1px solid #111827; text-align: center; padding-top: 8px; }
+    @media print { .no-print { display: none; } body { font-size: 12pt; } }
+    @media (max-width: 700px) { .grid { display: block; } .grid > * { margin-bottom: 10px; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="no-print d-flex justify-content-between mb-3">
+      <a class="btn btn-outline-secondary" href="{% url 'locacoes:detalhe' locacao.id %}">Voltar</a>
+      <button class="btn btn-primary" onclick="window.print()">Imprimir</button>
+    </div>
+    {% if messages %}
+      {% for message in messages %}<div class="alert alert-{{ message.tags|default:'info' }} no-print">{{ message }}</div>{% endfor %}
+    {% endif %}
+    <h1>Termo de compromisso de locacao #{{ locacao.id }}</h1>
+    <section class="box">
+      <div class="grid">
+        <div><strong>Pessoa/cliente</strong><br>{{ locacao.nome_contratante }}</div>
+        <div><strong>Telefone</strong><br>{{ locacao.telefone_contratante|default:"-" }}</div>
+        <div><strong>Endereco do contratante</strong><br>{{ locacao.endereco_contratante|default:"-"|linebreaksbr }}</div>
+        <div><strong>Endereco da entrega</strong><br>{{ locacao.endereco_entrega|linebreaksbr }}</div>
+        <div><strong>Entrega</strong><br>{{ locacao.data_entrega|date:"d/m/Y" }} as {{ locacao.horario_entrega|time:"H:i" }}</div>
+        <div><strong>Evento</strong><br>{{ locacao.data_evento|date:"d/m/Y" }} as {{ locacao.horario_evento|time:"H:i" }}</div>
+        <div><strong>Devolucao prevista</strong><br>{{ locacao.data_prevista_devolucao|date:"d/m/Y" }}</div>
+        <div><strong>Status financeiro</strong><br>{{ locacao.get_status_financeiro_display }}</div>
+      </div>
+    </section>
+    <section class="box">
+      <h2>Materiais</h2>
+      {% for item in locacao.itens.all %}
+        <p>{{ item.quantidade }} {{ item.get_tipo_display }} - diaria R$ {{ item.preco_diaria_snapshot|floatformat:2 }} - total R$ {{ item.valor_total|floatformat:2 }}</p>
+      {% endfor %}
+    </section>
+    <section class="box">
+      <p>Total contratado: <strong>R$ {{ locacao.total|floatformat:2 }}</strong></p>
+      <p>Valor ja pago: <strong>R$ {{ locacao.total_pago|floatformat:2 }}</strong></p>
+      <p>Saldo devedor: <strong>R$ {{ locacao.saldo_devedor|floatformat:2 }}</strong></p>
+      <p>Reposicao de mesa: <strong>R$ {{ locacao.valor_reposicao_mesa_snapshot|floatformat:2 }}</strong></p>
+      <p>Reposicao de cadeira: <strong>R$ {{ locacao.valor_reposicao_cadeira_snapshot|floatformat:2 }}</strong></p>
+    </section>
+    <section class="box">
+      <p>O contratante declara receber os materiais acima em locacao e assume o compromisso de devolve-los na data prevista, em boas condicoes de uso.</p>
+      <p>Perdas, quebras ou descartes poderao gerar apuracao posterior conforme os valores de reposicao registrados neste termo, sem cobranca automatica nesta etapa.</p>
+    </section>
+    <div class="assinatura">{{ locacao.nome_contratante }}</div>
+    <form method="post" class="box no-print">
+      {% csrf_token %}
+      <label class="form-label">Responsavel por gerar/imprimir</label>
+      {{ form.responsavel }}
+      <button class="btn btn-success mt-2" type="submit">Registrar termo gerado/impresso</button>
+      {% if locacao.termo_gerado_em %}
+        <p class="mt-2 mb-0">Termo registrado em {{ locacao.termo_gerado_em|date:"d/m/Y H:i" }}{% if locacao.termo_gerado_por %} por {{ locacao.termo_gerado_por }}{% endif %}.</p>
+      {% endif %}
+    </form>
+  </main>
+</body>
+</html>

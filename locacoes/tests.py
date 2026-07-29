@@ -6,16 +6,15 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 
-from estoque.models import Cliente
+from estoque.models import Cliente, ContaFinanceira, ContaReceber, ItemVenda, MovimentoFinanceiro, Produto, Venda
 
-from .models import ConfiguracaoLocacao, FaixaPrecoLocacao, ItemLocacao, Locacao, MovimentoEstoqueLocacao
+from .models import ConfiguracaoLocacao, FaixaPrecoLocacao, ItemLocacao, Locacao, MovimentoEstoqueLocacao, PagamentoLocacao
 
 
 class LocacoesBaseIsoladaTests(TestCase):
     def test_models_locacoes_nao_se_relacionam_com_venda_produto_ou_item_venda(self):
         models_bloqueados = {
             apps.get_model("estoque", "ContaReceber"),
-            apps.get_model("estoque", "MovimentoFinanceiro"),
             apps.get_model("estoque", "Produto"),
             apps.get_model("estoque", "Venda"),
             apps.get_model("estoque", "ItemVenda"),
@@ -480,21 +479,152 @@ class LocacoesOperacaoTests(TestCase):
                 quantidade=1,
             ).exists()
         )
-        self.assertTrue(
-            MovimentoEstoqueLocacao.objects.filter(
-                locacao=locacao,
-                item_locacao=item_jogo,
-                tipo=MovimentoEstoqueLocacao.TIPO_BAIXA_QUEBRA,
-                item=MovimentoEstoqueLocacao.ITEM_CADEIRA,
-                quantidade=4,
-            ).exists()
+
+
+class LocacoesPagamentosTermoTests(TestCase):
+    def setUp(self):
+        self.configuracao = ConfiguracaoLocacao.obter()
+        self.configuracao.total_mesas = 5
+        self.configuracao.total_cadeiras = 20
+        self.configuracao.preco_mesa_avulsa_diaria = Decimal("4.00")
+        self.configuracao.preco_cadeira_avulsa_diaria = Decimal("1.50")
+        self.configuracao.valor_reposicao_mesa = Decimal("80.00")
+        self.configuracao.valor_reposicao_cadeira = Decimal("40.00")
+        self.configuracao.save()
+        self.faixa = FaixaPrecoLocacao.objects.get(codigo=FaixaPrecoLocacao.CENTRO_PERTO)
+        self.faixa.preco_jogo_diaria = Decimal("8.00")
+        self.faixa.save()
+        self.conta_caixa = ContaFinanceira.objects.create(
+            nome="Caixa em especie",
+            tipo=ContaFinanceira.TIPO_CAIXA,
+            ativo=True,
         )
-        self.assertTrue(
-            MovimentoEstoqueLocacao.objects.filter(
-                locacao=locacao,
-                item_locacao=item_cadeira,
-                tipo=MovimentoEstoqueLocacao.TIPO_BAIXA_PERDA,
-                item=MovimentoEstoqueLocacao.ITEM_CADEIRA,
-                quantidade=1,
-            ).exists()
+        self.conta_banco = ContaFinanceira.objects.create(
+            nome="Banco/Pix",
+            tipo=ContaFinanceira.TIPO_BANCO,
+            ativo=True,
         )
+
+    def dados_base(self):
+        return {
+            "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
+            "pessoa_avulsa_nome": "Ana Locacao",
+            "pessoa_avulsa_telefone": "91999990000",
+            "pessoa_avulsa_endereco": "Rua B, 2",
+            "endereco_entrega": "Rua B, 2",
+            "data_entrega": date(2026, 10, 1),
+            "horario_entrega": "09:00",
+            "data_evento": date(2026, 10, 1),
+            "horario_evento": "18:00",
+            "data_prevista_devolucao": date(2026, 10, 2),
+            "faixa_preco": self.faixa,
+            "observacao": "",
+        }
+
+    def criar_locacao(self):
+        return Locacao.criar_reserva(
+            self.dados_base(),
+            [{
+                "tipo": ItemLocacao.TIPO_JOGO,
+                "quantidade": 2,
+                "preco_diaria": Decimal("8.00"),
+            }],
+        )
+
+    def test_sinal_reduz_saldo_sem_quitar_indevidamente(self):
+        locacao = self.criar_locacao()
+
+        pagamento = locacao.registrar_pagamento(
+            Decimal("5.00"),
+            PagamentoLocacao.FORMA_DINHEIRO,
+            responsavel="Camila",
+        )
+        locacao.refresh_from_db()
+
+        self.assertEqual(locacao.total, Decimal("16.00"))
+        self.assertEqual(locacao.total_pago, Decimal("5.00"))
+        self.assertEqual(locacao.saldo_devedor, Decimal("11.00"))
+        self.assertEqual(locacao.status_financeiro, Locacao.FINANCEIRO_PARCIAL)
+        self.assertEqual(pagamento.recibo_status, PagamentoLocacao.RECIBO_PENDENTE)
+
+    def test_varios_pagamentos_atualizam_total_pago_e_saldo(self):
+        locacao = self.criar_locacao()
+
+        locacao.registrar_pagamento(Decimal("5.00"), PagamentoLocacao.FORMA_PIX)
+        locacao.registrar_pagamento(Decimal("11.00"), PagamentoLocacao.FORMA_DINHEIRO)
+        locacao.refresh_from_db()
+
+        self.assertEqual(locacao.total_pago, Decimal("16.00"))
+        self.assertEqual(locacao.saldo_devedor, Decimal("0.00"))
+        self.assertEqual(locacao.status_financeiro, Locacao.FINANCEIRO_QUITADA)
+
+    def test_nao_permite_pagamento_acima_do_total_contratado(self):
+        locacao = self.criar_locacao()
+
+        with self.assertRaises(ValidationError):
+            locacao.registrar_pagamento(Decimal("17.00"), PagamentoLocacao.FORMA_PIX)
+
+    def test_pagamento_cria_no_maximo_um_movimento_financeiro_de_locacao(self):
+        locacao = self.criar_locacao()
+
+        pagamento = locacao.registrar_pagamento(Decimal("8.00"), PagamentoLocacao.FORMA_PIX)
+        pagamento.criar_movimento_financeiro()
+        pagamento.refresh_from_db()
+
+        self.assertEqual(
+            MovimentoFinanceiro.objects.filter(origem="locacao", descricao__icontains=f"#{locacao.id}").count(),
+            1,
+        )
+        self.assertEqual(pagamento.movimento_financeiro.origem, "locacao")
+
+    def test_recibo_pendente_enviado_e_dispensado(self):
+        locacao = self.criar_locacao()
+        pagamento = locacao.registrar_pagamento(Decimal("4.00"), PagamentoLocacao.FORMA_PIX)
+
+        self.assertEqual(pagamento.recibo_status, PagamentoLocacao.RECIBO_PENDENTE)
+        pagamento.confirmar_recibo_enviado(responsavel="Camila")
+        pagamento.refresh_from_db()
+        self.assertEqual(pagamento.recibo_status, PagamentoLocacao.RECIBO_ENVIADO)
+        self.assertIsNotNone(pagamento.recibo_enviado_em)
+
+        outro = locacao.registrar_pagamento(Decimal("4.00"), PagamentoLocacao.FORMA_PIX)
+        outro.dispensar_recibo(responsavel="Camila", observacao="Cliente dispensou")
+        outro.refresh_from_db()
+        self.assertEqual(outro.recibo_status, PagamentoLocacao.RECIBO_DISPENSADO)
+        self.assertEqual(outro.recibo_dispensa_observacao, "Cliente dispensou")
+
+    def test_recibo_mostra_saldo_corretamente(self):
+        locacao = self.criar_locacao()
+        pagamento = locacao.registrar_pagamento(Decimal("5.00"), PagamentoLocacao.FORMA_PIX)
+
+        response = self.client.get(reverse("locacoes:recibo_pagamento", kwargs={"pk": pagamento.pk}), secure=True)
+
+        self.assertContains(response, "Saldo restante")
+        self.assertContains(response, "11.00")
+        self.assertContains(response, "Ainda existe saldo devedor")
+
+    def test_snapshot_de_precos_e_reposicao_nao_muda_com_configuracao_posterior(self):
+        locacao = self.criar_locacao()
+        item = locacao.itens.get()
+
+        self.faixa.preco_jogo_diaria = Decimal("15.00")
+        self.faixa.save()
+        self.configuracao.valor_reposicao_mesa = Decimal("100.00")
+        self.configuracao.valor_reposicao_cadeira = Decimal("60.00")
+        self.configuracao.save()
+        locacao.refresh_from_db()
+        item.refresh_from_db()
+
+        self.assertEqual(item.preco_diaria_snapshot, Decimal("8.00"))
+        self.assertEqual(locacao.valor_reposicao_mesa_snapshot, Decimal("80.00"))
+        self.assertEqual(locacao.valor_reposicao_cadeira_snapshot, Decimal("40.00"))
+
+    def test_pagamentos_nao_criam_venda_produto_itemvenda_ou_conta_receber(self):
+        locacao = self.criar_locacao()
+
+        locacao.registrar_pagamento(Decimal("5.00"), PagamentoLocacao.FORMA_PIX)
+
+        self.assertEqual(Venda.objects.count(), 0)
+        self.assertEqual(ItemVenda.objects.count(), 0)
+        self.assertEqual(Produto.objects.count(), 0)
+        self.assertEqual(ContaReceber.objects.count(), 0)

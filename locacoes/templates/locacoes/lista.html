@@ -26,6 +26,7 @@
       </div>
       <div class="d-flex gap-2">
         <a class="btn btn-outline-secondary" href="{% url 'locacoes:configuracoes' %}">Configuracoes</a>
+        <a class="btn btn-outline-primary" href="{% url 'locacoes:recibos_pendentes' %}">Recibos pendentes</a>
         <a class="btn btn-success" href="{% url 'locacoes:nova' %}">Nova locacao</a>
       </div>
     </header>
@@ -72,6 +73,7 @@
               <th>Entrega</th>
               <th>Devolucao prevista</th>
               <th>Pendente/rua</th>
+              <th>Financeiro</th>
               <th>Total</th>
             </tr>
           </thead>
@@ -87,10 +89,11 @@
                   {{ locacao.necessidade_pendente_lista.mesas }} mesa(s) /
                   {{ locacao.necessidade_pendente_lista.cadeiras }} cadeira(s)
                 </td>
+                <td>{{ locacao.get_status_financeiro_display }}<br><span class="muted">Saldo R$ {{ locacao.saldo_devedor|floatformat:2 }}</span></td>
                 <td>R$ {{ locacao.total|floatformat:2 }}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="7" class="muted">Nenhuma locacao encontrada.</td></tr>
+              <tr><td colspan="8" class="muted">Nenhuma locacao encontrada.</td></tr>
             {% endfor %}
           </tbody>
         </table>

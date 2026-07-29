@@ -1,6 +1,14 @@
 from django.contrib import admin
 
-from .models import ConfiguracaoLocacao, EventoLocacao, FaixaPrecoLocacao, ItemLocacao, Locacao, MovimentoEstoqueLocacao
+from .models import (
+    ConfiguracaoLocacao,
+    EventoLocacao,
+    FaixaPrecoLocacao,
+    ItemLocacao,
+    Locacao,
+    MovimentoEstoqueLocacao,
+    PagamentoLocacao,
+)
 
 
 @admin.register(ConfiguracaoLocacao)
@@ -73,11 +81,33 @@ class ItemLocacaoInline(admin.TabularInline):
 
 @admin.register(Locacao)
 class LocacaoAdmin(admin.ModelAdmin):
-    list_display = ("id", "nome_contratante", "status", "data_entrega", "data_prevista_devolucao", "total")
-    list_filter = ("status", "data_entrega", "faixa_preco")
+    list_display = (
+        "id",
+        "nome_contratante",
+        "status",
+        "status_financeiro",
+        "data_entrega",
+        "data_prevista_devolucao",
+        "total",
+        "total_pago",
+        "saldo_devedor",
+    )
+    list_filter = ("status", "status_financeiro", "data_entrega", "faixa_preco")
     search_fields = ("pessoa_avulsa_nome", "cliente__nome", "endereco_entrega")
     inlines = [ItemLocacaoInline]
-    readonly_fields = ("status", "cancelada_em", "criado_em", "atualizado_em")
+    readonly_fields = (
+        "status",
+        "total_pago",
+        "saldo_devedor",
+        "status_financeiro",
+        "valor_reposicao_mesa_snapshot",
+        "valor_reposicao_cadeira_snapshot",
+        "termo_gerado_em",
+        "termo_gerado_por",
+        "cancelada_em",
+        "criado_em",
+        "atualizado_em",
+    )
 
 
 @admin.register(EventoLocacao)
@@ -86,3 +116,34 @@ class EventoLocacaoAdmin(admin.ModelAdmin):
     list_filter = ("tipo", "criado_em")
     search_fields = ("locacao__id", "descricao", "responsavel")
     readonly_fields = ("locacao", "tipo", "descricao", "responsavel", "criado_em")
+
+
+@admin.register(PagamentoLocacao)
+class PagamentoLocacaoAdmin(admin.ModelAdmin):
+    list_display = (
+        "locacao",
+        "valor",
+        "forma_pagamento",
+        "data_hora",
+        "recibo_status",
+        "responsavel",
+        "movimento_financeiro",
+    )
+    list_filter = ("forma_pagamento", "recibo_status", "data_hora")
+    search_fields = ("locacao__id", "locacao__pessoa_avulsa_nome", "locacao__cliente__nome", "responsavel")
+    readonly_fields = (
+        "locacao",
+        "valor",
+        "data_hora",
+        "forma_pagamento",
+        "observacao",
+        "responsavel",
+        "movimento_financeiro",
+        "recibo_status",
+        "recibo_enviado_em",
+        "recibo_enviado_por",
+        "recibo_dispensado_em",
+        "recibo_dispensado_por",
+        "recibo_dispensa_observacao",
+        "criado_em",
+    )

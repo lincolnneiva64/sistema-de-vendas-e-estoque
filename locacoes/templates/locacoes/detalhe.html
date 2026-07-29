@@ -16,6 +16,7 @@
     .muted { color: #64748b; }
     .pill { display: inline-block; border-radius: 999px; padding: 6px 10px; background: #e9f7ef; color: #176536; font-weight: 800; }
     .pill.cancelada { background: #fee2e2; color: #991b1b; }
+    .saldo-destaque { font-size: 1.4rem; font-weight: 900; color: #9f1239; }
     @media (max-width: 760px) { .top, .grid { display: block; } .grid > * { margin-bottom: 10px; } }
   </style>
 </head>
@@ -46,8 +47,45 @@
         <div><strong>Localidade/preco</strong><br>{{ locacao.faixa_preco_nome_snapshot }}</div>
         <div><strong>Endereco da entrega</strong><br>{{ locacao.endereco_entrega|linebreaksbr }}</div>
         <div><strong>Total</strong><br>R$ {{ locacao.total|floatformat:2 }}</div>
+        <div><strong>Total pago</strong><br>R$ {{ locacao.total_pago|floatformat:2 }}</div>
+        <div><strong>Status financeiro</strong><br>{{ locacao.get_status_financeiro_display }}</div>
+        <div><strong>Saldo devedor</strong><br><span class="saldo-destaque">R$ {{ locacao.saldo_devedor|floatformat:2 }}</span></div>
       </div>
       {% if locacao.observacao %}<p class="mt-3 mb-0"><strong>Observacao:</strong> {{ locacao.observacao }}</p>{% endif %}
+    </section>
+
+    <section class="cardx">
+      <h2>Pagamentos e documentos</h2>
+      <div class="d-flex gap-2 flex-wrap mb-3">
+        <a class="btn btn-success" href="{% url 'locacoes:registrar_pagamento' locacao.id %}">Registrar pagamento</a>
+        <a class="btn btn-outline-primary" href="{% url 'locacoes:termo' locacao.id %}">Termo de compromisso</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle">
+          <thead>
+            <tr>
+              <th>Data/hora</th>
+              <th>Valor</th>
+              <th>Forma</th>
+              <th>Recibo</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for pagamento in locacao.pagamentos.all %}
+              <tr>
+                <td>{{ pagamento.data_hora|date:"d/m/Y H:i" }}</td>
+                <td>R$ {{ pagamento.valor|floatformat:2 }}</td>
+                <td>{{ pagamento.get_forma_pagamento_display }}</td>
+                <td>{{ pagamento.get_recibo_status_display }}</td>
+                <td><a href="{% url 'locacoes:recibo_pagamento' pagamento.id %}">Abrir recibo</a></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="muted">Nenhum pagamento registrado.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section class="cardx">

@@ -2,7 +2,14 @@ from django import forms
 
 from estoque.models import Cliente
 
-from .models import ConfiguracaoLocacao, FaixaPrecoLocacao, ItemLocacao, Locacao, MovimentoEstoqueLocacao
+from .models import (
+    ConfiguracaoLocacao,
+    FaixaPrecoLocacao,
+    ItemLocacao,
+    Locacao,
+    MovimentoEstoqueLocacao,
+    PagamentoLocacao,
+)
 
 
 class ConfiguracaoLocacaoForm(forms.ModelForm):
@@ -131,6 +138,22 @@ class LocacaoForm(forms.Form):
         max_length=120,
         widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
     )
+    sinal_valor = forms.DecimalField(
+        required=False,
+        min_value=0,
+        decimal_places=2,
+        max_digits=12,
+        widget=forms.NumberInput(attrs={"class": "form-control", "min": "0", "step": "0.01"}),
+    )
+    sinal_forma_pagamento = forms.ChoiceField(
+        required=False,
+        choices=[("", "Sem sinal"), *PagamentoLocacao.FORMA_CHOICES],
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    sinal_observacao = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+    )
 
     def clean(self):
         cleaned_data = super().clean()
@@ -142,6 +165,8 @@ class LocacaoForm(forms.Form):
         data_entrega = cleaned_data.get("data_entrega")
         data_prevista_devolucao = cleaned_data.get("data_prevista_devolucao")
         data_evento = cleaned_data.get("data_evento")
+        sinal_valor = cleaned_data.get("sinal_valor")
+        sinal_forma = cleaned_data.get("sinal_forma_pagamento")
 
         if tipo_pessoa == Locacao.TIPO_PESSOA_CLIENTE and not cliente:
             self.add_error("cliente", "Selecione o cliente cadastrado.")
@@ -158,6 +183,8 @@ class LocacaoForm(forms.Form):
             self.add_error("data_prevista_devolucao", "A devolucao prevista nao pode ser anterior a entrega.")
         if data_entrega and data_evento and data_evento < data_entrega:
             self.add_error("data_evento", "A data do evento nao pode ser anterior a entrega.")
+        if sinal_valor and sinal_valor > 0 and not sinal_forma:
+            self.add_error("sinal_forma_pagamento", "Informe a forma de pagamento do sinal.")
 
         cleaned_data["pessoa_avulsa_nome"] = pessoa_avulsa_nome
         cleaned_data["pessoa_avulsa_telefone"] = pessoa_avulsa_telefone
@@ -165,6 +192,7 @@ class LocacaoForm(forms.Form):
         cleaned_data["endereco_entrega"] = (cleaned_data.get("endereco_entrega") or "").strip()
         cleaned_data["observacao"] = (cleaned_data.get("observacao") or "").strip()
         cleaned_data["responsavel"] = (cleaned_data.get("responsavel") or "").strip()
+        cleaned_data["sinal_observacao"] = (cleaned_data.get("sinal_observacao") or "").strip()
         return cleaned_data
 
 
@@ -252,6 +280,54 @@ class CancelarLocacaoForm(forms.Form):
         required=False,
         widget=forms.Textarea(attrs={"class": "form-control", "rows": 3}),
     )
+
+
+class PagamentoLocacaoForm(forms.Form):
+    valor = forms.DecimalField(
+        min_value=0,
+        decimal_places=2,
+        max_digits=12,
+        widget=forms.NumberInput(attrs={"class": "form-control", "min": "0.01", "step": "0.01"}),
+    )
+    data_hora = forms.DateTimeField(
+        required=False,
+        widget=forms.DateTimeInput(attrs={"class": "form-control", "type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
+        input_formats=["%Y-%m-%dT%H:%M"],
+    )
+    forma_pagamento = forms.ChoiceField(
+        choices=PagamentoLocacao.FORMA_CHOICES,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    responsavel = forms.CharField(
+        required=False,
+        max_length=120,
+        widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
+    )
+    observacao = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+    )
+
+    def clean_valor(self):
+        valor = self.cleaned_data["valor"]
+        if valor <= 0:
+            raise forms.ValidationError("Informe um valor maior que zero.")
+        return valor
+
+
+class ReciboStatusForm(forms.Form):
+    responsavel = forms.CharField(
+        required=False,
+        max_length=120,
+        widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
+    )
+    observacao = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+    )
+
+
+class TermoLocacaoForm(forms.Form):
     responsavel = forms.CharField(
         required=False,
         max_length=120,
