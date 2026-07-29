@@ -117,6 +117,20 @@ class MovimentoEstoqueLocacao(models.Model):
     saldo_posterior = models.PositiveIntegerField()
     responsavel = models.CharField(max_length=120)
     observacao = models.TextField(blank=True)
+    locacao = models.ForeignKey(
+        "Locacao",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="movimentos_estoque",
+    )
+    item_locacao = models.ForeignKey(
+        "ItemLocacao",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="movimentos_estoque",
+    )
     data_hora = models.DateTimeField(default=timezone.now)
     criado_em = models.DateTimeField(auto_now_add=True)
 
@@ -157,7 +171,17 @@ class MovimentoEstoqueLocacao(models.Model):
         raise ValidationError({"tipo": "Tipo de movimentacao invalido."})
 
     @classmethod
-    def registrar(cls, item, tipo, quantidade=None, responsavel="", observacao="", saldo_contado=None):
+    def registrar(
+        cls,
+        item,
+        tipo,
+        quantidade=None,
+        responsavel="",
+        observacao="",
+        saldo_contado=None,
+        locacao=None,
+        item_locacao=None,
+    ):
         if tipo == cls.TIPO_AJUSTE_INVENTARIO and not str(observacao or "").strip():
             raise ValidationError({"observacao": "Informe o motivo do ajuste de inventario."})
         if not str(responsavel or "").strip():
@@ -194,6 +218,8 @@ class MovimentoEstoqueLocacao(models.Model):
                 saldo_posterior=saldo_posterior,
                 responsavel=" ".join(str(responsavel).strip().split()),
                 observacao=str(observacao or "").strip(),
+                locacao=locacao,
+                item_locacao=item_locacao,
             )
             ConfiguracaoLocacao.objects.filter(pk=configuracao.pk).update(
                 **{campo_saldo: saldo_posterior},
@@ -240,9 +266,19 @@ class FaixaPrecoLocacao(models.Model):
 
 class Locacao(models.Model):
     STATUS_RESERVADA = "reservada"
+    STATUS_SAIU_PARA_ENTREGA = "saiu_para_entrega"
+    STATUS_ENTREGUE = "entregue"
+    STATUS_DEVOLVIDA = "devolvida"
+    STATUS_DEVOLVIDA_COM_AVARIA = "devolvida_com_avaria"
+    STATUS_PENDENTE_DEVOLUCAO = "pendente_devolucao"
     STATUS_CANCELADA = "cancelada"
     STATUS_CHOICES = [
         (STATUS_RESERVADA, "Reservada"),
+        (STATUS_SAIU_PARA_ENTREGA, "Saiu para entrega"),
+        (STATUS_ENTREGUE, "Entregue"),
+        (STATUS_DEVOLVIDA, "Devolvida"),
+        (STATUS_DEVOLVIDA_COM_AVARIA, "Devolvida com avaria"),
+        (STATUS_PENDENTE_DEVOLUCAO, "Pendente de devolucao"),
         (STATUS_CANCELADA, "Cancelada"),
     ]
 
@@ -292,6 +328,17 @@ class Locacao(models.Model):
     def __str__(self):
         return f"Locacao #{self.id}"
 
+    def save(self, *args, **kwargs):
+        if self.pk:
+            anterior = Locacao.objects.filter(pk=self.pk).only("status").first()
+            if (
+                anterior
+                and anterior.status != self.status
+                and not getattr(self, "_permitir_alterar_status", False)
+            ):
+                raise ValidationError("Status de locacao deve ser alterado por uma acao propria.")
+        super().save(*args, **kwargs)
+
     @property
     def nome_contratante(self):
         if self.cliente_id and self.cliente:
@@ -314,18 +361,31 @@ class Locacao(models.Model):
 
     @classmethod
     def reservados_no_periodo(cls, data_entrega, data_prevista_devolucao, excluir_id=None):
-        locacoes = cls.objects.filter(status=cls.STATUS_RESERVADA).filter(
+        locacoes_reservadas = cls.objects.filter(status=cls.STATUS_RESERVADA).filter(
             cls.periodo_conflita_q(data_entrega, data_prevista_devolucao)
         )
+        locacoes_rua = cls.objects.filter(
+            status__in=[
+                cls.STATUS_SAIU_PARA_ENTREGA,
+                cls.STATUS_ENTREGUE,
+                cls.STATUS_PENDENTE_DEVOLUCAO,
+            ],
+            data_entrega__lte=data_prevista_devolucao,
+        )
         if excluir_id:
-            locacoes = locacoes.exclude(pk=excluir_id)
+            locacoes_reservadas = locacoes_reservadas.exclude(pk=excluir_id)
+            locacoes_rua = locacoes_rua.exclude(pk=excluir_id)
 
         mesas = 0
         cadeiras = 0
-        for item in ItemLocacao.objects.filter(locacao__in=locacoes):
+        for item in ItemLocacao.objects.filter(locacao__in=locacoes_reservadas):
             necessidade = item.necessidade_estoque()
             mesas += necessidade["mesas"]
             cadeiras += necessidade["cadeiras"]
+        for item in ItemLocacao.objects.filter(locacao__in=locacoes_rua):
+            pendente = item.necessidade_pendente()
+            mesas += pendente["mesas"]
+            cadeiras += pendente["cadeiras"]
         return {"mesas": mesas, "cadeiras": cadeiras}
 
     @classmethod
@@ -426,16 +486,86 @@ class Locacao(models.Model):
     def cancelar(self, motivo="", responsavel=""):
         if self.status == self.STATUS_CANCELADA:
             return
+        if self.status != self.STATUS_RESERVADA:
+            raise ValidationError("Somente reservas ainda nao enviadas podem ser canceladas.")
         self.status = self.STATUS_CANCELADA
         self.motivo_cancelamento = str(motivo or "").strip()
         self.cancelada_em = timezone.now()
+        self._permitir_alterar_status = True
         self.save(update_fields=["status", "motivo_cancelamento", "cancelada_em", "atualizado_em"])
+        self._permitir_alterar_status = False
         EventoLocacao.objects.create(
             locacao=self,
             tipo="cancelada",
             descricao=self.motivo_cancelamento or "Reserva cancelada.",
             responsavel=responsavel,
         )
+
+    def marcar_saiu_para_entrega(self, responsavel="", observacao=""):
+        if self.status != self.STATUS_RESERVADA:
+            raise ValidationError("Somente reserva pode ser marcada como saiu para entrega.")
+        self.status = self.STATUS_SAIU_PARA_ENTREGA
+        self._permitir_alterar_status = True
+        self.save(update_fields=["status", "atualizado_em"])
+        self._permitir_alterar_status = False
+        EventoLocacao.objects.create(
+            locacao=self,
+            tipo="saiu_para_entrega",
+            descricao=str(observacao or "").strip() or "Material saiu para entrega.",
+            responsavel=responsavel,
+        )
+
+    def confirmar_entrega(self, responsavel="", observacao=""):
+        if self.status != self.STATUS_SAIU_PARA_ENTREGA:
+            raise ValidationError("Somente locacao que saiu para entrega pode ter entrega confirmada.")
+        self.status = self.STATUS_ENTREGUE
+        self._permitir_alterar_status = True
+        self.save(update_fields=["status", "atualizado_em"])
+        self._permitir_alterar_status = False
+        EventoLocacao.objects.create(
+            locacao=self,
+            tipo="entregue",
+            descricao=str(observacao or "").strip() or "Entrega confirmada. Material esta na rua.",
+            responsavel=responsavel,
+        )
+
+    def registrar_devolucao(self, retornos, responsavel="", observacao=""):
+        if self.status not in {self.STATUS_SAIU_PARA_ENTREGA, self.STATUS_ENTREGUE, self.STATUS_PENDENTE_DEVOLUCAO}:
+            raise ValidationError("Somente locacao em entrega ou pendente pode registrar devolucao.")
+
+        houve_avaria = False
+        with transaction.atomic():
+            itens = list(self.itens.select_for_update().order_by("id"))
+            for item in itens:
+                dados = retornos.get(item.id, {})
+                item.registrar_retorno(
+                    devolvida_boa=int(dados.get("devolvida_boa") or 0),
+                    quebrada=int(dados.get("quebrada") or 0),
+                    perdida=int(dados.get("perdida") or 0),
+                    descartada=int(dados.get("descartada") or 0),
+                    responsavel=responsavel,
+                    observacao=observacao,
+                )
+                if item.quebrada or item.perdida or item.descartada:
+                    houve_avaria = True
+
+            if any(item.tem_pendencia_devolucao() for item in itens):
+                novo_status = self.STATUS_PENDENTE_DEVOLUCAO
+            elif houve_avaria:
+                novo_status = self.STATUS_DEVOLVIDA_COM_AVARIA
+            else:
+                novo_status = self.STATUS_DEVOLVIDA
+
+            self.status = novo_status
+            self._permitir_alterar_status = True
+            self.save(update_fields=["status", "atualizado_em"])
+            self._permitir_alterar_status = False
+            EventoLocacao.objects.create(
+                locacao=self,
+                tipo="devolucao",
+                descricao=str(observacao or "").strip() or "Devolucao registrada.",
+                responsavel=responsavel,
+            )
 
 
 class ItemLocacao(models.Model):
@@ -455,6 +585,10 @@ class ItemLocacao(models.Model):
     diarias = models.PositiveIntegerField()
     valor_total = models.DecimalField(max_digits=12, decimal_places=2)
     ajuste_manual = models.BooleanField(default=False)
+    devolvida_boa = models.PositiveIntegerField(default=0)
+    quebrada = models.PositiveIntegerField(default=0)
+    perdida = models.PositiveIntegerField(default=0)
+    descartada = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ["id"]
@@ -475,6 +609,77 @@ class ItemLocacao(models.Model):
         if self.tipo == self.TIPO_CADEIRA_AVULSA:
             return {"mesas": 0, "cadeiras": self.quantidade}
         return {"mesas": 0, "cadeiras": 0}
+
+    def quantidade_encerrada(self):
+        return self.devolvida_boa + self.quebrada + self.perdida + self.descartada
+
+    def quantidade_pendente(self):
+        return max(self.quantidade - self.quantidade_encerrada(), 0)
+
+    def tem_pendencia_devolucao(self):
+        return self.quantidade_pendente() > 0
+
+    def necessidade_pendente(self):
+        return self._necessidade_para_quantidade(self.quantidade_pendente())
+
+    def _necessidade_para_quantidade(self, quantidade):
+        if self.tipo == self.TIPO_JOGO:
+            return {
+                "mesas": quantidade * ConfiguracaoLocacao.JOGO_MESAS,
+                "cadeiras": quantidade * ConfiguracaoLocacao.JOGO_CADEIRAS,
+            }
+        if self.tipo == self.TIPO_MESA_AVULSA:
+            return {"mesas": quantidade, "cadeiras": 0}
+        if self.tipo == self.TIPO_CADEIRA_AVULSA:
+            return {"mesas": 0, "cadeiras": quantidade}
+        return {"mesas": 0, "cadeiras": 0}
+
+    def registrar_retorno(self, devolvida_boa=0, quebrada=0, perdida=0, descartada=0, responsavel="", observacao=""):
+        incrementos = {
+            "devolvida_boa": int(devolvida_boa or 0),
+            "quebrada": int(quebrada or 0),
+            "perdida": int(perdida or 0),
+            "descartada": int(descartada or 0),
+        }
+        if any(valor < 0 for valor in incrementos.values()):
+            raise ValidationError("Quantidades de devolucao nao podem ser negativas.")
+        if sum(incrementos.values()) > self.quantidade_pendente():
+            raise ValidationError("A devolucao nao pode superar a quantidade pendente do item.")
+
+        baixas = [
+            ("quebrada", MovimentoEstoqueLocacao.TIPO_BAIXA_QUEBRA),
+            ("perdida", MovimentoEstoqueLocacao.TIPO_BAIXA_PERDA),
+            ("descartada", MovimentoEstoqueLocacao.TIPO_BAIXA_DESCARTE),
+        ]
+        for campo, tipo_movimento in baixas:
+            quantidade = incrementos[campo]
+            if quantidade <= 0:
+                continue
+            necessidade = self._necessidade_para_quantidade(quantidade)
+            if necessidade["mesas"]:
+                MovimentoEstoqueLocacao.registrar(
+                    item=MovimentoEstoqueLocacao.ITEM_MESA,
+                    tipo=tipo_movimento,
+                    quantidade=necessidade["mesas"],
+                    responsavel=responsavel or "Sistema",
+                    observacao=observacao or f"Baixa vinculada a locacao #{self.locacao_id}.",
+                    locacao=self.locacao,
+                    item_locacao=self,
+                )
+            if necessidade["cadeiras"]:
+                MovimentoEstoqueLocacao.registrar(
+                    item=MovimentoEstoqueLocacao.ITEM_CADEIRA,
+                    tipo=tipo_movimento,
+                    quantidade=necessidade["cadeiras"],
+                    responsavel=responsavel or "Sistema",
+                    observacao=observacao or f"Baixa vinculada a locacao #{self.locacao_id}.",
+                    locacao=self.locacao,
+                    item_locacao=self,
+                )
+
+        for campo, valor in incrementos.items():
+            setattr(self, campo, getattr(self, campo) + valor)
+        self.save(update_fields=["devolvida_boa", "quebrada", "perdida", "descartada"])
 
 
 class EventoLocacao(models.Model):

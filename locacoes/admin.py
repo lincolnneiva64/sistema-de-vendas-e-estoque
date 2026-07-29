@@ -34,6 +34,7 @@ class MovimentoEstoqueLocacaoAdmin(admin.ModelAdmin):
         "saldo_anterior",
         "saldo_posterior",
         "responsavel",
+        "locacao",
     )
     list_filter = ("item", "tipo", "data_hora")
     search_fields = ("responsavel", "observacao")
@@ -45,6 +46,8 @@ class MovimentoEstoqueLocacaoAdmin(admin.ModelAdmin):
         "saldo_posterior",
         "responsavel",
         "observacao",
+        "locacao",
+        "item_locacao",
         "data_hora",
         "criado_em",
     )
@@ -53,7 +56,18 @@ class MovimentoEstoqueLocacaoAdmin(admin.ModelAdmin):
 class ItemLocacaoInline(admin.TabularInline):
     model = ItemLocacao
     extra = 0
-    readonly_fields = ("tipo", "quantidade", "preco_diaria_snapshot", "diarias", "valor_total", "ajuste_manual")
+    readonly_fields = (
+        "tipo",
+        "quantidade",
+        "preco_diaria_snapshot",
+        "diarias",
+        "valor_total",
+        "ajuste_manual",
+        "devolvida_boa",
+        "quebrada",
+        "perdida",
+        "descartada",
+    )
     can_delete = False
 
 
@@ -63,6 +77,7 @@ class LocacaoAdmin(admin.ModelAdmin):
     list_filter = ("status", "data_entrega", "faixa_preco")
     search_fields = ("pessoa_avulsa_nome", "cliente__nome", "endereco_entrega")
     inlines = [ItemLocacaoInline]
+    readonly_fields = ("status", "cancelada_em", "criado_em", "atualizado_em")
 
 
 @admin.register(EventoLocacao)

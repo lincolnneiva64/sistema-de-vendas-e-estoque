@@ -11,4 +11,7 @@ urlpatterns = [
     path("configuracoes/", views.configuracoes, name="configuracoes"),
     path("<int:pk>/", views.detalhe, name="detalhe"),
     path("<int:pk>/cancelar/", views.cancelar, name="cancelar"),
+    path("<int:pk>/saiu-para-entrega/", views.marcar_saiu_para_entrega, name="marcar_saiu_para_entrega"),
+    path("<int:pk>/confirmar-entrega/", views.confirmar_entrega, name="confirmar_entrega"),
+    path("<int:pk>/devolucao/", views.registrar_devolucao, name="registrar_devolucao"),
 ]

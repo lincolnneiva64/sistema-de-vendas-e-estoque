@@ -7,8 +7,10 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from .forms import (
+    AcaoOperacionalLocacaoForm,
     CancelarLocacaoForm,
     ConfiguracaoLocacaoForm,
+    DevolucaoLocacaoForm,
     FaixaPrecoLocacaoForm,
     ItensLocacaoReservaForm,
     LocacaoForm,
@@ -25,13 +27,29 @@ def lista(request):
     status = request.GET.get("status", "").strip()
     data_inicio = parse_date(request.GET.get("data_inicio", "").strip() or "")
     data_fim = parse_date(request.GET.get("data_fim", "").strip() or "")
-    locacoes = Locacao.objects.select_related("cliente", "faixa_preco").prefetch_related("itens")
+    locacoes_qs = Locacao.objects.select_related("cliente", "faixa_preco").prefetch_related("itens")
     if status in {Locacao.STATUS_RESERVADA, Locacao.STATUS_CANCELADA}:
-        locacoes = locacoes.filter(status=status)
+        locacoes_qs = locacoes_qs.filter(status=status)
+    elif status in {
+        Locacao.STATUS_SAIU_PARA_ENTREGA,
+        Locacao.STATUS_ENTREGUE,
+        Locacao.STATUS_DEVOLVIDA,
+        Locacao.STATUS_DEVOLVIDA_COM_AVARIA,
+        Locacao.STATUS_PENDENTE_DEVOLUCAO,
+    }:
+        locacoes_qs = locacoes_qs.filter(status=status)
     if data_inicio:
-        locacoes = locacoes.filter(data_entrega__gte=data_inicio)
+        locacoes_qs = locacoes_qs.filter(data_entrega__gte=data_inicio)
     if data_fim:
-        locacoes = locacoes.filter(data_entrega__lte=data_fim)
+        locacoes_qs = locacoes_qs.filter(data_entrega__lte=data_fim)
+    locacoes = list(locacoes_qs)
+    for locacao in locacoes:
+        locacao.necessidade_pendente_lista = Locacao.necessidades_itens(
+            [
+                {"tipo": item.tipo, "quantidade": item.quantidade_pendente()}
+                for item in locacao.itens.all()
+            ]
+        )
     return render(
         request,
         "locacoes/lista.html",
@@ -137,6 +155,7 @@ def detalhe(request, pk):
             "necessidade": necessidade,
             "disponibilidade": disponibilidade,
             "cancelar_form": CancelarLocacaoForm(),
+            "acao_form": AcaoOperacionalLocacaoForm(),
         },
     )
 
@@ -146,14 +165,104 @@ def cancelar(request, pk):
     locacao = get_object_or_404(Locacao, pk=pk)
     form = CancelarLocacaoForm(request.POST)
     if form.is_valid():
-        locacao.cancelar(
-            motivo=form.cleaned_data.get("motivo", ""),
-            responsavel=form.cleaned_data.get("responsavel", ""),
-        )
-        messages.success(request, f"Reserva de locacao #{locacao.id} cancelada.")
+        try:
+            locacao.cancelar(
+                motivo=form.cleaned_data.get("motivo", ""),
+                responsavel=form.cleaned_data.get("responsavel", ""),
+            )
+        except ValidationError as exc:
+            messages.warning(request, "; ".join(exc.messages))
+        else:
+            messages.success(request, f"Reserva de locacao #{locacao.id} cancelada.")
     else:
         messages.warning(request, "Nao foi possivel cancelar a reserva.")
     return redirect("locacoes:detalhe", pk=locacao.pk)
+
+
+@require_POST
+def marcar_saiu_para_entrega(request, pk):
+    locacao = get_object_or_404(Locacao, pk=pk)
+    form = AcaoOperacionalLocacaoForm(request.POST)
+    if form.is_valid():
+        try:
+            locacao.marcar_saiu_para_entrega(
+                responsavel=form.cleaned_data.get("responsavel", ""),
+                observacao=form.cleaned_data.get("observacao", ""),
+            )
+        except ValidationError as exc:
+            messages.warning(request, "; ".join(exc.messages))
+        else:
+            messages.success(request, "Locacao marcada como saiu para entrega.")
+    return redirect("locacoes:detalhe", pk=locacao.pk)
+
+
+@require_POST
+def confirmar_entrega(request, pk):
+    locacao = get_object_or_404(Locacao, pk=pk)
+    form = AcaoOperacionalLocacaoForm(request.POST)
+    if form.is_valid():
+        try:
+            locacao.confirmar_entrega(
+                responsavel=form.cleaned_data.get("responsavel", ""),
+                observacao=form.cleaned_data.get("observacao", ""),
+            )
+        except ValidationError as exc:
+            messages.warning(request, "; ".join(exc.messages))
+        else:
+            messages.success(request, "Entrega confirmada. Material esta na rua.")
+    return redirect("locacoes:detalhe", pk=locacao.pk)
+
+
+@ensure_csrf_cookie
+def registrar_devolucao(request, pk):
+    locacao = get_object_or_404(
+        Locacao.objects.prefetch_related("itens").select_related("cliente"),
+        pk=pk,
+    )
+    if locacao.status not in {
+        Locacao.STATUS_SAIU_PARA_ENTREGA,
+        Locacao.STATUS_ENTREGUE,
+        Locacao.STATUS_PENDENTE_DEVOLUCAO,
+    }:
+        messages.warning(request, "Esta locacao nao pode registrar devolucao neste status.")
+        return redirect("locacoes:detalhe", pk=locacao.pk)
+
+    if request.method == "POST":
+        form = DevolucaoLocacaoForm(request.POST, locacao=locacao)
+        if form.is_valid():
+            try:
+                locacao.registrar_devolucao(
+                    form.retornos_por_item(),
+                    responsavel=form.cleaned_data.get("responsavel", ""),
+                    observacao=form.cleaned_data.get("observacao", ""),
+                )
+            except ValidationError as exc:
+                messages.warning(request, "; ".join(exc.messages))
+            else:
+                messages.success(request, "Devolucao registrada.")
+                return redirect("locacoes:detalhe", pk=locacao.pk)
+    else:
+        form = DevolucaoLocacaoForm(locacao=locacao)
+
+    linhas_devolucao = []
+    for item in locacao.itens.all():
+        linhas_devolucao.append({
+            "item": item,
+            "boa": form[f"item_{item.id}_boa"],
+            "quebrada": form[f"item_{item.id}_quebrada"],
+            "perdida": form[f"item_{item.id}_perdida"],
+            "descartada": form[f"item_{item.id}_descartada"],
+        })
+
+    return render(
+        request,
+        "locacoes/devolucao.html",
+        {
+            "locacao": locacao,
+            "form": form,
+            "linhas_devolucao": linhas_devolucao,
+        },
+    )
 
 
 @ensure_csrf_cookie

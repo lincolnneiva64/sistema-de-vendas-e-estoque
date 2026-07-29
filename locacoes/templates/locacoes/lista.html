@@ -71,6 +71,7 @@
               <th>Status</th>
               <th>Entrega</th>
               <th>Devolucao prevista</th>
+              <th>Pendente/rua</th>
               <th>Total</th>
             </tr>
           </thead>
@@ -82,10 +83,14 @@
                 <td>{{ locacao.get_status_display }}</td>
                 <td>{{ locacao.data_entrega|date:"d/m/Y" }} {{ locacao.horario_entrega|time:"H:i" }}</td>
                 <td>{{ locacao.data_prevista_devolucao|date:"d/m/Y" }}</td>
+                <td>
+                  {{ locacao.necessidade_pendente_lista.mesas }} mesa(s) /
+                  {{ locacao.necessidade_pendente_lista.cadeiras }} cadeira(s)
+                </td>
                 <td>R$ {{ locacao.total|floatformat:2 }}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="6" class="muted">Nenhuma locacao encontrada.</td></tr>
+              <tr><td colspan="7" class="muted">Nenhuma locacao encontrada.</td></tr>
             {% endfor %}
           </tbody>
         </table>

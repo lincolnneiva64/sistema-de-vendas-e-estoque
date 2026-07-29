@@ -14,6 +14,8 @@ from .models import ConfiguracaoLocacao, FaixaPrecoLocacao, ItemLocacao, Locacao
 class LocacoesBaseIsoladaTests(TestCase):
     def test_models_locacoes_nao_se_relacionam_com_venda_produto_ou_item_venda(self):
         models_bloqueados = {
+            apps.get_model("estoque", "ContaReceber"),
+            apps.get_model("estoque", "MovimentoFinanceiro"),
             apps.get_model("estoque", "Produto"),
             apps.get_model("estoque", "Venda"),
             apps.get_model("estoque", "ItemVenda"),
@@ -335,3 +337,164 @@ class LocacoesReservasTests(TestCase):
         self.assertIsNone(locacao.cliente_id)
         self.assertEqual(Cliente.objects.count(), clientes_antes)
         self.assertEqual(locacao.pessoa_avulsa_nome, "Maria Avulsa")
+
+
+class LocacoesOperacaoTests(TestCase):
+    def setUp(self):
+        self.configuracao = ConfiguracaoLocacao.obter()
+        self.configuracao.total_mesas = 5
+        self.configuracao.total_cadeiras = 20
+        self.configuracao.preco_mesa_avulsa_diaria = Decimal("4.00")
+        self.configuracao.preco_cadeira_avulsa_diaria = Decimal("1.50")
+        self.configuracao.save()
+        self.faixa = FaixaPrecoLocacao.objects.get(codigo=FaixaPrecoLocacao.CENTRO_PERTO)
+        self.faixa.preco_jogo_diaria = Decimal("8.00")
+        self.faixa.save()
+
+    def dados_base(self, **extras):
+        dados = {
+            "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
+            "pessoa_avulsa_nome": "Joao Evento",
+            "pessoa_avulsa_telefone": "91988887777",
+            "pessoa_avulsa_endereco": "Rua A, 1",
+            "endereco_entrega": "Rua A, 1",
+            "data_entrega": date(2026, 9, 1),
+            "horario_entrega": "09:00",
+            "data_evento": date(2026, 9, 1),
+            "horario_evento": "18:00",
+            "data_prevista_devolucao": date(2026, 9, 2),
+            "faixa_preco": self.faixa,
+            "observacao": "",
+        }
+        dados.update(extras)
+        return dados
+
+    def criar_locacao(self, jogos=1, mesas=0, cadeiras=0):
+        itens = []
+        if jogos:
+            itens.append({
+                "tipo": ItemLocacao.TIPO_JOGO,
+                "quantidade": jogos,
+                "preco_diaria": Decimal("8.00"),
+            })
+        if mesas:
+            itens.append({
+                "tipo": ItemLocacao.TIPO_MESA_AVULSA,
+                "quantidade": mesas,
+                "preco_diaria": Decimal("4.00"),
+            })
+        if cadeiras:
+            itens.append({
+                "tipo": ItemLocacao.TIPO_CADEIRA_AVULSA,
+                "quantidade": cadeiras,
+                "preco_diaria": Decimal("1.50"),
+            })
+        return Locacao.criar_reserva(self.dados_base(), itens)
+
+    def test_transicoes_validas_e_invalidas(self):
+        locacao = self.criar_locacao()
+
+        with self.assertRaises(ValidationError):
+            locacao.confirmar_entrega()
+
+        locacao.marcar_saiu_para_entrega(responsavel="Camila")
+        locacao.refresh_from_db()
+        self.assertEqual(locacao.status, Locacao.STATUS_SAIU_PARA_ENTREGA)
+
+        with self.assertRaises(ValidationError):
+            locacao.cancelar()
+
+        locacao.confirmar_entrega(responsavel="Camila")
+        locacao.refresh_from_db()
+        self.assertEqual(locacao.status, Locacao.STATUS_ENTREGUE)
+
+        locacao.status = Locacao.STATUS_DEVOLVIDA
+        with self.assertRaises(ValidationError):
+            locacao.save()
+
+    def test_material_entregue_continua_indisponivel_apos_data_prevista(self):
+        locacao = self.criar_locacao(jogos=2)
+        locacao.marcar_saiu_para_entrega()
+        locacao.confirmar_entrega()
+
+        disponibilidade = Locacao.disponibilidade_periodo(date(2026, 9, 5), date(2026, 9, 5))
+
+        self.assertEqual(disponibilidade["reservado_mesas"], 2)
+        self.assertEqual(disponibilidade["reservado_cadeiras"], 8)
+
+    def test_devolucao_normal_libera_disponibilidade(self):
+        locacao = self.criar_locacao(jogos=1)
+        locacao.marcar_saiu_para_entrega()
+        locacao.confirmar_entrega()
+        item = locacao.itens.get()
+
+        locacao.registrar_devolucao({item.id: {"devolvida_boa": 1}}, responsavel="Camila")
+        locacao.refresh_from_db()
+        disponibilidade = Locacao.disponibilidade_periodo(date(2026, 9, 5), date(2026, 9, 5))
+
+        self.assertEqual(locacao.status, Locacao.STATUS_DEVOLVIDA)
+        self.assertEqual(disponibilidade["reservado_mesas"], 0)
+        self.assertEqual(disponibilidade["reservado_cadeiras"], 0)
+
+    def test_devolucao_parcial_mantem_pendencia_na_rua(self):
+        locacao = self.criar_locacao(jogos=2)
+        locacao.marcar_saiu_para_entrega()
+        locacao.confirmar_entrega()
+        item = locacao.itens.get()
+
+        locacao.registrar_devolucao({item.id: {"devolvida_boa": 1}}, responsavel="Camila")
+        locacao.refresh_from_db()
+        disponibilidade = Locacao.disponibilidade_periodo(date(2026, 9, 5), date(2026, 9, 5))
+
+        self.assertEqual(locacao.status, Locacao.STATUS_PENDENTE_DEVOLUCAO)
+        self.assertEqual(disponibilidade["reservado_mesas"], 1)
+        self.assertEqual(disponibilidade["reservado_cadeiras"], 4)
+
+    def test_perda_e_quebra_baixam_estoque_fisico_com_vinculo_a_locacao(self):
+        locacao = self.criar_locacao(jogos=1, cadeiras=1)
+        locacao.marcar_saiu_para_entrega()
+        locacao.confirmar_entrega()
+        item_jogo = locacao.itens.get(tipo=ItemLocacao.TIPO_JOGO)
+        item_cadeira = locacao.itens.get(tipo=ItemLocacao.TIPO_CADEIRA_AVULSA)
+
+        locacao.registrar_devolucao(
+            {
+                item_jogo.id: {"quebrada": 1},
+                item_cadeira.id: {"perdida": 1},
+            },
+            responsavel="Camila",
+            observacao="Ocorrencias no retorno",
+        )
+        locacao.refresh_from_db()
+        self.configuracao.refresh_from_db()
+
+        self.assertEqual(locacao.status, Locacao.STATUS_DEVOLVIDA_COM_AVARIA)
+        self.assertEqual(self.configuracao.total_mesas, 4)
+        self.assertEqual(self.configuracao.total_cadeiras, 15)
+        self.assertTrue(
+            MovimentoEstoqueLocacao.objects.filter(
+                locacao=locacao,
+                item_locacao=item_jogo,
+                tipo=MovimentoEstoqueLocacao.TIPO_BAIXA_QUEBRA,
+                item=MovimentoEstoqueLocacao.ITEM_MESA,
+                quantidade=1,
+            ).exists()
+        )
+        self.assertTrue(
+            MovimentoEstoqueLocacao.objects.filter(
+                locacao=locacao,
+                item_locacao=item_jogo,
+                tipo=MovimentoEstoqueLocacao.TIPO_BAIXA_QUEBRA,
+                item=MovimentoEstoqueLocacao.ITEM_CADEIRA,
+                quantidade=4,
+            ).exists()
+        )
+        self.assertTrue(
+            MovimentoEstoqueLocacao.objects.filter(
+                locacao=locacao,
+                item_locacao=item_cadeira,
+                tipo=MovimentoEstoqueLocacao.TIPO_BAIXA_PERDA,
+                item=MovimentoEstoqueLocacao.ITEM_CADEIRA,
+                quantidade=1,
+            ).exists()
+        )

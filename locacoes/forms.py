@@ -257,3 +257,85 @@ class CancelarLocacaoForm(forms.Form):
         max_length=120,
         widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
     )
+
+
+class AcaoOperacionalLocacaoForm(forms.Form):
+    responsavel = forms.CharField(
+        required=False,
+        max_length=120,
+        widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
+    )
+    observacao = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+    )
+
+
+class DevolucaoLocacaoForm(forms.Form):
+    responsavel = forms.CharField(
+        required=False,
+        max_length=120,
+        widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
+    )
+    observacao = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+    )
+
+    def __init__(self, *args, locacao, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.locacao = locacao
+        for item in locacao.itens.all():
+            prefixo = f"item_{item.id}"
+            attrs = {"class": "form-control", "min": "0", "step": "1"}
+            self.fields[f"{prefixo}_boa"] = forms.IntegerField(
+                required=False,
+                min_value=0,
+                initial=0,
+                widget=forms.NumberInput(attrs=attrs),
+            )
+            self.fields[f"{prefixo}_quebrada"] = forms.IntegerField(
+                required=False,
+                min_value=0,
+                initial=0,
+                widget=forms.NumberInput(attrs=attrs),
+            )
+            self.fields[f"{prefixo}_perdida"] = forms.IntegerField(
+                required=False,
+                min_value=0,
+                initial=0,
+                widget=forms.NumberInput(attrs=attrs),
+            )
+            self.fields[f"{prefixo}_descartada"] = forms.IntegerField(
+                required=False,
+                min_value=0,
+                initial=0,
+                widget=forms.NumberInput(attrs=attrs),
+            )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        for item in self.locacao.itens.all():
+            prefixo = f"item_{item.id}"
+            total = sum(
+                cleaned_data.get(f"{prefixo}_{campo}") or 0
+                for campo in ["boa", "quebrada", "perdida", "descartada"]
+            )
+            if total > item.quantidade_pendente():
+                self.add_error(
+                    f"{prefixo}_boa",
+                    f"A soma informada para {item.get_tipo_display()} supera o pendente.",
+                )
+        return cleaned_data
+
+    def retornos_por_item(self):
+        retornos = {}
+        for item in self.locacao.itens.all():
+            prefixo = f"item_{item.id}"
+            retornos[item.id] = {
+                "devolvida_boa": self.cleaned_data.get(f"{prefixo}_boa") or 0,
+                "quebrada": self.cleaned_data.get(f"{prefixo}_quebrada") or 0,
+                "perdida": self.cleaned_data.get(f"{prefixo}_perdida") or 0,
+                "descartada": self.cleaned_data.get(f"{prefixo}_descartada") or 0,
+            }
+        return retornos

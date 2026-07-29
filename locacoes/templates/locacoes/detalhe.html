@@ -24,7 +24,7 @@
     <header class="top">
       <div>
         <h1>Locacao #{{ locacao.id }}</h1>
-        <p class="muted mb-0">Reserva registrada. O material ainda nao saiu para entrega.</p>
+        <p class="muted mb-0">Acompanhamento operacional da locacao, sem financeiro nesta etapa.</p>
       </div>
       <a class="btn btn-outline-secondary" href="{% url 'locacoes:lista' %}">Voltar</a>
     </header>
@@ -51,6 +51,51 @@
     </section>
 
     <section class="cardx">
+      <h2>Acoes operacionais</h2>
+      {% if locacao.status == 'reservada' %}
+        <form method="post" action="{% url 'locacoes:marcar_saiu_para_entrega' locacao.id %}">
+          {% csrf_token %}
+          <div class="grid">
+            <div>
+              <label class="form-label">Responsavel</label>
+              {{ acao_form.responsavel }}
+            </div>
+            <div>
+              <label class="form-label">Observacao</label>
+              {{ acao_form.observacao }}
+            </div>
+          </div>
+          <div class="d-flex justify-content-end mt-3">
+            <button class="btn btn-primary" type="submit">Marcar saiu para entrega</button>
+          </div>
+        </form>
+      {% elif locacao.status == 'saiu_para_entrega' %}
+        <form method="post" action="{% url 'locacoes:confirmar_entrega' locacao.id %}">
+          {% csrf_token %}
+          <div class="grid">
+            <div>
+              <label class="form-label">Responsavel</label>
+              {{ acao_form.responsavel }}
+            </div>
+            <div>
+              <label class="form-label">Observacao</label>
+              {{ acao_form.observacao }}
+            </div>
+          </div>
+          <div class="d-flex justify-content-end mt-3">
+            <button class="btn btn-success" type="submit">Confirmar entrega</button>
+            <a class="btn btn-outline-primary ms-2" href="{% url 'locacoes:registrar_devolucao' locacao.id %}">Registrar devolucao</a>
+          </div>
+        </form>
+      {% elif locacao.status == 'entregue' or locacao.status == 'pendente_devolucao' %}
+        <p class="muted">Material na rua ate a devolucao ser encerrada ou baixado por perda/quebra/descarte.</p>
+        <a class="btn btn-success" href="{% url 'locacoes:registrar_devolucao' locacao.id %}">Registrar devolucao</a>
+      {% else %}
+        <p class="muted mb-0">Nenhuma acao operacional disponivel neste status.</p>
+      {% endif %}
+    </section>
+
+    <section class="cardx">
       <h2>Itens</h2>
       <div class="table-responsive">
         <table class="table align-middle">
@@ -62,6 +107,7 @@
               <th>Diarias</th>
               <th>Total</th>
               <th>Ajuste</th>
+              <th>Retorno</th>
             </tr>
           </thead>
           <tbody>
@@ -73,6 +119,13 @@
                 <td>{{ item.diarias }}</td>
                 <td>R$ {{ item.valor_total|floatformat:2 }}</td>
                 <td>{% if item.ajuste_manual %}Preco negociado{% else %}Tabela{% endif %}</td>
+                <td>
+                  Bom {{ item.devolvida_boa }} /
+                  quebrado {{ item.quebrada }} /
+                  perdido {{ item.perdida }} /
+                  descartado {{ item.descartada }} /
+                  pendente {{ item.quantidade_pendente }}
+                </td>
               </tr>
             {% endfor %}
           </tbody>
