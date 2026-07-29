@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Locacoes</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f5f7fb; color: #172033; }
+    .page { max-width: 1100px; margin: 0 auto; padding: 26px 16px 46px; }
+    .top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 18px; }
+    .top h1 { font-size: 1.8rem; margin: 0; font-weight: 850; }
+    .cardx { background: #fff; border: 1px solid #dbe3ef; border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+    .filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: end; }
+    .table a { font-weight: 800; text-decoration: none; }
+    .muted { color: #64748b; }
+    @media (max-width: 760px) { .top, .filters { display: block; } .filters > * { margin-bottom: 10px; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="top">
+      <div>
+        <h1>Locacoes</h1>
+        <p class="muted mb-0">Reservas de material de locacao. O material ainda nao sai para entrega nesta etapa.</p>
+      </div>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="{% url 'locacoes:configuracoes' %}">Configuracoes</a>
+        <a class="btn btn-success" href="{% url 'locacoes:nova' %}">Nova locacao</a>
+      </div>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <section class="cardx">
+      <form method="get" class="filters">
+        <div>
+          <label class="form-label">Status</label>
+          <select name="status" class="form-select">
+            <option value="">Todos</option>
+            {% for valor, rotulo in status_opcoes %}
+              <option value="{{ valor }}" {% if status_filtro == valor %}selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Data inicial</label>
+          <input class="form-control" type="date" name="data_inicio" value="{{ data_inicio }}">
+        </div>
+        <div>
+          <label class="form-label">Data final</label>
+          <input class="form-control" type="date" name="data_fim" value="{{ data_fim }}">
+        </div>
+        <div>
+          <button class="btn btn-primary w-100" type="submit">Filtrar</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="cardx">
+      <div class="table-responsive">
+        <table class="table align-middle">
+          <thead>
+            <tr>
+              <th>Locacao</th>
+              <th>Contratante</th>
+              <th>Status</th>
+              <th>Entrega</th>
+              <th>Devolucao prevista</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for locacao in locacoes %}
+              <tr>
+                <td><a href="{% url 'locacoes:detalhe' locacao.id %}">#{{ locacao.id }}</a></td>
+                <td>{{ locacao.nome_contratante }}</td>
+                <td>{{ locacao.get_status_display }}</td>
+                <td>{{ locacao.data_entrega|date:"d/m/Y" }} {{ locacao.horario_entrega|time:"H:i" }}</td>
+                <td>{{ locacao.data_prevista_devolucao|date:"d/m/Y" }}</td>
+                <td>R$ {{ locacao.total|floatformat:2 }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="6" class="muted">Nenhuma locacao encontrada.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

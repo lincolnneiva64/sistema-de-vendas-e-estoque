@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nova locacao</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f5f7fb; color: #172033; }
+    .page { max-width: 1060px; margin: 0 auto; padding: 26px 16px 46px; }
+    .top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 18px; }
+    .top h1 { font-size: 1.8rem; margin: 0; font-weight: 850; }
+    .cardx { background: #fff; border: 1px solid #dbe3ef; border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+    .cardx h2 { font-size: 1.05rem; font-weight: 850; margin-bottom: 14px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .muted { color: #64748b; }
+    .availability { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .metric { background: #f8fafc; border: 1px solid #dbe3ef; border-radius: 8px; padding: 10px; }
+    .metric span { display: block; color: #64748b; font-size: 0.82rem; font-weight: 750; }
+    .metric strong { display: block; font-size: 1.25rem; }
+    .errorlist { color: #b91c1c; margin: 6px 0 0; padding-left: 18px; }
+    @media (max-width: 760px) { .top, .grid, .grid-3, .availability { display: block; } .grid > *, .grid-3 > *, .availability > * { margin-bottom: 10px; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="top">
+      <div>
+        <h1>Nova locacao</h1>
+        <p class="muted mb-0">Esta tela cria uma reserva. O material ainda nao saiu para entrega.</p>
+      </div>
+      <a class="btn btn-outline-secondary" href="{% url 'locacoes:lista' %}">Voltar</a>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+      {{ locacao_form.non_field_errors }}
+      {{ itens_form.non_field_errors }}
+
+      <section class="cardx">
+        <h2>Contratante</h2>
+        <div class="grid">
+          <div>
+            <label class="form-label">Tipo de pessoa</label>
+            {{ locacao_form.tipo_pessoa }}
+            {{ locacao_form.tipo_pessoa.errors }}
+          </div>
+          <div>
+            <label class="form-label">Cliente cadastrado</label>
+            {{ locacao_form.cliente }}
+            {{ locacao_form.cliente.errors }}
+          </div>
+          <div>
+            <label class="form-label">Nome avulso</label>
+            {{ locacao_form.pessoa_avulsa_nome }}
+            {{ locacao_form.pessoa_avulsa_nome.errors }}
+          </div>
+          <div>
+            <label class="form-label">Telefone avulso</label>
+            {{ locacao_form.pessoa_avulsa_telefone }}
+            {{ locacao_form.pessoa_avulsa_telefone.errors }}
+          </div>
+          <div class="col-span">
+            <label class="form-label">Endereco avulso</label>
+            {{ locacao_form.pessoa_avulsa_endereco }}
+            {{ locacao_form.pessoa_avulsa_endereco.errors }}
+          </div>
+          <div>
+            <label class="form-label">Responsavel interno</label>
+            {{ locacao_form.responsavel }}
+            {{ locacao_form.responsavel.errors }}
+          </div>
+        </div>
+      </section>
+
+      <section class="cardx">
+        <h2>Datas e endereco</h2>
+        <div class="grid">
+          <div>
+            <label class="form-label">Endereco da entrega</label>
+            {{ locacao_form.endereco_entrega }}
+            {{ locacao_form.endereco_entrega.errors }}
+          </div>
+          <div>
+            <label class="form-label">Faixa/localidade de preco</label>
+            {{ locacao_form.faixa_preco }}
+            {{ locacao_form.faixa_preco.errors }}
+          </div>
+          <div>
+            <label class="form-label">Data da entrega</label>
+            {{ locacao_form.data_entrega }}
+            {{ locacao_form.data_entrega.errors }}
+          </div>
+          <div>
+            <label class="form-label">Horario combinado de entrega</label>
+            {{ locacao_form.horario_entrega }}
+            {{ locacao_form.horario_entrega.errors }}
+          </div>
+          <div>
+            <label class="form-label">Data do evento</label>
+            {{ locacao_form.data_evento }}
+            {{ locacao_form.data_evento.errors }}
+          </div>
+          <div>
+            <label class="form-label">Horario do evento</label>
+            {{ locacao_form.horario_evento }}
+            {{ locacao_form.horario_evento.errors }}
+          </div>
+          <div>
+            <label class="form-label">Data prevista de devolucao</label>
+            {{ locacao_form.data_prevista_devolucao }}
+            {{ locacao_form.data_prevista_devolucao.errors }}
+          </div>
+          <div>
+            <label class="form-label">Observacao</label>
+            {{ locacao_form.observacao }}
+            {{ locacao_form.observacao.errors }}
+          </div>
+        </div>
+      </section>
+
+      <section class="cardx">
+        <h2>Itens reservados</h2>
+        <p class="muted">Jogo = 1 mesa + 4 cadeiras. Nao existe saldo proprio de jogos.</p>
+        <div class="grid-3">
+          <div>
+            <label class="form-label">Jogos</label>
+            {{ itens_form.jogos }}
+            {{ itens_form.jogos.errors }}
+            <label class="form-label mt-2">Preco diario do jogo</label>
+            {{ itens_form.preco_jogo_diaria }}
+            {{ itens_form.preco_jogo_diaria.errors }}
+          </div>
+          <div>
+            <label class="form-label">Mesas avulsas</label>
+            {{ itens_form.mesas_avulsas }}
+            {{ itens_form.mesas_avulsas.errors }}
+            <label class="form-label mt-2">Preco diario da mesa avulsa</label>
+            {{ itens_form.preco_mesa_avulsa_diaria }}
+            {{ itens_form.preco_mesa_avulsa_diaria.errors }}
+          </div>
+          <div>
+            <label class="form-label">Cadeiras avulsas</label>
+            {{ itens_form.cadeiras_avulsas }}
+            {{ itens_form.cadeiras_avulsas.errors }}
+            <label class="form-label mt-2">Preco diario da cadeira avulsa</label>
+            {{ itens_form.preco_cadeira_avulsa_diaria }}
+            {{ itens_form.preco_cadeira_avulsa_diaria.errors }}
+          </div>
+        </div>
+      </section>
+
+      <section class="cardx">
+        <h2>Disponibilidade</h2>
+        {% if disponibilidade %}
+          <div class="availability">
+            <div class="metric"><span>Saldo fisico mesas</span><strong>{{ disponibilidade.saldo_mesas }}</strong></div>
+            <div class="metric"><span>Ja reservado mesas</span><strong>{{ disponibilidade.reservado_mesas }}</strong></div>
+            <div class="metric"><span>Solicitado mesas</span><strong>{{ disponibilidade.solicitado_mesas }}</strong></div>
+            <div class="metric"><span>Restante mesas</span><strong>{{ disponibilidade.restante_mesas }}</strong></div>
+            <div class="metric"><span>Saldo fisico cadeiras</span><strong>{{ disponibilidade.saldo_cadeiras }}</strong></div>
+            <div class="metric"><span>Ja reservado cadeiras</span><strong>{{ disponibilidade.reservado_cadeiras }}</strong></div>
+            <div class="metric"><span>Solicitado cadeiras</span><strong>{{ disponibilidade.solicitado_cadeiras }}</strong></div>
+            <div class="metric"><span>Restante cadeiras</span><strong>{{ disponibilidade.restante_cadeiras }}</strong></div>
+          </div>
+          <p class="muted mt-2 mb-0">Diarias calculadas: {{ disponibilidade.diarias }}</p>
+        {% else %}
+          <p class="muted mb-0">Informe datas e itens para validar disponibilidade ao salvar.</p>
+        {% endif %}
+      </section>
+
+      <div class="d-flex justify-content-end gap-2">
+        <a class="btn btn-outline-secondary" href="{% url 'locacoes:lista' %}">Cancelar</a>
+        <button class="btn btn-success" type="submit">Salvar reserva</button>
+      </div>
+    </form>
+  </main>
+</body>
+</html>

@@ -1,0 +1,241 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configuracoes de Locacoes</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f5f7fb; color: #172033; }
+    .locacoes-page { max-width: 980px; margin: 0 auto; padding: 28px 16px 48px; }
+    .locacoes-header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 20px; }
+    .locacoes-header h1 { font-size: 1.8rem; margin: 0; font-weight: 800; }
+    .locacoes-header p { margin: 6px 0 0; color: #526071; max-width: 680px; }
+    .locacoes-card { background: #fff; border: 1px solid #dbe3ef; border-radius: 8px; padding: 18px; margin-bottom: 16px; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06); }
+    .locacoes-card h2 { font-size: 1.05rem; margin: 0 0 14px; font-weight: 800; }
+    .locacoes-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .locacoes-saldos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+    .locacoes-saldo { border: 1px solid #dbe3ef; border-radius: 8px; padding: 12px; background: #f8fafc; }
+    .locacoes-saldo span { display: block; color: #64748b; font-weight: 700; font-size: 0.85rem; }
+    .locacoes-saldo strong { display: block; margin-top: 4px; font-size: 1.7rem; line-height: 1; }
+    .locacoes-faixa { display: grid; grid-template-columns: minmax(160px, 1fr) 180px; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid #edf1f7; }
+    .locacoes-faixa:first-child { border-top: 0; padding-top: 0; }
+    .locacoes-label { font-weight: 750; margin-bottom: 5px; }
+    .locacoes-muted { color: #64748b; font-size: 0.9rem; }
+    .locacoes-help { color: #8a5a00; font-size: 0.82rem; margin-top: 5px; }
+    .locacoes-composicao { display: flex; gap: 10px; flex-wrap: wrap; }
+    .locacoes-pill { background: #e9f7ef; border: 1px solid #b9e4ca; color: #176536; border-radius: 999px; padding: 7px 11px; font-weight: 750; }
+    .locacoes-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+    .btn-locacoes-primary { background: #1f7a4d; color: #fff; border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 800; }
+    .btn-locacoes-secondary { background: #e2e8f0; color: #172033; border-radius: 8px; padding: 10px 16px; font-weight: 800; text-decoration: none; }
+    .errorlist { color: #b91c1c; margin: 6px 0 0; padding-left: 18px; }
+    .locacoes-history { width: 100%; border-collapse: collapse; }
+    .locacoes-history th, .locacoes-history td { border-bottom: 1px solid #edf1f7; padding: 9px 8px; text-align: left; vertical-align: top; }
+    .locacoes-history th { color: #526071; font-size: 0.82rem; text-transform: uppercase; }
+    .locacoes-history td { font-size: 0.92rem; }
+    @media (max-width: 720px) {
+      .locacoes-header { display: block; }
+      .locacoes-grid, .locacoes-faixa { grid-template-columns: 1fr; }
+      .locacoes-actions { justify-content: stretch; flex-direction: column-reverse; }
+      .btn-locacoes-primary, .btn-locacoes-secondary { width: 100%; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+  <main class="locacoes-page">
+    <header class="locacoes-header">
+      <div>
+        <h1>Configuracoes de Locacoes</h1>
+        <p>Disponibilidade de locacao separada do estoque de mercadorias. Jogos sao calculados a partir de mesas e cadeiras, sem criar estoque proprio de jogo.</p>
+      </div>
+      <a href="{% url 'locacoes:lista' %}" class="btn-locacoes-secondary">Voltar</a>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="acao" value="salvar_configuracoes">
+      {{ faixas_formset.management_form }}
+
+      <section class="locacoes-card">
+        <h2>Disponibilidade de locacao</h2>
+        <div class="locacoes-saldos">
+          <div class="locacoes-saldo">
+            <span>Saldo atual de mesas</span>
+            <strong>{{ configuracao.total_mesas|default:"0" }}</strong>
+          </div>
+          <div class="locacoes-saldo">
+            <span>Saldo atual de cadeiras</span>
+            <strong>{{ configuracao.total_cadeiras|default:"0" }}</strong>
+          </div>
+        </div>
+        <div class="locacoes-grid">
+          <div>
+            <label class="locacoes-label" for="{{ configuracao_form.total_mesas.id_for_label }}">Quantidade total de mesas</label>
+            {{ configuracao_form.total_mesas }}
+            {{ configuracao_form.total_mesas.errors }}
+            {% if configuracao_form.total_mesas.help_text %}<div class="locacoes-help">{{ configuracao_form.total_mesas.help_text }}</div>{% endif %}
+          </div>
+          <div>
+            <label class="locacoes-label" for="{{ configuracao_form.total_cadeiras.id_for_label }}">Quantidade total de cadeiras</label>
+            {{ configuracao_form.total_cadeiras }}
+            {{ configuracao_form.total_cadeiras.errors }}
+            {% if configuracao_form.total_cadeiras.help_text %}<div class="locacoes-help">{{ configuracao_form.total_cadeiras.help_text }}</div>{% endif %}
+          </div>
+        </div>
+        <p class="locacoes-muted mt-3 mb-0">Estas quantidades pertencem apenas ao material de locacao e nao alteram produtos, vendas ou estoque comum.</p>
+      </section>
+
+      <section class="locacoes-card">
+        <h2>Composicao fixa do jogo</h2>
+        <div class="locacoes-composicao">
+          <span class="locacoes-pill">{{ composicao_jogo.mesas }} mesa</span>
+          <span class="locacoes-pill">{{ composicao_jogo.cadeiras }} cadeiras</span>
+        </div>
+      </section>
+
+      <section class="locacoes-card">
+        <h2>Preco diario do jogo por localidade</h2>
+        {% for form in faixas_formset %}
+          <div class="locacoes-faixa">
+            <div>
+              <div class="locacoes-label">{{ form.instance.nome }}</div>
+              <div class="locacoes-muted">Distancia incluida no preco do aluguel.</div>
+              {{ form.id }}
+            </div>
+            <div>
+              <label class="locacoes-muted" for="{{ form.preco_jogo_diaria.id_for_label }}">Preco por diaria</label>
+              {{ form.preco_jogo_diaria }}
+              {{ form.preco_jogo_diaria.errors }}
+            </div>
+          </div>
+        {% endfor %}
+        {{ faixas_formset.non_form_errors }}
+      </section>
+
+      <section class="locacoes-card">
+        <h2>Mesas e cadeiras avulsas</h2>
+        <div class="locacoes-grid">
+          <div>
+            <label class="locacoes-label" for="{{ configuracao_form.preco_mesa_avulsa_diaria.id_for_label }}">Preco diario de mesa avulsa</label>
+            {{ configuracao_form.preco_mesa_avulsa_diaria }}
+            {{ configuracao_form.preco_mesa_avulsa_diaria.errors }}
+          </div>
+          <div>
+            <label class="locacoes-label" for="{{ configuracao_form.preco_cadeira_avulsa_diaria.id_for_label }}">Preco diario de cadeira avulsa</label>
+            {{ configuracao_form.preco_cadeira_avulsa_diaria }}
+            {{ configuracao_form.preco_cadeira_avulsa_diaria.errors }}
+          </div>
+        </div>
+      </section>
+
+      <section class="locacoes-card">
+        <h2>Reposicao por perda ou quebra</h2>
+        <div class="locacoes-grid">
+          <div>
+            <label class="locacoes-label" for="{{ configuracao_form.valor_reposicao_cadeira.id_for_label }}">Valor de reposicao de cadeira</label>
+            {{ configuracao_form.valor_reposicao_cadeira }}
+            {{ configuracao_form.valor_reposicao_cadeira.errors }}
+          </div>
+          <div>
+            <label class="locacoes-label" for="{{ configuracao_form.valor_reposicao_mesa.id_for_label }}">Valor de reposicao de mesa</label>
+            {{ configuracao_form.valor_reposicao_mesa }}
+            {{ configuracao_form.valor_reposicao_mesa.errors }}
+          </div>
+        </div>
+      </section>
+
+      <div class="locacoes-actions">
+        <a href="{% url 'locacoes:lista' %}" class="btn-locacoes-secondary">Cancelar</a>
+        <button type="submit" class="btn-locacoes-primary">Salvar configuracoes</button>
+      </div>
+    </form>
+
+    <section class="locacoes-card mt-4">
+      <h2>Registrar movimentacao</h2>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="registrar_movimentacao">
+        {{ movimentacao_form.non_field_errors }}
+        <div class="locacoes-grid">
+          <div>
+            <label class="locacoes-label" for="{{ movimentacao_form.item.id_for_label }}">Item</label>
+            {{ movimentacao_form.item }}
+            {{ movimentacao_form.item.errors }}
+          </div>
+          <div>
+            <label class="locacoes-label" for="{{ movimentacao_form.tipo.id_for_label }}">Tipo</label>
+            {{ movimentacao_form.tipo }}
+            {{ movimentacao_form.tipo.errors }}
+          </div>
+          <div>
+            <label class="locacoes-label" for="{{ movimentacao_form.quantidade.id_for_label }}">Quantidade</label>
+            {{ movimentacao_form.quantidade }}
+            <div class="locacoes-muted">Use para entrada ou baixa definitiva.</div>
+            {{ movimentacao_form.quantidade.errors }}
+          </div>
+          <div>
+            <label class="locacoes-label" for="{{ movimentacao_form.saldo_contado.id_for_label }}">Saldo contado</label>
+            {{ movimentacao_form.saldo_contado }}
+            <div class="locacoes-muted">Use somente para ajuste de inventario.</div>
+            {{ movimentacao_form.saldo_contado.errors }}
+          </div>
+          <div>
+            <label class="locacoes-label" for="{{ movimentacao_form.responsavel.id_for_label }}">Responsavel</label>
+            {{ movimentacao_form.responsavel }}
+            {{ movimentacao_form.responsavel.errors }}
+          </div>
+          <div>
+            <label class="locacoes-label" for="{{ movimentacao_form.observacao.id_for_label }}">Observacao/motivo</label>
+            {{ movimentacao_form.observacao }}
+            {{ movimentacao_form.observacao.errors }}
+          </div>
+        </div>
+        <div class="locacoes-actions">
+          <button type="submit" class="btn-locacoes-primary">Registrar movimentacao</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="locacoes-card">
+      <h2>Historico recente</h2>
+      {% if historico_movimentacoes %}
+        <table class="locacoes-history">
+          <thead>
+            <tr>
+              <th>Data/hora</th>
+              <th>Item</th>
+              <th>Tipo</th>
+              <th>Qtd.</th>
+              <th>Saldo</th>
+              <th>Responsavel</th>
+              <th>Motivo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for movimento in historico_movimentacoes %}
+              <tr>
+                <td>{{ movimento.data_hora|date:"d/m/Y H:i" }}</td>
+                <td>{{ movimento.get_item_display }}</td>
+                <td>{{ movimento.get_tipo_display }}</td>
+                <td>{{ movimento.quantidade }}</td>
+                <td>{{ movimento.saldo_anterior }} &rarr; {{ movimento.saldo_posterior }}</td>
+                <td>{{ movimento.responsavel }}</td>
+                <td>{{ movimento.observacao|default:"-" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="locacoes-muted mb-0">Nenhuma movimentacao registrada ainda.</p>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

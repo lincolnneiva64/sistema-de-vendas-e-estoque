@@ -1366,6 +1366,13 @@ align-items: center;
           Entregas
         </a>
         <a
+          href="{% url 'locacoes:lista' %}"
+          id="btnLocacoesPainel"
+          class="btn-acao-principal-painel"
+        >
+          Loca&ccedil;&otilde;es
+        </a>
+        <a
           href="{% url 'estoque:receber_cliente_escolher' %}"
           id="btnReceberClientePainel"
           class="btn-acao-principal-painel"
