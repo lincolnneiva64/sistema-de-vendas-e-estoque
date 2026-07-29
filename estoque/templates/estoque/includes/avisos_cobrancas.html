@@ -1,0 +1,478 @@
+<style>
+.cobrancas-vendas-lateral {
+  position: fixed;
+  left: 0;
+  top: {% if pendencias_vendas_qtd %}218px{% else %}96px{% endif %};
+  z-index: 9986;
+  display: flex;
+  align-items: flex-start;
+  max-width: calc(100vw - 12px);
+  pointer-events: none;
+}
+.cobrancas-vendas-lateral.aberto {
+  pointer-events: auto;
+}
+.cobrancas-vendas-toggle {
+  width: 36px;
+  min-height: 142px;
+  padding: 9px 4px 8px;
+  border: 1px solid #1d4ed8;
+  border-left: 0;
+  border-radius: 0 12px 12px 0;
+  background: linear-gradient(180deg, #2563eb 0%, #1e40af 100%);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 950;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  cursor: pointer;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, .22);
+  pointer-events: auto;
+  transition: box-shadow 160ms ease, filter 160ms ease, transform 160ms ease;
+}
+.cobrancas-vendas-toggle:hover {
+  filter: brightness(1.04);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, .26);
+}
+.cobrancas-vendas-toggle:active {
+  transform: translateX(1px);
+}
+.cobrancas-vendas-lateral.tem-cobranca .cobrancas-vendas-toggle {
+  border-color: #991b1b;
+  background: linear-gradient(180deg, #dc2626 0%, #991b1b 100%);
+}
+.cobrancas-vendas-lateral.tem-cobranca.cobranca-pulsando .cobrancas-vendas-toggle {
+  animation: cobrancasVendasPulso 1.8s ease-in-out infinite;
+}
+@keyframes cobrancasVendasPulso {
+  0%, 100% {
+    box-shadow: 0 12px 26px rgba(15, 23, 42, .22), 0 0 0 0 rgba(220, 38, 38, .22);
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow: 0 14px 34px rgba(185, 28, 28, .28), 0 0 0 5px rgba(220, 38, 38, .10);
+    filter: brightness(1.06);
+  }
+}
+.cobrancas-vendas-toggle-texto {
+  display: inline-block;
+}
+.cobrancas-vendas-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  min-height: 19px;
+  margin-top: 6px;
+  padding: 0 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .62);
+  background: rgba(255, 255, 255, .94);
+  color: #1e3a8a;
+  font-size: 11px;
+  font-weight: 950;
+  writing-mode: horizontal-tb;
+  box-shadow: 0 3px 8px rgba(15, 23, 42, .18);
+}
+.cobrancas-vendas-lateral.tem-cobranca .cobrancas-vendas-badge {
+  color: #b91c1c;
+}
+.cobrancas-vendas-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9985;
+  background: rgba(15, 23, 42, .14);
+}
+.cobrancas-vendas-backdrop[hidden],
+.cobrancas-vendas-painel[hidden] {
+  display: none;
+}
+.cobrancas-vendas-painel {
+  width: min(360px, calc(100vw - 48px));
+  max-height: min(78vh, 680px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 9px;
+  border: 1px solid #bfdbfe;
+  border-left: 0;
+  border-radius: 0 14px 14px 0;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 20px 46px rgba(15, 23, 42, .24);
+  pointer-events: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9;
+}
+.cobrancas-vendas-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+  padding: 7px 7px 8px;
+  border-bottom: 1px solid #e2e8f0;
+  border-radius: 10px 10px 8px 8px;
+  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+}
+.cobrancas-vendas-topo-info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.cobrancas-vendas-topo-linha {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.cobrancas-vendas-titulo {
+  margin: 0;
+  color: #0f172a;
+  font-size: .94rem;
+  font-weight: 950;
+}
+.cobrancas-vendas-contador {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 21px;
+  height: 21px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1e40af;
+  font-size: .72rem;
+  font-weight: 950;
+}
+.cobrancas-vendas-subtitulo {
+  margin: 2px 0 0;
+  color: #475569;
+  font-size: .76rem;
+  font-weight: 750;
+}
+.cobrancas-vendas-fechar {
+  width: 29px;
+  height: 29px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 5px 12px rgba(15, 23, 42, .11);
+}
+.cobrancas-vendas-fechar:hover {
+  background: #eff6ff;
+}
+.cobrancas-vendas-lista {
+  display: grid;
+  gap: 0;
+}
+.cobrancas-vendas-item {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  padding: 9px 8px 9px 11px;
+  border-bottom: 1px solid #e2e8f0;
+  background: transparent;
+}
+.cobrancas-vendas-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 11px;
+  border-left: 3px solid #94a3b8;
+  border-top: 3px solid #94a3b8;
+  border-bottom: 3px solid #94a3b8;
+  border-radius: 7px 0 0 7px;
+}
+.cobrancas-vendas-item.prioridade-critica { background: linear-gradient(90deg, #fff1f3 0%, #ffe4e8 100%); }
+.cobrancas-vendas-item.prioridade-alta { background: linear-gradient(90deg, #fff5eb 0%, #ffe6cf 100%); }
+.cobrancas-vendas-item.prioridade-media { background: linear-gradient(90deg, #fff9df 0%, #ffefb5 100%); }
+.cobrancas-vendas-item.prioridade-sem_urgencia { background: linear-gradient(90deg, #f8fafc 0%, #e2e8f0 100%); }
+.cobrancas-vendas-item.prioridade-critica::before { border-color: #e11d48; }
+.cobrancas-vendas-item.prioridade-alta::before { border-color: #f97316; }
+.cobrancas-vendas-item.prioridade-media::before { border-color: #e0a000; }
+.cobrancas-vendas-item.prioridade-sem_urgencia::before { border-color: #64748b; }
+.cobrancas-vendas-item-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cobrancas-vendas-nome {
+  color: #0f172a;
+  font-size: .86rem;
+  font-weight: 950;
+  overflow-wrap: anywhere;
+}
+.cobrancas-vendas-localidade {
+  margin-top: 1px;
+  color: #64748b;
+  font-size: .72rem;
+  font-weight: 800;
+}
+.cobrancas-vendas-rotulo {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: rgba(255, 255, 255, .86);
+  color: #475569;
+  font-size: .62rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.prioridade-critica .cobrancas-vendas-rotulo { color: #be123c; background: #ffe4e6; }
+.prioridade-alta .cobrancas-vendas-rotulo { color: #c2410c; background: #ffedd5; }
+.prioridade-media .cobrancas-vendas-rotulo { color: #9a6700; background: #fef3c7; }
+.prioridade-sem_urgencia .cobrancas-vendas-rotulo { color: #475569; background: #f8fafc; }
+.cobrancas-vendas-metas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+.cobrancas-vendas-meta {
+  display: grid;
+  gap: 1px;
+  padding: 5px 6px;
+  border: 1px solid rgba(148, 163, 184, .35);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .76);
+}
+.cobrancas-vendas-meta span {
+  color: #64748b;
+  font-size: .62rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+.cobrancas-vendas-meta strong {
+  color: #0f172a;
+  font-size: .76rem;
+  font-weight: 950;
+}
+.cobrancas-vendas-whatsapp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid #16a34a;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  color: #fff !important;
+  font-size: .76rem;
+  font-weight: 950;
+  text-decoration: none;
+  box-shadow: 0 4px 10px rgba(22, 163, 74, .18);
+}
+.cobrancas-vendas-sem-whatsapp {
+  color: #64748b;
+  font-size: .75rem;
+  font-weight: 850;
+}
+.cobrancas-vendas-vazio {
+  margin: 0;
+  padding: 10px 8px;
+  color: #475569;
+  font-size: .8rem;
+  font-weight: 800;
+}
+.cobrancas-vendas-toggle:focus-visible,
+.cobrancas-vendas-fechar:focus-visible,
+.cobrancas-vendas-whatsapp:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cobrancas-vendas-lateral.tem-cobranca.cobranca-pulsando .cobrancas-vendas-toggle {
+    animation: none;
+  }
+}
+@media (max-width: 768px) {
+  .cobrancas-vendas-lateral {
+    top: {% if pendencias_vendas_qtd %}194px{% else %}82px{% endif %};
+  }
+  .cobrancas-vendas-painel {
+    width: min(330px, calc(100vw - 44px));
+    max-height: 74vh;
+  }
+  .cobrancas-vendas-metas {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+
+<div
+  class="cobrancas-vendas-lateral{% if cobrancas_acionaveis_hoje_qtd %} tem-cobranca{% endif %}"
+  id="cobrancasVendasLateral"
+  data-cobrancas-acionaveis="{{ cobrancas_acionaveis_hoje_qtd|default:0 }}"
+  data-pulso-ativo-ms="15000"
+  data-pulso-pausa-ms="300000"
+  aria-label="Central de Cobranca"
+>
+  <button
+    type="button"
+    class="cobrancas-vendas-toggle"
+    id="btnCobrancasVendas"
+    aria-expanded="false"
+    aria-controls="cobrancasVendasPainel"
+  >
+    <span class="cobrancas-vendas-toggle-texto">Central de Cobrança</span>
+    {% if cobrancas_acionaveis_hoje_qtd %}
+      <span class="cobrancas-vendas-badge" aria-label="{{ cobrancas_acionaveis_hoje_qtd }} cobranca{{ cobrancas_acionaveis_hoje_qtd|pluralize }} acionavel{{ cobrancas_acionaveis_hoje_qtd|pluralize }}">{{ cobrancas_acionaveis_hoje_qtd }}</span>
+    {% endif %}
+  </button>
+  <aside class="cobrancas-vendas-painel" id="cobrancasVendasPainel" hidden>
+    <div class="cobrancas-vendas-topo">
+      <div class="cobrancas-vendas-topo-info">
+        <div class="cobrancas-vendas-topo-linha">
+          <h2 class="cobrancas-vendas-titulo">Central de Cobrança</h2>
+          <span class="cobrancas-vendas-contador">{{ cobrancas_acionaveis_hoje_qtd|default:0 }}</span>
+        </div>
+        <p class="cobrancas-vendas-subtitulo">
+          {{ cobrancas_acionaveis_hoje_qtd|default:0 }} cliente{{ cobrancas_acionaveis_hoje_qtd|pluralize }} acionável{{ cobrancas_acionaveis_hoje_qtd|pluralize }} hoje.
+        </p>
+      </div>
+      <button type="button" class="cobrancas-vendas-fechar" id="btnFecharCobrancasVendas" aria-label="Fechar Central de Cobranca">&times;</button>
+    </div>
+
+    <div class="cobrancas-vendas-lista">
+      {% for cliente in cobrancas_acionaveis_vendas %}
+        <article class="cobrancas-vendas-item prioridade-{{ cliente.prioridade }}">
+          <div class="cobrancas-vendas-item-topo">
+            <div>
+              <strong class="cobrancas-vendas-nome">{{ cliente.cliente_nome }}</strong>
+              {% if cliente.localidade %}
+                <div class="cobrancas-vendas-localidade">{{ cliente.localidade }}</div>
+              {% endif %}
+            </div>
+            <span class="cobrancas-vendas-rotulo">{{ cliente.prioridade_label }}</span>
+          </div>
+          <div class="cobrancas-vendas-metas">
+            <div class="cobrancas-vendas-meta">
+              <span>Total em aberto</span>
+              <strong>{{ cliente.total_em_aberto_formatado }}</strong>
+            </div>
+            <div class="cobrancas-vendas-meta">
+              <span>Mais antigo</span>
+              <strong>{{ cliente.vencimento_mais_antigo_formatado }}</strong>
+            </div>
+            <div class="cobrancas-vendas-meta">
+              <span>Atraso</span>
+              <strong>{{ cliente.dias_atraso }} dias</strong>
+            </div>
+            <div class="cobrancas-vendas-meta">
+              <span>Contas</span>
+              <strong>{{ cliente.qtd_contas }}</strong>
+            </div>
+          </div>
+          {% if cliente.whatsapp_url %}
+            <a class="cobrancas-vendas-whatsapp" href="{{ cliente.whatsapp_url }}" target="_blank" rel="noopener">Cobrar pelo WhatsApp</a>
+          {% else %}
+            <span class="cobrancas-vendas-sem-whatsapp">Sem WhatsApp válido cadastrado.</span>
+          {% endif %}
+        </article>
+      {% empty %}
+        <p class="cobrancas-vendas-vazio">Nenhuma cobrança acionável hoje.</p>
+      {% endfor %}
+    </div>
+  </aside>
+</div>
+<button type="button" class="cobrancas-vendas-backdrop" id="cobrancasVendasBackdrop" aria-label="Fechar Central de Cobranca" hidden></button>
+
+<script>
+(function () {
+  const lateral = document.getElementById("cobrancasVendasLateral");
+  const botao = document.getElementById("btnCobrancasVendas");
+  const painel = document.getElementById("cobrancasVendasPainel");
+  const fechar = document.getElementById("btnFecharCobrancasVendas");
+  const backdrop = document.getElementById("cobrancasVendasBackdrop");
+  if (!lateral || !botao || !painel) return;
+
+  function ignorarValidacaoOperadorVendaTemporariamente() {
+    window.__ignorarValidacaoOperadorVenda = true;
+    if (window.__ignorarValidacaoOperadorVendaTimer) {
+      window.clearTimeout(window.__ignorarValidacaoOperadorVendaTimer);
+    }
+    window.__ignorarValidacaoOperadorVendaTimer = window.setTimeout(function() {
+      window.__ignorarValidacaoOperadorVenda = false;
+    }, 1500);
+  }
+
+  painel.addEventListener("pointerdown", ignorarValidacaoOperadorVendaTemporariamente, true);
+  painel.addEventListener("keydown", ignorarValidacaoOperadorVendaTemporariamente, true);
+  painel.addEventListener("click", function(event) {
+    ignorarValidacaoOperadorVendaTemporariamente();
+    event.stopPropagation();
+  });
+
+  function abrirCobrancas() {
+    lateral.classList.add("aberto");
+    painel.hidden = false;
+    if (backdrop) backdrop.hidden = false;
+    botao.setAttribute("aria-expanded", "true");
+    fechar?.focus();
+  }
+
+  function fecharCobrancas() {
+    lateral.classList.remove("aberto");
+    painel.hidden = true;
+    if (backdrop) backdrop.hidden = true;
+    botao.setAttribute("aria-expanded", "false");
+  }
+
+  function iniciarCicloPulsoCobrancas() {
+    const cobrancasHoje = Number.parseInt(lateral.dataset.cobrancasAcionaveis || "0", 10) || 0;
+    if (cobrancasHoje <= 0) {
+      lateral.classList.remove("tem-cobranca", "cobranca-pulsando");
+      return;
+    }
+    lateral.classList.add("tem-cobranca");
+
+    const reduzMovimento = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduzMovimento) return;
+
+    const pulsoAtivoMs = Number.parseInt(lateral.dataset.pulsoAtivoMs || "15000", 10);
+    const pulsoPausaMs = Number.parseInt(lateral.dataset.pulsoPausaMs || "300000", 10);
+
+    function pausarPulso() {
+      lateral.classList.remove("cobranca-pulsando");
+      window.setTimeout(ativarPulso, pulsoPausaMs);
+    }
+
+    function ativarPulso() {
+      lateral.classList.add("cobranca-pulsando");
+      window.setTimeout(pausarPulso, pulsoAtivoMs);
+    }
+
+    ativarPulso();
+  }
+
+  iniciarCicloPulsoCobrancas();
+
+  botao.addEventListener("click", function(event) {
+    event.stopPropagation();
+    ignorarValidacaoOperadorVendaTemporariamente();
+    if (painel.hidden) {
+      abrirCobrancas();
+    } else {
+      fecharCobrancas();
+    }
+  });
+  fechar?.addEventListener("click", fecharCobrancas);
+  backdrop?.addEventListener("click", function(event) {
+    event.stopPropagation();
+    fecharCobrancas();
+  });
+  document.addEventListener("keydown", function(event) {
+    if (event.key === "Escape") {
+      fecharCobrancas();
+    }
+  });
+})();
+</script>

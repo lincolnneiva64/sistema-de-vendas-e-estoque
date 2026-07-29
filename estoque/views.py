@@ -22,7 +22,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core import signing
 from django.db import IntegrityError, transaction
-from django.db.models import Q, Sum, Max, Prefetch
+from django.db.models import Q, Sum, Max, Min, Prefetch
 from django.db.models.deletion import ProtectedError
 from django.db.models.functions import Coalesce
 from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse, urlsplit, urlunsplit
@@ -30,7 +30,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
     contato_tem_telefone_no_post,
@@ -85,6 +85,124 @@ def _tem_pix_em_atencao():
             PixRecebido.STATUS_POSSIVEL_DUPLICADO,
         ]
     ).exists()
+
+
+def _clientes_cobranca_acionaveis_vendas(hoje=None, limite=None):
+    hoje = hoje or timezone.localdate()
+    contas_vencidas = (
+        ContaReceber.objects.filter(
+            status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+            valor_em_aberto__gt=Decimal("0.00"),
+            data_vencimento__lt=hoje,
+        )
+        .exclude(data_vencimento__isnull=True)
+        .values("cliente_id")
+        .annotate(vencimento_mais_antigo=Min("data_vencimento"))
+    )
+    clientes_por_vencimento = {
+        item["cliente_id"]: item["vencimento_mais_antigo"]
+        for item in contas_vencidas
+        if item["cliente_id"] and (hoje - item["vencimento_mais_antigo"]).days >= 2
+    }
+    if not clientes_por_vencimento:
+        return []
+
+    historico_por_cliente = {
+        cliente_id: []
+        for cliente_id in clientes_por_vencimento
+    }
+    registros = (
+        RegistroCobrancaCliente.objects.filter(cliente_id__in=clientes_por_vencimento)
+        .order_by("cliente_id", "-criado_em", "-id")
+    )
+    for registro in registros:
+        if historico_por_cliente[registro.cliente_id]:
+            continue
+        historico_por_cliente[registro.cliente_id].append(_registro_cobranca_contexto(registro))
+
+    cliente_ids_acionaveis = [
+        cliente_id
+        for cliente_id, vencimento in sorted(
+            clientes_por_vencimento.items(),
+            key=lambda item: (item[1], item[0]),
+        )
+        if _contexto_acao_cobranca(historico_por_cliente.get(cliente_id, []), hoje)["acionavel_hoje"]
+    ]
+    if not cliente_ids_acionaveis:
+        return []
+
+    contas_por_cliente = {cliente_id: [] for cliente_id in cliente_ids_acionaveis}
+    contas = (
+        ContaReceber.objects.filter(
+            cliente_id__in=cliente_ids_acionaveis,
+            status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+            valor_em_aberto__gt=Decimal("0.00"),
+            data_vencimento__lt=hoje,
+        )
+        .exclude(data_vencimento__isnull=True)
+        .select_related("venda")
+        .order_by("cliente_id", "data_vencimento", "id")
+    )
+    for conta in contas:
+        contas_por_cliente.setdefault(conta.cliente_id, []).append(conta)
+
+    clientes = {
+        cliente.id: cliente
+        for cliente in Cliente.objects.filter(id__in=cliente_ids_acionaveis).only(
+            "id",
+            "nome",
+            "apelido_nome_conhecido",
+            "bairro",
+            "cidade",
+            "whatsapp",
+            "whatsapp_normalizado",
+            "telefone_alternativo",
+        )
+    }
+
+    itens = []
+    for cliente_id in cliente_ids_acionaveis:
+        cliente = clientes.get(cliente_id)
+        contas_cliente = contas_por_cliente.get(cliente_id, [])
+        if not cliente or not contas_cliente:
+            continue
+        vencimento_mais_antigo = clientes_por_vencimento[cliente_id]
+        dias_atraso = (hoje - vencimento_mais_antigo).days
+        prioridade, prioridade_label = _prioridade_cobranca_por_atraso(dias_atraso)
+        total = sum((conta.valor_em_aberto or Decimal("0.00") for conta in contas_cliente), Decimal("0.00"))
+        nome = (cliente.nome or "Cliente nao identificado").strip()
+        apelido = (cliente.apelido_nome_conhecido or "").strip()
+        nome_exibicao = nome
+        if apelido and apelido.casefold() != nome.casefold():
+            nome_exibicao = f"{nome} - {apelido}"
+        bairro = (cliente.bairro or "").strip()
+        cidade = (cliente.cidade or "").strip()
+        itens.append({
+            "cliente_id": cliente_id,
+            "cliente_nome": nome_exibicao,
+            "localidade": f"{bairro}/{cidade}" if bairro and cidade else (bairro or cidade),
+            "prioridade": prioridade,
+            "prioridade_label": prioridade_label,
+            "total_em_aberto": total,
+            "total_em_aberto_formatado": _formatar_moeda(total),
+            "vencimento_mais_antigo": vencimento_mais_antigo,
+            "vencimento_mais_antigo_formatado": _formatar_data_cobranca(vencimento_mais_antigo),
+            "dias_atraso": dias_atraso,
+            "qtd_contas": len(contas_cliente),
+            "whatsapp_url": _montar_whatsapp_central_cobranca(cliente, contas_cliente, hoje),
+        })
+        if limite and len(itens) >= limite:
+            break
+    return itens
+
+
+def _clientes_cobranca_acionavel_hoje_qtd(hoje=None):
+    return len(
+        _clientes_cobranca_acionaveis_vendas(
+            hoje=hoje,
+            limite=100000,
+        )
+    )
 
 
 def _pix_envio_url_padrao(request):
@@ -9662,6 +9780,80 @@ def _formatar_data_cobranca(valor):
     return valor.strftime("%d/%m/%Y") if valor else ""
 
 
+COBRANCA_PIX_CHAVE = "91984111011"
+COBRANCA_PIX_TITULAR = "Lincoln A. Neiva"
+COBRANCA_PIX_BANCO = "Nubank"
+
+
+def _referencia_nota_cobranca(conta):
+    if conta.venda_id:
+        return str(conta.venda_id)
+    return str(conta.numero_legado or conta.id)
+
+
+def _linha_conta_cobranca_central(conta, hoje):
+    vencimento = conta.data_vencimento
+    dias_atraso = (hoje - vencimento).days if vencimento else 0
+    return {
+        "nota": _referencia_nota_cobranca(conta),
+        "vencimento": _formatar_data_cobranca(vencimento),
+        "dias_atraso": dias_atraso,
+        "valor": _formatar_moeda(conta.valor_em_aberto or Decimal("0.00")),
+    }
+
+
+def _montar_mensagem_cobranca_central(cliente, contas, hoje):
+    cliente_nome = (getattr(cliente, "nome", "") or "cliente").strip() or "cliente"
+    linhas = [
+        f"Olá, *{cliente_nome}*!",
+        "",
+        "*PENDÊNCIAS EM ABERTO*",
+        "",
+    ]
+    total = Decimal("0.00")
+    for indice, conta in enumerate(contas):
+        if indice:
+            linhas.append("")
+        item = _linha_conta_cobranca_central(conta, hoje)
+        total += conta.valor_em_aberto or Decimal("0.00")
+        linhas.extend([
+            f"• Nota nº {item['nota']}",
+            f"  Vencimento: {item['vencimento']} — {item['dias_atraso']} dias em atraso",
+            f"  Valor em aberto: *{item['valor']}*",
+        ])
+
+    linhas.extend([
+        "",
+        "────────────────",
+        f"*Total em aberto: {_formatar_moeda(total)}*",
+        "",
+        "*PAGAMENTO VIA PIX*",
+        f"Chave Pix: *{COBRANCA_PIX_CHAVE}*",
+        f"Titular: *{COBRANCA_PIX_TITULAR}*",
+        f"Banco: {COBRANCA_PIX_BANCO}",
+        "",
+        "Após o pagamento, envie o comprovante para o nosso WhatsApp de atendimento para confirmarmos.",
+        "",
+        "Se preferir, entre em contato conosco para combinarmos a regularização. Obrigado.",
+    ])
+    return "\n".join(linhas)
+
+
+def _preview_cobranca_central(cliente, contas, hoje):
+    itens = [_linha_conta_cobranca_central(conta, hoje) for conta in contas]
+    total = sum((conta.valor_em_aberto or Decimal("0.00") for conta in contas), Decimal("0.00"))
+    return {
+        "cliente_nome": (getattr(cliente, "nome", "") or "cliente").strip() or "cliente",
+        "itens": itens,
+        "total": _formatar_moeda(total),
+        "pix": {
+            "chave": COBRANCA_PIX_CHAVE,
+            "titular": COBRANCA_PIX_TITULAR,
+            "banco": COBRANCA_PIX_BANCO,
+        },
+    }
+
+
 def _montar_contas_preview_cobranca(contas_qs, hoje):
     contas = []
     for conta in contas_qs.select_related("venda").order_by("data_vencimento", "id"):
@@ -10187,6 +10379,7 @@ def vendas(request):
         data_venda=hoje,
     ).only("total", "tipo_pagamento")
     resumo_vendas_hoje = _calcular_resumo_vendas(vendas_hoje)
+    cobrancas_acionaveis_vendas = _clientes_cobranca_acionaveis_vendas(hoje)
 
     produtos_incompletos_vendas_qs = (
         Produto.objects
@@ -10221,6 +10414,8 @@ def vendas(request):
         'pedido_importado': pedido_importado,
         'pedido_importado_aviso': pedido_importado_aviso,
         'tem_pix_em_atencao': _tem_pix_em_atencao(),
+        'cobrancas_acionaveis_hoje_qtd': len(cobrancas_acionaveis_vendas),
+        'cobrancas_acionaveis_vendas': cobrancas_acionaveis_vendas,
         'resumo_vendas_hoje': resumo_vendas_hoje,
     })
 
@@ -10350,6 +10545,380 @@ def consultar_vendas(request, mostrar_canceladas=False):
 @ensure_csrf_cookie
 def consultar_vendas_canceladas(request):
     return consultar_vendas(request, mostrar_canceladas=True)
+
+
+def _prioridade_cobranca_por_atraso(dias_atraso):
+    if dias_atraso >= 15:
+        return "critica", "Crítica"
+    if dias_atraso >= 10:
+        return "alta", "Alta"
+    if dias_atraso >= 2:
+        return "media", "Média"
+    return "sem_urgencia", "Sem urgência"
+
+
+COBRANCA_PROXIMO_CONTATO_PREFIXO = "[proximo_contato:"
+COBRANCA_STATUS_NAO_ATENDEU = RegistroCobrancaCliente.STATUS_SEM_RESPOSTA
+
+
+def _montar_observacao_registro_cobranca(observacao, proximo_contato):
+    observacao = str(observacao or "").strip()
+    if not proximo_contato:
+        return observacao
+    marcador = f"{COBRANCA_PROXIMO_CONTATO_PREFIXO}{proximo_contato.isoformat()}]"
+    return f"{observacao}\n{marcador}".strip()
+
+
+def _separar_observacao_registro_cobranca(observacao):
+    linhas_observacao = []
+    proximo_contato = None
+    for linha in str(observacao or "").splitlines():
+        linha_limpa = linha.strip()
+        if (
+            linha_limpa.startswith(COBRANCA_PROXIMO_CONTATO_PREFIXO)
+            and linha_limpa.endswith("]")
+        ):
+            proximo_contato = parse_date(
+                linha_limpa[len(COBRANCA_PROXIMO_CONTATO_PREFIXO) : -1]
+            )
+            continue
+        linhas_observacao.append(linha)
+    return "\n".join(linhas_observacao).strip(), proximo_contato
+
+
+def _registro_cobranca_contexto(registro):
+    observacao, proximo_contato = _separar_observacao_registro_cobranca(registro.observacao)
+    return {
+        "id": registro.id,
+        "criado_em": registro.criado_em,
+        "tipo": registro.tipo,
+        "tipo_label": registro.get_tipo_display(),
+        "status": registro.status,
+        "status_label": registro.get_status_display(),
+        "observacao": observacao,
+        "proximo_contato": proximo_contato,
+    }
+
+
+def _proximo_contato_operacional(historico):
+    if historico and historico[0].get("proximo_contato"):
+        return historico[0]["proximo_contato"]
+    return None
+
+
+def _contexto_acao_cobranca(historico, hoje):
+    proximo_contato = _proximo_contato_operacional(historico)
+    if proximo_contato and proximo_contato > hoje:
+        return {
+            "acionavel_hoje": False,
+            "proximo_contato": proximo_contato,
+            "status_operacional": f"Retomar em {proximo_contato.strftime('%d/%m/%Y')}",
+        }
+    return {
+        "acionavel_hoje": True,
+        "proximo_contato": proximo_contato,
+        "status_operacional": "Acionavel hoje",
+    }
+
+
+def _resultado_cobranca_opcoes_central():
+    return tuple(
+        (valor, "Nao atendeu" if valor == COBRANCA_STATUS_NAO_ATENDEU else rotulo)
+        for valor, rotulo in RegistroCobrancaCliente.STATUS_CHOICES
+    )
+
+
+def _registrar_cobranca_cliente_central(request):
+    cliente_id = request.POST.get("cliente_id")
+    tipo = request.POST.get("tipo", "").strip()
+    status = request.POST.get("status", "").strip()
+    observacao = request.POST.get("observacao", "").strip()
+    proximo_contato_texto = request.POST.get("proximo_contato", "").strip()
+    tipos_validos = {valor for valor, _rotulo in RegistroCobrancaCliente.TIPO_CHOICES}
+    status_validos = {valor for valor, _rotulo in RegistroCobrancaCliente.STATUS_CHOICES}
+    retorno_url = reverse("estoque:central_cobrancas")
+    query_string = request.GET.urlencode()
+    if query_string:
+        retorno_url = f"{retorno_url}?{query_string}"
+
+    if tipo not in tipos_validos or tipo == RegistroCobrancaCliente.TIPO_MANUAL:
+        messages.error(request, "Informe uma forma de contato valida.")
+        return redirect(retorno_url)
+    if status not in status_validos:
+        messages.error(request, "Informe um resultado valido para a cobranca.")
+        return redirect(retorno_url)
+
+    proximo_contato = None
+    if proximo_contato_texto:
+        proximo_contato = parse_date(proximo_contato_texto)
+        if not proximo_contato:
+            messages.error(request, "Informe uma proxima data de contato valida.")
+            return redirect(retorno_url)
+    elif status == COBRANCA_STATUS_NAO_ATENDEU:
+        proximo_contato = timezone.localdate() + timedelta(days=1)
+
+    cliente = get_object_or_404(Cliente, pk=cliente_id)
+    with transaction.atomic():
+        RegistroCobrancaCliente.objects.create(
+            cliente=cliente,
+            tipo=tipo,
+            status=status,
+            observacao=_montar_observacao_registro_cobranca(observacao, proximo_contato),
+            criado_por=request.user if request.user.is_authenticated else None,
+        )
+
+    messages.success(request, f"Cobranca registrada para {cliente.nome}.")
+    return redirect(retorno_url)
+
+
+def _normalizar_whatsapp_cliente_central(cliente):
+    if not cliente:
+        return ""
+    for valor in (cliente.whatsapp_normalizado, cliente.whatsapp, cliente.telefone_alternativo):
+        numero = Cliente.normalizar_whatsapp(valor)
+        if not numero:
+            continue
+        if numero.startswith("55") and len(numero) in {12, 13}:
+            return numero
+        if len(numero) in {10, 11}:
+            return f"55{numero}"
+    return ""
+
+
+def _montar_whatsapp_central_cobranca(cliente, contas_vencidas, hoje):
+    numero = _normalizar_whatsapp_cliente_central(cliente)
+    if not numero:
+        return ""
+    mensagem = _montar_mensagem_cobranca_central(cliente, contas_vencidas, hoje)
+    return f"https://web.whatsapp.com/send?phone={numero}&text={quote(mensagem)}"
+
+
+def _montar_tel_central_cobranca(cliente):
+    numero = _normalizar_whatsapp_cliente_central(cliente)
+    if not numero:
+        return ""
+    return f"tel:+{numero}"
+
+
+def _formatar_telefone_central_cobranca(cliente):
+    numero = _normalizar_whatsapp_cliente_central(cliente)
+    if not numero:
+        return ""
+    nacional = numero[2:] if numero.startswith("55") else numero
+    if len(nacional) == 11:
+        return f"+55 ({nacional[:2]}) {nacional[2:7]}-{nacional[7:]}"
+    if len(nacional) == 10:
+        return f"+55 ({nacional[:2]}) {nacional[2:6]}-{nacional[6:]}"
+    return f"+{numero}"
+
+
+@ensure_csrf_cookie
+def central_cobrancas(request):
+    if request.method == "POST":
+        acao = request.POST.get("acao", "").strip()
+        if acao == "registrar_cobranca":
+            return _registrar_cobranca_cliente_central(request)
+        messages.error(request, "Acao invalida na Central de Cobranca.")
+        return redirect("estoque:central_cobrancas")
+
+    cliente_filtro = request.GET.get("cliente", "").strip()
+    rota_filtro = request.GET.get("rota", "").strip()
+    prioridade_filtro = request.GET.get("prioridade", "").strip()
+    prioridades_validas = {"", "sem_urgencia", "media", "alta", "critica"}
+
+    if prioridade_filtro not in prioridades_validas:
+        prioridade_filtro = ""
+        messages.warning(request, "Prioridade invalida. Mostrando todas as prioridades.")
+
+    hoje = timezone.localdate()
+    contas_vencidas_base = ContaReceber.objects.filter(
+        status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+        valor_em_aberto__gt=Decimal("0.00"),
+        data_vencimento__lt=hoje,
+    ).exclude(data_vencimento__isnull=True)
+
+    rotas_opcoes = list(
+        contas_vencidas_base.exclude(cliente__bairro__isnull=True)
+        .exclude(cliente__bairro="")
+        .values_list("cliente__bairro", flat=True)
+        .distinct()
+        .order_by("cliente__bairro")
+    )
+
+    contas_vencidas_qs = contas_vencidas_base
+    if cliente_filtro:
+        contas_vencidas_qs = contas_vencidas_qs.filter(
+            Q(cliente__nome__icontains=cliente_filtro)
+            | Q(cliente__apelido_nome_conhecido__icontains=cliente_filtro)
+        )
+    if rota_filtro:
+        contas_vencidas_qs = contas_vencidas_qs.filter(cliente__bairro__iexact=rota_filtro)
+
+    clientes_agrupados = (
+        contas_vencidas_qs.values(
+            "cliente_id",
+            "cliente__nome",
+            "cliente__apelido_nome_conhecido",
+            "cliente__bairro",
+            "cliente__cidade",
+        )
+        .annotate(
+            qtd_contas=Count("id"),
+            total_em_aberto=Sum("valor_em_aberto"),
+            vencimento_mais_antigo=Min("data_vencimento"),
+        )
+        .order_by("vencimento_mais_antigo", "cliente__nome", "cliente_id")
+    )
+
+    clientes_cobranca = []
+    for cliente in clientes_agrupados:
+        vencimento_mais_antigo = cliente["vencimento_mais_antigo"]
+        dias_atraso = (hoje - vencimento_mais_antigo).days
+        prioridade_codigo, prioridade_label = _prioridade_cobranca_por_atraso(dias_atraso)
+        if prioridade_filtro and prioridade_codigo != prioridade_filtro:
+            continue
+
+        bairro = (cliente["cliente__bairro"] or "").strip()
+        cidade = (cliente["cliente__cidade"] or "").strip()
+        cliente_nome = (cliente["cliente__nome"] or "Cliente nao identificado").strip()
+        cliente_apelido = (cliente["cliente__apelido_nome_conhecido"] or "").strip()
+        cliente_nome_exibicao = cliente_nome
+        if cliente_apelido and cliente_apelido.casefold() != cliente_nome.casefold():
+            cliente_nome_exibicao = f"{cliente_nome} - {cliente_apelido}"
+        if bairro and cidade:
+            localidade = f"{bairro}/{cidade}"
+        else:
+            localidade = bairro or cidade
+
+        clientes_cobranca.append(
+            {
+                "cliente_id": cliente["cliente_id"],
+                "cliente_nome": cliente_nome,
+                "cliente_apelido": cliente_apelido,
+                "cliente_nome_exibicao": cliente_nome_exibicao,
+                "bairro": bairro,
+                "localidade": localidade,
+                "qtd_contas": cliente["qtd_contas"] or 0,
+                "total_em_aberto": cliente["total_em_aberto"] or Decimal("0.00"),
+                "vencimento_mais_antigo": vencimento_mais_antigo,
+                "dias_atraso": dias_atraso,
+                "prioridade": prioridade_codigo,
+                "prioridade_label": prioridade_label,
+            }
+        )
+
+    cliente_ids = [item["cliente_id"] for item in clientes_cobranca if item["cliente_id"]]
+    contas_por_cliente = {cliente_id: [] for cliente_id in cliente_ids}
+    if cliente_ids:
+        contas_cobranca = (
+            contas_vencidas_qs.filter(cliente_id__in=cliente_ids)
+            .select_related("venda")
+            .order_by("cliente_id", "data_vencimento", "id")
+        )
+        for conta in contas_cobranca:
+            contas_por_cliente.setdefault(conta.cliente_id, []).append(conta)
+
+    historico_por_cliente = {cliente_id: [] for cliente_id in cliente_ids}
+    if cliente_ids:
+        registros = (
+            RegistroCobrancaCliente.objects.filter(cliente_id__in=cliente_ids)
+            .select_related("cliente", "criado_por")
+            .order_by("cliente_id", "-criado_em", "-id")
+        )
+        for registro in registros:
+            historico_por_cliente.setdefault(registro.cliente_id, []).append(
+                _registro_cobranca_contexto(registro)
+            )
+
+    for cliente in clientes_cobranca:
+        historico = historico_por_cliente.get(cliente["cliente_id"], [])
+        contexto_acao = _contexto_acao_cobranca(historico, hoje)
+        cliente["historico_cobranca"] = historico
+        cliente["ultimo_contato"] = historico[0] if historico else None
+        cliente["acionavel_hoje"] = contexto_acao["acionavel_hoje"]
+        cliente["proximo_contato_operacional"] = contexto_acao["proximo_contato"]
+        cliente["status_operacional"] = contexto_acao["status_operacional"]
+        cliente["conta_para_alerta_central"] = (
+            contexto_acao["acionavel_hoje"]
+            and cliente["dias_atraso"] >= 2
+        )
+        cliente["receber_url"] = (
+            f"{reverse('estoque:receber_cliente', kwargs={'cliente_id': cliente['cliente_id']})}"
+            f"?{urlencode({'next': request.get_full_path()})}"
+            if cliente["cliente_id"]
+            else ""
+        )
+
+    clientes_objetos = {
+        cliente.id: cliente
+        for cliente in Cliente.objects.filter(id__in=cliente_ids).only(
+            "id",
+            "nome",
+            "whatsapp",
+            "whatsapp_normalizado",
+            "telefone_alternativo",
+        )
+    }
+    for cliente in clientes_cobranca:
+        cliente_objeto = clientes_objetos.get(cliente["cliente_id"])
+        contas_cliente = contas_por_cliente.get(cliente["cliente_id"], [])
+        cliente["whatsapp_url"] = (
+            _montar_whatsapp_central_cobranca(cliente_objeto, contas_cliente, hoje)
+            if cliente_objeto and contas_cliente
+            else ""
+        )
+        cliente["whatsapp_preview"] = (
+            _preview_cobranca_central(cliente_objeto, contas_cliente, hoje)
+            if cliente_objeto and contas_cliente
+            else None
+        )
+        cliente["telefone_ligacao_url"] = (
+            _montar_tel_central_cobranca(cliente_objeto)
+            if cliente_objeto
+            else ""
+        )
+        cliente["telefone_ligacao_numero"] = (
+            _formatar_telefone_central_cobranca(cliente_objeto)
+            if cliente_objeto
+            else ""
+        )
+
+    resumo = {
+        "clientes": len(clientes_cobranca),
+        "acoes_hoje": sum(1 for item in clientes_cobranca if item["conta_para_alerta_central"]),
+        "contas": sum(item["qtd_contas"] for item in clientes_cobranca),
+        "total": sum((item["total_em_aberto"] for item in clientes_cobranca), Decimal("0.00")),
+    }
+
+    return render(
+        request,
+        "estoque/central_cobrancas.html",
+        {
+            "clientes_cobranca": clientes_cobranca,
+            "cliente_filtro": cliente_filtro,
+            "rota_filtro": rota_filtro,
+            "rotas_opcoes": rotas_opcoes,
+            "prioridade_filtro": prioridade_filtro,
+            "prioridade_opcoes": (
+                ("", "Todas"),
+                ("sem_urgencia", "Sem urgência"),
+                ("media", "Média"),
+                ("alta", "Alta"),
+                ("critica", "Crítica"),
+            ),
+            "forma_contato_opcoes": (
+                (RegistroCobrancaCliente.TIPO_WHATSAPP, "WhatsApp"),
+                (RegistroCobrancaCliente.TIPO_TELEFONE, "Ligacao"),
+                (RegistroCobrancaCliente.TIPO_VISITA, "Visita"),
+                (RegistroCobrancaCliente.TIPO_OUTRO, "Outro"),
+            ),
+            "resultado_opcoes": _resultado_cobranca_opcoes_central(),
+            "resumo": resumo,
+            "hoje": hoje,
+            "amanha": hoje + timedelta(days=1),
+            "status_nao_atendeu": COBRANCA_STATUS_NAO_ATENDEU,
+        },
+    )
 
 
 @ensure_csrf_cookie

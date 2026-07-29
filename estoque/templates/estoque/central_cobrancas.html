@@ -1,0 +1,633 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Central de Cobranca{% endblock %}
+{% block content %}
+<style>
+  .cobrancas-page { color: #172033; padding: 18px 0 32px; }
+  .cobrancas-shell { max-width: 1180px; margin: 0 auto; padding: 0 18px; }
+  .cobrancas-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 12px; margin-bottom: 12px;
+  }
+  .cobrancas-title { margin: 0; font-size: 1.55rem; font-weight: 800; color: #111827; }
+  .cobrancas-subtitle { margin: 4px 0 0; color: #64748b; font-weight: 500; font-size: 0.92rem; }
+  .cobrancas-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+  .cobrancas-btn {
+    border: 0; border-radius: 9px; padding: 8px 13px; font-weight: 700;
+    font-size: 0.9rem; text-decoration: none; display: inline-flex;
+    align-items: center; justify-content: center; min-height: 38px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    cursor: pointer; white-space: nowrap;
+  }
+  .cobrancas-btn:hover { transform: translateY(-1px); }
+  .cobrancas-btn-primary { background: #2563eb; color: #fff; box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24); }
+  .cobrancas-btn-secondary {
+    background: #dbeafe; color: #164173; border: 1px solid #7ea6d9;
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.07);
+  }
+  .cobrancas-search {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 12px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.055);
+    padding: 12px; margin-bottom: 12px;
+  }
+  .cobrancas-search form {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.2fr) minmax(180px, 1fr) minmax(160px, 0.8fr) auto auto;
+    gap: 9px;
+    align-items: end;
+  }
+  .cobrancas-field label {
+    display: block; margin-bottom: 5px; color: #64748b; font-size: 0.74rem;
+    font-weight: 850; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .cobrancas-field input,
+  .cobrancas-field select {
+    width: 100%; border: 1.5px solid #d3dbe8; border-radius: 9px;
+    padding: 10px 12px; background: #fff; color: #172033; font-weight: 650;
+    outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .cobrancas-field input::placeholder { color: #94a3b8; font-weight: 650; }
+  .cobrancas-field input:focus,
+  .cobrancas-field select:focus {
+    border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.13);
+  }
+  .cobrancas-resumo {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(140px, 1fr));
+    gap: 9px;
+    margin-bottom: 12px;
+  }
+  .cobrancas-resumo-card {
+    background: #fff;
+    border: 1px solid #e1e7ef;
+    border-radius: 12px;
+    padding: 10px 12px;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+  }
+  .cobrancas-resumo-label {
+    display: block;
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 850;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .cobrancas-resumo-valor {
+    color: #172033;
+    font-size: 1.08rem;
+    font-weight: 950;
+  }
+  .cobrancas-panel {
+    background: #fff; border: 1px solid #e1e7ef; border-radius: 14px;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06); overflow: hidden;
+  }
+  .cobrancas-panel-head {
+    padding: 12px 16px; border-bottom: 1px solid #edf1f6;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .cobrancas-panel-title { margin: 0; font-size: 0.98rem; font-weight: 800; color: #111827; }
+  .cobrancas-count { color: #64748b; font-size: 0.84rem; font-weight: 700; white-space: nowrap; }
+  .cobrancas-lista { display: grid; gap: 0; }
+  .cobrancas-cliente {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.2fr) repeat(4, minmax(120px, 0.75fr)) minmax(110px, 0.55fr);
+    gap: 10px;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid #f0f3f8;
+  }
+  .cobrancas-cliente:hover { background: #f8fbff; }
+  .cobrancas-nome { color: #172033; font-weight: 900; font-size: 0.95rem; }
+  .cobrancas-localidade { color: #64748b; font-size: 0.8rem; font-weight: 700; margin-top: 2px; }
+  .cobrancas-label {
+    display: block; color: #94a3b8; font-size: 0.68rem;
+    font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+  .cobrancas-valor { color: #166534; font-weight: 950; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cobrancas-dado { color: #172033; font-weight: 850; font-size: 0.88rem; }
+  .cobrancas-prioridade {
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 999px; padding: 5px 9px; font-size: 0.76rem;
+    font-weight: 950; white-space: nowrap;
+  }
+  .cobrancas-prioridade.sem_urgencia { background: #f1f5f9; color: #475569; }
+  .cobrancas-prioridade.media { background: #fef3c7; color: #92400e; }
+  .cobrancas-prioridade.alta { background: #fed7aa; color: #9a3412; }
+  .cobrancas-prioridade.critica { background: #fee2e2; color: #991b1b; }
+  .cobrancas-card-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 7px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .cobrancas-card-actions .cobrancas-btn { min-height: 34px; padding: 7px 10px; font-size: 0.78rem; }
+  .cobrancas-btn-light { background: #f8fafc; color: #334155; border: 1px solid #cbd5e1; }
+  .cobrancas-btn-success { background: #16a34a; color: #fff; box-shadow: 0 8px 18px rgba(22, 163, 74, 0.18); }
+  .cobrancas-ligar-mobile { display: none; }
+  .cobrancas-telefone-desktop {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 34px;
+    border: 1px solid #dbe4ef;
+    border-radius: 9px;
+    padding: 4px 5px 4px 10px;
+    background: #f8fafc;
+  }
+  .cobrancas-telefone-numero {
+    color: #172033;
+    font-size: 0.8rem;
+    font-weight: 850;
+    white-space: nowrap;
+  }
+  .cobrancas-whatsapp-preview {
+    grid-column: 1 / -1;
+    border: 1px solid #d7e7dd;
+    border-radius: 10px;
+    background: #f7fcf8;
+    padding: 10px 12px;
+    display: grid;
+    gap: 8px;
+    max-height: 340px;
+    overflow: auto;
+    min-width: 0;
+  }
+  .cobrancas-whatsapp-preview > * {
+    max-width: min(100%, calc(100vw - 72px));
+  }
+  .cobrancas-whatsapp-preview-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    border-bottom: 1px solid #dceee2;
+    padding-bottom: 6px;
+  }
+  .cobrancas-whatsapp-preview-title {
+    color: #14532d;
+    font-size: 0.84rem;
+    font-weight: 950;
+    letter-spacing: 0.03em;
+  }
+  .cobrancas-whatsapp-preview-client {
+    color: #334155;
+    font-size: 0.78rem;
+    font-weight: 850;
+  }
+  .cobrancas-whatsapp-preview-list { display: grid; gap: 7px; }
+  .cobrancas-whatsapp-preview-item {
+    border-left: 3px solid #16a34a;
+    padding-left: 8px;
+    color: #334155;
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+  .cobrancas-whatsapp-preview-item strong { color: #111827; }
+  .cobrancas-whatsapp-preview-total {
+    border-top: 1px solid #dceee2;
+    padding-top: 7px;
+    color: #14532d;
+    font-size: 0.86rem;
+    font-weight: 950;
+  }
+  .cobrancas-whatsapp-preview-pix {
+    border-top: 1px solid #dceee2;
+    padding-top: 7px;
+    display: grid;
+    gap: 3px;
+    color: #334155;
+    font-size: 0.79rem;
+    line-height: 1.32;
+    overflow-wrap: break-word;
+  }
+  .cobrancas-whatsapp-preview-pix-title {
+    color: #14532d;
+    font-size: 0.8rem;
+    font-weight: 950;
+    letter-spacing: 0.03em;
+  }
+  .cobrancas-whatsapp-preview-note {
+    color: #475569;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    overflow-wrap: break-word;
+  }
+  .cobrancas-ultimo-contato {
+    grid-column: 1 / -1;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 8px 10px;
+    color: #475569;
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+  .cobrancas-ultimo-contato strong { color: #172033; }
+  .cobrancas-status-operacional {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 4px 8px;
+    margin-left: 6px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.76rem;
+    font-weight: 900;
+    white-space: nowrap;
+  }
+  .cobrancas-status-operacional.acionavel {
+    background: #ecfdf3;
+    color: #166534;
+  }
+  .cobrancas-inline-panel {
+    grid-column: 1 / -1;
+    background: #f8fbff;
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    padding: 12px;
+  }
+  .cobrancas-inline-panel[hidden] { display: none; }
+  .cobrancas-form-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(160px, 1fr));
+    gap: 10px;
+    align-items: end;
+  }
+  .cobrancas-field input,
+  .cobrancas-field textarea {
+    width: 100%;
+    border: 1.5px solid #d3dbe8;
+    border-radius: 9px;
+    padding: 10px 12px;
+    background: #fff;
+    color: #172033;
+    font-weight: 650;
+    outline: none;
+  }
+  .cobrancas-field textarea { min-height: 76px; resize: vertical; }
+  .cobrancas-field-full { grid-column: 1 / -1; }
+  .cobrancas-history-list { display: grid; gap: 8px; }
+  .cobrancas-history-item {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 9px 10px;
+  }
+  .cobrancas-history-meta {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    color: #334155;
+    font-size: 0.82rem;
+    font-weight: 850;
+  }
+  .cobrancas-history-text { margin-top: 5px; color: #475569; font-size: 0.84rem; white-space: pre-wrap; }
+  .cobrancas-history-empty { color: #64748b; font-weight: 750; font-size: 0.88rem; }
+  .cobrancas-empty {
+    padding: 22px 16px; color: #64748b; text-align: center;
+    font-weight: 700; font-size: 0.9rem;
+  }
+  .cobrancas-alert { border-radius: 13px; padding: 10px 12px; margin-bottom: 10px; font-weight: 750; }
+  .cobrancas-alert.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
+  .cobrancas-alert.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+  .cobrancas-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+  @media (max-width: 980px) {
+    .cobrancas-cliente {
+      grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(120px, 0.7fr));
+    }
+  }
+  @media (max-width: 760px) {
+    .cobrancas-header { align-items: stretch; flex-direction: column; }
+    .cobrancas-actions { justify-content: flex-start; }
+    .cobrancas-search form,
+    .cobrancas-resumo { grid-template-columns: 1fr; }
+    .cobrancas-cliente {
+      grid-template-columns: 1fr;
+      gap: 8px;
+      padding: 14px;
+    }
+    .cobrancas-form-grid { grid-template-columns: 1fr; }
+    .cobrancas-card-actions .cobrancas-btn { width: 100%; }
+    .cobrancas-ligar-mobile { display: inline-flex; }
+    .cobrancas-telefone-desktop { display: none; }
+    .cobrancas-whatsapp-preview-head {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .cobrancas-btn { width: 100%; }
+  }
+</style>
+
+<div class="cobrancas-page">
+  <div class="cobrancas-shell">
+    <header class="cobrancas-header">
+      <div>
+        <h1 class="cobrancas-title">Central de Cobranca</h1>
+        <p class="cobrancas-subtitle">Clientes com contas vencidas por data de vencimento.</p>
+      </div>
+      <div class="cobrancas-actions">
+        <a href="{% url 'estoque:contas_receber' %}" class="cobrancas-btn cobrancas-btn-secondary">Contas a Receber</a>
+        <a href="{% url 'estoque:home' %}" class="cobrancas-btn cobrancas-btn-secondary">Voltar ao painel</a>
+      </div>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="cobrancas-alert {{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <section class="cobrancas-search" aria-label="Filtros da central de cobranca">
+      <form method="get" id="centralCobrancasFiltros">
+        <div class="cobrancas-field">
+          <label for="cliente">Cliente ou estabelecimento</label>
+          <input id="cliente" name="cliente" type="search" value="{{ cliente_filtro }}" placeholder="Nome ou apelido comercial">
+        </div>
+        <div class="cobrancas-field">
+          <label for="rota">Rota/Bairro</label>
+          <select id="rota" name="rota">
+            <option value="">Todas</option>
+            {% for rota in rotas_opcoes %}
+              <option value="{{ rota }}" {% if rota_filtro == rota %}selected{% endif %}>{{ rota }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="cobrancas-field">
+          <label for="prioridade">Prioridade</label>
+          <select id="prioridade" name="prioridade">
+            {% for valor, texto in prioridade_opcoes %}
+              <option value="{{ valor }}" {% if prioridade_filtro == valor %}selected{% endif %}>{{ texto }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="cobrancas-btn cobrancas-btn-primary">Filtrar</button>
+        <a href="{% url 'estoque:central_cobrancas' %}" class="cobrancas-btn cobrancas-btn-secondary">Limpar</a>
+      </form>
+    </section>
+
+    <section class="cobrancas-resumo" aria-label="Resumo de cobrancas">
+      <div class="cobrancas-resumo-card">
+        <span class="cobrancas-resumo-label">Clientes vencidos</span>
+        <strong class="cobrancas-resumo-valor">{{ resumo.clientes }}</strong>
+      </div>
+      <div class="cobrancas-resumo-card">
+        <span class="cobrancas-resumo-label">A&ccedil;&otilde;es para hoje</span>
+        <strong class="cobrancas-resumo-valor">{{ resumo.acoes_hoje }}</strong>
+      </div>
+      <div class="cobrancas-resumo-card">
+        <span class="cobrancas-resumo-label">Contas vencidas</span>
+        <strong class="cobrancas-resumo-valor">{{ resumo.contas }}</strong>
+      </div>
+      <div class="cobrancas-resumo-card">
+        <span class="cobrancas-resumo-label">Total em aberto</span>
+        <strong class="cobrancas-resumo-valor">R$ {{ resumo.total|floatformat:2 }}</strong>
+      </div>
+    </section>
+
+    <section class="cobrancas-panel">
+      <div class="cobrancas-panel-head">
+        <h2 class="cobrancas-panel-title">Clientes para cobranca</h2>
+        <span class="cobrancas-count">Ordenado pelo vencimento mais antigo</span>
+      </div>
+      <div class="cobrancas-lista">
+        {% for cliente in clientes_cobranca %}
+          <article class="cobrancas-cliente">
+            <div>
+              <div class="cobrancas-nome">
+                {{ cliente.cliente_nome }}{% if cliente.cliente_apelido %} &mdash; {{ cliente.cliente_apelido }}{% endif %}
+              </div>
+              {% if cliente.localidade %}
+                <div class="cobrancas-localidade">{{ cliente.localidade }}</div>
+              {% endif %}
+            </div>
+            <div>
+              <span class="cobrancas-label">Contas</span>
+              <span class="cobrancas-dado">{{ cliente.qtd_contas }}</span>
+            </div>
+            <div>
+              <span class="cobrancas-label">Valor em aberto</span>
+              <span class="cobrancas-valor">R$ {{ cliente.total_em_aberto|floatformat:2 }}</span>
+            </div>
+            <div>
+              <span class="cobrancas-label">Mais antigo</span>
+              <span class="cobrancas-dado">{{ cliente.vencimento_mais_antigo|date:"d/m/Y" }}</span>
+            </div>
+            <div>
+              <span class="cobrancas-label">Atraso</span>
+              <span class="cobrancas-dado">{{ cliente.dias_atraso }} dia{{ cliente.dias_atraso|pluralize }}</span>
+            </div>
+            <div>
+              <span class="cobrancas-label">Prioridade</span>
+              <span class="cobrancas-prioridade {{ cliente.prioridade }}">{{ cliente.prioridade_label }}</span>
+              <span class="cobrancas-status-operacional{% if cliente.acionavel_hoje %} acionavel{% endif %}">
+                {{ cliente.status_operacional }}
+              </span>
+            </div>
+            {% if cliente.whatsapp_preview %}
+              <div class="cobrancas-whatsapp-preview">
+                <div class="cobrancas-whatsapp-preview-head">
+                  <span class="cobrancas-whatsapp-preview-title">PEND&Ecirc;NCIAS EM ABERTO</span>
+                  <span class="cobrancas-whatsapp-preview-client">Ol&aacute;, {{ cliente.whatsapp_preview.cliente_nome }}!</span>
+                </div>
+                <div class="cobrancas-whatsapp-preview-list">
+                  {% for item in cliente.whatsapp_preview.itens %}
+                    <div class="cobrancas-whatsapp-preview-item">
+                      <strong>&bull; Nota n&ordm; {{ item.nota }}</strong><br>
+                      Vencimento: {{ item.vencimento }} &mdash; {{ item.dias_atraso }} dias em atraso<br>
+                      Valor em aberto: <strong>{{ item.valor }}</strong>
+                    </div>
+                  {% endfor %}
+                </div>
+                <div class="cobrancas-whatsapp-preview-total">Total em aberto: {{ cliente.whatsapp_preview.total }}</div>
+                <div class="cobrancas-whatsapp-preview-pix">
+                  <span class="cobrancas-whatsapp-preview-pix-title">PAGAMENTO VIA PIX</span>
+                  <span>Chave Pix: <strong>{{ cliente.whatsapp_preview.pix.chave }}</strong></span>
+                  <span>Titular: <strong>{{ cliente.whatsapp_preview.pix.titular }}</strong></span>
+                  <span>Banco: {{ cliente.whatsapp_preview.pix.banco }}</span>
+                </div>
+                <div class="cobrancas-whatsapp-preview-note">
+                  Ap&oacute;s o pagamento, envie o comprovante<br>
+                  para o nosso WhatsApp de atendimento<br>
+                  para confirmarmos.<br>
+                  Se preferir, entre em contato conosco<br>
+                  para combinarmos a regulariza&ccedil;&atilde;o. Obrigado.
+                </div>
+              </div>
+            {% endif %}
+            <div class="cobrancas-card-actions">
+              {% if cliente.cliente_id %}
+                {% if cliente.whatsapp_url %}
+                  <a href="{{ cliente.whatsapp_url }}" target="_blank" rel="noopener" class="cobrancas-btn cobrancas-btn-success">Abrir WhatsApp</a>
+                {% endif %}
+                {% if cliente.telefone_ligacao_url %}
+                  <button type="button" class="cobrancas-btn cobrancas-btn-light cobrancas-ligar-mobile" data-call-url="{{ cliente.telefone_ligacao_url }}">Ligar para o cliente</button>
+                  <span class="cobrancas-telefone-desktop">
+                    <span class="cobrancas-telefone-numero">{{ cliente.telefone_ligacao_numero }}</span>
+                  </span>
+                {% endif %}
+                {% if cliente.receber_url %}
+                  <a href="{{ cliente.receber_url }}" class="cobrancas-btn cobrancas-btn-primary">Receber</a>
+                {% endif %}
+                <button type="button" class="cobrancas-btn cobrancas-btn-light" data-cobranca-toggle="form-{{ cliente.cliente_id }}">Registrar contato</button>
+                {% if cliente.historico_cobranca %}
+                  <button type="button" class="cobrancas-btn cobrancas-btn-light" data-cobranca-toggle="historico-{{ cliente.cliente_id }}">Ver hist&oacute;rico</button>
+                {% endif %}
+              {% else %}
+                <span class="cobrancas-dado">Cliente sem cadastro vinculado</span>
+              {% endif %}
+            </div>
+            <div class="cobrancas-ultimo-contato">
+              {% if cliente.ultimo_contato %}
+                <strong>&Uacute;ltimo contato:</strong>
+                {{ cliente.ultimo_contato.criado_em|date:"d/m/Y H:i" }} -
+                {{ cliente.ultimo_contato.tipo_label }} -
+                {{ cliente.ultimo_contato.status_label }}
+                {% if cliente.ultimo_contato.proximo_contato %}
+                  - pr&oacute;ximo {{ cliente.ultimo_contato.proximo_contato|date:"d/m/Y" }}
+                {% endif %}
+              {% else %}
+                <strong>&Uacute;ltimo contato:</strong> sem registros
+              {% endif %}
+            </div>
+            <div id="form-{{ cliente.cliente_id }}" class="cobrancas-inline-panel" hidden>
+              <form method="post" class="cobrancas-form-grid">
+                {% csrf_token %}
+                <input type="hidden" name="acao" value="registrar_cobranca">
+                <input type="hidden" name="cliente_id" value="{{ cliente.cliente_id }}">
+                <div class="cobrancas-field">
+                  <label for="tipo-{{ cliente.cliente_id }}">Forma de contato</label>
+                  <select id="tipo-{{ cliente.cliente_id }}" name="tipo" required>
+                    {% for valor, texto in forma_contato_opcoes %}
+                      <option value="{{ valor }}">{{ texto }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="cobrancas-field">
+                  <label for="status-{{ cliente.cliente_id }}">Resultado</label>
+                  <select id="status-{{ cliente.cliente_id }}" name="status" required>
+                    {% for valor, texto in resultado_opcoes %}
+                      <option value="{{ valor }}">{{ texto }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="cobrancas-field">
+                  <label for="proximo-{{ cliente.cliente_id }}">Pr&oacute;xima data</label>
+                  <input id="proximo-{{ cliente.cliente_id }}" type="date" name="proximo_contato" value="{{ hoje|date:'Y-m-d' }}" data-default-date="{{ hoje|date:'Y-m-d' }}" data-tomorrow-date="{{ amanha|date:'Y-m-d' }}">
+                </div>
+                <div class="cobrancas-field cobrancas-field-full">
+                  <label for="observacao-{{ cliente.cliente_id }}">Observa&ccedil;&atilde;o opcional</label>
+                  <textarea id="observacao-{{ cliente.cliente_id }}" name="observacao" rows="3"></textarea>
+                </div>
+                <button type="submit" class="cobrancas-btn cobrancas-btn-primary">Salvar registro</button>
+              </form>
+            </div>
+            <div id="historico-{{ cliente.cliente_id }}" class="cobrancas-inline-panel" hidden>
+              {% if cliente.historico_cobranca %}
+                <div class="cobrancas-history-list">
+                  {% for registro in cliente.historico_cobranca %}
+                    <div class="cobrancas-history-item">
+                      <div class="cobrancas-history-meta">
+                        <span>{{ registro.criado_em|date:"d/m/Y H:i" }}</span>
+                        <span>{{ registro.tipo_label }}</span>
+                        <span>{{ registro.status_label }}</span>
+                        {% if registro.proximo_contato %}
+                          <span>Pr&oacute;ximo: {{ registro.proximo_contato|date:"d/m/Y" }}</span>
+                        {% endif %}
+                      </div>
+                      {% if registro.observacao %}
+                        <div class="cobrancas-history-text">{{ registro.observacao }}</div>
+                      {% endif %}
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="cobrancas-history-empty">Nenhum registro de cobran&ccedil;a para este cliente.</div>
+              {% endif %}
+            </div>
+          </article>
+        {% empty %}
+          <div class="cobrancas-empty">Nenhum cliente com conta vencida para os filtros informados.</div>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+</div>
+<script>
+  (function () {
+    const formFiltros = document.getElementById("centralCobrancasFiltros");
+    const campoCliente = document.getElementById("cliente");
+    if (!formFiltros || !campoCliente) return;
+
+    let timeoutBusca = null;
+    let ultimoValorEnviado = campoCliente.value.trim();
+
+    campoCliente.addEventListener("input", function () {
+      window.clearTimeout(timeoutBusca);
+      timeoutBusca = window.setTimeout(function () {
+        const valorAtual = campoCliente.value.trim();
+        if (valorAtual === ultimoValorEnviado) return;
+        ultimoValorEnviado = valorAtual;
+        formFiltros.requestSubmit();
+      }, 350);
+    });
+  })();
+
+  document.addEventListener("click", function (event) {
+    const botaoLigar = event.target.closest("[data-call-url]");
+    if (botaoLigar) {
+      const consultaMobile = window.matchMedia("(max-width: 760px)");
+      if (consultaMobile.matches && botaoLigar.dataset.callUrl) {
+        window.location.href = botaoLigar.dataset.callUrl;
+      }
+      return;
+    }
+
+    const botao = event.target.closest("[data-cobranca-toggle]");
+    if (!botao) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const painel = document.getElementById(botao.dataset.cobrancaToggle);
+    if (!painel) return;
+    const vaiAbrir = painel.hidden;
+    const cartao = botao.closest(".cobrancas-cliente");
+    if (cartao) {
+      cartao.querySelectorAll(".cobrancas-inline-panel").forEach(function (item) {
+        if (item !== painel) item.hidden = true;
+      });
+    }
+    painel.hidden = !vaiAbrir;
+    if (vaiAbrir) {
+      const foco = painel.querySelector("select, input, textarea, button");
+      if (foco) foco.focus();
+    }
+  });
+
+  document.querySelectorAll(".cobrancas-form-grid").forEach(function (formulario) {
+    const resultado = formulario.querySelector('select[name="status"]');
+    const proximaData = formulario.querySelector('input[name="proximo_contato"]');
+    if (!resultado || !proximaData) return;
+
+    let dataAlteradaManualmente = false;
+    const dataInicial = proximaData.dataset.defaultDate || proximaData.value;
+    const amanha = proximaData.dataset.tomorrowDate || "";
+    const statusNaoAtendeu = "{{ status_nao_atendeu|escapejs }}";
+
+    proximaData.addEventListener("input", function () {
+      dataAlteradaManualmente = true;
+    });
+
+    resultado.addEventListener("change", function () {
+      if (resultado.value === statusNaoAtendeu && !dataAlteradaManualmente && amanha) {
+        proximaData.value = amanha;
+        return;
+      }
+      if (!dataAlteradaManualmente && proximaData.value !== dataInicial) {
+        proximaData.value = dataInicial;
+      }
+    });
+  });
+</script>
+{% endblock %}

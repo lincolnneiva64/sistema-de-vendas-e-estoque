@@ -83,6 +83,7 @@ urlpatterns = [
     path("vendas/consultar/canceladas/", views.consultar_vendas_canceladas, name="consultar_vendas_canceladas"),
     path("vendas/cliente-produto-historico/", views.vendas_cliente_produto_historico, name="vendas_cliente_produto_historico"),
     path("vendas/gravar/", views.gravar_venda, name="gravar_venda"),
+    path("central-cobrancas/", views.central_cobrancas, name="central_cobrancas"),
     path("contas-a-receber/", views.contas_receber, name="contas_receber"),
     path(
         "recebimentos/recibos-pendentes/",

@@ -638,6 +638,67 @@ class RecebimentoContaReceber(models.Model):
         return f"Recebimento R$ {self.valor} - Conta #{self.conta_id}"
 
 
+class RegistroCobrancaCliente(models.Model):
+    TIPO_MANUAL = "manual"
+    TIPO_WHATSAPP = "whatsapp"
+    TIPO_TELEFONE = "telefone"
+    TIPO_VISITA = "visita"
+    TIPO_OUTRO = "outro"
+    TIPO_CHOICES = [
+        (TIPO_MANUAL, "Manual"),
+        (TIPO_WHATSAPP, "WhatsApp"),
+        (TIPO_TELEFONE, "Telefone"),
+        (TIPO_VISITA, "Visita"),
+        (TIPO_OUTRO, "Outro"),
+    ]
+
+    STATUS_PENDENTE = "pendente"
+    STATUS_CONTATADO = "contatado"
+    STATUS_PROMESSA_PAGAMENTO = "promessa_pagamento"
+    STATUS_SEM_RESPOSTA = "sem_resposta"
+    STATUS_RESOLVIDO = "resolvido"
+    STATUS_CHOICES = [
+        (STATUS_PENDENTE, "Pendente"),
+        (STATUS_CONTATADO, "Contatado"),
+        (STATUS_PROMESSA_PAGAMENTO, "Promessa de pagamento"),
+        (STATUS_SEM_RESPOSTA, "Sem resposta"),
+        (STATUS_RESOLVIDO, "Resolvido"),
+    ]
+
+    cliente = models.ForeignKey(
+        Cliente,
+        on_delete=models.CASCADE,
+        related_name="registros_cobranca",
+    )
+    conta = models.ForeignKey(
+        ContaReceber,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="registros_cobranca",
+    )
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, default=TIPO_MANUAL)
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default=STATUS_PENDENTE)
+    observacao = models.TextField(blank=True)
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="registros_cobranca_cliente",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-criado_em", "-id"]
+        verbose_name = "Registro de cobranca de cliente"
+        verbose_name_plural = "Registros de cobranca de clientes"
+
+    def __str__(self):
+        return f"Cobranca {self.get_status_display()} - {self.cliente}"
+
+
 class FechamentoRotaRecebimento(models.Model):
     METODO_CEDULAS = "cedulas"
     METODO_DIRETA = "direta"

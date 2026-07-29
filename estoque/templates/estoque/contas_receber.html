@@ -225,6 +225,7 @@
           <a href="{% url 'estoque:home' %}" class="contas-btn contas-btn-secondary">Voltar ao painel</a>
         {% endif %}
         <a href="{% url 'estoque:painel_financeiro' %}" class="contas-btn contas-btn-secondary">Central Financeira</a>
+        <a href="{% url 'estoque:central_cobrancas' %}" class="contas-btn contas-btn-secondary">Central de Cobranca</a>
         <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="contas-btn contas-btn-secondary {% if tem_pix_em_atencao %}contas-btn-pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
         <a href="{% url 'estoque:consultar_vendas' %}" class="contas-btn contas-btn-primary">Consultar vendas</a>
       </div>
