@@ -122,6 +122,7 @@
     flex-wrap: wrap;
     justify-content: flex-start;
   }
+  .cobrancas-confirmar-form { display: inline-flex; margin: 0; }
   .cobrancas-card-actions .cobrancas-btn { min-height: 34px; padding: 7px 10px; font-size: 0.78rem; }
   .cobrancas-btn-light { background: #f8fafc; color: #334155; border: 1px solid #cbd5e1; }
   .cobrancas-btn-success { background: #16a34a; color: #fff; box-shadow: 0 8px 18px rgba(22, 163, 74, 0.18); }
@@ -310,6 +311,7 @@
     }
     .cobrancas-form-grid { grid-template-columns: 1fr; }
     .cobrancas-card-actions .cobrancas-btn { width: 100%; }
+    .cobrancas-confirmar-form { width: 100%; }
     .cobrancas-ligar-mobile { display: inline-flex; }
     .cobrancas-telefone-desktop { display: none; }
     .cobrancas-whatsapp-preview-head {
@@ -460,7 +462,19 @@
             <div class="cobrancas-card-actions">
               {% if cliente.cliente_id %}
                 {% if cliente.whatsapp_url %}
-                  <a href="{{ cliente.whatsapp_url }}" target="_blank" rel="noopener" class="cobrancas-btn cobrancas-btn-success">Abrir WhatsApp</a>
+                  <a href="{{ cliente.whatsapp_url }}" target="_blank" rel="noopener" class="cobrancas-btn cobrancas-btn-success" data-whatsapp-cobranca-link>Abrir WhatsApp</a>
+                  {% if cliente.acionavel_hoje %}
+                    <form method="post" class="cobrancas-confirmar-form">
+                      {% csrf_token %}
+                      <input type="hidden" name="acao" value="registrar_cobranca">
+                      <input type="hidden" name="cliente_id" value="{{ cliente.cliente_id }}">
+                      <input type="hidden" name="tipo" value="whatsapp">
+                      <input type="hidden" name="status" value="contatado">
+                      <input type="hidden" name="proximo_contato" value="{{ amanha|date:'Y-m-d' }}">
+                      <input type="hidden" name="observacao" value="Cobranca enviada pelo WhatsApp.">
+                      <button type="submit" class="cobrancas-btn cobrancas-btn-success">Confirmar cobrança enviada</button>
+                    </form>
+                  {% endif %}
                 {% endif %}
                 {% if cliente.telefone_ligacao_url %}
                   <button type="button" class="cobrancas-btn cobrancas-btn-light cobrancas-ligar-mobile" data-call-url="{{ cliente.telefone_ligacao_url }}">Ligar para o cliente</button>
@@ -576,6 +590,21 @@
   })();
 
   document.addEventListener("click", function (event) {
+    const linkWhatsapp = event.target.closest("[data-whatsapp-cobranca-link]");
+    if (linkWhatsapp) {
+      const consultaMobile = window.matchMedia("(max-width: 760px)");
+      if (!consultaMobile.matches) {
+        event.preventDefault();
+        const janelaWhatsapp = window.open(linkWhatsapp.href, "central_cobranca_whatsapp");
+        if (janelaWhatsapp) {
+          janelaWhatsapp.focus();
+        } else {
+          window.location.href = linkWhatsapp.href;
+        }
+      }
+      return;
+    }
+
     const botaoLigar = event.target.closest("[data-call-url]");
     if (botaoLigar) {
       const consultaMobile = window.matchMedia("(max-width: 760px)");

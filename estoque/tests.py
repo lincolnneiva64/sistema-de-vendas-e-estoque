@@ -1752,6 +1752,18 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, 'id="cobrancasVendasPainel" hidden')
         self.assertContains(resposta, "Cliente Cobranca Vendas")
         self.assertContains(resposta, "Cobrar pelo WhatsApp")
+        self.assertContains(resposta, 'data-whatsapp-cobranca-link')
+        self.assertContains(resposta, 'window.open(linkWhatsapp.href, "central_cobranca_whatsapp")')
+        self.assertContains(resposta, "Confirmar cobrança enviada")
+        self.assertContains(resposta, 'data-confirmar-cobranca-form')
+        self.assertContains(resposta, 'name="tipo" value="whatsapp"')
+        self.assertContains(resposta, 'name="status" value="contatado"')
+        self.assertContains(resposta, "function destacarConfirmacaoCobranca(linkWhatsapp)")
+        self.assertContains(resposta, 'botaoConfirmar.classList.add("aguardando-confirmacao")')
+        self.assertContains(resposta, 'botaoConfirmar.textContent = "✓ Agora confirme o envio";')
+        self.assertContains(resposta, "@keyframes cobrancasVendasConfirmarPulso")
+        self.assertContains(resposta, 'fetch(formulario.action')
+        self.assertContains(resposta, 'cartao.remove()')
         self.assertContains(resposta, 'data-cobrancas-acionaveis="1"')
         self.assertContains(resposta, 'data-pulso-ativo-ms="15000"')
         self.assertContains(resposta, 'data-pulso-pausa-ms="300000"')
@@ -1760,6 +1772,48 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, "window.setTimeout(pausarPulso, pulsoAtivoMs)")
         self.assertContains(resposta, "window.setTimeout(ativarPulso, pulsoPausaMs)")
         self.assertNotContains(resposta, 'id="btnCentralCobrancaVenda"')
+
+    def test_vendas_confirmar_cobranca_whatsapp_registra_sem_baixar_divida_e_remove_alerta(self):
+        cliente = Cliente.objects.create(nome="Cliente Confirma Cobranca Vendas", ativo=True)
+        cliente.whatsapp = "(91) 98888-7777"
+        cliente.save(update_fields=["whatsapp"])
+        hoje = timezone.localdate()
+        conta = ContaReceber.objects.create(
+            cliente=cliente,
+            data_emissao=hoje - timedelta(days=8),
+            data_vencimento=hoje - timedelta(days=5),
+            valor_original=Decimal("90.00"),
+            valor_em_aberto=Decimal("90.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:central_cobrancas"),
+            data={
+                "acao": "registrar_cobranca",
+                "cliente_id": cliente.id,
+                "tipo": views.RegistroCobrancaCliente.TIPO_WHATSAPP,
+                "status": views.RegistroCobrancaCliente.STATUS_CONTATADO,
+                "proximo_contato": (hoje + timedelta(days=1)).isoformat(),
+                "observacao": "Cobranca enviada pelo WhatsApp.",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.json()["cobrancas_acionaveis_hoje_qtd"], 0)
+        registro = views.RegistroCobrancaCliente.objects.get(cliente=cliente)
+        self.assertEqual(registro.tipo, views.RegistroCobrancaCliente.TIPO_WHATSAPP)
+        self.assertEqual(registro.status, views.RegistroCobrancaCliente.STATUS_CONTATADO)
+        conta.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("90.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+
+        pagina_vendas = self.client.get(reverse("estoque:vendas"), secure=True)
+
+        self.assertEqual(pagina_vendas.context["cobrancas_acionaveis_hoje_qtd"], 0)
+        self.assertNotContains(pagina_vendas, "Cliente Confirma Cobranca Vendas")
 
     def test_vendas_central_cobranca_ignora_retorno_futuro(self):
         cliente = Cliente.objects.create(nome="Cliente Cobranca Futuro Vendas", ativo=True)
@@ -6227,6 +6281,8 @@ class ProdutosIncompletosTests(TestCase):
             html.index('id="btnFornecedoresPainel"'),
             html.index('id="btnNovaListaFornecedorPainel"'),
         )
+        self.assertContains(resposta, "Central de Cobran&ccedil;a")
+        self.assertContains(resposta, f'href="{reverse("estoque:central_cobrancas")}"')
 
     def test_tela_completar_produto_incompleto_nao_inicializa_preco_final_com_compra(self):
         resposta = self.client.get(self._url_edicao(), secure=True)
@@ -19737,6 +19793,63 @@ class CentralCobrancasTests(TestCase):
         self.assertContains(resposta, "PAGAMENTO VIA PIX")
         self.assertContains(resposta, "Chave Pix: <strong>91984111011</strong>")
         self.assertContains(resposta, "Titular: <strong>Lincoln A. Neiva</strong>")
+
+    def test_whatsapp_central_desktop_reutiliza_mesma_janela_sem_registrar_cobranca(self):
+        cliente_um = self._criar_cliente_com_conta_vencida("Cliente WhatsApp Um", 5, valor="40.00")
+        cliente_um.whatsapp = "(91) 98888-7777"
+        cliente_um.save(update_fields=["whatsapp"])
+        cliente_dois = self._criar_cliente_com_conta_vencida("Cliente WhatsApp Dois", 6, valor="55.00")
+        cliente_dois.whatsapp = "(91) 97777-6666"
+        cliente_dois.save(update_fields=["whatsapp"])
+
+        resposta = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
+
+        self.assertContains(resposta, 'data-whatsapp-cobranca-link>Abrir WhatsApp</a>', count=2)
+        self.assertContains(resposta, 'window.open(linkWhatsapp.href, "central_cobranca_whatsapp")')
+        self.assertContains(resposta, 'window.matchMedia("(max-width: 760px)")')
+        self.assertEqual(views.RegistroCobrancaCliente.objects.count(), 0)
+
+    def test_confirmar_cobranca_enviada_na_central_registra_sem_baixar_divida(self):
+        cliente = self._criar_cliente_com_conta_vencida("Cliente Confirmar Central", 5, valor="80.00")
+        cliente.whatsapp = "(91) 98888-7777"
+        cliente.save(update_fields=["whatsapp"])
+        conta = ContaReceber.objects.get(cliente=cliente)
+        hoje = timezone.localdate()
+
+        resposta = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
+
+        self.assertContains(resposta, "Cliente Confirmar Central")
+        self.assertContains(resposta, "Confirmar cobrança enviada")
+
+        resposta_post = self.client.post(
+            reverse("estoque:central_cobrancas"),
+            data={
+                "acao": "registrar_cobranca",
+                "cliente_id": cliente.id,
+                "tipo": views.RegistroCobrancaCliente.TIPO_WHATSAPP,
+                "status": views.RegistroCobrancaCliente.STATUS_CONTATADO,
+                "proximo_contato": (hoje + timedelta(days=1)).isoformat(),
+                "observacao": "Cobranca enviada pelo WhatsApp.",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta_post.status_code, 302)
+        registro = views.RegistroCobrancaCliente.objects.get(cliente=cliente)
+        self.assertEqual(registro.tipo, views.RegistroCobrancaCliente.TIPO_WHATSAPP)
+        self.assertEqual(registro.status, views.RegistroCobrancaCliente.STATUS_CONTATADO)
+        _observacao, proximo_contato = views._separar_observacao_registro_cobranca(registro.observacao)
+        self.assertEqual(proximo_contato, hoje + timedelta(days=1))
+        conta.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("80.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+
+        pagina_atualizada = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
+
+        self.assertContains(pagina_atualizada, "Cliente Confirmar Central")
+        self.assertEqual(pagina_atualizada.context["resumo"]["acoes_hoje"], 0)
+        self.assertFalse(pagina_atualizada.context["clientes_cobranca"][0]["acionavel_hoje"])
+        self.assertNotContains(pagina_atualizada, "Confirmar cobrança enviada")
 
 
 class PedidoTests(TestCase):

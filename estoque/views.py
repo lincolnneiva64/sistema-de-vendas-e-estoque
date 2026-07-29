@@ -10416,6 +10416,10 @@ def vendas(request):
         'tem_pix_em_atencao': _tem_pix_em_atencao(),
         'cobrancas_acionaveis_hoje_qtd': len(cobrancas_acionaveis_vendas),
         'cobrancas_acionaveis_vendas': cobrancas_acionaveis_vendas,
+        'cobrancas_registrar_url': reverse("estoque:central_cobrancas"),
+        'cobrancas_confirmar_proximo_contato': hoje + timedelta(days=1),
+        'cobrancas_tipo_whatsapp': RegistroCobrancaCliente.TIPO_WHATSAPP,
+        'cobrancas_status_confirmado': RegistroCobrancaCliente.STATUS_CONTATADO,
         'resumo_vendas_hoje': resumo_vendas_hoje,
     })
 
@@ -10634,6 +10638,7 @@ def _registrar_cobranca_cliente_central(request):
     status = request.POST.get("status", "").strip()
     observacao = request.POST.get("observacao", "").strip()
     proximo_contato_texto = request.POST.get("proximo_contato", "").strip()
+    espera_json = request.headers.get("x-requested-with") == "XMLHttpRequest"
     tipos_validos = {valor for valor, _rotulo in RegistroCobrancaCliente.TIPO_CHOICES}
     status_validos = {valor for valor, _rotulo in RegistroCobrancaCliente.STATUS_CHOICES}
     retorno_url = reverse("estoque:central_cobrancas")
@@ -10641,19 +10646,22 @@ def _registrar_cobranca_cliente_central(request):
     if query_string:
         retorno_url = f"{retorno_url}?{query_string}"
 
+    def responder_erro(mensagem):
+        if espera_json:
+            return JsonResponse({"sucesso": False, "mensagem": mensagem}, status=400)
+        messages.error(request, mensagem)
+        return redirect(retorno_url)
+
     if tipo not in tipos_validos or tipo == RegistroCobrancaCliente.TIPO_MANUAL:
-        messages.error(request, "Informe uma forma de contato valida.")
-        return redirect(retorno_url)
+        return responder_erro("Informe uma forma de contato valida.")
     if status not in status_validos:
-        messages.error(request, "Informe um resultado valido para a cobranca.")
-        return redirect(retorno_url)
+        return responder_erro("Informe um resultado valido para a cobranca.")
 
     proximo_contato = None
     if proximo_contato_texto:
         proximo_contato = parse_date(proximo_contato_texto)
         if not proximo_contato:
-            messages.error(request, "Informe uma proxima data de contato valida.")
-            return redirect(retorno_url)
+            return responder_erro("Informe uma proxima data de contato valida.")
     elif status == COBRANCA_STATUS_NAO_ATENDEU:
         proximo_contato = timezone.localdate() + timedelta(days=1)
 
@@ -10666,6 +10674,14 @@ def _registrar_cobranca_cliente_central(request):
             observacao=_montar_observacao_registro_cobranca(observacao, proximo_contato),
             criado_por=request.user if request.user.is_authenticated else None,
         )
+
+    if espera_json:
+        return JsonResponse({
+            "sucesso": True,
+            "cliente_id": cliente.id,
+            "cobrancas_acionaveis_hoje_qtd": _clientes_cobranca_acionavel_hoje_qtd(),
+            "mensagem": f"Cobranca registrada para {cliente.nome}.",
+        })
 
     messages.success(request, f"Cobranca registrada para {cliente.nome}.")
     return redirect(retorno_url)

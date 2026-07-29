@@ -2,7 +2,7 @@
 .cobrancas-vendas-lateral {
   position: fixed;
   left: 0;
-  top: {% if pendencias_vendas_qtd %}218px{% else %}96px{% endif %};
+  top: {% if pendencias_vendas_qtd %}244px{% else %}96px{% endif %};
   z-index: 9986;
   display: flex;
   align-items: flex-start;
@@ -259,16 +259,79 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 30px;
-  padding: 5px 9px;
-  border: 1px solid #16a34a;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 38px;
+  margin-top: 3px;
+  padding: 8px 12px;
+  border: 1px solid #15803d;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
   color: #fff !important;
-  font-size: .76rem;
+  font-size: .8rem;
   font-weight: 950;
   text-decoration: none;
-  box-shadow: 0 4px 10px rgba(22, 163, 74, .18);
+  text-align: center;
+  box-shadow: 0 8px 17px rgba(21, 128, 61, .22);
+  transition: filter 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+.cobrancas-vendas-whatsapp:hover {
+  filter: brightness(1.04);
+  box-shadow: 0 10px 20px rgba(21, 128, 61, .26);
+}
+.cobrancas-vendas-whatsapp:active {
+  transform: translateY(1px);
+}
+.cobrancas-vendas-confirmar-form {
+  display: block;
+  margin: 0;
+}
+.cobrancas-vendas-confirmar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid #1d4ed8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1d4ed8;
+  font-size: .78rem;
+  font-weight: 950;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 6px 13px rgba(29, 78, 216, .14);
+  transition: filter 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+.cobrancas-vendas-confirmar:hover {
+  filter: brightness(.99);
+  box-shadow: 0 8px 16px rgba(29, 78, 216, .18);
+}
+.cobrancas-vendas-confirmar:active {
+  transform: translateY(1px);
+}
+.cobrancas-vendas-confirmar[disabled] {
+  cursor: wait;
+  opacity: .72;
+}
+.cobrancas-vendas-confirmar.aguardando-confirmacao {
+  border-color: #1e40af;
+  background: linear-gradient(180deg, #2563eb 0%, #1e40af 100%);
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(37, 99, 235, .32), 0 0 0 0 rgba(37, 99, 235, .34);
+  animation: cobrancasVendasConfirmarPulso 1.35s ease-in-out infinite;
+}
+@keyframes cobrancasVendasConfirmarPulso {
+  0%, 100% {
+    box-shadow: 0 10px 22px rgba(37, 99, 235, .28), 0 0 0 0 rgba(37, 99, 235, .34);
+    transform: translateY(0);
+  }
+  50% {
+    box-shadow: 0 13px 28px rgba(37, 99, 235, .38), 0 0 0 5px rgba(37, 99, 235, .12);
+    transform: translateY(-1px);
+  }
 }
 .cobrancas-vendas-sem-whatsapp {
   color: #64748b;
@@ -284,7 +347,8 @@
 }
 .cobrancas-vendas-toggle:focus-visible,
 .cobrancas-vendas-fechar:focus-visible,
-.cobrancas-vendas-whatsapp:focus-visible {
+.cobrancas-vendas-whatsapp:focus-visible,
+.cobrancas-vendas-confirmar:focus-visible {
   outline: 3px solid #2563eb;
   outline-offset: 2px;
 }
@@ -292,10 +356,13 @@
   .cobrancas-vendas-lateral.tem-cobranca.cobranca-pulsando .cobrancas-vendas-toggle {
     animation: none;
   }
+  .cobrancas-vendas-confirmar.aguardando-confirmacao {
+    animation: none;
+  }
 }
 @media (max-width: 768px) {
   .cobrancas-vendas-lateral {
-    top: {% if pendencias_vendas_qtd %}194px{% else %}82px{% endif %};
+    top: {% if pendencias_vendas_qtd %}224px{% else %}82px{% endif %};
   }
   .cobrancas-vendas-painel {
     width: min(330px, calc(100vw - 44px));
@@ -343,7 +410,7 @@
 
     <div class="cobrancas-vendas-lista">
       {% for cliente in cobrancas_acionaveis_vendas %}
-        <article class="cobrancas-vendas-item prioridade-{{ cliente.prioridade }}">
+        <article class="cobrancas-vendas-item prioridade-{{ cliente.prioridade }}" data-cobranca-cliente-card data-cliente-id="{{ cliente.cliente_id }}">
           <div class="cobrancas-vendas-item-topo">
             <div>
               <strong class="cobrancas-vendas-nome">{{ cliente.cliente_nome }}</strong>
@@ -372,7 +439,17 @@
             </div>
           </div>
           {% if cliente.whatsapp_url %}
-            <a class="cobrancas-vendas-whatsapp" href="{{ cliente.whatsapp_url }}" target="_blank" rel="noopener">Cobrar pelo WhatsApp</a>
+            <a class="cobrancas-vendas-whatsapp" href="{{ cliente.whatsapp_url }}" target="_blank" rel="noopener" data-whatsapp-cobranca-link>Cobrar pelo WhatsApp</a>
+            <form method="post" action="{{ cobrancas_registrar_url|default:'/central-cobrancas/' }}" class="cobrancas-vendas-confirmar-form" data-confirmar-cobranca-form>
+              {% csrf_token %}
+              <input type="hidden" name="acao" value="registrar_cobranca">
+              <input type="hidden" name="cliente_id" value="{{ cliente.cliente_id }}">
+              <input type="hidden" name="tipo" value="{{ cobrancas_tipo_whatsapp|default:'whatsapp' }}">
+              <input type="hidden" name="status" value="{{ cobrancas_status_confirmado|default:'contatado' }}">
+              <input type="hidden" name="proximo_contato" value="{{ cobrancas_confirmar_proximo_contato|date:'Y-m-d' }}">
+              <input type="hidden" name="observacao" value="Cobranca enviada pelo WhatsApp.">
+              <button type="submit" class="cobrancas-vendas-confirmar">Confirmar cobrança enviada</button>
+            </form>
           {% else %}
             <span class="cobrancas-vendas-sem-whatsapp">Sem WhatsApp válido cadastrado.</span>
           {% endif %}
@@ -454,6 +531,111 @@
   }
 
   iniciarCicloPulsoCobrancas();
+
+  function dispositivoMobile() {
+    return window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
+  }
+
+  function destacarConfirmacaoCobranca(linkWhatsapp) {
+    const cartao = linkWhatsapp.closest("[data-cobranca-cliente-card]");
+    const botaoConfirmar = cartao?.querySelector(".cobrancas-vendas-confirmar");
+    if (!botaoConfirmar) return;
+    botaoConfirmar.classList.add("aguardando-confirmacao");
+    botaoConfirmar.textContent = "✓ Agora confirme o envio";
+  }
+
+  painel.addEventListener("click", function(event) {
+    const linkWhatsapp = event.target.closest("[data-whatsapp-cobranca-link]");
+    if (!linkWhatsapp) return;
+
+    destacarConfirmacaoCobranca(linkWhatsapp);
+    if (dispositivoMobile()) return;
+    event.preventDefault();
+    const janelaWhatsapp = window.open(linkWhatsapp.href, "central_cobranca_whatsapp");
+    if (janelaWhatsapp) {
+      janelaWhatsapp.focus();
+    } else {
+      window.location.href = linkWhatsapp.href;
+    }
+  });
+
+  function textoClientesAcionaveis(total) {
+    const clienteTexto = total === 1 ? "cliente" : "clientes";
+    const acionavelTexto = total === 1 ? "acionável" : "acionáveis";
+    return `${total} ${clienteTexto} ${acionavelTexto} hoje.`;
+  }
+
+  function atualizarContadorCobrancas(total) {
+    const contador = painel.querySelector(".cobrancas-vendas-contador");
+    const subtitulo = painel.querySelector(".cobrancas-vendas-subtitulo");
+    const badge = botao.querySelector(".cobrancas-vendas-badge");
+    lateral.dataset.cobrancasAcionaveis = String(total);
+    if (contador) contador.textContent = String(total);
+    if (subtitulo) subtitulo.textContent = textoClientesAcionaveis(total);
+    if (badge) {
+      if (total > 0) {
+        badge.textContent = String(total);
+        badge.setAttribute("aria-label", textoClientesAcionaveis(total));
+      } else {
+        badge.remove();
+      }
+    }
+    if (total <= 0) {
+      lateral.classList.remove("tem-cobranca", "cobranca-pulsando");
+    } else {
+      lateral.classList.add("tem-cobranca");
+    }
+  }
+
+  function mostrarListaVaziaSeNecessario() {
+    const lista = painel.querySelector(".cobrancas-vendas-lista");
+    if (!lista || lista.querySelector("[data-cobranca-cliente-card]")) return;
+    if (!lista.querySelector(".cobrancas-vendas-vazio")) {
+      const vazio = document.createElement("p");
+      vazio.className = "cobrancas-vendas-vazio";
+      vazio.textContent = "Nenhuma cobrança acionável hoje.";
+      lista.appendChild(vazio);
+    }
+  }
+
+  painel.addEventListener("submit", async function(event) {
+    const formulario = event.target.closest("[data-confirmar-cobranca-form]");
+    if (!formulario) return;
+
+    event.preventDefault();
+    ignorarValidacaoOperadorVendaTemporariamente();
+    const botaoConfirmar = formulario.querySelector("button[type='submit']");
+    const textoOriginal = botaoConfirmar ? botaoConfirmar.textContent : "";
+    if (botaoConfirmar) {
+      botaoConfirmar.disabled = true;
+      botaoConfirmar.textContent = "Confirmando...";
+    }
+
+    try {
+      const resposta = await fetch(formulario.action, {
+        method: "POST",
+        body: new FormData(formulario),
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        credentials: "same-origin",
+      });
+      const dados = await resposta.json();
+      if (!resposta.ok || !dados.sucesso) {
+        throw new Error(dados.mensagem || "Nao foi possivel confirmar a cobranca.");
+      }
+      const cartao = formulario.closest("[data-cobranca-cliente-card]");
+      if (cartao) cartao.remove();
+      atualizarContadorCobrancas(Number.parseInt(dados.cobrancas_acionaveis_hoje_qtd || "0", 10) || 0);
+      mostrarListaVaziaSeNecessario();
+    } catch (erro) {
+      if (botaoConfirmar) {
+        botaoConfirmar.disabled = false;
+        botaoConfirmar.textContent = textoOriginal || "Confirmar cobrança enviada";
+      }
+      window.alert(erro.message || "Nao foi possivel confirmar a cobranca.");
+    }
+  });
 
   botao.addEventListener("click", function(event) {
     event.stopPropagation();
