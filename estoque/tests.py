@@ -19820,6 +19820,15 @@ class CentralCobrancasTests(TestCase):
 
         self.assertContains(resposta, "Cliente Confirmar Central")
         self.assertContains(resposta, "Confirmar cobrança enviada")
+        self.assertContains(resposta, "✓ Confirmar cobrança enviada")
+        self.assertContains(resposta, 'data-confirmar-cobranca-form')
+        self.assertContains(resposta, 'cobrancas-confirmar-envio')
+        self.assertContains(resposta, "@keyframes cobrancasConfirmarPulso")
+        self.assertContains(resposta, "function destacarConfirmacaoCobranca(linkWhatsapp)")
+        self.assertContains(resposta, 'botaoConfirmar.classList.add("aguardando-confirmacao")')
+        self.assertContains(resposta, 'botaoConfirmar.textContent = "✓ Agora confirme o envio";')
+        self.assertContains(resposta, 'cartao.remove()')
+        self.assertContains(resposta, 'data-resumo-acoes-hoje')
 
         resposta_post = self.client.post(
             reverse("estoque:central_cobrancas"),
@@ -19831,10 +19840,13 @@ class CentralCobrancasTests(TestCase):
                 "proximo_contato": (hoje + timedelta(days=1)).isoformat(),
                 "observacao": "Cobranca enviada pelo WhatsApp.",
             },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
             secure=True,
         )
 
-        self.assertEqual(resposta_post.status_code, 302)
+        self.assertEqual(resposta_post.status_code, 200)
+        self.assertTrue(resposta_post.json()["sucesso"])
+        self.assertEqual(resposta_post.json()["cobrancas_acionaveis_hoje_qtd"], 0)
         registro = views.RegistroCobrancaCliente.objects.get(cliente=cliente)
         self.assertEqual(registro.tipo, views.RegistroCobrancaCliente.TIPO_WHATSAPP)
         self.assertEqual(registro.status, views.RegistroCobrancaCliente.STATUS_CONTATADO)
@@ -19849,7 +19861,6 @@ class CentralCobrancasTests(TestCase):
         self.assertContains(pagina_atualizada, "Cliente Confirmar Central")
         self.assertEqual(pagina_atualizada.context["resumo"]["acoes_hoje"], 0)
         self.assertFalse(pagina_atualizada.context["clientes_cobranca"][0]["acionavel_hoje"])
-        self.assertNotContains(pagina_atualizada, "Confirmar cobrança enviada")
 
 
 class PedidoTests(TestCase):

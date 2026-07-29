@@ -126,6 +126,23 @@
   .cobrancas-card-actions .cobrancas-btn { min-height: 34px; padding: 7px 10px; font-size: 0.78rem; }
   .cobrancas-btn-light { background: #f8fafc; color: #334155; border: 1px solid #cbd5e1; }
   .cobrancas-btn-success { background: #16a34a; color: #fff; box-shadow: 0 8px 18px rgba(22, 163, 74, 0.18); }
+  .cobrancas-confirmar-envio.aguardando-confirmacao {
+    border-color: #1e40af;
+    background: linear-gradient(180deg, #2563eb 0%, #1e40af 100%);
+    color: #ffffff;
+    box-shadow: 0 10px 22px rgba(37, 99, 235, .32), 0 0 0 0 rgba(37, 99, 235, .34);
+    animation: cobrancasConfirmarPulso 1.35s ease-in-out infinite;
+  }
+  @keyframes cobrancasConfirmarPulso {
+    0%, 100% {
+      box-shadow: 0 10px 22px rgba(37, 99, 235, .28), 0 0 0 0 rgba(37, 99, 235, .34);
+      transform: translateY(0);
+    }
+    50% {
+      box-shadow: 0 13px 28px rgba(37, 99, 235, .38), 0 0 0 5px rgba(37, 99, 235, .12);
+      transform: translateY(-1px);
+    }
+  }
   .cobrancas-ligar-mobile { display: none; }
   .cobrancas-telefone-desktop {
     display: inline-flex;
@@ -294,6 +311,11 @@
   .cobrancas-alert.success { background: #ecfdf3; border: 1px solid #b7e4c7; color: #166534; }
   .cobrancas-alert.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
   .cobrancas-alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+  @media (prefers-reduced-motion: reduce) {
+    .cobrancas-confirmar-envio.aguardando-confirmacao {
+      animation: none;
+    }
+  }
   @media (max-width: 980px) {
     .cobrancas-cliente {
       grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(120px, 0.7fr));
@@ -373,19 +395,19 @@
     <section class="cobrancas-resumo" aria-label="Resumo de cobrancas">
       <div class="cobrancas-resumo-card">
         <span class="cobrancas-resumo-label">Clientes vencidos</span>
-        <strong class="cobrancas-resumo-valor">{{ resumo.clientes }}</strong>
+        <strong class="cobrancas-resumo-valor" data-resumo-clientes>{{ resumo.clientes }}</strong>
       </div>
       <div class="cobrancas-resumo-card">
         <span class="cobrancas-resumo-label">A&ccedil;&otilde;es para hoje</span>
-        <strong class="cobrancas-resumo-valor">{{ resumo.acoes_hoje }}</strong>
+        <strong class="cobrancas-resumo-valor" data-resumo-acoes-hoje>{{ resumo.acoes_hoje }}</strong>
       </div>
       <div class="cobrancas-resumo-card">
         <span class="cobrancas-resumo-label">Contas vencidas</span>
-        <strong class="cobrancas-resumo-valor">{{ resumo.contas }}</strong>
+        <strong class="cobrancas-resumo-valor" data-resumo-contas>{{ resumo.contas }}</strong>
       </div>
       <div class="cobrancas-resumo-card">
         <span class="cobrancas-resumo-label">Total em aberto</span>
-        <strong class="cobrancas-resumo-valor">R$ {{ resumo.total|floatformat:2 }}</strong>
+        <strong class="cobrancas-resumo-valor" data-resumo-total data-valor="{{ resumo.total }}">R$ {{ resumo.total|floatformat:2 }}</strong>
       </div>
     </section>
 
@@ -396,7 +418,7 @@
       </div>
       <div class="cobrancas-lista">
         {% for cliente in clientes_cobranca %}
-          <article class="cobrancas-cliente">
+          <article class="cobrancas-cliente" data-cobranca-cliente-card data-cliente-id="{{ cliente.cliente_id }}" data-qtd-contas="{{ cliente.qtd_contas }}" data-total-em-aberto="{{ cliente.total_em_aberto }}">
             <div>
               <div class="cobrancas-nome">
                 {{ cliente.cliente_nome }}{% if cliente.cliente_apelido %} &mdash; {{ cliente.cliente_apelido }}{% endif %}
@@ -463,18 +485,16 @@
               {% if cliente.cliente_id %}
                 {% if cliente.whatsapp_url %}
                   <a href="{{ cliente.whatsapp_url }}" target="_blank" rel="noopener" class="cobrancas-btn cobrancas-btn-success" data-whatsapp-cobranca-link>Abrir WhatsApp</a>
-                  {% if cliente.acionavel_hoje %}
-                    <form method="post" class="cobrancas-confirmar-form">
-                      {% csrf_token %}
-                      <input type="hidden" name="acao" value="registrar_cobranca">
-                      <input type="hidden" name="cliente_id" value="{{ cliente.cliente_id }}">
-                      <input type="hidden" name="tipo" value="whatsapp">
-                      <input type="hidden" name="status" value="contatado">
-                      <input type="hidden" name="proximo_contato" value="{{ amanha|date:'Y-m-d' }}">
-                      <input type="hidden" name="observacao" value="Cobranca enviada pelo WhatsApp.">
-                      <button type="submit" class="cobrancas-btn cobrancas-btn-success">Confirmar cobrança enviada</button>
-                    </form>
-                  {% endif %}
+                  <form method="post" class="cobrancas-confirmar-form" data-confirmar-cobranca-form>
+                    {% csrf_token %}
+                    <input type="hidden" name="acao" value="registrar_cobranca">
+                    <input type="hidden" name="cliente_id" value="{{ cliente.cliente_id }}">
+                    <input type="hidden" name="tipo" value="whatsapp">
+                    <input type="hidden" name="status" value="contatado">
+                    <input type="hidden" name="proximo_contato" value="{{ amanha|date:'Y-m-d' }}">
+                    <input type="hidden" name="observacao" value="Cobranca enviada pelo WhatsApp.">
+                    <button type="submit" class="cobrancas-btn cobrancas-btn-success cobrancas-confirmar-envio">✓ Confirmar cobrança enviada</button>
+                  </form>
                 {% endif %}
                 {% if cliente.telefone_ligacao_url %}
                   <button type="button" class="cobrancas-btn cobrancas-btn-light cobrancas-ligar-mobile" data-call-url="{{ cliente.telefone_ligacao_url }}">Ligar para o cliente</button>
@@ -589,9 +609,18 @@
     });
   })();
 
+  function destacarConfirmacaoCobranca(linkWhatsapp) {
+    const cartao = linkWhatsapp.closest("[data-cobranca-cliente-card]");
+    const botaoConfirmar = cartao?.querySelector(".cobrancas-confirmar-envio");
+    if (!botaoConfirmar) return;
+    botaoConfirmar.classList.add("aguardando-confirmacao");
+    botaoConfirmar.textContent = "✓ Agora confirme o envio";
+  }
+
   document.addEventListener("click", function (event) {
     const linkWhatsapp = event.target.closest("[data-whatsapp-cobranca-link]");
     if (linkWhatsapp) {
+      destacarConfirmacaoCobranca(linkWhatsapp);
       const consultaMobile = window.matchMedia("(max-width: 760px)");
       if (!consultaMobile.matches) {
         event.preventDefault();
@@ -631,6 +660,73 @@
     if (vaiAbrir) {
       const foco = painel.querySelector("select, input, textarea, button");
       if (foco) foco.focus();
+    }
+  });
+
+  document.addEventListener("submit", async function (event) {
+    const formulario = event.target.closest("[data-confirmar-cobranca-form]");
+    if (!formulario) return;
+
+    event.preventDefault();
+    const botaoConfirmar = formulario.querySelector("button[type='submit']");
+    const textoOriginal = botaoConfirmar ? botaoConfirmar.textContent : "";
+    if (botaoConfirmar) {
+      botaoConfirmar.disabled = true;
+      botaoConfirmar.textContent = "Confirmando...";
+    }
+
+    try {
+      const resposta = await fetch(formulario.action || window.location.href, {
+        method: "POST",
+        body: new FormData(formulario),
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        credentials: "same-origin",
+      });
+      const dados = await resposta.json();
+      if (!resposta.ok || !dados.sucesso) {
+        throw new Error(dados.mensagem || "Nao foi possivel confirmar a cobranca.");
+      }
+
+      const cartao = formulario.closest("[data-cobranca-cliente-card]");
+      const contasRemovidas = Number.parseInt(cartao?.dataset.qtdContas || "0", 10) || 0;
+      const totalRemovido = Number.parseFloat((cartao?.dataset.totalEmAberto || "0").replace(",", ".")) || 0;
+      if (cartao) cartao.remove();
+
+      const resumoAcoes = document.querySelector("[data-resumo-acoes-hoje]");
+      if (resumoAcoes) {
+        resumoAcoes.textContent = String(Number.parseInt(dados.cobrancas_acionaveis_hoje_qtd || "0", 10) || 0);
+      }
+      const resumoClientes = document.querySelector("[data-resumo-clientes]");
+      if (resumoClientes) {
+        resumoClientes.textContent = String(document.querySelectorAll("[data-cobranca-cliente-card]").length);
+      }
+      const resumoContas = document.querySelector("[data-resumo-contas]");
+      if (resumoContas) {
+        const contasAtuais = Number.parseInt(resumoContas.textContent || "0", 10) || 0;
+        resumoContas.textContent = String(Math.max(0, contasAtuais - contasRemovidas));
+      }
+      const resumoTotal = document.querySelector("[data-resumo-total]");
+      if (resumoTotal) {
+        const totalAtual = Number.parseFloat((resumoTotal.dataset.valor || "0").replace(",", ".")) || 0;
+        const proximoTotal = Math.max(0, totalAtual - totalRemovido);
+        resumoTotal.dataset.valor = proximoTotal.toFixed(2);
+        resumoTotal.textContent = `R$ ${proximoTotal.toFixed(2)}`;
+      }
+      const lista = document.querySelector(".cobrancas-lista");
+      if (lista && !lista.querySelector("[data-cobranca-cliente-card]")) {
+        const vazio = document.createElement("div");
+        vazio.className = "cobrancas-empty";
+        vazio.textContent = "Nenhum cliente com conta vencida para os filtros informados.";
+        lista.appendChild(vazio);
+      }
+    } catch (erro) {
+      if (botaoConfirmar) {
+        botaoConfirmar.disabled = false;
+        botaoConfirmar.textContent = textoOriginal || "✓ Confirmar cobrança enviada";
+      }
+      window.alert(erro.message || "Nao foi possivel confirmar a cobranca.");
     }
   });
 
