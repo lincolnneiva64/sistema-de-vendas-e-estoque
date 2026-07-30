@@ -1230,6 +1230,153 @@ class LocacoesFormularioReservaTests(TestCase):
             ).exists()
         )
 
+    def test_tipo_pessoa_recebe_foco_inicial(self):
+        response = self.client.get(
+            reverse("locacoes:nova"),
+            secure=True,
+        )
+
+        html = response.content.decode("utf-8")
+
+        self.assertIn(
+            'id="id_tipo_pessoa"',
+            html,
+        )
+
+        inicio_tipo = html.rfind(
+            "<select",
+            0,
+            html.index('id="id_tipo_pessoa"') + 1,
+        )
+        fim_tipo = html.index("</select>", inicio_tipo)
+        trecho_tipo = html[inicio_tipo:fim_tipo]
+
+        self.assertIn("autofocus", trecho_tipo)
+
+        inicio_cliente = html.rfind(
+            "<select",
+            0,
+            html.index('id="id_cliente"') + 1,
+        )
+        fim_cliente = html.index("</select>", inicio_cliente)
+        trecho_cliente = html[inicio_cliente:fim_cliente]
+
+        self.assertNotIn("autofocus", trecho_cliente)
+
+    def test_endereco_entrega_tem_enter_para_faixa_preco(self):
+        response = self.client.get(
+            reverse("locacoes:nova"),
+            secure=True,
+        )
+
+        html = response.content.decode("utf-8")
+
+        self.assertIn(
+            'const enderecoEntrega = document.getElementById(',
+            html,
+        )
+        self.assertIn(
+            '"id_faixa_preco"',
+            html,
+        )
+        self.assertIn(
+            "event.stopImmediatePropagation()",
+            html,
+        )
+
+    def test_nova_locacao_exibe_data_da_solicitacao(self):
+        response = self.client.get(
+            reverse("locacoes:nova"),
+            secure=True,
+        )
+
+        self.assertContains(
+            response,
+            "Data da solicitação",
+        )
+        self.assertNotContains(
+            response,
+            "Registrada automaticamente ao salvar a locação.",
+        )
+        self.assertNotContains(
+            response,
+            "Esta tela cria uma reserva.",
+        )
+
+    def test_lista_exibe_titulos_com_acentuacao(self):
+        response = self.client.get(
+            reverse("locacoes:lista"),
+            secure=True,
+        )
+
+        self.assertContains(response, "Locações")
+        self.assertContains(response, "Nova locação")
+        self.assertContains(response, "Configurações")
+        self.assertNotContains(
+            response,
+            "Reservas de material de locacao.",
+        )
+
+    def test_aviso_de_material_aparece_junto_dos_itens(self):
+        response = self.client.get(
+            reverse("locacoes:nova"),
+            secure=True,
+        )
+
+        self.assertContains(
+            response,
+            'id="avisoMaterialItens"',
+        )
+        self.assertContains(
+            response,
+            "consultarDisponibilidade",
+        )
+        self.assertContains(
+            response,
+            "destinosQuantidade",
+        )
+
+    def test_checklist_exibe_data_da_solicitacao(self):
+        locacao = Locacao.criar_reserva(
+            {
+                "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
+                "pessoa_avulsa_nome": "Data Solicitacao",
+                "pessoa_avulsa_telefone": "91999990000",
+                "endereco_entrega": "Rua Data, 1",
+                "data_entrega": self.hoje,
+                "horario_entrega": "09:00",
+                "data_evento": self.hoje,
+                "horario_evento": "18:00",
+                "data_prevista_devolucao":
+                    self.hoje + timedelta(days=1),
+                "faixa_preco": self.faixa,
+                "observacao": "",
+            },
+            [{
+                "tipo": ItemLocacao.TIPO_JOGO,
+                "quantidade": 1,
+                "preco_diaria": Decimal("8.00"),
+            }],
+        )
+
+        obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+
+        response = self.client.get(
+            reverse("locacoes:checklist_operacional"),
+            secure=True,
+        )
+
+        self.assertContains(response, "Solicitada em:")
+        self.assertContains(
+            response,
+            timezone.localtime(
+                locacao.criado_em
+            ).strftime("%d/%m/%Y"),
+        )
+
     def test_responsavel_interno_nao_aparece_como_digitacao_manual(self):
         response = self.client.get(reverse("locacoes:nova"), secure=True)
 
@@ -1246,7 +1393,10 @@ class LocacoesFormularioReservaTests(TestCase):
         response = self.client.get(reverse("locacoes:nova"), secure=True)
         html = response.content.decode("utf-8")
 
-        self.assertLess(html.index("Horario do evento"), html.index("Horario combinado de entrega"))
+        self.assertLess(
+            html.index("Horário do evento"),
+            html.index("Horário combinado de entrega"),
+        )
 
     def test_disponibilidade_suficiente(self):
         resultado = self.disponibilidade(jogos="1")

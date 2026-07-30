@@ -101,12 +101,21 @@ class LocacaoForm(forms.Form):
     tipo_pessoa = forms.ChoiceField(
         choices=Locacao.TIPO_PESSOA_CHOICES,
         initial=Locacao.TIPO_PESSOA_CLIENTE,
-        widget=forms.Select(attrs={"class": "form-select"}),
+        widget=forms.Select(
+            attrs={
+                "class": "form-select",
+                "autofocus": True,
+            }
+        ),
     )
     cliente = forms.ModelChoiceField(
         queryset=Cliente.objects.filter(ativo=True).order_by("nome"),
         required=False,
-        widget=forms.Select(attrs={"class": "form-select"}),
+        widget=forms.Select(
+            attrs={
+                "class": "form-select",
+            }
+        ),
     )
     pessoa_avulsa_nome = forms.CharField(
         required=False,

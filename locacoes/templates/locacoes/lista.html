@@ -3,14 +3,45 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Locacoes</title>
+  <title>Locações</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     :root { --locacoes-orange: #ea580c; --locacoes-orange-dark: #9a3412; --locacoes-orange-soft: #fff7ed; }
     body { background: #f5f7fb; color: #172033; }
     .page { max-width: 1100px; margin: 0 auto; padding: 26px 16px 46px; }
-    .top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 18px; }
-    .top h1 { font-size: 1.8rem; margin: 0; font-weight: 850; color: var(--locacoes-orange-dark); }
+    .top {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: center;
+      margin-bottom: 18px;
+      padding: 20px;
+      border: 1px solid #fdba74;
+      border-left: 7px solid var(--locacoes-orange);
+      border-radius: 12px;
+      background: linear-gradient(135deg, #ffffff 0%, #fff7ed 100%);
+      box-shadow: 0 8px 22px rgba(154, 52, 18, 0.08);
+    }
+    .top h1 {
+      font-size: 2rem;
+      margin: 0;
+      font-weight: 900;
+      color: var(--locacoes-orange-dark);
+      letter-spacing: -0.02em;
+    }
+    .top-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 9px;
+    }
+    .top-actions .btn {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+    }
     .cardx { background: #fff; border: 1px solid #fed7aa; border-radius: 8px; padding: 16px; margin-bottom: 14px; }
     .filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: end; }
     .table a { color: var(--locacoes-orange-dark); font-weight: 800; text-decoration: none; }
@@ -18,20 +49,34 @@
     .btn-locacoes { background: var(--locacoes-orange); border-color: var(--locacoes-orange); color: #fff; font-weight: 800; }
     .btn-locacoes:hover, .btn-locacoes:focus { background: #c2410c; border-color: #c2410c; color: #fff; }
     .badge-locacoes { background: var(--locacoes-orange-soft); color: var(--locacoes-orange-dark); border: 1px solid #fdba74; border-radius: 999px; padding: 4px 8px; font-weight: 800; }
-    @media (max-width: 760px) { .top, .filters { display: block; } .filters > * { margin-bottom: 10px; } }
+    @media (max-width: 760px) {
+      .top,
+      .filters {
+        display: block;
+      }
+      .top-actions {
+        display: grid;
+        margin-top: 16px;
+      }
+      .top-actions .btn {
+        width: 100%;
+      }
+      .filters > * {
+        margin-bottom: 10px;
+      }
+    }
   </style>
 </head>
 <body>
   <main class="page">
     <header class="top">
       <div>
-        <h1>Locacoes</h1>
-        <p class="muted mb-0">Reservas de material de locacao. O material ainda nao sai para entrega nesta etapa.</p>
+        <h1>Locações</h1>
       </div>
-      <div class="d-flex gap-2">
-        <a class="btn btn-outline-secondary" href="{% url 'locacoes:configuracoes' %}">Configuracoes</a>
+      <div class="top-actions">
+        <a class="btn btn-outline-secondary" href="{% url 'locacoes:configuracoes' %}">Configurações</a>
         <a class="btn btn-outline-primary" href="{% url 'locacoes:recibos_pendentes' %}">Recibos pendentes</a>
-        <a class="btn btn-locacoes" href="{% url 'locacoes:nova' %}">Nova locacao</a>
+        <a class="btn btn-locacoes" href="{% url 'locacoes:nova' %}">Nova locação</a>
       </div>
     </header>
 
@@ -71,11 +116,11 @@
         <table class="table align-middle">
           <thead>
             <tr>
-              <th>Locacao</th>
+              <th>Locação</th>
               <th>Contratante</th>
               <th>Status</th>
               <th>Entrega</th>
-              <th>Devolucao prevista</th>
+              <th>Devolução prevista</th>
               <th>Pendente/rua</th>
               <th>Financeiro</th>
               <th>Total</th>
@@ -97,7 +142,7 @@
                 <td>R$ {{ locacao.total|floatformat:2 }}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="8" class="muted">Nenhuma locacao encontrada.</td></tr>
+              <tr><td colspan="8" class="muted">Nenhuma locação encontrada.</td></tr>
             {% endfor %}
           </tbody>
         </table>

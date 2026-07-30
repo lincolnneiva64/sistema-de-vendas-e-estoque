@@ -29,6 +29,10 @@
     <h1>Termo de compromisso de locacao #{{ locacao.id }}</h1>
     <section class="box">
       <div class="grid">
+        <div>
+          <strong>Data da solicitação</strong><br>
+          {{ locacao.criado_em|date:"d/m/Y H:i" }}
+        </div>
         <div><strong>Pessoa/cliente</strong><br>{{ locacao.nome_contratante }}</div>
         <div><strong>Telefone</strong><br>{{ locacao.telefone_contratante|default:"-" }}</div>
         <div><strong>Endereco do contratante</strong><br>{{ locacao.endereco_contratante|default:"-"|linebreaksbr }}</div>

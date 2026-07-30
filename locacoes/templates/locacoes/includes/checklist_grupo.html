@@ -4,15 +4,19 @@
     <article class="item {% if item.atrasada %}atrasada{% endif %} {% if foco_tarefa_id == item.tarefa.id|stringformat:'s' %}foco{% endif %}" id="tarefa-{{ item.tarefa.id }}">
       <div class="linha-topo">
         <div class="cliente">{{ item.cliente }}</div>
-        <div class="hora">{% if item.horario %}{{ item.horario|time:"H:i" }}{% else %}Sem horario{% endif %}</div>
+        <div class="hora">{% if item.horario %}{{ item.horario|time:"H:i" }}{% else %}Sem horário{% endif %}</div>
       </div>
       <div class="dados">
-        <div><strong>Endereco:</strong> {{ item.endereco|linebreaksbr }}</div>
-        <div><strong>Referencia:</strong> {{ item.ponto_referencia|default:"Nao informada" }}</div>
+        <div>
+          <strong>Solicitada em:</strong>
+          {{ item.locacao.criado_em|date:"d/m/Y H:i" }}
+        </div>
+        <div><strong>Endereço:</strong> {{ item.endereco|linebreaksbr }}</div>
+        <div><strong>Referência:</strong> {{ item.ponto_referencia|default:"Nao informada" }}</div>
         <div><strong>Telefone/celular:</strong> {{ item.telefone|default:"Nao informado" }}</div>
-        {% if item.observacoes %}<div><strong>Observacoes:</strong> {{ item.observacoes|linebreaksbr }}</div>{% endif %}
+        {% if item.observacoes %}<div><strong>Observações:</strong> {{ item.observacoes|linebreaksbr }}</div>{% endif %}
         {% if item.tarefa.status == "nao_possivel" %}
-          <div><strong>Ultima tentativa:</strong> {{ item.tarefa.motivo_nao_realizado|linebreaksbr }}</div>
+          <div><strong>Última tentativa:</strong> {{ item.tarefa.motivo_nao_realizado|linebreaksbr }}</div>
         {% endif %}
       </div>
       <ul class="materiais">
@@ -26,8 +30,8 @@
           <form method="post" action="{{ item.confirmar_url }}" data-enter-nav>
             {% csrf_token %}
             <div class="campos">
-              <input class="form-control" type="text" name="responsavel" placeholder="Responsavel" autocomplete="off">
-              <textarea class="form-control" name="observacao" rows="2" placeholder="Observacao operacional"></textarea>
+              <input class="form-control" type="text" name="responsavel" placeholder="Responsável" autocomplete="off">
+              <textarea class="form-control" name="observacao" rows="2" placeholder="Observação operacional"></textarea>
             </div>
             <button class="btn btn-success w-100 mt-2" type="submit">
               {% if item.tarefa.tipo == "entrega" %}Confirmar entrega{% else %}Confirmar recolhimento{% endif %}
@@ -37,8 +41,8 @@
         <form method="post" action="{{ item.nao_possivel_url }}" data-enter-nav>
           {% csrf_token %}
           <div class="campos">
-            <input class="form-control" type="text" name="responsavel" placeholder="Responsavel" autocomplete="off">
-            <textarea class="form-control" name="observacao" rows="2" placeholder="Motivo/observacao" required></textarea>
+            <input class="form-control" type="text" name="responsavel" placeholder="Responsável" autocomplete="off">
+            <textarea class="form-control" name="observacao" rows="2" placeholder="Motivo/observação" required></textarea>
           </div>
           <button class="btn btn-outline-danger w-100 mt-2" type="submit">Nao foi possivel realizar</button>
         </form>

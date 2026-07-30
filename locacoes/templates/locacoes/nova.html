@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nova locacao</title>
+  <title>Nova locação</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     :root { --locacoes-orange: #ea580c; --locacoes-orange-dark: #9a3412; --locacoes-orange-soft: #fff7ed; }
@@ -11,6 +11,23 @@
     .page { max-width: 1060px; margin: 0 auto; padding: 26px 16px 46px; }
     .top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 18px; }
     .top h1 { font-size: 1.8rem; margin: 0; font-weight: 850; color: var(--locacoes-orange-dark); }
+    .solicitacao-topo {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 8px;
+      padding: 7px 11px;
+      border: 1px solid #fdba74;
+      border-radius: 8px;
+      background: #fff7ed;
+      color: #64748b;
+      font-size: 0.94rem;
+      font-weight: 750;
+    }
+    .solicitacao-topo strong {
+      color: var(--locacoes-orange-dark);
+      font-weight: 900;
+    }
     .cardx { background: #fff; border: 1px solid #fed7aa; border-radius: 8px; padding: 16px; margin-bottom: 14px; }
     .cardx h2 { color: var(--locacoes-orange-dark); font-size: 1.05rem; font-weight: 850; margin-bottom: 14px; }
     .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -75,6 +92,30 @@
       background: #fef2f2;
       color: #991b1b;
     }
+    .solicitacao-info {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px 12px;
+      margin-bottom: 14px;
+      padding: 12px 14px;
+      border: 1px solid #fdba74;
+      border-left: 5px solid var(--locacoes-orange);
+      border-radius: 8px;
+      background: var(--locacoes-orange-soft);
+    }
+    .solicitacao-info span {
+      color: #64748b;
+      font-weight: 800;
+    }
+    .solicitacao-info strong {
+      color: var(--locacoes-orange-dark);
+      font-size: 1.04rem;
+    }
+    .solicitacao-info small {
+      width: 100%;
+      color: #64748b;
+    }
     .errorlist { color: #b91c1c; margin: 6px 0 0; padding-left: 18px; }
     .btn-locacoes { background: var(--locacoes-orange); border-color: var(--locacoes-orange); color: #fff; font-weight: 800; }
     .btn-locacoes:hover, .btn-locacoes:focus { background: #c2410c; border-color: #c2410c; color: #fff; }
@@ -101,8 +142,11 @@
   <main class="page">
     <header class="top">
       <div>
-        <h1>Nova locacao</h1>
-        <p class="muted mb-0">Esta tela cria uma reserva. O material ainda nao saiu para entrega.</p>
+        <h1>Nova locação</h1>
+        <div class="solicitacao-topo">
+          <span>Data da solicitação:</span>
+          <strong>{% now "d/m/Y H:i" %}</strong>
+        </div>
       </div>
       <a class="btn btn-outline-secondary" href="{% url 'locacoes:lista' %}">Voltar</a>
     </header>
@@ -150,15 +194,16 @@
       </section>
 
       <section class="cardx">
-        <h2>Datas e endereco</h2>
+        <h2>Datas e endereço</h2>
+
         <div class="grid">
           <div>
-            <label class="form-label">Endereco da entrega</label>
+            <label class="form-label">Endereço da entrega</label>
             {{ locacao_form.endereco_entrega }}
             {{ locacao_form.endereco_entrega.errors }}
           </div>
           <div>
-            <label class="form-label">Faixa/localidade de preco</label>
+            <label class="form-label">Faixa/localidade de preço</label>
             {{ locacao_form.faixa_preco }}
             {{ locacao_form.faixa_preco.errors }}
           </div>
@@ -173,17 +218,17 @@
             {{ locacao_form.data_evento.errors }}
           </div>
           <div>
-            <label class="form-label">Horario do evento</label>
+            <label class="form-label">Horário do evento</label>
             {{ locacao_form.horario_evento }}
             {{ locacao_form.horario_evento.errors }}
           </div>
           <div>
-            <label class="form-label">Horario combinado de entrega</label>
+            <label class="form-label">Horário combinado de entrega</label>
             {{ locacao_form.horario_entrega }}
             {{ locacao_form.horario_entrega.errors }}
           </div>
           <div>
-            <label class="form-label">Data prevista de devolucao</label>
+            <label class="form-label">Data prevista de devolução</label>
             {{ locacao_form.data_prevista_devolucao }}
             {{ locacao_form.data_prevista_devolucao.errors }}
           </div>
@@ -203,7 +248,7 @@
             <label class="form-label">Jogos</label>
             {{ itens_form.jogos }}
             {{ itens_form.jogos.errors }}
-            <label class="form-label mt-2">Preco diario do jogo</label>
+            <label class="form-label mt-2">Preço diário do jogo</label>
             {{ itens_form.preco_jogo_diaria }}
             {{ itens_form.preco_jogo_diaria.errors }}
           </div>
@@ -211,7 +256,7 @@
             <label class="form-label">Mesas avulsas</label>
             {{ itens_form.mesas_avulsas }}
             {{ itens_form.mesas_avulsas.errors }}
-            <label class="form-label mt-2">Preco diario da mesa avulsa</label>
+            <label class="form-label mt-2">Preço diário da mesa avulsa</label>
             {{ itens_form.preco_mesa_avulsa_diaria }}
             {{ itens_form.preco_mesa_avulsa_diaria.errors }}
           </div>
@@ -219,18 +264,25 @@
             <label class="form-label">Cadeiras avulsas</label>
             {{ itens_form.cadeiras_avulsas }}
             {{ itens_form.cadeiras_avulsas.errors }}
-            <label class="form-label mt-2">Preco diario da cadeira avulsa</label>
+            <label class="form-label mt-2">Preço diário da cadeira avulsa</label>
             {{ itens_form.preco_cadeira_avulsa_diaria }}
             {{ itens_form.preco_cadeira_avulsa_diaria.errors }}
           </div>
         </div>
+
+        <p
+          id="avisoMaterialItens"
+          class="availability-message mt-3 mb-0"
+        >
+          Informe datas e itens para verificar a disponibilidade.
+        </p>
       </section>
 
       <section class="cardx" id="resumoLocacao">
-        <h2>Resumo da locacao</h2>
+        <h2>Resumo da locação</h2>
         <div class="resumo-valores">
           <div class="resumo-item">
-            <span>Quantidade de diarias</span>
+            <span>Quantidade de diárias</span>
             <strong id="resumoDiarias">0</strong>
           </div>
           <div class="resumo-item">
@@ -331,6 +383,10 @@
       if (!form) return;
 
       const disponibilidadeMensagem = document.getElementById("disponibilidadeMensagem");
+      const avisoMaterialItens = document.getElementById("avisoMaterialItens");
+      let ultimaDisponibilidade = {
+        status: "incompleto",
+      };
       const resumoDiarias = document.getElementById("resumoDiarias");
       const resumoJogos = document.getElementById("resumoJogos");
       const resumoMesas = document.getElementById("resumoMesas");
@@ -415,7 +471,7 @@
           totalContratadoAtual > 0 &&
           Math.abs(sinal - totalContratadoAtual) < 0.005
         ) {
-          pagamentoStatus.textContent = "Locacao quitada no ato";
+          pagamentoStatus.textContent = "Locação quitada no ato";
           pagamentoStatus.classList.add("visivel");
         }
       }
@@ -502,38 +558,257 @@
         }, 120);
       }
 
-      function atualizarMensagemDisponibilidade(dados) {
-        if (!disponibilidadeMensagem) return;
-        disponibilidadeMensagem.textContent = dados.mensagem || "Informe datas e itens para verificar a disponibilidade.";
-        disponibilidadeMensagem.classList.remove("disponivel", "indisponivel");
+      function aplicarEstadoDisponibilidade(elemento, dados) {
+        if (!elemento) return;
+
+        elemento.textContent =
+          dados.mensagem ||
+          "Informe datas e itens para verificar a disponibilidade.";
+
+        elemento.classList.remove(
+          "disponivel",
+          "indisponivel"
+        );
+
         if (dados.status === "disponivel") {
-          disponibilidadeMensagem.classList.add("disponivel");
+          elemento.classList.add("disponivel");
         } else if (dados.status === "indisponivel") {
-          disponibilidadeMensagem.classList.add("indisponivel");
+          elemento.classList.add("indisponivel");
         }
+      }
+
+      function atualizarMensagemDisponibilidade(dados) {
+        ultimaDisponibilidade = dados || {
+          status: "incompleto",
+        };
+
+        aplicarEstadoDisponibilidade(
+          disponibilidadeMensagem,
+          ultimaDisponibilidade
+        );
+
+        aplicarEstadoDisponibilidade(
+          avisoMaterialItens,
+          ultimaDisponibilidade
+        );
+      }
+
+      function parametrosDisponibilidade() {
+        return new URLSearchParams({
+          data_entrega:
+            document.getElementById("id_data_entrega")?.value || "",
+          data_prevista_devolucao:
+            document.getElementById(
+              "id_data_prevista_devolucao"
+            )?.value || "",
+          jogos:
+            document.getElementById("id_jogos")?.value || "0",
+          mesas_avulsas:
+            document.getElementById(
+              "id_mesas_avulsas"
+            )?.value || "0",
+          cadeiras_avulsas:
+            document.getElementById(
+              "id_cadeiras_avulsas"
+            )?.value || "0",
+        });
+      }
+
+      function consultarDisponibilidade() {
+        return fetch(
+          form.dataset.disponibilidadeUrl +
+            "?" +
+            parametrosDisponibilidade().toString(),
+          {
+            headers: {
+              "X-Requested-With": "XMLHttpRequest",
+            },
+          }
+        )
+          .then(function (response) {
+            return response.json();
+          })
+          .then(function (dados) {
+            atualizarMensagemDisponibilidade(dados);
+            return dados;
+          })
+          .catch(function () {
+            const dados = {
+              status: "incompleto",
+              mensagem:
+                "Nao foi possivel verificar a disponibilidade agora.",
+            };
+
+            atualizarMensagemDisponibilidade(dados);
+            return dados;
+          });
       }
 
       let temporizador = null;
       function verificarDisponibilidade() {
         window.clearTimeout(temporizador);
         temporizador = window.setTimeout(function () {
-          const params = new URLSearchParams({
-            data_entrega: document.getElementById("id_data_entrega")?.value || "",
-            data_prevista_devolucao: document.getElementById("id_data_prevista_devolucao")?.value || "",
-            jogos: document.getElementById("id_jogos")?.value || "0",
-            mesas_avulsas: document.getElementById("id_mesas_avulsas")?.value || "0",
-            cadeiras_avulsas: document.getElementById("id_cadeiras_avulsas")?.value || "0",
-          });
-          fetch(form.dataset.disponibilidadeUrl + "?" + params.toString(), {
-            headers: { "X-Requested-With": "XMLHttpRequest" },
-          })
-            .then((response) => response.json())
-            .then(atualizarMensagemDisponibilidade)
-            .catch(function () {
-              atualizarMensagemDisponibilidade({ status: "incompleto", mensagem: "Informe datas e itens para verificar a disponibilidade." });
-            });
+          consultarDisponibilidade();
         }, 180);
       }
+
+      const enderecoEntrega = document.getElementById(
+        "id_endereco_entrega"
+      );
+
+      enderecoEntrega?.addEventListener(
+        "keydown",
+        function (event) {
+          if (
+            event.key !== "Enter" ||
+            event.altKey ||
+            event.ctrlKey ||
+            event.metaKey ||
+            event.shiftKey
+          ) {
+            return;
+          }
+
+          event.preventDefault();
+          event.stopImmediatePropagation();
+
+          const faixaPreco = document.getElementById(
+            "id_faixa_preco"
+          );
+
+          if (faixaPreco) {
+            faixaPreco.focus();
+          }
+        },
+        true
+      );
+
+      const destinosQuantidade = {
+        id_jogos: "id_preco_jogo_diaria",
+        id_mesas_avulsas: "id_preco_mesa_avulsa_diaria",
+        id_cadeiras_avulsas:
+          "id_preco_cadeira_avulsa_diaria",
+      };
+
+      function campoComFalta(dados) {
+        const jogos =
+          Number(
+            document.getElementById("id_jogos")?.value || 0
+          ) || 0;
+
+        const mesasAvulsas =
+          Number(
+            document.getElementById(
+              "id_mesas_avulsas"
+            )?.value || 0
+          ) || 0;
+
+        const cadeirasAvulsas =
+          Number(
+            document.getElementById(
+              "id_cadeiras_avulsas"
+            )?.value || 0
+          ) || 0;
+
+        if (
+          Number(dados.solicitado_mesas || 0) >
+          Number(dados.disponivel_mesas || 0)
+        ) {
+          if (mesasAvulsas > 0) {
+            return document.getElementById(
+              "id_mesas_avulsas"
+            );
+          }
+
+          if (jogos > 0) {
+            return document.getElementById("id_jogos");
+          }
+        }
+
+        if (
+          Number(dados.solicitado_cadeiras || 0) >
+          Number(dados.disponivel_cadeiras || 0)
+        ) {
+          if (cadeirasAvulsas > 0) {
+            return document.getElementById(
+              "id_cadeiras_avulsas"
+            );
+          }
+
+          if (jogos > 0) {
+            return document.getElementById("id_jogos");
+          }
+        }
+
+        return null;
+      }
+
+      document.addEventListener(
+        "keydown",
+        function (event) {
+          if (
+            event.key !== "Enter" ||
+            event.altKey ||
+            event.ctrlKey ||
+            event.metaKey ||
+            event.shiftKey
+          ) {
+            return;
+          }
+
+          const campo = event.target;
+
+          if (
+            !campo ||
+            !Object.prototype.hasOwnProperty.call(
+              destinosQuantidade,
+              campo.id
+            )
+          ) {
+            return;
+          }
+
+          event.preventDefault();
+          event.stopImmediatePropagation();
+
+          consultarDisponibilidade().then(function (dados) {
+            if (dados.status === "indisponivel") {
+              const campoProblema =
+                campoComFalta(dados) || campo;
+
+              campoProblema.focus();
+
+              if (
+                typeof campoProblema.select === "function"
+              ) {
+                campoProblema.select();
+              }
+
+              avisoMaterialItens?.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
+              });
+
+              return;
+            }
+
+            const destino = document.getElementById(
+              destinosQuantidade[campo.id]
+            );
+
+            if (destino) {
+              destino.focus();
+
+              if (
+                typeof destino.select === "function"
+              ) {
+                destino.select();
+              }
+            }
+          });
+        },
+        true
+      );
 
       camposResumo.forEach(function (campo) {
         campo.addEventListener("input", atualizarResumoLocacao);
