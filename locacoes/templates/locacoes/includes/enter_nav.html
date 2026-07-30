@@ -1,0 +1,48 @@
+<script>
+  (function () {
+    function campoNavegavel(elemento) {
+      if (!elemento || elemento.disabled || elemento.hidden) return false;
+      if (elemento.type === "hidden") return false;
+      if (elemento.tabIndex < 0) return false;
+      if (elemento.offsetParent === null && elemento.type !== "hidden") return false;
+      return Boolean(elemento.matches("input, select, button, a.btn, textarea"));
+    }
+
+    function camposDoFormulario(formulario) {
+      return Array.from(formulario.querySelectorAll("input, select, button, a.btn, textarea"))
+        .filter(campoNavegavel);
+    }
+
+    function camposEditaveis(formulario) {
+      return Array.from(formulario.querySelectorAll("input, select, textarea"))
+        .filter(campoNavegavel);
+    }
+
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      const alvo = event.target;
+      if (!alvo || alvo.tagName === "TEXTAREA") return;
+      if (alvo.matches("button, a.btn")) return;
+      const formulario = alvo.closest("form");
+      if (!formulario || !formulario.matches("[data-enter-nav]")) return;
+
+      const campos = camposDoFormulario(formulario);
+      const indice = campos.indexOf(alvo);
+      if (indice < 0) return;
+
+      event.preventDefault();
+      const editaveis = camposEditaveis(formulario);
+      const indiceEditavel = editaveis.indexOf(alvo);
+      const submitPrincipal = formulario.querySelector("button[type='submit']:not([disabled])");
+      const proximo = (
+        indiceEditavel >= 0 && indiceEditavel === editaveis.length - 1 && submitPrincipal
+      ) ? submitPrincipal : campos[indice + 1];
+      if (proximo) {
+        proximo.focus();
+        if (typeof proximo.select === "function" && proximo.matches("input:not([type='date']):not([type='time']):not([type='datetime-local'])")) {
+          proximo.select();
+        }
+      }
+    });
+  })();
+</script>

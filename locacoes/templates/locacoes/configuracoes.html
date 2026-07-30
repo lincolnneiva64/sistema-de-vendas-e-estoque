@@ -7,27 +7,29 @@
   <title>Configuracoes de Locacoes</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
+    :root { --locacoes-orange: #ea580c; --locacoes-orange-dark: #9a3412; --locacoes-orange-soft: #fff7ed; }
     body { background: #f5f7fb; color: #172033; }
     .locacoes-page { max-width: 980px; margin: 0 auto; padding: 28px 16px 48px; }
     .locacoes-header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 20px; }
-    .locacoes-header h1 { font-size: 1.8rem; margin: 0; font-weight: 800; }
+    .locacoes-header h1 { color: var(--locacoes-orange-dark); font-size: 1.8rem; margin: 0; font-weight: 800; }
     .locacoes-header p { margin: 6px 0 0; color: #526071; max-width: 680px; }
-    .locacoes-card { background: #fff; border: 1px solid #dbe3ef; border-radius: 8px; padding: 18px; margin-bottom: 16px; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06); }
-    .locacoes-card h2 { font-size: 1.05rem; margin: 0 0 14px; font-weight: 800; }
+    .locacoes-card { background: #fff; border: 1px solid #fed7aa; border-radius: 8px; padding: 18px; margin-bottom: 16px; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06); }
+    .locacoes-card h2 { color: var(--locacoes-orange-dark); font-size: 1.05rem; margin: 0 0 14px; font-weight: 800; }
     .locacoes-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
     .locacoes-saldos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
-    .locacoes-saldo { border: 1px solid #dbe3ef; border-radius: 8px; padding: 12px; background: #f8fafc; }
+    .locacoes-saldo { border: 1px solid #fdba74; border-radius: 8px; padding: 12px; background: var(--locacoes-orange-soft); }
     .locacoes-saldo span { display: block; color: #64748b; font-weight: 700; font-size: 0.85rem; }
     .locacoes-saldo strong { display: block; margin-top: 4px; font-size: 1.7rem; line-height: 1; }
-    .locacoes-faixa { display: grid; grid-template-columns: minmax(160px, 1fr) 180px; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid #edf1f7; }
+    .locacoes-faixa { display: grid; grid-template-columns: minmax(160px, 1fr) 180px; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid #fed7aa; }
     .locacoes-faixa:first-child { border-top: 0; padding-top: 0; }
     .locacoes-label { font-weight: 750; margin-bottom: 5px; }
     .locacoes-muted { color: #64748b; font-size: 0.9rem; }
     .locacoes-help { color: #8a5a00; font-size: 0.82rem; margin-top: 5px; }
     .locacoes-composicao { display: flex; gap: 10px; flex-wrap: wrap; }
-    .locacoes-pill { background: #e9f7ef; border: 1px solid #b9e4ca; color: #176536; border-radius: 999px; padding: 7px 11px; font-weight: 750; }
+    .locacoes-pill { background: var(--locacoes-orange-soft); border: 1px solid #fdba74; color: var(--locacoes-orange-dark); border-radius: 999px; padding: 7px 11px; font-weight: 750; }
     .locacoes-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
-    .btn-locacoes-primary { background: #1f7a4d; color: #fff; border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 800; }
+    .btn-locacoes-primary { background: #198754; color: #fff; border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 800; }
+    .btn-locacoes-orange { background: var(--locacoes-orange); color: #fff; border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 800; }
     .btn-locacoes-secondary { background: #e2e8f0; color: #172033; border-radius: 8px; padding: 10px 16px; font-weight: 800; text-decoration: none; }
     .errorlist { color: #b91c1c; margin: 6px 0 0; padding-left: 18px; }
     .locacoes-history { width: 100%; border-collapse: collapse; }
@@ -58,7 +60,7 @@
       {% endfor %}
     {% endif %}
 
-    <form method="post">
+    <form method="post" data-enter-nav>
       {% csrf_token %}
       <input type="hidden" name="acao" value="salvar_configuracoes">
       {{ faixas_formset.management_form }}
@@ -159,7 +161,7 @@
 
     <section class="locacoes-card mt-4">
       <h2>Registrar movimentacao</h2>
-      <form method="post">
+      <form method="post" data-enter-nav>
         {% csrf_token %}
         <input type="hidden" name="acao" value="registrar_movimentacao">
         {{ movimentacao_form.non_field_errors }}
@@ -198,7 +200,7 @@
           </div>
         </div>
         <div class="locacoes-actions">
-          <button type="submit" class="btn-locacoes-primary">Registrar movimentacao</button>
+          <button type="submit" class="btn-locacoes-orange">Registrar movimentacao</button>
         </div>
       </form>
     </section>
@@ -237,5 +239,6 @@
       {% endif %}
     </section>
   </main>
+  {% include "locacoes/includes/enter_nav.html" %}
 </body>
 </html>

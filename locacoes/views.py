@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.forms import modelformset_factory
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
@@ -61,8 +62,12 @@ def _whatsapp_recibo_url(pagamento):
 
 def lista(request):
     status = request.GET.get("status", "").strip()
-    data_inicio = parse_date(request.GET.get("data_inicio", "").strip() or "")
-    data_fim = parse_date(request.GET.get("data_fim", "").strip() or "")
+    hoje = timezone.localdate()
+    primeira_abertura = not request.GET
+    data_inicio_texto = hoje.isoformat() if primeira_abertura else request.GET.get("data_inicio", "").strip()
+    data_fim_texto = hoje.isoformat() if primeira_abertura else request.GET.get("data_fim", "").strip()
+    data_inicio = parse_date(data_inicio_texto or "")
+    data_fim = parse_date(data_fim_texto or "")
     locacoes_qs = Locacao.objects.select_related("cliente", "faixa_preco").prefetch_related("itens")
     if status in {Locacao.STATUS_RESERVADA, Locacao.STATUS_CANCELADA}:
         locacoes_qs = locacoes_qs.filter(status=status)
@@ -92,8 +97,8 @@ def lista(request):
         {
             "locacoes": locacoes,
             "status_filtro": status,
-            "data_inicio": request.GET.get("data_inicio", ""),
-            "data_fim": request.GET.get("data_fim", ""),
+            "data_inicio": data_inicio_texto,
+            "data_fim": data_fim_texto,
             "status_opcoes": Locacao.STATUS_CHOICES,
         },
     )
@@ -164,7 +169,14 @@ def nova(request):
             disponibilidade = None
             messages.warning(request, "Revise os dados da reserva antes de salvar.")
     else:
-        locacao_form = LocacaoForm(initial={"faixa_preco": faixa_inicial})
+        hoje = timezone.localdate()
+        locacao_form = LocacaoForm(initial={
+            "faixa_preco": faixa_inicial,
+            "data_entrega": hoje,
+            "data_evento": hoje,
+            "data_prevista_devolucao": hoje,
+            "data_vencimento_saldo": hoje,
+        })
         itens_form = ItensLocacaoReservaForm(faixa_preco=faixa_inicial, configuracao=configuracao)
         disponibilidade = None
 

@@ -6,9 +6,11 @@
   <title>Termo de compromisso #{{ locacao.id }}</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
+    :root { --locacoes-orange: #ea580c; --locacoes-orange-dark: #9a3412; --locacoes-orange-soft: #fff7ed; }
     body { background: #fff; color: #172033; }
     .page { max-width: 920px; margin: 0 auto; padding: 26px 18px 46px; }
-    .box { border: 1px solid #d1d5db; border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+    h1, h2 { color: var(--locacoes-orange-dark); }
+    .box { border: 1px solid #fed7aa; border-radius: 8px; padding: 16px; margin-bottom: 14px; }
     .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
     .assinatura { margin-top: 42px; border-top: 1px solid #111827; text-align: center; padding-top: 8px; }
     @media print { .no-print { display: none; } body { font-size: 12pt; } }
@@ -55,7 +57,7 @@
       <p>Perdas, quebras ou descartes poderao gerar apuracao posterior conforme os valores de reposicao registrados neste termo, sem cobranca automatica nesta etapa.</p>
     </section>
     <div class="assinatura">{{ locacao.nome_contratante }}</div>
-    <form method="post" class="box no-print">
+    <form method="post" class="box no-print" data-enter-nav>
       {% csrf_token %}
       <label class="form-label">Responsavel por gerar/imprimir</label>
       {{ form.responsavel }}
@@ -65,5 +67,6 @@
       {% endif %}
     </form>
   </main>
+  {% include "locacoes/includes/enter_nav.html" %}
 </body>
 </html>

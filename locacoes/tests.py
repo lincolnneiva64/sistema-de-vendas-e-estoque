@@ -230,6 +230,32 @@ class LocacoesConfiguracoesViewTests(TestCase):
         )
 
 
+class LocacoesUxPadraoTests(TestCase):
+    def setUp(self):
+        self.configuracao = ConfiguracaoLocacao.obter()
+        self.configuracao.total_mesas = 4
+        self.configuracao.total_cadeiras = 16
+        self.configuracao.save()
+
+    def test_lista_abre_com_periodo_de_hoje_preenchido(self):
+        hoje = timezone.localdate().isoformat()
+
+        response = self.client.get(reverse("locacoes:lista"), secure=True)
+
+        self.assertContains(response, f'name="data_inicio" value="{hoje}"')
+        self.assertContains(response, f'name="data_fim" value="{hoje}"')
+        self.assertContains(response, "data-enter-nav")
+
+    def test_nova_locacao_abre_com_datas_de_hoje_preenchidas(self):
+        hoje = timezone.localdate().isoformat()
+
+        response = self.client.get(reverse("locacoes:nova"), secure=True)
+
+        self.assertContains(response, f'name="data_entrega"')
+        self.assertContains(response, f'value="{hoje}"', count=4)
+        self.assertContains(response, "data-enter-nav")
+
+
 class LocacoesReservasTests(TestCase):
     def setUp(self):
         self.configuracao = ConfiguracaoLocacao.obter()

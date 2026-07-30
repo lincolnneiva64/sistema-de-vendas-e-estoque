@@ -6,10 +6,14 @@
   <title>Recibos pendentes de locacoes</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
+    :root { --locacoes-orange: #ea580c; --locacoes-orange-dark: #9a3412; --locacoes-orange-soft: #fff7ed; }
     body { background: #f5f7fb; color: #172033; }
     .page { max-width: 1040px; margin: 0 auto; padding: 26px 16px 46px; }
-    .cardx { background: #fff; border: 1px solid #dbe3ef; border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+    h1 { color: var(--locacoes-orange-dark); }
+    .cardx { background: #fff; border: 1px solid #fed7aa; border-radius: 8px; padding: 16px; margin-bottom: 14px; }
     .muted { color: #64748b; }
+    .btn-locacoes { background: var(--locacoes-orange); border-color: var(--locacoes-orange); color: #fff; font-weight: 800; }
+    .btn-locacoes:hover, .btn-locacoes:focus { background: #c2410c; border-color: #c2410c; color: #fff; }
   </style>
 </head>
 <body>
@@ -34,7 +38,7 @@
               <td>{{ pagamento.locacao.nome_contratante }}</td>
               <td>R$ {{ pagamento.valor|floatformat:2 }}</td>
               <td>R$ {{ pagamento.locacao.saldo_devedor|floatformat:2 }}</td>
-              <td><a class="btn btn-primary btn-sm" href="{% url 'locacoes:recibo_pagamento' pagamento.id %}">Abrir / reenviar</a></td>
+              <td><a class="btn btn-locacoes btn-sm" href="{% url 'locacoes:recibo_pagamento' pagamento.id %}">Abrir / reenviar</a></td>
             </tr>
           {% empty %}
             <tr><td colspan="5" class="muted">Nenhum recibo pendente.</td></tr>

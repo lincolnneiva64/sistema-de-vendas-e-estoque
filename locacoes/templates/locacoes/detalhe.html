@@ -6,17 +6,21 @@
   <title>Locacao #{{ locacao.id }}</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
+    :root { --locacoes-orange: #ea580c; --locacoes-orange-dark: #9a3412; --locacoes-orange-soft: #fff7ed; }
     body { background: #f5f7fb; color: #172033; }
     .page { max-width: 1060px; margin: 0 auto; padding: 26px 16px 46px; }
     .top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 18px; }
-    .top h1 { font-size: 1.8rem; margin: 0; font-weight: 850; }
-    .cardx { background: #fff; border: 1px solid #dbe3ef; border-radius: 8px; padding: 16px; margin-bottom: 14px; }
-    .cardx h2 { font-size: 1.05rem; font-weight: 850; margin-bottom: 14px; }
+    .top h1 { font-size: 1.8rem; margin: 0; font-weight: 850; color: var(--locacoes-orange-dark); }
+    .cardx { background: #fff; border: 1px solid #fed7aa; border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+    .cardx h2 { color: var(--locacoes-orange-dark); font-size: 1.05rem; font-weight: 850; margin-bottom: 14px; }
     .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
     .muted { color: #64748b; }
-    .pill { display: inline-block; border-radius: 999px; padding: 6px 10px; background: #e9f7ef; color: #176536; font-weight: 800; }
+    .pill { display: inline-block; border-radius: 999px; padding: 6px 10px; background: var(--locacoes-orange-soft); color: var(--locacoes-orange-dark); border: 1px solid #fdba74; font-weight: 800; }
     .pill.cancelada { background: #fee2e2; color: #991b1b; }
     .saldo-destaque { font-size: 1.4rem; font-weight: 900; color: #9f1239; }
+    a:not(.btn) { color: var(--locacoes-orange-dark); font-weight: 800; }
+    .btn-locacoes { background: var(--locacoes-orange); border-color: var(--locacoes-orange); color: #fff; font-weight: 800; }
+    .btn-locacoes:hover, .btn-locacoes:focus { background: #c2410c; border-color: #c2410c; color: #fff; }
     @media (max-width: 760px) { .top, .grid { display: block; } .grid > * { margin-bottom: 10px; } }
   </style>
 </head>
@@ -58,8 +62,8 @@
     <section class="cardx">
       <h2>Pagamentos e documentos</h2>
       <div class="d-flex gap-2 flex-wrap mb-3">
-        <a class="btn btn-success" href="{% url 'locacoes:registrar_pagamento' locacao.id %}">Registrar pagamento</a>
-        <a class="btn btn-outline-primary" href="{% url 'locacoes:termo' locacao.id %}">Termo de compromisso</a>
+        <a class="btn btn-locacoes" href="{% url 'locacoes:registrar_pagamento' locacao.id %}">Registrar pagamento</a>
+        <a class="btn btn-outline-warning" href="{% url 'locacoes:termo' locacao.id %}">Termo de compromisso</a>
       </div>
       <div class="table-responsive">
         <table class="table align-middle">
@@ -91,7 +95,7 @@
 
     <section class="cardx">
       <h2>Vencimento do saldo</h2>
-      <form method="post" action="{% url 'locacoes:alterar_vencimento_saldo' locacao.id %}">
+      <form method="post" action="{% url 'locacoes:alterar_vencimento_saldo' locacao.id %}" data-enter-nav>
         {% csrf_token %}
         <div class="grid">
           <div>
@@ -107,14 +111,14 @@
             {{ vencimento_form.observacao }}
           </div>
         </div>
-        <button class="btn btn-primary mt-2" type="submit">Salvar vencimento</button>
+        <button class="btn btn-success mt-2" type="submit">Salvar vencimento</button>
       </form>
     </section>
 
     <section class="cardx">
       <h2>Acoes operacionais</h2>
       {% if locacao.status == 'reservada' %}
-        <form method="post" action="{% url 'locacoes:marcar_saiu_para_entrega' locacao.id %}">
+        <form method="post" action="{% url 'locacoes:marcar_saiu_para_entrega' locacao.id %}" data-enter-nav>
           {% csrf_token %}
           <div class="grid">
             <div>
@@ -127,11 +131,11 @@
             </div>
           </div>
           <div class="d-flex justify-content-end mt-3">
-            <button class="btn btn-primary" type="submit">Marcar saiu para entrega</button>
+            <button class="btn btn-locacoes" type="submit">Marcar saiu para entrega</button>
           </div>
         </form>
       {% elif locacao.status == 'saiu_para_entrega' %}
-        <form method="post" action="{% url 'locacoes:confirmar_entrega' locacao.id %}">
+        <form method="post" action="{% url 'locacoes:confirmar_entrega' locacao.id %}" data-enter-nav>
           {% csrf_token %}
           <div class="grid">
             <div>
@@ -204,7 +208,7 @@
     {% if locacao.status == 'reservada' %}
       <section class="cardx">
         <h2>Cancelar reserva</h2>
-        <form method="post" action="{% url 'locacoes:cancelar' locacao.id %}">
+        <form method="post" action="{% url 'locacoes:cancelar' locacao.id %}" data-enter-nav>
           {% csrf_token %}
           <div class="grid">
             <div>
@@ -232,5 +236,6 @@
       {% endfor %}
     </section>
   </main>
+  {% include "locacoes/includes/enter_nav.html" %}
 </body>
 </html>

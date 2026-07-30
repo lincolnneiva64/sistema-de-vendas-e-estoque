@@ -6,9 +6,11 @@
   <title>Recibo da locacao #{{ locacao.id }}</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
+    :root { --locacoes-orange: #ea580c; --locacoes-orange-dark: #9a3412; --locacoes-orange-soft: #fff7ed; }
     body { background: #f5f7fb; color: #172033; }
     .page { max-width: 860px; margin: 0 auto; padding: 26px 16px 46px; }
-    .cardx { background: #fff; border: 1px solid #dbe3ef; border-radius: 8px; padding: 18px; margin-bottom: 14px; }
+    h1, h2 { color: var(--locacoes-orange-dark); }
+    .cardx { background: #fff; border: 1px solid #fed7aa; border-radius: 8px; padding: 18px; margin-bottom: 14px; }
     .saldo { font-size: 1.8rem; font-weight: 950; color: #9f1239; }
     .ok { color: #176536; }
     .pulse { animation: pulse 1.2s infinite; font-weight: 900; }
@@ -53,13 +55,13 @@
         <p class="muted">Telefone nao informado para abrir WhatsApp automaticamente.</p>
       {% endif %}
       {% if pagamento.recibo_status == 'pendente' %}
-        <form method="post" action="{% url 'locacoes:confirmar_recibo_enviado' pagamento.id %}" class="mb-3">
+        <form method="post" action="{% url 'locacoes:confirmar_recibo_enviado' pagamento.id %}" class="mb-3" data-enter-nav>
           {% csrf_token %}
           <label class="form-label">Responsavel pela confirmacao</label>
           {{ confirmar_form.responsavel }}
           <button class="btn btn-primary btn-lg w-100 mt-2 pulse" type="submit">Confirmar recibo enviado</button>
         </form>
-        <form method="post" action="{% url 'locacoes:dispensar_recibo' pagamento.id %}">
+        <form method="post" action="{% url 'locacoes:dispensar_recibo' pagamento.id %}" data-enter-nav>
           {% csrf_token %}
           <label class="form-label">Responsavel</label>
           {{ dispensar_form.responsavel }}
@@ -71,5 +73,6 @@
     </section>
     <a class="btn btn-outline-secondary" href="{% url 'locacoes:detalhe' locacao.id %}">Voltar para locacao</a>
   </main>
+  {% include "locacoes/includes/enter_nav.html" %}
 </body>
 </html>
