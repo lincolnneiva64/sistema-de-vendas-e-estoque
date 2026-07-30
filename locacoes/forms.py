@@ -128,6 +128,10 @@ class LocacaoForm(forms.Form):
     data_evento = forms.DateField(widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
     horario_evento = forms.TimeField(widget=forms.TimeInput(attrs={"class": "form-control", "type": "time"}))
     data_prevista_devolucao = forms.DateField(widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
+    data_vencimento_saldo = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+    )
     faixa_preco = forms.ModelChoiceField(
         queryset=FaixaPrecoLocacao.objects.filter(ativa=True).order_by("ordem", "id"),
         widget=forms.Select(attrs={"class": "form-select"}),
@@ -164,6 +168,7 @@ class LocacaoForm(forms.Form):
         pessoa_avulsa_endereco = (cleaned_data.get("pessoa_avulsa_endereco") or "").strip()
         data_entrega = cleaned_data.get("data_entrega")
         data_prevista_devolucao = cleaned_data.get("data_prevista_devolucao")
+        data_vencimento_saldo = cleaned_data.get("data_vencimento_saldo")
         data_evento = cleaned_data.get("data_evento")
         sinal_valor = cleaned_data.get("sinal_valor")
         sinal_forma = cleaned_data.get("sinal_forma_pagamento")
@@ -183,6 +188,8 @@ class LocacaoForm(forms.Form):
             self.add_error("data_prevista_devolucao", "A devolucao prevista nao pode ser anterior a entrega.")
         if data_entrega and data_evento and data_evento < data_entrega:
             self.add_error("data_evento", "A data do evento nao pode ser anterior a entrega.")
+        if not data_vencimento_saldo and data_entrega:
+            cleaned_data["data_vencimento_saldo"] = data_entrega
         if sinal_valor and sinal_valor > 0 and not sinal_forma:
             self.add_error("sinal_forma_pagamento", "Informe a forma de pagamento do sinal.")
 
@@ -313,6 +320,21 @@ class PagamentoLocacaoForm(forms.Form):
         if valor <= 0:
             raise forms.ValidationError("Informe um valor maior que zero.")
         return valor
+
+
+class VencimentoSaldoLocacaoForm(forms.Form):
+    data_vencimento_saldo = forms.DateField(
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+    )
+    responsavel = forms.CharField(
+        required=False,
+        max_length=120,
+        widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
+    )
+    observacao = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+    )
 
 
 class ReciboStatusForm(forms.Form):

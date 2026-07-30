@@ -202,7 +202,140 @@ def _clientes_cobranca_acionavel_hoje_qtd(hoje=None):
             hoje=hoje,
             limite=100000,
         )
+    ) + len(_locacoes_cobranca_acionaveis(hoje=hoje, limite=100000))
+
+
+def _locacao_telefone_normalizado(locacao):
+    telefone = ""
+    if locacao.cliente_id:
+        telefone = _normalizar_whatsapp_cliente_central(locacao.cliente)
+    else:
+        telefone = "".join(caractere for caractere in locacao.pessoa_avulsa_telefone if caractere.isdigit())
+        if len(telefone) in {10, 11}:
+            telefone = f"55{telefone}"
+    return telefone
+
+
+def _locacao_tel_url(locacao):
+    telefone = _locacao_telefone_normalizado(locacao)
+    return f"tel:+{telefone}" if telefone else ""
+
+
+def _locacao_telefone_formatado(locacao):
+    numero = _locacao_telefone_normalizado(locacao)
+    if not numero:
+        return ""
+    nacional = numero[2:] if numero.startswith("55") else numero
+    if len(nacional) == 11:
+        return f"+55 ({nacional[:2]}) {nacional[2:7]}-{nacional[7:]}"
+    if len(nacional) == 10:
+        return f"+55 ({nacional[:2]}) {nacional[2:6]}-{nacional[6:]}"
+    return f"+{numero}"
+
+
+def _locacao_materiais_resumo(locacao):
+    return ", ".join(f"{item.quantidade} {item.get_tipo_display()}" for item in locacao.itens.all())
+
+
+def _locacao_localidade(locacao):
+    if locacao.cliente_id:
+        bairro = (locacao.cliente.bairro or "").strip()
+        cidade = (locacao.cliente.cidade or "").strip()
+        if bairro and cidade:
+            return f"{bairro}/{cidade}"
+        return bairro or cidade
+    return (locacao.endereco_entrega or locacao.pessoa_avulsa_endereco or "").strip()
+
+
+def _locacao_cobranca_historico(registros):
+    return [_registro_cobranca_contexto(registro) for registro in registros]
+
+
+def _montar_mensagem_cobranca_locacao(locacao, hoje):
+    dias_atraso = (hoje - locacao.data_vencimento_saldo).days if locacao.data_vencimento_saldo else 0
+    return "\n".join([
+        f"Cobranca de locacao #{locacao.id}",
+        f"Cliente/Pessoa: {locacao.nome_contratante}",
+        f"Saldo em aberto: R$ {locacao.saldo_devedor:.2f}",
+        f"Vencimento: {locacao.data_vencimento_saldo:%d/%m/%Y}",
+        f"Atraso: {dias_atraso} dia{'s' if dias_atraso != 1 else ''}",
+        f"Materiais: {_locacao_materiais_resumo(locacao)}",
+        f"Entrega: {locacao.data_entrega:%d/%m/%Y}",
+        "Este saldo e de locacao, nao de venda de mercadorias.",
+    ])
+
+
+def _montar_whatsapp_cobranca_locacao(locacao, hoje):
+    numero = _locacao_telefone_normalizado(locacao)
+    if not numero:
+        return ""
+    return f"https://web.whatsapp.com/send?phone={numero}&text={quote(_montar_mensagem_cobranca_locacao(locacao, hoje))}"
+
+
+def _preview_cobranca_locacao(locacao, hoje):
+    dias_atraso = (hoje - locacao.data_vencimento_saldo).days if locacao.data_vencimento_saldo else 0
+    return {
+        "cliente_nome": locacao.nome_contratante,
+        "itens": [{
+            "nota": f"Locacao #{locacao.id}",
+            "vencimento": _formatar_data_cobranca(locacao.data_vencimento_saldo),
+            "dias_atraso": dias_atraso,
+            "valor": _formatar_moeda(locacao.saldo_devedor),
+        }],
+        "total": _formatar_moeda(locacao.saldo_devedor),
+        "pix": {
+            "chave": COBRANCA_PIX_CHAVE,
+            "titular": COBRANCA_PIX_TITULAR,
+            "banco": COBRANCA_PIX_BANCO,
+        },
+    }
+
+
+def _locacoes_cobranca_acionaveis(hoje=None, limite=None):
+    hoje = hoje or timezone.localdate()
+    try:
+        from locacoes.models import Locacao
+    except ImportError:
+        return []
+
+    locacoes = (
+        Locacao.objects.select_related("cliente")
+        .prefetch_related("itens", "registros_cobranca")
+        .filter(
+            saldo_devedor__gt=Decimal("0.00"),
+            data_vencimento_saldo__lt=hoje,
+        )
+        .exclude(status__in=[
+            Locacao.STATUS_CANCELADA,
+            Locacao.STATUS_DEVOLVIDA,
+            Locacao.STATUS_DEVOLVIDA_COM_AVARIA,
+        ])
+        .order_by("data_vencimento_saldo", "id")
     )
+
+    itens = []
+    for locacao in locacoes:
+        historico = _locacao_cobranca_historico(list(locacao.registros_cobranca.all()))
+        if not _contexto_acao_cobranca(historico, hoje)["acionavel_hoje"]:
+            continue
+        dias_atraso = (hoje - locacao.data_vencimento_saldo).days
+        prioridade, prioridade_label = _prioridade_cobranca_por_atraso(dias_atraso)
+        itens.append({
+            "cliente_nome": locacao.nome_contratante,
+            "localidade": _locacao_localidade(locacao),
+            "prioridade": prioridade,
+            "prioridade_label": prioridade_label,
+            "total_em_aberto": locacao.saldo_devedor,
+            "total_em_aberto_formatado": _formatar_moeda(locacao.saldo_devedor),
+            "vencimento_mais_antigo": locacao.data_vencimento_saldo,
+            "vencimento_mais_antigo_formatado": _formatar_data_cobranca(locacao.data_vencimento_saldo),
+            "dias_atraso": dias_atraso,
+            "qtd_contas": 1,
+            "whatsapp_url": _montar_whatsapp_cobranca_locacao(locacao, hoje),
+        })
+        if limite and len(itens) >= limite:
+            break
+    return itens
 
 
 def _pix_envio_url_padrao(request):
@@ -1339,6 +1472,97 @@ def _avisos_visitas_painel_vendas(avisos_visitas_fornecedores):
     avisos_visiveis.sort(key=lambda item: (_ordem_aviso_painel_vendas(item[1]), item[0]))
     return [aviso for _, aviso in avisos_visiveis]
 
+
+def _contexto_alertas_locacoes(hoje=None):
+    hoje = hoje or timezone.localdate()
+    try:
+        from locacoes.models import Locacao
+    except ImportError:
+        return {
+            "locacoes_alertas_operacionais": [],
+            "locacoes_alertas_operacionais_qtd": 0,
+        }
+
+    def materiais(locacao):
+        return ", ".join(f"{item.quantidade} {item.get_tipo_display()}" for item in locacao.itens.all())
+
+    encerrados = [
+        Locacao.STATUS_CANCELADA,
+        Locacao.STATUS_DEVOLVIDA,
+        Locacao.STATUS_DEVOLVIDA_COM_AVARIA,
+    ]
+    alertas = []
+    entregas = (
+        Locacao.objects.select_related("cliente")
+        .prefetch_related("itens")
+        .filter(data_entrega=hoje, status=Locacao.STATUS_RESERVADA)
+        .order_by("horario_entrega", "id")
+    )
+    for locacao in entregas:
+        alertas.append({
+            "tipo": "entrega",
+            "prioridade": "alta",
+            "titulo": f"Hoje: entregar para {locacao.nome_contratante}",
+            "descricao": f"{locacao.endereco_entrega} - {locacao.horario_entrega:%H:%M} - {materiais(locacao)}",
+            "url": reverse("locacoes:detalhe", kwargs={"pk": locacao.id}),
+        })
+
+    recolhimentos = (
+        Locacao.objects.select_related("cliente")
+        .prefetch_related("itens")
+        .filter(
+            data_prevista_devolucao=hoje,
+            status__in=[
+                Locacao.STATUS_SAIU_PARA_ENTREGA,
+                Locacao.STATUS_ENTREGUE,
+                Locacao.STATUS_PENDENTE_DEVOLUCAO,
+            ],
+        )
+        .order_by("horario_evento", "id")
+    )
+    for locacao in recolhimentos:
+        necessidade = Locacao.necessidades_itens(
+            [{"tipo": item.tipo, "quantidade": item.quantidade_pendente()} for item in locacao.itens.all()]
+        )
+        alertas.append({
+            "tipo": "recolhimento",
+            "prioridade": "alta",
+            "titulo": f"Hoje: recolher mesas/cadeiras de {locacao.nome_contratante}",
+            "descricao": f"Em {locacao.endereco_entrega}. Pendentes: {necessidade['mesas']} mesa(s), {necessidade['cadeiras']} cadeira(s).",
+            "url": reverse("locacoes:detalhe", kwargs={"pk": locacao.id}),
+        })
+
+    atrasadas = (
+        Locacao.objects.select_related("cliente")
+        .prefetch_related("itens")
+        .filter(
+            data_prevista_devolucao__lt=hoje,
+            status__in=[
+                Locacao.STATUS_SAIU_PARA_ENTREGA,
+                Locacao.STATUS_ENTREGUE,
+                Locacao.STATUS_PENDENTE_DEVOLUCAO,
+            ],
+        )
+        .order_by("data_prevista_devolucao", "id")
+    )
+    for locacao in atrasadas:
+        necessidade = Locacao.necessidades_itens(
+            [{"tipo": item.tipo, "quantidade": item.quantidade_pendente()} for item in locacao.itens.all()]
+        )
+        dias = (hoje - locacao.data_prevista_devolucao).days
+        alertas.append({
+            "tipo": "devolucao_atrasada",
+            "prioridade": "critica",
+            "titulo": f"Devolucao atrasada: {locacao.nome_contratante}",
+            "descricao": f"{dias} dia(s) em atraso. Pendentes: {necessidade['mesas']} mesa(s), {necessidade['cadeiras']} cadeira(s).",
+            "url": reverse("locacoes:detalhe", kwargs={"pk": locacao.id}),
+        })
+
+    return {
+        "locacoes_alertas_operacionais": alertas,
+        "locacoes_alertas_operacionais_qtd": len(alertas),
+    }
+
 def home(request):
     produto_edicao = None
 
@@ -1468,6 +1692,7 @@ def home(request):
         "estoque/home.html",
         {
             **_contexto_compras_rascunho_alerta(),
+            **_contexto_alertas_locacoes(),
             "produtos_incompletos_home": produtos_incompletos_home,
             "produtos_incompletos_home_qtd": produtos_incompletos_home_qtd,
             "mostrar_produtos_incompletos_home": mostrar_produtos_incompletos_home,
@@ -10687,6 +10912,75 @@ def _registrar_cobranca_cliente_central(request):
     return redirect(retorno_url)
 
 
+def _registrar_cobranca_locacao_central(request):
+    locacao_id = request.POST.get("locacao_id")
+    tipo = request.POST.get("tipo", "").strip()
+    status = request.POST.get("status", "").strip()
+    observacao = request.POST.get("observacao", "").strip()
+    proximo_contato_texto = request.POST.get("proximo_contato", "").strip()
+    espera_json = request.headers.get("x-requested-with") == "XMLHttpRequest"
+    retorno_url = reverse("estoque:central_cobrancas")
+    query_string = request.GET.urlencode()
+    if query_string:
+        retorno_url = f"{retorno_url}?{query_string}"
+
+    try:
+        from locacoes.models import Locacao, RegistroCobrancaLocacao
+    except ImportError:
+        if espera_json:
+            return JsonResponse({"sucesso": False, "mensagem": "Modulo de locacoes indisponivel."}, status=400)
+        messages.error(request, "Modulo de locacoes indisponivel.")
+        return redirect(retorno_url)
+
+    tipos_validos = {valor for valor, _rotulo in RegistroCobrancaLocacao.TIPO_CHOICES}
+    status_validos = {valor for valor, _rotulo in RegistroCobrancaLocacao.STATUS_CHOICES}
+
+    def responder_erro(mensagem):
+        if espera_json:
+            return JsonResponse({"sucesso": False, "mensagem": mensagem}, status=400)
+        messages.error(request, mensagem)
+        return redirect(retorno_url)
+
+    if tipo not in tipos_validos:
+        return responder_erro("Informe uma forma de contato valida.")
+    if status not in status_validos:
+        return responder_erro("Informe um resultado valido para a cobranca.")
+
+    proximo_contato = None
+    if proximo_contato_texto:
+        proximo_contato = parse_date(proximo_contato_texto)
+        if not proximo_contato:
+            return responder_erro("Informe uma proxima data de contato valida.")
+    elif status == RegistroCobrancaLocacao.STATUS_SEM_RESPOSTA:
+        proximo_contato = timezone.localdate() + timedelta(days=1)
+
+    locacao = get_object_or_404(Locacao, pk=locacao_id)
+    nome_usuario = (
+        request.user.get_username()
+        if request.user.is_authenticated
+        else ""
+    )
+    with transaction.atomic():
+        RegistroCobrancaLocacao.objects.create(
+            locacao=locacao,
+            tipo=tipo,
+            status=status,
+            observacao=_montar_observacao_registro_cobranca(observacao, proximo_contato),
+            criado_por_nome=nome_usuario,
+        )
+
+    if espera_json:
+        return JsonResponse({
+            "sucesso": True,
+            "locacao_id": locacao.id,
+            "cobrancas_acionaveis_hoje_qtd": _clientes_cobranca_acionavel_hoje_qtd(),
+            "mensagem": f"Cobranca registrada para locacao #{locacao.id}.",
+        })
+
+    messages.success(request, f"Cobranca registrada para locacao #{locacao.id}.")
+    return redirect(retorno_url)
+
+
 def _normalizar_whatsapp_cliente_central(cliente):
     if not cliente:
         return ""
@@ -10734,6 +11028,8 @@ def central_cobrancas(request):
         acao = request.POST.get("acao", "").strip()
         if acao == "registrar_cobranca":
             return _registrar_cobranca_cliente_central(request)
+        if acao == "registrar_cobranca_locacao":
+            return _registrar_cobranca_locacao_central(request)
         messages.error(request, "Acao invalida na Central de Cobranca.")
         return redirect("estoque:central_cobrancas")
 
@@ -10809,6 +11105,11 @@ def central_cobrancas(request):
         clientes_cobranca.append(
             {
                 "cliente_id": cliente["cliente_id"],
+                "item_key": f"cliente-{cliente['cliente_id']}",
+                "origem": "venda",
+                "origem_label": "Venda",
+                "locacao_id": "",
+                "detalhe_url": "",
                 "cliente_nome": cliente_nome,
                 "cliente_apelido": cliente_apelido,
                 "cliente_nome_exibicao": cliente_nome_exibicao,
@@ -10898,6 +11199,76 @@ def central_cobrancas(request):
             if cliente_objeto
             else ""
         )
+
+    try:
+        from locacoes.models import Locacao
+        locacoes_vencidas_qs = (
+            Locacao.objects.select_related("cliente")
+            .prefetch_related("itens", "registros_cobranca")
+            .filter(
+                saldo_devedor__gt=Decimal("0.00"),
+                data_vencimento_saldo__lt=hoje,
+            )
+            .exclude(status__in=[
+                Locacao.STATUS_CANCELADA,
+                Locacao.STATUS_DEVOLVIDA,
+                Locacao.STATUS_DEVOLVIDA_COM_AVARIA,
+            ])
+        )
+        if cliente_filtro:
+            locacoes_vencidas_qs = locacoes_vencidas_qs.filter(
+                Q(cliente__nome__icontains=cliente_filtro)
+                | Q(cliente__apelido_nome_conhecido__icontains=cliente_filtro)
+                | Q(pessoa_avulsa_nome__icontains=cliente_filtro)
+                | Q(pessoa_avulsa_telefone__icontains=cliente_filtro)
+            )
+        if rota_filtro:
+            locacoes_vencidas_qs = locacoes_vencidas_qs.filter(
+                Q(cliente__bairro__iexact=rota_filtro)
+                | Q(endereco_entrega__icontains=rota_filtro)
+                | Q(pessoa_avulsa_endereco__icontains=rota_filtro)
+            )
+        for locacao in locacoes_vencidas_qs.order_by("data_vencimento_saldo", "id"):
+            dias_atraso = (hoje - locacao.data_vencimento_saldo).days
+            prioridade_codigo, prioridade_label = _prioridade_cobranca_por_atraso(dias_atraso)
+            if prioridade_filtro and prioridade_codigo != prioridade_filtro:
+                continue
+            historico = _locacao_cobranca_historico(list(locacao.registros_cobranca.all()))
+            contexto_acao = _contexto_acao_cobranca(historico, hoje)
+            clientes_cobranca.append({
+                "cliente_id": locacao.cliente_id or "",
+                "item_key": f"locacao-{locacao.id}",
+                "origem": "locacao",
+                "origem_label": "Locacao",
+                "locacao_id": locacao.id,
+                "detalhe_url": reverse("locacoes:detalhe", kwargs={"pk": locacao.id}),
+                "cliente_nome": locacao.nome_contratante,
+                "cliente_apelido": "",
+                "cliente_nome_exibicao": locacao.nome_contratante,
+                "bairro": "",
+                "localidade": _locacao_localidade(locacao),
+                "qtd_contas": 1,
+                "total_em_aberto": locacao.saldo_devedor,
+                "vencimento_mais_antigo": locacao.data_vencimento_saldo,
+                "dias_atraso": dias_atraso,
+                "prioridade": prioridade_codigo,
+                "prioridade_label": prioridade_label,
+                "historico_cobranca": historico,
+                "ultimo_contato": historico[0] if historico else None,
+                "acionavel_hoje": contexto_acao["acionavel_hoje"],
+                "proximo_contato_operacional": contexto_acao["proximo_contato"],
+                "status_operacional": contexto_acao["status_operacional"],
+                "conta_para_alerta_central": contexto_acao["acionavel_hoje"] and dias_atraso >= 2,
+                "receber_url": "",
+                "whatsapp_url": _montar_whatsapp_cobranca_locacao(locacao, hoje),
+                "whatsapp_preview": _preview_cobranca_locacao(locacao, hoje),
+                "telefone_ligacao_url": _locacao_tel_url(locacao),
+                "telefone_ligacao_numero": _locacao_telefone_formatado(locacao),
+            })
+    except ImportError:
+        pass
+
+    clientes_cobranca.sort(key=lambda item: (item["vencimento_mais_antigo"], item["origem"], item.get("locacao_id") or item.get("cliente_id") or 0))
 
     resumo = {
         "clientes": len(clientes_cobranca),

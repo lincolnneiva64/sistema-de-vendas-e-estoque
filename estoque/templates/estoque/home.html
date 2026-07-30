@@ -65,6 +65,54 @@
 .produtos-incompletos-item strong {
   font-size: .9rem;
 }
+.locacoes-operacionais-alerta {
+  border-color: #dc2626;
+  background: #fef2f2;
+  animation: locacoes-alerta-pulse 1.35s ease-in-out infinite;
+}
+.locacoes-operacionais-alerta h2 {
+  color: #991b1b;
+}
+.locacoes-operacionais-lista {
+  display: grid;
+  gap: 7px;
+  margin-top: 9px;
+}
+.locacoes-operacionais-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid #fecaca;
+  border-radius: 9px;
+  background: #fff;
+}
+.locacoes-operacionais-item.critica {
+  border-color: #ef4444;
+  background: #fff7f7;
+}
+.locacoes-operacionais-titulo {
+  color: #172033;
+  font-size: .92rem;
+  font-weight: 950;
+}
+.locacoes-operacionais-desc {
+  color: #64748b;
+  font-size: .84rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+@keyframes locacoes-alerta-pulse {
+  0%, 100% {
+    box-shadow: 0 6px 16px rgba(220, 38, 38, 0.12), 0 0 0 0 rgba(220, 38, 38, 0.25);
+    transform: translateY(0);
+  }
+  50% {
+    box-shadow: 0 10px 24px rgba(220, 38, 38, 0.22), 0 0 0 5px rgba(220, 38, 38, 0.10);
+    transform: translateY(-1px);
+  }
+}
 @media (max-width: 768px) {
   .produtos-incompletos-alerta {
     margin: 8px 8px 12px;
@@ -82,6 +130,9 @@
   .produtos-incompletos-item {
     align-items: stretch;
     flex-direction: column;
+  }
+  .locacoes-operacionais-item {
+    grid-template-columns: 1fr;
   }
 }
 </style>
@@ -124,6 +175,29 @@
       <p>Aviso: {{ compras_rascunho_qtd }} compra{{ compras_rascunho_qtd|pluralize }} em rascunho aguardando finalização.</p>
     </div>
     <a class="produtos-incompletos-btn" href="{{ compras_rascunho_url }}">{{ compras_rascunho_botao }}</a>
+  </div>
+</section>
+{% endif %}
+
+{% if locacoes_alertas_operacionais_qtd %}
+<section class="produtos-incompletos-alerta locacoes-operacionais-alerta" id="locacoes-operacionais-alerta">
+  <div class="produtos-incompletos-topo">
+    <div>
+      <h2>Locacoes operacionais</h2>
+      <p>{{ locacoes_alertas_operacionais_qtd }} alerta{{ locacoes_alertas_operacionais_qtd|pluralize }} de entrega, recolhimento ou devolucao.</p>
+    </div>
+    <a class="produtos-incompletos-btn" href="{% url 'locacoes:lista' %}">Abrir locacoes</a>
+  </div>
+  <div class="locacoes-operacionais-lista">
+    {% for alerta in locacoes_alertas_operacionais %}
+      <div class="locacoes-operacionais-item {{ alerta.prioridade }}">
+        <div>
+          <div class="locacoes-operacionais-titulo">{{ alerta.titulo }}</div>
+          <div class="locacoes-operacionais-desc">{{ alerta.descricao }}</div>
+        </div>
+        <a class="produtos-incompletos-btn" href="{{ alerta.url }}">Detalhe</a>
+      </div>
+    {% endfor %}
   </div>
 </section>
 {% endif %}

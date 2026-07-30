@@ -315,6 +315,7 @@ class Locacao(models.Model):
     data_evento = models.DateField()
     horario_evento = models.TimeField()
     data_prevista_devolucao = models.DateField()
+    data_vencimento_saldo = models.DateField(blank=True, null=True)
     faixa_preco = models.ForeignKey(
         FaixaPrecoLocacao,
         on_delete=models.PROTECT,
@@ -526,6 +527,7 @@ class Locacao(models.Model):
                 data_evento=dados["data_evento"],
                 horario_evento=dados["horario_evento"],
                 data_prevista_devolucao=dados["data_prevista_devolucao"],
+                data_vencimento_saldo=dados.get("data_vencimento_saldo") or dados["data_entrega"],
                 faixa_preco=dados["faixa_preco"],
                 faixa_preco_nome_snapshot=dados["faixa_preco"].nome,
                 observacao=dados.get("observacao", ""),
@@ -592,6 +594,31 @@ class Locacao(models.Model):
             )
             self.refresh_from_db()
             return pagamento
+
+    def alterar_vencimento_saldo(self, nova_data, responsavel="", observacao=""):
+        data_anterior = self.data_vencimento_saldo
+        self.data_vencimento_saldo = nova_data
+        self.save(update_fields=["data_vencimento_saldo", "atualizado_em"])
+        anterior_texto = data_anterior.strftime("%d/%m/%Y") if data_anterior else "sem data"
+        nova_texto = nova_data.strftime("%d/%m/%Y") if nova_data else "sem data"
+        descricao = str(observacao or "").strip()
+        if descricao:
+            descricao = f"{descricao}\n"
+        descricao = f"{descricao}Vencimento do saldo alterado de {anterior_texto} para {nova_texto}."
+        EventoLocacao.objects.create(
+            locacao=self,
+            tipo="vencimento_saldo",
+            descricao=descricao,
+            responsavel=responsavel,
+        )
+
+    def saldo_vencido_em(self, data_referencia=None):
+        data_referencia = data_referencia or timezone.localdate()
+        return (
+            self.saldo_devedor > Decimal("0.00")
+            and self.data_vencimento_saldo
+            and self.data_vencimento_saldo < data_referencia
+        )
 
     def registrar_termo_gerado(self, responsavel=""):
         self.termo_gerado_em = timezone.now()
@@ -962,3 +989,46 @@ class PagamentoLocacao(models.Model):
             descricao=self.recibo_dispensa_observacao or f"Recibo do pagamento #{self.id} dispensado.",
             responsavel=self.recibo_dispensado_por,
         )
+
+
+class RegistroCobrancaLocacao(models.Model):
+    TIPO_WHATSAPP = "whatsapp"
+    TIPO_TELEFONE = "telefone"
+    TIPO_VISITA = "visita"
+    TIPO_OUTRO = "outro"
+    TIPO_CHOICES = [
+        (TIPO_WHATSAPP, "WhatsApp"),
+        (TIPO_TELEFONE, "Ligacao"),
+        (TIPO_VISITA, "Visita"),
+        (TIPO_OUTRO, "Outro"),
+    ]
+
+    STATUS_CONTATADO = "contatado"
+    STATUS_PENDENTE = "pendente"
+    STATUS_SEM_RESPOSTA = "sem_resposta"
+    STATUS_PROMESSA_PAGAMENTO = "promessa_pagamento"
+    STATUS_RESOLVIDO = "resolvido"
+    STATUS_OUTRO = "outro"
+    STATUS_CHOICES = [
+        (STATUS_PENDENTE, "Pendente"),
+        (STATUS_CONTATADO, "Contatado"),
+        (STATUS_SEM_RESPOSTA, "Nao atendeu"),
+        (STATUS_PROMESSA_PAGAMENTO, "Promessa de pagamento"),
+        (STATUS_RESOLVIDO, "Resolvido"),
+        (STATUS_OUTRO, "Outro"),
+    ]
+
+    locacao = models.ForeignKey(Locacao, on_delete=models.CASCADE, related_name="registros_cobranca")
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES)
+    observacao = models.TextField(blank=True)
+    criado_por_nome = models.CharField(max_length=150, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-criado_em", "-id"]
+        verbose_name = "Registro de cobranca de locacao"
+        verbose_name_plural = "Registros de cobranca de locacoes"
+
+    def __str__(self):
+        return f"Cobranca locacao #{self.locacao_id} - {self.get_tipo_display()}"

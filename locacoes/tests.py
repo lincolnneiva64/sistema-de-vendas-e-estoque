@@ -1,14 +1,23 @@
 from decimal import Decimal
-from datetime import date
+from datetime import date, timedelta
 
 from django.apps import apps
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from estoque.models import Cliente, ContaFinanceira, ContaReceber, ItemVenda, MovimentoFinanceiro, Produto, Venda
 
-from .models import ConfiguracaoLocacao, FaixaPrecoLocacao, ItemLocacao, Locacao, MovimentoEstoqueLocacao, PagamentoLocacao
+from .models import (
+    ConfiguracaoLocacao,
+    FaixaPrecoLocacao,
+    ItemLocacao,
+    Locacao,
+    MovimentoEstoqueLocacao,
+    PagamentoLocacao,
+    RegistroCobrancaLocacao,
+)
 
 
 class LocacoesBaseIsoladaTests(TestCase):
@@ -628,3 +637,202 @@ class LocacoesPagamentosTermoTests(TestCase):
         self.assertEqual(ItemVenda.objects.count(), 0)
         self.assertEqual(Produto.objects.count(), 0)
         self.assertEqual(ContaReceber.objects.count(), 0)
+
+
+class LocacoesAlertasCobrancaTests(TestCase):
+    def setUp(self):
+        self.hoje = timezone.localdate()
+        self.configuracao = ConfiguracaoLocacao.obter()
+        self.configuracao.total_mesas = 8
+        self.configuracao.total_cadeiras = 32
+        self.configuracao.preco_mesa_avulsa_diaria = Decimal("4.00")
+        self.configuracao.preco_cadeira_avulsa_diaria = Decimal("1.50")
+        self.configuracao.save()
+        self.faixa = FaixaPrecoLocacao.objects.get(codigo=FaixaPrecoLocacao.CENTRO_PERTO)
+        self.faixa.preco_jogo_diaria = Decimal("8.00")
+        self.faixa.save()
+
+    def dados_base(self, **extras):
+        data_entrega = extras.pop("data_entrega", self.hoje)
+        dados = {
+            "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
+            "pessoa_avulsa_nome": "Cliente Locacao Etapa 6",
+            "pessoa_avulsa_telefone": "91999990000",
+            "pessoa_avulsa_endereco": "Rua L, 6",
+            "endereco_entrega": "Rua L, 6",
+            "data_entrega": data_entrega,
+            "horario_entrega": "09:30",
+            "data_evento": data_entrega,
+            "horario_evento": "18:00",
+            "data_prevista_devolucao": data_entrega + timedelta(days=1),
+            "faixa_preco": self.faixa,
+            "observacao": "",
+        }
+        dados.update(extras)
+        return dados
+
+    def criar_locacao(self, **extras):
+        return Locacao.criar_reserva(
+            self.dados_base(**extras),
+            [{
+                "tipo": ItemLocacao.TIPO_JOGO,
+                "quantidade": 1,
+                "preco_diaria": Decimal("8.00"),
+            }],
+        )
+
+    def test_vencimento_sugerido_na_data_da_entrega(self):
+        locacao = self.criar_locacao(data_entrega=self.hoje + timedelta(days=3))
+
+        self.assertEqual(locacao.data_vencimento_saldo, locacao.data_entrega)
+
+    def test_vencimento_alteravel_por_locacao_registra_historico(self):
+        locacao = self.criar_locacao()
+        nova_data = self.hoje + timedelta(days=2)
+
+        locacao.alterar_vencimento_saldo(nova_data, responsavel="Camila", observacao="Pagar no recolhimento")
+        locacao.refresh_from_db()
+
+        self.assertEqual(locacao.data_vencimento_saldo, nova_data)
+        self.assertTrue(
+            locacao.eventos.filter(
+                tipo="vencimento_saldo",
+                descricao__icontains="Pagar no recolhimento",
+            ).exists()
+        )
+
+    def test_saldo_so_aparece_vencido_apos_data_de_vencimento(self):
+        locacao = self.criar_locacao(
+            data_entrega=self.hoje - timedelta(days=1),
+            data_prevista_devolucao=self.hoje,
+            data_vencimento_saldo=self.hoje,
+        )
+
+        response = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
+        self.assertNotContains(response, f"Locacao #{locacao.id}")
+
+        locacao.alterar_vencimento_saldo(self.hoje - timedelta(days=1))
+        response = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
+        self.assertContains(response, f"Locacao #{locacao.id}")
+        self.assertContains(response, "Locacao")
+
+    def test_entrega_e_recolhimento_do_dia_aparecem_no_painel(self):
+        entrega = self.criar_locacao(data_entrega=self.hoje, pessoa_avulsa_nome="Entrega Hoje")
+        recolhimento = self.criar_locacao(
+            data_entrega=self.hoje - timedelta(days=1),
+            data_prevista_devolucao=self.hoje,
+            pessoa_avulsa_nome="Recolher Hoje",
+        )
+        recolhimento.marcar_saiu_para_entrega()
+        recolhimento.confirmar_entrega()
+
+        response = self.client.get(reverse("estoque:home"), secure=True)
+
+        self.assertContains(response, f"Hoje: entregar para {entrega.nome_contratante}")
+        self.assertContains(response, f"Hoje: recolher mesas/cadeiras de {recolhimento.nome_contratante}")
+        self.assertContains(response, "locacoes-operacionais-alerta")
+
+    def test_devolucao_atrasada_persiste_ate_encerramento(self):
+        locacao = self.criar_locacao(
+            data_entrega=self.hoje - timedelta(days=3),
+            data_prevista_devolucao=self.hoje - timedelta(days=2),
+            pessoa_avulsa_nome="Atraso Persistente",
+        )
+        locacao.marcar_saiu_para_entrega()
+        locacao.confirmar_entrega()
+
+        response = self.client.get(reverse("estoque:home"), secure=True)
+        self.assertContains(response, "Devolucao atrasada: Atraso Persistente")
+
+        item = locacao.itens.get()
+        locacao.registrar_devolucao({item.id: {"devolvida_boa": 1}})
+
+        response = self.client.get(reverse("estoque:home"), secure=True)
+        self.assertNotContains(response, "Devolucao atrasada: Atraso Persistente")
+
+    def test_pagamento_quitacao_remove_cobranca_de_locacao(self):
+        locacao = self.criar_locacao(
+            data_entrega=self.hoje - timedelta(days=3),
+            data_prevista_devolucao=self.hoje - timedelta(days=2),
+            data_vencimento_saldo=self.hoje - timedelta(days=2),
+        )
+
+        response = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
+        self.assertContains(response, f"Locacao #{locacao.id}")
+
+        locacao.registrar_pagamento(locacao.total, PagamentoLocacao.FORMA_PIX)
+
+        response = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
+        self.assertNotContains(response, f"Locacao #{locacao.id}")
+
+    def test_registra_contato_cobranca_especifico_da_locacao(self):
+        locacao = self.criar_locacao(
+            data_entrega=self.hoje - timedelta(days=3),
+            data_prevista_devolucao=self.hoje - timedelta(days=2),
+            data_vencimento_saldo=self.hoje - timedelta(days=2),
+        )
+
+        response = self.client.post(
+            reverse("estoque:central_cobrancas"),
+            {
+                "acao": "registrar_cobranca_locacao",
+                "locacao_id": str(locacao.id),
+                "tipo": RegistroCobrancaLocacao.TIPO_WHATSAPP,
+                "status": RegistroCobrancaLocacao.STATUS_CONTATADO,
+                "observacao": "Cobranca da locacao enviada.",
+            },
+            secure=True,
+        )
+
+        self.assertRedirects(response, reverse("estoque:central_cobrancas"), fetch_redirect_response=False)
+        self.assertEqual(RegistroCobrancaLocacao.objects.filter(locacao=locacao).count(), 1)
+        self.assertEqual(ContaReceber.objects.count(), 0)
+        self.assertEqual(Venda.objects.count(), 0)
+
+    def test_pagamento_total_na_criacao_deixa_locacao_quitada_e_fora_da_cobranca(self):
+        response = self.client.post(
+            reverse("locacoes:nova"),
+            {
+                "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
+                "pessoa_avulsa_nome": "Quitada Na Reserva",
+                "pessoa_avulsa_telefone": "91999990000",
+                "pessoa_avulsa_endereco": "Rua Q, 1",
+                "endereco_entrega": "Rua Q, 1",
+                "data_entrega": (self.hoje - timedelta(days=2)).isoformat(),
+                "horario_entrega": "09:00",
+                "data_evento": (self.hoje - timedelta(days=2)).isoformat(),
+                "horario_evento": "18:00",
+                "data_prevista_devolucao": (self.hoje - timedelta(days=1)).isoformat(),
+                "data_vencimento_saldo": (self.hoje - timedelta(days=2)).isoformat(),
+                "faixa_preco": str(self.faixa.id),
+                "observacao": "",
+                "responsavel": "Camila",
+                "sinal_valor": "8.00",
+                "sinal_forma_pagamento": PagamentoLocacao.FORMA_PIX,
+                "sinal_observacao": "Pagamento total na reserva.",
+                "jogos": "1",
+                "preco_jogo_diaria": "8.00",
+                "mesas_avulsas": "0",
+                "preco_mesa_avulsa_diaria": "4.00",
+                "cadeiras_avulsas": "0",
+                "preco_cadeira_avulsa_diaria": "1.50",
+            },
+            secure=True,
+        )
+
+        locacao = Locacao.objects.get(pessoa_avulsa_nome="Quitada Na Reserva")
+        self.assertRedirects(
+            response,
+            reverse("locacoes:recibo_pagamento", kwargs={"pk": locacao.pagamentos.get().pk}),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(locacao.status_financeiro, Locacao.FINANCEIRO_QUITADA)
+        self.assertEqual(locacao.total_pago, locacao.total)
+        self.assertEqual(locacao.saldo_devedor, Decimal("0.00"))
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="locacao").count(), 1)
+
+        response = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
+        self.assertNotContains(response, "Quitada Na Reserva")
+        self.assertEqual(ContaReceber.objects.count(), 0)
+        self.assertEqual(Venda.objects.count(), 0)
+        self.assertEqual(Produto.objects.count(), 0)

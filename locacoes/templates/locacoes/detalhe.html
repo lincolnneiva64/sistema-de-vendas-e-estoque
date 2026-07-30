@@ -25,7 +25,7 @@
     <header class="top">
       <div>
         <h1>Locacao #{{ locacao.id }}</h1>
-        <p class="muted mb-0">Acompanhamento operacional da locacao, sem financeiro nesta etapa.</p>
+        <p class="muted mb-0">Acompanhamento operacional e financeiro proprio da locacao.</p>
       </div>
       <a class="btn btn-outline-secondary" href="{% url 'locacoes:lista' %}">Voltar</a>
     </header>
@@ -50,6 +50,7 @@
         <div><strong>Total pago</strong><br>R$ {{ locacao.total_pago|floatformat:2 }}</div>
         <div><strong>Status financeiro</strong><br>{{ locacao.get_status_financeiro_display }}</div>
         <div><strong>Saldo devedor</strong><br><span class="saldo-destaque">R$ {{ locacao.saldo_devedor|floatformat:2 }}</span></div>
+        <div><strong>Vencimento do saldo</strong><br>{{ locacao.data_vencimento_saldo|date:"d/m/Y"|default:"Sem data" }}</div>
       </div>
       {% if locacao.observacao %}<p class="mt-3 mb-0"><strong>Observacao:</strong> {{ locacao.observacao }}</p>{% endif %}
     </section>
@@ -86,6 +87,28 @@
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section class="cardx">
+      <h2>Vencimento do saldo</h2>
+      <form method="post" action="{% url 'locacoes:alterar_vencimento_saldo' locacao.id %}">
+        {% csrf_token %}
+        <div class="grid">
+          <div>
+            <label class="form-label">Data de vencimento</label>
+            {{ vencimento_form.data_vencimento_saldo }}
+          </div>
+          <div>
+            <label class="form-label">Responsavel</label>
+            {{ vencimento_form.responsavel }}
+          </div>
+          <div>
+            <label class="form-label">Observacao</label>
+            {{ vencimento_form.observacao }}
+          </div>
+        </div>
+        <button class="btn btn-primary mt-2" type="submit">Salvar vencimento</button>
+      </form>
     </section>
 
     <section class="cardx">

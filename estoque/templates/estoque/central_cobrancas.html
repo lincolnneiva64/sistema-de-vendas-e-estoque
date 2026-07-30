@@ -350,7 +350,7 @@
     <header class="cobrancas-header">
       <div>
         <h1 class="cobrancas-title">Central de Cobranca</h1>
-        <p class="cobrancas-subtitle">Clientes com contas vencidas por data de vencimento.</p>
+        <p class="cobrancas-subtitle">Clientes e locacoes com saldos vencidos por data de vencimento.</p>
       </div>
       <div class="cobrancas-actions">
         <a href="{% url 'estoque:contas_receber' %}" class="cobrancas-btn cobrancas-btn-secondary">Contas a Receber</a>
@@ -394,7 +394,7 @@
 
     <section class="cobrancas-resumo" aria-label="Resumo de cobrancas">
       <div class="cobrancas-resumo-card">
-        <span class="cobrancas-resumo-label">Clientes vencidos</span>
+        <span class="cobrancas-resumo-label">Pendencias vencidas</span>
         <strong class="cobrancas-resumo-valor" data-resumo-clientes>{{ resumo.clientes }}</strong>
       </div>
       <div class="cobrancas-resumo-card">
@@ -402,7 +402,7 @@
         <strong class="cobrancas-resumo-valor" data-resumo-acoes-hoje>{{ resumo.acoes_hoje }}</strong>
       </div>
       <div class="cobrancas-resumo-card">
-        <span class="cobrancas-resumo-label">Contas vencidas</span>
+        <span class="cobrancas-resumo-label">Itens vencidos</span>
         <strong class="cobrancas-resumo-valor" data-resumo-contas>{{ resumo.contas }}</strong>
       </div>
       <div class="cobrancas-resumo-card">
@@ -413,16 +413,17 @@
 
     <section class="cobrancas-panel">
       <div class="cobrancas-panel-head">
-        <h2 class="cobrancas-panel-title">Clientes para cobranca</h2>
+        <h2 class="cobrancas-panel-title">Pendencias para cobranca</h2>
         <span class="cobrancas-count">Ordenado pelo vencimento mais antigo</span>
       </div>
       <div class="cobrancas-lista">
         {% for cliente in clientes_cobranca %}
-          <article class="cobrancas-cliente" data-cobranca-cliente-card data-cliente-id="{{ cliente.cliente_id }}" data-qtd-contas="{{ cliente.qtd_contas }}" data-total-em-aberto="{{ cliente.total_em_aberto }}">
+          <article class="cobrancas-cliente" data-cobranca-cliente-card data-cliente-id="{{ cliente.cliente_id }}" data-locacao-id="{{ cliente.locacao_id }}" data-qtd-contas="{{ cliente.qtd_contas }}" data-total-em-aberto="{{ cliente.total_em_aberto }}">
             <div>
               <div class="cobrancas-nome">
                 {{ cliente.cliente_nome }}{% if cliente.cliente_apelido %} &mdash; {{ cliente.cliente_apelido }}{% endif %}
               </div>
+              <div class="cobrancas-localidade"><strong>{{ cliente.origem_label }}</strong>{% if cliente.detalhe_url %} &middot; <a href="{{ cliente.detalhe_url }}">Abrir locacao</a>{% endif %}</div>
               {% if cliente.localidade %}
                 <div class="cobrancas-localidade">{{ cliente.localidade }}</div>
               {% endif %}
@@ -459,7 +460,7 @@
                 <div class="cobrancas-whatsapp-preview-list">
                   {% for item in cliente.whatsapp_preview.itens %}
                     <div class="cobrancas-whatsapp-preview-item">
-                      <strong>&bull; Nota n&ordm; {{ item.nota }}</strong><br>
+                      <strong>&bull; {{ item.nota }}</strong><br>
                       Vencimento: {{ item.vencimento }} &mdash; {{ item.dias_atraso }} dias em atraso<br>
                       Valor em aberto: <strong>{{ item.valor }}</strong>
                     </div>
@@ -482,13 +483,17 @@
               </div>
             {% endif %}
             <div class="cobrancas-card-actions">
-              {% if cliente.cliente_id %}
+              {% if cliente.cliente_id or cliente.locacao_id %}
                 {% if cliente.whatsapp_url %}
                   <a href="{{ cliente.whatsapp_url }}" target="_blank" rel="noopener" class="cobrancas-btn cobrancas-btn-success" data-whatsapp-cobranca-link>Abrir WhatsApp</a>
                   <form method="post" class="cobrancas-confirmar-form" data-confirmar-cobranca-form>
                     {% csrf_token %}
-                    <input type="hidden" name="acao" value="registrar_cobranca">
-                    <input type="hidden" name="cliente_id" value="{{ cliente.cliente_id }}">
+                    <input type="hidden" name="acao" value="{% if cliente.origem == 'locacao' %}registrar_cobranca_locacao{% else %}registrar_cobranca{% endif %}">
+                    {% if cliente.origem == 'locacao' %}
+                      <input type="hidden" name="locacao_id" value="{{ cliente.locacao_id }}">
+                    {% else %}
+                      <input type="hidden" name="cliente_id" value="{{ cliente.cliente_id }}">
+                    {% endif %}
                     <input type="hidden" name="tipo" value="whatsapp">
                     <input type="hidden" name="status" value="contatado">
                     <input type="hidden" name="proximo_contato" value="{{ amanha|date:'Y-m-d' }}">
@@ -505,9 +510,9 @@
                 {% if cliente.receber_url %}
                   <a href="{{ cliente.receber_url }}" class="cobrancas-btn cobrancas-btn-primary">Receber</a>
                 {% endif %}
-                <button type="button" class="cobrancas-btn cobrancas-btn-light" data-cobranca-toggle="form-{{ cliente.cliente_id }}">Registrar contato</button>
+                <button type="button" class="cobrancas-btn cobrancas-btn-light" data-cobranca-toggle="form-{{ cliente.item_key }}">Registrar contato</button>
                 {% if cliente.historico_cobranca %}
-                  <button type="button" class="cobrancas-btn cobrancas-btn-light" data-cobranca-toggle="historico-{{ cliente.cliente_id }}">Ver hist&oacute;rico</button>
+                  <button type="button" class="cobrancas-btn cobrancas-btn-light" data-cobranca-toggle="historico-{{ cliente.item_key }}">Ver hist&oacute;rico</button>
                 {% endif %}
               {% else %}
                 <span class="cobrancas-dado">Cliente sem cadastro vinculado</span>
@@ -526,39 +531,43 @@
                 <strong>&Uacute;ltimo contato:</strong> sem registros
               {% endif %}
             </div>
-            <div id="form-{{ cliente.cliente_id }}" class="cobrancas-inline-panel" hidden>
+            <div id="form-{{ cliente.item_key }}" class="cobrancas-inline-panel" hidden>
               <form method="post" class="cobrancas-form-grid">
                 {% csrf_token %}
-                <input type="hidden" name="acao" value="registrar_cobranca">
-                <input type="hidden" name="cliente_id" value="{{ cliente.cliente_id }}">
+                <input type="hidden" name="acao" value="{% if cliente.origem == 'locacao' %}registrar_cobranca_locacao{% else %}registrar_cobranca{% endif %}">
+                {% if cliente.origem == 'locacao' %}
+                  <input type="hidden" name="locacao_id" value="{{ cliente.locacao_id }}">
+                {% else %}
+                  <input type="hidden" name="cliente_id" value="{{ cliente.cliente_id }}">
+                {% endif %}
                 <div class="cobrancas-field">
-                  <label for="tipo-{{ cliente.cliente_id }}">Forma de contato</label>
-                  <select id="tipo-{{ cliente.cliente_id }}" name="tipo" required>
+                  <label for="tipo-{{ cliente.item_key }}">Forma de contato</label>
+                  <select id="tipo-{{ cliente.item_key }}" name="tipo" required>
                     {% for valor, texto in forma_contato_opcoes %}
                       <option value="{{ valor }}">{{ texto }}</option>
                     {% endfor %}
                   </select>
                 </div>
                 <div class="cobrancas-field">
-                  <label for="status-{{ cliente.cliente_id }}">Resultado</label>
-                  <select id="status-{{ cliente.cliente_id }}" name="status" required>
+                  <label for="status-{{ cliente.item_key }}">Resultado</label>
+                  <select id="status-{{ cliente.item_key }}" name="status" required>
                     {% for valor, texto in resultado_opcoes %}
                       <option value="{{ valor }}">{{ texto }}</option>
                     {% endfor %}
                   </select>
                 </div>
                 <div class="cobrancas-field">
-                  <label for="proximo-{{ cliente.cliente_id }}">Pr&oacute;xima data</label>
-                  <input id="proximo-{{ cliente.cliente_id }}" type="date" name="proximo_contato" value="{{ hoje|date:'Y-m-d' }}" data-default-date="{{ hoje|date:'Y-m-d' }}" data-tomorrow-date="{{ amanha|date:'Y-m-d' }}">
+                  <label for="proximo-{{ cliente.item_key }}">Pr&oacute;xima data</label>
+                  <input id="proximo-{{ cliente.item_key }}" type="date" name="proximo_contato" value="{{ hoje|date:'Y-m-d' }}" data-default-date="{{ hoje|date:'Y-m-d' }}" data-tomorrow-date="{{ amanha|date:'Y-m-d' }}">
                 </div>
                 <div class="cobrancas-field cobrancas-field-full">
-                  <label for="observacao-{{ cliente.cliente_id }}">Observa&ccedil;&atilde;o opcional</label>
-                  <textarea id="observacao-{{ cliente.cliente_id }}" name="observacao" rows="3"></textarea>
+                  <label for="observacao-{{ cliente.item_key }}">Observa&ccedil;&atilde;o opcional</label>
+                  <textarea id="observacao-{{ cliente.item_key }}" name="observacao" rows="3"></textarea>
                 </div>
                 <button type="submit" class="cobrancas-btn cobrancas-btn-primary">Salvar registro</button>
               </form>
             </div>
-            <div id="historico-{{ cliente.cliente_id }}" class="cobrancas-inline-panel" hidden>
+            <div id="historico-{{ cliente.item_key }}" class="cobrancas-inline-panel" hidden>
               {% if cliente.historico_cobranca %}
                 <div class="cobrancas-history-list">
                   {% for registro in cliente.historico_cobranca %}
@@ -583,7 +592,7 @@
             </div>
           </article>
         {% empty %}
-          <div class="cobrancas-empty">Nenhum cliente com conta vencida para os filtros informados.</div>
+          <div class="cobrancas-empty">Nenhuma pendencia vencida para os filtros informados.</div>
         {% endfor %}
       </div>
     </section>
@@ -718,7 +727,7 @@
       if (lista && !lista.querySelector("[data-cobranca-cliente-card]")) {
         const vazio = document.createElement("div");
         vazio.className = "cobrancas-empty";
-        vazio.textContent = "Nenhum cliente com conta vencida para os filtros informados.";
+        vazio.textContent = "Nenhuma pendencia vencida para os filtros informados.";
         lista.appendChild(vazio);
       }
     } catch (erro) {

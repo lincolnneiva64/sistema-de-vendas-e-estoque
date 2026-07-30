@@ -8,6 +8,7 @@ from .models import (
     Locacao,
     MovimentoEstoqueLocacao,
     PagamentoLocacao,
+    RegistroCobrancaLocacao,
 )
 
 
@@ -88,6 +89,7 @@ class LocacaoAdmin(admin.ModelAdmin):
         "status_financeiro",
         "data_entrega",
         "data_prevista_devolucao",
+        "data_vencimento_saldo",
         "total",
         "total_pago",
         "saldo_devedor",
@@ -108,6 +110,14 @@ class LocacaoAdmin(admin.ModelAdmin):
         "criado_em",
         "atualizado_em",
     )
+
+
+@admin.register(RegistroCobrancaLocacao)
+class RegistroCobrancaLocacaoAdmin(admin.ModelAdmin):
+    list_display = ("locacao", "tipo", "status", "criado_por_nome", "criado_em")
+    list_filter = ("tipo", "status", "criado_em")
+    search_fields = ("locacao__id", "locacao__pessoa_avulsa_nome", "locacao__cliente__nome", "observacao")
+    readonly_fields = ("locacao", "tipo", "status", "observacao", "criado_por_nome", "criado_em")
 
 
 @admin.register(EventoLocacao)

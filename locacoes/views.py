@@ -19,6 +19,7 @@ from .forms import (
     PagamentoLocacaoForm,
     ReciboStatusForm,
     TermoLocacaoForm,
+    VencimentoSaldoLocacaoForm,
 )
 from .models import ConfiguracaoLocacao, FaixaPrecoLocacao, Locacao, MovimentoEstoqueLocacao, PagamentoLocacao
 
@@ -202,6 +203,9 @@ def detalhe(request, pk):
             "cancelar_form": CancelarLocacaoForm(),
             "acao_form": AcaoOperacionalLocacaoForm(),
             "pagamento_form": PagamentoLocacaoForm(),
+            "vencimento_form": VencimentoSaldoLocacaoForm(initial={
+                "data_vencimento_saldo": locacao.data_vencimento_saldo,
+            }),
         },
     )
 
@@ -230,6 +234,22 @@ def registrar_pagamento(request, pk):
     else:
         form = PagamentoLocacaoForm()
     return render(request, "locacoes/pagamento.html", {"locacao": locacao, "form": form})
+
+
+@require_POST
+def alterar_vencimento_saldo(request, pk):
+    locacao = get_object_or_404(Locacao, pk=pk)
+    form = VencimentoSaldoLocacaoForm(request.POST)
+    if form.is_valid():
+        locacao.alterar_vencimento_saldo(
+            form.cleaned_data["data_vencimento_saldo"],
+            responsavel=form.cleaned_data.get("responsavel", ""),
+            observacao=form.cleaned_data.get("observacao", ""),
+        )
+        messages.success(request, "Vencimento do saldo atualizado.")
+    else:
+        messages.warning(request, "Informe uma data valida para o vencimento do saldo.")
+    return redirect("locacoes:detalhe", pk=locacao.pk)
 
 
 def recibo_pagamento(request, pk):

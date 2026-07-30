@@ -177,11 +177,11 @@
       </section>
 
       <section class="cardx">
-        <h2>Sinal opcional</h2>
-        <p class="muted">Sinal e pagamento parcial reduzem o saldo, mas nao quitam a locacao enquanto houver valor em aberto.</p>
+        <h2>Pagamento inicial opcional</h2>
+        <p class="muted">Informe qualquer valor entre R$ 0,01 e o total contratado. Se pagar o total, a locacao ja nasce quitada.</p>
         <div class="grid">
           <div>
-            <label class="form-label">Valor do sinal</label>
+            <label class="form-label">Valor do pagamento inicial</label>
             {{ locacao_form.sinal_valor }}
             {{ locacao_form.sinal_valor.errors }}
           </div>
@@ -191,9 +191,15 @@
             {{ locacao_form.sinal_forma_pagamento.errors }}
           </div>
           <div>
-            <label class="form-label">Observacao do sinal</label>
+            <label class="form-label">Observacao do pagamento inicial</label>
             {{ locacao_form.sinal_observacao }}
             {{ locacao_form.sinal_observacao.errors }}
+          </div>
+          <div>
+            <label class="form-label">Vencimento do saldo</label>
+            {{ locacao_form.data_vencimento_saldo }}
+            {{ locacao_form.data_vencimento_saldo.errors }}
+            <div class="form-text">Se ficar em branco, usa a data da entrega.</div>
           </div>
         </div>
       </section>
