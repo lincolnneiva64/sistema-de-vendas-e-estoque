@@ -226,6 +226,79 @@ def _avaliar_disponibilidade_dinamica(data_entrega, data_prevista_devolucao, jog
     }
 
 
+def resumo_valores_dinamico(request):
+    data_entrega = parse_date(request.GET.get("data_entrega", ""))
+    data_prevista_devolucao = parse_date(
+        request.GET.get("data_prevista_devolucao", "")
+    )
+
+    def decimal_nao_negativo(valor):
+        try:
+            numero = Decimal(
+                str(valor or "0").strip().replace(",", ".")
+            ).quantize(Decimal("0.01"))
+        except Exception:
+            return Decimal("0.00")
+        return max(numero, Decimal("0.00"))
+
+    itens = [
+        {
+            "tipo": ItemLocacao.TIPO_JOGO,
+            "quantidade": _inteiro_nao_negativo(
+                request.GET.get("jogos")
+            ),
+            "preco_diaria": decimal_nao_negativo(
+                request.GET.get("preco_jogo_diaria")
+            ),
+        },
+        {
+            "tipo": ItemLocacao.TIPO_MESA_AVULSA,
+            "quantidade": _inteiro_nao_negativo(
+                request.GET.get("mesas_avulsas")
+            ),
+            "preco_diaria": decimal_nao_negativo(
+                request.GET.get("preco_mesa_avulsa_diaria")
+            ),
+        },
+        {
+            "tipo": ItemLocacao.TIPO_CADEIRA_AVULSA,
+            "quantidade": _inteiro_nao_negativo(
+                request.GET.get("cadeiras_avulsas")
+            ),
+            "preco_diaria": decimal_nao_negativo(
+                request.GET.get("preco_cadeira_avulsa_diaria")
+            ),
+        },
+    ]
+
+    if not data_entrega or not data_prevista_devolucao:
+        resumo = {
+            "diarias": 0,
+            "subtotal_jogos": Decimal("0.00"),
+            "subtotal_mesas_avulsas": Decimal("0.00"),
+            "subtotal_cadeiras_avulsas": Decimal("0.00"),
+            "total": Decimal("0.00"),
+        }
+    else:
+        resumo = _resumo_valores_locacao(
+            data_entrega,
+            data_prevista_devolucao,
+            itens,
+        )
+
+    return JsonResponse({
+        "diarias": resumo["diarias"],
+        "subtotal_jogos": str(resumo["subtotal_jogos"]),
+        "subtotal_mesas_avulsas": str(
+            resumo["subtotal_mesas_avulsas"]
+        ),
+        "subtotal_cadeiras_avulsas": str(
+            resumo["subtotal_cadeiras_avulsas"]
+        ),
+        "total": str(resumo["total"]),
+    })
+
+
 def disponibilidade_dinamica(request):
     data_entrega = parse_date(request.GET.get("data_entrega", ""))
     data_prevista_devolucao = parse_date(request.GET.get("data_prevista_devolucao", ""))

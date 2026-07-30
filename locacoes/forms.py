@@ -118,14 +118,16 @@ class LocacaoForm(forms.Form):
         max_length=40,
         widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
     )
-    pessoa_avulsa_endereco = forms.CharField(
+    endereco_entrega = forms.CharField(
         required=False,
-        max_length=255,
         widget=forms.Textarea(
-            attrs={"class": "form-control", "rows": 2}
+            attrs={
+                "class": "form-control",
+                "rows": 2,
+                "data-enter-next": "id_faixa_preco",
+            }
         ),
     )
-    endereco_entrega = forms.CharField(required=False, widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}))
     data_entrega = forms.DateField(widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
     horario_entrega = forms.TimeField(widget=forms.TimeInput(attrs={"class": "form-control", "type": "time"}))
     data_evento = forms.DateField(widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
@@ -192,20 +194,9 @@ class LocacaoForm(forms.Form):
 
         cleaned_data["pessoa_avulsa_nome"] = pessoa_avulsa_nome
         cleaned_data["pessoa_avulsa_telefone"] = pessoa_avulsa_telefone
-        pessoa_avulsa_endereco = (
-            cleaned_data.get("pessoa_avulsa_endereco") or ""
-        ).strip()
-
         endereco_entrega = (
             cleaned_data.get("endereco_entrega") or ""
         ).strip()
-
-        if (
-            tipo_pessoa == Locacao.TIPO_PESSOA_AVULSA
-            and not endereco_entrega
-            and pessoa_avulsa_endereco
-        ):
-            endereco_entrega = pessoa_avulsa_endereco
 
         if not endereco_entrega:
             self.add_error(
@@ -213,7 +204,6 @@ class LocacaoForm(forms.Form):
                 "Informe o endereco da entrega.",
             )
 
-        cleaned_data["pessoa_avulsa_endereco"] = pessoa_avulsa_endereco
         cleaned_data["endereco_entrega"] = endereco_entrega
         cleaned_data["observacao"] = (cleaned_data.get("observacao") or "").strip()
         cleaned_data["sinal_observacao"] = (cleaned_data.get("sinal_observacao") or "").strip()

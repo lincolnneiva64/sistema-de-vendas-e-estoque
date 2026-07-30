@@ -23,10 +23,78 @@
     .availability-message { border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; background: #fff; color: #475569; font-weight: 800; }
     .availability-message.disponivel { border-color: #86efac; background: #f0fdf4; color: #166534; }
     .availability-message.indisponivel { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+    .resumo-valores {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .resumo-item {
+      background: #fff7ed;
+      border: 1px solid #fdba74;
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .resumo-item span {
+      display: block;
+      color: #64748b;
+      font-size: 0.82rem;
+      font-weight: 750;
+    }
+    .resumo-item strong {
+      display: block;
+      color: #7c2d12;
+      font-size: 1.12rem;
+      margin-top: 3px;
+    }
+    .resumo-item.total {
+      background: #ffedd5;
+      border-color: #f97316;
+    }
+    .pagamento-resumo {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .pagamento-status {
+      display: none;
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border: 1px solid #86efac;
+      border-radius: 8px;
+      background: #f0fdf4;
+      color: #166534;
+      font-weight: 850;
+    }
+    .pagamento-status.visivel {
+      display: block;
+    }
+    .pagamento-status.erro {
+      display: block;
+      border-color: #fecaca;
+      background: #fef2f2;
+      color: #991b1b;
+    }
     .errorlist { color: #b91c1c; margin: 6px 0 0; padding-left: 18px; }
     .btn-locacoes { background: var(--locacoes-orange); border-color: var(--locacoes-orange); color: #fff; font-weight: 800; }
     .btn-locacoes:hover, .btn-locacoes:focus { background: #c2410c; border-color: #c2410c; color: #fff; }
-    @media (max-width: 760px) { .top, .grid, .grid-3, .availability { display: block; } .grid > *, .grid-3 > *, .availability > * { margin-bottom: 10px; } }
+    @media (max-width: 760px) {
+      .top,
+      .grid,
+      .grid-3,
+      .availability,
+      .resumo-valores,
+      .pagamento-resumo {
+        display: block;
+      }
+      .grid > *,
+      .grid-3 > *,
+      .availability > *,
+      .resumo-valores > *,
+      .pagamento-resumo > * {
+        margin-bottom: 10px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -45,7 +113,12 @@
       {% endfor %}
     {% endif %}
 
-    <form method="post" data-enter-nav data-disponibilidade-url="{% url 'locacoes:disponibilidade_dinamica' %}">
+    <form
+      method="post"
+      data-enter-nav
+      data-disponibilidade-url="{% url 'locacoes:disponibilidade_dinamica' %}"
+      data-resumo-url="{% url 'locacoes:resumo_valores_dinamico' %}"
+    >
       {% csrf_token %}
       {{ locacao_form.non_field_errors }}
       {{ itens_form.non_field_errors }}
@@ -72,12 +145,6 @@
             <label class="form-label">Telefone avulso</label>
             {{ locacao_form.pessoa_avulsa_telefone }}
             {{ locacao_form.pessoa_avulsa_telefone.errors }}
-          </div>
-          <div class="col-span">
-            <label class="form-label">Endereco avulso</label>
-            <div class="form-text">Endereco alternativo onde a locacao sera entregue.</div>
-            {{ locacao_form.pessoa_avulsa_endereco }}
-            {{ locacao_form.pessoa_avulsa_endereco.errors }}
           </div>
         </div>
       </section>
@@ -159,6 +226,32 @@
         </div>
       </section>
 
+      <section class="cardx" id="resumoLocacao">
+        <h2>Resumo da locacao</h2>
+        <div class="resumo-valores">
+          <div class="resumo-item">
+            <span>Quantidade de diarias</span>
+            <strong id="resumoDiarias">0</strong>
+          </div>
+          <div class="resumo-item">
+            <span>Subtotal de jogos</span>
+            <strong id="resumoJogos">R$ 0,00</strong>
+          </div>
+          <div class="resumo-item">
+            <span>Subtotal de mesas avulsas</span>
+            <strong id="resumoMesas">R$ 0,00</strong>
+          </div>
+          <div class="resumo-item">
+            <span>Subtotal de cadeiras avulsas</span>
+            <strong id="resumoCadeiras">R$ 0,00</strong>
+          </div>
+          <div class="resumo-item total">
+            <span>Total contratado</span>
+            <strong id="resumoTotal">R$ 0,00</strong>
+          </div>
+        </div>
+      </section>
+
       <section class="cardx">
         <h2>Disponibilidade</h2>
         <p id="disponibilidadeMensagem" class="availability-message mb-3">Informe datas e itens para verificar a disponibilidade.</p>
@@ -182,6 +275,24 @@
       <section class="cardx">
         <h2>Pagamento inicial opcional</h2>
         <p class="muted">Informe qualquer valor entre R$ 0,01 e o total contratado. Se pagar o total, a locacao ja nasce quitada.</p>
+
+        <div class="pagamento-resumo">
+          <div class="resumo-item total">
+            <span>Total contratado</span>
+            <strong id="pagamentoTotal">R$ 0,00</strong>
+          </div>
+          <div class="resumo-item">
+            <span>Sinal / pagamento inicial</span>
+            <strong id="pagamentoInicial">R$ 0,00</strong>
+          </div>
+          <div class="resumo-item">
+            <span>Saldo restante</span>
+            <strong id="pagamentoSaldo">R$ 0,00</strong>
+          </div>
+        </div>
+
+        <div id="pagamentoStatus" class="pagamento-status"></div>
+
         <div class="grid">
           <div>
             <label class="form-label">Valor do pagamento inicial</label>
@@ -219,9 +330,28 @@
       const form = document.querySelector("form[data-disponibilidade-url]");
       if (!form) return;
 
-      const enderecoAvulso = document.getElementById("id_pessoa_avulsa_endereco");
-      const enderecoEntrega = document.getElementById("id_endereco_entrega");
       const disponibilidadeMensagem = document.getElementById("disponibilidadeMensagem");
+      const resumoDiarias = document.getElementById("resumoDiarias");
+      const resumoJogos = document.getElementById("resumoJogos");
+      const resumoMesas = document.getElementById("resumoMesas");
+      const resumoCadeiras = document.getElementById("resumoCadeiras");
+      const resumoTotal = document.getElementById("resumoTotal");
+      const pagamentoTotal = document.getElementById("pagamentoTotal");
+      const pagamentoInicial = document.getElementById("pagamentoInicial");
+      const pagamentoSaldo = document.getElementById("pagamentoSaldo");
+      const pagamentoStatus = document.getElementById("pagamentoStatus");
+      const campoSinal = document.getElementById("id_sinal_valor");
+
+      const camposResumo = [
+        "id_data_entrega",
+        "id_data_prevista_devolucao",
+        "id_jogos",
+        "id_preco_jogo_diaria",
+        "id_mesas_avulsas",
+        "id_preco_mesa_avulsa_diaria",
+        "id_cadeiras_avulsas",
+        "id_preco_cadeira_avulsa_diaria",
+      ].map((id) => document.getElementById(id)).filter(Boolean);
       const camposDisponibilidade = [
         "id_data_entrega",
         "id_data_prevista_devolucao",
@@ -230,12 +360,146 @@
         "id_cadeiras_avulsas",
       ].map((id) => document.getElementById(id)).filter(Boolean);
 
-      function copiarEnderecoAvulso() {
-        if (!enderecoAvulso || !enderecoEntrega) return;
-        const valor = enderecoAvulso.value.trim();
-        if (valor) {
-          enderecoEntrega.value = valor;
+      function numero(valor) {
+        const convertido = Number(
+          String(valor || "0").replace(",", ".")
+        );
+        return Number.isFinite(convertido) ? convertido : 0;
+      }
+
+      function moeda(valor) {
+        return numero(valor).toLocaleString("pt-BR", {
+          style: "currency",
+          currency: "BRL",
+        });
+      }
+
+      let totalContratadoAtual = 0;
+
+      function atualizarResumoPagamento() {
+        const sinal = Math.max(numero(campoSinal?.value), 0);
+        const saldo = Math.max(totalContratadoAtual - sinal, 0);
+
+        if (pagamentoTotal) {
+          pagamentoTotal.textContent = moeda(totalContratadoAtual);
         }
+        if (pagamentoInicial) {
+          pagamentoInicial.textContent = moeda(sinal);
+        }
+        if (pagamentoSaldo) {
+          pagamentoSaldo.textContent = moeda(saldo);
+        }
+
+        if (!pagamentoStatus) return;
+
+        pagamentoStatus.classList.remove("visivel", "erro");
+        pagamentoStatus.textContent = "";
+
+        if (campoSinal) {
+          campoSinal.max = totalContratadoAtual.toFixed(2);
+
+          if (sinal > totalContratadoAtual) {
+            campoSinal.setCustomValidity(
+              "O pagamento inicial nao pode ser maior que o total contratado."
+            );
+            pagamentoStatus.textContent =
+              "Pagamento inicial maior que o total contratado.";
+            pagamentoStatus.classList.add("erro");
+            return;
+          }
+
+          campoSinal.setCustomValidity("");
+        }
+
+        if (
+          totalContratadoAtual > 0 &&
+          Math.abs(sinal - totalContratadoAtual) < 0.005
+        ) {
+          pagamentoStatus.textContent = "Locacao quitada no ato";
+          pagamentoStatus.classList.add("visivel");
+        }
+      }
+
+      function aplicarResumo(dados) {
+        totalContratadoAtual = numero(dados.total);
+
+        if (resumoDiarias) {
+          resumoDiarias.textContent = dados.diarias || 0;
+        }
+        if (resumoJogos) {
+          resumoJogos.textContent = moeda(dados.subtotal_jogos);
+        }
+        if (resumoMesas) {
+          resumoMesas.textContent = moeda(
+            dados.subtotal_mesas_avulsas
+          );
+        }
+        if (resumoCadeiras) {
+          resumoCadeiras.textContent = moeda(
+            dados.subtotal_cadeiras_avulsas
+          );
+        }
+        if (resumoTotal) {
+          resumoTotal.textContent = moeda(dados.total);
+        }
+
+        atualizarResumoPagamento();
+      }
+
+      let temporizadorResumo = null;
+
+      function atualizarResumoLocacao() {
+        window.clearTimeout(temporizadorResumo);
+
+        temporizadorResumo = window.setTimeout(function () {
+          const params = new URLSearchParams({
+            data_entrega:
+              document.getElementById("id_data_entrega")?.value || "",
+            data_prevista_devolucao:
+              document.getElementById(
+                "id_data_prevista_devolucao"
+              )?.value || "",
+            jogos:
+              document.getElementById("id_jogos")?.value || "0",
+            preco_jogo_diaria:
+              document.getElementById(
+                "id_preco_jogo_diaria"
+              )?.value || "0",
+            mesas_avulsas:
+              document.getElementById(
+                "id_mesas_avulsas"
+              )?.value || "0",
+            preco_mesa_avulsa_diaria:
+              document.getElementById(
+                "id_preco_mesa_avulsa_diaria"
+              )?.value || "0",
+            cadeiras_avulsas:
+              document.getElementById(
+                "id_cadeiras_avulsas"
+              )?.value || "0",
+            preco_cadeira_avulsa_diaria:
+              document.getElementById(
+                "id_preco_cadeira_avulsa_diaria"
+              )?.value || "0",
+          });
+
+          fetch(form.dataset.resumoUrl + "?" + params.toString(), {
+            headers: {
+              "X-Requested-With": "XMLHttpRequest",
+            },
+          })
+            .then((response) => response.json())
+            .then(aplicarResumo)
+            .catch(function () {
+              aplicarResumo({
+                diarias: 0,
+                subtotal_jogos: "0.00",
+                subtotal_mesas_avulsas: "0.00",
+                subtotal_cadeiras_avulsas: "0.00",
+                total: "0.00",
+              });
+            });
+        }, 120);
       }
 
       function atualizarMensagemDisponibilidade(dados) {
@@ -271,13 +535,27 @@
         }, 180);
       }
 
-      enderecoAvulso?.addEventListener("input", copiarEnderecoAvulso);
-      enderecoAvulso?.addEventListener("change", copiarEnderecoAvulso);
+      camposResumo.forEach(function (campo) {
+        campo.addEventListener("input", atualizarResumoLocacao);
+        campo.addEventListener("change", atualizarResumoLocacao);
+      });
+
+      campoSinal?.addEventListener(
+        "input",
+        atualizarResumoPagamento
+      );
+      campoSinal?.addEventListener(
+        "change",
+        atualizarResumoPagamento
+      );
+
       camposDisponibilidade.forEach(function (campo) {
         campo.addEventListener("input", verificarDisponibilidade);
         campo.addEventListener("change", verificarDisponibilidade);
       });
       verificarDisponibilidade();
+      atualizarResumoLocacao();
+      atualizarResumoPagamento();
     })();
   </script>
 </body>

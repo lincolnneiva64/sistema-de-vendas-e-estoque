@@ -275,7 +275,6 @@ class LocacoesReservasTests(TestCase):
             "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
             "pessoa_avulsa_nome": "Maria Avulsa",
             "pessoa_avulsa_telefone": "91999990000",
-            "pessoa_avulsa_endereco": "Rua da Festa, 10",
             "endereco_entrega": "Rua da Festa, 10",
             "data_entrega": date(2026, 8, 10),
             "horario_entrega": "10:00",
@@ -392,7 +391,6 @@ class LocacoesOperacaoTests(TestCase):
             "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
             "pessoa_avulsa_nome": "Joao Evento",
             "pessoa_avulsa_telefone": "91988887777",
-            "pessoa_avulsa_endereco": "Rua A, 1",
             "endereco_entrega": "Rua A, 1",
             "data_entrega": date(2026, 9, 1),
             "horario_entrega": "09:00",
@@ -547,7 +545,6 @@ class LocacoesPagamentosTermoTests(TestCase):
             "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
             "pessoa_avulsa_nome": "Ana Locacao",
             "pessoa_avulsa_telefone": "91999990000",
-            "pessoa_avulsa_endereco": "Rua B, 2",
             "endereco_entrega": "Rua B, 2",
             "data_entrega": date(2026, 10, 1),
             "horario_entrega": "09:00",
@@ -686,7 +683,6 @@ class LocacoesAlertasCobrancaTests(TestCase):
             "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
             "pessoa_avulsa_nome": "Cliente Locacao Etapa 6",
             "pessoa_avulsa_telefone": "91999990000",
-            "pessoa_avulsa_endereco": "Rua L, 6",
             "endereco_entrega": "Rua L, 6",
             "data_entrega": data_entrega,
             "horario_entrega": "09:30",
@@ -824,7 +820,6 @@ class LocacoesAlertasCobrancaTests(TestCase):
                 "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
                 "pessoa_avulsa_nome": "Quitada Na Reserva",
                 "pessoa_avulsa_telefone": "91999990000",
-                "pessoa_avulsa_endereco": "Rua Q, 1",
                 "endereco_entrega": "Rua Q, 1",
                 "data_entrega": (self.hoje - timedelta(days=2)).isoformat(),
                 "horario_entrega": "09:00",
@@ -885,7 +880,6 @@ class LocacoesChecklistOperacionalTests(TestCase):
             "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
             "pessoa_avulsa_nome": "Cliente Checklist",
             "pessoa_avulsa_telefone": "91999990000",
-            "pessoa_avulsa_endereco": "Rua Checklist, 1",
             "endereco_entrega": "Rua Checklist, 1",
             "data_entrega": data_entrega,
             "horario_entrega": "09:30",
@@ -1085,7 +1079,6 @@ class LocacoesFormularioReservaTests(TestCase):
             "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
             "pessoa_avulsa_nome": "Cliente Formulario",
             "pessoa_avulsa_telefone": "91999990000",
-            "pessoa_avulsa_endereco": "Rua Alternativa, 123",
             "endereco_entrega": "Rua Entrega, 456",
             "data_entrega": self.hoje.isoformat(),
             "horario_entrega": "09:00",
@@ -1114,7 +1107,6 @@ class LocacoesFormularioReservaTests(TestCase):
                 "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
                 "pessoa_avulsa_nome": extras.pop("pessoa_avulsa_nome", "Ocupante"),
                 "pessoa_avulsa_telefone": "91999990000",
-                "pessoa_avulsa_endereco": "Rua O, 1",
                 "endereco_entrega": "Rua O, 1",
                 "data_entrega": extras.pop("data_entrega", self.hoje),
                 "horario_entrega": "09:00",
@@ -1143,16 +1135,100 @@ class LocacoesFormularioReservaTests(TestCase):
         base.update(params)
         return self.client.get(reverse("locacoes:disponibilidade_dinamica"), base, secure=True).json()
 
-    def test_endereco_avulso_preenche_endereco_de_entrega_ao_salvar_sem_js(self):
-        response = self.client.post(
+    def test_tela_exibe_apenas_endereco_da_entrega(self):
+        response = self.client.get(
             reverse("locacoes:nova"),
-            self.dados_post(endereco_entrega="", pessoa_avulsa_endereco="Rua Operacional, 77"),
             secure=True,
         )
 
-        locacao = Locacao.objects.get(pessoa_avulsa_nome="Cliente Formulario")
-        self.assertRedirects(response, reverse("locacoes:detalhe", kwargs={"pk": locacao.pk}), fetch_redirect_response=False)
-        self.assertEqual(locacao.endereco_entrega, "Rua Operacional, 77")
+        self.assertContains(
+            response,
+            'name="endereco_entrega"',
+        )
+        self.assertNotContains(
+            response,
+            'name="pessoa_avulsa_endereco"',
+        )
+        self.assertNotContains(
+            response,
+            "Endereco avulso",
+        )
+
+    def test_enter_endereco_entrega_vai_para_faixa_preco(self):
+        response = self.client.get(
+            reverse("locacoes:nova"),
+            secure=True,
+        )
+
+        self.assertContains(
+            response,
+            'id="id_endereco_entrega"',
+        )
+        self.assertContains(
+            response,
+            'data-enter-next="id_faixa_preco"',
+        )
+
+    def test_resumo_valores_dinamico_usa_regra_do_servidor(self):
+        response = self.client.get(
+            reverse("locacoes:resumo_valores_dinamico"),
+            {
+                "data_entrega": self.hoje.isoformat(),
+                "data_prevista_devolucao": (
+                    self.hoje + timedelta(days=1)
+                ).isoformat(),
+                "jogos": "1",
+                "preco_jogo_diaria": "8.00",
+                "mesas_avulsas": "2",
+                "preco_mesa_avulsa_diaria": "4.00",
+                "cadeiras_avulsas": "3",
+                "preco_cadeira_avulsa_diaria": "1.50",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        dados = response.json()
+
+        self.assertEqual(dados["diarias"], 1)
+        self.assertEqual(
+            Decimal(dados["subtotal_jogos"]),
+            Decimal("8.00"),
+        )
+        self.assertEqual(
+            Decimal(dados["subtotal_mesas_avulsas"]),
+            Decimal("8.00"),
+        )
+        self.assertEqual(
+            Decimal(dados["subtotal_cadeiras_avulsas"]),
+            Decimal("4.50"),
+        )
+        self.assertEqual(
+            Decimal(dados["total"]),
+            Decimal("20.50"),
+        )
+
+    def test_pagamento_inicial_acima_do_total_nao_salva(self):
+        response = self.client.post(
+            reverse("locacoes:nova"),
+            self.dados_post(
+                sinal_valor="17.00",
+                sinal_forma_pagamento=PagamentoLocacao.FORMA_PIX,
+            ),
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Pagamento inicial nao pode ser maior que o total contratado.",
+        )
+        self.assertFalse(
+            Locacao.objects.filter(
+                pessoa_avulsa_nome="Cliente Formulario"
+            ).exists()
+        )
 
     def test_responsavel_interno_nao_aparece_como_digitacao_manual(self):
         response = self.client.get(reverse("locacoes:nova"), secure=True)

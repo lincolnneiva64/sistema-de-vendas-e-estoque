@@ -10,6 +10,7 @@ urlpatterns = [
     path("nova/", views.nova, name="nova"),
     path("configuracoes/", views.configuracoes, name="configuracoes"),
     path("disponibilidade/", views.disponibilidade_dinamica, name="disponibilidade_dinamica"),
+    path("resumo-valores/", views.resumo_valores_dinamico, name="resumo_valores_dinamico"),
     path("checklist-operacional/", views.checklist_operacional, name="checklist_operacional"),
     path("tarefas-operacionais/<int:pk>/confirmar/", views.confirmar_tarefa_operacional, name="confirmar_tarefa_operacional"),
     path("tarefas-operacionais/<int:pk>/nao-possivel/", views.tarefa_operacional_nao_possivel, name="tarefa_operacional_nao_possivel"),
