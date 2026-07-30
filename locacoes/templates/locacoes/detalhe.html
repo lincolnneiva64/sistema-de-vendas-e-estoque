@@ -21,6 +21,9 @@
     a:not(.btn) { color: var(--locacoes-orange-dark); font-weight: 800; }
     .btn-locacoes { background: var(--locacoes-orange); border-color: var(--locacoes-orange); color: #fff; font-weight: 800; }
     .btn-locacoes:hover, .btn-locacoes:focus { background: #c2410c; border-color: #c2410c; color: #fff; }
+    .operacional-lista { display: grid; gap: 10px; }
+    .operacional-item { border: 1px solid #fed7aa; border-radius: 8px; padding: 12px; background: #fff7ed; }
+    .operacional-item strong { color: #9a3412; }
     @media (max-width: 760px) { .top, .grid { display: block; } .grid > * { margin-bottom: 10px; } }
   </style>
 </head>
@@ -113,6 +116,25 @@
         </div>
         <button class="btn btn-success mt-2" type="submit">Salvar vencimento</button>
       </form>
+    </section>
+
+    <section class="cardx">
+      <h2>Tarefa operacional</h2>
+      {% if tarefas_operacionais %}
+        <div class="operacional-lista">
+          {% for tarefa in tarefas_operacionais %}
+            <div class="operacional-item">
+              <strong>{{ tarefa.get_tipo_display }}</strong><br>
+              {{ tarefa.data_agendada|date:"d/m/Y" }}{% if tarefa.horario_agendado %} as {{ tarefa.horario_agendado|time:"H:i" }}{% else %} sem horario marcado{% endif %}
+              <div class="mt-2">
+                <a class="btn btn-locacoes btn-sm" href="{% url 'locacoes:abrir_tarefa_operacional' locacao.id tarefa.tipo %}">Abrir na checklist</a>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="muted mb-0">Nenhuma entrega ou recolhimento pendente para esta locacao.</p>
+      {% endif %}
     </section>
 
     <section class="cardx">

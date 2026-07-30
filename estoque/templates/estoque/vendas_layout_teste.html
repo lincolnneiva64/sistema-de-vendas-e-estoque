@@ -600,6 +600,40 @@ select {
     width: 100%;
     min-height: 38px;
 }
+.locacoes-operacionais-venda {
+    top: 238px;
+}
+.locacoes-operacionais-venda .atalhos-venda-toggle {
+    background: #ea580c;
+    border-color: #ea580c;
+    min-height: 154px;
+}
+.locacoes-operacionais-venda.alerta .atalhos-venda-toggle {
+    background: #dc2626;
+    border-color: #dc2626;
+    animation: locacoesOperacionaisPulso 1s ease-in-out infinite;
+}
+.locacoes-operacionais-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    min-height: 22px;
+    margin-top: 8px;
+    border-radius: 999px;
+    background: #fff;
+    color: #9a3412;
+    font-size: 12px;
+    font-weight: 950;
+    writing-mode: horizontal-tb;
+}
+.locacoes-operacionais-venda.alerta .locacoes-operacionais-badge {
+    color: #991b1b;
+}
+@keyframes locacoesOperacionaisPulso {
+    0%, 100% { box-shadow: 0 10px 24px rgba(220, 38, 38, 0.24); transform: scale(1); }
+    50% { box-shadow: 0 10px 30px rgba(220, 38, 38, 0.58); transform: scale(1.04); }
+}
 .acao-venda-btn {
     height: 32px;
     border: 1px solid #64748b;
@@ -2156,6 +2190,19 @@ td:first-child {
                 </div>
             </div>
         </aside>
+        <aside class="atalhos-venda locacoes-operacionais-venda {% if locacoes_operacionais.alerta %}alerta{% endif %}" id="locacoesOperacionaisVenda" aria-label="Entregas e Recolhimentos">
+            <button type="button" class="atalhos-venda-toggle" id="btnLocacoesOperacionaisVenda" aria-expanded="false" aria-controls="locacoesOperacionaisVendaPainel">
+                Entregas e Recolhimentos
+                <span class="locacoes-operacionais-badge">{{ locacoes_operacionais.total }}</span>
+            </button>
+            <div class="atalhos-venda-painel" id="locacoesOperacionaisVendaPainel">
+                <h2 class="atalhos-venda-titulo">Entregas e Recolhimentos</h2>
+                <div class="atalhos-venda-lista">
+                    <a href="{% url 'locacoes:checklist_operacional' %}" class="acao-venda-btn secundaria">Abrir checklist do dia</a>
+                    <a href="{% url 'locacoes:lista' %}" class="acao-venda-btn secundaria">Loca&ccedil;&otilde;es</a>
+                </div>
+            </div>
+        </aside>
         <div id="vendaGravadaBloco" class="venda-gravada-bloco" role="status" aria-live="polite">
             <div id="vendaGravadaTexto" class="venda-gravada-texto">Venda gravada com sucesso.</div>
             <div class="venda-gravada-acoes">
@@ -2376,6 +2423,8 @@ const btnConsultarVendas = document.getElementById("btnConsultarVendas");
 const btnContasReceberVenda = document.getElementById("btnContasReceberVenda");
 const atalhosVenda = document.getElementById("atalhosVenda");
 const btnAtalhosVenda = document.getElementById("btnAtalhosVenda");
+const locacoesOperacionaisVenda = document.getElementById("locacoesOperacionaisVenda");
+const btnLocacoesOperacionaisVenda = document.getElementById("btnLocacoesOperacionaisVenda");
 const vendaToast = document.getElementById("vendaToast");
 const vendaGravadaBloco = document.getElementById("vendaGravadaBloco");
 const vendaGravadaTexto = document.getElementById("vendaGravadaTexto");
@@ -4443,22 +4492,42 @@ function alternarAtalhosVenda(forcarAberto) {
     btnAtalhosVenda.setAttribute("aria-expanded", abrir ? "true" : "false");
 }
 
+function alternarLocacoesOperacionaisVenda(forcarAberto) {
+    if (!locacoesOperacionaisVenda || !btnLocacoesOperacionaisVenda) return;
+    const abrir = typeof forcarAberto === "boolean" ? forcarAberto : !locacoesOperacionaisVenda.classList.contains("aberto");
+    locacoesOperacionaisVenda.classList.toggle("aberto", abrir);
+    btnLocacoesOperacionaisVenda.setAttribute("aria-expanded", abrir ? "true" : "false");
+}
+
 btnAtalhosVenda?.addEventListener("click", (event) => {
     event.stopPropagation();
     alternarAtalhosVenda();
+    alternarLocacoesOperacionaisVenda(false);
+});
+
+btnLocacoesOperacionaisVenda?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    alternarLocacoesOperacionaisVenda();
+    alternarAtalhosVenda(false);
 });
 
 atalhosVenda?.addEventListener("click", (event) => {
     event.stopPropagation();
 });
 
+locacoesOperacionaisVenda?.addEventListener("click", (event) => {
+    event.stopPropagation();
+});
+
 document.addEventListener("click", () => {
     alternarAtalhosVenda(false);
+    alternarLocacoesOperacionaisVenda(false);
 });
 
 document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
         alternarAtalhosVenda(false);
+        alternarLocacoesOperacionaisVenda(false);
     }
 });
 

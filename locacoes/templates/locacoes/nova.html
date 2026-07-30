@@ -20,6 +20,9 @@
     .metric { background: var(--locacoes-orange-soft); border: 1px solid #fdba74; border-radius: 8px; padding: 10px; }
     .metric span { display: block; color: #64748b; font-size: 0.82rem; font-weight: 750; }
     .metric strong { display: block; font-size: 1.25rem; }
+    .availability-message { border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; background: #fff; color: #475569; font-weight: 800; }
+    .availability-message.disponivel { border-color: #86efac; background: #f0fdf4; color: #166534; }
+    .availability-message.indisponivel { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
     .errorlist { color: #b91c1c; margin: 6px 0 0; padding-left: 18px; }
     .btn-locacoes { background: var(--locacoes-orange); border-color: var(--locacoes-orange); color: #fff; font-weight: 800; }
     .btn-locacoes:hover, .btn-locacoes:focus { background: #c2410c; border-color: #c2410c; color: #fff; }
@@ -42,7 +45,7 @@
       {% endfor %}
     {% endif %}
 
-    <form method="post" data-enter-nav>
+    <form method="post" data-enter-nav data-disponibilidade-url="{% url 'locacoes:disponibilidade_dinamica' %}">
       {% csrf_token %}
       {{ locacao_form.non_field_errors }}
       {{ itens_form.non_field_errors }}
@@ -72,13 +75,9 @@
           </div>
           <div class="col-span">
             <label class="form-label">Endereco avulso</label>
+            <div class="form-text">Endereco alternativo onde a locacao sera entregue.</div>
             {{ locacao_form.pessoa_avulsa_endereco }}
             {{ locacao_form.pessoa_avulsa_endereco.errors }}
-          </div>
-          <div>
-            <label class="form-label">Responsavel interno</label>
-            {{ locacao_form.responsavel }}
-            {{ locacao_form.responsavel.errors }}
           </div>
         </div>
       </section>
@@ -102,11 +101,6 @@
             {{ locacao_form.data_entrega.errors }}
           </div>
           <div>
-            <label class="form-label">Horario combinado de entrega</label>
-            {{ locacao_form.horario_entrega }}
-            {{ locacao_form.horario_entrega.errors }}
-          </div>
-          <div>
             <label class="form-label">Data do evento</label>
             {{ locacao_form.data_evento }}
             {{ locacao_form.data_evento.errors }}
@@ -115,6 +109,11 @@
             <label class="form-label">Horario do evento</label>
             {{ locacao_form.horario_evento }}
             {{ locacao_form.horario_evento.errors }}
+          </div>
+          <div>
+            <label class="form-label">Horario combinado de entrega</label>
+            {{ locacao_form.horario_entrega }}
+            {{ locacao_form.horario_entrega.errors }}
           </div>
           <div>
             <label class="form-label">Data prevista de devolucao</label>
@@ -162,6 +161,7 @@
 
       <section class="cardx">
         <h2>Disponibilidade</h2>
+        <p id="disponibilidadeMensagem" class="availability-message mb-3">Informe datas e itens para verificar a disponibilidade.</p>
         {% if disponibilidade %}
           <div class="availability">
             <div class="metric"><span>Saldo fisico mesas</span><strong>{{ disponibilidade.saldo_mesas }}</strong></div>
@@ -175,7 +175,7 @@
           </div>
           <p class="muted mt-2 mb-0">Diarias calculadas: {{ disponibilidade.diarias }}</p>
         {% else %}
-          <p class="muted mb-0">Informe datas e itens para validar disponibilidade ao salvar.</p>
+          <p class="muted mb-0">A validacao final continua ocorrendo ao salvar.</p>
         {% endif %}
       </section>
 
@@ -214,5 +214,71 @@
     </form>
   </main>
   {% include "locacoes/includes/enter_nav.html" %}
+  <script>
+    (function () {
+      const form = document.querySelector("form[data-disponibilidade-url]");
+      if (!form) return;
+
+      const enderecoAvulso = document.getElementById("id_pessoa_avulsa_endereco");
+      const enderecoEntrega = document.getElementById("id_endereco_entrega");
+      const disponibilidadeMensagem = document.getElementById("disponibilidadeMensagem");
+      const camposDisponibilidade = [
+        "id_data_entrega",
+        "id_data_prevista_devolucao",
+        "id_jogos",
+        "id_mesas_avulsas",
+        "id_cadeiras_avulsas",
+      ].map((id) => document.getElementById(id)).filter(Boolean);
+
+      function copiarEnderecoAvulso() {
+        if (!enderecoAvulso || !enderecoEntrega) return;
+        const valor = enderecoAvulso.value.trim();
+        if (valor) {
+          enderecoEntrega.value = valor;
+        }
+      }
+
+      function atualizarMensagemDisponibilidade(dados) {
+        if (!disponibilidadeMensagem) return;
+        disponibilidadeMensagem.textContent = dados.mensagem || "Informe datas e itens para verificar a disponibilidade.";
+        disponibilidadeMensagem.classList.remove("disponivel", "indisponivel");
+        if (dados.status === "disponivel") {
+          disponibilidadeMensagem.classList.add("disponivel");
+        } else if (dados.status === "indisponivel") {
+          disponibilidadeMensagem.classList.add("indisponivel");
+        }
+      }
+
+      let temporizador = null;
+      function verificarDisponibilidade() {
+        window.clearTimeout(temporizador);
+        temporizador = window.setTimeout(function () {
+          const params = new URLSearchParams({
+            data_entrega: document.getElementById("id_data_entrega")?.value || "",
+            data_prevista_devolucao: document.getElementById("id_data_prevista_devolucao")?.value || "",
+            jogos: document.getElementById("id_jogos")?.value || "0",
+            mesas_avulsas: document.getElementById("id_mesas_avulsas")?.value || "0",
+            cadeiras_avulsas: document.getElementById("id_cadeiras_avulsas")?.value || "0",
+          });
+          fetch(form.dataset.disponibilidadeUrl + "?" + params.toString(), {
+            headers: { "X-Requested-With": "XMLHttpRequest" },
+          })
+            .then((response) => response.json())
+            .then(atualizarMensagemDisponibilidade)
+            .catch(function () {
+              atualizarMensagemDisponibilidade({ status: "incompleto", mensagem: "Informe datas e itens para verificar a disponibilidade." });
+            });
+        }, 180);
+      }
+
+      enderecoAvulso?.addEventListener("input", copiarEnderecoAvulso);
+      enderecoAvulso?.addEventListener("change", copiarEnderecoAvulso);
+      camposDisponibilidade.forEach(function (campo) {
+        campo.addEventListener("input", verificarDisponibilidade);
+        campo.addEventListener("change", verificarDisponibilidade);
+      });
+      verificarDisponibilidade();
+    })();
+  </script>
 </body>
 </html>

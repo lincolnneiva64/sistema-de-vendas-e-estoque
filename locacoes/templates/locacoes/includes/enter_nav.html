@@ -31,6 +31,17 @@
       if (indice < 0) return;
 
       event.preventDefault();
+      const destinoId = alvo.dataset.enterNext;
+      if (destinoId) {
+        const destino = document.getElementById(destinoId);
+        if (destino && campoNavegavel(destino)) {
+          destino.focus();
+          if (typeof destino.select === "function" && destino.matches("input:not([type='date']):not([type='time']):not([type='datetime-local'])")) {
+            destino.select();
+          }
+          return;
+        }
+      }
       const editaveis = camposEditaveis(formulario);
       const indiceEditavel = editaveis.indexOf(alvo);
       const submitPrincipal = formulario.querySelector("button[type='submit']:not([disabled])");

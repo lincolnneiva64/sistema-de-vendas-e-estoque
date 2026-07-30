@@ -716,6 +716,121 @@ class Locacao(models.Model):
             )
 
 
+class TarefaOperacionalLocacao(models.Model):
+    TIPO_ENTREGA = "entrega"
+    TIPO_RECOLHIMENTO = "recolhimento"
+    TIPO_CHOICES = [
+        (TIPO_ENTREGA, "Entrega"),
+        (TIPO_RECOLHIMENTO, "Recolhimento"),
+    ]
+
+    STATUS_PENDENTE = "pendente"
+    STATUS_CONFIRMADA = "confirmada"
+    STATUS_NAO_POSSIVEL = "nao_possivel"
+    STATUS_CHOICES = [
+        (STATUS_PENDENTE, "Pendente"),
+        (STATUS_CONFIRMADA, "Confirmada"),
+        (STATUS_NAO_POSSIVEL, "Nao foi possivel realizar"),
+    ]
+
+    locacao = models.ForeignKey(Locacao, on_delete=models.CASCADE, related_name="tarefas_operacionais")
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDENTE)
+    data_agendada = models.DateField()
+    horario_agendado = models.TimeField(blank=True, null=True)
+    confirmado_em = models.DateTimeField(blank=True, null=True)
+    confirmado_por = models.CharField(max_length=120, blank=True)
+    tentativa_em = models.DateTimeField(blank=True, null=True)
+    tentativa_por = models.CharField(max_length=120, blank=True)
+    motivo_nao_realizado = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["data_agendada", "horario_agendado", "id"]
+        unique_together = [("locacao", "tipo")]
+        verbose_name = "Tarefa operacional de locacao"
+        verbose_name_plural = "Tarefas operacionais de locacao"
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} - Locacao #{self.locacao_id}"
+
+    @property
+    def pendente_operacional(self):
+        return self.status in {self.STATUS_PENDENTE, self.STATUS_NAO_POSSIVEL}
+
+    def confirmar(self, responsavel="", observacao=""):
+        if self.status == self.STATUS_CONFIRMADA:
+            raise ValidationError("Esta tarefa operacional ja foi confirmada.")
+
+        responsavel = str(responsavel or "").strip()
+        observacao = str(observacao or "").strip()
+        agora = timezone.now()
+
+        with transaction.atomic():
+            tarefa = TarefaOperacionalLocacao.objects.select_for_update().select_related("locacao").get(pk=self.pk)
+            if tarefa.status == self.STATUS_CONFIRMADA:
+                raise ValidationError("Esta tarefa operacional ja foi confirmada.")
+
+            locacao = tarefa.locacao
+            if tarefa.tipo == self.TIPO_ENTREGA:
+                if locacao.status == Locacao.STATUS_RESERVADA:
+                    locacao.marcar_saiu_para_entrega(responsavel=responsavel, observacao="Saida registrada pela checklist operacional.")
+                    locacao.refresh_from_db()
+                if locacao.status != Locacao.STATUS_SAIU_PARA_ENTREGA:
+                    raise ValidationError("Esta locacao nao possui entrega pendente.")
+                locacao.confirmar_entrega(responsavel=responsavel, observacao=observacao)
+                evento_tipo = "checklist_entrega_confirmada"
+                descricao_padrao = "Entrega confirmada pela checklist operacional."
+            elif tarefa.tipo == self.TIPO_RECOLHIMENTO:
+                if locacao.status not in {Locacao.STATUS_ENTREGUE, Locacao.STATUS_PENDENTE_DEVOLUCAO}:
+                    raise ValidationError("Esta locacao nao possui recolhimento pendente.")
+                evento_tipo = "checklist_recolhimento_confirmado"
+                descricao_padrao = "Recolhimento confirmado pela checklist operacional."
+            else:
+                raise ValidationError("Tipo de tarefa operacional invalido.")
+
+            tarefa.status = self.STATUS_CONFIRMADA
+            tarefa.confirmado_em = agora
+            tarefa.confirmado_por = responsavel
+            tarefa.save(update_fields=["status", "confirmado_em", "confirmado_por", "atualizado_em"])
+            EventoLocacao.objects.create(
+                locacao=locacao,
+                tipo=evento_tipo,
+                descricao=observacao or descricao_padrao,
+                responsavel=responsavel,
+            )
+
+        self.refresh_from_db()
+        return self
+
+    def registrar_nao_possivel(self, motivo="", responsavel=""):
+        motivo = str(motivo or "").strip()
+        if not motivo:
+            raise ValidationError("Informe o motivo/observacao para manter a pendencia.")
+        if self.status == self.STATUS_CONFIRMADA:
+            raise ValidationError("Esta tarefa ja foi confirmada. Registre uma correcao antes de alterar.")
+
+        self.status = self.STATUS_NAO_POSSIVEL
+        self.tentativa_em = timezone.now()
+        self.tentativa_por = str(responsavel or "").strip()
+        self.motivo_nao_realizado = motivo
+        self.save(update_fields=[
+            "status",
+            "tentativa_em",
+            "tentativa_por",
+            "motivo_nao_realizado",
+            "atualizado_em",
+        ])
+        EventoLocacao.objects.create(
+            locacao=self.locacao,
+            tipo=f"checklist_{self.tipo}_nao_possivel",
+            descricao=motivo,
+            responsavel=self.tentativa_por,
+        )
+        return self
+
+
 class ItemLocacao(models.Model):
     TIPO_JOGO = "jogo"
     TIPO_MESA_AVULSA = "mesa_avulsa"

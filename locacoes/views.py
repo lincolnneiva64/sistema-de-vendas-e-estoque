@@ -1,7 +1,11 @@
+from decimal import Decimal
+
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.forms import modelformset_factory
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -17,12 +21,14 @@ from .forms import (
     ItensLocacaoReservaForm,
     LocacaoForm,
     MovimentoEstoqueLocacaoForm,
+    NaoPossivelOperacionalLocacaoForm,
     PagamentoLocacaoForm,
     ReciboStatusForm,
     TermoLocacaoForm,
     VencimentoSaldoLocacaoForm,
 )
-from .models import ConfiguracaoLocacao, FaixaPrecoLocacao, Locacao, MovimentoEstoqueLocacao, PagamentoLocacao
+from .models import ConfiguracaoLocacao, FaixaPrecoLocacao, ItemLocacao, Locacao, MovimentoEstoqueLocacao, PagamentoLocacao, TarefaOperacionalLocacao
+from .services import checklist_operacional_locacoes, obter_ou_criar_tarefa_operacional, tarefas_ativas_da_locacao
 
 
 def _faixa_padrao():
@@ -123,6 +129,118 @@ def _contexto_disponibilidade(data_entrega, data_prevista_devolucao, itens):
     }
 
 
+def _resumo_valores_locacao(data_entrega, data_prevista_devolucao, itens):
+    try:
+        diarias = Locacao.calcular_diarias(data_entrega, data_prevista_devolucao)
+    except ValidationError:
+        diarias = 0
+    subtotais = {
+        ItemLocacao.TIPO_JOGO: Decimal("0.00"),
+        ItemLocacao.TIPO_MESA_AVULSA: Decimal("0.00"),
+        ItemLocacao.TIPO_CADEIRA_AVULSA: Decimal("0.00"),
+    }
+    for item in itens:
+        quantidade = int(item.get("quantidade") or 0)
+        if quantidade <= 0:
+            continue
+        preco_diaria = Decimal(item.get("preco_diaria") or "0").quantize(Decimal("0.01"))
+        subtotal = (Decimal(quantidade) * preco_diaria * Decimal(diarias)).quantize(Decimal("0.01"))
+        subtotais[item["tipo"]] += subtotal
+    total = sum(subtotais.values(), Decimal("0.00")).quantize(Decimal("0.01"))
+    return {
+        "diarias": diarias,
+        "subtotal_jogos": subtotais[ItemLocacao.TIPO_JOGO].quantize(Decimal("0.01")),
+        "subtotal_mesas_avulsas": subtotais[ItemLocacao.TIPO_MESA_AVULSA].quantize(Decimal("0.01")),
+        "subtotal_cadeiras_avulsas": subtotais[ItemLocacao.TIPO_CADEIRA_AVULSA].quantize(Decimal("0.01")),
+        "total": total,
+    }
+
+
+def _inteiro_nao_negativo(valor):
+    try:
+        return max(int(valor or 0), 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _avaliar_disponibilidade_dinamica(data_entrega, data_prevista_devolucao, jogos=0, mesas_avulsas=0, cadeiras_avulsas=0, excluir_id=None):
+    if not data_entrega or not data_prevista_devolucao:
+        return {
+            "status": "incompleto",
+            "mensagem": "Informe datas e itens para verificar a disponibilidade.",
+        }
+    jogos = _inteiro_nao_negativo(jogos)
+    mesas_avulsas = _inteiro_nao_negativo(mesas_avulsas)
+    cadeiras_avulsas = _inteiro_nao_negativo(cadeiras_avulsas)
+    if jogos <= 0 and mesas_avulsas <= 0 and cadeiras_avulsas <= 0:
+        return {
+            "status": "incompleto",
+            "mensagem": "Informe datas e itens para verificar a disponibilidade.",
+        }
+
+    itens = []
+    if jogos:
+        itens.append({"tipo": ItemLocacao.TIPO_JOGO, "quantidade": jogos})
+    if mesas_avulsas:
+        itens.append({"tipo": ItemLocacao.TIPO_MESA_AVULSA, "quantidade": mesas_avulsas})
+    if cadeiras_avulsas:
+        itens.append({"tipo": ItemLocacao.TIPO_CADEIRA_AVULSA, "quantidade": cadeiras_avulsas})
+
+    try:
+        Locacao.calcular_diarias(data_entrega, data_prevista_devolucao)
+    except ValidationError as exc:
+        return {"status": "incompleto", "mensagem": "; ".join(exc.messages)}
+
+    disponibilidade = Locacao.disponibilidade_periodo(data_entrega, data_prevista_devolucao, excluir_id=excluir_id)
+    necessidade = Locacao.necessidades_itens(itens)
+    disponivel_mesas = disponibilidade["disponivel_mesas"]
+    disponivel_cadeiras = disponibilidade["disponivel_cadeiras"]
+    jogos_disponiveis = min(disponivel_mesas, disponivel_cadeiras // ConfiguracaoLocacao.JOGO_CADEIRAS)
+
+    faltas = []
+    if necessidade["mesas"] > disponivel_mesas:
+        faltas.append(f"mesas: solicitado {necessidade['mesas']}, disponível {disponivel_mesas}")
+    if necessidade["cadeiras"] > disponivel_cadeiras:
+        faltas.append(f"cadeiras: solicitado {necessidade['cadeiras']}, disponível {disponivel_cadeiras}")
+
+    dados = {
+        "jogos_disponiveis": jogos_disponiveis,
+        "disponivel_mesas": disponivel_mesas,
+        "disponivel_cadeiras": disponivel_cadeiras,
+        "solicitado_mesas": necessidade["mesas"],
+        "solicitado_cadeiras": necessidade["cadeiras"],
+    }
+    if faltas:
+        return {
+            **dados,
+            "status": "indisponivel",
+            "mensagem": "Falta de material: " + "; ".join(faltas) + ".",
+        }
+    return {
+        **dados,
+        "status": "disponivel",
+        "mensagem": (
+            f"Disponível: {jogos_disponiveis} jogo(s), "
+            f"{disponivel_mesas} mesa(s) e {disponivel_cadeiras} cadeira(s) para o período."
+        ),
+    }
+
+
+def disponibilidade_dinamica(request):
+    data_entrega = parse_date(request.GET.get("data_entrega", ""))
+    data_prevista_devolucao = parse_date(request.GET.get("data_prevista_devolucao", ""))
+    excluir_id = _inteiro_nao_negativo(request.GET.get("excluir_id")) or None
+    resultado = _avaliar_disponibilidade_dinamica(
+        data_entrega,
+        data_prevista_devolucao,
+        jogos=request.GET.get("jogos"),
+        mesas_avulsas=request.GET.get("mesas_avulsas"),
+        cadeiras_avulsas=request.GET.get("cadeiras_avulsas"),
+        excluir_id=excluir_id,
+    )
+    return JsonResponse(resultado)
+
+
 @ensure_csrf_cookie
 def nova(request):
     configuracao = ConfiguracaoLocacao.obter()
@@ -138,19 +256,37 @@ def nova(request):
                 locacao_form.cleaned_data["data_prevista_devolucao"],
                 itens,
             )
+            resumo_valores = _resumo_valores_locacao(
+                locacao_form.cleaned_data["data_entrega"],
+                locacao_form.cleaned_data["data_prevista_devolucao"],
+                itens,
+            )
+            sinal_valor = locacao_form.cleaned_data.get("sinal_valor") or Decimal("0.00")
+            if sinal_valor > resumo_valores["total"]:
+                locacao_form.add_error("sinal_valor", "Pagamento inicial nao pode ser maior que o total contratado.")
+                messages.warning(request, "Revise o pagamento inicial antes de salvar.")
+                return render(
+                    request,
+                    "locacoes/nova.html",
+                    {
+                        "locacao_form": locacao_form,
+                        "itens_form": itens_form,
+                        "configuracao": configuracao,
+                        "disponibilidade": disponibilidade,
+                    },
+                )
             try:
                 locacao = Locacao.criar_reserva(
                     locacao_form.cleaned_data,
                     itens,
-                    responsavel=locacao_form.cleaned_data.get("responsavel", ""),
+                    responsavel="",
                 )
-                sinal_valor = locacao_form.cleaned_data.get("sinal_valor")
                 if sinal_valor and sinal_valor > 0:
                     pagamento = locacao.registrar_pagamento(
                         sinal_valor,
                         locacao_form.cleaned_data.get("sinal_forma_pagamento"),
                         observacao=locacao_form.cleaned_data.get("sinal_observacao", "") or "Sinal da locacao.",
-                        responsavel=locacao_form.cleaned_data.get("responsavel", ""),
+                        responsavel="",
                     )
                     messages.success(request, f"Reserva #{locacao.id} criada com sinal registrado.")
                     return redirect("locacoes:recibo_pagamento", pk=pagamento.pk)
@@ -210,6 +346,7 @@ def detalhe(request, pk):
         "locacoes/detalhe.html",
         {
             "locacao": locacao,
+            "tarefas_operacionais": tarefas_ativas_da_locacao(locacao),
             "necessidade": necessidade,
             "disponibilidade": disponibilidade,
             "cancelar_form": CancelarLocacaoForm(),
@@ -220,6 +357,75 @@ def detalhe(request, pk):
             }),
         },
     )
+
+
+def checklist_operacional(request):
+    data_texto = request.GET.get("data", "").strip()
+    data_referencia = parse_date(data_texto) if data_texto else timezone.localdate()
+    if not data_referencia:
+        data_referencia = timezone.localdate()
+    checklist = checklist_operacional_locacoes(data_referencia=data_referencia)
+    return render(
+        request,
+        "locacoes/checklist_operacional.html",
+        {
+            "checklist": checklist,
+            "data_referencia": data_referencia,
+            "foco_tarefa_id": request.GET.get("tarefa", "").strip(),
+            "acao_form": AcaoOperacionalLocacaoForm(),
+            "nao_possivel_form": NaoPossivelOperacionalLocacaoForm(),
+        },
+    )
+
+
+def abrir_tarefa_operacional_locacao(request, pk, tipo):
+    locacao = get_object_or_404(
+        Locacao.objects.select_related("cliente", "faixa_preco").prefetch_related("itens"),
+        pk=pk,
+    )
+    if tipo not in {TarefaOperacionalLocacao.TIPO_ENTREGA, TarefaOperacionalLocacao.TIPO_RECOLHIMENTO}:
+        messages.warning(request, "Tipo de tarefa operacional invalido.")
+        return redirect("locacoes:detalhe", pk=locacao.pk)
+    tarefa = obter_ou_criar_tarefa_operacional(locacao, tipo)
+    return redirect(f"{reverse('locacoes:checklist_operacional')}?data={tarefa.data_agendada:%Y-%m-%d}&tarefa={tarefa.pk}")
+
+
+@require_POST
+def confirmar_tarefa_operacional(request, pk):
+    tarefa = get_object_or_404(TarefaOperacionalLocacao.objects.select_related("locacao"), pk=pk)
+    form = AcaoOperacionalLocacaoForm(request.POST)
+    if form.is_valid():
+        try:
+            tarefa.confirmar(
+                responsavel=form.cleaned_data.get("responsavel", ""),
+                observacao=form.cleaned_data.get("observacao", ""),
+            )
+        except ValidationError as exc:
+            messages.warning(request, "; ".join(exc.messages))
+        else:
+            messages.success(request, f"{tarefa.get_tipo_display()} confirmada.")
+    else:
+        messages.warning(request, "Revise os dados antes de confirmar.")
+    return redirect(f"{reverse('locacoes:checklist_operacional')}?data={tarefa.data_agendada:%Y-%m-%d}")
+
+
+@require_POST
+def tarefa_operacional_nao_possivel(request, pk):
+    tarefa = get_object_or_404(TarefaOperacionalLocacao.objects.select_related("locacao"), pk=pk)
+    form = NaoPossivelOperacionalLocacaoForm(request.POST)
+    if form.is_valid():
+        try:
+            tarefa.registrar_nao_possivel(
+                motivo=form.cleaned_data.get("observacao", ""),
+                responsavel=form.cleaned_data.get("responsavel", ""),
+            )
+        except ValidationError as exc:
+            messages.warning(request, "; ".join(exc.messages))
+        else:
+            messages.warning(request, "Tarefa mantida como pendencia para resolver ou reagendar.")
+    else:
+        messages.warning(request, "Informe o motivo para manter a pendencia.")
+    return redirect(f"{reverse('locacoes:checklist_operacional')}?data={tarefa.data_agendada:%Y-%m-%d}&tarefa={tarefa.pk}")
 
 
 @ensure_csrf_cookie

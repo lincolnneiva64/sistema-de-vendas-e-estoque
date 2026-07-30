@@ -9,6 +9,7 @@ from .models import (
     MovimentoEstoqueLocacao,
     PagamentoLocacao,
     RegistroCobrancaLocacao,
+    TarefaOperacionalLocacao,
 )
 
 
@@ -118,6 +119,14 @@ class RegistroCobrancaLocacaoAdmin(admin.ModelAdmin):
     list_filter = ("tipo", "status", "criado_em")
     search_fields = ("locacao__id", "locacao__pessoa_avulsa_nome", "locacao__cliente__nome", "observacao")
     readonly_fields = ("locacao", "tipo", "status", "observacao", "criado_por_nome", "criado_em")
+
+
+@admin.register(TarefaOperacionalLocacao)
+class TarefaOperacionalLocacaoAdmin(admin.ModelAdmin):
+    list_display = ("locacao", "tipo", "status", "data_agendada", "horario_agendado", "confirmado_por", "confirmado_em")
+    list_filter = ("tipo", "status", "data_agendada")
+    search_fields = ("locacao__id", "locacao__pessoa_avulsa_nome", "locacao__cliente__nome", "confirmado_por")
+    readonly_fields = ("criado_em", "atualizado_em")
 
 
 @admin.register(EventoLocacao)

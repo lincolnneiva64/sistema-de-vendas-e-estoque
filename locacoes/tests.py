@@ -1,5 +1,5 @@
 from decimal import Decimal
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 
 from django.apps import apps
 from django.core.exceptions import ValidationError
@@ -17,7 +17,9 @@ from .models import (
     MovimentoEstoqueLocacao,
     PagamentoLocacao,
     RegistroCobrancaLocacao,
+    TarefaOperacionalLocacao,
 )
+from .services import checklist_operacional_locacoes, obter_ou_criar_tarefa_operacional
 
 
 class LocacoesBaseIsoladaTests(TestCase):
@@ -862,3 +864,350 @@ class LocacoesAlertasCobrancaTests(TestCase):
         self.assertEqual(ContaReceber.objects.count(), 0)
         self.assertEqual(Venda.objects.count(), 0)
         self.assertEqual(Produto.objects.count(), 0)
+
+
+class LocacoesChecklistOperacionalTests(TestCase):
+    def setUp(self):
+        self.hoje = timezone.localdate()
+        self.configuracao = ConfiguracaoLocacao.obter()
+        self.configuracao.total_mesas = 30
+        self.configuracao.total_cadeiras = 120
+        self.configuracao.preco_mesa_avulsa_diaria = Decimal("4.00")
+        self.configuracao.preco_cadeira_avulsa_diaria = Decimal("1.50")
+        self.configuracao.save()
+        self.faixa = FaixaPrecoLocacao.objects.get(codigo=FaixaPrecoLocacao.CENTRO_PERTO)
+        self.faixa.preco_jogo_diaria = Decimal("8.00")
+        self.faixa.save()
+
+    def dados_base(self, **extras):
+        data_entrega = extras.pop("data_entrega", self.hoje)
+        dados = {
+            "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
+            "pessoa_avulsa_nome": "Cliente Checklist",
+            "pessoa_avulsa_telefone": "91999990000",
+            "pessoa_avulsa_endereco": "Rua Checklist, 1",
+            "endereco_entrega": "Rua Checklist, 1",
+            "data_entrega": data_entrega,
+            "horario_entrega": "09:30",
+            "data_evento": data_entrega,
+            "horario_evento": "18:00",
+            "data_prevista_devolucao": data_entrega + timedelta(days=1),
+            "faixa_preco": self.faixa,
+            "observacao": "Levar toalhas separadas.",
+        }
+        dados.update(extras)
+        return dados
+
+    def criar_locacao(self, **extras):
+        return Locacao.criar_reserva(
+            self.dados_base(**extras),
+            [{
+                "tipo": ItemLocacao.TIPO_JOGO,
+                "quantidade": 1,
+                "preco_diaria": Decimal("8.00"),
+            }],
+        )
+
+    def colocar_na_rua(self, locacao):
+        locacao.marcar_saiu_para_entrega(responsavel="Camila")
+        locacao.refresh_from_db()
+        locacao.confirmar_entrega(responsavel="Camila")
+        locacao.refresh_from_db()
+        return locacao
+
+    def test_checklist_ordena_por_horario_e_sem_horario_fica_no_final(self):
+        tarde = self.criar_locacao(pessoa_avulsa_nome="Entrega Tarde", horario_entrega=time(15, 0))
+        cedo = self.criar_locacao(pessoa_avulsa_nome="Entrega Cedo", horario_entrega=time(8, 0))
+        recolhimento = self.colocar_na_rua(self.criar_locacao(
+            pessoa_avulsa_nome="Recolhimento Sem Horario",
+            data_entrega=self.hoje - timedelta(days=1),
+            data_prevista_devolucao=self.hoje,
+        ))
+
+        checklist = checklist_operacional_locacoes(self.hoje)
+
+        self.assertEqual(
+            [item["locacao"].id for item in checklist["grupos"]["entregas"]],
+            [cedo.id, tarde.id],
+        )
+        self.assertEqual(
+            [item["locacao"].id for item in checklist["grupos"]["recolhimentos"]],
+            [recolhimento.id],
+        )
+        self.assertIsNone(checklist["grupos"]["recolhimentos"][0]["horario"])
+
+    def test_confirmacao_de_entrega_registra_data_hora_responsavel_remove_pendencia_e_mantem_historico(self):
+        locacao = self.criar_locacao()
+        tarefa = obter_ou_criar_tarefa_operacional(locacao, TarefaOperacionalLocacao.TIPO_ENTREGA)
+
+        response = self.client.post(
+            reverse("locacoes:confirmar_tarefa_operacional", kwargs={"pk": tarefa.pk}),
+            {"responsavel": "Camila", "observacao": "Entregue no portao."},
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        tarefa.refresh_from_db()
+        locacao.refresh_from_db()
+        self.assertEqual(tarefa.status, TarefaOperacionalLocacao.STATUS_CONFIRMADA)
+        self.assertIsNotNone(tarefa.confirmado_em)
+        self.assertEqual(tarefa.confirmado_por, "Camila")
+        self.assertEqual(locacao.status, Locacao.STATUS_ENTREGUE)
+        self.assertEqual(checklist_operacional_locacoes(self.hoje)["total"], 0)
+        self.assertTrue(locacao.eventos.filter(tipo="checklist_entrega_confirmada", responsavel="Camila").exists())
+
+        response = self.client.post(
+            reverse("locacoes:confirmar_tarefa_operacional", kwargs={"pk": tarefa.pk}),
+            {"responsavel": "Camila"},
+            secure=True,
+        )
+
+        tarefa.refresh_from_db()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(tarefa.status, TarefaOperacionalLocacao.STATUS_CONFIRMADA)
+
+    def test_tela_checklist_renderiza_dados_operacionais(self):
+        locacao = self.criar_locacao(pessoa_avulsa_nome="Cliente Tela Checklist")
+
+        response = self.client.get(reverse("locacoes:checklist_operacional"), secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Entregas e Recolhimentos")
+        self.assertContains(response, "Cliente Tela Checklist")
+        self.assertContains(response, "Rua Checklist, 1")
+        self.assertContains(response, "Levar toalhas separadas.")
+        self.assertContains(response, reverse("locacoes:detalhe", kwargs={"pk": locacao.pk}))
+
+    def test_confirmacao_de_recolhimento_remove_pendencia_operacional_e_mantem_historico(self):
+        locacao = self.colocar_na_rua(self.criar_locacao(
+            data_entrega=self.hoje - timedelta(days=1),
+            data_prevista_devolucao=self.hoje,
+        ))
+        tarefa = obter_ou_criar_tarefa_operacional(locacao, TarefaOperacionalLocacao.TIPO_RECOLHIMENTO)
+
+        response = self.client.post(
+            reverse("locacoes:confirmar_tarefa_operacional", kwargs={"pk": tarefa.pk}),
+            {"responsavel": "Lincoln", "observacao": "Material recolhido para conferencia."},
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        tarefa.refresh_from_db()
+        locacao.refresh_from_db()
+        self.assertEqual(tarefa.status, TarefaOperacionalLocacao.STATUS_CONFIRMADA)
+        self.assertIsNotNone(tarefa.confirmado_em)
+        self.assertEqual(tarefa.confirmado_por, "Lincoln")
+        self.assertEqual(checklist_operacional_locacoes(self.hoje)["total"], 0)
+        self.assertTrue(locacao.eventos.filter(tipo="checklist_recolhimento_confirmado", responsavel="Lincoln").exists())
+        self.assertEqual(locacao.status, Locacao.STATUS_ENTREGUE)
+
+    def test_excecao_mantem_tarefa_pendente(self):
+        locacao = self.criar_locacao()
+        tarefa = obter_ou_criar_tarefa_operacional(locacao, TarefaOperacionalLocacao.TIPO_ENTREGA)
+
+        response = self.client.post(
+            reverse("locacoes:tarefa_operacional_nao_possivel", kwargs={"pk": tarefa.pk}),
+            {"responsavel": "Camila", "observacao": "Cliente nao estava no local."},
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        tarefa.refresh_from_db()
+        self.assertEqual(tarefa.status, TarefaOperacionalLocacao.STATUS_NAO_POSSIVEL)
+        self.assertEqual(tarefa.motivo_nao_realizado, "Cliente nao estava no local.")
+        checklist = checklist_operacional_locacoes(self.hoje)
+        self.assertEqual(checklist["total"], 1)
+        self.assertEqual(checklist["grupos"]["entregas"][0]["tarefa"].id, tarefa.id)
+
+    def test_alerta_vermelho_ao_chegar_horario_e_devolucao_atrasada(self):
+        self.criar_locacao(horario_entrega=time(8, 0))
+        agora = timezone.make_aware(datetime.combine(self.hoje, time(8, 5)))
+
+        checklist = checklist_operacional_locacoes(self.hoje, agora=agora)
+
+        self.assertTrue(checklist["alerta"])
+
+        checklist_sem_horario_vencido = checklist_operacional_locacoes(
+            self.hoje,
+            agora=timezone.make_aware(datetime.combine(self.hoje, time(7, 55))),
+        )
+        self.assertFalse(checklist_sem_horario_vencido["alerta"])
+
+        atrasada = self.colocar_na_rua(self.criar_locacao(
+            pessoa_avulsa_nome="Atrasada",
+            data_entrega=self.hoje - timedelta(days=3),
+            data_prevista_devolucao=self.hoje - timedelta(days=1),
+        ))
+        checklist_atrasada = checklist_operacional_locacoes(
+            self.hoje,
+            agora=timezone.make_aware(datetime.combine(self.hoje, time(7, 55))),
+        )
+        self.assertTrue(checklist_atrasada["alerta"])
+        self.assertEqual(checklist_atrasada["grupos"]["devolucoes_atrasadas"][0]["locacao"].id, atrasada.id)
+
+    def test_oculta_locacoes_canceladas_ou_encerradas(self):
+        cancelada = self.criar_locacao(pessoa_avulsa_nome="Cancelada")
+        cancelada.cancelar(motivo="Cliente desistiu.")
+        devolvida = self.colocar_na_rua(self.criar_locacao(
+            pessoa_avulsa_nome="Encerrada",
+            data_entrega=self.hoje - timedelta(days=1),
+            data_prevista_devolucao=self.hoje,
+        ))
+        item = devolvida.itens.get()
+        devolvida.registrar_devolucao({item.id: {"devolvida_boa": 1}})
+
+        checklist = checklist_operacional_locacoes(self.hoje)
+        nomes = [
+            item["cliente"]
+            for grupo in checklist["grupos"].values()
+            for item in grupo
+        ]
+
+        self.assertNotIn("Cancelada", nomes)
+        self.assertNotIn("Encerrada", nomes)
+
+
+class LocacoesFormularioReservaTests(TestCase):
+    def setUp(self):
+        self.hoje = timezone.localdate()
+        self.configuracao = ConfiguracaoLocacao.obter()
+        self.configuracao.total_mesas = 10
+        self.configuracao.total_cadeiras = 40
+        self.configuracao.preco_mesa_avulsa_diaria = Decimal("4.00")
+        self.configuracao.preco_cadeira_avulsa_diaria = Decimal("1.50")
+        self.configuracao.save()
+        self.faixa = FaixaPrecoLocacao.objects.get(codigo=FaixaPrecoLocacao.CENTRO_PERTO)
+        self.faixa.preco_jogo_diaria = Decimal("8.00")
+        self.faixa.save()
+
+    def dados_post(self, **extras):
+        dados = {
+            "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
+            "pessoa_avulsa_nome": "Cliente Formulario",
+            "pessoa_avulsa_telefone": "91999990000",
+            "pessoa_avulsa_endereco": "Rua Alternativa, 123",
+            "endereco_entrega": "Rua Entrega, 456",
+            "data_entrega": self.hoje.isoformat(),
+            "horario_entrega": "09:00",
+            "data_evento": self.hoje.isoformat(),
+            "horario_evento": "18:00",
+            "data_prevista_devolucao": (self.hoje + timedelta(days=1)).isoformat(),
+            "faixa_preco": str(self.faixa.id),
+            "observacao": "",
+            "sinal_valor": "",
+            "sinal_forma_pagamento": "",
+            "sinal_observacao": "",
+            "data_vencimento_saldo": "",
+            "jogos": "1",
+            "preco_jogo_diaria": "8.00",
+            "mesas_avulsas": "0",
+            "preco_mesa_avulsa_diaria": "4.00",
+            "cadeiras_avulsas": "0",
+            "preco_cadeira_avulsa_diaria": "1.50",
+        }
+        dados.update(extras)
+        return dados
+
+    def criar_locacao(self, **extras):
+        return Locacao.criar_reserva(
+            {
+                "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
+                "pessoa_avulsa_nome": extras.pop("pessoa_avulsa_nome", "Ocupante"),
+                "pessoa_avulsa_telefone": "91999990000",
+                "pessoa_avulsa_endereco": "Rua O, 1",
+                "endereco_entrega": "Rua O, 1",
+                "data_entrega": extras.pop("data_entrega", self.hoje),
+                "horario_entrega": "09:00",
+                "data_evento": self.hoje,
+                "horario_evento": "18:00",
+                "data_prevista_devolucao": extras.pop("data_prevista_devolucao", self.hoje + timedelta(days=1)),
+                "faixa_preco": self.faixa,
+                "observacao": "",
+                **extras,
+            },
+            [{
+                "tipo": ItemLocacao.TIPO_JOGO,
+                "quantidade": 1,
+                "preco_diaria": Decimal("8.00"),
+            }],
+        )
+
+    def disponibilidade(self, **params):
+        base = {
+            "data_entrega": self.hoje.isoformat(),
+            "data_prevista_devolucao": (self.hoje + timedelta(days=1)).isoformat(),
+            "jogos": "0",
+            "mesas_avulsas": "0",
+            "cadeiras_avulsas": "0",
+        }
+        base.update(params)
+        return self.client.get(reverse("locacoes:disponibilidade_dinamica"), base, secure=True).json()
+
+    def test_endereco_avulso_preenche_endereco_de_entrega_ao_salvar_sem_js(self):
+        response = self.client.post(
+            reverse("locacoes:nova"),
+            self.dados_post(endereco_entrega="", pessoa_avulsa_endereco="Rua Operacional, 77"),
+            secure=True,
+        )
+
+        locacao = Locacao.objects.get(pessoa_avulsa_nome="Cliente Formulario")
+        self.assertRedirects(response, reverse("locacoes:detalhe", kwargs={"pk": locacao.pk}), fetch_redirect_response=False)
+        self.assertEqual(locacao.endereco_entrega, "Rua Operacional, 77")
+
+    def test_responsavel_interno_nao_aparece_como_digitacao_manual(self):
+        response = self.client.get(reverse("locacoes:nova"), secure=True)
+
+        self.assertNotContains(response, "Responsavel interno")
+        self.assertNotContains(response, 'name="responsavel"')
+
+    def test_enter_apos_data_prevista_vai_para_jogos(self):
+        response = self.client.get(reverse("locacoes:nova"), secure=True)
+
+        self.assertContains(response, 'id="id_data_prevista_devolucao"')
+        self.assertContains(response, 'data-enter-next="id_jogos"')
+
+    def test_ordem_dos_horarios_na_secao_datas(self):
+        response = self.client.get(reverse("locacoes:nova"), secure=True)
+        html = response.content.decode("utf-8")
+
+        self.assertLess(html.index("Horario do evento"), html.index("Horario combinado de entrega"))
+
+    def test_disponibilidade_suficiente(self):
+        resultado = self.disponibilidade(jogos="1")
+
+        self.assertEqual(resultado["status"], "disponivel")
+        self.assertEqual(resultado["mensagem"], "Disponível: 10 jogo(s), 10 mesa(s) e 40 cadeira(s) para o período.")
+
+    def test_indisponibilidade_por_mesas(self):
+        resultado = self.disponibilidade(mesas_avulsas="11")
+
+        self.assertEqual(resultado["status"], "indisponivel")
+        self.assertIn("mesas: solicitado 11, disponível 10", resultado["mensagem"])
+
+    def test_indisponibilidade_por_cadeiras(self):
+        resultado = self.disponibilidade(cadeiras_avulsas="41")
+
+        self.assertEqual(resultado["status"], "indisponivel")
+        self.assertIn("cadeiras: solicitado 41, disponível 40", resultado["mensagem"])
+
+    def test_indisponibilidade_de_jogos_pela_composicao_mesa_e_cadeiras(self):
+        resultado = self.disponibilidade(jogos="11")
+
+        self.assertEqual(resultado["status"], "indisponivel")
+        self.assertIn("mesas: solicitado 11, disponível 10", resultado["mensagem"])
+        self.assertIn("cadeiras: solicitado 44, disponível 40", resultado["mensagem"])
+
+    def test_locacao_cancelada_ou_encerrada_nao_reduz_disponibilidade(self):
+        cancelada = self.criar_locacao(pessoa_avulsa_nome="Cancelada")
+        cancelada.cancelar(motivo="Desistencia")
+        encerrada = self.criar_locacao(pessoa_avulsa_nome="Encerrada")
+        encerrada.marcar_saiu_para_entrega()
+        encerrada.confirmar_entrega()
+        item = encerrada.itens.get()
+        encerrada.registrar_devolucao({item.id: {"devolvida_boa": 1}})
+
+        resultado = self.disponibilidade(jogos="1")
+
+        self.assertEqual(resultado["status"], "disponivel")
+        self.assertEqual(resultado["disponivel_mesas"], 10)
+        self.assertEqual(resultado["disponivel_cadeiras"], 40)

@@ -120,14 +120,19 @@ class LocacaoForm(forms.Form):
     )
     pessoa_avulsa_endereco = forms.CharField(
         required=False,
-        widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+        max_length=255,
+        widget=forms.Textarea(
+            attrs={"class": "form-control", "rows": 2}
+        ),
     )
-    endereco_entrega = forms.CharField(widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}))
+    endereco_entrega = forms.CharField(required=False, widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}))
     data_entrega = forms.DateField(widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
     horario_entrega = forms.TimeField(widget=forms.TimeInput(attrs={"class": "form-control", "type": "time"}))
     data_evento = forms.DateField(widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
     horario_evento = forms.TimeField(widget=forms.TimeInput(attrs={"class": "form-control", "type": "time"}))
-    data_prevista_devolucao = forms.DateField(widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
+    data_prevista_devolucao = forms.DateField(
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "date", "data-enter-next": "id_jogos"})
+    )
     data_vencimento_saldo = forms.DateField(
         required=False,
         widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}),
@@ -137,11 +142,6 @@ class LocacaoForm(forms.Form):
         widget=forms.Select(attrs={"class": "form-select"}),
     )
     observacao = forms.CharField(required=False, widget=forms.Textarea(attrs={"class": "form-control", "rows": 3}))
-    responsavel = forms.CharField(
-        required=False,
-        max_length=120,
-        widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
-    )
     sinal_valor = forms.DecimalField(
         required=False,
         min_value=0,
@@ -165,7 +165,6 @@ class LocacaoForm(forms.Form):
         cliente = cleaned_data.get("cliente")
         pessoa_avulsa_nome = (cleaned_data.get("pessoa_avulsa_nome") or "").strip()
         pessoa_avulsa_telefone = (cleaned_data.get("pessoa_avulsa_telefone") or "").strip()
-        pessoa_avulsa_endereco = (cleaned_data.get("pessoa_avulsa_endereco") or "").strip()
         data_entrega = cleaned_data.get("data_entrega")
         data_prevista_devolucao = cleaned_data.get("data_prevista_devolucao")
         data_vencimento_saldo = cleaned_data.get("data_vencimento_saldo")
@@ -180,8 +179,6 @@ class LocacaoForm(forms.Form):
                 self.add_error("pessoa_avulsa_nome", "Informe o nome da pessoa avulsa.")
             if not pessoa_avulsa_telefone:
                 self.add_error("pessoa_avulsa_telefone", "Informe o telefone da pessoa avulsa.")
-            if not pessoa_avulsa_endereco:
-                self.add_error("pessoa_avulsa_endereco", "Informe o endereco da pessoa avulsa.")
             cleaned_data["cliente"] = None
 
         if data_entrega and data_prevista_devolucao and data_prevista_devolucao < data_entrega:
@@ -195,10 +192,30 @@ class LocacaoForm(forms.Form):
 
         cleaned_data["pessoa_avulsa_nome"] = pessoa_avulsa_nome
         cleaned_data["pessoa_avulsa_telefone"] = pessoa_avulsa_telefone
+        pessoa_avulsa_endereco = (
+            cleaned_data.get("pessoa_avulsa_endereco") or ""
+        ).strip()
+
+        endereco_entrega = (
+            cleaned_data.get("endereco_entrega") or ""
+        ).strip()
+
+        if (
+            tipo_pessoa == Locacao.TIPO_PESSOA_AVULSA
+            and not endereco_entrega
+            and pessoa_avulsa_endereco
+        ):
+            endereco_entrega = pessoa_avulsa_endereco
+
+        if not endereco_entrega:
+            self.add_error(
+                "endereco_entrega",
+                "Informe o endereco da entrega.",
+            )
+
         cleaned_data["pessoa_avulsa_endereco"] = pessoa_avulsa_endereco
-        cleaned_data["endereco_entrega"] = (cleaned_data.get("endereco_entrega") or "").strip()
+        cleaned_data["endereco_entrega"] = endereco_entrega
         cleaned_data["observacao"] = (cleaned_data.get("observacao") or "").strip()
-        cleaned_data["responsavel"] = (cleaned_data.get("responsavel") or "").strip()
         cleaned_data["sinal_observacao"] = (cleaned_data.get("sinal_observacao") or "").strip()
         return cleaned_data
 
@@ -367,6 +384,23 @@ class AcaoOperacionalLocacaoForm(forms.Form):
         required=False,
         widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}),
     )
+
+
+class NaoPossivelOperacionalLocacaoForm(forms.Form):
+    responsavel = forms.CharField(
+        required=False,
+        max_length=120,
+        widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
+    )
+    observacao = forms.CharField(
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+    )
+
+    def clean_observacao(self):
+        observacao = (self.cleaned_data.get("observacao") or "").strip()
+        if not observacao:
+            raise forms.ValidationError("Informe o motivo/observacao.")
+        return observacao
 
 
 class DevolucaoLocacaoForm(forms.Form):

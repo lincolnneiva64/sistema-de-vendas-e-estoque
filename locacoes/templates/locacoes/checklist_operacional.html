@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Entregas e Recolhimentos</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    :root { --orange: #ea580c; --orange-dark: #9a3412; --red: #dc2626; --ink: #172033; }
+    body { margin: 0; background: #f5f7fb; color: var(--ink); }
+    .page { max-width: 860px; margin: 0 auto; padding: 18px 12px 42px; }
+    .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+    h1 { margin: 0; color: var(--orange-dark); font-size: 1.45rem; font-weight: 900; }
+    .muted { color: #64748b; }
+    .filtro { display: flex; gap: 8px; align-items: center; margin: 12px 0; }
+    .filtro input { max-width: 170px; }
+    .grupo { margin-top: 16px; }
+    .grupo h2 { font-size: 1rem; margin: 0 0 8px; font-weight: 900; color: #0f172a; }
+    .item { border: 1px solid #fed7aa; border-left: 5px solid var(--orange); border-radius: 8px; background: #fff; padding: 12px; margin-bottom: 10px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08); }
+    .item.foco { outline: 3px solid #fdba74; }
+    .item.atrasada { border-color: #fecaca; border-left-color: var(--red); }
+    .linha-topo { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+    .cliente { font-size: 1.05rem; font-weight: 900; }
+    .hora { white-space: nowrap; border-radius: 999px; padding: 5px 9px; background: #fff7ed; color: var(--orange-dark); font-weight: 900; border: 1px solid #fdba74; }
+    .item.atrasada .hora { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+    .dados { display: grid; gap: 5px; margin-top: 8px; font-size: 0.94rem; }
+    .materiais { margin: 8px 0 0; padding-left: 18px; }
+    .acoes { display: grid; gap: 8px; margin-top: 12px; }
+    .acoes form { border-top: 1px solid #e2e8f0; padding-top: 9px; }
+    .campos { display: grid; gap: 7px; grid-template-columns: 1fr; }
+    .btn-loc { background: var(--orange); border-color: var(--orange); color: #fff; font-weight: 850; }
+    .btn-loc:hover, .btn-loc:focus { background: #c2410c; border-color: #c2410c; color: #fff; }
+    .empty { border: 1px dashed #cbd5e1; border-radius: 8px; padding: 12px; background: #fff; color: #64748b; }
+    @media (min-width: 680px) {
+      .acoes { grid-template-columns: 1fr 1fr; align-items: start; }
+      .campos { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="top">
+      <div>
+        <h1>Entregas e Recolhimentos</h1>
+        <p class="muted mb-0">{{ checklist.total }} acao(oes) pendente(s) em {{ data_referencia|date:"d/m/Y" }}.</p>
+      </div>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'estoque:vendas' %}">Vendas</a>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <form class="filtro" method="get">
+      <input class="form-control" type="date" name="data" value="{{ data_referencia|date:'Y-m-d' }}">
+      <button class="btn btn-loc" type="submit">Abrir dia</button>
+    </form>
+
+    {% include "locacoes/includes/checklist_grupo.html" with titulo="Entregas" itens=checklist.grupos.entregas tipo="entrega" %}
+    {% include "locacoes/includes/checklist_grupo.html" with titulo="Recolhimentos" itens=checklist.grupos.recolhimentos tipo="recolhimento" %}
+    {% include "locacoes/includes/checklist_grupo.html" with titulo="Devolucoes atrasadas" itens=checklist.grupos.devolucoes_atrasadas tipo="recolhimento" %}
+  </main>
+  {% include "locacoes/includes/enter_nav.html" %}
+</body>
+</html>
