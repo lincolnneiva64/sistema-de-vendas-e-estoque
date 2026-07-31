@@ -1128,41 +1128,159 @@ def configuracoes(request):
     faixas_qs = FaixaPrecoLocacao.objects.all()
 
     movimentacao_form = MovimentoEstoqueLocacaoForm()
+    correcao_form = MovimentoEstoqueLocacaoForm(
+        prefix="correcao",
+    )
+    correcao_aberta = False
 
     if request.method == "POST" and request.POST.get("acao") == "salvar_configuracoes":
-        configuracao_form = ConfiguracaoLocacaoForm(request.POST, instance=configuracao)
-        faixas_formset = FaixaFormSet(request.POST, queryset=faixas_qs, prefix="faixas")
+        configuracao_form = ConfiguracaoLocacaoForm(
+            request.POST,
+            instance=configuracao,
+        )
+        faixas_formset = FaixaFormSet(
+            request.POST,
+            queryset=faixas_qs,
+            prefix="faixas",
+        )
         if configuracao_form.is_valid() and faixas_formset.is_valid():
             configuracao_form.save()
             faixas_formset.save()
-            messages.success(request, "Configuracoes de locacoes atualizadas.")
+            messages.success(
+                request,
+                "Configuracoes de locacoes atualizadas.",
+            )
             return redirect("locacoes:configuracoes")
-        messages.warning(request, "Revise os campos destacados antes de salvar.")
-    elif request.method == "POST" and request.POST.get("acao") == "registrar_movimentacao":
-        configuracao_form = ConfiguracaoLocacaoForm(instance=configuracao)
-        faixas_formset = FaixaFormSet(queryset=faixas_qs, prefix="faixas")
-        movimentacao_form = MovimentoEstoqueLocacaoForm(request.POST)
-        if movimentacao_form.is_valid():
+        messages.warning(
+            request,
+            "Revise os campos destacados antes de salvar.",
+        )
+
+    elif request.method == "POST" and request.POST.get("acao") == "corrigir_saldo":
+        configuracao_form = ConfiguracaoLocacaoForm(
+            instance=configuracao,
+        )
+        faixas_formset = FaixaFormSet(
+            queryset=faixas_qs,
+            prefix="faixas",
+        )
+
+        dados_correcao = request.POST.copy()
+        dados_correcao["correcao-tipo"] = (
+            MovimentoEstoqueLocacao.TIPO_AJUSTE_INVENTARIO
+        )
+        dados_correcao["correcao-quantidade"] = ""
+
+        correcao_form = MovimentoEstoqueLocacaoForm(
+            dados_correcao,
+            prefix="correcao",
+        )
+        correcao_aberta = True
+
+        if correcao_form.is_valid():
             try:
-                MovimentoEstoqueLocacao.registrar(**movimentacao_form.cleaned_data)
+                MovimentoEstoqueLocacao.registrar(
+                    **correcao_form.cleaned_data
+                )
             except ValidationError as exc:
                 if hasattr(exc, "message_dict"):
                     for campo, erros in exc.message_dict.items():
                         for erro in erros:
-                            movimentacao_form.add_error(campo if campo in movimentacao_form.fields else None, erro)
+                            correcao_form.add_error(
+                                campo if campo in correcao_form.fields else None,
+                                erro,
+                            )
                 else:
-                    movimentacao_form.add_error(None, exc)
-                messages.warning(request, "Nao foi possivel registrar a movimentacao.")
+                    correcao_form.add_error(None, exc)
+
+                messages.warning(
+                    request,
+                    "Nao foi possivel corrigir o saldo.",
+                )
             else:
-                messages.success(request, "Movimentacao de estoque de locacao registrada.")
+                messages.success(
+                    request,
+                    "Saldo de locacao corrigido com sucesso.",
+                )
                 return redirect("locacoes:configuracoes")
         else:
-            messages.warning(request, "Revise os dados da movimentacao antes de salvar.")
-    else:
-        configuracao_form = ConfiguracaoLocacaoForm(instance=configuracao)
-        faixas_formset = FaixaFormSet(queryset=faixas_qs, prefix="faixas")
+            messages.warning(
+                request,
+                "Revise os dados da correcao antes de salvar.",
+            )
 
-    historico_movimentacoes = MovimentoEstoqueLocacao.objects.all()[:12]
+    elif request.method == "POST" and request.POST.get("acao") == "registrar_movimentacao":
+        configuracao_form = ConfiguracaoLocacaoForm(
+            instance=configuracao,
+        )
+        faixas_formset = FaixaFormSet(
+            queryset=faixas_qs,
+            prefix="faixas",
+        )
+        movimentacao_form = MovimentoEstoqueLocacaoForm(
+            request.POST,
+        )
+
+        if movimentacao_form.is_valid():
+            try:
+                MovimentoEstoqueLocacao.registrar(
+                    **movimentacao_form.cleaned_data
+                )
+            except ValidationError as exc:
+                if hasattr(exc, "message_dict"):
+                    for campo, erros in exc.message_dict.items():
+                        for erro in erros:
+                            movimentacao_form.add_error(
+                                campo if campo in movimentacao_form.fields else None,
+                                erro,
+                            )
+                else:
+                    movimentacao_form.add_error(None, exc)
+
+                messages.warning(
+                    request,
+                    "Nao foi possivel registrar a movimentacao.",
+                )
+            else:
+                messages.success(
+                    request,
+                    "Movimentacao de estoque de locacao registrada.",
+                )
+                return redirect("locacoes:configuracoes")
+        else:
+            messages.warning(
+                request,
+                "Revise os dados da movimentacao antes de salvar.",
+            )
+
+    else:
+        configuracao_form = ConfiguracaoLocacaoForm(
+            instance=configuracao,
+        )
+        faixas_formset = FaixaFormSet(
+            queryset=faixas_qs,
+            prefix="faixas",
+        )
+
+    total_mesas = configuracao.total_mesas or 0
+    total_cadeiras = configuracao.total_cadeiras or 0
+
+    jogos_completos = min(
+        total_mesas // ConfiguracaoLocacao.JOGO_MESAS,
+        total_cadeiras // ConfiguracaoLocacao.JOGO_CADEIRAS,
+    )
+    mesas_sobrando = (
+        total_mesas
+        - jogos_completos * ConfiguracaoLocacao.JOGO_MESAS
+    )
+    cadeiras_sobrando = (
+        total_cadeiras
+        - jogos_completos * ConfiguracaoLocacao.JOGO_CADEIRAS
+    )
+
+    historico_movimentacoes = (
+        MovimentoEstoqueLocacao.objects.all()[:12]
+    )
 
     return render(
         request,
@@ -1172,7 +1290,12 @@ def configuracoes(request):
             "configuracao_form": configuracao_form,
             "faixas_formset": faixas_formset,
             "movimentacao_form": movimentacao_form,
+            "correcao_form": correcao_form,
+            "correcao_aberta": correcao_aberta,
             "historico_movimentacoes": historico_movimentacoes,
             "composicao_jogo": ConfiguracaoLocacao.composicao_jogo(),
+            "jogos_completos": jogos_completos,
+            "mesas_sobrando": mesas_sobrando,
+            "cadeiras_sobrando": cadeiras_sobrando,
         },
     )

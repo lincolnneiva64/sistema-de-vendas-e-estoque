@@ -33,6 +33,81 @@
     .btn-locacoes-secondary { background: #e2e8f0; color: #172033; border-radius: 8px; padding: 10px 16px; font-weight: 800; text-decoration: none; }
     .btn-corrigir-saldo { margin-top: 10px; background: #fff; color: var(--locacoes-orange-dark); border: 1px solid #fb923c; border-radius: 7px; padding: 7px 10px; font-weight: 800; cursor: pointer; }
     .btn-corrigir-saldo:hover { background: #ffedd5; }
+    .locacoes-resumo-jogos {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+      padding: 12px;
+      border: 1px solid #86efac;
+      border-radius: 8px;
+      background: #f0fdf4;
+    }
+    .locacoes-resumo-jogos strong {
+      color: #166534;
+      font-size: 1.05rem;
+    }
+    .locacoes-sobra {
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: #fff;
+      border: 1px solid #bbf7d0;
+      color: #166534;
+      font-weight: 700;
+      font-size: 0.85rem;
+    }
+    .locacoes-correcao {
+      margin-top: 14px;
+      padding: 14px;
+      border: 1px solid #fdba74;
+      border-radius: 8px;
+      background: #fff;
+    }
+    .locacoes-correcao h3 {
+      margin: 0 0 5px;
+      color: var(--locacoes-orange-dark);
+      font-size: 1rem;
+      font-weight: 800;
+    }
+    .locacoes-correcao-grid {
+      display: grid;
+      grid-template-columns: 150px minmax(180px, 1fr) minmax(220px, 1.4fr);
+      gap: 12px;
+      align-items: start;
+      margin-top: 12px;
+    }
+    .locacoes-correcao-acoes {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .btn-cancelar-correcao {
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 16px;
+      background: #e2e8f0;
+      color: #172033;
+      font-weight: 800;
+    }
+    .locacoes-details {
+      padding: 0;
+      overflow: hidden;
+    }
+    .locacoes-details summary {
+      cursor: pointer;
+      padding: 16px 18px;
+      color: var(--locacoes-orange-dark);
+      font-weight: 800;
+      list-style-position: inside;
+    }
+    .locacoes-details[open] summary {
+      border-bottom: 1px solid #fed7aa;
+    }
+    .locacoes-details-body {
+      padding: 18px;
+    }
     .errorlist { color: #b91c1c; margin: 6px 0 0; padding-left: 18px; }
     .locacoes-history { width: 100%; border-collapse: collapse; }
     .locacoes-history th, .locacoes-history td { border-bottom: 1px solid #edf1f7; padding: 9px 8px; text-align: left; vertical-align: top; }
@@ -40,7 +115,10 @@
     .locacoes-history td { font-size: 0.92rem; }
     @media (max-width: 720px) {
       .locacoes-header { display: block; }
-      .locacoes-grid, .locacoes-faixa { grid-template-columns: 1fr; }
+      .locacoes-grid, .locacoes-faixa, .locacoes-correcao-grid { grid-template-columns: 1fr; }
+      .locacoes-saldos { grid-template-columns: 1fr; }
+      .locacoes-correcao-acoes { flex-direction: column-reverse; }
+      .locacoes-correcao-acoes button { width: 100%; }
       .locacoes-actions { justify-content: stretch; flex-direction: column-reverse; }
       .btn-locacoes-primary, .btn-locacoes-secondary { width: 100%; text-align: center; }
     }
@@ -62,55 +140,158 @@
       {% endfor %}
     {% endif %}
 
+    <section class="locacoes-card">
+      <h2>Disponibilidade de locacao</h2>
+
+      <div class="locacoes-saldos">
+        <div class="locacoes-saldo">
+          <span>Saldo atual de mesas</span>
+          <strong>{{ configuracao.total_mesas|default:"0" }}</strong>
+          <button
+            type="button"
+            class="btn-corrigir-saldo"
+            data-corrigir-item="mesa"
+            data-saldo-atual="{{ configuracao.total_mesas|default:'0' }}"
+          >
+            Corrigir
+          </button>
+        </div>
+
+        <div class="locacoes-saldo">
+          <span>Saldo atual de cadeiras</span>
+          <strong>{{ configuracao.total_cadeiras|default:"0" }}</strong>
+          <button
+            type="button"
+            class="btn-corrigir-saldo"
+            data-corrigir-item="cadeira"
+            data-saldo-atual="{{ configuracao.total_cadeiras|default:'0' }}"
+          >
+            Corrigir
+          </button>
+        </div>
+      </div>
+
+      <div class="locacoes-resumo-jogos">
+        <strong>Jogos completos: {{ jogos_completos }}</strong>
+        <span class="locacoes-sobra">
+          {{ mesas_sobrando }} mesa(s) sobrando
+        </span>
+        <span class="locacoes-sobra">
+          {{ cadeiras_sobrando }} cadeira(s) sobrando
+        </span>
+      </div>
+
+      <div
+        id="painel-correcao"
+        class="locacoes-correcao{% if not correcao_aberta %} d-none{% endif %}"
+      >
+        <h3 id="titulo-correcao">Corrigir saldo</h3>
+        <div
+          id="informacao-correcao"
+          class="locacoes-muted"
+        >
+          Informe a quantidade correta encontrada na contagem.
+        </div>
+
+        <form
+          method="post"
+          id="form-correcao-saldo"
+          data-enter-nav
+        >
+          {% csrf_token %}
+          <input
+            type="hidden"
+            name="acao"
+            value="corrigir_saldo"
+          >
+          <input
+            type="hidden"
+            name="{{ correcao_form.item.html_name }}"
+            id="{{ correcao_form.item.id_for_label }}"
+            value="{{ correcao_form.item.value|default:'' }}"
+          >
+          <input
+            type="hidden"
+            name="{{ correcao_form.tipo.html_name }}"
+            value="ajuste_inventario"
+          >
+          <input
+            type="hidden"
+            name="{{ correcao_form.quantidade.html_name }}"
+            value=""
+          >
+
+          {{ correcao_form.non_field_errors }}
+          {{ correcao_form.item.errors }}
+          {{ correcao_form.tipo.errors }}
+
+          <div class="locacoes-correcao-grid">
+            <div>
+              <label
+                class="locacoes-label"
+                for="{{ correcao_form.saldo_contado.id_for_label }}"
+              >
+                Novo saldo
+              </label>
+              {{ correcao_form.saldo_contado }}
+              {{ correcao_form.saldo_contado.errors }}
+            </div>
+
+            <div>
+              <label
+                class="locacoes-label"
+                for="{{ correcao_form.responsavel.id_for_label }}"
+              >
+                Responsavel
+              </label>
+              {{ correcao_form.responsavel }}
+              {{ correcao_form.responsavel.errors }}
+            </div>
+
+            <div>
+              <label
+                class="locacoes-label"
+                for="{{ correcao_form.observacao.id_for_label }}"
+              >
+                Motivo
+              </label>
+              {{ correcao_form.observacao }}
+              {{ correcao_form.observacao.errors }}
+            </div>
+          </div>
+
+          <div class="locacoes-correcao-acoes">
+            <button
+              type="button"
+              class="btn-cancelar-correcao"
+              id="cancelar-correcao"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              class="btn-locacoes-primary"
+            >
+              Gravar correcao
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <p class="locacoes-muted mt-3 mb-0">
+        Estas quantidades pertencem apenas ao material de
+        locacao e nao alteram produtos, vendas ou estoque comum.
+      </p>
+    </section>
+
     <form method="post" data-enter-nav>
       {% csrf_token %}
-      <input type="hidden" name="acao" value="salvar_configuracoes">
+      <input
+        type="hidden"
+        name="acao"
+        value="salvar_configuracoes"
+      >
       {{ faixas_formset.management_form }}
-
-      <section class="locacoes-card">
-        <h2>Disponibilidade de locacao</h2>
-        <div class="locacoes-saldos">
-          <div class="locacoes-saldo">
-            <span>Saldo atual de mesas</span>
-            <strong>{{ configuracao.total_mesas|default:"0" }}</strong>
-            <button
-              type="button"
-              class="btn-corrigir-saldo"
-              data-corrigir-item="mesa"
-              data-saldo-atual="{{ configuracao.total_mesas|default:'0' }}"
-            >
-              Corrigir saldo de mesas
-            </button>
-          </div>
-          <div class="locacoes-saldo">
-            <span>Saldo atual de cadeiras</span>
-            <strong>{{ configuracao.total_cadeiras|default:"0" }}</strong>
-            <button
-              type="button"
-              class="btn-corrigir-saldo"
-              data-corrigir-item="cadeira"
-              data-saldo-atual="{{ configuracao.total_cadeiras|default:'0' }}"
-            >
-              Corrigir saldo de cadeiras
-            </button>
-          </div>
-        </div>
-        <div class="locacoes-grid">
-          <div>
-            <label class="locacoes-label" for="{{ configuracao_form.total_mesas.id_for_label }}">Quantidade total de mesas</label>
-            {{ configuracao_form.total_mesas }}
-            {{ configuracao_form.total_mesas.errors }}
-            {% if configuracao_form.total_mesas.help_text %}<div class="locacoes-help">{{ configuracao_form.total_mesas.help_text }}</div>{% endif %}
-          </div>
-          <div>
-            <label class="locacoes-label" for="{{ configuracao_form.total_cadeiras.id_for_label }}">Quantidade total de cadeiras</label>
-            {{ configuracao_form.total_cadeiras }}
-            {{ configuracao_form.total_cadeiras.errors }}
-            {% if configuracao_form.total_cadeiras.help_text %}<div class="locacoes-help">{{ configuracao_form.total_cadeiras.help_text }}</div>{% endif %}
-          </div>
-        </div>
-        <p class="locacoes-muted mt-3 mb-0">Estas quantidades pertencem apenas ao material de locacao e nao alteram produtos, vendas ou estoque comum.</p>
-      </section>
 
       <section class="locacoes-card">
         <h2>Composicao fixa do jogo</h2>
@@ -177,10 +358,13 @@
       </div>
     </form>
 
-    <section
-      class="locacoes-card mt-4"
+    <details
+      class="locacoes-card mt-4 locacoes-details"
       id="secao-movimentacao"
+      {% if movimentacao_form.errors %}open{% endif %}
     >
+      <summary>Outras movimentacoes de estoque</summary>
+      <div class="locacoes-details-body">
       <h2 id="titulo-movimentacao">Registrar movimentacao</h2>
 
       <div
@@ -240,7 +424,8 @@
           </button>
         </div>
       </form>
-    </section>
+      </div>
+    </details>
 
     <section class="locacoes-card">
       <h2>Historico recente</h2>
@@ -281,100 +466,94 @@
       const botoes = document.querySelectorAll(
         "[data-corrigir-item]"
       );
-      const secao = document.getElementById(
-        "secao-movimentacao"
-      );
-      const formulario = document.getElementById(
-        "form-movimentacao"
-      );
-      const item = document.getElementById("id_item");
-      const tipo = document.getElementById("id_tipo");
-      const quantidade = document.getElementById(
-        "id_quantidade"
-      );
-      const saldoContado = document.getElementById(
-        "id_saldo_contado"
-      );
-      const observacao = document.getElementById(
-        "id_observacao"
+      const painel = document.getElementById(
+        "painel-correcao"
       );
       const titulo = document.getElementById(
-        "titulo-movimentacao"
+        "titulo-correcao"
       );
-      const aviso = document.getElementById(
-        "aviso-correcao"
+      const informacao = document.getElementById(
+        "informacao-correcao"
       );
-      const botaoSalvar = document.getElementById(
-        "botao-movimentacao"
+      const item = document.getElementById(
+        "id_correcao-item"
       );
+      const saldo = document.getElementById(
+        "id_correcao-saldo_contado"
+      );
+      const observacao = document.getElementById(
+        "id_correcao-observacao"
+      );
+      const cancelar = document.getElementById(
+        "cancelar-correcao"
+      );
+
+      function nomePlural(codigoItem) {
+        return codigoItem === "mesa"
+          ? "mesas"
+          : "cadeiras";
+      }
+
+      function prepararTitulo(codigoItem, saldoAtual) {
+        const nomeItem = nomePlural(codigoItem);
+
+        titulo.textContent = (
+          "Corrigir saldo de " + nomeItem
+        );
+
+        informacao.textContent = (
+          "Saldo atual: " + saldoAtual +
+          ". Informe a quantidade correta encontrada."
+        );
+      }
 
       botoes.forEach(function (botao) {
         botao.addEventListener("click", function () {
           const codigoItem = botao.dataset.corrigirItem;
           const saldoAtual = botao.dataset.saldoAtual;
-          const nomeItem = (
-            codigoItem === "mesa"
-              ? "mesas"
-              : "cadeiras"
-          );
 
           item.value = codigoItem;
-          tipo.value = "ajuste_inventario";
-          quantidade.value = "";
-          saldoContado.value = saldoAtual;
-          observacao.value = (
-            "Correcao de quantidade cadastrada incorretamente."
-          );
+          saldo.value = saldoAtual;
 
-          formulario.dataset.saldoAtual = saldoAtual;
-          formulario.dataset.nomeItem = nomeItem;
+          if (!observacao.value.trim()) {
+            observacao.value = (
+              "Correcao de quantidade cadastrada " +
+              "incorretamente."
+            );
+          }
 
-          titulo.textContent = (
-            "Corrigir saldo de " + nomeItem
-          );
-          botaoSalvar.textContent = "Salvar correcao";
-
-          aviso.textContent = (
-            "Informe no campo Saldo contado a quantidade " +
-            "correta de " + nomeItem + ". O saldo atual e " +
-            saldoAtual + "."
-          );
-          aviso.classList.remove("d-none");
-
-          secao.scrollIntoView({
-            behavior: "smooth",
-            block: "start"
-          });
+          prepararTitulo(codigoItem, saldoAtual);
+          painel.classList.remove("d-none");
 
           window.setTimeout(function () {
-            saldoContado.focus();
-            saldoContado.select();
-          }, 350);
+            saldo.focus();
+            saldo.select();
+          }, 50);
         });
       });
 
-      formulario.addEventListener("submit", function (evento) {
-        if (
-          tipo.value !== "ajuste_inventario"
-          || !formulario.dataset.saldoAtual
-        ) {
-          return;
-        }
+      cancelar.addEventListener("click", function () {
+        painel.classList.add("d-none");
+        item.value = "";
+        saldo.value = "";
+        observacao.value = "";
+      });
 
-        const saldoAtual = formulario.dataset.saldoAtual;
-        const novoSaldo = saldoContado.value;
-        const nomeItem = formulario.dataset.nomeItem;
-
-        const confirmar = window.confirm(
-          "Confirmar a correcao do saldo de " +
-          nomeItem + " de " + saldoAtual +
-          " para " + novoSaldo + "?"
+      if (
+        !painel.classList.contains("d-none")
+        && item.value
+      ) {
+        const botaoAtual = document.querySelector(
+          '[data-corrigir-item="' + item.value + '"]'
         );
 
-        if (!confirmar) {
-          evento.preventDefault();
-        }
-      });
+        prepararTitulo(
+          item.value,
+          botaoAtual
+            ? botaoAtual.dataset.saldoAtual
+            : ""
+        );
+      }
     });
   </script>
   {% include "locacoes/includes/enter_nav.html" %}

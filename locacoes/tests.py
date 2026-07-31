@@ -1,4 +1,4 @@
-from decimal import Decimal
+﻿from decimal import Decimal
 from datetime import date, datetime, time, timedelta
 
 from django.apps import apps
@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from estoque.models import Cliente, ContaFinanceira, ContaReceber, ItemVenda, MovimentoFinanceiro, Produto, Venda
+from estoque.models import Cliente, ContaFinanceira, ContaReceber, Funcionario, ItemVenda, MovimentoFinanceiro, Produto, Venda
 
 from .models import (
     ConfiguracaoLocacao,
@@ -91,7 +91,7 @@ class LocacoesBaseIsoladaTests(TestCase):
             item=MovimentoEstoqueLocacao.ITEM_MESA,
             tipo=MovimentoEstoqueLocacao.TIPO_ENTRADA,
             quantidade=5,
-            responsavel="Lincoln",
+            responsavel="Lincoln Albuquerque Neiva",
             observacao="Compra inicial",
         )
 
@@ -137,14 +137,14 @@ class LocacoesBaseIsoladaTests(TestCase):
             MovimentoEstoqueLocacao.registrar(
                 item=MovimentoEstoqueLocacao.ITEM_MESA,
                 tipo=MovimentoEstoqueLocacao.TIPO_AJUSTE_INVENTARIO,
-                responsavel="Lincoln",
+                responsavel="Lincoln Albuquerque Neiva",
                 saldo_contado=9,
             )
 
         movimento = MovimentoEstoqueLocacao.registrar(
             item=MovimentoEstoqueLocacao.ITEM_MESA,
             tipo=MovimentoEstoqueLocacao.TIPO_AJUSTE_INVENTARIO,
-            responsavel="Lincoln",
+            responsavel="Lincoln Albuquerque Neiva",
             observacao="Inventario mensal",
             saldo_contado=9,
         )
@@ -162,6 +162,16 @@ class LocacoesConfiguracoesViewTests(TestCase):
         self.faixa_centro = FaixaPrecoLocacao.objects.get(codigo=FaixaPrecoLocacao.CENTRO_PERTO)
         self.faixa_distante = FaixaPrecoLocacao.objects.get(codigo=FaixaPrecoLocacao.MAIS_DISTANTE)
         self.faixa_muito_distante = FaixaPrecoLocacao.objects.get(codigo=FaixaPrecoLocacao.MUITO_DISTANTE)
+        self.lincoln = Funcionario.objects.create(
+            nome="Lincoln Albuquerque Neiva",
+            ativo=True,
+            pode_operar_sistema=True,
+        )
+        self.roseli = Funcionario.objects.create(
+            nome="Roseli Da Costa Gama",
+            ativo=True,
+            pode_operar_sistema=True,
+        )
 
     def test_tela_salva_configuracoes_de_locacao(self):
         response = self.client.post(
@@ -210,7 +220,7 @@ class LocacoesConfiguracoesViewTests(TestCase):
                 "tipo": MovimentoEstoqueLocacao.TIPO_ENTRADA,
                 "quantidade": "12",
                 "saldo_contado": "",
-                "responsavel": "Camila",
+                "responsavel": str(self.roseli.id),
                 "observacao": "Compra para locacao",
             },
             secure=True,
@@ -247,11 +257,11 @@ class LocacoesConfiguracoesViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "Corrigir saldo de mesas",
+            "Jogos completos: 46",
         )
         self.assertContains(
             response,
-            "Corrigir saldo de cadeiras",
+            "47 cadeira(s) sobrando",
         )
         self.assertContains(
             response,
@@ -273,16 +283,11 @@ class LocacoesConfiguracoesViewTests(TestCase):
         response = self.client.post(
             reverse("locacoes:configuracoes"),
             {
-                "acao": "registrar_movimentacao",
-                "item": MovimentoEstoqueLocacao.ITEM_MESA,
-                "tipo": (
-                    MovimentoEstoqueLocacao
-                    .TIPO_AJUSTE_INVENTARIO
-                ),
-                "quantidade": "",
-                "saldo_contado": "346",
-                "responsavel": "Lincoln",
-                "observacao": (
+                "acao": "corrigir_saldo",
+                "correcao-item": MovimentoEstoqueLocacao.ITEM_MESA,
+                "correcao-saldo_contado": "346",
+                "correcao-responsavel": str(self.lincoln.id),
+                "correcao-observacao": (
                     "Correcao de quantidade cadastrada "
                     "incorretamente."
                 ),
@@ -316,7 +321,7 @@ class LocacoesConfiguracoesViewTests(TestCase):
                 saldo_anterior=46,
                 saldo_posterior=346,
                 quantidade=300,
-                responsavel="Lincoln",
+                responsavel="Lincoln Albuquerque Neiva",
             ).exists()
         )
 

@@ -1,6 +1,6 @@
 from django import forms
 
-from estoque.models import Cliente
+from estoque.models import Cliente, Funcionario
 
 from .models import (
     ConferenciaEntregaLocacao,
@@ -70,14 +70,33 @@ class MovimentoEstoqueLocacaoForm(forms.Form):
         min_value=0,
         widget=forms.NumberInput(attrs={"class": "form-control", "min": "0", "step": "1"}),
     )
-    responsavel = forms.CharField(
-        max_length=120,
-        widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
+    responsavel = forms.ModelChoiceField(
+        queryset=Funcionario.objects.none(),
+        empty_label="Selecione o responsavel",
+        widget=forms.Select(
+            attrs={"class": "form-select"}
+        ),
     )
+
     observacao = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={"class": "form-control", "rows": 3}),
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["responsavel"].queryset = (
+            Funcionario.objects
+            .filter(
+                ativo=True,
+                pode_operar_sistema=True,
+            )
+            .order_by("nome", "id")
+        )
+
+    def clean_responsavel(self):
+        funcionario = self.cleaned_data["responsavel"]
+        return funcionario.nome
 
     def clean(self):
         cleaned_data = super().clean()
