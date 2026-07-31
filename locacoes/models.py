@@ -725,10 +725,12 @@ class TarefaOperacionalLocacao(models.Model):
     ]
 
     STATUS_PENDENTE = "pendente"
+    STATUS_PARCIAL = "parcial"
     STATUS_CONFIRMADA = "confirmada"
     STATUS_NAO_POSSIVEL = "nao_possivel"
     STATUS_CHOICES = [
         (STATUS_PENDENTE, "Pendente"),
+        (STATUS_PARCIAL, "Entrega parcial"),
         (STATUS_CONFIRMADA, "Confirmada"),
         (STATUS_NAO_POSSIVEL, "Nao foi possivel realizar"),
     ]
@@ -757,7 +759,11 @@ class TarefaOperacionalLocacao(models.Model):
 
     @property
     def pendente_operacional(self):
-        return self.status in {self.STATUS_PENDENTE, self.STATUS_NAO_POSSIVEL}
+        return self.status in {
+            self.STATUS_PENDENTE,
+            self.STATUS_PARCIAL,
+            self.STATUS_NAO_POSSIVEL,
+        }
 
     def confirmar(self, responsavel="", observacao=""):
         if self.status == self.STATUS_CONFIRMADA:
@@ -829,6 +835,456 @@ class TarefaOperacionalLocacao(models.Model):
             responsavel=self.tentativa_por,
         )
         return self
+
+
+class ConferenciaEntregaLocacao(models.Model):
+    SITUACAO_PARCIAL = "parcial"
+    SITUACAO_COMPLETA = "completa"
+    SITUACAO_CHOICES = [
+        (SITUACAO_PARCIAL, "Entrega parcial"),
+        (SITUACAO_COMPLETA, "Entrega completa"),
+    ]
+
+    RELACAO_CLIENTE = "cliente"
+    RELACAO_FUNCIONARIO = "funcionario"
+    RELACAO_CASEIRO = "caseiro"
+    RELACAO_FAMILIAR = "familiar"
+    RELACAO_OUTRO = "outro"
+    RELACAO_CHOICES = [
+        (RELACAO_CLIENTE, "Cliente"),
+        (RELACAO_FUNCIONARIO, "Funcionario"),
+        (RELACAO_CASEIRO, "Caseiro"),
+        (RELACAO_FAMILIAR, "Familiar"),
+        (RELACAO_OUTRO, "Outro"),
+    ]
+
+    ESTADO_BOM = "bom"
+    ESTADO_RESSALVA = "ressalva"
+    ESTADO_CHOICES = [
+        (ESTADO_BOM, "Em bom estado"),
+        (ESTADO_RESSALVA, "Entregue com ressalva"),
+    ]
+
+    locacao = models.ForeignKey(
+        Locacao,
+        on_delete=models.CASCADE,
+        related_name="conferencias_entrega",
+    )
+    tarefa = models.ForeignKey(
+        TarefaOperacionalLocacao,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="conferencias_entrega",
+    )
+
+    previsto_mesas = models.PositiveIntegerField()
+    previsto_cadeiras = models.PositiveIntegerField()
+
+    entregue_mesas = models.PositiveIntegerField()
+    entregue_cadeiras = models.PositiveIntegerField()
+
+    acumulado_mesas = models.PositiveIntegerField()
+    acumulado_cadeiras = models.PositiveIntegerField()
+
+    pendente_mesas = models.PositiveIntegerField()
+    pendente_cadeiras = models.PositiveIntegerField()
+
+    situacao = models.CharField(
+        max_length=20,
+        choices=SITUACAO_CHOICES,
+    )
+
+    recebedor_nome = models.CharField(max_length=160)
+    recebedor_relacao = models.CharField(
+        max_length=20,
+        choices=RELACAO_CHOICES,
+    )
+    recebedor_relacao_outro = models.CharField(
+        max_length=120,
+        blank=True,
+    )
+
+    estado_material = models.CharField(
+        max_length=20,
+        choices=ESTADO_CHOICES,
+    )
+    justificativa_parcial = models.TextField(blank=True)
+    previsao_conclusao = models.DateTimeField(blank=True, null=True)
+    observacao = models.TextField(blank=True)
+    responsavel = models.CharField(max_length=120)
+
+    mensagem_whatsapp_snapshot = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-criado_em", "-id"]
+        verbose_name = "Conferencia de entrega de locacao"
+        verbose_name_plural = "Conferencias de entrega de locacao"
+
+    def __str__(self):
+        return (
+            f"{self.get_situacao_display()} - "
+            f"Locacao #{self.locacao_id} - Conferencia #{self.id}"
+        )
+
+    def clean(self):
+        erros = {}
+
+        if self.entregue_mesas == 0 and self.entregue_cadeiras == 0:
+            erros["entregue_mesas"] = (
+                "Informe pelo menos uma mesa ou cadeira entregue."
+            )
+
+        if self.acumulado_mesas > self.previsto_mesas:
+            erros["acumulado_mesas"] = (
+                "O total acumulado de mesas nao pode superar o previsto."
+            )
+
+        if self.acumulado_cadeiras > self.previsto_cadeiras:
+            erros["acumulado_cadeiras"] = (
+                "O total acumulado de cadeiras nao pode superar o previsto."
+            )
+
+        if self.pendente_mesas != self.previsto_mesas - self.acumulado_mesas:
+            erros["pendente_mesas"] = (
+                "A quantidade pendente de mesas esta inconsistente."
+            )
+
+        if (
+            self.pendente_cadeiras
+            != self.previsto_cadeiras - self.acumulado_cadeiras
+        ):
+            erros["pendente_cadeiras"] = (
+                "A quantidade pendente de cadeiras esta inconsistente."
+            )
+
+        if self.situacao == self.SITUACAO_PARCIAL:
+            if self.pendente_mesas == 0 and self.pendente_cadeiras == 0:
+                erros["situacao"] = (
+                    "Entrega parcial precisa possuir material pendente."
+                )
+            if not str(self.justificativa_parcial or "").strip():
+                erros["justificativa_parcial"] = (
+                    "Informe a justificativa da entrega parcial."
+                )
+            if not self.previsao_conclusao:
+                erros["previsao_conclusao"] = (
+                    "Informe a previsao para completar a entrega."
+                )
+
+        if self.situacao == self.SITUACAO_COMPLETA:
+            if self.pendente_mesas or self.pendente_cadeiras:
+                erros["situacao"] = (
+                    "Entrega completa nao pode possuir material pendente."
+                )
+
+        if (
+            self.recebedor_relacao == self.RELACAO_OUTRO
+            and not str(self.recebedor_relacao_outro or "").strip()
+        ):
+            erros["recebedor_relacao_outro"] = (
+                "Informe a relacao da pessoa que recebeu."
+            )
+
+        if (
+            self.estado_material == self.ESTADO_RESSALVA
+            and not str(self.observacao or "").strip()
+        ):
+            erros["observacao"] = (
+                "Explique a ressalva sobre o estado do material."
+            )
+
+        if not str(self.recebedor_nome or "").strip():
+            erros["recebedor_nome"] = "Informe quem recebeu o material."
+
+        if not str(self.responsavel or "").strip():
+            erros["responsavel"] = (
+                "Informe o funcionario responsavel pela entrega."
+            )
+
+        if erros:
+            raise ValidationError(erros)
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValidationError(
+                "Uma conferencia de entrega ja registrada nao pode ser alterada."
+            )
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def registrar(cls, tarefa, dados, calculos):
+        agora = timezone.now()
+
+        with transaction.atomic():
+            tarefa = (
+                TarefaOperacionalLocacao.objects
+                .select_for_update()
+                .select_related("locacao")
+                .get(pk=tarefa.pk)
+            )
+            locacao = (
+                Locacao.objects
+                .select_for_update()
+                .prefetch_related("itens", "conferencias_entrega")
+                .get(pk=tarefa.locacao_id)
+            )
+
+            if tarefa.tipo != TarefaOperacionalLocacao.TIPO_ENTREGA:
+                raise ValidationError(
+                    "Esta tarefa nao corresponde a uma entrega."
+                )
+
+            if tarefa.status == TarefaOperacionalLocacao.STATUS_CONFIRMADA:
+                raise ValidationError(
+                    "Esta entrega ja foi confirmada."
+                )
+
+            if locacao.status == Locacao.STATUS_RESERVADA:
+                locacao.marcar_saiu_para_entrega(
+                    responsavel=dados["responsavel"],
+                    observacao=(
+                        "Saida registrada pelo checklist "
+                        "detalhado de entrega."
+                    ),
+                )
+                locacao.refresh_from_db()
+
+            if locacao.status != Locacao.STATUS_SAIU_PARA_ENTREGA:
+                raise ValidationError(
+                    "Esta locacao nao possui entrega pendente."
+                )
+
+            previsto = Locacao.necessidades_itens(
+                [
+                    {
+                        "tipo": item.tipo,
+                        "quantidade": item.quantidade,
+                    }
+                    for item in locacao.itens.all()
+                ]
+            )
+
+            acumulados = locacao.conferencias_entrega.aggregate(
+                mesas=models.Sum("entregue_mesas"),
+                cadeiras=models.Sum("entregue_cadeiras"),
+            )
+            acumulado_anterior_mesas = int(
+                acumulados["mesas"] or 0
+            )
+            acumulado_anterior_cadeiras = int(
+                acumulados["cadeiras"] or 0
+            )
+
+            entregue_mesas = int(dados["entregue_mesas"])
+            entregue_cadeiras = int(dados["entregue_cadeiras"])
+
+            acumulado_mesas = (
+                acumulado_anterior_mesas + entregue_mesas
+            )
+            acumulado_cadeiras = (
+                acumulado_anterior_cadeiras + entregue_cadeiras
+            )
+
+            if acumulado_mesas > previsto["mesas"]:
+                raise ValidationError(
+                    "A quantidade entregue de mesas esta maior "
+                    "que a prevista no termo."
+                )
+
+            if acumulado_cadeiras > previsto["cadeiras"]:
+                raise ValidationError(
+                    "A quantidade entregue de cadeiras esta maior "
+                    "que a prevista no termo."
+                )
+
+            if entregue_mesas == 0 and entregue_cadeiras == 0:
+                raise ValidationError(
+                    "Informe pelo menos uma mesa ou cadeira entregue."
+                )
+
+            pendente_mesas = previsto["mesas"] - acumulado_mesas
+            pendente_cadeiras = (
+                previsto["cadeiras"] - acumulado_cadeiras
+            )
+            parcial = pendente_mesas > 0 or pendente_cadeiras > 0
+
+            if parcial:
+                situacao = cls.SITUACAO_PARCIAL
+                if not str(
+                    dados.get("justificativa_parcial") or ""
+                ).strip():
+                    raise ValidationError(
+                        "Informe a justificativa da entrega parcial."
+                    )
+                if not dados.get("previsao_conclusao"):
+                    raise ValidationError(
+                        "Informe a previsao para completar a entrega."
+                    )
+            else:
+                situacao = cls.SITUACAO_COMPLETA
+
+            relacao_codigo = dados["recebedor_relacao"]
+            relacao_texto = dict(cls.RELACAO_CHOICES).get(
+                relacao_codigo,
+                relacao_codigo,
+            )
+            if relacao_codigo == cls.RELACAO_OUTRO:
+                relacao_texto = dados["recebedor_relacao_outro"]
+
+            linhas = [
+                f"Conferencia da locacao #{locacao.id}",
+                "",
+                (
+                    f"Material conferido com "
+                    f"{dados['recebedor_nome']}, "
+                    f"{str(relacao_texto).lower()}."
+                ),
+                "",
+                (
+                    f"Previsto: {previsto['mesas']} mesa(s) "
+                    f"e {previsto['cadeiras']} cadeira(s)."
+                ),
+                (
+                    f"Entregue agora: {entregue_mesas} mesa(s) "
+                    f"e {entregue_cadeiras} cadeira(s)."
+                ),
+                (
+                    f"Total entregue: {acumulado_mesas} mesa(s) "
+                    f"e {acumulado_cadeiras} cadeira(s)."
+                ),
+                (
+                    f"Pendente: {pendente_mesas} mesa(s) "
+                    f"e {pendente_cadeiras} cadeira(s)."
+                ),
+            ]
+
+            if parcial:
+                previsao_local = timezone.localtime(
+                    dados["previsao_conclusao"]
+                )
+                linhas.append(
+                    "Previsao para completar: "
+                    f"{previsao_local:%d/%m/%Y as %H:%M}."
+                )
+
+            linhas.extend([
+                (
+                    "Estado do material: "
+                    f"{dict(cls.ESTADO_CHOICES).get(dados['estado_material'])}."
+                ),
+                (
+                    "Responsavel pela entrega: "
+                    f"{dados['responsavel']}."
+                ),
+            ])
+
+            observacao = str(
+                dados.get("observacao") or ""
+            ).strip()
+            if observacao:
+                linhas.append(f"Observacao: {observacao}")
+
+            mensagem = "\n".join(linhas)
+
+            conferencia = cls.objects.create(
+                locacao=locacao,
+                tarefa=tarefa,
+                previsto_mesas=previsto["mesas"],
+                previsto_cadeiras=previsto["cadeiras"],
+                entregue_mesas=entregue_mesas,
+                entregue_cadeiras=entregue_cadeiras,
+                acumulado_mesas=acumulado_mesas,
+                acumulado_cadeiras=acumulado_cadeiras,
+                pendente_mesas=pendente_mesas,
+                pendente_cadeiras=pendente_cadeiras,
+                situacao=situacao,
+                recebedor_nome=str(
+                    dados["recebedor_nome"]
+                ).strip(),
+                recebedor_relacao=relacao_codigo,
+                recebedor_relacao_outro=str(
+                    dados.get("recebedor_relacao_outro") or ""
+                ).strip(),
+                estado_material=dados["estado_material"],
+                justificativa_parcial=str(
+                    dados.get("justificativa_parcial") or ""
+                ).strip(),
+                previsao_conclusao=(
+                    dados.get("previsao_conclusao")
+                    if parcial
+                    else None
+                ),
+                observacao=observacao,
+                responsavel=str(dados["responsavel"]).strip(),
+                mensagem_whatsapp_snapshot=mensagem,
+            )
+
+            if parcial:
+                previsao_local = timezone.localtime(
+                    dados["previsao_conclusao"]
+                )
+                tarefa.status = (
+                    TarefaOperacionalLocacao.STATUS_PARCIAL
+                )
+                tarefa.data_agendada = previsao_local.date()
+                tarefa.horario_agendado = previsao_local.time().replace(
+                    second=0,
+                    microsecond=0,
+                )
+                tarefa.confirmado_em = None
+                tarefa.confirmado_por = ""
+                tarefa.save(update_fields=[
+                    "status",
+                    "data_agendada",
+                    "horario_agendado",
+                    "confirmado_em",
+                    "confirmado_por",
+                    "atualizado_em",
+                ])
+                evento_tipo = "checklist_entrega_parcial"
+                descricao = (
+                    f"Entrega parcial registrada. Pendente: "
+                    f"{pendente_mesas} mesa(s) e "
+                    f"{pendente_cadeiras} cadeira(s)."
+                )
+            else:
+                tarefa.status = (
+                    TarefaOperacionalLocacao.STATUS_CONFIRMADA
+                )
+                tarefa.confirmado_em = agora
+                tarefa.confirmado_por = str(
+                    dados["responsavel"]
+                ).strip()
+                tarefa.save(update_fields=[
+                    "status",
+                    "confirmado_em",
+                    "confirmado_por",
+                    "atualizado_em",
+                ])
+                locacao.confirmar_entrega(
+                    responsavel=dados["responsavel"],
+                    observacao=(
+                        "Entrega completa confirmada pelo "
+                        "checklist detalhado."
+                    ),
+                )
+                evento_tipo = "checklist_entrega_completa"
+                descricao = (
+                    "Entrega completa confirmada pelo "
+                    "checklist detalhado."
+                )
+
+            EventoLocacao.objects.create(
+                locacao=locacao,
+                tipo=evento_tipo,
+                descricao=descricao,
+                responsavel=dados["responsavel"],
+            )
+
+        return conferencia
 
 
 class ItemLocacao(models.Model):

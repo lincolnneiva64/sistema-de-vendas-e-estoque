@@ -15,6 +15,7 @@ from urllib.parse import quote
 from .forms import (
     AcaoOperacionalLocacaoForm,
     CancelarLocacaoForm,
+    ConferenciaEntregaLocacaoForm,
     ConfiguracaoLocacaoForm,
     DevolucaoLocacaoForm,
     FaixaPrecoLocacaoForm,
@@ -27,7 +28,16 @@ from .forms import (
     TermoLocacaoForm,
     VencimentoSaldoLocacaoForm,
 )
-from .models import ConfiguracaoLocacao, FaixaPrecoLocacao, ItemLocacao, Locacao, MovimentoEstoqueLocacao, PagamentoLocacao, TarefaOperacionalLocacao
+from .models import (
+    ConferenciaEntregaLocacao,
+    ConfiguracaoLocacao,
+    FaixaPrecoLocacao,
+    ItemLocacao,
+    Locacao,
+    MovimentoEstoqueLocacao,
+    PagamentoLocacao,
+    TarefaOperacionalLocacao,
+)
 from .services import checklist_operacional_locacoes, obter_ou_criar_tarefa_operacional, tarefas_ativas_da_locacao
 
 
@@ -403,7 +413,15 @@ def nova(request):
 
 def detalhe(request, pk):
     locacao = get_object_or_404(
-        Locacao.objects.select_related("cliente", "faixa_preco").prefetch_related("itens", "eventos", "pagamentos"),
+        Locacao.objects.select_related(
+            "cliente",
+            "faixa_preco",
+        ).prefetch_related(
+            "itens",
+            "eventos",
+            "pagamentos",
+            "conferencias_entrega",
+        ),
         pk=pk,
     )
     necessidade = Locacao.necessidades_itens(
@@ -414,12 +432,26 @@ def detalhe(request, pk):
         locacao.data_prevista_devolucao,
         excluir_id=locacao.pk,
     )
+    tarefa_entrega = None
+    if locacao.status in {
+        Locacao.STATUS_RESERVADA,
+        Locacao.STATUS_SAIU_PARA_ENTREGA,
+    }:
+        tarefa_entrega = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+
     return render(
         request,
         "locacoes/detalhe.html",
         {
             "locacao": locacao,
             "tarefas_operacionais": tarefas_ativas_da_locacao(locacao),
+            "tarefa_entrega": tarefa_entrega,
+            "conferencias_entrega": (
+                locacao.conferencias_entrega.all()
+            ),
             "necessidade": necessidade,
             "disponibilidade": disponibilidade,
             "cancelar_form": CancelarLocacaoForm(),
@@ -463,9 +495,167 @@ def abrir_tarefa_operacional_locacao(request, pk, tipo):
     return redirect(f"{reverse('locacoes:checklist_operacional')}?data={tarefa.data_agendada:%Y-%m-%d}&tarefa={tarefa.pk}")
 
 
+@ensure_csrf_cookie
+def conferencia_entrega(request, pk):
+    tarefa = get_object_or_404(
+        TarefaOperacionalLocacao.objects
+        .select_related("locacao", "locacao__cliente")
+        .prefetch_related(
+            "locacao__itens",
+            "locacao__conferencias_entrega",
+        ),
+        pk=pk,
+        tipo=TarefaOperacionalLocacao.TIPO_ENTREGA,
+    )
+    locacao = tarefa.locacao
+
+    conferencia_salva = None
+    conferencia_id = request.GET.get(
+        "conferencia",
+        "",
+    ).strip()
+
+    if conferencia_id.isdigit():
+        conferencia_salva = get_object_or_404(
+            ConferenciaEntregaLocacao,
+            pk=int(conferencia_id),
+            locacao=locacao,
+        )
+
+    if (
+        tarefa.status
+        == TarefaOperacionalLocacao.STATUS_CONFIRMADA
+        and not conferencia_salva
+    ):
+        messages.warning(
+            request,
+            "Esta entrega ja foi confirmada completamente.",
+        )
+        return redirect("locacoes:detalhe", pk=locacao.pk)
+
+    if (
+        locacao.status not in {
+            Locacao.STATUS_RESERVADA,
+            Locacao.STATUS_SAIU_PARA_ENTREGA,
+        }
+        and not conferencia_salva
+    ):
+        messages.warning(
+            request,
+            "Esta locacao nao possui entrega pendente.",
+        )
+        return redirect("locacoes:detalhe", pk=locacao.pk)
+
+    if request.method == "POST":
+        form = ConferenciaEntregaLocacaoForm(
+            request.POST,
+            locacao=locacao,
+        )
+        if form.is_valid():
+            try:
+                conferencia = ConferenciaEntregaLocacao.registrar(
+                    tarefa=tarefa,
+                    dados=form.cleaned_data,
+                    calculos=form.dados_conferencia(),
+                )
+            except ValidationError as exc:
+                if hasattr(exc, "message_dict"):
+                    for campo, erros in exc.message_dict.items():
+                        for erro in erros:
+                            form.add_error(
+                                campo if campo in form.fields else None,
+                                erro,
+                            )
+                else:
+                    for erro in exc.messages:
+                        form.add_error(None, erro)
+                messages.warning(
+                    request,
+                    "Nao foi possivel registrar a conferencia.",
+                )
+            else:
+                if (
+                    conferencia.situacao
+                    == ConferenciaEntregaLocacao.SITUACAO_PARCIAL
+                ):
+                    messages.warning(
+                        request,
+                        "Entrega parcial registrada. A pendencia foi mantida.",
+                    )
+                else:
+                    messages.success(
+                        request,
+                        "Entrega completa registrada com sucesso.",
+                    )
+                return redirect(
+                    f"{reverse('locacoes:conferencia_entrega', kwargs={'pk': tarefa.pk})}"
+                    f"?conferencia={conferencia.pk}"
+                )
+        else:
+            messages.warning(
+                request,
+                "Revise os campos destacados antes de confirmar.",
+            )
+    else:
+        form = ConferenciaEntregaLocacaoForm(
+            locacao=locacao,
+        )
+
+    telefone = "".join(
+        caractere
+        for caractere in locacao.telefone_contratante
+        if caractere.isdigit()
+    )
+    if len(telefone) in {10, 11}:
+        telefone = f"55{telefone}"
+
+    whatsapp_url = ""
+    if conferencia_salva and telefone:
+        whatsapp_url = (
+            f"https://web.whatsapp.com/send?"
+            f"phone={telefone}&"
+            f"text={quote(conferencia_salva.mensagem_whatsapp_snapshot)}"
+        )
+
+    historico = locacao.conferencias_entrega.all()
+
+    return render(
+        request,
+        "locacoes/conferencia_entrega.html",
+        {
+            "tarefa": tarefa,
+            "locacao": locacao,
+            "form": form,
+            "previsto_mesas": form.previsto_mesas,
+            "previsto_cadeiras": form.previsto_cadeiras,
+            "acumulado_mesas": form.acumulado_mesas,
+            "acumulado_cadeiras": form.acumulado_cadeiras,
+            "pendente_mesas": form.pendente_mesas,
+            "pendente_cadeiras": form.pendente_cadeiras,
+            "conferencia_salva": conferencia_salva,
+            "whatsapp_url": whatsapp_url,
+            "historico": historico,
+        },
+    )
+
+
 @require_POST
 def confirmar_tarefa_operacional(request, pk):
-    tarefa = get_object_or_404(TarefaOperacionalLocacao.objects.select_related("locacao"), pk=pk)
+    tarefa = get_object_or_404(
+        TarefaOperacionalLocacao.objects.select_related("locacao"),
+        pk=pk,
+    )
+
+    if tarefa.tipo == TarefaOperacionalLocacao.TIPO_ENTREGA:
+        messages.warning(
+            request,
+            "A entrega deve ser registrada pelo checklist detalhado.",
+        )
+        return redirect(
+            "locacoes:conferencia_entrega",
+            pk=tarefa.pk,
+        )
+
     form = AcaoOperacionalLocacaoForm(request.POST)
     if form.is_valid():
         try:
@@ -654,18 +844,18 @@ def marcar_saiu_para_entrega(request, pk):
 @require_POST
 def confirmar_entrega(request, pk):
     locacao = get_object_or_404(Locacao, pk=pk)
-    form = AcaoOperacionalLocacaoForm(request.POST)
-    if form.is_valid():
-        try:
-            locacao.confirmar_entrega(
-                responsavel=form.cleaned_data.get("responsavel", ""),
-                observacao=form.cleaned_data.get("observacao", ""),
-            )
-        except ValidationError as exc:
-            messages.warning(request, "; ".join(exc.messages))
-        else:
-            messages.success(request, "Entrega confirmada. Material esta na rua.")
-    return redirect("locacoes:detalhe", pk=locacao.pk)
+    tarefa = obter_ou_criar_tarefa_operacional(
+        locacao,
+        TarefaOperacionalLocacao.TIPO_ENTREGA,
+    )
+    messages.warning(
+        request,
+        "A entrega deve ser registrada pelo checklist detalhado.",
+    )
+    return redirect(
+        "locacoes:conferencia_entrega",
+        pk=tarefa.pk,
+    )
 
 
 @ensure_csrf_cookie

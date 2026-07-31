@@ -27,7 +27,13 @@ def obter_ou_criar_tarefa_operacional(locacao, tipo):
             "horario_agendado": horario_agendado,
         },
     )
-    if not criada and tarefa.status != TarefaOperacionalLocacao.STATUS_CONFIRMADA:
+    if (
+        not criada
+        and tarefa.status in {
+            TarefaOperacionalLocacao.STATUS_PENDENTE,
+            TarefaOperacionalLocacao.STATUS_NAO_POSSIVEL,
+        }
+    ):
         campos = []
         if tarefa.data_agendada != data_agendada:
             tarefa.data_agendada = data_agendada
@@ -86,9 +92,22 @@ def tarefa_para_item_checklist(tarefa, data_referencia):
         "materiais": materiais_locacao(locacao),
         "observacoes": locacao.observacao,
         "atrasada": atrasada,
-        "detalhe_url": reverse("locacoes:detalhe", kwargs={"pk": locacao.pk}),
-        "confirmar_url": reverse("locacoes:confirmar_tarefa_operacional", kwargs={"pk": tarefa.pk}),
-        "nao_possivel_url": reverse("locacoes:tarefa_operacional_nao_possivel", kwargs={"pk": tarefa.pk}),
+        "detalhe_url": reverse(
+            "locacoes:detalhe",
+            kwargs={"pk": locacao.pk},
+        ),
+        "conferencia_entrega_url": reverse(
+            "locacoes:conferencia_entrega",
+            kwargs={"pk": tarefa.pk},
+        ),
+        "confirmar_url": reverse(
+            "locacoes:confirmar_tarefa_operacional",
+            kwargs={"pk": tarefa.pk},
+        ),
+        "nao_possivel_url": reverse(
+            "locacoes:tarefa_operacional_nao_possivel",
+            kwargs={"pk": tarefa.pk},
+        ),
     }
 
 
@@ -103,36 +122,70 @@ def ordenar_itens_operacionais(itens):
     )
 
 
-def checklist_operacional_locacoes(data_referencia=None, agora=None):
-    data_referencia = data_referencia or timezone.localdate()
+def checklist_operacional_locacoes(
+    data_referencia=None,
+    agora=None,
+):
+    data_referencia = (
+        data_referencia or timezone.localdate()
+    )
     agora = agora or timezone.localtime()
-    locacoes = (
+
+    # Garante que locacoes originalmente marcadas para este dia
+    # possuam uma tarefa operacional de entrega.
+    locacoes_com_entrega_original_no_dia = (
         Locacao.objects
         .select_related("cliente", "faixa_preco")
         .prefetch_related("itens")
-        .exclude(status__in=STATUS_LOCACAO_ENCERRADOS)
         .filter(
             data_entrega=data_referencia,
+            status__in=[
+                Locacao.STATUS_RESERVADA,
+                Locacao.STATUS_SAIU_PARA_ENTREGA,
+            ],
         )
     )
-    entrega_ids = list(locacoes.values_list("id", flat=True))
+
+    for locacao in locacoes_com_entrega_original_no_dia:
+        obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+
+    tarefas_entrega = (
+        TarefaOperacionalLocacao.objects
+        .select_related(
+            "locacao",
+            "locacao__cliente",
+            "locacao__faixa_preco",
+        )
+        .prefetch_related("locacao__itens")
+        .filter(
+            tipo=TarefaOperacionalLocacao.TIPO_ENTREGA,
+            status__in=[
+                TarefaOperacionalLocacao.STATUS_PENDENTE,
+                TarefaOperacionalLocacao.STATUS_PARCIAL,
+                TarefaOperacionalLocacao.STATUS_NAO_POSSIVEL,
+            ],
+            data_agendada=data_referencia,
+            locacao__status__in=[
+                Locacao.STATUS_RESERVADA,
+                Locacao.STATUS_SAIU_PARA_ENTREGA,
+            ],
+        )
+    )
+
     locacoes_recolhimento = (
         Locacao.objects
         .select_related("cliente", "faixa_preco")
         .prefetch_related("itens")
         .exclude(status__in=STATUS_LOCACAO_ENCERRADOS)
         .filter(
-            status__in=[Locacao.STATUS_ENTREGUE, Locacao.STATUS_PENDENTE_DEVOLUCAO],
+            status__in=[
+                Locacao.STATUS_ENTREGUE,
+                Locacao.STATUS_PENDENTE_DEVOLUCAO,
+            ],
             data_prevista_devolucao__lte=data_referencia,
-        )
-    )
-    locacoes_entrega = (
-        Locacao.objects
-        .select_related("cliente", "faixa_preco")
-        .prefetch_related("itens")
-        .filter(
-            id__in=entrega_ids,
-            status__in=[Locacao.STATUS_RESERVADA, Locacao.STATUS_SAIU_PARA_ENTREGA],
         )
     )
 
@@ -141,31 +194,67 @@ def checklist_operacional_locacoes(data_referencia=None, agora=None):
         "recolhimentos": [],
         "devolucoes_atrasadas": [],
     }
-    for locacao in locacoes_entrega:
-        tarefa = obter_ou_criar_tarefa_operacional(locacao, TarefaOperacionalLocacao.TIPO_ENTREGA)
+
+    for tarefa in tarefas_entrega:
         if tarefa.pendente_operacional:
-            grupos["entregas"].append(tarefa_para_item_checklist(tarefa, data_referencia))
+            grupos["entregas"].append(
+                tarefa_para_item_checklist(
+                    tarefa,
+                    data_referencia,
+                )
+            )
 
     for locacao in locacoes_recolhimento:
-        tarefa = obter_ou_criar_tarefa_operacional(locacao, TarefaOperacionalLocacao.TIPO_RECOLHIMENTO)
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+        )
         if not tarefa.pendente_operacional:
             continue
-        chave = "devolucoes_atrasadas" if tarefa.data_agendada < data_referencia else "recolhimentos"
-        grupos[chave].append(tarefa_para_item_checklist(tarefa, data_referencia))
+
+        chave = (
+            "devolucoes_atrasadas"
+            if tarefa.data_agendada < data_referencia
+            else "recolhimentos"
+        )
+        grupos[chave].append(
+            tarefa_para_item_checklist(
+                tarefa,
+                data_referencia,
+            )
+        )
 
     for chave, itens in grupos.items():
         grupos[chave] = ordenar_itens_operacionais(itens)
 
-    total = sum(len(itens) for itens in grupos.values())
-    hora_atual = agora.time() if data_referencia == agora.date() else None
-    tem_horario_vencido = any(
-        item["horario"] is not None and hora_atual is not None and item["horario"] <= hora_atual
-        for item in grupos["entregas"] + grupos["recolhimentos"]
+    total = sum(
+        len(itens)
+        for itens in grupos.values()
     )
-    tem_atrasada = bool(grupos["devolucoes_atrasadas"])
+    hora_atual = (
+        agora.time()
+        if data_referencia == agora.date()
+        else None
+    )
+    tem_horario_vencido = any(
+        item["horario"] is not None
+        and hora_atual is not None
+        and item["horario"] <= hora_atual
+        for item in (
+            grupos["entregas"]
+            + grupos["recolhimentos"]
+        )
+    )
+    tem_atrasada = bool(
+        grupos["devolucoes_atrasadas"]
+    )
+
     return {
         "data": data_referencia,
         "grupos": grupos,
         "total": total,
-        "alerta": tem_horario_vencido or tem_atrasada,
+        "alerta": (
+            tem_horario_vencido
+            or tem_atrasada
+        ),
     }

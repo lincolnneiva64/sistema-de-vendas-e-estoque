@@ -3,6 +3,7 @@ from django import forms
 from estoque.models import Cliente
 
 from .models import (
+    ConferenciaEntregaLocacao,
     ConfiguracaoLocacao,
     FaixaPrecoLocacao,
     ItemLocacao,
@@ -383,6 +384,298 @@ class AcaoOperacionalLocacaoForm(forms.Form):
         required=False,
         widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}),
     )
+
+
+class ConferenciaEntregaLocacaoForm(forms.Form):
+    entregue_mesas = forms.IntegerField(
+        min_value=0,
+        initial=0,
+        label="Mesas entregues agora",
+        widget=forms.NumberInput(
+            attrs={
+                "class": "form-control",
+                "min": "0",
+                "step": "1",
+            }
+        ),
+    )
+    entregue_cadeiras = forms.IntegerField(
+        min_value=0,
+        initial=0,
+        label="Cadeiras entregues agora",
+        widget=forms.NumberInput(
+            attrs={
+                "class": "form-control",
+                "min": "0",
+                "step": "1",
+            }
+        ),
+    )
+    recebedor_nome = forms.CharField(
+        max_length=160,
+        label="Quem recebeu",
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "autocomplete": "off",
+            }
+        ),
+    )
+    recebedor_relacao = forms.ChoiceField(
+        choices=ConferenciaEntregaLocacao.RELACAO_CHOICES,
+        label="Relacao com o cliente",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    recebedor_relacao_outro = forms.CharField(
+        required=False,
+        max_length=120,
+        label="Qual e a relacao",
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "autocomplete": "off",
+            }
+        ),
+    )
+    estado_material = forms.ChoiceField(
+        choices=ConferenciaEntregaLocacao.ESTADO_CHOICES,
+        label="Estado do material",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    justificativa_parcial = forms.CharField(
+        required=False,
+        label="Justificativa da entrega parcial",
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 3,
+            }
+        ),
+    )
+    previsao_conclusao = forms.DateTimeField(
+        required=False,
+        label="Previsao para completar",
+        input_formats=["%Y-%m-%dT%H:%M"],
+        widget=forms.DateTimeInput(
+            format="%Y-%m-%dT%H:%M",
+            attrs={
+                "class": "form-control",
+                "type": "datetime-local",
+            },
+        ),
+    )
+    observacao = forms.CharField(
+        required=False,
+        label="Observacao",
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 3,
+            }
+        ),
+    )
+    responsavel = forms.CharField(
+        max_length=120,
+        label="Funcionario responsavel",
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "autocomplete": "off",
+            }
+        ),
+    )
+
+    def __init__(self, *args, locacao, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.locacao = locacao
+        self._dados_calculados = None
+
+        previsto = Locacao.necessidades_itens(
+            [
+                {
+                    "tipo": item.tipo,
+                    "quantidade": item.quantidade,
+                }
+                for item in locacao.itens.all()
+            ]
+        )
+        acumulado_mesas = sum(
+            conferencia.entregue_mesas
+            for conferencia in locacao.conferencias_entrega.all()
+        )
+        acumulado_cadeiras = sum(
+            conferencia.entregue_cadeiras
+            for conferencia in locacao.conferencias_entrega.all()
+        )
+
+        self.previsto_mesas = previsto["mesas"]
+        self.previsto_cadeiras = previsto["cadeiras"]
+        self.acumulado_mesas = acumulado_mesas
+        self.acumulado_cadeiras = acumulado_cadeiras
+        self.pendente_mesas = max(
+            self.previsto_mesas - self.acumulado_mesas,
+            0,
+        )
+        self.pendente_cadeiras = max(
+            self.previsto_cadeiras - self.acumulado_cadeiras,
+            0,
+        )
+
+        if not self.is_bound:
+            self.fields["entregue_mesas"].initial = self.pendente_mesas
+            self.fields["entregue_cadeiras"].initial = (
+                self.pendente_cadeiras
+            )
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        entregue_mesas = cleaned_data.get("entregue_mesas")
+        entregue_cadeiras = cleaned_data.get("entregue_cadeiras")
+
+        entregue_mesas = (
+            int(entregue_mesas)
+            if entregue_mesas is not None
+            else 0
+        )
+        entregue_cadeiras = (
+            int(entregue_cadeiras)
+            if entregue_cadeiras is not None
+            else 0
+        )
+
+        if entregue_mesas == 0 and entregue_cadeiras == 0:
+            self.add_error(
+                "entregue_mesas",
+                "Informe pelo menos uma mesa ou cadeira entregue.",
+            )
+
+        if entregue_mesas > self.pendente_mesas:
+            self.add_error(
+                "entregue_mesas",
+                (
+                    "A quantidade entregue esta maior que a prevista "
+                    "no termo. Corrija a contagem e traga o excedente "
+                    "de volta ou regularize o material adicional em "
+                    "um ajuste da locacao."
+                ),
+            )
+
+        if entregue_cadeiras > self.pendente_cadeiras:
+            self.add_error(
+                "entregue_cadeiras",
+                (
+                    "A quantidade entregue esta maior que a prevista "
+                    "no termo. Corrija a contagem e traga o excedente "
+                    "de volta ou regularize o material adicional em "
+                    "um ajuste da locacao."
+                ),
+            )
+
+        novo_acumulado_mesas = (
+            self.acumulado_mesas + entregue_mesas
+        )
+        novo_acumulado_cadeiras = (
+            self.acumulado_cadeiras + entregue_cadeiras
+        )
+        novo_pendente_mesas = max(
+            self.previsto_mesas - novo_acumulado_mesas,
+            0,
+        )
+        novo_pendente_cadeiras = max(
+            self.previsto_cadeiras - novo_acumulado_cadeiras,
+            0,
+        )
+
+        entrega_parcial = (
+            novo_pendente_mesas > 0
+            or novo_pendente_cadeiras > 0
+        )
+
+        justificativa = (
+            cleaned_data.get("justificativa_parcial") or ""
+        ).strip()
+        previsao = cleaned_data.get("previsao_conclusao")
+        relacao = cleaned_data.get("recebedor_relacao")
+        relacao_outro = (
+            cleaned_data.get("recebedor_relacao_outro") or ""
+        ).strip()
+        estado = cleaned_data.get("estado_material")
+        observacao = (
+            cleaned_data.get("observacao") or ""
+        ).strip()
+
+        if entrega_parcial:
+            if not justificativa:
+                self.add_error(
+                    "justificativa_parcial",
+                    (
+                        "Informe a justificativa da entrega "
+                        "parcial."
+                    ),
+                )
+            if not previsao:
+                self.add_error(
+                    "previsao_conclusao",
+                    (
+                        "Informe a previsao para completar "
+                        "a entrega."
+                    ),
+                )
+
+        if (
+            relacao
+            == ConferenciaEntregaLocacao.RELACAO_OUTRO
+            and not relacao_outro
+        ):
+            self.add_error(
+                "recebedor_relacao_outro",
+                "Informe a relacao da pessoa que recebeu.",
+            )
+
+        if (
+            estado
+            == ConferenciaEntregaLocacao.ESTADO_RESSALVA
+            and not observacao
+        ):
+            self.add_error(
+                "observacao",
+                (
+                    "Explique a ressalva sobre o estado "
+                    "do material."
+                ),
+            )
+
+        cleaned_data["justificativa_parcial"] = justificativa
+        cleaned_data["recebedor_relacao_outro"] = relacao_outro
+        cleaned_data["observacao"] = observacao
+
+        self._dados_calculados = {
+            "previsto_mesas": self.previsto_mesas,
+            "previsto_cadeiras": self.previsto_cadeiras,
+            "acumulado_anterior_mesas": self.acumulado_mesas,
+            "acumulado_anterior_cadeiras": (
+                self.acumulado_cadeiras
+            ),
+            "acumulado_mesas": novo_acumulado_mesas,
+            "acumulado_cadeiras": novo_acumulado_cadeiras,
+            "pendente_mesas": novo_pendente_mesas,
+            "pendente_cadeiras": novo_pendente_cadeiras,
+            "situacao": (
+                ConferenciaEntregaLocacao.SITUACAO_PARCIAL
+                if entrega_parcial
+                else ConferenciaEntregaLocacao.SITUACAO_COMPLETA
+            ),
+        }
+
+        return cleaned_data
+
+    def dados_conferencia(self):
+        if not self.is_valid():
+            raise ValueError(
+                "O formulario precisa ser valido antes do calculo."
+            )
+        return dict(self._dados_calculados)
 
 
 class NaoPossivelOperacionalLocacaoForm(forms.Form):

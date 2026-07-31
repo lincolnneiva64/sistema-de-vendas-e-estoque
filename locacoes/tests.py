@@ -11,6 +11,7 @@ from estoque.models import Cliente, ContaFinanceira, ContaReceber, ItemVenda, Mo
 
 from .models import (
     ConfiguracaoLocacao,
+    ConferenciaEntregaLocacao,
     FaixaPrecoLocacao,
     ItemLocacao,
     Locacao,
@@ -930,35 +931,277 @@ class LocacoesChecklistOperacionalTests(TestCase):
         )
         self.assertIsNone(checklist["grupos"]["recolhimentos"][0]["horario"])
 
-    def test_confirmacao_de_entrega_registra_data_hora_responsavel_remove_pendencia_e_mantem_historico(self):
+    def dados_conferencia_entrega(self, **extras):
+        dados = {
+            "entregue_mesas": "1",
+            "entregue_cadeiras": "4",
+            "recebedor_nome": "Maria",
+            "recebedor_relacao": (
+                ConferenciaEntregaLocacao.RELACAO_CLIENTE
+            ),
+            "recebedor_relacao_outro": "",
+            "estado_material": (
+                ConferenciaEntregaLocacao.ESTADO_BOM
+            ),
+            "justificativa_parcial": "",
+            "previsao_conclusao": "",
+            "observacao": "Material conferido no local.",
+            "responsavel": "Camila",
+        }
+        dados.update(extras)
+        return dados
+
+    def test_confirmacao_simples_de_entrega_redireciona_para_checklist_detalhado(self):
         locacao = self.criar_locacao()
-        tarefa = obter_ou_criar_tarefa_operacional(locacao, TarefaOperacionalLocacao.TIPO_ENTREGA)
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
 
         response = self.client.post(
-            reverse("locacoes:confirmar_tarefa_operacional", kwargs={"pk": tarefa.pk}),
-            {"responsavel": "Camila", "observacao": "Entregue no portao."},
+            reverse(
+                "locacoes:confirmar_tarefa_operacional",
+                kwargs={"pk": tarefa.pk},
+            ),
+            {
+                "responsavel": "Camila",
+                "observacao": "Tentativa pela rota antiga.",
+            },
+            secure=True,
+        )
+
+        tarefa.refresh_from_db()
+        locacao.refresh_from_db()
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "locacoes:conferencia_entrega",
+                kwargs={"pk": tarefa.pk},
+            ),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(
+            tarefa.status,
+            TarefaOperacionalLocacao.STATUS_PENDENTE,
+        )
+        self.assertEqual(
+            locacao.status,
+            Locacao.STATUS_RESERVADA,
+        )
+        self.assertEqual(
+            ConferenciaEntregaLocacao.objects.count(),
+            0,
+        )
+
+    def test_entrega_completa_registra_conferencia_e_remove_alerta(self):
+        locacao = self.criar_locacao()
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+
+        response = self.client.post(
+            reverse(
+                "locacoes:conferencia_entrega",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_entrega(),
+            secure=True,
+        )
+
+        conferencia = ConferenciaEntregaLocacao.objects.get()
+        tarefa.refresh_from_db()
+        locacao.refresh_from_db()
+
+        self.assertRedirects(
+            response,
+            (
+                reverse(
+                    "locacoes:conferencia_entrega",
+                    kwargs={"pk": tarefa.pk},
+                )
+                + f"?conferencia={conferencia.pk}"
+            ),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(
+            conferencia.situacao,
+            ConferenciaEntregaLocacao.SITUACAO_COMPLETA,
+        )
+        self.assertEqual(conferencia.acumulado_mesas, 1)
+        self.assertEqual(conferencia.acumulado_cadeiras, 4)
+        self.assertEqual(conferencia.pendente_mesas, 0)
+        self.assertEqual(conferencia.pendente_cadeiras, 0)
+        self.assertIn(
+            "Material conferido com Maria",
+            conferencia.mensagem_whatsapp_snapshot,
+        )
+        self.assertEqual(
+            tarefa.status,
+            TarefaOperacionalLocacao.STATUS_CONFIRMADA,
+        )
+        self.assertEqual(tarefa.confirmado_por, "Camila")
+        self.assertIsNotNone(tarefa.confirmado_em)
+        self.assertEqual(
+            locacao.status,
+            Locacao.STATUS_ENTREGUE,
+        )
+        self.assertEqual(
+            checklist_operacional_locacoes(self.hoje)["total"],
+            0,
+        )
+        self.assertTrue(
+            locacao.eventos.filter(
+                tipo="checklist_entrega_completa",
+                responsavel="Camila",
+            ).exists()
+        )
+
+    def test_entrega_parcial_reagenda_e_depois_pode_ser_completada(self):
+        locacao = self.criar_locacao()
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+        nova_data = self.hoje + timedelta(days=1)
+        previsao = f"{nova_data.isoformat()}T10:00"
+
+        response = self.client.post(
+            reverse(
+                "locacoes:conferencia_entrega",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_entrega(
+                entregue_mesas="1",
+                entregue_cadeiras="2",
+                justificativa_parcial=(
+                    "Duas cadeiras ficaram para a segunda viagem."
+                ),
+                previsao_conclusao=previsao,
+            ),
             secure=True,
         )
 
         self.assertEqual(response.status_code, 302)
         tarefa.refresh_from_db()
         locacao.refresh_from_db()
-        self.assertEqual(tarefa.status, TarefaOperacionalLocacao.STATUS_CONFIRMADA)
-        self.assertIsNotNone(tarefa.confirmado_em)
-        self.assertEqual(tarefa.confirmado_por, "Camila")
-        self.assertEqual(locacao.status, Locacao.STATUS_ENTREGUE)
-        self.assertEqual(checklist_operacional_locacoes(self.hoje)["total"], 0)
-        self.assertTrue(locacao.eventos.filter(tipo="checklist_entrega_confirmada", responsavel="Camila").exists())
+
+        primeira = (
+            ConferenciaEntregaLocacao.objects
+            .order_by("criado_em", "id")
+            .first()
+        )
+
+        self.assertEqual(
+            primeira.situacao,
+            ConferenciaEntregaLocacao.SITUACAO_PARCIAL,
+        )
+        self.assertEqual(primeira.pendente_mesas, 0)
+        self.assertEqual(primeira.pendente_cadeiras, 2)
+        self.assertEqual(
+            tarefa.status,
+            TarefaOperacionalLocacao.STATUS_PARCIAL,
+        )
+        self.assertEqual(tarefa.data_agendada, nova_data)
+        self.assertEqual(tarefa.horario_agendado, time(10, 0))
+        self.assertEqual(
+            locacao.status,
+            Locacao.STATUS_SAIU_PARA_ENTREGA,
+        )
+        self.assertEqual(
+            checklist_operacional_locacoes(self.hoje)["total"],
+            0,
+        )
+
+        checklist_reagendado = checklist_operacional_locacoes(
+            nova_data
+        )
+        self.assertEqual(
+            checklist_reagendado["grupos"]["entregas"][0][
+                "tarefa"
+            ].pk,
+            tarefa.pk,
+        )
 
         response = self.client.post(
-            reverse("locacoes:confirmar_tarefa_operacional", kwargs={"pk": tarefa.pk}),
-            {"responsavel": "Camila"},
+            reverse(
+                "locacoes:conferencia_entrega",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_entrega(
+                entregue_mesas="0",
+                entregue_cadeiras="2",
+            ),
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        tarefa.refresh_from_db()
+        locacao.refresh_from_db()
+
+        self.assertEqual(
+            ConferenciaEntregaLocacao.objects.count(),
+            2,
+        )
+        segunda = (
+            ConferenciaEntregaLocacao.objects
+            .order_by("criado_em", "id")
+            .last()
+        )
+        self.assertEqual(
+            segunda.situacao,
+            ConferenciaEntregaLocacao.SITUACAO_COMPLETA,
+        )
+        self.assertEqual(segunda.acumulado_mesas, 1)
+        self.assertEqual(segunda.acumulado_cadeiras, 4)
+        self.assertEqual(
+            tarefa.status,
+            TarefaOperacionalLocacao.STATUS_CONFIRMADA,
+        )
+        self.assertEqual(
+            locacao.status,
+            Locacao.STATUS_ENTREGUE,
+        )
+
+    def test_entrega_acima_do_previsto_e_bloqueada(self):
+        locacao = self.criar_locacao()
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+
+        response = self.client.post(
+            reverse(
+                "locacoes:conferencia_entrega",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_entrega(
+                entregue_mesas="2",
+            ),
             secure=True,
         )
 
         tarefa.refresh_from_db()
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(tarefa.status, TarefaOperacionalLocacao.STATUS_CONFIRMADA)
+        locacao.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "A quantidade entregue esta maior que a prevista",
+        )
+        self.assertEqual(
+            ConferenciaEntregaLocacao.objects.count(),
+            0,
+        )
+        self.assertEqual(
+            tarefa.status,
+            TarefaOperacionalLocacao.STATUS_PENDENTE,
+        )
+        self.assertEqual(
+            locacao.status,
+            Locacao.STATUS_RESERVADA,
+        )
 
     def test_tela_checklist_renderiza_dados_operacionais(self):
         locacao = self.criar_locacao(pessoa_avulsa_nome="Cliente Tela Checklist")

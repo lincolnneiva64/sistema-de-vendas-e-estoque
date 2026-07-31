@@ -1,54 +1,166 @@
 <section class="grupo">
   <h2>{{ titulo }}</h2>
+
   {% for item in itens %}
-    <article class="item {% if item.atrasada %}atrasada{% endif %} {% if foco_tarefa_id == item.tarefa.id|stringformat:'s' %}foco{% endif %}" id="tarefa-{{ item.tarefa.id }}">
+    <article
+      class="item {% if item.atrasada %}atrasada{% endif %} {% if foco_tarefa_id == item.tarefa.id|stringformat:'s' %}foco{% endif %}"
+      id="tarefa-{{ item.tarefa.id }}"
+    >
       <div class="linha-topo">
         <div class="cliente">{{ item.cliente }}</div>
-        <div class="hora">{% if item.horario %}{{ item.horario|time:"H:i" }}{% else %}Sem horário{% endif %}</div>
+
+        <div class="hora">
+          {% if item.horario %}
+            {{ item.horario|time:"H:i" }}
+          {% else %}
+            Sem hor?rio
+          {% endif %}
+        </div>
       </div>
+
       <div class="dados">
         <div>
           <strong>Solicitada em:</strong>
           {{ item.locacao.criado_em|date:"d/m/Y H:i" }}
         </div>
-        <div><strong>Endereço:</strong> {{ item.endereco|linebreaksbr }}</div>
-        <div><strong>Referência:</strong> {{ item.ponto_referencia|default:"Nao informada" }}</div>
-        <div><strong>Telefone/celular:</strong> {{ item.telefone|default:"Nao informado" }}</div>
-        {% if item.observacoes %}<div><strong>Observações:</strong> {{ item.observacoes|linebreaksbr }}</div>{% endif %}
+
+        <div>
+          <strong>Endere?o:</strong>
+          {{ item.endereco|linebreaksbr }}
+        </div>
+
+        <div>
+          <strong>Refer?ncia:</strong>
+          {{ item.ponto_referencia|default:"N?o informada" }}
+        </div>
+
+        <div>
+          <strong>Telefone/celular:</strong>
+          {{ item.telefone|default:"N?o informado" }}
+        </div>
+
+        {% if item.observacoes %}
+          <div>
+            <strong>Observa??es:</strong>
+            {{ item.observacoes|linebreaksbr }}
+          </div>
+        {% endif %}
+
         {% if item.tarefa.status == "nao_possivel" %}
-          <div><strong>Última tentativa:</strong> {{ item.tarefa.motivo_nao_realizado|linebreaksbr }}</div>
+          <div>
+            <strong>?ltima tentativa:</strong>
+            {{ item.tarefa.motivo_nao_realizado|linebreaksbr }}
+          </div>
         {% endif %}
       </div>
+
       <ul class="materiais">
         {% for material in item.materiais %}
-          <li>{{ material.quantidade }} {{ material.nome }}{% if item.tarefa.tipo == "recolhimento" %} - pendente {{ material.pendente }}{% endif %}</li>
+          <li>
+            {{ material.quantidade }} {{ material.nome }}
+
+            {% if item.tarefa.tipo == "recolhimento" %}
+              ? pendente {{ material.pendente }}
+            {% endif %}
+          </li>
         {% endfor %}
       </ul>
+
       <div class="acoes">
         <div>
-          <a class="btn btn-outline-primary w-100 mb-2" href="{{ item.detalhe_url }}">Ver locacao</a>
-          <form method="post" action="{{ item.confirmar_url }}" data-enter-nav>
-            {% csrf_token %}
-            <div class="campos">
-              <input class="form-control" type="text" name="responsavel" placeholder="Responsável" autocomplete="off">
-              <textarea class="form-control" name="observacao" rows="2" placeholder="Observação operacional"></textarea>
-            </div>
-            <button class="btn btn-success w-100 mt-2" type="submit">
-              {% if item.tarefa.tipo == "entrega" %}Confirmar entrega{% else %}Confirmar recolhimento{% endif %}
-            </button>
-          </form>
+          <a
+            class="btn btn-outline-primary w-100 mb-2"
+            href="{{ item.detalhe_url }}"
+          >
+            Ver loca??o
+          </a>
+
+          {% if item.tarefa.tipo == "entrega" %}
+            <a
+              class="btn btn-success w-100"
+              href="{{ item.conferencia_entrega_url }}"
+            >
+              Fazer checklist de entrega
+            </a>
+
+            {% if item.tarefa.status == "parcial" %}
+              <div class="alert alert-warning mt-2 mb-0">
+                Entrega parcial. Ainda existem materiais
+                pendentes para entregar.
+              </div>
+            {% endif %}
+          {% else %}
+            <form
+              method="post"
+              action="{{ item.confirmar_url }}"
+              data-enter-nav
+            >
+              {% csrf_token %}
+
+              <div class="campos">
+                <input
+                  class="form-control"
+                  type="text"
+                  name="responsavel"
+                  placeholder="Respons?vel"
+                  autocomplete="off"
+                >
+
+                <textarea
+                  class="form-control"
+                  name="observacao"
+                  rows="2"
+                  placeholder="Observa??o operacional"
+                ></textarea>
+              </div>
+
+              <button
+                class="btn btn-success w-100 mt-2"
+                type="submit"
+              >
+                Confirmar recolhimento
+              </button>
+            </form>
+          {% endif %}
         </div>
-        <form method="post" action="{{ item.nao_possivel_url }}" data-enter-nav>
+
+        <form
+          method="post"
+          action="{{ item.nao_possivel_url }}"
+          data-enter-nav
+        >
           {% csrf_token %}
+
           <div class="campos">
-            <input class="form-control" type="text" name="responsavel" placeholder="Responsável" autocomplete="off">
-            <textarea class="form-control" name="observacao" rows="2" placeholder="Motivo/observação" required></textarea>
+            <input
+              class="form-control"
+              type="text"
+              name="responsavel"
+              placeholder="Respons?vel"
+              autocomplete="off"
+            >
+
+            <textarea
+              class="form-control"
+              name="observacao"
+              rows="2"
+              placeholder="Motivo/observa??o"
+              required
+            ></textarea>
           </div>
-          <button class="btn btn-outline-danger w-100 mt-2" type="submit">Nao foi possivel realizar</button>
+
+          <button
+            class="btn btn-outline-danger w-100 mt-2"
+            type="submit"
+          >
+            N?o foi poss?vel realizar
+          </button>
         </form>
       </div>
     </article>
   {% empty %}
-    <div class="empty">Nenhuma pendencia nesta secao.</div>
+    <div class="empty">
+      Nenhuma pend?ncia nesta se??o.
+    </div>
   {% endfor %}
 </section>
