@@ -31,6 +31,8 @@
     .btn-locacoes-primary { background: #198754; color: #fff; border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 800; }
     .btn-locacoes-orange { background: var(--locacoes-orange); color: #fff; border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 800; }
     .btn-locacoes-secondary { background: #e2e8f0; color: #172033; border-radius: 8px; padding: 10px 16px; font-weight: 800; text-decoration: none; }
+    .btn-corrigir-saldo { margin-top: 10px; background: #fff; color: var(--locacoes-orange-dark); border: 1px solid #fb923c; border-radius: 7px; padding: 7px 10px; font-weight: 800; cursor: pointer; }
+    .btn-corrigir-saldo:hover { background: #ffedd5; }
     .errorlist { color: #b91c1c; margin: 6px 0 0; padding-left: 18px; }
     .locacoes-history { width: 100%; border-collapse: collapse; }
     .locacoes-history th, .locacoes-history td { border-bottom: 1px solid #edf1f7; padding: 9px 8px; text-align: left; vertical-align: top; }
@@ -71,10 +73,26 @@
           <div class="locacoes-saldo">
             <span>Saldo atual de mesas</span>
             <strong>{{ configuracao.total_mesas|default:"0" }}</strong>
+            <button
+              type="button"
+              class="btn-corrigir-saldo"
+              data-corrigir-item="mesa"
+              data-saldo-atual="{{ configuracao.total_mesas|default:'0' }}"
+            >
+              Corrigir saldo de mesas
+            </button>
           </div>
           <div class="locacoes-saldo">
             <span>Saldo atual de cadeiras</span>
             <strong>{{ configuracao.total_cadeiras|default:"0" }}</strong>
+            <button
+              type="button"
+              class="btn-corrigir-saldo"
+              data-corrigir-item="cadeira"
+              data-saldo-atual="{{ configuracao.total_cadeiras|default:'0' }}"
+            >
+              Corrigir saldo de cadeiras
+            </button>
           </div>
         </div>
         <div class="locacoes-grid">
@@ -159,9 +177,22 @@
       </div>
     </form>
 
-    <section class="locacoes-card mt-4">
-      <h2>Registrar movimentacao</h2>
-      <form method="post" data-enter-nav>
+    <section
+      class="locacoes-card mt-4"
+      id="secao-movimentacao"
+    >
+      <h2 id="titulo-movimentacao">Registrar movimentacao</h2>
+
+      <div
+        id="aviso-correcao"
+        class="alert alert-warning d-none"
+      ></div>
+
+      <form
+        method="post"
+        data-enter-nav
+        id="form-movimentacao"
+      >
         {% csrf_token %}
         <input type="hidden" name="acao" value="registrar_movimentacao">
         {{ movimentacao_form.non_field_errors }}
@@ -200,7 +231,13 @@
           </div>
         </div>
         <div class="locacoes-actions">
-          <button type="submit" class="btn-locacoes-orange">Registrar movimentacao</button>
+          <button
+            type="submit"
+            class="btn-locacoes-orange"
+            id="botao-movimentacao"
+          >
+            Registrar movimentacao
+          </button>
         </div>
       </form>
     </section>
@@ -239,6 +276,107 @@
       {% endif %}
     </section>
   </main>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const botoes = document.querySelectorAll(
+        "[data-corrigir-item]"
+      );
+      const secao = document.getElementById(
+        "secao-movimentacao"
+      );
+      const formulario = document.getElementById(
+        "form-movimentacao"
+      );
+      const item = document.getElementById("id_item");
+      const tipo = document.getElementById("id_tipo");
+      const quantidade = document.getElementById(
+        "id_quantidade"
+      );
+      const saldoContado = document.getElementById(
+        "id_saldo_contado"
+      );
+      const observacao = document.getElementById(
+        "id_observacao"
+      );
+      const titulo = document.getElementById(
+        "titulo-movimentacao"
+      );
+      const aviso = document.getElementById(
+        "aviso-correcao"
+      );
+      const botaoSalvar = document.getElementById(
+        "botao-movimentacao"
+      );
+
+      botoes.forEach(function (botao) {
+        botao.addEventListener("click", function () {
+          const codigoItem = botao.dataset.corrigirItem;
+          const saldoAtual = botao.dataset.saldoAtual;
+          const nomeItem = (
+            codigoItem === "mesa"
+              ? "mesas"
+              : "cadeiras"
+          );
+
+          item.value = codigoItem;
+          tipo.value = "ajuste_inventario";
+          quantidade.value = "";
+          saldoContado.value = saldoAtual;
+          observacao.value = (
+            "Correcao de quantidade cadastrada incorretamente."
+          );
+
+          formulario.dataset.saldoAtual = saldoAtual;
+          formulario.dataset.nomeItem = nomeItem;
+
+          titulo.textContent = (
+            "Corrigir saldo de " + nomeItem
+          );
+          botaoSalvar.textContent = "Salvar correcao";
+
+          aviso.textContent = (
+            "Informe no campo Saldo contado a quantidade " +
+            "correta de " + nomeItem + ". O saldo atual e " +
+            saldoAtual + "."
+          );
+          aviso.classList.remove("d-none");
+
+          secao.scrollIntoView({
+            behavior: "smooth",
+            block: "start"
+          });
+
+          window.setTimeout(function () {
+            saldoContado.focus();
+            saldoContado.select();
+          }, 350);
+        });
+      });
+
+      formulario.addEventListener("submit", function (evento) {
+        if (
+          tipo.value !== "ajuste_inventario"
+          || !formulario.dataset.saldoAtual
+        ) {
+          return;
+        }
+
+        const saldoAtual = formulario.dataset.saldoAtual;
+        const novoSaldo = saldoContado.value;
+        const nomeItem = formulario.dataset.nomeItem;
+
+        const confirmar = window.confirm(
+          "Confirmar a correcao do saldo de " +
+          nomeItem + " de " + saldoAtual +
+          " para " + novoSaldo + "?"
+        );
+
+        if (!confirmar) {
+          evento.preventDefault();
+        }
+      });
+    });
+  </script>
   {% include "locacoes/includes/enter_nav.html" %}
 </body>
 </html>

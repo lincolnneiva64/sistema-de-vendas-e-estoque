@@ -234,6 +234,93 @@ class LocacoesConfiguracoesViewTests(TestCase):
         )
 
 
+    def test_correcao_simples_exibe_botoes_e_ajusta_saldo_contado(self):
+        self.configuracao.total_mesas = 46
+        self.configuracao.total_cadeiras = 231
+        self.configuracao.save()
+
+        response = self.client.get(
+            reverse("locacoes:configuracoes"),
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Corrigir saldo de mesas",
+        )
+        self.assertContains(
+            response,
+            "Corrigir saldo de cadeiras",
+        )
+        self.assertContains(
+            response,
+            'data-corrigir-item="mesa"',
+        )
+        self.assertContains(
+            response,
+            'data-saldo-atual="46"',
+        )
+        self.assertContains(
+            response,
+            'data-corrigir-item="cadeira"',
+        )
+        self.assertContains(
+            response,
+            'data-saldo-atual="231"',
+        )
+
+        response = self.client.post(
+            reverse("locacoes:configuracoes"),
+            {
+                "acao": "registrar_movimentacao",
+                "item": MovimentoEstoqueLocacao.ITEM_MESA,
+                "tipo": (
+                    MovimentoEstoqueLocacao
+                    .TIPO_AJUSTE_INVENTARIO
+                ),
+                "quantidade": "",
+                "saldo_contado": "346",
+                "responsavel": "Lincoln",
+                "observacao": (
+                    "Correcao de quantidade cadastrada "
+                    "incorretamente."
+                ),
+            },
+            secure=True,
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("locacoes:configuracoes"),
+            fetch_redirect_response=False,
+        )
+
+        self.configuracao.refresh_from_db()
+
+        self.assertEqual(
+            self.configuracao.total_mesas,
+            346,
+        )
+        self.assertEqual(
+            self.configuracao.total_cadeiras,
+            231,
+        )
+        self.assertTrue(
+            MovimentoEstoqueLocacao.objects.filter(
+                item=MovimentoEstoqueLocacao.ITEM_MESA,
+                tipo=(
+                    MovimentoEstoqueLocacao
+                    .TIPO_AJUSTE_INVENTARIO
+                ),
+                saldo_anterior=46,
+                saldo_posterior=346,
+                quantidade=300,
+                responsavel="Lincoln",
+            ).exists()
+        )
+
+
 class LocacoesUxPadraoTests(TestCase):
     def setUp(self):
         self.configuracao = ConfiguracaoLocacao.obter()
