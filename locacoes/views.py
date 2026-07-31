@@ -16,6 +16,7 @@ from .forms import (
     AcaoOperacionalLocacaoForm,
     CancelarLocacaoForm,
     ConferenciaEntregaLocacaoForm,
+    ConferenciaRecolhimentoLocacaoForm,
     ConfiguracaoLocacaoForm,
     DevolucaoLocacaoForm,
     FaixaPrecoLocacaoForm,
@@ -30,6 +31,7 @@ from .forms import (
 )
 from .models import (
     ConferenciaEntregaLocacao,
+    ConferenciaRecolhimentoLocacao,
     ConfiguracaoLocacao,
     FaixaPrecoLocacao,
     ItemLocacao,
@@ -421,6 +423,7 @@ def detalhe(request, pk):
             "eventos",
             "pagamentos",
             "conferencias_entrega",
+            "conferencias_recolhimento",
         ),
         pk=pk,
     )
@@ -442,6 +445,16 @@ def detalhe(request, pk):
             TarefaOperacionalLocacao.TIPO_ENTREGA,
         )
 
+    tarefa_recolhimento = None
+    if locacao.status in {
+        Locacao.STATUS_ENTREGUE,
+        Locacao.STATUS_PENDENTE_DEVOLUCAO,
+    }:
+        tarefa_recolhimento = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+        )
+
     return render(
         request,
         "locacoes/detalhe.html",
@@ -449,8 +462,12 @@ def detalhe(request, pk):
             "locacao": locacao,
             "tarefas_operacionais": tarefas_ativas_da_locacao(locacao),
             "tarefa_entrega": tarefa_entrega,
+            "tarefa_recolhimento": tarefa_recolhimento,
             "conferencias_entrega": (
                 locacao.conferencias_entrega.all()
+            ),
+            "conferencias_recolhimento": (
+                locacao.conferencias_recolhimento.all()
             ),
             "necessidade": necessidade,
             "disponibilidade": disponibilidade,
@@ -639,6 +656,190 @@ def conferencia_entrega(request, pk):
     )
 
 
+def conferencia_recolhimento(request, pk):
+    tarefa = get_object_or_404(
+        TarefaOperacionalLocacao.objects
+        .select_related(
+            "locacao",
+            "locacao__cliente",
+        )
+        .prefetch_related(
+            "locacao__itens",
+            "locacao__conferencias_entrega",
+            "locacao__conferencias_recolhimento",
+        ),
+        pk=pk,
+        tipo=TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+    )
+    locacao = tarefa.locacao
+
+    conferencia_salva = None
+    conferencia_id = request.GET.get(
+        "conferencia",
+        "",
+    ).strip()
+
+    if conferencia_id.isdigit():
+        conferencia_salva = get_object_or_404(
+            ConferenciaRecolhimentoLocacao,
+            pk=int(conferencia_id),
+            locacao=locacao,
+        )
+
+    if (
+        tarefa.status
+        == TarefaOperacionalLocacao.STATUS_CONFIRMADA
+        and not conferencia_salva
+    ):
+        messages.warning(
+            request,
+            "Este recolhimento ja foi concluido.",
+        )
+        return redirect(
+            "locacoes:detalhe",
+            pk=locacao.pk,
+        )
+
+    if (
+        locacao.status not in {
+            Locacao.STATUS_ENTREGUE,
+            Locacao.STATUS_PENDENTE_DEVOLUCAO,
+        }
+        and not conferencia_salva
+    ):
+        messages.warning(
+            request,
+            "Esta locacao nao possui recolhimento pendente.",
+        )
+        return redirect(
+            "locacoes:detalhe",
+            pk=locacao.pk,
+        )
+
+    if request.method == "POST":
+        form = ConferenciaRecolhimentoLocacaoForm(
+            request.POST,
+            locacao=locacao,
+        )
+
+        if form.is_valid():
+            try:
+                conferencia = (
+                    ConferenciaRecolhimentoLocacao.registrar(
+                        tarefa=tarefa,
+                        dados=form.cleaned_data,
+                    )
+                )
+            except ValidationError as exc:
+                if hasattr(exc, "message_dict"):
+                    for campo, erros in exc.message_dict.items():
+                        for erro in erros:
+                            form.add_error(
+                                (
+                                    campo
+                                    if campo in form.fields
+                                    else None
+                                ),
+                                erro,
+                            )
+                else:
+                    for erro in exc.messages:
+                        form.add_error(None, erro)
+
+                messages.warning(
+                    request,
+                    (
+                        "Nao foi possivel registrar "
+                        "o recolhimento."
+                    ),
+                )
+            else:
+                if (
+                    conferencia.situacao
+                    == ConferenciaRecolhimentoLocacao
+                    .SITUACAO_PARCIAL
+                ):
+                    messages.warning(
+                        request,
+                        (
+                            "Recolhimento parcial registrado. "
+                            "A pendencia foi mantida."
+                        ),
+                    )
+                else:
+                    messages.success(
+                        request,
+                        (
+                            "Recolhimento completo registrado "
+                            "com sucesso."
+                        ),
+                    )
+
+                return redirect(
+                    (
+                        reverse(
+                            "locacoes:conferencia_recolhimento",
+                            kwargs={"pk": tarefa.pk},
+                        )
+                        + f"?conferencia={conferencia.pk}"
+                    )
+                )
+        else:
+            messages.warning(
+                request,
+                (
+                    "Revise os campos destacados "
+                    "antes de confirmar."
+                ),
+            )
+    else:
+        form = ConferenciaRecolhimentoLocacaoForm(
+            locacao=locacao,
+        )
+
+    telefone = "".join(
+        caractere
+        for caractere in locacao.telefone_contratante
+        if caractere.isdigit()
+    )
+
+    if len(telefone) in {10, 11}:
+        telefone = f"55{telefone}"
+
+    whatsapp_url = ""
+    if conferencia_salva and telefone:
+        whatsapp_url = (
+            "https://web.whatsapp.com/send?"
+            f"phone={telefone}&"
+            f"text={quote(
+                conferencia_salva.mensagem_whatsapp_snapshot
+            )}"
+        )
+
+    historico = (
+        locacao.conferencias_recolhimento.all()
+    )
+
+    return render(
+        request,
+        "locacoes/conferencia_recolhimento.html",
+        {
+            "tarefa": tarefa,
+            "locacao": locacao,
+            "form": form,
+            "previsto_mesas": form.previsto_mesas,
+            "previsto_cadeiras": form.previsto_cadeiras,
+            "recolhido_mesas": form.recolhido_mesas,
+            "recolhido_cadeiras": form.recolhido_cadeiras,
+            "pendente_mesas": form.pendente_mesas,
+            "pendente_cadeiras": form.pendente_cadeiras,
+            "conferencia_salva": conferencia_salva,
+            "whatsapp_url": whatsapp_url,
+            "historico": historico,
+        },
+    )
+
+
 @require_POST
 def confirmar_tarefa_operacional(request, pk):
     tarefa = get_object_or_404(
@@ -653,6 +854,22 @@ def confirmar_tarefa_operacional(request, pk):
         )
         return redirect(
             "locacoes:conferencia_entrega",
+            pk=tarefa.pk,
+        )
+
+    if (
+        tarefa.tipo
+        == TarefaOperacionalLocacao.TIPO_RECOLHIMENTO
+    ):
+        messages.warning(
+            request,
+            (
+                "O recolhimento deve ser registrado "
+                "pelo checklist detalhado."
+            ),
+        )
+        return redirect(
+            "locacoes:conferencia_recolhimento",
             pk=tarefa.pk,
         )
 
@@ -861,54 +1078,43 @@ def confirmar_entrega(request, pk):
 @ensure_csrf_cookie
 def registrar_devolucao(request, pk):
     locacao = get_object_or_404(
-        Locacao.objects.prefetch_related("itens").select_related("cliente"),
+        Locacao.objects.select_related("cliente"),
         pk=pk,
     )
+
     if locacao.status not in {
-        Locacao.STATUS_SAIU_PARA_ENTREGA,
         Locacao.STATUS_ENTREGUE,
         Locacao.STATUS_PENDENTE_DEVOLUCAO,
     }:
-        messages.warning(request, "Esta locacao nao pode registrar devolucao neste status.")
-        return redirect("locacoes:detalhe", pk=locacao.pk)
+        messages.warning(
+            request,
+            (
+                "O recolhimento somente pode ser iniciado "
+                "depois da entrega ser concluida."
+            ),
+        )
+        return redirect(
+            "locacoes:detalhe",
+            pk=locacao.pk,
+        )
 
-    if request.method == "POST":
-        form = DevolucaoLocacaoForm(request.POST, locacao=locacao)
-        if form.is_valid():
-            try:
-                locacao.registrar_devolucao(
-                    form.retornos_por_item(),
-                    responsavel=form.cleaned_data.get("responsavel", ""),
-                    observacao=form.cleaned_data.get("observacao", ""),
-                )
-            except ValidationError as exc:
-                messages.warning(request, "; ".join(exc.messages))
-            else:
-                messages.success(request, "Devolucao registrada.")
-                return redirect("locacoes:detalhe", pk=locacao.pk)
-    else:
-        form = DevolucaoLocacaoForm(locacao=locacao)
-
-    linhas_devolucao = []
-    for item in locacao.itens.all():
-        linhas_devolucao.append({
-            "item": item,
-            "boa": form[f"item_{item.id}_boa"],
-            "quebrada": form[f"item_{item.id}_quebrada"],
-            "perdida": form[f"item_{item.id}_perdida"],
-            "descartada": form[f"item_{item.id}_descartada"],
-        })
-
-    return render(
-        request,
-        "locacoes/devolucao.html",
-        {
-            "locacao": locacao,
-            "form": form,
-            "linhas_devolucao": linhas_devolucao,
-        },
+    tarefa = obter_ou_criar_tarefa_operacional(
+        locacao,
+        TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
     )
 
+    messages.warning(
+        request,
+        (
+            "A devolucao agora deve ser registrada "
+            "pelo checklist detalhado de recolhimento."
+        ),
+    )
+
+    return redirect(
+        "locacoes:conferencia_recolhimento",
+        pk=tarefa.pk,
+    )
 
 @ensure_csrf_cookie
 def configuracoes(request):

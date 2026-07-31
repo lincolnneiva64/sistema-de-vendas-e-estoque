@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>Checklist de recolhimento</title>
+
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  >
+
+  <style>
+    :root {
+      --orange: #ea580c;
+      --orange-dark: #9a3412;
+      --orange-border: #fdba74;
+      --green: #15803d;
+      --red: #b91c1c;
+      --ink: #172033;
+      --muted: #64748b;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(
+          circle at top left,
+          #fff7ed 0,
+          transparent 34%
+        ),
+        #f5f7fb;
+      color: var(--ink);
+      font-family:
+        Inter,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+    }
+
+    .page {
+      width: min(100% - 20px, 1040px);
+      margin: 0 auto;
+      padding: 18px 0 48px;
+    }
+
+    .topo,
+    .cardx {
+      border: 2px solid var(--orange-border);
+      border-left: 7px solid var(--orange);
+      border-radius: 14px;
+      background: #fff;
+      box-shadow:
+        0 10px 24px rgba(154, 52, 18, 0.09),
+        0 2px 5px rgba(15, 23, 42, 0.04);
+    }
+
+    .topo {
+      margin-bottom: 16px;
+      padding: 18px;
+      background:
+        linear-gradient(
+          135deg,
+          #fff 0%,
+          #fff7ed 65%,
+          #ffedd5 100%
+        );
+    }
+
+    .topo-linha {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    h1 {
+      margin: 0;
+      color: var(--orange-dark);
+      font-size: clamp(1.65rem, 5vw, 2.25rem);
+      font-weight: 950;
+    }
+
+    .subtitulo {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .cardx {
+      margin-bottom: 16px;
+      padding: 18px;
+    }
+
+    .cardx h2 {
+      margin: -18px -18px 18px;
+      padding: 13px 18px;
+      border-bottom: 2px solid #fed7aa;
+      background:
+        linear-gradient(
+          90deg,
+          #ffedd5,
+          #fff7ed 70%,
+          #fff
+        );
+      color: var(--orange-dark);
+      font-size: 1.08rem;
+      font-weight: 950;
+    }
+
+    .dados {
+      display: grid;
+      gap: 8px;
+      color: #334155;
+    }
+
+    .resumo {
+      display: grid;
+      grid-template-columns:
+        repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .resumo-item {
+      padding: 13px;
+      border: 2px solid #e2e8f0;
+      border-radius: 11px;
+      background: #f8fafc;
+    }
+
+    .resumo-item strong {
+      display: block;
+      margin-bottom: 5px;
+      color: #334155;
+      font-size: 0.84rem;
+      text-transform: uppercase;
+    }
+
+    .resumo-item span {
+      display: block;
+      font-size: 1.03rem;
+      font-weight: 900;
+    }
+
+    .resumo-item.pendente {
+      border-color: #fbbf24;
+      background: #fffbeb;
+      color: #854d0e;
+    }
+
+    .grade {
+      display: grid;
+      grid-template-columns:
+        repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .campo-inteiro {
+      grid-column: 1 / -1;
+    }
+
+    .grupo-quantidade {
+      padding: 15px;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      background: #f8fafc;
+    }
+
+    .grupo-quantidade h3 {
+      margin: 0 0 14px;
+      color: #334155;
+      font-size: 1rem;
+      font-weight: 950;
+    }
+
+    .grupo-quantidade.avaria {
+      border-color: #fca5a5;
+      background: #fff7f7;
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 6px;
+      color: #334155;
+      font-weight: 900;
+    }
+
+    .form-control,
+    .form-select {
+      min-height: 48px;
+      border: 2px solid #cbd5e1;
+      border-radius: 10px;
+      font-weight: 650;
+    }
+
+    textarea.form-control {
+      min-height: auto;
+    }
+
+    .form-control:focus,
+    .form-select:focus {
+      border-color: var(--orange);
+      box-shadow:
+        0 0 0 0.22rem rgba(234, 88, 12, 0.15);
+    }
+
+    .erro {
+      margin-top: 5px;
+      color: var(--red);
+      font-size: 0.87rem;
+      font-weight: 800;
+    }
+
+    .resultado {
+      margin-top: 16px;
+      padding: 14px;
+      border: 2px solid #cbd5e1;
+      border-radius: 11px;
+      background: #f8fafc;
+      font-weight: 850;
+    }
+
+    .resultado.completa {
+      border-color: #86efac;
+      background: #f0fdf4;
+      color: #166534;
+    }
+
+    .resultado.parcial {
+      border-color: #fcd34d;
+      background: #fffbeb;
+      color: #854d0e;
+    }
+
+    .resultado.excesso {
+      border-color: #fca5a5;
+      background: #fef2f2;
+      color: #991b1b;
+    }
+
+    .btn-loc {
+      min-height: 50px;
+      border: 2px solid var(--orange);
+      border-radius: 10px;
+      background: var(--orange);
+      color: #fff;
+      font-weight: 950;
+    }
+
+    .btn-loc:hover,
+    .btn-loc:focus {
+      border-color: #c2410c;
+      background: #c2410c;
+      color: #fff;
+    }
+
+    .sucesso {
+      border-color: #86efac;
+      border-left-color: var(--green);
+    }
+
+    .mensagem {
+      min-height: 230px;
+      white-space: pre-wrap;
+    }
+
+    .historico-item {
+      margin-bottom: 12px;
+      padding: 14px;
+      border: 2px solid #e2e8f0;
+      border-radius: 11px;
+      background: #f8fafc;
+    }
+
+    .historico-topo {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .badge-parcial,
+    .badge-completa {
+      display: inline-block;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 900;
+    }
+
+    .badge-parcial {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .badge-completa {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    @media (max-width: 760px) {
+      .topo-linha {
+        display: block;
+      }
+
+      .topo-linha .btn {
+        width: 100%;
+        margin-top: 14px;
+      }
+
+      .resumo,
+      .grade {
+        grid-template-columns: 1fr;
+      }
+
+      .campo-inteiro {
+        grid-column: auto;
+      }
+
+      .cardx {
+        padding: 15px;
+      }
+
+      .cardx h2 {
+        margin: -15px -15px 15px;
+        padding: 12px 15px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main
+    class="page"
+    data-pendente-mesas="{{ pendente_mesas }}"
+    data-pendente-cadeiras="{{ pendente_cadeiras }}"
+  >
+    <header class="topo">
+      <div class="topo-linha">
+        <div>
+          <h1>Checklist de recolhimento</h1>
+
+          <p class="subtitulo">
+            Loca??o #{{ locacao.id }} ?
+            {{ locacao.nome_contratante }}
+          </p>
+        </div>
+
+        <a
+          class="btn btn-outline-secondary"
+          href="{% url 'locacoes:detalhe' locacao.id %}"
+        >
+          Voltar para a loca??o
+        </a>
+      </div>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div
+          class="alert alert-{{ message.tags|default:'info' }}"
+        >
+          {{ message }}
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <section class="cardx">
+      <h2>Dados do recolhimento</h2>
+
+      <div class="dados">
+        <div>
+          <strong>Cliente/pessoa:</strong>
+          {{ locacao.nome_contratante }}
+        </div>
+
+        <div>
+          <strong>Endere?o:</strong>
+          {{ locacao.endereco_entrega|linebreaksbr }}
+        </div>
+
+        <div>
+          <strong>Telefone:</strong>
+          {{ locacao.telefone_contratante|default:"N?o informado" }}
+        </div>
+
+        <div>
+          <strong>Devolu??o prevista:</strong>
+          {{ locacao.data_prevista_devolucao|date:"d/m/Y" }}
+        </div>
+      </div>
+    </section>
+
+    <section class="cardx">
+      <h2>Resumo f?sico</h2>
+
+      <div class="resumo">
+        <div class="resumo-item">
+          <strong>Entregue ao cliente</strong>
+          <span>
+            {{ previsto_mesas }} mesa(s) e
+            {{ previsto_cadeiras }} cadeira(s)
+          </span>
+        </div>
+
+        <div class="resumo-item">
+          <strong>J? encerrado</strong>
+          <span>
+            {{ recolhido_mesas }} mesa(s) e
+            {{ recolhido_cadeiras }} cadeira(s)
+          </span>
+        </div>
+
+        <div class="resumo-item pendente">
+          <strong>Pendente agora</strong>
+          <span>
+            {{ pendente_mesas }} mesa(s) e
+            {{ pendente_cadeiras }} cadeira(s)
+          </span>
+        </div>
+      </div>
+    </section>
+
+    {% if conferencia_salva %}
+      <section class="cardx sucesso">
+        <h2>Confer?ncia registrada</h2>
+
+        <p>
+          <strong>Situa??o:</strong>
+          {{ conferencia_salva.get_situacao_display }}
+        </p>
+
+        <textarea
+          class="form-control mensagem"
+          readonly
+        >{{ conferencia_salva.mensagem_whatsapp_snapshot }}</textarea>
+
+        {% if whatsapp_url %}
+          <a
+            class="btn btn-success w-100 mt-3"
+            href="{{ whatsapp_url }}"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Abrir mensagem no WhatsApp
+          </a>
+        {% else %}
+          <div class="alert alert-warning mt-3 mb-0">
+            A loca??o n?o possui telefone v?lido para abrir
+            o WhatsApp.
+          </div>
+        {% endif %}
+
+        {% if conferencia_salva.situacao == "parcial" %}
+          <a
+            class="btn btn-loc w-100 mt-2"
+            href="{% url 'locacoes:conferencia_recolhimento' tarefa.id %}"
+          >
+            Registrar pr?ximo recolhimento
+          </a>
+        {% endif %}
+      </section>
+    {% else %}
+      <section class="cardx">
+        <h2>Confer?ncia atual</h2>
+
+        <form method="post" data-enter-nav novalidate>
+          {% csrf_token %}
+
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger">
+              {{ form.non_field_errors }}
+            </div>
+          {% endif %}
+
+          <div class="grade">
+            <div class="grupo-quantidade campo-inteiro">
+              <h3>Material recolhido em bom estado</h3>
+
+              <div class="grade">
+                <div>
+                  <label
+                    class="form-label"
+                    for="{{ form.boa_mesas.id_for_label }}"
+                  >
+                    {{ form.boa_mesas.label }}
+                  </label>
+
+                  {{ form.boa_mesas }}
+
+                  {% for erro in form.boa_mesas.errors %}
+                    <div class="erro">{{ erro }}</div>
+                  {% endfor %}
+                </div>
+
+                <div>
+                  <label
+                    class="form-label"
+                    for="{{ form.boa_cadeiras.id_for_label }}"
+                  >
+                    {{ form.boa_cadeiras.label }}
+                  </label>
+
+                  {{ form.boa_cadeiras }}
+
+                  {% for erro in form.boa_cadeiras.errors %}
+                    <div class="erro">{{ erro }}</div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+
+            <div class="grupo-quantidade avaria campo-inteiro">
+              <h3>Quebra, perda ou descarte</h3>
+
+              <div class="grade">
+                <div>
+                  <label
+                    class="form-label"
+                    for="{{ form.quebrada_mesas.id_for_label }}"
+                  >
+                    {{ form.quebrada_mesas.label }}
+                  </label>
+                  {{ form.quebrada_mesas }}
+                  {% for erro in form.quebrada_mesas.errors %}
+                    <div class="erro">{{ erro }}</div>
+                  {% endfor %}
+                </div>
+
+                <div>
+                  <label
+                    class="form-label"
+                    for="{{ form.quebrada_cadeiras.id_for_label }}"
+                  >
+                    {{ form.quebrada_cadeiras.label }}
+                  </label>
+                  {{ form.quebrada_cadeiras }}
+                  {% for erro in form.quebrada_cadeiras.errors %}
+                    <div class="erro">{{ erro }}</div>
+                  {% endfor %}
+                </div>
+
+                <div>
+                  <label
+                    class="form-label"
+                    for="{{ form.perdida_mesas.id_for_label }}"
+                  >
+                    {{ form.perdida_mesas.label }}
+                  </label>
+                  {{ form.perdida_mesas }}
+                  {% for erro in form.perdida_mesas.errors %}
+                    <div class="erro">{{ erro }}</div>
+                  {% endfor %}
+                </div>
+
+                <div>
+                  <label
+                    class="form-label"
+                    for="{{ form.perdida_cadeiras.id_for_label }}"
+                  >
+                    {{ form.perdida_cadeiras.label }}
+                  </label>
+                  {{ form.perdida_cadeiras }}
+                  {% for erro in form.perdida_cadeiras.errors %}
+                    <div class="erro">{{ erro }}</div>
+                  {% endfor %}
+                </div>
+
+                <div>
+                  <label
+                    class="form-label"
+                    for="{{ form.descartada_mesas.id_for_label }}"
+                  >
+                    {{ form.descartada_mesas.label }}
+                  </label>
+                  {{ form.descartada_mesas }}
+                  {% for erro in form.descartada_mesas.errors %}
+                    <div class="erro">{{ erro }}</div>
+                  {% endfor %}
+                </div>
+
+                <div>
+                  <label
+                    class="form-label"
+                    for="{{ form.descartada_cadeiras.id_for_label }}"
+                  >
+                    {{ form.descartada_cadeiras.label }}
+                  </label>
+                  {{ form.descartada_cadeiras }}
+                  {% for erro in form.descartada_cadeiras.errors %}
+                    <div class="erro">{{ erro }}</div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label
+                class="form-label"
+                for="{{ form.pessoa_local_nome.id_for_label }}"
+              >
+                {{ form.pessoa_local_nome.label }}
+              </label>
+
+              {{ form.pessoa_local_nome }}
+
+              {% for erro in form.pessoa_local_nome.errors %}
+                <div class="erro">{{ erro }}</div>
+              {% endfor %}
+            </div>
+
+            <div>
+              <label
+                class="form-label"
+                for="{{ form.pessoa_local_relacao.id_for_label }}"
+              >
+                {{ form.pessoa_local_relacao.label }}
+              </label>
+
+              {{ form.pessoa_local_relacao }}
+
+              {% for erro in form.pessoa_local_relacao.errors %}
+                <div class="erro">{{ erro }}</div>
+              {% endfor %}
+            </div>
+
+            <div id="campo-relacao-outro">
+              <label
+                class="form-label"
+                for="{{ form.pessoa_local_relacao_outro.id_for_label }}"
+              >
+                {{ form.pessoa_local_relacao_outro.label }}
+              </label>
+
+              {{ form.pessoa_local_relacao_outro }}
+
+              {% for erro in form.pessoa_local_relacao_outro.errors %}
+                <div class="erro">{{ erro }}</div>
+              {% endfor %}
+            </div>
+
+            <div class="campo-inteiro" id="campo-justificativa">
+              <label
+                class="form-label"
+                for="{{ form.justificativa_parcial.id_for_label }}"
+              >
+                {{ form.justificativa_parcial.label }}
+              </label>
+
+              {{ form.justificativa_parcial }}
+
+              {% for erro in form.justificativa_parcial.errors %}
+                <div class="erro">{{ erro }}</div>
+              {% endfor %}
+            </div>
+
+            <div class="campo-inteiro" id="campo-previsao">
+              <label
+                class="form-label"
+                for="{{ form.previsao_conclusao.id_for_label }}"
+              >
+                {{ form.previsao_conclusao.label }}
+              </label>
+
+              {{ form.previsao_conclusao }}
+
+              {% for erro in form.previsao_conclusao.errors %}
+                <div class="erro">{{ erro }}</div>
+              {% endfor %}
+            </div>
+
+            <div class="campo-inteiro">
+              <label
+                class="form-label"
+                for="{{ form.observacao.id_for_label }}"
+              >
+                {{ form.observacao.label }}
+              </label>
+
+              {{ form.observacao }}
+
+              {% for erro in form.observacao.errors %}
+                <div class="erro">{{ erro }}</div>
+              {% endfor %}
+            </div>
+
+            <div class="campo-inteiro">
+              <label
+                class="form-label"
+                for="{{ form.responsavel.id_for_label }}"
+              >
+                {{ form.responsavel.label }}
+              </label>
+
+              {{ form.responsavel }}
+
+              {% for erro in form.responsavel.errors %}
+                <div class="erro">{{ erro }}</div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div
+            class="resultado"
+            id="resultado-recolhimento"
+          >
+            Informe as quantidades recolhidas agora.
+          </div>
+
+          <button
+            class="btn btn-loc w-100 mt-3"
+            id="botao-confirmar"
+            type="submit"
+          >
+            Confirmar confer?ncia do recolhimento
+          </button>
+        </form>
+      </section>
+    {% endif %}
+
+    <section class="cardx">
+      <h2>Hist?rico dos recolhimentos</h2>
+
+      {% for conferencia in historico %}
+        <article class="historico-item">
+          <div class="historico-topo">
+            <strong>
+              {{ conferencia.criado_em|date:"d/m/Y H:i" }}
+            </strong>
+
+            {% if conferencia.situacao == "completa" %}
+              <span class="badge-completa">
+                Recolhimento completo
+              </span>
+            {% else %}
+              <span class="badge-parcial">
+                Recolhimento parcial
+              </span>
+            {% endif %}
+          </div>
+
+          <div>
+            <strong>Bom nesta confer?ncia:</strong>
+            {{ conferencia.boa_mesas }} mesa(s) e
+            {{ conferencia.boa_cadeiras }} cadeira(s)
+          </div>
+
+          <div>
+            <strong>Quebrado:</strong>
+            {{ conferencia.quebrada_mesas }} mesa(s) e
+            {{ conferencia.quebrada_cadeiras }} cadeira(s)
+          </div>
+
+          <div>
+            <strong>Perdido:</strong>
+            {{ conferencia.perdida_mesas }} mesa(s) e
+            {{ conferencia.perdida_cadeiras }} cadeira(s)
+          </div>
+
+          <div>
+            <strong>Descartado:</strong>
+            {{ conferencia.descartada_mesas }} mesa(s) e
+            {{ conferencia.descartada_cadeiras }} cadeira(s)
+          </div>
+
+          <div>
+            <strong>Pendente:</strong>
+            {{ conferencia.pendente_mesas }} mesa(s) e
+            {{ conferencia.pendente_cadeiras }} cadeira(s)
+          </div>
+
+          <div>
+            <strong>Conferido com:</strong>
+            {{ conferencia.pessoa_local_nome }} ?
+            {{ conferencia.get_pessoa_local_relacao_display }}
+
+            {% if conferencia.pessoa_local_relacao_outro %}
+              ({{ conferencia.pessoa_local_relacao_outro }})
+            {% endif %}
+          </div>
+
+          {% if conferencia.previsao_conclusao %}
+            <div>
+              <strong>Previs?o para concluir:</strong>
+              {{ conferencia.previsao_conclusao|date:"d/m/Y H:i" }}
+            </div>
+          {% endif %}
+
+          {% if conferencia.justificativa_parcial %}
+            <div>
+              <strong>Justificativa:</strong>
+              {{ conferencia.justificativa_parcial|linebreaksbr }}
+            </div>
+          {% endif %}
+
+          {% if conferencia.observacao %}
+            <div>
+              <strong>Observa??o:</strong>
+              {{ conferencia.observacao|linebreaksbr }}
+            </div>
+          {% endif %}
+
+          <div>
+            <strong>Funcion?rio respons?vel:</strong>
+            {{ conferencia.responsavel }}
+          </div>
+        </article>
+      {% empty %}
+        <div class="alert alert-light border mb-0">
+          Nenhuma confer?ncia de recolhimento registrada.
+        </div>
+      {% endfor %}
+    </section>
+  </main>
+
+  {% include "locacoes/includes/enter_nav.html" %}
+
+  <script>
+    (function () {
+      const pagina = document.querySelector(".page");
+      const resultado = document.getElementById(
+        "resultado-recolhimento"
+      );
+      const botao = document.getElementById(
+        "botao-confirmar"
+      );
+      const relacao = document.getElementById(
+        "id_pessoa_local_relacao"
+      );
+      const campoOutro = document.getElementById(
+        "campo-relacao-outro"
+      );
+      const campoJustificativa = document.getElementById(
+        "campo-justificativa"
+      );
+      const campoPrevisao = document.getElementById(
+        "campo-previsao"
+      );
+
+      const camposMesas = [
+        "id_boa_mesas",
+        "id_quebrada_mesas",
+        "id_perdida_mesas",
+        "id_descartada_mesas"
+      ];
+
+      const camposCadeiras = [
+        "id_boa_cadeiras",
+        "id_quebrada_cadeiras",
+        "id_perdida_cadeiras",
+        "id_descartada_cadeiras"
+      ];
+
+      if (!pagina || !resultado) {
+        return;
+      }
+
+      const pendenteMesas = Number(
+        pagina.dataset.pendenteMesas || 0
+      );
+      const pendenteCadeiras = Number(
+        pagina.dataset.pendenteCadeiras || 0
+      );
+
+      function somar(ids) {
+        return ids.reduce(function (total, id) {
+          const campo = document.getElementById(id);
+          return total + Math.max(
+            Number(campo ? campo.value || 0 : 0),
+            0
+          );
+        }, 0);
+      }
+
+      function atualizarRelacao() {
+        if (!relacao || !campoOutro) {
+          return;
+        }
+
+        campoOutro.style.display =
+          relacao.value === "outro"
+            ? "block"
+            : "none";
+      }
+
+      function atualizarResultado() {
+        const atualMesas = somar(camposMesas);
+        const atualCadeiras = somar(camposCadeiras);
+
+        const excesso =
+          atualMesas > pendenteMesas ||
+          atualCadeiras > pendenteCadeiras;
+
+        const restanteMesas = Math.max(
+          pendenteMesas - atualMesas,
+          0
+        );
+        const restanteCadeiras = Math.max(
+          pendenteCadeiras - atualCadeiras,
+          0
+        );
+
+        resultado.className = "resultado";
+
+        if (excesso) {
+          resultado.classList.add("excesso");
+          resultado.textContent =
+            "A quantidade informada supera o material " +
+            "que ainda est? pendente.";
+
+          if (botao) {
+            botao.disabled = true;
+          }
+
+          return;
+        }
+
+        if (
+          restanteMesas === 0 &&
+          restanteCadeiras === 0
+        ) {
+          resultado.classList.add("completa");
+          resultado.textContent =
+            "Recolhimento completo. Ap?s confirmar, a " +
+            "loca??o ser? encerrada.";
+
+          if (campoJustificativa) {
+            campoJustificativa.style.display = "none";
+          }
+
+          if (campoPrevisao) {
+            campoPrevisao.style.display = "none";
+          }
+        } else {
+          resultado.classList.add("parcial");
+          resultado.textContent =
+            "Recolhimento parcial. Permanecer?o pendentes " +
+            restanteMesas +
+            " mesa(s) e " +
+            restanteCadeiras +
+            " cadeira(s).";
+
+          if (campoJustificativa) {
+            campoJustificativa.style.display = "block";
+          }
+
+          if (campoPrevisao) {
+            campoPrevisao.style.display = "block";
+          }
+        }
+
+        if (botao) {
+          botao.disabled =
+            atualMesas === 0 &&
+            atualCadeiras === 0;
+        }
+      }
+
+      camposMesas
+        .concat(camposCadeiras)
+        .forEach(function (id) {
+          const campo = document.getElementById(id);
+
+          if (campo) {
+            campo.addEventListener(
+              "input",
+              atualizarResultado
+            );
+          }
+        });
+
+      if (relacao) {
+        relacao.addEventListener(
+          "change",
+          atualizarRelacao
+        );
+      }
+
+      atualizarRelacao();
+      atualizarResultado();
+    })();
+  </script>
+</body>
+</html>

@@ -100,6 +100,10 @@ def tarefa_para_item_checklist(tarefa, data_referencia):
             "locacoes:conferencia_entrega",
             kwargs={"pk": tarefa.pk},
         ),
+        "conferencia_recolhimento_url": reverse(
+            "locacoes:conferencia_recolhimento",
+            kwargs={"pk": tarefa.pk},
+        ),
         "confirmar_url": reverse(
             "locacoes:confirmar_tarefa_operacional",
             kwargs={"pk": tarefa.pk},
@@ -175,7 +179,9 @@ def checklist_operacional_locacoes(
         )
     )
 
-    locacoes_recolhimento = (
+    # Cria a tarefa das locacoes cujo recolhimento
+    # original ja venceu ou vence na data consultada.
+    locacoes_com_recolhimento_vencido = (
         Locacao.objects
         .select_related("cliente", "faixa_preco")
         .prefetch_related("itens")
@@ -186,6 +192,35 @@ def checklist_operacional_locacoes(
                 Locacao.STATUS_PENDENTE_DEVOLUCAO,
             ],
             data_prevista_devolucao__lte=data_referencia,
+        )
+    )
+
+    for locacao in locacoes_com_recolhimento_vencido:
+        obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+        )
+
+    tarefas_recolhimento = (
+        TarefaOperacionalLocacao.objects
+        .select_related(
+            "locacao",
+            "locacao__cliente",
+            "locacao__faixa_preco",
+        )
+        .prefetch_related("locacao__itens")
+        .filter(
+            tipo=TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+            status__in=[
+                TarefaOperacionalLocacao.STATUS_PENDENTE,
+                TarefaOperacionalLocacao.STATUS_PARCIAL,
+                TarefaOperacionalLocacao.STATUS_NAO_POSSIVEL,
+            ],
+            data_agendada__lte=data_referencia,
+            locacao__status__in=[
+                Locacao.STATUS_ENTREGUE,
+                Locacao.STATUS_PENDENTE_DEVOLUCAO,
+            ],
         )
     )
 
@@ -204,11 +239,7 @@ def checklist_operacional_locacoes(
                 )
             )
 
-    for locacao in locacoes_recolhimento:
-        tarefa = obter_ou_criar_tarefa_operacional(
-            locacao,
-            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
-        )
+    for tarefa in tarefas_recolhimento:
         if not tarefa.pendente_operacional:
             continue
 

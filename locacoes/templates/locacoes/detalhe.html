@@ -173,7 +173,14 @@
         {% endif %}
       {% elif locacao.status == 'entregue' or locacao.status == 'pendente_devolucao' %}
         <p class="muted">Material na rua ate a devolucao ser encerrada ou baixado por perda/quebra/descarte.</p>
-        <a class="btn btn-success" href="{% url 'locacoes:registrar_devolucao' locacao.id %}">Registrar devolucao</a>
+        {% if tarefa_recolhimento %}
+          <a
+            class="btn btn-success"
+            href="{% url 'locacoes:conferencia_recolhimento' tarefa_recolhimento.id %}"
+          >
+            Fazer checklist de recolhimento
+          </a>
+        {% endif %}
       {% else %}
         <p class="muted mb-0">Nenhuma acao operacional disponivel neste status.</p>
       {% endif %}
@@ -334,6 +341,96 @@
       {% empty %}
         <p class="muted mb-0">
           Nenhuma confer?ncia de entrega registrada.
+        </p>
+      {% endfor %}
+    </section>
+
+    <section class="cardx">
+      <h2>Hist?rico das confer?ncias de recolhimento</h2>
+
+      {% for conferencia in conferencias_recolhimento %}
+        <div class="border rounded p-3 mb-3">
+          <div class="d-flex justify-content-between gap-2 flex-wrap">
+            <strong>
+              {{ conferencia.get_situacao_display }}
+            </strong>
+
+            <span class="muted">
+              {{ conferencia.criado_em|date:"d/m/Y H:i" }}
+            </span>
+          </div>
+
+          <div class="mt-2">
+            <strong>Recolhido nesta confer?ncia:</strong><br>
+            Mesas: {{ conferencia.boa_mesas }} boas,
+            {{ conferencia.quebrada_mesas }} quebradas,
+            {{ conferencia.perdida_mesas }} perdidas e
+            {{ conferencia.descartada_mesas }} descartadas.<br>
+
+            Cadeiras: {{ conferencia.boa_cadeiras }} boas,
+            {{ conferencia.quebrada_cadeiras }} quebradas,
+            {{ conferencia.perdida_cadeiras }} perdidas e
+            {{ conferencia.descartada_cadeiras }} descartadas.
+          </div>
+
+          <div class="mt-2">
+            <strong>Pendente ap?s esta confer?ncia:</strong>
+            {{ conferencia.pendente_mesas }} mesa(s) e
+            {{ conferencia.pendente_cadeiras }} cadeira(s).
+          </div>
+
+          {% if conferencia.pessoa_local_nome %}
+            <div class="mt-2">
+              <strong>Pessoa presente no local:</strong>
+              {{ conferencia.pessoa_local_nome }} ?
+              {{ conferencia.get_pessoa_local_relacao_display }}
+
+              {% if conferencia.pessoa_local_relacao_outro %}
+                ({{ conferencia.pessoa_local_relacao_outro }})
+              {% endif %}
+            </div>
+          {% endif %}
+
+          <div>
+            <strong>Respons?vel pelo recolhimento:</strong>
+            {{ conferencia.responsavel }}
+          </div>
+
+          {% if conferencia.justificativa_parcial %}
+            <div class="mt-2">
+              <strong>Motivo do recolhimento parcial:</strong>
+              {{ conferencia.justificativa_parcial|linebreaksbr }}
+            </div>
+          {% endif %}
+
+          {% if conferencia.previsao_conclusao %}
+            <div>
+              <strong>Nova previs?o:</strong>
+              {{ conferencia.previsao_conclusao|date:"d/m/Y H:i" }}
+            </div>
+          {% endif %}
+
+          {% if conferencia.observacao %}
+            <div class="mt-2">
+              <strong>Observa??o:</strong>
+              {{ conferencia.observacao|linebreaksbr }}
+            </div>
+          {% endif %}
+
+          {% if conferencia.tarefa %}
+            <div class="mt-3">
+              <a
+                class="btn btn-outline-primary btn-sm"
+                href="{% url 'locacoes:conferencia_recolhimento' conferencia.tarefa.id %}?conferencia={{ conferencia.id }}"
+              >
+                Ver comprovante do recolhimento
+              </a>
+            </div>
+          {% endif %}
+        </div>
+      {% empty %}
+        <p class="muted mb-0">
+          Nenhuma confer?ncia de recolhimento registrada.
         </p>
       {% endfor %}
     </section>

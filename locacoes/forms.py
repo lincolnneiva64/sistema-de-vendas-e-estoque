@@ -4,6 +4,7 @@ from estoque.models import Cliente
 
 from .models import (
     ConferenciaEntregaLocacao,
+    ConferenciaRecolhimentoLocacao,
     ConfiguracaoLocacao,
     FaixaPrecoLocacao,
     ItemLocacao,
@@ -693,6 +694,359 @@ class NaoPossivelOperacionalLocacaoForm(forms.Form):
         if not observacao:
             raise forms.ValidationError("Informe o motivo/observacao.")
         return observacao
+
+
+class ConferenciaRecolhimentoLocacaoForm(forms.Form):
+    boa_mesas = forms.IntegerField(
+        min_value=0,
+        initial=0,
+        label="Mesas recolhidas em bom estado",
+        widget=forms.NumberInput(
+            attrs={
+                "class": "form-control",
+                "min": "0",
+                "step": "1",
+            }
+        ),
+    )
+    boa_cadeiras = forms.IntegerField(
+        min_value=0,
+        initial=0,
+        label="Cadeiras recolhidas em bom estado",
+        widget=forms.NumberInput(
+            attrs={
+                "class": "form-control",
+                "min": "0",
+                "step": "1",
+            }
+        ),
+    )
+    quebrada_mesas = forms.IntegerField(
+        min_value=0,
+        initial=0,
+        label="Mesas quebradas",
+        widget=forms.NumberInput(
+            attrs={
+                "class": "form-control",
+                "min": "0",
+                "step": "1",
+            }
+        ),
+    )
+    quebrada_cadeiras = forms.IntegerField(
+        min_value=0,
+        initial=0,
+        label="Cadeiras quebradas",
+        widget=forms.NumberInput(
+            attrs={
+                "class": "form-control",
+                "min": "0",
+                "step": "1",
+            }
+        ),
+    )
+    perdida_mesas = forms.IntegerField(
+        min_value=0,
+        initial=0,
+        label="Mesas perdidas",
+        widget=forms.NumberInput(
+            attrs={
+                "class": "form-control",
+                "min": "0",
+                "step": "1",
+            }
+        ),
+    )
+    perdida_cadeiras = forms.IntegerField(
+        min_value=0,
+        initial=0,
+        label="Cadeiras perdidas",
+        widget=forms.NumberInput(
+            attrs={
+                "class": "form-control",
+                "min": "0",
+                "step": "1",
+            }
+        ),
+    )
+    descartada_mesas = forms.IntegerField(
+        min_value=0,
+        initial=0,
+        label="Mesas descartadas",
+        widget=forms.NumberInput(
+            attrs={
+                "class": "form-control",
+                "min": "0",
+                "step": "1",
+            }
+        ),
+    )
+    descartada_cadeiras = forms.IntegerField(
+        min_value=0,
+        initial=0,
+        label="Cadeiras descartadas",
+        widget=forms.NumberInput(
+            attrs={
+                "class": "form-control",
+                "min": "0",
+                "step": "1",
+            }
+        ),
+    )
+
+    pessoa_local_nome = forms.CharField(
+        max_length=160,
+        label="Com quem foi conferido",
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "autocomplete": "off",
+            }
+        ),
+    )
+    pessoa_local_relacao = forms.ChoiceField(
+        choices=ConferenciaEntregaLocacao.RELACAO_CHOICES,
+        label="Relacao com o cliente",
+        widget=forms.Select(
+            attrs={"class": "form-select"}
+        ),
+    )
+    pessoa_local_relacao_outro = forms.CharField(
+        required=False,
+        max_length=120,
+        label="Qual e a relacao",
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "autocomplete": "off",
+            }
+        ),
+    )
+
+    justificativa_parcial = forms.CharField(
+        required=False,
+        label="Justificativa do recolhimento parcial",
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 3,
+            }
+        ),
+    )
+    previsao_conclusao = forms.DateTimeField(
+        required=False,
+        label="Previsao para concluir",
+        input_formats=["%Y-%m-%dT%H:%M"],
+        widget=forms.DateTimeInput(
+            format="%Y-%m-%dT%H:%M",
+            attrs={
+                "class": "form-control",
+                "type": "datetime-local",
+            },
+        ),
+    )
+    observacao = forms.CharField(
+        required=False,
+        label="Observacao",
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 3,
+            }
+        ),
+    )
+    responsavel = forms.CharField(
+        max_length=120,
+        label="Funcionario responsavel",
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "autocomplete": "off",
+            }
+        ),
+    )
+
+    def __init__(self, *args, locacao, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.locacao = locacao
+
+        previsto = (
+            ConferenciaRecolhimentoLocacao
+            .totais_entregues(locacao)
+        )
+        recolhido = (
+            ConferenciaRecolhimentoLocacao
+            .totais_recolhidos(locacao)
+        )
+
+        encerrado_mesas = sum(
+            valor
+            for chave, valor in recolhido.items()
+            if chave.endswith("_mesas")
+        )
+        encerrado_cadeiras = sum(
+            valor
+            for chave, valor in recolhido.items()
+            if chave.endswith("_cadeiras")
+        )
+
+        self.previsto_mesas = previsto["mesas"]
+        self.previsto_cadeiras = previsto["cadeiras"]
+        self.recolhido_mesas = encerrado_mesas
+        self.recolhido_cadeiras = encerrado_cadeiras
+        self.pendente_mesas = max(
+            self.previsto_mesas - encerrado_mesas,
+            0,
+        )
+        self.pendente_cadeiras = max(
+            self.previsto_cadeiras - encerrado_cadeiras,
+            0,
+        )
+
+        if not self.is_bound:
+            self.fields["boa_mesas"].initial = (
+                self.pendente_mesas
+            )
+            self.fields["boa_cadeiras"].initial = (
+                self.pendente_cadeiras
+            )
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        campos_quantidade = [
+            "boa_mesas",
+            "boa_cadeiras",
+            "quebrada_mesas",
+            "quebrada_cadeiras",
+            "perdida_mesas",
+            "perdida_cadeiras",
+            "descartada_mesas",
+            "descartada_cadeiras",
+        ]
+
+        quantidades = {
+            campo: int(cleaned_data.get(campo) or 0)
+            for campo in campos_quantidade
+        }
+
+        atual_mesas = sum(
+            valor
+            for campo, valor in quantidades.items()
+            if campo.endswith("_mesas")
+        )
+        atual_cadeiras = sum(
+            valor
+            for campo, valor in quantidades.items()
+            if campo.endswith("_cadeiras")
+        )
+
+        if atual_mesas == 0 and atual_cadeiras == 0:
+            self.add_error(
+                "boa_mesas",
+                "Informe pelo menos uma mesa ou cadeira.",
+            )
+
+        if atual_mesas > self.pendente_mesas:
+            self.add_error(
+                "boa_mesas",
+                (
+                    "A quantidade de mesas informada supera "
+                    "o total que ainda esta pendente."
+                ),
+            )
+
+        if atual_cadeiras > self.pendente_cadeiras:
+            self.add_error(
+                "boa_cadeiras",
+                (
+                    "A quantidade de cadeiras informada supera "
+                    "o total que ainda esta pendente."
+                ),
+            )
+
+        novo_pendente_mesas = max(
+            self.pendente_mesas - atual_mesas,
+            0,
+        )
+        novo_pendente_cadeiras = max(
+            self.pendente_cadeiras - atual_cadeiras,
+            0,
+        )
+        parcial = bool(
+            novo_pendente_mesas or novo_pendente_cadeiras
+        )
+
+        justificativa = str(
+            cleaned_data.get("justificativa_parcial") or ""
+        ).strip()
+        previsao = cleaned_data.get("previsao_conclusao")
+        observacao = str(
+            cleaned_data.get("observacao") or ""
+        ).strip()
+        relacao = cleaned_data.get("pessoa_local_relacao")
+        relacao_outro = str(
+            cleaned_data.get("pessoa_local_relacao_outro") or ""
+        ).strip()
+
+        if parcial:
+            if not justificativa:
+                self.add_error(
+                    "justificativa_parcial",
+                    (
+                        "Informe a justificativa do "
+                        "recolhimento parcial."
+                    ),
+                )
+            if not previsao:
+                self.add_error(
+                    "previsao_conclusao",
+                    (
+                        "Informe quando o recolhimento "
+                        "sera concluido."
+                    ),
+                )
+
+        if (
+            relacao
+            == ConferenciaEntregaLocacao.RELACAO_OUTRO
+            and not relacao_outro
+        ):
+            self.add_error(
+                "pessoa_local_relacao_outro",
+                "Informe a relacao da pessoa com o cliente.",
+            )
+
+        houve_ocorrencia = any(
+            quantidades[campo] > 0
+            for campo in [
+                "quebrada_mesas",
+                "quebrada_cadeiras",
+                "perdida_mesas",
+                "perdida_cadeiras",
+                "descartada_mesas",
+                "descartada_cadeiras",
+            ]
+        )
+
+        if houve_ocorrencia and not observacao:
+            self.add_error(
+                "observacao",
+                (
+                    "Explique a quebra, perda ou descarte "
+                    "registrado."
+                ),
+            )
+
+        cleaned_data["justificativa_parcial"] = (
+            justificativa
+        )
+        cleaned_data["pessoa_local_relacao_outro"] = (
+            relacao_outro
+        )
+        cleaned_data["observacao"] = observacao
+
+        return cleaned_data
 
 
 class DevolucaoLocacaoForm(forms.Form):

@@ -90,37 +90,19 @@
               </div>
             {% endif %}
           {% else %}
-            <form
-              method="post"
-              action="{{ item.confirmar_url }}"
-              data-enter-nav
+            <a
+              class="btn btn-success w-100"
+              href="{{ item.conferencia_recolhimento_url }}"
             >
-              {% csrf_token %}
+              Fazer checklist de recolhimento
+            </a>
 
-              <div class="campos">
-                <input
-                  class="form-control"
-                  type="text"
-                  name="responsavel"
-                  placeholder="Respons?vel"
-                  autocomplete="off"
-                >
-
-                <textarea
-                  class="form-control"
-                  name="observacao"
-                  rows="2"
-                  placeholder="Observa??o operacional"
-                ></textarea>
+            {% if item.tarefa.status == "parcial" %}
+              <div class="alert alert-warning mt-2 mb-0">
+                Recolhimento parcial. Ainda existem mesas
+                ou cadeiras pendentes.
               </div>
-
-              <button
-                class="btn btn-success w-100 mt-2"
-                type="submit"
-              >
-                Confirmar recolhimento
-              </button>
-            </form>
+            {% endif %}
           {% endif %}
         </div>
 

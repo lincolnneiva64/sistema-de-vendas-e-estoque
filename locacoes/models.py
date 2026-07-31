@@ -436,13 +436,21 @@ class Locacao(models.Model):
         locacoes_reservadas = cls.objects.filter(status=cls.STATUS_RESERVADA).filter(
             cls.periodo_conflita_q(data_entrega, data_prevista_devolucao)
         )
-        locacoes_rua = cls.objects.filter(
-            status__in=[
-                cls.STATUS_SAIU_PARA_ENTREGA,
-                cls.STATUS_ENTREGUE,
-                cls.STATUS_PENDENTE_DEVOLUCAO,
-            ],
-            data_entrega__lte=data_prevista_devolucao,
+        locacoes_rua = (
+            cls.objects
+            .filter(
+                status__in=[
+                    cls.STATUS_SAIU_PARA_ENTREGA,
+                    cls.STATUS_ENTREGUE,
+                    cls.STATUS_PENDENTE_DEVOLUCAO,
+                ],
+                data_entrega__lte=data_prevista_devolucao,
+            )
+            .prefetch_related(
+                "itens",
+                "conferencias_entrega",
+                "conferencias_recolhimento",
+            )
         )
         if excluir_id:
             locacoes_reservadas = locacoes_reservadas.exclude(pk=excluir_id)
@@ -454,10 +462,60 @@ class Locacao(models.Model):
             necessidade = item.necessidade_estoque()
             mesas += necessidade["mesas"]
             cadeiras += necessidade["cadeiras"]
-        for item in ItemLocacao.objects.filter(locacao__in=locacoes_rua):
-            pendente = item.necessidade_pendente()
-            mesas += pendente["mesas"]
-            cadeiras += pendente["cadeiras"]
+        for locacao in locacoes_rua:
+            conferencias_entrega = list(
+                locacao.conferencias_entrega.all()
+            )
+
+            # Enquanto a entrega ainda estiver incompleta,
+            # toda a quantidade contratada continua reservada.
+            if (
+                locacao.status
+                == cls.STATUS_SAIU_PARA_ENTREGA
+                or not conferencias_entrega
+            ):
+                for item in locacao.itens.all():
+                    pendente = item.necessidade_pendente()
+                    mesas += pendente["mesas"]
+                    cadeiras += pendente["cadeiras"]
+                continue
+
+            entregues_mesas = sum(
+                conferencia.entregue_mesas
+                for conferencia in conferencias_entrega
+            )
+            entregues_cadeiras = sum(
+                conferencia.entregue_cadeiras
+                for conferencia in conferencias_entrega
+            )
+
+            recolhidos_mesas = 0
+            recolhidos_cadeiras = 0
+
+            for conferencia in (
+                locacao.conferencias_recolhimento.all()
+            ):
+                recolhidos_mesas += (
+                    conferencia.boa_mesas
+                    + conferencia.quebrada_mesas
+                    + conferencia.perdida_mesas
+                    + conferencia.descartada_mesas
+                )
+                recolhidos_cadeiras += (
+                    conferencia.boa_cadeiras
+                    + conferencia.quebrada_cadeiras
+                    + conferencia.perdida_cadeiras
+                    + conferencia.descartada_cadeiras
+                )
+
+            mesas += max(
+                entregues_mesas - recolhidos_mesas,
+                0,
+            )
+            cadeiras += max(
+                entregues_cadeiras - recolhidos_cadeiras,
+                0,
+            )
         return {"mesas": mesas, "cadeiras": cadeiras}
 
     @classmethod
@@ -730,7 +788,7 @@ class TarefaOperacionalLocacao(models.Model):
     STATUS_NAO_POSSIVEL = "nao_possivel"
     STATUS_CHOICES = [
         (STATUS_PENDENTE, "Pendente"),
-        (STATUS_PARCIAL, "Entrega parcial"),
+        (STATUS_PARCIAL, "Parcial"),
         (STATUS_CONFIRMADA, "Confirmada"),
         (STATUS_NAO_POSSIVEL, "Nao foi possivel realizar"),
     ]
@@ -1282,6 +1340,623 @@ class ConferenciaEntregaLocacao(models.Model):
                 tipo=evento_tipo,
                 descricao=descricao,
                 responsavel=dados["responsavel"],
+            )
+
+        return conferencia
+
+
+class ConferenciaRecolhimentoLocacao(models.Model):
+    SITUACAO_PARCIAL = "parcial"
+    SITUACAO_COMPLETA = "completa"
+    SITUACAO_CHOICES = [
+        (SITUACAO_PARCIAL, "Recolhimento parcial"),
+        (SITUACAO_COMPLETA, "Recolhimento completo"),
+    ]
+
+    locacao = models.ForeignKey(
+        Locacao,
+        on_delete=models.CASCADE,
+        related_name="conferencias_recolhimento",
+    )
+    tarefa = models.ForeignKey(
+        TarefaOperacionalLocacao,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="conferencias_recolhimento",
+    )
+
+    previsto_mesas = models.PositiveIntegerField()
+    previsto_cadeiras = models.PositiveIntegerField()
+
+    boa_mesas = models.PositiveIntegerField(default=0)
+    boa_cadeiras = models.PositiveIntegerField(default=0)
+    quebrada_mesas = models.PositiveIntegerField(default=0)
+    quebrada_cadeiras = models.PositiveIntegerField(default=0)
+    perdida_mesas = models.PositiveIntegerField(default=0)
+    perdida_cadeiras = models.PositiveIntegerField(default=0)
+    descartada_mesas = models.PositiveIntegerField(default=0)
+    descartada_cadeiras = models.PositiveIntegerField(default=0)
+
+    acumulado_boa_mesas = models.PositiveIntegerField(default=0)
+    acumulado_boa_cadeiras = models.PositiveIntegerField(default=0)
+    acumulado_quebrada_mesas = models.PositiveIntegerField(default=0)
+    acumulado_quebrada_cadeiras = models.PositiveIntegerField(default=0)
+    acumulado_perdida_mesas = models.PositiveIntegerField(default=0)
+    acumulado_perdida_cadeiras = models.PositiveIntegerField(default=0)
+    acumulado_descartada_mesas = models.PositiveIntegerField(default=0)
+    acumulado_descartada_cadeiras = models.PositiveIntegerField(default=0)
+
+    pendente_mesas = models.PositiveIntegerField()
+    pendente_cadeiras = models.PositiveIntegerField()
+
+    situacao = models.CharField(
+        max_length=20,
+        choices=SITUACAO_CHOICES,
+    )
+
+    pessoa_local_nome = models.CharField(max_length=160)
+    pessoa_local_relacao = models.CharField(
+        max_length=20,
+        choices=ConferenciaEntregaLocacao.RELACAO_CHOICES,
+    )
+    pessoa_local_relacao_outro = models.CharField(
+        max_length=120,
+        blank=True,
+    )
+
+    justificativa_parcial = models.TextField(blank=True)
+    previsao_conclusao = models.DateTimeField(
+        blank=True,
+        null=True,
+    )
+    observacao = models.TextField(blank=True)
+    responsavel = models.CharField(max_length=120)
+
+    mensagem_whatsapp_snapshot = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-criado_em", "-id"]
+        verbose_name = "Conferencia de recolhimento de locacao"
+        verbose_name_plural = (
+            "Conferencias de recolhimento de locacao"
+        )
+
+    def __str__(self):
+        return (
+            f"{self.get_situacao_display()} - "
+            f"Locacao #{self.locacao_id} - "
+            f"Conferencia #{self.id}"
+        )
+
+    @staticmethod
+    def totais_entregues(locacao):
+        conferencias = locacao.conferencias_entrega.all()
+
+        if conferencias.exists():
+            totais = conferencias.aggregate(
+                mesas=models.Sum("entregue_mesas"),
+                cadeiras=models.Sum("entregue_cadeiras"),
+            )
+            return {
+                "mesas": int(totais["mesas"] or 0),
+                "cadeiras": int(totais["cadeiras"] or 0),
+            }
+
+        return Locacao.necessidades_itens(
+            [
+                {
+                    "tipo": item.tipo,
+                    "quantidade": item.quantidade,
+                }
+                for item in locacao.itens.all()
+            ]
+        )
+
+    @staticmethod
+    def totais_recolhidos(locacao):
+        totais = locacao.conferencias_recolhimento.aggregate(
+            boa_mesas=models.Sum("boa_mesas"),
+            boa_cadeiras=models.Sum("boa_cadeiras"),
+            quebrada_mesas=models.Sum("quebrada_mesas"),
+            quebrada_cadeiras=models.Sum("quebrada_cadeiras"),
+            perdida_mesas=models.Sum("perdida_mesas"),
+            perdida_cadeiras=models.Sum("perdida_cadeiras"),
+            descartada_mesas=models.Sum("descartada_mesas"),
+            descartada_cadeiras=models.Sum("descartada_cadeiras"),
+        )
+        return {
+            chave: int(valor or 0)
+            for chave, valor in totais.items()
+        }
+
+    def clean(self):
+        erros = {}
+
+        atual_mesas = (
+            self.boa_mesas
+            + self.quebrada_mesas
+            + self.perdida_mesas
+            + self.descartada_mesas
+        )
+        atual_cadeiras = (
+            self.boa_cadeiras
+            + self.quebrada_cadeiras
+            + self.perdida_cadeiras
+            + self.descartada_cadeiras
+        )
+
+        if atual_mesas == 0 and atual_cadeiras == 0:
+            erros["boa_mesas"] = (
+                "Informe pelo menos uma mesa ou cadeira."
+            )
+
+        encerrado_mesas = (
+            self.acumulado_boa_mesas
+            + self.acumulado_quebrada_mesas
+            + self.acumulado_perdida_mesas
+            + self.acumulado_descartada_mesas
+        )
+        encerrado_cadeiras = (
+            self.acumulado_boa_cadeiras
+            + self.acumulado_quebrada_cadeiras
+            + self.acumulado_perdida_cadeiras
+            + self.acumulado_descartada_cadeiras
+        )
+
+        if encerrado_mesas > self.previsto_mesas:
+            erros["pendente_mesas"] = (
+                "O recolhimento de mesas supera o entregue."
+            )
+
+        if encerrado_cadeiras > self.previsto_cadeiras:
+            erros["pendente_cadeiras"] = (
+                "O recolhimento de cadeiras supera o entregue."
+            )
+
+        if (
+            self.pendente_mesas
+            != self.previsto_mesas - encerrado_mesas
+        ):
+            erros["pendente_mesas"] = (
+                "A quantidade pendente de mesas esta inconsistente."
+            )
+
+        if (
+            self.pendente_cadeiras
+            != self.previsto_cadeiras - encerrado_cadeiras
+        ):
+            erros["pendente_cadeiras"] = (
+                "A quantidade pendente de cadeiras esta inconsistente."
+            )
+
+        if self.situacao == self.SITUACAO_PARCIAL:
+            if not self.pendente_mesas and not self.pendente_cadeiras:
+                erros["situacao"] = (
+                    "Recolhimento parcial precisa ter material pendente."
+                )
+            if not str(
+                self.justificativa_parcial or ""
+            ).strip():
+                erros["justificativa_parcial"] = (
+                    "Informe a justificativa do recolhimento parcial."
+                )
+            if not self.previsao_conclusao:
+                erros["previsao_conclusao"] = (
+                    "Informe quando o recolhimento sera concluido."
+                )
+
+        if self.situacao == self.SITUACAO_COMPLETA:
+            if self.pendente_mesas or self.pendente_cadeiras:
+                erros["situacao"] = (
+                    "Recolhimento completo nao pode ter pendencia."
+                )
+
+        if not str(self.pessoa_local_nome or "").strip():
+            erros["pessoa_local_nome"] = (
+                "Informe com quem o material foi conferido."
+            )
+
+        if (
+            self.pessoa_local_relacao
+            == ConferenciaEntregaLocacao.RELACAO_OUTRO
+            and not str(
+                self.pessoa_local_relacao_outro or ""
+            ).strip()
+        ):
+            erros["pessoa_local_relacao_outro"] = (
+                "Informe a relacao da pessoa com o cliente."
+            )
+
+        if not str(self.responsavel or "").strip():
+            erros["responsavel"] = (
+                "Informe o funcionario responsavel."
+            )
+
+        if erros:
+            raise ValidationError(erros)
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValidationError(
+                "Uma conferencia de recolhimento registrada "
+                "nao pode ser alterada."
+            )
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def registrar(cls, tarefa, dados):
+        agora = timezone.now()
+
+        with transaction.atomic():
+            tarefa = (
+                TarefaOperacionalLocacao.objects
+                .select_for_update()
+                .select_related("locacao")
+                .get(pk=tarefa.pk)
+            )
+            locacao = (
+                Locacao.objects
+                .select_for_update()
+                .prefetch_related(
+                    "itens",
+                    "conferencias_entrega",
+                    "conferencias_recolhimento",
+                )
+                .get(pk=tarefa.locacao_id)
+            )
+
+            if (
+                tarefa.tipo
+                != TarefaOperacionalLocacao.TIPO_RECOLHIMENTO
+            ):
+                raise ValidationError(
+                    "Esta tarefa nao corresponde a um recolhimento."
+                )
+
+            if (
+                tarefa.status
+                == TarefaOperacionalLocacao.STATUS_CONFIRMADA
+            ):
+                raise ValidationError(
+                    "Este recolhimento ja foi concluido."
+                )
+
+            if locacao.status not in {
+                Locacao.STATUS_ENTREGUE,
+                Locacao.STATUS_PENDENTE_DEVOLUCAO,
+            }:
+                raise ValidationError(
+                    "Esta locacao nao possui recolhimento pendente."
+                )
+
+            previsto = cls.totais_entregues(locacao)
+            anterior = cls.totais_recolhidos(locacao)
+
+            atuais = {
+                "boa_mesas": int(dados.get("boa_mesas") or 0),
+                "boa_cadeiras": int(
+                    dados.get("boa_cadeiras") or 0
+                ),
+                "quebrada_mesas": int(
+                    dados.get("quebrada_mesas") or 0
+                ),
+                "quebrada_cadeiras": int(
+                    dados.get("quebrada_cadeiras") or 0
+                ),
+                "perdida_mesas": int(
+                    dados.get("perdida_mesas") or 0
+                ),
+                "perdida_cadeiras": int(
+                    dados.get("perdida_cadeiras") or 0
+                ),
+                "descartada_mesas": int(
+                    dados.get("descartada_mesas") or 0
+                ),
+                "descartada_cadeiras": int(
+                    dados.get("descartada_cadeiras") or 0
+                ),
+            }
+
+            if any(valor < 0 for valor in atuais.values()):
+                raise ValidationError(
+                    "As quantidades nao podem ser negativas."
+                )
+
+            atual_total_mesas = sum(
+                valor
+                for chave, valor in atuais.items()
+                if chave.endswith("_mesas")
+            )
+            atual_total_cadeiras = sum(
+                valor
+                for chave, valor in atuais.items()
+                if chave.endswith("_cadeiras")
+            )
+
+            if atual_total_mesas == 0 and atual_total_cadeiras == 0:
+                raise ValidationError(
+                    "Informe pelo menos uma mesa ou cadeira."
+                )
+
+            acumulados = {
+                chave: anterior[chave] + atuais[chave]
+                for chave in atuais
+            }
+
+            encerrado_mesas = sum(
+                valor
+                for chave, valor in acumulados.items()
+                if chave.endswith("_mesas")
+            )
+            encerrado_cadeiras = sum(
+                valor
+                for chave, valor in acumulados.items()
+                if chave.endswith("_cadeiras")
+            )
+
+            if encerrado_mesas > previsto["mesas"]:
+                raise ValidationError(
+                    "A quantidade de mesas supera o total entregue."
+                )
+
+            if encerrado_cadeiras > previsto["cadeiras"]:
+                raise ValidationError(
+                    "A quantidade de cadeiras supera o total entregue."
+                )
+
+            pendente_mesas = previsto["mesas"] - encerrado_mesas
+            pendente_cadeiras = (
+                previsto["cadeiras"] - encerrado_cadeiras
+            )
+            parcial = bool(
+                pendente_mesas or pendente_cadeiras
+            )
+
+            justificativa = str(
+                dados.get("justificativa_parcial") or ""
+            ).strip()
+            previsao = dados.get("previsao_conclusao")
+
+            if parcial and not justificativa:
+                raise ValidationError(
+                    "Informe a justificativa do recolhimento parcial."
+                )
+
+            if parcial and not previsao:
+                raise ValidationError(
+                    "Informe quando o recolhimento sera concluido."
+                )
+
+            relacao_codigo = dados["pessoa_local_relacao"]
+            relacao_texto = dict(
+                ConferenciaEntregaLocacao.RELACAO_CHOICES
+            ).get(relacao_codigo, relacao_codigo)
+
+            if (
+                relacao_codigo
+                == ConferenciaEntregaLocacao.RELACAO_OUTRO
+            ):
+                relacao_texto = str(
+                    dados.get("pessoa_local_relacao_outro") or ""
+                ).strip()
+
+            linhas = [
+                f"Conferencia do recolhimento da locacao #{locacao.id}",
+                "",
+                (
+                    "Material conferido com "
+                    f"{dados['pessoa_local_nome']}, "
+                    f"{str(relacao_texto).lower()}."
+                ),
+                "",
+                (
+                    f"Entregue ao cliente: "
+                    f"{previsto['mesas']} mesa(s) e "
+                    f"{previsto['cadeiras']} cadeira(s)."
+                ),
+                (
+                    f"Recolhido em bom estado agora: "
+                    f"{atuais['boa_mesas']} mesa(s) e "
+                    f"{atuais['boa_cadeiras']} cadeira(s)."
+                ),
+                (
+                    f"Quebrado: "
+                    f"{atuais['quebrada_mesas']} mesa(s) e "
+                    f"{atuais['quebrada_cadeiras']} cadeira(s)."
+                ),
+                (
+                    f"Perdido: "
+                    f"{atuais['perdida_mesas']} mesa(s) e "
+                    f"{atuais['perdida_cadeiras']} cadeira(s)."
+                ),
+                (
+                    f"Descartado: "
+                    f"{atuais['descartada_mesas']} mesa(s) e "
+                    f"{atuais['descartada_cadeiras']} cadeira(s)."
+                ),
+                (
+                    f"Pendente: {pendente_mesas} mesa(s) e "
+                    f"{pendente_cadeiras} cadeira(s)."
+                ),
+            ]
+
+            if parcial:
+                previsao_local = timezone.localtime(previsao)
+                linhas.append(
+                    "Previsao para concluir: "
+                    f"{previsao_local:%d/%m/%Y as %H:%M}."
+                )
+
+            observacao = str(
+                dados.get("observacao") or ""
+            ).strip()
+            if observacao:
+                linhas.append(f"Observacao: {observacao}")
+
+            responsavel = str(
+                dados["responsavel"]
+            ).strip()
+            linhas.append(
+                f"Responsavel pelo recolhimento: {responsavel}."
+            )
+
+            conferencia = cls.objects.create(
+                locacao=locacao,
+                tarefa=tarefa,
+                previsto_mesas=previsto["mesas"],
+                previsto_cadeiras=previsto["cadeiras"],
+                pendente_mesas=pendente_mesas,
+                pendente_cadeiras=pendente_cadeiras,
+                situacao=(
+                    cls.SITUACAO_PARCIAL
+                    if parcial
+                    else cls.SITUACAO_COMPLETA
+                ),
+                pessoa_local_nome=str(
+                    dados["pessoa_local_nome"]
+                ).strip(),
+                pessoa_local_relacao=relacao_codigo,
+                pessoa_local_relacao_outro=str(
+                    dados.get(
+                        "pessoa_local_relacao_outro"
+                    ) or ""
+                ).strip(),
+                justificativa_parcial=justificativa,
+                previsao_conclusao=(
+                    previsao if parcial else None
+                ),
+                observacao=observacao,
+                responsavel=responsavel,
+                mensagem_whatsapp_snapshot="\n".join(linhas),
+                **atuais,
+                **{
+                    f"acumulado_{chave}": valor
+                    for chave, valor in acumulados.items()
+                },
+            )
+
+            baixas = [
+                (
+                    "quebrada",
+                    MovimentoEstoqueLocacao.TIPO_BAIXA_QUEBRA,
+                ),
+                (
+                    "perdida",
+                    MovimentoEstoqueLocacao.TIPO_BAIXA_PERDA,
+                ),
+                (
+                    "descartada",
+                    MovimentoEstoqueLocacao.TIPO_BAIXA_DESCARTE,
+                ),
+            ]
+
+            for prefixo, tipo_movimento in baixas:
+                quantidade_mesas = atuais[
+                    f"{prefixo}_mesas"
+                ]
+                quantidade_cadeiras = atuais[
+                    f"{prefixo}_cadeiras"
+                ]
+
+                if quantidade_mesas:
+                    MovimentoEstoqueLocacao.registrar(
+                        item=MovimentoEstoqueLocacao.ITEM_MESA,
+                        tipo=tipo_movimento,
+                        quantidade=quantidade_mesas,
+                        responsavel=responsavel,
+                        observacao=(
+                            observacao
+                            or f"Recolhimento da locacao #{locacao.id}."
+                        ),
+                        locacao=locacao,
+                    )
+
+                if quantidade_cadeiras:
+                    MovimentoEstoqueLocacao.registrar(
+                        item=MovimentoEstoqueLocacao.ITEM_CADEIRA,
+                        tipo=tipo_movimento,
+                        quantidade=quantidade_cadeiras,
+                        responsavel=responsavel,
+                        observacao=(
+                            observacao
+                            or f"Recolhimento da locacao #{locacao.id}."
+                        ),
+                        locacao=locacao,
+                    )
+
+            if parcial:
+                previsao_local = timezone.localtime(previsao)
+                tarefa.status = (
+                    TarefaOperacionalLocacao.STATUS_PARCIAL
+                )
+                tarefa.data_agendada = previsao_local.date()
+                tarefa.horario_agendado = (
+                    previsao_local.time().replace(
+                        second=0,
+                        microsecond=0,
+                    )
+                )
+                tarefa.confirmado_em = None
+                tarefa.confirmado_por = ""
+                locacao.status = (
+                    Locacao.STATUS_PENDENTE_DEVOLUCAO
+                )
+                evento_tipo = "checklist_recolhimento_parcial"
+                descricao = (
+                    "Recolhimento parcial registrado. "
+                    f"Pendente: {pendente_mesas} mesa(s) e "
+                    f"{pendente_cadeiras} cadeira(s)."
+                )
+            else:
+                tarefa.status = (
+                    TarefaOperacionalLocacao.STATUS_CONFIRMADA
+                )
+                tarefa.confirmado_em = agora
+                tarefa.confirmado_por = responsavel
+
+                houve_avaria = any(
+                    acumulados[chave] > 0
+                    for chave in acumulados
+                    if (
+                        chave.startswith("quebrada_")
+                        or chave.startswith("perdida_")
+                        or chave.startswith("descartada_")
+                    )
+                )
+                locacao.status = (
+                    Locacao.STATUS_DEVOLVIDA_COM_AVARIA
+                    if houve_avaria
+                    else Locacao.STATUS_DEVOLVIDA
+                )
+                evento_tipo = "checklist_recolhimento_completo"
+                descricao = (
+                    "Recolhimento completo registrado pelo "
+                    "checklist detalhado."
+                )
+
+            tarefa.save(update_fields=[
+                "status",
+                "data_agendada",
+                "horario_agendado",
+                "confirmado_em",
+                "confirmado_por",
+                "atualizado_em",
+            ])
+
+            locacao._permitir_alterar_status = True
+            locacao.save(
+                update_fields=["status", "atualizado_em"]
+            )
+            locacao._permitir_alterar_status = False
+
+            EventoLocacao.objects.create(
+                locacao=locacao,
+                tipo=evento_tipo,
+                descricao=descricao,
+                responsavel=responsavel,
             )
 
         return conferencia

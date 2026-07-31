@@ -12,6 +12,7 @@ from estoque.models import Cliente, ContaFinanceira, ContaReceber, ItemVenda, Mo
 from .models import (
     ConfiguracaoLocacao,
     ConferenciaEntregaLocacao,
+    ConferenciaRecolhimentoLocacao,
     FaixaPrecoLocacao,
     ItemLocacao,
     Locacao,
@@ -951,6 +952,29 @@ class LocacoesChecklistOperacionalTests(TestCase):
         dados.update(extras)
         return dados
 
+    def dados_conferencia_recolhimento(self, **extras):
+        dados = {
+            "boa_mesas": "1",
+            "boa_cadeiras": "4",
+            "quebrada_mesas": "0",
+            "quebrada_cadeiras": "0",
+            "perdida_mesas": "0",
+            "perdida_cadeiras": "0",
+            "descartada_mesas": "0",
+            "descartada_cadeiras": "0",
+            "pessoa_local_nome": "Maria",
+            "pessoa_local_relacao": (
+                ConferenciaEntregaLocacao.RELACAO_CLIENTE
+            ),
+            "pessoa_local_relacao_outro": "",
+            "justificativa_parcial": "",
+            "previsao_conclusao": "",
+            "observacao": "Material conferido no recolhimento.",
+            "responsavel": "Lincoln",
+        }
+        dados.update(extras)
+        return dados
+
     def test_confirmacao_simples_de_entrega_redireciona_para_checklist_detalhado(self):
         locacao = self.criar_locacao()
         tarefa = obter_ou_criar_tarefa_operacional(
@@ -1215,28 +1239,407 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.assertContains(response, "Levar toalhas separadas.")
         self.assertContains(response, reverse("locacoes:detalhe", kwargs={"pk": locacao.pk}))
 
-    def test_confirmacao_de_recolhimento_remove_pendencia_operacional_e_mantem_historico(self):
-        locacao = self.colocar_na_rua(self.criar_locacao(
-            data_entrega=self.hoje - timedelta(days=1),
-            data_prevista_devolucao=self.hoje,
-        ))
-        tarefa = obter_ou_criar_tarefa_operacional(locacao, TarefaOperacionalLocacao.TIPO_RECOLHIMENTO)
+    def test_confirmacao_simples_de_recolhimento_redireciona_para_checklist_detalhado(self):
+        locacao = self.colocar_na_rua(
+            self.criar_locacao(
+                data_entrega=self.hoje - timedelta(days=1),
+                data_prevista_devolucao=self.hoje,
+            )
+        )
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+        )
 
         response = self.client.post(
-            reverse("locacoes:confirmar_tarefa_operacional", kwargs={"pk": tarefa.pk}),
-            {"responsavel": "Lincoln", "observacao": "Material recolhido para conferencia."},
+            reverse(
+                "locacoes:confirmar_tarefa_operacional",
+                kwargs={"pk": tarefa.pk},
+            ),
+            {
+                "responsavel": "Lincoln",
+                "observacao": "Tentativa pela confirmacao simples.",
+            },
+            secure=True,
+        )
+
+        tarefa.refresh_from_db()
+        locacao.refresh_from_db()
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "locacoes:conferencia_recolhimento",
+                kwargs={"pk": tarefa.pk},
+            ),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(
+            tarefa.status,
+            TarefaOperacionalLocacao.STATUS_PENDENTE,
+        )
+        self.assertEqual(
+            locacao.status,
+            Locacao.STATUS_ENTREGUE,
+        )
+        self.assertEqual(
+            ConferenciaRecolhimentoLocacao.objects.count(),
+            0,
+        )
+
+    def test_recolhimento_completo_registra_conferencia_e_remove_alerta(self):
+        locacao = self.colocar_na_rua(
+            self.criar_locacao(
+                data_entrega=self.hoje - timedelta(days=1),
+                data_prevista_devolucao=self.hoje,
+            )
+        )
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+        )
+
+        response = self.client.post(
+            reverse(
+                "locacoes:conferencia_recolhimento",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_recolhimento(),
+            secure=True,
+        )
+
+        conferencia = (
+            ConferenciaRecolhimentoLocacao.objects.get()
+        )
+        tarefa.refresh_from_db()
+        locacao.refresh_from_db()
+
+        self.assertRedirects(
+            response,
+            (
+                reverse(
+                    "locacoes:conferencia_recolhimento",
+                    kwargs={"pk": tarefa.pk},
+                )
+                + f"?conferencia={conferencia.pk}"
+            ),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(
+            conferencia.situacao,
+            ConferenciaRecolhimentoLocacao.SITUACAO_COMPLETA,
+        )
+        self.assertEqual(conferencia.previsto_mesas, 1)
+        self.assertEqual(conferencia.previsto_cadeiras, 4)
+        self.assertEqual(conferencia.acumulado_boa_mesas, 1)
+        self.assertEqual(conferencia.acumulado_boa_cadeiras, 4)
+        self.assertEqual(conferencia.pendente_mesas, 0)
+        self.assertEqual(conferencia.pendente_cadeiras, 0)
+        self.assertEqual(
+            tarefa.status,
+            TarefaOperacionalLocacao.STATUS_CONFIRMADA,
+        )
+        self.assertEqual(tarefa.confirmado_por, "Lincoln")
+        self.assertIsNotNone(tarefa.confirmado_em)
+        self.assertEqual(
+            locacao.status,
+            Locacao.STATUS_DEVOLVIDA,
+        )
+        self.assertEqual(
+            checklist_operacional_locacoes(self.hoje)["total"],
+            0,
+        )
+
+
+    def test_recolhimento_parcial_reagenda_e_depois_pode_ser_concluido(self):
+        locacao = self.colocar_na_rua(
+            self.criar_locacao(
+                data_entrega=self.hoje - timedelta(days=1),
+                data_prevista_devolucao=self.hoje,
+            )
+        )
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+        )
+
+        nova_data = self.hoje + timedelta(days=1)
+        previsao = f"{nova_data.isoformat()}T10:00"
+
+        response = self.client.post(
+            reverse(
+                "locacoes:conferencia_recolhimento",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_recolhimento(
+                boa_mesas="1",
+                boa_cadeiras="2",
+                justificativa_parcial=(
+                    "Duas cadeiras ficaram no local."
+                ),
+                previsao_conclusao=previsao,
+            ),
             secure=True,
         )
 
         self.assertEqual(response.status_code, 302)
         tarefa.refresh_from_db()
         locacao.refresh_from_db()
-        self.assertEqual(tarefa.status, TarefaOperacionalLocacao.STATUS_CONFIRMADA)
-        self.assertIsNotNone(tarefa.confirmado_em)
-        self.assertEqual(tarefa.confirmado_por, "Lincoln")
-        self.assertEqual(checklist_operacional_locacoes(self.hoje)["total"], 0)
-        self.assertTrue(locacao.eventos.filter(tipo="checklist_recolhimento_confirmado", responsavel="Lincoln").exists())
-        self.assertEqual(locacao.status, Locacao.STATUS_ENTREGUE)
+
+        primeira = (
+            ConferenciaRecolhimentoLocacao.objects
+            .order_by("criado_em", "id")
+            .first()
+        )
+
+        self.assertEqual(
+            primeira.situacao,
+            ConferenciaRecolhimentoLocacao.SITUACAO_PARCIAL,
+        )
+        self.assertEqual(primeira.pendente_mesas, 0)
+        self.assertEqual(primeira.pendente_cadeiras, 2)
+        self.assertEqual(
+            tarefa.status,
+            TarefaOperacionalLocacao.STATUS_PARCIAL,
+        )
+        self.assertEqual(tarefa.data_agendada, nova_data)
+        self.assertEqual(tarefa.horario_agendado, time(10, 0))
+        self.assertEqual(
+            locacao.status,
+            Locacao.STATUS_PENDENTE_DEVOLUCAO,
+        )
+        self.assertEqual(
+            checklist_operacional_locacoes(self.hoje)["total"],
+            0,
+        )
+
+        checklist_reagendado = checklist_operacional_locacoes(
+            nova_data
+        )
+        self.assertEqual(
+            checklist_reagendado["grupos"]["recolhimentos"][0][
+                "tarefa"
+            ].pk,
+            tarefa.pk,
+        )
+
+        response = self.client.post(
+            reverse(
+                "locacoes:conferencia_recolhimento",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_recolhimento(
+                boa_mesas="0",
+                boa_cadeiras="2",
+            ),
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        tarefa.refresh_from_db()
+        locacao.refresh_from_db()
+
+        self.assertEqual(
+            ConferenciaRecolhimentoLocacao.objects.count(),
+            2,
+        )
+
+        segunda = (
+            ConferenciaRecolhimentoLocacao.objects
+            .order_by("criado_em", "id")
+            .last()
+        )
+
+        self.assertEqual(
+            segunda.situacao,
+            ConferenciaRecolhimentoLocacao.SITUACAO_COMPLETA,
+        )
+        self.assertEqual(segunda.acumulado_boa_mesas, 1)
+        self.assertEqual(segunda.acumulado_boa_cadeiras, 4)
+        self.assertEqual(segunda.pendente_mesas, 0)
+        self.assertEqual(segunda.pendente_cadeiras, 0)
+        self.assertEqual(
+            tarefa.status,
+            TarefaOperacionalLocacao.STATUS_CONFIRMADA,
+        )
+        self.assertEqual(
+            locacao.status,
+            Locacao.STATUS_DEVOLVIDA,
+        )
+
+    def test_recolhimento_com_quebra_baixa_estoque_e_registra_avaria(self):
+        locacao = self.colocar_na_rua(
+            self.criar_locacao(
+                data_entrega=self.hoje - timedelta(days=1),
+                data_prevista_devolucao=self.hoje,
+            )
+        )
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+        )
+
+        response = self.client.post(
+            reverse(
+                "locacoes:conferencia_recolhimento",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_recolhimento(
+                boa_cadeiras="3",
+                quebrada_cadeiras="1",
+                observacao=(
+                    "Uma cadeira voltou quebrada."
+                ),
+            ),
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        conferencia = (
+            ConferenciaRecolhimentoLocacao.objects.get()
+        )
+        locacao.refresh_from_db()
+        tarefa.refresh_from_db()
+        self.configuracao.refresh_from_db()
+
+        self.assertEqual(conferencia.quebrada_cadeiras, 1)
+        self.assertEqual(conferencia.boa_cadeiras, 3)
+        self.assertEqual(
+            conferencia.situacao,
+            ConferenciaRecolhimentoLocacao.SITUACAO_COMPLETA,
+        )
+        self.assertEqual(
+            locacao.status,
+            Locacao.STATUS_DEVOLVIDA_COM_AVARIA,
+        )
+        self.assertEqual(
+            tarefa.status,
+            TarefaOperacionalLocacao.STATUS_CONFIRMADA,
+        )
+        self.assertEqual(
+            self.configuracao.total_mesas,
+            30,
+        )
+        self.assertEqual(
+            self.configuracao.total_cadeiras,
+            119,
+        )
+        self.assertTrue(
+            MovimentoEstoqueLocacao.objects.filter(
+                locacao=locacao,
+                tipo=(
+                    MovimentoEstoqueLocacao
+                    .TIPO_BAIXA_QUEBRA
+                ),
+                item=MovimentoEstoqueLocacao.ITEM_CADEIRA,
+                quantidade=1,
+            ).exists()
+        )
+
+    def test_recolhimento_acima_do_entregue_e_bloqueado(self):
+        locacao = self.colocar_na_rua(
+            self.criar_locacao(
+                data_entrega=self.hoje - timedelta(days=1),
+                data_prevista_devolucao=self.hoje,
+            )
+        )
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+        )
+
+        response = self.client.post(
+            reverse(
+                "locacoes:conferencia_recolhimento",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_recolhimento(
+                boa_cadeiras="5",
+            ),
+            secure=True,
+        )
+
+        tarefa.refresh_from_db()
+        locacao.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            (
+                "A quantidade de cadeiras informada supera "
+                "o total que ainda esta pendente."
+            ),
+        )
+        self.assertEqual(
+            ConferenciaRecolhimentoLocacao.objects.count(),
+            0,
+        )
+        self.assertEqual(
+            tarefa.status,
+            TarefaOperacionalLocacao.STATUS_PENDENTE,
+        )
+        self.assertEqual(
+            locacao.status,
+            Locacao.STATUS_ENTREGUE,
+        )
+
+    def test_ocorrencia_no_recolhimento_exige_observacao(self):
+        locacao = self.colocar_na_rua(
+            self.criar_locacao(
+                data_entrega=self.hoje - timedelta(days=1),
+                data_prevista_devolucao=self.hoje,
+            )
+        )
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+        )
+
+        response = self.client.post(
+            reverse(
+                "locacoes:conferencia_recolhimento",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_recolhimento(
+                boa_cadeiras="3",
+                quebrada_cadeiras="1",
+                observacao="",
+            ),
+            secure=True,
+        )
+
+        tarefa.refresh_from_db()
+        locacao.refresh_from_db()
+        self.configuracao.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Explique a quebra, perda ou descarte registrado.",
+        )
+        self.assertEqual(
+            ConferenciaRecolhimentoLocacao.objects.count(),
+            0,
+        )
+        self.assertEqual(
+            MovimentoEstoqueLocacao.objects.filter(
+                locacao=locacao,
+            ).count(),
+            0,
+        )
+        self.assertEqual(
+            self.configuracao.total_cadeiras,
+            120,
+        )
+        self.assertEqual(
+            tarefa.status,
+            TarefaOperacionalLocacao.STATUS_PENDENTE,
+        )
+        self.assertEqual(
+            locacao.status,
+            Locacao.STATUS_ENTREGUE,
+        )
 
     def test_excecao_mantem_tarefa_pendente(self):
         locacao = self.criar_locacao()
