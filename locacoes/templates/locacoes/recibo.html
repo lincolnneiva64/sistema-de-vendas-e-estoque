@@ -7,21 +7,24 @@
     content="width=device-width, initial-scale=1.0"
   >
   <title>Recibo da locacao #{{ locacao.id }}</title>
+
   <link
     href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
     rel="stylesheet"
   >
+
   <style>
     :root {
       --orange: #ea580c;
       --orange-dark: #9a3412;
       --orange-soft: #fff7ed;
-      --orange-border: #fdba74;
       --green: #15803d;
       --green-soft: #f0fdf4;
-      --green-border: #4ade80;
-      --blue: #1d4ed8;
-      --text: #172033;
+      --yellow: #ca8a04;
+      --yellow-soft: #fefce8;
+      --blue: #2563eb;
+      --blue-soft: #eff6ff;
+      --ink: #172033;
       --muted: #64748b;
     }
 
@@ -31,238 +34,231 @@
 
     body {
       margin: 0;
-      background:
-        radial-gradient(
-          circle at top left,
-          #fff7ed 0,
-          transparent 34%
-        ),
-        #f5f7fb;
-      color: var(--text);
-      font-family:
-        Inter, system-ui, -apple-system,
-        BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f7fb;
+      color: var(--ink);
     }
 
     .page {
-      width: min(920px, calc(100% - 28px));
+      max-width: 860px;
       margin: 0 auto;
-      padding: 28px 0 48px;
+      padding: 18px 12px 42px;
     }
 
     .topo {
-      margin-bottom: 18px;
-      padding: 22px 24px;
-      border: 2px solid var(--orange-border);
-      border-left: 9px solid var(--orange);
-      border-radius: 17px;
-      background: linear-gradient(
-        135deg,
-        #ffffff,
-        var(--orange-soft)
-      );
-      box-shadow: 0 12px 28px
-        rgba(154, 52, 18, 0.12);
-    }
-
-    .topo small {
-      color: var(--muted);
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 14px;
     }
 
     .topo h1 {
-      margin: 4px 0 0;
-      color: var(--orange-dark);
-      font-size: clamp(2rem, 5vw, 2.8rem);
-      font-weight: 950;
-      letter-spacing: -0.04em;
-    }
-
-    .cardx {
-      margin-bottom: 18px;
-      overflow: hidden;
-      border: 2px solid var(--orange-border);
-      border-radius: 17px;
-      background: #ffffff;
-      box-shadow: 0 10px 24px
-        rgba(15, 23, 42, 0.07);
-    }
-
-    .card-headerx {
-      padding: 17px 21px;
-      border-bottom: 2px solid #fed7aa;
-      background: linear-gradient(
-        90deg,
-        #ffedd5,
-        #fff7ed,
-        #ffffff
-      );
-    }
-
-    .card-headerx h2 {
       margin: 0;
       color: var(--orange-dark);
-      font-size: 1.25rem;
-      font-weight: 950;
+      font-size: 1.45rem;
+      font-weight: 900;
     }
 
-    .card-bodyx {
-      padding: 22px;
+    .subtitulo {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 0.92rem;
     }
 
-    .cliente {
-      margin-bottom: 18px;
+    .card-recibo {
+      margin-bottom: 12px;
+      padding: 14px;
+      border: 1px solid #fed7aa;
+      border-left: 5px solid var(--orange);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 8px 20px
+        rgba(15, 23, 42, 0.08);
+    }
+
+    .card-interno {
+      border-color: #bfdbfe;
+      border-left-color: var(--blue);
+    }
+
+    .linha-topo {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
     }
 
     .rotulo {
       display: block;
-      margin-bottom: 3px;
+      margin-bottom: 2px;
       color: var(--muted);
-      font-size: 0.82rem;
-      font-weight: 900;
+      font-size: 0.76rem;
+      font-weight: 850;
+      letter-spacing: 0.04em;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
     }
 
-    .cliente strong {
-      display: block;
-      color: var(--text);
-      font-size: 1.35rem;
-      font-weight: 950;
+    .cliente {
+      font-size: 1.08rem;
+      font-weight: 900;
     }
 
-    .quitado {
-      margin-bottom: 18px;
-      padding: 18px;
-      border: 2px solid var(--green-border);
-      border-left: 8px solid var(--green);
-      border-radius: 13px;
+    .situacao {
+      flex-shrink: 0;
+      padding: 5px 9px;
+      border: 1px solid #86efac;
+      border-radius: 999px;
+      background: var(--green-soft);
+      color: #166534;
+      font-size: 0.78rem;
+      font-weight: 900;
+    }
+
+    .situacao.parcial {
+      border-color: #fde047;
+      background: var(--yellow-soft);
+      color: #854d0e;
+    }
+
+    .valor-principal {
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid #86efac;
+      border-radius: 8px;
       background: var(--green-soft);
     }
 
-    .quitado span {
-      display: block;
-      color: var(--green);
-      font-weight: 950;
+    .valor-principal.parcial {
+      border-color: #fde047;
+      background: var(--yellow-soft);
     }
 
-    .quitado strong {
+    .valor-principal strong {
       display: block;
-      margin-top: 5px;
+      margin-top: 2px;
       color: #14532d;
-      font-size: 1.75rem;
+      font-size: 1.45rem;
       font-weight: 950;
     }
 
-    .parcial {
-      margin-bottom: 18px;
-      padding: 18px;
-      border: 2px solid #facc15;
-      border-left: 8px solid #ca8a04;
-      border-radius: 13px;
-      background: #fefce8;
+    .valor-principal.parcial strong {
+      color: #713f12;
     }
 
-    .valores-parciais,
+    .saldo-parcial {
+      display: grid;
+      grid-template-columns:
+        repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .saldo-parcial > div {
+      padding: 10px;
+      border: 1px solid #fde68a;
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .saldo-parcial strong {
+      display: block;
+      margin-top: 2px;
+      font-size: 1.08rem;
+      font-weight: 900;
+    }
+
     .dados {
       display: grid;
       grid-template-columns:
         repeat(2, minmax(0, 1fr));
-      gap: 14px;
+      gap: 8px;
+      margin-top: 12px;
     }
 
     .dado {
-      padding: 15px;
+      padding: 10px;
       border: 1px solid #e2e8f0;
-      border-radius: 11px;
+      border-radius: 8px;
       background: #f8fafc;
     }
 
     .dado strong {
       display: block;
-      margin-top: 3px;
-      font-size: 1.08rem;
+      margin-top: 2px;
+      font-size: 0.98rem;
+      font-weight: 900;
+    }
+
+    .secao-titulo {
+      margin: 14px 0 7px;
+      color: #334155;
+      font-size: 0.9rem;
       font-weight: 900;
     }
 
     .materiais {
-      margin: 18px 0 0;
+      display: grid;
+      gap: 7px;
+      margin: 0;
       padding: 0;
       list-style: none;
     }
 
     .materiais li {
-      margin-top: 8px;
-      padding: 12px 14px;
+      padding: 10px 12px;
       border: 1px solid #fed7aa;
-      border-radius: 10px;
+      border-radius: 8px;
       background: var(--orange-soft);
       font-weight: 850;
     }
 
-    .controle {
-      border-color: #bfdbfe;
-    }
-
-    .controle .card-headerx {
-      border-bottom-color: #bfdbfe;
-      background: linear-gradient(
-        90deg,
-        #dbeafe,
-        #eff6ff,
-        #ffffff
-      );
-    }
-
-    .controle .card-headerx h2 {
+    .interno-titulo {
+      margin: 0;
       color: #1e3a8a;
+      font-size: 1rem;
+      font-weight: 900;
     }
 
     .nota-interna {
-      margin-bottom: 18px;
+      margin: 4px 0 12px;
       color: var(--muted);
-      font-weight: 700;
+      font-size: 0.9rem;
     }
 
     .form-label {
-      margin-bottom: 7px;
+      margin-bottom: 5px;
       color: #334155;
-      font-weight: 900;
+      font-size: 0.9rem;
+      font-weight: 850;
     }
 
     .form-control,
     .form-select {
-      min-height: 49px;
-      border: 2px solid #cbd5e1;
-      border-radius: 10px;
+      min-height: 46px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
     }
 
     textarea.form-control {
-      min-height: 90px;
+      min-height: 82px;
     }
 
-    .acoes {
-      display: grid;
-      grid-template-columns:
-        repeat(2, minmax(0, 1fr));
-      gap: 12px;
-      margin-top: 16px;
-    }
-
-    .acoes .btn,
-    .whatsapp {
-      min-height: 50px;
-      border-radius: 10px;
+    .whatsapp,
+    .btn-confirmar,
+    .btn-dispensar {
+      min-height: 48px;
+      border-radius: 8px;
       font-weight: 900;
     }
 
     .whatsapp {
-      display: inline-flex;
+      display: flex;
       align-items: center;
       justify-content: center;
-      padding: 11px 19px;
+      width: 100%;
+      margin-bottom: 12px;
+      padding: 10px 14px;
+      border: 1px solid #15803d;
       background: #15803d;
       color: #ffffff;
       text-decoration: none;
@@ -274,27 +270,33 @@
       color: #ffffff;
     }
 
-    .confirmar {
-      border: 2px solid var(--blue);
+    .acoes {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .btn-confirmar {
+      border: 1px solid var(--blue);
       background: var(--blue);
       color: #ffffff;
       animation: pulse 1.4s infinite;
     }
 
-    .dispensar {
-      border: 2px solid #94a3b8;
+    .btn-dispensar {
+      border: 1px solid #94a3b8;
       background: #ffffff;
       color: #475569;
     }
 
     .estado-final {
-      padding: 18px;
-      border: 2px solid #86efac;
-      border-left: 8px solid var(--green);
-      border-radius: 12px;
+      padding: 12px;
+      border: 1px solid #86efac;
+      border-left: 5px solid var(--green);
+      border-radius: 8px;
       background: var(--green-soft);
       color: #14532d;
-      font-weight: 800;
+      font-size: 0.92rem;
     }
 
     .estado-final.dispensado {
@@ -304,13 +306,15 @@
       color: #334155;
     }
 
+    .estado-final strong {
+      display: block;
+      margin-bottom: 3px;
+      font-weight: 900;
+    }
+
     .voltar {
-      min-height: 48px;
-      padding: 10px 18px;
-      border: 2px solid #cbd5e1;
-      border-radius: 10px;
-      background: #ffffff;
-      color: #475569;
+      min-height: 44px;
+      border-radius: 8px;
       font-weight: 850;
     }
 
@@ -324,40 +328,50 @@
       }
     }
 
-    @media (max-width: 700px) {
-      .page {
-        width: min(100% - 18px, 920px);
-        padding-top: 12px;
-      }
-
-      .topo,
-      .card-bodyx {
-        padding: 17px;
-      }
-
-      .valores-parciais,
-      .dados,
+    @media (min-width: 680px) {
       .acoes {
-        display: block;
+        grid-template-columns:
+          repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 430px) {
+      .topo {
+        align-items: center;
       }
 
-      .dado,
-      .acoes .btn {
-        width: 100%;
-        margin-bottom: 10px;
+      .topo h1 {
+        font-size: 1.28rem;
       }
 
-      .whatsapp {
-        width: 100%;
+      .saldo-parcial,
+      .dados {
+        grid-template-columns: 1fr;
+      }
+
+      .valor-principal strong {
+        font-size: 1.3rem;
       }
     }
   </style>
 </head>
+
 <body>
   <main class="page">
     <header class="topo">
-      <small>Comprovante para o cliente</small>
-      <h1>Recibo de locacao #{{ locacao.id }}</h1>
+      <div>
+        <h1>Recibo de locacao #{{ locacao.id }}</h1>
+        <p class="subtitulo">
+          Comprovante de pagamento do cliente
+        </p>
+      </div>
+
+      <a
+        class="btn btn-outline-secondary btn-sm"
+        href="{% url 'locacoes:detalhe' locacao.id %}"
+      >
+        Voltar
+      </a>
     </header>
 
     {% if messages %}
@@ -370,192 +384,199 @@
       {% endfor %}
     {% endif %}
 
-    <section class="cardx">
-      <div class="card-headerx">
-        <h2>Resumo do recibo</h2>
-      </div>
-
-      <div class="card-bodyx">
-        <div class="cliente">
+    <section class="card-recibo">
+      <div class="linha-topo">
+        <div>
           <span class="rotulo">Cliente</span>
-          <strong>{{ locacao.nome_contratante }}</strong>
+          <div class="cliente">
+            {{ locacao.nome_contratante }}
+          </div>
         </div>
 
         {% if locacao.saldo_devedor <= 0 %}
-          <div class="quitado">
-            <span>Pagamento quitado</span>
-            <strong>
-              Valor total quitado:
-              R$ {{ locacao.total|floatformat:2 }}
-            </strong>
-          </div>
+          <span class="situacao">Quitada</span>
         {% else %}
-          <div class="parcial">
-            <strong>Pagamento parcial recebido</strong>
+          <span class="situacao parcial">Parcial</span>
+        {% endif %}
+      </div>
 
-            <div class="valores-parciais mt-3">
-              <div>
-                <span class="rotulo">Valor recebido</span>
-                <strong>
-                  R$ {{ pagamento.valor|floatformat:2 }}
-                </strong>
-              </div>
+      {% if locacao.saldo_devedor <= 0 %}
+        <div class="valor-principal">
+          <span class="rotulo">Pagamento quitado</span>
+          <strong>
+            Valor total quitado:
+            R$ {{ locacao.total|floatformat:2 }}
+          </strong>
+        </div>
+      {% else %}
+        <div class="valor-principal parcial">
+          <span class="rotulo">
+            Pagamento parcial recebido
+          </span>
 
-              <div>
-                <span class="rotulo">Saldo restante</span>
-                <strong>
-                  R$ {{ locacao.saldo_devedor|floatformat:2 }}
-                </strong>
-              </div>
+          <div class="saldo-parcial">
+            <div>
+              <span class="rotulo">Valor recebido</span>
+              <strong>
+                R$ {{ pagamento.valor|floatformat:2 }}
+              </strong>
             </div>
 
-            <p class="mb-0 mt-3">
-              Ainda existe saldo devedor.
-            </p>
-          </div>
-        {% endif %}
-
-        <div class="dados">
-          <div class="dado">
-            <span class="rotulo">Entrega</span>
-            <strong>
-              {{ locacao.data_entrega|date:"d/m/Y" }}
-            </strong>
+            <div>
+              <span class="rotulo">Saldo restante</span>
+              <strong>
+                R$ {{ locacao.saldo_devedor|floatformat:2 }}
+              </strong>
+            </div>
           </div>
 
-          <div class="dado">
-            <span class="rotulo">Devolucao prevista</span>
-            <strong>
-              {{ locacao.data_prevista_devolucao|date:"d/m/Y" }}
-            </strong>
+          <div class="mt-2">
+            Ainda existe saldo devedor.
           </div>
         </div>
+      {% endif %}
 
-        <span class="rotulo mt-4">Materiais contratados</span>
-        <ul class="materiais">
-          {% for item in locacao.itens.all %}
-            <li>
-              {{ item.quantidade }}
-              {{ item.get_tipo_display }}
-            </li>
-          {% endfor %}
-        </ul>
+      <div class="dados">
+        <div class="dado">
+          <span class="rotulo">Entrega</span>
+          <strong>
+            {{ locacao.data_entrega|date:"d/m/Y" }}
+          </strong>
+        </div>
+
+        <div class="dado">
+          <span class="rotulo">Devolucao prevista</span>
+          <strong>
+            {{ locacao.data_prevista_devolucao|date:"d/m/Y" }}
+          </strong>
+        </div>
       </div>
+
+      <h2 class="secao-titulo">Materiais contratados</h2>
+
+      <ul class="materiais">
+        {% for item in locacao.itens.all %}
+          <li>
+            {{ item.quantidade }}
+            {{ item.get_tipo_display }}
+          </li>
+        {% endfor %}
+      </ul>
     </section>
 
-    <section class="cardx controle">
-      <div class="card-headerx">
-        <h2>Controle interno de envio</h2>
-      </div>
+    <section class="card-recibo card-interno">
+      <h2 class="interno-titulo">
+        Controle interno de envio
+      </h2>
 
-      <div class="card-bodyx">
-        {% if pagamento.recibo_status == 'pendente' %}
-          <p class="nota-interna">
-            Esta parte e somente para registrar quem enviou
-            ou dispensou o recibo.
-          </p>
+      {% if pagamento.recibo_status == 'pendente' %}
+        <p class="nota-interna">
+          Registre quem enviou o recibo ou quem decidiu
+          dispensar o envio.
+        </p>
 
-          {% if whatsapp_url %}
-            <a
-              class="whatsapp mb-3"
-              href="{{ whatsapp_url }}"
-              target="_blank"
-              rel="noopener"
-            >
-              Abrir WhatsApp
-            </a>
-          {% else %}
-            <p class="nota-interna">
-              Telefone nao informado para abrir o WhatsApp
-              automaticamente.
-            </p>
-          {% endif %}
-
-          <form method="post" data-enter-nav>
-            {% csrf_token %}
-
-            <label class="form-label">
-              Responsavel pela acao
-            </label>
-            {{ recibo_form.responsavel }}
-            {{ recibo_form.responsavel.errors }}
-
-            <label class="form-label mt-3">
-              Motivo, caso o envio seja dispensado
-            </label>
-            {{ recibo_form.observacao }}
-            {{ recibo_form.observacao.errors }}
-
-            <div class="acoes">
-              <button
-                class="btn confirmar"
-                type="submit"
-                formaction="{% url 'locacoes:confirmar_recibo_enviado' pagamento.id %}"
-              >
-                Confirmar recibo enviado
-              </button>
-
-              <button
-                class="btn dispensar"
-                type="submit"
-                formaction="{% url 'locacoes:dispensar_recibo' pagamento.id %}"
-              >
-                Dispensar envio
-              </button>
-            </div>
-          </form>
-        {% elif pagamento.recibo_status == 'enviado' %}
-          <div class="estado-final">
-            <strong>Recibo enviado.</strong>
-
-            {% if pagamento.recibo_enviado_por %}
-              Enviado por
-              {{ pagamento.recibo_enviado_por }}.
-            {% endif %}
-
-            {% if pagamento.recibo_enviado_em %}
-              Registrado em
-              {{ pagamento.recibo_enviado_em|date:"d/m/Y H:i" }}.
-            {% endif %}
-          </div>
-
-          {% if whatsapp_url %}
-            <a
-              class="whatsapp mt-3"
-              href="{{ whatsapp_url }}"
-              target="_blank"
-              rel="noopener"
-            >
-              Abrir WhatsApp novamente
-            </a>
-          {% endif %}
+        {% if whatsapp_url %}
+          <a
+            class="whatsapp"
+            href="{{ whatsapp_url }}"
+            target="_blank"
+            rel="noopener"
+          >
+            Abrir WhatsApp
+          </a>
         {% else %}
-          <div class="estado-final dispensado">
-            <strong>Envio dispensado.</strong>
-
-            {% if pagamento.recibo_dispensado_por %}
-              Dispensado por
-              {{ pagamento.recibo_dispensado_por }}.
-            {% endif %}
-
-            {% if pagamento.recibo_dispensado_em %}
-              Registrado em
-              {{ pagamento.recibo_dispensado_em|date:"d/m/Y H:i" }}.
-            {% endif %}
-
-            {% if pagamento.recibo_dispensa_observacao %}
-              <div class="mt-2">
-                Motivo:
-                {{ pagamento.recibo_dispensa_observacao }}
-              </div>
-            {% endif %}
-          </div>
+          <p class="nota-interna">
+            Telefone nao informado para abrir o WhatsApp
+            automaticamente.
+          </p>
         {% endif %}
-      </div>
+
+        <form method="post" data-enter-nav>
+          {% csrf_token %}
+
+          <label class="form-label">
+            Responsavel pela acao
+          </label>
+          {{ recibo_form.responsavel }}
+          {{ recibo_form.responsavel.errors }}
+
+          <label class="form-label mt-3">
+            Motivo, caso o envio seja dispensado
+          </label>
+          {{ recibo_form.observacao }}
+          {{ recibo_form.observacao.errors }}
+
+          <div class="acoes">
+            <button
+              class="btn btn-confirmar"
+              type="submit"
+              formaction="{% url 'locacoes:confirmar_recibo_enviado' pagamento.id %}"
+            >
+              Confirmar recibo enviado
+            </button>
+
+            <button
+              class="btn btn-dispensar"
+              type="submit"
+              formaction="{% url 'locacoes:dispensar_recibo' pagamento.id %}"
+            >
+              Dispensar envio
+            </button>
+          </div>
+        </form>
+
+      {% elif pagamento.recibo_status == 'enviado' %}
+        <div class="estado-final mt-3">
+          <strong>Recibo enviado.</strong>
+
+          {% if pagamento.recibo_enviado_por %}
+            Enviado por
+            {{ pagamento.recibo_enviado_por }}.
+          {% endif %}
+
+          {% if pagamento.recibo_enviado_em %}
+            Registrado em
+            {{ pagamento.recibo_enviado_em|date:"d/m/Y H:i" }}.
+          {% endif %}
+        </div>
+
+        {% if whatsapp_url %}
+          <a
+            class="whatsapp mt-3 mb-0"
+            href="{{ whatsapp_url }}"
+            target="_blank"
+            rel="noopener"
+          >
+            Abrir WhatsApp novamente
+          </a>
+        {% endif %}
+
+      {% else %}
+        <div class="estado-final dispensado mt-3">
+          <strong>Envio dispensado.</strong>
+
+          {% if pagamento.recibo_dispensado_por %}
+            Dispensado por
+            {{ pagamento.recibo_dispensado_por }}.
+          {% endif %}
+
+          {% if pagamento.recibo_dispensado_em %}
+            Registrado em
+            {{ pagamento.recibo_dispensado_em|date:"d/m/Y H:i" }}.
+          {% endif %}
+
+          {% if pagamento.recibo_dispensa_observacao %}
+            <div class="mt-2">
+              Motivo:
+              {{ pagamento.recibo_dispensa_observacao }}
+            </div>
+          {% endif %}
+        </div>
+      {% endif %}
     </section>
 
     <a
-      class="btn voltar"
+      class="btn btn-outline-secondary voltar"
       href="{% url 'locacoes:detalhe' locacao.id %}"
     >
       Voltar para locacao
