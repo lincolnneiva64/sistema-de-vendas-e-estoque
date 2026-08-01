@@ -49,24 +49,51 @@ def _faixa_padrao():
 
 def _mensagem_recibo_whatsapp(pagamento):
     locacao = pagamento.locacao
-    saldo = locacao.saldo_devedor
-    status = "QUITADA" if saldo <= 0 else "SALDO PENDENTE"
+    quitada = locacao.saldo_devedor <= Decimal("0.00")
     itens = ", ".join(
         f"{item.quantidade} {item.get_tipo_display()}"
         for item in locacao.itens.all()
     )
-    return "\n".join([
-        f"Recibo de pagamento - Locacao #{locacao.id}",
-        f"Cliente/Pessoa: {locacao.nome_contratante}",
-        f"Valor pago agora: R$ {pagamento.valor:.2f}",
-        f"Forma: {pagamento.get_forma_pagamento_display()}",
-        f"Total contratado: R$ {locacao.total:.2f}",
-        f"Total pago: R$ {locacao.total_pago:.2f}",
-        f"Saldo restante: R$ {saldo:.2f} ({status})",
+
+    linhas = [
+        f"RECIBO DE LOCACAO #{locacao.id}",
+        f"Cliente: {locacao.nome_contratante}",
+    ]
+
+    if quitada:
+        linhas.extend([
+            "Situacao: PAGAMENTO QUITADO",
+            (
+                "Valor total quitado: "
+                f"R$ {locacao.total:.2f}"
+            ),
+        ])
+    else:
+        linhas.extend([
+            (
+                "Valor recebido: "
+                f"R$ {pagamento.valor:.2f}"
+            ),
+            (
+                "Forma: "
+                f"{pagamento.get_forma_pagamento_display()}"
+            ),
+            (
+                "Saldo restante: "
+                f"R$ {locacao.saldo_devedor:.2f}"
+            ),
+        ])
+
+    linhas.extend([
         f"Materiais: {itens}",
         f"Entrega: {locacao.data_entrega:%d/%m/%Y}",
-        f"Devolucao prevista: {locacao.data_prevista_devolucao:%d/%m/%Y}",
+        (
+            "Devolucao prevista: "
+            f"{locacao.data_prevista_devolucao:%d/%m/%Y}"
+        ),
     ])
+
+    return "\n".join(linhas)
 
 
 def _whatsapp_recibo_url(pagamento):
@@ -972,8 +999,7 @@ def recibo_pagamento(request, pk):
             "pagamento": pagamento,
             "locacao": pagamento.locacao,
             "whatsapp_url": _whatsapp_recibo_url(pagamento),
-            "confirmar_form": ReciboStatusForm(),
-            "dispensar_form": ReciboStatusForm(),
+            "recibo_form": ReciboStatusForm(),
         },
     )
 
@@ -983,9 +1009,26 @@ def confirmar_recibo_enviado(request, pk):
     pagamento = get_object_or_404(PagamentoLocacao.objects.select_related("locacao"), pk=pk)
     form = ReciboStatusForm(request.POST)
     if form.is_valid():
-        pagamento.confirmar_recibo_enviado(responsavel=form.cleaned_data.get("responsavel", ""))
-        messages.success(request, "Recibo confirmado como enviado.")
-    return redirect("locacoes:recibo_pagamento", pk=pagamento.pk)
+        pagamento.confirmar_recibo_enviado(
+            responsavel=form.cleaned_data.get(
+                "responsavel",
+                "",
+            )
+        )
+        messages.success(
+            request,
+            "Recibo confirmado como enviado.",
+        )
+    else:
+        messages.warning(
+            request,
+            "Selecione o responsavel pela acao.",
+        )
+
+    return redirect(
+        "locacoes:recibo_pagamento",
+        pk=pagamento.pk,
+    )
 
 
 @require_POST
@@ -993,12 +1036,42 @@ def dispensar_recibo(request, pk):
     pagamento = get_object_or_404(PagamentoLocacao.objects.select_related("locacao"), pk=pk)
     form = ReciboStatusForm(request.POST)
     if form.is_valid():
+        observacao = (
+            form.cleaned_data.get("observacao", "")
+            or ""
+        ).strip()
+
+        if not observacao:
+            messages.warning(
+                request,
+                "Informe o motivo para dispensar o envio.",
+            )
+            return redirect(
+                "locacoes:recibo_pagamento",
+                pk=pagamento.pk,
+            )
+
         pagamento.dispensar_recibo(
-            responsavel=form.cleaned_data.get("responsavel", ""),
-            observacao=form.cleaned_data.get("observacao", ""),
+            responsavel=form.cleaned_data.get(
+                "responsavel",
+                "",
+            ),
+            observacao=observacao,
         )
-        messages.success(request, "Recibo dispensado.")
-    return redirect("locacoes:recibo_pagamento", pk=pagamento.pk)
+        messages.success(
+            request,
+            "Envio do recibo dispensado.",
+        )
+    else:
+        messages.warning(
+            request,
+            "Selecione o responsavel pela acao.",
+        )
+
+    return redirect(
+        "locacoes:recibo_pagamento",
+        pk=pagamento.pk,
+    )
 
 
 def recibos_pendentes(request):

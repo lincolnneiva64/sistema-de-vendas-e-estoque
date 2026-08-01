@@ -723,13 +723,185 @@ class LocacoesPagamentosTermoTests(TestCase):
 
     def test_recibo_mostra_saldo_corretamente(self):
         locacao = self.criar_locacao()
-        pagamento = locacao.registrar_pagamento(Decimal("5.00"), PagamentoLocacao.FORMA_PIX)
+        pagamento = locacao.registrar_pagamento(
+            Decimal("5.00"),
+            PagamentoLocacao.FORMA_PIX,
+        )
 
-        response = self.client.get(reverse("locacoes:recibo_pagamento", kwargs={"pk": pagamento.pk}), secure=True)
+        response = self.client.get(
+            reverse(
+                "locacoes:recibo_pagamento",
+                kwargs={"pk": pagamento.pk},
+            ),
+            secure=True,
+        )
 
         self.assertContains(response, "Saldo restante")
         self.assertContains(response, "11.00")
-        self.assertContains(response, "Ainda existe saldo devedor")
+        self.assertContains(
+            response,
+            "Ainda existe saldo devedor",
+        )
+
+    def test_recibo_quitado_exibe_resumo_sem_repetir_valores(self):
+        locacao = self.criar_locacao()
+        pagamento = locacao.registrar_pagamento(
+            locacao.total,
+            PagamentoLocacao.FORMA_DINHEIRO,
+        )
+
+        response = self.client.get(
+            reverse(
+                "locacoes:recibo_pagamento",
+                kwargs={"pk": pagamento.pk},
+            ),
+            secure=True,
+        )
+
+        self.assertContains(response, "Pagamento quitado")
+        self.assertContains(
+            response,
+            "Valor total quitado",
+        )
+        self.assertContains(response, "Materiais contratados")
+        self.assertNotContains(response, "Total contratado")
+        self.assertNotContains(response, "Total pago")
+        self.assertNotContains(response, "Status do recibo")
+
+    def test_recibo_tem_um_unico_responsavel_para_as_acoes(self):
+        locacao = self.criar_locacao()
+        pagamento = locacao.registrar_pagamento(
+            Decimal("4.00"),
+            PagamentoLocacao.FORMA_PIX,
+        )
+
+        Funcionario.objects.create(
+            nome="Lincoln Albuquerque Neiva",
+            ativo=True,
+            pode_operar_sistema=True,
+        )
+
+        response = self.client.get(
+            reverse(
+                "locacoes:recibo_pagamento",
+                kwargs={"pk": pagamento.pk},
+            ),
+            secure=True,
+        )
+
+        html = response.content.decode("utf-8")
+
+        self.assertEqual(
+            html.count('name="responsavel"'),
+            1,
+        )
+        self.assertContains(
+            response,
+            "Responsavel pela acao",
+        )
+        self.assertContains(
+            response,
+            "Confirmar recibo enviado",
+        )
+        self.assertContains(response, "Dispensar envio")
+
+    def test_confirmacao_salva_nome_do_operador_cadastrado(self):
+        locacao = self.criar_locacao()
+        pagamento = locacao.registrar_pagamento(
+            Decimal("4.00"),
+            PagamentoLocacao.FORMA_PIX,
+        )
+        operador = Funcionario.objects.create(
+            nome="Lincoln Albuquerque Neiva",
+            ativo=True,
+            pode_operar_sistema=True,
+        )
+
+        response = self.client.post(
+            reverse(
+                "locacoes:confirmar_recibo_enviado",
+                kwargs={"pk": pagamento.pk},
+            ),
+            {
+                "responsavel": str(operador.id),
+                "observacao": "",
+            },
+            secure=True,
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "locacoes:recibo_pagamento",
+                kwargs={"pk": pagamento.pk},
+            ),
+            fetch_redirect_response=False,
+        )
+
+        pagamento.refresh_from_db()
+
+        self.assertEqual(
+            pagamento.recibo_status,
+            PagamentoLocacao.RECIBO_ENVIADO,
+        )
+        self.assertEqual(
+            pagamento.recibo_enviado_por,
+            operador.nome,
+        )
+
+    def test_dispensa_exige_responsavel_e_motivo(self):
+        locacao = self.criar_locacao()
+        pagamento = locacao.registrar_pagamento(
+            Decimal("4.00"),
+            PagamentoLocacao.FORMA_PIX,
+        )
+        operador = Funcionario.objects.create(
+            nome="Roseli Da Costa Gama",
+            ativo=True,
+            pode_operar_sistema=True,
+        )
+
+        self.client.post(
+            reverse(
+                "locacoes:dispensar_recibo",
+                kwargs={"pk": pagamento.pk},
+            ),
+            {
+                "responsavel": str(operador.id),
+                "observacao": "",
+            },
+            secure=True,
+        )
+
+        pagamento.refresh_from_db()
+
+        self.assertEqual(
+            pagamento.recibo_status,
+            PagamentoLocacao.RECIBO_PENDENTE,
+        )
+
+        self.client.post(
+            reverse(
+                "locacoes:dispensar_recibo",
+                kwargs={"pk": pagamento.pk},
+            ),
+            {
+                "responsavel": str(operador.id),
+                "observacao": "Cliente nao quis receber.",
+            },
+            secure=True,
+        )
+
+        pagamento.refresh_from_db()
+
+        self.assertEqual(
+            pagamento.recibo_status,
+            PagamentoLocacao.RECIBO_DISPENSADO,
+        )
+        self.assertEqual(
+            pagamento.recibo_dispensado_por,
+            operador.nome,
+        )
 
     def test_snapshot_de_precos_e_reposicao_nao_muda_com_configuracao_posterior(self):
         locacao = self.criar_locacao()

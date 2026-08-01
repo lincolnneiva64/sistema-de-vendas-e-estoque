@@ -394,15 +394,41 @@ class VencimentoSaldoLocacaoForm(forms.Form):
 
 
 class ReciboStatusForm(forms.Form):
-    responsavel = forms.CharField(
-        required=False,
-        max_length=120,
-        widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
+    responsavel = forms.ModelChoiceField(
+        queryset=Funcionario.objects.none(),
+        empty_label="Selecione o responsavel",
+        widget=forms.Select(
+            attrs={"class": "form-select"}
+        ),
     )
     observacao = forms.CharField(
         required=False,
-        widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 2,
+                "placeholder": (
+                    "Informe o motivo somente quando "
+                    "o recibo nao for enviado."
+                ),
+            }
+        ),
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["responsavel"].queryset = (
+            Funcionario.objects
+            .filter(
+                ativo=True,
+                pode_operar_sistema=True,
+            )
+            .order_by("nome", "id")
+        )
+
+    def clean_responsavel(self):
+        funcionario = self.cleaned_data["responsavel"]
+        return funcionario.nome
 
 
 class TermoLocacaoForm(forms.Form):
