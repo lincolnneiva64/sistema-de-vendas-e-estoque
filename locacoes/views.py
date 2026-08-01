@@ -360,9 +360,19 @@ def nova(request):
                         "disponibilidade": disponibilidade,
                     },
                 )
+            dados_locacao = dict(
+                locacao_form.cleaned_data
+            )
+            if (
+                resumo_valores["total"] > Decimal("0.00")
+                and sinal_valor == resumo_valores["total"]
+            ):
+                dados_locacao["sem_vencimento_saldo"] = True
+                dados_locacao["data_vencimento_saldo"] = None
+
             try:
                 locacao = Locacao.criar_reserva(
-                    locacao_form.cleaned_data,
+                    dados_locacao,
                     itens,
                     responsavel="",
                 )

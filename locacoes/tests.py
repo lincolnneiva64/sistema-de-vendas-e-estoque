@@ -946,6 +946,7 @@ class LocacoesAlertasCobrancaTests(TestCase):
         self.assertEqual(locacao.status_financeiro, Locacao.FINANCEIRO_QUITADA)
         self.assertEqual(locacao.total_pago, locacao.total)
         self.assertEqual(locacao.saldo_devedor, Decimal("0.00"))
+        self.assertIsNone(locacao.data_vencimento_saldo)
         self.assertEqual(MovimentoFinanceiro.objects.filter(origem="locacao").count(), 1)
 
         response = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
@@ -2137,6 +2138,30 @@ class LocacoesFormularioReservaTests(TestCase):
         self.assertContains(
             response,
             'data-enter-next="id_data_vencimento_saldo"',
+        )
+        self.assertContains(
+            response,
+            'inputmode="decimal"',
+        )
+        self.assertContains(
+            response,
+            'data-enter-next="id_sinal_forma_pagamento"',
+        )
+        self.assertContains(
+            response,
+            'id="bloco-vencimento-saldo"',
+        )
+        self.assertContains(
+            response,
+            'campoSinal.value = moeda(',
+        )
+        self.assertContains(
+            response,
+            'campoFormaPagamento.value = "dinheiro"',
+        )
+        self.assertContains(
+            response,
+            'blocoVencimentoSaldo.hidden = quitada',
         )
         self.assertContains(
             response,

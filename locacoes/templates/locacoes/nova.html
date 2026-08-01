@@ -666,22 +666,22 @@
         <div id="pagamentoStatus" class="pagamento-status"></div>
 
         <div class="grid">
-          <div>
+          <div id="bloco-pagamento-inicial">
             <label class="form-label">Valor do pagamento inicial</label>
             {{ locacao_form.sinal_valor }}
             {{ locacao_form.sinal_valor.errors }}
           </div>
-          <div>
+          <div id="bloco-forma-pagamento">
             <label class="form-label">Forma de pagamento</label>
             {{ locacao_form.sinal_forma_pagamento }}
             {{ locacao_form.sinal_forma_pagamento.errors }}
           </div>
-          <div>
+          <div id="bloco-observacao-pagamento">
             <label class="form-label">Observacao do pagamento inicial</label>
             {{ locacao_form.sinal_observacao }}
             {{ locacao_form.sinal_observacao.errors }}
           </div>
-          <div>
+          <div id="bloco-vencimento-saldo">
             <label class="form-label">Vencimento do saldo</label>
             {{ locacao_form.data_vencimento_saldo }}
             {{ locacao_form.data_vencimento_saldo.errors }}
@@ -731,6 +731,22 @@
       const pagamentoSaldo = document.getElementById("pagamentoSaldo");
       const pagamentoStatus = document.getElementById("pagamentoStatus");
       const campoSinal = document.getElementById("id_sinal_valor");
+      const campoFormaPagamento = document.getElementById(
+        "id_sinal_forma_pagamento"
+      );
+      const campoObservacaoSinal = document.getElementById(
+        "id_sinal_observacao"
+      );
+      const campoVencimentoSaldo = document.getElementById(
+        "id_data_vencimento_saldo"
+      );
+      const blocoVencimentoSaldo = document.getElementById(
+        "bloco-vencimento-saldo"
+      );
+      let aplicandoPagamentoAutomatico = false;
+      let pagamentoAlteradoManualmente = Boolean(
+        String(campoSinal?.value || "").trim()
+      );
 
       const camposResumo = [
         "id_data_entrega",
@@ -751,9 +767,25 @@
       ].map((id) => document.getElementById(id)).filter(Boolean);
 
       function numero(valor) {
-        const convertido = Number(
-          String(valor || "0").replace(",", ".")
-        );
+        let texto = String(valor ?? "").trim();
+
+        if (!texto) return 0;
+
+        texto = texto
+          .replace(/\s/g, "")
+          .replace(/^R\$/i, "");
+
+        if (texto.includes(",") && texto.includes(".")) {
+          texto = texto
+            .replace(/\./g, "")
+            .replace(",", ".");
+        } else {
+          texto = texto.replace(",", ".");
+        }
+
+        texto = texto.replace(/[^0-9.-]/g, "");
+
+        const convertido = Number(texto);
         return Number.isFinite(convertido) ? convertido : 0;
       }
 
@@ -766,28 +798,87 @@
 
       let totalContratadoAtual = 0;
 
+      function formatarCampoPagamento() {
+        if (!campoSinal) return;
+
+        campoSinal.value = moeda(
+          Math.max(numero(campoSinal.value), 0)
+        );
+      }
+
       function atualizarResumoPagamento() {
-        const sinal = Math.max(numero(campoSinal?.value), 0);
-        const saldo = Math.max(totalContratadoAtual - sinal, 0);
+        const sinal = Math.max(
+          numero(campoSinal?.value),
+          0
+        );
+        const saldo = Math.max(
+          totalContratadoAtual - sinal,
+          0
+        );
+        const quitada = (
+          totalContratadoAtual > 0
+          && Math.abs(
+            sinal - totalContratadoAtual
+          ) < 0.005
+        );
+
+        if (campoFormaPagamento) {
+          if (
+            sinal > 0
+            && !campoFormaPagamento.value
+          ) {
+            campoFormaPagamento.value = "dinheiro";
+          } else if (sinal <= 0) {
+            campoFormaPagamento.value = "";
+          }
+        }
+
+        if (blocoVencimentoSaldo) {
+          blocoVencimentoSaldo.hidden = quitada;
+        }
+
+        if (campoVencimentoSaldo) {
+          if (quitada) {
+            campoVencimentoSaldo.value = "";
+          } else if (!campoVencimentoSaldo.value) {
+            campoVencimentoSaldo.value =
+              document.getElementById(
+                "id_data_entrega"
+              )?.value || "";
+          }
+        }
+
+        if (campoObservacaoSinal) {
+          campoObservacaoSinal.dataset.enterNext = (
+            quitada
+              ? "salvar-reserva"
+              : "id_data_vencimento_saldo"
+          );
+        }
 
         if (pagamentoTotal) {
-          pagamentoTotal.textContent = moeda(totalContratadoAtual);
+          pagamentoTotal.textContent = moeda(
+            totalContratadoAtual
+          );
         }
+
         if (pagamentoInicial) {
           pagamentoInicial.textContent = moeda(sinal);
         }
+
         if (pagamentoSaldo) {
           pagamentoSaldo.textContent = moeda(saldo);
         }
 
         if (!pagamentoStatus) return;
 
-        pagamentoStatus.classList.remove("visivel", "erro");
+        pagamentoStatus.classList.remove(
+          "visivel",
+          "erro"
+        );
         pagamentoStatus.textContent = "";
 
         if (campoSinal) {
-          campoSinal.max = totalContratadoAtual.toFixed(2);
-
           if (sinal > totalContratadoAtual) {
             campoSinal.setCustomValidity(
               "O pagamento inicial nao pode ser maior que o total contratado."
@@ -801,17 +892,26 @@
           campoSinal.setCustomValidity("");
         }
 
-        if (
-          totalContratadoAtual > 0 &&
-          Math.abs(sinal - totalContratadoAtual) < 0.005
-        ) {
-          pagamentoStatus.textContent = "Locação quitada no ato";
+        if (quitada) {
+          pagamentoStatus.textContent =
+            "Loca\u00e7\u00e3o quitada no ato";
           pagamentoStatus.classList.add("visivel");
         }
       }
 
       function aplicarResumo(dados) {
         totalContratadoAtual = numero(dados.total);
+
+        if (
+          campoSinal
+          && !pagamentoAlteradoManualmente
+        ) {
+          aplicandoPagamentoAutomatico = true;
+          campoSinal.value = moeda(
+            totalContratadoAtual
+          );
+          aplicandoPagamentoAutomatico = false;
+        }
 
         if (resumoDiarias) {
           resumoDiarias.textContent = dados.diarias || 0;
@@ -1150,12 +1250,59 @@
       });
 
       campoSinal?.addEventListener(
-        "input",
-        atualizarResumoPagamento
+        "focus",
+        function () {
+          window.setTimeout(function () {
+            campoSinal.select();
+          }, 0);
+        }
       );
+
       campoSinal?.addEventListener(
-        "change",
-        atualizarResumoPagamento
+        "input",
+        function () {
+          if (!aplicandoPagamentoAutomatico) {
+            pagamentoAlteradoManualmente = true;
+          }
+
+          atualizarResumoPagamento();
+        }
+      );
+
+      campoSinal?.addEventListener(
+        "blur",
+        function () {
+          formatarCampoPagamento();
+          atualizarResumoPagamento();
+        }
+      );
+
+      campoSinal?.addEventListener(
+        "keydown",
+        function (event) {
+          if (
+            event.key === "Enter"
+            && !event.altKey
+            && !event.ctrlKey
+            && !event.metaKey
+            && !event.shiftKey
+          ) {
+            formatarCampoPagamento();
+            atualizarResumoPagamento();
+          }
+        }
+      );
+
+      form.addEventListener(
+        "submit",
+        function () {
+          if (campoSinal) {
+            campoSinal.value = Math.max(
+              numero(campoSinal.value),
+              0
+            ).toFixed(2);
+          }
+        }
       );
 
       camposDisponibilidade.forEach(function (campo) {

@@ -585,7 +585,14 @@ class Locacao(models.Model):
                 data_evento=dados["data_evento"],
                 horario_evento=dados["horario_evento"],
                 data_prevista_devolucao=dados["data_prevista_devolucao"],
-                data_vencimento_saldo=dados.get("data_vencimento_saldo") or dados["data_entrega"],
+                data_vencimento_saldo=(
+                    None
+                    if dados.get("sem_vencimento_saldo")
+                    else (
+                        dados.get("data_vencimento_saldo")
+                        or dados["data_entrega"]
+                    )
+                ),
                 faixa_preco=dados["faixa_preco"],
                 faixa_preco_nome_snapshot=dados["faixa_preco"].nome,
                 observacao=dados.get("observacao", ""),

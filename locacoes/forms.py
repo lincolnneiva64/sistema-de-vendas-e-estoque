@@ -185,7 +185,14 @@ class LocacaoForm(forms.Form):
         min_value=0,
         decimal_places=2,
         max_digits=12,
-        widget=forms.NumberInput(attrs={"class": "form-control", "min": "0", "step": "0.01"}),
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "inputmode": "decimal",
+                "autocomplete": "off",
+                "data-enter-next": "id_sinal_forma_pagamento",
+            }
+        ),
     )
     sinal_forma_pagamento = forms.ChoiceField(
         required=False,
