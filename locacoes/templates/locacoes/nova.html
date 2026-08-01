@@ -691,8 +691,22 @@
       </section>
 
       <div class="d-flex justify-content-end gap-2">
-        <a class="btn btn-outline-secondary" href="{% url 'locacoes:lista' %}">Cancelar</a>
-        <button class="btn btn-success" type="submit">Salvar reserva</button>
+        <a
+          class="btn btn-outline-secondary"
+          href="{% url 'locacoes:lista' %}"
+          id="cancelar-reserva"
+          data-arrow-nav="reserva-final"
+        >
+          Cancelar
+        </a>
+        <button
+          class="btn btn-success"
+          type="submit"
+          id="salvar-reserva"
+          data-arrow-nav="reserva-final"
+        >
+          Salvar reserva
+        </button>
       </div>
     </form>
   </main>
@@ -1151,6 +1165,48 @@
       verificarDisponibilidade();
       atualizarResumoLocacao();
       atualizarResumoPagamento();
+    })();
+  </script>
+
+  <script>
+    (function () {
+      const controles = Array.from(
+        document.querySelectorAll(
+          '[data-arrow-nav="reserva-final"]'
+        )
+      );
+
+      if (!controles.length) return;
+
+      document.addEventListener(
+        "keydown",
+        function (event) {
+          if (
+            event.key !== "ArrowLeft"
+            && event.key !== "ArrowRight"
+          ) {
+            return;
+          }
+
+          const indice = controles.indexOf(
+            document.activeElement
+          );
+
+          if (indice === -1) return;
+
+          event.preventDefault();
+
+          const passo = (
+            event.key === "ArrowRight" ? 1 : -1
+          );
+
+          const proximoIndice = (
+            indice + passo + controles.length
+          ) % controles.length;
+
+          controles[proximoIndice].focus();
+        }
+      );
     })();
   </script>
 </body>

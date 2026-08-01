@@ -167,7 +167,13 @@ class LocacaoForm(forms.Form):
     )
     data_vencimento_saldo = forms.DateField(
         required=False,
-        widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+        widget=forms.DateInput(
+            attrs={
+                "class": "form-control",
+                "type": "date",
+                "data-enter-next": "salvar-reserva",
+            }
+        ),
     )
     faixa_preco = forms.ModelChoiceField(
         queryset=FaixaPrecoLocacao.objects.filter(ativa=True).order_by("ordem", "id"),
@@ -188,7 +194,13 @@ class LocacaoForm(forms.Form):
     )
     sinal_observacao = forms.CharField(
         required=False,
-        widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 2,
+                "data-enter-next": "id_data_vencimento_saldo",
+            }
+        ),
     )
 
     def clean(self):

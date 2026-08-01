@@ -2127,6 +2127,45 @@ class LocacoesFormularioReservaTests(TestCase):
         self.assertContains(response, 'id="id_data_prevista_devolucao"')
         self.assertContains(response, 'data-enter-next="id_jogos"')
 
+
+    def test_fluxo_enter_pagamento_e_setas_nos_botoes_finais(self):
+        response = self.client.get(
+            reverse("locacoes:nova"),
+            secure=True,
+        )
+
+        self.assertContains(
+            response,
+            'data-enter-next="id_data_vencimento_saldo"',
+        )
+        self.assertContains(
+            response,
+            'data-enter-next="salvar-reserva"',
+        )
+        self.assertContains(
+            response,
+            'id="cancelar-reserva"',
+        )
+        self.assertContains(
+            response,
+            'id="salvar-reserva"',
+        )
+        html = response.content.decode("utf-8")
+        self.assertEqual(
+            html.count(
+                'data-arrow-nav="reserva-final"\n        >'
+            ),
+            2,
+        )
+        self.assertContains(
+            response,
+            'event.key !== "ArrowLeft"',
+        )
+        self.assertContains(
+            response,
+            'event.key !== "ArrowRight"',
+        )
+
     def test_ordem_dos_horarios_na_secao_datas(self):
         response = self.client.get(reverse("locacoes:nova"), secure=True)
         html = response.content.decode("utf-8")
