@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8">
@@ -55,7 +55,7 @@
     .topo h1 {
       margin: 0;
       color: var(--orange-dark);
-      font-size: 1.45rem;
+      font-size: 0.85rem;
       font-weight: 900;
     }
 
@@ -66,8 +66,8 @@
     }
 
     .card-recibo {
-      margin-bottom: 12px;
-      padding: 14px;
+      margin-bottom: 4px;
+      padding: 3px;
       border: 1px solid #fed7aa;
       border-left: 5px solid var(--orange);
       border-radius: 8px;
@@ -92,14 +92,14 @@
       display: block;
       margin-bottom: 2px;
       color: var(--muted);
-      font-size: 0.76rem;
+      font-size: 0.68rem;
       font-weight: 850;
       letter-spacing: 0.04em;
       text-transform: uppercase;
     }
 
     .cliente {
-      font-size: 1.08rem;
+      font-size: 0.85rem;
       font-weight: 900;
     }
 
@@ -121,8 +121,8 @@
     }
 
     .valor-principal {
-      margin-top: 12px;
-      padding: 12px;
+      margin-top: 2px;
+      padding: 3px;
       border: 1px solid #86efac;
       border-radius: 8px;
       background: var(--green-soft);
@@ -137,7 +137,7 @@
       display: block;
       margin-top: 2px;
       color: #14532d;
-      font-size: 1.45rem;
+      font-size: 0.85rem;
       font-weight: 950;
     }
 
@@ -148,13 +148,13 @@
     .saldo-parcial {
       display: grid;
       grid-template-columns:
-        repeat(2, minmax(0, 1fr));
-      gap: 8px;
+        repeat(4, minmax(0, 1fr));
+      gap: 2px;
       margin-top: 10px;
     }
 
     .saldo-parcial > div {
-      padding: 10px;
+      padding: 3px;
       border: 1px solid #fde68a;
       border-radius: 8px;
       background: #ffffff;
@@ -163,20 +163,20 @@
     .saldo-parcial strong {
       display: block;
       margin-top: 2px;
-      font-size: 1.08rem;
+      font-size: 0.85rem;
       font-weight: 900;
     }
 
     .dados {
       display: grid;
       grid-template-columns:
-        repeat(2, minmax(0, 1fr));
-      gap: 8px;
-      margin-top: 12px;
+        repeat(4, minmax(0, 1fr));
+      gap: 2px;
+      margin-top: 2px;
     }
 
     .dado {
-      padding: 10px;
+      padding: 3px;
       border: 1px solid #e2e8f0;
       border-radius: 8px;
       background: #f8fafc;
@@ -185,7 +185,7 @@
     .dado strong {
       display: block;
       margin-top: 2px;
-      font-size: 0.98rem;
+      font-size: 0.75rem;
       font-weight: 900;
     }
 
@@ -205,7 +205,7 @@
     }
 
     .materiais li {
-      padding: 10px 12px;
+      padding: 6px 10px;
       border: 1px solid #fed7aa;
       border-radius: 8px;
       background: var(--orange-soft);
@@ -234,13 +234,13 @@
 
     .form-control,
     .form-select {
-      min-height: 46px;
+      min-height: 30px;
       border: 1px solid #cbd5e1;
       border-radius: 8px;
     }
 
     textarea.form-control {
-      min-height: 82px;
+      min-height: 60px;
     }
 
     .whatsapp,
@@ -256,7 +256,7 @@
       align-items: center;
       justify-content: center;
       width: 100%;
-      margin-bottom: 12px;
+      margin-bottom: 4px;
       padding: 10px 14px;
       border: 1px solid #15803d;
       background: #15803d;
@@ -271,17 +271,17 @@
     }
 
     .acoes {
-      display: grid;
-      gap: 8px;
-      margin-top: 12px;
-    }
+      display:block;
+      margin-top:2px;
+}
 
     .btn-confirmar {
-      border: 1px solid var(--blue);
-      background: var(--blue);
-      color: #ffffff;
-      animation: pulse 1.4s infinite;
-    }
+      width:100%;
+      border:1px solid var(--blue);
+      background:var(--blue);
+      color:#ffffff;
+      animation:pulse 1.4s infinite;
+}
 
     .btn-dispensar {
       border: 1px solid #94a3b8;
@@ -290,7 +290,7 @@
     }
 
     .estado-final {
-      padding: 12px;
+      padding: 3px;
       border: 1px solid #86efac;
       border-left: 5px solid var(--green);
       border-radius: 8px;
@@ -330,9 +330,9 @@
 
     @media (min-width: 680px) {
       .acoes {
-        grid-template-columns:
-          repeat(2, minmax(0, 1fr));
-      }
+      display:block;
+      margin-top:2px;
+}
     }
 
     @media (max-width: 430px) {
@@ -437,20 +437,40 @@
       {% endif %}
 
       <div class="dados">
-        <div class="dado">
-          <span class="rotulo">Entrega</span>
-          <strong>
-            {{ locacao.data_entrega|date:"d/m/Y" }}
-          </strong>
-        </div>
 
-        <div class="dado">
-          <span class="rotulo">Devolucao prevista</span>
-          <strong>
-            {{ locacao.data_prevista_devolucao|date:"d/m/Y" }}
-          </strong>
-        </div>
-      </div>
+  <div class="dado">
+    <span class="rotulo">Reserva realizada</span>
+    <strong>
+      {{ locacao.criado_em|date:"d/m/Y H:i" }}
+    </strong>
+  </div>
+
+  <div class="dado">
+    <span class="rotulo">Entrega</span>
+    <strong>
+      {{ locacao.data_entrega|date:"d/m/Y" }}
+      Ã s
+      
+    </strong>
+  </div>
+
+  <div class="dado">
+    <span class="rotulo">Evento</span>
+    <strong>
+      {{ locacao.data_evento|date:"d/m/Y" }}
+      Ã s
+      {{ locacao.horario_evento|time:"H:i" }}
+    </strong>
+  </div>
+
+  <div class="dado">
+    <span class="rotulo">DevoluÃ§Ã£o prevista</span>
+    <strong>
+      {{ locacao.data_prevista_devolucao|date:"d/m/Y" }}
+    </strong>
+  </div>
+
+</div>
 
       <h2 class="secao-titulo">Materiais contratados</h2>
 
@@ -463,7 +483,7 @@
         {% endfor %}
       </ul>
     </section>
-
+{% if not modo_publico %}
     <section class="card-recibo card-interno">
       <h2 class="interno-titulo">
         Controle interno de envio
@@ -477,13 +497,13 @@
 
         {% if whatsapp_url %}
           <a
-            class="whatsapp"
-            href="{{ whatsapp_url }}"
-            target="_blank"
-            rel="noopener"
-          >
-            Abrir WhatsApp
-          </a>
+  class="whatsapp"
+  href="{{ whatsapp_url }}"
+  target="_blank"
+  rel="noopener"
+>
+  Abrir WhatsApp
+</a>
         {% else %}
           <p class="nota-interna">
             Telefone nao informado para abrir o WhatsApp
@@ -494,36 +514,18 @@
         <form method="post" data-enter-nav>
           {% csrf_token %}
 
-          <label class="form-label">
-            Responsavel pela acao
-          </label>
-          {{ recibo_form.responsavel }}
-          {{ recibo_form.responsavel.errors }}
-
-          <label class="form-label mt-3">
-            Motivo, caso o envio seja dispensado
-          </label>
-          {{ recibo_form.observacao }}
-          {{ recibo_form.observacao.errors }}
+          
 
           <div class="acoes">
-            <button
-              class="btn btn-confirmar"
-              type="submit"
-              formaction="{% url 'locacoes:confirmar_recibo_enviado' pagamento.id %}"
-            >
-              Confirmar recibo enviado
-            </button>
-
-            <button
-              class="btn btn-dispensar"
-              type="submit"
-              formaction="{% url 'locacoes:dispensar_recibo' pagamento.id %}"
-            >
-              Dispensar envio
-            </button>
-          </div>
-        </form>
+  <button
+    class="btn btn-confirmar"
+    type="submit"
+    formaction="{% url 'locacoes:confirmar_recibo_enviado' pagamento.id %}"
+  >
+    Confirmar envio do recibo
+  </button>
+</div>
+</form>
 
       {% elif pagamento.recibo_status == 'enviado' %}
         <div class="estado-final mt-3">
@@ -574,15 +576,20 @@
         </div>
       {% endif %}
     </section>
-
-    <a
-      class="btn btn-outline-secondary voltar"
-      href="{% url 'locacoes:detalhe' locacao.id %}"
-    >
-      Voltar para locacao
-    </a>
+{% endif %}
+    
   </main>
 
   {% include "locacoes/includes/enter_nav.html" %}
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+

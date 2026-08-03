@@ -10,6 +10,7 @@ urlpatterns = [
     path("nova/", views.nova, name="nova"),
     path("configuracoes/", views.configuracoes, name="configuracoes"),
     path("disponibilidade/", views.disponibilidade_dinamica, name="disponibilidade_dinamica"),
+    path("cliente/<int:pk>/dados/", views.dados_cliente, name="dados_cliente"),
     path("resumo-valores/", views.resumo_valores_dinamico, name="resumo_valores_dinamico"),
     path("checklist-operacional/", views.checklist_operacional, name="checklist_operacional"),
     path(
@@ -35,6 +36,8 @@ urlpatterns = [
     path("<int:pk>/termo/", views.termo, name="termo"),
     path("recibos-pendentes/", views.recibos_pendentes, name="recibos_pendentes"),
     path("pagamentos/<int:pk>/recibo/", views.recibo_pagamento, name="recibo_pagamento"),
+    
+
     path("pagamentos/<int:pk>/recibo/confirmar/", views.confirmar_recibo_enviado, name="confirmar_recibo_enviado"),
     path("pagamentos/<int:pk>/recibo/dispensar/", views.dispensar_recibo, name="dispensar_recibo"),
 ]

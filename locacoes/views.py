@@ -1,4 +1,4 @@
-from decimal import Decimal
+﻿from decimal import Decimal
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
@@ -33,6 +33,7 @@ from .models import (
     ConferenciaEntregaLocacao,
     ConferenciaRecolhimentoLocacao,
     ConfiguracaoLocacao,
+    Cliente,
     FaixaPrecoLocacao,
     ItemLocacao,
     Locacao,
@@ -351,7 +352,48 @@ def disponibilidade_dinamica(request):
         excluir_id=excluir_id,
     )
     return JsonResponse(resultado)
+def dados_cliente(request, pk):
+    cliente = get_object_or_404(Cliente, pk=pk)
 
+    linhas = []
+
+    primeira_linha = ", ".join(
+        parte for parte in [
+            cliente.logradouro,
+            cliente.numero,
+        ] if parte
+    )
+    if primeira_linha:
+        linhas.append(primeira_linha)
+
+    if cliente.complemento:
+        linhas.append(cliente.complemento)
+
+    if cliente.bairro:
+        linhas.append(cliente.bairro)
+
+    cidade_uf = " - ".join(
+        parte for parte in [
+            cliente.cidade,
+            cliente.uf,
+        ] if parte
+    )
+    if cidade_uf:
+        linhas.append(cidade_uf)
+
+    endereco = "\n".join(linhas)
+
+    telefone = (
+        cliente.whatsapp
+        or cliente.telefone_alternativo
+        or ""
+    )
+
+    return JsonResponse({
+        "endereco": endereco,
+        "numero": cliente.numero or "",
+        "telefone": telefone,
+    })
 
 @ensure_csrf_cookie
 def nova(request):

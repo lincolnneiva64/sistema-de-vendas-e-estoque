@@ -136,7 +136,39 @@
         <p class="muted mb-0">Nenhuma entrega ou recolhimento pendente para esta locacao.</p>
       {% endif %}
     </section>
+{% if ultimo_pagamento %}
+<section class="cardx">
+  <h2>Recibo da locação</h2>
 
+  {% if ultimo_pagamento.recibo_status == "pendente" %}
+
+    {% if whatsapp_recibo_url %}
+      <a
+        class="btn btn-success w-100 mb-2"
+        target="_blank"
+        href="{{ whatsapp_recibo_url }}"
+      >
+        Abrir WhatsApp do recibo
+      </a>
+    {% endif %}
+
+    <form method="post"
+          action="{% url 'locacoes:confirmar_recibo_enviado' ultimo_pagamento.id %}">
+      {% csrf_token %}
+      <button class="btn btn-primary w-100">
+        Confirmar envio do recibo
+      </button>
+    </form>
+
+  {% else %}
+
+    <div class="alert alert-success mb-0">
+      ✅ Recibo já enviado ao cliente.
+    </div>
+
+  {% endif %}
+</section>
+{% endif %}
     <section class="cardx">
       <h2>Acoes operacionais</h2>
       {% if locacao.status == 'reservada' %}

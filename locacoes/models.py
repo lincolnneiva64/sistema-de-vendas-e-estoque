@@ -1,3 +1,5 @@
+import uuid
+
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -2139,6 +2141,12 @@ class PagamentoLocacao(models.Model):
     recibo_dispensado_em = models.DateTimeField(blank=True, null=True)
     recibo_dispensado_por = models.CharField(max_length=120, blank=True)
     recibo_dispensa_observacao = models.TextField(blank=True)
+    recibo_token = models.UUIDField(
+    default=uuid.uuid4,
+    unique=True,
+    editable=False,
+    db_index=True,
+)
     criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:
