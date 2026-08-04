@@ -714,6 +714,35 @@ def conferencia_entrega(request, pk):
         )
 
     historico = locacao.conferencias_entrega.all()
+    materiais_entrega = [
+        {
+            "chave": "jogos",
+            "nome": "Jogos",
+            "contratado": form.previsto_itens["jogos"],
+            "acumulado": form.acumulado_itens["jogos"],
+            "pendente": form.pendente_itens["jogos"],
+            "field": form["entregue_jogos"],
+            "errors": form["entregue_jogos"].errors,
+        },
+        {
+            "chave": "mesas_avulsas",
+            "nome": "Mesas avulsas",
+            "contratado": form.previsto_itens["mesas_avulsas"],
+            "acumulado": form.acumulado_itens["mesas_avulsas"],
+            "pendente": form.pendente_itens["mesas_avulsas"],
+            "field": form["entregue_mesas_avulsas"],
+            "errors": form["entregue_mesas_avulsas"].errors,
+        },
+        {
+            "chave": "cadeiras_avulsas",
+            "nome": "Cadeiras",
+            "contratado": form.previsto_itens["cadeiras_avulsas"],
+            "acumulado": form.acumulado_itens["cadeiras_avulsas"],
+            "pendente": form.pendente_itens["cadeiras_avulsas"],
+            "field": form["entregue_cadeiras_avulsas"],
+            "errors": form["entregue_cadeiras_avulsas"].errors,
+        },
+    ]
 
     return render(
         request,
@@ -728,6 +757,7 @@ def conferencia_entrega(request, pk):
             "acumulado_cadeiras": form.acumulado_cadeiras,
             "pendente_mesas": form.pendente_mesas,
             "pendente_cadeiras": form.pendente_cadeiras,
+            "materiais_entrega": materiais_entrega,
             "conferencia_salva": conferencia_salva,
             "whatsapp_url": whatsapp_url,
             "historico": historico,
@@ -1424,3 +1454,5 @@ def configuracoes(request):
             "cadeiras_sobrando": cadeiras_sobrando,
         },
     )
+
+

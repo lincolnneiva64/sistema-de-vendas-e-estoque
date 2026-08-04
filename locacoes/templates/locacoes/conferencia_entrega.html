@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8">
@@ -155,10 +155,26 @@
     }
 
     .dados {
-      display: grid;
-      gap: 8px;
-      color: #334155;
-    }
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px;
+}
+
+.dados > div{
+  padding:14px;
+  border:2px solid #e2e8f0;
+  border-radius:11px;
+  background:#f8fafc;
+  color:#334155;
+}
+
+.dados strong{
+  display:block;
+  margin-bottom:6px;
+  color:#64748b;
+  font-size:.82rem;
+  text-transform:uppercase;
+}
 
     .grade {
       display: grid;
@@ -229,6 +245,124 @@
       border-color: #fca5a5;
       background: #fef2f2;
       color: #991b1b;
+    }
+
+    .materiais-checklist {
+      display: grid;
+      gap: 12px;
+    }
+
+    .material-linha {
+      display: grid;
+      grid-template-columns: minmax(150px, 1.4fr) 108px 108px 116px 154px;
+      gap: 12px;
+      align-items: center;
+      padding: 14px;
+      border: 2px solid #e2e8f0;
+      border-left: 7px solid #94a3b8;
+      border-radius: 11px;
+      background: #fff;
+      transition:
+        border-color 0.18s ease,
+        background 0.18s ease,
+        box-shadow 0.18s ease;
+    }
+
+    .material-linha.status-completa {
+      border-color: #86efac;
+      border-left-color: var(--green);
+      background: #f0fdf4;
+    }
+
+    .material-linha.status-parcial {
+      border-color: #fcd34d;
+      border-left-color: var(--yellow);
+      background: #fffbeb;
+    }
+
+    .material-linha.status-excesso {
+      border-color: #fca5a5;
+      border-left-color: var(--red);
+      background: #fef2f2;
+    }
+
+    .material-linha strong,
+    .material-linha span {
+      font-weight: 900;
+    }
+
+    .material-linha small {
+      display: block;
+      color: var(--muted);
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .material-nome {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .material-status {
+      justify-self: start;
+      min-width: 96px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #e2e8f0;
+      color: #334155;
+      font-size: 0.82rem;
+      font-weight: 950;
+      text-align: center;
+    }
+
+    .status-completa .material-status {
+      background: #bbf7d0;
+      color: #166534;
+    }
+
+    .status-parcial .material-status {
+      background: #fde68a;
+      color: #854d0e;
+    }
+
+    .status-excesso .material-status {
+      background: #fecaca;
+      color: #991b1b;
+    }
+
+    .material-linha input {
+      width: 100%;
+    }
+
+    .painel-parcial {
+      display: none;
+      margin-top: 12px;
+      padding: 14px;
+      border: 2px solid #fcd34d;
+      border-left: 7px solid var(--yellow);
+      border-radius: 11px;
+      background: #fffbeb;
+      color: #854d0e;
+      font-weight: 850;
+    }
+
+    .painel-parcial.visivel {
+      display: block;
+    }
+
+    .painel-parcial strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 0.86rem;
+      text-transform: uppercase;
+    }
+
+    .acoes-comprovante {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 12px;
     }
 
     .btn-loc {
@@ -306,6 +440,15 @@
         grid-template-columns: 1fr;
       }
 
+      .material-linha,
+      .acoes-comprovante {
+        grid-template-columns: 1fr;
+      }
+
+      .material-status {
+        justify-self: stretch;
+      }
+
       .campo-inteiro {
         grid-column: auto;
       }
@@ -332,6 +475,12 @@
     data-previsto-cadeiras="{{ previsto_cadeiras }}"
     data-acumulado-mesas="{{ acumulado_mesas }}"
     data-acumulado-cadeiras="{{ acumulado_cadeiras }}"
+    data-previsto-jogos="{{ form.previsto_itens.jogos }}"
+    data-previsto-mesas-avulsas="{{ form.previsto_itens.mesas_avulsas }}"
+    data-previsto-cadeiras-avulsas="{{ form.previsto_itens.cadeiras_avulsas }}"
+    data-acumulado-jogos="{{ form.acumulado_itens.jogos }}"
+    data-acumulado-mesas-avulsas="{{ form.acumulado_itens.mesas_avulsas }}"
+    data-acumulado-cadeiras-avulsas="{{ form.acumulado_itens.cadeiras_avulsas }}"
   >
     <header class="topo">
       <div class="topo-linha">
@@ -433,16 +582,39 @@
           readonly
         >{{ conferencia_salva.mensagem_whatsapp_snapshot }}</textarea>
 
-        {% if whatsapp_url %}
-          <a
-            class="btn btn-success w-100 mt-3"
-            href="{{ whatsapp_url }}"
-            target="_blank"
-            rel="noopener noreferrer"
+        <div class="acoes-comprovante">
+          {% if whatsapp_url %}
+            <a
+              class="btn btn-success"
+              href="{{ whatsapp_url }}"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Abrir WhatsApp
+            </a>
+          {% else %}
+            <button class="btn btn-outline-secondary" type="button" disabled>
+              Abrir WhatsApp
+            </button>
+          {% endif %}
+
+          <button
+            class="btn btn-outline-primary"
+            id="copiar-mensagem"
+            type="button"
           >
-            Abrir mensagem no WhatsApp
+            Copiar mensagem
+          </button>
+
+          <a
+            class="btn btn-outline-secondary"
+            href="{% url 'locacoes:conferencia_entrega' tarefa.id %}?conferencia={{ conferencia_salva.id }}"
+          >
+            Visualizar comprovante
           </a>
-        {% else %}
+        </div>
+
+        {% if not whatsapp_url %}
           <div class="alert alert-warning mt-3 mb-0">
             A loca??o n?o possui telefone v?lido para abrir o
             WhatsApp.
@@ -471,36 +643,54 @@
             </div>
           {% endif %}
 
+          <div class="materiais-checklist mb-3">
+            {% for material in materiais_entrega %}
+              {% if material.contratado %}
+                <div
+                  class="material-linha"
+                  data-material="{{ material.chave }}"
+                  data-contratado="{{ material.contratado }}"
+                  data-acumulado="{{ material.acumulado }}"
+                >
+                  <div class="material-nome">
+                    <strong>{{ material.nome }}</strong>
+                    <small class="material-pendente">
+                      Pendente {{ material.pendente }}
+                    </small>
+                  </div>
+
+                  <span>
+                    <small>Contratado</small>
+                    {{ material.contratado }}
+                  </span>
+
+                  <span>
+                    <small>Ja entregue</small>
+                    {{ material.acumulado }}
+                  </span>
+
+                  <span class="material-status">
+                    A conferir
+                  </span>
+
+                  <div>
+                    <label
+                      class="form-label"
+                      for="{{ material.field.id_for_label }}"
+                    >
+                      Entregue
+                    </label>
+                    {{ material.field }}
+                    {% for erro in material.errors %}
+                      <div class="erro">{{ erro }}</div>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+
           <div class="grade">
-            <div>
-              <label
-                class="form-label"
-                for="{{ form.entregue_mesas.id_for_label }}"
-              >
-                {{ form.entregue_mesas.label }}
-              </label>
-
-              {{ form.entregue_mesas }}
-
-              {% for erro in form.entregue_mesas.errors %}
-                <div class="erro">{{ erro }}</div>
-              {% endfor %}
-            </div>
-
-            <div>
-              <label
-                class="form-label"
-                for="{{ form.entregue_cadeiras.id_for_label }}"
-              >
-                {{ form.entregue_cadeiras.label }}
-              </label>
-
-              {{ form.entregue_cadeiras }}
-
-              {% for erro in form.entregue_cadeiras.errors %}
-                <div class="erro">{{ erro }}</div>
-              {% endfor %}
-            </div>
 
             <div>
               <label
@@ -630,6 +820,16 @@
             Informe as quantidades entregues agora.
           </div>
 
+          <div
+            class="painel-parcial"
+            id="painel-parcial"
+          >
+            <strong>Entrega parcial</strong>
+            <span id="texto-pendencias">
+              Informe as quantidades entregues para calcular a pendencia.
+            </span>
+          </div>
+
           <button
             class="btn btn-loc w-100 mt-3"
             id="botao-confirmar"
@@ -664,29 +864,29 @@
 
           <div>
             <strong>Entregue nesta confer?ncia:</strong>
-            {{ conferencia.entregue_mesas }} mesa(s) e
-            {{ conferencia.entregue_cadeiras }} cadeira(s)
+            {{ conferencia.entregue_jogos }} jogo(s),
+            {{ conferencia.entregue_mesas_avulsas }} mesa(s) avulsa(s) e
+            {{ conferencia.entregue_cadeiras_avulsas }} cadeira(s)
           </div>
 
           <div>
             <strong>Total acumulado:</strong>
-            {{ conferencia.acumulado_mesas }} mesa(s) e
-            {{ conferencia.acumulado_cadeiras }} cadeira(s)
+            {{ conferencia.acumulado_jogos }} jogo(s),
+            {{ conferencia.acumulado_mesas_avulsas }} mesa(s) avulsa(s) e
+            {{ conferencia.acumulado_cadeiras_avulsas }} cadeira(s)
           </div>
 
           <div>
             <strong>Pendente:</strong>
-            {{ conferencia.pendente_mesas }} mesa(s) e
-            {{ conferencia.pendente_cadeiras }} cadeira(s)
+            {{ conferencia.pendente_jogos }} jogo(s),
+            {{ conferencia.pendente_mesas_avulsas }} mesa(s) avulsa(s) e
+            {{ conferencia.pendente_cadeiras_avulsas }} cadeira(s)
           </div>
 
           <div>
             <strong>Recebeu:</strong>
             {{ conferencia.recebedor_nome }} ?
-            {{ conferencia.get_recebedor_relacao_display }}
-            {% if conferencia.recebedor_relacao_outro %}
-              ({{ conferencia.recebedor_relacao_outro }})
-            {% endif %}
+            {{ conferencia.recebedor_cargo_display }}
           </div>
 
           <div>
@@ -733,11 +933,8 @@
   <script>
     (function () {
       const pagina = document.querySelector(".page");
-      const mesasInput = document.getElementById(
-        "id_entregue_mesas"
-      );
-      const cadeirasInput = document.getElementById(
-        "id_entregue_cadeiras"
+      const materiais = Array.from(
+        document.querySelectorAll(".material-linha")
       );
       const resultado = document.getElementById(
         "resultado-entrega"
@@ -757,28 +954,29 @@
       const campoPrevisao = document.getElementById(
         "campo-previsao"
       );
+      const painelParcial = document.getElementById(
+        "painel-parcial"
+      );
+      const textoPendencias = document.getElementById(
+        "texto-pendencias"
+      );
 
-      if (
-        !pagina ||
-        !mesasInput ||
-        !cadeirasInput ||
-        !resultado
-      ) {
-        return;
+      const copiar = document.getElementById("copiar-mensagem");
+      if (copiar) {
+        copiar.addEventListener("click", function () {
+          const mensagem = document.querySelector(".mensagem");
+          if (!mensagem) {
+            return;
+          }
+          mensagem.select();
+          navigator.clipboard?.writeText(mensagem.value);
+          copiar.textContent = "Mensagem copiada";
+        });
       }
 
-      const previstoMesas = Number(
-        pagina.dataset.previstoMesas || 0
-      );
-      const previstoCadeiras = Number(
-        pagina.dataset.previstoCadeiras || 0
-      );
-      const acumuladoMesas = Number(
-        pagina.dataset.acumuladoMesas || 0
-      );
-      const acumuladoCadeiras = Number(
-        pagina.dataset.acumuladoCadeiras || 0
-      );
+      if (!pagina || !resultado) {
+        return;
+      }
 
       function atualizarRelacao() {
         if (!relacao || !campoOutro) {
@@ -792,52 +990,94 @@
       }
 
       function atualizarResultado() {
-        const agoraMesas = Math.max(
-          Number(mesasInput.value || 0),
-          0
-        );
-        const agoraCadeiras = Math.max(
-          Number(cadeirasInput.value || 0),
-          0
-        );
+        let excesso = false;
+        let algumInformado = false;
+        const pendencias = [];
 
-        const totalMesas =
-          acumuladoMesas + agoraMesas;
-        const totalCadeiras =
-          acumuladoCadeiras + agoraCadeiras;
+        materiais.forEach((linha) => {
+          const contratado = Number(
+            linha.dataset.contratado || 0
+          );
+          const acumulado = Number(
+            linha.dataset.acumulado || 0
+          );
+          const input = linha.querySelector("input");
+          const entregueAgora = Math.max(
+            Number((input && input.value) || 0),
+            0
+          );
+          const total = acumulado + entregueAgora;
+          const pendente = Math.max(contratado - total, 0);
+          const nome = (
+            linha.querySelector("strong") || {}
+          ).textContent || "material";
+          const pendenteTexto = linha.querySelector(
+            ".material-pendente"
+          );
+          const statusTexto = linha.querySelector(
+            ".material-status"
+          );
 
-        const excesso =
-          totalMesas > previstoMesas ||
-          totalCadeiras > previstoCadeiras;
+          linha.classList.remove(
+            "status-completa",
+            "status-parcial",
+            "status-excesso"
+          );
 
-        const pendenteMesas = Math.max(
-          previstoMesas - totalMesas,
-          0
-        );
-        const pendenteCadeiras = Math.max(
-          previstoCadeiras - totalCadeiras,
-          0
-        );
+          if (entregueAgora > 0) {
+            algumInformado = true;
+          }
+
+          if (total > contratado) {
+            excesso = true;
+            linha.classList.add("status-excesso");
+            if (statusTexto) {
+              statusTexto.textContent = "Excedente";
+            }
+          }
+
+          if (total <= contratado && pendente > 0) {
+            linha.classList.add("status-parcial");
+            if (statusTexto) {
+              statusTexto.textContent = "Parcial";
+            }
+            pendencias.push(pendente + " " + nome.toLowerCase());
+          }
+
+          if (total <= contratado && pendente === 0) {
+            linha.classList.add("status-completa");
+            if (statusTexto) {
+              statusTexto.textContent = "Completa";
+            }
+          }
+
+          if (pendenteTexto) {
+            pendenteTexto.textContent =
+              "Pendente " + pendente;
+          }
+        });
 
         resultado.className = "resultado";
 
         if (excesso) {
           resultado.classList.add("excesso");
           resultado.textContent =
-            "Quantidade maior que a prevista no termo. " +
-            "Corrija a contagem ou regularize o material " +
-            "adicional antes de confirmar.";
+            "Existe material excedente. O excedente deve voltar " +
+            "ou ser tratado por ajuste posterior.";
 
           if (botao) {
             botao.disabled = true;
+          }
+
+          if (painelParcial) {
+            painelParcial.classList.remove("visivel");
           }
 
           return;
         }
 
         if (
-          pendenteMesas === 0 &&
-          pendenteCadeiras === 0
+          pendencias.length === 0
         ) {
           resultado.classList.add("completa");
           resultado.textContent =
@@ -851,14 +1091,27 @@
           if (campoPrevisao) {
             campoPrevisao.style.display = "none";
           }
+
+          if (painelParcial) {
+            painelParcial.classList.remove("visivel");
+          }
         } else {
           resultado.classList.add("parcial");
           resultado.textContent =
-            "Entrega parcial. Permanecer?o pendentes " +
-            pendenteMesas +
-            " mesa(s) e " +
-            pendenteCadeiras +
-            " cadeira(s).";
+            "Entrega parcial. Pendente: " +
+            pendencias.join(", ") +
+            ".";
+
+          if (painelParcial) {
+            painelParcial.classList.add("visivel");
+          }
+
+          if (textoPendencias) {
+            textoPendencias.textContent =
+              "Quantidade pendente: " +
+              pendencias.join(", ") +
+              ". Informe a justificativa e a previsao de conclusao.";
+          }
 
           if (campoJustificativa) {
             campoJustificativa.style.display = "block";
@@ -870,20 +1123,19 @@
         }
 
         if (botao) {
-          botao.disabled =
-            agoraMesas === 0 &&
-            agoraCadeiras === 0;
+          botao.disabled = !algumInformado;
         }
       }
 
-      mesasInput.addEventListener(
-        "input",
-        atualizarResultado
-      );
-      cadeirasInput.addEventListener(
-        "input",
-        atualizarResultado
-      );
+      materiais.forEach((linha) => {
+        const input = linha.querySelector("input");
+        if (input) {
+          input.addEventListener(
+            "input",
+            atualizarResultado
+          );
+        }
+      });
 
       if (relacao) {
         relacao.addEventListener(
@@ -894,7 +1146,9 @@
 
       atualizarRelacao();
       atualizarResultado();
+
     })();
   </script>
 </body>
 </html>
+

@@ -1159,14 +1159,29 @@ class LocacoesChecklistOperacionalTests(TestCase):
         dados.update(extras)
         return dados
 
-    def criar_locacao(self, **extras):
+    def criar_locacao(self, jogos=1, mesas=0, cadeiras=0, **extras):
+        itens = []
+        if jogos:
+            itens.append({
+                "tipo": ItemLocacao.TIPO_JOGO,
+                "quantidade": jogos,
+                "preco_diaria": Decimal("8.00"),
+            })
+        if mesas:
+            itens.append({
+                "tipo": ItemLocacao.TIPO_MESA_AVULSA,
+                "quantidade": mesas,
+                "preco_diaria": Decimal("4.00"),
+            })
+        if cadeiras:
+            itens.append({
+                "tipo": ItemLocacao.TIPO_CADEIRA_AVULSA,
+                "quantidade": cadeiras,
+                "preco_diaria": Decimal("1.50"),
+            })
         return Locacao.criar_reserva(
             self.dados_base(**extras),
-            [{
-                "tipo": ItemLocacao.TIPO_JOGO,
-                "quantidade": 1,
-                "preco_diaria": Decimal("8.00"),
-            }],
+            itens,
         )
 
     def colocar_na_rua(self, locacao):
@@ -1199,8 +1214,9 @@ class LocacoesChecklistOperacionalTests(TestCase):
 
     def dados_conferencia_entrega(self, **extras):
         dados = {
-            "entregue_mesas": "1",
-            "entregue_cadeiras": "4",
+            "entregue_jogos": "1",
+            "entregue_mesas_avulsas": "0",
+            "entregue_cadeiras_avulsas": "0",
             "recebedor_nome": "Maria",
             "recebedor_relacao": (
                 ConferenciaEntregaLocacao.RELACAO_CLIENTE
@@ -1318,6 +1334,9 @@ class LocacoesChecklistOperacionalTests(TestCase):
             conferencia.situacao,
             ConferenciaEntregaLocacao.SITUACAO_COMPLETA,
         )
+        self.assertEqual(conferencia.entregue_jogos, 1)
+        self.assertEqual(conferencia.acumulado_jogos, 1)
+        self.assertEqual(conferencia.pendente_jogos, 0)
         self.assertEqual(conferencia.acumulado_mesas, 1)
         self.assertEqual(conferencia.acumulado_cadeiras, 4)
         self.assertEqual(conferencia.pendente_mesas, 0)
@@ -1347,8 +1366,145 @@ class LocacoesChecklistOperacionalTests(TestCase):
             ).exists()
         )
 
+    def test_entrega_completa_funciona_para_cada_composicao_de_material(self):
+        cenarios = [
+            (
+                "somente_jogos",
+                {"jogos": 2, "mesas": 0, "cadeiras": 0},
+                {
+                    "entregue_jogos": "2",
+                    "entregue_mesas_avulsas": "0",
+                    "entregue_cadeiras_avulsas": "0",
+                },
+                {"mesas": 2, "cadeiras": 8},
+            ),
+            (
+                "somente_mesas",
+                {"jogos": 0, "mesas": 3, "cadeiras": 0},
+                {
+                    "entregue_jogos": "0",
+                    "entregue_mesas_avulsas": "3",
+                    "entregue_cadeiras_avulsas": "0",
+                },
+                {"mesas": 3, "cadeiras": 0},
+            ),
+            (
+                "somente_cadeiras",
+                {"jogos": 0, "mesas": 0, "cadeiras": 6},
+                {
+                    "entregue_jogos": "0",
+                    "entregue_mesas_avulsas": "0",
+                    "entregue_cadeiras_avulsas": "6",
+                },
+                {"mesas": 0, "cadeiras": 6},
+            ),
+            (
+                "combinacao_dos_tres",
+                {"jogos": 1, "mesas": 2, "cadeiras": 3},
+                {
+                    "entregue_jogos": "1",
+                    "entregue_mesas_avulsas": "2",
+                    "entregue_cadeiras_avulsas": "3",
+                },
+                {"mesas": 3, "cadeiras": 7},
+            ),
+        ]
+
+        for nome, itens, post_itens, fisico in cenarios:
+            with self.subTest(nome=nome):
+                locacao = self.criar_locacao(**itens)
+                tarefa = obter_ou_criar_tarefa_operacional(
+                    locacao,
+                    TarefaOperacionalLocacao.TIPO_ENTREGA,
+                )
+
+                response = self.client.post(
+                    reverse(
+                        "locacoes:conferencia_entrega",
+                        kwargs={"pk": tarefa.pk},
+                    ),
+                    self.dados_conferencia_entrega(**post_itens),
+                    secure=True,
+                )
+
+                conferencia = (
+                    ConferenciaEntregaLocacao.objects
+                    .filter(locacao=locacao)
+                    .get()
+                )
+
+                self.assertRedirects(
+                    response,
+                    (
+                        reverse(
+                            "locacoes:conferencia_entrega",
+                            kwargs={"pk": tarefa.pk},
+                        )
+                        + f"?conferencia={conferencia.pk}"
+                    ),
+                    fetch_redirect_response=False,
+                )
+                self.assertEqual(
+                    conferencia.situacao,
+                    ConferenciaEntregaLocacao.SITUACAO_COMPLETA,
+                )
+                self.assertEqual(conferencia.previsto_jogos, itens["jogos"])
+                self.assertEqual(
+                    conferencia.previsto_mesas_avulsas,
+                    itens["mesas"],
+                )
+                self.assertEqual(
+                    conferencia.previsto_cadeiras_avulsas,
+                    itens["cadeiras"],
+                )
+                self.assertEqual(
+                    conferencia.entregue_jogos,
+                    int(post_itens["entregue_jogos"]),
+                )
+                self.assertEqual(
+                    conferencia.entregue_mesas_avulsas,
+                    int(post_itens["entregue_mesas_avulsas"]),
+                )
+                self.assertEqual(
+                    conferencia.entregue_cadeiras_avulsas,
+                    int(post_itens["entregue_cadeiras_avulsas"]),
+                )
+                self.assertEqual(conferencia.pendente_jogos, 0)
+                self.assertEqual(conferencia.pendente_mesas_avulsas, 0)
+                self.assertEqual(conferencia.pendente_cadeiras_avulsas, 0)
+                self.assertEqual(conferencia.entregue_mesas, fisico["mesas"])
+                self.assertEqual(
+                    conferencia.entregue_cadeiras,
+                    fisico["cadeiras"],
+                )
+                self.assertEqual(conferencia.recebedor_nome, "Maria")
+                self.assertEqual(
+                    conferencia.recebedor_relacao,
+                    ConferenciaEntregaLocacao.RELACAO_CLIENTE,
+                )
+                self.assertEqual(
+                    conferencia.observacao,
+                    "Material conferido no local.",
+                )
+                self.assertEqual(conferencia.responsavel, "Camila")
+                self.assertIsNotNone(conferencia.criado_em)
+
+                comprovante = self.client.get(
+                    (
+                        reverse(
+                            "locacoes:conferencia_entrega",
+                            kwargs={"pk": tarefa.pk},
+                        )
+                        + f"?conferencia={conferencia.pk}"
+                    ),
+                    secure=True,
+                )
+                self.assertContains(comprovante, "Abrir WhatsApp")
+                self.assertContains(comprovante, "Copiar mensagem")
+                self.assertContains(comprovante, "Visualizar comprovante")
+
     def test_entrega_parcial_reagenda_e_depois_pode_ser_completada(self):
-        locacao = self.criar_locacao()
+        locacao = self.criar_locacao(jogos=0, mesas=2, cadeiras=3)
         tarefa = obter_ou_criar_tarefa_operacional(
             locacao,
             TarefaOperacionalLocacao.TIPO_ENTREGA,
@@ -1362,10 +1518,11 @@ class LocacoesChecklistOperacionalTests(TestCase):
                 kwargs={"pk": tarefa.pk},
             ),
             self.dados_conferencia_entrega(
-                entregue_mesas="1",
-                entregue_cadeiras="2",
+                entregue_jogos="0",
+                entregue_mesas_avulsas="1",
+                entregue_cadeiras_avulsas="3",
                 justificativa_parcial=(
-                    "Duas cadeiras ficaram para a segunda viagem."
+                    "Uma mesa ficou para a segunda viagem."
                 ),
                 previsao_conclusao=previsao,
             ),
@@ -1386,8 +1543,14 @@ class LocacoesChecklistOperacionalTests(TestCase):
             primeira.situacao,
             ConferenciaEntregaLocacao.SITUACAO_PARCIAL,
         )
-        self.assertEqual(primeira.pendente_mesas, 0)
-        self.assertEqual(primeira.pendente_cadeiras, 2)
+        self.assertEqual(primeira.pendente_jogos, 0)
+        self.assertEqual(primeira.pendente_mesas_avulsas, 1)
+        self.assertEqual(primeira.pendente_cadeiras_avulsas, 0)
+        self.assertEqual(
+            primeira.justificativa_parcial,
+            "Uma mesa ficou para a segunda viagem.",
+        )
+        self.assertIsNotNone(primeira.previsao_conclusao)
         self.assertEqual(
             tarefa.status,
             TarefaOperacionalLocacao.STATUS_PARCIAL,
@@ -1419,8 +1582,9 @@ class LocacoesChecklistOperacionalTests(TestCase):
                 kwargs={"pk": tarefa.pk},
             ),
             self.dados_conferencia_entrega(
-                entregue_mesas="0",
-                entregue_cadeiras="2",
+                entregue_jogos="0",
+                entregue_mesas_avulsas="1",
+                entregue_cadeiras_avulsas="0",
             ),
             secure=True,
         )
@@ -1442,8 +1606,11 @@ class LocacoesChecklistOperacionalTests(TestCase):
             segunda.situacao,
             ConferenciaEntregaLocacao.SITUACAO_COMPLETA,
         )
-        self.assertEqual(segunda.acumulado_mesas, 1)
-        self.assertEqual(segunda.acumulado_cadeiras, 4)
+        self.assertEqual(segunda.acumulado_jogos, 0)
+        self.assertEqual(segunda.acumulado_mesas_avulsas, 2)
+        self.assertEqual(segunda.acumulado_cadeiras_avulsas, 3)
+        self.assertEqual(segunda.acumulado_mesas, 2)
+        self.assertEqual(segunda.acumulado_cadeiras, 3)
         self.assertEqual(
             tarefa.status,
             TarefaOperacionalLocacao.STATUS_CONFIRMADA,
@@ -1451,6 +1618,53 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.assertEqual(
             locacao.status,
             Locacao.STATUS_ENTREGUE,
+        )
+
+    def test_entrega_parcial_exige_justificativa_e_previsao(self):
+        locacao = self.criar_locacao(jogos=0, mesas=2, cadeiras=0)
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+
+        response = self.client.post(
+            reverse(
+                "locacoes:conferencia_entrega",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_entrega(
+                entregue_jogos="0",
+                entregue_mesas_avulsas="1",
+                entregue_cadeiras_avulsas="0",
+            ),
+            secure=True,
+        )
+
+        tarefa.refresh_from_db()
+        locacao.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Informe a justificativa da entrega parcial.",
+        )
+        self.assertContains(
+            response,
+            "Informe a previsao para completar a entrega.",
+        )
+        self.assertEqual(
+            ConferenciaEntregaLocacao.objects.filter(
+                locacao=locacao,
+            ).count(),
+            0,
+        )
+        self.assertEqual(
+            tarefa.status,
+            TarefaOperacionalLocacao.STATUS_PENDENTE,
+        )
+        self.assertEqual(
+            locacao.status,
+            Locacao.STATUS_RESERVADA,
         )
 
     def test_entrega_acima_do_previsto_e_bloqueada(self):
@@ -1466,7 +1680,7 @@ class LocacoesChecklistOperacionalTests(TestCase):
                 kwargs={"pk": tarefa.pk},
             ),
             self.dados_conferencia_entrega(
-                entregue_mesas="2",
+                entregue_jogos="2",
             ),
             secure=True,
         )
@@ -1477,7 +1691,7 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "A quantidade entregue esta maior que a prevista",
+            "Existe material excedente",
         )
         self.assertEqual(
             ConferenciaEntregaLocacao.objects.count(),
@@ -1503,6 +1717,40 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.assertContains(response, "Rua Checklist, 1")
         self.assertContains(response, "Levar toalhas separadas.")
         self.assertContains(response, reverse("locacoes:detalhe", kwargs={"pk": locacao.pk}))
+
+    def test_tela_conferencia_entrega_exibe_materiais_e_status_visual(self):
+        locacao = self.criar_locacao(jogos=1, mesas=2, cadeiras=3)
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+
+        response = self.client.get(
+            reverse(
+                "locacoes:conferencia_entrega",
+                kwargs={"pk": tarefa.pk},
+            ),
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Jogos")
+        self.assertContains(response, "Mesas avulsas")
+        self.assertContains(response, "Cadeiras")
+        self.assertContains(response, 'data-material="jogos"')
+        self.assertContains(response, 'data-contratado="1"')
+        self.assertContains(response, "material-status")
+        self.assertContains(response, "status-completa")
+        self.assertContains(response, "status-parcial")
+        self.assertContains(response, "status-excesso")
+        self.assertContains(response, "painel-parcial")
+        self.assertContains(response, "Recebido por")
+        self.assertContains(response, "Cargo/Função")
+        self.assertContains(response, "Cliente")
+        self.assertContains(response, "Funcionário")
+        self.assertContains(response, "Caseiro")
+        self.assertContains(response, "Familiar")
+        self.assertContains(response, "Outro")
 
     def test_confirmacao_simples_de_recolhimento_redireciona_para_checklist_detalhado(self):
         locacao = self.colocar_na_rua(

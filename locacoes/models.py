@@ -551,6 +551,40 @@ class Locacao(models.Model):
                 cadeiras += quantidade
         return {"mesas": mesas, "cadeiras": cadeiras}
 
+    @staticmethod
+    def necessidades_quantidades_contratadas(quantidades):
+        return Locacao.necessidades_itens([
+            {
+                "tipo": ItemLocacao.TIPO_JOGO,
+                "quantidade": quantidades.get("jogos", 0),
+            },
+            {
+                "tipo": ItemLocacao.TIPO_MESA_AVULSA,
+                "quantidade": quantidades.get("mesas_avulsas", 0),
+            },
+            {
+                "tipo": ItemLocacao.TIPO_CADEIRA_AVULSA,
+                "quantidade": quantidades.get("cadeiras_avulsas", 0),
+            },
+        ])
+
+    def quantidades_contratadas(self):
+        quantidades = {
+            "jogos": 0,
+            "mesas_avulsas": 0,
+            "cadeiras_avulsas": 0,
+        }
+        mapa = {
+            ItemLocacao.TIPO_JOGO: "jogos",
+            ItemLocacao.TIPO_MESA_AVULSA: "mesas_avulsas",
+            ItemLocacao.TIPO_CADEIRA_AVULSA: "cadeiras_avulsas",
+        }
+        for item in self.itens.all():
+            chave = mapa.get(item.tipo)
+            if chave:
+                quantidades[chave] += int(item.quantidade or 0)
+        return quantidades
+
     @classmethod
     def validar_disponibilidade(cls, data_entrega, data_prevista_devolucao, itens, excluir_id=None):
         necessidade = cls.necessidades_itens(itens)
@@ -924,6 +958,13 @@ class ConferenciaEntregaLocacao(models.Model):
         (RELACAO_FAMILIAR, "Familiar"),
         (RELACAO_OUTRO, "Outro"),
     ]
+    RELACAO_ENTREGA_LABELS = {
+        RELACAO_CLIENTE: "Cliente",
+        RELACAO_FUNCIONARIO: "Funcionário",
+        RELACAO_CASEIRO: "Caseiro",
+        RELACAO_FAMILIAR: "Familiar",
+        RELACAO_OUTRO: "Outro",
+    }
 
     ESTADO_BOM = "bom"
     ESTADO_RESSALVA = "ressalva"
@@ -947,15 +988,27 @@ class ConferenciaEntregaLocacao(models.Model):
 
     previsto_mesas = models.PositiveIntegerField()
     previsto_cadeiras = models.PositiveIntegerField()
+    previsto_jogos = models.PositiveIntegerField(default=0)
+    previsto_mesas_avulsas = models.PositiveIntegerField(default=0)
+    previsto_cadeiras_avulsas = models.PositiveIntegerField(default=0)
 
     entregue_mesas = models.PositiveIntegerField()
     entregue_cadeiras = models.PositiveIntegerField()
+    entregue_jogos = models.PositiveIntegerField(default=0)
+    entregue_mesas_avulsas = models.PositiveIntegerField(default=0)
+    entregue_cadeiras_avulsas = models.PositiveIntegerField(default=0)
 
     acumulado_mesas = models.PositiveIntegerField()
     acumulado_cadeiras = models.PositiveIntegerField()
+    acumulado_jogos = models.PositiveIntegerField(default=0)
+    acumulado_mesas_avulsas = models.PositiveIntegerField(default=0)
+    acumulado_cadeiras_avulsas = models.PositiveIntegerField(default=0)
 
     pendente_mesas = models.PositiveIntegerField()
     pendente_cadeiras = models.PositiveIntegerField()
+    pendente_jogos = models.PositiveIntegerField(default=0)
+    pendente_mesas_avulsas = models.PositiveIntegerField(default=0)
+    pendente_cadeiras_avulsas = models.PositiveIntegerField(default=0)
 
     situacao = models.CharField(
         max_length=20,
@@ -995,12 +1048,21 @@ class ConferenciaEntregaLocacao(models.Model):
             f"Locacao #{self.locacao_id} - Conferencia #{self.id}"
         )
 
+    @property
+    def recebedor_cargo_display(self):
+        if self.recebedor_relacao == self.RELACAO_OUTRO:
+            return self.recebedor_relacao_outro or "Outro"
+        return self.RELACAO_ENTREGA_LABELS.get(
+            self.recebedor_relacao,
+            self.get_recebedor_relacao_display(),
+        )
+
     def clean(self):
         erros = {}
 
         if self.entregue_mesas == 0 and self.entregue_cadeiras == 0:
             erros["entregue_mesas"] = (
-                "Informe pelo menos uma mesa ou cadeira entregue."
+                "Informe pelo menos um material entregue."
             )
 
         if self.acumulado_mesas > self.previsto_mesas:
@@ -1012,6 +1074,23 @@ class ConferenciaEntregaLocacao(models.Model):
             erros["acumulado_cadeiras"] = (
                 "O total acumulado de cadeiras nao pode superar o previsto."
             )
+
+        for campo in [
+            "jogos",
+            "mesas_avulsas",
+            "cadeiras_avulsas",
+        ]:
+            previsto = getattr(self, f"previsto_{campo}")
+            acumulado = getattr(self, f"acumulado_{campo}")
+            pendente = getattr(self, f"pendente_{campo}")
+            if acumulado > previsto:
+                erros[f"acumulado_{campo}"] = (
+                    "O total entregue nao pode superar o contratado."
+                )
+            if pendente != previsto - acumulado:
+                erros[f"pendente_{campo}"] = (
+                    "A quantidade pendente esta inconsistente."
+                )
 
         if self.pendente_mesas != self.previsto_mesas - self.acumulado_mesas:
             erros["pendente_mesas"] = (
@@ -1051,7 +1130,7 @@ class ConferenciaEntregaLocacao(models.Model):
             and not str(self.recebedor_relacao_outro or "").strip()
         ):
             erros["recebedor_relacao_outro"] = (
-                "Informe a relacao da pessoa que recebeu."
+                "Informe o cargo ou funcao da pessoa que recebeu."
             )
 
         if (
@@ -1124,19 +1203,17 @@ class ConferenciaEntregaLocacao(models.Model):
                     "Esta locacao nao possui entrega pendente."
                 )
 
-            previsto = Locacao.necessidades_itens(
-                [
-                    {
-                        "tipo": item.tipo,
-                        "quantidade": item.quantidade,
-                    }
-                    for item in locacao.itens.all()
-                ]
+            previsto_itens = locacao.quantidades_contratadas()
+            previsto = Locacao.necessidades_quantidades_contratadas(
+                previsto_itens
             )
 
             acumulados = locacao.conferencias_entrega.aggregate(
                 mesas=models.Sum("entregue_mesas"),
                 cadeiras=models.Sum("entregue_cadeiras"),
+                jogos=models.Sum("entregue_jogos"),
+                mesas_avulsas=models.Sum("entregue_mesas_avulsas"),
+                cadeiras_avulsas=models.Sum("entregue_cadeiras_avulsas"),
             )
             acumulado_anterior_mesas = int(
                 acumulados["mesas"] or 0
@@ -1144,9 +1221,28 @@ class ConferenciaEntregaLocacao(models.Model):
             acumulado_anterior_cadeiras = int(
                 acumulados["cadeiras"] or 0
             )
+            acumulado_anterior_itens = {
+                "jogos": int(acumulados["jogos"] or 0),
+                "mesas_avulsas": int(acumulados["mesas_avulsas"] or 0),
+                "cadeiras_avulsas": int(acumulados["cadeiras_avulsas"] or 0),
+            }
 
-            entregue_mesas = int(dados["entregue_mesas"])
-            entregue_cadeiras = int(dados["entregue_cadeiras"])
+            entregues_itens = {
+                "jogos": int(dados.get("entregue_jogos") or 0),
+                "mesas_avulsas": int(
+                    dados.get("entregue_mesas_avulsas") or 0
+                ),
+                "cadeiras_avulsas": int(
+                    dados.get("entregue_cadeiras_avulsas") or 0
+                ),
+            }
+            entregues_fisicos = (
+                Locacao.necessidades_quantidades_contratadas(
+                    entregues_itens
+                )
+            )
+            entregue_mesas = entregues_fisicos["mesas"]
+            entregue_cadeiras = entregues_fisicos["cadeiras"]
 
             acumulado_mesas = (
                 acumulado_anterior_mesas + entregue_mesas
@@ -1154,6 +1250,10 @@ class ConferenciaEntregaLocacao(models.Model):
             acumulado_cadeiras = (
                 acumulado_anterior_cadeiras + entregue_cadeiras
             )
+            acumulado_itens = {
+                chave: acumulado_anterior_itens[chave] + entregues_itens[chave]
+                for chave in previsto_itens
+            }
 
             if acumulado_mesas > previsto["mesas"]:
                 raise ValidationError(
@@ -1167,16 +1267,34 @@ class ConferenciaEntregaLocacao(models.Model):
                     "que a prevista no termo."
                 )
 
+            for chave, texto in [
+                ("jogos", "jogos"),
+                ("mesas_avulsas", "mesas avulsas"),
+                ("cadeiras_avulsas", "cadeiras"),
+            ]:
+                if acumulado_itens[chave] > previsto_itens[chave]:
+                    raise ValidationError(
+                        "A quantidade entregue esta maior que a "
+                        "contratada para "
+                        f"{texto}. Existe material excedente; "
+                        "o excedente devera voltar ou ser tratado "
+                        "por ajuste posterior."
+                    )
+
             if entregue_mesas == 0 and entregue_cadeiras == 0:
                 raise ValidationError(
-                    "Informe pelo menos uma mesa ou cadeira entregue."
+                    "Informe pelo menos um material entregue."
                 )
 
             pendente_mesas = previsto["mesas"] - acumulado_mesas
             pendente_cadeiras = (
                 previsto["cadeiras"] - acumulado_cadeiras
             )
-            parcial = pendente_mesas > 0 or pendente_cadeiras > 0
+            pendente_itens = {
+                chave: previsto_itens[chave] - acumulado_itens[chave]
+                for chave in previsto_itens
+            }
+            parcial = any(valor > 0 for valor in pendente_itens.values())
 
             if parcial:
                 situacao = cls.SITUACAO_PARCIAL
@@ -1194,7 +1312,7 @@ class ConferenciaEntregaLocacao(models.Model):
                 situacao = cls.SITUACAO_COMPLETA
 
             relacao_codigo = dados["recebedor_relacao"]
-            relacao_texto = dict(cls.RELACAO_CHOICES).get(
+            relacao_texto = cls.RELACAO_ENTREGA_LABELS.get(
                 relacao_codigo,
                 relacao_codigo,
             )
@@ -1215,16 +1333,28 @@ class ConferenciaEntregaLocacao(models.Model):
                     f"e {previsto['cadeiras']} cadeira(s)."
                 ),
                 (
-                    f"Entregue agora: {entregue_mesas} mesa(s) "
-                    f"e {entregue_cadeiras} cadeira(s)."
+                    "Contratado: "
+                    f"{previsto_itens['jogos']} jogo(s), "
+                    f"{previsto_itens['mesas_avulsas']} mesa(s) avulsa(s) e "
+                    f"{previsto_itens['cadeiras_avulsas']} cadeira(s)."
                 ),
                 (
-                    f"Total entregue: {acumulado_mesas} mesa(s) "
-                    f"e {acumulado_cadeiras} cadeira(s)."
+                    "Entregue agora: "
+                    f"{entregues_itens['jogos']} jogo(s), "
+                    f"{entregues_itens['mesas_avulsas']} mesa(s) avulsa(s) e "
+                    f"{entregues_itens['cadeiras_avulsas']} cadeira(s)."
                 ),
                 (
-                    f"Pendente: {pendente_mesas} mesa(s) "
-                    f"e {pendente_cadeiras} cadeira(s)."
+                    "Total entregue: "
+                    f"{acumulado_itens['jogos']} jogo(s), "
+                    f"{acumulado_itens['mesas_avulsas']} mesa(s) avulsa(s) e "
+                    f"{acumulado_itens['cadeiras_avulsas']} cadeira(s)."
+                ),
+                (
+                    "Pendente: "
+                    f"{pendente_itens['jogos']} jogo(s), "
+                    f"{pendente_itens['mesas_avulsas']} mesa(s) avulsa(s) e "
+                    f"{pendente_itens['cadeiras_avulsas']} cadeira(s)."
                 ),
             ]
 
@@ -1261,12 +1391,24 @@ class ConferenciaEntregaLocacao(models.Model):
                 tarefa=tarefa,
                 previsto_mesas=previsto["mesas"],
                 previsto_cadeiras=previsto["cadeiras"],
+                previsto_jogos=previsto_itens["jogos"],
+                previsto_mesas_avulsas=previsto_itens["mesas_avulsas"],
+                previsto_cadeiras_avulsas=previsto_itens["cadeiras_avulsas"],
                 entregue_mesas=entregue_mesas,
                 entregue_cadeiras=entregue_cadeiras,
+                entregue_jogos=entregues_itens["jogos"],
+                entregue_mesas_avulsas=entregues_itens["mesas_avulsas"],
+                entregue_cadeiras_avulsas=entregues_itens["cadeiras_avulsas"],
                 acumulado_mesas=acumulado_mesas,
                 acumulado_cadeiras=acumulado_cadeiras,
+                acumulado_jogos=acumulado_itens["jogos"],
+                acumulado_mesas_avulsas=acumulado_itens["mesas_avulsas"],
+                acumulado_cadeiras_avulsas=acumulado_itens["cadeiras_avulsas"],
                 pendente_mesas=pendente_mesas,
                 pendente_cadeiras=pendente_cadeiras,
+                pendente_jogos=pendente_itens["jogos"],
+                pendente_mesas_avulsas=pendente_itens["mesas_avulsas"],
+                pendente_cadeiras_avulsas=pendente_itens["cadeiras_avulsas"],
                 situacao=situacao,
                 recebedor_nome=str(
                     dados["recebedor_nome"]
@@ -1313,9 +1455,10 @@ class ConferenciaEntregaLocacao(models.Model):
                 ])
                 evento_tipo = "checklist_entrega_parcial"
                 descricao = (
-                    f"Entrega parcial registrada. Pendente: "
-                    f"{pendente_mesas} mesa(s) e "
-                    f"{pendente_cadeiras} cadeira(s)."
+                    "Entrega parcial registrada. Pendente: "
+                    f"{pendente_itens['jogos']} jogo(s), "
+                    f"{pendente_itens['mesas_avulsas']} mesa(s) avulsa(s) e "
+                    f"{pendente_itens['cadeiras_avulsas']} cadeira(s)."
                 )
             else:
                 tarefa.status = (

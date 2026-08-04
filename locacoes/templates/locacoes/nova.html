@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8">
@@ -743,6 +743,60 @@
       const blocoVencimentoSaldo = document.getElementById(
         "bloco-vencimento-saldo"
       );
+      const campoCliente = document.getElementById("id_cliente");
+const campoTipoPessoa = document.getElementById("id_tipo_pessoa");
+const campoTelefoneAvulso = document.getElementById("id_pessoa_avulsa_telefone");
+const campoEndereco = document.getElementById("id_endereco_entrega");
+
+let enderecoAlteradoManual = false;
+
+campoEndereco?.addEventListener("input", () => {
+    enderecoAlteradoManual = true;
+});
+
+async function carregarDadosCliente() {
+    if (!campoCliente?.value) return;
+
+    try {
+        const resposta = await fetch(
+            `/locacoes/cliente/${campoCliente.value}/dados/`,
+            {
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+            }
+        );
+
+        if (!resposta.ok) return;
+
+        const dados = await resposta.json();
+
+        if (
+            campoEndereco &&
+            (!campoEndereco.value.trim() || !enderecoAlteradoManual)
+        ) {
+            campoEndereco.value = dados.endereco || "";
+        }
+
+        if (
+            campoTelefoneAvulso &&
+            !campoTelefoneAvulso.value.trim()
+        ) {
+            campoTelefoneAvulso.value = dados.telefone || "";
+        }
+    } catch (erro) {
+        console.error(erro);
+    }
+}
+
+campoCliente?.addEventListener("change", carregarDadosCliente);
+
+if (
+    campoTipoPessoa?.value === "cliente" &&
+    campoCliente?.value
+) {
+    carregarDadosCliente();
+}
       let aplicandoPagamentoAutomatico = false;
       let pagamentoAlteradoManualmente = Boolean(
         String(campoSinal?.value || "").trim()

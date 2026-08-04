@@ -452,10 +452,10 @@ class AcaoOperacionalLocacaoForm(forms.Form):
 
 
 class ConferenciaEntregaLocacaoForm(forms.Form):
-    entregue_mesas = forms.IntegerField(
+    entregue_jogos = forms.IntegerField(
         min_value=0,
         initial=0,
-        label="Mesas entregues agora",
+        label="Jogos entregues",
         widget=forms.NumberInput(
             attrs={
                 "class": "form-control",
@@ -464,10 +464,22 @@ class ConferenciaEntregaLocacaoForm(forms.Form):
             }
         ),
     )
-    entregue_cadeiras = forms.IntegerField(
+    entregue_mesas_avulsas = forms.IntegerField(
         min_value=0,
         initial=0,
-        label="Cadeiras entregues agora",
+        label="Mesas avulsas entregues",
+        widget=forms.NumberInput(
+            attrs={
+                "class": "form-control",
+                "min": "0",
+                "step": "1",
+            }
+        ),
+    )
+    entregue_cadeiras_avulsas = forms.IntegerField(
+        min_value=0,
+        initial=0,
+        label="Cadeiras entregues",
         widget=forms.NumberInput(
             attrs={
                 "class": "form-control",
@@ -478,7 +490,7 @@ class ConferenciaEntregaLocacaoForm(forms.Form):
     )
     recebedor_nome = forms.CharField(
         max_length=160,
-        label="Quem recebeu",
+        label="Recebido por",
         widget=forms.TextInput(
             attrs={
                 "class": "form-control",
@@ -487,14 +499,35 @@ class ConferenciaEntregaLocacaoForm(forms.Form):
         ),
     )
     recebedor_relacao = forms.ChoiceField(
-        choices=ConferenciaEntregaLocacao.RELACAO_CHOICES,
-        label="Relacao com o cliente",
+        choices=[
+            (
+                ConferenciaEntregaLocacao.RELACAO_CLIENTE,
+                "Cliente",
+            ),
+            (
+                ConferenciaEntregaLocacao.RELACAO_FUNCIONARIO,
+                "Funcionário",
+            ),
+            (
+                ConferenciaEntregaLocacao.RELACAO_CASEIRO,
+                "Caseiro",
+            ),
+            (
+                ConferenciaEntregaLocacao.RELACAO_FAMILIAR,
+                "Familiar",
+            ),
+            (
+                ConferenciaEntregaLocacao.RELACAO_OUTRO,
+                "Outro",
+            ),
+        ],
+        label="Cargo/Função",
         widget=forms.Select(attrs={"class": "form-select"}),
     )
     recebedor_relacao_outro = forms.CharField(
         required=False,
         max_length=120,
-        label="Qual e a relacao",
+        label="Qual cargo/função",
         widget=forms.TextInput(
             attrs={
                 "class": "form-control",
@@ -555,28 +588,41 @@ class ConferenciaEntregaLocacaoForm(forms.Form):
         self.locacao = locacao
         self._dados_calculados = None
 
-        previsto = Locacao.necessidades_itens(
-            [
-                {
-                    "tipo": item.tipo,
-                    "quantidade": item.quantidade,
-                }
-                for item in locacao.itens.all()
-            ]
+        self.previsto_itens = locacao.quantidades_contratadas()
+        previsto = Locacao.necessidades_quantidades_contratadas(
+            self.previsto_itens
         )
-        acumulado_mesas = sum(
-            conferencia.entregue_mesas
-            for conferencia in locacao.conferencias_entrega.all()
-        )
-        acumulado_cadeiras = sum(
-            conferencia.entregue_cadeiras
-            for conferencia in locacao.conferencias_entrega.all()
+        self.acumulado_itens = {
+            "jogos": sum(
+                conferencia.entregue_jogos
+                for conferencia in locacao.conferencias_entrega.all()
+            ),
+            "mesas_avulsas": sum(
+                conferencia.entregue_mesas_avulsas
+                for conferencia in locacao.conferencias_entrega.all()
+            ),
+            "cadeiras_avulsas": sum(
+                conferencia.entregue_cadeiras_avulsas
+                for conferencia in locacao.conferencias_entrega.all()
+            ),
+        }
+        acumulado_fisico = (
+            Locacao.necessidades_quantidades_contratadas(
+                self.acumulado_itens
+            )
         )
 
         self.previsto_mesas = previsto["mesas"]
         self.previsto_cadeiras = previsto["cadeiras"]
-        self.acumulado_mesas = acumulado_mesas
-        self.acumulado_cadeiras = acumulado_cadeiras
+        self.acumulado_mesas = acumulado_fisico["mesas"]
+        self.acumulado_cadeiras = acumulado_fisico["cadeiras"]
+        self.pendente_itens = {
+            chave: max(
+                self.previsto_itens[chave] - self.acumulado_itens[chave],
+                0,
+            )
+            for chave in self.previsto_itens
+        }
         self.pendente_mesas = max(
             self.previsto_mesas - self.acumulado_mesas,
             0,
@@ -587,55 +633,57 @@ class ConferenciaEntregaLocacaoForm(forms.Form):
         )
 
         if not self.is_bound:
-            self.fields["entregue_mesas"].initial = self.pendente_mesas
-            self.fields["entregue_cadeiras"].initial = (
-                self.pendente_cadeiras
+            self.fields["entregue_jogos"].initial = (
+                self.pendente_itens["jogos"]
+            )
+            self.fields["entregue_mesas_avulsas"].initial = (
+                self.pendente_itens["mesas_avulsas"]
+            )
+            self.fields["entregue_cadeiras_avulsas"].initial = (
+                self.pendente_itens["cadeiras_avulsas"]
             )
 
     def clean(self):
         cleaned_data = super().clean()
 
-        entregue_mesas = cleaned_data.get("entregue_mesas")
-        entregue_cadeiras = cleaned_data.get("entregue_cadeiras")
-
-        entregue_mesas = (
-            int(entregue_mesas)
-            if entregue_mesas is not None
-            else 0
+        entregues_itens = {
+            "jogos": int(cleaned_data.get("entregue_jogos") or 0),
+            "mesas_avulsas": int(
+                cleaned_data.get("entregue_mesas_avulsas") or 0
+            ),
+            "cadeiras_avulsas": int(
+                cleaned_data.get("entregue_cadeiras_avulsas") or 0
+            ),
+        }
+        entregues_fisicos = (
+            Locacao.necessidades_quantidades_contratadas(
+                entregues_itens
+            )
         )
-        entregue_cadeiras = (
-            int(entregue_cadeiras)
-            if entregue_cadeiras is not None
-            else 0
-        )
+        entregue_mesas = entregues_fisicos["mesas"]
+        entregue_cadeiras = entregues_fisicos["cadeiras"]
 
-        if entregue_mesas == 0 and entregue_cadeiras == 0:
+        if all(valor == 0 for valor in entregues_itens.values()):
             self.add_error(
-                "entregue_mesas",
-                "Informe pelo menos uma mesa ou cadeira entregue.",
+                "entregue_jogos",
+                "Informe pelo menos um material entregue.",
             )
 
-        if entregue_mesas > self.pendente_mesas:
-            self.add_error(
-                "entregue_mesas",
-                (
-                    "A quantidade entregue esta maior que a prevista "
-                    "no termo. Corrija a contagem e traga o excedente "
-                    "de volta ou regularize o material adicional em "
-                    "um ajuste da locacao."
-                ),
-            )
-
-        if entregue_cadeiras > self.pendente_cadeiras:
-            self.add_error(
-                "entregue_cadeiras",
-                (
-                    "A quantidade entregue esta maior que a prevista "
-                    "no termo. Corrija a contagem e traga o excedente "
-                    "de volta ou regularize o material adicional em "
-                    "um ajuste da locacao."
-                ),
-            )
+        campos = {
+            "jogos": "entregue_jogos",
+            "mesas_avulsas": "entregue_mesas_avulsas",
+            "cadeiras_avulsas": "entregue_cadeiras_avulsas",
+        }
+        for chave, campo in campos.items():
+            if entregues_itens[chave] > self.pendente_itens[chave]:
+                self.add_error(
+                    campo,
+                    (
+                        "Existe material excedente. O excedente "
+                        "devera voltar ou ser tratado por ajuste "
+                        "posterior."
+                    ),
+                )
 
         novo_acumulado_mesas = (
             self.acumulado_mesas + entregue_mesas
@@ -651,10 +699,21 @@ class ConferenciaEntregaLocacaoForm(forms.Form):
             self.previsto_cadeiras - novo_acumulado_cadeiras,
             0,
         )
+        novo_acumulado_itens = {
+            chave: self.acumulado_itens[chave] + entregues_itens[chave]
+            for chave in self.previsto_itens
+        }
+        novo_pendente_itens = {
+            chave: max(
+                self.previsto_itens[chave] - novo_acumulado_itens[chave],
+                0,
+            )
+            for chave in self.previsto_itens
+        }
 
-        entrega_parcial = (
-            novo_pendente_mesas > 0
-            or novo_pendente_cadeiras > 0
+        entrega_parcial = any(
+            valor > 0
+            for valor in novo_pendente_itens.values()
         )
 
         justificativa = (
@@ -695,7 +754,7 @@ class ConferenciaEntregaLocacaoForm(forms.Form):
         ):
             self.add_error(
                 "recebedor_relacao_outro",
-                "Informe a relacao da pessoa que recebeu.",
+                "Informe o cargo ou funcao da pessoa que recebeu.",
             )
 
         if (
@@ -726,6 +785,10 @@ class ConferenciaEntregaLocacaoForm(forms.Form):
             "acumulado_cadeiras": novo_acumulado_cadeiras,
             "pendente_mesas": novo_pendente_mesas,
             "pendente_cadeiras": novo_pendente_cadeiras,
+            "previsto_itens": dict(self.previsto_itens),
+            "entregues_itens": dict(entregues_itens),
+            "acumulado_itens": dict(novo_acumulado_itens),
+            "pendente_itens": dict(novo_pendente_itens),
             "situacao": (
                 ConferenciaEntregaLocacao.SITUACAO_PARCIAL
                 if entrega_parcial
