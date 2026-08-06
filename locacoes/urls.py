@@ -19,6 +19,11 @@ urlpatterns = [
         name="conferencia_entrega",
     ),
     path(
+        "conferencias-entrega/<int:pk>/checklist-entrega/",
+        views.checklist_entrega_cliente,
+        name="checklist_entrega_cliente",
+    ),
+    path(
         "tarefas-operacionais/<int:pk>/conferencia-recolhimento/",
         views.conferencia_recolhimento,
         name="conferencia_recolhimento",

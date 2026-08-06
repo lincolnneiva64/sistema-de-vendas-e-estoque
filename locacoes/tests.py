@@ -343,12 +343,15 @@ class LocacoesUxPadraoTests(TestCase):
         self.assertContains(response, "data-enter-nav")
 
     def test_nova_locacao_abre_com_datas_de_hoje_preenchidas(self):
-        hoje = timezone.localdate().isoformat()
+        hoje_data = timezone.localdate()
+        hoje = hoje_data.isoformat()
+        amanha = (hoje_data + timedelta(days=1)).isoformat()
 
         response = self.client.get(reverse("locacoes:nova"), secure=True)
 
         self.assertContains(response, f'name="data_entrega"')
-        self.assertContains(response, f'value="{hoje}"', count=4)
+        self.assertContains(response, f'value="{hoje}"', count=3)
+        self.assertContains(response, f'name="data_prevista_devolucao" value="{amanha}"')
         self.assertContains(response, "data-enter-nav")
 
 
@@ -805,6 +808,38 @@ class LocacoesPagamentosTermoTests(TestCase):
         )
         self.assertContains(response, "Dispensar envio")
 
+    def test_recibo_exibe_mensagem_copiavel_e_whatsapp_sem_depender_do_texto_na_url(self):
+        locacao = self.criar_locacao()
+        pagamento = locacao.registrar_pagamento(
+            Decimal("4.00"),
+            PagamentoLocacao.FORMA_PIX,
+        )
+
+        response = self.client.get(
+            reverse(
+                "locacoes:recibo_pagamento",
+                kwargs={"pk": pagamento.pk},
+            ),
+            secure=True,
+        )
+
+        self.assertContains(response, "Mensagem para WhatsApp")
+        self.assertContains(response, 'id="mensagem-recibo"')
+        self.assertNotContains(response, 'class="form-control mensagem-recibo"')
+        self.assertContains(response, "RECIBO DE LOCACAO No")
+        self.assertContains(response, "Cliente:")
+        self.assertContains(response, "Evento:")
+        self.assertContains(response, "Entrega:")
+        self.assertContains(response, "Devolucao prevista:")
+        self.assertContains(response, "Materiais locados:")
+        self.assertContains(response, "Pagamento:")
+        self.assertContains(response, "Obrigado pela preferencia.")
+        self.assertContains(response, "Copiar mensagem")
+        self.assertContains(response, "Abrir WhatsApp")
+        self.assertContains(response, "web.whatsapp.com/send?phone=55")
+        self.assertNotContains(response, "web.whatsapp.com/send?phone=55&amp;text=")
+        self.assertContains(response, "Abrir checklist de entrega")
+
     def test_confirmacao_salva_nome_do_operador_cadastrado(self):
         locacao = self.criar_locacao()
         pagamento = locacao.registrar_pagamento(
@@ -848,6 +883,20 @@ class LocacoesPagamentosTermoTests(TestCase):
             pagamento.recibo_enviado_por,
             operador.nome,
         )
+        self.assertIsNotNone(pagamento.recibo_enviado_em)
+
+        response = self.client.get(
+            reverse(
+                "locacoes:recibo_pagamento",
+                kwargs={"pk": pagamento.pk},
+            ),
+            secure=True,
+        )
+
+        self.assertContains(response, "Recibo enviado.")
+        self.assertContains(response, operador.nome)
+        self.assertNotContains(response, 'class="btn btn-confirmar"')
+        self.assertNotContains(response, "Confirmar envio do recibo")
 
     def test_dispensa_exige_responsavel_e_motivo(self):
         locacao = self.criar_locacao()
@@ -1140,6 +1189,12 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.faixa = FaixaPrecoLocacao.objects.get(codigo=FaixaPrecoLocacao.CENTRO_PERTO)
         self.faixa.preco_jogo_diaria = Decimal("8.00")
         self.faixa.save()
+        self.entregador_checklist = Funcionario.objects.create(
+            nome="Lincoln Checklist",
+            telefone_whatsapp="(91) 99999-0000",
+            ativo=True,
+            pode_receber_checklist=True,
+        )
 
     def dados_base(self, **extras):
         data_entrega = extras.pop("data_entrega", self.hoje)
@@ -1229,6 +1284,7 @@ class LocacoesChecklistOperacionalTests(TestCase):
             "previsao_conclusao": "",
             "observacao": "Material conferido no local.",
             "responsavel": "Camila",
+            "checklist_funcionario": str(self.entregador_checklist.id),
         }
         dados.update(extras)
         return dados
@@ -1330,6 +1386,28 @@ class LocacoesChecklistOperacionalTests(TestCase):
             ),
             fetch_redirect_response=False,
         )
+        comprovante = self.client.get(
+            (
+                reverse(
+                    "locacoes:conferencia_entrega",
+                    kwargs={"pk": tarefa.pk},
+                )
+                + f"?conferencia={conferencia.pk}"
+            ),
+            secure=True,
+        )
+        self.assertContains(comprovante, "Conferencia salva")
+        self.assertContains(comprovante, "Enviar checklist pelo WhatsApp")
+        self.assertContains(comprovante, 'id="btn-enviar-checklist-whatsapp"')
+        self.assertContains(comprovante, 'target="_blank"')
+        self.assertContains(comprovante, 'rel="noopener"')
+        self.assertContains(comprovante, "web.whatsapp.com/send?phone=5591999990000")
+        self.assertContains(comprovante, "Segue%20o%20checklist%20de%20entrega")
+        self.assertContains(comprovante, 'data-whatsapp-url="https://web.whatsapp.com/send?phone=5591999990000')
+        self.assertContains(comprovante, "checklist-entrega/")
+        self.assertContains(comprovante, 'name="checklist_funcionario_envio"')
+        self.assertNotContains(comprovante, "window.open(")
+        self.assertNotContains(comprovante, "wa.me")
         self.assertEqual(
             conferencia.situacao,
             ConferenciaEntregaLocacao.SITUACAO_COMPLETA,
@@ -1490,18 +1568,195 @@ class LocacoesChecklistOperacionalTests(TestCase):
                 self.assertIsNotNone(conferencia.criado_em)
 
                 comprovante = self.client.get(
-                    (
-                        reverse(
-                            "locacoes:conferencia_entrega",
-                            kwargs={"pk": tarefa.pk},
-                        )
-                        + f"?conferencia={conferencia.pk}"
+                    reverse(
+                        "locacoes:checklist_entrega_cliente",
+                        kwargs={"pk": conferencia.pk},
                     ),
                     secure=True,
                 )
+                self.assertContains(comprovante, "Checklist de entrega")
+                self.assertContains(comprovante, "Materiais conferidos")
                 self.assertContains(comprovante, "Abrir WhatsApp")
-                self.assertContains(comprovante, "Copiar mensagem")
-                self.assertContains(comprovante, "Visualizar comprovante")
+                self.assertContains(comprovante, "Copiar checklist")
+                self.assertContains(comprovante, "Enviar para o celular")
+                self.assertContains(comprovante, "Enviar checklist para")
+                self.assertContains(comprovante, "<details")
+                self.assertContains(comprovante, "Lincoln Checklist")
+                self.assertContains(comprovante, "Confirmar envio do checklist")
+                self.assertNotContains(
+                    comprovante,
+                    "Justificativa da entrega parcial",
+                )
+                self.assertNotContains(
+                    comprovante,
+                    "Material conferido no local.",
+                )
+
+    def test_checklist_entrega_confirma_envio_para_funcionario(self):
+        locacao = self.criar_locacao()
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+        self.client.post(
+            reverse(
+                "locacoes:conferencia_entrega",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_entrega(),
+            secure=True,
+        )
+        conferencia = ConferenciaEntregaLocacao.objects.get()
+
+        response = self.client.get(
+            reverse(
+                "locacoes:checklist_entrega_cliente",
+                kwargs={"pk": conferencia.pk},
+            )
+            + f"?funcionario={self.entregador_checklist.pk}",
+            secure=True,
+        )
+
+        self.assertContains(response, "Enviar checklist para")
+        self.assertContains(response, '<details id="envio-checklist-funcionarios">')
+        self.assertContains(response, "Enviar checklist pelo WhatsApp")
+        self.assertContains(response, "Confirmar envio do checklist")
+        self.assertContains(response, 'data-envio-pendente="true"')
+        self.assertNotContains(response, 'class="btn-confirmar-envio" type="submit" hidden')
+        self.assertContains(response, "https://web.whatsapp.com/send?phone=5591999990000")
+        self.assertContains(response, "Segue%20o%20checklist%20de%20entrega")
+        self.assertContains(response, "conferencias-entrega")
+        self.assertContains(response, "checklist-entrega")
+        self.assertNotContains(response, "%F0%9F%91%A4")
+        self.assertNotContains(response, "%F0%9F%93%8D")
+        self.assertNotContains(response, "%E2%98%90%201%20Mesa%28s%29")
+        self.assertNotContains(response, "%E2%98%90%204%20Cadeira%28s%29")
+        self.assertNotContains(response, "%5B%20%20%20%5D")
+        self.assertNotContains(response, "Recebido%20por")
+        self.assertNotContains(response, "%E2%98%91%201%20Mesa")
+        self.assertNotContains(response, "%E2%98%91%204%20Cadeira")
+        self.assertNotContains(response, "Cargo")
+        self.assertNotContains(response, 'data-auto-open-whatsapp="true"')
+        self.assertNotContains(response, "about:blank")
+        self.assertNotContains(response, "window.open(")
+
+        response = self.client.get(
+            reverse(
+                "locacoes:checklist_entrega_cliente",
+                kwargs={"pk": conferencia.pk},
+            )
+            + f"?funcionario={self.entregador_checklist.pk}&abrir_whatsapp=1",
+            secure=True,
+        )
+
+        self.assertNotContains(response, 'data-auto-open-whatsapp="true"')
+        self.assertNotContains(response, "window.location.assign(abrirWhatsappFuncionario.href)")
+        self.assertNotContains(response, "about:blank")
+        self.assertNotContains(response, "window.open(")
+
+        response = self.client.post(
+            reverse(
+                "locacoes:checklist_entrega_cliente",
+                kwargs={"pk": conferencia.pk},
+            ),
+            {"checklist_funcionario": str(self.entregador_checklist.pk)},
+            secure=True,
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "locacoes:checklist_entrega_cliente",
+                kwargs={"pk": conferencia.pk},
+            ),
+            fetch_redirect_response=False,
+        )
+        self.assertTrue(
+            locacao.eventos.filter(
+                tipo="checklist_entrega_funcionario_enviado",
+                responsavel="Camila",
+                descricao__contains="Lincoln Checklist",
+            ).exists()
+        )
+
+        response = self.client.get(
+            reverse(
+                "locacoes:checklist_entrega_cliente",
+                kwargs={"pk": conferencia.pk},
+            ),
+            secure=True,
+        )
+
+        self.assertContains(response, "Checklist enviado")
+        self.assertContains(response, "Enviado para:")
+        self.assertContains(response, "Lincoln Checklist")
+        self.assertContains(response, "Enviado por:")
+        self.assertContains(response, "Camila")
+        self.assertContains(response, "Abrir WhatsApp novamente")
+        self.assertNotContains(response, 'class="btn-confirmar-envio"')
+        self.assertNotContains(response, "Enviar checklist pelo WhatsApp")
+        self.assertNotContains(response, '<span class="rotulo">Cargo</span>')
+        self.assertContains(response, 'class="check-row is-pending"')
+        self.assertContains(response, 'class="check-row-text">Mesa</span>')
+        self.assertContains(response, 'class="check-row-sub">1 un</span>')
+
+    def test_checklist_entrega_salva_sem_redirecionar_whatsapp_mesmo_com_header_ajax(self):
+        locacao = self.criar_locacao()
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+
+        response = self.client.post(
+            reverse(
+                "locacoes:conferencia_entrega",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_entrega(),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+
+        conferencia = ConferenciaEntregaLocacao.objects.get()
+        self.assertRedirects(
+            response,
+            (
+                reverse(
+                    "locacoes:conferencia_entrega",
+                    kwargs={"pk": tarefa.pk},
+                )
+                + f"?conferencia={conferencia.pk}"
+            ),
+            fetch_redirect_response=False,
+        )
+        self.assertFalse(
+            locacao.eventos.filter(
+                tipo="checklist_entrega_funcionario_enviado",
+            ).exists()
+        )
+
+        response = self.client.post(
+            reverse(
+                "locacoes:checklist_entrega_cliente",
+                kwargs={"pk": conferencia.pk},
+            ),
+            {"checklist_funcionario": str(self.entregador_checklist.pk)},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        dados = response.json()
+        self.assertTrue(dados["ok"])
+        self.assertIn("redirectUrl", dados)
+        self.assertEqual(dados["envio"]["funcionario_nome"], "Lincoln Checklist")
+        self.assertTrue(
+            locacao.eventos.filter(
+                tipo="checklist_entrega_funcionario_enviado",
+                responsavel="Camila",
+                descricao__contains="Lincoln Checklist",
+            ).exists()
+        )
 
     def test_entrega_parcial_reagenda_e_depois_pode_ser_completada(self):
         locacao = self.criar_locacao(jogos=0, mesas=2, cadeiras=3)
@@ -1667,6 +1922,40 @@ class LocacoesChecklistOperacionalTests(TestCase):
             Locacao.STATUS_RESERVADA,
         )
 
+    def test_cliente_recebedor_nao_exige_nome_digitado_na_interface(self):
+        locacao = self.criar_locacao()
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+
+        response = self.client.post(
+            reverse(
+                "locacoes:conferencia_entrega",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_entrega(recebedor_nome=""),
+            secure=True,
+        )
+
+        conferencia = ConferenciaEntregaLocacao.objects.get()
+
+        self.assertRedirects(
+            response,
+            (
+                reverse(
+                    "locacoes:conferencia_entrega",
+                    kwargs={"pk": tarefa.pk},
+                )
+                + f"?conferencia={conferencia.pk}"
+            ),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(
+            conferencia.recebedor_nome,
+            locacao.nome_contratante,
+        )
+
     def test_entrega_acima_do_previsto_e_bloqueada(self):
         locacao = self.criar_locacao()
         tarefa = obter_ou_criar_tarefa_operacional(
@@ -1719,7 +2008,7 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.assertContains(response, reverse("locacoes:detalhe", kwargs={"pk": locacao.pk}))
 
     def test_tela_conferencia_entrega_exibe_materiais_e_status_visual(self):
-        locacao = self.criar_locacao(jogos=1, mesas=2, cadeiras=3)
+        locacao = self.criar_locacao(jogos=10, mesas=2, cadeiras=3)
         tarefa = obter_ou_criar_tarefa_operacional(
             locacao,
             TarefaOperacionalLocacao.TIPO_ENTREGA,
@@ -1734,20 +2023,52 @@ class LocacoesChecklistOperacionalTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Jogos")
+        self.assertNotContains(response, "Jogos conferidos")
         self.assertContains(response, "Mesas avulsas")
         self.assertContains(response, "Cadeiras")
-        self.assertContains(response, 'data-material="jogos"')
-        self.assertContains(response, 'data-contratado="1"')
-        self.assertContains(response, "material-status")
+        self.assertContains(response, 'data-material="jogos_mesas"')
+        self.assertContains(response, 'data-material="jogos_cadeiras"')
+        self.assertContains(response, 'data-contratado="10"')
+        self.assertContains(response, 'data-sugestao="10"')
+        self.assertContains(response, 'data-sugestao="40"')
+        self.assertContains(response, '<span class="qtd-material">10</span> Mesa(s)')
+        self.assertContains(response, '<span class="qtd-material">40</span> Cadeira(s)')
+        self.assertNotContains(response, 'aria-label="Conferir mesas dos jogos" checked')
+        self.assertNotContains(response, 'aria-label="Conferir cadeiras dos jogos" checked')
+        self.assertContains(response, 'id="check-material-bom" type="checkbox">')
+        self.assertContains(response, 'value="" placeholder=" "')
+        self.assertContains(response, 'input.value = check.checked ? Number(linha.dataset.sugestao || 0) : "";')
+        self.assertContains(response, 'if (botao) { botao.disabled = false; }')
+        self.assertNotContains(response, 'qtdMaterial.textContent = entregueAgora')
+        self.assertNotContains(response, 'check.checked = true')
         self.assertContains(response, "status-completa")
         self.assertContains(response, "status-parcial")
         self.assertContains(response, "status-excesso")
         self.assertContains(response, "painel-parcial")
         self.assertContains(response, "Recebido por")
-        self.assertContains(response, "Cargo/Função")
+        self.assertContains(
+            response,
+            "Confirmar conferencia da entrega",
+        )
+        self.assertNotContains(response, "Enviar checklist pelo WhatsApp")
+        self.assertNotContains(response, 'name="checklist_funcionario_envio"')
+        self.assertNotContains(response, 'target="_blank"')
+        self.assertNotContains(response, "about:blank")
+        self.assertNotContains(response, "janelaWhatsapp.location.assign")
+        self.assertNotContains(response, "window.location.href = dados.checklistUrl")
+        self.assertNotContains(response, "}, 900)")
+        self.assertNotContains(response, "montarTextoChecklistWhatsapp")
+        self.assertNotContains(response, '<details class="envio-card"')
+        self.assertNotContains(response, "<summary>Enviar checklist para</summary>")
+        self.assertContains(response, "Materiais em bom estado")
+        self.assertContains(response, "Mesa(s)")
+        self.assertContains(response, "Cadeira(s)")
+        self.assertContains(response, 'type="hidden" name="responsavel"')
+        self.assertNotContains(response, "Qual cargo?")
+        self.assertNotContains(response, "Historico")
+        self.assertNotContains(response, "Confirmar e abrir checklist final")
         self.assertContains(response, "Cliente")
-        self.assertContains(response, "Funcionário")
+        self.assertContains(response, "Funcionario")
         self.assertContains(response, "Caseiro")
         self.assertContains(response, "Familiar")
         self.assertContains(response, "Outro")
@@ -2547,6 +2868,63 @@ class LocacoesFormularioReservaTests(TestCase):
 
         self.assertContains(response, 'id="id_data_prevista_devolucao"')
         self.assertContains(response, 'data-enter-next="id_jogos"')
+
+    def test_nova_locacao_sugere_devolucao_no_dia_seguinte(self):
+        response = self.client.get(reverse("locacoes:nova"), secure=True)
+        amanha = self.hoje + timedelta(days=1)
+
+        self.assertContains(
+            response,
+            f'name="data_prevista_devolucao" value="{amanha.isoformat()}"',
+        )
+
+    def test_nova_locacao_tem_autopreenchimento_cliente_e_rotulos_dinamicos(self):
+        response = self.client.get(reverse("locacoes:nova"), secure=True)
+
+        self.assertContains(response, 'id="label-nome-contratante"')
+        self.assertContains(response, 'id="label-telefone-contratante"')
+        self.assertContains(response, "Telefone do cliente")
+        self.assertContains(response, "Telefone avulso")
+        self.assertContains(response, "campoEndereco.value = dados.endereco || \"\";")
+        self.assertContains(response, "campoTelefoneAvulso.value = dados.telefone || \"\";")
+        self.assertContains(response, "campoCliente?.addEventListener(\"change\", carregarDadosCliente)")
+        self.assertContains(response, "dataMaisUmDia")
+        self.assertContains(response, "devolucaoAlteradaManual")
+        self.assertContains(response, "devolucaoInicialEsperada")
+        self.assertContains(response, "campoDataDevolucao.value !== devolucaoInicialEsperada")
+        self.assertContains(response, "sugerirDevolucao")
+
+    def test_nova_locacao_com_cliente_inicial_ja_exibe_telefone_e_endereco(self):
+        cliente = Cliente.objects.create(
+            nome="Cliente Preselecionado",
+            whatsapp="(91) 98888-7777",
+            logradouro="Rua Inicial",
+            numero="123",
+            complemento="Casa A",
+            bairro="Centro",
+            cidade="Belem",
+            uf="PA",
+            ativo=True,
+        )
+
+        response = self.client.get(
+            f"{reverse('locacoes:nova')}?cliente={cliente.pk}",
+            secure=True,
+        )
+
+        self.assertContains(response, f'value="{cliente.pk}" selected')
+        self.assertContains(response, "(91) 98888-7777")
+        self.assertContains(response, "Rua Inicial, 123")
+        self.assertContains(response, "Casa A")
+        self.assertContains(response, "Centro")
+        self.assertContains(response, "Belem - PA")
+
+    def test_endereco_entrega_exibe_cerca_de_cinco_linhas(self):
+        response = self.client.get(reverse("locacoes:nova"), secure=True)
+
+        self.assertContains(response, 'name="endereco_entrega"')
+        self.assertContains(response, 'rows="5"')
+        self.assertContains(response, "#id_endereco_entrega")
 
 
     def test_fluxo_enter_pagamento_e_setas_nos_botoes_finais(self):

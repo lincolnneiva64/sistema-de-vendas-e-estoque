@@ -34,6 +34,7 @@ from .models import (
     ConferenciaRecolhimentoLocacao,
     ConfiguracaoLocacao,
     Cliente,
+    EventoLocacao,
     FaixaPrecoLocacao,
     ItemLocacao,
     Locacao,
@@ -41,6 +42,7 @@ from .models import (
     PagamentoLocacao,
     TarefaOperacionalLocacao,
 )
+from estoque.models import Funcionario
 from .services import checklist_operacional_locacoes, obter_ou_criar_tarefa_operacional, tarefas_ativas_da_locacao
 
 
@@ -51,59 +53,280 @@ def _faixa_padrao():
 def _mensagem_recibo_whatsapp(pagamento):
     locacao = pagamento.locacao
     quitada = locacao.saldo_devedor <= Decimal("0.00")
-    itens = ", ".join(
-        f"{item.quantidade} {item.get_tipo_display()}"
+    itens = [
+        f"- {item.quantidade} {item.get_tipo_display().lower()}"
         for item in locacao.itens.all()
-    )
+    ]
+    situacao = "Pagamento quitado" if quitada else "Pagamento parcial"
 
     linhas = [
-        f"RECIBO DE LOCACAO #{locacao.id}",
-        f"Cliente: {locacao.nome_contratante}",
+        f"RECIBO DE LOCACAO No {locacao.id}",
+        "",
+        "Cliente:",
+        locacao.nome_contratante,
+        "",
+        "Evento:",
+        f"{locacao.data_evento:%d/%m/%Y} as {locacao.horario_evento:%H:%M}",
+        "",
+        "Entrega:",
+        f"{locacao.data_entrega:%d/%m/%Y} as {locacao.horario_entrega:%H:%M}",
+        "",
+        "Devolucao prevista:",
+        f"{locacao.data_prevista_devolucao:%d/%m/%Y}",
+        "",
+        "Materiais locados:",
+        *(itens or ["- Nenhum material informado"]),
+        "",
+        "Pagamento:",
+        f"Situacao: {situacao}",
+        f"Valor pago: R$ {pagamento.valor:.2f}",
+        f"Saldo: R$ {locacao.saldo_devedor:.2f}",
     ]
 
-    if quitada:
-        linhas.extend([
-            "Situacao: PAGAMENTO QUITADO",
-            (
-                "Valor total quitado: "
-                f"R$ {locacao.total:.2f}"
-            ),
-        ])
+    if pagamento.observacao:
+        linhas.extend(["", "Observacao:", pagamento.observacao])
+
+    linhas.extend(["", "Obrigado pela preferencia."])
+
+    return "\n".join(linhas)
+
+
+def _whatsapp_web_url(telefone, texto=""):
+    if not telefone:
+        return ""
+    url = f"https://web.whatsapp.com/send?phone={telefone}"
+    if texto:
+        url = f"{url}&text={quote(texto)}"
+    return url
+
+
+def _whatsapp_recibo_url(pagamento):
+    return _whatsapp_web_url(_telefone_whatsapp_locacao(pagamento.locacao))
+
+
+def _telefone_whatsapp_locacao(locacao):
+    telefone = "".join(
+        caractere
+        for caractere in locacao.telefone_contratante
+        if caractere.isdigit()
+    )
+    if len(telefone) in {10, 11}:
+        telefone = f"55{telefone}"
+    return telefone
+
+
+def _whatsapp_locacao_url(locacao):
+    return _whatsapp_web_url(_telefone_whatsapp_locacao(locacao))
+
+
+def _itens_checklist_entrega(conferencia):
+    itens = [
+        (
+            "Jogos",
+            conferencia.entregue_jogos,
+            [
+                {
+                    "nome": "Mesas",
+                    "quantidade": (
+                        conferencia.entregue_jogos
+                        * ConfiguracaoLocacao.JOGO_MESAS
+                    ),
+                },
+                {
+                    "nome": "Cadeiras",
+                    "quantidade": (
+                        conferencia.entregue_jogos
+                        * ConfiguracaoLocacao.JOGO_CADEIRAS
+                    ),
+                },
+            ],
+        ),
+        ("Mesas", conferencia.entregue_mesas_avulsas, []),
+        ("Cadeiras", conferencia.entregue_cadeiras_avulsas, []),
+    ]
+    return [
+        {
+            "nome": nome,
+            "quantidade": quantidade,
+            "composicao": composicao,
+        }
+        for nome, quantidade, composicao in itens
+        if quantidade
+    ]
+
+
+def _nome_material_checklist_entrega(nome):
+    nomes = {
+        "Mesas": "Mesa",
+        "Cadeiras": "Cadeira",
+    }
+    return nomes.get(nome, nome)
+
+
+def _linha_item_checklist_pendente(quantidade, material):
+    return f"\u2610 {quantidade} {material}(s)"
+
+
+def _materiais_checklist_entrega_pendentes(conferencia):
+    materiais = []
+    vistos = set()
+    for item in _itens_checklist_entrega(conferencia):
+        partes = item["composicao"] or [{"nome": item["nome"]}]
+        for parte in partes:
+            nome = _nome_material_checklist_entrega(parte["nome"])
+            chave = (nome, parte.get("quantidade") or item["quantidade"])
+            if chave not in vistos:
+                vistos.add(chave)
+                materiais.append({
+                    "nome": nome,
+                    "quantidade": parte.get("quantidade") or item["quantidade"],
+                })
+    return materiais
+
+
+def _itens_checklist_entrega_formato_rota(conferencia):
+    return [
+        {
+            "produto_nome": material["nome"],
+            "quantidade": material["quantidade"],
+            "unidade": "un",
+        }
+        for material in _materiais_checklist_entrega_pendentes(conferencia)
+    ]
+
+
+def _texto_checklist_entrega(conferencia):
+    locacao = conferencia.locacao
+    linhas = [
+        "\u2610 CHECKLIST DE ENTREGA",
+        "",
+        "Cliente",
+        locacao.nome_contratante,
+        "",
+        "Endereco",
+        locacao.endereco_entrega,
+        "",
+        "Materiais conferidos",
+        "",
+    ]
+
+    materiais = _materiais_checklist_entrega_pendentes(conferencia)
+    if materiais:
+        linhas.extend(
+            _linha_item_checklist_pendente(material["quantidade"], material["nome"])
+            for material in materiais
+        )
     else:
-        linhas.extend([
-            (
-                "Valor recebido: "
-                f"R$ {pagamento.valor:.2f}"
-            ),
-            (
-                "Forma: "
-                f"{pagamento.get_forma_pagamento_display()}"
-            ),
-            (
-                "Saldo restante: "
-                f"R$ {locacao.saldo_devedor:.2f}"
-            ),
-        ])
+        linhas.append("Nenhum material informado")
+
+    linhas.append("\u2610 Materiais em bom estado")
 
     linhas.extend([
-        f"Materiais: {itens}",
-        f"Entrega: {locacao.data_entrega:%d/%m/%Y}",
-        (
-            "Devolucao prevista: "
-            f"{locacao.data_prevista_devolucao:%d/%m/%Y}"
-        ),
+        "",
+        "Recebido por",
+        conferencia.recebedor_nome,
+        "",
+        "Data/Hora",
+        timezone.localtime(conferencia.criado_em).strftime("%d/%m/%Y %H:%M"),
+        "",
+        "Responsavel pela entrega",
+        conferencia.responsavel,
     ])
 
     return "\n".join(linhas)
 
 
-def _whatsapp_recibo_url(pagamento):
-    telefone = "".join(caractere for caractere in pagamento.locacao.telefone_contratante if caractere.isdigit())
-    if len(telefone) in {10, 11}:
+def _funcionarios_checklist_locacoes():
+    return Funcionario.habilitados_para_checklist()
+
+
+def _telefone_funcionario_checklist(funcionario):
+    telefone = Funcionario.normalizar_whatsapp(
+        funcionario.telefone_whatsapp_normalizado
+        or funcionario.telefone_whatsapp
+        or ""
+    )
+    if len(telefone) in {10, 11} and not telefone.startswith("55"):
         telefone = f"55{telefone}"
-    if not telefone:
-        return ""
-    return f"https://web.whatsapp.com/send?phone={telefone}&text={quote(_mensagem_recibo_whatsapp(pagamento))}"
+    return telefone
+
+
+def _mensagem_checklist_link_whatsapp(nome_destinatario, checklist_url):
+    nome = nome_destinatario or "funcionario"
+    return "\n".join([
+        f"Ola, {nome}.",
+        "",
+        "Segue o checklist de entrega:",
+        "",
+        checklist_url,
+    ])
+
+
+def _whatsapp_checklist_funcionario_url(funcionario, texto):
+    telefone = _telefone_funcionario_checklist(funcionario)
+    return _whatsapp_web_url(telefone, texto)
+
+
+def _funcionarios_checklist_envio(conferencia, checklist_url, funcionarios):
+    if not conferencia or not checklist_url:
+        return []
+    separador = "&" if "?" in checklist_url else "?"
+    return [
+        {
+            "funcionario": funcionario,
+            "whatsapp_url": _whatsapp_checklist_funcionario_url(
+                funcionario,
+                _mensagem_checklist_link_whatsapp(
+                    funcionario.nome,
+                    f"{checklist_url}{separador}funcionario={funcionario.pk}",
+                ),
+            ),
+        }
+        for funcionario in funcionarios
+    ]
+
+
+def _responsavel_request(request, fallback=""):
+    usuario = getattr(request, "user", None)
+    if usuario is not None and getattr(usuario, "is_authenticated", False):
+        return usuario.get_username()
+    return fallback or "Sistema"
+
+
+def _request_ajax(request):
+    return request.headers.get("x-requested-with") == "XMLHttpRequest"
+
+
+def _evento_checklist_entrega_enviado(conferencia):
+    return (
+        EventoLocacao.objects.filter(
+            locacao=conferencia.locacao,
+            tipo="checklist_entrega_funcionario_enviado",
+            descricao__contains=f"Conferencia #{conferencia.pk}",
+        )
+        .order_by("-criado_em", "-id")
+        .first()
+    )
+
+
+def _dados_evento_checklist_entrega(evento):
+    if not evento:
+        return {}
+    descricao = evento.descricao or ""
+    nome = ""
+    telefone = ""
+    marcador_nome = "Enviado para: "
+    marcador_telefone = "Telefone: "
+    if marcador_nome in descricao:
+        nome = descricao.split(marcador_nome, 1)[1].split("\n", 1)[0].strip()
+    if marcador_telefone in descricao:
+        telefone = descricao.split(marcador_telefone, 1)[1].split("\n", 1)[0].strip()
+    return {
+        "funcionario_nome": nome,
+        "telefone": telefone,
+        "responsavel": evento.responsavel,
+        "criado_em": evento.criado_em,
+    }
 
 
 def lista(request):
@@ -352,9 +575,9 @@ def disponibilidade_dinamica(request):
         excluir_id=excluir_id,
     )
     return JsonResponse(resultado)
-def dados_cliente(request, pk):
-    cliente = get_object_or_404(Cliente, pk=pk)
 
+
+def _dados_cliente_locacao(cliente):
     linhas = []
 
     primeira_linha = ", ".join(
@@ -381,19 +604,22 @@ def dados_cliente(request, pk):
     if cidade_uf:
         linhas.append(cidade_uf)
 
-    endereco = "\n".join(linhas)
-
     telefone = (
         cliente.whatsapp
         or cliente.telefone_alternativo
         or ""
     )
 
-    return JsonResponse({
-        "endereco": endereco,
+    return {
+        "endereco": "\n".join(linhas),
         "numero": cliente.numero or "",
         "telefone": telefone,
-    })
+    }
+
+
+def dados_cliente(request, pk):
+    cliente = get_object_or_404(Cliente, pk=pk)
+    return JsonResponse(_dados_cliente_locacao(cliente))
 
 @ensure_csrf_cookie
 def nova(request):
@@ -470,13 +696,36 @@ def nova(request):
             messages.warning(request, "Revise os dados da reserva antes de salvar.")
     else:
         hoje = timezone.localdate()
-        locacao_form = LocacaoForm(initial={
+        amanha = hoje + hoje.resolution
+        cliente_inicial_id = (
+            request.GET.get("cliente")
+            or request.GET.get("cliente_id")
+            or ""
+        )
+        cliente_inicial = (
+            Cliente.objects.filter(
+                pk=cliente_inicial_id,
+                ativo=True,
+            ).first()
+            if str(cliente_inicial_id).isdigit()
+            else None
+        )
+        initial_locacao = {
             "faixa_preco": faixa_inicial,
             "data_entrega": hoje,
             "data_evento": hoje,
-            "data_prevista_devolucao": hoje,
+            "data_prevista_devolucao": amanha,
             "data_vencimento_saldo": hoje,
-        })
+        }
+        if cliente_inicial:
+            dados_cliente_inicial = _dados_cliente_locacao(cliente_inicial)
+            initial_locacao.update({
+                "tipo_pessoa": Locacao.TIPO_PESSOA_CLIENTE,
+                "cliente": cliente_inicial,
+                "pessoa_avulsa_telefone": dados_cliente_inicial["telefone"],
+                "endereco_entrega": dados_cliente_inicial["endereco"],
+            })
+        locacao_form = LocacaoForm(initial=initial_locacao)
         itens_form = ItensLocacaoReservaForm(faixa_preco=faixa_inicial, configuracao=configuracao)
         disponibilidade = None
 
@@ -534,6 +783,8 @@ def detalhe(request, pk):
             TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
         )
 
+    ultimo_pagamento = locacao.pagamentos.all().first()
+
     return render(
         request,
         "locacoes/detalhe.html",
@@ -553,6 +804,13 @@ def detalhe(request, pk):
             "cancelar_form": CancelarLocacaoForm(),
             "acao_form": AcaoOperacionalLocacaoForm(),
             "pagamento_form": PagamentoLocacaoForm(),
+            "ultimo_pagamento": ultimo_pagamento,
+            "whatsapp_recibo_url": (
+                _whatsapp_recibo_url(ultimo_pagamento)
+                if ultimo_pagamento
+                else ""
+            ),
+            "recibo_form": ReciboStatusForm(),
             "vencimento_form": VencimentoSaldoLocacaoForm(initial={
                 "data_vencimento_saldo": locacao.data_vencimento_saldo,
             }),
@@ -617,6 +875,12 @@ def conferencia_entrega(request, pk):
             pk=int(conferencia_id),
             locacao=locacao,
         )
+    elif tarefa.status == TarefaOperacionalLocacao.STATUS_CONFIRMADA:
+        conferencias_tarefa = list(
+            tarefa.conferencias_entrega.all().order_by("-criado_em", "-id")[:2]
+        )
+        if len(conferencias_tarefa) == 1:
+            conferencia_salva = conferencias_tarefa[0]
 
     if (
         tarefa.status
@@ -643,8 +907,23 @@ def conferencia_entrega(request, pk):
         return redirect("locacoes:detalhe", pk=locacao.pk)
 
     if request.method == "POST":
+        dados_post = request.POST.copy()
+        if (
+            dados_post.get("recebedor_relacao")
+            == ConferenciaEntregaLocacao.RELACAO_CLIENTE
+            and not str(dados_post.get("recebedor_nome") or "").strip()
+        ):
+            dados_post["recebedor_nome"] = locacao.nome_contratante
+        if (
+            dados_post.get("recebedor_relacao")
+            == ConferenciaEntregaLocacao.RELACAO_OUTRO
+            and not str(dados_post.get("recebedor_relacao_outro") or "").strip()
+        ):
+            dados_post["recebedor_relacao_outro"] = "Outro"
+        if not str(dados_post.get("responsavel") or "").strip():
+            dados_post["responsavel"] = "Checklist operacional"
         form = ConferenciaEntregaLocacaoForm(
-            request.POST,
+            dados_post,
             locacao=locacao,
         )
         if form.is_valid():
@@ -697,23 +976,28 @@ def conferencia_entrega(request, pk):
             locacao=locacao,
         )
 
-    telefone = "".join(
-        caractere
-        for caractere in locacao.telefone_contratante
-        if caractere.isdigit()
-    )
-    if len(telefone) in {10, 11}:
-        telefone = f"55{telefone}"
-
-    whatsapp_url = ""
-    if conferencia_salva and telefone:
-        whatsapp_url = (
-            f"https://web.whatsapp.com/send?"
-            f"phone={telefone}&"
-            f"text={quote(conferencia_salva.mensagem_whatsapp_snapshot)}"
-        )
-
     historico = locacao.conferencias_entrega.all()
+    checklist_url = (
+        request.build_absolute_uri(
+            reverse(
+                "locacoes:checklist_entrega_cliente",
+                kwargs={"pk": conferencia_salva.pk},
+            )
+        )
+        if conferencia_salva
+        else ""
+    )
+    funcionarios_checklist = _funcionarios_checklist_locacoes()
+    funcionarios_checklist_envio = _funcionarios_checklist_envio(
+        conferencia_salva,
+        checklist_url,
+        funcionarios_checklist,
+    )
+    whatsapp_checklist_url = (
+        funcionarios_checklist_envio[0]["whatsapp_url"]
+        if funcionarios_checklist_envio
+        else ""
+    )
     materiais_entrega = [
         {
             "chave": "jogos",
@@ -721,6 +1005,14 @@ def conferencia_entrega(request, pk):
             "contratado": form.previsto_itens["jogos"],
             "acumulado": form.acumulado_itens["jogos"],
             "pendente": form.pendente_itens["jogos"],
+            "mesas_jogos": (
+                form.pendente_itens["jogos"]
+                * ConfiguracaoLocacao.JOGO_MESAS
+            ),
+            "cadeiras_jogos": (
+                form.pendente_itens["jogos"]
+                * ConfiguracaoLocacao.JOGO_CADEIRAS
+            ),
             "field": form["entregue_jogos"],
             "errors": form["entregue_jogos"].errors,
         },
@@ -758,9 +1050,135 @@ def conferencia_entrega(request, pk):
             "pendente_mesas": form.pendente_mesas,
             "pendente_cadeiras": form.pendente_cadeiras,
             "materiais_entrega": materiais_entrega,
-            "conferencia_salva": conferencia_salva,
-            "whatsapp_url": whatsapp_url,
             "historico": historico,
+            "funcionarios_checklist": funcionarios_checklist,
+            "funcionarios_checklist_envio": funcionarios_checklist_envio,
+            "whatsapp_checklist_url": whatsapp_checklist_url,
+            "conferencia_salva": conferencia_salva,
+            "checklist_url": checklist_url,
+        },
+    )
+
+
+def checklist_entrega_cliente(request, pk):
+    conferencia = get_object_or_404(
+        ConferenciaEntregaLocacao.objects.select_related(
+            "locacao",
+            "locacao__cliente",
+            "tarefa",
+        ),
+        pk=pk,
+    )
+    locacao = conferencia.locacao
+    texto_checklist = _texto_checklist_entrega(conferencia)
+    funcionarios_checklist = _funcionarios_checklist_locacoes()
+    evento_envio = _evento_checklist_entrega_enviado(conferencia)
+
+    if request.method == "POST" and not evento_envio:
+        funcionario_id = str(request.POST.get("checklist_funcionario") or "").strip()
+        funcionario = funcionarios_checklist.filter(pk=funcionario_id).first()
+        if funcionario:
+            telefone = _telefone_funcionario_checklist(funcionario)
+            responsavel = _responsavel_request(request, conferencia.responsavel)
+            EventoLocacao.objects.create(
+                locacao=locacao,
+                tipo="checklist_entrega_funcionario_enviado",
+                descricao=(
+                    f"Checklist de entrega enviado ao funcionario.\n"
+                    f"Conferencia #{conferencia.pk}\n"
+                    f"Enviado para: {funcionario.nome}\n"
+                    f"Telefone: {telefone}"
+                ),
+                responsavel=responsavel,
+            )
+            messages.success(request, "Checklist confirmado como enviado.")
+            if _request_ajax(request):
+                evento_envio = _evento_checklist_entrega_enviado(conferencia)
+                return JsonResponse(
+                    {
+                        "ok": True,
+                        "redirectUrl": reverse(
+                            "locacoes:checklist_entrega_cliente",
+                            kwargs={"pk": conferencia.pk},
+                        ),
+                        "envio": _dados_evento_checklist_entrega(evento_envio),
+                    }
+                )
+            return redirect("locacoes:checklist_entrega_cliente", pk=conferencia.pk)
+        if _request_ajax(request):
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "erro": "Selecione um funcionario habilitado para receber o checklist.",
+                },
+                status=400,
+            )
+        messages.warning(
+            request,
+            "Selecione um funcionario habilitado para receber o checklist.",
+        )
+
+    evento_envio = _evento_checklist_entrega_enviado(conferencia)
+    envio_checklist = _dados_evento_checklist_entrega(evento_envio)
+    checklist_url = request.build_absolute_uri(
+        reverse(
+            "locacoes:checklist_entrega_cliente",
+            kwargs={"pk": conferencia.pk},
+        )
+    )
+    funcionarios_checklist_envio = _funcionarios_checklist_envio(
+        conferencia,
+        checklist_url,
+        funcionarios_checklist,
+    )
+    funcionario_selecionado_id = str(request.GET.get("funcionario") or "")
+    funcionario_selecionado = (
+        funcionarios_checklist.filter(pk=funcionario_selecionado_id).first()
+        if funcionario_selecionado_id
+        else None
+    )
+    funcionario_selecionado_whatsapp_url = (
+        _whatsapp_checklist_funcionario_url(
+            funcionario_selecionado,
+            _mensagem_checklist_link_whatsapp(
+                funcionario_selecionado.nome,
+                checklist_url,
+            ),
+        )
+        if funcionario_selecionado
+        else ""
+    )
+    abrir_whatsapp_automatico = (
+        request.GET.get("abrir_whatsapp") == "1"
+        and bool(funcionario_selecionado_whatsapp_url)
+        and not evento_envio
+    )
+    if envio_checklist.get("telefone"):
+        envio_checklist["whatsapp_url"] = _whatsapp_web_url(
+            envio_checklist["telefone"],
+            _mensagem_checklist_link_whatsapp(
+                envio_checklist.get("funcionario_nome"),
+                checklist_url,
+            ),
+        )
+
+    return render(
+        request,
+        "locacoes/checklist_entrega_cliente.html",
+        {
+            "conferencia": conferencia,
+            "locacao": locacao,
+            "itens_checklist": _itens_checklist_entrega(conferencia),
+            "itens_checklist_rota": _itens_checklist_entrega_formato_rota(conferencia),
+            "texto_checklist": texto_checklist,
+            "whatsapp_url": _whatsapp_locacao_url(locacao),
+            "funcionarios_checklist": funcionarios_checklist,
+            "funcionarios_checklist_envio": funcionarios_checklist_envio,
+            "funcionario_selecionado": funcionario_selecionado,
+            "funcionario_selecionado_whatsapp_url": funcionario_selecionado_whatsapp_url,
+            "abrir_whatsapp_automatico": abrir_whatsapp_automatico,
+            "evento_envio_checklist": evento_envio,
+            "envio_checklist": envio_checklist,
         },
     )
 
@@ -1064,14 +1482,31 @@ def recibo_pagamento(request, pk):
         PagamentoLocacao.objects.select_related("locacao", "locacao__cliente").prefetch_related("locacao__itens"),
         pk=pk,
     )
+    locacao = pagamento.locacao
+    tarefa_entrega_url = ""
+    if locacao.status in {
+        Locacao.STATUS_RESERVADA,
+        Locacao.STATUS_SAIU_PARA_ENTREGA,
+    }:
+        tarefa_entrega = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+        tarefa_entrega_url = reverse(
+            "locacoes:conferencia_entrega",
+            kwargs={"pk": tarefa_entrega.pk},
+        )
+
     return render(
         request,
         "locacoes/recibo.html",
         {
             "pagamento": pagamento,
-            "locacao": pagamento.locacao,
+            "locacao": locacao,
             "whatsapp_url": _whatsapp_recibo_url(pagamento),
+            "mensagem_recibo": _mensagem_recibo_whatsapp(pagamento),
             "recibo_form": ReciboStatusForm(),
+            "tarefa_entrega_url": tarefa_entrega_url,
         },
     )
 

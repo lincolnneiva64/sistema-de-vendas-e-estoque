@@ -1,992 +1,602 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8">
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  >
-  <title>Checklist de entrega</title>
-
-  <link
-    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
-    rel="stylesheet"
-  >
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Checklist operacional de entrega</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     :root {
       --orange: #ea580c;
       --orange-dark: #9a3412;
       --orange-soft: #fff7ed;
-      --orange-border: #fdba74;
+      --line: #fed7aa;
       --green: #15803d;
       --yellow: #a16207;
       --red: #b91c1c;
       --ink: #172033;
       --muted: #64748b;
     }
-
-    * {
-      box-sizing: border-box;
-    }
-
+    * { box-sizing: border-box; }
     body {
       margin: 0;
-      background:
-        radial-gradient(
-          circle at top left,
-          #fff7ed 0,
-          transparent 34%
-        ),
-        #f5f7fb;
+      background: #f5f7fb;
       color: var(--ink);
-      font-family:
-        Inter,
-        system-ui,
-        -apple-system,
-        BlinkMacSystemFont,
-        "Segoe UI",
-        sans-serif;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     }
-
-    .page {
-      width: min(100% - 20px, 980px);
-      margin: 0 auto;
-      padding: 18px 0 48px;
-    }
-
-    .topo,
-    .cardx {
-      border: 2px solid var(--orange-border);
-      border-left: 7px solid var(--orange);
-      border-radius: 14px;
+    .page { max-width: 560px; margin: 0 auto; padding: 8px 8px 42px; }
+    .topo, .box {
+      border: 1px solid var(--line);
+      border-left: 5px solid var(--orange);
+      border-radius: 8px;
       background: #fff;
-      box-shadow:
-        0 10px 24px rgba(154, 52, 18, 0.09),
-        0 2px 5px rgba(15, 23, 42, 0.04);
+      box-shadow: 0 8px 20px rgba(15, 23, 42, .08);
     }
-
-    .topo {
-      margin-bottom: 16px;
-      padding: 18px;
-      background:
-        linear-gradient(
-          135deg,
-          #fff 0%,
-          #fff7ed 65%,
-          #ffedd5 100%
-        );
-    }
-
-    .topo-linha {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 14px;
-    }
-
-    h1 {
-      margin: 0;
-      color: var(--orange-dark);
-      font-size: clamp(1.65rem, 5vw, 2.25rem);
-      font-weight: 950;
-      letter-spacing: -0.035em;
-    }
-
-    .subtitulo {
-      margin: 6px 0 0;
-      color: var(--muted);
-      font-weight: 700;
-    }
-
-    .cardx {
-      margin-bottom: 16px;
-      padding: 18px;
-    }
-
-    .cardx h2 {
-      margin: -18px -18px 18px;
-      padding: 13px 18px;
-      border-bottom: 2px solid #fed7aa;
-      background:
-        linear-gradient(
-          90deg,
-          #ffedd5,
-          #fff7ed 70%,
-          #fff
-        );
-      color: var(--orange-dark);
-      font-size: 1.08rem;
-      font-weight: 950;
-    }
-
-    .resumo {
-      display: grid;
-      grid-template-columns:
-        repeat(3, minmax(0, 1fr));
-      gap: 10px;
-    }
-
-    .resumo-item {
-      padding: 13px;
-      border: 2px solid #e2e8f0;
-      border-radius: 11px;
-      background: #f8fafc;
-    }
-
-    .resumo-item strong {
+    .topo { padding: 9px 11px; margin-bottom: 7px; }
+    .topo-linha { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+    h1 { margin: 0; color: var(--orange-dark); font-size: 1.08rem; font-weight: 950; }
+    .subtitulo { margin-top: 1px; color: var(--muted); font-size: .82rem; }
+    .box { padding: 9px; margin-bottom: 7px; }
+    .box h2 { margin: 0 0 8px; color: var(--orange-dark); font-size: .98rem; font-weight: 950; }
+    .mini-dados { display: grid; gap: 4px; color: #334155; font-size: .9rem; }
+    .rotulo {
       display: block;
-      margin-bottom: 5px;
-      color: #334155;
-      font-size: 0.84rem;
+      margin-bottom: 2px;
+      color: var(--muted);
+      font-size: .7rem;
+      font-weight: 850;
       text-transform: uppercase;
     }
-
-    .resumo-item span {
-      display: block;
-      font-size: 1.03rem;
-      font-weight: 900;
-    }
-
-    .resumo-item.pendente {
-      border-color: #fbbf24;
-      background: #fffbeb;
-      color: #854d0e;
-    }
-
-    .dados {
-  display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:14px;
-}
-
-.dados > div{
-  padding:14px;
-  border:2px solid #e2e8f0;
-  border-radius:11px;
-  background:#f8fafc;
-  color:#334155;
-}
-
-.dados strong{
-  display:block;
-  margin-bottom:6px;
-  color:#64748b;
-  font-size:.82rem;
-  text-transform:uppercase;
-}
-
-    .grade {
+    .checklist { display: grid; gap: 8px; }
+    .check-item {
       display: grid;
-      grid-template-columns:
-        repeat(2, minmax(0, 1fr));
-      gap: 14px;
+      grid-template-columns: 58px 1fr 72px;
+      gap: 8px;
+      align-items: center;
+      padding: 9px;
+      border: 2px solid #e2e8f0;
+      border-left: 6px solid #94a3b8;
+      border-radius: 8px;
+      background: #fff;
     }
-
-    .campo-inteiro {
-      grid-column: 1 / -1;
+    .check-item.status-completa { border-color: #86efac; border-left-color: var(--green); background: #f0fdf4; }
+    .check-item.status-parcial { border-color: #fcd34d; border-left-color: var(--yellow); background: #fffbeb; }
+    .check-item.status-excesso { border-color: #fca5a5; border-left-color: var(--red); background: #fef2f2; }
+    .check-toggle {
+      width: 48px;
+      height: 48px;
+      accent-color: var(--green);
     }
-
-    .form-label {
-      display: block;
-      margin-bottom: 6px;
-      color: #334155;
-      font-weight: 900;
+    .check-main strong { display: block; font-size: 1.08rem; font-weight: 950; line-height: 1.15; }
+    .contagem-fisica {
+      display: grid;
+      gap: 2px;
     }
-
-    .form-control,
-    .form-select {
-      min-height: 48px;
-      border: 2px solid #cbd5e1;
-      border-radius: 10px;
-      font-weight: 650;
+    .contagem-fisica strong {
+      font-size: 1.12rem;
     }
-
-    textarea.form-control {
-      min-height: auto;
-    }
-
-    .form-control:focus,
-    .form-select:focus {
-      border-color: var(--orange);
-      box-shadow:
-        0 0 0 0.22rem rgba(234, 88, 12, 0.15);
-    }
-
-    .erro {
-      margin-top: 5px;
-      color: var(--red);
-      font-size: 0.87rem;
-      font-weight: 800;
-    }
-
-    .resultado {
-      margin-top: 16px;
-      padding: 14px;
-      border: 2px solid #cbd5e1;
-      border-radius: 11px;
-      background: #f8fafc;
+    .contexto-jogo {
+      color: #64748b;
+      font-size: .82rem;
       font-weight: 850;
     }
-
-    .resultado.completa {
-      border-color: #86efac;
-      background: #f0fdf4;
-      color: #166534;
-    }
-
-    .resultado.parcial {
-      border-color: #fcd34d;
-      background: #fffbeb;
-      color: #854d0e;
-    }
-
-    .resultado.excesso {
-      border-color: #fca5a5;
-      background: #fef2f2;
-      color: #991b1b;
-    }
-
-    .materiais-checklist {
-      display: grid;
-      gap: 12px;
-    }
-
-    .material-linha {
-      display: grid;
-      grid-template-columns: minmax(150px, 1.4fr) 108px 108px 116px 154px;
-      gap: 12px;
-      align-items: center;
-      padding: 14px;
-      border: 2px solid #e2e8f0;
-      border-left: 7px solid #94a3b8;
-      border-radius: 11px;
-      background: #fff;
-      transition:
-        border-color 0.18s ease,
-        background 0.18s ease,
-        box-shadow 0.18s ease;
-    }
-
-    .material-linha.status-completa {
-      border-color: #86efac;
-      border-left-color: var(--green);
-      background: #f0fdf4;
-    }
-
-    .material-linha.status-parcial {
-      border-color: #fcd34d;
-      border-left-color: var(--yellow);
-      background: #fffbeb;
-    }
-
-    .material-linha.status-excesso {
-      border-color: #fca5a5;
-      border-left-color: var(--red);
-      background: #fef2f2;
-    }
-
-    .material-linha strong,
-    .material-linha span {
-      font-weight: 900;
-    }
-
-    .material-linha small {
-      display: block;
-      color: var(--muted);
-      font-weight: 800;
-      text-transform: uppercase;
-    }
-
-    .material-nome {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-    }
-
-    .material-status {
-      justify-self: start;
-      min-width: 96px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: #e2e8f0;
-      color: #334155;
-      font-size: 0.82rem;
+    .check-meta { margin-top: 3px; color: var(--muted); font-size: .76rem; font-weight: 800; }
+    .qtd-wrap label { margin: 0; color: var(--muted); font-size: .68rem; font-weight: 850; text-transform: uppercase; }
+    .qtd-wrap input {
+      width: 100%;
+      min-height: 42px;
+      border: 2px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 1.05rem;
       font-weight: 950;
       text-align: center;
     }
-
-    .status-completa .material-status {
-      background: #bbf7d0;
-      color: #166534;
-    }
-
-    .status-parcial .material-status {
-      background: #fde68a;
-      color: #854d0e;
-    }
-
-    .status-excesso .material-status {
-      background: #fecaca;
-      color: #991b1b;
-    }
-
-    .material-linha input {
-      width: 100%;
-    }
-
-    .painel-parcial {
-      display: none;
-      margin-top: 12px;
-      padding: 14px;
-      border: 2px solid #fcd34d;
-      border-left: 7px solid var(--yellow);
-      border-radius: 11px;
-      background: #fffbeb;
-      color: #854d0e;
-      font-weight: 850;
-    }
-
-    .painel-parcial.visivel {
-      display: block;
-    }
-
-    .painel-parcial strong {
-      display: block;
-      margin-bottom: 5px;
-      font-size: 0.86rem;
-      text-transform: uppercase;
-    }
-
-    .acoes-comprovante {
+    .grid { display: grid; gap: 8px; }
+    .recebedor-card { padding-top: 2px; }
+    .recebedor-opcoes {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
-      margin-top: 12px;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 6px;
+      margin-top: 7px;
     }
-
+    .recebedor-opcao {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 40px;
+      padding: 6px;
+      border: 2px solid #cbd5e1;
+      border-radius: 8px;
+      background: #fff;
+      color: #334155;
+      font-size: .78rem;
+      font-weight: 900;
+      text-align: center;
+    }
+    .recebedor-opcao input { position: absolute; opacity: 0; pointer-events: none; }
+    .recebedor-opcao:has(input:checked) {
+      border-color: var(--orange);
+      background: var(--orange-soft);
+      color: var(--orange-dark);
+    }
+    .form-label { margin-bottom: 2px; color: #334155; font-size: .82rem; font-weight: 900; }
+    .form-control, .form-select { min-height: 42px; border: 2px solid #cbd5e1; border-radius: 8px; font-weight: 750; }
+    textarea.form-control { min-height: 54px; }
+    .erro { margin-top: 4px; color: var(--red); font-size: .82rem; font-weight: 850; }
+    .resultado, .painel-parcial {
+      margin-top: 8px;
+      padding: 10px;
+      border: 2px solid #cbd5e1;
+      border-radius: 8px;
+      background: #f8fafc;
+      font-weight: 900;
+    }
+    .resultado:empty { display: none; }
+    .resultado.completa { border-color: #86efac; background: #f0fdf4; color: #166534; }
+    .resultado.parcial, .painel-parcial { border-color: #fcd34d; background: #fffbeb; color: #854d0e; }
+    .resultado.excesso { border-color: #fca5a5; background: #fef2f2; color: #991b1b; }
+    .painel-parcial, .campo-condicional { display: none; }
+    .painel-parcial.visivel, .campo-condicional.visivel { display: block; }
+    .estado-check {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      min-height: 48px;
+      padding: 8px 10px;
+      border: 2px solid #bbf7d0;
+      border-radius: 8px;
+      background: #f0fdf4;
+      font-weight: 900;
+    }
+    .estado-check input { width: 34px; height: 34px; accent-color: var(--green); }
+    .estado-select-wrap { display: none; }
     .btn-loc {
-      min-height: 50px;
-      border: 2px solid var(--orange);
-      border-radius: 10px;
+      min-height: 54px;
+      border-radius: 8px;
       background: var(--orange);
+      border-color: var(--orange);
       color: #fff;
       font-weight: 950;
     }
-
-    .btn-loc:hover,
-    .btn-loc:focus {
-      border-color: #c2410c;
-      background: #c2410c;
-      color: #fff;
+    .btn-loc:hover, .btn-loc:focus { background: #c2410c; border-color: #c2410c; color: #fff; }
+    .envio-card {
+      margin-top: 12px;
+      padding: 10px;
+      border: 2px solid #bbf7d0;
+      border-radius: 8px;
+      background: #f0fdf4;
     }
-
-    .sucesso {
-      border-color: #86efac;
-      border-left-color: var(--green);
+    .envio-card summary {
+      cursor: pointer;
+      list-style-position: inside;
+      color: #166534;
+      font-size: .98rem;
+      font-weight: 950;
     }
-
-    .mensagem {
-      min-height: 220px;
-      white-space: pre-wrap;
-    }
-
-    .historico-item {
-      margin-bottom: 12px;
-      padding: 14px;
-      border: 2px solid #e2e8f0;
-      border-radius: 11px;
-      background: #f8fafc;
-    }
-
-    .historico-topo {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
+    .envio-card[open] summary {
       margin-bottom: 8px;
     }
-
-    .badge-parcial,
-    .badge-completa {
-      display: inline-block;
-      padding: 4px 9px;
-      border-radius: 999px;
-      font-size: 0.82rem;
-      font-weight: 900;
+    .funcionarios-envio {
+      display: grid;
+      gap: 7px;
     }
-
-    .badge-parcial {
-      background: #fef3c7;
-      color: #92400e;
+    .funcionario-envio {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px;
+      align-items: start;
+      padding: 9px;
+      border: 2px solid #d1fae5;
+      border-radius: 8px;
+      background: #fff;
+      cursor: pointer;
     }
-
-    .badge-completa {
-      background: #dcfce7;
-      color: #166534;
+    .funcionario-envio input { margin-top: 4px; accent-color: var(--green); }
+    .funcionario-envio:has(input:checked) {
+      border-color: var(--green);
+      background: #ecfdf5;
     }
-
-    @media (max-width: 720px) {
-      .topo-linha {
-        display: block;
-      }
-
-      .topo-linha .btn {
-        width: 100%;
-        margin-top: 14px;
-      }
-
-      .resumo,
-      .grade {
-        grid-template-columns: 1fr;
-      }
-
-      .material-linha,
-      .acoes-comprovante {
-        grid-template-columns: 1fr;
-      }
-
-      .material-status {
-        justify-self: stretch;
-      }
-
-      .campo-inteiro {
-        grid-column: auto;
-      }
-
-      .cardx {
-        padding: 15px;
-      }
-
-      .cardx h2 {
-        margin:
-          -15px
-          -15px
-          15px;
-        padding: 12px 15px;
-      }
+    .funcionario-envio strong {
+      display: block;
+      color: #14532d;
+      font-size: .95rem;
+      font-weight: 950;
+    }
+    .funcionario-envio span {
+      display: block;
+      color: #64748b;
+      font-size: .84rem;
+      font-weight: 850;
+    }
+    @media (max-width: 420px) {
+      .topo-linha { display: block; }
+      .topo-linha .btn { width: 100%; margin-top: 8px; }
+      .recebedor-opcoes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .check-item { grid-template-columns: 54px 1fr 66px; padding: 8px; }
     }
   </style>
 </head>
-
 <body>
-  <main
-    class="page"
-    data-previsto-mesas="{{ previsto_mesas }}"
-    data-previsto-cadeiras="{{ previsto_cadeiras }}"
-    data-acumulado-mesas="{{ acumulado_mesas }}"
-    data-acumulado-cadeiras="{{ acumulado_cadeiras }}"
-    data-previsto-jogos="{{ form.previsto_itens.jogos }}"
-    data-previsto-mesas-avulsas="{{ form.previsto_itens.mesas_avulsas }}"
-    data-previsto-cadeiras-avulsas="{{ form.previsto_itens.cadeiras_avulsas }}"
-    data-acumulado-jogos="{{ form.acumulado_itens.jogos }}"
-    data-acumulado-mesas-avulsas="{{ form.acumulado_itens.mesas_avulsas }}"
-    data-acumulado-cadeiras-avulsas="{{ form.acumulado_itens.cadeiras_avulsas }}"
-  >
+  <main class="page">
     <header class="topo">
       <div class="topo-linha">
         <div>
-          <h1>Checklist de entrega</h1>
-          <p class="subtitulo">
-            Loca??o #{{ locacao.id }} ?
-            {{ locacao.nome_contratante }}
-          </p>
+          <h1>Checklist operacional</h1>
+          <div class="subtitulo">#{{ locacao.id }} - {{ locacao.nome_contratante }}</div>
         </div>
-
-        <a
-          class="btn btn-outline-secondary"
-          href="{% url 'locacoes:detalhe' locacao.id %}"
-        >
-          Voltar para a loca??o
-        </a>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'locacoes:detalhe' locacao.id %}">Voltar</a>
       </div>
     </header>
 
     {% if messages %}
       {% for message in messages %}
-        <div
-          class="alert alert-{{ message.tags|default:'info' }}"
-        >
-          {{ message }}
-        </div>
+        <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
       {% endfor %}
     {% endif %}
 
-    <section class="cardx">
-      <h2>Dados da entrega</h2>
-
-      <div class="dados">
-        <div>
-          <strong>Cliente/pessoa:</strong>
-          {{ locacao.nome_contratante }}
-        </div>
-
-        <div>
-          <strong>Endere?o:</strong>
-          {{ locacao.endereco_entrega|linebreaksbr }}
-        </div>
-
-        <div>
-          <strong>Telefone:</strong>
-          {{ locacao.telefone_contratante|default:"N?o informado" }}
-        </div>
-
-        <div>
-          <strong>Data prevista:</strong>
-          {{ locacao.data_entrega|date:"d/m/Y" }}
-          ?s {{ locacao.horario_entrega|time:"H:i" }}
-        </div>
-      </div>
-    </section>
-
-    <section class="cardx">
-      <h2>Resumo das quantidades</h2>
-
-      <div class="resumo">
-        <div class="resumo-item">
-          <strong>Previsto no termo</strong>
-          <span>
-            {{ previsto_mesas }} mesa(s) e
-            {{ previsto_cadeiras }} cadeira(s)
-          </span>
-        </div>
-
-        <div class="resumo-item">
-          <strong>J? entregue</strong>
-          <span>
-            {{ acumulado_mesas }} mesa(s) e
-            {{ acumulado_cadeiras }} cadeira(s)
-          </span>
-        </div>
-
-        <div class="resumo-item pendente">
-          <strong>Pendente agora</strong>
-          <span>
-            {{ pendente_mesas }} mesa(s) e
-            {{ pendente_cadeiras }} cadeira(s)
-          </span>
-        </div>
+    <section class="box">
+      <div class="mini-dados">
+        <div><strong>Endereco:</strong> {{ locacao.endereco_entrega|linebreaksbr }}</div>
       </div>
     </section>
 
     {% if conferencia_salva %}
-      <section class="cardx sucesso">
-        <h2>Confer?ncia registrada</h2>
-
-        <p>
-          <strong>Situa??o:</strong>
-          {{ conferencia_salva.get_situacao_display }}
-        </p>
-
-        <textarea
-          class="form-control mensagem"
-          readonly
-        >{{ conferencia_salva.mensagem_whatsapp_snapshot }}</textarea>
-
-        <div class="acoes-comprovante">
-          {% if whatsapp_url %}
-            <a
-              class="btn btn-success"
-              href="{{ whatsapp_url }}"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Abrir WhatsApp
-            </a>
-          {% else %}
-            <button class="btn btn-outline-secondary" type="button" disabled>
-              Abrir WhatsApp
-            </button>
-          {% endif %}
-
-          <button
-            class="btn btn-outline-primary"
-            id="copiar-mensagem"
-            type="button"
-          >
-            Copiar mensagem
-          </button>
-
-          <a
-            class="btn btn-outline-secondary"
-            href="{% url 'locacoes:conferencia_entrega' tarefa.id %}?conferencia={{ conferencia_salva.id }}"
-          >
-            Visualizar comprovante
-          </a>
+      <section class="box sucesso">
+        <h2>Conferencia salva</h2>
+        <div class="mini-dados">
+          <div><strong>Situacao:</strong> {{ conferencia_salva.get_situacao_display }}</div>
+          <div><strong>Checklist:</strong> <a href="{{ checklist_url }}" target="_blank" rel="noopener">Abrir checklist salvo</a></div>
         </div>
 
-        {% if not whatsapp_url %}
-          <div class="alert alert-warning mt-3 mb-0">
-            A loca??o n?o possui telefone v?lido para abrir o
-            WhatsApp.
-          </div>
+        <details class="envio-card mt-2" id="envio-checklist-funcionarios" open>
+          <summary>Enviar checklist para</summary>
+          {% if funcionarios_checklist_envio %}
+            <div class="funcionarios-envio">
+              {% for envio in funcionarios_checklist_envio %}
+                <label class="funcionario-envio">
+                  <input
+                    type="radio"
+                    name="checklist_funcionario_envio"
+                    value="{{ envio.funcionario.id }}"
+                    data-whatsapp-url="{{ envio.whatsapp_url }}"
+                    {% if forloop.first %}checked{% endif %}
+                  >
+                  <span>
+                    <strong>{{ envio.funcionario.nome }}</strong>
+                    <span>{{ envio.funcionario.telefone_whatsapp }}</span>
+                  </span>
+                </label>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="erro">Nenhum funcionario habilitado para receber checklist.</div>
+          {% endif %}
+          <div class="erro" id="erro-funcionario-checklist" hidden>Selecione um funcionario habilitado para receber o checklist.</div>
+        </details>
+
+        {% if whatsapp_checklist_url %}
+        <a
+          class="btn btn-loc w-100 mt-3"
+          id="btn-enviar-checklist-whatsapp"
+          href="{{ whatsapp_checklist_url }}"
+          target="_blank"
+          rel="noopener"
+        >
+          Enviar checklist pelo WhatsApp
+        </a>
+        {% else %}
+        <button class="btn btn-outline-secondary w-100 mt-3" type="button" disabled>
+          Enviar checklist pelo WhatsApp
+        </button>
         {% endif %}
 
         {% if conferencia_salva.situacao == "parcial" %}
-          <a
-            class="btn btn-loc w-100 mt-2"
-            href="{% url 'locacoes:conferencia_entrega' tarefa.id %}"
-          >
-            Registrar pr?xima entrega
+          <a class="btn btn-outline-secondary w-100 mt-2" href="{% url 'locacoes:conferencia_entrega' tarefa.id %}">
+            Registrar proxima entrega
           </a>
         {% endif %}
       </section>
     {% else %}
-      <section class="cardx">
-        <h2>Confer?ncia atual</h2>
+    <section class="box">
+      <h2>Conferencia</h2>
+      <form method="post" data-enter-nav novalidate>
+        {% csrf_token %}
 
-        <form method="post" data-enter-nav novalidate>
-          {% csrf_token %}
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+        {% endif %}
 
-          {% if form.non_field_errors %}
-            <div class="alert alert-danger">
-              {{ form.non_field_errors }}
-            </div>
-          {% endif %}
-
-          <div class="materiais-checklist mb-3">
-            {% for material in materiais_entrega %}
-              {% if material.contratado %}
+        <div class="checklist">
+          {% for material in materiais_entrega %}
+            {% if material.contratado %}
+              {% if material.chave == "jogos" %}
+                {{ material.field.as_hidden }}
                 <div
-                  class="material-linha"
+                  class="check-item material-linha"
+                  data-material="jogos_mesas"
+                  data-jogos-fisico="mesas"
+                  data-contratado="{{ material.contratado }}"
+                  data-acumulado="{{ material.acumulado }}"
+                  data-pendente-inicial="{{ material.pendente }}"
+                  data-sugestao="{{ material.mesas_jogos }}"
+                >
+                  <input class="check-toggle" type="checkbox" aria-label="Conferir mesas dos jogos">
+                  <div class="check-main">
+                    <strong><span class="qtd-material">{{ material.mesas_jogos }}</span> Mesa(s)</strong>
+                    <div class="check-meta">
+                      Mesas dos jogos
+                    </div>
+                  </div>
+                  <div class="qtd-wrap">
+                    <label>Qtd.</label>
+                    <input class="form-control qtd-fisica-jogo" data-fisico="mesas" type="number" min="0" step="1" value="" placeholder=" ">
+                  </div>
+                </div>
+
+                <div
+                  class="check-item material-linha"
+                  data-material="jogos_cadeiras"
+                  data-jogos-fisico="cadeiras"
+                  data-contratado="{{ material.contratado }}"
+                  data-acumulado="{{ material.acumulado }}"
+                  data-pendente-inicial="{{ material.pendente }}"
+                  data-sugestao="{{ material.cadeiras_jogos }}"
+                >
+                  <input class="check-toggle" type="checkbox" aria-label="Conferir cadeiras dos jogos">
+                  <div class="check-main">
+                    <strong><span class="qtd-material">{{ material.cadeiras_jogos }}</span> Cadeira(s)</strong>
+                    <div class="check-meta">
+                      Cadeiras dos jogos
+                    </div>
+                  </div>
+                  <div class="qtd-wrap">
+                    <label>Qtd.</label>
+                    <input class="form-control qtd-fisica-jogo" data-fisico="cadeiras" type="number" min="0" step="1" value="" placeholder=" ">
+                  </div>
+                </div>
+
+                {% for erro in material.errors %}
+                  <div class="erro">{{ erro }}</div>
+                {% endfor %}
+              {% else %}
+                <div
+                  class="check-item material-linha"
                   data-material="{{ material.chave }}"
                   data-contratado="{{ material.contratado }}"
                   data-acumulado="{{ material.acumulado }}"
+                  data-pendente-inicial="{{ material.pendente }}"
+                  data-sugestao="{{ material.pendente }}"
                 >
-                  <div class="material-nome">
-                    <strong>{{ material.nome }}</strong>
-                    <small class="material-pendente">
-                      Pendente {{ material.pendente }}
-                    </small>
+                  <input class="check-toggle" type="checkbox" aria-label="Conferir {{ material.nome }}">
+
+                  <div class="check-main">
+                    <strong><span class="qtd-material">{{ material.pendente }}</span> {{ material.nome }}</strong>
                   </div>
 
-                  <span>
-                    <small>Contratado</small>
-                    {{ material.contratado }}
-                  </span>
-
-                  <span>
-                    <small>Ja entregue</small>
-                    {{ material.acumulado }}
-                  </span>
-
-                  <span class="material-status">
-                    A conferir
-                  </span>
-
-                  <div>
-                    <label
-                      class="form-label"
-                      for="{{ material.field.id_for_label }}"
+                  <div class="qtd-wrap">
+                    <label for="{{ material.field.id_for_label }}">Qtd.</label>
+                    <input
+                      class="form-control"
+                      id="{{ material.field.id_for_label }}"
+                      name="{{ material.field.html_name }}"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value="{% if form.is_bound %}{{ material.field.value|default:'' }}{% endif %}"
+                      placeholder=" "
                     >
-                      Entregue
-                    </label>
-                    {{ material.field }}
                     {% for erro in material.errors %}
                       <div class="erro">{{ erro }}</div>
                     {% endfor %}
                   </div>
                 </div>
               {% endif %}
-            {% endfor %}
-          </div>
-
-          <div class="grade">
-
-            <div>
-              <label
-                class="form-label"
-                for="{{ form.recebedor_nome.id_for_label }}"
-              >
-                {{ form.recebedor_nome.label }}
-              </label>
-
-              {{ form.recebedor_nome }}
-
-              {% for erro in form.recebedor_nome.errors %}
-                <div class="erro">{{ erro }}</div>
-              {% endfor %}
-            </div>
-
-            <div>
-              <label
-                class="form-label"
-                for="{{ form.recebedor_relacao.id_for_label }}"
-              >
-                {{ form.recebedor_relacao.label }}
-              </label>
-
-              {{ form.recebedor_relacao }}
-
-              {% for erro in form.recebedor_relacao.errors %}
-                <div class="erro">{{ erro }}</div>
-              {% endfor %}
-            </div>
-
-            <div id="campo-relacao-outro">
-              <label
-                class="form-label"
-                for="{{ form.recebedor_relacao_outro.id_for_label }}"
-              >
-                {{ form.recebedor_relacao_outro.label }}
-              </label>
-
-              {{ form.recebedor_relacao_outro }}
-
-              {% for erro in form.recebedor_relacao_outro.errors %}
-                <div class="erro">{{ erro }}</div>
-              {% endfor %}
-            </div>
-
-            <div>
-              <label
-                class="form-label"
-                for="{{ form.estado_material.id_for_label }}"
-              >
-                {{ form.estado_material.label }}
-              </label>
-
-              {{ form.estado_material }}
-
-              {% for erro in form.estado_material.errors %}
-                <div class="erro">{{ erro }}</div>
-              {% endfor %}
-            </div>
-
-            <div class="campo-inteiro" id="campo-justificativa">
-              <label
-                class="form-label"
-                for="{{ form.justificativa_parcial.id_for_label }}"
-              >
-                {{ form.justificativa_parcial.label }}
-              </label>
-
-              {{ form.justificativa_parcial }}
-
-              {% for erro in form.justificativa_parcial.errors %}
-                <div class="erro">{{ erro }}</div>
-              {% endfor %}
-            </div>
-
-            <div class="campo-inteiro" id="campo-previsao">
-              <label
-                class="form-label"
-                for="{{ form.previsao_conclusao.id_for_label }}"
-              >
-                {{ form.previsao_conclusao.label }}
-              </label>
-
-              {{ form.previsao_conclusao }}
-
-              {% for erro in form.previsao_conclusao.errors %}
-                <div class="erro">{{ erro }}</div>
-              {% endfor %}
-            </div>
-
-            <div class="campo-inteiro">
-              <label
-                class="form-label"
-                for="{{ form.observacao.id_for_label }}"
-              >
-                {{ form.observacao.label }}
-              </label>
-
-              {{ form.observacao }}
-
-              {% for erro in form.observacao.errors %}
-                <div class="erro">{{ erro }}</div>
-              {% endfor %}
-            </div>
-
-            <div class="campo-inteiro">
-              <label
-                class="form-label"
-                for="{{ form.responsavel.id_for_label }}"
-              >
-                {{ form.responsavel.label }}
-              </label>
-
-              {{ form.responsavel }}
-
-              {% for erro in form.responsavel.errors %}
-                <div class="erro">{{ erro }}</div>
-              {% endfor %}
-            </div>
-          </div>
-
-          <div
-            class="resultado"
-            id="resultado-entrega"
-          >
-            Informe as quantidades entregues agora.
-          </div>
-
-          <div
-            class="painel-parcial"
-            id="painel-parcial"
-          >
-            <strong>Entrega parcial</strong>
-            <span id="texto-pendencias">
-              Informe as quantidades entregues para calcular a pendencia.
-            </span>
-          </div>
-
-          <button
-            class="btn btn-loc w-100 mt-3"
-            id="botao-confirmar"
-            type="submit"
-          >
-            Confirmar confer?ncia da entrega
-          </button>
-        </form>
-      </section>
-    {% endif %}
-
-    <section class="cardx">
-      <h2>Hist?rico das entregas</h2>
-
-      {% for conferencia in historico %}
-        <article class="historico-item">
-          <div class="historico-topo">
-            <strong>
-              {{ conferencia.criado_em|date:"d/m/Y H:i" }}
-            </strong>
-
-            {% if conferencia.situacao == "completa" %}
-              <span class="badge-completa">
-                Entrega completa
-              </span>
-            {% else %}
-              <span class="badge-parcial">
-                Entrega parcial
-              </span>
             {% endif %}
-          </div>
-
-          <div>
-            <strong>Entregue nesta confer?ncia:</strong>
-            {{ conferencia.entregue_jogos }} jogo(s),
-            {{ conferencia.entregue_mesas_avulsas }} mesa(s) avulsa(s) e
-            {{ conferencia.entregue_cadeiras_avulsas }} cadeira(s)
-          </div>
-
-          <div>
-            <strong>Total acumulado:</strong>
-            {{ conferencia.acumulado_jogos }} jogo(s),
-            {{ conferencia.acumulado_mesas_avulsas }} mesa(s) avulsa(s) e
-            {{ conferencia.acumulado_cadeiras_avulsas }} cadeira(s)
-          </div>
-
-          <div>
-            <strong>Pendente:</strong>
-            {{ conferencia.pendente_jogos }} jogo(s),
-            {{ conferencia.pendente_mesas_avulsas }} mesa(s) avulsa(s) e
-            {{ conferencia.pendente_cadeiras_avulsas }} cadeira(s)
-          </div>
-
-          <div>
-            <strong>Recebeu:</strong>
-            {{ conferencia.recebedor_nome }} ?
-            {{ conferencia.recebedor_cargo_display }}
-          </div>
-
-          <div>
-            <strong>Estado:</strong>
-            {{ conferencia.get_estado_material_display }}
-          </div>
-
-          {% if conferencia.previsao_conclusao %}
-            <div>
-              <strong>Previs?o para completar:</strong>
-              {{ conferencia.previsao_conclusao|date:"d/m/Y H:i" }}
-            </div>
-          {% endif %}
-
-          {% if conferencia.justificativa_parcial %}
-            <div>
-              <strong>Justificativa:</strong>
-              {{ conferencia.justificativa_parcial|linebreaksbr }}
-            </div>
-          {% endif %}
-
-          {% if conferencia.observacao %}
-            <div>
-              <strong>Observa??o:</strong>
-              {{ conferencia.observacao|linebreaksbr }}
-            </div>
-          {% endif %}
-
-          <div>
-            <strong>Funcion?rio respons?vel:</strong>
-            {{ conferencia.responsavel }}
-          </div>
-        </article>
-      {% empty %}
-        <div class="alert alert-light border mb-0">
-          Nenhuma confer?ncia de entrega registrada.
+          {% endfor %}
         </div>
-      {% endfor %}
+
+        <label class="estado-check mt-2">
+          <input id="check-material-bom" type="checkbox">
+          <span>Materiais em bom estado</span>
+        </label>
+        <div class="estado-select-wrap">
+          {{ form.estado_material }}
+          {% for erro in form.estado_material.errors %}<div class="erro">{{ erro }}</div>{% endfor %}
+        </div>
+
+        <div class="resultado" id="resultado-entrega"></div>
+
+        <div class="painel-parcial" id="painel-parcial">
+          <strong>Entrega parcial</strong>
+          <div id="texto-pendencias"></div>
+        </div>
+
+        <div class="recebedor-card mt-2">
+          <label class="form-label" for="{{ form.recebedor_nome.id_for_label }}">Recebido por</label>
+          {{ form.recebedor_nome }}
+          {% for erro in form.recebedor_nome.errors %}<div class="erro">{{ erro }}</div>{% endfor %}
+
+          <div class="recebedor-opcoes" aria-label="Quem recebeu">
+            <label class="recebedor-opcao">
+              <input type="radio" name="{{ form.recebedor_relacao.html_name }}" value="cliente" {% if form.recebedor_relacao.value == "cliente" or not form.recebedor_relacao.value %}checked{% endif %}>
+              Cliente
+            </label>
+            <label class="recebedor-opcao">
+              <input type="radio" name="{{ form.recebedor_relacao.html_name }}" value="funcionario" {% if form.recebedor_relacao.value == "funcionario" %}checked{% endif %}>
+              Funcionario
+            </label>
+            <label class="recebedor-opcao">
+              <input type="radio" name="{{ form.recebedor_relacao.html_name }}" value="familiar" {% if form.recebedor_relacao.value == "familiar" %}checked{% endif %}>
+              Familiar
+            </label>
+            <label class="recebedor-opcao">
+              <input type="radio" name="{{ form.recebedor_relacao.html_name }}" value="caseiro" {% if form.recebedor_relacao.value == "caseiro" %}checked{% endif %}>
+              Caseiro
+            </label>
+            <label class="recebedor-opcao">
+              <input type="radio" name="{{ form.recebedor_relacao.html_name }}" value="outro" {% if form.recebedor_relacao.value == "outro" %}checked{% endif %}>
+              Outro
+            </label>
+          </div>
+          {% for erro in form.recebedor_relacao.errors %}<div class="erro">{{ erro }}</div>{% endfor %}
+        </div>
+
+        <div class="grid mt-2">
+          <div id="campo-justificativa" class="campo-condicional">
+            <label class="form-label" for="{{ form.justificativa_parcial.id_for_label }}">Justificativa</label>
+            {{ form.justificativa_parcial }}
+            {% for erro in form.justificativa_parcial.errors %}<div class="erro">{{ erro }}</div>{% endfor %}
+          </div>
+
+          <div id="campo-previsao" class="campo-condicional">
+            <label class="form-label" for="{{ form.previsao_conclusao.id_for_label }}">Previsao</label>
+            {{ form.previsao_conclusao }}
+            {% for erro in form.previsao_conclusao.errors %}<div class="erro">{{ erro }}</div>{% endfor %}
+          </div>
+
+          <div id="campo-observacao" class="campo-condicional">
+            <label class="form-label" for="{{ form.observacao.id_for_label }}">Observacao</label>
+            {{ form.observacao }}
+            {% for erro in form.observacao.errors %}<div class="erro">{{ erro }}</div>{% endfor %}
+          </div>
+
+          <input type="hidden" name="{{ form.responsavel.html_name }}" id="{{ form.responsavel.id_for_label }}" value="{{ form.responsavel.value|default:'Checklist operacional' }}">
+        </div>
+
+        <button class="btn btn-loc w-100 mt-3" id="botao-confirmar" type="submit">
+          Confirmar conferencia da entrega
+        </button>
+      </form>
     </section>
+    {% endif %}
   </main>
 
   {% include "locacoes/includes/enter_nav.html" %}
 
   <script>
     (function () {
-      const pagina = document.querySelector(".page");
-      const materiais = Array.from(
-        document.querySelectorAll(".material-linha")
-      );
-      const resultado = document.getElementById(
-        "resultado-entrega"
-      );
-      const botao = document.getElementById(
-        "botao-confirmar"
-      );
-      const relacao = document.getElementById(
-        "id_recebedor_relacao"
-      );
-      const campoOutro = document.getElementById(
-        "campo-relacao-outro"
-      );
-      const campoJustificativa = document.getElementById(
-        "campo-justificativa"
-      );
-      const campoPrevisao = document.getElementById(
-        "campo-previsao"
-      );
-      const painelParcial = document.getElementById(
-        "painel-parcial"
-      );
-      const textoPendencias = document.getElementById(
-        "texto-pendencias"
-      );
+      const materiais = Array.from(document.querySelectorAll(".check-item"));
+      const resultado = document.getElementById("resultado-entrega");
+      const botao = document.getElementById("botao-confirmar");
+      const relacoes = Array.from(document.querySelectorAll("input[name='{{ form.recebedor_relacao.html_name }}']"));
+      const recebedorNome = document.getElementById("{{ form.recebedor_nome.id_for_label }}");
+      const campoJustificativa = document.getElementById("campo-justificativa");
+      const campoPrevisao = document.getElementById("campo-previsao");
+      const campoObservacao = document.getElementById("campo-observacao");
+      const painelParcial = document.getElementById("painel-parcial");
+      const textoPendencias = document.getElementById("texto-pendencias");
+      const checkBom = document.getElementById("check-material-bom");
+      const estadoMaterial = document.getElementById("id_estado_material");
+      const clienteNome = "{{ locacao.nome_contratante|escapejs }}";
+      const jogosHidden = document.getElementById("id_entregue_jogos");
+      const jogosMesasInput = document.querySelector("input[data-fisico='mesas']");
+      const jogosCadeirasInput = document.querySelector("input[data-fisico='cadeiras']");
+      const formulario = document.querySelector("form[data-enter-nav]");
+      const envioFuncionarios = document.getElementById("envio-checklist-funcionarios");
+      const erroFuncionarioChecklist = document.getElementById("erro-funcionario-checklist");
+      const radiosFuncionariosChecklist = Array.from(document.querySelectorAll("input[name='checklist_funcionario_envio']"));
+      const botaoEnviarChecklistWhatsapp = document.getElementById("btn-enviar-checklist-whatsapp");
 
-      const copiar = document.getElementById("copiar-mensagem");
-      if (copiar) {
-        copiar.addEventListener("click", function () {
-          const mensagem = document.querySelector(".mensagem");
-          if (!mensagem) {
-            return;
-          }
-          mensagem.select();
-          navigator.clipboard?.writeText(mensagem.value);
-          copiar.textContent = "Mensagem copiada";
+      function funcionarioChecklistSelecionado() {
+        return radiosFuncionariosChecklist.find(function (radio) {
+          return radio.checked;
         });
       }
 
-      if (!pagina || !resultado) {
-        return;
+      function atualizarLinkChecklistWhatsapp() {
+        const selecionado = funcionarioChecklistSelecionado();
+        if (botaoEnviarChecklistWhatsapp && selecionado) {
+          botaoEnviarChecklistWhatsapp.href = selecionado.dataset.whatsappUrl || "#";
+        }
+      }
+
+      radiosFuncionariosChecklist.forEach(function (radio) {
+        radio.addEventListener("change", atualizarLinkChecklistWhatsapp);
+      });
+      atualizarLinkChecklistWhatsapp();
+
+      botaoEnviarChecklistWhatsapp?.addEventListener("click", function (event) {
+        const selecionado = radiosFuncionariosChecklist.find(function (radio) {
+          return radio.checked;
+        });
+        if (!selecionado) {
+          event.preventDefault();
+          if (envioFuncionarios) {
+            envioFuncionarios.open = true;
+            envioFuncionarios.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+          if (erroFuncionarioChecklist) {
+            erroFuncionarioChecklist.hidden = false;
+          }
+          radiosFuncionariosChecklist[0]?.focus();
+          return;
+        }
+        if (erroFuncionarioChecklist) {
+          erroFuncionarioChecklist.hidden = true;
+        }
+      });
+
+      if (!resultado) { return; }
+
+      function mostrar(campo, sim) {
+        if (campo) { campo.classList.toggle("visivel", Boolean(sim)); }
       }
 
       function atualizarRelacao() {
-        if (!relacao || !campoOutro) {
-          return;
+        const selecionada = relacoes.find(function (item) { return item.checked; });
+        const valor = selecionada ? selecionada.value : "cliente";
+        if (!recebedorNome) { return; }
+        if (valor === "cliente") {
+          recebedorNome.value = clienteNome;
+          recebedorNome.readOnly = true;
+          recebedorNome.classList.add("bg-light");
+        } else {
+          if (recebedorNome.value === clienteNome) {
+            recebedorNome.value = "";
+          }
+          recebedorNome.readOnly = false;
+          recebedorNome.classList.remove("bg-light");
         }
+      }
 
-        campoOutro.style.display =
-          relacao.value === "outro"
-            ? "block"
-            : "none";
+      function atualizarEstado() {
+        if (!estadoMaterial || !checkBom) { return; }
+        estadoMaterial.value = checkBom.checked ? "bom" : "ressalva";
+        mostrar(campoObservacao, !checkBom.checked);
+      }
+
+      function inicializarEstadoMaterial() {
+        if (!estadoMaterial || !checkBom) { return; }
+        checkBom.checked = estadoMaterial.value !== "ressalva";
+        atualizarEstado();
+      }
+
+      function inicializarJogos() {
+        if (!jogosHidden || !jogosMesasInput || !jogosCadeirasInput) { return; }
+        const jogos = Math.max(Number(jogosHidden.value || 0), 0);
+        if (jogos <= 0 || jogosMesasInput.value || jogosCadeirasInput.value) { return; }
+        jogosMesasInput.value = jogos;
+        jogosCadeirasInput.value = jogos * 4;
+        materiais.forEach(function (linha) {
+          if (linha.dataset.jogosFisico) {
+            const check = linha.querySelector(".check-toggle");
+            if (check) { check.checked = true; }
+          }
+        });
+      }
+
+      function sincronizarJogos() {
+        if (!jogosHidden || !jogosMesasInput || !jogosCadeirasInput) { return; }
+        const mesasJogos = Math.max(Number(jogosMesasInput.value || 0), 0);
+        const cadeirasJogos = Math.max(Number(jogosCadeirasInput.value || 0), 0);
+        const jogosPorMesas = mesasJogos;
+        const jogosPorCadeiras = Math.floor(cadeirasJogos / 4);
+        jogosHidden.value = Math.max(jogosPorMesas, jogosPorCadeiras);
+      }
+
+      function sincronizarCamposPost() {
+        atualizarEstado();
+        sincronizarJogos();
       }
 
       function atualizarResultado() {
@@ -994,161 +604,132 @@
         let algumInformado = false;
         const pendencias = [];
 
-        materiais.forEach((linha) => {
-          const contratado = Number(
-            linha.dataset.contratado || 0
-          );
-          const acumulado = Number(
-            linha.dataset.acumulado || 0
-          );
-          const input = linha.querySelector("input");
-          const entregueAgora = Math.max(
-            Number((input && input.value) || 0),
-            0
-          );
-          const total = acumulado + entregueAgora;
-          const pendente = Math.max(contratado - total, 0);
-          const nome = (
-            linha.querySelector("strong") || {}
-          ).textContent || "material";
-          const pendenteTexto = linha.querySelector(
-            ".material-pendente"
-          );
-          const statusTexto = linha.querySelector(
-            ".material-status"
-          );
+        sincronizarJogos();
 
-          linha.classList.remove(
-            "status-completa",
-            "status-parcial",
-            "status-excesso"
-          );
+        materiais.forEach(function (linha) {
+          const contratado = Number(linha.dataset.contratado || 0);
+          const acumulado = Number(linha.dataset.acumulado || 0);
+          const input = linha.querySelector("input[type='number']");
+          const check = linha.querySelector(".check-toggle");
+          const material = linha.dataset.material || "";
+          const jogosFisico = linha.dataset.jogosFisico || "";
+          let entregueAgora = Math.max(Number((input && input.value) || 0), 0);
+          let contratadoVisual = contratado;
 
-          if (entregueAgora > 0) {
-            algumInformado = true;
+          if (jogosFisico === "cadeiras") {
+            contratadoVisual = contratado * 4;
           }
 
-          if (total > contratado) {
+          const total = acumulado + entregueAgora;
+          const pendente = Math.max(contratadoVisual - total, 0);
+
+          linha.classList.remove("status-completa", "status-parcial", "status-excesso");
+
+          if (entregueAgora > 0) { algumInformado = true; }
+
+          if (total > contratadoVisual) {
             excesso = true;
             linha.classList.add("status-excesso");
-            if (statusTexto) {
-              statusTexto.textContent = "Excedente";
-            }
-          }
-
-          if (total <= contratado && pendente > 0) {
+          } else if (pendente > 0) {
             linha.classList.add("status-parcial");
-            if (statusTexto) {
-              statusTexto.textContent = "Parcial";
+            if (material === "jogos_mesas") {
+              pendencias.push(pendente + " mesa(s) dos jogos");
+            } else if (material === "jogos_cadeiras") {
+              pendencias.push(pendente + " cadeira(s) dos jogos");
+            } else if (material === "mesas_avulsas") {
+              pendencias.push(pendente + " mesa(s)");
+            } else {
+              pendencias.push(pendente + " cadeira(s)");
             }
-            pendencias.push(pendente + " " + nome.toLowerCase());
-          }
-
-          if (total <= contratado && pendente === 0) {
+          } else {
             linha.classList.add("status-completa");
-            if (statusTexto) {
-              statusTexto.textContent = "Completa";
-            }
-          }
-
-          if (pendenteTexto) {
-            pendenteTexto.textContent =
-              "Pendente " + pendente;
           }
         });
 
         resultado.className = "resultado";
 
-        if (excesso) {
-          resultado.classList.add("excesso");
-          resultado.textContent =
-            "Existe material excedente. O excedente deve voltar " +
-            "ou ser tratado por ajuste posterior.";
-
-          if (botao) {
-            botao.disabled = true;
-          }
-
-          if (painelParcial) {
-            painelParcial.classList.remove("visivel");
-          }
-
+        if (!algumInformado) {
+          resultado.textContent = "";
+          if (painelParcial) { painelParcial.classList.remove("visivel"); }
+          mostrar(campoJustificativa, false);
+          mostrar(campoPrevisao, false);
+          if (botao) { botao.disabled = false; }
           return;
         }
 
-        if (
-          pendencias.length === 0
-        ) {
+        if (excesso) {
+          resultado.classList.add("excesso");
+          resultado.textContent = "Material excedente. O excedente deve voltar ou ser ajustado depois.";
+          if (botao) { botao.disabled = true; }
+          if (painelParcial) { painelParcial.classList.remove("visivel"); }
+          mostrar(campoJustificativa, false);
+          mostrar(campoPrevisao, false);
+          return;
+        }
+
+        if (pendencias.length === 0) {
           resultado.classList.add("completa");
-          resultado.textContent =
-            "Entrega completa. Ap?s confirmar, a loca??o " +
-            "ser? marcada como entregue.";
-
-          if (campoJustificativa) {
-            campoJustificativa.style.display = "none";
-          }
-
-          if (campoPrevisao) {
-            campoPrevisao.style.display = "none";
-          }
-
-          if (painelParcial) {
-            painelParcial.classList.remove("visivel");
-          }
+          resultado.textContent = "";
+          mostrar(campoJustificativa, false);
+          mostrar(campoPrevisao, false);
+          if (painelParcial) { painelParcial.classList.remove("visivel"); }
         } else {
           resultado.classList.add("parcial");
-          resultado.textContent =
-            "Entrega parcial. Pendente: " +
-            pendencias.join(", ") +
-            ".";
-
-          if (painelParcial) {
-            painelParcial.classList.add("visivel");
-          }
-
-          if (textoPendencias) {
-            textoPendencias.textContent =
-              "Quantidade pendente: " +
-              pendencias.join(", ") +
-              ". Informe a justificativa e a previsao de conclusao.";
-          }
-
-          if (campoJustificativa) {
-            campoJustificativa.style.display = "block";
-          }
-
-          if (campoPrevisao) {
-            campoPrevisao.style.display = "block";
-          }
+          resultado.textContent = "";
+          if (painelParcial) { painelParcial.classList.add("visivel"); }
+          if (textoPendencias) { textoPendencias.textContent = "Pendente: " + pendencias.join(", ") + "."; }
+          mostrar(campoJustificativa, true);
+          mostrar(campoPrevisao, true);
         }
 
-        if (botao) {
-          botao.disabled = !algumInformado;
-        }
+        if (botao) { botao.disabled = false; }
       }
 
-      materiais.forEach((linha) => {
-        const input = linha.querySelector("input");
+      materiais.forEach(function (linha) {
+        const input = linha.querySelector("input[type='number']");
+        const check = linha.querySelector(".check-toggle");
+        if (check && input) {
+          check.addEventListener("change", function () {
+            input.value = check.checked ? Number(linha.dataset.sugestao || 0) : "";
+            sincronizarCamposPost();
+            atualizarResultado();
+          });
+        }
         if (input) {
-          input.addEventListener(
-            "input",
-            atualizarResultado
-          );
+          input.addEventListener("input", function () {
+            if (check) {
+              check.checked = Math.max(Number(input.value || 0), 0) > 0;
+            }
+            sincronizarCamposPost();
+            atualizarResultado();
+          });
+        }
+      });
+      relacoes.forEach(function (relacao) {
+        relacao.addEventListener("change", atualizarRelacao);
+      });
+      if (checkBom) { checkBom.addEventListener("change", sincronizarCamposPost); }
+      radiosFuncionariosChecklist.forEach(function (radio) {
+        radio.addEventListener("change", function () {
+          if (erroFuncionarioChecklist) {
+            erroFuncionarioChecklist.hidden = true;
+          }
+        });
+      });
+      formulario?.addEventListener("submit", function (event) {
+        sincronizarCamposPost();
+
+        if (botao) {
+          botao.disabled = true;
+          botao.textContent = "Salvando conferencia...";
         }
       });
 
-      if (relacao) {
-        relacao.addEventListener(
-          "change",
-          atualizarRelacao
-        );
-      }
-
       atualizarRelacao();
+      inicializarEstadoMaterial();
+      inicializarJogos();
       atualizarResultado();
-
     })();
   </script>
 </body>
 </html>
-

@@ -177,6 +177,10 @@
       resize: vertical;
     }
 
+    #id_endereco_entrega {
+      min-height: 142px;
+    }
+
     .form-control:hover,
     .form-select:hover {
       border-color: #fdba74;
@@ -496,17 +500,17 @@
             {{ locacao_form.tipo_pessoa.errors }}
           </div>
           <div>
-            <label class="form-label">Cliente cadastrado</label>
+            <label class="form-label" id="label-cliente">Cliente cadastrado</label>
             {{ locacao_form.cliente }}
             {{ locacao_form.cliente.errors }}
           </div>
           <div>
-            <label class="form-label">Nome avulso</label>
+            <label class="form-label" id="label-nome-contratante">Nome avulso</label>
             {{ locacao_form.pessoa_avulsa_nome }}
             {{ locacao_form.pessoa_avulsa_nome.errors }}
           </div>
           <div>
-            <label class="form-label">Telefone avulso</label>
+            <label class="form-label" id="label-telefone-contratante">Telefone avulso</label>
             {{ locacao_form.pessoa_avulsa_telefone }}
             {{ locacao_form.pessoa_avulsa_telefone.errors }}
           </div>
@@ -744,59 +748,121 @@
         "bloco-vencimento-saldo"
       );
       const campoCliente = document.getElementById("id_cliente");
-const campoTipoPessoa = document.getElementById("id_tipo_pessoa");
-const campoTelefoneAvulso = document.getElementById("id_pessoa_avulsa_telefone");
-const campoEndereco = document.getElementById("id_endereco_entrega");
+      const campoTipoPessoa = document.getElementById("id_tipo_pessoa");
+      const campoTelefoneAvulso = document.getElementById("id_pessoa_avulsa_telefone");
+      const campoNomeAvulso = document.getElementById("id_pessoa_avulsa_nome");
+      const campoEndereco = document.getElementById("id_endereco_entrega");
+      const campoDataEntrega = document.getElementById("id_data_entrega");
+      const campoDataDevolucao = document.getElementById("id_data_prevista_devolucao");
+      const labelCliente = document.getElementById("label-cliente");
+      const labelNomeContratante = document.getElementById("label-nome-contratante");
+      const labelTelefoneContratante = document.getElementById("label-telefone-contratante");
+      let devolucaoAlteradaManual = false;
 
-let enderecoAlteradoManual = false;
+      function dataMaisUmDia(valor) {
+        if (!valor) return "";
+        const partes = valor.split("-").map(Number);
+        if (partes.length !== 3 || partes.some(Number.isNaN)) return "";
+        const data = new Date(partes[0], partes[1] - 1, partes[2]);
+        data.setDate(data.getDate() + 1);
+        const ano = data.getFullYear();
+        const mes = String(data.getMonth() + 1).padStart(2, "0");
+        const dia = String(data.getDate()).padStart(2, "0");
+        return `${ano}-${mes}-${dia}`;
+      }
 
-campoEndereco?.addEventListener("input", () => {
-    enderecoAlteradoManual = true;
-});
+      function sugerirDevolucao() {
+        if (!campoDataEntrega || !campoDataDevolucao || devolucaoAlteradaManual) {
+          return;
+        }
+        campoDataDevolucao.value = dataMaisUmDia(campoDataEntrega.value);
+      }
 
-async function carregarDadosCliente() {
-    if (!campoCliente?.value) return;
+      function atualizarRotulosContratante() {
+        const tipo = campoTipoPessoa?.value || "cliente";
+        const clienteCadastrado = tipo === "cliente";
 
-    try {
-        const resposta = await fetch(
+        if (labelCliente) {
+          labelCliente.textContent = clienteCadastrado ? "Cliente cadastrado" : "Cliente cadastrado";
+        }
+        if (labelNomeContratante) {
+          labelNomeContratante.textContent = clienteCadastrado ? "Nome do cliente" : "Nome avulso";
+        }
+        if (labelTelefoneContratante) {
+          labelTelefoneContratante.textContent = clienteCadastrado ? "Telefone do cliente" : "Telefone avulso";
+        }
+        if (campoNomeAvulso) {
+          campoNomeAvulso.placeholder = clienteCadastrado ? "Preenchido pelo cliente cadastrado" : "";
+        }
+        if (campoTelefoneAvulso) {
+          campoTelefoneAvulso.placeholder = clienteCadastrado ? "Telefone do cliente cadastrado" : "";
+        }
+      }
+
+      async function carregarDadosCliente() {
+        if (!campoCliente?.value || campoTipoPessoa?.value !== "cliente") return;
+
+        try {
+          const resposta = await fetch(
             `/locacoes/cliente/${campoCliente.value}/dados/`,
             {
-                headers: {
-                    "X-Requested-With": "XMLHttpRequest",
-                },
+              headers: {
+                "X-Requested-With": "XMLHttpRequest",
+              },
             }
-        );
+          );
 
-        if (!resposta.ok) return;
+          if (!resposta.ok) return;
 
-        const dados = await resposta.json();
+          const dados = await resposta.json();
 
-        if (
-            campoEndereco &&
-            (!campoEndereco.value.trim() || !enderecoAlteradoManual)
-        ) {
+          if (campoEndereco) {
             campoEndereco.value = dados.endereco || "";
-        }
+          }
 
-        if (
-            campoTelefoneAvulso &&
-            !campoTelefoneAvulso.value.trim()
-        ) {
+          if (campoTelefoneAvulso) {
             campoTelefoneAvulso.value = dados.telefone || "";
+          }
+        } catch (erro) {
+          console.error(erro);
         }
-    } catch (erro) {
-        console.error(erro);
-    }
-}
+      }
 
-campoCliente?.addEventListener("change", carregarDadosCliente);
+      const devolucaoInicialEsperada = dataMaisUmDia(campoDataEntrega?.value || "");
+      devolucaoAlteradaManual = Boolean(
+        campoDataDevolucao?.value &&
+        devolucaoInicialEsperada &&
+        campoDataDevolucao.value !== devolucaoInicialEsperada
+      );
 
-if (
-    campoTipoPessoa?.value === "cliente" &&
-    campoCliente?.value
-) {
-    carregarDadosCliente();
-}
+      campoCliente?.addEventListener("change", carregarDadosCliente);
+      campoTipoPessoa?.addEventListener("change", function () {
+        atualizarRotulosContratante();
+        carregarDadosCliente();
+      });
+      campoDataDevolucao?.addEventListener("input", function () {
+        devolucaoAlteradaManual = true;
+      });
+      campoDataDevolucao?.addEventListener("change", function () {
+        devolucaoAlteradaManual = true;
+      });
+      campoDataEntrega?.addEventListener("change", function () {
+        sugerirDevolucao();
+      });
+      campoDataEntrega?.addEventListener("input", function () {
+        sugerirDevolucao();
+      });
+
+      atualizarRotulosContratante();
+      if (!campoDataDevolucao?.value) {
+        sugerirDevolucao();
+      }
+      if (
+        campoTipoPessoa?.value === "cliente" &&
+        campoCliente?.value
+      ) {
+        carregarDadosCliente();
+      }
       let aplicandoPagamentoAutomatico = false;
       let pagamentoAlteradoManualmente = Boolean(
         String(campoSinal?.value || "").trim()

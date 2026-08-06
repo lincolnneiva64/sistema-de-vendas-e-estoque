@@ -141,6 +141,10 @@
   <h2>Comunicação e operação da locação</h2>
 
   {% if ultimo_pagamento.recibo_status == "pendente" %}
+    <p class="muted">
+      Primeiro copie/envie o recibo. Depois confirme o envio com o
+      responsavel pela acao.
+    </p>
 
     {% if whatsapp_recibo_url %}
       <a
@@ -155,6 +159,14 @@
     <form method="post"
           action="{% url 'locacoes:confirmar_recibo_enviado' ultimo_pagamento.id %}">
       {% csrf_token %}
+
+      <div class="grid">
+        <div>
+          <label class="form-label">Responsavel pela acao</label>
+          {{ recibo_form.responsavel }}
+        </div>
+      </div>
+
       <button class="btn btn-primary w-100">
         Confirmar envio do recibo
       </button>
@@ -166,6 +178,15 @@
       âœ… Recibo jÃ¡ enviado ao cliente.
     </div>
 
+  {% endif %}
+
+  {% if tarefa_entrega %}
+    <a
+      class="btn btn-success w-100 mt-2"
+      href="{% url 'locacoes:conferencia_entrega' tarefa_entrega.id %}"
+    >
+      Abrir checklist de entrega
+    </a>
   {% endif %}
 </section>
 {% endif %}
@@ -363,9 +384,9 @@
             <div class="mt-3">
               <a
                 class="btn btn-outline-primary btn-sm"
-                href="{% url 'locacoes:conferencia_entrega' conferencia.tarefa.id %}?conferencia={{ conferencia.id }}"
+                href="{% url 'locacoes:checklist_entrega_cliente' conferencia.id %}"
               >
-                Ver comprovante da entrega
+                Abrir checklist de entrega
               </a>
             </div>
           {% endif %}

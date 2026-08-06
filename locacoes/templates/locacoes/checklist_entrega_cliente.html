@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Checklist de entrega #{{ locacao.id }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --loc-orange: #ea580c;
+      --loc-orange-dark: #9a3412;
+      --loc-orange-soft: #fff7ed;
+      --loc-line: #fed7aa;
+      --loc-green: #15803d;
+      --loc-ink: #172033;
+      --loc-muted: #64748b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #f5f7fb;
+      color: var(--loc-ink);
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    .page { max-width: 560px; margin: 0 auto; padding: 14px 10px 42px; }
+    .topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+    h1 { margin: 0; color: var(--loc-orange-dark); font-size: 1.22rem; font-weight: 950; }
+    .subtitulo { color: var(--loc-muted); font-size: .9rem; }
+    .doc-card {
+      border: 1px solid var(--loc-line);
+      border-top: 5px solid var(--loc-orange);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, .10);
+      overflow: hidden;
+    }
+    .doc-head {
+      padding: 16px 14px 13px;
+      background: linear-gradient(90deg, #ffedd5, #fff7ed 72%, #fff);
+      border-bottom: 1px solid var(--loc-line);
+      text-align: center;
+    }
+    .doc-title {
+      margin: 0;
+      color: var(--loc-orange-dark);
+      font-size: 1.18rem;
+      font-weight: 950;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+    }
+    .doc-body { padding: 15px; }
+    .campo { margin-bottom: 11px; }
+    .rotulo {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--loc-muted);
+      font-size: .72rem;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+    .valor { font-size: 1rem; font-weight: 850; white-space: pre-line; }
+    .materiais {
+      display: grid;
+      gap: 8px;
+      margin: 8px 0 14px;
+      padding: 0;
+      list-style: none;
+    }
+    .materiais li {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      padding: 11px;
+      border: 1px solid var(--loc-line);
+      border-radius: 8px;
+      background: var(--loc-orange-soft);
+      font-weight: 900;
+    }
+    .materiais small {
+      display: block;
+      margin-top: 2px;
+      color: #64748b;
+      font-size: .84rem;
+      font-weight: 850;
+    }
+    .check { color: var(--loc-green); font-size: 1.2rem; line-height: 1; }
+    .material-contexto {
+      color: #64748b;
+      font-size: .84rem;
+      font-weight: 850;
+    }
+    .check-item-list {
+      display: grid;
+      gap: 6px;
+      margin: 8px 0 14px;
+    }
+    .check-row {
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      border: 1px solid #e5edf5;
+      border-radius: 9px;
+      padding: 7px 9px;
+      background: #fcfdff;
+    }
+    .check-row.is-checked {
+      border-color: #bbf7d0;
+      background: #f0fdf4;
+      box-shadow: inset 3px 0 0 #16a34a;
+    }
+    .check-row.is-pending {
+      border-color: #f7d98b;
+      background: #fff7ed;
+      box-shadow: inset 3px 0 0 #f59e0b;
+    }
+    .check-row input {
+      width: 22px;
+      height: 22px;
+      margin: 0;
+      accent-color: #16a34a;
+      pointer-events: none;
+    }
+    .check-row-text {
+      display: block;
+      color: #172033;
+      font-size: .92rem;
+      font-weight: 850;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+    .check-row-sub {
+      display: block;
+      color: #64748b;
+      font-size: .76rem;
+      font-weight: 760;
+      margin-top: 1px;
+      line-height: 1.15;
+    }
+    .acoes {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .btn-doc { min-height: 48px; border-radius: 8px; font-weight: 900; }
+    .btn-whats { background: var(--loc-green); border-color: var(--loc-green); color: #fff; }
+    .btn-whats:hover, .btn-whats:focus { background: #166534; border-color: #166534; color: #fff; }
+    .nota { margin-top: 10px; color: var(--loc-muted); font-size: .88rem; }
+    .envio-operacional {
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid #bfdbfe;
+      border-left: 5px solid #2563eb;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, .08);
+    }
+    .envio-operacional h2,
+    .envio-operacional summary {
+      margin: 0 0 8px;
+      color: #1e3a8a;
+      font-size: 1rem;
+      font-weight: 950;
+    }
+    .envio-operacional summary {
+      cursor: pointer;
+      list-style-position: inside;
+    }
+    .funcionarios-envio {
+      display: grid;
+      gap: 7px;
+    }
+    .funcionario-envio {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px;
+      align-items: start;
+      padding: 9px;
+      border: 1px solid #dbeafe;
+      border-radius: 8px;
+      background: #f8fafc;
+      cursor: pointer;
+    }
+    .funcionario-envio input { margin-top: 4px; accent-color: #2563eb; }
+    .funcionario-envio:has(input:checked) {
+      border-color: #2563eb;
+      background: #eff6ff;
+    }
+    .funcionario-envio strong,
+    .envio-valor {
+      display: block;
+      color: #0f172a;
+      font-weight: 950;
+    }
+    .funcionario-envio span,
+    .envio-label {
+      display: block;
+      color: #64748b;
+      font-size: .86rem;
+      font-weight: 850;
+    }
+    .envio-acoes {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .btn-confirmar-envio {
+      min-height: 48px;
+      border-radius: 8px;
+      border: 1px solid #2563eb;
+      background: #2563eb;
+      color: #fff;
+      font-weight: 950;
+    }
+    .btn-pulsante {
+      animation: pulse-whatsapp 1.25s infinite;
+      box-shadow: 0 0 0 0 rgba(21, 128, 61, .46), 0 12px 24px rgba(21, 128, 61, .22);
+    }
+    .envio-confirmado {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid #86efac;
+      border-radius: 8px;
+      background: #f0fdf4;
+      color: #14532d;
+    }
+    .envio-confirmado h2 {
+      margin: 0;
+      color: #166534;
+    }
+    .btn-discreto {
+      min-height: 42px;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      color: #475569;
+      font-weight: 900;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    @keyframes pulse-whatsapp {
+      0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(21, 128, 61, .48), 0 12px 24px rgba(21, 128, 61, .22); }
+      65% { transform: scale(1.018); box-shadow: 0 0 0 11px rgba(21, 128, 61, 0), 0 16px 30px rgba(21, 128, 61, .30); }
+      100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(21, 128, 61, 0), 0 12px 24px rgba(21, 128, 61, .22); }
+    }
+    @media (max-width: 520px) {
+      .topo { display: block; }
+      .topo .btn { width: 100%; margin-top: 10px; }
+      .acoes { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="topo">
+      <div>
+        <h1>Checklist de entrega</h1>
+        <div class="subtitulo">Locacao #{{ locacao.id }}</div>
+      </div>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'locacoes:detalhe' locacao.id %}">Voltar</a>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <section class="doc-card">
+      <div class="doc-head">
+        <h2 class="doc-title">Checklist de entrega</h2>
+      </div>
+
+      <div class="doc-body" id="card-checklist-entrega">
+        <div class="campo">
+          <span class="rotulo">Cliente</span>
+          <div class="valor">{{ locacao.nome_contratante }}</div>
+        </div>
+
+        <div class="campo">
+          <span class="rotulo">Endereco</span>
+          <div class="valor">{{ locacao.endereco_entrega }}</div>
+        </div>
+
+        <span class="rotulo">Materiais conferidos</span>
+        <div class="check-item-list">
+          {% for item in itens_checklist_rota %}
+            <div class="check-row is-pending">
+              <input type="checkbox" readonly>
+              <span>
+                <span class="check-row-text">{{ item.produto_nome }}</span>
+                <span class="check-row-sub">{{ item.quantidade }} {{ item.unidade }}</span>
+              </span>
+            </div>
+          {% empty %}
+            <div class="check-row is-pending">
+              <input type="checkbox" readonly>
+              <span>
+                <span class="check-row-text">Nenhum item informado.</span>
+              </span>
+            </div>
+          {% endfor %}
+          <div class="check-row is-pending">
+            <input type="checkbox" readonly>
+            <span>
+              <span class="check-row-text">Materiais em bom estado</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="campo">
+          <span class="rotulo">Recebido por</span>
+          <div class="valor">{{ conferencia.recebedor_nome }}</div>
+        </div>
+
+        <div class="campo">
+          <span class="rotulo">Data/Hora</span>
+          <div class="valor">{{ conferencia.criado_em|date:"d/m/Y H:i" }}</div>
+        </div>
+
+        <div class="campo mb-0">
+          <span class="rotulo">Responsavel pela entrega</span>
+          <div class="valor">{{ conferencia.responsavel }}</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="envio-operacional">
+      {% if evento_envio_checklist %}
+        <div class="envio-confirmado">
+          <h2>&#10004; Checklist enviado</h2>
+          <div>
+            <span class="envio-label">Enviado para:</span>
+            <span class="envio-valor">{{ envio_checklist.funcionario_nome|default:"Funcionario" }}</span>
+          </div>
+          <div>
+            <span class="envio-label">Enviado por:</span>
+            <span class="envio-valor">{{ envio_checklist.responsavel|default:"Sistema" }}</span>
+          </div>
+          <div>
+            <span class="envio-label">Data:</span>
+            <span class="envio-valor">{{ envio_checklist.criado_em|date:"d/m/Y H:i" }}</span>
+          </div>
+          {% if envio_checklist.whatsapp_url %}
+            <a class="btn-discreto" href="{{ envio_checklist.whatsapp_url }}" target="_blank" rel="noopener">Abrir WhatsApp novamente</a>
+          {% endif %}
+        </div>
+      {% else %}
+        {% if funcionarios_checklist %}
+          <form method="post" id="form-envio-checklist">
+            {% csrf_token %}
+            <details id="envio-checklist-funcionarios">
+              <summary>Enviar checklist para</summary>
+              <div class="funcionarios-envio">
+                {% for envio in funcionarios_checklist_envio %}
+                  <label class="funcionario-envio">
+                    <input
+                      type="radio"
+                      name="checklist_funcionario"
+                      value="{{ envio.funcionario.id }}"
+                      data-whatsapp-url="{{ envio.whatsapp_url }}"
+                      {% if funcionario_selecionado and funcionario_selecionado.id == envio.funcionario.id %}checked{% endif %}
+                    >
+                    <span>
+                      <strong>{{ envio.funcionario.nome }}</strong>
+                      <span>{{ envio.funcionario.telefone_whatsapp }}</span>
+                    </span>
+                  </label>
+                {% endfor %}
+              </div>
+            </details>
+            <div class="envio-acoes" id="acoes-envio-checklist" hidden>
+              <a
+                class="btn btn-whats btn-doc btn-pulsante"
+                id="abrir-whatsapp-funcionario"
+                href="{{ funcionario_selecionado_whatsapp_url|default:'#' }}"
+                target="_blank"
+                rel="noopener"
+              >
+                &#128994; Enviar checklist pelo WhatsApp
+              </a>
+              <button
+                class="btn-confirmar-envio"
+                type="submit"
+                data-envio-pendente="{% if funcionario_selecionado %}true{% else %}false{% endif %}"
+                {% if not funcionario_selecionado %}hidden{% endif %}
+              >
+                &#128309; Confirmar envio do checklist
+              </button>
+            </div>
+            <div class="nota" id="aviso-envio-checklist" hidden>WhatsApp aberto. Depois de enviar a mensagem, confirme o envio aqui.</div>
+          </form>
+        {% else %}
+          <div class="nota">Nenhum funcionario habilitado para receber checklist.</div>
+        {% endif %}
+      {% endif %}
+    </section>
+
+    <div class="acoes">
+      <button class="btn btn-outline-primary btn-doc" id="copiar-checklist" type="button">
+        Copiar checklist
+      </button>
+
+      {% if whatsapp_url %}
+        <a class="btn btn-whats btn-doc" href="{{ whatsapp_url }}" target="_blank" rel="noopener">
+          Abrir WhatsApp
+        </a>
+      {% else %}
+        <button class="btn btn-outline-secondary btn-doc" type="button" disabled>
+          Abrir WhatsApp
+        </button>
+      {% endif %}
+
+      <button class="btn btn-outline-success btn-doc" id="enviar-celular" type="button">
+        Enviar para o celular
+      </button>
+    </div>
+
+    {% if not whatsapp_url %}
+      <div class="nota">Telefone nao informado para abrir o WhatsApp automaticamente.</div>
+    {% endif %}
+
+    {{ texto_checklist|json_script:"texto-checklist-entrega" }}
+  </main>
+
+  <script>
+    (function () {
+      const botao = document.getElementById("copiar-checklist");
+      const enviarCelular = document.getElementById("enviar-celular");
+      const fonte = document.getElementById("texto-checklist-entrega");
+      const acoesEnvio = document.getElementById("acoes-envio-checklist");
+      const formEnvioChecklist = document.getElementById("form-envio-checklist");
+      const abrirWhatsappFuncionario = document.getElementById("abrir-whatsapp-funcionario");
+      const confirmarEnvioChecklist = document.querySelector(".btn-confirmar-envio");
+      const avisoEnvioChecklist = document.getElementById("aviso-envio-checklist");
+      const envioFuncionarios = document.getElementById("envio-checklist-funcionarios");
+      const radiosFuncionarios = Array.from(document.querySelectorAll("input[name='checklist_funcionario']"));
+      const envioStorageKey = "checklistEntregaWhatsappAberto:{{ conferencia.pk }}";
+      const envioPendenteInicial = confirmarEnvioChecklist?.dataset.envioPendente === "true";
+
+      if (!fonte) { return; }
+
+      function copiarTexto(texto) {
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(texto);
+        } else {
+          const area = document.createElement("pre");
+          area.value = texto;
+          area.textContent = texto;
+          area.style.position = "fixed";
+          area.style.opacity = "0";
+          document.body.appendChild(area);
+          const selecao = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(area);
+          selecao.removeAllRanges();
+          selecao.addRange(range);
+          document.execCommand("copy");
+          selecao.removeAllRanges();
+          area.remove();
+        }
+      }
+
+      function atualizarEnvioFuncionario() {
+        if (!acoesEnvio || !abrirWhatsappFuncionario) { return; }
+        const selecionado = radiosFuncionarios.find(function (radio) { return radio.checked; });
+        if (!selecionado) {
+          acoesEnvio.hidden = true;
+          abrirWhatsappFuncionario.removeAttribute("href");
+          if (confirmarEnvioChecklist) {
+            confirmarEnvioChecklist.hidden = true;
+          }
+          return;
+        }
+        abrirWhatsappFuncionario.href = selecionado.dataset.whatsappUrl || "#";
+        acoesEnvio.hidden = false;
+        if (
+          confirmarEnvioChecklist &&
+          !envioPendenteInicial &&
+          abrirWhatsappFuncionario.dataset.whatsappAberto !== "true"
+        ) {
+          confirmarEnvioChecklist.hidden = true;
+        }
+      }
+
+      function liberarConfirmacaoEnvio() {
+        if (abrirWhatsappFuncionario) {
+          abrirWhatsappFuncionario.dataset.whatsappAberto = "true";
+        }
+        try {
+          sessionStorage.setItem(envioStorageKey, "true");
+        } catch (erro) {}
+        if (avisoEnvioChecklist) {
+          avisoEnvioChecklist.hidden = false;
+        }
+        if (confirmarEnvioChecklist) {
+          confirmarEnvioChecklist.hidden = false;
+        }
+      }
+
+      if (botao) {
+        botao.addEventListener("click", function () {
+          const texto = JSON.parse(fonte.textContent);
+          copiarTexto(texto);
+          botao.textContent = "Checklist copiado";
+        });
+      }
+
+      if (enviarCelular) {
+        enviarCelular.addEventListener("click", function () {
+          const texto = JSON.parse(fonte.textContent);
+          const payload = {
+            title: "Checklist de entrega",
+            text: texto,
+            url: window.location.href
+          };
+          if (navigator.share) {
+            navigator.share(payload).catch(function () {});
+            return;
+          }
+          copiarTexto(window.location.href);
+          enviarCelular.textContent = "Link copiado";
+        });
+      }
+
+      radiosFuncionarios.forEach(function (radio) {
+        radio.addEventListener("change", function () {
+          if (abrirWhatsappFuncionario) {
+            abrirWhatsappFuncionario.dataset.whatsappAberto = "false";
+          }
+          try {
+            sessionStorage.removeItem(envioStorageKey);
+          } catch (erro) {}
+          atualizarEnvioFuncionario();
+        });
+      });
+      atualizarEnvioFuncionario();
+
+      try {
+        if (sessionStorage.getItem(envioStorageKey) === "true") {
+          liberarConfirmacaoEnvio();
+        }
+      } catch (erro) {}
+
+      abrirWhatsappFuncionario?.addEventListener("click", function () {
+        liberarConfirmacaoEnvio();
+      });
+
+      formEnvioChecklist?.addEventListener("submit", function (event) {
+        event.preventDefault();
+        const selecionado = radiosFuncionarios.find(function (radio) { return radio.checked; });
+        if (!selecionado) {
+          if (envioFuncionarios) {
+            envioFuncionarios.open = true;
+          }
+          return;
+        }
+        if (confirmarEnvioChecklist) {
+          confirmarEnvioChecklist.disabled = true;
+          confirmarEnvioChecklist.textContent = "Confirmando...";
+        }
+        fetch(formEnvioChecklist.action || window.location.href, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "X-Requested-With": "XMLHttpRequest"
+          },
+          body: new FormData(formEnvioChecklist)
+        })
+          .then(function (resposta) {
+            return resposta.json().catch(function () { return {}; }).then(function (dados) {
+              if (!resposta.ok || !dados.ok) {
+                throw new Error(dados.erro || "Nao foi possivel confirmar o envio.");
+              }
+              return dados;
+            });
+          })
+          .then(function (dados) {
+            window.location.href = dados.redirectUrl || window.location.pathname;
+          })
+          .catch(function (erro) {
+            if (avisoEnvioChecklist) {
+              avisoEnvioChecklist.textContent = erro.message || "Nao foi possivel confirmar o envio.";
+              avisoEnvioChecklist.hidden = false;
+            }
+            if (confirmarEnvioChecklist) {
+              confirmarEnvioChecklist.disabled = false;
+              confirmarEnvioChecklist.textContent = "\uD83D\uDD35 Confirmar envio do checklist";
+            }
+          });
+      });
+
+    })();
+  </script>
+</body>
+</html>

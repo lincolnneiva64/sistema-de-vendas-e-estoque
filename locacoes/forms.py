@@ -153,7 +153,7 @@ class LocacaoForm(forms.Form):
         widget=forms.Textarea(
             attrs={
                 "class": "form-control",
-                "rows": 2,
+                "rows": 5,
                 "data-enter-next": "id_faixa_preco",
             }
         ),
@@ -585,8 +585,26 @@ class ConferenciaEntregaLocacaoForm(forms.Form):
 
     def __init__(self, *args, locacao, **kwargs):
         super().__init__(*args, **kwargs)
+        self.use_required_attribute = False
         self.locacao = locacao
         self._dados_calculados = None
+
+        mensagens = {
+            "entregue_jogos": "Informe a quantidade de jogos.",
+            "entregue_mesas_avulsas": "Informe a quantidade de mesas.",
+            "entregue_cadeiras_avulsas": "Informe a quantidade de cadeiras.",
+            "recebedor_nome": "Informe quem recebeu.",
+            "recebedor_relacao": "Selecione o cargo ou funcao.",
+            "estado_material": "Informe o estado do material.",
+            "responsavel": "Informe o funcionario responsavel.",
+        }
+        for nome, mensagem in mensagens.items():
+            self.fields[nome].error_messages.update({
+                "required": mensagem,
+                "invalid": "Informe um valor valido.",
+                "invalid_choice": "Selecione uma opcao valida.",
+                "min_value": "A quantidade nao pode ser negativa.",
+            })
 
         self.previsto_itens = locacao.quantidades_contratadas()
         previsto = Locacao.necessidades_quantidades_contratadas(
@@ -630,6 +648,15 @@ class ConferenciaEntregaLocacaoForm(forms.Form):
         self.pendente_cadeiras = max(
             self.previsto_cadeiras - self.acumulado_cadeiras,
             0,
+        )
+        self.fields["entregue_jogos"].required = bool(
+            self.previsto_itens["jogos"]
+        )
+        self.fields["entregue_mesas_avulsas"].required = bool(
+            self.previsto_itens["mesas_avulsas"]
+        )
+        self.fields["entregue_cadeiras_avulsas"].required = bool(
+            self.previsto_itens["cadeiras_avulsas"]
         )
 
         if not self.is_bound:
