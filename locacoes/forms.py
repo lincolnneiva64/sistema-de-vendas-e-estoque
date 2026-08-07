@@ -339,6 +339,11 @@ class ItensLocacaoReservaForm(forms.Form):
 
 
 class CancelarLocacaoForm(forms.Form):
+    responsavel = forms.CharField(
+        required=False,
+        max_length=120,
+        widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
+    )
     motivo = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={"class": "form-control", "rows": 3}),
@@ -660,6 +665,9 @@ class ConferenciaEntregaLocacaoForm(forms.Form):
         )
 
         if not self.is_bound:
+            self.fields["estado_material"].initial = (
+                ConferenciaEntregaLocacao.ESTADO_RESSALVA
+            )
             self.fields["entregue_jogos"].initial = (
                 self.pendente_itens["jogos"]
             )

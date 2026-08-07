@@ -1,9 +1,10 @@
 ﻿from decimal import Decimal
 from datetime import date, datetime, time, timedelta
+from urllib.parse import parse_qs, urlparse
 
 from django.apps import apps
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -469,6 +470,112 @@ class LocacoesReservasTests(TestCase):
         self.assertIsNone(locacao.cliente_id)
         self.assertEqual(Cliente.objects.count(), clientes_antes)
         self.assertEqual(locacao.pessoa_avulsa_nome, "Maria Avulsa")
+
+    def test_editar_reserva_recalcula_sem_conflitar_com_ela_mesma(self):
+        locacao = Locacao.criar_reserva(
+            self.dados_base(pessoa_avulsa_nome="Editavel"),
+            self.itens(jogos=10),
+        )
+
+        locacao.atualizar_reserva(
+            self.dados_base(
+                pessoa_avulsa_nome="Editada",
+                data_prevista_devolucao=date(2026, 8, 12),
+            ),
+            self.itens(jogos=10),
+        )
+
+        locacao.refresh_from_db()
+        self.assertEqual(locacao.pessoa_avulsa_nome, "Editada")
+        self.assertEqual(locacao.data_prevista_devolucao, date(2026, 8, 12))
+        self.assertEqual(locacao.total, Decimal("160.00"))
+
+    def test_editar_reserva_bloqueia_quantidade_indisponivel(self):
+        Locacao.criar_reserva(
+            self.dados_base(pessoa_avulsa_nome="Ocupante"),
+            self.itens(jogos=9),
+        )
+        locacao = Locacao.criar_reserva(
+            self.dados_base(
+                pessoa_avulsa_nome="Editavel",
+                data_entrega=date(2026, 8, 12),
+                data_prevista_devolucao=date(2026, 8, 13),
+            ),
+            self.itens(jogos=1),
+        )
+
+        with self.assertRaises(ValidationError):
+            locacao.atualizar_reserva(
+                self.dados_base(pessoa_avulsa_nome="Editavel"),
+                self.itens(jogos=2),
+            )
+
+    def test_editar_reserva_com_pagamento_nao_duplica_pagamento(self):
+        locacao = Locacao.criar_reserva(
+            self.dados_base(pessoa_avulsa_nome="Com sinal"),
+            self.itens(jogos=1),
+        )
+        locacao.registrar_pagamento(
+            Decimal("4.00"),
+            PagamentoLocacao.FORMA_PIX,
+            responsavel="Camila",
+        )
+
+        locacao.atualizar_reserva(
+            self.dados_base(pessoa_avulsa_nome="Com sinal editada"),
+            self.itens(jogos=2),
+        )
+
+        locacao.refresh_from_db()
+        self.assertEqual(locacao.pagamentos.count(), 1)
+        self.assertEqual(locacao.total, Decimal("16.00"))
+        self.assertEqual(locacao.total_pago, Decimal("4.00"))
+        self.assertEqual(locacao.saldo_devedor, Decimal("12.00"))
+
+    def test_edicao_ampla_bloqueada_apos_entrega(self):
+        locacao = Locacao.criar_reserva(
+            self.dados_base(pessoa_avulsa_nome="Entregue"),
+            self.itens(jogos=1),
+        )
+        locacao.marcar_saiu_para_entrega()
+        locacao.confirmar_entrega()
+
+        with self.assertRaises(ValidationError):
+            locacao.atualizar_reserva(
+                self.dados_base(pessoa_avulsa_nome="Tentativa"),
+                self.itens(jogos=1),
+            )
+
+    def test_exclusao_segura_remove_reserva_sem_vinculos(self):
+        locacao = Locacao.criar_reserva(
+            self.dados_base(pessoa_avulsa_nome="Excluir"),
+            self.itens(jogos=1),
+        )
+        locacao_id = locacao.id
+
+        locacao.excluir_se_seguro()
+
+        self.assertFalse(Locacao.objects.filter(pk=locacao_id).exists())
+
+    def test_exclusao_com_pagamento_e_bloqueada_e_cancelamento_preserva_historico(self):
+        locacao = Locacao.criar_reserva(
+            self.dados_base(pessoa_avulsa_nome="Com pagamento"),
+            self.itens(jogos=1),
+        )
+        locacao.registrar_pagamento(
+            Decimal("4.00"),
+            PagamentoLocacao.FORMA_DINHEIRO,
+            responsavel="Camila",
+        )
+
+        with self.assertRaises(ValidationError):
+            locacao.excluir_se_seguro()
+
+        locacao.cancelar(motivo="Cliente desistiu", responsavel="Camila")
+        locacao.refresh_from_db()
+        self.assertEqual(locacao.status, Locacao.STATUS_CANCELADA)
+        self.assertEqual(locacao.pagamentos.count(), 1)
+
 
 
 class LocacoesOperacaoTests(TestCase):
@@ -1396,7 +1503,7 @@ class LocacoesChecklistOperacionalTests(TestCase):
             ),
             secure=True,
         )
-        self.assertContains(comprovante, "Conferencia salva")
+        self.assertContains(comprovante, "Conferência salva")
         self.assertContains(comprovante, "Enviar checklist pelo WhatsApp")
         self.assertContains(comprovante, 'id="btn-enviar-checklist-whatsapp"')
         self.assertContains(comprovante, 'target="_blank"')
@@ -2006,6 +2113,318 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.assertContains(response, "Rua Checklist, 1")
         self.assertContains(response, "Levar toalhas separadas.")
         self.assertContains(response, reverse("locacoes:detalhe", kwargs={"pk": locacao.pk}))
+        self.assertNotContains(response, "Entrega #1")
+
+    def test_tela_checklist_numera_multiplas_tarefas_e_abre_checklist_direto(self):
+        entrega_um = self.criar_locacao(
+            pessoa_avulsa_nome="Entrega Primeira",
+            horario_entrega=time(8, 0),
+        )
+        entrega_dois = self.criar_locacao(
+            pessoa_avulsa_nome="Entrega Segunda",
+            horario_entrega=time(10, 0),
+        )
+        recolhimento_um = self.colocar_na_rua(self.criar_locacao(
+            pessoa_avulsa_nome="Recolhimento Primeiro",
+            data_entrega=self.hoje - timedelta(days=1),
+            data_prevista_devolucao=self.hoje,
+        ))
+        recolhimento_dois = self.colocar_na_rua(self.criar_locacao(
+            pessoa_avulsa_nome="Recolhimento Segundo",
+            data_entrega=self.hoje - timedelta(days=1),
+            data_prevista_devolucao=self.hoje,
+        ))
+
+        response = self.client.get(reverse("locacoes:checklist_operacional"), secure=True)
+        conteudo = response.content.decode()
+        checklist = response.context["checklist"]
+        tarefa_entrega_um = checklist["grupos"]["entregas"][0]["tarefa"]
+        tarefa_recolhimento_um = checklist["grupos"]["recolhimentos"][0]["tarefa"]
+
+        self.assertContains(response, "Entrega #1")
+        self.assertContains(response, "Entrega #2")
+        self.assertContains(response, "Recolhimento #1")
+        self.assertContains(response, "Recolhimento #2")
+        self.assertLess(conteudo.index("Entrega Primeira"), conteudo.index("Entrega Segunda"))
+        self.assertLess(conteudo.index("Recolhimento Primeiro"), conteudo.index("Recolhimento Segundo"))
+        self.assertEqual(tarefa_entrega_um.locacao_id, entrega_um.id)
+        self.assertEqual(tarefa_recolhimento_um.locacao_id, recolhimento_um.id)
+        self.assertContains(
+            response,
+            reverse("locacoes:conferencia_entrega", kwargs={"pk": tarefa_entrega_um.pk}),
+        )
+        self.assertContains(
+            response,
+            reverse(
+                "locacoes:conferencia_recolhimento",
+                kwargs={"pk": tarefa_recolhimento_um.pk},
+            ),
+        )
+
+    @override_settings(
+        ALLOWED_HOSTS=["testserver", "127.0.0.1"],
+        CHECKLIST_BASE_URL="https://sistema-de-vendas-e-estoque.onrender.com",
+    )
+    def test_agenda_envia_checklist_de_entrega_para_funcionario_selecionado(self):
+        locacao = self.criar_locacao(
+            pessoa_avulsa_nome="Cliente Com Telefone Proprio",
+            pessoa_avulsa_telefone="91988887777",
+            horario_entrega=time(16, 0),
+        )
+
+        response = self.client.get(
+            reverse("locacoes:checklist_operacional"),
+            secure=True,
+            HTTP_HOST="127.0.0.1:8000",
+        )
+        item = response.context["checklist"]["grupos"]["entregas"][0]
+        envio = item["envio_operacional"]
+        whatsapp_url = envio["funcionario_padrao"]["whatsapp_url"]
+        texto = parse_qs(urlparse(whatsapp_url).query)["text"][0]
+        checklist_path = reverse(
+            "locacoes:conferencia_entrega",
+            kwargs={"pk": item["tarefa"].pk},
+        )
+
+        self.assertContains(response, "Funcionário responsável")
+        self.assertContains(response, self.entregador_checklist.nome)
+        self.assertContains(response, "Enviar checklist pelo WhatsApp")
+        self.assertContains(response, '<details class="excecao-operacional">')
+        self.assertContains(response, "Abrir checklist")
+        self.assertContains(response, "Mais detalhes")
+        self.assertNotContains(response, ">Ver locação<")
+        self.assertNotContains(response, ">Fazer checklist de entrega<")
+        self.assertNotContains(response, 'placeholder="Responsável"')
+        self.assertIn("phone=5591999990000", whatsapp_url)
+        self.assertNotIn("91988887777", whatsapp_url)
+        self.assertIn(
+            f"https://sistema-de-vendas-e-estoque.onrender.com{checklist_path}",
+            texto,
+        )
+        self.assertNotIn(f"https://127.0.0.1:8000{checklist_path}", texto)
+        self.assertIn("Checklist de entrega #1", texto)
+        self.assertIn(f"Locação #{locacao.id} - Cliente Com Telefone Proprio", texto)
+        self.assertIn("Horário: 16:00", texto)
+        self.assertIn("Abrir checklist:", texto)
+        self.assertIn("Locação", texto)
+        self.assertIn("Horário", texto)
+        self.assertNotIn("R$", texto)
+        self.assertNotIn("Total", texto)
+        self.assertNotIn("Saldo", texto)
+        self.assertNotIn("Endereço", texto)
+        self.assertNotIn("91988887777", texto)
+        self.assertEqual(envio["checklist_url"], f"https://127.0.0.1:8000{checklist_path}")
+        self.assertEqual(
+            envio["checklist_whatsapp_url"],
+            f"https://sistema-de-vendas-e-estoque.onrender.com{checklist_path}",
+        )
+
+    @override_settings(
+        ALLOWED_HOSTS=["testserver", "127.0.0.1"],
+        CHECKLIST_BASE_URL="https://sistema-de-vendas-e-estoque.onrender.com",
+    )
+    def test_agenda_envia_checklist_de_recolhimento_para_rota_existente(self):
+        locacao = self.colocar_na_rua(self.criar_locacao(
+            pessoa_avulsa_nome="Cliente Recolhimento Agenda",
+            data_entrega=self.hoje - timedelta(days=1),
+            data_prevista_devolucao=self.hoje,
+        ))
+
+        response = self.client.get(
+            reverse("locacoes:checklist_operacional"),
+            secure=True,
+            HTTP_HOST="127.0.0.1:8000",
+        )
+        item = response.context["checklist"]["grupos"]["recolhimentos"][0]
+        envio = item["envio_operacional"]
+        whatsapp_url = envio["funcionario_padrao"]["whatsapp_url"]
+        texto = parse_qs(urlparse(whatsapp_url).query)["text"][0]
+        checklist_path = reverse(
+            "locacoes:conferencia_recolhimento",
+            kwargs={"pk": item["tarefa"].pk},
+        )
+
+        self.assertEqual(item["locacao"].id, locacao.id)
+        self.assertIn("phone=5591999990000", whatsapp_url)
+        self.assertNotIn("91988887777", whatsapp_url)
+        self.assertIn(
+            f"https://sistema-de-vendas-e-estoque.onrender.com{checklist_path}",
+            texto,
+        )
+        self.assertNotIn(f"https://127.0.0.1:8000{checklist_path}", texto)
+        self.assertIn("Checklist de recolhimento #1", texto)
+        self.assertIn(f"Locação #{locacao.id} - Cliente Recolhimento Agenda", texto)
+        self.assertIn("Abrir checklist:", texto)
+        self.assertIn("Locação", texto)
+        self.assertNotIn("R$", texto)
+        self.assertNotIn("Total", texto)
+        self.assertNotIn("Saldo", texto)
+        self.assertNotIn("Endereço", texto)
+        self.assertNotIn("Telefone", texto)
+        self.assertNotIn("conferencia-entrega", texto)
+        self.assertEqual(envio["checklist_url"], f"https://127.0.0.1:8000{checklist_path}")
+        self.assertEqual(
+            envio["checklist_whatsapp_url"],
+            f"https://sistema-de-vendas-e-estoque.onrender.com{checklist_path}",
+        )
+
+    def test_agenda_avisa_quando_funcionario_habilitado_nao_tem_whatsapp(self):
+        Funcionario.objects.filter(pk=self.entregador_checklist.pk).update(
+            telefone_whatsapp="",
+            telefone_whatsapp_normalizado="",
+        )
+        self.criar_locacao()
+
+        response = self.client.get(
+            reverse("locacoes:checklist_operacional"),
+            secure=True,
+        )
+
+        self.assertContains(
+            response,
+            "Nenhum funcionário habilitado com WhatsApp cadastrado.",
+        )
+        self.assertContains(response, "Enviar checklist pelo WhatsApp")
+        self.assertContains(response, 'aria-disabled="true"')
+        self.assertContains(response, "Lincoln Checklist - sem WhatsApp")
+
+    @override_settings(ALLOWED_HOSTS=["testserver", "agenda.example.com"])
+    def test_whatsapp_recolhimento_aparece_para_locacao_entregue_pendente(self):
+        locacao = self.colocar_na_rua(self.criar_locacao())
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+        )
+
+        response = self.client.get(
+            reverse("locacoes:lista"),
+            secure=True,
+            HTTP_HOST="agenda.example.com",
+        )
+        checklist_url = reverse(
+            "locacoes:conferencia_recolhimento",
+            kwargs={"pk": tarefa.pk},
+        )
+
+        self.assertContains(response, "Enviar recolhimento pelo WhatsApp")
+        self.assertContains(response, "web.whatsapp.com/send?phone=5591999990000")
+        whatsapp_href = response.context["locacoes"][0].acoes_consulta[
+            "whatsapp_recolhimento"
+        ]["whatsapp_url"]
+        texto = parse_qs(urlparse(whatsapp_href).query)["text"][0]
+        self.assertIn(f"https://agenda.example.com{checklist_url}", texto)
+        self.assertNotIn("Saldo", texto)
+        self.assertNotIn("Pagamento:", texto)
+
+        checklist_response = self.client.get(
+            f"{reverse('locacoes:checklist_operacional')}?data={tarefa.data_agendada:%Y-%m-%d}",
+            secure=True,
+            HTTP_HOST="agenda.example.com",
+        )
+        self.assertContains(
+            checklist_response,
+            "Enviar checklist pelo WhatsApp",
+        )
+
+    def test_whatsapp_recolhimento_nao_aparece_para_reserva_ou_cancelada(self):
+        self.criar_locacao(pessoa_avulsa_nome="Reserva Sem Entrega")
+        cancelada = self.criar_locacao(pessoa_avulsa_nome="Cancelada")
+        cancelada.cancelar(motivo="Cliente desistiu")
+
+        response = self.client.get(
+            reverse("locacoes:lista"),
+            secure=True,
+        )
+
+        self.assertNotContains(response, "Enviar recolhimento pelo WhatsApp")
+
+    @override_settings(ALLOWED_HOSTS=["testserver", "render.example.com"])
+    def test_whatsapp_recolhimento_usa_tarefa_correta_host_atual_e_mensagem_curta(self):
+        locacao = self.colocar_na_rua(
+            self.criar_locacao(
+                pessoa_avulsa_nome="João Ação",
+                endereco_entrega="Rua Antônio Lisboa da Silva, 133",
+            )
+        )
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+        )
+        outra = self.colocar_na_rua(
+            self.criar_locacao(pessoa_avulsa_nome="Outra Locacao")
+        )
+        outra_tarefa = obter_ou_criar_tarefa_operacional(
+            outra,
+            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+        )
+
+        response = self.client.get(
+            reverse("locacoes:detalhe", kwargs={"pk": locacao.pk}),
+            secure=True,
+            HTTP_HOST="render.example.com",
+        )
+        html = response.content.decode("utf-8")
+        checklist_url = reverse(
+            "locacoes:conferencia_recolhimento",
+            kwargs={"pk": tarefa.pk},
+        )
+        outra_url = reverse(
+            "locacoes:conferencia_recolhimento",
+            kwargs={"pk": outra_tarefa.pk},
+        )
+        whatsapp_href = response.context["acoes_locacao"]["whatsapp_recolhimento"]["whatsapp_url"]
+        texto = parse_qs(urlparse(whatsapp_href).query)["text"][0]
+
+        self.assertContains(response, "Enviar recolhimento pelo WhatsApp")
+        self.assertIn(f"https://render.example.com{checklist_url}", texto)
+        self.assertNotIn(outra_url, html)
+        self.assertIn(f"Recolhimento da locacao #{locacao.id}", texto)
+        self.assertIn("Cliente: João Ação", texto)
+        self.assertIn(f"Data: {tarefa.data_agendada:%d/%m/%Y}", texto)
+        self.assertIn("Endereco: Rua Antônio Lisboa da Silva, 133", texto)
+        self.assertIn("Material: 1 mesas e 4 cadeiras", texto)
+        self.assertNotIn("Saldo", texto)
+        self.assertNotIn("Pagamento", texto)
+        self.assertIn("Jo%C3%A3o%20A%C3%A7%C3%A3o", whatsapp_href)
+        self.assertIn("Ant%C3%B4nio%20Lisboa", whatsapp_href)
+
+    @override_settings(ALLOWED_HOSTS=["testserver", "agenda.example.com"])
+    def test_whatsapp_recolhimento_sem_funcionario_abre_mensagem_sem_numero(self):
+        Funcionario.objects.all().delete()
+        locacao = self.colocar_na_rua(self.criar_locacao())
+
+        response = self.client.get(
+            reverse("locacoes:detalhe", kwargs={"pk": locacao.pk}),
+            secure=True,
+            HTTP_HOST="agenda.example.com",
+        )
+        whatsapp_href = response.context["acoes_locacao"]["whatsapp_recolhimento"]["whatsapp_url"]
+
+        self.assertTrue(whatsapp_href.startswith("https://web.whatsapp.com/send?text="))
+        self.assertNotIn("phone=", whatsapp_href)
+        self.assertContains(response, "Enviar recolhimento pelo WhatsApp")
+
+    def test_link_whatsapp_recolhimento_abre_o_mesmo_checklist_existente(self):
+        locacao = self.colocar_na_rua(self.criar_locacao())
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+        )
+
+        response = self.client.get(
+            reverse(
+                "locacoes:conferencia_recolhimento",
+                kwargs={"pk": tarefa.pk},
+            ),
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "locacoes/conferencia_recolhimento.html")
+        self.assertContains(response, "Checklist de recolhimento")
+        self.assertContains(response, "Mesas recolhidas")
+        self.assertContains(response, "Cadeiras recolhidas")
+        self.assertContains(response, "Informar avarias (opcional)")
 
     def test_tela_conferencia_entrega_exibe_materiais_e_status_visual(self):
         locacao = self.criar_locacao(jogos=10, mesas=2, cadeiras=3)
@@ -2036,6 +2455,12 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.assertNotContains(response, 'aria-label="Conferir mesas dos jogos" checked')
         self.assertNotContains(response, 'aria-label="Conferir cadeiras dos jogos" checked')
         self.assertContains(response, 'id="check-material-bom" type="checkbox">')
+        self.assertNotContains(response, 'id="check-material-bom" type="checkbox" checked')
+        self.assertEqual(
+            response.context["form"].fields["estado_material"].initial,
+            ConferenciaEntregaLocacao.ESTADO_RESSALVA,
+        )
+        self.assertContains(response, 'data-form-bound="false"')
         self.assertContains(response, 'value="" placeholder=" "')
         self.assertContains(response, 'input.value = check.checked ? Number(linha.dataset.sugestao || 0) : "";')
         self.assertContains(response, 'if (botao) { botao.disabled = false; }')
@@ -2048,7 +2473,7 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.assertContains(response, "Recebido por")
         self.assertContains(
             response,
-            "Confirmar conferencia da entrega",
+            "Confirmar conferência da entrega",
         )
         self.assertNotContains(response, "Enviar checklist pelo WhatsApp")
         self.assertNotContains(response, 'name="checklist_funcionario_envio"')
@@ -2065,13 +2490,88 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.assertContains(response, "Cadeira(s)")
         self.assertContains(response, 'type="hidden" name="responsavel"')
         self.assertNotContains(response, "Qual cargo?")
-        self.assertNotContains(response, "Historico")
+        self.assertNotContains(response, "Histórico")
         self.assertNotContains(response, "Confirmar e abrir checklist final")
         self.assertContains(response, "Cliente")
-        self.assertContains(response, "Funcionario")
+        self.assertContains(response, "Funcionário")
         self.assertContains(response, "Caseiro")
         self.assertContains(response, "Familiar")
         self.assertContains(response, "Outro")
+
+    def test_checklist_novo_nao_exibe_textos_quebrados(self):
+        locacao = self.criar_locacao()
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+
+        response = self.client.get(
+            reverse(
+                "locacoes:conferencia_entrega",
+                kwargs={"pk": tarefa.pk},
+            ),
+            secure=True,
+        )
+        agenda = self.client.get(
+            reverse("locacoes:checklist_operacional"),
+            secure=True,
+        )
+
+        textos_quebrados = [
+            "pend?ncia",
+            "se??o",
+            "Endere?o",
+            "Refer?ncia",
+            "N?o informada",
+            "Ver loca??o",
+            "Respons?vel",
+            "Motivo/observa??o",
+            "N?o foi poss?vel realizar",
+        ]
+        for texto in textos_quebrados:
+            self.assertNotContains(response, texto)
+            self.assertNotContains(agenda, texto)
+
+        self.assertContains(agenda, "Endereço")
+        self.assertContains(agenda, "Referência")
+        self.assertContains(agenda, "Não informada")
+        self.assertContains(agenda, "Mais detalhes")
+        self.assertContains(agenda, "Não foi possível realizar")
+
+    def test_conferencia_registrada_continua_aparecendo_como_historico(self):
+        locacao = self.criar_locacao()
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+        self.client.post(
+            reverse(
+                "locacoes:conferencia_entrega",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_entrega(),
+            secure=True,
+        )
+        conferencia = ConferenciaEntregaLocacao.objects.get()
+
+        response = self.client.get(
+            (
+                reverse(
+                    "locacoes:conferencia_entrega",
+                    kwargs={"pk": tarefa.pk},
+                )
+                + f"?conferencia={conferencia.pk}"
+            ),
+            secure=True,
+        )
+
+        self.assertContains(response, "Conferência salva")
+        self.assertContains(response, "Enviar checklist pelo WhatsApp")
+        self.assertNotContains(response, 'id="check-material-bom"')
+        self.assertEqual(
+            conferencia.estado_material,
+            ConferenciaEntregaLocacao.ESTADO_BOM,
+        )
 
     def test_confirmacao_simples_de_recolhimento_redireciona_para_checklist_detalhado(self):
         locacao = self.colocar_na_rua(
@@ -2183,6 +2683,210 @@ class LocacoesChecklistOperacionalTests(TestCase):
             checklist_operacional_locacoes(self.hoje)["total"],
             0,
         )
+
+    @override_settings(ALLOWED_HOSTS=["testserver", "agenda.example.com"])
+    def test_recolhimento_salvo_gera_checklist_compartilhavel(self):
+        locacao = self.colocar_na_rua(
+            self.criar_locacao(
+                pessoa_avulsa_nome="Cliente Checklist Recolhimento",
+                pessoa_avulsa_telefone="91988887777",
+                data_entrega=self.hoje - timedelta(days=1),
+                data_prevista_devolucao=self.hoje,
+            )
+        )
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+        )
+        self.client.post(
+            reverse(
+                "locacoes:conferencia_recolhimento",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_recolhimento(),
+            secure=True,
+            HTTP_HOST="agenda.example.com",
+        )
+        conferencia = ConferenciaRecolhimentoLocacao.objects.get()
+
+        response = self.client.get(
+            (
+                reverse(
+                    "locacoes:conferencia_recolhimento",
+                    kwargs={"pk": tarefa.pk},
+                )
+                + f"?conferencia={conferencia.pk}"
+            ),
+            secure=True,
+            HTTP_HOST="agenda.example.com",
+        )
+        checklist_url = reverse(
+            "locacoes:checklist_recolhimento_cliente",
+            kwargs={"pk": conferencia.pk},
+        )
+        whatsapp_href = response.context["whatsapp_url"]
+        texto = parse_qs(urlparse(whatsapp_href).query)["text"][0]
+
+        self.assertContains(response, "Recolhimento registrado")
+        self.assertContains(response, "Abrir checklist compartilhável")
+        self.assertContains(response, "Enviar checklist pelo WhatsApp")
+        self.assertContains(response, checklist_url)
+        self.assertIn("phone=5591988887777", whatsapp_href)
+        self.assertIn(f"https://agenda.example.com{checklist_url}", texto)
+        self.assertIn("Checklist de recolhimento da locacao", texto)
+        self.assertNotIn("Quebrado: 0", texto)
+        self.assertNotIn("Saldo", texto)
+        self.assertNotIn("Pagamento", texto)
+
+    @override_settings(ALLOWED_HOSTS=["testserver", "agenda.example.com"])
+    def test_checklist_recolhimento_compartilhavel_sem_avaria_e_somente_leitura(self):
+        locacao = self.colocar_na_rua(
+            self.criar_locacao(
+                pessoa_avulsa_nome="Sem Avaria",
+                data_entrega=self.hoje - timedelta(days=1),
+                data_prevista_devolucao=self.hoje,
+            )
+        )
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+        )
+        self.client.post(
+            reverse(
+                "locacoes:conferencia_recolhimento",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_recolhimento(),
+            secure=True,
+        )
+        conferencia = ConferenciaRecolhimentoLocacao.objects.get()
+
+        response = self.client.get(
+            reverse(
+                "locacoes:checklist_recolhimento_cliente",
+                kwargs={"pk": conferencia.pk},
+            ),
+            secure=True,
+            HTTP_HOST="agenda.example.com",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "locacoes/checklist_recolhimento_cliente.html")
+        self.assertContains(response, "Checklist de recolhimento")
+        self.assertContains(response, "Sem Avaria")
+        self.assertContains(response, "Previsto")
+        self.assertContains(response, "Recolhido")
+        self.assertContains(response, "Materiais recolhidos sem avarias.")
+        self.assertContains(response, "Responsável pela conferência")
+        self.assertContains(response, "Copiar checklist")
+        self.assertContains(response, "Enviar para o celular")
+        self.assertNotContains(response, "quebrada")
+        self.assertNotContains(response, "perdida")
+        self.assertNotContains(response, "descartada")
+        self.assertNotContains(response, 'name="boa_mesas"')
+        self.assertNotContains(response, 'name="boa_cadeiras"')
+        self.assertNotContains(response, "Total pago")
+        self.assertNotContains(response, "Saldo devedor")
+        self.assertNotContains(response, "Recibo")
+
+    def test_checklist_recolhimento_compartilhavel_mostra_apenas_avarias_existentes(self):
+        locacao = self.colocar_na_rua(
+            self.criar_locacao(
+                pessoa_avulsa_nome="Com Avaria",
+                data_entrega=self.hoje - timedelta(days=1),
+                data_prevista_devolucao=self.hoje,
+            )
+        )
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+        )
+        self.client.post(
+            reverse(
+                "locacoes:conferencia_recolhimento",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_recolhimento(
+                boa_mesas="0",
+                boa_cadeiras="2",
+                quebrada_mesas="1",
+                quebrada_cadeiras="2",
+                observacao="Uma mesa trincada e duas cadeiras avariadas.",
+            ),
+            secure=True,
+        )
+        conferencia = ConferenciaRecolhimentoLocacao.objects.get()
+
+        response = self.client.get(
+            reverse(
+                "locacoes:checklist_recolhimento_cliente",
+                kwargs={"pk": conferencia.pk},
+            ),
+            secure=True,
+        )
+
+        self.assertContains(response, "Avarias")
+        self.assertContains(response, "1 mesa com problema")
+        self.assertContains(response, "2 cadeiras com problema")
+        self.assertContains(response, "Uma mesa trincada e duas cadeiras avariadas.")
+        self.assertNotContains(response, "Materiais recolhidos sem avarias.")
+        self.assertNotContains(response, "perdida")
+        self.assertNotContains(response, "descartada")
+        self.assertNotContains(response, "quebrada 0")
+
+    def test_checklist_recolhimento_registra_envio_para_funcionario(self):
+        locacao = self.colocar_na_rua(
+            self.criar_locacao(
+                data_entrega=self.hoje - timedelta(days=1),
+                data_prevista_devolucao=self.hoje,
+            )
+        )
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+        )
+        self.client.post(
+            reverse(
+                "locacoes:conferencia_recolhimento",
+                kwargs={"pk": tarefa.pk},
+            ),
+            self.dados_conferencia_recolhimento(),
+            secure=True,
+        )
+        conferencia = ConferenciaRecolhimentoLocacao.objects.get()
+
+        response = self.client.post(
+            reverse(
+                "locacoes:checklist_recolhimento_cliente",
+                kwargs={"pk": conferencia.pk},
+            ),
+            {"checklist_funcionario": str(self.entregador_checklist.pk)},
+            secure=True,
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "locacoes:checklist_recolhimento_cliente",
+                kwargs={"pk": conferencia.pk},
+            ),
+            fetch_redirect_response=False,
+        )
+        self.assertTrue(
+            locacao.eventos.filter(
+                tipo="checklist_recolhimento_enviado",
+                descricao__contains="Lincoln Checklist",
+            ).exists()
+        )
+        response = self.client.get(
+            reverse(
+                "locacoes:checklist_recolhimento_cliente",
+                kwargs={"pk": conferencia.pk},
+            ),
+            secure=True,
+        )
+        self.assertContains(response, "Checklist enviado")
+        self.assertContains(response, "Abrir WhatsApp novamente")
 
 
     def test_recolhimento_parcial_reagenda_e_depois_pode_ser_concluido(self):

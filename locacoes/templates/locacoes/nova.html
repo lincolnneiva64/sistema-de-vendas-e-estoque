@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nova locação</title>
+  <title>{% if modo_edicao %}Editar locação #{{ locacao.id }}{% else %}Nova locação{% endif %}</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
 :root {
@@ -466,10 +466,15 @@
   <main class="page">
     <header class="top">
       <div>
-        <h1>Nova locação</h1>
+        <h1>{% if modo_edicao %}Editar locação #{{ locacao.id }}{% else %}Nova locação{% endif %}</h1>
         <div class="solicitacao-topo">
-          <span>Data da solicitação:</span>
-          <strong>{% now "d/m/Y H:i" %}</strong>
+          {% if modo_edicao %}
+            <span>Status:</span>
+            <strong>{{ locacao.get_status_display }}</strong>
+          {% else %}
+            <span>Data da solicitação:</span>
+            <strong>{% now "d/m/Y H:i" %}</strong>
+          {% endif %}
         </div>
       </div>
       <a class="btn btn-outline-secondary" href="{% url 'locacoes:lista' %}">Voltar</a>
@@ -486,10 +491,22 @@
       data-enter-nav
       data-disponibilidade-url="{% url 'locacoes:disponibilidade_dinamica' %}"
       data-resumo-url="{% url 'locacoes:resumo_valores_dinamico' %}"
+      {% if modo_edicao %}data-excluir-id="{{ locacao.id }}"{% endif %}
     >
       {% csrf_token %}
       {{ locacao_form.non_field_errors }}
       {{ itens_form.non_field_errors }}
+
+      {% if modo_edicao %}
+        <section class="cardx">
+          <h2>Edição segura</h2>
+          <p class="muted mb-0">
+            Esta reserva ainda nao possui entrega confirmada. Ao salvar, datas,
+            quantidades, disponibilidade, total e saldo serao recalculados sem
+            criar novo pagamento.
+          </p>
+        </section>
+      {% endif %}
 
       <section class="cardx">
         <h2>Contratante</h2>
@@ -648,6 +665,7 @@
         {% endif %}
       </section>
 
+      {% if not modo_edicao %}
       <section class="cardx">
         <h2>Pagamento inicial opcional</h2>
         <p class="muted">Informe qualquer valor entre R$ 0,01 e o total contratado. Se pagar o total, a locacao ja nasce quitada.</p>
@@ -693,6 +711,31 @@
           </div>
         </div>
       </section>
+      {% else %}
+        <section class="cardx">
+          <h2>Financeiro</h2>
+          <div class="pagamento-resumo">
+            <div class="resumo-item total">
+              <span>Novo total contratado</span>
+              <strong id="pagamentoTotal">R$ 0,00</strong>
+            </div>
+            <div class="resumo-item">
+              <span>Total ja pago</span>
+              <strong>R$ {{ locacao.total_pago|floatformat:2 }}</strong>
+            </div>
+            <div class="resumo-item">
+              <span>Saldo recalculado</span>
+              <strong id="pagamentoSaldo">R$ 0,00</strong>
+            </div>
+          </div>
+          <div id="pagamentoStatus" class="pagamento-status"></div>
+          <div id="bloco-vencimento-saldo" class="mt-3">
+            <label class="form-label">Vencimento do saldo</label>
+            {{ locacao_form.data_vencimento_saldo }}
+            {{ locacao_form.data_vencimento_saldo.errors }}
+          </div>
+        </section>
+      {% endif %}
 
       <div class="d-flex justify-content-end gap-2">
         <a
@@ -709,7 +752,7 @@
           id="salvar-reserva"
           data-arrow-nav="reserva-final"
         >
-          Salvar reserva
+          {% if modo_edicao %}Salvar alterações{% else %}Salvar reserva{% endif %}
         </button>
       </div>
     </form>
@@ -747,6 +790,9 @@
       const blocoVencimentoSaldo = document.getElementById(
         "bloco-vencimento-saldo"
       );
+      const totalJaPago = Number(
+        "{{ locacao.total_pago|default:'0'|floatformat:2 }}".replace(",", ".")
+      ) || 0;
       const campoCliente = document.getElementById("id_cliente");
       const campoTipoPessoa = document.getElementById("id_tipo_pessoa");
       const campoTelefoneAvulso = document.getElementById("id_pessoa_avulsa_telefone");
@@ -927,10 +973,9 @@
       }
 
       function atualizarResumoPagamento() {
-        const sinal = Math.max(
-          numero(campoSinal?.value),
-          0
-        );
+        const sinal = campoSinal
+          ? Math.max(numero(campoSinal.value), 0)
+          : totalJaPago;
         const saldo = Math.max(
           totalContratadoAtual - sinal,
           0
@@ -1012,9 +1057,16 @@
           campoSinal.setCustomValidity("");
         }
 
+        if (!campoSinal && totalJaPago > totalContratadoAtual) {
+          pagamentoStatus.textContent =
+            "O novo total nao pode ficar menor que o total ja pago.";
+          pagamentoStatus.classList.add("erro");
+          return;
+        }
+
         if (quitada) {
           pagamentoStatus.textContent =
-            "Loca\u00e7\u00e3o quitada no ato";
+            campoSinal ? "Loca\u00e7\u00e3o quitada no ato" : "Loca\u00e7\u00e3o quitada com os pagamentos ja registrados";
           pagamentoStatus.classList.add("visivel");
         }
       }
@@ -1148,7 +1200,7 @@
       }
 
       function parametrosDisponibilidade() {
-        return new URLSearchParams({
+        const params = new URLSearchParams({
           data_entrega:
             document.getElementById("id_data_entrega")?.value || "",
           data_prevista_devolucao:
@@ -1166,6 +1218,10 @@
               "id_cadeiras_avulsas"
             )?.value || "0",
         });
+        if (form.dataset.excluirId) {
+          params.set("excluir_id", form.dataset.excluirId);
+        }
+        return params;
       }
 
       function consultarDisponibilidade() {

@@ -585,6 +585,47 @@ class Locacao(models.Model):
                 quantidades[chave] += int(item.quantidade or 0)
         return quantidades
 
+    def entrega_confirmada(self):
+        return self.conferencias_entrega.exists() or self.status in {
+            self.STATUS_ENTREGUE,
+            self.STATUS_DEVOLVIDA,
+            self.STATUS_DEVOLVIDA_COM_AVARIA,
+            self.STATUS_PENDENTE_DEVOLUCAO,
+        }
+
+    def pode_editar_amplamente(self):
+        return self.status == self.STATUS_RESERVADA and not self.entrega_confirmada()
+
+    def pode_cancelar(self):
+        return self.status == self.STATUS_RESERVADA
+
+    def impedimentos_exclusao(self):
+        impedimentos = []
+        if self.status != self.STATUS_RESERVADA:
+            impedimentos.append("Somente locacao reservada pode ser excluida.")
+        if self.entrega_confirmada():
+            impedimentos.append("Checklist de entrega ja foi confirmado.")
+        if self.pagamentos.exists():
+            impedimentos.append("Existe pagamento vinculado.")
+        if self.movimentos_estoque.exists():
+            impedimentos.append("Existe movimentacao de estoque vinculada.")
+        if self.conferencias_recolhimento.exists():
+            impedimentos.append("Existe checklist de recolhimento vinculado.")
+        if self.termo_gerado_em:
+            impedimentos.append("Termo de compromisso ja foi gerado.")
+        tarefas_preservar = self.tarefas_operacionais.exclude(
+            status__in=[
+                TarefaOperacionalLocacao.STATUS_PENDENTE,
+                TarefaOperacionalLocacao.STATUS_NAO_POSSIVEL,
+            ]
+        )
+        if tarefas_preservar.exists():
+            impedimentos.append("Existe tarefa operacional confirmada ou parcial.")
+        return impedimentos
+
+    def pode_excluir(self):
+        return not self.impedimentos_exclusao()
+
     @classmethod
     def validar_disponibilidade(cls, data_entrega, data_prevista_devolucao, itens, excluir_id=None):
         necessidade = cls.necessidades_itens(itens)
@@ -660,6 +701,120 @@ class Locacao(models.Model):
                 descricao="Reserva de locacao criada. Material ainda nao saiu para entrega.",
                 responsavel=responsavel,
             )
+            return locacao
+
+    def atualizar_reserva(self, dados, itens, responsavel=""):
+        if not self.pode_editar_amplamente():
+            raise ValidationError(
+                "Esta locacao nao permite edicao ampla. Depois da entrega, use apenas ajustes administrativos seguros."
+            )
+
+        itens_validos = [item for item in itens if int(item.get("quantidade") or 0) > 0]
+        if not itens_validos:
+            raise ValidationError("Inclua pelo menos um item na locacao.")
+
+        diarias = self.calcular_diarias(
+            dados["data_entrega"],
+            dados["data_prevista_devolucao"],
+        )
+        self.validar_disponibilidade(
+            dados["data_entrega"],
+            dados["data_prevista_devolucao"],
+            itens_validos,
+            excluir_id=self.pk,
+        )
+
+        with transaction.atomic():
+            locacao = Locacao.objects.select_for_update().get(pk=self.pk)
+            if not locacao.pode_editar_amplamente():
+                raise ValidationError(
+                    "Esta locacao nao permite edicao ampla. Depois da entrega, use apenas ajustes administrativos seguros."
+                )
+
+            locacao.cliente = dados.get("cliente")
+            locacao.tipo_pessoa = dados["tipo_pessoa"]
+            locacao.pessoa_avulsa_nome = dados.get("pessoa_avulsa_nome", "")
+            locacao.pessoa_avulsa_telefone = dados.get("pessoa_avulsa_telefone", "")
+            locacao.pessoa_avulsa_endereco = dados.get("pessoa_avulsa_endereco", "")
+            locacao.endereco_entrega = dados["endereco_entrega"]
+            locacao.data_entrega = dados["data_entrega"]
+            locacao.horario_entrega = dados["horario_entrega"]
+            locacao.data_evento = dados["data_evento"]
+            locacao.horario_evento = dados["horario_evento"]
+            locacao.data_prevista_devolucao = dados["data_prevista_devolucao"]
+            locacao.data_vencimento_saldo = (
+                None
+                if dados.get("sem_vencimento_saldo")
+                else (
+                    dados.get("data_vencimento_saldo")
+                    or dados["data_entrega"]
+                )
+            )
+            locacao.faixa_preco = dados["faixa_preco"]
+            locacao.faixa_preco_nome_snapshot = dados["faixa_preco"].nome
+            locacao.observacao = dados.get("observacao", "")
+
+            total = Decimal("0.00")
+            novos_itens = []
+            for item in itens_validos:
+                quantidade = int(item["quantidade"])
+                preco_diaria = Decimal(item["preco_diaria"]).quantize(Decimal("0.01"))
+                valor_total = (
+                    Decimal(quantidade) * preco_diaria * Decimal(diarias)
+                ).quantize(Decimal("0.01"))
+                total += valor_total
+                novos_itens.append(
+                    ItemLocacao(
+                        locacao=locacao,
+                        tipo=item["tipo"],
+                        quantidade=quantidade,
+                        preco_diaria_snapshot=preco_diaria,
+                        diarias=diarias,
+                        valor_total=valor_total,
+                        ajuste_manual=bool(item.get("ajuste_manual")),
+                    )
+                )
+
+            total = total.quantize(Decimal("0.01"))
+            total_pago = (
+                locacao.pagamentos.aggregate(total=models.Sum("valor")).get("total")
+                or Decimal("0.00")
+            ).quantize(Decimal("0.01"))
+            if total < total_pago:
+                raise ValidationError(
+                    "O novo total nao pode ficar menor que o total ja pago."
+                )
+
+            locacao.total = total
+            locacao.save(update_fields=[
+                "cliente",
+                "tipo_pessoa",
+                "pessoa_avulsa_nome",
+                "pessoa_avulsa_telefone",
+                "pessoa_avulsa_endereco",
+                "endereco_entrega",
+                "data_entrega",
+                "horario_entrega",
+                "data_evento",
+                "horario_evento",
+                "data_prevista_devolucao",
+                "data_vencimento_saldo",
+                "faixa_preco",
+                "faixa_preco_nome_snapshot",
+                "observacao",
+                "total",
+                "atualizado_em",
+            ])
+            locacao.itens.all().delete()
+            ItemLocacao.objects.bulk_create(novos_itens)
+            locacao.atualizar_financeiro()
+            EventoLocacao.objects.create(
+                locacao=locacao,
+                tipo="editada",
+                descricao="Reserva de locacao editada antes da entrega.",
+                responsavel=responsavel,
+            )
+            self.refresh_from_db()
             return locacao
 
     def registrar_pagamento(self, valor, forma_pagamento, data_hora=None, observacao="", responsavel=""):
@@ -749,6 +904,12 @@ class Locacao(models.Model):
             descricao=self.motivo_cancelamento or "Reserva cancelada.",
             responsavel=responsavel,
         )
+
+    def excluir_se_seguro(self):
+        impedimentos = self.impedimentos_exclusao()
+        if impedimentos:
+            raise ValidationError(impedimentos)
+        self.delete()
 
     def marcar_saiu_para_entrega(self, responsavel="", observacao=""):
         if self.status != self.STATUS_RESERVADA:

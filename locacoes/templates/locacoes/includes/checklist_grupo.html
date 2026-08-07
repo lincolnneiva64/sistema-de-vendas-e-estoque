@@ -6,83 +6,140 @@
       class="item {% if item.atrasada %}atrasada{% endif %} {% if foco_tarefa_id == item.tarefa.id|stringformat:'s' %}foco{% endif %}"
       id="tarefa-{{ item.tarefa.id }}"
     >
-      <div class="linha-topo">
-        <div class="cliente">{{ item.cliente }}</div>
+      <div class="tarefa-link">
+        {% if total_tarefas > 1 %}
+          <a
+            class="tarefa-ordem"
+            href="{{ item.envio_operacional.checklist_url }}"
+          >
+            {% if tipo == "entrega" %}
+              Entrega #{{ item.ordem_operacional }}
+            {% else %}
+              Recolhimento #{{ item.ordem_operacional }}
+            {% endif %}
+          </a>
+        {% endif %}
 
-        <div class="hora">
-          {% if item.horario %}
-            {{ item.horario|time:"H:i" }}
-          {% else %}
-            Sem hor?rio
+        <div class="linha-topo">
+          <div class="cliente">{{ item.cliente }}</div>
+
+          <div class="hora">
+            {% if item.horario %}
+              {{ item.horario|time:"H:i" }}
+            {% else %}
+              Sem horário
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="dados">
+          <div>
+            <strong>Solicitada em:</strong>
+            {{ item.locacao.criado_em|date:"d/m/Y H:i" }}
+          </div>
+
+          <div>
+            <strong>Endereço:</strong>
+            {{ item.endereco|linebreaksbr }}
+          </div>
+
+          <div>
+            <strong>Referência:</strong>
+            {{ item.ponto_referencia|default:"Não informada" }}
+          </div>
+
+          <div>
+            <strong>Telefone/celular:</strong>
+            {{ item.telefone|default:"Não informado" }}
+          </div>
+
+          {% if item.observacoes %}
+            <div>
+              <strong>Observações:</strong>
+              {{ item.observacoes|linebreaksbr }}
+            </div>
+          {% endif %}
+
+          {% if item.tarefa.status == "nao_possivel" %}
+            <div>
+              <strong>Última tentativa:</strong>
+              {{ item.tarefa.motivo_nao_realizado|linebreaksbr }}
+            </div>
           {% endif %}
         </div>
+
+        <ul class="materiais">
+          {% for material in item.materiais %}
+            <li>
+              {{ material.quantidade }} {{ material.nome }}
+
+              {% if item.tarefa.tipo == "recolhimento" %}
+                - pendente {{ material.pendente }}
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
       </div>
 
-      <div class="dados">
-        <div>
-          <strong>Solicitada em:</strong>
-          {{ item.locacao.criado_em|date:"d/m/Y H:i" }}
-        </div>
+      <div class="acoes" data-envio-operacional>
+        <div class="envio-operacional">
+          <label for="funcionario-tarefa-{{ item.tarefa.id }}">
+            Funcionário responsável
+          </label>
 
-        <div>
-          <strong>Endere?o:</strong>
-          {{ item.endereco|linebreaksbr }}
-        </div>
+          <div class="envio-linha">
+            <select
+              class="form-select funcionario-select"
+              id="funcionario-tarefa-{{ item.tarefa.id }}"
+              {% if not item.envio_operacional.tem_funcionario_com_whatsapp %}disabled{% endif %}
+            >
+              {% for funcionario in item.envio_operacional.funcionarios %}
+                <option
+                  value="{{ funcionario.id }}"
+                  data-nome="{{ funcionario.nome }}"
+                  data-whatsapp-url="{{ funcionario.whatsapp_url }}"
+                  {% if not funcionario.telefone %}disabled{% endif %}
+                  {% if item.envio_operacional.funcionario_padrao.id == funcionario.id %}selected{% endif %}
+                >
+                  {{ funcionario.nome }}{% if not funcionario.telefone %} - sem WhatsApp{% endif %}
+                </option>
+              {% empty %}
+                <option value="">Nenhum funcionário habilitado</option>
+              {% endfor %}
+            </select>
 
-        <div>
-          <strong>Refer?ncia:</strong>
-          {{ item.ponto_referencia|default:"N?o informada" }}
-        </div>
-
-        <div>
-          <strong>Telefone/celular:</strong>
-          {{ item.telefone|default:"N?o informado" }}
-        </div>
-
-        {% if item.observacoes %}
-          <div>
-            <strong>Observa??es:</strong>
-            {{ item.observacoes|linebreaksbr }}
+            <a
+              class="btn btn-success btn-whatsapp-operacional {% if not item.envio_operacional.funcionario_padrao %}disabled{% endif %}"
+              href="{% if item.envio_operacional.funcionario_padrao %}{{ item.envio_operacional.funcionario_padrao.whatsapp_url }}{% else %}#{% endif %}"
+              {% if not item.envio_operacional.funcionario_padrao %}aria-disabled="true"{% endif %}
+              target="_blank"
+              rel="noopener"
+            >
+              Enviar checklist pelo WhatsApp
+            </a>
           </div>
-        {% endif %}
 
-        {% if item.tarefa.status == "nao_possivel" %}
+          <p class="alerta-envio" {% if item.envio_operacional.tem_funcionario_com_whatsapp %}hidden{% endif %}>
+            Nenhum funcionário habilitado com WhatsApp cadastrado.
+          </p>
+
           <div>
-            <strong>?ltima tentativa:</strong>
-            {{ item.tarefa.motivo_nao_realizado|linebreaksbr }}
+            <a
+              class="link-secundario"
+              href="{{ item.envio_operacional.checklist_url }}"
+            >
+              Abrir checklist
+            </a>
+            <span class="text-muted"> · </span>
+            <a
+              class="link-secundario"
+              href="{{ item.detalhe_url }}"
+            >
+              Mais detalhes
+            </a>
           </div>
-        {% endif %}
-      </div>
-
-      <ul class="materiais">
-        {% for material in item.materiais %}
-          <li>
-            {{ material.quantidade }} {{ material.nome }}
-
-            {% if item.tarefa.tipo == "recolhimento" %}
-              ? pendente {{ material.pendente }}
-            {% endif %}
-          </li>
-        {% endfor %}
-      </ul>
-
-      <div class="acoes">
-        <div>
-          <a
-            class="btn btn-outline-primary w-100 mb-2"
-            href="{{ item.detalhe_url }}"
-          >
-            Ver loca??o
-          </a>
 
           {% if item.tarefa.tipo == "entrega" %}
-            <a
-              class="btn btn-success w-100"
-              href="{{ item.conferencia_entrega_url }}"
-            >
-              Fazer checklist de entrega
-            </a>
-
             {% if item.tarefa.status == "parcial" %}
               <div class="alert alert-warning mt-2 mb-0">
                 Entrega parcial. Ainda existem materiais
@@ -90,13 +147,6 @@
               </div>
             {% endif %}
           {% else %}
-            <a
-              class="btn btn-success w-100"
-              href="{{ item.conferencia_recolhimento_url }}"
-            >
-              Fazer checklist de recolhimento
-            </a>
-
             {% if item.tarefa.status == "parcial" %}
               <div class="alert alert-warning mt-2 mb-0">
                 Recolhimento parcial. Ainda existem mesas
@@ -106,43 +156,41 @@
           {% endif %}
         </div>
 
-        <form
-          method="post"
-          action="{{ item.nao_possivel_url }}"
-          data-enter-nav
-        >
-          {% csrf_token %}
+        <details class="excecao-operacional">
+          <summary>Não foi possível realizar</summary>
 
-          <div class="campos">
-            <input
-              class="form-control"
-              type="text"
-              name="responsavel"
-              placeholder="Respons?vel"
-              autocomplete="off"
-            >
-
-            <textarea
-              class="form-control"
-              name="observacao"
-              rows="2"
-              placeholder="Motivo/observa??o"
-              required
-            ></textarea>
-          </div>
-
-          <button
-            class="btn btn-outline-danger w-100 mt-2"
-            type="submit"
+          <form
+            method="post"
+            action="{{ item.nao_possivel_url }}"
+            data-enter-nav
           >
-            N?o foi poss?vel realizar
-          </button>
-        </form>
+            {% csrf_token %}
+
+            <input type="hidden" name="responsavel" value="{% if item.envio_operacional.funcionario_padrao %}{{ item.envio_operacional.funcionario_padrao.nome }}{% endif %}">
+
+            <div class="campos">
+              <textarea
+                class="form-control"
+                name="observacao"
+                rows="2"
+                placeholder="Motivo/observação"
+                required
+              ></textarea>
+            </div>
+
+            <button
+              class="btn btn-outline-danger w-100 mt-2"
+              type="submit"
+            >
+              Confirmar que não foi possível realizar
+            </button>
+          </form>
+        </details>
       </div>
     </article>
   {% empty %}
     <div class="empty">
-      Nenhuma pend?ncia nesta se??o.
+      Nenhuma pendência nesta seção.
     </div>
   {% endfor %}
 </section>

@@ -1,7 +1,9 @@
 ﻿from decimal import Decimal
 
+from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.forms import modelformset_factory
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -50,6 +52,85 @@ def _faixa_padrao():
     return FaixaPrecoLocacao.objects.filter(ativa=True).order_by("ordem", "id").first()
 
 
+def _initial_locacao_edicao(locacao):
+    return {
+        "tipo_pessoa": locacao.tipo_pessoa,
+        "cliente": locacao.cliente,
+        "pessoa_avulsa_nome": locacao.pessoa_avulsa_nome,
+        "pessoa_avulsa_telefone": locacao.pessoa_avulsa_telefone,
+        "endereco_entrega": locacao.endereco_entrega,
+        "data_entrega": locacao.data_entrega,
+        "horario_entrega": locacao.horario_entrega,
+        "data_evento": locacao.data_evento,
+        "horario_evento": locacao.horario_evento,
+        "data_prevista_devolucao": locacao.data_prevista_devolucao,
+        "data_vencimento_saldo": locacao.data_vencimento_saldo,
+        "faixa_preco": locacao.faixa_preco,
+        "observacao": locacao.observacao,
+    }
+
+
+def _initial_itens_edicao(locacao):
+    initial = {
+        "jogos": 0,
+        "mesas_avulsas": 0,
+        "cadeiras_avulsas": 0,
+        "preco_jogo_diaria": None,
+        "preco_mesa_avulsa_diaria": None,
+        "preco_cadeira_avulsa_diaria": None,
+    }
+    mapa = {
+        ItemLocacao.TIPO_JOGO: ("jogos", "preco_jogo_diaria"),
+        ItemLocacao.TIPO_MESA_AVULSA: ("mesas_avulsas", "preco_mesa_avulsa_diaria"),
+        ItemLocacao.TIPO_CADEIRA_AVULSA: ("cadeiras_avulsas", "preco_cadeira_avulsa_diaria"),
+    }
+    for item in locacao.itens.all():
+        campos = mapa.get(item.tipo)
+        if not campos:
+            continue
+        campo_qtd, campo_preco = campos
+        initial[campo_qtd] += item.quantidade
+        if initial[campo_preco] is None:
+            initial[campo_preco] = item.preco_diaria_snapshot
+    return initial
+
+
+def _acoes_locacao(locacao, request=None):
+    tarefa_entrega = None
+    tarefa_recolhimento = None
+    if locacao.status in {
+        Locacao.STATUS_RESERVADA,
+        Locacao.STATUS_SAIU_PARA_ENTREGA,
+    }:
+        tarefa_entrega = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+    if locacao.status in {
+        Locacao.STATUS_ENTREGUE,
+        Locacao.STATUS_PENDENTE_DEVOLUCAO,
+    }:
+        tarefa_recolhimento = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+        )
+    whatsapp_recolhimento = (
+        _whatsapp_recolhimento_context(request, tarefa_recolhimento)
+        if request and tarefa_recolhimento
+        else {}
+    )
+    return {
+        "pode_editar": locacao.pode_editar_amplamente(),
+        "pode_cancelar": locacao.pode_cancelar(),
+        "pode_excluir": locacao.pode_excluir(),
+        "impedimentos_exclusao": locacao.impedimentos_exclusao(),
+        "tarefa_entrega": tarefa_entrega,
+        "tarefa_recolhimento": tarefa_recolhimento,
+        "whatsapp_recolhimento": whatsapp_recolhimento,
+        "tem_pagamentos": locacao.pagamentos.exists(),
+    }
+
+
 def _mensagem_recibo_whatsapp(pagamento):
     locacao = pagamento.locacao
     quitada = locacao.saldo_devedor <= Decimal("0.00")
@@ -92,9 +173,14 @@ def _mensagem_recibo_whatsapp(pagamento):
 
 
 def _whatsapp_web_url(telefone, texto=""):
-    if not telefone:
+    if not telefone and not texto:
         return ""
-    url = f"https://web.whatsapp.com/send?phone={telefone}"
+    url = "https://web.whatsapp.com/send"
+    if telefone:
+        url = f"{url}?phone={telefone}"
+    elif texto:
+        url = f"{url}?text={quote(texto)}"
+        return url
     if texto:
         url = f"{url}&text={quote(texto)}"
     return url
@@ -262,9 +348,170 @@ def _mensagem_checklist_link_whatsapp(nome_destinatario, checklist_url):
     ])
 
 
+def _mensagem_checklist_recolhimento_link_whatsapp(nome_destinatario, checklist_url, locacao):
+    linhas = []
+    if nome_destinatario:
+        linhas.extend([f"Ola, {nome_destinatario}.", ""])
+    linhas.extend([
+        f"Checklist de recolhimento da locacao #{locacao.id}",
+        "",
+        f"Cliente: {locacao.nome_contratante}",
+        "",
+        "Veja a conferencia do recolhimento:",
+        checklist_url,
+    ])
+    return "\n".join(linhas)
+
+
 def _whatsapp_checklist_funcionario_url(funcionario, texto):
     telefone = _telefone_funcionario_checklist(funcionario)
     return _whatsapp_web_url(telefone, texto)
+
+
+def _url_publica_checklist_whatsapp(request, path):
+    base_url = (
+        getattr(settings, "CHECKLIST_BASE_URL", "")
+        or getattr(settings, "SISTEMA_ONLINE_URL", "")
+    ).rstrip("/")
+    if base_url:
+        return f"{base_url}{path}"
+    return request.build_absolute_uri(path)
+
+
+def _mensagem_tarefa_operacional_whatsapp(tarefa, checklist_url, ordem=None):
+    locacao = tarefa.locacao
+    tipo = (
+        "entrega"
+        if tarefa.tipo == TarefaOperacionalLocacao.TIPO_ENTREGA
+        else "recolhimento"
+    )
+    titulo = f"Checklist de {tipo}"
+    if ordem:
+        titulo = f"{titulo} #{ordem}"
+    linhas = [
+        titulo,
+        f"Locação #{locacao.id} - {locacao.nome_contratante}",
+    ]
+    if tarefa.tipo == TarefaOperacionalLocacao.TIPO_ENTREGA and tarefa.horario_agendado:
+        linhas.append(f"Horário: {tarefa.horario_agendado:%H:%M}")
+    linhas.extend([
+        "",
+        "Abrir checklist:",
+        checklist_url,
+    ])
+    return "\n".join(linhas)
+
+
+def _envios_tarefa_operacional_context(request, tarefa, ordem=None):
+    rota = (
+        "locacoes:conferencia_entrega"
+        if tarefa.tipo == TarefaOperacionalLocacao.TIPO_ENTREGA
+        else "locacoes:conferencia_recolhimento"
+    )
+    checklist_path = reverse(rota, kwargs={"pk": tarefa.pk})
+    checklist_url = request.build_absolute_uri(checklist_path)
+    checklist_whatsapp_url = _url_publica_checklist_whatsapp(request, checklist_path)
+    mensagem = _mensagem_tarefa_operacional_whatsapp(
+        tarefa,
+        checklist_whatsapp_url,
+        ordem=ordem,
+    )
+    funcionarios = []
+    for funcionario in _funcionarios_checklist_locacoes():
+        telefone = _telefone_funcionario_checklist(funcionario)
+        funcionarios.append({
+            "id": funcionario.pk,
+            "nome": funcionario.nome,
+            "telefone": telefone,
+            "telefone_exibicao": funcionario.telefone_whatsapp or telefone,
+            "whatsapp_url": (
+                _whatsapp_web_url(telefone, mensagem)
+                if telefone
+                else ""
+            ),
+        })
+    funcionario_padrao = next(
+        (
+            funcionario
+            for funcionario in funcionarios
+            if funcionario["telefone"]
+        ),
+        None,
+    )
+    return {
+        "checklist_url": checklist_url,
+        "checklist_whatsapp_url": checklist_whatsapp_url,
+        "mensagem": mensagem,
+        "funcionarios": funcionarios,
+        "funcionario_padrao": funcionario_padrao,
+        "tem_funcionario_com_whatsapp": any(
+            funcionario["telefone"]
+            for funcionario in funcionarios
+        ),
+    }
+
+
+def _material_recolhimento_pendente(locacao):
+    previsto = ConferenciaRecolhimentoLocacao.totais_entregues(locacao)
+    recolhido = ConferenciaRecolhimentoLocacao.totais_recolhidos(locacao)
+    recolhido_mesas = sum(
+        valor for chave, valor in recolhido.items() if chave.endswith("_mesas")
+    )
+    recolhido_cadeiras = sum(
+        valor for chave, valor in recolhido.items() if chave.endswith("_cadeiras")
+    )
+    return {
+        "mesas": max(previsto["mesas"] - recolhido_mesas, 0),
+        "cadeiras": max(previsto["cadeiras"] - recolhido_cadeiras, 0),
+    }
+
+
+def _mensagem_recolhimento_whatsapp(tarefa, checklist_url):
+    locacao = tarefa.locacao
+    material = _material_recolhimento_pendente(locacao)
+    return "\n".join([
+        f"Recolhimento da locacao #{locacao.id}",
+        "",
+        f"Cliente: {locacao.nome_contratante}",
+        f"Data: {tarefa.data_agendada:%d/%m/%Y}",
+        f"Endereco: {locacao.endereco_entrega}",
+        (
+            "Material: "
+            f"{material['mesas']} mesas e {material['cadeiras']} cadeiras"
+        ),
+        "",
+        "Abra o checklist:",
+        checklist_url,
+    ])
+
+
+def _whatsapp_recolhimento_context(request, tarefa):
+    locacao = tarefa.locacao
+    if tarefa.tipo != TarefaOperacionalLocacao.TIPO_RECOLHIMENTO:
+        return {}
+    if tarefa.status == TarefaOperacionalLocacao.STATUS_CONFIRMADA:
+        return {}
+    if locacao.status not in {
+        Locacao.STATUS_ENTREGUE,
+        Locacao.STATUS_PENDENTE_DEVOLUCAO,
+    }:
+        return {}
+
+    checklist_url = request.build_absolute_uri(
+        reverse("locacoes:conferencia_recolhimento", kwargs={"pk": tarefa.pk})
+    )
+    mensagem = _mensagem_recolhimento_whatsapp(tarefa, checklist_url)
+    funcionarios = list(_funcionarios_checklist_locacoes())
+    funcionario = funcionarios[0] if funcionarios else None
+    return {
+        "checklist_url": checklist_url,
+        "mensagem": mensagem,
+        "funcionario": funcionario,
+        "whatsapp_url": _whatsapp_checklist_funcionario_url(
+            funcionario,
+            mensagem,
+        ) if funcionario else _whatsapp_web_url("", mensagem),
+    }
 
 
 def _funcionarios_checklist_envio(conferencia, checklist_url, funcionarios):
@@ -329,6 +576,108 @@ def _dados_evento_checklist_entrega(evento):
     }
 
 
+def _evento_checklist_recolhimento_enviado(conferencia):
+    return (
+        EventoLocacao.objects.filter(
+            locacao=conferencia.locacao,
+            tipo="checklist_recolhimento_enviado",
+            descricao__contains=f"Conferencia #{conferencia.pk}",
+        )
+        .order_by("-criado_em", "-id")
+        .first()
+    )
+
+
+def _dados_evento_checklist_recolhimento(evento):
+    return _dados_evento_checklist_entrega(evento)
+
+
+def _avarias_recolhimento(conferencia):
+    avarias = []
+    for prefixo in ["quebrada", "perdida", "descartada"]:
+        for material, singular, plural in [
+            ("mesas", "mesa", "mesas"),
+            ("cadeiras", "cadeira", "cadeiras"),
+        ]:
+            quantidade = getattr(conferencia, f"{prefixo}_{material}")
+            if quantidade:
+                nome = singular if quantidade == 1 else plural
+                avarias.append({
+                    "quantidade": quantidade,
+                    "descricao": f"{quantidade} {nome} com problema",
+                })
+    return avarias
+
+
+def _texto_checklist_recolhimento(conferencia, avarias):
+    locacao = conferencia.locacao
+    recolhido_mesas = (
+        conferencia.boa_mesas
+        + conferencia.quebrada_mesas
+        + conferencia.perdida_mesas
+        + conferencia.descartada_mesas
+    )
+    recolhido_cadeiras = (
+        conferencia.boa_cadeiras
+        + conferencia.quebrada_cadeiras
+        + conferencia.perdida_cadeiras
+        + conferencia.descartada_cadeiras
+    )
+    linhas = [
+        f"Checklist de recolhimento da locacao #{locacao.id}",
+        "",
+        f"Cliente: {locacao.nome_contratante}",
+        f"Endereco: {locacao.endereco_entrega}",
+        f"Data/Hora: {timezone.localtime(conferencia.criado_em):%d/%m/%Y %H:%M}",
+        "",
+        (
+            "Previsto: "
+            f"{conferencia.previsto_mesas} mesa(s) e "
+            f"{conferencia.previsto_cadeiras} cadeira(s)"
+        ),
+        (
+            "Recolhido: "
+            f"{recolhido_mesas} mesa(s) e "
+            f"{recolhido_cadeiras} cadeira(s)"
+        ),
+        f"Situacao: {conferencia.get_situacao_display()}",
+    ]
+    if conferencia.pendente_mesas or conferencia.pendente_cadeiras:
+        linhas.append(
+            "Pendente: "
+            f"{conferencia.pendente_mesas} mesa(s) e "
+            f"{conferencia.pendente_cadeiras} cadeira(s)"
+        )
+    if avarias:
+        linhas.extend(["", "Avarias:"])
+        linhas.extend(f"- {avaria['descricao']}" for avaria in avarias)
+    else:
+        linhas.extend(["", "Materiais recolhidos sem avarias."])
+    if conferencia.observacao:
+        linhas.extend(["", "Observacao:", conferencia.observacao])
+    linhas.extend(["", f"Responsavel: {conferencia.responsavel}"])
+    return "\n".join(linhas)
+
+
+def _funcionarios_checklist_recolhimento_envio(conferencia, checklist_url, funcionarios):
+    if not conferencia or not checklist_url:
+        return []
+    return [
+        {
+            "funcionario": funcionario,
+            "whatsapp_url": _whatsapp_checklist_funcionario_url(
+                funcionario,
+                _mensagem_checklist_recolhimento_link_whatsapp(
+                    funcionario.nome,
+                    checklist_url,
+                    conferencia.locacao,
+                ),
+            ),
+        }
+        for funcionario in funcionarios
+    ]
+
+
 def lista(request):
     status = request.GET.get("status", "").strip()
     hoje = timezone.localdate()
@@ -337,7 +686,18 @@ def lista(request):
     data_fim_texto = hoje.isoformat() if primeira_abertura else request.GET.get("data_fim", "").strip()
     data_inicio = parse_date(data_inicio_texto or "")
     data_fim = parse_date(data_fim_texto or "")
-    locacoes_qs = Locacao.objects.select_related("cliente", "faixa_preco").prefetch_related("itens")
+    locacoes_qs = (
+        Locacao.objects
+        .select_related("cliente", "faixa_preco")
+        .prefetch_related(
+            "itens",
+            "pagamentos",
+            "conferencias_entrega",
+            "conferencias_recolhimento",
+            "movimentos_estoque",
+            "tarefas_operacionais",
+        )
+    )
     if status in {Locacao.STATUS_RESERVADA, Locacao.STATUS_CANCELADA}:
         locacoes_qs = locacoes_qs.filter(status=status)
     elif status in {
@@ -360,6 +720,7 @@ def lista(request):
                 for item in locacao.itens.all()
             ]
         )
+        locacao.acoes_consulta = _acoes_locacao(locacao, request=request)
     return render(
         request,
         "locacoes/lista.html",
@@ -373,7 +734,7 @@ def lista(request):
     )
 
 
-def _contexto_disponibilidade(data_entrega, data_prevista_devolucao, itens):
+def _contexto_disponibilidade(data_entrega, data_prevista_devolucao, itens, excluir_id=None):
     if not data_entrega or not data_prevista_devolucao:
         return None
     try:
@@ -381,7 +742,11 @@ def _contexto_disponibilidade(data_entrega, data_prevista_devolucao, itens):
     except ValidationError:
         return None
     necessidade = Locacao.necessidades_itens(itens)
-    disponibilidade = Locacao.disponibilidade_periodo(data_entrega, data_prevista_devolucao)
+    disponibilidade = Locacao.disponibilidade_periodo(
+        data_entrega,
+        data_prevista_devolucao,
+        excluir_id=excluir_id,
+    )
     return {
         **disponibilidade,
         "solicitado_mesas": necessidade["mesas"],
@@ -653,6 +1018,7 @@ def nova(request):
                         "itens_form": itens_form,
                         "configuracao": configuracao,
                         "disponibilidade": disponibilidade,
+                        "modo_edicao": False,
                     },
                 )
             dados_locacao = dict(
@@ -737,6 +1103,123 @@ def nova(request):
             "itens_form": itens_form,
             "configuracao": configuracao,
             "disponibilidade": disponibilidade,
+            "modo_edicao": False,
+        },
+    )
+
+
+@ensure_csrf_cookie
+def editar(request, pk):
+    locacao = get_object_or_404(
+        Locacao.objects.select_related("cliente", "faixa_preco").prefetch_related(
+            "itens",
+            "pagamentos",
+            "conferencias_entrega",
+            "tarefas_operacionais",
+        ),
+        pk=pk,
+    )
+    if not locacao.pode_editar_amplamente():
+        messages.warning(
+            request,
+            (
+                "Esta locacao nao permite edicao ampla porque ja saiu do "
+                "estado de reserva livre ou possui entrega confirmada."
+            ),
+        )
+        return redirect("locacoes:detalhe", pk=locacao.pk)
+
+    configuracao = ConfiguracaoLocacao.obter()
+    faixa_inicial = locacao.faixa_preco or _faixa_padrao()
+    if request.method == "POST":
+        locacao_form = LocacaoForm(request.POST)
+        itens_form = ItensLocacaoReservaForm(
+            request.POST,
+            faixa_preco=faixa_inicial,
+            configuracao=configuracao,
+        )
+        if locacao_form.is_valid() and itens_form.is_valid():
+            faixa = locacao_form.cleaned_data["faixa_preco"]
+            itens = itens_form.itens(faixa, configuracao)
+            disponibilidade = _contexto_disponibilidade(
+                locacao_form.cleaned_data["data_entrega"],
+                locacao_form.cleaned_data["data_prevista_devolucao"],
+                itens,
+                excluir_id=locacao.pk,
+            )
+            resumo_valores = _resumo_valores_locacao(
+                locacao_form.cleaned_data["data_entrega"],
+                locacao_form.cleaned_data["data_prevista_devolucao"],
+                itens,
+            )
+            total_pago = locacao.total_pago
+            if resumo_valores["total"] < total_pago:
+                locacao_form.add_error(
+                    None,
+                    "O novo total nao pode ficar menor que o total ja pago.",
+                )
+                messages.warning(request, "Revise os valores antes de salvar.")
+            else:
+                dados_locacao = dict(locacao_form.cleaned_data)
+                if resumo_valores["total"] == total_pago and total_pago > Decimal("0.00"):
+                    dados_locacao["sem_vencimento_saldo"] = True
+                    dados_locacao["data_vencimento_saldo"] = None
+                try:
+                    with transaction.atomic():
+                        locacao.atualizar_reserva(
+                            dados_locacao,
+                            itens,
+                            responsavel=_responsavel_request(request),
+                        )
+                        obter_ou_criar_tarefa_operacional(
+                            locacao,
+                            TarefaOperacionalLocacao.TIPO_ENTREGA,
+                        )
+                except ValidationError as exc:
+                    if hasattr(exc, "message_dict"):
+                        for campo, erros in exc.message_dict.items():
+                            for erro in erros:
+                                locacao_form.add_error(
+                                    campo if campo in locacao_form.fields else None,
+                                    erro,
+                                )
+                    else:
+                        for erro in exc.messages:
+                            locacao_form.add_error(None, erro)
+                    messages.warning(request, "Nao foi possivel salvar a edicao.")
+                else:
+                    messages.success(request, f"Locacao #{locacao.id} atualizada.")
+                    return redirect("locacoes:lista")
+        else:
+            disponibilidade = None
+            messages.warning(request, "Revise os dados da locacao antes de salvar.")
+    else:
+        locacao_form = LocacaoForm(initial=_initial_locacao_edicao(locacao))
+        itens_form = ItensLocacaoReservaForm(
+            initial=_initial_itens_edicao(locacao),
+            faixa_preco=faixa_inicial,
+            configuracao=configuracao,
+        )
+        disponibilidade = _contexto_disponibilidade(
+            locacao.data_entrega,
+            locacao.data_prevista_devolucao,
+            [
+                {"tipo": item.tipo, "quantidade": item.quantidade}
+                for item in locacao.itens.all()
+            ],
+            excluir_id=locacao.pk,
+        )
+
+    return render(
+        request,
+        "locacoes/nova.html",
+        {
+            "locacao": locacao,
+            "locacao_form": locacao_form,
+            "itens_form": itens_form,
+            "configuracao": configuracao,
+            "disponibilidade": disponibilidade,
+            "modo_edicao": True,
         },
     )
 
@@ -763,25 +1246,9 @@ def detalhe(request, pk):
         locacao.data_prevista_devolucao,
         excluir_id=locacao.pk,
     )
-    tarefa_entrega = None
-    if locacao.status in {
-        Locacao.STATUS_RESERVADA,
-        Locacao.STATUS_SAIU_PARA_ENTREGA,
-    }:
-        tarefa_entrega = obter_ou_criar_tarefa_operacional(
-            locacao,
-            TarefaOperacionalLocacao.TIPO_ENTREGA,
-        )
-
-    tarefa_recolhimento = None
-    if locacao.status in {
-        Locacao.STATUS_ENTREGUE,
-        Locacao.STATUS_PENDENTE_DEVOLUCAO,
-    }:
-        tarefa_recolhimento = obter_ou_criar_tarefa_operacional(
-            locacao,
-            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
-        )
+    acoes_locacao = _acoes_locacao(locacao, request=request)
+    tarefa_entrega = acoes_locacao["tarefa_entrega"]
+    tarefa_recolhimento = acoes_locacao["tarefa_recolhimento"]
 
     ultimo_pagamento = locacao.pagamentos.all().first()
 
@@ -801,6 +1268,7 @@ def detalhe(request, pk):
             ),
             "necessidade": necessidade,
             "disponibilidade": disponibilidade,
+            "acoes_locacao": acoes_locacao,
             "cancelar_form": CancelarLocacaoForm(),
             "acao_form": AcaoOperacionalLocacaoForm(),
             "pagamento_form": PagamentoLocacaoForm(),
@@ -824,6 +1292,20 @@ def checklist_operacional(request):
     if not data_referencia:
         data_referencia = timezone.localdate()
     checklist = checklist_operacional_locacoes(data_referencia=data_referencia)
+    for grupo in checklist["grupos"].values():
+        for indice, item in enumerate(grupo, start=1):
+            item["ordem_operacional"] = indice
+            item["envio_operacional"] = _envios_tarefa_operacional_context(
+                request,
+                item["tarefa"],
+                ordem=indice,
+            )
+            if item["tarefa"].tipo != TarefaOperacionalLocacao.TIPO_RECOLHIMENTO:
+                continue
+            item["whatsapp_recolhimento"] = _whatsapp_recolhimento_context(
+                request,
+                item["tarefa"],
+            )
     return render(
         request,
         "locacoes/checklist_operacional.html",
@@ -1183,6 +1665,149 @@ def checklist_entrega_cliente(request, pk):
     )
 
 
+def checklist_recolhimento_cliente(request, pk):
+    conferencia = get_object_or_404(
+        ConferenciaRecolhimentoLocacao.objects.select_related(
+            "locacao",
+            "locacao__cliente",
+            "tarefa",
+        ),
+        pk=pk,
+    )
+    locacao = conferencia.locacao
+    funcionarios_checklist = _funcionarios_checklist_locacoes()
+    evento_envio = _evento_checklist_recolhimento_enviado(conferencia)
+    checklist_url = request.build_absolute_uri(
+        reverse(
+            "locacoes:checklist_recolhimento_cliente",
+            kwargs={"pk": conferencia.pk},
+        )
+    )
+
+    if request.method == "POST" and not evento_envio:
+        funcionario_id = str(request.POST.get("checklist_funcionario") or "").strip()
+        funcionario = funcionarios_checklist.filter(pk=funcionario_id).first()
+        if funcionario:
+            telefone = _telefone_funcionario_checklist(funcionario)
+            responsavel = _responsavel_request(request, conferencia.responsavel)
+            EventoLocacao.objects.create(
+                locacao=locacao,
+                tipo="checklist_recolhimento_enviado",
+                descricao=(
+                    f"Checklist de recolhimento enviado ao funcionario.\n"
+                    f"Conferencia #{conferencia.pk}\n"
+                    f"Enviado para: {funcionario.nome}\n"
+                    f"Telefone: {telefone}"
+                ),
+                responsavel=responsavel,
+            )
+            messages.success(request, "Checklist confirmado como enviado.")
+            if _request_ajax(request):
+                evento_envio = _evento_checklist_recolhimento_enviado(conferencia)
+                return JsonResponse(
+                    {
+                        "ok": True,
+                        "redirectUrl": reverse(
+                            "locacoes:checklist_recolhimento_cliente",
+                            kwargs={"pk": conferencia.pk},
+                        ),
+                        "envio": _dados_evento_checklist_recolhimento(evento_envio),
+                    }
+                )
+            return redirect("locacoes:checklist_recolhimento_cliente", pk=conferencia.pk)
+        if _request_ajax(request):
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "erro": "Selecione um funcionario habilitado para receber o checklist.",
+                },
+                status=400,
+            )
+        messages.warning(
+            request,
+            "Selecione um funcionario habilitado para receber o checklist.",
+        )
+
+    evento_envio = _evento_checklist_recolhimento_enviado(conferencia)
+    envio_checklist = _dados_evento_checklist_recolhimento(evento_envio)
+    funcionarios_checklist_envio = _funcionarios_checklist_recolhimento_envio(
+        conferencia,
+        checklist_url,
+        funcionarios_checklist,
+    )
+    funcionario_selecionado_id = str(request.GET.get("funcionario") or "")
+    funcionario_selecionado = (
+        funcionarios_checklist.filter(pk=funcionario_selecionado_id).first()
+        if funcionario_selecionado_id
+        else None
+    )
+    funcionario_selecionado_whatsapp_url = (
+        _whatsapp_checklist_funcionario_url(
+            funcionario_selecionado,
+            _mensagem_checklist_recolhimento_link_whatsapp(
+                funcionario_selecionado.nome,
+                checklist_url,
+                locacao,
+            ),
+        )
+        if funcionario_selecionado
+        else ""
+    )
+    if envio_checklist.get("telefone"):
+        envio_checklist["whatsapp_url"] = _whatsapp_web_url(
+            envio_checklist["telefone"],
+            _mensagem_checklist_recolhimento_link_whatsapp(
+                envio_checklist.get("funcionario_nome"),
+                checklist_url,
+                locacao,
+            ),
+        )
+
+    telefone_cliente = _telefone_whatsapp_locacao(locacao)
+    whatsapp_url = _whatsapp_web_url(
+        telefone_cliente,
+        _mensagem_checklist_recolhimento_link_whatsapp(
+            "",
+            checklist_url,
+            locacao,
+        ),
+    ) if telefone_cliente else ""
+    recolhido_mesas = (
+        conferencia.boa_mesas
+        + conferencia.quebrada_mesas
+        + conferencia.perdida_mesas
+        + conferencia.descartada_mesas
+    )
+    recolhido_cadeiras = (
+        conferencia.boa_cadeiras
+        + conferencia.quebrada_cadeiras
+        + conferencia.perdida_cadeiras
+        + conferencia.descartada_cadeiras
+    )
+    avarias = _avarias_recolhimento(conferencia)
+
+    return render(
+        request,
+        "locacoes/checklist_recolhimento_cliente.html",
+        {
+            "conferencia": conferencia,
+            "locacao": locacao,
+            "checklist_url": checklist_url,
+            "whatsapp_url": whatsapp_url,
+            "funcionarios_checklist": funcionarios_checklist,
+            "funcionarios_checklist_envio": funcionarios_checklist_envio,
+            "funcionario_selecionado": funcionario_selecionado,
+            "funcionario_selecionado_whatsapp_url": funcionario_selecionado_whatsapp_url,
+            "evento_envio_checklist": evento_envio,
+            "envio_checklist": envio_checklist,
+            "avarias": avarias,
+            "texto_checklist": _texto_checklist_recolhimento(conferencia, avarias),
+            "recolhido_mesas": recolhido_mesas,
+            "recolhido_cadeiras": recolhido_cadeiras,
+        },
+    )
+
+
 def conferencia_recolhimento(request, pk):
     tarefa = get_object_or_404(
         TarefaOperacionalLocacao.objects
@@ -1244,8 +1869,27 @@ def conferencia_recolhimento(request, pk):
         )
 
     if request.method == "POST":
+        dados_post = request.POST.copy()
+        responsavel = _responsavel_request(
+            request,
+            str(request.POST.get("responsavel") or "").strip()
+            or "Checklist operacional",
+        )
+        dados_post["pessoa_local_nome"] = responsavel
+        dados_post["pessoa_local_relacao"] = (
+            ConferenciaEntregaLocacao.RELACAO_FUNCIONARIO
+        )
+        dados_post["pessoa_local_relacao_outro"] = ""
+        dados_post["responsavel"] = responsavel
+        for campo in [
+            "perdida_mesas",
+            "perdida_cadeiras",
+            "descartada_mesas",
+            "descartada_cadeiras",
+        ]:
+            dados_post[campo] = "0"
         form = ConferenciaRecolhimentoLocacaoForm(
-            request.POST,
+            dados_post,
             locacao=locacao,
         )
 
@@ -1324,24 +1968,43 @@ def conferencia_recolhimento(request, pk):
             locacao=locacao,
         )
 
-    telefone = "".join(
-        caractere
-        for caractere in locacao.telefone_contratante
-        if caractere.isdigit()
-    )
-
-    if len(telefone) in {10, 11}:
-        telefone = f"55{telefone}"
-
-    whatsapp_url = ""
-    if conferencia_salva and telefone:
-        whatsapp_url = (
-            "https://web.whatsapp.com/send?"
-            f"phone={telefone}&"
-            f"text={quote(
-                conferencia_salva.mensagem_whatsapp_snapshot
-            )}"
+    checklist_url = (
+        request.build_absolute_uri(
+            reverse(
+                "locacoes:checklist_recolhimento_cliente",
+                kwargs={"pk": conferencia_salva.pk},
+            )
         )
+        if conferencia_salva
+        else ""
+    )
+    whatsapp_url = ""
+    if conferencia_salva:
+        telefone = _telefone_whatsapp_locacao(locacao)
+        if telefone:
+            whatsapp_url = _whatsapp_web_url(
+                telefone,
+                _mensagem_checklist_recolhimento_link_whatsapp(
+                    "",
+                    checklist_url,
+                    locacao,
+                ),
+            )
+    funcionarios_checklist = _funcionarios_checklist_locacoes()
+    funcionarios_checklist_envio = (
+        _funcionarios_checklist_recolhimento_envio(
+            conferencia_salva,
+            checklist_url,
+            funcionarios_checklist,
+        )
+        if conferencia_salva
+        else []
+    )
+    whatsapp_checklist_funcionario_url = (
+        funcionarios_checklist_envio[0]["whatsapp_url"]
+        if funcionarios_checklist_envio
+        else ""
+    )
 
     historico = (
         locacao.conferencias_recolhimento.all()
@@ -1361,7 +2024,10 @@ def conferencia_recolhimento(request, pk):
             "pendente_mesas": form.pendente_mesas,
             "pendente_cadeiras": form.pendente_cadeiras,
             "conferencia_salva": conferencia_salva,
+            "checklist_url": checklist_url,
             "whatsapp_url": whatsapp_url,
+            "funcionarios_checklist_envio": funcionarios_checklist_envio,
+            "whatsapp_checklist_funcionario_url": whatsapp_checklist_funcionario_url,
             "historico": historico,
         },
     )
@@ -1614,7 +2280,10 @@ def termo(request, pk):
 
 @require_POST
 def cancelar(request, pk):
-    locacao = get_object_or_404(Locacao, pk=pk)
+    locacao = get_object_or_404(
+        Locacao.objects.prefetch_related("pagamentos"),
+        pk=pk,
+    )
     form = CancelarLocacaoForm(request.POST)
     if form.is_valid():
         try:
@@ -1629,6 +2298,31 @@ def cancelar(request, pk):
     else:
         messages.warning(request, "Nao foi possivel cancelar a reserva.")
     return redirect("locacoes:detalhe", pk=locacao.pk)
+
+
+@require_POST
+def excluir(request, pk):
+    locacao = get_object_or_404(
+        Locacao.objects.prefetch_related(
+            "pagamentos",
+            "conferencias_entrega",
+            "conferencias_recolhimento",
+            "movimentos_estoque",
+            "tarefas_operacionais",
+        ),
+        pk=pk,
+    )
+    locacao_id = locacao.pk
+    try:
+        locacao.excluir_se_seguro()
+    except ValidationError as exc:
+        messages.warning(
+            request,
+            "Nao foi possivel excluir. " + "; ".join(exc.messages),
+        )
+        return redirect("locacoes:detalhe", pk=locacao.pk)
+    messages.success(request, f"Locacao #{locacao_id} excluida.")
+    return redirect("locacoes:lista")
 
 
 @require_POST

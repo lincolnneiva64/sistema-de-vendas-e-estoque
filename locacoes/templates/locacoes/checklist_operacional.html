@@ -19,6 +19,9 @@
     .item { border: 1px solid #fed7aa; border-left: 5px solid var(--orange); border-radius: 8px; background: #fff; padding: 12px; margin-bottom: 10px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08); }
     .item.foco { outline: 3px solid #fdba74; }
     .item.atrasada { border-color: #fecaca; border-left-color: var(--red); }
+    .tarefa-link { display: block; color: inherit; text-decoration: none; }
+    .tarefa-link:focus { outline: 3px solid #fdba74; outline-offset: 3px; border-radius: 6px; }
+    .tarefa-ordem { display: inline-flex; align-items: center; width: fit-content; border-radius: 999px; padding: 4px 8px; margin-bottom: 8px; background: #e0f2fe; color: #075985; font-size: 0.78rem; font-weight: 900; }
     .linha-topo { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
     .cliente { font-size: 1.05rem; font-weight: 900; }
     .hora { white-space: nowrap; border-radius: 999px; padding: 5px 9px; background: #fff7ed; color: var(--orange-dark); font-weight: 900; border: 1px solid #fdba74; }
@@ -26,13 +29,20 @@
     .dados { display: grid; gap: 5px; margin-top: 8px; font-size: 0.94rem; }
     .materiais { margin: 8px 0 0; padding-left: 18px; }
     .acoes { display: grid; gap: 8px; margin-top: 12px; }
-    .acoes form { border-top: 1px solid #e2e8f0; padding-top: 9px; }
+    .envio-operacional { display: grid; gap: 7px; }
+    .envio-operacional label { margin: 0; color: #334155; font-size: 0.82rem; font-weight: 900; }
+    .envio-linha { display: grid; gap: 7px; }
+    .link-secundario { color: #475569; font-size: 0.84rem; font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
+    .alerta-envio { margin: 0; color: #991b1b; font-size: 0.86rem; font-weight: 800; }
+    .excecao-operacional { border-top: 1px solid #e2e8f0; padding-top: 8px; }
+    .excecao-operacional summary { cursor: pointer; color: #7f1d1d; font-size: 0.88rem; font-weight: 900; list-style-position: inside; }
+    .excecao-operacional[open] summary { margin-bottom: 8px; }
     .campos { display: grid; gap: 7px; grid-template-columns: 1fr; }
     .btn-loc { background: var(--orange); border-color: var(--orange); color: #fff; font-weight: 850; }
     .btn-loc:hover, .btn-loc:focus { background: #c2410c; border-color: #c2410c; color: #fff; }
     .empty { border: 1px dashed #cbd5e1; border-radius: 8px; padding: 12px; background: #fff; color: #64748b; }
     @media (min-width: 680px) {
-      .acoes { grid-template-columns: 1fr 1fr; align-items: start; }
+      .envio-linha { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
       .campos { grid-template-columns: 1fr 1fr; }
     }
   </style>
@@ -58,10 +68,55 @@
       <button class="btn btn-loc" type="submit">Abrir dia</button>
     </form>
 
-    {% include "locacoes/includes/checklist_grupo.html" with titulo="Entregas" itens=checklist.grupos.entregas tipo="entrega" %}
-    {% include "locacoes/includes/checklist_grupo.html" with titulo="Recolhimentos" itens=checklist.grupos.recolhimentos tipo="recolhimento" %}
-    {% include "locacoes/includes/checklist_grupo.html" with titulo="Devolucoes atrasadas" itens=checklist.grupos.devolucoes_atrasadas tipo="recolhimento" %}
+    {% include "locacoes/includes/checklist_grupo.html" with titulo="Entregas" itens=checklist.grupos.entregas tipo="entrega" total_tarefas=checklist.total %}
+    {% include "locacoes/includes/checklist_grupo.html" with titulo="Recolhimentos" itens=checklist.grupos.recolhimentos tipo="recolhimento" total_tarefas=checklist.total %}
+    {% include "locacoes/includes/checklist_grupo.html" with titulo="Devolucoes atrasadas" itens=checklist.grupos.devolucoes_atrasadas tipo="recolhimento" total_tarefas=checklist.total %}
   </main>
   {% include "locacoes/includes/enter_nav.html" %}
+  <script>
+    (function () {
+      document.querySelectorAll("[data-envio-operacional]").forEach(function (cartao) {
+        const select = cartao.querySelector(".funcionario-select");
+        const botao = cartao.querySelector(".btn-whatsapp-operacional");
+        const responsavel = cartao.querySelector("input[name='responsavel']");
+        const aviso = cartao.querySelector(".alerta-envio");
+
+        function atualizarEnvio() {
+          const opcao = select?.selectedOptions?.[0];
+          const url = opcao?.dataset.whatsappUrl || "";
+          const nome = opcao?.dataset.nome || "";
+          if (responsavel) {
+            responsavel.value = nome;
+          }
+          if (botao) {
+            if (url) {
+              botao.href = url;
+              botao.classList.remove("disabled");
+              botao.removeAttribute("aria-disabled");
+            } else {
+              botao.href = "#";
+              botao.classList.add("disabled");
+              botao.setAttribute("aria-disabled", "true");
+            }
+          }
+          if (aviso) {
+            aviso.hidden = Boolean(url);
+          }
+        }
+
+        select?.addEventListener("change", atualizarEnvio);
+        botao?.addEventListener("click", function (event) {
+          if (!botao.href || botao.getAttribute("href") === "#") {
+            event.preventDefault();
+            if (aviso) {
+              aviso.hidden = false;
+            }
+            select?.focus();
+          }
+        });
+        atualizarEnvio();
+      });
+    })();
+  </script>
 </body>
 </html>

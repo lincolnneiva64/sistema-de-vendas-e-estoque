@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Locacao #{{ locacao.id }}</title>
+  <title>Locação #{{ locacao.id }}</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     :root { --locacoes-orange: #ea580c; --locacoes-orange-dark: #9a3412; --locacoes-orange-soft: #fff7ed; }
@@ -11,6 +11,7 @@
     .page { max-width: 1060px; margin: 0 auto; padding: 26px 16px 46px; }
     .top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 18px; }
     .top h1 { font-size: 1.8rem; margin: 0; font-weight: 850; color: var(--locacoes-orange-dark); }
+    .top-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
     .cardx { background: #fff; border: 1px solid #fed7aa; border-radius: 8px; padding: 16px; margin-bottom: 14px; }
     .cardx h2 { color: var(--locacoes-orange-dark); font-size: 1.05rem; font-weight: 850; margin-bottom: 14px; }
     .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -31,10 +32,24 @@
   <main class="page">
     <header class="top">
       <div>
-        <h1>Locacao #{{ locacao.id }}</h1>
-        <p class="muted mb-0">Acompanhamento operacional e financeiro proprio da locacao.</p>
+        <h1>Locação #{{ locacao.id }}</h1>
+        <p class="muted mb-0">Acompanhamento operacional e financeiro próprio da locação.</p>
       </div>
-      <a class="btn btn-outline-secondary" href="{% url 'locacoes:lista' %}">Voltar</a>
+      <div class="top-actions">
+        {% if acoes_locacao.pode_editar %}
+          <a class="btn btn-outline-primary" href="{% url 'locacoes:editar' locacao.id %}">Editar</a>
+        {% endif %}
+        {% if tarefa_entrega %}
+          <a class="btn btn-outline-success" href="{% url 'locacoes:conferencia_entrega' tarefa_entrega.id %}">Checklist de entrega</a>
+        {% endif %}
+        {% if tarefa_recolhimento %}
+          <a class="btn btn-outline-success" href="{% url 'locacoes:conferencia_recolhimento' tarefa_recolhimento.id %}">Checklist de recolhimento</a>
+        {% endif %}
+        {% if acoes_locacao.whatsapp_recolhimento.whatsapp_url %}
+          <a class="btn btn-success" href="{{ acoes_locacao.whatsapp_recolhimento.whatsapp_url }}" target="_blank" rel="noopener">Enviar recolhimento pelo WhatsApp</a>
+        {% endif %}
+        <a class="btn btn-outline-secondary" href="{% url 'locacoes:lista' %}">Voltar</a>
+      </div>
     </header>
 
     {% if messages %}
@@ -48,21 +63,21 @@
       <div class="grid">
         <div><strong>Status</strong><br><span class="pill {% if locacao.status == 'cancelada' %}cancelada{% endif %}">{{ locacao.get_status_display }}</span></div>
         <div><strong>Contratante</strong><br>{{ locacao.nome_contratante }}</div>
-        <div><strong>Entrega</strong><br>{{ locacao.data_entrega|date:"d/m/Y" }} as {{ locacao.horario_entrega|time:"H:i" }}</div>
-        <div><strong>Evento</strong><br>{{ locacao.data_evento|date:"d/m/Y" }} as {{ locacao.horario_evento|time:"H:i" }}</div>
-        <div><strong>Devolucao prevista</strong><br>{{ locacao.data_prevista_devolucao|date:"d/m/Y" }}</div>
-        <div><strong>Localidade/preco</strong><br>{{ locacao.faixa_preco_nome_snapshot }}</div>
-        <div><strong>Endereco da entrega</strong><br>{{ locacao.endereco_entrega|linebreaksbr }}</div>
+        <div><strong>Entrega</strong><br>{{ locacao.data_entrega|date:"d/m/Y" }} às {{ locacao.horario_entrega|time:"H:i" }}</div>
+        <div><strong>Evento</strong><br>{{ locacao.data_evento|date:"d/m/Y" }} às {{ locacao.horario_evento|time:"H:i" }}</div>
+        <div><strong>Devolução prevista</strong><br>{{ locacao.data_prevista_devolucao|date:"d/m/Y" }}</div>
+        <div><strong>Localidade/preço</strong><br>{{ locacao.faixa_preco_nome_snapshot }}</div>
+        <div><strong>Endereço da entrega</strong><br>{{ locacao.endereco_entrega|linebreaksbr }}</div>
         <div><strong>Total</strong><br>R$ {{ locacao.total|floatformat:2 }}</div>
         <div><strong>Total pago</strong><br>R$ {{ locacao.total_pago|floatformat:2 }}</div>
         <div><strong>Status financeiro</strong><br>{{ locacao.get_status_financeiro_display }}</div>
         <div><strong>Saldo devedor</strong><br><span class="saldo-destaque">R$ {{ locacao.saldo_devedor|floatformat:2 }}</span></div>
         <div><strong>Vencimento do saldo</strong><br>{{ locacao.data_vencimento_saldo|date:"d/m/Y"|default:"Sem data" }}</div>
       </div>
-      {% if locacao.observacao %}<p class="mt-3 mb-0"><strong>Observacao:</strong> {{ locacao.observacao }}</p>{% endif %}
+      {% if locacao.observacao %}<p class="mt-3 mb-0"><strong>Observação:</strong> {{ locacao.observacao }}</p>{% endif %}
     </section>
 
-    <section class="cardx">
+    <section class="cardx" id="pagamentos">
       <h2>Pagamentos e documentos</h2>
       <div class="d-flex gap-2 flex-wrap mb-3">
         <a class="btn btn-locacoes" href="{% url 'locacoes:registrar_pagamento' locacao.id %}">Registrar pagamento</a>
@@ -106,11 +121,11 @@
             {{ vencimento_form.data_vencimento_saldo }}
           </div>
           <div>
-            <label class="form-label">Responsavel</label>
+            <label class="form-label">Responsável</label>
             {{ vencimento_form.responsavel }}
           </div>
           <div>
-            <label class="form-label">Observacao</label>
+            <label class="form-label">Observação</label>
             {{ vencimento_form.observacao }}
           </div>
         </div>
@@ -125,7 +140,7 @@
           {% for tarefa in tarefas_operacionais %}
             <div class="operacional-item">
               <strong>{{ tarefa.get_tipo_display }}</strong><br>
-              {{ tarefa.data_agendada|date:"d/m/Y" }}{% if tarefa.horario_agendado %} as {{ tarefa.horario_agendado|time:"H:i" }}{% else %} sem horario marcado{% endif %}
+              {{ tarefa.data_agendada|date:"d/m/Y" }}{% if tarefa.horario_agendado %} às {{ tarefa.horario_agendado|time:"H:i" }}{% else %} sem horário marcado{% endif %}
               <div class="mt-2">
                 <a class="btn btn-locacoes btn-sm" href="{% url 'locacoes:abrir_tarefa_operacional' locacao.id tarefa.tipo %}">Abrir na checklist</a>
               </div>
@@ -133,7 +148,7 @@
           {% endfor %}
         </div>
       {% else %}
-        <p class="muted mb-0">Nenhuma entrega ou recolhimento pendente para esta locacao.</p>
+        <p class="muted mb-0">Nenhuma entrega ou recolhimento pendente para esta locação.</p>
       {% endif %}
     </section>
 {% if ultimo_pagamento %}
@@ -162,7 +177,7 @@
 
       <div class="grid">
         <div>
-          <label class="form-label">Responsavel pela acao</label>
+          <label class="form-label">Responsável pela ação</label>
           {{ recibo_form.responsavel }}
         </div>
       </div>
@@ -197,11 +212,11 @@
           {% csrf_token %}
           <div class="grid">
             <div>
-              <label class="form-label">Responsavel</label>
+              <label class="form-label">Responsável</label>
               {{ acao_form.responsavel }}
             </div>
             <div>
-              <label class="form-label">Observacao</label>
+              <label class="form-label">Observação</label>
               {{ acao_form.observacao }}
             </div>
           </div>
@@ -279,19 +294,24 @@
     </section>
 
     <section class="cardx">
-      <h2>Disponibilidade do periodo sem esta reserva</h2>
-      <p class="mb-1">Mesas: saldo fisico {{ disponibilidade.saldo_mesas }}, ja reservado {{ disponibilidade.reservado_mesas }}, disponivel antes desta reserva {{ disponibilidade.disponivel_mesas }}.</p>
-      <p class="mb-0">Cadeiras: saldo fisico {{ disponibilidade.saldo_cadeiras }}, ja reservado {{ disponibilidade.reservado_cadeiras }}, disponivel antes desta reserva {{ disponibilidade.disponivel_cadeiras }}.</p>
+      <h2>Disponibilidade do período sem esta reserva</h2>
+      <p class="mb-1">Mesas: saldo físico {{ disponibilidade.saldo_mesas }}, já reservado {{ disponibilidade.reservado_mesas }}, disponível antes desta reserva {{ disponibilidade.disponivel_mesas }}.</p>
+      <p class="mb-0">Cadeiras: saldo físico {{ disponibilidade.saldo_cadeiras }}, já reservado {{ disponibilidade.reservado_cadeiras }}, disponível antes desta reserva {{ disponibilidade.disponivel_cadeiras }}.</p>
     </section>
 
     {% if locacao.status == 'reservada' %}
       <section class="cardx">
         <h2>Cancelar reserva</h2>
+        {% if acoes_locacao.tem_pagamentos %}
+          <div class="alert alert-warning">
+            Esta locação possui pagamento registrado. O cancelamento preserva o histórico financeiro e não gera estorno automático.
+          </div>
+        {% endif %}
         <form method="post" action="{% url 'locacoes:cancelar' locacao.id %}" data-enter-nav>
           {% csrf_token %}
           <div class="grid">
             <div>
-              <label class="form-label">Responsavel</label>
+              <label class="form-label">Responsável</label>
               {{ cancelar_form.responsavel }}
             </div>
             <div>
@@ -307,7 +327,31 @@
     {% endif %}
 
     <section class="cardx">
-      <h2>Hist?rico das confer?ncias de entrega</h2>
+      <h2>Exclusão</h2>
+      {% if acoes_locacao.pode_excluir %}
+        <p class="muted">
+          Permitida porque a locação ainda está reservada e não possui pagamento,
+          recibo, checklist confirmado nem movimentacao operacional que precise
+          ser preservada.
+        </p>
+        <form method="post" action="{% url 'locacoes:excluir' locacao.id %}" onsubmit="return confirm('Excluir definitivamente esta reserva sem vínculos?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit">Excluir locação</button>
+        </form>
+      {% else %}
+        <p class="muted mb-2">Exclusão bloqueada. Quando houver vínculos, use cancelamento para preservar o histórico.</p>
+        {% if acoes_locacao.impedimentos_exclusao %}
+          <ul class="mb-0">
+            {% for impedimento in acoes_locacao.impedimentos_exclusao %}
+              <li>{{ impedimento }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endif %}
+    </section>
+
+    <section class="cardx">
+      <h2>Histórico das conferências de entrega</h2>
 
       {% for conferencia in conferencias_entrega %}
         <div class="border rounded p-3 mb-3">
@@ -322,7 +366,7 @@
           </div>
 
           <div class="mt-2">
-            <strong>Entregue nesta confer?ncia:</strong>
+            <strong>Entregue nesta conferência:</strong>
             {{ conferencia.entregue_mesas }} mesa(s) e
             {{ conferencia.entregue_cadeiras }} cadeira(s).
           </div>
@@ -341,7 +385,7 @@
 
           <div class="mt-2">
             <strong>Recebedor:</strong>
-            {{ conferencia.recebedor_nome }} ?
+            {{ conferencia.recebedor_nome }} -
             {{ conferencia.get_recebedor_relacao_display }}
 
             {% if conferencia.recebedor_relacao_outro %}
@@ -355,7 +399,7 @@
           </div>
 
           <div>
-            <strong>Respons?vel pela entrega:</strong>
+            <strong>Responsável pela entrega:</strong>
             {{ conferencia.responsavel }}
           </div>
 
@@ -368,14 +412,14 @@
 
           {% if conferencia.previsao_conclusao %}
             <div>
-              <strong>Previs?o para completar:</strong>
+              <strong>Previsão para completar:</strong>
               {{ conferencia.previsao_conclusao|date:"d/m/Y H:i" }}
             </div>
           {% endif %}
 
           {% if conferencia.observacao %}
             <div class="mt-2">
-              <strong>Observa??o:</strong>
+              <strong>Observação:</strong>
               {{ conferencia.observacao|linebreaksbr }}
             </div>
           {% endif %}
@@ -393,13 +437,13 @@
         </div>
       {% empty %}
         <p class="muted mb-0">
-          Nenhuma confer?ncia de entrega registrada.
+          Nenhuma conferência de entrega registrada.
         </p>
       {% endfor %}
     </section>
 
     <section class="cardx">
-      <h2>Hist?rico das confer?ncias de recolhimento</h2>
+      <h2>Histórico das conferências de recolhimento</h2>
 
       {% for conferencia in conferencias_recolhimento %}
         <div class="border rounded p-3 mb-3">
@@ -414,7 +458,7 @@
           </div>
 
           <div class="mt-2">
-            <strong>Recolhido nesta confer?ncia:</strong><br>
+            <strong>Recolhido nesta conferência:</strong><br>
             Mesas: {{ conferencia.boa_mesas }} boas,
             {{ conferencia.quebrada_mesas }} quebradas,
             {{ conferencia.perdida_mesas }} perdidas e
@@ -427,7 +471,7 @@
           </div>
 
           <div class="mt-2">
-            <strong>Pendente ap?s esta confer?ncia:</strong>
+            <strong>Pendente após esta conferência:</strong>
             {{ conferencia.pendente_mesas }} mesa(s) e
             {{ conferencia.pendente_cadeiras }} cadeira(s).
           </div>
@@ -435,7 +479,7 @@
           {% if conferencia.pessoa_local_nome %}
             <div class="mt-2">
               <strong>Pessoa presente no local:</strong>
-              {{ conferencia.pessoa_local_nome }} ?
+              {{ conferencia.pessoa_local_nome }} -
               {{ conferencia.get_pessoa_local_relacao_display }}
 
               {% if conferencia.pessoa_local_relacao_outro %}
@@ -445,7 +489,7 @@
           {% endif %}
 
           <div>
-            <strong>Respons?vel pelo recolhimento:</strong>
+            <strong>Responsável pelo recolhimento:</strong>
             {{ conferencia.responsavel }}
           </div>
 
@@ -458,14 +502,14 @@
 
           {% if conferencia.previsao_conclusao %}
             <div>
-              <strong>Nova previs?o:</strong>
+              <strong>Nova previsão:</strong>
               {{ conferencia.previsao_conclusao|date:"d/m/Y H:i" }}
             </div>
           {% endif %}
 
           {% if conferencia.observacao %}
             <div class="mt-2">
-              <strong>Observa??o:</strong>
+              <strong>Observação:</strong>
               {{ conferencia.observacao|linebreaksbr }}
             </div>
           {% endif %}
@@ -478,18 +522,24 @@
               >
                 Ver comprovante do recolhimento
               </a>
+              <a
+                class="btn btn-outline-success btn-sm"
+                href="{% url 'locacoes:checklist_recolhimento_cliente' conferencia.id %}"
+              >
+                Abrir checklist de recolhimento
+              </a>
             </div>
           {% endif %}
         </div>
       {% empty %}
         <p class="muted mb-0">
-          Nenhuma confer?ncia de recolhimento registrada.
+          Nenhuma conferência de recolhimento registrada.
         </p>
       {% endfor %}
     </section>
 
     <section class="cardx">
-      <h2>Historico</h2>
+      <h2>Histórico</h2>
       {% for evento in locacao.eventos.all %}
         <p class="mb-2"><strong>{{ evento.criado_em|date:"d/m/Y H:i" }}</strong> - {{ evento.tipo }}{% if evento.responsavel %} - {{ evento.responsavel }}{% endif %}<br>{{ evento.descricao }}</p>
       {% empty %}

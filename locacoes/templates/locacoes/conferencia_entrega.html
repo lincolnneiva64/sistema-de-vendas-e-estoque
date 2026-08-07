@@ -236,15 +236,15 @@
 
     <section class="box">
       <div class="mini-dados">
-        <div><strong>Endereco:</strong> {{ locacao.endereco_entrega|linebreaksbr }}</div>
+        <div><strong>Endereço:</strong> {{ locacao.endereco_entrega|linebreaksbr }}</div>
       </div>
     </section>
 
     {% if conferencia_salva %}
       <section class="box sucesso">
-        <h2>Conferencia salva</h2>
+        <h2>Conferência salva</h2>
         <div class="mini-dados">
-          <div><strong>Situacao:</strong> {{ conferencia_salva.get_situacao_display }}</div>
+          <div><strong>Situação:</strong> {{ conferencia_salva.get_situacao_display }}</div>
           <div><strong>Checklist:</strong> <a href="{{ checklist_url }}" target="_blank" rel="noopener">Abrir checklist salvo</a></div>
         </div>
 
@@ -269,9 +269,9 @@
               {% endfor %}
             </div>
           {% else %}
-            <div class="erro">Nenhum funcionario habilitado para receber checklist.</div>
+            <div class="erro">Nenhum funcionário habilitado para receber checklist.</div>
           {% endif %}
-          <div class="erro" id="erro-funcionario-checklist" hidden>Selecione um funcionario habilitado para receber o checklist.</div>
+          <div class="erro" id="erro-funcionario-checklist" hidden>Selecione um funcionário habilitado para receber o checklist.</div>
         </details>
 
         {% if whatsapp_checklist_url %}
@@ -292,14 +292,14 @@
 
         {% if conferencia_salva.situacao == "parcial" %}
           <a class="btn btn-outline-secondary w-100 mt-2" href="{% url 'locacoes:conferencia_entrega' tarefa.id %}">
-            Registrar proxima entrega
+            Registrar próxima entrega
           </a>
         {% endif %}
       </section>
     {% else %}
     <section class="box">
-      <h2>Conferencia</h2>
-      <form method="post" data-enter-nav novalidate>
+      <h2>Conferência</h2>
+      <form method="post" data-enter-nav data-form-bound="{% if form.is_bound %}true{% else %}false{% endif %}" novalidate>
         {% csrf_token %}
 
         {% if form.non_field_errors %}
@@ -423,7 +423,7 @@
             </label>
             <label class="recebedor-opcao">
               <input type="radio" name="{{ form.recebedor_relacao.html_name }}" value="funcionario" {% if form.recebedor_relacao.value == "funcionario" %}checked{% endif %}>
-              Funcionario
+              Funcionário
             </label>
             <label class="recebedor-opcao">
               <input type="radio" name="{{ form.recebedor_relacao.html_name }}" value="familiar" {% if form.recebedor_relacao.value == "familiar" %}checked{% endif %}>
@@ -449,13 +449,13 @@
           </div>
 
           <div id="campo-previsao" class="campo-condicional">
-            <label class="form-label" for="{{ form.previsao_conclusao.id_for_label }}">Previsao</label>
+            <label class="form-label" for="{{ form.previsao_conclusao.id_for_label }}">Previsão</label>
             {{ form.previsao_conclusao }}
             {% for erro in form.previsao_conclusao.errors %}<div class="erro">{{ erro }}</div>{% endfor %}
           </div>
 
           <div id="campo-observacao" class="campo-condicional">
-            <label class="form-label" for="{{ form.observacao.id_for_label }}">Observacao</label>
+            <label class="form-label" for="{{ form.observacao.id_for_label }}">Observação</label>
             {{ form.observacao }}
             {% for erro in form.observacao.errors %}<div class="erro">{{ erro }}</div>{% endfor %}
           </div>
@@ -464,7 +464,7 @@
         </div>
 
         <button class="btn btn-loc w-100 mt-3" id="botao-confirmar" type="submit">
-          Confirmar conferencia da entrega
+          Confirmar conferência da entrega
         </button>
       </form>
     </section>
@@ -492,6 +492,7 @@
       const jogosMesasInput = document.querySelector("input[data-fisico='mesas']");
       const jogosCadeirasInput = document.querySelector("input[data-fisico='cadeiras']");
       const formulario = document.querySelector("form[data-enter-nav]");
+      const formularioJaSubmetido = formulario?.dataset.formBound === "true";
       const envioFuncionarios = document.getElementById("envio-checklist-funcionarios");
       const erroFuncionarioChecklist = document.getElementById("erro-funcionario-checklist");
       const radiosFuncionariosChecklist = Array.from(document.querySelectorAll("input[name='checklist_funcionario_envio']"));
@@ -567,22 +568,8 @@
 
       function inicializarEstadoMaterial() {
         if (!estadoMaterial || !checkBom) { return; }
-        checkBom.checked = estadoMaterial.value !== "ressalva";
+        checkBom.checked = formularioJaSubmetido && estadoMaterial.value === "bom";
         atualizarEstado();
-      }
-
-      function inicializarJogos() {
-        if (!jogosHidden || !jogosMesasInput || !jogosCadeirasInput) { return; }
-        const jogos = Math.max(Number(jogosHidden.value || 0), 0);
-        if (jogos <= 0 || jogosMesasInput.value || jogosCadeirasInput.value) { return; }
-        jogosMesasInput.value = jogos;
-        jogosCadeirasInput.value = jogos * 4;
-        materiais.forEach(function (linha) {
-          if (linha.dataset.jogosFisico) {
-            const check = linha.querySelector(".check-toggle");
-            if (check) { check.checked = true; }
-          }
-        });
       }
 
       function sincronizarJogos() {
@@ -721,13 +708,12 @@
 
         if (botao) {
           botao.disabled = true;
-          botao.textContent = "Salvando conferencia...";
+          botao.textContent = "Salvando conferência...";
         }
       });
 
       atualizarRelacao();
       inicializarEstadoMaterial();
-      inicializarJogos();
       atualizarResultado();
     })();
   </script>

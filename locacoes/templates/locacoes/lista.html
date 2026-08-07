@@ -271,6 +271,22 @@
       white-space: nowrap;
     }
 
+    .acoes-locacao {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      min-width: 230px;
+    }
+
+    .acoes-locacao .btn {
+      min-height: 34px;
+      padding: 5px 9px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
     .alert {
       border-width: 2px;
       border-radius: 11px;
@@ -381,12 +397,19 @@
               <th>Pendente/rua</th>
               <th>Financeiro</th>
               <th>Total</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody>
             {% for locacao in locacoes %}
               <tr>
-                <td><a href="{% url 'locacoes:detalhe' locacao.id %}">#{{ locacao.id }}</a></td>
+                <td>
+                  {% if locacao.acoes_consulta.pode_editar %}
+                    <a href="{% url 'locacoes:editar' locacao.id %}">#{{ locacao.id }}</a>
+                  {% else %}
+                    <a href="{% url 'locacoes:detalhe' locacao.id %}">#{{ locacao.id }}</a>
+                  {% endif %}
+                </td>
                 <td>{{ locacao.nome_contratante }}</td>
                 <td><span class="badge-locacoes">{{ locacao.get_status_display }}</span></td>
                 <td>{{ locacao.data_entrega|date:"d/m/Y" }} {{ locacao.horario_entrega|time:"H:i" }}</td>
@@ -397,9 +420,45 @@
                 </td>
                 <td>{{ locacao.get_status_financeiro_display }}<br><span class="muted">Saldo R$ {{ locacao.saldo_devedor|floatformat:2 }}</span></td>
                 <td>R$ {{ locacao.total|floatformat:2 }}</td>
+                <td>
+                  <div class="acoes-locacao">
+                    {% if locacao.acoes_consulta.pode_editar %}
+                      <a class="btn btn-outline-primary btn-sm" href="{% url 'locacoes:editar' locacao.id %}">Abrir</a>
+                    {% else %}
+                      <a class="btn btn-outline-secondary btn-sm" href="{% url 'locacoes:detalhe' locacao.id %}">Ver detalhes</a>
+                    {% endif %}
+                    {% if locacao.acoes_consulta.tarefa_entrega %}
+                      <a class="btn btn-outline-success btn-sm" href="{% url 'locacoes:conferencia_entrega' locacao.acoes_consulta.tarefa_entrega.id %}">Entrega</a>
+                    {% endif %}
+                    {% if locacao.acoes_consulta.tarefa_recolhimento %}
+                      <a class="btn btn-outline-success btn-sm" href="{% url 'locacoes:conferencia_recolhimento' locacao.acoes_consulta.tarefa_recolhimento.id %}">Recolhimento</a>
+                    {% endif %}
+                    {% if locacao.acoes_consulta.whatsapp_recolhimento.whatsapp_url %}
+                      <a class="btn btn-success btn-sm" href="{{ locacao.acoes_consulta.whatsapp_recolhimento.whatsapp_url }}" target="_blank" rel="noopener">Enviar recolhimento pelo WhatsApp</a>
+                    {% endif %}
+                    {% if locacao.status != 'cancelada' %}
+                      <a class="btn btn-outline-warning btn-sm" href="{% url 'locacoes:registrar_pagamento' locacao.id %}">Pagamentos</a>
+                    {% endif %}
+                    {% if locacao.pagamentos.all %}
+                      <a class="btn btn-outline-info btn-sm" href="{% url 'locacoes:detalhe' locacao.id %}#pagamentos">Recibos</a>
+                    {% endif %}
+                    {% if locacao.acoes_consulta.pode_cancelar %}
+                      <form method="post" action="{% url 'locacoes:cancelar' locacao.id %}" onsubmit="return confirm('{% if locacao.acoes_consulta.tem_pagamentos %}Esta locação possui pagamento registrado. Cancelar preserva o histórico financeiro e não gera estorno automático. Confirmar cancelamento?{% else %}Confirmar cancelamento desta reserva?{% endif %}');">
+                        {% csrf_token %}
+                        <button class="btn btn-outline-danger btn-sm" type="submit">Cancelar</button>
+                      </form>
+                    {% endif %}
+                    {% if locacao.acoes_consulta.pode_excluir %}
+                      <form method="post" action="{% url 'locacoes:excluir' locacao.id %}" onsubmit="return confirm('Excluir definitivamente esta reserva sem vínculos?');">
+                        {% csrf_token %}
+                        <button class="btn btn-danger btn-sm" type="submit">Excluir</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                </td>
               </tr>
             {% empty %}
-              <tr><td colspan="8" class="muted">Nenhuma locação encontrada.</td></tr>
+              <tr><td colspan="9" class="muted">Nenhuma locação encontrada.</td></tr>
             {% endfor %}
           </tbody>
         </table>

@@ -31,13 +31,7 @@
 
     body {
       margin: 0;
-      background:
-        radial-gradient(
-          circle at top left,
-          #fff7ed 0,
-          transparent 34%
-        ),
-        #f5f7fb;
+      background: #f5f7fb;
       color: var(--ink);
       font-family:
         Inter,
@@ -49,32 +43,23 @@
     }
 
     .page {
-      width: min(100% - 20px, 1040px);
+      width: min(100% - 16px, 600px);
       margin: 0 auto;
-      padding: 18px 0 48px;
+      padding: 8px 0 42px;
     }
 
     .topo,
     .cardx {
-      border: 2px solid var(--orange-border);
-      border-left: 7px solid var(--orange);
-      border-radius: 14px;
+      border: 1px solid var(--orange-border);
+      border-left: 5px solid var(--orange);
+      border-radius: 8px;
       background: #fff;
-      box-shadow:
-        0 10px 24px rgba(154, 52, 18, 0.09),
-        0 2px 5px rgba(15, 23, 42, 0.04);
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
     }
 
     .topo {
-      margin-bottom: 16px;
-      padding: 18px;
-      background:
-        linear-gradient(
-          135deg,
-          #fff 0%,
-          #fff7ed 65%,
-          #ffedd5 100%
-        );
+      margin-bottom: 7px;
+      padding: 9px 11px;
     }
 
     .topo-linha {
@@ -87,68 +72,60 @@
     h1 {
       margin: 0;
       color: var(--orange-dark);
-      font-size: clamp(1.65rem, 5vw, 2.25rem);
+      font-size: 1.08rem;
       font-weight: 950;
     }
 
     .subtitulo {
-      margin: 6px 0 0;
+      margin: 1px 0 0;
       color: var(--muted);
+      font-size: .82rem;
       font-weight: 700;
     }
 
     .cardx {
-      margin-bottom: 16px;
-      padding: 18px;
+      margin-bottom: 7px;
+      padding: 9px;
     }
 
     .cardx h2 {
-      margin: -18px -18px 18px;
-      padding: 13px 18px;
-      border-bottom: 2px solid #fed7aa;
-      background:
-        linear-gradient(
-          90deg,
-          #ffedd5,
-          #fff7ed 70%,
-          #fff
-        );
+      margin: 0 0 8px;
       color: var(--orange-dark);
-      font-size: 1.08rem;
+      font-size: .98rem;
       font-weight: 950;
     }
 
     .dados {
       display: grid;
-      gap: 8px;
+      gap: 4px;
       color: #334155;
+      font-size: .9rem;
     }
 
     .resumo {
       display: grid;
-      grid-template-columns:
-        repeat(3, minmax(0, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px;
     }
 
     .resumo-item {
-      padding: 13px;
+      padding: 9px;
       border: 2px solid #e2e8f0;
-      border-radius: 11px;
+      border-radius: 8px;
       background: #f8fafc;
     }
 
     .resumo-item strong {
       display: block;
-      margin-bottom: 5px;
+      margin-bottom: 2px;
       color: #334155;
-      font-size: 0.84rem;
+      font-size: .7rem;
       text-transform: uppercase;
     }
 
     .resumo-item span {
       display: block;
-      font-size: 1.03rem;
+      font-size: 1rem;
       font-weight: 900;
     }
 
@@ -160,9 +137,8 @@
 
     .grade {
       display: grid;
-      grid-template-columns:
-        repeat(2, minmax(0, 1fr));
-      gap: 14px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
     }
 
     .campo-inteiro {
@@ -170,16 +146,16 @@
     }
 
     .grupo-quantidade {
-      padding: 15px;
+      padding: 9px;
       border: 2px solid #e2e8f0;
-      border-radius: 12px;
+      border-radius: 8px;
       background: #f8fafc;
     }
 
     .grupo-quantidade h3 {
-      margin: 0 0 14px;
+      margin: 0 0 8px;
       color: #334155;
-      font-size: 1rem;
+      font-size: .92rem;
       font-weight: 950;
     }
 
@@ -190,16 +166,17 @@
 
     .form-label {
       display: block;
-      margin-bottom: 6px;
+      margin-bottom: 3px;
       color: #334155;
+      font-size: .82rem;
       font-weight: 900;
     }
 
     .form-control,
     .form-select {
-      min-height: 48px;
+      min-height: 42px;
       border: 2px solid #cbd5e1;
-      border-radius: 10px;
+      border-radius: 8px;
       font-weight: 650;
     }
 
@@ -223,9 +200,9 @@
 
     .resultado {
       margin-top: 16px;
-      padding: 14px;
+      padding: 10px;
       border: 2px solid #cbd5e1;
-      border-radius: 11px;
+      border-radius: 8px;
       background: #f8fafc;
       font-weight: 850;
     }
@@ -251,7 +228,7 @@
     .btn-loc {
       min-height: 50px;
       border: 2px solid var(--orange);
-      border-radius: 10px;
+      border-radius: 8px;
       background: var(--orange);
       color: #fff;
       font-weight: 950;
@@ -275,11 +252,24 @@
     }
 
     .historico-item {
-      margin-bottom: 12px;
-      padding: 14px;
+      margin-bottom: 8px;
+      padding: 9px;
       border: 2px solid #e2e8f0;
-      border-radius: 11px;
+      border-radius: 8px;
       background: #f8fafc;
+    }
+
+    details.cardx summary,
+    details.grupo-quantidade summary {
+      cursor: pointer;
+      color: var(--orange-dark);
+      font-weight: 950;
+      list-style-position: inside;
+    }
+
+    details.cardx[open] summary,
+    details.grupo-quantidade[open] summary {
+      margin-bottom: 8px;
     }
 
     .historico-topo {
@@ -327,14 +317,7 @@
         grid-column: auto;
       }
 
-      .cardx {
-        padding: 15px;
-      }
-
-      .cardx h2 {
-        margin: -15px -15px 15px;
-        padding: 12px 15px;
-      }
+      .cardx { padding: 9px; }
     }
   </style>
 </head>
@@ -351,16 +334,16 @@
           <h1>Checklist de recolhimento</h1>
 
           <p class="subtitulo">
-            Loca??o #{{ locacao.id }} ?
+            Locação #{{ locacao.id }} -
             {{ locacao.nome_contratante }}
           </p>
         </div>
 
         <a
           class="btn btn-outline-secondary"
-          href="{% url 'locacoes:detalhe' locacao.id %}"
+          href="{% url 'locacoes:lista' %}"
         >
-          Voltar para a loca??o
+          Voltar
         </a>
       </div>
     </header>
@@ -376,53 +359,36 @@
     {% endif %}
 
     <section class="cardx">
-      <h2>Dados do recolhimento</h2>
+      <h2>Locacao</h2>
 
       <div class="dados">
         <div>
-          <strong>Cliente/pessoa:</strong>
+          <strong>Cliente:</strong>
           {{ locacao.nome_contratante }}
         </div>
 
         <div>
-          <strong>Endere?o:</strong>
+          <strong>Endereço:</strong>
           {{ locacao.endereco_entrega|linebreaksbr }}
         </div>
 
-        <div>
-          <strong>Telefone:</strong>
-          {{ locacao.telefone_contratante|default:"N?o informado" }}
-        </div>
-
-        <div>
-          <strong>Devolu??o prevista:</strong>
-          {{ locacao.data_prevista_devolucao|date:"d/m/Y" }}
-        </div>
       </div>
     </section>
 
     <section class="cardx">
-      <h2>Resumo f?sico</h2>
+      <h2>Quantidades</h2>
 
       <div class="resumo">
         <div class="resumo-item">
-          <strong>Entregue ao cliente</strong>
+          <strong>Previsto</strong>
           <span>
             {{ previsto_mesas }} mesa(s) e
             {{ previsto_cadeiras }} cadeira(s)
           </span>
         </div>
 
-        <div class="resumo-item">
-          <strong>J? encerrado</strong>
-          <span>
-            {{ recolhido_mesas }} mesa(s) e
-            {{ recolhido_cadeiras }} cadeira(s)
-          </span>
-        </div>
-
         <div class="resumo-item pendente">
-          <strong>Pendente agora</strong>
+          <strong>A recolher</strong>
           <span>
             {{ pendente_mesas }} mesa(s) e
             {{ pendente_cadeiras }} cadeira(s)
@@ -433,17 +399,21 @@
 
     {% if conferencia_salva %}
       <section class="cardx sucesso">
-        <h2>Confer?ncia registrada</h2>
+        <h2>Recolhimento registrado</h2>
 
         <p>
-          <strong>Situa??o:</strong>
+          <strong>Situação:</strong>
           {{ conferencia_salva.get_situacao_display }}
         </p>
 
-        <textarea
-          class="form-control mensagem"
-          readonly
-        >{{ conferencia_salva.mensagem_whatsapp_snapshot }}</textarea>
+        <a
+          class="btn btn-outline-primary w-100 mt-2"
+          href="{{ checklist_url }}"
+          target="_blank"
+          rel="noopener"
+        >
+          Abrir checklist compartilhável
+        </a>
 
         {% if whatsapp_url %}
           <a
@@ -452,13 +422,24 @@
             target="_blank"
             rel="noopener noreferrer"
           >
-            Abrir mensagem no WhatsApp
+            Enviar checklist pelo WhatsApp
           </a>
         {% else %}
           <div class="alert alert-warning mt-3 mb-0">
-            A loca??o n?o possui telefone v?lido para abrir
+            A locação não possui telefone válido para abrir
             o WhatsApp.
           </div>
+        {% endif %}
+
+        {% if whatsapp_checklist_funcionario_url %}
+          <a
+            class="btn btn-outline-success w-100 mt-2"
+            href="{{ whatsapp_checklist_funcionario_url }}"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Enviar checklist para funcionário
+          </a>
         {% endif %}
 
         {% if conferencia_salva.situacao == "parcial" %}
@@ -466,13 +447,13 @@
             class="btn btn-loc w-100 mt-2"
             href="{% url 'locacoes:conferencia_recolhimento' tarefa.id %}"
           >
-            Registrar pr?ximo recolhimento
+            Registrar proximo recolhimento
           </a>
         {% endif %}
       </section>
     {% else %}
       <section class="cardx">
-        <h2>Confer?ncia atual</h2>
+        <h2>Conferência</h2>
 
         <form method="post" data-enter-nav novalidate>
           {% csrf_token %}
@@ -485,7 +466,7 @@
 
           <div class="grade">
             <div class="grupo-quantidade campo-inteiro">
-              <h3>Material recolhido em bom estado</h3>
+              <h3>Quantidade recolhida</h3>
 
               <div class="grade">
                 <div>
@@ -493,7 +474,7 @@
                     class="form-label"
                     for="{{ form.boa_mesas.id_for_label }}"
                   >
-                    {{ form.boa_mesas.label }}
+                    Mesas recolhidas
                   </label>
 
                   {{ form.boa_mesas }}
@@ -508,7 +489,7 @@
                     class="form-label"
                     for="{{ form.boa_cadeiras.id_for_label }}"
                   >
-                    {{ form.boa_cadeiras.label }}
+                    Cadeiras recolhidas
                   </label>
 
                   {{ form.boa_cadeiras }}
@@ -520,134 +501,27 @@
               </div>
             </div>
 
-            <div class="grupo-quantidade avaria campo-inteiro">
-              <h3>Quebra, perda ou descarte</h3>
+            <details class="grupo-quantidade avaria campo-inteiro">
+              <summary>Informar avarias (opcional)</summary>
 
               <div class="grade">
                 <div>
-                  <label
-                    class="form-label"
-                    for="{{ form.quebrada_mesas.id_for_label }}"
-                  >
-                    {{ form.quebrada_mesas.label }}
-                  </label>
+                  <label class="form-label" for="{{ form.quebrada_mesas.id_for_label }}">Mesas com problema</label>
                   {{ form.quebrada_mesas }}
-                  {% for erro in form.quebrada_mesas.errors %}
-                    <div class="erro">{{ erro }}</div>
-                  {% endfor %}
+                  {% for erro in form.quebrada_mesas.errors %}<div class="erro">{{ erro }}</div>{% endfor %}
                 </div>
-
                 <div>
-                  <label
-                    class="form-label"
-                    for="{{ form.quebrada_cadeiras.id_for_label }}"
-                  >
-                    {{ form.quebrada_cadeiras.label }}
-                  </label>
+                  <label class="form-label" for="{{ form.quebrada_cadeiras.id_for_label }}">Cadeiras com problema</label>
                   {{ form.quebrada_cadeiras }}
-                  {% for erro in form.quebrada_cadeiras.errors %}
-                    <div class="erro">{{ erro }}</div>
-                  {% endfor %}
+                  {% for erro in form.quebrada_cadeiras.errors %}<div class="erro">{{ erro }}</div>{% endfor %}
                 </div>
-
-                <div>
-                  <label
-                    class="form-label"
-                    for="{{ form.perdida_mesas.id_for_label }}"
-                  >
-                    {{ form.perdida_mesas.label }}
-                  </label>
-                  {{ form.perdida_mesas }}
-                  {% for erro in form.perdida_mesas.errors %}
-                    <div class="erro">{{ erro }}</div>
-                  {% endfor %}
-                </div>
-
-                <div>
-                  <label
-                    class="form-label"
-                    for="{{ form.perdida_cadeiras.id_for_label }}"
-                  >
-                    {{ form.perdida_cadeiras.label }}
-                  </label>
-                  {{ form.perdida_cadeiras }}
-                  {% for erro in form.perdida_cadeiras.errors %}
-                    <div class="erro">{{ erro }}</div>
-                  {% endfor %}
-                </div>
-
-                <div>
-                  <label
-                    class="form-label"
-                    for="{{ form.descartada_mesas.id_for_label }}"
-                  >
-                    {{ form.descartada_mesas.label }}
-                  </label>
-                  {{ form.descartada_mesas }}
-                  {% for erro in form.descartada_mesas.errors %}
-                    <div class="erro">{{ erro }}</div>
-                  {% endfor %}
-                </div>
-
-                <div>
-                  <label
-                    class="form-label"
-                    for="{{ form.descartada_cadeiras.id_for_label }}"
-                  >
-                    {{ form.descartada_cadeiras.label }}
-                  </label>
-                  {{ form.descartada_cadeiras }}
-                  {% for erro in form.descartada_cadeiras.errors %}
-                    <div class="erro">{{ erro }}</div>
-                  {% endfor %}
+                <div class="campo-inteiro">
+                  <label class="form-label" for="{{ form.observacao.id_for_label }}">Observacoes das avarias</label>
+                  {{ form.observacao }}
+                  {% for erro in form.observacao.errors %}<div class="erro">{{ erro }}</div>{% endfor %}
                 </div>
               </div>
-            </div>
-
-            <div>
-              <label
-                class="form-label"
-                for="{{ form.pessoa_local_nome.id_for_label }}"
-              >
-                {{ form.pessoa_local_nome.label }}
-              </label>
-
-              {{ form.pessoa_local_nome }}
-
-              {% for erro in form.pessoa_local_nome.errors %}
-                <div class="erro">{{ erro }}</div>
-              {% endfor %}
-            </div>
-
-            <div>
-              <label
-                class="form-label"
-                for="{{ form.pessoa_local_relacao.id_for_label }}"
-              >
-                {{ form.pessoa_local_relacao.label }}
-              </label>
-
-              {{ form.pessoa_local_relacao }}
-
-              {% for erro in form.pessoa_local_relacao.errors %}
-                <div class="erro">{{ erro }}</div>
-              {% endfor %}
-            </div>
-
-            <div id="campo-relacao-outro">
-              <label
-                class="form-label"
-                for="{{ form.pessoa_local_relacao_outro.id_for_label }}"
-              >
-                {{ form.pessoa_local_relacao_outro.label }}
-              </label>
-
-              {{ form.pessoa_local_relacao_outro }}
-
-              {% for erro in form.pessoa_local_relacao_outro.errors %}
-                <div class="erro">{{ erro }}</div>
-              {% endfor %}
-            </div>
+            </details>
 
             <div class="campo-inteiro" id="campo-justificativa">
               <label
@@ -679,35 +553,6 @@
               {% endfor %}
             </div>
 
-            <div class="campo-inteiro">
-              <label
-                class="form-label"
-                for="{{ form.observacao.id_for_label }}"
-              >
-                {{ form.observacao.label }}
-              </label>
-
-              {{ form.observacao }}
-
-              {% for erro in form.observacao.errors %}
-                <div class="erro">{{ erro }}</div>
-              {% endfor %}
-            </div>
-
-            <div class="campo-inteiro">
-              <label
-                class="form-label"
-                for="{{ form.responsavel.id_for_label }}"
-              >
-                {{ form.responsavel.label }}
-              </label>
-
-              {{ form.responsavel }}
-
-              {% for erro in form.responsavel.errors %}
-                <div class="erro">{{ erro }}</div>
-              {% endfor %}
-            </div>
           </div>
 
           <div
@@ -722,14 +567,14 @@
             id="botao-confirmar"
             type="submit"
           >
-            Confirmar confer?ncia do recolhimento
+            Confirmar recolhimento
           </button>
         </form>
       </section>
     {% endif %}
 
-    <section class="cardx">
-      <h2>Hist?rico dos recolhimentos</h2>
+    <details class="cardx">
+      <summary>Histórico</summary>
 
       {% for conferencia in historico %}
         <article class="historico-item">
@@ -750,7 +595,7 @@
           </div>
 
           <div>
-            <strong>Bom nesta confer?ncia:</strong>
+            <strong>Bom nesta conferência:</strong>
             {{ conferencia.boa_mesas }} mesa(s) e
             {{ conferencia.boa_cadeiras }} cadeira(s)
           </div>
@@ -781,7 +626,7 @@
 
           <div>
             <strong>Conferido com:</strong>
-            {{ conferencia.pessoa_local_nome }} ?
+            {{ conferencia.pessoa_local_nome }} -
             {{ conferencia.get_pessoa_local_relacao_display }}
 
             {% if conferencia.pessoa_local_relacao_outro %}
@@ -791,7 +636,7 @@
 
           {% if conferencia.previsao_conclusao %}
             <div>
-              <strong>Previs?o para concluir:</strong>
+              <strong>Previsão para concluir:</strong>
               {{ conferencia.previsao_conclusao|date:"d/m/Y H:i" }}
             </div>
           {% endif %}
@@ -805,22 +650,46 @@
 
           {% if conferencia.observacao %}
             <div>
-              <strong>Observa??o:</strong>
+              <strong>Observação:</strong>
               {{ conferencia.observacao|linebreaksbr }}
             </div>
           {% endif %}
 
           <div>
-            <strong>Funcion?rio respons?vel:</strong>
+            <strong>Funcionário responsável:</strong>
             {{ conferencia.responsavel }}
           </div>
         </article>
       {% empty %}
         <div class="alert alert-light border mb-0">
-          Nenhuma confer?ncia de recolhimento registrada.
+          Nenhuma conferencia de recolhimento registrada.
         </div>
       {% endfor %}
-    </section>
+    </details>
+
+    <details class="cardx">
+      <summary>Ver detalhes</summary>
+      <div class="dados">
+        <div>
+          <strong>Telefone:</strong>
+          {{ locacao.telefone_contratante|default:"Não informado" }}
+        </div>
+        <div>
+          <strong>Devolução prevista:</strong>
+          {{ locacao.data_prevista_devolucao|date:"d/m/Y" }}
+        </div>
+        <div>
+          <strong>Ja recolhido:</strong>
+          {{ recolhido_mesas }} mesa(s) e
+          {{ recolhido_cadeiras }} cadeira(s)
+        </div>
+        <div>
+          <a href="{% url 'locacoes:detalhe' locacao.id %}">
+            Abrir detalhes da locação
+          </a>
+        </div>
+      </div>
+    </details>
   </main>
 
   {% include "locacoes/includes/enter_nav.html" %}
@@ -834,12 +703,6 @@
       const botao = document.getElementById(
         "botao-confirmar"
       );
-      const relacao = document.getElementById(
-        "id_pessoa_local_relacao"
-      );
-      const campoOutro = document.getElementById(
-        "campo-relacao-outro"
-      );
       const campoJustificativa = document.getElementById(
         "campo-justificativa"
       );
@@ -849,16 +712,12 @@
 
       const camposMesas = [
         "id_boa_mesas",
-        "id_quebrada_mesas",
-        "id_perdida_mesas",
-        "id_descartada_mesas"
+        "id_quebrada_mesas"
       ];
 
       const camposCadeiras = [
         "id_boa_cadeiras",
-        "id_quebrada_cadeiras",
-        "id_perdida_cadeiras",
-        "id_descartada_cadeiras"
+        "id_quebrada_cadeiras"
       ];
 
       if (!pagina || !resultado) {
@@ -880,17 +739,6 @@
             0
           );
         }, 0);
-      }
-
-      function atualizarRelacao() {
-        if (!relacao || !campoOutro) {
-          return;
-        }
-
-        campoOutro.style.display =
-          relacao.value === "outro"
-            ? "block"
-            : "none";
       }
 
       function atualizarResultado() {
@@ -916,7 +764,7 @@
           resultado.classList.add("excesso");
           resultado.textContent =
             "A quantidade informada supera o material " +
-            "que ainda est? pendente.";
+            "que ainda está pendente.";
 
           if (botao) {
             botao.disabled = true;
@@ -931,8 +779,8 @@
         ) {
           resultado.classList.add("completa");
           resultado.textContent =
-            "Recolhimento completo. Ap?s confirmar, a " +
-            "loca??o ser? encerrada.";
+            "Recolhimento completo. Após confirmar, a " +
+            "locação será encerrada.";
 
           if (campoJustificativa) {
             campoJustificativa.style.display = "none";
@@ -944,7 +792,7 @@
         } else {
           resultado.classList.add("parcial");
           resultado.textContent =
-            "Recolhimento parcial. Permanecer?o pendentes " +
+            "Recolhimento parcial. Permanecerão pendentes " +
             restanteMesas +
             " mesa(s) e " +
             restanteCadeiras +
@@ -979,14 +827,6 @@
           }
         });
 
-      if (relacao) {
-        relacao.addEventListener(
-          "change",
-          atualizarRelacao
-        );
-      }
-
-      atualizarRelacao();
       atualizarResultado();
     })();
   </script>

@@ -24,6 +24,11 @@ urlpatterns = [
         name="checklist_entrega_cliente",
     ),
     path(
+        "conferencias-recolhimento/<int:pk>/checklist-recolhimento/",
+        views.checklist_recolhimento_cliente,
+        name="checklist_recolhimento_cliente",
+    ),
+    path(
         "tarefas-operacionais/<int:pk>/conferencia-recolhimento/",
         views.conferencia_recolhimento,
         name="conferencia_recolhimento",
@@ -31,8 +36,10 @@ urlpatterns = [
     path("tarefas-operacionais/<int:pk>/confirmar/", views.confirmar_tarefa_operacional, name="confirmar_tarefa_operacional"),
     path("tarefas-operacionais/<int:pk>/nao-possivel/", views.tarefa_operacional_nao_possivel, name="tarefa_operacional_nao_possivel"),
     path("<int:pk>/", views.detalhe, name="detalhe"),
+    path("<int:pk>/editar/", views.editar, name="editar"),
     path("<int:pk>/tarefa-operacional/<str:tipo>/", views.abrir_tarefa_operacional_locacao, name="abrir_tarefa_operacional"),
     path("<int:pk>/cancelar/", views.cancelar, name="cancelar"),
+    path("<int:pk>/excluir/", views.excluir, name="excluir"),
     path("<int:pk>/saiu-para-entrega/", views.marcar_saiu_para_entrega, name="marcar_saiu_para_entrega"),
     path("<int:pk>/confirmar-entrega/", views.confirmar_entrega, name="confirmar_entrega"),
     path("<int:pk>/devolucao/", views.registrar_devolucao, name="registrar_devolucao"),
