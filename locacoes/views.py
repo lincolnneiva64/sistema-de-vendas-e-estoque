@@ -348,6 +348,35 @@ def _mensagem_checklist_link_whatsapp(nome_destinatario, checklist_url):
     ])
 
 
+def _mensagem_checklist_entrega_cliente_whatsapp(conferencia, checklist_url):
+    locacao = conferencia.locacao
+    linhas = [
+        "Checklist de entrega",
+        "",
+        f"Locação #{locacao.id}",
+        f"Cliente: {locacao.nome_contratante}",
+        "",
+        "Sua entrega foi conferida e registrada com sucesso.",
+        "",
+        f"Recebido por: {conferencia.recebedor_nome}",
+        (
+            "Materiais: "
+            f"{conferencia.entregue_mesas} mesas e "
+            f"{conferencia.entregue_cadeiras} cadeiras"
+        ),
+        f"Estado: {conferencia.get_estado_material_display()}",
+    ]
+    observacao = str(conferencia.observacao or "").strip()
+    if observacao:
+        linhas.append(f"Observação: {observacao}")
+    linhas.extend([
+        "",
+        "Abrir checklist:",
+        checklist_url,
+    ])
+    return "\n".join(linhas)
+
+
 def _mensagem_checklist_recolhimento_link_whatsapp(nome_destinatario, checklist_url, locacao):
     linhas = []
     if nome_destinatario:
@@ -1459,25 +1488,30 @@ def conferencia_entrega(request, pk):
         )
 
     historico = locacao.conferencias_entrega.all()
-    checklist_url = (
-        request.build_absolute_uri(
-            reverse(
-                "locacoes:checklist_entrega_cliente",
-                kwargs={"pk": conferencia_salva.pk},
-            )
+    checklist_path = (
+        reverse(
+            "locacoes:checklist_entrega_cliente",
+            kwargs={"pk": conferencia_salva.pk},
         )
         if conferencia_salva
         else ""
     )
-    funcionarios_checklist = _funcionarios_checklist_locacoes()
-    funcionarios_checklist_envio = _funcionarios_checklist_envio(
-        conferencia_salva,
-        checklist_url,
-        funcionarios_checklist,
+    checklist_url = request.build_absolute_uri(checklist_path) if checklist_path else ""
+    checklist_cliente_whatsapp_url = (
+        _url_publica_checklist_whatsapp(request, checklist_path)
+        if checklist_path
+        else ""
     )
-    whatsapp_checklist_url = (
-        funcionarios_checklist_envio[0]["whatsapp_url"]
-        if funcionarios_checklist_envio
+    telefone_cliente_whatsapp = _telefone_whatsapp_locacao(locacao)
+    whatsapp_checklist_cliente_url = (
+        _whatsapp_web_url(
+            telefone_cliente_whatsapp,
+            _mensagem_checklist_entrega_cliente_whatsapp(
+                conferencia_salva,
+                checklist_cliente_whatsapp_url,
+            ),
+        )
+        if conferencia_salva and telefone_cliente_whatsapp
         else ""
     )
     materiais_entrega = [
@@ -1533,11 +1567,12 @@ def conferencia_entrega(request, pk):
             "pendente_cadeiras": form.pendente_cadeiras,
             "materiais_entrega": materiais_entrega,
             "historico": historico,
-            "funcionarios_checklist": funcionarios_checklist,
-            "funcionarios_checklist_envio": funcionarios_checklist_envio,
-            "whatsapp_checklist_url": whatsapp_checklist_url,
+            "whatsapp_checklist_cliente_url": whatsapp_checklist_cliente_url,
+            "telefone_cliente_whatsapp": telefone_cliente_whatsapp,
+            "telefone_cliente_exibicao": locacao.telefone_contratante,
             "conferencia_salva": conferencia_salva,
             "checklist_url": checklist_url,
+            "checklist_cliente_whatsapp_url": checklist_cliente_whatsapp_url,
         },
     )
 

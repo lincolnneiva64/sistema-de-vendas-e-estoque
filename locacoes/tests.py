@@ -879,7 +879,7 @@ class LocacoesPagamentosTermoTests(TestCase):
         self.assertNotContains(response, "Status do recibo")
 
     def test_recibo_tem_um_unico_responsavel_para_as_acoes(self):
-        locacao = self.criar_locacao()
+        locacao = self.criar_locacao(pessoa_avulsa_telefone="91988887777")
         pagamento = locacao.registrar_pagamento(
             Decimal("4.00"),
             PagamentoLocacao.FORMA_PIX,
@@ -1462,8 +1462,12 @@ class LocacoesChecklistOperacionalTests(TestCase):
             0,
         )
 
+    @override_settings(
+        ALLOWED_HOSTS=["testserver", "127.0.0.1"],
+        CHECKLIST_BASE_URL="https://sistema-de-vendas-e-estoque.onrender.com",
+    )
     def test_entrega_completa_registra_conferencia_e_remove_alerta(self):
-        locacao = self.criar_locacao()
+        locacao = self.criar_locacao(pessoa_avulsa_telefone="91988887777")
         tarefa = obter_ou_criar_tarefa_operacional(
             locacao,
             TarefaOperacionalLocacao.TIPO_ENTREGA,
@@ -1502,17 +1506,38 @@ class LocacoesChecklistOperacionalTests(TestCase):
                 + f"?conferencia={conferencia.pk}"
             ),
             secure=True,
+            HTTP_HOST="127.0.0.1:8000",
         )
-        self.assertContains(comprovante, "Conferência salva")
-        self.assertContains(comprovante, "Enviar checklist pelo WhatsApp")
+        whatsapp_href = comprovante.context["whatsapp_checklist_cliente_url"]
+        texto_whatsapp = parse_qs(urlparse(whatsapp_href).query)["text"][0]
+        checklist_path = reverse(
+            "locacoes:checklist_entrega_cliente",
+            kwargs={"pk": conferencia.pk},
+        )
+
+        self.assertContains(comprovante, "Entrega registrada com sucesso.")
+        self.assertContains(comprovante, "Enviar checklist ao cliente pelo WhatsApp")
         self.assertContains(comprovante, 'id="btn-enviar-checklist-whatsapp"')
         self.assertContains(comprovante, 'target="_blank"')
         self.assertContains(comprovante, 'rel="noopener"')
-        self.assertContains(comprovante, "web.whatsapp.com/send?phone=5591999990000")
-        self.assertContains(comprovante, "Segue%20o%20checklist%20de%20entrega")
-        self.assertContains(comprovante, 'data-whatsapp-url="https://web.whatsapp.com/send?phone=5591999990000')
+        self.assertContains(comprovante, "web.whatsapp.com/send?phone=5591988887777")
         self.assertContains(comprovante, "checklist-entrega/")
-        self.assertContains(comprovante, 'name="checklist_funcionario_envio"')
+        self.assertNotContains(comprovante, 'name="checklist_funcionario_envio"')
+        self.assertNotContains(comprovante, "Enviar checklist para")
+        self.assertIn("Checklist de entrega", texto_whatsapp)
+        self.assertIn(f"Locação #{locacao.id}", texto_whatsapp)
+        self.assertIn(f"Cliente: {locacao.nome_contratante}", texto_whatsapp)
+        self.assertIn("Sua entrega foi conferida e registrada com sucesso.", texto_whatsapp)
+        self.assertIn("Abrir checklist:", texto_whatsapp)
+        self.assertIn(
+            f"https://sistema-de-vendas-e-estoque.onrender.com{checklist_path}",
+            texto_whatsapp,
+        )
+        self.assertNotIn(f"https://127.0.0.1:8000{checklist_path}", texto_whatsapp)
+        self.assertEqual(
+            comprovante.context["checklist_url"],
+            f"https://127.0.0.1:8000{checklist_path}",
+        )
         self.assertNotContains(comprovante, "window.open(")
         self.assertNotContains(comprovante, "wa.me")
         self.assertEqual(
@@ -2565,8 +2590,8 @@ class LocacoesChecklistOperacionalTests(TestCase):
             secure=True,
         )
 
-        self.assertContains(response, "Conferência salva")
-        self.assertContains(response, "Enviar checklist pelo WhatsApp")
+        self.assertContains(response, "Entrega registrada com sucesso.")
+        self.assertContains(response, "Enviar checklist ao cliente pelo WhatsApp")
         self.assertNotContains(response, 'id="check-material-bom"')
         self.assertEqual(
             conferencia.estado_material,

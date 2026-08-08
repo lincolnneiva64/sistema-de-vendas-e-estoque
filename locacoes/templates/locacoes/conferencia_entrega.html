@@ -242,52 +242,29 @@
 
     {% if conferencia_salva %}
       <section class="box sucesso">
-        <h2>Conferência salva</h2>
+        <h2>Entrega registrada com sucesso.</h2>
         <div class="mini-dados">
           <div><strong>Situação:</strong> {{ conferencia_salva.get_situacao_display }}</div>
           <div><strong>Checklist:</strong> <a href="{{ checklist_url }}" target="_blank" rel="noopener">Abrir checklist salvo</a></div>
+          <div><strong>Cliente:</strong> {{ locacao.nome_contratante }}</div>
+          <div><strong>WhatsApp:</strong> {{ telefone_cliente_exibicao|default:"Não informado" }}</div>
         </div>
 
-        <details class="envio-card mt-2" id="envio-checklist-funcionarios" open>
-          <summary>Enviar checklist para</summary>
-          {% if funcionarios_checklist_envio %}
-            <div class="funcionarios-envio">
-              {% for envio in funcionarios_checklist_envio %}
-                <label class="funcionario-envio">
-                  <input
-                    type="radio"
-                    name="checklist_funcionario_envio"
-                    value="{{ envio.funcionario.id }}"
-                    data-whatsapp-url="{{ envio.whatsapp_url }}"
-                    {% if forloop.first %}checked{% endif %}
-                  >
-                  <span>
-                    <strong>{{ envio.funcionario.nome }}</strong>
-                    <span>{{ envio.funcionario.telefone_whatsapp }}</span>
-                  </span>
-                </label>
-              {% endfor %}
-            </div>
-          {% else %}
-            <div class="erro">Nenhum funcionário habilitado para receber checklist.</div>
-          {% endif %}
-          <div class="erro" id="erro-funcionario-checklist" hidden>Selecione um funcionário habilitado para receber o checklist.</div>
-        </details>
-
-        {% if whatsapp_checklist_url %}
+        {% if whatsapp_checklist_cliente_url %}
         <a
           class="btn btn-loc w-100 mt-3"
           id="btn-enviar-checklist-whatsapp"
-          href="{{ whatsapp_checklist_url }}"
+          href="{{ whatsapp_checklist_cliente_url }}"
           target="_blank"
           rel="noopener"
         >
-          Enviar checklist pelo WhatsApp
+          Enviar checklist ao cliente pelo WhatsApp
         </a>
         {% else %}
         <button class="btn btn-outline-secondary w-100 mt-3" type="button" disabled>
-          Enviar checklist pelo WhatsApp
+          Enviar checklist ao cliente pelo WhatsApp
         </button>
+        <div class="erro mt-2">Cliente sem WhatsApp cadastrado.</div>
         {% endif %}
 
         {% if conferencia_salva.situacao == "parcial" %}
@@ -493,50 +470,6 @@
       const jogosCadeirasInput = document.querySelector("input[data-fisico='cadeiras']");
       const formulario = document.querySelector("form[data-enter-nav]");
       const formularioJaSubmetido = formulario?.dataset.formBound === "true";
-      const envioFuncionarios = document.getElementById("envio-checklist-funcionarios");
-      const erroFuncionarioChecklist = document.getElementById("erro-funcionario-checklist");
-      const radiosFuncionariosChecklist = Array.from(document.querySelectorAll("input[name='checklist_funcionario_envio']"));
-      const botaoEnviarChecklistWhatsapp = document.getElementById("btn-enviar-checklist-whatsapp");
-
-      function funcionarioChecklistSelecionado() {
-        return radiosFuncionariosChecklist.find(function (radio) {
-          return radio.checked;
-        });
-      }
-
-      function atualizarLinkChecklistWhatsapp() {
-        const selecionado = funcionarioChecklistSelecionado();
-        if (botaoEnviarChecklistWhatsapp && selecionado) {
-          botaoEnviarChecklistWhatsapp.href = selecionado.dataset.whatsappUrl || "#";
-        }
-      }
-
-      radiosFuncionariosChecklist.forEach(function (radio) {
-        radio.addEventListener("change", atualizarLinkChecklistWhatsapp);
-      });
-      atualizarLinkChecklistWhatsapp();
-
-      botaoEnviarChecklistWhatsapp?.addEventListener("click", function (event) {
-        const selecionado = radiosFuncionariosChecklist.find(function (radio) {
-          return radio.checked;
-        });
-        if (!selecionado) {
-          event.preventDefault();
-          if (envioFuncionarios) {
-            envioFuncionarios.open = true;
-            envioFuncionarios.scrollIntoView({ behavior: "smooth", block: "center" });
-          }
-          if (erroFuncionarioChecklist) {
-            erroFuncionarioChecklist.hidden = false;
-          }
-          radiosFuncionariosChecklist[0]?.focus();
-          return;
-        }
-        if (erroFuncionarioChecklist) {
-          erroFuncionarioChecklist.hidden = true;
-        }
-      });
-
       if (!resultado) { return; }
 
       function mostrar(campo, sim) {
@@ -696,13 +629,6 @@
         relacao.addEventListener("change", atualizarRelacao);
       });
       if (checkBom) { checkBom.addEventListener("change", sincronizarCamposPost); }
-      radiosFuncionariosChecklist.forEach(function (radio) {
-        radio.addEventListener("change", function () {
-          if (erroFuncionarioChecklist) {
-            erroFuncionarioChecklist.hidden = true;
-          }
-        });
-      });
       formulario?.addEventListener("submit", function (event) {
         sincronizarCamposPost();
 
