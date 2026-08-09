@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8">
@@ -40,7 +40,7 @@
           <a class="btn btn-outline-primary" href="{% url 'locacoes:editar' locacao.id %}">Editar</a>
         {% endif %}
         {% if tarefa_entrega %}
-          <a class="btn btn-outline-success" href="{% url 'locacoes:conferencia_entrega' tarefa_entrega.id %}">Checklist de entrega</a>
+          <a class="btn btn-outline-success" href="{% url 'locacoes:checklist_operacional' %}?foco={{ tarefa_entrega.id }}">Checklist de entrega</a>
         {% endif %}
         {% if tarefa_recolhimento %}
           <a class="btn btn-outline-success" href="{% url 'locacoes:conferencia_recolhimento' tarefa_recolhimento.id %}">Checklist de recolhimento</a>
@@ -198,7 +198,7 @@
   {% if tarefa_entrega %}
     <a
       class="btn btn-success w-100 mt-2"
-      href="{% url 'locacoes:conferencia_entrega' tarefa_entrega.id %}"
+      href="{% url 'locacoes:checklist_operacional' %}?foco={{ tarefa_entrega.id }}"
     >
       Abrir checklist de entrega
     </a>
@@ -233,7 +233,7 @@
           <div class="d-flex justify-content-end mt-3">
             <a
               class="btn btn-success"
-              href="{% url 'locacoes:conferencia_entrega' tarefa_entrega.id %}"
+              href="{% url 'locacoes:checklist_operacional' %}?foco={{ tarefa_entrega.id }}"
             >
               Fazer checklist de entrega
             </a>

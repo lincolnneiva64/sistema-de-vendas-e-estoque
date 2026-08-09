@@ -1,4 +1,4 @@
-﻿from decimal import Decimal
+from decimal import Decimal
 
 from django.conf import settings
 from django.contrib import messages
@@ -1503,14 +1503,24 @@ def conferencia_entrega(request, pk):
         else ""
     )
     telefone_cliente_whatsapp = _telefone_whatsapp_locacao(locacao)
+    mensagem_checklist_cliente = (
+        _mensagem_checklist_entrega_cliente_whatsapp(
+            conferencia_salva,
+            checklist_cliente_whatsapp_url,
+        )
+        if conferencia_salva
+        else ""
+    )
     whatsapp_checklist_cliente_url = (
         _whatsapp_web_url(
             telefone_cliente_whatsapp,
-            _mensagem_checklist_entrega_cliente_whatsapp(
-                conferencia_salva,
-                checklist_cliente_whatsapp_url,
-            ),
+            mensagem_checklist_cliente,
         )
+        if conferencia_salva and telefone_cliente_whatsapp
+        else ""
+    )
+    whatsapp_checklist_cliente_mobile_url = (
+        f"https://wa.me/{telefone_cliente_whatsapp}?text={quote(mensagem_checklist_cliente)}"
         if conferencia_salva and telefone_cliente_whatsapp
         else ""
     )
@@ -1568,6 +1578,7 @@ def conferencia_entrega(request, pk):
             "materiais_entrega": materiais_entrega,
             "historico": historico,
             "whatsapp_checklist_cliente_url": whatsapp_checklist_cliente_url,
+            "whatsapp_checklist_cliente_mobile_url": whatsapp_checklist_cliente_mobile_url,
             "telefone_cliente_whatsapp": telefone_cliente_whatsapp,
             "telefone_cliente_exibicao": locacao.telefone_contratante,
             "conferencia_salva": conferencia_salva,
@@ -1586,98 +1597,8 @@ def checklist_entrega_cliente(request, pk):
         ),
         pk=pk,
     )
+
     locacao = conferencia.locacao
-    texto_checklist = _texto_checklist_entrega(conferencia)
-    funcionarios_checklist = _funcionarios_checklist_locacoes()
-    evento_envio = _evento_checklist_entrega_enviado(conferencia)
-
-    if request.method == "POST" and not evento_envio:
-        funcionario_id = str(request.POST.get("checklist_funcionario") or "").strip()
-        funcionario = funcionarios_checklist.filter(pk=funcionario_id).first()
-        if funcionario:
-            telefone = _telefone_funcionario_checklist(funcionario)
-            responsavel = _responsavel_request(request, conferencia.responsavel)
-            EventoLocacao.objects.create(
-                locacao=locacao,
-                tipo="checklist_entrega_funcionario_enviado",
-                descricao=(
-                    f"Checklist de entrega enviado ao funcionario.\n"
-                    f"Conferencia #{conferencia.pk}\n"
-                    f"Enviado para: {funcionario.nome}\n"
-                    f"Telefone: {telefone}"
-                ),
-                responsavel=responsavel,
-            )
-            messages.success(request, "Checklist confirmado como enviado.")
-            if _request_ajax(request):
-                evento_envio = _evento_checklist_entrega_enviado(conferencia)
-                return JsonResponse(
-                    {
-                        "ok": True,
-                        "redirectUrl": reverse(
-                            "locacoes:checklist_entrega_cliente",
-                            kwargs={"pk": conferencia.pk},
-                        ),
-                        "envio": _dados_evento_checklist_entrega(evento_envio),
-                    }
-                )
-            return redirect("locacoes:checklist_entrega_cliente", pk=conferencia.pk)
-        if _request_ajax(request):
-            return JsonResponse(
-                {
-                    "ok": False,
-                    "erro": "Selecione um funcionario habilitado para receber o checklist.",
-                },
-                status=400,
-            )
-        messages.warning(
-            request,
-            "Selecione um funcionario habilitado para receber o checklist.",
-        )
-
-    evento_envio = _evento_checklist_entrega_enviado(conferencia)
-    envio_checklist = _dados_evento_checklist_entrega(evento_envio)
-    checklist_url = request.build_absolute_uri(
-        reverse(
-            "locacoes:checklist_entrega_cliente",
-            kwargs={"pk": conferencia.pk},
-        )
-    )
-    funcionarios_checklist_envio = _funcionarios_checklist_envio(
-        conferencia,
-        checklist_url,
-        funcionarios_checklist,
-    )
-    funcionario_selecionado_id = str(request.GET.get("funcionario") or "")
-    funcionario_selecionado = (
-        funcionarios_checklist.filter(pk=funcionario_selecionado_id).first()
-        if funcionario_selecionado_id
-        else None
-    )
-    funcionario_selecionado_whatsapp_url = (
-        _whatsapp_checklist_funcionario_url(
-            funcionario_selecionado,
-            _mensagem_checklist_link_whatsapp(
-                funcionario_selecionado.nome,
-                checklist_url,
-            ),
-        )
-        if funcionario_selecionado
-        else ""
-    )
-    abrir_whatsapp_automatico = (
-        request.GET.get("abrir_whatsapp") == "1"
-        and bool(funcionario_selecionado_whatsapp_url)
-        and not evento_envio
-    )
-    if envio_checklist.get("telefone"):
-        envio_checklist["whatsapp_url"] = _whatsapp_web_url(
-            envio_checklist["telefone"],
-            _mensagem_checklist_link_whatsapp(
-                envio_checklist.get("funcionario_nome"),
-                checklist_url,
-            ),
-        )
 
     return render(
         request,
@@ -1687,15 +1608,7 @@ def checklist_entrega_cliente(request, pk):
             "locacao": locacao,
             "itens_checklist": _itens_checklist_entrega(conferencia),
             "itens_checklist_rota": _itens_checklist_entrega_formato_rota(conferencia),
-            "texto_checklist": texto_checklist,
-            "whatsapp_url": _whatsapp_locacao_url(locacao),
-            "funcionarios_checklist": funcionarios_checklist,
-            "funcionarios_checklist_envio": funcionarios_checklist_envio,
-            "funcionario_selecionado": funcionario_selecionado,
-            "funcionario_selecionado_whatsapp_url": funcionario_selecionado_whatsapp_url,
-            "abrir_whatsapp_automatico": abrir_whatsapp_automatico,
-            "evento_envio_checklist": evento_envio,
-            "envio_checklist": envio_checklist,
+            "texto_checklist": _texto_checklist_entrega(conferencia),
         },
     )
 
