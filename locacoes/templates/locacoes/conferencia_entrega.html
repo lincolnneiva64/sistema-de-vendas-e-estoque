@@ -255,7 +255,6 @@
           class="btn btn-loc w-100 mt-3"
           id="btn-enviar-checklist-whatsapp"
           href="{{ whatsapp_checklist_cliente_url }}"
-          data-mobile-url="{{ whatsapp_checklist_cliente_mobile_url }}"
           target="_blank"
           rel="noopener"
         >
@@ -644,22 +643,5 @@
       atualizarResultado();
     })();
   </script>
-
-  <script id="whatsapp-cliente-final">
-    (function () {
-      const botao = document.getElementById("btn-enviar-checklist-whatsapp");
-      if (!botao) return;
-
-      botao.addEventListener("click", function (event) {
-        const mobile = /Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent);
-
-        if (mobile && botao.dataset.mobileUrl) {
-          event.preventDefault();
-          window.location.href = botao.dataset.mobileUrl;
-        }
-      });
-    })();
-  </script>
-
 </body>
 </html>

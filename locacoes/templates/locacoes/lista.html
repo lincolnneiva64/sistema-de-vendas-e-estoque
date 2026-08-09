@@ -428,7 +428,7 @@
                       <a class="btn btn-outline-secondary btn-sm" href="{% url 'locacoes:detalhe' locacao.id %}">Ver detalhes</a>
                     {% endif %}
                     {% if locacao.acoes_consulta.tarefa_entrega %}
-                      <a class="btn btn-outline-success btn-sm" href="{% url 'locacoes:checklist_operacional' %}?foco={{ locacao.acoes_consulta.tarefa_entrega.id }}">Entrega</a>
+                      <a class="btn btn-outline-success btn-sm" href="{% url 'locacoes:conferencia_entrega' locacao.acoes_consulta.tarefa_entrega.id %}">Entrega</a>
                     {% endif %}
                     {% if locacao.acoes_consulta.tarefa_recolhimento %}
                       <a class="btn btn-outline-success btn-sm" href="{% url 'locacoes:conferencia_recolhimento' locacao.acoes_consulta.tarefa_recolhimento.id %}">Recolhimento</a>
