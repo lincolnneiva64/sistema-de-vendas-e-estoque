@@ -629,6 +629,20 @@ class LocacoesOperacaoTests(TestCase):
             })
         return Locacao.criar_reserva(self.dados_base(), itens)
 
+    def criar_locacao_com_datas(self, data_entrega, data_prevista_devolucao, jogos=1):
+        itens = [{
+            "tipo": ItemLocacao.TIPO_JOGO,
+            "quantidade": jogos,
+            "preco_diaria": Decimal("8.00"),
+        }]
+        return Locacao.criar_reserva(
+            self.dados_base(
+                data_entrega=data_entrega,
+                data_prevista_devolucao=data_prevista_devolucao,
+            ),
+            itens,
+        )
+
     def test_transicoes_validas_e_invalidas(self):
         locacao = self.criar_locacao()
 
@@ -687,6 +701,43 @@ class LocacoesOperacaoTests(TestCase):
         self.assertEqual(locacao.status, Locacao.STATUS_PENDENTE_DEVOLUCAO)
         self.assertEqual(disponibilidade["reservado_mesas"], 1)
         self.assertEqual(disponibilidade["reservado_cadeiras"], 4)
+
+    def test_quadro_disponibilidade_separa_estoque_previsto_e_potencial(self):
+        retorna_na_data = self.criar_locacao(jogos=1)
+        retorna_na_data.marcar_saiu_para_entrega()
+        retorna_depois = self.criar_locacao_com_datas(
+            data_entrega=date(2026, 9, 1),
+            data_prevista_devolucao=date(2026, 9, 4),
+            jogos=1,
+        )
+        retorna_depois.marcar_saiu_para_entrega()
+
+        quadro = Locacao.quadro_disponibilidade(date(2026, 9, 2))
+
+        self.assertEqual(
+            quadro["estoque_agora"],
+            {"jogos": 3, "mesas": 3, "cadeiras": 12},
+        )
+        self.assertEqual(
+            quadro["previsto_recolher"],
+            {"jogos": 1, "mesas": 1, "cadeiras": 4},
+        )
+        self.assertEqual(
+            quadro["potencial_data"],
+            {"jogos": 4, "mesas": 4, "cadeiras": 16},
+        )
+
+    def test_quadro_disponibilidade_calcula_jogos_por_mesas_e_cadeiras(self):
+        ConfiguracaoLocacao.objects.filter(pk=self.configuracao.pk).update(
+            total_mesas=5,
+            total_cadeiras=16,
+        )
+
+        quadro = Locacao.quadro_disponibilidade(date(2026, 9, 2))
+
+        self.assertEqual(quadro["estoque_agora"]["jogos"], 4)
+        self.assertEqual(quadro["estoque_agora"]["mesas"], 5)
+        self.assertEqual(quadro["estoque_agora"]["cadeiras"], 16)
 
     def test_perda_e_quebra_baixam_estoque_fisico_com_vinculo_a_locacao(self):
         locacao = self.criar_locacao(jogos=1, cadeiras=1)
@@ -3526,7 +3577,87 @@ class LocacoesFormularioReservaTests(TestCase):
         )
         self.assertContains(
             response,
-            "destinosQuantidade",
+            "sequenciaItensEnter",
+        )
+        self.assertContains(
+            response,
+            'id="resumoDisponibilidadeTitulo"',
+        )
+        self.assertContains(
+            response,
+            'id="resumoEstoqueJogos"',
+        )
+        self.assertContains(
+            response,
+            'id="resumoRecolherJogos"',
+        )
+        self.assertContains(
+            response,
+            'id="resumoPrevistoJogos"',
+        )
+        self.assertContains(
+            response,
+            "Total previsto",
+        )
+        self.assertNotContains(
+            response,
+            "Potencial na data",
+        )
+        self.assertNotContains(
+            response,
+            "availability-table",
+        )
+
+    def test_enter_dos_itens_tem_fluxo_sincrono_unico(self):
+        response = self.client.get(
+            reverse("locacoes:nova"),
+            secure=True,
+        )
+        html = response.content.decode("utf-8")
+
+        self.assertIn(
+            'const sequenciaItensEnter = [',
+            html,
+        )
+        self.assertIn(
+            '"id_jogos"',
+            html,
+        )
+        self.assertIn(
+            '"id_preco_jogo_diaria"',
+            html,
+        )
+        self.assertIn(
+            '"id_mesas_avulsas"',
+            html,
+        )
+        self.assertIn(
+            '"id_preco_mesa_avulsa_diaria"',
+            html,
+        )
+        self.assertIn(
+            '"id_cadeiras_avulsas"',
+            html,
+        )
+        self.assertIn(
+            '"id_preco_cadeira_avulsa_diaria"',
+            html,
+        )
+        trecho = html[
+            html.index("const sequenciaItensEnter = ["):
+            html.index("camposResumo.forEach")
+        ]
+        self.assertIn(
+            "event.stopImmediatePropagation()",
+            trecho,
+        )
+        self.assertIn(
+            "focarCampo(destino);",
+            trecho,
+        )
+        self.assertNotIn(
+            "consultarDisponibilidade().then",
+            trecho,
         )
 
     def test_checklist_exibe_data_da_solicitacao(self):
@@ -3735,6 +3866,36 @@ class LocacoesFormularioReservaTests(TestCase):
         self.assertEqual(resultado["status"], "indisponivel")
         self.assertIn("mesas: solicitado 11, disponível 10", resultado["mensagem"])
         self.assertIn("cadeiras: solicitado 44, disponível 40", resultado["mensagem"])
+
+    def test_endpoint_disponibilidade_inclui_quadro_por_data_de_entrega(self):
+        retorna_na_data = self.criar_locacao(
+            data_entrega=self.hoje - timedelta(days=2),
+            data_prevista_devolucao=self.hoje,
+        )
+        retorna_na_data.marcar_saiu_para_entrega()
+        retorna_depois = self.criar_locacao(
+            pessoa_avulsa_nome="Retorna depois",
+            data_entrega=self.hoje - timedelta(days=2),
+            data_prevista_devolucao=self.hoje + timedelta(days=2),
+        )
+        retorna_depois.marcar_saiu_para_entrega()
+
+        resultado = self.disponibilidade(jogos="0")
+
+        self.assertEqual(resultado["status"], "incompleto")
+        self.assertEqual(resultado["quadro"]["data"], self.hoje.isoformat())
+        self.assertEqual(
+            resultado["quadro"]["estoque_agora"],
+            {"jogos": 8, "mesas": 8, "cadeiras": 32},
+        )
+        self.assertEqual(
+            resultado["quadro"]["previsto_recolher"],
+            {"jogos": 1, "mesas": 1, "cadeiras": 4},
+        )
+        self.assertEqual(
+            resultado["quadro"]["potencial_data"],
+            {"jogos": 9, "mesas": 9, "cadeiras": 36},
+        )
 
     def test_locacao_cancelada_ou_encerrada_nao_reduz_disponibilidade(self):
         cancelada = self.criar_locacao(pessoa_avulsa_nome="Cancelada")

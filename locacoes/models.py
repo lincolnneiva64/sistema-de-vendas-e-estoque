@@ -438,21 +438,8 @@ class Locacao(models.Model):
         locacoes_reservadas = cls.objects.filter(status=cls.STATUS_RESERVADA).filter(
             cls.periodo_conflita_q(data_entrega, data_prevista_devolucao)
         )
-        locacoes_rua = (
-            cls.objects
-            .filter(
-                status__in=[
-                    cls.STATUS_SAIU_PARA_ENTREGA,
-                    cls.STATUS_ENTREGUE,
-                    cls.STATUS_PENDENTE_DEVOLUCAO,
-                ],
-                data_entrega__lte=data_prevista_devolucao,
-            )
-            .prefetch_related(
-                "itens",
-                "conferencias_entrega",
-                "conferencias_recolhimento",
-            )
+        locacoes_rua = cls.locacoes_com_material_na_rua().filter(
+            data_entrega__lte=data_prevista_devolucao,
         )
         if excluir_id:
             locacoes_reservadas = locacoes_reservadas.exclude(pk=excluir_id)
@@ -465,60 +452,132 @@ class Locacao(models.Model):
             mesas += necessidade["mesas"]
             cadeiras += necessidade["cadeiras"]
         for locacao in locacoes_rua:
-            conferencias_entrega = list(
-                locacao.conferencias_entrega.all()
-            )
-
-            # Enquanto a entrega ainda estiver incompleta,
-            # toda a quantidade contratada continua reservada.
-            if (
-                locacao.status
-                == cls.STATUS_SAIU_PARA_ENTREGA
-                or not conferencias_entrega
-            ):
-                for item in locacao.itens.all():
-                    pendente = item.necessidade_pendente()
-                    mesas += pendente["mesas"]
-                    cadeiras += pendente["cadeiras"]
-                continue
-
-            entregues_mesas = sum(
-                conferencia.entregue_mesas
-                for conferencia in conferencias_entrega
-            )
-            entregues_cadeiras = sum(
-                conferencia.entregue_cadeiras
-                for conferencia in conferencias_entrega
-            )
-
-            recolhidos_mesas = 0
-            recolhidos_cadeiras = 0
-
-            for conferencia in (
-                locacao.conferencias_recolhimento.all()
-            ):
-                recolhidos_mesas += (
-                    conferencia.boa_mesas
-                    + conferencia.quebrada_mesas
-                    + conferencia.perdida_mesas
-                    + conferencia.descartada_mesas
-                )
-                recolhidos_cadeiras += (
-                    conferencia.boa_cadeiras
-                    + conferencia.quebrada_cadeiras
-                    + conferencia.perdida_cadeiras
-                    + conferencia.descartada_cadeiras
-                )
-
-            mesas += max(
-                entregues_mesas - recolhidos_mesas,
-                0,
-            )
-            cadeiras += max(
-                entregues_cadeiras - recolhidos_cadeiras,
-                0,
-            )
+            pendente = cls.material_pendente_na_rua(locacao)
+            mesas += pendente["mesas"]
+            cadeiras += pendente["cadeiras"]
         return {"mesas": mesas, "cadeiras": cadeiras}
+
+    @classmethod
+    def locacoes_com_material_na_rua(cls):
+        return (
+            cls.objects
+            .filter(
+                status__in=[
+                    cls.STATUS_SAIU_PARA_ENTREGA,
+                    cls.STATUS_ENTREGUE,
+                    cls.STATUS_PENDENTE_DEVOLUCAO,
+                ],
+            )
+            .prefetch_related(
+                "itens",
+                "conferencias_entrega",
+                "conferencias_recolhimento",
+            )
+        )
+
+    @classmethod
+    def material_pendente_na_rua(cls, locacao):
+        conferencias_entrega = list(locacao.conferencias_entrega.all())
+
+        if locacao.status == cls.STATUS_SAIU_PARA_ENTREGA or not conferencias_entrega:
+            mesas = 0
+            cadeiras = 0
+            for item in locacao.itens.all():
+                pendente = item.necessidade_pendente()
+                mesas += pendente["mesas"]
+                cadeiras += pendente["cadeiras"]
+            return {"mesas": mesas, "cadeiras": cadeiras}
+
+        entregues_mesas = sum(
+            conferencia.entregue_mesas
+            for conferencia in conferencias_entrega
+        )
+        entregues_cadeiras = sum(
+            conferencia.entregue_cadeiras
+            for conferencia in conferencias_entrega
+        )
+
+        recolhidos_mesas = 0
+        recolhidos_cadeiras = 0
+
+        for conferencia in locacao.conferencias_recolhimento.all():
+            recolhidos_mesas += (
+                conferencia.boa_mesas
+                + conferencia.quebrada_mesas
+                + conferencia.perdida_mesas
+                + conferencia.descartada_mesas
+            )
+            recolhidos_cadeiras += (
+                conferencia.boa_cadeiras
+                + conferencia.quebrada_cadeiras
+                + conferencia.perdida_cadeiras
+                + conferencia.descartada_cadeiras
+            )
+
+        return {
+            "mesas": max(entregues_mesas - recolhidos_mesas, 0),
+            "cadeiras": max(entregues_cadeiras - recolhidos_cadeiras, 0),
+        }
+
+    @classmethod
+    def materiais_na_rua(cls, data_prevista_devolucao_ate=None, excluir_id=None):
+        locacoes = cls.locacoes_com_material_na_rua()
+        if data_prevista_devolucao_ate:
+            locacoes = locacoes.filter(
+                data_prevista_devolucao__lte=data_prevista_devolucao_ate,
+            )
+        if excluir_id:
+            locacoes = locacoes.exclude(pk=excluir_id)
+
+        mesas = 0
+        cadeiras = 0
+        for locacao in locacoes:
+            pendente = cls.material_pendente_na_rua(locacao)
+            mesas += pendente["mesas"]
+            cadeiras += pendente["cadeiras"]
+        return {"mesas": mesas, "cadeiras": cadeiras}
+
+    @classmethod
+    def quadro_disponibilidade(cls, data_referencia, excluir_id=None):
+        configuracao = ConfiguracaoLocacao.obter()
+        total_mesas = int(configuracao.total_mesas or 0)
+        total_cadeiras = int(configuracao.total_cadeiras or 0)
+        na_rua = cls.materiais_na_rua(excluir_id=excluir_id)
+        previsto = cls.materiais_na_rua(
+            data_prevista_devolucao_ate=data_referencia,
+            excluir_id=excluir_id,
+        )
+
+        def linha(mesas, cadeiras):
+            mesas = int(mesas or 0)
+            cadeiras = int(cadeiras or 0)
+            return {
+                "jogos": min(
+                    mesas,
+                    cadeiras // ConfiguracaoLocacao.JOGO_CADEIRAS,
+                ),
+                "mesas": mesas,
+                "cadeiras": cadeiras,
+            }
+
+        estoque_agora = linha(
+            max(total_mesas - na_rua["mesas"], 0),
+            max(total_cadeiras - na_rua["cadeiras"], 0),
+        )
+        previsto_recolher = linha(
+            previsto["mesas"],
+            previsto["cadeiras"],
+        )
+        potencial_data = linha(
+            estoque_agora["mesas"] + previsto_recolher["mesas"],
+            estoque_agora["cadeiras"] + previsto_recolher["cadeiras"],
+        )
+
+        return {
+            "estoque_agora": estoque_agora,
+            "previsto_recolher": previsto_recolher,
+            "potencial_data": potencial_data,
+        }
 
     @classmethod
     def disponibilidade_periodo(cls, data_entrega, data_prevista_devolucao, excluir_id=None):

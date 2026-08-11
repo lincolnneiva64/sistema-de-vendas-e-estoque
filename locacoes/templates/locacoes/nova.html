@@ -39,12 +39,12 @@
     }
 
     .top {
-      display: flex;
-      justify-content: space-between;
+      display: grid;
+      grid-template-columns: minmax(245px, auto) minmax(360px, 1fr) auto;
       gap: 18px;
       align-items: center;
       margin-bottom: 22px;
-      padding: 22px 24px;
+      padding: 18px 22px;
       border: 2px solid var(--locacoes-border);
       border-left: 9px solid var(--locacoes-orange);
       border-radius: 16px;
@@ -58,6 +58,10 @@
       box-shadow:
         0 14px 30px rgba(154, 52, 18, 0.13),
         0 3px 8px rgba(15, 23, 42, 0.06);
+    }
+
+    .top-info {
+      min-width: 0;
     }
 
     .top h1 {
@@ -91,8 +95,8 @@
       align-items: center;
       flex-wrap: wrap;
       gap: 7px;
-      margin-top: 11px;
-      padding: 8px 13px;
+      margin-top: 8px;
+      padding: 7px 11px;
       border: 2px solid #fdba74;
       border-radius: 10px;
       background: rgba(255, 255, 255, 0.86);
@@ -104,6 +108,92 @@
 
     .solicitacao-topo strong {
       color: var(--locacoes-orange-dark);
+      font-weight: 950;
+    }
+
+    .disponibilidade-topo {
+      width: min(100%, 520px);
+      justify-self: end;
+      padding: 8px 10px;
+      border: 1px solid #fb923c;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 3px 8px rgba(154, 52, 18, 0.07);
+    }
+
+    .disponibilidade-topo-titulo {
+      margin-bottom: 5px;
+      color: var(--locacoes-orange-dark);
+      font-size: 0.82rem;
+      font-weight: 950;
+    }
+
+    .disponibilidade-topo-linhas {
+      display: grid;
+    }
+
+    .disponibilidade-topo-linha {
+      display: grid;
+      grid-template-columns: 118px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      padding: 4px 0;
+      border-top: 1px solid #ffedd5;
+      color: #334155;
+      font-size: 0.82rem;
+      font-weight: 800;
+    }
+
+    .disponibilidade-topo-linha span:first-child {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--locacoes-muted);
+      font-size: 0.7rem;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .disponibilidade-topo-linha span:first-child::before {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      content: "";
+    }
+
+    .disponibilidade-topo-linha.estoque span:first-child,
+    .disponibilidade-topo-linha.estoque strong {
+      color: #166534;
+    }
+
+    .disponibilidade-topo-linha.estoque span:first-child::before {
+      background: #22c55e;
+    }
+
+    .disponibilidade-topo-linha.recolher span:first-child,
+    .disponibilidade-topo-linha.recolher strong {
+      color: #9a3412;
+    }
+
+    .disponibilidade-topo-linha.recolher span:first-child::before {
+      background: #f97316;
+    }
+
+    .disponibilidade-topo-linha.previsto span:first-child,
+    .disponibilidade-topo-linha.previsto strong {
+      color: #1d4ed8;
+    }
+
+    .disponibilidade-topo-linha.previsto span:first-child::before {
+      background: #3b82f6;
+    }
+
+    .disponibilidade-topo-valores {
+      min-width: 0;
+      color: #334155;
+    }
+
+    .disponibilidade-topo-linha strong {
       font-weight: 950;
     }
 
@@ -420,6 +510,20 @@
         border-left-width: 7px;
       }
 
+      .top-info {
+        display: block;
+      }
+
+      .disponibilidade-topo {
+        width: 100%;
+        margin-top: 12px;
+      }
+
+      .disponibilidade-topo-linha {
+        grid-template-columns: 1fr;
+        gap: 2px;
+      }
+
       .top .btn {
         width: 100%;
         margin-top: 16px;
@@ -465,7 +569,7 @@
 <body>
   <main class="page">
     <header class="top">
-      <div>
+      <div class="top-info">
         <h1>{% if modo_edicao %}Editar locação #{{ locacao.id }}{% else %}Nova locação{% endif %}</h1>
         <div class="solicitacao-topo">
           {% if modo_edicao %}
@@ -475,6 +579,37 @@
             <span>Data da solicitação:</span>
             <strong>{% now "d/m/Y H:i" %}</strong>
           {% endif %}
+        </div>
+      </div>
+      <div class="disponibilidade-topo" aria-live="polite">
+        <div id="resumoDisponibilidadeTitulo" class="disponibilidade-topo-titulo">
+          Disponibilidade - data da entrega
+        </div>
+        <div class="disponibilidade-topo-linhas">
+          <div class="disponibilidade-topo-linha estoque">
+            <span>Em estoque</span>
+            <div class="disponibilidade-topo-valores">
+              <strong id="resumoEstoqueJogos">0</strong> jogos |
+              <strong id="resumoEstoqueMesas">0</strong> mesas |
+              <strong id="resumoEstoqueCadeiras">0</strong> cadeiras
+            </div>
+          </div>
+          <div class="disponibilidade-topo-linha recolher">
+            <span>A recolher</span>
+            <div class="disponibilidade-topo-valores">
+              <strong id="resumoRecolherJogos">0</strong> jogos |
+              <strong id="resumoRecolherMesas">0</strong> mesas |
+              <strong id="resumoRecolherCadeiras">0</strong> cadeiras
+            </div>
+          </div>
+          <div class="disponibilidade-topo-linha previsto">
+            <span>Total previsto</span>
+            <div class="disponibilidade-topo-valores">
+              <strong id="resumoPrevistoJogos">0</strong> jogos |
+              <strong id="resumoPrevistoMesas">0</strong> mesas |
+              <strong id="resumoPrevistoCadeiras">0</strong> cadeiras
+            </div>
+          </div>
         </div>
       </div>
       <a class="btn btn-outline-secondary" href="{% url 'locacoes:lista' %}">Voltar</a>
@@ -765,6 +900,24 @@
 
       const disponibilidadeMensagem = document.getElementById("disponibilidadeMensagem");
       const avisoMaterialItens = document.getElementById("avisoMaterialItens");
+      const resumoDisponibilidadeTitulo = document.getElementById("resumoDisponibilidadeTitulo");
+      const camposResumoDisponibilidade = {
+        estoque_agora: {
+          jogos: document.getElementById("resumoEstoqueJogos"),
+          mesas: document.getElementById("resumoEstoqueMesas"),
+          cadeiras: document.getElementById("resumoEstoqueCadeiras"),
+        },
+        previsto_recolher: {
+          jogos: document.getElementById("resumoRecolherJogos"),
+          mesas: document.getElementById("resumoRecolherMesas"),
+          cadeiras: document.getElementById("resumoRecolherCadeiras"),
+        },
+        potencial_data: {
+          jogos: document.getElementById("resumoPrevistoJogos"),
+          mesas: document.getElementById("resumoPrevistoMesas"),
+          cadeiras: document.getElementById("resumoPrevistoCadeiras"),
+        },
+      };
       let ultimaDisponibilidade = {
         status: "incompleto",
       };
@@ -1183,10 +1336,53 @@
         }
       }
 
+      function formatarData(valor) {
+        if (!valor) return "a data escolhida";
+        const partes = valor.split("-");
+        if (partes.length !== 3) return valor;
+        return `${partes[2]}/${partes[1]}/${partes[0]}`;
+      }
+
+      function numeroInteiro(valor) {
+        const convertido = Number(valor || 0);
+        return Number.isFinite(convertido) ? convertido : 0;
+      }
+
+      function atualizarLinhaQuadro(chave, dados) {
+        const campos = camposResumoDisponibilidade[chave];
+        const linha = dados?.[chave] || {};
+        if (!campos) return;
+
+        if (campos.jogos) {
+          campos.jogos.textContent = numeroInteiro(linha.jogos);
+        }
+        if (campos.mesas) {
+          campos.mesas.textContent = numeroInteiro(linha.mesas);
+        }
+        if (campos.cadeiras) {
+          campos.cadeiras.textContent = numeroInteiro(linha.cadeiras);
+        }
+      }
+
+      function atualizarQuadroDisponibilidade(quadro) {
+        if (resumoDisponibilidadeTitulo) {
+          resumoDisponibilidadeTitulo.textContent =
+            `Disponibilidade - ${formatarData(quadro?.data || campoDataEntrega?.value || "")}`;
+        }
+
+        atualizarLinhaQuadro("estoque_agora", quadro);
+        atualizarLinhaQuadro("previsto_recolher", quadro);
+        atualizarLinhaQuadro("potencial_data", quadro);
+      }
+
       function atualizarMensagemDisponibilidade(dados) {
         ultimaDisponibilidade = dados || {
           status: "incompleto",
         };
+
+        atualizarQuadroDisponibilidade(
+          ultimaDisponibilidade.quadro
+        );
 
         aplicarEstadoDisponibilidade(
           disponibilidadeMensagem,
@@ -1293,64 +1489,45 @@
         true
       );
 
-      const destinosQuantidade = {
-        id_jogos: "id_preco_jogo_diaria",
-        id_mesas_avulsas: "id_preco_mesa_avulsa_diaria",
-        id_cadeiras_avulsas:
-          "id_preco_cadeira_avulsa_diaria",
-      };
+      const sequenciaItensEnter = [
+        "id_jogos",
+        "id_preco_jogo_diaria",
+        "id_mesas_avulsas",
+        "id_preco_mesa_avulsa_diaria",
+        "id_cadeiras_avulsas",
+        "id_preco_cadeira_avulsa_diaria",
+      ];
 
-      function campoComFalta(dados) {
-        const jogos =
-          Number(
-            document.getElementById("id_jogos")?.value || 0
-          ) || 0;
+      function campoNavegavel(elemento) {
+        if (!elemento || elemento.disabled || elemento.hidden) return false;
+        if (elemento.type === "hidden") return false;
+        if (elemento.tabIndex < 0) return false;
+        if (elemento.offsetParent === null && elemento.type !== "hidden") return false;
+        return Boolean(
+          elemento.matches("input, select, button, a.btn, textarea")
+        );
+      }
 
-        const mesasAvulsas =
-          Number(
-            document.getElementById(
-              "id_mesas_avulsas"
-            )?.value || 0
-          ) || 0;
+      function proximoCampoDoFormulario(campo) {
+        const campos = Array.from(
+          form.querySelectorAll("input, select, button, a.btn, textarea")
+        ).filter(campoNavegavel);
+        const indice = campos.indexOf(campo);
+        return indice >= 0 ? campos[indice + 1] : null;
+      }
 
-        const cadeirasAvulsas =
-          Number(
-            document.getElementById(
-              "id_cadeiras_avulsas"
-            )?.value || 0
-          ) || 0;
-
-        if (
-          Number(dados.solicitado_mesas || 0) >
-          Number(dados.disponivel_mesas || 0)
-        ) {
-          if (mesasAvulsas > 0) {
-            return document.getElementById(
-              "id_mesas_avulsas"
-            );
-          }
-
-          if (jogos > 0) {
-            return document.getElementById("id_jogos");
-          }
-        }
+      function focarCampo(campo) {
+        if (!campo) return;
+        campo.focus();
 
         if (
-          Number(dados.solicitado_cadeiras || 0) >
-          Number(dados.disponivel_cadeiras || 0)
+          typeof campo.select === "function" &&
+          campo.matches(
+            "input:not([type='date']):not([type='time']):not([type='datetime-local'])"
+          )
         ) {
-          if (cadeirasAvulsas > 0) {
-            return document.getElementById(
-              "id_cadeiras_avulsas"
-            );
-          }
-
-          if (jogos > 0) {
-            return document.getElementById("id_jogos");
-          }
+          campo.select();
         }
-
-        return null;
       }
 
       document.addEventListener(
@@ -1370,10 +1547,7 @@
 
           if (
             !campo ||
-            !Object.prototype.hasOwnProperty.call(
-              destinosQuantidade,
-              campo.id
-            )
+            !sequenciaItensEnter.includes(campo.id)
           ) {
             return;
           }
@@ -1381,41 +1555,14 @@
           event.preventDefault();
           event.stopImmediatePropagation();
 
-          consultarDisponibilidade().then(function (dados) {
-            if (dados.status === "indisponivel") {
-              const campoProblema =
-                campoComFalta(dados) || campo;
+          const indice = sequenciaItensEnter.indexOf(campo.id);
+          const proximoId = sequenciaItensEnter[indice + 1];
+          const destino = proximoId
+            ? document.getElementById(proximoId)
+            : proximoCampoDoFormulario(campo);
 
-              campoProblema.focus();
-
-              if (
-                typeof campoProblema.select === "function"
-              ) {
-                campoProblema.select();
-              }
-
-              avisoMaterialItens?.scrollIntoView({
-                behavior: "smooth",
-                block: "center",
-              });
-
-              return;
-            }
-
-            const destino = document.getElementById(
-              destinosQuantidade[campo.id]
-            );
-
-            if (destino) {
-              destino.focus();
-
-              if (
-                typeof destino.select === "function"
-              ) {
-                destino.select();
-              }
-            }
-          });
+          focarCampo(destino);
+          verificarDisponibilidade();
         },
         true
       );

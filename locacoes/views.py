@@ -825,11 +825,28 @@ def _inteiro_nao_negativo(valor):
         return 0
 
 
+def _quadro_disponibilidade_locacao(data_entrega, excluir_id=None):
+    if not data_entrega:
+        return None
+    return {
+        "data": data_entrega.isoformat(),
+        **Locacao.quadro_disponibilidade(
+            data_entrega,
+            excluir_id=excluir_id,
+        ),
+    }
+
+
 def _avaliar_disponibilidade_dinamica(data_entrega, data_prevista_devolucao, jogos=0, mesas_avulsas=0, cadeiras_avulsas=0, excluir_id=None):
+    quadro = _quadro_disponibilidade_locacao(
+        data_entrega,
+        excluir_id=excluir_id,
+    )
     if not data_entrega or not data_prevista_devolucao:
         return {
             "status": "incompleto",
             "mensagem": "Informe datas e itens para verificar a disponibilidade.",
+            "quadro": quadro,
         }
     jogos = _inteiro_nao_negativo(jogos)
     mesas_avulsas = _inteiro_nao_negativo(mesas_avulsas)
@@ -838,6 +855,7 @@ def _avaliar_disponibilidade_dinamica(data_entrega, data_prevista_devolucao, jog
         return {
             "status": "incompleto",
             "mensagem": "Informe datas e itens para verificar a disponibilidade.",
+            "quadro": quadro,
         }
 
     itens = []
@@ -851,7 +869,11 @@ def _avaliar_disponibilidade_dinamica(data_entrega, data_prevista_devolucao, jog
     try:
         Locacao.calcular_diarias(data_entrega, data_prevista_devolucao)
     except ValidationError as exc:
-        return {"status": "incompleto", "mensagem": "; ".join(exc.messages)}
+        return {
+            "status": "incompleto",
+            "mensagem": "; ".join(exc.messages),
+            "quadro": quadro,
+        }
 
     disponibilidade = Locacao.disponibilidade_periodo(data_entrega, data_prevista_devolucao, excluir_id=excluir_id)
     necessidade = Locacao.necessidades_itens(itens)
@@ -871,6 +893,7 @@ def _avaliar_disponibilidade_dinamica(data_entrega, data_prevista_devolucao, jog
         "disponivel_cadeiras": disponivel_cadeiras,
         "solicitado_mesas": necessidade["mesas"],
         "solicitado_cadeiras": necessidade["cadeiras"],
+        "quadro": quadro,
     }
     if faltas:
         return {
