@@ -946,6 +946,9 @@ class LocacoesPagamentosTermoTests(TestCase):
         self.assertContains(response, "web.whatsapp.com/send?phone=55")
         self.assertNotContains(response, "web.whatsapp.com/send?phone=55&amp;text=")
         self.assertContains(response, "Abrir checklist de entrega")
+        self.assertContains(response, reverse("locacoes:checklist_operacional"))
+        self.assertContains(response, "tarefa=")
+        self.assertNotContains(response, "/conferencia-entrega/")
 
     def test_confirmacao_salva_nome_do_operador_cadastrado(self):
         locacao = self.criar_locacao()
@@ -1520,15 +1523,14 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.assertContains(comprovante, 'id="btn-enviar-checklist-whatsapp"')
         self.assertContains(comprovante, 'target="_blank"')
         self.assertContains(comprovante, 'rel="noopener"')
+        self.assertContains(comprovante, 'data-whatsapp-phone="5591988887777"')
+        self.assertContains(comprovante, 'data-checklist-url="https://sistema-de-vendas-e-estoque.onrender.com')
         self.assertContains(comprovante, "web.whatsapp.com/send?phone=5591988887777")
         self.assertContains(comprovante, "checklist-entrega/")
         self.assertNotContains(comprovante, 'name="checklist_funcionario_envio"')
         self.assertNotContains(comprovante, "Enviar checklist para")
-        self.assertIn("Checklist de entrega", texto_whatsapp)
-        self.assertIn(f"Locação #{locacao.id}", texto_whatsapp)
-        self.assertIn(f"Cliente: {locacao.nome_contratante}", texto_whatsapp)
-        self.assertIn("Sua entrega foi conferida e registrada com sucesso.", texto_whatsapp)
-        self.assertIn("Abrir checklist:", texto_whatsapp)
+        self.assertIn(f"Ola, {locacao.nome_contratante}.", texto_whatsapp)
+        self.assertIn("Segue o checklist conferido da sua entrega:", texto_whatsapp)
         self.assertIn(
             f"https://sistema-de-vendas-e-estoque.onrender.com{checklist_path}",
             texto_whatsapp,
@@ -1538,8 +1540,8 @@ class LocacoesChecklistOperacionalTests(TestCase):
             comprovante.context["checklist_url"],
             f"https://127.0.0.1:8000{checklist_path}",
         )
-        self.assertNotContains(comprovante, "window.open(")
-        self.assertNotContains(comprovante, "wa.me")
+        self.assertContains(comprovante, "window.open(")
+        self.assertContains(comprovante, "wa.me")
         self.assertEqual(
             conferencia.situacao,
             ConferenciaEntregaLocacao.SITUACAO_COMPLETA,
@@ -1708,13 +1710,14 @@ class LocacoesChecklistOperacionalTests(TestCase):
                 )
                 self.assertContains(comprovante, "Checklist de entrega")
                 self.assertContains(comprovante, "Materiais conferidos")
-                self.assertContains(comprovante, "Abrir WhatsApp")
-                self.assertContains(comprovante, "Copiar checklist")
-                self.assertContains(comprovante, "Enviar para o celular")
-                self.assertContains(comprovante, "Enviar checklist para")
-                self.assertContains(comprovante, "<details")
-                self.assertContains(comprovante, "Lincoln Checklist")
-                self.assertContains(comprovante, "Confirmar envio do checklist")
+                self.assertContains(comprovante, 'class="check-row is-checked"')
+                self.assertNotContains(comprovante, "Abrir WhatsApp")
+                self.assertNotContains(comprovante, "Copiar checklist")
+                self.assertNotContains(comprovante, "Enviar para o celular")
+                self.assertNotContains(comprovante, "Enviar checklist para")
+                self.assertNotContains(comprovante, "<details")
+                self.assertNotContains(comprovante, "Lincoln Checklist")
+                self.assertNotContains(comprovante, "Confirmar envio do checklist")
                 self.assertNotContains(
                     comprovante,
                     "Justificativa da entrega parcial",
@@ -1724,7 +1727,7 @@ class LocacoesChecklistOperacionalTests(TestCase):
                     "Material conferido no local.",
                 )
 
-    def test_checklist_entrega_confirma_envio_para_funcionario(self):
+    def test_checklist_entrega_cliente_e_somente_comprovante_final(self):
         locacao = self.criar_locacao()
         tarefa = obter_ou_criar_tarefa_operacional(
             locacao,
@@ -1749,25 +1752,22 @@ class LocacoesChecklistOperacionalTests(TestCase):
             secure=True,
         )
 
-        self.assertContains(response, "Enviar checklist para")
-        self.assertContains(response, '<details id="envio-checklist-funcionarios">')
-        self.assertContains(response, "Enviar checklist pelo WhatsApp")
-        self.assertContains(response, "Confirmar envio do checklist")
-        self.assertContains(response, 'data-envio-pendente="true"')
-        self.assertNotContains(response, 'class="btn-confirmar-envio" type="submit" hidden')
-        self.assertContains(response, "https://web.whatsapp.com/send?phone=5591999990000")
-        self.assertContains(response, "Segue%20o%20checklist%20de%20entrega")
-        self.assertContains(response, "conferencias-entrega")
-        self.assertContains(response, "checklist-entrega")
-        self.assertNotContains(response, "%F0%9F%91%A4")
-        self.assertNotContains(response, "%F0%9F%93%8D")
-        self.assertNotContains(response, "%E2%98%90%201%20Mesa%28s%29")
-        self.assertNotContains(response, "%E2%98%90%204%20Cadeira%28s%29")
-        self.assertNotContains(response, "%5B%20%20%20%5D")
-        self.assertNotContains(response, "Recebido%20por")
-        self.assertNotContains(response, "%E2%98%91%201%20Mesa")
-        self.assertNotContains(response, "%E2%98%91%204%20Cadeira")
-        self.assertNotContains(response, "Cargo")
+        self.assertContains(response, "Checklist de entrega")
+        self.assertContains(response, "Materiais conferidos")
+        self.assertContains(response, 'class="check-row is-checked"')
+        self.assertContains(response, 'class="check-row-text">Mesa</span>')
+        self.assertContains(response, 'class="check-row-sub">1 un</span>')
+        self.assertContains(response, 'class="check-row-text">Cadeira</span>')
+        self.assertContains(response, 'class="check-row-sub">4 un</span>')
+        self.assertContains(response, "Materiais em bom estado")
+        self.assertContains(response, "Recebido por")
+        self.assertContains(response, "Data/Hora")
+        self.assertContains(response, "Respons")
+        self.assertNotContains(response, "Enviar checklist para")
+        self.assertNotContains(response, '<details id="envio-checklist-funcionarios">')
+        self.assertNotContains(response, "Enviar checklist pelo WhatsApp")
+        self.assertNotContains(response, "Confirmar envio do checklist")
+        self.assertNotContains(response, "https://web.whatsapp.com/send?phone=5591999990000")
         self.assertNotContains(response, 'data-auto-open-whatsapp="true"')
         self.assertNotContains(response, "about:blank")
         self.assertNotContains(response, "window.open(")
@@ -1795,42 +1795,13 @@ class LocacoesChecklistOperacionalTests(TestCase):
             secure=True,
         )
 
-        self.assertRedirects(
-            response,
-            reverse(
-                "locacoes:checklist_entrega_cliente",
-                kwargs={"pk": conferencia.pk},
-            ),
-            fetch_redirect_response=False,
-        )
-        self.assertTrue(
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
             locacao.eventos.filter(
                 tipo="checklist_entrega_funcionario_enviado",
-                responsavel="Camila",
-                descricao__contains="Lincoln Checklist",
             ).exists()
         )
-
-        response = self.client.get(
-            reverse(
-                "locacoes:checklist_entrega_cliente",
-                kwargs={"pk": conferencia.pk},
-            ),
-            secure=True,
-        )
-
-        self.assertContains(response, "Checklist enviado")
-        self.assertContains(response, "Enviado para:")
-        self.assertContains(response, "Lincoln Checklist")
-        self.assertContains(response, "Enviado por:")
-        self.assertContains(response, "Camila")
-        self.assertContains(response, "Abrir WhatsApp novamente")
-        self.assertNotContains(response, 'class="btn-confirmar-envio"')
-        self.assertNotContains(response, "Enviar checklist pelo WhatsApp")
-        self.assertNotContains(response, '<span class="rotulo">Cargo</span>')
-        self.assertContains(response, 'class="check-row is-pending"')
-        self.assertContains(response, 'class="check-row-text">Mesa</span>')
-        self.assertContains(response, 'class="check-row-sub">1 un</span>')
+        self.assertNotContains(response, "Checklist enviado")
 
     def test_checklist_entrega_salva_sem_redirecionar_whatsapp_mesmo_com_header_ajax(self):
         locacao = self.criar_locacao()

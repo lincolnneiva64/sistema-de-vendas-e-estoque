@@ -290,8 +290,8 @@
         <span class="rotulo">Materiais conferidos</span>
         <div class="check-item-list">
           {% for item in itens_checklist_rota %}
-            <div class="check-row is-pending">
-              <input type="checkbox" readonly>
+            <div class="check-row is-checked">
+              <input type="checkbox" checked readonly>
               <span>
                 <span class="check-row-text">{{ item.produto_nome }}</span>
                 <span class="check-row-sub">{{ item.quantidade }} {{ item.unidade }}</span>
@@ -305,8 +305,8 @@
               </span>
             </div>
           {% endfor %}
-          <div class="check-row is-pending">
-            <input type="checkbox" readonly>
+          <div class="check-row is-checked">
+            <input type="checkbox" checked readonly>
             <span>
               <span class="check-row-text">Materiais em bom estado</span>
             </span>
@@ -330,6 +330,7 @@
       </div>
     </section>
 
+    {% comment %}
     <section class="envio-operacional">
       {% if evento_envio_checklist %}
         <div class="envio-confirmado">
@@ -597,5 +598,6 @@
 
     })();
   </script>
+  {% endcomment %}
 </body>
 </html>

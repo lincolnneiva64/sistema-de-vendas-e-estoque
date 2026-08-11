@@ -255,6 +255,9 @@
           class="btn btn-loc w-100 mt-3"
           id="btn-enviar-checklist-whatsapp"
           href="{{ whatsapp_checklist_cliente_url }}"
+          data-whatsapp-phone="{{ telefone_cliente_whatsapp }}"
+          data-checklist-url="{{ checklist_cliente_whatsapp_url }}"
+          data-cliente-nome="{{ locacao.nome_contratante }}"
           target="_blank"
           rel="noopener"
         >
@@ -470,6 +473,44 @@
       const jogosCadeirasInput = document.querySelector("input[data-fisico='cadeiras']");
       const formulario = document.querySelector("form[data-enter-nav]");
       const formularioJaSubmetido = formulario?.dataset.formBound === "true";
+      const botaoChecklistCliente = document.getElementById("btn-enviar-checklist-whatsapp");
+
+      {% if conferencia_salva %}
+      function normalizarWhatsapp(numero) {
+        let digitos = String(numero || "").replace(/\D/g, "");
+        if (digitos && !digitos.startsWith("55")) {
+          digitos = "55" + digitos;
+        }
+        return digitos;
+      }
+
+      if (botaoChecklistCliente) {
+        botaoChecklistCliente.addEventListener("click", function (event) {
+          const telefone = normalizarWhatsapp(botaoChecklistCliente.dataset.whatsappPhone);
+          const checklistUrl = botaoChecklistCliente.dataset.checklistUrl || "";
+          if (!telefone || !checklistUrl) {
+            return;
+          }
+          event.preventDefault();
+          const clienteNome = botaoChecklistCliente.dataset.clienteNome || "cliente";
+          const linhas = [
+            "Ola, " + clienteNome + ".",
+            "",
+            "Segue o checklist conferido da sua entrega:",
+            "",
+            checklistUrl
+          ];
+          const mensagem = encodeURIComponent(linhas.join("\n"));
+          const isMobile = /Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent);
+          if (isMobile) {
+            window.location.href = "https://wa.me/" + telefone + "?text=" + mensagem;
+          } else {
+            window.open("https://web.whatsapp.com/send?phone=" + telefone + "&text=" + mensagem, "_blank", "noopener");
+          }
+        });
+      }
+      {% endif %}
+
       if (!resultado) { return; }
 
       function mostrar(campo, sim) {
