@@ -440,7 +440,7 @@
             {% for erro in form.observacao.errors %}<div class="erro">{{ erro }}</div>{% endfor %}
           </div>
 
-          <input type="hidden" name="{{ form.responsavel.html_name }}" id="{{ form.responsavel.id_for_label }}" value="{{ form.responsavel.value|default:'Checklist operacional' }}">
+          <input type="hidden" name="{{ form.responsavel.html_name }}" id="{{ form.responsavel.id_for_label }}" value="{{ form.responsavel.value|default:'' }}">
         </div>
 
         <button class="btn btn-loc w-100 mt-3" id="botao-confirmar" type="submit">

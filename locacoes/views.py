@@ -12,7 +12,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from .forms import (
     AcaoOperacionalLocacaoForm,
@@ -337,6 +337,14 @@ def _telefone_funcionario_checklist(funcionario):
     return telefone
 
 
+def _nome_funcionario_checklist_por_id(funcionario_id):
+    funcionario_id = str(funcionario_id or "").strip()
+    if not funcionario_id.isdigit():
+        return ""
+    funcionario = _funcionarios_checklist_locacoes().filter(pk=int(funcionario_id)).first()
+    return funcionario.nome if funcionario else ""
+
+
 def _mensagem_checklist_link_whatsapp(nome_destinatario, checklist_url):
     nome = nome_destinatario or "funcionario"
     return "\n".join([
@@ -431,13 +439,27 @@ def _envios_tarefa_operacional_context(request, tarefa, ordem=None):
     funcionarios = []
     for funcionario in _funcionarios_checklist_locacoes():
         telefone = _telefone_funcionario_checklist(funcionario)
+        mensagem_funcionario = mensagem
+        if tarefa.tipo == TarefaOperacionalLocacao.TIPO_ENTREGA:
+            checklist_funcionario_path = (
+                f"{checklist_path}?{urlencode({'funcionario': funcionario.pk})}"
+            )
+            checklist_funcionario_url = _url_publica_checklist_whatsapp(
+                request,
+                checklist_funcionario_path,
+            )
+            mensagem_funcionario = _mensagem_tarefa_operacional_whatsapp(
+                tarefa,
+                checklist_funcionario_url,
+                ordem=ordem,
+            )
         funcionarios.append({
             "id": funcionario.pk,
             "nome": funcionario.nome,
             "telefone": telefone,
             "telefone_exibicao": funcionario.telefone_whatsapp or telefone,
             "whatsapp_url": (
-                _whatsapp_web_url(telefone, mensagem)
+                _whatsapp_web_url(telefone, mensagem_funcionario)
                 if telefone
                 else ""
             ),
@@ -1356,6 +1378,9 @@ def conferencia_entrega(request, pk):
         tipo=TarefaOperacionalLocacao.TIPO_ENTREGA,
     )
     locacao = tarefa.locacao
+    responsavel_checklist = _nome_funcionario_checklist_por_id(
+        request.GET.get("funcionario")
+    ) or str(request.GET.get("responsavel") or "").strip()
 
     conferencia_salva = None
     conferencia_id = request.GET.get(
@@ -1414,8 +1439,12 @@ def conferencia_entrega(request, pk):
             and not str(dados_post.get("recebedor_relacao_outro") or "").strip()
         ):
             dados_post["recebedor_relacao_outro"] = "Outro"
-        if not str(dados_post.get("responsavel") or "").strip():
-            dados_post["responsavel"] = "Checklist operacional"
+        responsavel_post = str(dados_post.get("responsavel") or "").strip()
+        if (
+            not responsavel_post
+            or responsavel_post == "Checklist operacional"
+        ):
+            dados_post["responsavel"] = responsavel_checklist
         form = ConferenciaEntregaLocacaoForm(
             dados_post,
             locacao=locacao,
@@ -1468,6 +1497,7 @@ def conferencia_entrega(request, pk):
     else:
         form = ConferenciaEntregaLocacaoForm(
             locacao=locacao,
+            initial={"responsavel": responsavel_checklist},
         )
 
     historico = locacao.conferencias_entrega.all()

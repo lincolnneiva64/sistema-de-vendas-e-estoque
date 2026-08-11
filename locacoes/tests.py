@@ -1734,14 +1734,18 @@ class LocacoesChecklistOperacionalTests(TestCase):
             TarefaOperacionalLocacao.TIPO_ENTREGA,
         )
         self.client.post(
-            reverse(
-                "locacoes:conferencia_entrega",
-                kwargs={"pk": tarefa.pk},
+            (
+                reverse(
+                    "locacoes:conferencia_entrega",
+                    kwargs={"pk": tarefa.pk},
+                )
+                + f"?funcionario={self.entregador_checklist.pk}"
             ),
-            self.dados_conferencia_entrega(),
+            self.dados_conferencia_entrega(responsavel="Checklist operacional"),
             secure=True,
         )
         conferencia = ConferenciaEntregaLocacao.objects.get()
+        self.assertEqual(conferencia.responsavel, self.entregador_checklist.nome)
 
         response = self.client.get(
             reverse(
@@ -1755,6 +1759,7 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.assertContains(response, "Checklist de entrega")
         self.assertContains(response, "Materiais conferidos")
         self.assertContains(response, 'class="check-row is-checked"')
+        self.assertContains(response, '<span class="check-mark" aria-hidden="true">&#10003;</span>')
         self.assertContains(response, 'class="check-row-text">Mesa</span>')
         self.assertContains(response, 'class="check-row-sub">1 un</span>')
         self.assertContains(response, 'class="check-row-text">Cadeira</span>')
@@ -1767,6 +1772,10 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.assertNotContains(response, '<details id="envio-checklist-funcionarios">')
         self.assertNotContains(response, "Enviar checklist pelo WhatsApp")
         self.assertNotContains(response, "Confirmar envio do checklist")
+        self.assertNotContains(response, "Copiar checklist")
+        self.assertNotContains(response, "Abrir WhatsApp")
+        self.assertNotContains(response, "Enviar para o celular")
+        self.assertNotContains(response, '<input type="checkbox"')
         self.assertNotContains(response, "https://web.whatsapp.com/send?phone=5591999990000")
         self.assertNotContains(response, 'data-auto-open-whatsapp="true"')
         self.assertNotContains(response, "about:blank")
@@ -2194,9 +2203,13 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.assertIn("phone=5591999990000", whatsapp_url)
         self.assertNotIn("91988887777", whatsapp_url)
         self.assertIn(
-            f"https://sistema-de-vendas-e-estoque.onrender.com{checklist_path}",
+            (
+                f"https://sistema-de-vendas-e-estoque.onrender.com{checklist_path}"
+                f"?funcionario={self.entregador_checklist.pk}"
+            ),
             texto,
         )
+        self.assertIn(f"funcionario={self.entregador_checklist.pk}", texto)
         self.assertNotIn(f"https://127.0.0.1:8000{checklist_path}", texto)
         self.assertIn("Checklist de entrega #1", texto)
         self.assertIn(f"Locação #{locacao.id} - Cliente Com Telefone Proprio", texto)
