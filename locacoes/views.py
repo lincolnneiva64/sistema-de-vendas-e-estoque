@@ -46,7 +46,14 @@ from .models import (
     TarefaOperacionalLocacao,
 )
 from estoque.models import Funcionario
-from .services import checklist_operacional_locacoes, obter_ou_criar_tarefa_operacional, tarefas_ativas_da_locacao
+from .services import (
+    checklist_operacional_locacoes,
+    obter_ou_criar_tarefa_operacional,
+    tarefas_ativas_da_locacao,
+    telefone_funcionario_checklist,
+    url_publica_checklist,
+    whatsapp_web_url,
+)
 
 
 def _faixa_padrao():
@@ -174,17 +181,7 @@ def _mensagem_recibo_whatsapp(pagamento):
 
 
 def _whatsapp_web_url(telefone, texto=""):
-    if not telefone and not texto:
-        return ""
-    url = "https://web.whatsapp.com/send"
-    if telefone:
-        url = f"{url}?phone={telefone}"
-    elif texto:
-        url = f"{url}?text={quote(texto)}"
-        return url
-    if texto:
-        url = f"{url}&text={quote(texto)}"
-    return url
+    return whatsapp_web_url(telefone, texto)
 
 
 def _whatsapp_recibo_url(pagamento):
@@ -328,14 +325,7 @@ def _funcionarios_checklist_locacoes():
 
 
 def _telefone_funcionario_checklist(funcionario):
-    telefone = Funcionario.normalizar_whatsapp(
-        funcionario.telefone_whatsapp_normalizado
-        or funcionario.telefone_whatsapp
-        or ""
-    )
-    if len(telefone) in {10, 11} and not telefone.startswith("55"):
-        telefone = f"55{telefone}"
-    return telefone
+    return telefone_funcionario_checklist(funcionario)
 
 
 def _nome_funcionario_checklist_por_id(funcionario_id):
@@ -390,13 +380,7 @@ def _whatsapp_checklist_funcionario_url(funcionario, texto):
 
 
 def _url_publica_checklist_whatsapp(request, path):
-    base_url = (
-        getattr(settings, "CHECKLIST_BASE_URL", "")
-        or getattr(settings, "SISTEMA_ONLINE_URL", "")
-    ).rstrip("/")
-    if base_url:
-        return f"{base_url}{path}"
-    return request.build_absolute_uri(path)
+    return url_publica_checklist(request, path)
 
 
 def _mensagem_tarefa_operacional_whatsapp(tarefa, checklist_url, ordem=None):

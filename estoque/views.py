@@ -46,7 +46,7 @@ from .services.avisos_fornecedores import (
     data_ciclo_visita_valida,
     obter_avisos_visitas_fornecedores,
 )
-from locacoes.services import checklist_operacional_locacoes
+from locacoes.services import painel_operacional_rapido_locacoes
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.utils.dateparse import parse_date, parse_datetime
@@ -10605,7 +10605,10 @@ def vendas(request):
         data_venda=hoje,
     ).only("total", "tipo_pagamento")
     resumo_vendas_hoje = _calcular_resumo_vendas(vendas_hoje)
-    locacoes_operacionais = checklist_operacional_locacoes(data_referencia=hoje)
+    locacoes_operacionais = painel_operacional_rapido_locacoes(
+        request,
+        data_referencia=hoje,
+    )
     cobrancas_acionaveis_vendas = _clientes_cobranca_acionaveis_vendas(hoje)
 
     produtos_incompletos_vendas_qs = (

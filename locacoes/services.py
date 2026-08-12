@@ -1,5 +1,10 @@
+from urllib.parse import quote, urlencode
+
+from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
+
+from estoque.models import Funcionario
 
 from .models import Locacao, TarefaOperacionalLocacao
 
@@ -15,6 +20,93 @@ def dados_agendamento_tarefa(locacao, tipo):
     if tipo == TarefaOperacionalLocacao.TIPO_ENTREGA:
         return locacao.data_entrega, locacao.horario_entrega
     return locacao.data_prevista_devolucao, None
+
+
+def whatsapp_web_url(telefone, texto=""):
+    if not telefone and not texto:
+        return ""
+    url = "https://web.whatsapp.com/send"
+    if telefone:
+        url = f"{url}?phone={telefone}"
+    elif texto:
+        return f"{url}?text={quote(texto)}"
+    if texto:
+        url = f"{url}&text={quote(texto)}"
+    return url
+
+
+def telefone_funcionario_checklist(funcionario):
+    telefone = Funcionario.normalizar_whatsapp(
+        funcionario.telefone_whatsapp_normalizado
+        or funcionario.telefone_whatsapp
+        or ""
+    )
+    if len(telefone) in {10, 11} and not telefone.startswith("55"):
+        telefone = f"55{telefone}"
+    return telefone
+
+
+def url_publica_checklist(request, path):
+    base_url = (
+        getattr(settings, "CHECKLIST_BASE_URL", "")
+        or getattr(settings, "SISTEMA_ONLINE_URL", "")
+    ).rstrip("/")
+    if base_url:
+        return f"{base_url}{path}"
+    return request.build_absolute_uri(path)
+
+
+def mensagem_checklist_operacional(tarefa, checklist_url):
+    tipo = "Entrega" if tarefa.tipo == TarefaOperacionalLocacao.TIPO_ENTREGA else "Recolhimento"
+    return "\n".join([
+        f"{tipo} - {tarefa.locacao.nome_contratante}",
+        "Checklist de conferencia:",
+        checklist_url,
+    ])
+
+
+def envios_tarefa_operacional_context(request, tarefa):
+    rota = (
+        "locacoes:conferencia_entrega"
+        if tarefa.tipo == TarefaOperacionalLocacao.TIPO_ENTREGA
+        else "locacoes:conferencia_recolhimento"
+    )
+    checklist_path = reverse(rota, kwargs={"pk": tarefa.pk})
+    checklist_url = request.build_absolute_uri(checklist_path)
+    funcionarios = []
+    for funcionario in Funcionario.habilitados_para_checklist():
+        checklist_funcionario_path = (
+            f"{checklist_path}?{urlencode({'funcionario': funcionario.pk})}"
+        )
+        checklist_funcionario_url = url_publica_checklist(
+            request,
+            checklist_funcionario_path,
+        )
+        telefone = telefone_funcionario_checklist(funcionario)
+        mensagem = mensagem_checklist_operacional(
+            tarefa,
+            checklist_funcionario_url,
+        )
+        funcionarios.append({
+            "id": funcionario.pk,
+            "nome": funcionario.nome,
+            "telefone": telefone,
+            "telefone_exibicao": funcionario.telefone_whatsapp or telefone,
+            "whatsapp_url": whatsapp_web_url(telefone, mensagem) if telefone else "",
+        })
+    funcionario_padrao = next(
+        (funcionario for funcionario in funcionarios if funcionario["telefone"]),
+        None,
+    )
+    return {
+        "checklist_url": checklist_url,
+        "funcionarios": funcionarios,
+        "funcionario_padrao": funcionario_padrao,
+        "tem_funcionario_com_whatsapp": any(
+            funcionario["telefone"]
+            for funcionario in funcionarios
+        ),
+    }
 
 
 def obter_ou_criar_tarefa_operacional(locacao, tipo):
@@ -77,10 +169,7 @@ def ponto_referencia_locacao(locacao):
 
 def tarefa_para_item_checklist(tarefa, data_referencia):
     locacao = tarefa.locacao
-    atrasada = (
-        tarefa.tipo == TarefaOperacionalLocacao.TIPO_RECOLHIMENTO
-        and tarefa.data_agendada < data_referencia
-    )
+    atrasada = tarefa.data_agendada < data_referencia
     return {
         "tarefa": tarefa,
         "locacao": locacao,
@@ -124,6 +213,28 @@ def ordenar_itens_operacionais(itens):
             item["locacao"].id,
         ),
     )
+
+
+def ordenar_itens_operacionais_rapidos(itens):
+    return sorted(
+        itens,
+        key=lambda item: (
+            not item["atrasada"],
+            item["horario"] is None,
+            item["horario"] or timezone.datetime.max.time(),
+            item["tarefa"].data_agendada,
+            item["locacao"].id,
+        ),
+    )
+
+
+def resumo_materiais_compacto(materiais):
+    partes = [
+        f"{material['quantidade']} {material['nome'].lower()}"
+        for material in materiais
+        if material["quantidade"]
+    ]
+    return ", ".join(partes) or "Sem materiais"
 
 
 def checklist_operacional_locacoes(
@@ -276,8 +387,13 @@ def checklist_operacional_locacoes(
             + grupos["recolhimentos"]
         )
     )
-    tem_atrasada = bool(
-        grupos["devolucoes_atrasadas"]
+    tem_atrasada = any(
+        item["atrasada"]
+        for item in (
+            grupos["entregas"]
+            + grupos["recolhimentos"]
+            + grupos["devolucoes_atrasadas"]
+        )
     )
 
     return {
@@ -288,4 +404,124 @@ def checklist_operacional_locacoes(
             tem_horario_vencido
             or tem_atrasada
         ),
+    }
+
+
+def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None):
+    data_referencia = data_referencia or timezone.localdate()
+    locacoes_com_entrega_atrasada = (
+        Locacao.objects
+        .select_related("cliente", "faixa_preco")
+        .prefetch_related("itens")
+        .filter(
+            data_entrega__lt=data_referencia,
+            status__in=[
+                Locacao.STATUS_RESERVADA,
+                Locacao.STATUS_SAIU_PARA_ENTREGA,
+            ],
+        )
+    )
+    for locacao in locacoes_com_entrega_atrasada:
+        obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+
+    checklist = checklist_operacional_locacoes(
+        data_referencia=data_referencia,
+        agora=agora,
+    )
+    itens = []
+    for chave in ("entregas", "recolhimentos", "devolucoes_atrasadas"):
+        for item in checklist["grupos"][chave]:
+            item = dict(item)
+            tarefa = item["tarefa"]
+            item["tipo"] = tarefa.tipo
+            item["tipo_label"] = (
+                "Entrega"
+                if tarefa.tipo == TarefaOperacionalLocacao.TIPO_ENTREGA
+                else "Recolhimento"
+            )
+            item["materiais_resumo"] = resumo_materiais_compacto(item["materiais"])
+            item["envio_operacional"] = envios_tarefa_operacional_context(
+                request,
+                tarefa,
+            )
+            itens.append(item)
+
+    ids_existentes = {item["tarefa"].id for item in itens}
+    tarefas_entrega_atrasadas = (
+        TarefaOperacionalLocacao.objects
+        .select_related(
+            "locacao",
+            "locacao__cliente",
+            "locacao__faixa_preco",
+        )
+        .prefetch_related("locacao__itens")
+        .filter(
+            tipo=TarefaOperacionalLocacao.TIPO_ENTREGA,
+            status__in=[
+                TarefaOperacionalLocacao.STATUS_PENDENTE,
+                TarefaOperacionalLocacao.STATUS_PARCIAL,
+                TarefaOperacionalLocacao.STATUS_NAO_POSSIVEL,
+            ],
+            data_agendada__lt=data_referencia,
+            locacao__status__in=[
+                Locacao.STATUS_RESERVADA,
+                Locacao.STATUS_SAIU_PARA_ENTREGA,
+            ],
+        )
+    )
+    for tarefa in tarefas_entrega_atrasadas:
+        if tarefa.id in ids_existentes or not tarefa.pendente_operacional:
+            continue
+        item = tarefa_para_item_checklist(tarefa, data_referencia)
+        item["tipo"] = tarefa.tipo
+        item["tipo_label"] = "Entrega"
+        item["materiais_resumo"] = resumo_materiais_compacto(item["materiais"])
+        item["envio_operacional"] = envios_tarefa_operacional_context(
+            request,
+            tarefa,
+        )
+        itens.append(item)
+
+    itens = ordenar_itens_operacionais_rapidos(itens)
+    for indice, item in enumerate(itens, start=1):
+        item["ordem_operacional"] = indice
+
+    entregas = [
+        item
+        for item in itens
+        if item["tipo"] == TarefaOperacionalLocacao.TIPO_ENTREGA
+    ]
+    recolhimentos = [
+        item
+        for item in itens
+        if item["tipo"] == TarefaOperacionalLocacao.TIPO_RECOLHIMENTO
+    ]
+    agora = agora or timezone.localtime()
+    hora_atual = (
+        agora.time()
+        if checklist["data"] == agora.date()
+        else None
+    )
+    for item in itens:
+        item["proxima"] = (
+            not item["atrasada"]
+            and item["horario"] is not None
+            and hora_atual is not None
+            and item["horario"] >= hora_atual
+            and (
+                timezone.datetime.combine(checklist["data"], item["horario"])
+                - timezone.datetime.combine(checklist["data"], hora_atual)
+            ).total_seconds() <= 60 * 60
+        )
+
+    return {
+        "data": checklist["data"],
+        "itens": itens,
+        "total": len(itens),
+        "total_entregas": len(entregas),
+        "total_recolhimentos": len(recolhimentos),
+        "alerta": any(item["atrasada"] or item["proxima"] for item in itens),
     }

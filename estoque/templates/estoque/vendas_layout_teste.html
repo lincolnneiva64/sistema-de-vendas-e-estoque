@@ -600,6 +600,12 @@ select {
     width: 100%;
     min-height: 38px;
 }
+.locacoes-operacionais-venda .atalhos-venda-painel {
+    width: min(390px, calc(100vw - 48px));
+    max-height: min(78vh, 720px);
+    overflow-y: auto;
+    overflow-x: hidden;
+}
 .locacoes-operacionais-venda {
     top: 238px;
 }
@@ -611,7 +617,7 @@ select {
 .locacoes-operacionais-venda.alerta .atalhos-venda-toggle {
     background: #dc2626;
     border-color: #dc2626;
-    animation: locacoesOperacionaisPulso 1s ease-in-out infinite;
+    animation: locacoesOperacionaisPulso 315s ease-in-out infinite;
 }
 .locacoes-operacionais-badge {
     display: inline-flex;
@@ -631,8 +637,198 @@ select {
     color: #991b1b;
 }
 @keyframes locacoesOperacionaisPulso {
-    0%, 100% { box-shadow: 0 10px 24px rgba(220, 38, 38, 0.24); transform: scale(1); }
-    50% { box-shadow: 0 10px 30px rgba(220, 38, 38, 0.58); transform: scale(1.04); }
+    0%, 4.76% { box-shadow: 0 10px 24px rgba(220, 38, 38, 0.24); transform: scale(1); }
+    2.38% { box-shadow: 0 10px 30px rgba(220, 38, 38, 0.58); transform: scale(1.04); }
+    4.77%, 100% { box-shadow: 0 10px 24px rgba(220, 38, 38, 0.18); transform: scale(1); }
+}
+.locacoes-rapidas-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 9px;
+}
+.locacoes-rapidas-tab {
+    min-height: 32px;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    background: #eff6ff;
+    color: #1e3a8a;
+    font-size: 12px;
+    font-weight: 950;
+    cursor: pointer;
+}
+.locacoes-rapidas-tab.ativo {
+    border-color: #ea580c;
+    background: #fff7ed;
+    color: #9a3412;
+}
+.locacoes-rapidas-lista {
+    display: grid;
+    gap: 8px;
+}
+.locacoes-rapidas-card {
+    display: grid;
+    gap: 7px;
+    padding: 9px;
+    border: 1px solid #fed7aa;
+    border-left: 5px solid #ea580c;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 7px 18px rgba(15, 23, 42, 0.08);
+}
+.locacoes-rapidas-card.atrasada {
+    border-color: #fecaca;
+    border-left-color: #dc2626;
+    background: #fffafa;
+    animation: locacoesCardPulso 315s ease-in-out infinite;
+}
+.locacoes-rapidas-card.proxima {
+    border-color: #fde68a;
+    border-left-color: #d97706;
+    background: #fffdf5;
+    animation: locacoesCardAtencao 315s ease-in-out infinite;
+}
+@keyframes locacoesCardPulso {
+    0%, 4.76% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.26), 0 7px 18px rgba(15, 23, 42, 0.08); }
+    2.38% { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.10), 0 10px 22px rgba(185, 28, 28, 0.18); }
+    4.77%, 100% { box-shadow: 0 7px 18px rgba(15, 23, 42, 0.08); }
+}
+@keyframes locacoesCardAtencao {
+    0%, 4.76% { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.22), 0 7px 18px rgba(15, 23, 42, 0.08); }
+    2.38% { box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.09), 0 10px 22px rgba(146, 64, 14, 0.14); }
+    4.77%, 100% { box-shadow: 0 7px 18px rgba(15, 23, 42, 0.08); }
+}
+.locacoes-rapidas-topo {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: start;
+}
+.locacoes-rapidas-tipo {
+    color: #7c2d12;
+    font-size: 11px;
+    font-weight: 950;
+    text-transform: uppercase;
+}
+.locacoes-rapidas-cliente {
+    min-width: 0;
+    color: #0f172a;
+    font-size: 14px;
+    font-weight: 950;
+    overflow-wrap: anywhere;
+}
+.locacoes-rapidas-hora {
+    padding: 4px 7px;
+    border-radius: 999px;
+    border: 1px solid #fdba74;
+    background: #fff7ed;
+    color: #9a3412;
+    font-size: 12px;
+    font-weight: 950;
+    white-space: nowrap;
+}
+.locacoes-rapidas-meta {
+    color: #475569;
+    font-size: 12px;
+    font-weight: 800;
+}
+.locacoes-rapidas-funcionario {
+    display: grid;
+    gap: 4px;
+}
+.locacoes-rapidas-funcionario label {
+    color: #334155;
+    font-size: 11px;
+    font-weight: 950;
+}
+.locacoes-rapidas-funcionario select {
+    width: 100%;
+    height: 34px;
+    font-size: 13px;
+}
+.locacoes-rapidas-acoes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+.locacoes-rapidas-whatsapp,
+.locacoes-rapidas-checklist,
+.locacoes-rapidas-confirmar,
+.locacoes-rapidas-dia {
+    min-height: 34px;
+    border-radius: 8px;
+    padding: 0 8px;
+    font-size: 12px;
+    font-weight: 950;
+}
+.locacoes-rapidas-whatsapp {
+    border: 1px solid #15803d;
+    background: #16a34a;
+    color: #fff;
+    text-decoration: none;
+}
+.locacoes-rapidas-whatsapp.disabled {
+    pointer-events: none;
+    opacity: 0.58;
+}
+.locacoes-rapidas-checklist {
+    border: 1px solid #2563eb;
+    background: #dbeafe;
+    color: #0f2f6b;
+    text-decoration: none;
+}
+.locacoes-rapidas-confirmar {
+    grid-column: 1 / -1;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #334155;
+    cursor: pointer;
+}
+.locacoes-rapidas-confirmado {
+    display: none;
+    color: #166534;
+    font-size: 12px;
+    font-weight: 950;
+}
+.locacoes-rapidas-card.enviado .locacoes-rapidas-confirmado {
+    display: block;
+}
+.locacoes-rapidas-alerta {
+    margin: 0;
+    color: #991b1b;
+    font-size: 12px;
+    font-weight: 850;
+}
+.locacoes-rapidas-empty {
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    padding: 10px;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 800;
+}
+.locacoes-rapidas-rodape {
+    display: grid;
+    gap: 7px;
+    margin-top: 9px;
+}
+.locacoes-rapidas-dia {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #64748b;
+    background: #f8fafc;
+    color: #0f172a;
+    text-decoration: none;
+}
+@media (max-width: 520px) {
+    .locacoes-rapidas-acoes {
+        grid-template-columns: 1fr;
+    }
+    .locacoes-rapidas-confirmar {
+        grid-column: auto;
+    }
 }
 .acao-venda-btn {
     height: 32px;
@@ -2197,9 +2393,93 @@ td:first-child {
             </button>
             <div class="atalhos-venda-painel" id="locacoesOperacionaisVendaPainel">
                 <h2 class="atalhos-venda-titulo">Entregas e Recolhimentos</h2>
-                <div class="atalhos-venda-lista">
-                    <a href="{% url 'locacoes:checklist_operacional' %}" class="acao-venda-btn secundaria">Abrir checklist do dia</a>
-                    <a href="{% url 'locacoes:lista' %}" class="acao-venda-btn secundaria">Loca&ccedil;&otilde;es</a>
+                <div class="locacoes-rapidas-tabs" role="tablist" aria-label="Filtro de entregas e recolhimentos">
+                    <button type="button" class="locacoes-rapidas-tab ativo" data-locacoes-filtro="tudo">Tudo {{ locacoes_operacionais.total }}</button>
+                    <button type="button" class="locacoes-rapidas-tab" data-locacoes-filtro="entrega">Entregas {{ locacoes_operacionais.total_entregas }}</button>
+                    <button type="button" class="locacoes-rapidas-tab" data-locacoes-filtro="recolhimento">Recolhimentos {{ locacoes_operacionais.total_recolhimentos }}</button>
+                </div>
+                <div class="locacoes-rapidas-lista" data-locacoes-lista>
+                    {% for item in locacoes_operacionais.itens %}
+                        <article
+                            class="locacoes-rapidas-card {% if item.atrasada %}atrasada{% elif item.proxima %}proxima{% endif %}"
+                            data-locacoes-card
+                            data-tipo="{{ item.tipo }}"
+                            data-tarefa-id="{{ item.tarefa.id }}"
+                        >
+                            <div class="locacoes-rapidas-topo">
+                                <div>
+                                    <div class="locacoes-rapidas-tipo">
+                                        {{ item.tipo_label }} #{{ item.ordem_operacional }}
+                                    </div>
+                                    <div class="locacoes-rapidas-cliente">{{ item.cliente }}</div>
+                                </div>
+                                <div class="locacoes-rapidas-hora">
+                                    {% if item.atrasada %}
+                                        Atrasada
+                                    {% elif item.horario %}
+                                        {{ item.horario|time:"H:i" }}
+                                    {% else %}
+                                        Sem horario
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="locacoes-rapidas-meta">{{ item.materiais_resumo }}</div>
+                            <div class="locacoes-rapidas-funcionario" data-envio-operacional>
+                                <label for="locacoes-funcionario-{{ item.tarefa.id }}">Funcionario responsavel</label>
+                                <select
+                                    id="locacoes-funcionario-{{ item.tarefa.id }}"
+                                    class="locacoes-rapidas-select funcionario-select"
+                                    {% if not item.envio_operacional.tem_funcionario_com_whatsapp %}disabled{% endif %}
+                                >
+                                    {% for funcionario in item.envio_operacional.funcionarios %}
+                                        <option
+                                            value="{{ funcionario.id }}"
+                                            data-nome="{{ funcionario.nome }}"
+                                            data-whatsapp-url="{{ funcionario.whatsapp_url }}"
+                                            {% if not funcionario.telefone %}disabled{% endif %}
+                                            {% if item.envio_operacional.funcionario_padrao.id == funcionario.id %}selected{% endif %}
+                                        >
+                                            {{ funcionario.nome }}{% if not funcionario.telefone %} - sem WhatsApp{% endif %}
+                                        </option>
+                                    {% empty %}
+                                        <option value="">Nenhum funcionario habilitado</option>
+                                    {% endfor %}
+                                </select>
+                                <p class="locacoes-rapidas-alerta" hidden>
+                                    Funcionario sem WhatsApp valido cadastrado.
+                                </p>
+                            </div>
+                            <div class="locacoes-rapidas-acoes">
+                                <a
+                                    class="locacoes-rapidas-whatsapp {% if not item.envio_operacional.funcionario_padrao %}disabled{% endif %}"
+                                    href="{% if item.envio_operacional.funcionario_padrao %}{{ item.envio_operacional.funcionario_padrao.whatsapp_url }}{% else %}#{% endif %}"
+                                    target="_blank"
+                                    rel="noopener"
+                                    {% if not item.envio_operacional.funcionario_padrao %}aria-disabled="true"{% endif %}
+                                >
+                                    Enviar checklist pelo WhatsApp
+                                </a>
+                                <a class="locacoes-rapidas-checklist" href="{{ item.envio_operacional.checklist_url }}">
+                                    Abrir checklist
+                                </a>
+                                <button type="button" class="locacoes-rapidas-confirmar">
+                                    Confirmar checklist enviado
+                                </button>
+                            </div>
+                            <div class="locacoes-rapidas-confirmado">Checklist enviado</div>
+                        </article>
+                    {% empty %}
+                        <div class="locacoes-rapidas-empty" data-locacoes-empty>
+                            Nenhuma acao operacional pendente agora.
+                        </div>
+                    {% endfor %}
+                    <div class="locacoes-rapidas-empty" data-locacoes-sem-filtro hidden>
+                        Nenhuma acao neste filtro.
+                    </div>
+                </div>
+                <div class="locacoes-rapidas-rodape">
+                    <a href="{% url 'locacoes:checklist_operacional' %}" class="locacoes-rapidas-dia">Abrir dia completo</a>
+                    <a href="{% url 'locacoes:lista' %}" class="locacoes-rapidas-dia">Locacoes</a>
                 </div>
             </div>
         </aside>
@@ -4518,6 +4798,92 @@ atalhosVenda?.addEventListener("click", (event) => {
 locacoesOperacionaisVenda?.addEventListener("click", (event) => {
     event.stopPropagation();
 });
+
+(function configurarLocacoesRapidas() {
+    const painel = document.getElementById("locacoesOperacionaisVendaPainel");
+    if (!painel) return;
+    const tabs = Array.from(painel.querySelectorAll("[data-locacoes-filtro]"));
+    const cards = Array.from(painel.querySelectorAll("[data-locacoes-card]"));
+    const vazioFiltro = painel.querySelector("[data-locacoes-sem-filtro]");
+
+    function aplicarFiltro(filtro) {
+        let visiveis = 0;
+        cards.forEach((card) => {
+            const mostrar = filtro === "tudo" || card.dataset.tipo === filtro;
+            card.hidden = !mostrar;
+            if (mostrar) visiveis += 1;
+        });
+        tabs.forEach((tab) => {
+            tab.classList.toggle("ativo", tab.dataset.locacoesFiltro === filtro);
+        });
+        if (vazioFiltro) {
+            vazioFiltro.hidden = visiveis !== 0 || cards.length === 0;
+        }
+    }
+
+    tabs.forEach((tab) => {
+        tab.addEventListener("click", () => aplicarFiltro(tab.dataset.locacoesFiltro || "tudo"));
+    });
+
+    cards.forEach((card) => {
+        const select = card.querySelector(".funcionario-select");
+        const botao = card.querySelector(".locacoes-rapidas-whatsapp");
+        const aviso = card.querySelector(".locacoes-rapidas-alerta");
+        const confirmar = card.querySelector(".locacoes-rapidas-confirmar");
+        const chaveFuncionario = "locacoes.operacional.funcionario." + (card.dataset.tarefaId || "");
+        const chaveEnviado = "locacoes.operacional.enviado." + (card.dataset.tarefaId || "");
+
+        function atualizarEnvio() {
+            const opcao = select?.selectedOptions?.[0];
+            const url = opcao?.dataset.whatsappUrl || "";
+            if (botao) {
+                botao.href = url || "#";
+                botao.classList.toggle("disabled", !url);
+                if (url) {
+                    botao.removeAttribute("aria-disabled");
+                } else {
+                    botao.setAttribute("aria-disabled", "true");
+                }
+            }
+            if (aviso) {
+                aviso.hidden = Boolean(url);
+            }
+            if (select?.value) {
+                try {
+                    localStorage.setItem(chaveFuncionario, select.value);
+                } catch (erro) {}
+            }
+        }
+
+        try {
+            const funcionarioSalvo = localStorage.getItem(chaveFuncionario);
+            if (funcionarioSalvo && select?.querySelector("option[value='" + funcionarioSalvo + "']")) {
+                select.value = funcionarioSalvo;
+            }
+            if (localStorage.getItem(chaveEnviado) === "1") {
+                card.classList.add("enviado");
+            }
+        } catch (erro) {}
+
+        select?.addEventListener("change", atualizarEnvio);
+        botao?.addEventListener("click", (event) => {
+            if (!botao.href || botao.getAttribute("href") === "#") {
+                event.preventDefault();
+                if (aviso) aviso.hidden = false;
+                select?.focus();
+            }
+        });
+        confirmar?.addEventListener("click", () => {
+            card.classList.add("enviado");
+            try {
+                localStorage.setItem(chaveEnviado, "1");
+            } catch (erro) {}
+        });
+        atualizarEnvio();
+    });
+
+    aplicarFiltro("tudo");
+})();
 
 document.addEventListener("click", () => {
     alternarAtalhosVenda(false);

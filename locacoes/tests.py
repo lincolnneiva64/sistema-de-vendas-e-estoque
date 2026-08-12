@@ -4,7 +4,7 @@ from urllib.parse import parse_qs, urlparse
 
 from django.apps import apps
 from django.core.exceptions import ValidationError
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -22,7 +22,11 @@ from .models import (
     RegistroCobrancaLocacao,
     TarefaOperacionalLocacao,
 )
-from .services import checklist_operacional_locacoes, obter_ou_criar_tarefa_operacional
+from .services import (
+    checklist_operacional_locacoes,
+    obter_ou_criar_tarefa_operacional,
+    painel_operacional_rapido_locacoes,
+)
 
 
 class LocacoesBaseIsoladaTests(TestCase):
@@ -1340,6 +1344,7 @@ class LocacoesAlertasCobrancaTests(TestCase):
 
 class LocacoesChecklistOperacionalTests(TestCase):
     def setUp(self):
+        self.factory = RequestFactory()
         self.hoje = timezone.localdate()
         self.configuracao = ConfiguracaoLocacao.obter()
         self.configuracao.total_mesas = 30
@@ -1427,6 +1432,205 @@ class LocacoesChecklistOperacionalTests(TestCase):
             [recolhimento.id],
         )
         self.assertIsNone(checklist["grupos"]["recolhimentos"][0]["horario"])
+
+    def test_painel_rapido_mostra_atrasadas_e_hoje_sem_futuras_ou_concluidas(self):
+        entrega_atrasada = self.criar_locacao(
+            pessoa_avulsa_nome="Entrega Atrasada",
+            data_entrega=self.hoje - timedelta(days=1),
+            horario_entrega=time(8, 0),
+        )
+        entrega_hoje = self.criar_locacao(
+            pessoa_avulsa_nome="Entrega Hoje",
+            horario_entrega=time(10, 0),
+        )
+        self.criar_locacao(
+            pessoa_avulsa_nome="Entrega Futura",
+            data_entrega=self.hoje + timedelta(days=1),
+            horario_entrega=time(9, 0),
+        )
+        concluida = self.criar_locacao(
+            pessoa_avulsa_nome="Entrega Concluida",
+            horario_entrega=time(11, 0),
+        )
+        tarefa_concluida = obter_ou_criar_tarefa_operacional(
+            concluida,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+        self.client.post(
+            reverse(
+                "locacoes:conferencia_entrega",
+                kwargs={"pk": tarefa_concluida.pk},
+            ),
+            self.dados_conferencia_entrega(),
+            secure=True,
+        )
+        recolhimento_atrasado = self.colocar_na_rua(self.criar_locacao(
+            pessoa_avulsa_nome="Recolhimento Atrasado",
+            data_entrega=self.hoje - timedelta(days=3),
+            data_prevista_devolucao=self.hoje - timedelta(days=1),
+        ))
+        recolhimento_hoje = self.colocar_na_rua(self.criar_locacao(
+            pessoa_avulsa_nome="Recolhimento Hoje",
+            data_entrega=self.hoje - timedelta(days=2),
+            data_prevista_devolucao=self.hoje,
+        ))
+        request = self.factory.get("/", secure=True, HTTP_HOST="testserver")
+
+        painel = painel_operacional_rapido_locacoes(
+            request,
+            data_referencia=self.hoje,
+        )
+
+        nomes = [item["cliente"] for item in painel["itens"]]
+        self.assertEqual(painel["total"], 4)
+        self.assertEqual(painel["total_entregas"], 2)
+        self.assertEqual(painel["total_recolhimentos"], 2)
+        self.assertIn("Entrega Atrasada", nomes)
+        self.assertIn("Entrega Hoje", nomes)
+        self.assertIn("Recolhimento Atrasado", nomes)
+        self.assertIn("Recolhimento Hoje", nomes)
+        self.assertNotIn("Entrega Futura", nomes)
+        self.assertNotIn("Entrega Concluida", nomes)
+        self.assertEqual(
+            {entrega_atrasada.id, entrega_hoje.id, recolhimento_atrasado.id, recolhimento_hoje.id},
+            {item["locacao"].id for item in painel["itens"]},
+        )
+
+    def test_painel_rapido_prioriza_atrasadas_horarios_e_sem_horario(self):
+        sem_horario = self.criar_locacao(
+            pessoa_avulsa_nome="Hoje Sem Horario",
+        )
+        tarefa_sem_horario = obter_ou_criar_tarefa_operacional(
+            sem_horario,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+        tarefa_sem_horario.status = TarefaOperacionalLocacao.STATUS_PARCIAL
+        tarefa_sem_horario.horario_agendado = None
+        tarefa_sem_horario.save(update_fields=["status", "horario_agendado", "atualizado_em"])
+        self.criar_locacao(
+            pessoa_avulsa_nome="Hoje Tarde",
+            horario_entrega=time(15, 0),
+        )
+        self.criar_locacao(
+            pessoa_avulsa_nome="Hoje Cedo",
+            horario_entrega=time(8, 0),
+        )
+        self.criar_locacao(
+            pessoa_avulsa_nome="Atrasada",
+            data_entrega=self.hoje - timedelta(days=1),
+            horario_entrega=time(18, 0),
+        )
+        request = self.factory.get("/", secure=True, HTTP_HOST="testserver")
+
+        painel = painel_operacional_rapido_locacoes(
+            request,
+            data_referencia=self.hoje,
+        )
+
+        self.assertEqual(
+            [item["cliente"] for item in painel["itens"]],
+            ["Atrasada", "Hoje Cedo", "Hoje Tarde", "Hoje Sem Horario"],
+        )
+        self.assertIsNone(painel["itens"][-1]["horario"])
+
+    @override_settings(
+        ALLOWED_HOSTS=["testserver"],
+        CHECKLIST_BASE_URL="https://sistema-de-vendas-e-estoque.onrender.com",
+    )
+    def test_painel_rapido_whatsapp_usa_funcionario_e_checklists_corretos(self):
+        entrega = self.criar_locacao(
+            pessoa_avulsa_nome="Cliente Entrega WhatsApp",
+            pessoa_avulsa_telefone="91988887777",
+        )
+        recolhimento = self.colocar_na_rua(self.criar_locacao(
+            pessoa_avulsa_nome="Cliente Recolhimento WhatsApp",
+            pessoa_avulsa_telefone="91977776666",
+            data_entrega=self.hoje - timedelta(days=1),
+            data_prevista_devolucao=self.hoje,
+        ))
+        request = self.factory.get("/", secure=True, HTTP_HOST="testserver")
+
+        painel = painel_operacional_rapido_locacoes(
+            request,
+            data_referencia=self.hoje,
+        )
+        entrega_item = next(item for item in painel["itens"] if item["locacao"].id == entrega.id)
+        recolhimento_item = next(item for item in painel["itens"] if item["locacao"].id == recolhimento.id)
+        entrega_url = entrega_item["envio_operacional"]["funcionario_padrao"]["whatsapp_url"]
+        recolhimento_url = recolhimento_item["envio_operacional"]["funcionario_padrao"]["whatsapp_url"]
+        texto_entrega = parse_qs(urlparse(entrega_url).query)["text"][0]
+        texto_recolhimento = parse_qs(urlparse(recolhimento_url).query)["text"][0]
+
+        self.assertIn("phone=5591999990000", entrega_url)
+        self.assertIn("phone=5591999990000", recolhimento_url)
+        self.assertNotIn("91988887777", entrega_url)
+        self.assertNotIn("91977776666", recolhimento_url)
+        self.assertIn(
+            reverse("locacoes:conferencia_entrega", kwargs={"pk": entrega_item["tarefa"].pk}),
+            texto_entrega,
+        )
+        self.assertIn(
+            reverse("locacoes:conferencia_recolhimento", kwargs={"pk": recolhimento_item["tarefa"].pk}),
+            texto_recolhimento,
+        )
+        self.assertIn(f"funcionario={self.entregador_checklist.pk}", texto_entrega)
+        self.assertIn(f"funcionario={self.entregador_checklist.pk}", texto_recolhimento)
+        self.assertIn("Entrega - Cliente Entrega WhatsApp", texto_entrega)
+        self.assertIn("Recolhimento - Cliente Recolhimento WhatsApp", texto_recolhimento)
+        self.assertNotIn("Endereco", texto_entrega)
+        self.assertNotIn("Endereco", texto_recolhimento)
+
+    def test_painel_rapido_funcionario_sem_whatsapp_nao_usa_cliente_como_fallback(self):
+        self.entregador_checklist.delete()
+        Funcionario.objects.bulk_create([
+            Funcionario(
+                nome="Sem WhatsApp",
+                telefone_whatsapp="",
+                telefone_whatsapp_normalizado=None,
+                ativo=True,
+                pode_receber_checklist=True,
+            )
+        ])
+        self.criar_locacao(
+            pessoa_avulsa_nome="Cliente Sem Fallback",
+            pessoa_avulsa_telefone="91988887777",
+        )
+        request = self.factory.get("/", secure=True, HTTP_HOST="testserver")
+
+        painel = painel_operacional_rapido_locacoes(
+            request,
+            data_referencia=self.hoje,
+        )
+        envio = painel["itens"][0]["envio_operacional"]
+
+        self.assertIsNone(envio["funcionario_padrao"])
+        self.assertFalse(envio["tem_funcionario_com_whatsapp"])
+        self.assertEqual(envio["funcionarios"][0]["whatsapp_url"], "")
+
+    def test_tela_vendas_renderiza_painel_rapido_com_filtros(self):
+        self.criar_locacao(
+            pessoa_avulsa_nome="Cliente Entrega Lateral",
+            horario_entrega=time(9, 0),
+        )
+        self.colocar_na_rua(self.criar_locacao(
+            pessoa_avulsa_nome="Cliente Recolhimento Lateral",
+            data_entrega=self.hoje - timedelta(days=1),
+            data_prevista_devolucao=self.hoje,
+        ))
+
+        response = self.client.get(reverse("estoque:vendas"), secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Tudo 2")
+        self.assertContains(response, "Entregas 1")
+        self.assertContains(response, "Recolhimentos 1")
+        self.assertContains(response, "Cliente Entrega Lateral")
+        self.assertContains(response, "Cliente Recolhimento Lateral")
+        self.assertContains(response, "data-locacoes-filtro=\"tudo\"")
+        self.assertContains(response, "data-locacoes-filtro=\"entrega\"")
+        self.assertContains(response, "data-locacoes-filtro=\"recolhimento\"")
+        self.assertContains(response, "Confirmar checklist enviado")
+        self.assertContains(response, "Abrir dia completo")
 
     def dados_conferencia_entrega(self, **extras):
         dados = {
