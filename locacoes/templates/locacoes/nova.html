@@ -718,7 +718,6 @@
 
       <section class="cardx">
         <h2>Itens reservados</h2>
-        <p class="muted">Jogo = 1 mesa + 4 cadeiras. Nao existe saldo proprio de jogos.</p>
         <div class="grid-3">
           <div>
             <label class="form-label">Jogos</label>
@@ -921,6 +920,7 @@
       let ultimaDisponibilidade = {
         status: "incompleto",
       };
+      let ultimaConsultaDisponibilidade = 0;
       const resumoDiarias = document.getElementById("resumoDiarias");
       const resumoJogos = document.getElementById("resumoJogos");
       const resumoMesas = document.getElementById("resumoMesas");
@@ -1421,10 +1421,14 @@
       }
 
       function consultarDisponibilidade() {
+        const params = parametrosDisponibilidade();
+        const assinatura = params.toString();
+        const numeroConsulta = ++ultimaConsultaDisponibilidade;
+
         return fetch(
           form.dataset.disponibilidadeUrl +
             "?" +
-            parametrosDisponibilidade().toString(),
+            assinatura,
           {
             headers: {
               "X-Requested-With": "XMLHttpRequest",
@@ -1435,10 +1439,21 @@
             return response.json();
           })
           .then(function (dados) {
+            if (
+              numeroConsulta !== ultimaConsultaDisponibilidade ||
+              assinatura !== parametrosDisponibilidade().toString()
+            ) {
+              return ultimaDisponibilidade;
+            }
+
             atualizarMensagemDisponibilidade(dados);
             return dados;
           })
           .catch(function () {
+            if (numeroConsulta !== ultimaConsultaDisponibilidade) {
+              return ultimaDisponibilidade;
+            }
+
             const dados = {
               status: "incompleto",
               mensagem:
@@ -1456,6 +1471,11 @@
         temporizador = window.setTimeout(function () {
           consultarDisponibilidade();
         }, 180);
+      }
+
+      function consultarDisponibilidadeAgora() {
+        window.clearTimeout(temporizador);
+        consultarDisponibilidade();
       }
 
       const enderecoEntrega = document.getElementById(
@@ -1496,6 +1516,11 @@
         "id_preco_mesa_avulsa_diaria",
         "id_cadeiras_avulsas",
         "id_preco_cadeira_avulsa_diaria",
+      ];
+      const camposQuantidadeDisponibilidade = [
+        "id_jogos",
+        "id_mesas_avulsas",
+        "id_cadeiras_avulsas",
       ];
 
       function campoNavegavel(elemento) {
@@ -1562,7 +1587,9 @@
             : proximoCampoDoFormulario(campo);
 
           focarCampo(destino);
-          verificarDisponibilidade();
+          if (camposQuantidadeDisponibilidade.includes(campo.id)) {
+            consultarDisponibilidadeAgora();
+          }
         },
         true
       );

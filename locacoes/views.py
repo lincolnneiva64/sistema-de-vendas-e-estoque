@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import prefetch_related_objects
 from django.forms import modelformset_factory
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -825,7 +826,44 @@ def _inteiro_nao_negativo(valor):
         return 0
 
 
-def _quadro_disponibilidade_locacao(data_entrega, excluir_id=None):
+def _locacoes_rua_disponibilidade(excluir_id=None):
+    locacoes_rua = Locacao.locacoes_com_material_na_rua(
+        prefetch=False,
+    ).prefetch_related(
+        "conferencias_entrega",
+    )
+    if excluir_id:
+        locacoes_rua = locacoes_rua.exclude(pk=excluir_id)
+    locacoes_rua = list(locacoes_rua)
+    locacoes_sem_conferencia = [
+        locacao
+        for locacao in locacoes_rua
+        if (
+            locacao.status == Locacao.STATUS_SAIU_PARA_ENTREGA
+            or not locacao.conferencias_entrega.all()
+        )
+    ]
+    if locacoes_sem_conferencia:
+        prefetch_related_objects(locacoes_sem_conferencia, "itens")
+    locacoes_pendentes = [
+        locacao
+        for locacao in locacoes_rua
+        if locacao.status == Locacao.STATUS_PENDENTE_DEVOLUCAO
+    ]
+    if locacoes_pendentes:
+        prefetch_related_objects(
+            locacoes_pendentes,
+            "conferencias_recolhimento",
+        )
+    return locacoes_rua
+
+
+def _quadro_disponibilidade_locacao(
+    data_entrega,
+    excluir_id=None,
+    configuracao=None,
+    locacoes_rua=None,
+):
     if not data_entrega:
         return None
     return {
@@ -833,14 +871,24 @@ def _quadro_disponibilidade_locacao(data_entrega, excluir_id=None):
         **Locacao.quadro_disponibilidade(
             data_entrega,
             excluir_id=excluir_id,
+            configuracao=configuracao,
+            locacoes_rua=locacoes_rua,
         ),
     }
 
 
 def _avaliar_disponibilidade_dinamica(data_entrega, data_prevista_devolucao, jogos=0, mesas_avulsas=0, cadeiras_avulsas=0, excluir_id=None):
+    configuracao = ConfiguracaoLocacao.obter()
+    locacoes_rua = (
+        _locacoes_rua_disponibilidade(excluir_id=excluir_id)
+        if data_entrega
+        else None
+    )
     quadro = _quadro_disponibilidade_locacao(
         data_entrega,
         excluir_id=excluir_id,
+        configuracao=configuracao,
+        locacoes_rua=locacoes_rua,
     )
     if not data_entrega or not data_prevista_devolucao:
         return {
@@ -875,11 +923,25 @@ def _avaliar_disponibilidade_dinamica(data_entrega, data_prevista_devolucao, jog
             "quadro": quadro,
         }
 
-    disponibilidade = Locacao.disponibilidade_periodo(data_entrega, data_prevista_devolucao, excluir_id=excluir_id)
+    disponibilidade = Locacao.disponibilidade_periodo(
+        data_entrega,
+        data_prevista_devolucao,
+        excluir_id=excluir_id,
+        configuracao=configuracao,
+        locacoes_rua=locacoes_rua,
+    )
     necessidade = Locacao.necessidades_itens(itens)
     disponivel_mesas = disponibilidade["disponivel_mesas"]
     disponivel_cadeiras = disponibilidade["disponivel_cadeiras"]
-    jogos_disponiveis = min(disponivel_mesas, disponivel_cadeiras // ConfiguracaoLocacao.JOGO_CADEIRAS)
+    restante_mesas = disponivel_mesas - necessidade["mesas"]
+    restante_cadeiras = disponivel_cadeiras - necessidade["cadeiras"]
+    jogos_disponiveis = max(
+        min(
+            restante_mesas,
+            restante_cadeiras // ConfiguracaoLocacao.JOGO_CADEIRAS,
+        ),
+        0,
+    )
 
     faltas = []
     if necessidade["mesas"] > disponivel_mesas:
@@ -893,6 +955,8 @@ def _avaliar_disponibilidade_dinamica(data_entrega, data_prevista_devolucao, jog
         "disponivel_cadeiras": disponivel_cadeiras,
         "solicitado_mesas": necessidade["mesas"],
         "solicitado_cadeiras": necessidade["cadeiras"],
+        "restante_mesas": restante_mesas,
+        "restante_cadeiras": restante_cadeiras,
         "quadro": quadro,
     }
     if faltas:
@@ -906,7 +970,7 @@ def _avaliar_disponibilidade_dinamica(data_entrega, data_prevista_devolucao, jog
         "status": "disponivel",
         "mensagem": (
             f"Disponível: {jogos_disponiveis} jogo(s), "
-            f"{disponivel_mesas} mesa(s) e {disponivel_cadeiras} cadeira(s) para o período."
+            f"{restante_mesas} mesa(s) e {restante_cadeiras} cadeira(s) para o período."
         ),
     }
 

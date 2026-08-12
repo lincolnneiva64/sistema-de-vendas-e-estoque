@@ -3597,6 +3597,14 @@ class LocacoesFormularioReservaTests(TestCase):
         )
         self.assertContains(
             response,
+            "ultimaConsultaDisponibilidade",
+        )
+        self.assertContains(
+            response,
+            "assinatura !== parametrosDisponibilidade().toString()",
+        )
+        self.assertContains(
+            response,
             "Total previsto",
         )
         self.assertNotContains(
@@ -3654,6 +3662,18 @@ class LocacoesFormularioReservaTests(TestCase):
         self.assertIn(
             "focarCampo(destino);",
             trecho,
+        )
+        self.assertIn(
+            "const camposQuantidadeDisponibilidade = [",
+            trecho,
+        )
+        self.assertIn(
+            "consultarDisponibilidadeAgora();",
+            trecho,
+        )
+        self.assertLess(
+            trecho.index("focarCampo(destino);"),
+            trecho.index("consultarDisponibilidadeAgora();"),
         )
         self.assertNotIn(
             "consultarDisponibilidade().then",
@@ -3846,7 +3866,88 @@ class LocacoesFormularioReservaTests(TestCase):
         resultado = self.disponibilidade(jogos="1")
 
         self.assertEqual(resultado["status"], "disponivel")
-        self.assertEqual(resultado["mensagem"], "Disponível: 10 jogo(s), 10 mesa(s) e 40 cadeira(s) para o período.")
+        self.assertEqual(resultado["mensagem"], "Disponível: 9 jogo(s), 9 mesa(s) e 36 cadeira(s) para o período.")
+        self.assertEqual(resultado["jogos_disponiveis"], 9)
+        self.assertEqual(resultado["restante_mesas"], 9)
+        self.assertEqual(resultado["restante_cadeiras"], 36)
+
+    def test_disponibilidade_dinamica_desconta_quantidade_atual_solicitada(self):
+        ConfiguracaoLocacao.objects.filter(pk=self.configuracao.pk).update(
+            total_mesas=68,
+            total_cadeiras=275,
+        )
+
+        resultado = self.disponibilidade(jogos="15")
+
+        self.assertEqual(resultado["status"], "disponivel")
+        self.assertEqual(resultado["disponivel_mesas"], 68)
+        self.assertEqual(resultado["disponivel_cadeiras"], 275)
+        self.assertEqual(resultado["solicitado_mesas"], 15)
+        self.assertEqual(resultado["solicitado_cadeiras"], 60)
+        self.assertEqual(resultado["jogos_disponiveis"], 53)
+        self.assertEqual(resultado["restante_mesas"], 53)
+        self.assertEqual(resultado["restante_cadeiras"], 215)
+        self.assertEqual(
+            resultado["mensagem"],
+            "Disponível: 53 jogo(s), 53 mesa(s) e 215 cadeira(s) para o período.",
+        )
+
+    def test_disponibilidade_dinamica_nao_reaproveita_quantidade_anterior(self):
+        ConfiguracaoLocacao.objects.filter(pk=self.configuracao.pk).update(
+            total_mesas=68,
+            total_cadeiras=275,
+        )
+
+        resultado_dez = self.disponibilidade(jogos="10")
+        resultado_quinze = self.disponibilidade(jogos="15")
+
+        self.assertEqual(resultado_dez["jogos_disponiveis"], 58)
+        self.assertEqual(resultado_dez["restante_mesas"], 58)
+        self.assertEqual(resultado_dez["restante_cadeiras"], 235)
+        self.assertEqual(resultado_quinze["jogos_disponiveis"], 53)
+        self.assertEqual(resultado_quinze["restante_mesas"], 53)
+        self.assertEqual(resultado_quinze["restante_cadeiras"], 215)
+
+    def test_disponibilidade_dinamica_desconta_reservas_do_periodo_uma_vez(self):
+        ConfiguracaoLocacao.objects.filter(pk=self.configuracao.pk).update(
+            total_mesas=68,
+            total_cadeiras=275,
+        )
+        Locacao.criar_reserva(
+            {
+                "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
+                "pessoa_avulsa_nome": "Reserva existente",
+                "pessoa_avulsa_telefone": "91999990000",
+                "endereco_entrega": "Rua Reserva, 10",
+                "data_entrega": self.hoje,
+                "horario_entrega": "09:00",
+                "data_evento": self.hoje,
+                "horario_evento": "18:00",
+                "data_prevista_devolucao": self.hoje + timedelta(days=1),
+                "faixa_preco": self.faixa,
+                "observacao": "",
+            },
+            [{
+                "tipo": ItemLocacao.TIPO_JOGO,
+                "quantidade": 10,
+                "preco_diaria": Decimal("8.00"),
+            }],
+        )
+
+        resultado = self.disponibilidade(jogos="15")
+
+        self.assertEqual(resultado["status"], "disponivel")
+        self.assertEqual(resultado["disponivel_mesas"], 58)
+        self.assertEqual(resultado["disponivel_cadeiras"], 235)
+        self.assertEqual(resultado["solicitado_mesas"], 15)
+        self.assertEqual(resultado["solicitado_cadeiras"], 60)
+        self.assertEqual(resultado["jogos_disponiveis"], 43)
+        self.assertEqual(resultado["restante_mesas"], 43)
+        self.assertEqual(resultado["restante_cadeiras"], 175)
+        self.assertEqual(
+            resultado["mensagem"],
+            "Disponível: 43 jogo(s), 43 mesa(s) e 175 cadeira(s) para o período.",
+        )
 
     def test_indisponibilidade_por_mesas(self):
         resultado = self.disponibilidade(mesas_avulsas="11")

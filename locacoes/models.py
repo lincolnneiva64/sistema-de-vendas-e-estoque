@@ -434,16 +434,33 @@ class Locacao(models.Model):
         )
 
     @classmethod
-    def reservados_no_periodo(cls, data_entrega, data_prevista_devolucao, excluir_id=None):
+    def reservados_no_periodo(
+        cls,
+        data_entrega,
+        data_prevista_devolucao,
+        excluir_id=None,
+        locacoes_rua=None,
+    ):
         locacoes_reservadas = cls.objects.filter(status=cls.STATUS_RESERVADA).filter(
             cls.periodo_conflita_q(data_entrega, data_prevista_devolucao)
         )
-        locacoes_rua = cls.locacoes_com_material_na_rua().filter(
-            data_entrega__lte=data_prevista_devolucao,
-        )
+        if locacoes_rua is None:
+            locacoes_rua = cls.locacoes_com_material_na_rua().filter(
+                data_entrega__lte=data_prevista_devolucao,
+            )
+            if excluir_id:
+                locacoes_rua = locacoes_rua.exclude(pk=excluir_id)
+        else:
+            locacoes_rua = [
+                locacao
+                for locacao in locacoes_rua
+                if (
+                    locacao.data_entrega <= data_prevista_devolucao
+                    and (not excluir_id or locacao.pk != excluir_id)
+                )
+            ]
         if excluir_id:
             locacoes_reservadas = locacoes_reservadas.exclude(pk=excluir_id)
-            locacoes_rua = locacoes_rua.exclude(pk=excluir_id)
 
         mesas = 0
         cadeiras = 0
@@ -458,8 +475,8 @@ class Locacao(models.Model):
         return {"mesas": mesas, "cadeiras": cadeiras}
 
     @classmethod
-    def locacoes_com_material_na_rua(cls):
-        return (
+    def locacoes_com_material_na_rua(cls, prefetch=True):
+        locacoes = (
             cls.objects
             .filter(
                 status__in=[
@@ -468,12 +485,14 @@ class Locacao(models.Model):
                     cls.STATUS_PENDENTE_DEVOLUCAO,
                 ],
             )
-            .prefetch_related(
+        )
+        if prefetch:
+            locacoes = locacoes.prefetch_related(
                 "itens",
                 "conferencias_entrega",
                 "conferencias_recolhimento",
             )
-        )
+        return locacoes
 
     @classmethod
     def material_pendente_na_rua(cls, locacao):
@@ -496,6 +515,12 @@ class Locacao(models.Model):
             conferencia.entregue_cadeiras
             for conferencia in conferencias_entrega
         )
+
+        if locacao.status == cls.STATUS_ENTREGUE:
+            return {
+                "mesas": max(entregues_mesas, 0),
+                "cadeiras": max(entregues_cadeiras, 0),
+            }
 
         recolhidos_mesas = 0
         recolhidos_cadeiras = 0
@@ -538,15 +563,36 @@ class Locacao(models.Model):
         return {"mesas": mesas, "cadeiras": cadeiras}
 
     @classmethod
-    def quadro_disponibilidade(cls, data_referencia, excluir_id=None):
-        configuracao = ConfiguracaoLocacao.obter()
+    def quadro_disponibilidade(
+        cls,
+        data_referencia,
+        excluir_id=None,
+        configuracao=None,
+        locacoes_rua=None,
+    ):
+        configuracao = configuracao or ConfiguracaoLocacao.obter()
         total_mesas = int(configuracao.total_mesas or 0)
         total_cadeiras = int(configuracao.total_cadeiras or 0)
-        na_rua = cls.materiais_na_rua(excluir_id=excluir_id)
-        previsto = cls.materiais_na_rua(
-            data_prevista_devolucao_ate=data_referencia,
-            excluir_id=excluir_id,
-        )
+        if locacoes_rua is None:
+            locacoes_rua = cls.locacoes_com_material_na_rua()
+            if excluir_id:
+                locacoes_rua = locacoes_rua.exclude(pk=excluir_id)
+        else:
+            locacoes_rua = [
+                locacao
+                for locacao in locacoes_rua
+                if not excluir_id or locacao.pk != excluir_id
+            ]
+
+        na_rua = {"mesas": 0, "cadeiras": 0}
+        previsto = {"mesas": 0, "cadeiras": 0}
+        for locacao in locacoes_rua:
+            pendente = cls.material_pendente_na_rua(locacao)
+            na_rua["mesas"] += pendente["mesas"]
+            na_rua["cadeiras"] += pendente["cadeiras"]
+            if locacao.data_prevista_devolucao <= data_referencia:
+                previsto["mesas"] += pendente["mesas"]
+                previsto["cadeiras"] += pendente["cadeiras"]
 
         def linha(mesas, cadeiras):
             mesas = int(mesas or 0)
@@ -580,9 +626,21 @@ class Locacao(models.Model):
         }
 
     @classmethod
-    def disponibilidade_periodo(cls, data_entrega, data_prevista_devolucao, excluir_id=None):
-        configuracao = ConfiguracaoLocacao.obter()
-        reservado = cls.reservados_no_periodo(data_entrega, data_prevista_devolucao, excluir_id=excluir_id)
+    def disponibilidade_periodo(
+        cls,
+        data_entrega,
+        data_prevista_devolucao,
+        excluir_id=None,
+        configuracao=None,
+        locacoes_rua=None,
+    ):
+        configuracao = configuracao or ConfiguracaoLocacao.obter()
+        reservado = cls.reservados_no_periodo(
+            data_entrega,
+            data_prevista_devolucao,
+            excluir_id=excluir_id,
+            locacoes_rua=locacoes_rua,
+        )
         saldo_mesas = int(configuracao.total_mesas or 0)
         saldo_cadeiras = int(configuracao.total_cadeiras or 0)
         return {
