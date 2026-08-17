@@ -668,7 +668,7 @@ select {
 }
 .locacoes-rapidas-card {
     display: grid;
-    gap: 7px;
+    gap: 6px;
     padding: 9px;
     border: 1px solid #fed7aa;
     border-left: 5px solid #ea580c;
@@ -728,6 +728,7 @@ select {
     white-space: nowrap;
 }
 .locacoes-rapidas-meta {
+    margin-top: 2px;
     color: #475569;
     font-size: 12px;
     font-weight: 800;
@@ -748,20 +749,25 @@ select {
 }
 .locacoes-rapidas-acoes {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
+    grid-template-columns: 1fr;
+    gap: 5px;
 }
 .locacoes-rapidas-whatsapp,
-.locacoes-rapidas-checklist,
 .locacoes-rapidas-confirmar,
 .locacoes-rapidas-dia {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     min-height: 34px;
     border-radius: 8px;
     padding: 0 8px;
     font-size: 12px;
     font-weight: 950;
+    text-align: center;
+    box-sizing: border-box;
 }
 .locacoes-rapidas-whatsapp {
+    width: 100%;
     border: 1px solid #15803d;
     background: #16a34a;
     color: #fff;
@@ -771,18 +777,16 @@ select {
     pointer-events: none;
     opacity: 0.58;
 }
-.locacoes-rapidas-checklist {
-    border: 1px solid #2563eb;
-    background: #dbeafe;
-    color: #0f2f6b;
-    text-decoration: none;
-}
 .locacoes-rapidas-confirmar {
-    grid-column: 1 / -1;
-    border: 1px solid #cbd5e1;
-    background: #f8fafc;
-    color: #334155;
+    width: 100%;
+    border: 1px solid #22c55e;
+    background: #dcfce7;
+    color: #14532d;
     cursor: pointer;
+    animation: locacoesConfirmarChecklistPulso 1.8s ease-in-out infinite;
+}
+.locacoes-rapidas-card.enviado .locacoes-rapidas-confirmar {
+    animation: none;
 }
 .locacoes-rapidas-confirmado {
     display: none;
@@ -792,6 +796,10 @@ select {
 }
 .locacoes-rapidas-card.enviado .locacoes-rapidas-confirmado {
     display: block;
+}
+@keyframes locacoesConfirmarChecklistPulso {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.18); }
+    50% { box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.10); }
 }
 .locacoes-rapidas-alerta {
     margin: 0;
@@ -825,9 +833,6 @@ select {
 @media (max-width: 520px) {
     .locacoes-rapidas-acoes {
         grid-template-columns: 1fr;
-    }
-    .locacoes-rapidas-confirmar {
-        grid-column: auto;
     }
 }
 .acao-venda-btn {
@@ -2412,18 +2417,18 @@ td:first-child {
                                         {{ item.tipo_label }} #{{ item.ordem_operacional }}
                                     </div>
                                     <div class="locacoes-rapidas-cliente">{{ item.cliente }}</div>
+                                    <div class="locacoes-rapidas-meta">{{ item.materiais_resumo }}</div>
                                 </div>
                                 <div class="locacoes-rapidas-hora">
                                     {% if item.atrasada %}
                                         Atrasada
-                                    {% elif item.horario %}
-                                        {{ item.horario|time:"H:i" }}
+                                    {% elif item.proxima %}
+                                        Proxima
                                     {% else %}
-                                        Sem horario
+                                        Pendente
                                     {% endif %}
                                 </div>
                             </div>
-                            <div class="locacoes-rapidas-meta">{{ item.materiais_resumo }}</div>
                             <div class="locacoes-rapidas-funcionario" data-envio-operacional>
                                 <label for="locacoes-funcionario-{{ item.tarefa.id }}">Funcionario responsavel</label>
                                 <select
@@ -2459,11 +2464,8 @@ td:first-child {
                                 >
                                     Enviar checklist pelo WhatsApp
                                 </a>
-                                <a class="locacoes-rapidas-checklist" href="{{ item.envio_operacional.checklist_url }}">
-                                    Abrir checklist
-                                </a>
                                 <button type="button" class="locacoes-rapidas-confirmar">
-                                    Confirmar checklist enviado
+                                    Confirmar que o checklist foi enviado
                                 </button>
                             </div>
                             <div class="locacoes-rapidas-confirmado">Checklist enviado</div>

@@ -272,10 +272,15 @@
     }
 
     .acoes-locacao {
+      display: grid;
+      gap: 7px;
+      min-width: 260px;
+    }
+
+    .acoes-locacao-linha {
       display: flex;
       flex-wrap: wrap;
       gap: 7px;
-      min-width: 230px;
     }
 
     .acoes-locacao .btn {
@@ -285,6 +290,26 @@
       font-size: 0.82rem;
       font-weight: 900;
       white-space: nowrap;
+    }
+
+    .acoes-locacao .acao-editar {
+      border-color: var(--locacoes-orange);
+      background: var(--locacoes-orange);
+      color: #ffffff;
+      box-shadow: 0 5px 11px rgba(234, 88, 12, 0.18);
+    }
+
+    .acoes-locacao .acao-editar:hover,
+    .acoes-locacao .acao-editar:focus {
+      border-color: var(--locacoes-orange-hover);
+      background: var(--locacoes-orange-hover);
+      color: #ffffff;
+      text-decoration: none;
+    }
+
+    .acoes-locacao-linha.secundaria .btn {
+      min-height: 31px;
+      font-size: 0.78rem;
     }
 
     .alert {
@@ -422,10 +447,9 @@
                 <td>R$ {{ locacao.total|floatformat:2 }}</td>
                 <td>
                   <div class="acoes-locacao">
+                    <div class="acoes-locacao-linha principal">
                     {% if locacao.acoes_consulta.pode_editar %}
-                      <a class="btn btn-outline-primary btn-sm" href="{% url 'locacoes:editar' locacao.id %}">Abrir</a>
-                    {% else %}
-                      <a class="btn btn-outline-secondary btn-sm" href="{% url 'locacoes:detalhe' locacao.id %}">Ver detalhes</a>
+                      <a class="btn btn-sm acao-editar" href="{% url 'locacoes:editar' locacao.id %}">Editar</a>
                     {% endif %}
                     {% if locacao.acoes_consulta.tarefa_entrega %}
                       <a class="btn btn-outline-success btn-sm" href="{% url 'locacoes:conferencia_entrega' locacao.acoes_consulta.tarefa_entrega.id %}">Entrega</a>
@@ -436,12 +460,15 @@
                     {% if locacao.acoes_consulta.whatsapp_recolhimento.whatsapp_url %}
                       <a class="btn btn-success btn-sm" href="{{ locacao.acoes_consulta.whatsapp_recolhimento.whatsapp_url }}" target="_blank" rel="noopener">Enviar recolhimento pelo WhatsApp</a>
                     {% endif %}
+                    </div>
+                    <div class="acoes-locacao-linha secundaria">
                     {% if locacao.status != 'cancelada' %}
                       <a class="btn btn-outline-warning btn-sm" href="{% url 'locacoes:registrar_pagamento' locacao.id %}">Pagamentos</a>
                     {% endif %}
                     {% if locacao.pagamentos.all %}
                       <a class="btn btn-outline-info btn-sm" href="{% url 'locacoes:detalhe' locacao.id %}#pagamentos">Recibos</a>
                     {% endif %}
+                    <a class="btn btn-outline-secondary btn-sm" href="{% url 'locacoes:detalhe' locacao.id %}">Detalhes</a>
                     {% if locacao.acoes_consulta.pode_cancelar %}
                       <form method="post" action="{% url 'locacoes:cancelar' locacao.id %}" onsubmit="return confirm('{% if locacao.acoes_consulta.tem_pagamentos %}Esta locação possui pagamento registrado. Cancelar preserva o histórico financeiro e não gera estorno automático. Confirmar cancelamento?{% else %}Confirmar cancelamento desta reserva?{% endif %}');">
                         {% csrf_token %}
@@ -454,6 +481,7 @@
                         <button class="btn btn-danger btn-sm" type="submit">Excluir</button>
                       </form>
                     {% endif %}
+                  </div>
                   </div>
                 </td>
               </tr>
