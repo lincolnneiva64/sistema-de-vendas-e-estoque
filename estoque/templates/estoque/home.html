@@ -151,6 +151,8 @@
 
   {% if mostrar_produtos_incompletos_home %}
     <div class="produtos-incompletos-lista">
+
+      {# seleção em massa: implementação dentro do <script> principal para execução correta #}
       {% for produto in produtos_incompletos_home %}
         <div class="produtos-incompletos-item">
           <strong>{{ produto.nome }}</strong>
@@ -1621,10 +1623,20 @@ align-items: center;
   </button>
 </div>
 <div class="produtos-tabela-card" style="max-width: 720px; margin: 0 auto 90px auto; background: #fff; border: 1px solid #e9ecef; border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); overflow: hidden;">
+  <div style="padding:10px 14px; border-bottom:1px solid #eef0f2; display:flex; align-items:center; gap:12px;">
+    <form method="post" id="formExcluirProdutosSelecionados">
+      {% csrf_token %}
+      <input type="hidden" name="acao" value="excluir_selecionados">
+      <div id="produtosSelecionadosInputs"></div>
+    </form>
+    <span id="produtosSelecionadosResumo" style="font-weight:700; color:#444;">0 produto(s) selecionado(s)</span>
+    <button type="button" id="btnExcluirProdutosSelecionados" class="btn-tarja btn-tarja-perigo" disabled>Excluir selecionados (0)</button>
+  </div>
   <table class="table table-hover mx-auto align-middle produtos-tabela" style="width: auto;">
     
     <thead style="background: #f8f9fa;">
     <tr>
+        <th style="font-weight: 600; font-size: 13px; width:36px; text-align:center;">Selecionar</th>
         <th style="font-weight: 600; font-size: 13px;">Produto</th>
         <th style="font-weight: 600; font-size: 13px;">Estoque</th>
         <th style="font-weight: 600; font-size: 13px;">Estoque Mínimo</th>
@@ -1637,6 +1649,9 @@ align-items: center;
     <tbody>
       {% for produto in produtos %}
       <tr id="produto-{{ produto.id }}" data-produto-id="{{ produto.id }}" data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}" data-categoria="{% if produto.categoria %}{{ produto.categoria|lower }}{% else %}__sem_categoria__{% endif %}" class="linha-produto {% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}" style="transition: all 0.15s ease;">
+    <td style="text-align:center;">
+      <input type="checkbox" class="checkbox-produto-exclusao" data-produto-id="{{ produto.id }}" aria-label="Selecionar produto {{ produto.nome }}">
+    </td>
     <td class="produto-card-nome">{{ produto.nome|default:"Produto sem nome" }}
                                 <div class="produto-categoria-inline">{% if produto.categoria %}{{ produto.categoria }}{% else %}Sem categoria{% endif %}</div></td>
         <td class="td-quantidade">
@@ -1740,6 +1755,54 @@ document.querySelectorAll(".btn-editar-produto").forEach(function(botaoEditar) {
         e.stopPropagation();
     });
 });
+  // --- Seleção em massa para exclusão lógica ---
+  function atualizarResumoSelecionados() {
+    const checkboxes = document.querySelectorAll('.checkbox-produto-exclusao');
+    const produtosSelecionadosResumo = document.getElementById('produtosSelecionadosResumo');
+    const btnExcluirProdutosSelecionados = document.getElementById('btnExcluirProdutosSelecionados');
+    const produtosSelecionadosInputs = document.getElementById('produtosSelecionadosInputs');
+    if (!produtosSelecionadosResumo || !btnExcluirProdutosSelecionados || !produtosSelecionadosInputs) return;
+
+    const selecionados = Array.from(checkboxes).filter(cb => cb.checked);
+    const count = selecionados.length;
+    produtosSelecionadosResumo.textContent = `${count} produto(s) selecionado(s)`;
+    btnExcluirProdutosSelecionados.textContent = `Excluir selecionados (${count})`;
+    btnExcluirProdutosSelecionados.disabled = count === 0;
+
+    produtosSelecionadosInputs.innerHTML = '';
+    selecionados.forEach(cb => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'produto_ids';
+      input.value = cb.dataset.produtoId;
+      produtosSelecionadosInputs.appendChild(input);
+    });
+  }
+
+  // attach per-checkbox handlers so stopPropagation runs before row click
+  const cbList = document.querySelectorAll('.checkbox-produto-exclusao');
+  cbList.forEach(cb => {
+    cb.addEventListener('click', function(e) { e.stopPropagation(); });
+    cb.addEventListener('change', atualizarResumoSelecionados);
+  });
+
+  // initialize UI state
+  atualizarResumoSelecionados();
+
+  const btnExcluirSel = document.getElementById('btnExcluirProdutosSelecionados');
+  if (btnExcluirSel) {
+    btnExcluirSel.addEventListener('click', function() {
+      const selecionados = document.querySelectorAll('.checkbox-produto-exclusao:checked');
+      if (!selecionados || selecionados.length === 0) {
+        alert('Nenhum produto selecionado.');
+        return;
+      }
+      const confirma = confirm(`Excluir ${selecionados.length} produto(s)?\nIsto apenas marcará como excluído.`);
+      if (!confirma) return;
+      const form = document.getElementById('formExcluirProdutosSelecionados');
+      if (form) form.submit();
+    });
+  }
 document.addEventListener("keydown", function (e) {
 
   // Alt + N → Novo Produto

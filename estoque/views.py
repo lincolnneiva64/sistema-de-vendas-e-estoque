@@ -1580,6 +1580,23 @@ def home(request):
                     produto.excluido = True
                     produto.save()
             return redirect("estoque:home")
+        # EXCLUIR SELECIONADOS (exclusão lógica em lote)
+        if acao == "excluir_selecionados":
+            produto_ids = request.POST.getlist("produto_ids")
+            if produto_ids:
+                try:
+                    now = timezone.now()
+                    Produto.objects.filter(
+                        id__in=produto_ids,
+                        excluido=False,
+                    ).update(
+                        excluido=True,
+                        excluido_em=now,
+                    )
+                except Exception:
+                    # Não propagar exceção para o usuário final nesta operação simples
+                    logger.exception("Erro ao excluir produtos selecionados: %s", produto_ids)
+            return redirect("estoque:home")
         # CRIAR / EDITAR
         produto_id = request.POST.get("produto_id")
         if produto_id:
