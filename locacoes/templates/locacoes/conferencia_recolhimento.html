@@ -406,42 +406,6 @@
           {{ conferencia_salva.get_situacao_display }}
         </p>
 
-        <a
-          class="btn btn-outline-primary w-100 mt-2"
-          href="{{ checklist_url }}"
-          target="_blank"
-          rel="noopener"
-        >
-          Abrir checklist compartilhável
-        </a>
-
-        {% if whatsapp_url %}
-          <a
-            class="btn btn-success w-100 mt-3"
-            href="{{ whatsapp_url }}"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Enviar checklist pelo WhatsApp
-          </a>
-        {% else %}
-          <div class="alert alert-warning mt-3 mb-0">
-            A locação não possui telefone válido para abrir
-            o WhatsApp.
-          </div>
-        {% endif %}
-
-        {% if whatsapp_checklist_funcionario_url %}
-          <a
-            class="btn btn-outline-success w-100 mt-2"
-            href="{{ whatsapp_checklist_funcionario_url }}"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Enviar checklist para funcionário
-          </a>
-        {% endif %}
-
         {% if conferencia_salva.situacao == "parcial" %}
           <a
             class="btn btn-loc w-100 mt-2"
