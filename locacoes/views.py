@@ -424,20 +424,18 @@ def _envios_tarefa_operacional_context(request, tarefa, ordem=None):
     funcionarios = []
     for funcionario in _funcionarios_checklist_locacoes():
         telefone = _telefone_funcionario_checklist(funcionario)
-        mensagem_funcionario = mensagem
-        if tarefa.tipo == TarefaOperacionalLocacao.TIPO_ENTREGA:
-            checklist_funcionario_path = (
-                f"{checklist_path}?{urlencode({'funcionario': funcionario.pk})}"
-            )
-            checklist_funcionario_url = _url_publica_checklist_whatsapp(
-                request,
-                checklist_funcionario_path,
-            )
-            mensagem_funcionario = _mensagem_tarefa_operacional_whatsapp(
-                tarefa,
-                checklist_funcionario_url,
-                ordem=ordem,
-            )
+        checklist_funcionario_path = (
+            f"{checklist_path}?{urlencode({'funcionario': funcionario.pk})}"
+        )
+        checklist_funcionario_url = _url_publica_checklist_whatsapp(
+            request,
+            checklist_funcionario_path,
+        )
+        mensagem_funcionario = _mensagem_tarefa_operacional_whatsapp(
+            tarefa,
+            checklist_funcionario_url,
+            ordem=ordem,
+        )
         funcionarios.append({
             "id": funcionario.pk,
             "nome": funcionario.nome,
@@ -1846,6 +1844,9 @@ def conferencia_recolhimento(request, pk):
         tipo=TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
     )
     locacao = tarefa.locacao
+    responsavel_checklist = _nome_funcionario_checklist_por_id(
+        request.GET.get("funcionario")
+    )
 
     conferencia_salva = None
     conferencia_id = request.GET.get(
@@ -1892,7 +1893,7 @@ def conferencia_recolhimento(request, pk):
 
     if request.method == "POST":
         dados_post = request.POST.copy()
-        responsavel = _responsavel_request(
+        responsavel = responsavel_checklist or _responsavel_request(
             request,
             str(request.POST.get("responsavel") or "").strip()
             or "Checklist operacional",
@@ -1968,14 +1969,20 @@ def conferencia_recolhimento(request, pk):
                         ),
                     )
 
-                return redirect(
-                    (
+                if (
+                    conferencia.situacao
+                    == ConferenciaRecolhimentoLocacao.SITUACAO_PARCIAL
+                ):
+                    return redirect(
                         reverse(
                             "locacoes:conferencia_recolhimento",
                             kwargs={"pk": tarefa.pk},
                         )
-                        + f"?conferencia={conferencia.pk}"
                     )
+
+                return redirect(
+                    "locacoes:detalhe",
+                    pk=locacao.pk,
                 )
         else:
             messages.warning(
