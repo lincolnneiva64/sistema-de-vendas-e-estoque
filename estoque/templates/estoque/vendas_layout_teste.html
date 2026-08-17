@@ -2422,8 +2422,10 @@ td:first-child {
                                 <div class="locacoes-rapidas-hora">
                                     {% if item.atrasada %}
                                         Atrasada
-                                    {% elif item.proxima %}
-                                        Proxima
+                                    {% elif item.data_label %}
+                                        {{ item.data_label }}
+                                    {% elif item.horario %}
+                                        {{ item.horario|time:"H:i" }}
                                     {% else %}
                                         Pendente
                                     {% endif %}

@@ -3,6 +3,7 @@ from urllib.parse import quote, urlencode
 from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
+from datetime import timedelta
 
 from estoque.models import Funcionario
 
@@ -484,6 +485,79 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
             tarefa,
         )
         itens.append(item)
+
+    # Adiciona somente a PRÓXIMA data futura que contenha tarefas operacionais
+    # (entrega ou recolhimento). Não alterar checklist_operacional_locacoes().
+    next_entrega_date = (
+        Locacao.objects
+        .filter(
+            data_entrega__gt=data_referencia,
+            status__in=[
+                Locacao.STATUS_RESERVADA,
+                Locacao.STATUS_SAIU_PARA_ENTREGA,
+            ],
+        )
+        .order_by("data_entrega")
+        .values_list("data_entrega", flat=True)
+        .first()
+    )
+    next_recolhimento_date = (
+        Locacao.objects
+        .filter(
+            data_prevista_devolucao__gt=data_referencia,
+            status__in=[
+                Locacao.STATUS_ENTREGUE,
+                Locacao.STATUS_PENDENTE_DEVOLUCAO,
+            ],
+        )
+        .order_by("data_prevista_devolucao")
+        .values_list("data_prevista_devolucao", flat=True)
+        .first()
+    )
+
+    # Determina a próxima data entre entrega e recolhimento
+    proximas = [d for d in (next_entrega_date, next_recolhimento_date) if d]
+    proxima_data = min(proximas) if proximas else None
+    if proxima_data:
+        # Criar/obter tarefas operacionais para essa data e adicioná-las
+        locacoes_entrega = Locacao.objects.filter(
+            data_entrega=proxima_data,
+            status__in=[Locacao.STATUS_RESERVADA, Locacao.STATUS_SAIU_PARA_ENTREGA],
+        )
+        for locacao in locacoes_entrega:
+            tarefa = obter_ou_criar_tarefa_operacional(locacao, TarefaOperacionalLocacao.TIPO_ENTREGA)
+            if tarefa.id in ids_existentes or not tarefa.pendente_operacional:
+                continue
+            item = tarefa_para_item_checklist(tarefa, proxima_data)
+            item["tipo"] = tarefa.tipo
+            item["tipo_label"] = "Entrega"
+            item["materiais_resumo"] = resumo_materiais_compacto(item["materiais"])
+            item["envio_operacional"] = envios_tarefa_operacional_context(request, tarefa)
+            # marca como futura e define rótulo de data para o template
+            if proxima_data == data_referencia + timedelta(days=1):
+                item["data_label"] = "Amanhã"
+            else:
+                item["data_label"] = proxima_data.strftime("%d/%m")
+            itens.append(item)
+
+        locacoes_recolhimento = Locacao.objects.filter(
+            data_prevista_devolucao=proxima_data,
+            status__in=[Locacao.STATUS_ENTREGUE, Locacao.STATUS_PENDENTE_DEVOLUCAO],
+        )
+        for locacao in locacoes_recolhimento:
+            tarefa = obter_ou_criar_tarefa_operacional(locacao, TarefaOperacionalLocacao.TIPO_RECOLHIMENTO)
+            if tarefa.id in ids_existentes or not tarefa.pendente_operacional:
+                continue
+            item = tarefa_para_item_checklist(tarefa, proxima_data)
+            item["tipo"] = tarefa.tipo
+            item["tipo_label"] = "Recolhimento"
+            item["materiais_resumo"] = resumo_materiais_compacto(item["materiais"])
+            item["envio_operacional"] = envios_tarefa_operacional_context(request, tarefa)
+            if proxima_data == data_referencia + timedelta(days=1):
+                item["data_label"] = "Amanhã"
+            else:
+                item["data_label"] = proxima_data.strftime("%d/%m")
+            itens.append(item)
 
     itens = ordenar_itens_operacionais_rapidos(itens)
     for indice, item in enumerate(itens, start=1):

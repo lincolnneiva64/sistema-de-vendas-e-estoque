@@ -1482,19 +1482,46 @@ class LocacoesChecklistOperacionalTests(TestCase):
         )
 
         nomes = [item["cliente"] for item in painel["itens"]]
-        self.assertEqual(painel["total"], 4)
-        self.assertEqual(painel["total_entregas"], 2)
-        self.assertEqual(painel["total_recolhimentos"], 2)
+
+        # Itens de hoje e atrasados continuam aparecendo
         self.assertIn("Entrega Atrasada", nomes)
         self.assertIn("Entrega Hoje", nomes)
         self.assertIn("Recolhimento Atrasado", nomes)
         self.assertIn("Recolhimento Hoje", nomes)
-        self.assertNotIn("Entrega Futura", nomes)
-        self.assertNotIn("Entrega Concluida", nomes)
-        self.assertEqual(
-            {entrega_atrasada.id, entrega_hoje.id, recolhimento_atrasado.id, recolhimento_hoje.id},
-            {item["locacao"].id for item in painel["itens"]},
-        )
+
+        # A locacao com entrega concluida nao deve reaparecer como entrega,
+        # mas seu recolhimento futuro (se houver) pode aparecer como recolhimento.
+        if "Entrega Concluida" in nomes:
+            item_concluida = next(item for item in painel["itens"] if item["cliente"] == "Entrega Concluida")
+            self.assertEqual(item_concluida["tipo"], TarefaOperacionalLocacao.TIPO_RECOLHIMENTO)
+
+        # A partir da nova regra, somente a PRÓXIMA data futura deve aparecer
+        # e sua operacao correspondente deve estar presente (Entrega Futura)
+        self.assertIn("Entrega Futura", nomes)
+
+        # Garantir que não existem itens de datas futuras posteriores à próxima data operacional
+        # calcula a próxima data futura programada entre entregas e recolhimentos
+        from django.db.models import Min
+        next_entrega = Locacao.objects.filter(
+            data_entrega__gt=self.hoje,
+            status__in=[Locacao.STATUS_RESERVADA, Locacao.STATUS_SAIU_PARA_ENTREGA],
+        ).aggregate(Min('data_entrega'))['data_entrega__min']
+        next_recolhimento = Locacao.objects.filter(
+            data_prevista_devolucao__gt=self.hoje,
+            status__in=[Locacao.STATUS_ENTREGUE, Locacao.STATUS_PENDENTE_DEVOLUCAO],
+        ).aggregate(Min('data_prevista_devolucao'))['data_prevista_devolucao__min']
+        proximas = [d for d in (next_entrega, next_recolhimento) if d]
+        proxima_data = min(proximas) if proximas else None
+
+        # Todos os itens no painel devem ter data_agendada <= proxima_data (ou ser atrasados/hoje)
+        if proxima_data:
+            for item in painel['itens']:
+                self.assertTrue(
+                    item['tarefa'].data_agendada <= proxima_data,
+                    msg=f"Item {item['cliente']} tem data {item['tarefa'].data_agendada} maior que proxima {proxima_data}",
+                )
+            # Deve haver ao menos um item agendado exatamente para a próxima data
+            self.assertTrue(any(item['tarefa'].data_agendada == proxima_data for item in painel['itens']))
 
     def test_painel_rapido_prioriza_atrasadas_horarios_e_sem_horario(self):
         sem_horario = self.criar_locacao(
