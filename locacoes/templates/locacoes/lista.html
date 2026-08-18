@@ -457,9 +457,6 @@
                     {% if locacao.acoes_consulta.tarefa_recolhimento %}
                       <a class="btn btn-outline-success btn-sm" href="{% url 'locacoes:conferencia_recolhimento' locacao.acoes_consulta.tarefa_recolhimento.id %}">Recolhimento</a>
                     {% endif %}
-                    {% if locacao.acoes_consulta.whatsapp_recolhimento.whatsapp_url %}
-                      <a class="btn btn-success btn-sm" href="{{ locacao.acoes_consulta.whatsapp_recolhimento.whatsapp_url }}" target="_blank" rel="noopener">Enviar recolhimento pelo WhatsApp</a>
-                    {% endif %}
                     </div>
                     <div class="acoes-locacao-linha secundaria">
                     {% if locacao.status != 'cancelada' %}
