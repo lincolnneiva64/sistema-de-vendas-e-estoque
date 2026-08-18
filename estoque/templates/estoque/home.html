@@ -1648,7 +1648,7 @@ align-items: center;
 
     <tbody>
       {% for produto in produtos %}
-      <tr id="produto-{{ produto.id }}" data-produto-id="{{ produto.id }}" data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}" data-categoria="{% if produto.categoria %}{{ produto.categoria|lower }}{% else %}__sem_categoria__{% endif %}" class="linha-produto {% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}" style="transition: all 0.15s ease;">
+      <tr id="produto-{{ produto.id }}" data-produto-id="{{ produto.id }}" data-produto-search="{{ produto.nome|default:'Produto sem nome' }}" data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}" data-categoria="{% if produto.categoria %}{{ produto.categoria|lower }}{% else %}__sem_categoria__{% endif %}" class="linha-produto {% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}" style="transition: all 0.15s ease;">
     <td style="text-align:center;">
       <input type="checkbox" class="checkbox-produto-exclusao" data-produto-id="{{ produto.id }}" aria-label="Selecionar produto {{ produto.nome }}">
     </td>
@@ -1743,7 +1743,7 @@ linhas.forEach(function(linha) {
 
         // guarda o id do produto
         produtoSelecionado = linha.dataset.produtoId;
-nomeProdutoSelecionado = linha.children[0].textContent.trim();
+        nomeProdutoSelecionado = linha.dataset.produtoSearch || linha.querySelector(".produto-card-nome")?.textContent.trim() || "";
         console.log("Produto selecionado:", produtoSelecionado);
 
     });
@@ -1921,6 +1921,14 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
       .replace(/[\u0300-\u036f]/g, '');
   }
 
+  function obterNomeProdutoLinha(linha) {
+    if (!linha) return "";
+    const nomeDoAtributo = (linha.dataset.produtoSearch || "").trim();
+    if (nomeDoAtributo) return nomeDoAtributo;
+    const nomeDoElemento = linha.querySelector(".produto-card-nome");
+    return nomeDoElemento ? nomeDoElemento.textContent.trim() : "";
+  }
+
   const filtroCategoriaProduto = document.getElementById("filtroCategoriaProduto");
   const filtroCategoriaProdutoMobile = document.getElementById("filtroCategoriaProdutoMobile");
   const contadorFiltroCategoria = document.getElementById("contadorFiltroCategoria");
@@ -1932,7 +1940,7 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
     let totalVisivel = 0;
 
     linhas.forEach(function(linha) {
-      const nome = linha.children[0].textContent.trim();
+      const nome = obterNomeProdutoLinha(linha);
       const nomeNormalizado = normalizarTexto(nome);
       const categoriaLinhaRaw = linha.dataset.categoria || "__sem_categoria__";
       const categoriaLinha = categoriaLinhaRaw === "__sem_categoria__" ? "__sem_categoria__" : normalizarTexto(categoriaLinhaRaw);
@@ -1945,7 +1953,6 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
         totalVisivel++;
       } else {
         linha.style.display = "none";
-        linha.classList.remove("linha-selecionada");
       }
     });
 
@@ -2076,7 +2083,7 @@ document.getElementById("btnCancelarModalExclusao").onclick = function () {
       });
       linhaDestacada.classList.add("linha-selecionada");
       produtoSelecionado = produtoDestacado;
-      nomeProdutoSelecionado = linhaDestacada.children[0].textContent.trim();
+      nomeProdutoSelecionado = obterNomeProdutoLinha(linhaDestacada);
       // Remover destaque apos 5 segundos
       setTimeout(function() {
         linhaDestacada.classList.remove('linha-destacada');
