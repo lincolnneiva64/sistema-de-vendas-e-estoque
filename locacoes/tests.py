@@ -1656,7 +1656,7 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.assertContains(response, "data-locacoes-filtro=\"tudo\"")
         self.assertContains(response, "data-locacoes-filtro=\"entrega\"")
         self.assertContains(response, "data-locacoes-filtro=\"recolhimento\"")
-        self.assertContains(response, "Confirmar checklist enviado")
+        self.assertContains(response, "Confirmar que o checklist foi enviado")
         self.assertContains(response, "Abrir dia completo")
 
     def dados_conferencia_entrega(self, **extras):
@@ -3513,6 +3513,100 @@ class LocacoesChecklistOperacionalTests(TestCase):
         )
         self.assertTrue(checklist_atrasada["alerta"])
         self.assertEqual(checklist_atrasada["grupos"]["devolucoes_atrasadas"][0]["locacao"].id, atrasada.id)
+
+    def test_painel_rapido_nao_alerta_antes_do_horario(self):
+        self.criar_locacao(horario_entrega=time(4, 10))
+        request = self.factory.get("/", secure=True, HTTP_HOST="testserver")
+        agora = timezone.make_aware(datetime.combine(self.hoje, time(4, 9)))
+
+        painel = painel_operacional_rapido_locacoes(
+            request,
+            data_referencia=self.hoje,
+            agora=agora,
+        )
+
+        self.assertFalse(painel["alerta"])
+        self.assertFalse(painel["itens"][0]["vencida"])
+
+    def test_painel_rapido_alerta_no_horario_exato(self):
+        self.criar_locacao(horario_entrega=time(4, 10))
+        request = self.factory.get("/", secure=True, HTTP_HOST="testserver")
+        agora = timezone.make_aware(datetime.combine(self.hoje, time(4, 10)))
+
+        painel = painel_operacional_rapido_locacoes(
+            request,
+            data_referencia=self.hoje,
+            agora=agora,
+        )
+
+        self.assertTrue(painel["alerta"])
+        self.assertTrue(painel["itens"][0]["vencida"])
+
+    def test_painel_rapido_alerta_depois_do_horario(self):
+        self.criar_locacao(horario_entrega=time(4, 10))
+        request = self.factory.get("/", secure=True, HTTP_HOST="testserver")
+        agora = timezone.make_aware(datetime.combine(self.hoje, time(4, 13)))
+
+        painel = painel_operacional_rapido_locacoes(
+            request,
+            data_referencia=self.hoje,
+            agora=agora,
+        )
+
+        self.assertTrue(painel["alerta"])
+        self.assertTrue(painel["itens"][0]["vencida"])
+
+    def test_painel_rapido_alerta_tarefa_de_ontem_pendente(self):
+        self.criar_locacao(
+            data_entrega=self.hoje - timedelta(days=1),
+            horario_entrega=time(23, 0),
+        )
+        request = self.factory.get("/", secure=True, HTTP_HOST="testserver")
+        agora = timezone.make_aware(datetime.combine(self.hoje, time(4, 9)))
+
+        painel = painel_operacional_rapido_locacoes(
+            request,
+            data_referencia=self.hoje,
+            agora=agora,
+        )
+
+        self.assertTrue(painel["alerta"])
+        self.assertTrue(painel["itens"][0]["vencida"])
+
+    def test_painel_rapido_nao_alerta_tarefa_de_amanha(self):
+        self.criar_locacao(
+            data_entrega=self.hoje + timedelta(days=1),
+            horario_entrega=time(4, 10),
+        )
+        request = self.factory.get("/", secure=True, HTTP_HOST="testserver")
+        agora = timezone.make_aware(datetime.combine(self.hoje, time(4, 13)))
+
+        painel = painel_operacional_rapido_locacoes(
+            request,
+            data_referencia=self.hoje,
+            agora=agora,
+        )
+
+        self.assertFalse(painel["alerta"])
+        self.assertFalse(painel["itens"][0]["vencida"])
+
+    def test_painel_rapido_nao_alerta_tarefa_concluida(self):
+        locacao = self.criar_locacao(horario_entrega=time(4, 10))
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+        tarefa.confirmar(responsavel="Camila")
+        request = self.factory.get("/", secure=True, HTTP_HOST="testserver")
+        agora = timezone.make_aware(datetime.combine(self.hoje, time(4, 13)))
+
+        painel = painel_operacional_rapido_locacoes(
+            request,
+            data_referencia=self.hoje,
+            agora=agora,
+        )
+
+        self.assertFalse(painel["alerta"])
 
     def test_oculta_locacoes_canceladas_ou_encerradas(self):
         cancelada = self.criar_locacao(pessoa_avulsa_nome="Cancelada")
