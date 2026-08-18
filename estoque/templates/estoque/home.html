@@ -716,28 +716,6 @@
     overflow-wrap: anywhere;
   }
 
-  .produtos-tabela .produto-nome-linha {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .produtos-tabela .produto-nome-texto {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  .produtos-tabela .produto-data-criacao {
-    color: #6b7280;
-    font-size: 0.74rem;
-    font-weight: 700;
-    letter-spacing: 0.01em;
-    white-space: nowrap;
-    opacity: 0.9;
-  }
-
   .produtos-tabela .produto-card-nome:empty::before {
     content: "Produto sem nome";
   }
@@ -928,49 +906,6 @@
   }
 }
 
-/* Categoria discreta dentro da coluna Produto */
-.produto-categoria-inline {
-    margin-top: 4px;
-    font-size: 13px;
-    line-height: 1.2;
-    color: #667085;
-    font-weight: 600;
-}
-
-@media (max-width: 768px) {
-    .produto-categoria-inline {
-        font-size: 12px;
-    }
-}
-
-
-/* Reforço visual do produto e categoria na lista */
-.tabela-produtos-estoque td:nth-child(1) {
-    font-size: 20px;
-    font-weight: 700;
-}
-
-.produto-categoria-inline {
-    margin-top: 5px;
-    font-size: 15px;
-    line-height: 1.25;
-    color: #475467;
-    font-weight: 700;
-}
-
-@media (max-width: 768px) {
-    .tabela-produtos-estoque td:nth-child(1) {
-        font-size: 18px;
-        font-weight: 700;
-    }
-
-    .produto-categoria-inline {
-        font-size: 14px;
-        font-weight: 700;
-    }
-}
-
-
 /* Reforço visual apenas no mobile - cards de produtos */
 @media (max-width: 768px) {
     .produto-card h3,
@@ -1020,6 +955,87 @@
     }
 }
 
+
+/* Hierarquia visual da coluna Produto */
+.produtos-tabela {
+    width: 100% !important;
+}
+
+.produtos-tabela .produto-card-nome {
+    overflow-wrap: anywhere;
+}
+
+.produtos-tabela .produto-nome-linha {
+    display: block;
+}
+
+.produtos-tabela .produto-nome-texto {
+    display: block;
+    color: #111827;
+    font-size: 17px;
+    font-weight: 850;
+    line-height: 1.2;
+}
+
+.produtos-tabela .produto-data-criacao {
+    color: #6b7280;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    opacity: 0.9;
+}
+
+.produtos-tabela .produto-categoria-inline {
+    margin-top: 3px;
+    color: #667085;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.2;
+}
+
+.produtos-tabela .produto-meta-separador {
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 500;
+    margin: 0 4px;
+}
+
+@media (min-width: 576px) {
+    .produtos-tabela {
+        table-layout: fixed;
+    }
+
+    .produtos-tabela th:nth-child(1),
+    .produtos-tabela td:nth-child(1) {
+        width: 72px;
+    }
+
+    .produtos-tabela th:first-child {
+        padding-left: 8px !important;
+        padding-right: 8px !important;
+        font-size: 13px !important;
+        line-height: 1.1;
+        text-align: center;
+    }
+
+    .produtos-tabela th:nth-child(2),
+    .produtos-tabela .produto-card-nome {
+        padding-left: 12px !important;
+    }
+
+    .produtos-tabela th:nth-child(3),
+    .produtos-tabela td:nth-child(3),
+    .produtos-tabela th:nth-child(4),
+    .produtos-tabela td:nth-child(4) {
+        width: 112px;
+    }
+
+    .produtos-tabela th:nth-child(5),
+    .produtos-tabela td:nth-child(5) {
+        width: 104px;
+        white-space: nowrap;
+    }
+}
 
   .produtos-busca-grid {
     display: grid;
@@ -1658,7 +1674,7 @@ align-items: center;
     
     <thead style="background: #f8f9fa;">
     <tr>
-        <th style="font-weight: 600; font-size: 13px; width:36px; text-align:center;">Selecionar</th>
+        <th style="font-weight: 600; font-size: 13px; width:72px; text-align:center;">Selecionar</th>
         <th style="font-weight: 600; font-size: 13px;">Produto</th>
         <th style="font-weight: 600; font-size: 13px;">Estoque</th>
         <th style="font-weight: 600; font-size: 13px;">Estoque Mínimo</th>
@@ -1677,9 +1693,12 @@ align-items: center;
     <td class="produto-card-nome">
       <div class="produto-nome-linha">
         <span class="produto-nome-texto">{{ produto.nome|default:"Produto sem nome" }}</span>
+      </div>
+      <div class="produto-categoria-inline">
+        {% if produto.categoria %}{{ produto.categoria }}{% else %}Sem categoria{% endif %}
+        <span class="produto-meta-separador">&middot;</span>
         <span class="produto-data-criacao">{{ produto.criado_em|date:"d/m/Y" }}</span>
       </div>
-      <div class="produto-categoria-inline">{% if produto.categoria %}{{ produto.categoria }}{% else %}Sem categoria{% endif %}</div>
     </td>
         <td class="td-quantidade">
   <div class="qtd-wrap">
