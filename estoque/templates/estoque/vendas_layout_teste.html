@@ -610,8 +610,8 @@ select {
     top: 238px;
 }
 .locacoes-operacionais-venda .atalhos-venda-toggle {
-    background: #ea580c;
-    border-color: #ea580c;
+    background: #2563eb;
+    border-color: #2563eb;
     min-height: 154px;
 }
 .locacoes-operacionais-venda.alerta .atalhos-venda-toggle {
@@ -637,9 +637,25 @@ select {
     color: #991b1b;
 }
 @keyframes locacoesOperacionaisPulso {
-    0%, 4.76% { box-shadow: 0 10px 24px rgba(220, 38, 38, 0.24); transform: scale(1); }
-    2.38% { box-shadow: 0 10px 30px rgba(220, 38, 38, 0.58); transform: scale(1.04); }
-    4.77%, 100% { box-shadow: 0 10px 24px rgba(220, 38, 38, 0.18); transform: scale(1); }
+    0%, 0.95%, 1.90%, 2.86%, 3.81%, 4.76% {
+        box-shadow: 0 10px 24px rgba(220, 38, 38, 0.24);
+        filter: brightness(1);
+        transform: scale(1);
+    }
+
+    0.48%, 1.43%, 2.38%, 3.33%, 4.29% {
+        box-shadow:
+            0 0 0 10px rgba(239, 68, 68, 0.28),
+            0 10px 42px rgba(220, 38, 38, 0.85);
+        filter: brightness(1.55);
+        transform: scale(1.085);
+    }
+
+    4.77%, 100% {
+        box-shadow: 0 10px 24px rgba(220, 38, 38, 0.18);
+        filter: brightness(1);
+        transform: scale(1);
+    }
 }
 .locacoes-rapidas-tabs {
     display: grid;

@@ -580,6 +580,16 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
         else None
     )
     for item in itens:
+        vencida_no_horario = (
+            not item["atrasada"]
+            and item["tarefa"].data_agendada == checklist["data"]
+            and item["horario"] is not None
+            and hora_atual is not None
+            and item["horario"] <= hora_atual
+        )
+
+        item["atrasada"] = item["atrasada"] or vencida_no_horario
+
         item["proxima"] = (
             not item["atrasada"]
             and item["horario"] is not None
@@ -597,5 +607,5 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
         "total": len(itens),
         "total_entregas": len(entregas),
         "total_recolhimentos": len(recolhimentos),
-        "alerta": any(item["atrasada"] or item["proxima"] for item in itens),
+        "alerta": any(item["atrasada"] for item in itens),
     }
