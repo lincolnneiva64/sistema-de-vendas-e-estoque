@@ -716,6 +716,28 @@
     overflow-wrap: anywhere;
   }
 
+  .produtos-tabela .produto-nome-linha {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .produtos-tabela .produto-nome-texto {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .produtos-tabela .produto-data-criacao {
+    color: #6b7280;
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    opacity: 0.9;
+  }
+
   .produtos-tabela .produto-card-nome:empty::before {
     content: "Produto sem nome";
   }
@@ -1652,8 +1674,13 @@ align-items: center;
     <td style="text-align:center;">
       <input type="checkbox" class="checkbox-produto-exclusao" data-produto-id="{{ produto.id }}" aria-label="Selecionar produto {{ produto.nome }}">
     </td>
-    <td class="produto-card-nome">{{ produto.nome|default:"Produto sem nome" }}
-                                <div class="produto-categoria-inline">{% if produto.categoria %}{{ produto.categoria }}{% else %}Sem categoria{% endif %}</div></td>
+    <td class="produto-card-nome">
+      <div class="produto-nome-linha">
+        <span class="produto-nome-texto">{{ produto.nome|default:"Produto sem nome" }}</span>
+        <span class="produto-data-criacao">{{ produto.criado_em|date:"d/m/Y" }}</span>
+      </div>
+      <div class="produto-categoria-inline">{% if produto.categoria %}{{ produto.categoria }}{% else %}Sem categoria{% endif %}</div>
+    </td>
         <td class="td-quantidade">
   <div class="qtd-wrap">
     {% if produto.vende_fracionado and produto.fator_conversao and produto.unidade_venda_2 %}
