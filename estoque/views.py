@@ -1621,6 +1621,9 @@ def home(request):
     q = request.GET.get("q", "").strip()
     filtro = request.GET.get("f", "todos").strip().lower()
 
+    ativos_param = request.GET.get("ativos")
+    mostrar_ativos = ativos_param != "0"
+
     produtos_base = Produto.objects.filter(excluido=False).annotate(
         prioridade=Case(
             When(quantidade=0, then=Value(0)),
@@ -1635,7 +1638,8 @@ def home(request):
         )
     ).order_by("nome")
 
-    produtos = produtos_base
+    produtos_status_base = produtos_base.filter(ativo=mostrar_ativos)
+    produtos = produtos_status_base
 
     if q:
         produtos = produtos.filter(
@@ -1662,17 +1666,19 @@ def home(request):
         )
 
     # Contadores
-    total_produtos = produtos_base.count()
-    zerado_count = produtos_base.filter(quantidade=0).count()
-    criticos_count = produtos_base.filter(
+    total_produtos = produtos_status_base.count()
+    produtos_ativos_count = produtos_base.filter(ativo=True).count()
+    produtos_inativos_count = produtos_base.filter(ativo=False).count()
+    zerado_count = produtos_status_base.filter(quantidade=0).count()
+    criticos_count = produtos_status_base.filter(
         quantidade__gt=0,
         quantidade__lte=F("estoque_minimo"),
     ).count()
-    limite_count = produtos_base.filter(
+    limite_count = produtos_status_base.filter(
         quantidade__gt=F("estoque_minimo"),
         quantidade__lte=F("estoque_minimo") + Value(5),
     ).count()
-    normal_count = produtos_base.filter(
+    normal_count = produtos_status_base.filter(
         quantidade__gt=F("estoque_minimo") + Value(5),
     ).count()
 
@@ -1721,6 +1727,10 @@ def home(request):
             "form": form,
             "q": q,
             "filtro": filtro,
+            "mostrar_ativos": mostrar_ativos,
+            "ativos_param": "1" if mostrar_ativos else "0",
+            "produtos_ativos_count": produtos_ativos_count,
+            "produtos_inativos_count": produtos_inativos_count,
             "categorias_ativas": categorias_ativas,
             "total_produtos": total_produtos,
             "zerado_count": zerado_count,
@@ -4786,6 +4796,7 @@ def sugestao_compra_fornecedor(request):
         vinculos_base = ProdutoFornecedor.objects.select_related("produto", "fornecedor").filter(
             fornecedor=fornecedor,
             ativo=True,
+            produto__ativo=True,
             produto__excluido=False,
         )
         total_produtos_vinculados = vinculos_base.count()
@@ -4802,7 +4813,7 @@ def sugestao_compra_fornecedor(request):
         )
         produto_ids = [vinculo.produto_id for vinculo in vinculos]
 
-        produtos_manual = list(Produto.objects.filter(excluido=False).order_by("nome", "id"))
+        produtos_manual = list(Produto.objects.filter(excluido=False, ativo=True).order_by("nome", "id"))
         produto_ids_consulta = [produto.id for produto in produtos_manual]
         produtos_vinculados_ids = set(produto_ids)
         vendidos_por_produto = {
@@ -6336,7 +6347,7 @@ def compras_lista_fornecedor_gravar(request):
                     continue
 
             produto_id = str(linha.get("produtoId") or "").strip()
-            produto = Produto.objects.filter(pk=produto_id, excluido=False).first()
+            produto = Produto.objects.filter(pk=produto_id, excluido=False, ativo=True).first()
             if not produto:
                 continue
 
@@ -7208,7 +7219,7 @@ def compras_lista_fornecedor_editar(request, pk):
     )
 
     itens = list(lista.itens.select_related("produto").all())
-    produtos_queryset = Produto.objects.filter(excluido=False).order_by("nome", "id")
+    produtos_queryset = Produto.objects.filter(excluido=False, ativo=True).order_by("nome", "id")
     produtos_queryset_list = list(produtos_queryset)
     produto_ids_edicao = [produto.id for produto in produtos_queryset_list]
 
@@ -7462,7 +7473,7 @@ def compras_lista(request):
 
 def compras_nova(request):
     fornecedores = Fornecedor.objects.filter(ativo=True).order_by("nome", "id")
-    produtos = Produto.objects.filter(excluido=False).order_by("nome")
+    produtos = Produto.objects.filter(excluido=False, ativo=True).order_by("nome")
 
     if request.method == "POST":
         fechamento_token = (request.POST.get("fechamento_token") or "").strip() or uuid4().hex
@@ -7511,7 +7522,7 @@ def compras_nova(request):
                 if not produto_id:
                     continue
 
-                produto = Produto.objects.filter(pk=produto_id, excluido=False).first()
+                produto = Produto.objects.filter(pk=produto_id, excluido=False, ativo=True).first()
                 if not produto:
                     raise ValueError("Produto informado nao foi encontrado.")
 
@@ -7647,7 +7658,7 @@ def compras_nova(request):
 
 
 def _produto_opcoes_compra():
-    return Produto.objects.filter(excluido=False).order_by("nome")
+    return Produto.objects.filter(excluido=False, ativo=True).order_by("nome")
 
 
 def _linha_item_compra_vazia():
@@ -7762,7 +7773,7 @@ def _dados_compra_post(request, exigir_itens=True):
         if produto_id:
             ids_validos.append(produto_id)
 
-    produtos_map = Produto.objects.filter(pk__in=ids_validos, excluido=False).in_bulk()
+    produtos_map = Produto.objects.filter(pk__in=ids_validos, excluido=False, ativo=True).in_bulk()
 
     itens_validos = []
     for indice, produto_id in enumerate(produto_ids):
@@ -8580,7 +8591,7 @@ def compra_corrigir_itens(request, pk):
                         continue
                     if not produto_id_texto:
                         raise ValueError("Selecione o produto do novo item.")
-                    produto = Produto.objects.filter(pk=produto_id_texto, excluido=False).first()
+                    produto = Produto.objects.filter(pk=produto_id_texto, excluido=False, ativo=True).first()
                     if not produto:
                         raise ValueError("Um dos novos produtos nao foi encontrado.")
                     quantidade = _decimal_compra(quantidade_texto, casas=3)
@@ -8711,7 +8722,7 @@ def compra_corrigir_itens(request, pk):
         {
             "compra": compra,
             "itens": itens,
-            "produtos": Produto.objects.filter(excluido=False).order_by("nome"),
+            "produtos": Produto.objects.filter(excluido=False, ativo=True).order_by("nome"),
         },
     )
 
@@ -10338,6 +10349,26 @@ def produto_editar(request, pk):
         form = ProdutoForm(instance=produto)
 
     return render(request, "estoque/cadastrar_produto.html", {"form": form, "retorno_url": retorno_url})
+
+
+@require_POST
+def produto_alternar_ativo(request, pk):
+    produto = get_object_or_404(Produto, pk=pk, excluido=False)
+    acao = (request.POST.get("acao") or "").strip()
+    retorno_url = request.POST.get("next") or reverse("estoque:home")
+    if not url_has_allowed_host_and_scheme(retorno_url, allowed_hosts={request.get_host()}):
+        retorno_url = reverse("estoque:home")
+
+    if acao == "desativar":
+        Produto.objects.filter(pk=produto.pk).update(ativo=False)
+        messages.success(request, f'Produto "{produto.nome}" desativado com sucesso.')
+    elif acao == "reativar":
+        Produto.objects.filter(pk=produto.pk).update(ativo=True)
+        messages.success(request, f'Produto "{produto.nome}" reativado com sucesso.')
+
+    return redirect(retorno_url)
+
+
 def produto_excluir(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
     produto.excluido = True
@@ -10559,7 +10590,7 @@ def resolver_visita_fornecedor_atrasada(request):
 
 
 def vendas(request):
-    produtos = Produto.objects.filter(excluido=False).order_by('nome')
+    produtos = Produto.objects.filter(excluido=False, ativo=True).order_by('nome')
     cliente_inicial = None
     cliente_id = request.GET.get("cliente_id")
     pedido_importado = None
@@ -15358,9 +15389,9 @@ def gravar_venda(request):
         valor_total = (quantidade * preco_unitario).quantize(Decimal("0.01"))
         produto = None
         if produto_id.isdigit():
-            produto = Produto.objects.filter(pk=int(produto_id), excluido=False).first()
+            produto = Produto.objects.filter(pk=int(produto_id), excluido=False, ativo=True).first()
         if not produto:
-            produto = Produto.objects.filter(nome__iexact=produto_nome, excluido=False).first()
+            produto = Produto.objects.filter(nome__iexact=produto_nome, excluido=False, ativo=True).first()
         if not produto:
             return JsonResponse(
                 {"sucesso": False, "mensagem": f'Produto "{produto_nome}" nao foi encontrado no estoque.'},
@@ -16757,7 +16788,7 @@ def venda_adicionar_produto_item(request, pk):
     if bloqueio:
         return bloqueio
     retorno_url = _url_retorno_segura(request)
-    produtos = Produto.objects.filter(excluido=False).order_by("nome")
+    produtos = Produto.objects.filter(excluido=False, ativo=True).order_by("nome")
     total_atual_venda = venda.total or Decimal("0.00")
     produto_selecionado = None
     quantidade_preview = None
@@ -16774,7 +16805,7 @@ def venda_adicionar_produto_item(request, pk):
         produto_bloqueio_id = request.POST.get("produto_id")
         produto_bloqueio = (
             Produto.objects
-            .filter(pk=produto_bloqueio_id, excluido=False)
+            .filter(pk=produto_bloqueio_id, excluido=False, ativo=True)
             .first()
             if produto_bloqueio_id
             else None
@@ -18881,7 +18912,17 @@ def _salvar_itens_pedido(pedido, itens, item_ids_editaveis=None):
         except (TypeError, ValueError):
             continue
 
-        produto = Produto.objects.filter(pk=produto_id, excluido=False).first()
+        item_existente = None
+        item_id = item.get("item_id")
+        if str(item_id or "").isdigit():
+            item_existente = ItemPedido.objects.filter(pedido=pedido, id=int(item_id)).first()
+            if item_existente and ids_editaveis is not None and item_existente.id not in ids_editaveis:
+                item_existente = None
+
+        produto_query = Produto.objects.filter(pk=produto_id, excluido=False)
+        if not item_existente or item_existente.produto_id != produto_id:
+            produto_query = produto_query.filter(ativo=True)
+        produto = produto_query.first()
         if not produto:
             continue
 
@@ -18898,7 +18939,15 @@ def _salvar_itens_pedido(pedido, itens, item_ids_editaveis=None):
         raise ValueError("Adicione pelo menos um item ao pedido.")
 
     if ids_editaveis is None:
-        pedido.itens.all().delete()
+        enviados = {
+            int(item.get("item_id"))
+            for item, _produto, _quantidade, _preco_unitario, _valor_total in itens_validos
+            if str(item.get("item_id") or "").isdigit()
+        }
+        if enviados:
+            pedido.itens.exclude(id__in=enviados).delete()
+        else:
+            pedido.itens.all().delete()
     else:
         pedido.itens.exclude(id__in=ids_editaveis).update(
             quantidade=Decimal("0.000"),
@@ -18949,7 +18998,7 @@ def _sugestoes_ultimas_compras_cliente(cliente_id):
 
     sugestoes = {}
     itens = (
-        ItemVenda.objects.filter(venda_id__in=vendas_ids, produto__isnull=False)
+        ItemVenda.objects.filter(venda_id__in=vendas_ids, produto__isnull=False, produto__ativo=True)
         .select_related("venda", "produto")
         .order_by("-venda__data_venda", "-venda_id", "id")
     )
@@ -19082,7 +19131,7 @@ def pedido_criar(request):
                 for item in itens:
                     try:
                         produto_id = int(item.get("produto_id", 0))
-                        produto = Produto.objects.filter(pk=produto_id, excluido=False).first()
+                        produto = Produto.objects.filter(pk=produto_id, excluido=False, ativo=True).first()
                         if not produto:
                             continue
 
@@ -19128,7 +19177,7 @@ def pedido_criar(request):
             return JsonResponse({"sucesso": False, "mensagem": "Erro ao criar pedido."}, status=500)
 
     # GET: mostrar formulário de criação
-    produtos = Produto.objects.filter(excluido=False).order_by("nome")
+    produtos = Produto.objects.filter(excluido=False, ativo=True).order_by("nome")
     clientes = Cliente.objects.filter(ativo=True).order_by("nome")
     operadores_pedido = list(_operadores_pedido_queryset())
     cliente_preselecionado = None
@@ -19247,7 +19296,7 @@ def pedido_editar(request, pk):
             "redirect_url": _url_detalhe_pedido_fluxo(pedido.id, next_url=pedido_next_url, pedido_editado=1),
         })
 
-    produtos = Produto.objects.filter(excluido=False).order_by("nome")
+    produtos = Produto.objects.filter(excluido=False, ativo=True).order_by("nome")
     clientes = Cliente.objects.filter(ativo=True).order_by("nome")
     operadores_pedido = list(_operadores_pedido_queryset())
     operador_atual_habilitado = bool(

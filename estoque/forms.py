@@ -1125,6 +1125,7 @@ class FornecedorForm(forms.ModelForm):
             self.fields["produtos"].initial = ProdutoFornecedor.objects.filter(
                 fornecedor=self.instance,
                 ativo=True,
+                produto__ativo=True,
                 produto__excluido=False,
                 produto__excluido_em__isnull=True,
             ).values_list("produto_id", flat=True)
@@ -1186,6 +1187,7 @@ class FornecedorForm(forms.ModelForm):
     @staticmethod
     def produtos_disponiveis_queryset():
         return Produto.objects.filter(
+            ativo=True,
             excluido=False,
             excluido_em__isnull=True,
         ).order_by("nome", "id")

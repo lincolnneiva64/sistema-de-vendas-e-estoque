@@ -23,7 +23,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, OperacaoRecebimentoCliente, PagamentoContaPagar, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, OperacaoRecebimentoCliente, PagamentoContaPagar, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
 from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_ALTERADA_FALTA_REENVIAR, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
@@ -6327,6 +6327,349 @@ class ProdutosIncompletosTests(TestCase):
         self.assertEqual(self.produto.preco_compra, Decimal("3.33"))
         self.assertEqual(self.produto.preco_vista, Decimal("4.33"))
         self.assertEqual(self.produto.preco_prazo, Decimal("4.99"))
+
+
+class ProdutoAtivacaoTests(TestCase):
+    def criar_produto(self, nome="Produto Ativacao", ativo=True):
+        return Produto.objects.create(
+            nome=nome,
+            categoria="Teste",
+            preco_compra=Decimal("10.00"),
+            preco_vista=Decimal("15.00"),
+            preco_prazo=Decimal("16.00"),
+            quantidade=Decimal("10.000"),
+            estoque_minimo=1,
+            unidade_compra="UN",
+            ativo=ativo,
+        )
+
+    def criar_cliente(self):
+        return Cliente.objects.create(nome="Cliente Ativacao", whatsapp="11999999999")
+
+    def criar_fornecedor(self):
+        return Fornecedor.objects.create(nome="Fornecedor Ativacao")
+
+    def mensagens(self, resposta):
+        return [str(mensagem) for mensagem in resposta.context["messages"]]
+
+    def test_produto_ativo_pode_ser_desativado(self):
+        produto = self.criar_produto()
+
+        resposta = self.client.post(
+            reverse("estoque:produto_alternar_ativo", kwargs={"pk": produto.pk}),
+            {"acao": "desativar", "next": reverse("estoque:home")},
+            secure=True,
+            follow=True,
+        )
+
+        produto.refresh_from_db()
+        self.assertEqual(resposta.status_code, 200)
+        self.assertFalse(produto.ativo)
+        self.assertIn('Produto "Produto Ativacao" desativado com sucesso.', self.mensagens(resposta))
+
+    def test_produto_inativo_pode_ser_reativado(self):
+        produto = self.criar_produto(ativo=False)
+
+        resposta = self.client.post(
+            reverse("estoque:produto_alternar_ativo", kwargs={"pk": produto.pk}),
+            {"acao": "reativar", "next": reverse("estoque:home")},
+            secure=True,
+            follow=True,
+        )
+
+        produto.refresh_from_db()
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(produto.ativo)
+        self.assertIn('Produto "Produto Ativacao" reativado com sucesso.', self.mensagens(resposta))
+
+    def test_desativar_nao_exclui_produto(self):
+        produto = self.criar_produto()
+
+        self.client.post(
+            reverse("estoque:produto_alternar_ativo", kwargs={"pk": produto.pk}),
+            {"acao": "desativar", "next": reverse("estoque:home")},
+            secure=True,
+        )
+
+        produto.refresh_from_db()
+        self.assertFalse(produto.ativo)
+        self.assertFalse(produto.excluido)
+        self.assertTrue(Produto.objects.filter(pk=produto.pk).exists())
+
+    def test_produto_inativo_continua_acessivel_para_edicao_e_aba_desativados(self):
+        produto = self.criar_produto(ativo=False)
+
+        resposta_home = self.client.get(reverse("estoque:home"), secure=True)
+        resposta_desativados = self.client.get(f"{reverse('estoque:home')}?ativos=0", secure=True)
+        resposta_edicao = self.client.get(reverse("estoque:produto_editar", kwargs={"pk": produto.pk}), secure=True)
+
+        self.assertEqual(resposta_home.status_code, 200)
+        self.assertNotContains(resposta_home, produto.nome)
+        self.assertContains(resposta_home, "Desativados")
+        self.assertContains(resposta_desativados, produto.nome)
+        self.assertContains(resposta_desativados, "Inativo")
+        self.assertContains(resposta_desativados, "Reativar")
+        self.assertNotContains(resposta_desativados, "Desativar este produto?")
+        self.assertEqual(resposta_edicao.status_code, 200)
+
+    def test_home_filtra_produtos_por_aba_ativos_e_desativados(self):
+        produto_ativo = self.criar_produto("Produto Ativo Aba")
+        produto_inativo = self.criar_produto("Produto Inativo Aba", ativo=False)
+
+        resposta_ativos = self.client.get(reverse("estoque:home"), secure=True)
+        resposta_desativados = self.client.get(f"{reverse('estoque:home')}?ativos=0", secure=True)
+
+        self.assertContains(resposta_ativos, produto_ativo.nome)
+        self.assertNotContains(resposta_ativos, produto_inativo.nome)
+        self.assertContains(resposta_desativados, produto_inativo.nome)
+        self.assertNotContains(resposta_desativados, produto_ativo.nome)
+
+    def test_alternar_ativo_remove_produto_da_aba_atual(self):
+        produto = self.criar_produto()
+
+        resposta_desativar = self.client.post(
+            reverse("estoque:produto_alternar_ativo", kwargs={"pk": produto.pk}),
+            {"acao": "desativar", "next": f"{reverse('estoque:home')}?ativos=1"},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertNotIn(produto.pk, [item.pk for item in resposta_desativar.context["produtos"]])
+
+        resposta_reativar = self.client.post(
+            reverse("estoque:produto_alternar_ativo", kwargs={"pk": produto.pk}),
+            {"acao": "reativar", "next": f"{reverse('estoque:home')}?ativos=0"},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertNotIn(produto.pk, [item.pk for item in resposta_reativar.context["produtos"]])
+
+    def test_produto_inativo_nao_aparece_em_nova_venda(self):
+        produto_ativo = self.criar_produto("Produto Ativo Venda")
+        produto_inativo = self.criar_produto("Produto Inativo Venda", ativo=False)
+
+        resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+
+        self.assertContains(resposta, produto_ativo.nome)
+        self.assertNotContains(resposta, produto_inativo.nome)
+
+    def test_produto_inativo_nao_aparece_em_nova_compra(self):
+        produto_ativo = self.criar_produto("Produto Ativo Compra")
+        produto_inativo = self.criar_produto("Produto Inativo Compra", ativo=False)
+
+        resposta = self.client.get(reverse("estoque:compras_nova"), secure=True)
+
+        self.assertContains(resposta, produto_ativo.nome)
+        self.assertNotContains(resposta, produto_inativo.nome)
+
+    def test_produto_reativado_volta_a_aparecer_nas_selecoes_normais(self):
+        produto = self.criar_produto("Produto Reativado Selecoes", ativo=False)
+        Produto.objects.filter(pk=produto.pk).update(ativo=True)
+
+        resposta_venda = self.client.get(reverse("estoque:vendas"), secure=True)
+        resposta_compra = self.client.get(reverse("estoque:compras_nova"), secure=True)
+
+        self.assertContains(resposta_venda, produto.nome)
+        self.assertContains(resposta_compra, produto.nome)
+
+    def test_alteracao_de_ativo_exige_post(self):
+        produto = self.criar_produto()
+
+        resposta = self.client.get(
+            reverse("estoque:produto_alternar_ativo", kwargs={"pk": produto.pk}),
+            secure=True,
+        )
+
+        produto.refresh_from_db()
+        self.assertEqual(resposta.status_code, 405)
+        self.assertTrue(produto.ativo)
+
+    def test_alteracao_de_ativo_exige_csrf(self):
+        produto = self.criar_produto()
+        client = Client(enforce_csrf_checks=True)
+
+        resposta = client.post(
+            reverse("estoque:produto_alternar_ativo", kwargs={"pk": produto.pk}),
+            {"acao": "desativar", "next": reverse("estoque:home")},
+            secure=True,
+        )
+
+        produto.refresh_from_db()
+        self.assertEqual(resposta.status_code, 403)
+        self.assertTrue(produto.ativo)
+
+    def test_editar_pedido_com_produto_desativado_preserva_item_existente(self):
+        produto = self.criar_produto("Produto Pedido Existente")
+        cliente = self.criar_cliente()
+        pedido = Pedido.objects.create(
+            cliente=cliente,
+            data_pedido=timezone.localdate(),
+            total=Decimal("30.00"),
+        )
+        item = ItemPedido.objects.create(
+            pedido=pedido,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="UN",
+            preco_unitario=Decimal("15.00"),
+            valor_total=Decimal("30.00"),
+            estoque_no_momento=10,
+        )
+        Produto.objects.filter(pk=produto.pk).update(ativo=False)
+
+        resposta = self.client.post(
+            reverse("estoque:pedido_editar", kwargs={"pk": pedido.pk}),
+            {
+                "cliente_id": str(cliente.pk),
+                "data_pedido": f"{timezone.localdate():%Y-%m-%d}",
+                "data_prevista_entrega": "",
+                "operador": "",
+                "observacao": "",
+                "itens_json": json.dumps([
+                    {
+                        "item_id": item.pk,
+                        "produto_id": produto.pk,
+                        "quantidade": "2.000",
+                        "unidade": "UN",
+                        "preco_unitario": "15.00",
+                        "valor_total": "30.00",
+                    }
+                ]),
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200, resposta.content.decode())
+        self.assertTrue(resposta.json()["sucesso"])
+        self.assertTrue(ItemPedido.objects.filter(pk=item.pk, produto=produto).exists())
+        self.assertEqual(pedido.itens.count(), 1)
+
+    def test_corrigir_compra_com_produto_desativado_preserva_item_existente(self):
+        produto = self.criar_produto("Produto Compra Existente")
+        fornecedor = self.criar_fornecedor()
+        compra = Compra.objects.create(
+            fornecedor=fornecedor,
+            data_compra=timezone.localdate(),
+            tipo_pagamento="aprazo",
+            total=Decimal("20.00"),
+        )
+        item = ItemCompra.objects.create(
+            compra=compra,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="UN",
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("20.00"),
+        )
+        Produto.objects.filter(pk=produto.pk).update(ativo=False)
+
+        resposta_get = self.client.get(reverse("estoque:compra_corrigir_itens", kwargs={"pk": compra.pk}), secure=True)
+        resposta_post = self.client.post(
+            reverse("estoque:compra_corrigir_itens", kwargs={"pk": compra.pk}),
+            {
+                "tipo_pagamento_compra": compra.tipo_pagamento,
+                "item_id[]": [str(item.pk)],
+                "quantidade[]": ["2.000"],
+                "preco_unitario[]": ["10.00"],
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta_get.status_code, 200)
+        self.assertContains(resposta_get, produto.nome)
+        self.assertEqual(resposta_post.status_code, 302)
+        self.assertTrue(ItemCompra.objects.filter(pk=item.pk, produto=produto).exists())
+        self.assertEqual(compra.itens.count(), 1)
+
+    def test_venda_com_produto_desativado_mantem_historico_e_detalhe(self):
+        produto = self.criar_produto("Produto Venda Historico")
+        cliente = self.criar_cliente()
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="avista",
+            total=Decimal("15.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="UN",
+            preco_unitario=Decimal("15.00"),
+            valor_total=Decimal("15.00"),
+        )
+        Produto.objects.filter(pk=produto.pk).update(ativo=False)
+
+        resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.pk}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, produto.nome)
+        self.assertTrue(ItemVenda.objects.filter(pk=item.pk, produto=produto).exists())
+
+    def test_produto_desativado_nao_pode_ser_acrescentado_como_novo_item(self):
+        produto = self.criar_produto("Produto Inativo Novo Item", ativo=False)
+        cliente = self.criar_cliente()
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("0.00"),
+        )
+        ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("0.00"),
+            valor_em_aberto=Decimal("0.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_adicionar_produto_item", kwargs={"pk": venda.pk}),
+            {
+                "produto_id": str(produto.pk),
+                "quantidade": "1",
+                "preco_unitario": "15.00",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Selecione um produto cadastrado.")
+        self.assertFalse(ItemVenda.objects.filter(venda=venda, produto=produto).exists())
+
+    def test_produto_reativado_pode_ser_acrescentado_como_novo_item(self):
+        produto = self.criar_produto("Produto Reativado Novo Item", ativo=False)
+        Produto.objects.filter(pk=produto.pk).update(ativo=True)
+        cliente = self.criar_cliente()
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("0.00"),
+        )
+        ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("0.00"),
+            valor_em_aberto=Decimal("0.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_adicionar_produto_item", kwargs={"pk": venda.pk}),
+            {
+                "produto_id": str(produto.pk),
+                "quantidade": "1",
+                "preco_unitario": "15.00",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertTrue(ItemVenda.objects.filter(venda=venda, produto=produto).exists())
 
 
 class ComprasListaFinanceiroTests(TestCase):

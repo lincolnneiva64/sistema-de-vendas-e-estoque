@@ -44,6 +44,7 @@ class Produto(models.Model):
     quantidade = models.DecimalField(max_digits=12, decimal_places=3, blank=True, null=True)
     estoque_minimo = models.PositiveIntegerField(blank=True, null=True)
     fornecedor = models.CharField(max_length=120, blank=True, null=True)
+    ativo = models.BooleanField(default=True)
     excluido = models.BooleanField(default=False)
     excluido_em = models.DateTimeField(null=True, blank=True)
     cadastro_incompleto = models.BooleanField(default=False)

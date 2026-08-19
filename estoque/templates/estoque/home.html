@@ -65,54 +65,6 @@
 .produtos-incompletos-item strong {
   font-size: .9rem;
 }
-.locacoes-operacionais-alerta {
-  border-color: #ea580c;
-  background: #fff7ed;
-  animation: locacoes-alerta-pulse 1.35s ease-in-out infinite;
-}
-.locacoes-operacionais-alerta h2 {
-  color: #9a3412;
-}
-.locacoes-operacionais-lista {
-  display: grid;
-  gap: 7px;
-  margin-top: 9px;
-}
-.locacoes-operacionais-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  padding: 8px 10px;
-  border: 1px solid #fdba74;
-  border-radius: 9px;
-  background: #fff;
-}
-.locacoes-operacionais-item.critica {
-  border-color: #ea580c;
-  background: #ffedd5;
-}
-.locacoes-operacionais-titulo {
-  color: #172033;
-  font-size: .92rem;
-  font-weight: 950;
-}
-.locacoes-operacionais-desc {
-  color: #64748b;
-  font-size: .84rem;
-  font-weight: 700;
-  line-height: 1.3;
-}
-@keyframes locacoes-alerta-pulse {
-  0%, 100% {
-    box-shadow: 0 6px 16px rgba(234, 88, 12, 0.12), 0 0 0 0 rgba(234, 88, 12, 0.25);
-    transform: translateY(0);
-  }
-  50% {
-    box-shadow: 0 10px 24px rgba(234, 88, 12, 0.22), 0 0 0 5px rgba(234, 88, 12, 0.10);
-    transform: translateY(-1px);
-  }
-}
 @media (max-width: 768px) {
   .produtos-incompletos-alerta {
     margin: 8px 8px 12px;
@@ -130,9 +82,6 @@
   .produtos-incompletos-item {
     align-items: stretch;
     flex-direction: column;
-  }
-  .locacoes-operacionais-item {
-    grid-template-columns: 1fr;
   }
 }
 </style>
@@ -181,28 +130,6 @@
 </section>
 {% endif %}
 
-{% if locacoes_alertas_operacionais_qtd %}
-<section class="produtos-incompletos-alerta locacoes-operacionais-alerta" id="locacoes-operacionais-alerta">
-  <div class="produtos-incompletos-topo">
-    <div>
-      <h2>Locacoes operacionais</h2>
-      <p>{{ locacoes_alertas_operacionais_qtd }} alerta{{ locacoes_alertas_operacionais_qtd|pluralize }} de entrega, recolhimento ou devolucao.</p>
-    </div>
-    <a class="produtos-incompletos-btn" href="{% url 'locacoes:lista' %}">Abrir locacoes</a>
-  </div>
-  <div class="locacoes-operacionais-lista">
-    {% for alerta in locacoes_alertas_operacionais %}
-      <div class="locacoes-operacionais-item {{ alerta.prioridade }}">
-        <div>
-          <div class="locacoes-operacionais-titulo">{{ alerta.titulo }}</div>
-          <div class="locacoes-operacionais-desc">{{ alerta.descricao }}</div>
-        </div>
-        <a class="produtos-incompletos-btn" href="{{ alerta.url }}">Detalhe</a>
-      </div>
-    {% endfor %}
-  </div>
-</section>
-{% endif %}
 <!-- AVISO PRODUTOS INCOMPLETOS - FIM -->
 
 
@@ -510,6 +437,7 @@
 
   .produtos-resumo,
   .produtos-filtros,
+  .produtos-status-tabs,
   .produtos-busca {
     max-width: none !important;
     margin: 0 0 12px !important;
@@ -1000,14 +928,330 @@
     margin: 0 4px;
 }
 
+.produtos-tabela tr.produto-inativo {
+    opacity: 0.68;
+}
+
+.produto-inativo-badge {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 6px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: #e5e7eb;
+    color: #4b5563;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.produtos-status-tabs {
+    max-width: 720px;
+    margin: 0 auto 10px auto;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.produtos-status-tab {
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 1px solid #dbe3ef;
+    border-radius: 999px;
+    padding: 7px 12px;
+    background: #ffffff;
+    color: #334155;
+    font-size: 0.84rem;
+    font-weight: 850;
+    line-height: 1;
+    text-decoration: none;
+}
+
+.produtos-status-tab:hover {
+    color: #1d4ed8;
+    border-color: #bfdbfe;
+    background: #eff6ff;
+}
+
+.produtos-status-tab.active {
+    color: #ffffff;
+    border-color: #2563eb;
+    background: #2563eb;
+}
+
+.produtos-acoes-coluna {
+    min-width: 118px;
+    text-align: right;
+}
+
+.produtos-acoes {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    min-width: 108px;
+}
+
+.produto-status-form {
+    display: inline-flex;
+    margin: 0;
+}
+
+.btn-status-produto {
+    min-width: 104px;
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    font-weight: 800;
+}
+
+.btn-desativar-produto {
+    color: #991b1b;
+    border-color: #fecaca;
+    background: #fff;
+}
+
+.btn-reativar-produto {
+    color: #166534;
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+}
+
+/* Refinamento visual da listagem administrativa de produtos */
+.produtos-tabela {
+    border-collapse: separate;
+    border-spacing: 0 7px;
+}
+
+.produtos-tabela tr.linha-produto {
+    --bs-table-bg: #ffffff !important;
+    --bs-table-color: #172033 !important;
+    --bs-table-striped-bg: #ffffff !important;
+    --bs-table-striped-color: #172033 !important;
+    --bs-table-hover-bg: #f8fafc !important;
+    --bs-table-hover-color: #172033 !important;
+    --bs-table-active-bg: #f8fafc !important;
+    --bs-table-active-color: #172033 !important;
+    background: #ffffff !important;
+}
+
+.produtos-tabela tr.linha-produto > td {
+    background: #ffffff !important;
+    color: #172033 !important;
+    transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.produtos-tabela tr.linha-produto:hover > td {
+    background: #f5f9ff !important;
+}
+
+.produtos-tabela tr.linha-produto.produto-inativo > td {
+    background: #f9fafb !important;
+    color: #4b5563 !important;
+}
+
+.produtos-tabela tr.linha-produto.produto-inativo:hover > td {
+    background: #f3f4f6 !important;
+}
+
+.qtd-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.produtos-tabela .td-quantidade,
+.produtos-tabela .produto-card-minimo {
+    font-variant-numeric: tabular-nums;
+}
+
+.produtos-tabela .badge-zero,
+.produtos-tabela .badge-critico,
+.produtos-tabela .badge-limite,
+.produtos-tabela .badge-ok {
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-weight: 850;
+}
+
+.produtos-tabela .badge-zero {
+    background: #fee2e2 !important;
+    border-color: #fecaca !important;
+    color: #991b1b !important;
+}
+
+.produtos-tabela .badge-critico {
+    background: #ffedd5 !important;
+    border-color: #fed7aa !important;
+    color: #9a3412 !important;
+}
+
+.produtos-tabela .badge-limite {
+    background: #fef3c7 !important;
+    border-color: #fde68a !important;
+    color: #92400e !important;
+}
+
+.produtos-tabela .badge-ok {
+    background: #dcfce7 !important;
+    border-color: #bbf7d0 !important;
+    color: #166534 !important;
+}
+
 @media (min-width: 576px) {
     .produtos-tabela {
         table-layout: fixed;
     }
 
+    .produtos-tabela th {
+        padding: 7px 8px !important;
+        color: #475569;
+        font-size: 12px !important;
+        font-weight: 750 !important;
+        line-height: 1.15;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .produtos-tabela tr.linha-produto > td {
+        padding: 5px 8px !important;
+        border-top: 1px solid #d7e0ea;
+        border-bottom: 1px solid #d7e0ea;
+        font-size: 13px;
+        line-height: 1.18;
+        vertical-align: middle;
+    }
+
+    .produtos-tabela tr.linha-produto > td:first-child {
+        border-left: 4px solid #cbd5e1;
+        border-radius: 8px 0 0 8px;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.045);
+    }
+
+    .produtos-tabela tr.linha-produto > td:last-child {
+        border-right: 1px solid #d7e0ea;
+        border-radius: 0 8px 8px 0;
+    }
+
+    .produtos-tabela tr.linha-produto[data-status="zerado"] > td:first-child {
+        border-left-color: #ef4444;
+    }
+
+    .produtos-tabela tr.linha-produto[data-status="critico"] > td:first-child {
+        border-left-color: #f97316;
+    }
+
+    .produtos-tabela tr.linha-produto[data-status="limite"] > td:first-child {
+        border-left-color: #facc15;
+    }
+
+    .produtos-tabela tr.linha-produto[data-status="normal"] > td:first-child {
+        border-left-color: #22c55e;
+    }
+
+    .produtos-tabela tr.linha-produto.produto-inativo > td:first-child {
+        border-left-color: #9ca3af;
+    }
+
+    .produtos-tabela tr.linha-produto:hover > td {
+        border-top-color: #bfd3ec;
+        border-bottom-color: #bfd3ec;
+        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.055);
+    }
+
+    .produtos-tabela tr.linha-produto:hover > td:last-child {
+        border-right-color: #bfd3ec;
+    }
+
+    .produtos-tabela .produto-nome-texto {
+        font-size: 14.5px;
+        line-height: 1.14;
+        font-weight: 850;
+    }
+
+    .produtos-tabela .produto-categoria-inline {
+        margin-top: 2px;
+        font-size: 11px;
+        line-height: 1.12;
+    }
+
+    .produtos-tabela .produto-data-criacao,
+    .produtos-tabela .produto-meta-separador {
+        font-size: 11px;
+    }
+
+    .produtos-tabela .produto-card-valor,
+    .qtd-num {
+        font-size: 13px !important;
+        font-weight: 850;
+        letter-spacing: 0;
+    }
+
+    .estoque-lista-duplo {
+        gap: 1px;
+        align-items: flex-start;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .estoque-lista-principal {
+        display: block;
+        max-width: 100%;
+        font-size: 13px;
+        line-height: 1.08;
+        overflow-wrap: anywhere;
+    }
+
+    .estoque-lista-fracionado {
+        display: block;
+        max-width: 100%;
+        font-size: 11px;
+        line-height: 1.08;
+        overflow-wrap: anywhere;
+    }
+
+    .qtd-wrap {
+        width: 100%;
+        min-width: 0;
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .td-quantidade .qtd-num,
+    .produto-card-minimo .produto-card-valor {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .produto-card-minimo {
+        text-align: left !important;
+    }
+
+    .qtd-badge {
+        padding: 2px 6px;
+        font-size: 10px;
+        line-height: 1.05;
+        white-space: nowrap;
+    }
+
+    .produto-inativo-badge {
+        padding: 2px 6px;
+        font-size: 10px;
+        background: #e5e7eb;
+        color: #4b5563;
+    }
+
     .produtos-tabela th:nth-child(1),
     .produtos-tabela td:nth-child(1) {
-        width: 72px;
+        width: 62px;
     }
 
     .produtos-tabela th:first-child {
@@ -1027,13 +1271,55 @@
     .produtos-tabela td:nth-child(3),
     .produtos-tabela th:nth-child(4),
     .produtos-tabela td:nth-child(4) {
-        width: 112px;
+        width: 132px;
     }
 
     .produtos-tabela th:nth-child(5),
     .produtos-tabela td:nth-child(5) {
-        width: 104px;
+        width: 86px;
         white-space: nowrap;
+    }
+
+    .produtos-tabela td:last-child {
+        align-items: flex-end;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .produtos-acoes {
+        width: 74px;
+        gap: 3px;
+        min-width: 74px;
+    }
+
+    .btn-editar-produto,
+    .btn-status-produto {
+        min-width: 74px;
+        min-height: 23px;
+        padding: 2px 7px;
+        border-radius: 6px;
+        font-size: 10.5px;
+        font-weight: 750;
+        line-height: 1.1;
+        box-shadow: none !important;
+    }
+
+    .btn-editar-produto {
+        background: #f8fbff;
+        border-color: #c7dffc;
+        color: #1d4ed8;
+    }
+
+    .btn-desativar-produto {
+        background: #ffffff;
+        border-color: #f3c5c5;
+        color: #a33b3b;
+    }
+
+    .btn-reativar-produto {
+        background: #f7fef9;
+        border-color: #bfe8cc;
+        color: #1d6b39;
     }
 }
 
@@ -1584,22 +1870,37 @@ align-items: center;
     Total: {{ total_produtos }} produtos cadastrados
 </p>
 </div>
-<div class="produtos-filtros" style="max-width: 720px; margin: 0 auto 10px auto;">
+<div id="produtos-lista" class="produtos-filtros" style="max-width: 720px; margin: 0 auto 10px auto;">
 
 <a class="badge bg-secondary resumo-badge {% if filtro == 'todos' %}active{% endif %}"
-   href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=todos">Todos</a>
+   href="?ativos={{ ativos_param }}{% if q %}&q={{ q|urlencode }}{% endif %}&f=todos">Todos</a>
 
 <a class="badge badge-zero resumo-badge {% if filtro == 'zerado' %}active{% endif %}"
-   href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=zerado">Zerado: {{ zerado_count }}</a>
+   href="?ativos={{ ativos_param }}{% if q %}&q={{ q|urlencode }}{% endif %}&f=zerado">Zerado: {{ zerado_count }}</a>
 
 <a class="badge badge-critico resumo-badge {% if filtro == 'critico' %}active{% endif %}"
-   href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=critico">Crítico: {{ criticos_count }}</a>
+   href="?ativos={{ ativos_param }}{% if q %}&q={{ q|urlencode }}{% endif %}&f=critico">Crítico: {{ criticos_count }}</a>
 
 <a class="badge badge-limite resumo-badge {% if filtro == 'limite' %}active{% endif %}"
-   href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=limite">No limite: {{ limite_count }}</a>
+   href="?ativos={{ ativos_param }}{% if q %}&q={{ q|urlencode }}{% endif %}&f=limite">No limite: {{ limite_count }}</a>
 
 <a class="badge badge-ok resumo-badge {% if filtro == 'normal' %}active{% endif %}"
-   href="?{% if q %}q={{ q|urlencode }}&{% endif %}f=normal">Normal: {{ normal_count }}</a>
+   href="?ativos={{ ativos_param }}{% if q %}&q={{ q|urlencode }}{% endif %}&f=normal">Normal: {{ normal_count }}</a>
+</div>
+
+<div class="produtos-status-tabs" aria-label="Status dos produtos">
+  <a
+    class="produtos-status-tab {% if mostrar_ativos %}active{% endif %}"
+    href="?ativos=1{% if q %}&q={{ q|urlencode }}{% endif %}{% if filtro %}&f={{ filtro|urlencode }}{% endif %}#produtos-lista"
+  >
+    Ativos <span>{{ produtos_ativos_count }}</span>
+  </a>
+  <a
+    class="produtos-status-tab {% if not mostrar_ativos %}active{% endif %}"
+    href="?ativos=0{% if q %}&q={{ q|urlencode }}{% endif %}{% if filtro %}&f={{ filtro|urlencode }}{% endif %}#produtos-lista"
+  >
+    Desativados <span>{{ produtos_inativos_count }}</span>
+  </a>
 </div>
   
 <div class="fade-wrapper produtos-busca" id="fadeWrapper">
@@ -1678,7 +1979,7 @@ align-items: center;
         <th style="font-weight: 600; font-size: 13px;">Produto</th>
         <th style="font-weight: 600; font-size: 13px;">Estoque</th>
         <th style="font-weight: 600; font-size: 13px;">Estoque Mínimo</th>
-        <th style="font-weight: 600; font-size: 13px; text-align: right;">Ações</th>
+        <th class="produtos-acoes-coluna" style="font-weight: 600; font-size: 13px; text-align: right;">Ações</th>
     </tr>
 </thead>
       
@@ -1686,7 +1987,7 @@ align-items: center;
 
     <tbody>
       {% for produto in produtos %}
-      <tr id="produto-{{ produto.id }}" data-produto-id="{{ produto.id }}" data-produto-search="{{ produto.nome|default:'Produto sem nome' }}" data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}" data-categoria="{% if produto.categoria %}{{ produto.categoria|lower }}{% else %}__sem_categoria__{% endif %}" class="linha-produto {% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}" style="transition: all 0.15s ease;">
+      <tr id="produto-{{ produto.id }}" data-produto-id="{{ produto.id }}" data-produto-search="{{ produto.nome|default:'Produto sem nome' }}" data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}" data-categoria="{% if produto.categoria %}{{ produto.categoria|lower }}{% else %}__sem_categoria__{% endif %}" class="linha-produto {% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}{% if not produto.ativo %} produto-inativo{% endif %}" style="transition: all 0.15s ease;">
     <td style="text-align:center;">
       <input type="checkbox" class="checkbox-produto-exclusao" data-produto-id="{{ produto.id }}" aria-label="Selecionar produto {{ produto.nome }}">
     </td>
@@ -1698,6 +1999,9 @@ align-items: center;
         {% if produto.categoria %}{{ produto.categoria }}{% else %}Sem categoria{% endif %}
         <span class="produto-meta-separador">&middot;</span>
         <span class="produto-data-criacao">{{ produto.criado_em|date:"d/m/Y" }}</span>
+        {% if not produto.ativo %}
+          <span class="produto-inativo-badge">Inativo</span>
+        {% endif %}
       </div>
     </td>
         <td class="td-quantidade">
@@ -1734,7 +2038,8 @@ align-items: center;
           {% endif %}
         </td>
 
-        <td>
+        <td class="produtos-acoes-coluna">
+          <div class="produtos-acoes">
           <a
   href="{% url 'estoque:produto_editar' produto.id %}?next={{ request.get_full_path|urlencode }}%23produto-{{ produto.id }}"
   class="btn btn-sm btn-primary btn-editar-produto"
@@ -1742,6 +2047,17 @@ align-items: center;
 >
   Editar
 </a>
+          <form class="produto-status-form" method="post" action="{% url 'estoque:produto_alternar_ativo' produto.id %}" onsubmit="return confirm('{% if produto.ativo %}Desativar este produto? Ele nao aparecera nas selecoes normais de vendas e compras.{% else %}Reativar este produto? Ele voltara a aparecer nas selecoes normais.{% endif %}');">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="{% if produto.ativo %}desativar{% else %}reativar{% endif %}">
+            <input type="hidden" name="next" value="{{ request.get_full_path }}#produtos-lista">
+            {% if produto.ativo %}
+              <button type="submit" class="btn btn-outline-danger btn-sm btn-status-produto btn-desativar-produto">Desativar</button>
+            {% else %}
+              <button type="submit" class="btn btn-outline-success btn-sm btn-status-produto btn-reativar-produto">Reativar</button>
+            {% endif %}
+          </form>
+          </div>
         </td>
       </tr>
       {% endfor %}

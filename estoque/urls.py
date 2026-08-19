@@ -73,6 +73,7 @@ urlpatterns = [
     path("verificar-produto/", views.verificar_produto, name="verificar_produto"),
     path("produto/<int:pk>/", views.produto_detalhe, name="produto_detalhe"),
     path("produto/<int:pk>/editar/", views.produto_editar, name="produto_editar"),
+    path("produto/<int:pk>/alternar-ativo/", views.produto_alternar_ativo, name="produto_alternar_ativo"),
     path("vendas/", views.vendas, name="vendas"),
     path(
         "vendas/visitas-fornecedores/resolver/",
