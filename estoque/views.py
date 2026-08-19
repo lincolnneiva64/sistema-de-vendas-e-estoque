@@ -1579,7 +1579,8 @@ def home(request):
                 if produto:
                     produto.excluido = True
                     produto.save()
-            return redirect("estoque:home")
+            retorno_url = _url_next_segura_request(request) or reverse("estoque:home")
+            return redirect(_url_produtos_com_foco(retorno_url, request.POST.get("foco_produto")))
         # EXCLUIR SELECIONADOS (exclusão lógica em lote)
         if acao == "excluir_selecionados":
             produto_ids = request.POST.getlist("produto_ids")
@@ -1596,7 +1597,7 @@ def home(request):
                 except Exception:
                     # Não propagar exceção para o usuário final nesta operação simples
                     logger.exception("Erro ao excluir produtos selecionados: %s", produto_ids)
-            return redirect("estoque:home")
+            return redirect(f"{reverse('estoque:home')}#produtos-lista")
         # CRIAR / EDITAR
         produto_id = request.POST.get("produto_id")
         if produto_id:
@@ -9208,6 +9209,143 @@ def fornecedores(request):
     )
 
 
+def _contagens_fornecedores(queryset, campo="fornecedor_id"):
+    return {
+        item[campo]: item["total"]
+        for item in queryset.values(campo).annotate(total=Count("id"))
+    }
+
+
+def _bloqueios_fornecedores(fornecedor_ids):
+    fornecedor_ids = list(fornecedor_ids)
+    compras = _contagens_fornecedores(Compra.objects.filter(fornecedor_id__in=fornecedor_ids))
+    contas = _contagens_fornecedores(ContaPagar.objects.filter(fornecedor_id__in=fornecedor_ids))
+    listas = _contagens_fornecedores(ListaCompraFornecedor.objects.filter(fornecedor_id__in=fornecedor_ids))
+    envios = _contagens_fornecedores(EnvioListaCompraFornecedor.objects.filter(fornecedor_id__in=fornecedor_ids))
+    envios_internos = _contagens_fornecedores(EnvioInternoListaCompraFornecedor.objects.filter(fornecedor_id__in=fornecedor_ids))
+    resolucoes = _contagens_fornecedores(ResolucaoVisitaFornecedor.objects.filter(fornecedor_id__in=fornecedor_ids))
+    produtos_com_historico = _contagens_fornecedores(
+        ProdutoFornecedor.objects.filter(
+            fornecedor_id__in=fornecedor_ids,
+        ).filter(Q(ultima_compra_em__isnull=False) | Q(ultimo_preco_compra__isnull=False))
+    )
+
+    bloqueios = {}
+    for fornecedor_id in fornecedor_ids:
+        motivos = {}
+        if compras.get(fornecedor_id):
+            motivos["compras"] = compras[fornecedor_id]
+        if contas.get(fornecedor_id):
+            motivos["contas a pagar"] = contas[fornecedor_id]
+        if produtos_com_historico.get(fornecedor_id):
+            motivos["historico de produtos"] = produtos_com_historico[fornecedor_id]
+        if listas.get(fornecedor_id):
+            motivos["listas de compra"] = listas[fornecedor_id]
+        if envios.get(fornecedor_id):
+            motivos["envios de listas"] = envios[fornecedor_id]
+        if envios_internos.get(fornecedor_id):
+            motivos["envios internos"] = envios_internos[fornecedor_id]
+        if resolucoes.get(fornecedor_id):
+            motivos["historico de visitas"] = resolucoes[fornecedor_id]
+        bloqueios[fornecedor_id] = motivos
+    return bloqueios
+
+
+def _fornecedor_bloqueios_exclusao(fornecedor):
+    return list(_bloqueios_fornecedores([fornecedor.pk]).get(fornecedor.pk, {}))
+
+
+def _excluir_fornecedor_sem_historico(fornecedor):
+    """Remove apenas dados cadastrais; chamadores ja validaram os bloqueios."""
+    with transaction.atomic():
+        ProdutoFornecedor.objects.filter(fornecedor=fornecedor).delete()
+        FornecedorDestinatarioLista.objects.filter(fornecedor=fornecedor).delete()
+        FornecedorDestinatarioRecente.objects.filter(fornecedor=fornecedor).delete()
+        fornecedor.delete()
+
+
+def _url_fornecedores_retorno(request):
+    retorno_url = _url_next_segura_request(request)
+    if retorno_url:
+        return retorno_url
+    return reverse("estoque:fornecedores") + "#fornecedores-lista"
+
+
+def _url_fornecedores_com_foco(retorno_url, foco_fornecedor):
+    foco_fornecedor = str(foco_fornecedor or "").strip()
+    if not foco_fornecedor.isdigit():
+        return retorno_url
+    partes = urlsplit(retorno_url)
+    query = parse_qs(partes.query, keep_blank_values=True)
+    query["foco_fornecedor"] = [foco_fornecedor]
+    return urlunsplit((partes.scheme, partes.netloc, partes.path, urlencode(query, doseq=True), f"fornecedor-{foco_fornecedor}"))
+
+
+@require_POST
+def fornecedor_excluir(request, pk):
+    fornecedor = get_object_or_404(Fornecedor, pk=pk)
+    retorno_url = _url_fornecedores_retorno(request)
+    bloqueios = _fornecedor_bloqueios_exclusao(fornecedor)
+    if bloqueios:
+        messages.error(
+            request,
+            f'Fornecedor "{fornecedor.nome}" nao pode ser excluido porque possui: '
+            f'{", ".join(bloqueios)}. Use Desativar como alternativa.',
+        )
+        return redirect(retorno_url)
+
+    try:
+        _excluir_fornecedor_sem_historico(fornecedor)
+    except ProtectedError:
+        messages.error(
+            request,
+            f'Fornecedor "{fornecedor.nome}" possui historico protegido e nao pode ser excluido. Use Desativar como alternativa.',
+        )
+        return redirect(retorno_url)
+
+    messages.success(request, f'Fornecedor "{fornecedor.nome}" excluido com sucesso.')
+    return redirect(_url_fornecedores_com_foco(retorno_url, request.POST.get("foco_fornecedor")))
+
+
+@require_POST
+def fornecedores_excluir_massa(request):
+    fornecedor_ids = list(dict.fromkeys(request.POST.getlist("fornecedor_ids")))
+    retorno_url = _url_fornecedores_retorno(request)
+    excluidos = 0
+    bloqueios_por_motivo = {}
+    fornecedores = list(Fornecedor.objects.filter(pk__in=fornecedor_ids))
+    bloqueios = _bloqueios_fornecedores([fornecedor.pk for fornecedor in fornecedores])
+
+    for fornecedor in fornecedores:
+        motivos = bloqueios.get(fornecedor.pk, {})
+        if motivos:
+            for motivo in motivos:
+                bloqueios_por_motivo[motivo] = bloqueios_por_motivo.get(motivo, 0) + 1
+            continue
+        try:
+            _excluir_fornecedor_sem_historico(fornecedor)
+        except ProtectedError:
+            bloqueios_por_motivo["historico protegido"] = bloqueios_por_motivo.get("historico protegido", 0) + 1
+        else:
+            excluidos += 1
+
+    if not fornecedor_ids:
+        messages.error(request, "Nenhum fornecedor foi selecionado.")
+    else:
+        bloqueados = len(fornecedores) - excluidos
+        messages.success(request, f"{len(fornecedor_ids)} fornecedor(es) processado(s). {excluidos} excluido(s). {bloqueados} nao puderam ser excluido(s).")
+        if bloqueados:
+            resumo_motivos = "; ".join(
+                f"{quantidade} possuem {motivo}"
+                for motivo, quantidade in sorted(bloqueios_por_motivo.items(), key=lambda item: (-item[1], item[0]))
+            )
+            messages.error(
+                request,
+                f"Motivos dos bloqueios: {resumo_motivos}. Use Desativar como alternativa.",
+            )
+    return redirect(retorno_url)
+
+
 
 def meios_pagamento(request):
     termo = request.GET.get("q", "").strip()
@@ -10005,6 +10143,18 @@ def _url_next_segura_request(request):
     return ""
 
 
+def _url_produtos_com_foco(retorno_url, foco_produto):
+    foco_produto = str(foco_produto or "").strip()
+    if not foco_produto.isdigit():
+        return retorno_url
+
+    partes = urlsplit(retorno_url)
+    query = parse_qs(partes.query, keep_blank_values=True)
+    query["foco_produto"] = [foco_produto]
+    nova_query = urlencode(query, doseq=True)
+    return urlunsplit((partes.scheme, partes.netloc, partes.path, nova_query, f"produto-{foco_produto}"))
+
+
 def _url_adicionar_query_params(url, params):
     url = (url or "").strip()
     if not url:
@@ -10355,9 +10505,7 @@ def produto_editar(request, pk):
 def produto_alternar_ativo(request, pk):
     produto = get_object_or_404(Produto, pk=pk, excluido=False)
     acao = (request.POST.get("acao") or "").strip()
-    retorno_url = request.POST.get("next") or reverse("estoque:home")
-    if not url_has_allowed_host_and_scheme(retorno_url, allowed_hosts={request.get_host()}):
-        retorno_url = reverse("estoque:home")
+    retorno_url = _url_next_segura_request(request) or reverse("estoque:home")
 
     if acao == "desativar":
         Produto.objects.filter(pk=produto.pk).update(ativo=False)
@@ -10366,7 +10514,7 @@ def produto_alternar_ativo(request, pk):
         Produto.objects.filter(pk=produto.pk).update(ativo=True)
         messages.success(request, f'Produto "{produto.nome}" reativado com sucesso.')
 
-    return redirect(retorno_url)
+    return redirect(_url_produtos_com_foco(retorno_url, request.POST.get("foco_produto")))
 
 
 def produto_excluir(request, pk):
@@ -10374,7 +10522,9 @@ def produto_excluir(request, pk):
     produto.excluido = True
     produto.excluido_em = timezone.now()
     produto.save()
-    return redirect("estoque:home")
+    retorno_url = _url_next_segura_request(request) or reverse("estoque:home")
+    foco_produto = request.GET.get("foco_produto") or request.POST.get("foco_produto")
+    return redirect(_url_produtos_com_foco(retorno_url, foco_produto))
 def verificar_produto(request):
     nome = request.GET.get("nome", "").strip()
     produto_id = request.GET.get("produto_id")

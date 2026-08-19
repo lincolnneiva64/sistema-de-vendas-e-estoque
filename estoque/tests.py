@@ -16,6 +16,7 @@ from django.apps import apps as django_apps
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
 from django.db import transaction
 from django.db.models import Sum
 from django.test import Client, TestCase, override_settings
@@ -6074,6 +6075,235 @@ class FornecedorContatoTelefonesFormTests(TestCase):
         self.assertEqual(destinatario.telefone.numero, "91993152627")
 
 
+class FornecedorExclusaoTests(TestCase):
+    def criar_fornecedor(self, nome):
+        return Fornecedor.objects.create(nome=nome)
+
+    def criar_compra_com_conta(self, fornecedor):
+        compra = Compra.objects.create(
+            fornecedor=fornecedor,
+            data_compra=timezone.localdate(),
+            total=Decimal("25.00"),
+        )
+        ContaPagar.objects.create(
+            compra=compra,
+            fornecedor=fornecedor,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("25.00"),
+            valor_em_aberto=Decimal("25.00"),
+        )
+        return compra
+
+    def test_exclusao_individual_exige_post(self):
+        fornecedor = self.criar_fornecedor("Fornecedor Somente Post")
+
+        resposta = self.client.get(reverse("estoque:fornecedor_excluir", kwargs={"pk": fornecedor.pk}), secure=True)
+
+        self.assertEqual(resposta.status_code, 405)
+        self.assertTrue(Fornecedor.objects.filter(pk=fornecedor.pk).exists())
+
+    def test_exclusao_individual_exige_csrf(self):
+        fornecedor = self.criar_fornecedor("Fornecedor CSRF")
+        client = Client(enforce_csrf_checks=True)
+
+        resposta = client.post(reverse("estoque:fornecedor_excluir", kwargs={"pk": fornecedor.pk}), secure=True)
+
+        self.assertEqual(resposta.status_code, 403)
+        self.assertTrue(Fornecedor.objects.filter(pk=fornecedor.pk).exists())
+
+    def test_fornecedor_sem_vinculos_pode_ser_excluido(self):
+        fornecedor = self.criar_fornecedor("Fornecedor Sem Vinculos")
+
+        resposta = self.client.post(
+            reverse("estoque:fornecedor_excluir", kwargs={"pk": fornecedor.pk}),
+            {"next": f"{reverse('estoque:fornecedores')}?q=sem&pagina=2#fornecedores-lista"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertFalse(Fornecedor.objects.filter(pk=fornecedor.pk).exists())
+        self.assertEqual(resposta["Location"], f"{reverse('estoque:fornecedores')}?q=sem&pagina=2#fornecedores-lista")
+
+    def test_fornecedor_com_historico_preserva_compra_e_conta(self):
+        fornecedor = self.criar_fornecedor("Fornecedor Com Historico")
+        compra = self.criar_compra_com_conta(fornecedor)
+
+        resposta = self.client.post(
+            reverse("estoque:fornecedor_excluir", kwargs={"pk": fornecedor.pk}),
+            {"next": f"{reverse('estoque:fornecedores')}#fornecedores-lista"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertTrue(Fornecedor.objects.filter(pk=fornecedor.pk).exists())
+        self.assertTrue(Compra.objects.filter(pk=compra.pk, fornecedor=fornecedor).exists())
+        self.assertTrue(ContaPagar.objects.filter(compra=compra, fornecedor=fornecedor).exists())
+
+    def test_vinculo_cadastral_sem_historico_nao_bloqueia(self):
+        fornecedor = self.criar_fornecedor("Fornecedor Cadastral")
+        produto = Produto.objects.create(
+            nome="Produto Cadastral",
+            preco_compra=Decimal("8.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("11.00"),
+        )
+        contato = FornecedorContato.objects.create(fornecedor=fornecedor, nome="Contato Cadastral")
+        ProdutoFornecedor.objects.create(produto=produto, fornecedor=fornecedor)
+
+        resposta = self.client.post(
+            reverse("estoque:fornecedor_excluir", kwargs={"pk": fornecedor.pk}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertFalse(Fornecedor.objects.filter(pk=fornecedor.pk).exists())
+        self.assertFalse(FornecedorContato.objects.filter(pk=contato.pk).exists())
+        self.assertFalse(ProdutoFornecedor.objects.filter(fornecedor_id=fornecedor.pk).exists())
+        self.assertTrue(Produto.objects.filter(pk=produto.pk).exists())
+
+    def test_historico_de_produto_bloqueia_e_preserva_vinculo(self):
+        fornecedor = self.criar_fornecedor("Fornecedor Historico Produto")
+        produto = Produto.objects.create(
+            nome="Produto Historico",
+            preco_compra=Decimal("8.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("11.00"),
+        )
+        vinculo = ProdutoFornecedor.objects.create(
+            produto=produto,
+            fornecedor=fornecedor,
+            ultimo_preco_compra=Decimal("12.00"),
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:fornecedor_excluir", kwargs={"pk": fornecedor.pk}),
+            secure=True,
+            follow=True,
+        )
+
+        self.assertContains(resposta, "historico de produtos")
+        self.assertTrue(Fornecedor.objects.filter(pk=fornecedor.pk).exists())
+        self.assertTrue(ProdutoFornecedor.objects.filter(pk=vinculo.pk).exists())
+
+    def test_exclusao_individual_preserva_busca_e_foco(self):
+        fornecedor = self.criar_fornecedor("Fornecedor Atual")
+        proximo = self.criar_fornecedor("Fornecedor Proximo")
+        retorno = f"{reverse('estoque:fornecedores')}?q=Fornecedor&extra=1#fornecedores-lista"
+
+        resposta = self.client.post(
+            reverse("estoque:fornecedor_excluir", kwargs={"pk": fornecedor.pk}),
+            {"next": retorno, "foco_fornecedor": proximo.pk},
+            secure=True,
+        )
+
+        self.assertEqual(resposta["Location"], f"{reverse('estoque:fornecedores')}?q=Fornecedor&extra=1&foco_fornecedor={proximo.pk}#fornecedor-{proximo.pk}")
+
+    def test_exclusao_em_massa_continua_quando_um_fornecedor_tem_vinculo(self):
+        primeiro = self.criar_fornecedor("Fornecedor Livre 1")
+        bloqueado = self.criar_fornecedor("Fornecedor Bloqueado")
+        ultimo = self.criar_fornecedor("Fornecedor Livre 2")
+        self.criar_compra_com_conta(bloqueado)
+
+        resposta = self.client.post(
+            reverse("estoque:fornecedores_excluir_massa"),
+            {
+                "fornecedor_ids": [str(primeiro.pk), str(bloqueado.pk), str(ultimo.pk)],
+                "next": f"{reverse('estoque:fornecedores')}?q=Fornecedor#fornecedores-lista",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertFalse(Fornecedor.objects.filter(pk=primeiro.pk).exists())
+        self.assertTrue(Fornecedor.objects.filter(pk=bloqueado.pk).exists())
+        self.assertFalse(Fornecedor.objects.filter(pk=ultimo.pk).exists())
+
+        mensagens = [str(mensagem) for mensagem in get_messages(resposta.wsgi_request)]
+        self.assertTrue(any("3 fornecedor(es) processado(s)" in mensagem for mensagem in mensagens))
+        self.assertTrue(any("2 excluido(s)" in mensagem and "1 nao puderam" in mensagem for mensagem in mensagens))
+        self.assertTrue(any("compras" in mensagem for mensagem in mensagens))
+
+    def test_exclusao_em_massa_resume_varios_motivos(self):
+        fornecedor_compra = self.criar_fornecedor("Fornecedor Com Compra")
+        fornecedor_conta = self.criar_fornecedor("Fornecedor Com Conta")
+        fornecedor_livre = self.criar_fornecedor("Fornecedor Livre")
+        self.criar_compra_com_conta(fornecedor_compra)
+        conta_compra = Compra.objects.create(
+            fornecedor=None,
+            data_compra=timezone.localdate(),
+            total=Decimal("10.00"),
+        )
+        ContaPagar.objects.create(
+            compra=conta_compra,
+            fornecedor=fornecedor_conta,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("10.00"),
+            valor_em_aberto=Decimal("10.00"),
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:fornecedores_excluir_massa"),
+            {"fornecedor_ids": [fornecedor_compra.pk, fornecedor_conta.pk, fornecedor_livre.pk]},
+            secure=True,
+            follow=True,
+        )
+
+        mensagens = [str(mensagem) for mensagem in get_messages(resposta.wsgi_request)]
+        self.assertTrue(any("3 fornecedor(es) processado(s)" in mensagem for mensagem in mensagens))
+        self.assertTrue(any("1 excluido(s)" in mensagem and "2 nao puderam" in mensagem for mensagem in mensagens))
+        self.assertTrue(any("compras" in mensagem and "contas a pagar" in mensagem for mensagem in mensagens))
+
+    def test_lote_grande_processa_todos_os_fornecedores(self):
+        fornecedores = [self.criar_fornecedor(f"Fornecedor Lote {indice}") for indice in range(76)]
+
+        resposta = self.client.post(
+            reverse("estoque:fornecedores_excluir_massa"),
+            {"fornecedor_ids": [fornecedor.pk for fornecedor in fornecedores]},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(Fornecedor.objects.count(), 0)
+        self.assertContains(resposta, "76 fornecedor(es) processado(s)")
+
+    def test_exclusao_em_massa_sem_selecao_nao_exclui(self):
+        fornecedor = self.criar_fornecedor("Fornecedor Nenhum Selecionado")
+
+        resposta = self.client.post(
+            reverse("estoque:fornecedores_excluir_massa"),
+            {"next": f"{reverse('estoque:fornecedores')}#fornecedores-lista"},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertTrue(Fornecedor.objects.filter(pk=fornecedor.pk).exists())
+        self.assertContains(resposta, "Nenhum fornecedor foi selecionado.")
+
+    def test_desativar_fornecedor_continua_funcionando(self):
+        fornecedor = self.criar_fornecedor("Fornecedor Desativar")
+
+        resposta = self.client.post(
+            reverse("estoque:fornecedores"),
+            {"acao": "alternar_status", "fornecedor_id": fornecedor.pk, "ativo": "0"},
+            secure=True,
+        )
+
+        fornecedor.refresh_from_db()
+        self.assertEqual(resposta.status_code, 302)
+        self.assertFalse(fornecedor.ativo)
+
+    def test_lista_renderiza_controles_e_ids_de_exclusao(self):
+        fornecedor = self.criar_fornecedor("Fornecedor Controles")
+
+        resposta = self.client.get(reverse("estoque:fornecedores"), secure=True)
+
+        self.assertContains(resposta, "Selecionar visiveis")
+        self.assertContains(resposta, "Excluir selecionados (0)")
+        self.assertContains(resposta, f'id="fornecedor-{fornecedor.pk}"')
+        self.assertContains(resposta, 'input.name = "fornecedor_ids"')
+
+
 class FornecedorProdutosFormTests(TestCase):
     def _produto_teste(self, nome, excluido=False, excluido_em=None):
         return Produto.objects.create(
@@ -6444,6 +6674,64 @@ class ProdutoAtivacaoTests(TestCase):
         )
 
         self.assertNotIn(produto.pk, [item.pk for item in resposta_reativar.context["produtos"]])
+
+    def test_desativar_preserva_aba_filtros_e_foco_no_redirect(self):
+        produto = self.criar_produto("Produto Foco Atual")
+        proximo = self.criar_produto("Produto Foco Proximo")
+        retorno = f"{reverse('estoque:home')}?ativos=1&q=Foco&f=critico&extra=1#produtos-lista"
+
+        resposta = self.client.post(
+            reverse("estoque:produto_alternar_ativo", kwargs={"pk": produto.pk}),
+            {"acao": "desativar", "next": retorno, "foco_produto": proximo.pk},
+            secure=True,
+        )
+
+        self.assertEqual(resposta["Location"], f"{reverse('estoque:home')}?ativos=1&q=Foco&f=critico&extra=1&foco_produto={proximo.pk}#produto-{proximo.pk}")
+
+    def test_reativar_preserva_aba_filtros_e_foco_no_redirect(self):
+        produto = self.criar_produto("Produto Reativar Atual", ativo=False)
+        proximo = self.criar_produto("Produto Reativar Proximo", ativo=False)
+        retorno = f"{reverse('estoque:home')}?ativos=0&q=Reativar&f=normal#produtos-lista"
+
+        resposta = self.client.post(
+            reverse("estoque:produto_alternar_ativo", kwargs={"pk": produto.pk}),
+            {"acao": "reativar", "next": retorno, "foco_produto": proximo.pk},
+            secure=True,
+        )
+
+        self.assertEqual(resposta["Location"], f"{reverse('estoque:home')}?ativos=0&q=Reativar&f=normal&foco_produto={proximo.pk}#produto-{proximo.pk}")
+
+    def test_exclusao_individual_preserva_foco_e_contexto(self):
+        produto = self.criar_produto("Produto Excluir Atual")
+        proximo = self.criar_produto("Produto Excluir Proximo")
+        retorno = f"{reverse('estoque:home')}?ativos=1&q=Excluir&f=todos#produtos-lista"
+
+        resposta = self.client.get(
+            reverse("estoque:produto_excluir", kwargs={"pk": produto.pk}),
+            {"next": retorno, "foco_produto": proximo.pk},
+            secure=True,
+        )
+
+        self.assertEqual(resposta["Location"], f"{reverse('estoque:home')}?ativos=1&q=Excluir&f=todos&foco_produto={proximo.pk}#produto-{proximo.pk}")
+
+    def test_next_externo_e_ignorado_na_ativacao(self):
+        produto = self.criar_produto("Produto Next Seguro")
+
+        resposta = self.client.post(
+            reverse("estoque:produto_alternar_ativo", kwargs={"pk": produto.pk}),
+            {"acao": "desativar", "next": "https://example.com/fora", "foco_produto": produto.pk},
+            secure=True,
+        )
+
+        self.assertEqual(resposta["Location"], f"{reverse('estoque:home')}?foco_produto={produto.pk}#produto-{produto.pk}")
+
+    def test_foco_de_produto_inexistente_nao_impede_carregar_home(self):
+        resposta = self.client.get(
+            f"{reverse('estoque:home')}?ativos=1&q=produto&f=todos&foco_produto=999999#produto-999999",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
 
     def test_produto_inativo_nao_aparece_em_nova_venda(self):
         produto_ativo = self.criar_produto("Produto Ativo Venda")

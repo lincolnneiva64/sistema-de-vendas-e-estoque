@@ -75,37 +75,37 @@
     font-size: 0.9rem !important;
   }
 
-  .fornecedores-table td:nth-child(2)::before {
+  .fornecedores-table td:nth-child(3)::before {
     content: "Contatos: ";
     font-weight: 850;
     color: #334155;
   }
 
-  .fornecedores-table td:nth-child(3)::before {
+  .fornecedores-table td:nth-child(4)::before {
     content: "Localidade: ";
     font-weight: 850;
     color: #334155;
   }
 
-  .fornecedores-table td:nth-child(4)::before {
+  .fornecedores-table td:nth-child(5)::before {
     content: "Status: ";
     font-weight: 850;
     color: #334155;
   }
 
-  .fornecedores-table td:nth-child(5)::before {
+  .fornecedores-table td:nth-child(6)::before {
     content: "Financeiro: ";
     font-weight: 850;
     color: #334155;
   }
 
-  .fornecedores-table td:nth-child(6)::before {
+  .fornecedores-table td:nth-child(7)::before {
     content: "Compras: ";
     font-weight: 850;
     color: #334155;
   }
 
-  .fornecedores-table td:nth-child(7)::before {
+  .fornecedores-table td:nth-child(8)::before {
     content: "Produtos: ";
     font-weight: 850;
     color: #334155;
@@ -194,6 +194,14 @@
     padding: 12px 16px; border-bottom: 1px solid #edf1f6;
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
   }
+  .fornecedores-bulk-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 16px; border-bottom: 1px solid #edf1f6; background: #fbfdff;
+  }
+  .fornecedores-bulk-bar form { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .fornecedores-bulk-summary { color: #475569; font-size: 0.82rem; font-weight: 800; }
+  .fornecedores-select-all { display: inline-flex; align-items: center; gap: 6px; color: #475569; font-size: 0.78rem; font-weight: 800; }
+  .fornecedores-checkbox { width: 16px; height: 16px; accent-color: #2563eb; }
   .fornecedores-panel-title { margin: 0; font-size: 0.98rem; font-weight: 800; color: #111827; }
   .fornecedores-count { color: #64748b; font-size: 0.84rem; font-weight: 700; white-space: nowrap; }
   .fornecedores-table-wrap { overflow-x: auto; }
@@ -253,6 +261,10 @@
   .fornecedores-action-link { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
   .status-action-btn.ativar { border-color: #86efac; color: #166534; background: #f0fdf4; }
   .status-action-btn.desativar { border-color: #fecaca; color: #991b1b; background: #fff7ed; }
+  .status-action-btn.excluir { border-color: #dc2626; color: #fff; background: #dc2626; }
+  .fornecedores-row.linha-foco-fornecedor td { background: #eff6ff; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.14); }
+  .fornecedores-row.linha-foco-fornecedor td:first-child { border-left: 2px solid #2563eb; }
+  .fornecedores-row.linha-foco-fornecedor td:last-child { border-right: 2px solid #2563eb; }
   .fornecedores-form { padding: 14px 16px 16px; }
   .fornecedores-field { margin-bottom: 10px; min-width: 0; }
   .fornecedores-field label {
@@ -386,12 +398,26 @@
           <h2 class="fornecedores-panel-title">Fornecedores cadastrados</h2>
           <span class="fornecedores-count">{{ total_fornecedores }} fornecedor(es) - {{ fornecedores_ativos }} ativo(s)</span>
         </div>
+        <div class="fornecedores-bulk-bar" id="fornecedores-lista">
+          <label class="fornecedores-select-all">
+            <input type="checkbox" class="fornecedores-checkbox" id="selecionarTodosFornecedores">
+            Selecionar visiveis
+          </label>
+          <form method="post" action="{% url 'estoque:fornecedores_excluir_massa' %}" id="formExcluirFornecedoresSelecionados">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}#fornecedores-lista">
+            <div id="fornecedoresSelecionadosInputs"></div>
+            <span class="fornecedores-bulk-summary" id="fornecedoresSelecionadosResumo">0 fornecedor(es) selecionado(s)</span>
+            <button type="submit" class="status-action-btn excluir" id="btnExcluirFornecedoresSelecionados" disabled>Excluir selecionados (0)</button>
+          </form>
+        </div>
 
         {% if fornecedores %}
           <div class="fornecedores-table-wrap">
             <table class="fornecedores-table">
               <thead>
                 <tr>
+                  <th><span class="visually-hidden">Selecionar</span></th>
                   <th>Fornecedor</th>
                   <th>Contatos</th>
                   <th>Localidade</th>
@@ -404,7 +430,8 @@
               </thead>
               <tbody>
                 {% for fornecedor in fornecedores %}
-                  <tr class="fornecedores-row {% if fornecedor_selecionado and fornecedor.id == fornecedor_selecionado.id %}selecionado{% elif request.GET.fornecedor_salvo and fornecedor.id|stringformat:'s' == request.GET.fornecedor_salvo %}selecionado{% endif %}">
+                  <tr id="fornecedor-{{ fornecedor.id }}" class="fornecedores-row {% if fornecedor_selecionado and fornecedor.id == fornecedor_selecionado.id %}selecionado{% elif request.GET.fornecedor_salvo and fornecedor.id|stringformat:'s' == request.GET.fornecedor_salvo %}selecionado{% endif %}">
+                    <td><input type="checkbox" class="fornecedores-checkbox checkbox-fornecedor" value="{{ fornecedor.id }}" aria-label="Selecionar fornecedor {{ fornecedor.nome }}"></td>
                     <td>
                       <div class="fornecedor-nome">{{ fornecedor.nome }}</div>
                       {% if fornecedor.nome_fantasia %}
@@ -482,6 +509,11 @@
                             {% if fornecedor.ativo %}Desativar{% else %}Ativar{% endif %}
                           </button>
                         </form>
+                        <form method="post" class="status-action-form form-excluir-fornecedor" action="{% url 'estoque:fornecedor_excluir' fornecedor.id %}">
+                          {% csrf_token %}
+                          <input type="hidden" name="next" value="{{ request.get_full_path }}#fornecedores-lista">
+                          <button type="submit" class="status-action-btn excluir" data-fornecedor-nome="{{ fornecedor.nome|escape }}">Excluir</button>
+                        </form>
                       </div>
                     </td>
                   </tr>
@@ -496,6 +528,95 @@
     </main>
   </div>
 </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const checkboxes = Array.from(document.querySelectorAll(".checkbox-fornecedor"));
+  const selecionarTodos = document.getElementById("selecionarTodosFornecedores");
+  const resumo = document.getElementById("fornecedoresSelecionadosResumo");
+  const botaoExcluir = document.getElementById("btnExcluirFornecedoresSelecionados");
+  const inputs = document.getElementById("fornecedoresSelecionadosInputs");
+
+  function atualizarSelecao() {
+    const selecionados = checkboxes.filter(function(checkbox) { return checkbox.checked; });
+    if (resumo) resumo.textContent = selecionados.length + " fornecedor(es) selecionado(s)";
+    if (botaoExcluir) {
+      botaoExcluir.textContent = "Excluir selecionados (" + selecionados.length + ")";
+      botaoExcluir.disabled = selecionados.length === 0;
+    }
+    if (inputs) {
+      inputs.innerHTML = "";
+      selecionados.forEach(function(checkbox) {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "fornecedor_ids";
+        input.value = checkbox.value;
+        inputs.appendChild(input);
+      });
+    }
+    if (selecionarTodos) {
+      selecionarTodos.checked = checkboxes.length > 0 && selecionados.length === checkboxes.length;
+      selecionarTodos.indeterminate = selecionados.length > 0 && selecionados.length < checkboxes.length;
+    }
+    checkboxes.forEach(function(checkbox) {
+      const linha = checkbox.closest(".fornecedores-row");
+      if (linha) linha.classList.toggle("selecionado", checkbox.checked);
+    });
+  }
+
+  checkboxes.forEach(function(checkbox) {
+    checkbox.addEventListener("change", atualizarSelecao);
+  });
+  if (selecionarTodos) {
+    selecionarTodos.addEventListener("change", function() {
+      checkboxes.forEach(function(checkbox) { checkbox.checked = selecionarTodos.checked; });
+      atualizarSelecao();
+    });
+  }
+  atualizarSelecao();
+
+  document.querySelectorAll(".form-excluir-fornecedor").forEach(function(formulario) {
+    formulario.addEventListener("submit", function(evento) {
+      const linhaAtual = formulario.closest(".fornecedores-row");
+      const linhas = Array.from(document.querySelectorAll(".fornecedores-row"));
+      const indice = linhas.indexOf(linhaAtual);
+      const foco = (linhas[indice + 1] || linhas[indice - 1]);
+      if (foco) {
+        const campo = document.createElement("input");
+        campo.type = "hidden";
+        campo.name = "foco_fornecedor";
+        campo.value = foco.id.replace("fornecedor-", "");
+        formulario.appendChild(campo);
+      }
+      const nome = formulario.querySelector("[data-fornecedor-nome]")?.dataset.fornecedorNome || "este fornecedor";
+      if (!window.confirm('Excluir o fornecedor "' + nome + '"?')) evento.preventDefault();
+    });
+  });
+
+  const formularioMassa = document.getElementById("formExcluirFornecedoresSelecionados");
+  if (formularioMassa) {
+    formularioMassa.addEventListener("submit", function(evento) {
+      const quantidade = checkboxes.filter(function(checkbox) { return checkbox.checked; }).length;
+      if (!quantidade) {
+        evento.preventDefault();
+        window.alert("Nenhum fornecedor foi selecionado.");
+        return;
+      }
+      if (!window.confirm("Excluir " + quantidade + " fornecedores selecionados?")) evento.preventDefault();
+    });
+  }
+
+  const focoId = new URLSearchParams(window.location.search).get("foco_fornecedor");
+  if (focoId) {
+    const linhaFoco = document.getElementById("fornecedor-" + focoId);
+    if (linhaFoco) {
+      linhaFoco.scrollIntoView({block: "center"});
+      linhaFoco.classList.add("linha-foco-fornecedor");
+      window.setTimeout(function() { linhaFoco.classList.remove("linha-foco-fornecedor"); }, 1800);
+    }
+  }
+});
+</script>
 
 
 
@@ -575,37 +696,37 @@
     font-size: 0.9rem !important;
   }
 
-  .fornecedores-table td:nth-child(2)::before {
+  .fornecedores-table td:nth-child(3)::before {
     content: "Contatos: ";
     font-weight: 850;
     color: #334155;
   }
 
-  .fornecedores-table td:nth-child(3)::before {
+  .fornecedores-table td:nth-child(4)::before {
     content: "Localidade: ";
     font-weight: 850;
     color: #334155;
   }
 
-  .fornecedores-table td:nth-child(4)::before {
+  .fornecedores-table td:nth-child(5)::before {
     content: "Status: ";
     font-weight: 850;
     color: #334155;
   }
 
-  .fornecedores-table td:nth-child(5)::before {
+  .fornecedores-table td:nth-child(6)::before {
     content: "Financeiro: ";
     font-weight: 850;
     color: #334155;
   }
 
-  .fornecedores-table td:nth-child(6)::before {
+  .fornecedores-table td:nth-child(7)::before {
     content: "Compras: ";
     font-weight: 850;
     color: #334155;
   }
 
-  .fornecedores-table td:nth-child(7)::before {
+  .fornecedores-table td:nth-child(8)::before {
     content: "Produtos: ";
     font-weight: 850;
     color: #334155;
