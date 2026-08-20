@@ -490,7 +490,11 @@
                     </td>
                     <td class="fornecedor-muted">
                       {% if fornecedor.prazos_pagamento_padrao %}
-                        Boleto/prazo: {{ fornecedor.prazos_pagamento_padrao }} dias
+                        {% if fornecedor.prazos_pagamento_padrao == "0" %}
+                          À vista
+                        {% else %}
+                          Boleto/prazo: {{ fornecedor.prazos_pagamento_padrao }} dias
+                        {% endif %}
                       {% else %}
                         Sem prazo/boleto cadastrado
                       {% endif %}

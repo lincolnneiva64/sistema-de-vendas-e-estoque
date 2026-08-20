@@ -32,6 +32,74 @@ from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google
 from . import views
 
 
+class FornecedorFormPrazosPagamentoTests(TestCase):
+    def dados_formulario(self, prazo, nome="Fornecedor Prazo"):
+        return {
+            "nome": nome,
+            "nome_fantasia": "",
+            "telefone_whatsapp": "",
+            "cidade": "",
+            "bairro": "",
+            "prazos_pagamento_padrao": prazo,
+            "frequencia_visita_ativa": "",
+            "frequencia_visita_intervalo_dias": "",
+            "frequencia_visita_dia_semana": "",
+            "frequencia_visita_data_referencia": "",
+            "observacao": "",
+            "ativo": "on",
+        }
+
+    def test_normaliza_pagamento_a_vista_para_zero(self):
+        entradas = ["0", "a vista", "à vista", "A VISTA", "À VISTA"]
+
+        for indice, entrada in enumerate(entradas):
+            with self.subTest(entrada=entrada):
+                form = FornecedorForm(self.dados_formulario(entrada, f"Fornecedor Avista {indice}"))
+
+                self.assertTrue(form.is_valid(), form.errors)
+                self.assertEqual(form.cleaned_data["prazos_pagamento_padrao"], "0")
+
+    def test_normaliza_dias_de_prazo_positivos(self):
+        entradas = {
+            "7": "7",
+            "14": "14",
+            "7, 14, 21": "7, 14, 21",
+            "7;14;21": "7, 14, 21",
+        }
+
+        for indice, (entrada, esperado) in enumerate(entradas.items()):
+            with self.subTest(entrada=entrada):
+                form = FornecedorForm(self.dados_formulario(entrada, f"Fornecedor Prazo {indice}"))
+
+                self.assertTrue(form.is_valid(), form.errors)
+                self.assertEqual(form.cleaned_data["prazos_pagamento_padrao"], esperado)
+
+    def test_rejeita_pagamento_a_vista_combinado_com_prazo(self):
+        entradas = ["0, 7", "7, 0", "a vista, 7", "7, à vista"]
+
+        for indice, entrada in enumerate(entradas):
+            with self.subTest(entrada=entrada):
+                form = FornecedorForm(self.dados_formulario(entrada, f"Fornecedor Misto {indice}"))
+
+                self.assertFalse(form.is_valid())
+                self.assertIn(
+                    "Pagamento a vista nao pode ser combinado com dias de prazo.",
+                    form.errors["prazos_pagamento_padrao"],
+                )
+
+    def test_rejeita_prazo_negativo(self):
+        form = FornecedorForm(self.dados_formulario("-7"))
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("prazos_pagamento_padrao", form.errors)
+
+    def test_preserva_siglas_curta_aprovadas_no_nome(self):
+        form = FornecedorForm(self.dados_formulario("", nome="MC FRIOS"))
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["nome"], "MC Frios")
+
+
 class FornecedorDestinatarioListaTests(TestCase):
     def setUp(self):
         self.fornecedor = Fornecedor.objects.create(

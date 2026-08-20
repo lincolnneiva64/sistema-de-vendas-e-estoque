@@ -1002,6 +1002,8 @@ class MeioPagamentoForm(forms.ModelForm):
 
 
 class FornecedorForm(forms.ModelForm):
+    SIGLAS_PRESERVADAS = {"NF", "MC", "BR"}
+
     produtos = forms.ModelMultipleChoiceField(
         queryset=Produto.objects.none(),
         required=False,
@@ -1072,7 +1074,7 @@ class FornecedorForm(forms.ModelForm):
             }),
             "prazos_pagamento_padrao": forms.TextInput(attrs={
                 "class": "form-control",
-                "placeholder": "Ex.: 7, 14, 21",
+                "placeholder": "Ex.: 0 ou 7, 14, 21",
                 "autocomplete": "off",
                 "onkeydown": "return fornecedorEnterAvanca(event);",
             }),
@@ -1225,7 +1227,10 @@ class FornecedorForm(forms.ModelForm):
         valor = (valor or "").strip()
         if not valor:
             return valor
-        return " ".join(parte[:1].upper() + parte[1:].lower() for parte in valor.split())
+        return " ".join(
+            parte if parte in FornecedorForm.SIGLAS_PRESERVADAS else parte[:1].upper() + parte[1:].lower()
+            for parte in valor.split()
+        )
 
     @staticmethod
     def _somente_digitos(valor):
@@ -1275,14 +1280,37 @@ class FornecedorForm(forms.ModelForm):
             return None
 
         partes = [parte.strip() for parte in valor.replace(";", ",").split(",") if parte.strip()]
+        if not partes:
+            return None
+
         dias = []
+        possui_avista = False
+        possui_prazo = False
         for parte in partes:
+            parte_normalizada = parte.lower().replace("à", "a")
+            if parte_normalizada == "a vista":
+                possui_avista = True
+                dias.append("0")
+                continue
+
             if not parte.isdigit():
-                raise forms.ValidationError("Informe apenas dias separados por virgula. Exemplo: 7, 14, 21")
+                raise forms.ValidationError(
+                    "Informe 0 para pagamento a vista ou dias separados por virgula. Exemplo: 0 ou 7, 14, 21"
+                )
             dia = int(parte)
-            if dia <= 0:
-                raise forms.ValidationError("Os dias de prazo devem ser maiores que zero.")
+            if dia == 0:
+                possui_avista = True
+                dias.append("0")
+                continue
+
+            possui_prazo = True
             dias.append(str(dia))
+
+        if possui_avista and possui_prazo:
+            raise forms.ValidationError("Pagamento a vista nao pode ser combinado com dias de prazo.")
+
+        if possui_avista:
+            return "0"
 
         return ", ".join(dias)
 
