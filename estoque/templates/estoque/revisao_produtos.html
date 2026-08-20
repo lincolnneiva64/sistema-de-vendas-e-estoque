@@ -1,0 +1,263 @@
+{% extends "estoque/base.html" %}
+
+{% block title %}Revisao de Produtos | {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4 revisao-produtos">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
+        <div>
+            <h1 class="h3 mb-1">REVISAO DE PRODUTOS</h1>
+            <div class="text-muted">
+                Total: <strong>{{ total_importados }}</strong>
+                <span class="mx-2">|</span>
+                Pendentes: <strong>{{ total_pendentes }}</strong>
+                <span class="mx-2">|</span>
+                Revisados: <strong>{{ total_revisados }}</strong>
+            </div>
+        </div>
+        <a href="{% url 'estoque:home' %}" class="btn btn-outline-secondary">Voltar</a>
+    </div>
+
+    <form method="get" class="d-flex flex-wrap align-items-center gap-2 mb-3">
+        <div class="btn-group" role="group" aria-label="Filtros de revisao">
+            <input type="radio" class="btn-check" name="filtro" id="filtro_pendentes" value="pendentes"
+                   {% if filtro_atual == "pendentes" %}checked{% endif %} onchange="this.form.submit()">
+            <label class="btn btn-outline-primary" for="filtro_pendentes">Pendentes</label>
+
+            <input type="radio" class="btn-check" name="filtro" id="filtro_revisados" value="revisados"
+                   {% if filtro_atual == "revisados" %}checked{% endif %} onchange="this.form.submit()">
+            <label class="btn btn-outline-primary" for="filtro_revisados">Revisados</label>
+
+            <input type="radio" class="btn-check" name="filtro" id="filtro_todos" value="todos"
+                   {% if filtro_atual == "todos" %}checked{% endif %} onchange="this.form.submit()">
+            <label class="btn btn-outline-primary" for="filtro_todos">Todos</label>
+        </div>
+        <input type="search" class="form-control revisao-busca" name="busca" value="{{ busca_atual }}"
+               placeholder="Pesquisar por nome">
+        <button type="submit" class="btn btn-primary">Buscar</button>
+        {% if busca_atual %}
+            <a href="?filtro={{ filtro_atual }}" class="btn btn-outline-secondary">Limpar</a>
+        {% endif %}
+    </form>
+
+    <form method="post" id="formRevisaoProdutos">
+        {% csrf_token %}
+        <div class="table-responsive border rounded">
+            <table class="table table-sm table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Revisado</th>
+                        <th>Produto</th>
+                        <th>Codigo atual</th>
+                        <th>Codigo antigo</th>
+                        <th>Categoria</th>
+                        <th>Fornecedor(es)</th>
+                        <th>Data</th>
+                        <th>Acoes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in produto_forms %}
+                        {% with produto=item.produto form=item.form %}
+                            <tr class="{% if produto.revisado_importacao %}table-success{% endif %}">
+                                <td class="text-center">
+                                    <input type="checkbox" class="form-check-input" name="revisado_{{ produto.id }}" value="1"
+                                           {% if produto.revisado_importacao %}checked{% endif %}>
+                                </td>
+                                <td>
+                                    <input type="hidden" name="produto_id" value="{{ produto.id }}">
+                                    <input type="text" class="form-control form-control-sm" name="nome_{{ produto.id }}"
+                                           value="{{ produto.nome }}" required>
+                                </td>
+                                <td>
+                                    <input type="text" class="form-control form-control-sm mono" name="codigo_{{ produto.id }}"
+                                           value="{{ produto.codigo|default_if_none:'' }}">
+                                </td>
+                                <td class="mono text-muted">{{ produto.codigo_legado }}</td>
+                                <td>
+                                    <select class="form-select form-select-sm" name="categoria_{{ produto.id }}">
+                                        {% for opt_val, opt_label in form.fields.categoria.choices %}
+                                            <option value="{{ opt_val }}" {% if opt_val == produto.categoria|default_if_none:'' %}selected{% endif %}>
+                                                {{ opt_label }}
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                                <td>
+                                    <div class="small text-muted mb-1">
+                                        {% if item.fornecedores %}
+                                            {% for fornecedor in item.fornecedores %}
+                                                {{ fornecedor.nome }}{% if not forloop.last %}, {% endif %}
+                                            {% endfor %}
+                                        {% else %}
+                                            Sem fornecedor
+                                        {% endif %}
+                                    </div>
+                                    <button type="button" class="btn btn-outline-primary btn-sm"
+                                            data-revisao-modal-target="fornecedoresProduto{{ produto.id }}">
+                                        Gerenciar
+                                    </button>
+                                    <div class="modal fade revisao-fornecedores-modal" id="fornecedoresProduto{{ produto.id }}" tabindex="-1"
+                                         aria-labelledby="fornecedoresProduto{{ produto.id }}Label" aria-hidden="true">
+                                        <div class="modal-dialog modal-dialog-scrollable">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h2 class="modal-title h5" id="fornecedoresProduto{{ produto.id }}Label">
+                                                        Fornecedores
+                                                    </h2>
+                                                    <button type="button" class="btn-close" data-revisao-modal-close aria-label="Fechar"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    {% if fornecedores %}
+                                                        <div class="revisao-fornecedores-lista">
+                                                            {% for fornecedor in fornecedores %}
+                                                                <label class="form-check revisao-fornecedor-opcao">
+                                                                    <input class="form-check-input" type="checkbox"
+                                                                           name="fornecedores_{{ produto.id }}"
+                                                                           value="{{ fornecedor.id }}"
+                                                                           {% if fornecedor.id in item.fornecedor_ids %}checked{% endif %}>
+                                                                    <span class="form-check-label">{{ fornecedor.nome }}</span>
+                                                                </label>
+                                                            {% endfor %}
+                                                        </div>
+                                                    {% else %}
+                                                        <div class="text-muted">Nenhum fornecedor ativo cadastrado.</div>
+                                                    {% endif %}
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-primary" data-revisao-modal-confirm>OK</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="text-muted">{{ produto.criado_em|date:"d/m/Y" }}</td>
+                                <td>
+                                    <button type="submit" name="acao" value="excluir:{{ produto.id }}"
+                                            class="btn btn-outline-danger btn-sm"
+                                            onclick="return confirm('Excluir este produto vai salvar tambem as alteracoes preenchidas nesta pagina. Confirmar?');">
+                                        Excluir
+                                    </button>
+                                </td>
+                            </tr>
+                        {% endwith %}
+                    {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">Nenhum produto para exibir.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-3">
+            <button type="submit" name="salvar" value="1" class="btn btn-primary">Salvar alteracoes</button>
+            {% if page.has_other_pages %}
+                <nav aria-label="Paginacao da revisao">
+                    <ul class="pagination mb-0">
+                        {% if page.has_previous %}
+                            <li class="page-item"><a class="page-link" href="?filtro={{ filtro_atual }}&busca={{ busca_atual }}&page={{ page.previous_page_number }}">Anterior</a></li>
+                        {% endif %}
+                        <li class="page-item active"><span class="page-link">{{ page.number }} / {{ page.paginator.num_pages }}</span></li>
+                        {% if page.has_next %}
+                            <li class="page-item"><a class="page-link" href="?filtro={{ filtro_atual }}&busca={{ busca_atual }}&page={{ page.next_page_number }}">Proxima</a></li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<style>
+    .revisao-produtos .mono {
+        font-family: "Courier New", monospace;
+    }
+    .revisao-produtos .revisao-busca {
+        max-width: 360px;
+    }
+    .revisao-produtos th {
+        white-space: nowrap;
+    }
+    .revisao-produtos .revisao-fornecedores-lista {
+        display: grid;
+        gap: 0.35rem;
+    }
+    .revisao-produtos .revisao-fornecedor-opcao {
+        border-bottom: 1px solid #f1f3f5;
+        margin: 0;
+        padding: 0.35rem 0;
+    }
+    .revisao-produtos .revisao-fornecedores-modal.show {
+        background: rgba(15, 23, 42, 0.45);
+    }
+</style>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        let modalAberto = null;
+        let estadoInicial = [];
+        let confirmado = false;
+
+        function checkboxesDoModal(modal) {
+            return Array.from(modal.querySelectorAll('input[type="checkbox"][name^="fornecedores_"]'));
+        }
+
+        function abrirModal(modal) {
+            modalAberto = modal;
+            estadoInicial = checkboxesDoModal(modal).map(function (checkbox) {
+                return checkbox.checked;
+            });
+            confirmado = false;
+            modal.style.display = "block";
+            modal.removeAttribute("aria-hidden");
+            modal.setAttribute("aria-modal", "true");
+            modal.classList.add("show");
+            document.body.classList.add("modal-open");
+        }
+
+        function fecharModal(modal) {
+            if (!confirmado) {
+                checkboxesDoModal(modal).forEach(function (checkbox, indice) {
+                    checkbox.checked = estadoInicial[indice];
+                });
+            }
+            modal.classList.remove("show");
+            modal.style.display = "none";
+            modal.setAttribute("aria-hidden", "true");
+            modal.removeAttribute("aria-modal");
+            document.body.classList.remove("modal-open");
+            modalAberto = null;
+            estadoInicial = [];
+            confirmado = false;
+        }
+
+        document.querySelectorAll("[data-revisao-modal-target]").forEach(function (botao) {
+            botao.addEventListener("click", function () {
+                const modal = document.getElementById(botao.dataset.revisaoModalTarget);
+                if (modal) {
+                    abrirModal(modal);
+                }
+            });
+        });
+
+        document.querySelectorAll(".revisao-fornecedores-modal").forEach(function (modal) {
+            modal.addEventListener("click", function (event) {
+                if (event.target === modal || event.target.closest("[data-revisao-modal-close]")) {
+                    fecharModal(modal);
+                }
+                if (event.target.closest("[data-revisao-modal-confirm]")) {
+                    confirmado = true;
+                    fecharModal(modal);
+                }
+            });
+        });
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape" && modalAberto) {
+                fecharModal(modalAberto);
+            }
+        });
+    });
+</script>
+{% endblock %}

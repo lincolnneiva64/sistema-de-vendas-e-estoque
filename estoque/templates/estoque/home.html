@@ -1700,6 +1700,13 @@ align-items: center;
           <span class="novo-produto-prefixo">+ </span>Novo Produto
         </a>
         <a
+          href="{% url 'estoque:revisao_produtos' %}"
+          id="btnRevisaoProdutosPainel"
+          class="btn-acao-principal-painel"
+        >
+          Revisar produtos importados
+        </a>
+        <a
           href="{% url 'estoque:unidades_produto' %}"
           id="btnUnidadesPainel"
           class="btn-acao-principal-painel"

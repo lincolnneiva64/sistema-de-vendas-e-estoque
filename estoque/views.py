@@ -19667,3 +19667,191 @@ def contas_pagar(request):
             "status_choices": ContaPagar.STATUS_CHOICES,
         },
     )
+
+
+def _produtos_importados_revisao_qs():
+    return (
+        Produto.objects.filter(
+            ativo=True,
+            excluido=False,
+            criado_em__date=date(2026, 7, 27),
+            codigo_legado__isnull=False,
+        )
+        .exclude(codigo_legado="")
+        .order_by("id")
+    )
+
+
+def _salvar_fornecedores_revisao(produto, fornecedor_ids):
+    ProdutoFornecedor.objects.filter(produto=produto).exclude(
+        fornecedor_id__in=fornecedor_ids
+    ).update(ativo=False)
+
+    for fornecedor_id in fornecedor_ids:
+        ProdutoFornecedor.objects.update_or_create(
+            produto=produto,
+            fornecedor_id=fornecedor_id,
+            defaults={"ativo": True},
+        )
+
+
+def _excluir_produto_logicamente(produto):
+    produto.excluido = True
+    produto.excluido_em = timezone.now()
+    produto.save()
+
+
+def revisao_produtos(request):
+    from django.core.paginator import Paginator
+
+    from .forms_revisao import ProdutoRevisaoForm, ProdutoRevisaoFiltrosForm, categorias_revisao_choices
+
+    filtro = request.GET.get("filtro", "pendentes")
+    if filtro not in {"pendentes", "revisados", "todos"}:
+        filtro = "pendentes"
+    busca = (request.GET.get("busca") or "").strip()
+
+    base_query = _produtos_importados_revisao_qs()
+    total_importados = base_query.count()
+    total_pendentes = base_query.filter(revisado_importacao=False).count()
+    total_revisados = base_query.filter(revisado_importacao=True).count()
+
+    if request.method == "POST" and request.POST.get("salvar") == "1":
+        acao = (request.POST.get("acao") or "salvar").strip()
+        excluir_produto_id = None
+        if acao.startswith("excluir:"):
+            try:
+                excluir_produto_id = int(acao.split(":", 1)[1])
+            except (TypeError, ValueError):
+                messages.error(request, "O produto enviado para exclusao tem ID invalido.")
+                return redirect(f"{reverse('estoque:revisao_produtos')}?filtro=pendentes")
+
+        ids_postados = []
+        for valor in request.POST.getlist("produto_id"):
+            try:
+                ids_postados.append(int(valor))
+            except (TypeError, ValueError):
+                messages.error(request, "Um produto enviado para revisao tem ID invalido.")
+                return redirect(f"{reverse('estoque:revisao_produtos')}?filtro=pendentes")
+
+        ids_permitidos = set(base_query.filter(id__in=ids_postados).values_list("id", flat=True))
+        if set(ids_postados) - ids_permitidos:
+            messages.error(request, "A revisao recebeu produto fora do conjunto permitido. Nenhuma alteracao foi salva.")
+            return redirect(f"{reverse('estoque:revisao_produtos')}?filtro=pendentes")
+        if excluir_produto_id and excluir_produto_id not in ids_permitidos:
+            messages.error(request, "A revisao recebeu produto fora do conjunto permitido para exclusao. Nenhuma alteracao foi salva.")
+            return redirect(f"{reverse('estoque:revisao_produtos')}?filtro=pendentes")
+
+        categorias_validas = {valor for valor, _rotulo in categorias_revisao_choices()}
+        fornecedores_validos = set(Fornecedor.objects.filter(ativo=True).values_list("id", flat=True))
+        produtos = Produto.objects.filter(id__in=ids_permitidos).in_bulk()
+
+        try:
+            with transaction.atomic():
+                for produto_id in ids_postados:
+                    produto = produtos[produto_id]
+                    fornecedores_atuais = set(
+                        ProdutoFornecedor.objects.filter(produto=produto, ativo=True)
+                        .values_list("fornecedor_id", flat=True)
+                    )
+                    nome = (request.POST.get(f"nome_{produto_id}") or "").strip()
+                    codigo = (request.POST.get(f"codigo_{produto_id}") or "").strip()
+                    categoria = (request.POST.get(f"categoria_{produto_id}") or "").strip()
+                    revisado_marcado = request.POST.get(f"revisado_{produto_id}") == "1"
+                    fornecedor_ids = []
+                    for valor in request.POST.getlist(f"fornecedores_{produto_id}"):
+                        try:
+                            fornecedor_ids.append(int(valor))
+                        except (TypeError, ValueError):
+                            raise ValidationError("Um fornecedor enviado para revisao tem ID invalido.")
+
+                    if not nome:
+                        raise ValidationError("O nome do produto e obrigatorio.")
+                    if categoria not in categorias_validas:
+                        raise ValidationError("A categoria selecionada nao e valida.")
+                    if set(fornecedor_ids) - fornecedores_validos:
+                        raise ValidationError("A revisao recebeu fornecedor invalido.")
+
+                    codigo_salvo = produto.codigo or ""
+                    categoria_salva = produto.categoria or ""
+                    fornecedores_recebidos = set(fornecedor_ids)
+                    produto_alterado = (
+                        nome != produto.nome
+                        or codigo != codigo_salvo
+                        or categoria != categoria_salva
+                        or fornecedores_recebidos != fornecedores_atuais
+                    )
+
+                    produto.nome = nome
+                    produto.codigo = codigo
+                    produto.categoria = categoria or None
+                    if produto_alterado or revisado_marcado:
+                        produto.revisado_importacao = True
+                        produto.revisado_importacao_em = timezone.now()
+                    else:
+                        produto.revisado_importacao = False
+                        produto.revisado_importacao_em = None
+                    produto.save()
+                    _salvar_fornecedores_revisao(produto, fornecedor_ids)
+
+                if excluir_produto_id:
+                    _excluir_produto_logicamente(produtos[excluir_produto_id])
+        except (IntegrityError, ValidationError) as exc:
+            messages.error(request, f"Nao foi possivel salvar a revisao: {exc}")
+            return redirect(f"{reverse('estoque:revisao_produtos')}?filtro=pendentes")
+
+        if excluir_produto_id:
+            messages.success(request, "Alteracoes salvas e produto excluido da revisao.")
+        else:
+            messages.success(request, f"{len(ids_postados)} produto(s) salvo(s) com sucesso.")
+        return redirect(f"{reverse('estoque:revisao_produtos')}?filtro=pendentes")
+
+    produtos_query = base_query
+    if filtro == "pendentes":
+        produtos_query = produtos_query.filter(revisado_importacao=False)
+    elif filtro == "revisados":
+        produtos_query = produtos_query.filter(revisado_importacao=True)
+
+    if busca:
+        produtos_query = produtos_query.filter(nome__icontains=busca)
+
+    paginator = Paginator(produtos_query, 50)
+    page = paginator.get_page(request.GET.get("page", 1))
+    fornecedores = list(Fornecedor.objects.filter(ativo=True).order_by("nome", "id"))
+    vinculos_ativos = ProdutoFornecedor.objects.filter(
+        produto_id__in=[produto.id for produto in page.object_list],
+        ativo=True,
+    ).select_related("fornecedor")
+    fornecedores_por_produto = {}
+    for vinculo in vinculos_ativos:
+        fornecedores_por_produto.setdefault(vinculo.produto_id, []).append(vinculo.fornecedor)
+
+    produto_forms = []
+    for produto in page.object_list:
+        fornecedores_produto = fornecedores_por_produto.get(produto.id, [])
+        form = ProdutoRevisaoForm(initial={
+            "nome": produto.nome,
+            "codigo": produto.codigo or "",
+            "categoria": produto.categoria or "",
+            "revisado": produto.revisado_importacao,
+        })
+        produto_forms.append({
+            "produto": produto,
+            "form": form,
+            "fornecedores": fornecedores_produto,
+            "fornecedor_ids": {fornecedor.id for fornecedor in fornecedores_produto},
+        })
+
+    contexto = {
+        "page": page,
+        "produto_forms": produto_forms,
+        "fornecedores": fornecedores,
+        "filtros_form": ProdutoRevisaoFiltrosForm(initial={"filtro": filtro, "busca": busca, "page": page.number}),
+        "filtro_atual": filtro,
+        "busca_atual": busca,
+        "total_importados": total_importados,
+        "total_pendentes": total_pendentes,
+        "total_revisados": total_revisados,
+        "items_por_pagina": 50,
+    }
+    return render(request, "estoque/revisao_produtos.html", contexto)

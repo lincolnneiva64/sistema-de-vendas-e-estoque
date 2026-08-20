@@ -48,6 +48,14 @@ class Produto(models.Model):
     excluido = models.BooleanField(default=False)
     excluido_em = models.DateTimeField(null=True, blank=True)
     cadastro_incompleto = models.BooleanField(default=False)
+    revisado_importacao = models.BooleanField(
+        default=False,
+        db_index=True,
+    )
+    revisado_importacao_em = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
