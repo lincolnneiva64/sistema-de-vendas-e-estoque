@@ -42,6 +42,8 @@
 
     <form method="post" id="formRevisaoProdutos">
         {% csrf_token %}
+        <input type="hidden" name="produtos_alterados" value="">
+        <div id="produtosAlteradosRevisao"></div>
         <div class="table-responsive border rounded">
             <table class="table table-sm table-hover align-middle mb-0">
                 <thead class="table-light">
@@ -59,23 +61,24 @@
                 <tbody>
                     {% for item in produto_forms %}
                         {% with produto=item.produto %}
-                            <tr class="{% if produto.revisado_importacao %}table-success{% endif %}">
+                            <tr class="{% if produto.revisado_importacao %}table-success{% endif %}" data-produto-row="{{ produto.id }}">
                                 <td class="text-center">
                                     <input type="checkbox" class="form-check-input" name="revisado_{{ produto.id }}" value="1"
+                                           data-produto-id="{{ produto.id }}"
                                            {% if produto.revisado_importacao %}checked{% endif %}>
                                 </td>
                                 <td>
                                     <input type="hidden" name="produto_id" value="{{ produto.id }}">
                                     <input type="text" class="form-control form-control-sm" name="nome_{{ produto.id }}"
-                                           value="{{ produto.nome }}" required>
+                                           value="{{ produto.nome }}" data-produto-id="{{ produto.id }}" required>
                                 </td>
                                 <td>
                                     <input type="text" class="form-control form-control-sm mono" name="codigo_{{ produto.id }}"
-                                           value="{{ produto.codigo|default_if_none:'' }}">
+                                           value="{{ produto.codigo|default_if_none:'' }}" data-produto-id="{{ produto.id }}">
                                 </td>
                                 <td class="mono text-muted">{{ produto.codigo_legado }}</td>
                                 <td>
-                                    <select class="form-select form-select-sm" name="categoria_{{ produto.id }}">
+                                    <select class="form-select form-select-sm" name="categoria_{{ produto.id }}" data-produto-id="{{ produto.id }}">
                                         {% for opt_val, opt_label in categoria_choices %}
                                             <option value="{{ opt_val }}" {% if opt_val == produto.categoria|default_if_none:'' %}selected{% endif %}>
                                                 {{ opt_label }}
@@ -205,7 +208,22 @@
         const modal = document.getElementById("fornecedoresProdutoModal");
         const modalProduto = modal ? modal.querySelector("[data-revisao-modal-produto]") : null;
         const checkboxes = modal ? Array.from(modal.querySelectorAll("[data-fornecedor-checkbox]")) : [];
+        const alteradosContainer = document.getElementById("produtosAlteradosRevisao");
+        const produtosAlterados = new Set();
         let produtoAtualId = null;
+        let focoAposModal = null;
+
+        function marcarProdutoAlterado(produtoId) {
+            if (!produtoId || produtosAlterados.has(produtoId) || !alteradosContainer) {
+                return;
+            }
+            produtosAlterados.add(produtoId);
+            const input = document.createElement("input");
+            input.type = "hidden";
+            input.name = "produtos_alterados";
+            input.value = produtoId;
+            alteradosContainer.appendChild(input);
+        }
 
         function hiddenContainer(produtoId) {
             return document.querySelector('[data-fornecedores-hidden="' + produtoId + '"]');
@@ -255,11 +273,36 @@
             atualizarResumo(produtoId);
         }
 
-        function abrirModal(produtoId, produtoNome) {
+        function linhaDoProduto(produtoId) {
+            return document.querySelector('[data-produto-row="' + produtoId + '"]');
+        }
+
+        function proximaLinha(produtoId) {
+            const linha = linhaDoProduto(produtoId);
+            if (!linha) {
+                return null;
+            }
+            let proxima = linha.nextElementSibling;
+            while (proxima && !proxima.matches("[data-produto-row]")) {
+                proxima = proxima.nextElementSibling;
+            }
+            return proxima;
+        }
+
+        function focarNomeDaProximaLinha(produtoId) {
+            const linha = proximaLinha(produtoId);
+            const nome = linha ? linha.querySelector('input[name^="nome_"]') : null;
+            if (nome) {
+                nome.focus();
+            }
+        }
+
+        function abrirModal(produtoId, produtoNome, aoConfirmar) {
             if (!modal) {
                 return;
             }
             produtoAtualId = produtoId;
+            focoAposModal = typeof aoConfirmar === "function" ? aoConfirmar : null;
             const selecionados = idsSelecionados(produtoId);
             checkboxes.forEach(function (checkbox) {
                 checkbox.checked = selecionados.has(checkbox.value);
@@ -272,6 +315,15 @@
             modal.setAttribute("aria-modal", "true");
             modal.classList.add("show");
             document.body.classList.add("modal-open");
+            window.setTimeout(function () {
+                const primeiroCheckbox = checkboxes[0];
+                const ok = modal.querySelector("[data-revisao-modal-confirm]");
+                if (primeiroCheckbox) {
+                    primeiroCheckbox.focus();
+                } else if (ok) {
+                    ok.focus();
+                }
+            }, 0);
         }
 
         function confirmarModal() {
@@ -284,7 +336,15 @@
                 return checkbox.value;
             }));
             escreverSelecionados(produtoAtualId, ids);
+            marcarProdutoAlterado(produtoAtualId);
+            const produtoConfirmadoId = produtoAtualId;
+            const aposConfirmar = focoAposModal;
             fecharModal();
+            if (aposConfirmar) {
+                window.setTimeout(function () {
+                    aposConfirmar(produtoConfirmadoId);
+                }, 0);
+            }
         }
 
         function fecharModal() {
@@ -297,14 +357,68 @@
             modal.removeAttribute("aria-modal");
             document.body.classList.remove("modal-open");
             produtoAtualId = null;
+            focoAposModal = null;
         }
 
         document.querySelectorAll("[data-revisao-modal-open]").forEach(function (botao) {
             botao.addEventListener("click", function () {
                 const linha = botao.closest("tr");
                 const nomeInput = linha ? linha.querySelector('input[name^="nome_"]') : null;
-                abrirModal(botao.dataset.produtoId, nomeInput ? nomeInput.value : "");
+                abrirModal(botao.dataset.produtoId, nomeInput ? nomeInput.value : "", focarNomeDaProximaLinha);
             });
+        });
+
+        document.querySelectorAll("[data-produto-row] input, [data-produto-row] select").forEach(function (campo) {
+            if (campo.matches('input[name^="codigo_"]')) {
+                campo.addEventListener("focus", function () {
+                    campo.select();
+                });
+                campo.addEventListener("mouseup", function (event) {
+                    event.preventDefault();
+                });
+            }
+
+            campo.addEventListener("keydown", function (event) {
+                if (event.key !== "Enter") {
+                    return;
+                }
+                event.preventDefault();
+                const linha = campo.closest("[data-produto-row]");
+                if (!linha) {
+                    return;
+                }
+                if (campo.matches('input[name^="nome_"]')) {
+                    const codigo = linha.querySelector('input[name^="codigo_"]');
+                    if (codigo) {
+                        codigo.focus();
+                    }
+                    return;
+                }
+                if (campo.matches('input[name^="codigo_"]')) {
+                    const categoria = linha.querySelector('select[name^="categoria_"]');
+                    if (categoria) {
+                        categoria.focus();
+                    }
+                    return;
+                }
+                if (campo.matches('select[name^="categoria_"]')) {
+                    const botao = linha.querySelector("[data-revisao-modal-open]");
+                    if (botao) {
+                        botao.focus();
+                        const nomeInput = linha.querySelector('input[name^="nome_"]');
+                        abrirModal(botao.dataset.produtoId, nomeInput ? nomeInput.value : "", focarNomeDaProximaLinha);
+                    }
+                }
+            });
+
+            campo.addEventListener("change", function () {
+                marcarProdutoAlterado(campo.dataset.produtoId);
+            });
+            if (campo.matches('input[type="text"]')) {
+                campo.addEventListener("input", function () {
+                    marcarProdutoAlterado(campo.dataset.produtoId);
+                });
+            }
         });
 
         if (modal) {
@@ -313,6 +427,20 @@
                     fecharModal();
                 }
                 if (event.target.closest("[data-revisao-modal-confirm]")) {
+                    confirmarModal();
+                }
+            });
+            modal.addEventListener("keydown", function (event) {
+                if (event.key === "Enter" && event.target.matches("[data-fornecedor-checkbox]")) {
+                    event.preventDefault();
+                    const ok = modal.querySelector("[data-revisao-modal-confirm]");
+                    if (ok) {
+                        ok.focus();
+                    }
+                    return;
+                }
+                if (event.key === "Enter" && event.target.closest("[data-revisao-modal-confirm]")) {
+                    event.preventDefault();
                     confirmarModal();
                 }
             });

@@ -19695,6 +19695,42 @@ def _salvar_fornecedores_revisao(produto, fornecedor_ids):
         )
 
 
+def _salvar_fornecedores_revisao_diferencas(produto, fornecedor_ids_atuais, fornecedor_ids_novos):
+    fornecedor_ids_atuais = set(fornecedor_ids_atuais)
+    fornecedor_ids_novos = set(fornecedor_ids_novos)
+    fornecedor_ids_removidos = fornecedor_ids_atuais - fornecedor_ids_novos
+    fornecedor_ids_adicionados = fornecedor_ids_novos - fornecedor_ids_atuais
+
+    if fornecedor_ids_removidos:
+        ProdutoFornecedor.objects.filter(
+            produto=produto,
+            fornecedor_id__in=fornecedor_ids_removidos,
+            ativo=True,
+        ).update(ativo=False)
+
+    if not fornecedor_ids_adicionados:
+        return
+
+    vinculos_existentes = set(
+        ProdutoFornecedor.objects.filter(
+            produto=produto,
+            fornecedor_id__in=fornecedor_ids_adicionados,
+        ).values_list("fornecedor_id", flat=True)
+    )
+    if vinculos_existentes:
+        ProdutoFornecedor.objects.filter(
+            produto=produto,
+            fornecedor_id__in=vinculos_existentes,
+        ).update(ativo=True)
+
+    for fornecedor_id in fornecedor_ids_adicionados - vinculos_existentes:
+        ProdutoFornecedor.objects.create(
+            produto=produto,
+            fornecedor_id=fornecedor_id,
+            ativo=True,
+        )
+
+
 def _excluir_produto_logicamente(produto):
     produto.excluido = True
     produto.excluido_em = timezone.now()
@@ -19712,17 +19748,10 @@ def revisao_produtos(request):
     busca = (request.GET.get("busca") or "").strip()
 
     base_query = _produtos_importados_revisao_qs()
-    totais_revisao = base_query.aggregate(
-        total_importados=Count("id"),
-        total_pendentes=Count("id", filter=Q(revisado_importacao=False)),
-        total_revisados=Count("id", filter=Q(revisado_importacao=True)),
-    )
-    total_importados = totais_revisao["total_importados"]
-    total_pendentes = totais_revisao["total_pendentes"]
-    total_revisados = totais_revisao["total_revisados"]
 
-    if request.method == "POST" and request.POST.get("salvar") == "1":
-        acao = (request.POST.get("acao") or "salvar").strip()
+    acao_post = (request.POST.get("acao") or "").strip()
+    if request.method == "POST" and (request.POST.get("salvar") == "1" or acao_post.startswith("excluir:")):
+        acao = acao_post or "salvar"
         excluir_produto_id = None
         if acao.startswith("excluir:"):
             try:
@@ -19747,18 +19776,56 @@ def revisao_produtos(request):
             messages.error(request, "A revisao recebeu produto fora do conjunto permitido para exclusao. Nenhuma alteracao foi salva.")
             return redirect(f"{reverse('estoque:revisao_produtos')}?filtro=pendentes")
 
+        if "produtos_alterados" in request.POST:
+            ids_alterados = []
+            for valor in request.POST.getlist("produtos_alterados"):
+                if not str(valor or "").strip():
+                    continue
+                try:
+                    ids_alterados.append(int(valor))
+                except (TypeError, ValueError):
+                    messages.error(request, "Um produto alterado enviado para revisao tem ID invalido.")
+                    return redirect(f"{reverse('estoque:revisao_produtos')}?filtro=pendentes")
+        else:
+            ids_alterados = ids_postados
+
+        if excluir_produto_id:
+            ids_alterados.append(excluir_produto_id)
+
+        ids_alterados_set = set(ids_alterados)
+        if ids_alterados_set - ids_permitidos:
+            messages.error(request, "A revisao recebeu produto alterado fora do conjunto permitido. Nenhuma alteracao foi salva.")
+            return redirect(f"{reverse('estoque:revisao_produtos')}?filtro=pendentes")
+
+        ids_processar = []
+        vistos = set()
+        for produto_id in ids_postados:
+            if produto_id in ids_alterados_set and produto_id not in vistos:
+                ids_processar.append(produto_id)
+                vistos.add(produto_id)
+        if excluir_produto_id and excluir_produto_id not in vistos:
+            ids_processar.append(excluir_produto_id)
+
+        if not ids_processar:
+            messages.success(request, "0 produto(s) atualizado(s) com sucesso.")
+            return redirect(f"{reverse('estoque:revisao_produtos')}?filtro=pendentes")
+
         categorias_validas = {valor for valor, _rotulo in categorias_revisao_choices()}
         fornecedores_validos = set(Fornecedor.objects.filter(ativo=True).values_list("id", flat=True))
-        produtos = Produto.objects.filter(id__in=ids_permitidos).in_bulk()
+        produtos = Produto.objects.filter(id__in=ids_processar).in_bulk()
+        fornecedores_atuais_por_produto = {produto_id: set() for produto_id in ids_processar}
+        for produto_id, fornecedor_id in ProdutoFornecedor.objects.filter(
+            produto_id__in=ids_processar,
+            ativo=True,
+        ).values_list("produto_id", "fornecedor_id"):
+            fornecedores_atuais_por_produto.setdefault(produto_id, set()).add(fornecedor_id)
 
         try:
+            produtos_atualizados = 0
             with transaction.atomic():
-                for produto_id in ids_postados:
+                for produto_id in ids_processar:
                     produto = produtos[produto_id]
-                    fornecedores_atuais = set(
-                        ProdutoFornecedor.objects.filter(produto=produto, ativo=True)
-                        .values_list("fornecedor_id", flat=True)
-                    )
+                    fornecedores_atuais = fornecedores_atuais_por_produto.get(produto_id, set())
                     nome = (request.POST.get(f"nome_{produto_id}") or "").strip()
                     codigo = (request.POST.get(f"codigo_{produto_id}") or "").strip()
                     categoria = (request.POST.get(f"categoria_{produto_id}") or "").strip()
@@ -19780,24 +19847,48 @@ def revisao_produtos(request):
                     codigo_salvo = produto.codigo or ""
                     categoria_salva = produto.categoria or ""
                     fornecedores_recebidos = set(fornecedor_ids)
-                    produto_alterado = (
-                        nome != produto.nome
-                        or codigo != codigo_salvo
-                        or categoria != categoria_salva
-                        or fornecedores_recebidos != fornecedores_atuais
+                    campos_alterados = []
+                    if nome != produto.nome:
+                        produto.nome = nome
+                        campos_alterados.append("nome")
+                    if codigo != codigo_salvo:
+                        produto.codigo = codigo
+                        campos_alterados.append("codigo")
+                    if categoria != categoria_salva:
+                        produto.categoria = categoria or None
+                        campos_alterados.append("categoria")
+                    fornecedores_alterados = fornecedores_recebidos != fornecedores_atuais
+                    revisado_novo = bool(campos_alterados or fornecedores_alterados or revisado_marcado)
+                    revisao_alterada = produto.revisado_importacao != revisado_novo
+                    revisao_data_deve_mudar = revisao_alterada or (
+                        revisado_novo and produto.revisado_importacao_em is None
                     )
 
-                    produto.nome = nome
-                    produto.codigo = codigo
-                    produto.categoria = categoria or None
-                    if produto_alterado or revisado_marcado:
-                        produto.revisado_importacao = True
-                        produto.revisado_importacao_em = timezone.now()
-                    else:
-                        produto.revisado_importacao = False
-                        produto.revisado_importacao_em = None
-                    produto.save()
-                    _salvar_fornecedores_revisao(produto, fornecedor_ids)
+                    if campos_alterados:
+                        produto.revisado_importacao = revisado_novo
+                        produto.revisado_importacao_em = timezone.now() if revisado_novo else None
+                        update_fields = campos_alterados + [
+                            "revisado_importacao",
+                            "revisado_importacao_em",
+                            "atualizado_em",
+                        ]
+                        produto.save(update_fields=update_fields)
+                    elif revisao_alterada or revisao_data_deve_mudar:
+                        Produto.objects.filter(pk=produto.pk).update(
+                            revisado_importacao=revisado_novo,
+                            revisado_importacao_em=timezone.now() if revisado_novo else None,
+                            atualizado_em=timezone.now(),
+                        )
+
+                    if fornecedores_alterados:
+                        _salvar_fornecedores_revisao_diferencas(
+                            produto,
+                            fornecedores_atuais,
+                            fornecedores_recebidos,
+                        )
+
+                    if campos_alterados or fornecedores_alterados or revisao_alterada or revisao_data_deve_mudar:
+                        produtos_atualizados += 1
 
                 if excluir_produto_id:
                     _excluir_produto_logicamente(produtos[excluir_produto_id])
@@ -19808,8 +19899,17 @@ def revisao_produtos(request):
         if excluir_produto_id:
             messages.success(request, "Alteracoes salvas e produto excluido da revisao.")
         else:
-            messages.success(request, f"{len(ids_postados)} produto(s) salvo(s) com sucesso.")
+            messages.success(request, f"{produtos_atualizados} produto(s) atualizado(s) com sucesso.")
         return redirect(f"{reverse('estoque:revisao_produtos')}?filtro=pendentes")
+
+    totais_revisao = base_query.aggregate(
+        total_importados=Count("id"),
+        total_pendentes=Count("id", filter=Q(revisado_importacao=False)),
+        total_revisados=Count("id", filter=Q(revisado_importacao=True)),
+    )
+    total_importados = totais_revisao["total_importados"]
+    total_pendentes = totais_revisao["total_pendentes"]
+    total_revisados = totais_revisao["total_revisados"]
 
     produtos_query = base_query
     if filtro == "pendentes":

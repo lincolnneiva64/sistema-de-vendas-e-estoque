@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -49,6 +50,43 @@ class ProdutoRevisaoTestCase(TestCase):
         Produto.objects.filter(pk=produto.pk).update(criado_em=self.data_importacao)
         produto.refresh_from_db()
         return produto
+
+    def _payload_revisao_pagina(self, filtro="pendentes"):
+        response = self.client.get(self.url, {"filtro": filtro})
+        data = {
+            "salvar": "1",
+            "produto_id": [],
+            "produtos_alterados": [""],
+        }
+        itens = list(response.context["produto_forms"])
+        for item in itens:
+            produto = item["produto"]
+            data["produto_id"].append(str(produto.id))
+            data[f"nome_{produto.id}"] = produto.nome
+            data[f"codigo_{produto.id}"] = produto.codigo or ""
+            data[f"categoria_{produto.id}"] = produto.categoria or ""
+            if produto.revisado_importacao:
+                data[f"revisado_{produto.id}"] = "1"
+            fornecedor_ids = [str(fornecedor.id) for fornecedor in item["fornecedores"]]
+            if fornecedor_ids:
+                data[f"fornecedores_{produto.id}"] = fornecedor_ids
+        return data, itens
+
+    def _garantir_pagina_50_pendentes(self):
+        for i in range(48):
+            self._produto(f"Produto Lote {i}", f"{2000 + i}", f"LOTE_{i:04d}", "Testes")
+
+    def _post_contando_produto_save(self, data):
+        chamadas = []
+        save_original = Produto.save
+
+        def save_contado(produto, *args, **kwargs):
+            chamadas.append(produto.pk)
+            return save_original(produto, *args, **kwargs)
+
+        with patch.object(Produto, "save", save_contado):
+            response = self.client.post(self.url, data, follow=True)
+        return response, chamadas
 
     def test_view_revisao_existe(self):
         response = self.client.get(self.url)
@@ -276,7 +314,6 @@ class ProdutoRevisaoTestCase(TestCase):
 
     def test_excluir_logicamente_produto_da_revisao(self):
         data = {
-            "salvar": "1",
             "acao": f"excluir:{self.produto1.id}",
             "produto_id": [str(self.produto1.id)],
             f"nome_{self.produto1.id}": "Produto A",
@@ -287,14 +324,29 @@ class ProdutoRevisaoTestCase(TestCase):
         self.client.post(self.url, data, follow=True)
 
         self.produto1.refresh_from_db()
+        self.produto2.refresh_from_db()
         self.assertTrue(self.produto1.excluido)
         self.assertIsNotNone(self.produto1.excluido_em)
+        self.assertFalse(self.produto2.excluido)
 
     def test_produto_excluido_deixa_de_aparecer(self):
         Produto.objects.filter(pk=self.produto1.pk).update(excluido=True, excluido_em=timezone.now())
 
         response = self.client.get(self.url, {"filtro": "todos"})
 
+        self.assertNotContains(response, "Produto A")
+
+    def test_excluir_por_acao_sem_salvar_remove_produto_da_revisao(self):
+        data, _itens = self._payload_revisao_pagina()
+        data.pop("salvar", None)
+        data["acao"] = f"excluir:{self.produto1.id}"
+
+        response = self.client.post(self.url, data, follow=True)
+
+        self.produto1.refresh_from_db()
+        self.produto2.refresh_from_db()
+        self.assertTrue(self.produto1.excluido)
+        self.assertFalse(self.produto2.excluido)
         self.assertNotContains(response, "Produto A")
 
     def test_vincular_fornecedor(self):
@@ -357,7 +409,6 @@ class ProdutoRevisaoTestCase(TestCase):
 
     def test_impede_exclusao_de_produto_fora_do_conjunto(self):
         data = {
-            "salvar": "1",
             "acao": f"excluir:{self.produto_novo.id}",
             "produto_id": [str(self.produto_novo.id)],
             f"nome_{self.produto_novo.id}": "Produto Novo",
@@ -369,3 +420,104 @@ class ProdutoRevisaoTestCase(TestCase):
 
         self.produto_novo.refresh_from_db()
         self.assertFalse(self.produto_novo.excluido)
+
+    def test_post_sem_acao_de_exclusao_nao_exclui_produto(self):
+        data, _itens = self._payload_revisao_pagina()
+        data.pop("salvar", None)
+        data.pop("acao", None)
+
+        self.client.post(self.url, data, follow=True)
+
+        self.produto1.refresh_from_db()
+        self.produto2.refresh_from_db()
+        self.assertFalse(self.produto1.excluido)
+        self.assertFalse(self.produto2.excluido)
+
+    def test_pagina_50_alterar_1_atualiza_somente_aquele_produto(self):
+        self._garantir_pagina_50_pendentes()
+        data, itens = self._payload_revisao_pagina()
+        produto_alterado = itens[0]["produto"]
+        produto_intocado = itens[1]["produto"]
+        data[f"nome_{produto_alterado.id}"] = "Produto Alterado No Lote"
+        data["produtos_alterados"].append(str(produto_alterado.id))
+
+        _response, chamadas = self._post_contando_produto_save(data)
+
+        self.assertEqual(chamadas, [produto_alterado.id])
+        produto_alterado.refresh_from_db()
+        produto_intocado.refresh_from_db()
+        self.assertEqual(produto_alterado.nome, "Produto Alterado No Lote")
+        self.assertTrue(produto_alterado.revisado_importacao)
+        self.assertFalse(produto_intocado.revisado_importacao)
+
+    def test_pagina_50_sem_alteracao_nao_salva_nem_revisa_produto(self):
+        self._garantir_pagina_50_pendentes()
+        data, _itens = self._payload_revisao_pagina()
+
+        _response, chamadas = self._post_contando_produto_save(data)
+
+        self.assertEqual(chamadas, [])
+        self.produto1.refresh_from_db()
+        self.produto2.refresh_from_db()
+        self.assertFalse(self.produto1.revisado_importacao)
+        self.assertFalse(self.produto2.revisado_importacao)
+
+    def test_dois_produtos_alterados_sao_atualizados(self):
+        self._garantir_pagina_50_pendentes()
+        data, itens = self._payload_revisao_pagina()
+        produto_a = itens[0]["produto"]
+        produto_b = itens[1]["produto"]
+        data[f"nome_{produto_a.id}"] = "Produto A Lote Alterado"
+        data[f"codigo_{produto_b.id}"] = "COD-B-ALTERADO"
+        data["produtos_alterados"].extend([str(produto_a.id), str(produto_b.id)])
+
+        _response, chamadas = self._post_contando_produto_save(data)
+
+        self.assertEqual(set(chamadas), {produto_a.id, produto_b.id})
+        produto_a.refresh_from_db()
+        produto_b.refresh_from_db()
+        self.assertEqual(produto_a.nome, "Produto A Lote Alterado")
+        self.assertEqual(produto_b.codigo, "COD-B-ALTERADO")
+        self.assertTrue(produto_a.revisado_importacao)
+        self.assertTrue(produto_b.revisado_importacao)
+
+    def test_somente_fornecedor_alterado_nao_chama_produto_save_e_marca_revisado(self):
+        data, _itens = self._payload_revisao_pagina()
+        data[f"fornecedores_{self.produto1.id}"] = [str(self.fornecedor1.id)]
+        data["produtos_alterados"].append(str(self.produto1.id))
+
+        _response, chamadas = self._post_contando_produto_save(data)
+
+        self.assertEqual(chamadas, [])
+        self.assertTrue(
+            ProdutoFornecedor.objects.filter(
+                produto=self.produto1,
+                fornecedor=self.fornecedor1,
+                ativo=True,
+            ).exists()
+        )
+        self.produto1.refresh_from_db()
+        self.assertTrue(self.produto1.revisado_importacao)
+
+    def test_somente_checkbox_revisado_alterada_nao_chama_produto_save(self):
+        data, _itens = self._payload_revisao_pagina()
+        data[f"revisado_{self.produto1.id}"] = "1"
+        data["produtos_alterados"].append(str(self.produto1.id))
+
+        _response, chamadas = self._post_contando_produto_save(data)
+
+        self.assertEqual(chamadas, [])
+        self.produto1.refresh_from_db()
+        self.assertTrue(self.produto1.revisado_importacao)
+
+    def test_produto_intocado_permanece_pendente_quando_outro_e_alterado(self):
+        data, _itens = self._payload_revisao_pagina()
+        data[f"nome_{self.produto1.id}"] = "Produto A Alterado"
+        data["produtos_alterados"].append(str(self.produto1.id))
+
+        self.client.post(self.url, data, follow=True)
+
+        self.produto1.refresh_from_db()
+        self.produto2.refresh_from_db()
+        self.assertTrue(self.produto1.revisado_importacao)
+        self.assertFalse(self.produto2.revisado_importacao)
