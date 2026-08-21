@@ -58,7 +58,7 @@
                 </thead>
                 <tbody>
                     {% for item in produto_forms %}
-                        {% with produto=item.produto form=item.form %}
+                        {% with produto=item.produto %}
                             <tr class="{% if produto.revisado_importacao %}table-success{% endif %}">
                                 <td class="text-center">
                                     <input type="checkbox" class="form-check-input" name="revisado_{{ produto.id }}" value="1"
@@ -76,7 +76,7 @@
                                 <td class="mono text-muted">{{ produto.codigo_legado }}</td>
                                 <td>
                                     <select class="form-select form-select-sm" name="categoria_{{ produto.id }}">
-                                        {% for opt_val, opt_label in form.fields.categoria.choices %}
+                                        {% for opt_val, opt_label in categoria_choices %}
                                             <option value="{{ opt_val }}" {% if opt_val == produto.categoria|default_if_none:'' %}selected{% endif %}>
                                                 {{ opt_label }}
                                             </option>
@@ -84,7 +84,7 @@
                                     </select>
                                 </td>
                                 <td>
-                                    <div class="small text-muted mb-1">
+                                    <div class="small text-muted mb-1" data-fornecedores-resumo="{{ produto.id }}">
                                         {% if item.fornecedores %}
                                             {% for fornecedor in item.fornecedores %}
                                                 {{ fornecedor.nome }}{% if not forloop.last %}, {% endif %}
@@ -93,43 +93,16 @@
                                             Sem fornecedor
                                         {% endif %}
                                     </div>
+                                    <div id="fornecedoresSelecionados{{ produto.id }}" data-fornecedores-hidden="{{ produto.id }}">
+                                        {% for fornecedor in item.fornecedores %}
+                                            <input type="hidden" name="fornecedores_{{ produto.id }}" value="{{ fornecedor.id }}">
+                                        {% endfor %}
+                                    </div>
                                     <button type="button" class="btn btn-outline-primary btn-sm"
-                                            data-revisao-modal-target="fornecedoresProduto{{ produto.id }}">
+                                            data-revisao-modal-open
+                                            data-produto-id="{{ produto.id }}">
                                         Gerenciar
                                     </button>
-                                    <div class="modal fade revisao-fornecedores-modal" id="fornecedoresProduto{{ produto.id }}" tabindex="-1"
-                                         aria-labelledby="fornecedoresProduto{{ produto.id }}Label" aria-hidden="true">
-                                        <div class="modal-dialog modal-dialog-scrollable">
-                                            <div class="modal-content">
-                                                <div class="modal-header">
-                                                    <h2 class="modal-title h5" id="fornecedoresProduto{{ produto.id }}Label">
-                                                        Fornecedores
-                                                    </h2>
-                                                    <button type="button" class="btn-close" data-revisao-modal-close aria-label="Fechar"></button>
-                                                </div>
-                                                <div class="modal-body">
-                                                    {% if fornecedores %}
-                                                        <div class="revisao-fornecedores-lista">
-                                                            {% for fornecedor in fornecedores %}
-                                                                <label class="form-check revisao-fornecedor-opcao">
-                                                                    <input class="form-check-input" type="checkbox"
-                                                                           name="fornecedores_{{ produto.id }}"
-                                                                           value="{{ fornecedor.id }}"
-                                                                           {% if fornecedor.id in item.fornecedor_ids %}checked{% endif %}>
-                                                                    <span class="form-check-label">{{ fornecedor.nome }}</span>
-                                                                </label>
-                                                            {% endfor %}
-                                                        </div>
-                                                    {% else %}
-                                                        <div class="text-muted">Nenhum fornecedor ativo cadastrado.</div>
-                                                    {% endif %}
-                                                </div>
-                                                <div class="modal-footer">
-                                                    <button type="button" class="btn btn-primary" data-revisao-modal-confirm>OK</button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
                                 </td>
                                 <td class="text-muted">{{ produto.criado_em|date:"d/m/Y" }}</td>
                                 <td>
@@ -166,6 +139,40 @@
                 </nav>
             {% endif %}
         </div>
+
+        <div class="modal fade revisao-fornecedores-modal" id="fornecedoresProdutoModal" tabindex="-1"
+             aria-labelledby="fornecedoresProdutoModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2 class="modal-title h5" id="fornecedoresProdutoModalLabel">Fornecedores</h2>
+                        <button type="button" class="btn-close" data-revisao-modal-close aria-label="Fechar"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="small text-muted mb-2" data-revisao-modal-produto></div>
+                        {% if fornecedores %}
+                            <div class="revisao-fornecedores-lista">
+                                {% for fornecedor in fornecedores %}
+                                    <label class="form-check revisao-fornecedor-opcao">
+                                        <input class="form-check-input" type="checkbox"
+                                               value="{{ fornecedor.id }}"
+                                               data-fornecedor-checkbox
+                                               data-fornecedor-nome="{{ fornecedor.nome }}">
+                                        <span class="form-check-label">{{ fornecedor.nome }}</span>
+                                    </label>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="text-muted">Nenhum fornecedor ativo cadastrado.</div>
+                        {% endif %}
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-revisao-modal-close>Cancelar</button>
+                        <button type="button" class="btn btn-primary" data-revisao-modal-confirm>OK</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </form>
 </div>
 
@@ -195,20 +202,71 @@
 
 <script>
     document.addEventListener("DOMContentLoaded", function () {
-        let modalAberto = null;
-        let estadoInicial = [];
-        let confirmado = false;
+        const modal = document.getElementById("fornecedoresProdutoModal");
+        const modalProduto = modal ? modal.querySelector("[data-revisao-modal-produto]") : null;
+        const checkboxes = modal ? Array.from(modal.querySelectorAll("[data-fornecedor-checkbox]")) : [];
+        let produtoAtualId = null;
 
-        function checkboxesDoModal(modal) {
-            return Array.from(modal.querySelectorAll('input[type="checkbox"][name^="fornecedores_"]'));
+        function hiddenContainer(produtoId) {
+            return document.querySelector('[data-fornecedores-hidden="' + produtoId + '"]');
         }
 
-        function abrirModal(modal) {
-            modalAberto = modal;
-            estadoInicial = checkboxesDoModal(modal).map(function (checkbox) {
-                return checkbox.checked;
+        function idsSelecionados(produtoId) {
+            const container = hiddenContainer(produtoId);
+            if (!container) {
+                return new Set();
+            }
+            return new Set(Array.from(container.querySelectorAll("input")).map(function (input) {
+                return input.value;
+            }));
+        }
+
+        function textoResumo(ids) {
+            const nomes = checkboxes
+                .filter(function (checkbox) {
+                    return ids.has(checkbox.value);
+                })
+                .map(function (checkbox) {
+                    return checkbox.dataset.fornecedorNome;
+                });
+            return nomes.length ? nomes.join(", ") : "Sem fornecedor";
+        }
+
+        function atualizarResumo(produtoId) {
+            const resumo = document.querySelector('[data-fornecedores-resumo="' + produtoId + '"]');
+            if (resumo) {
+                resumo.textContent = textoResumo(idsSelecionados(produtoId));
+            }
+        }
+
+        function escreverSelecionados(produtoId, ids) {
+            const container = hiddenContainer(produtoId);
+            if (!container) {
+                return;
+            }
+            container.innerHTML = "";
+            ids.forEach(function (id) {
+                const input = document.createElement("input");
+                input.type = "hidden";
+                input.name = "fornecedores_" + produtoId;
+                input.value = id;
+                container.appendChild(input);
             });
-            confirmado = false;
+            atualizarResumo(produtoId);
+        }
+
+        function abrirModal(produtoId, produtoNome) {
+            if (!modal) {
+                return;
+            }
+            produtoAtualId = produtoId;
+            const selecionados = idsSelecionados(produtoId);
+            checkboxes.forEach(function (checkbox) {
+                checkbox.checked = selecionados.has(checkbox.value);
+            });
+            if (modalProduto) {
+                modalProduto.textContent = produtoNome || "";
+            }
             modal.style.display = "block";
             modal.removeAttribute("aria-hidden");
             modal.setAttribute("aria-modal", "true");
@@ -216,46 +274,53 @@
             document.body.classList.add("modal-open");
         }
 
-        function fecharModal(modal) {
-            if (!confirmado) {
-                checkboxesDoModal(modal).forEach(function (checkbox, indice) {
-                    checkbox.checked = estadoInicial[indice];
-                });
+        function confirmarModal() {
+            if (!produtoAtualId) {
+                return;
+            }
+            const ids = new Set(checkboxes.filter(function (checkbox) {
+                return checkbox.checked;
+            }).map(function (checkbox) {
+                return checkbox.value;
+            }));
+            escreverSelecionados(produtoAtualId, ids);
+            fecharModal();
+        }
+
+        function fecharModal() {
+            if (!modal) {
+                return;
             }
             modal.classList.remove("show");
             modal.style.display = "none";
             modal.setAttribute("aria-hidden", "true");
             modal.removeAttribute("aria-modal");
             document.body.classList.remove("modal-open");
-            modalAberto = null;
-            estadoInicial = [];
-            confirmado = false;
+            produtoAtualId = null;
         }
 
-        document.querySelectorAll("[data-revisao-modal-target]").forEach(function (botao) {
+        document.querySelectorAll("[data-revisao-modal-open]").forEach(function (botao) {
             botao.addEventListener("click", function () {
-                const modal = document.getElementById(botao.dataset.revisaoModalTarget);
-                if (modal) {
-                    abrirModal(modal);
-                }
+                const linha = botao.closest("tr");
+                const nomeInput = linha ? linha.querySelector('input[name^="nome_"]') : null;
+                abrirModal(botao.dataset.produtoId, nomeInput ? nomeInput.value : "");
             });
         });
 
-        document.querySelectorAll(".revisao-fornecedores-modal").forEach(function (modal) {
+        if (modal) {
             modal.addEventListener("click", function (event) {
                 if (event.target === modal || event.target.closest("[data-revisao-modal-close]")) {
-                    fecharModal(modal);
+                    fecharModal();
                 }
                 if (event.target.closest("[data-revisao-modal-confirm]")) {
-                    confirmado = true;
-                    fecharModal(modal);
+                    confirmarModal();
                 }
             });
-        });
+        }
 
         document.addEventListener("keydown", function (event) {
-            if (event.key === "Escape" && modalAberto) {
-                fecharModal(modalAberto);
+            if (event.key === "Escape" && produtoAtualId) {
+                fecharModal();
             }
         });
     });

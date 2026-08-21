@@ -19704,7 +19704,7 @@ def _excluir_produto_logicamente(produto):
 def revisao_produtos(request):
     from django.core.paginator import Paginator
 
-    from .forms_revisao import ProdutoRevisaoForm, ProdutoRevisaoFiltrosForm, categorias_revisao_choices
+    from .forms_revisao import ProdutoRevisaoFiltrosForm, categorias_revisao_choices
 
     filtro = request.GET.get("filtro", "pendentes")
     if filtro not in {"pendentes", "revisados", "todos"}:
@@ -19712,9 +19712,14 @@ def revisao_produtos(request):
     busca = (request.GET.get("busca") or "").strip()
 
     base_query = _produtos_importados_revisao_qs()
-    total_importados = base_query.count()
-    total_pendentes = base_query.filter(revisado_importacao=False).count()
-    total_revisados = base_query.filter(revisado_importacao=True).count()
+    totais_revisao = base_query.aggregate(
+        total_importados=Count("id"),
+        total_pendentes=Count("id", filter=Q(revisado_importacao=False)),
+        total_revisados=Count("id", filter=Q(revisado_importacao=True)),
+    )
+    total_importados = totais_revisao["total_importados"]
+    total_pendentes = totais_revisao["total_pendentes"]
+    total_revisados = totais_revisao["total_revisados"]
 
     if request.method == "POST" and request.POST.get("salvar") == "1":
         acao = (request.POST.get("acao") or "salvar").strip()
@@ -19817,6 +19822,7 @@ def revisao_produtos(request):
 
     paginator = Paginator(produtos_query, 50)
     page = paginator.get_page(request.GET.get("page", 1))
+    categoria_choices = categorias_revisao_choices()
     fornecedores = list(Fornecedor.objects.filter(ativo=True).order_by("nome", "id"))
     vinculos_ativos = ProdutoFornecedor.objects.filter(
         produto_id__in=[produto.id for produto in page.object_list],
@@ -19829,15 +19835,8 @@ def revisao_produtos(request):
     produto_forms = []
     for produto in page.object_list:
         fornecedores_produto = fornecedores_por_produto.get(produto.id, [])
-        form = ProdutoRevisaoForm(initial={
-            "nome": produto.nome,
-            "codigo": produto.codigo or "",
-            "categoria": produto.categoria or "",
-            "revisado": produto.revisado_importacao,
-        })
         produto_forms.append({
             "produto": produto,
-            "form": form,
             "fornecedores": fornecedores_produto,
             "fornecedor_ids": {fornecedor.id for fornecedor in fornecedores_produto},
         })
@@ -19845,6 +19844,7 @@ def revisao_produtos(request):
     contexto = {
         "page": page,
         "produto_forms": produto_forms,
+        "categoria_choices": categoria_choices,
         "fornecedores": fornecedores,
         "filtros_form": ProdutoRevisaoFiltrosForm(initial={"filtro": filtro, "busca": busca, "page": page.number}),
         "filtro_atual": filtro,
