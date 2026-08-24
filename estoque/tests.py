@@ -23040,13 +23040,32 @@ class CartoesAReceberFinanceiroTests(TestCase):
             origem="venda",
         )
 
-    def _post_liquidar(self, valor_bruto="100,00", taxa="0,00", follow=False):
+    def test_formulario_liquidar_cartao_abre_com_saldo_cartoes(self):
+        self._criar_saldo_cartoes(Decimal("10.00"))
+
+        resposta = self.client.get(reverse("estoque:caixa_banco"), secure=True)
+
+        self.assertContains(
+            resposta,
+            'id="liquidarCartaoBruto" name="valor_bruto" type="text" inputmode="decimal" value="R$ 10,00"',
+        )
+        self.assertContains(
+            resposta,
+            'id="liquidarCartaoTaxa" name="taxa_operadora" type="text" inputmode="decimal" value="R$ 0,00"',
+        )
+        self.assertContains(
+            resposta,
+            'id="liquidarCartaoLiquido" name="valor_liquido" type="text" inputmode="decimal" value="R$ 10,00"',
+        )
+
+    def _post_liquidar(self, valor_bruto="100,00", taxa="0,00", valor_liquido="", follow=False):
         return self.client.post(
             reverse("estoque:caixa_banco"),
             {
                 "acao": "liquidar_cartao",
                 "valor_bruto": valor_bruto,
                 "taxa_operadora": taxa,
+                "valor_liquido": valor_liquido,
                 "operador": str(self.operador.id),
                 "descricao": "Liquidacao teste",
             },
@@ -23054,16 +23073,7 @@ class CartoesAReceberFinanceiroTests(TestCase):
             follow=follow,
         )
 
-    def test_liquidacao_sem_taxa_move_bruto_para_banco(self):
-        self._criar_saldo_cartoes()
-
-        self._post_liquidar()
-
-        self.assertEqual(views._saldo_conta_financeira(self.conta_cartoes), Decimal("0.00"))
-        self.assertEqual(views._saldo_conta_financeira(self.conta_banco), Decimal("100.00"))
-        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="taxa_operadora_cartao").count(), 0)
-
-    def test_liquidacao_com_taxa_registra_taxa_separada(self):
+    def test_liquidacao_com_bruto_e_taxa_calcula_liquido(self):
         self._criar_saldo_cartoes()
 
         self._post_liquidar(taxa="2,50")
@@ -23072,8 +23082,45 @@ class CartoesAReceberFinanceiroTests(TestCase):
         self.assertEqual(views._saldo_conta_financeira(self.conta_banco), Decimal("97.50"))
         taxa = MovimentoFinanceiro.objects.get(origem="taxa_operadora_cartao")
         self.assertEqual(taxa.valor, Decimal("2.50"))
+
+    def test_liquidacao_com_bruto_e_liquido_calcula_taxa(self):
+        self._criar_saldo_cartoes()
+
+        self._post_liquidar(taxa="", valor_liquido="97,50")
+
+        self.assertEqual(views._saldo_conta_financeira(self.conta_cartoes), Decimal("0.00"))
+        self.assertEqual(views._saldo_conta_financeira(self.conta_banco), Decimal("97.50"))
+        taxa = MovimentoFinanceiro.objects.get(origem="taxa_operadora_cartao")
+        self.assertEqual(taxa.valor, Decimal("2.50"))
         self.assertEqual(taxa.tipo, MovimentoFinanceiro.TIPO_SAIDA)
         self.assertIn("Taxa da operadora", taxa.descricao)
+
+    def test_liquidacao_com_liquido_e_taxa_calcula_bruto(self):
+        self._criar_saldo_cartoes()
+
+        self._post_liquidar(valor_bruto="", taxa="2,50", valor_liquido="97,50")
+
+        self.assertEqual(views._saldo_conta_financeira(self.conta_cartoes), Decimal("0.00"))
+        self.assertEqual(views._saldo_conta_financeira(self.conta_banco), Decimal("97.50"))
+        transferencia = MovimentoFinanceiro.objects.get(origem="liquidacao_cartao")
+        self.assertEqual(transferencia.valor, Decimal("100.00"))
+
+    def test_liquidacao_com_taxa_zero_move_bruto_para_banco(self):
+        self._criar_saldo_cartoes()
+
+        self._post_liquidar(taxa="0,00")
+
+        self.assertEqual(views._saldo_conta_financeira(self.conta_cartoes), Decimal("0.00"))
+        self.assertEqual(views._saldo_conta_financeira(self.conta_banco), Decimal("100.00"))
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="taxa_operadora_cartao").count(), 0)
+
+    def test_liquidacao_bloqueia_tres_valores_inconsistentes(self):
+        self._criar_saldo_cartoes()
+
+        resposta = self._post_liquidar(taxa="2,50", valor_liquido="96,00", follow=True)
+
+        self.assertContains(resposta, "Bruto, taxa e liquido nao fecham matematicamente.")
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="liquidacao_cartao").count(), 0)
 
     def test_liquidacao_bloqueia_saldo_insuficiente(self):
         self._criar_saldo_cartoes(Decimal("50.00"))

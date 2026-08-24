@@ -1044,15 +1044,15 @@
         <div class="caixa-form-grid">
           <div class="caixa-field">
             <label for="liquidarCartaoBruto">Valor bruto liquidado</label>
-            <input id="liquidarCartaoBruto" name="valor_bruto" type="text" inputmode="decimal" placeholder="R$ 0,00" data-money-input data-cartao-bruto required>
+            <input id="liquidarCartaoBruto" name="valor_bruto" type="text" inputmode="decimal" value="{{ saldo_cartoes_texto }}" placeholder="R$ 0,00" data-money-input data-cartao-campo="bruto" data-cartao-inicial="1" data-cartao-bruto>
           </div>
           <div class="caixa-field">
             <label for="liquidarCartaoTaxa">Taxa da operadora</label>
-            <input id="liquidarCartaoTaxa" name="taxa_operadora" type="text" inputmode="decimal" placeholder="R$ 0,00" data-money-input data-cartao-taxa required>
+            <input id="liquidarCartaoTaxa" name="taxa_operadora" type="text" inputmode="decimal" value="R$ 0,00" placeholder="R$ 0,00" data-money-input data-cartao-campo="taxa" data-cartao-inicial="1" data-cartao-taxa>
           </div>
           <div class="caixa-field">
             <label for="liquidarCartaoLiquido">Valor liquido para Banco/Pix</label>
-            <input id="liquidarCartaoLiquido" type="text" value="R$ 0,00" readonly data-cartao-liquido>
+            <input id="liquidarCartaoLiquido" name="valor_liquido" type="text" inputmode="decimal" value="{{ saldo_cartoes_texto }}" placeholder="R$ 0,00" data-money-input data-cartao-campo="liquido" data-cartao-liquido>
           </div>
           <div class="caixa-field">
             <label for="liquidarCartaoOperador">Operador / responsavel</label>
@@ -1476,6 +1476,8 @@
     const liquidarCartaoBruto = document.querySelector("[data-cartao-bruto]");
     const liquidarCartaoTaxa = document.querySelector("[data-cartao-taxa]");
     const liquidarCartaoLiquido = document.querySelector("[data-cartao-liquido]");
+    const liquidarCartaoCampos = Array.from(document.querySelectorAll("[data-cartao-campo]"));
+    let liquidarCartaoOrdemManual = [];
     let ajusteDescricaoAutomatica = "";
     const focusableFieldSelector = "input:not([type='hidden']), select, textarea, button[type='submit']";
 
@@ -1676,13 +1678,8 @@
       return number.toFixed(2).replace(".", ",");
     }
 
-    function updateLiquidarCartaoLiquido() {
-      if (!liquidarCartaoBruto || !liquidarCartaoTaxa || !liquidarCartaoLiquido) return;
-
-      const bruto = parseMoneyValue(liquidarCartaoBruto.value) || 0;
-      const taxa = parseMoneyValue(liquidarCartaoTaxa.value) || 0;
-      const liquido = Math.max(bruto - taxa, 0);
-      liquidarCartaoLiquido.value = liquido.toLocaleString("pt-BR", {
+    function formatMoneyNumber(number) {
+      return number.toLocaleString("pt-BR", {
         style: "currency",
         currency: "BRL",
         minimumFractionDigits: 2,
@@ -1690,20 +1687,149 @@
       });
     }
 
+    function campoCartaoTemValor(input) {
+      return Boolean(input && input.value.trim() && parseMoneyValue(input.value) !== null);
+    }
+
+    function campoCartaoPorNome(nome) {
+      return liquidarCartaoCampos.find(function (input) {
+        return input.dataset.cartaoCampo === nome;
+      });
+    }
+
+    function marcarCampoCartaoManual(input, manual) {
+      if (!input || !input.dataset.cartaoCampo) return;
+
+      const deveMarcar = manual && campoCartaoTemValor(input);
+      input.dataset.cartaoManual = deveMarcar ? "1" : "";
+      liquidarCartaoOrdemManual = liquidarCartaoOrdemManual.filter(function (campo) {
+        return campo !== input.dataset.cartaoCampo;
+      });
+      if (deveMarcar) {
+        liquidarCartaoOrdemManual.push(input.dataset.cartaoCampo);
+      }
+    }
+
+    function prepararCampoCartaoParaEdicao(input) {
+      if (!input || !input.dataset.cartaoCampo || input.dataset.cartaoCalculado !== "1") return;
+
+      const campo = input.dataset.cartaoCampo;
+      input.readOnly = false;
+      input.removeAttribute("title");
+      input.dataset.cartaoCalculado = "";
+      marcarCampoCartaoManual(input, true);
+
+      if (campo === "liquido") {
+        marcarCampoCartaoManual(liquidarCartaoTaxa, false);
+      } else if (campo === "taxa") {
+        marcarCampoCartaoManual(liquidarCartaoLiquido, false);
+      } else {
+        marcarCampoCartaoManual(liquidarCartaoTaxa, false);
+      }
+      updateLiquidarCartaoValores();
+    }
+
+    function limparEstadoCalculadoCartao() {
+      liquidarCartaoCampos.forEach(function (input) {
+        input.readOnly = false;
+        input.removeAttribute("title");
+        input.dataset.cartaoCalculado = "";
+      });
+    }
+
+    function sincronizarCamposCartaoManuais() {
+      liquidarCartaoCampos.forEach(function (input) {
+        if (!campoCartaoTemValor(input)) {
+          input.dataset.cartaoManual = "";
+          liquidarCartaoOrdemManual = liquidarCartaoOrdemManual.filter(function (campo) {
+            return campo !== input.dataset.cartaoCampo;
+          });
+        }
+      });
+
+      liquidarCartaoOrdemManual = liquidarCartaoOrdemManual.filter(function (campo) {
+        const input = campoCartaoPorNome(campo);
+        return input && input.dataset.cartaoManual === "1" && campoCartaoTemValor(input);
+      });
+
+      while (liquidarCartaoOrdemManual.length > 2) {
+        const campoRemovido = liquidarCartaoOrdemManual.shift();
+        const inputRemovido = campoCartaoPorNome(campoRemovido);
+        if (inputRemovido) {
+          inputRemovido.dataset.cartaoManual = "";
+        }
+      }
+    }
+
+    function updateLiquidarCartaoValores() {
+      if (!liquidarCartaoBruto || !liquidarCartaoTaxa || !liquidarCartaoLiquido) return;
+
+      limparEstadoCalculadoCartao();
+      sincronizarCamposCartaoManuais();
+      if (liquidarCartaoOrdemManual.length < 2) return;
+
+      const valores = {
+        bruto: parseMoneyValue(liquidarCartaoBruto.value),
+        taxa: parseMoneyValue(liquidarCartaoTaxa.value),
+        liquido: parseMoneyValue(liquidarCartaoLiquido.value),
+      };
+      const camposInformados = liquidarCartaoOrdemManual.slice(-2);
+      const campoCalculado = ["bruto", "taxa", "liquido"].find(function (campo) {
+        return !camposInformados.includes(campo);
+      });
+      let valorCalculado = null;
+      if (campoCalculado === "liquido") {
+        valorCalculado = valores.bruto - valores.taxa;
+      } else if (campoCalculado === "taxa") {
+        valorCalculado = valores.bruto - valores.liquido;
+      } else if (campoCalculado === "bruto") {
+        valorCalculado = valores.liquido + valores.taxa;
+      }
+      const inputCalculado = liquidarCartaoCampos.find(function (input) {
+        return input.dataset.cartaoCampo === campoCalculado;
+      });
+      if (!inputCalculado || !Number.isFinite(valorCalculado)) return;
+
+      inputCalculado.value = formatMoneyNumber(valorCalculado);
+      inputCalculado.readOnly = true;
+      inputCalculado.title = "Calculado automaticamente";
+      inputCalculado.dataset.cartaoCalculado = "1";
+      inputCalculado.dataset.cartaoManual = "";
+    }
+
     moneyInputs.forEach(function (input) {
       input.addEventListener("blur", function () {
         input.value = formatMoneyValue(input.value);
-        updateLiquidarCartaoLiquido();
+        updateLiquidarCartaoValores();
       });
 
       input.addEventListener("focus", function () {
+        prepararCampoCartaoParaEdicao(input);
         selectMoneyInput(input);
       });
 
-      input.addEventListener("input", updateLiquidarCartaoLiquido);
+      if (input.dataset.cartaoCampo) {
+        input.addEventListener("input", function () {
+          marcarCampoCartaoManual(input, true);
+          updateLiquidarCartaoValores();
+        });
+
+        input.addEventListener("change", function () {
+          marcarCampoCartaoManual(input, true);
+          updateLiquidarCartaoValores();
+        });
+      } else {
+        input.addEventListener("input", updateLiquidarCartaoValores);
+        input.addEventListener("change", updateLiquidarCartaoValores);
+      }
     });
 
-    updateLiquidarCartaoLiquido();
+    liquidarCartaoCampos.forEach(function (input) {
+      if (input.dataset.cartaoInicial === "1") {
+        marcarCampoCartaoManual(input, true);
+      }
+    });
+    updateLiquidarCartaoValores();
 
     closeOperations();
 
