@@ -918,9 +918,14 @@
       <button class="caixa-operacao-btn{% if erro_operacao == "pagar-reserva" %} ativa{% endif %}" type="button" data-caixa-op="pagar-reserva"><span class="caixa-operacao-main">Sangria: pagar despesa</span><span class="caixa-operacao-sub">Sangria -> Saída</span></button>
       <button class="caixa-operacao-btn{% if erro_operacao == "deposito" %} ativa{% endif %}" type="button" data-caixa-op="deposito"><span class="caixa-operacao-main">Sangria: depositar no banco</span><span class="caixa-operacao-sub">Sangria -> Banco</span></button>
       <button class="caixa-operacao-btn{% if erro_operacao == "liquidar-cartao" %} ativa{% endif %}" type="button" data-caixa-op="liquidar-cartao"><span class="caixa-operacao-main">Liquidar cartão</span><span class="caixa-operacao-sub">Cartões a receber -> Banco/Pix</span></button>
-      <button class="caixa-operacao-btn{% if erro_operacao == "corrigir-saldo" %} ativa{% endif %}" type="button" data-caixa-op="corrigir-saldo"><span class="caixa-operacao-main">Corrigir saldo real</span><span class="caixa-operacao-sub">Caixa • Sangria • Banco/Pix</span></button>
       <button class="caixa-operacao-btn{% if erro_operacao == "entrada" %} ativa{% endif %}" type="button" data-caixa-op="entrada"><span class="caixa-operacao-main">Entrada avulsa: dinheiro sem origem</span><span class="caixa-operacao-sub">Só use se não for venda, cliente ou empréstimo</span></button>
       <button class="caixa-operacao-btn{% if erro_operacao == "saida" %} ativa{% endif %}" type="button" data-caixa-op="saida"><span class="caixa-operacao-main">Saída avulsa: retirada sem módulo</span><span class="caixa-operacao-sub">Só use se não for compra, despesa, conta ou dívida</span></button>
+    </div>
+
+    <div class="caixa-operacoes" role="tablist" aria-label="Ajustes e auditoria">
+      <h3 class="caixa-operacoes-card-title">Ajustes e auditoria</h3>
+      <p class="caixa-operacoes-card-help">Use somente quando o saldo real não bater com o saldo calculado pelo sistema e não houver um lançamento de origem a corrigir.</p>
+      <button class="caixa-operacao-btn{% if erro_operacao == "corrigir-saldo" %} ativa{% endif %}" type="button" data-caixa-op="corrigir-saldo"><span class="caixa-operacao-main">Conferir / ajustar saldo</span><span class="caixa-operacao-sub">Correção excepcional de Caixa, Sangria, Banco/Pix ou Cartões a receber</span></button>
     </div>
 
     <article class="caixa-operacao-form{% if erro_operacao == "sangria" %} ativa{% endif %}" data-caixa-op-panel="sangria">
@@ -1201,8 +1206,8 @@
       {% if erro_operacao == "corrigir-saldo" %}
         <div class="caixa-form-error">{{ erro_operacao_texto }}</div>
       {% endif %}
-      <h2 class="caixa-form-title">Informar / Corrigir saldo real</h2>
-      <p class="caixa-form-help">Ajuste por saldo final: o sistema cria a diferença necessária para a conta escolhida chegar ao novo saldo informado.</p>
+      <h2 class="caixa-form-title">Conferir / ajustar saldo</h2>
+      <p class="caixa-form-help">Correção excepcional de auditoria: use somente quando o saldo conferido não bater com o saldo calculado pelo sistema.</p>
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="acao" value="ajuste_saldo">
@@ -1211,21 +1216,29 @@
             <label for="ajusteConta">Conta</label>
             <select id="ajusteConta" name="conta" required>
               {% for conta in contas %}
-                <option value="{{ conta.id }}">{{ conta.nome }} - {{ conta.saldo_atual_texto }}</option>
+                <option value="{{ conta.id }}" data-saldo="{{ conta.saldo_atual_texto }}">{{ conta.nome }}</option>
               {% endfor %}
             </select>
           </div>
           <div class="caixa-field">
-            <label for="ajusteNovoSaldo">Novo saldo</label>
-            <input id="ajusteNovoSaldo" name="novo_saldo" type="text" inputmode="decimal" placeholder="R$ 0,00" data-money-input required>
+            <label for="ajusteSaldoSistema">Saldo no sistema</label>
+            <input id="ajusteSaldoSistema" type="text" value="{% for conta in contas %}{% if forloop.first %}{{ conta.saldo_atual_texto }}{% endif %}{% endfor %}" readonly data-ajuste-saldo-sistema>
+          </div>
+          <div class="caixa-field">
+            <label for="ajusteNovoSaldo">Saldo conferido</label>
+            <input id="ajusteNovoSaldo" name="novo_saldo" type="text" inputmode="decimal" value="{% for conta in contas %}{% if forloop.first %}{{ conta.saldo_atual_texto }}{% endif %}{% endfor %}" placeholder="R$ 0,00" data-money-input data-ajuste-saldo-conferido required>
+          </div>
+          <div class="caixa-field">
+            <label for="ajusteDiferenca">Diferença</label>
+            <input id="ajusteDiferenca" type="text" value="R$ 0,00" readonly data-ajuste-diferenca>
           </div>
           <div class="caixa-field full">
-            <label for="ajusteDescricao">Descricao opcional</label>
-            <input id="ajusteDescricao" name="descricao" type="text" placeholder="Ex: saldo inicial real conferido">
+            <label for="ajusteDescricao">Descrição / justificativa</label>
+            <input id="ajusteDescricao" name="descricao" type="text" placeholder="Justifique a correção excepcional">
           </div>
           <div class="caixa-field full">
             <label for="ajusteOperador">Operador / responsavel</label>
-            <select id="ajusteOperador" name="operador" required>
+            <select id="ajusteOperador" name="operador">
               <option value="">Selecione o operador</option>
               {% for operador in operadores_caixa %}
                 <option value="{{ operador.id }}">{{ operador.nome }}</option>
@@ -1472,64 +1485,15 @@
     const operationPanels = Array.from(document.querySelectorAll("[data-caixa-op-panel]"));
     const closeOperationButtons = Array.from(document.querySelectorAll("[data-caixa-close]"));
     const ajusteConta = document.getElementById("ajusteConta");
-    const ajusteDescricao = document.getElementById("ajusteDescricao");
+    const ajusteSaldoSistema = document.querySelector("[data-ajuste-saldo-sistema]");
+    const ajusteSaldoConferido = document.querySelector("[data-ajuste-saldo-conferido]");
+    const ajusteDiferenca = document.querySelector("[data-ajuste-diferenca]");
     const liquidarCartaoBruto = document.querySelector("[data-cartao-bruto]");
     const liquidarCartaoTaxa = document.querySelector("[data-cartao-taxa]");
     const liquidarCartaoLiquido = document.querySelector("[data-cartao-liquido]");
     const liquidarCartaoCampos = Array.from(document.querySelectorAll("[data-cartao-campo]"));
     let liquidarCartaoOrdemManual = [];
-    let ajusteDescricaoAutomatica = "";
     const focusableFieldSelector = "input:not([type='hidden']), select, textarea, button[type='submit']";
-
-    function formatCurrentDateTime() {
-      const now = new Date();
-      const pad = function (value) {
-        return String(value).padStart(2, "0");
-      };
-
-      return [
-        pad(now.getDate()),
-        pad(now.getMonth() + 1),
-        now.getFullYear(),
-      ].join("/") + " " + [
-        pad(now.getHours()),
-        pad(now.getMinutes()),
-      ].join(":");
-    }
-
-    function normalizeAccountText(text) {
-      return String(text || "")
-        .split(" - ")[0]
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLowerCase();
-    }
-
-    function getAjusteDescricaoPrefix() {
-      const selectedOption = ajusteConta ? ajusteConta.options[ajusteConta.selectedIndex] : null;
-      const accountText = normalizeAccountText(selectedOption ? selectedOption.textContent : "");
-
-      if (accountText.includes("sangria") || accountText.includes("reserva")) {
-        return "Conferi o dinheiro da sangria";
-      }
-
-      if (accountText.includes("banco") || accountText.includes("pix")) {
-        return "Conferi o saldo do banco/Pix";
-      }
-
-      return "Conferi o dinheiro do caixa";
-    }
-
-    function updateAjusteDescricao(force) {
-      if (!ajusteDescricao || !ajusteConta) return;
-
-      const currentValue = ajusteDescricao.value.trim();
-      const canUpdate = force || !currentValue || currentValue === ajusteDescricaoAutomatica;
-      if (!canUpdate) return;
-
-      ajusteDescricaoAutomatica = getAjusteDescricaoPrefix() + " - " + formatCurrentDateTime();
-      ajusteDescricao.value = ajusteDescricaoAutomatica;
-    }
 
     function setPanelEnabled(panel, enabled) {
       panel.querySelectorAll("input, select, textarea, button").forEach(function (control) {
@@ -1602,7 +1566,7 @@
       });
 
       if (operation === "corrigir-saldo") {
-        updateAjusteDescricao(false);
+        updateAjusteSaldoConferencia(true);
       }
 
       if (activePanel) {
@@ -1637,9 +1601,9 @@
       button.addEventListener("click", closeOperations);
     });
 
-    if (ajusteConta && ajusteDescricao) {
+    if (ajusteConta) {
       ajusteConta.addEventListener("change", function () {
-        updateAjusteDescricao(false);
+        updateAjusteSaldoConferencia(true);
       });
     }
 
@@ -1685,6 +1649,25 @@
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       });
+    }
+
+    function updateAjusteSaldoConferencia(resetConferido) {
+      if (!ajusteConta || !ajusteSaldoSistema || !ajusteSaldoConferido || !ajusteDiferenca) return;
+
+      const selectedOption = ajusteConta.options[ajusteConta.selectedIndex];
+      const saldoSistemaTexto = selectedOption ? selectedOption.dataset.saldo || "R$ 0,00" : "R$ 0,00";
+      const saldoSistema = parseMoneyValue(saldoSistemaTexto) || 0;
+      ajusteSaldoSistema.value = formatMoneyNumber(saldoSistema);
+      if (resetConferido) {
+        ajusteSaldoConferido.value = formatMoneyNumber(saldoSistema);
+      }
+
+      const saldoConferido = parseMoneyValue(ajusteSaldoConferido.value);
+      if (saldoConferido === null) {
+        ajusteDiferenca.value = "";
+        return;
+      }
+      ajusteDiferenca.value = formatMoneyNumber(saldoConferido - saldoSistema);
     }
 
     function campoCartaoTemValor(input) {
@@ -1822,6 +1805,14 @@
         input.addEventListener("input", updateLiquidarCartaoValores);
         input.addEventListener("change", updateLiquidarCartaoValores);
       }
+      if (input === ajusteSaldoConferido) {
+        input.addEventListener("input", function () {
+          updateAjusteSaldoConferencia(false);
+        });
+        input.addEventListener("change", function () {
+          updateAjusteSaldoConferencia(false);
+        });
+      }
     });
 
     liquidarCartaoCampos.forEach(function (input) {
@@ -1830,6 +1821,7 @@
       }
     });
     updateLiquidarCartaoValores();
+    updateAjusteSaldoConferencia(true);
 
     closeOperations();
 

@@ -23058,6 +23058,118 @@ class CartoesAReceberFinanceiroTests(TestCase):
             'id="liquidarCartaoLiquido" name="valor_liquido" type="text" inputmode="decimal" value="R$ 10,00"',
         )
 
+    def test_corrigir_saldo_sai_das_operacoes_normais_e_auditoria_aparece(self):
+        resposta = self.client.get(reverse("estoque:caixa_banco"), secure=True)
+
+        conteudo = resposta.content.decode()
+        area_operacoes = conteudo.split("Ajustes e auditoria")[0]
+        self.assertNotIn("Corrigir saldo real", area_operacoes)
+        self.assertContains(resposta, "Ajustes e auditoria")
+        self.assertContains(resposta, "Conferir / ajustar saldo")
+        self.assertContains(resposta, "Correção excepcional de Caixa, Sangria, Banco/Pix ou Cartões a receber")
+
+    def test_formulario_ajuste_abre_saldo_conferido_igual_saldo_atual(self):
+        MovimentoFinanceiro.objects.create(
+            conta=self.conta_banco,
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            valor=Decimal("12.34"),
+            data=timezone.localdate(),
+        )
+
+        resposta = self.client.get(reverse("estoque:caixa_banco"), secure=True)
+
+        self.assertContains(
+            resposta,
+            'id="ajusteSaldoSistema" type="text" value="R$ 12,34" readonly',
+        )
+        self.assertContains(
+            resposta,
+            'id="ajusteNovoSaldo" name="novo_saldo" type="text" inputmode="decimal" value="R$ 12,34"',
+        )
+
+    def test_ajuste_diferenca_zero_nao_cria_movimento(self):
+        self._criar_saldo_cartoes(Decimal("10.00"))
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        resposta = self.client.post(
+            reverse("estoque:caixa_banco"),
+            {"acao": "ajuste_saldo", "conta": str(self.conta_cartoes.id), "novo_saldo": "10,00"},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertContains(resposta, "Saldo conferido. Nenhum ajuste necessario.")
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+
+    def test_ajuste_diferenca_positiva_cria_movimento_auditoria(self):
+        self._criar_saldo_cartoes(Decimal("10.00"))
+
+        self.client.post(
+            reverse("estoque:caixa_banco"),
+            {
+                "acao": "ajuste_saldo",
+                "conta": str(self.conta_cartoes.id),
+                "novo_saldo": "15,00",
+                "descricao": "Conferencia da maquininha",
+                "operador": str(self.operador.id),
+            },
+            secure=True,
+        )
+
+        ajuste = MovimentoFinanceiro.objects.get(origem="ajuste_saldo_auditoria")
+        self.assertEqual(ajuste.conta, self.conta_cartoes)
+        self.assertEqual(ajuste.valor, Decimal("5.00"))
+        self.assertIn("Correcao excepcional de auditoria", ajuste.descricao)
+
+    def test_ajuste_diferenca_negativa_cria_movimento_auditoria(self):
+        self._criar_saldo_cartoes(Decimal("10.00"))
+
+        self.client.post(
+            reverse("estoque:caixa_banco"),
+            {
+                "acao": "ajuste_saldo",
+                "conta": str(self.conta_cartoes.id),
+                "novo_saldo": "7,50",
+                "descricao": "Conferencia da maquininha",
+                "operador": str(self.operador.id),
+            },
+            secure=True,
+        )
+
+        ajuste = MovimentoFinanceiro.objects.get(origem="ajuste_saldo_auditoria")
+        self.assertEqual(ajuste.conta, self.conta_cartoes)
+        self.assertEqual(ajuste.valor, Decimal("-2.50"))
+
+    def test_ajuste_com_diferenca_exige_justificativa(self):
+        self._criar_saldo_cartoes(Decimal("10.00"))
+
+        resposta = self.client.post(
+            reverse("estoque:caixa_banco"),
+            {
+                "acao": "ajuste_saldo",
+                "conta": str(self.conta_cartoes.id),
+                "novo_saldo": "11,00",
+                "descricao": "",
+                "operador": str(self.operador.id),
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertContains(resposta, "Informe a descricao/justificativa da correcao excepcional.")
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="ajuste_saldo_auditoria").count(), 0)
+
+    def test_cartoes_a_receber_pode_ser_conferido(self):
+        self._criar_saldo_cartoes(Decimal("10.00"))
+
+        resposta = self.client.get(reverse("estoque:caixa_banco"), secure=True)
+
+        self.assertContains(
+            resposta,
+            f'<option value="{self.conta_cartoes.id}" data-saldo="R$ 10,00">Cartões a receber</option>',
+            html=True,
+        )
+
     def _post_liquidar(self, valor_bruto="100,00", taxa="0,00", valor_liquido="", follow=False):
         return self.client.post(
             reverse("estoque:caixa_banco"),

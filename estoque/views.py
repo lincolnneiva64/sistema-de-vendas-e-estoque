@@ -2640,31 +2640,47 @@ def caixa_banco(request):
     if request.method == "POST":
         acao = request.POST.get("acao", "").strip()
 
-        if acao in {"abrir_caixa", "ajustar_saldo", "ajuste_saldo"}:
-            conta = ContaFinanceira.objects.filter(pk=request.POST.get("conta"), ativo=True).first()
+        if acao == "abrir_caixa":
             operador = operador_post(painel_por_acao_caixa.get(acao, ""))
             if operador is None:
                 return redirect("estoque:caixa_banco")
-            if acao == "abrir_caixa":
-                conta = conta_caixa
-                novo_saldo = _parse_decimal_financeiro(request.POST.get("valor") or request.POST.get("novo_saldo"))
-                descricao = request.POST.get("descricao", "").strip() or "Troco inicial / abertura de caixa"
-                origem = "abertura_caixa"
-            else:
-                novo_saldo = _parse_decimal_financeiro(request.POST.get("novo_saldo"))
-                descricao = request.POST.get("descricao", "").strip() or "Conferência / ajuste de saldo"
-                origem = "ajuste_saldo"
-
+            conta = conta_caixa
+            novo_saldo = _parse_decimal_financeiro(request.POST.get("valor") or request.POST.get("novo_saldo"))
+            descricao = request.POST.get("descricao", "").strip() or "Troco inicial / abertura de caixa"
             if not conta or novo_saldo is None or novo_saldo < 0:
                 registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "Informe um saldo zero ou positivo.")
                 return redirect("estoque:caixa_banco")
 
             with transaction.atomic():
-                criar_ajuste_para_saldo(conta, novo_saldo, descricao, origem, operador)
-            if acao == "abrir_caixa":
-                messages.success(request, "Caixa aberto / troco inicial ajustado com sucesso.")
-            else:
-                messages.success(request, "Conferencia / ajuste de saldo registrado com sucesso.")
+                criar_ajuste_para_saldo(conta, novo_saldo, descricao, "abertura_caixa", operador)
+            messages.success(request, "Caixa aberto / troco inicial ajustado com sucesso.")
+            return redirect("estoque:caixa_banco")
+
+        if acao in {"ajustar_saldo", "ajuste_saldo"}:
+            conta = ContaFinanceira.objects.filter(pk=request.POST.get("conta"), ativo=True).first()
+            novo_saldo = _parse_decimal_financeiro(request.POST.get("novo_saldo"))
+            descricao_usuario = request.POST.get("descricao", "").strip()
+            if not conta or novo_saldo is None or novo_saldo < 0:
+                registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "Informe um saldo zero ou positivo.")
+                return redirect("estoque:caixa_banco")
+
+            diferenca = (novo_saldo - _saldo_conta_financeira(conta)).quantize(Decimal("0.01"))
+            if diferenca == Decimal("0.00"):
+                messages.success(request, "Saldo conferido. Nenhum ajuste necessario.")
+                return redirect("estoque:caixa_banco")
+            if not descricao_usuario:
+                registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "Informe a descricao/justificativa da correcao excepcional.")
+                return redirect("estoque:caixa_banco")
+            operador = operador_post(painel_por_acao_caixa.get(acao, ""))
+            if operador is None:
+                return redirect("estoque:caixa_banco")
+
+            descricao = (
+                f"Correcao excepcional de auditoria - {conta.nome}: {descricao_usuario}"
+            )[:255]
+            with transaction.atomic():
+                criar_ajuste_para_saldo(conta, novo_saldo, descricao, "ajuste_saldo_auditoria", operador)
+            messages.success(request, "Conferencia / ajuste de saldo registrado com sucesso.")
             return redirect("estoque:caixa_banco")
 
         if acao == "ajuste_banco_pix":
