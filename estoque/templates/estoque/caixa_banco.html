@@ -78,7 +78,7 @@
 
   .caixa-summary {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 8px;
     margin-bottom: 12px;
   }
@@ -882,6 +882,10 @@
       <div class="caixa-label">Banco/Pix</div>
       <div class="caixa-value">{{ saldo_banco_texto }}</div>
     </article>
+    <article class="caixa-card">
+      <div class="caixa-label">Cartões a receber</div>
+      <div class="caixa-value">{{ saldo_cartoes_texto }}</div>
+    </article>
     <article class="caixa-card total">
       <div class="caixa-label">Total disponivel</div>
       <div class="caixa-value">{{ total_disponivel_texto }}</div>
@@ -913,6 +917,7 @@
       <button class="caixa-operacao-btn{% if erro_operacao == "reforco" %} ativa{% endif %}" type="button" data-caixa-op="reforco"><span class="caixa-operacao-main">Sangria: reforçar caixa</span><span class="caixa-operacao-sub">Sangria -> Caixa</span></button>
       <button class="caixa-operacao-btn{% if erro_operacao == "pagar-reserva" %} ativa{% endif %}" type="button" data-caixa-op="pagar-reserva"><span class="caixa-operacao-main">Sangria: pagar despesa</span><span class="caixa-operacao-sub">Sangria -> Saída</span></button>
       <button class="caixa-operacao-btn{% if erro_operacao == "deposito" %} ativa{% endif %}" type="button" data-caixa-op="deposito"><span class="caixa-operacao-main">Sangria: depositar no banco</span><span class="caixa-operacao-sub">Sangria -> Banco</span></button>
+      <button class="caixa-operacao-btn{% if erro_operacao == "liquidar-cartao" %} ativa{% endif %}" type="button" data-caixa-op="liquidar-cartao"><span class="caixa-operacao-main">Liquidar cartão</span><span class="caixa-operacao-sub">Cartões a receber -> Banco/Pix</span></button>
       <button class="caixa-operacao-btn{% if erro_operacao == "corrigir-saldo" %} ativa{% endif %}" type="button" data-caixa-op="corrigir-saldo"><span class="caixa-operacao-main">Corrigir saldo real</span><span class="caixa-operacao-sub">Caixa • Sangria • Banco/Pix</span></button>
       <button class="caixa-operacao-btn{% if erro_operacao == "entrada" %} ativa{% endif %}" type="button" data-caixa-op="entrada"><span class="caixa-operacao-main">Entrada avulsa: dinheiro sem origem</span><span class="caixa-operacao-sub">Só use se não for venda, cliente ou empréstimo</span></button>
       <button class="caixa-operacao-btn{% if erro_operacao == "saida" %} ativa{% endif %}" type="button" data-caixa-op="saida"><span class="caixa-operacao-main">Saída avulsa: retirada sem módulo</span><span class="caixa-operacao-sub">Só use se não for compra, despesa, conta ou dívida</span></button>
@@ -1021,6 +1026,50 @@
         </div>
         <div class="caixa-form-actions">
           <button class="caixa-btn caixa-btn-primary" type="submit">Depositar no banco</button>
+          <button class="caixa-btn caixa-btn-secondary" type="button" data-caixa-close>Fechar</button>
+        </div>
+      </form>
+    </article>
+
+    <article class="caixa-operacao-form{% if erro_operacao == "liquidar-cartao" %} ativa{% endif %}" data-caixa-op-panel="liquidar-cartao">
+      {% if erro_operacao == "liquidar-cartao" %}
+        <div class="caixa-form-error">{{ erro_operacao_texto }}</div>
+      {% endif %}
+      <h2 class="caixa-form-title">Liquidar cartão</h2>
+      <p class="caixa-form-help">Informe o valor vendido/recebido no cartão, a taxa cobrada pela operadora e confira o valor que efetivamente entrou no Banco/Pix.</p>
+      <div class="caixa-flow">Cartões a receber -> Banco/Pix</div>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="liquidar_cartao">
+        <div class="caixa-form-grid">
+          <div class="caixa-field">
+            <label for="liquidarCartaoBruto">Valor bruto liquidado</label>
+            <input id="liquidarCartaoBruto" name="valor_bruto" type="text" inputmode="decimal" placeholder="R$ 0,00" data-money-input data-cartao-bruto required>
+          </div>
+          <div class="caixa-field">
+            <label for="liquidarCartaoTaxa">Taxa da operadora</label>
+            <input id="liquidarCartaoTaxa" name="taxa_operadora" type="text" inputmode="decimal" placeholder="R$ 0,00" data-money-input data-cartao-taxa required>
+          </div>
+          <div class="caixa-field">
+            <label for="liquidarCartaoLiquido">Valor liquido para Banco/Pix</label>
+            <input id="liquidarCartaoLiquido" type="text" value="R$ 0,00" readonly data-cartao-liquido>
+          </div>
+          <div class="caixa-field">
+            <label for="liquidarCartaoOperador">Operador / responsavel</label>
+            <select id="liquidarCartaoOperador" name="operador" required>
+              <option value="">Selecione o operador</option>
+              {% for operador in operadores_caixa %}
+                <option value="{{ operador.id }}">{{ operador.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="caixa-field full">
+            <label for="liquidarCartaoDescricao">Observacao opcional</label>
+            <input id="liquidarCartaoDescricao" name="descricao" type="text" placeholder="Ex: liquidacao da Stone, PagSeguro ou Cielo">
+          </div>
+        </div>
+        <div class="caixa-form-actions">
+          <button class="caixa-btn caixa-btn-primary" type="submit">Liquidar cartão</button>
           <button class="caixa-btn caixa-btn-secondary" type="button" data-caixa-close>Fechar</button>
         </div>
       </form>
@@ -1424,6 +1473,9 @@
     const closeOperationButtons = Array.from(document.querySelectorAll("[data-caixa-close]"));
     const ajusteConta = document.getElementById("ajusteConta");
     const ajusteDescricao = document.getElementById("ajusteDescricao");
+    const liquidarCartaoBruto = document.querySelector("[data-cartao-bruto]");
+    const liquidarCartaoTaxa = document.querySelector("[data-cartao-taxa]");
+    const liquidarCartaoLiquido = document.querySelector("[data-cartao-liquido]");
     let ajusteDescricaoAutomatica = "";
     const focusableFieldSelector = "input:not([type='hidden']), select, textarea, button[type='submit']";
 
@@ -1624,15 +1676,34 @@
       return number.toFixed(2).replace(".", ",");
     }
 
+    function updateLiquidarCartaoLiquido() {
+      if (!liquidarCartaoBruto || !liquidarCartaoTaxa || !liquidarCartaoLiquido) return;
+
+      const bruto = parseMoneyValue(liquidarCartaoBruto.value) || 0;
+      const taxa = parseMoneyValue(liquidarCartaoTaxa.value) || 0;
+      const liquido = Math.max(bruto - taxa, 0);
+      liquidarCartaoLiquido.value = liquido.toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    }
+
     moneyInputs.forEach(function (input) {
       input.addEventListener("blur", function () {
         input.value = formatMoneyValue(input.value);
+        updateLiquidarCartaoLiquido();
       });
 
       input.addEventListener("focus", function () {
         selectMoneyInput(input);
       });
+
+      input.addEventListener("input", updateLiquidarCartaoLiquido);
     });
+
+    updateLiquidarCartaoLiquido();
 
     closeOperations();
 

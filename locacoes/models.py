@@ -2589,34 +2589,29 @@ class PagamentoLocacao(models.Model):
     @staticmethod
     def conta_financeira_para_forma(forma_pagamento):
         if forma_pagamento == PagamentoLocacao.FORMA_DINHEIRO:
-            conta = (
-                ContaFinanceira.objects
-                .filter(
-                    ativo=True,
-                    tipo=ContaFinanceira.TIPO_CAIXA,
-                    nome__in=["Caixa em especie", "Caixa em espécie"],
-                )
-                .order_by("id")
-                .first()
-            )
-            if conta:
-                return conta
-            return ContaFinanceira.objects.create(
-                nome="Caixa em especie",
-                tipo=ContaFinanceira.TIPO_CAIXA,
-                saldo_inicial=Decimal("0.00"),
-                ativo=True,
-            )
-        conta = ContaFinanceira.objects.filter(
-            ativo=True,
-            tipo=ContaFinanceira.TIPO_BANCO,
-            nome="Banco/Pix",
-        ).order_by("id").first()
+            nome = "Caixa em especie"
+            tipo = ContaFinanceira.TIPO_CAIXA
+            aliases = ["Caixa em especie", "Caixa em espécie"]
+        elif forma_pagamento == PagamentoLocacao.FORMA_CARTAO:
+            nome = "Cartoes a receber"
+            tipo = ContaFinanceira.TIPO_BANCO
+            aliases = ["Cartoes a receber", "Cartões a receber"]
+        else:
+            nome = "Banco/Pix"
+            tipo = ContaFinanceira.TIPO_BANCO
+            aliases = ["Banco/Pix"]
+
+        conta = (
+            ContaFinanceira.objects
+            .filter(ativo=True, tipo=tipo, nome__in=aliases)
+            .order_by("id")
+            .first()
+        )
         if conta:
             return conta
         return ContaFinanceira.objects.create(
-            nome="Banco/Pix",
-            tipo=ContaFinanceira.TIPO_BANCO,
+            nome=nome,
+            tipo=tipo,
             saldo_inicial=Decimal("0.00"),
             ativo=True,
         )

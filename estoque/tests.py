@@ -24,7 +24,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, OperacaoRecebimentoCliente, PagamentoContaPagar, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, OperacaoRecebimentoCliente, PagamentoContaPagar, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
 from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_ALTERADA_FALTA_REENVIAR, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
@@ -22955,3 +22955,157 @@ class PedidoTests(TestCase):
         mensagem = f"Pix salvo como possivel duplicado. Confira a comparacao com o Pix #{pix_parecido.id}."
         self.assertContains(resposta, mensagem, count=1)
         self.assertContains(resposta, f"Pix parecido #{pix_parecido.id}")
+
+
+class CartoesAReceberFinanceiroTests(TestCase):
+    def setUp(self):
+        self.operador = Funcionario.objects.create(nome="Operador Cartao", pode_operar_caixa=True)
+        views._garantir_contas_financeiras_padrao()
+        self.conta_caixa = views._conta_financeira_padrao("caixa")
+        self.conta_banco = views._conta_financeira_padrao("banco")
+        self.conta_cartoes = views._conta_financeira_padrao("cartoes")
+
+    def test_formas_de_recebimento_usam_contas_corretas(self):
+        self.assertEqual(views._conta_financeira_por_forma_pagamento("Dinheiro"), self.conta_caixa)
+        self.assertEqual(views._conta_financeira_por_forma_pagamento("Pix"), self.conta_banco)
+        self.assertEqual(views._conta_financeira_por_forma_pagamento("Cartao de credito"), self.conta_cartoes)
+        self.assertEqual(views._conta_financeira_por_forma_pagamento("Cartao de debito"), self.conta_cartoes)
+        self.assertEqual(
+            views._conta_financeira_por_forma_pagamento("Cartao", cartao_para_receber=False),
+            self.conta_banco,
+        )
+
+    def test_venda_a_vista_cartao_entra_em_cartoes_a_receber(self):
+        venda = Venda.objects.create(
+            data_venda=timezone.localdate(),
+            tipo_pagamento="cartao",
+            total=Decimal("45.00"),
+        )
+
+        movimentos = views._registrar_movimentos_venda_a_vista(venda)
+
+        self.assertEqual(len(movimentos), 1)
+        self.assertEqual(movimentos[0].conta, self.conta_cartoes)
+        self.assertEqual(views._saldo_conta_financeira(self.conta_cartoes), Decimal("45.00"))
+        self.assertEqual(views._saldo_conta_financeira(self.conta_banco), Decimal("0.00"))
+
+    def test_recebimento_cliente_cartao_entra_em_cartoes_a_receber(self):
+        cliente = Cliente.objects.create(nome="Cliente Cartao")
+
+        movimento = views._registrar_movimento_recebimento_cliente(
+            cliente,
+            Decimal("60.00"),
+            timezone.localdate(),
+            "Cartao",
+        )
+
+        self.assertEqual(movimento.conta, self.conta_cartoes)
+        self.assertEqual(views._saldo_conta_financeira(self.conta_cartoes), Decimal("60.00"))
+
+    def test_cartoes_a_receber_nao_entra_no_total_disponivel(self):
+        MovimentoFinanceiro.objects.create(
+            conta=self.conta_caixa,
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            valor=Decimal("10.00"),
+            data=timezone.localdate(),
+        )
+        MovimentoFinanceiro.objects.create(
+            conta=self.conta_banco,
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            valor=Decimal("20.00"),
+            data=timezone.localdate(),
+        )
+        MovimentoFinanceiro.objects.create(
+            conta=self.conta_cartoes,
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            valor=Decimal("30.00"),
+            data=timezone.localdate(),
+        )
+
+        resposta = self.client.get(reverse("estoque:painel_financeiro"), secure=True)
+
+        cards = resposta.context["caixa_banco_cards"]
+        por_titulo = {card["titulo"]: card["valor"] for card in cards}
+        self.assertEqual(por_titulo["Banco/Pix"], Decimal("20.00"))
+        self.assertEqual(por_titulo["Total disponivel"], Decimal("30.00"))
+        self.assertIn("Cartões a receber", por_titulo)
+
+    def _criar_saldo_cartoes(self, valor=Decimal("100.00")):
+        return MovimentoFinanceiro.objects.create(
+            conta=self.conta_cartoes,
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            valor=valor,
+            data=timezone.localdate(),
+            descricao="Venda original no cartao",
+            origem="venda",
+        )
+
+    def _post_liquidar(self, valor_bruto="100,00", taxa="0,00", follow=False):
+        return self.client.post(
+            reverse("estoque:caixa_banco"),
+            {
+                "acao": "liquidar_cartao",
+                "valor_bruto": valor_bruto,
+                "taxa_operadora": taxa,
+                "operador": str(self.operador.id),
+                "descricao": "Liquidacao teste",
+            },
+            secure=True,
+            follow=follow,
+        )
+
+    def test_liquidacao_sem_taxa_move_bruto_para_banco(self):
+        self._criar_saldo_cartoes()
+
+        self._post_liquidar()
+
+        self.assertEqual(views._saldo_conta_financeira(self.conta_cartoes), Decimal("0.00"))
+        self.assertEqual(views._saldo_conta_financeira(self.conta_banco), Decimal("100.00"))
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="taxa_operadora_cartao").count(), 0)
+
+    def test_liquidacao_com_taxa_registra_taxa_separada(self):
+        self._criar_saldo_cartoes()
+
+        self._post_liquidar(taxa="2,50")
+
+        self.assertEqual(views._saldo_conta_financeira(self.conta_cartoes), Decimal("0.00"))
+        self.assertEqual(views._saldo_conta_financeira(self.conta_banco), Decimal("97.50"))
+        taxa = MovimentoFinanceiro.objects.get(origem="taxa_operadora_cartao")
+        self.assertEqual(taxa.valor, Decimal("2.50"))
+        self.assertEqual(taxa.tipo, MovimentoFinanceiro.TIPO_SAIDA)
+        self.assertIn("Taxa da operadora", taxa.descricao)
+
+    def test_liquidacao_bloqueia_saldo_insuficiente(self):
+        self._criar_saldo_cartoes(Decimal("50.00"))
+
+        resposta = self._post_liquidar(follow=True)
+
+        self.assertContains(resposta, "Saldo insuficiente em Cartoes a receber")
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="liquidacao_cartao").count(), 0)
+
+    def test_liquidacao_bloqueia_taxa_invalida(self):
+        self._criar_saldo_cartoes()
+
+        resposta = self._post_liquidar(taxa="100,00", follow=True)
+
+        self.assertContains(resposta, "A taxa precisa ser menor que o valor bruto liquidado.")
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="liquidacao_cartao").count(), 0)
+
+    def test_liquidacao_com_taxa_e_atomica(self):
+        self._criar_saldo_cartoes()
+        create_original = MovimentoFinanceiro.objects.create
+        chamadas = {"total": 0}
+
+        def falhar_na_taxa(*args, **kwargs):
+            chamadas["total"] += 1
+            if chamadas["total"] == 2:
+                raise RuntimeError("falha simulada")
+            return create_original(*args, **kwargs)
+
+        with self.assertRaises(RuntimeError):
+            with patch.object(MovimentoFinanceiro.objects, "create", side_effect=falhar_na_taxa):
+                self._post_liquidar(taxa="2,50")
+
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="liquidacao_cartao").count(), 0)
+        self.assertEqual(views._saldo_conta_financeira(self.conta_cartoes), Decimal("100.00"))
+        self.assertEqual(views._saldo_conta_financeira(self.conta_banco), Decimal("0.00"))

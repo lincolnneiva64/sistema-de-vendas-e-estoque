@@ -870,6 +870,23 @@ class LocacoesPagamentosTermoTests(TestCase):
         )
         self.assertEqual(pagamento.movimento_financeiro.origem, "locacao")
 
+    def test_pagamento_cartao_usa_cartoes_a_receber(self):
+        locacao = self.criar_locacao()
+
+        pagamento = locacao.registrar_pagamento(Decimal("8.00"), PagamentoLocacao.FORMA_CARTAO)
+        movimento = pagamento.criar_movimento_financeiro()
+
+        self.assertEqual(movimento.conta.nome, "Cartoes a receber")
+        self.assertEqual(movimento.conta.tipo, ContaFinanceira.TIPO_BANCO)
+
+    def test_pagamento_outro_preserva_destino_banco_pix(self):
+        locacao = self.criar_locacao()
+
+        pagamento = locacao.registrar_pagamento(Decimal("8.00"), PagamentoLocacao.FORMA_OUTRO)
+        movimento = pagamento.criar_movimento_financeiro()
+
+        self.assertEqual(movimento.conta, self.conta_banco)
+
     def test_recibo_pendente_enviado_e_dispensado(self):
         locacao = self.criar_locacao()
         pagamento = locacao.registrar_pagamento(Decimal("4.00"), PagamentoLocacao.FORMA_PIX)

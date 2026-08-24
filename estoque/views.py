@@ -1772,6 +1772,7 @@ def _garantir_contas_financeiras_padrao():
         ("Caixa em espécie", ContaFinanceira.TIPO_CAIXA, ["Caixa em espécie", "Caixa em especie"]),
         ("Sangria / Reserva em mãos", ContaFinanceira.TIPO_CAIXA, ["Sangria / Reserva em mãos", "Sangria / Reserva em maos", "Reserva em mãos", "Reserva em maos"]),
         ("Banco/Pix", ContaFinanceira.TIPO_BANCO, ["Banco/Pix"]),
+        ("Cartões a receber", ContaFinanceira.TIPO_BANCO, ["Cartões a receber", "Cartoes a receber"]),
     ]
     for nome, tipo, aliases in contas_padrao:
         conta = ContaFinanceira.objects.filter(nome__in=aliases, tipo=tipo).order_by("id").first()
@@ -1795,6 +1796,7 @@ def _conta_financeira_padrao(nome):
         "caixa": ["Caixa em espécie", "Caixa em especie"],
         "reserva": ["Sangria / Reserva em mãos", "Sangria / Reserva em maos", "Reserva em mãos", "Reserva em maos"],
         "banco": ["Banco/Pix"],
+        "cartoes": ["Cartões a receber", "Cartoes a receber"],
     }.get(nome, [nome])
     return ContaFinanceira.objects.filter(ativo=True, nome__in=aliases).order_by("id").first()
 
@@ -1851,17 +1853,20 @@ def _texto_sem_acentos(texto):
     )
 
 
-def _conta_financeira_por_forma_pagamento(forma_pagamento):
+def _forma_pagamento_cartao(forma_pagamento):
+    forma = _texto_sem_acentos(forma_pagamento).lower().strip()
+    forma_compacta = re.sub(r"\s+", "", forma)
+    return any(termo in forma_compacta for termo in {"cartao", "debito", "credito"})
+
+
+def _conta_financeira_por_forma_pagamento(forma_pagamento, cartao_para_receber=True):
     _garantir_contas_financeiras_padrao()
     forma = _texto_sem_acentos(forma_pagamento).lower().strip()
     forma_compacta = re.sub(r"\s+", "", forma)
     if any(termo in forma_compacta for termo in {"dinheiro", "especie"}):
-        return ContaFinanceira.objects.filter(
-            ativo=True,
-            tipo=ContaFinanceira.TIPO_CAIXA,
-            nome__in=["Caixa em espécie", "Caixa em especie"],
-        ).order_by("id").first()
-    # Cartao pode ganhar controle proprio em etapa futura.
+        return _conta_financeira_padrao("caixa")
+    if cartao_para_receber and _forma_pagamento_cartao(forma_pagamento):
+        return _conta_financeira_padrao("cartoes")
     if any(
         termo in forma_compacta
         for termo in {
@@ -1870,21 +1875,12 @@ def _conta_financeira_por_forma_pagamento(forma_pagamento):
             "transferencia",
             "boleto",
             "deposito",
-            "cartao",
-            "debito",
-            "credito",
         }
     ):
-        return ContaFinanceira.objects.filter(
-            ativo=True,
-            tipo=ContaFinanceira.TIPO_BANCO,
-            nome="Banco/Pix",
-        ).order_by("id").first()
-    return ContaFinanceira.objects.filter(
-        ativo=True,
-        tipo=ContaFinanceira.TIPO_BANCO,
-        nome="Banco/Pix",
-    ).order_by("id").first()
+        return _conta_financeira_padrao("banco")
+    if _forma_pagamento_cartao(forma_pagamento):
+        return _conta_financeira_padrao("banco")
+    return _conta_financeira_padrao("banco")
 
 
 def _registrar_movimento_recebimento_cliente(cliente, valor_recebido, data_recebimento, forma_pagamento):
@@ -1917,7 +1913,7 @@ def _registrar_movimento_despesa_diaria(despesa, conta_financeira=None):
     if valor <= Decimal("0.00"):
         return None
     if not conta_financeira:
-        conta_financeira = _conta_financeira_por_forma_pagamento(despesa.forma_pagamento)
+        conta_financeira = _conta_financeira_por_forma_pagamento(despesa.forma_pagamento, cartao_para_receber=False)
     if not conta_financeira:
         return None
     data_despesa = timezone.localtime(despesa.data_hora).date() if despesa.data_hora else timezone.localdate()
@@ -2149,7 +2145,7 @@ def _registrar_movimentos_compra_a_vista(compra, valores_origem=None):
     if contas_ausentes:
         raise ValueError("Nao foi possivel localizar todas as contas financeiras do pagamento.")
     if valores_origem is None:
-        conta = _conta_financeira_por_forma_pagamento(compra.tipo_pagamento)
+        conta = _conta_financeira_por_forma_pagamento(compra.tipo_pagamento, cartao_para_receber=False)
         chave = "banco"
         if conta and contas["caixa"] and conta.pk == contas["caixa"].pk:
             chave = "caixa"
@@ -2218,6 +2214,8 @@ def _descricao_venda_a_vista(venda, conta=None):
     if conta:
         if conta.nome == "Banco/Pix":
             descricao = f"{descricao} - Banco/Pix"
+        elif conta.nome in {"Cartões a receber", "Cartoes a receber"}:
+            descricao = f"{descricao} - Cartoes a receber"
         else:
             descricao = f"{descricao} - Dinheiro/Caixa"
     return descricao[:255]
@@ -2240,6 +2238,7 @@ def _alocacao_financeira_venda(venda):
     contas = {
         "caixa": _conta_financeira_padrao("caixa"),
         "banco": _conta_financeira_padrao("banco"),
+        "cartoes": _conta_financeira_padrao("cartoes"),
     }
     alocacao = {chave: Decimal("0.00") for chave in contas}
     conta_para_chave = {conta.pk: chave for chave, conta in contas.items() if conta}
@@ -2290,13 +2289,16 @@ def _registrar_movimentos_venda_a_vista(venda, valores_origem=None):
     contas = {
         "caixa": _conta_financeira_padrao("caixa"),
         "banco": _conta_financeira_padrao("banco"),
+        "cartoes": _conta_financeira_padrao("cartoes"),
     }
     if valores_origem is None:
         conta = _conta_financeira_venda_a_vista(venda.tipo_pagamento)
         chave = "banco"
         if conta and contas["caixa"] and conta.pk == contas["caixa"].pk:
             chave = "caixa"
-        valores_origem = {"caixa": Decimal("0.00"), "banco": Decimal("0.00")}
+        elif conta and contas["cartoes"] and conta.pk == contas["cartoes"].pk:
+            chave = "cartoes"
+        valores_origem = {"caixa": Decimal("0.00"), "banco": Decimal("0.00"), "cartoes": Decimal("0.00")}
         valores_origem[chave] = valor
 
     movimentos = []
@@ -2328,7 +2330,7 @@ def _registrar_movimento_conta_pagar_fornecedor(conta, valor_pago, data_pagament
     valor = _financeiro_dinheiro(valor_pago).quantize(Decimal("0.01"))
     if valor <= Decimal("0.00"):
         return None
-    conta_financeira = _conta_financeira_por_forma_pagamento(forma_pagamento)
+    conta_financeira = _conta_financeira_por_forma_pagamento(forma_pagamento, cartao_para_receber=False)
     if not conta_financeira:
         return None
     fornecedor_nome = conta.fornecedor.nome if conta.fornecedor else ""
@@ -2409,9 +2411,11 @@ def painel_financeiro(request):
     conta_caixa = _conta_financeira_padrao("caixa")
     conta_reserva = _conta_financeira_padrao("reserva")
     conta_banco = _conta_financeira_padrao("banco")
+    conta_cartoes = _conta_financeira_padrao("cartoes")
     saldo_caixa_especie = _saldo_conta_financeira(conta_caixa) if conta_caixa else Decimal("0.00")
     saldo_reserva = _saldo_conta_financeira(conta_reserva) if conta_reserva else Decimal("0.00")
     saldo_banco = _saldo_conta_financeira(conta_banco) if conta_banco else Decimal("0.00")
+    saldo_cartoes = _saldo_conta_financeira(conta_cartoes) if conta_cartoes else Decimal("0.00")
     saldo_caixa_total = saldo_caixa_especie + saldo_reserva
     saldo_caixa = saldo_caixa_especie
     total_disponivel = saldo_caixa_total + saldo_banco
@@ -2493,6 +2497,7 @@ def painel_financeiro(request):
                 {"titulo": "Caixa em espécie", "valor": saldo_caixa, "valor_texto": moeda_br(saldo_caixa), "tipo": "neutro"},
                 {"titulo": "Sangria / Reserva em mãos", "valor": saldo_reserva, "valor_texto": moeda_br(saldo_reserva), "tipo": "neutro"},
                 {"titulo": "Banco/Pix", "valor": saldo_banco, "valor_texto": moeda_br(saldo_banco), "tipo": "neutro"},
+                {"titulo": "Cartões a receber", "valor": saldo_cartoes, "valor_texto": moeda_br(saldo_cartoes), "tipo": "neutro"},
                 {"titulo": "Total disponivel", "valor": total_disponivel, "valor_texto": moeda_br(total_disponivel), "tipo": "destaque"},
                 {
                     "titulo": "Situacao do banco hoje",
@@ -2548,6 +2553,7 @@ def caixa_banco(request):
     conta_caixa = _conta_financeira_padrao("caixa")
     conta_reserva = _conta_financeira_padrao("reserva")
     conta_banco = _conta_financeira_padrao("banco")
+    conta_cartoes = _conta_financeira_padrao("cartoes")
     operadores_caixa = list(Funcionario.operadores_do_caixa().only("id", "nome"))
     operadores_caixa_por_id = {str(funcionario.id): funcionario for funcionario in operadores_caixa}
 
@@ -2565,6 +2571,7 @@ def caixa_banco(request):
         "entrada_avulsa": "entrada",
         "saida_avulsa": "saida",
         "transferencia": "transferencia",
+        "liquidar_cartao": "liquidar-cartao",
     }
 
     erro_local_caixa = request.session.pop("caixa_banco_erro_operacao", {}) if request.method == "GET" else {}
@@ -2718,6 +2725,71 @@ def caixa_banco(request):
             messages.success(request, "Transferencia registrada com sucesso.")
             return redirect("estoque:caixa_banco")
 
+        if acao == "liquidar_cartao":
+            operador = operador_post(painel_por_acao_caixa.get(acao, ""))
+            if operador is None:
+                return redirect("estoque:caixa_banco")
+            valor_bruto = _parse_decimal_financeiro(request.POST.get("valor_bruto"))
+            taxa = _parse_decimal_financeiro(request.POST.get("taxa_operadora"))
+            descricao_usuario = request.POST.get("descricao", "").strip()
+            if not conta_cartoes or not conta_banco:
+                registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "Conta financeira nao encontrada.")
+                return redirect("estoque:caixa_banco")
+            if valor_bruto is None or valor_bruto <= Decimal("0.00"):
+                registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "Informe um valor bruto maior que zero.")
+                return redirect("estoque:caixa_banco")
+            if taxa is None:
+                taxa = Decimal("0.00")
+            taxa = taxa.quantize(Decimal("0.01"))
+            valor_bruto = valor_bruto.quantize(Decimal("0.01"))
+            if taxa < Decimal("0.00"):
+                registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "A taxa da operadora nao pode ser negativa.")
+                return redirect("estoque:caixa_banco")
+            if taxa >= valor_bruto:
+                registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "A taxa precisa ser menor que o valor bruto liquidado.")
+                return redirect("estoque:caixa_banco")
+            saldo_cartoes_atual = _saldo_conta_financeira(conta_cartoes)
+            if saldo_cartoes_atual < valor_bruto:
+                registrar_erro_caixa_local(
+                    painel_por_acao_caixa.get(acao, ""),
+                    f"Saldo insuficiente em Cartoes a receber. Disponivel: {_financeiro_moeda_br(saldo_cartoes_atual)}.",
+                )
+                return redirect("estoque:caixa_banco")
+
+            valor_liquido = (valor_bruto - taxa).quantize(Decimal("0.01"))
+            descricao_base = descricao_usuario or "Liquidacao de cartao"
+            descricao_transferencia = (
+                f"{descricao_base} - bruto {_financeiro_moeda_br(valor_bruto)}; "
+                f"liquido no Banco/Pix {_financeiro_moeda_br(valor_liquido)}; "
+                f"taxa {_financeiro_moeda_br(taxa)}"
+            )[:255]
+            with transaction.atomic():
+                MovimentoFinanceiro.objects.create(
+                    conta=conta_cartoes,
+                    conta_destino=conta_banco,
+                    tipo=MovimentoFinanceiro.TIPO_TRANSFERENCIA,
+                    valor=valor_bruto,
+                    data=timezone.localdate(),
+                    descricao=descricao_transferencia,
+                    operador=operador,
+                    origem="liquidacao_cartao",
+                )
+                if taxa > Decimal("0.00"):
+                    MovimentoFinanceiro.objects.create(
+                        conta=conta_banco,
+                        tipo=MovimentoFinanceiro.TIPO_SAIDA,
+                        valor=taxa,
+                        data=timezone.localdate(),
+                        descricao=(f"Taxa da operadora - {descricao_transferencia}")[:255],
+                        operador=operador,
+                        origem="taxa_operadora_cartao",
+                    )
+            messages.success(
+                request,
+                f"Cartao liquidado: {_financeiro_moeda_br(valor_bruto)} bruto, {_financeiro_moeda_br(taxa)} taxa, {_financeiro_moeda_br(valor_liquido)} no Banco/Pix.",
+            )
+            return redirect("estoque:caixa_banco")
+
         if acao in {"entrada", "saida", "entrada_avulsa", "saida_avulsa", "pagar_com_reserva"}:
             conta = ContaFinanceira.objects.filter(pk=request.POST.get("conta"), ativo=True).first()
             operador = operador_post(painel_por_acao_caixa.get(acao, ""))
@@ -2772,6 +2844,7 @@ def caixa_banco(request):
     saldo_caixa_especie = _saldo_conta_financeira(conta_caixa) if conta_caixa else Decimal("0.00")
     saldo_reserva = _saldo_conta_financeira(conta_reserva) if conta_reserva else Decimal("0.00")
     saldo_banco = _saldo_conta_financeira(conta_banco) if conta_banco else Decimal("0.00")
+    saldo_cartoes = _saldo_conta_financeira(conta_cartoes) if conta_cartoes else Decimal("0.00")
     saldo_caixa = saldo_caixa_especie + saldo_reserva
     total_disponivel = saldo_caixa + saldo_banco
     movimentos = list(
@@ -2851,6 +2924,7 @@ def caixa_banco(request):
             "erro_operacao": erro_operacao,
             "erro_operacao_texto": erro_operacao_texto,
             "conta_banco": conta_banco,
+            "conta_cartoes": conta_cartoes,
             "saldo_caixa": saldo_caixa,
             "saldo_caixa_texto": _financeiro_moeda_br(saldo_caixa),
             "saldo_caixa_especie": saldo_caixa_especie,
@@ -2859,6 +2933,8 @@ def caixa_banco(request):
             "saldo_reserva_texto": _financeiro_moeda_br(saldo_reserva),
             "saldo_banco": saldo_banco,
             "saldo_banco_texto": _financeiro_moeda_br(saldo_banco),
+            "saldo_cartoes": saldo_cartoes,
+            "saldo_cartoes_texto": _financeiro_moeda_br(saldo_cartoes),
             "total_disponivel": total_disponivel,
             "total_disponivel_texto": _financeiro_moeda_br(total_disponivel),
             "movimentos": movimentos,
