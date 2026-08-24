@@ -2729,24 +2729,52 @@ def caixa_banco(request):
             operador = operador_post(painel_por_acao_caixa.get(acao, ""))
             if operador is None:
                 return redirect("estoque:caixa_banco")
-            valor_bruto = _parse_decimal_financeiro(request.POST.get("valor_bruto"))
-            taxa = _parse_decimal_financeiro(request.POST.get("taxa_operadora"))
+            bruto_informado = str(request.POST.get("valor_bruto") or "").strip()
+            taxa_informada = str(request.POST.get("taxa_operadora") or "").strip()
+            liquido_informado = str(request.POST.get("valor_liquido") or "").strip()
+            valor_bruto = _parse_decimal_financeiro(bruto_informado) if bruto_informado else None
+            taxa = _parse_decimal_financeiro(taxa_informada) if taxa_informada else None
+            valor_liquido = _parse_decimal_financeiro(liquido_informado) if liquido_informado else None
             descricao_usuario = request.POST.get("descricao", "").strip()
             if not conta_cartoes or not conta_banco:
                 registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "Conta financeira nao encontrada.")
                 return redirect("estoque:caixa_banco")
+            valores_validos = {
+                "bruto": valor_bruto,
+                "taxa": taxa,
+                "liquido": valor_liquido,
+            }
+            informados = [chave for chave, valor in valores_validos.items() if valor is not None]
+            if len(informados) < 2:
+                registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "Informe pelo menos dois valores: bruto, taxa ou liquido.")
+                return redirect("estoque:caixa_banco")
+            if any(valor is None for valor in valores_validos.values()):
+                if valor_bruto is None and valor_liquido is not None and taxa is not None:
+                    valor_bruto = valor_liquido + taxa
+                elif taxa is None and valor_bruto is not None and valor_liquido is not None:
+                    taxa = valor_bruto - valor_liquido
+                elif valor_liquido is None and valor_bruto is not None and taxa is not None:
+                    valor_liquido = valor_bruto - taxa
+            valor_bruto = valor_bruto.quantize(Decimal("0.01")) if valor_bruto is not None else None
+            taxa = taxa.quantize(Decimal("0.01")) if taxa is not None else None
+            valor_liquido = valor_liquido.quantize(Decimal("0.01")) if valor_liquido is not None else None
             if valor_bruto is None or valor_bruto <= Decimal("0.00"):
                 registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "Informe um valor bruto maior que zero.")
                 return redirect("estoque:caixa_banco")
-            if taxa is None:
-                taxa = Decimal("0.00")
-            taxa = taxa.quantize(Decimal("0.01"))
-            valor_bruto = valor_bruto.quantize(Decimal("0.01"))
-            if taxa < Decimal("0.00"):
+            if taxa is None or taxa < Decimal("0.00"):
                 registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "A taxa da operadora nao pode ser negativa.")
                 return redirect("estoque:caixa_banco")
             if taxa >= valor_bruto:
                 registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "A taxa precisa ser menor que o valor bruto liquidado.")
+                return redirect("estoque:caixa_banco")
+            if valor_liquido is None or valor_liquido <= Decimal("0.00"):
+                registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "Informe um valor liquido maior que zero.")
+                return redirect("estoque:caixa_banco")
+            if valor_liquido > valor_bruto:
+                registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "O valor liquido nao pode ser maior que o valor bruto.")
+                return redirect("estoque:caixa_banco")
+            if (valor_bruto - taxa).quantize(Decimal("0.01")) != valor_liquido:
+                registrar_erro_caixa_local(painel_por_acao_caixa.get(acao, ""), "Bruto, taxa e liquido nao fecham matematicamente.")
                 return redirect("estoque:caixa_banco")
             saldo_cartoes_atual = _saldo_conta_financeira(conta_cartoes)
             if saldo_cartoes_atual < valor_bruto:
@@ -2756,7 +2784,6 @@ def caixa_banco(request):
                 )
                 return redirect("estoque:caixa_banco")
 
-            valor_liquido = (valor_bruto - taxa).quantize(Decimal("0.01"))
             descricao_base = descricao_usuario or "Liquidacao de cartao"
             descricao_transferencia = (
                 f"{descricao_base} - bruto {_financeiro_moeda_br(valor_bruto)}; "
