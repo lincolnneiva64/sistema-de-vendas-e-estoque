@@ -641,42 +641,6 @@ function fornecedorEnterAvanca(event) {
         {{ form.observacao }}
       </div>
 
-      <section class="fornecedor-section" id="fornecedorDestinatarioListas">
-        <h3 class="fornecedor-section-title">Destinatário das listas</h3>
-        <p class="fornecedor-section-note">Escolha o contato e o WhatsApp que recebem as Listas por Fornecedor.</p>
-
-        <p class="fornecedor-destinatario-atual" id="fornecedorDestinatarioAtual" hidden></p>
-        <p class="fornecedor-destinatario-vazio" id="fornecedorDestinatarioVazio" hidden>Nenhum destinatário salvo ainda.</p>
-
-        <div class="fornecedor-grid">
-          <div class="fornecedores-field">
-            <label for="id_destinatario_lista_contato">Contato</label>
-            <select
-              id="id_destinatario_lista_contato"
-              name="destinatario_lista_contato"
-              class="form-control"
-              data-destinatario-contato
-              onkeydown="return fornecedorEnterAvanca(event);"
-            >
-              <option value="">Sem destinatário configurado</option>
-            </select>
-          </div>
-
-          <div class="fornecedores-field">
-            <label for="id_destinatario_lista_telefone">WhatsApp</label>
-            <select
-              id="id_destinatario_lista_telefone"
-              name="destinatario_lista_telefone"
-              class="form-control"
-              data-destinatario-telefone
-              onkeydown="return fornecedorEnterAvanca(event);"
-            >
-              <option value="">Escolha um contato primeiro</option>
-            </select>
-          </div>
-        </div>
-      </section>
-
       <section class="fornecedor-section">
         <h3 class="fornecedor-section-title">Contatos do fornecedor</h3>
         <p class="fornecedor-section-note">Cadastre responsáveis diferentes, como vendedor, financeiro ou entrega.</p>
@@ -686,7 +650,6 @@ function fornecedorEnterAvanca(event) {
         {% for contato_form in contatos_formset.forms %}
           <details
             class="fornecedor-contato-details"
-            data-destinatario-contato-linha="{{ forloop.counter0 }}"
             {% if contato_form.instance.pk or contato_form.nome.value or contato_form.cargo.value or contato_form.telefone_whatsapp.value or contato_form.telefones_tem_erro or contato_form.observacao.value or contato_form.errors %}open{% endif %}
           >
             <summary>
@@ -699,6 +662,15 @@ function fornecedorEnterAvanca(event) {
             <div class="fornecedor-contato-card">
               {% for hidden in contato_form.hidden_fields %}{{ hidden }}{% endfor %}
               {% if contato_form.DELETE %}<span style="display:none;">{{ contato_form.DELETE }}</span>{% endif %}
+
+              {% if forloop.first %}
+                <p class="fornecedor-section-note">
+                  Este contato será usado como destinatário padrão das Listas por Fornecedor. O sistema usará o telefone marcado como WhatsApp e Ativo.
+                  {% if whatsapp_listas_contato_principal.numero_formatado %}
+                    <br>WhatsApp usado nas listas: {{ whatsapp_listas_contato_principal.numero_formatado }}
+                  {% endif %}
+                </p>
+              {% endif %}
 
               <div class="fornecedor-grid">
                 <div class="fornecedores-field">
@@ -717,7 +689,7 @@ function fornecedorEnterAvanca(event) {
 
                 <div class="fornecedor-telefones-lista">
                   {% for linha in contato_form.telefones_linhas %}
-                    <div class="fornecedor-telefone-linha" data-telefone-linha data-destinatario-telefone-linha="{{ linha.index }}" {% if not linha.visivel %}hidden{% endif %}>
+                    <div class="fornecedor-telefone-linha" data-telefone-linha {% if not linha.visivel %}hidden{% endif %}>
                       <input type="hidden" name="{{ linha.id_name }}" value="{{ linha.id }}">
                       <input type="hidden" name="{{ linha.delete_name }}" value="{% if linha.delete %}on{% endif %}" data-telefone-delete>
 
@@ -813,155 +785,6 @@ function fornecedorEnterAvanca(event) {
     </form>
   </div>
 </div>
-{{ destinatario_lista_payload|json_script:"fornecedor-destinatario-listas-data" }}
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-  const dadosEl = document.getElementById("fornecedor-destinatario-listas-data");
-  const contatoSelect = document.querySelector("[data-destinatario-contato]");
-  const telefoneSelect = document.querySelector("[data-destinatario-telefone]");
-  const atualEl = document.getElementById("fornecedorDestinatarioAtual");
-  const vazioEl = document.getElementById("fornecedorDestinatarioVazio");
-  if (!dadosEl || !contatoSelect || !telefoneSelect) return;
-
-  const dados = JSON.parse(dadosEl.textContent || "{}");
-  const selecionadoInicialContato = String(dados.selecionadoContato || "");
-  const selecionadoInicialTelefone = String(dados.selecionadoTelefone || "");
-
-  function texto(campo) {
-    return String((campo && campo.value) || "").trim();
-  }
-
-  function checkboxMarcado(container, seletor, padrao) {
-    const campo = container.querySelector(seletor);
-    return campo ? campo.checked : padrao;
-  }
-
-  function tokenPkOuForm(valorPk, tokenForm) {
-    return valorPk ? "pk:" + valorPk : tokenForm;
-  }
-
-  function contatosDaTela() {
-    return Array.from(document.querySelectorAll("[data-destinatario-contato-linha]")).map(function (card) {
-      const indiceContato = card.getAttribute("data-destinatario-contato-linha");
-      const idContato = texto(card.querySelector('input[name="contatos-' + indiceContato + '-id"]'));
-      const nome = texto(card.querySelector('input[name="contatos-' + indiceContato + '-nome"]'));
-      const ativo = checkboxMarcado(card, 'input[name="contatos-' + indiceContato + '-ativo"]', false);
-      const principal = checkboxMarcado(card, 'input[name="contatos-' + indiceContato + '-principal"]', false);
-
-      if (!ativo || !nome) return null;
-
-      const telefones = Array.from(card.querySelectorAll("[data-destinatario-telefone-linha]")).map(function (linha) {
-        const indiceTelefone = linha.getAttribute("data-destinatario-telefone-linha");
-        const prefixo = "contatos-" + indiceContato + "-telefones-" + indiceTelefone;
-        const idTelefone = texto(linha.querySelector('input[name="' + prefixo + '-id"]'));
-        const numero = texto(linha.querySelector('input[name="' + prefixo + '-numero"]'));
-        const deleteValor = texto(linha.querySelector('input[name="' + prefixo + '-DELETE"]'));
-        const whatsapp = checkboxMarcado(linha, 'input[name="' + prefixo + '-whatsapp"]', false);
-        const telefoneAtivo = checkboxMarcado(linha, 'input[name="' + prefixo + '-ativo"]', false);
-        const telefonePrincipal = checkboxMarcado(linha, 'input[name="' + prefixo + '-principal"]', false);
-        if (!numero || deleteValor || !whatsapp || !telefoneAtivo) return null;
-        return {
-          id: tokenPkOuForm(idTelefone, "form:" + indiceContato + ":" + indiceTelefone),
-          numero: numero,
-          principal: telefonePrincipal,
-          ordem: Number(indiceTelefone || 0)
-        };
-      }).filter(Boolean).sort(function (a, b) {
-        if (a.principal !== b.principal) return a.principal ? -1 : 1;
-        return a.ordem - b.ordem;
-      });
-
-      return {
-        id: tokenPkOuForm(idContato, "form:" + indiceContato),
-        nome: nome,
-        principal: principal,
-        telefones: telefones
-      };
-    }).filter(Boolean);
-  }
-
-  function contatosDisponiveis() {
-    const porId = new Map();
-    (dados.contatos || []).forEach(function (contato) {
-      porId.set(contato.id, contato);
-    });
-    contatosDaTela().forEach(function (contato) {
-      porId.set(contato.id, contato);
-    });
-    return Array.from(porId.values()).sort(function (a, b) {
-      if (!!a.principal !== !!b.principal) return a.principal ? -1 : 1;
-      return String(a.nome || "").localeCompare(String(b.nome || ""));
-    });
-  }
-
-  function popularContatos() {
-    const valorAtual = contatoSelect.value || selecionadoInicialContato;
-    contatoSelect.innerHTML = '<option value="">Sem destinatário configurado</option>';
-    contatosDisponiveis().forEach(function (contato) {
-      const opcao = document.createElement("option");
-      opcao.value = contato.id;
-      opcao.textContent = contato.nome;
-      contatoSelect.appendChild(opcao);
-    });
-    if (valorAtual && Array.from(contatoSelect.options).some(function (opcao) { return opcao.value === valorAtual; })) {
-      contatoSelect.value = valorAtual;
-    }
-  }
-
-  function popularTelefones() {
-    const contatos = contatosDisponiveis();
-    const contato = contatos.find(function (item) { return item.id === contatoSelect.value; });
-    const valorAtual = telefoneSelect.value || selecionadoInicialTelefone;
-    telefoneSelect.innerHTML = "";
-
-    if (!contato) {
-      telefoneSelect.innerHTML = '<option value="">Escolha um contato primeiro</option>';
-      return;
-    }
-
-    const telefones = contato.telefones || [];
-    if (!telefones.length) {
-      telefoneSelect.innerHTML = '<option value="">Nenhum WhatsApp ativo neste contato</option>';
-      return;
-    }
-
-    telefones.forEach(function (telefone) {
-      const opcao = document.createElement("option");
-      opcao.value = telefone.id;
-      opcao.textContent = telefone.principal ? telefone.numero + " - principal" : telefone.numero;
-      telefoneSelect.appendChild(opcao);
-    });
-
-    if (valorAtual && telefones.some(function (telefone) { return telefone.id === valorAtual; })) {
-      telefoneSelect.value = valorAtual;
-    }
-  }
-
-  function atualizarResumo() {
-    if (atualEl && dados.temConfiguracaoAtual && dados.configuracaoAtual) {
-      atualEl.textContent = "Configuracao atual: " + dados.configuracaoAtual;
-      atualEl.hidden = false;
-    } else if (vazioEl) {
-      vazioEl.hidden = false;
-    }
-  }
-
-  function atualizarTudo() {
-    popularContatos();
-    popularTelefones();
-  }
-
-  contatoSelect.addEventListener("change", function () {
-    telefoneSelect.value = "";
-    popularTelefones();
-  });
-
-  document.addEventListener("input", atualizarTudo);
-  document.addEventListener("change", atualizarTudo);
-  atualizarResumo();
-  atualizarTudo();
-});
-</script>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   function aplicarMascaraTelefone(campo) {

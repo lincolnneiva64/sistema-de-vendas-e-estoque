@@ -36,7 +36,6 @@ from .services.fornecedor_contatos import (
     contato_tem_telefone_no_post,
     preparar_telefones_contatos,
     salvar_telefones_contatos,
-    telefone_principal_contato,
     telefones_whatsapp_contato,
     validar_telefones_contatos,
 )
@@ -5412,7 +5411,9 @@ def _destinatario_confirmacao_lista_fornecedor(lista, telefone_normalizado, nome
         destinatarios = _payload_destinatarios_lista_fornecedor(lista.fornecedor)["opcoes"]
         destinatario_padrao = destinatarios[0] if destinatarios else None
         if not destinatario_padrao:
-            raise ValidationError("Destinatario padrao nao encontrado para esta lista.")
+            raise ValidationError(
+                "O contato principal precisa de um telefone WhatsApp ativo para enviar a lista."
+            )
         telefone_padrao = EnvioListaCompraFornecedor.normalizar_telefone(
             destinatario_padrao.get("numero") or destinatario_padrao.get("whatsapp") or ""
         )
@@ -5547,91 +5548,33 @@ def _payload_destinatarios_lista_fornecedor(fornecedor):
             "opcoes": destinatarios,
             "temContatoFornecedor": False,
             "destinatarioConfigurado": False,
+            "avisoDestinatario": "Fornecedor nao informado.",
         }
 
-    destinatario_padrao = (
-        FornecedorDestinatarioLista.objects
-        .select_related("contato", "telefone")
-        .filter(
-            fornecedor=fornecedor,
-            tipo=FornecedorDestinatarioLista.TIPO_PADRAO,
-            ativo=True,
-            contato__ativo=True,
-            telefone__ativo=True,
-            telefone__whatsapp=True,
-        )
-        .order_by("-criado_em", "-id")
-        .first()
-    )
-
-    contato_vendedor = (
-        destinatario_padrao.contato
-        if destinatario_padrao
-        else fornecedor.contatos.filter(
-            ativo=True,
-            principal=True,
-        ).order_by("id").first()
-    )
+    contato_vendedor = _contato_principal_fornecedor(fornecedor)
 
     if contato_vendedor:
         telefones_whatsapp = telefones_whatsapp_contato(contato_vendedor)
         cargo = f" ({contato_vendedor.cargo})" if contato_vendedor.cargo else ""
-        telefone_padrao_id = (
-            destinatario_padrao.telefone_id
-            if destinatario_padrao
-            else None
-        )
+        telefone = next((item for item in telefones_whatsapp if item.principal), None)
+        if telefone is None:
+            telefone = telefones_whatsapp[0] if telefones_whatsapp else None
 
-        if telefone_padrao_id:
-            telefones_whatsapp.sort(
-                key=lambda telefone: (
-                    telefone.id != telefone_padrao_id,
-                    not telefone.principal,
-                    telefone.ordem,
-                    telefone.id or 0,
-                )
-            )
-
-        for indice, telefone in enumerate(telefones_whatsapp):
+        if telefone:
             numero = _normalizar_whatsapp_fornecedor(telefone.numero)
-            if not numero:
-                continue
-
-            selecionado = (
-                telefone.id == telefone_padrao_id
-                if telefone_padrao_id
-                else bool(telefone.principal or indice == 0)
-            )
-
-            if len(telefones_whatsapp) > 1:
-                if selecionado and destinatario_padrao:
-                    complemento = " - WhatsApp das listas"
-                elif selecionado:
-                    complemento = " - WhatsApp principal"
-                else:
-                    complemento = f" - Outro WhatsApp {indice + 1}"
-            else:
-                complemento = ""
-
-            destinatarios.append(
-                {
-                    "tipo": (
-                        "vendedor_padrao"
-                        if selecionado and destinatario_padrao
-                        else "vendedor"
-                    ),
-                    "nome": f"{contato_vendedor.nome}{cargo}{complemento}",
-                    "whatsapp": telefone.numero,
-                    "numero": numero,
-                    "telefoneId": getattr(telefone, "id", None),
-                    "contatoId": contato_vendedor.id,
-                    "principal": selecionado,
-                    "configurado": bool(
-                        destinatario_padrao
-                        and telefone.id == telefone_padrao_id
-                    ),
-                }
-            )
+            if numero:
+                destinatarios.append(
+                    {
+                        "tipo": "vendedor_padrao",
+                        "nome": f"{contato_vendedor.nome}{cargo}",
+                        "whatsapp": telefone.numero,
+                        "numero": numero,
+                        "telefoneId": getattr(telefone, "id", None),
+                        "contatoId": contato_vendedor.id,
+                        "principal": True,
+                        "configurado": True,
+                    }
+                )
 
     destinatarios.sort(
         key=lambda destinatario: (
@@ -5643,7 +5586,12 @@ def _payload_destinatarios_lista_fornecedor(fornecedor):
     return {
         "opcoes": destinatarios,
         "temContatoFornecedor": bool(destinatarios),
-        "destinatarioConfigurado": bool(destinatario_padrao),
+        "destinatarioConfigurado": bool(destinatarios),
+        "avisoDestinatario": (
+            ""
+            if destinatarios
+            else "O contato principal precisa de um telefone WhatsApp ativo para enviar a lista."
+        ),
     }
 
 
@@ -6875,6 +6823,7 @@ def compras_lista_fornecedor_interno_imagem(request, pk):
     return response
 
 
+@ensure_csrf_cookie
 def compras_lista_fornecedor_whatsapp(request, pk):
     lista = get_object_or_404(
         ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("fornecedor__contatos", "itens__produto"),
@@ -6889,9 +6838,6 @@ def compras_lista_fornecedor_whatsapp(request, pk):
 
 @require_POST
 def compras_lista_fornecedor_whatsapp_destinatario_recente(request, pk):
-    if not request.user.is_authenticated:
-        return JsonResponse({"ok": False, "erro": "Autenticacao necessaria."}, status=403)
-
     lista = get_object_or_404(
         ListaCompraFornecedor.objects.select_related("fornecedor"),
         pk=pk,
@@ -6924,9 +6870,6 @@ def compras_lista_fornecedor_whatsapp_destinatario_recente(request, pk):
 
 @require_POST
 def compras_lista_fornecedor_confirmar_envio_vendedor(request, pk):
-    if not request.user.is_authenticated:
-        return JsonResponse({"ok": False, "erro": "Autenticacao necessaria."}, status=403)
-
     lista = get_object_or_404(
         ListaCompraFornecedor.objects.select_related("fornecedor"),
         pk=pk,
@@ -9557,6 +9500,30 @@ def _limpar_contatos_vazios_fornecedor(post_data):
     return post_data
 
 
+def _contato_form_tem_dados(post_data, indice):
+    prefixo = f"contatos-{indice}"
+    campos = [
+        f"{prefixo}-id",
+        f"{prefixo}-nome",
+        f"{prefixo}-cargo",
+        f"{prefixo}-telefone_whatsapp",
+        f"{prefixo}-observacao",
+    ]
+    return any((post_data.get(campo) or "").strip() for campo in campos) or contato_tem_telefone_no_post(post_data, indice)
+
+
+def _normalizar_contato_principal_formset(post_data):
+    total_contatos = int(post_data.get("contatos-TOTAL_FORMS") or 0)
+    for indice in range(total_contatos):
+        prefixo = f"contatos-{indice}"
+        if indice == 0 and not post_data.get(f"{prefixo}-DELETE") and _contato_form_tem_dados(post_data, indice):
+            post_data[f"{prefixo}-principal"] = "on"
+            post_data[f"{prefixo}-ativo"] = "on"
+        elif indice > 0:
+            post_data[f"{prefixo}-principal"] = ""
+    return post_data
+
+
 def _formatar_telefone_fornecedor_form(valor):
     digitos = _normalizar_whatsapp_fornecedor(valor)
     if len(digitos) == 11:
@@ -9566,99 +9533,64 @@ def _formatar_telefone_fornecedor_form(valor):
     return valor or ""
 
 
-def _token_pk(pk):
-    return f"pk:{pk}" if pk else ""
-
-
-def _destinatario_padrao_fornecedor(fornecedor):
+def _contato_principal_fornecedor(fornecedor):
     if not fornecedor or not getattr(fornecedor, "pk", None):
         return None
-    return (
-        FornecedorDestinatarioLista.objects
-        .select_related("contato", "telefone")
-        .filter(
-            fornecedor=fornecedor,
-            tipo=FornecedorDestinatarioLista.TIPO_PADRAO,
-            ativo=True,
-        )
-        .order_by("-criado_em", "-id")
+
+    contato = (
+        fornecedor.contatos
+        .filter(ativo=True, principal=True)
+        .order_by("id")
         .first()
     )
+    if contato:
+        return contato
+
+    contatos_ativos = list(fornecedor.contatos.filter(ativo=True).order_by("id")[:2])
+    if len(contatos_ativos) == 1:
+        contato = contatos_ativos[0]
+        contato.principal = True
+        contato.save(update_fields=["principal", "atualizado_em"])
+        return contato
+
+    return None
 
 
-def _sugestao_destinatario_fornecedor(fornecedor):
+def _garantir_unico_contato_principal_fornecedor(fornecedor):
     if not fornecedor or not getattr(fornecedor, "pk", None):
-        return None, None
-    contato = fornecedor.contatos.filter(ativo=True, principal=True).order_by("id").first()
-    telefone = telefone_principal_contato(contato) if contato else None
-    if telefone and getattr(telefone, "pk", None) and getattr(telefone, "whatsapp", False) and getattr(telefone, "ativo", False):
-        return contato, telefone
-    telefones = telefones_whatsapp_contato(contato) if contato else []
-    telefone = next((item for item in telefones if getattr(item, "pk", None)), None)
-    return contato, telefone
+        return
+
+    principais = list(
+        fornecedor.contatos
+        .filter(ativo=True, principal=True)
+        .order_by("id")
+        .values_list("id", flat=True)
+    )
+    if not principais:
+        return
+
+    FornecedorContato.objects.filter(
+        fornecedor=fornecedor,
+        ativo=True,
+        principal=True,
+    ).exclude(pk=principais[0]).update(principal=False)
 
 
-def _payload_destinatario_form_fornecedor(fornecedor, post_data=None):
-    contatos_payload = []
-    selecionado_contato = ""
-    selecionado_telefone = ""
-    configuracao_atual = ""
-    destinatario_padrao = _destinatario_padrao_fornecedor(fornecedor)
+def _telefone_whatsapp_listas_contato_principal(fornecedor):
+    contato = _contato_principal_fornecedor(fornecedor)
+    if not contato:
+        return None
 
-    if post_data is not None:
-        selecionado_contato = (post_data.get("destinatario_lista_contato") or "").strip()
-        selecionado_telefone = (post_data.get("destinatario_lista_telefone") or "").strip()
-    elif destinatario_padrao:
-        selecionado_contato = _token_pk(destinatario_padrao.contato_id)
-        selecionado_telefone = _token_pk(destinatario_padrao.telefone_id)
-    else:
-        contato_sugerido, telefone_sugerido = _sugestao_destinatario_fornecedor(fornecedor)
-        selecionado_contato = _token_pk(getattr(contato_sugerido, "pk", None))
-        selecionado_telefone = _token_pk(getattr(telefone_sugerido, "pk", None))
+    telefones = telefones_whatsapp_contato(contato)
+    telefone = next((item for item in telefones if item.principal), None)
+    return telefone or (telefones[0] if telefones else None)
 
-    if destinatario_padrao:
-        configuracao_atual = (
-            f"{destinatario_padrao.contato.nome} - "
-            f"{_formatar_telefone_fornecedor_form(destinatario_padrao.telefone.numero)}"
-        )
 
-    if fornecedor and getattr(fornecedor, "pk", None):
-        telefones_validos = Prefetch(
-            "telefones",
-            queryset=FornecedorContatoTelefone.objects.filter(
-                ativo=True,
-                whatsapp=True,
-            ).order_by("-principal", "ordem", "id"),
-            to_attr="telefones_destinatario_validos",
-        )
-        contatos = (
-            fornecedor.contatos
-            .filter(ativo=True)
-            .prefetch_related(telefones_validos)
-            .order_by("-principal", "nome", "id")
-        )
-        for contato in contatos:
-            telefones = getattr(contato, "telefones_destinatario_validos", [])
-            contatos_payload.append({
-                "id": _token_pk(contato.pk),
-                "nome": contato.nome,
-                "principal": contato.principal,
-                "telefones": [
-                    {
-                        "id": _token_pk(telefone.pk),
-                        "numero": _formatar_telefone_fornecedor_form(telefone.numero),
-                        "principal": telefone.principal,
-                    }
-                    for telefone in telefones
-                ],
-            })
-
+def _whatsapp_listas_form_fornecedor(fornecedor):
+    telefone = _telefone_whatsapp_listas_contato_principal(fornecedor)
     return {
-        "contatos": contatos_payload,
-        "selecionadoContato": selecionado_contato,
-        "selecionadoTelefone": selecionado_telefone,
-        "configuracaoAtual": configuracao_atual,
-        "temConfiguracaoAtual": bool(destinatario_padrao),
+        "numero": getattr(telefone, "numero", "") if telefone else "",
+        "numero_formatado": _formatar_telefone_fornecedor_form(getattr(telefone, "numero", "")) if telefone else "",
     }
 
 
@@ -9673,103 +9605,11 @@ def _mensagens_validation_error(erro):
     return [str(erro)]
 
 
-def _resolver_contato_destinatario(token, fornecedor, contatos_formset):
-    token = (token or "").strip()
-    if token.startswith("pk:"):
-        contato_id = token[3:]
-        if not contato_id.isdigit():
-            raise ValidationError("O contato escolhido deixou de existir.")
-        contato = FornecedorContato.objects.filter(pk=contato_id).first()
-    elif token.startswith("form:"):
-        indice = token[5:]
-        if not indice.isdigit() or int(indice) >= len(contatos_formset.forms):
-            raise ValidationError("O contato escolhido deixou de existir.")
-        contato_form = contatos_formset.forms[int(indice)]
-        if contato_form.cleaned_data.get("DELETE"):
-            raise ValidationError("O contato escolhido deixou de existir.")
-        contato = contato_form.instance
-    else:
-        raise ValidationError("Escolha um contato valido para o destinatario das listas.")
-
-    if not contato or not getattr(contato, "pk", None):
-        raise ValidationError("O contato escolhido deixou de existir.")
-    if contato.fornecedor_id != fornecedor.pk:
-        raise ValidationError("O contato escolhido precisa pertencer a este fornecedor.")
-    if hasattr(contato, "ativo") and not contato.ativo:
-        raise ValidationError("O contato escolhido precisa estar ativo.")
-    return contato
-
-
-def _resolver_telefone_destinatario(token, contato, post_data):
-    token = (token or "").strip()
-    if token.startswith("pk:"):
-        telefone_id = token[3:]
-        if not telefone_id.isdigit():
-            raise ValidationError("O telefone escolhido deixou de existir.")
-        telefone = FornecedorContatoTelefone.objects.filter(pk=telefone_id).first()
-    elif token.startswith("form:"):
-        partes = token.split(":")
-        if len(partes) != 3 or not partes[1].isdigit() or not partes[2].isdigit():
-            raise ValidationError("Escolha um WhatsApp valido para o destinatario das listas.")
-        contato_indice, telefone_indice = partes[1], partes[2]
-        prefixo = f"contatos-{contato_indice}-telefones-{telefone_indice}"
-        telefone_id = (post_data.get(f"{prefixo}-id") or "").strip()
-        numero = FornecedorContatoTelefone.normalizar_numero(post_data.get(f"{prefixo}-numero"))
-        if telefone_id:
-            telefone = contato.telefones.filter(pk=telefone_id).first()
-        else:
-            telefone = contato.telefones.filter(numero=numero, ativo=True).order_by("-principal", "ordem", "id").first()
-    else:
-        raise ValidationError("Escolha um WhatsApp valido para o destinatario das listas.")
-
-    if not telefone or not getattr(telefone, "pk", None):
-        raise ValidationError("O telefone escolhido deixou de existir.")
-    return telefone
-
-
-def _salvar_destinatario_padrao_fornecedor(fornecedor, post_data, contatos_formset):
-    contato_token = (post_data.get("destinatario_lista_contato") or "").strip()
-    telefone_token = (post_data.get("destinatario_lista_telefone") or "").strip()
-
-    if not contato_token and not telefone_token:
-        return
-    if not contato_token or not telefone_token:
-        raise ValidationError("Escolha o contato e o WhatsApp do destinatario das listas.")
-
-    contato = _resolver_contato_destinatario(contato_token, fornecedor, contatos_formset)
-    telefone = _resolver_telefone_destinatario(telefone_token, contato, post_data)
-
-    destinatario = (
-        FornecedorDestinatarioLista.objects
-        .select_for_update()
-        .filter(
-            fornecedor=fornecedor,
-            tipo=FornecedorDestinatarioLista.TIPO_PADRAO,
-            ativo=True,
-        )
-        .order_by("-criado_em", "-id")
-        .first()
-    )
-    if destinatario is None:
-        destinatario = FornecedorDestinatarioLista(
-            fornecedor=fornecedor,
-            tipo=FornecedorDestinatarioLista.TIPO_PADRAO,
-            ativo=True,
-        )
-
-    destinatario.contato = contato
-    destinatario.telefone = telefone
-    try:
-        destinatario.save()
-    except IntegrityError as erro:
-        raise ValidationError(
-            "Nao foi possivel salvar o destinatario das listas porque ja existe um destinatario padrao ativo para este fornecedor."
-        ) from erro
-
-
 def fornecedor_novo(request):
     if request.method == "POST":
-        post_data = _limpar_contatos_vazios_fornecedor(request.POST.copy())
+        post_data = _normalizar_contato_principal_formset(
+            _limpar_contatos_vazios_fornecedor(request.POST.copy())
+        )
         form = FornecedorForm(post_data)
         fornecedor_base = Fornecedor()
         contatos_formset = FornecedorContatoFormSet(post_data, instance=fornecedor_base, prefix="contatos")
@@ -9785,7 +9625,7 @@ def fornecedor_novo(request):
                     contatos_formset.save()
                     salvar_telefones_contatos(post_data, contatos_formset)
                     form.salvar_produtos(fornecedor)
-                    _salvar_destinatario_padrao_fornecedor(fornecedor, post_data, contatos_formset)
+                    _garantir_unico_contato_principal_fornecedor(fornecedor)
             except ValidationError as erro:
                 for mensagem in _mensagens_validation_error(erro):
                     form.add_error(None, mensagem)
@@ -9808,7 +9648,7 @@ def fornecedor_novo(request):
             "contatos_formset": contatos_formset,
             "fornecedor": None,
             "titulo_formulario": "Novo fornecedor",
-            "destinatario_lista_payload": _payload_destinatario_form_fornecedor(None, request.POST if request.method == "POST" else None),
+            "whatsapp_listas_contato_principal": _whatsapp_listas_form_fornecedor(None),
         },
     )
 
@@ -9817,7 +9657,9 @@ def fornecedor_editar(request, pk):
     fornecedor = get_object_or_404(Fornecedor, pk=pk)
 
     if request.method == "POST":
-        post_data = _limpar_contatos_vazios_fornecedor(request.POST.copy())
+        post_data = _normalizar_contato_principal_formset(
+            _limpar_contatos_vazios_fornecedor(request.POST.copy())
+        )
         form = FornecedorForm(post_data, instance=fornecedor)
         contatos_formset = FornecedorContatoFormSet(post_data, instance=fornecedor, prefix="contatos")
         form_valido = form.is_valid()
@@ -9832,7 +9674,7 @@ def fornecedor_editar(request, pk):
                     contatos_formset.save()
                     salvar_telefones_contatos(post_data, contatos_formset)
                     form.salvar_produtos(fornecedor)
-                    _salvar_destinatario_padrao_fornecedor(fornecedor, post_data, contatos_formset)
+                    _garantir_unico_contato_principal_fornecedor(fornecedor)
             except ValidationError as erro:
                 for mensagem in _mensagens_validation_error(erro):
                     form.add_error(None, mensagem)
@@ -9855,10 +9697,7 @@ def fornecedor_editar(request, pk):
             "contatos_formset": contatos_formset,
             "fornecedor": fornecedor,
             "titulo_formulario": "Editar fornecedor",
-            "destinatario_lista_payload": _payload_destinatario_form_fornecedor(
-                fornecedor,
-                request.POST if request.method == "POST" else None,
-            ),
+            "whatsapp_listas_contato_principal": _whatsapp_listas_form_fornecedor(fornecedor),
         },
     )
 

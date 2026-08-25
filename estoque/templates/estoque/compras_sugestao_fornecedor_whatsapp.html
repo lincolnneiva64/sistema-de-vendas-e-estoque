@@ -1352,7 +1352,9 @@
 
       if (destinatarioAviso) {
         const mostrarAviso = payload.temContatoFornecedor === false;
-        destinatarioAviso.textContent = mostrarAviso ? "Nenhum vendedor principal cadastrado para este fornecedor." : "";
+        destinatarioAviso.textContent = mostrarAviso
+          ? (payload.avisoDestinatario || "O contato principal precisa de um telefone WhatsApp ativo para enviar a lista.")
+          : "";
         destinatarioAviso.classList.toggle("visivel", mostrarAviso);
       }
       atualizarStatusDestinatario();
@@ -1523,6 +1525,14 @@
       if (!mensagem) return;
       const numero = normalizarWhatsapp(whatsappDestinatario?.value || "");
       const nome = normalizarNomeDestinatario(whatsappDestinatarioNome?.value || "");
+      if (!numero && !destinatarioPadraoAtual) {
+        if (destinatarioAviso) {
+          destinatarioAviso.textContent = payloadAtual?.avisoDestinatario || "O contato principal precisa de um telefone WhatsApp ativo para enviar a lista.";
+          destinatarioAviso.classList.add("visivel");
+        }
+        whatsappDestinatario?.focus();
+        return;
+      }
       registrarDestinatarioRecente(numero, nome);
       const url = numero
         ? `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`
@@ -1542,7 +1552,7 @@
       const dados = dadosDestinatarioAtual();
       if (!dados.telefone || dados.telefone.length < 8) {
         if (confirmacaoEnvioStatus) {
-          confirmacaoEnvioStatus.textContent = "Informe um WhatsApp valido antes de confirmar.";
+          confirmacaoEnvioStatus.textContent = payloadAtual?.avisoDestinatario || "O contato principal precisa de um telefone WhatsApp ativo para enviar a lista.";
           confirmacaoEnvioStatus.classList.add("erro");
           confirmacaoEnvioStatus.classList.remove("sucesso");
         }
