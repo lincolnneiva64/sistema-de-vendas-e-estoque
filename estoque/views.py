@@ -3796,15 +3796,54 @@ def unidades_produto(request):
             destino = f"{reverse('estoque:unidades_produto')}?{urlencode(params)}"
             return redirect(destino)
 
+        if acao == "excluir" and unidade_id:
+            unidade = get_object_or_404(Unidade, pk=unidade_id)
+            produtos_vinculados = Produto.objects.filter(excluido=False).filter(
+                Q(unidade_compra__iexact=unidade.sigla) |
+                Q(unidade_venda_1__iexact=unidade.sigla) |
+                Q(unidade_venda_2__iexact=unidade.sigla)
+            ).count()
+            if produtos_vinculados:
+                messages.error(
+                    request,
+                    f"Esta unidade possui {produtos_vinculados} produto"
+                    f"{'s' if produtos_vinculados != 1 else ''} vinculado"
+                    f"{'s' if produtos_vinculados != 1 else ''}. "
+                    "Reclassifique esses produtos antes de excluir.",
+                )
+                return redirect(
+                    f"{reverse('estoque:unidades_produto')}?unidade={unidade.id}"
+                )
+
+            sigla_unidade = unidade.sigla
+            unidade.delete()
+            messages.success(request, f'Unidade "{sigla_unidade}" excluída com sucesso.')
+            return redirect(reverse("estoque:unidades_produto"))
+
+        sigla_anterior = None
         if unidade_id:
             unidade_selecionada = get_object_or_404(Unidade, pk=unidade_id)
+            sigla_anterior = unidade_selecionada.sigla
             form = UnidadeForm(request.POST, instance=unidade_selecionada)
         else:
             form = UnidadeForm(request.POST)
 
         if form.is_valid():
             unidade = form.save()
-            messages.success(request, f'Unidade "{unidade.sigla}" salva com sucesso.')
+            if sigla_anterior and sigla_anterior != unidade.sigla:
+                Produto.objects.filter(unidade_compra__iexact=sigla_anterior).update(
+                    unidade_compra=unidade.sigla
+                )
+                Produto.objects.filter(unidade_venda_1__iexact=sigla_anterior).update(
+                    unidade_venda_1=unidade.sigla
+                )
+                Produto.objects.filter(unidade_venda_2__iexact=sigla_anterior).update(
+                    unidade_venda_2=unidade.sigla
+                )
+            if unidade_id:
+                messages.success(request, f'Unidade "{unidade.sigla}" atualizada com sucesso.')
+            else:
+                messages.success(request, f'Unidade "{unidade.sigla}" cadastrada com sucesso.')
             return redirect(f"{reverse('estoque:unidades_produto')}?unidade={unidade.id}")
         messages.error(request, "Revise os campos destacados para salvar a unidade.")
     else:
@@ -3818,9 +3857,9 @@ def unidades_produto(request):
     unidades = list(unidades)
     for unidade in unidades:
         unidade.produtos_em_uso = Produto.objects.filter(excluido=False).filter(
-            Q(unidade_compra=unidade.sigla) |
-            Q(unidade_venda_1=unidade.sigla) |
-            Q(unidade_venda_2=unidade.sigla)
+            Q(unidade_compra__iexact=unidade.sigla) |
+            Q(unidade_venda_1__iexact=unidade.sigla) |
+            Q(unidade_venda_2__iexact=unidade.sigla)
         ).count()
 
     return render(

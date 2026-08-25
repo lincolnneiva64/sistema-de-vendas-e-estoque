@@ -235,6 +235,13 @@
     margin: 0;
   }
 
+  .unidade-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
   .status-action-btn {
     border: 1px solid #cbd5e1;
     border-radius: 8px;
@@ -249,6 +256,17 @@
 
   .status-action-btn:hover {
     transform: translateY(-1px);
+  }
+
+  .status-action-btn.editar {
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+    background: #eff6ff;
+    text-decoration: none;
+  }
+
+  .status-action-btn.editar:hover {
+    background: #dbeafe;
   }
 
   .status-action-btn.ativar {
@@ -269,6 +287,16 @@
 
   .status-action-btn.desativar:hover {
     background: #fee2e2;
+  }
+
+  .status-action-btn.excluir {
+    border-color: #fecaca;
+    color: #b91c1c;
+    background: #fff;
+  }
+
+  .status-action-btn.excluir:hover {
+    background: #fef2f2;
   }
 
   .uso-info {
@@ -483,15 +511,31 @@
                     {% endif %}
                   </td>
                   <td>
-                    <form method="post" class="status-action-form" onclick="event.stopPropagation();">
-                      {% csrf_token %}
-                      <input type="hidden" name="acao" value="alternar_status">
-                      <input type="hidden" name="unidade_id" value="{{ unidade.id }}">
-                      <input type="hidden" name="ativa" value="{% if unidade.ativa %}0{% else %}1{% endif %}">
-                      <button type="submit" class="status-action-btn {% if unidade.ativa %}desativar{% else %}ativar{% endif %}">
-                        {% if unidade.ativa %}Desativar{% else %}Ativar{% endif %}
-                      </button>
-                    </form>
+                    <div class="unidade-actions" onclick="event.stopPropagation();">
+                      <a
+                        href="{% url 'estoque:unidades_produto' %}?{% if termo %}q={{ termo|urlencode }}&{% endif %}unidade={{ unidade.id }}"
+                        class="status-action-btn editar"
+                      >Editar</a>
+                      <form method="post" class="status-action-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="acao" value="alternar_status">
+                        <input type="hidden" name="unidade_id" value="{{ unidade.id }}">
+                        <input type="hidden" name="ativa" value="{% if unidade.ativa %}0{% else %}1{% endif %}">
+                        <button type="submit" class="status-action-btn {% if unidade.ativa %}desativar{% else %}ativar{% endif %}">
+                          {% if unidade.ativa %}Desativar{% else %}Ativar{% endif %}
+                        </button>
+                      </form>
+                      <form
+                        method="post"
+                        class="status-action-form"
+                        onsubmit="return confirm('Excluir esta unidade?');"
+                      >
+                        {% csrf_token %}
+                        <input type="hidden" name="acao" value="excluir">
+                        <input type="hidden" name="unidade_id" value="{{ unidade.id }}">
+                        <button type="submit" class="status-action-btn excluir">Excluir</button>
+                      </form>
+                    </div>
                   </td>
                 </tr>
               {% endfor %}
@@ -579,7 +623,9 @@
 
           <div class="unidades-form-actions">
             <a href="{% url 'estoque:unidades_produto' %}" class="unidades-btn unidades-btn-secondary">Novo / Limpar</a>
-            <button type="submit" class="unidades-btn unidades-btn-primary">Salvar unidade</button>
+            <button type="submit" class="unidades-btn unidades-btn-primary">
+              {% if unidade_selecionada %}Salvar alterações{% else %}Salvar unidade{% endif %}
+            </button>
           </div>
         </form>
 
@@ -598,13 +644,6 @@
 
 <script>
   document.addEventListener("DOMContentLoaded", function () {
-    const sigla = document.getElementById("id_sigla");
-    if (sigla) {
-      sigla.addEventListener("input", function () {
-        sigla.value = sigla.value.toUpperCase();
-      });
-    }
-
     const busca = document.getElementById("buscaUnidades");
     const linhas = Array.from(document.querySelectorAll("[data-unidade-search]"));
     const contador = document.getElementById("contadorUnidades");

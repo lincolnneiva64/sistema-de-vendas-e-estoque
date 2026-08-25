@@ -378,7 +378,7 @@ class UnidadeForm(forms.ModelForm):
                 "autocomplete": "off",
             }),
             "sigla": forms.TextInput(attrs={
-                "class": "form-control text-uppercase",
+                "class": "form-control",
                 "placeholder": "Ex.: UN",
                 "autocomplete": "off",
                 "maxlength": "20",
@@ -408,7 +408,7 @@ class UnidadeForm(forms.ModelForm):
         return nome.title()
 
     def clean_sigla(self):
-        sigla = " ".join((self.cleaned_data.get("sigla") or "").strip().upper().split())
+        sigla = " ".join((self.cleaned_data.get("sigla") or "").strip().split())
         if not sigla:
             raise forms.ValidationError("Informe a sigla da unidade.")
 

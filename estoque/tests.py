@@ -6611,6 +6611,178 @@ class FornecedorProdutosFormTests(TestCase):
         )
 
 
+class UnidadesProdutoTests(TestCase):
+    def setUp(self):
+        self.url = reverse("estoque:unidades_produto")
+
+    def _produto(self, nome="Produto Unidade Teste", unidade="UN"):
+        return Produto.objects.create(
+            nome=nome,
+            preco_compra=Decimal("1.00"),
+            preco_vista=Decimal("2.00"),
+            preco_prazo=Decimal("3.00"),
+            quantidade=Decimal("1.000"),
+            unidade_compra=unidade,
+            unidade_venda_2=unidade,
+        )
+
+    def _dados_unidade(self, unidade, nome=None, sigla=None, descricao=None):
+        return {
+            "unidade_id": unidade.pk,
+            "nome": nome if nome is not None else unidade.nome,
+            "sigla": sigla if sigla is not None else unidade.sigla,
+            "descricao": descricao if descricao is not None else (unidade.descricao or ""),
+            "ativa": "on",
+        }
+
+    def test_tela_exibe_acoes_editar_excluir_e_modo_edicao(self):
+        unidade = Unidade.objects.create(
+            nome="Unidade Crud Tela",
+            sigla="UCT",
+            descricao="Original",
+            ativa=True,
+        )
+
+        resposta = self.client.get(self.url, {"unidade": unidade.pk}, secure=True)
+
+        self.assertContains(resposta, "Editar")
+        self.assertContains(resposta, "Excluir")
+        self.assertContains(resposta, "Editar unidade")
+        self.assertContains(resposta, "Salvar alterações")
+        self.assertContains(resposta, "Novo / Limpar")
+
+    def test_editar_nome_unidade_nao_cria_duplicada(self):
+        unidade = Unidade.objects.create(nome="Unidade Crud Nome", sigla="UCN", ativa=True)
+        total_antes = Unidade.objects.count()
+
+        resposta = self.client.post(
+            self.url,
+            self._dados_unidade(unidade, nome="Unidade Crud Nome Novo"),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(Unidade.objects.count(), total_antes)
+        unidade.refresh_from_db()
+        self.assertEqual(unidade.nome, "Unidade Crud Nome Novo")
+
+    def test_editar_sigla_propaga_para_produtos_vinculados(self):
+        unidade = Unidade.objects.create(nome="Mililitro Crud", sigla="MLC", ativa=True)
+        produto = self._produto(unidade="MLC")
+
+        resposta = self.client.post(
+            self.url,
+            self._dados_unidade(unidade, sigla="mLc"),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        unidade.refresh_from_db()
+        produto.refresh_from_db()
+        self.assertEqual(unidade.sigla, "mLc")
+        self.assertEqual(produto.unidade_compra, "mLc")
+        self.assertEqual(produto.unidade_venda_1, "mLc")
+        self.assertEqual(produto.unidade_venda_2, "mLc")
+
+    def test_editar_descricao_unidade(self):
+        unidade = Unidade.objects.create(
+            nome="Unidade Crud Descricao",
+            sigla="UCD",
+            descricao="Antiga",
+            ativa=True,
+        )
+
+        self.client.post(
+            self.url,
+            self._dados_unidade(unidade, descricao="Nova descricao"),
+            secure=True,
+        )
+
+        unidade.refresh_from_db()
+        self.assertEqual(unidade.descricao, "Nova descricao")
+
+    def test_impede_nome_duplicado_sem_diferenciar_maiusculas(self):
+        Unidade.objects.create(nome="Unidade Crud Existente", sigla="UCE", ativa=True)
+        unidade = Unidade.objects.create(nome="Unidade Crud Livre", sigla="UCL", ativa=True)
+        total_antes = Unidade.objects.count()
+
+        resposta = self.client.post(
+            self.url,
+            self._dados_unidade(unidade, nome="unidade crud existente"),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Já existe uma unidade com esse nome.")
+        unidade.refresh_from_db()
+        self.assertEqual(unidade.nome, "Unidade Crud Livre")
+        self.assertEqual(Unidade.objects.count(), total_antes)
+
+    def test_impede_sigla_duplicada_sem_diferenciar_maiusculas(self):
+        Unidade.objects.create(nome="Unidade Crud Sigla Existente", sigla="UCS", ativa=True)
+        unidade = Unidade.objects.create(nome="Unidade Crud Sigla Livre", sigla="USL", ativa=True)
+        total_antes = Unidade.objects.count()
+
+        resposta = self.client.post(
+            self.url,
+            self._dados_unidade(unidade, sigla="ucs"),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Já existe uma unidade com essa sigla.")
+        unidade.refresh_from_db()
+        self.assertEqual(unidade.sigla, "USL")
+        self.assertEqual(Unidade.objects.count(), total_antes)
+
+    def test_excluir_unidade_sem_produtos(self):
+        unidade = Unidade.objects.create(nome="Unidade Crud Sem Produtos", sigla="USP", ativa=True)
+
+        resposta = self.client.post(
+            self.url,
+            {"acao": "excluir", "unidade_id": unidade.pk},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertFalse(Unidade.objects.filter(pk=unidade.pk).exists())
+
+    def test_bloqueia_exclusao_unidade_com_produtos(self):
+        unidade = Unidade.objects.create(nome="Unidade Crud Com Produtos", sigla="UCP", ativa=True)
+        self._produto(unidade="ucp")
+
+        resposta = self.client.post(
+            self.url,
+            {"acao": "excluir", "unidade_id": unidade.pk},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(Unidade.objects.filter(pk=unidade.pk).exists())
+        mensagens = [str(message) for message in get_messages(resposta.wsgi_request)]
+        self.assertTrue(
+            any("Esta unidade possui 1 produto vinculado" in mensagem for mensagem in mensagens)
+        )
+
+    def test_desativar_continua_funcionando(self):
+        unidade = Unidade.objects.create(nome="Unidade Crud Ativa", sigla="UCA", ativa=True)
+
+        resposta = self.client.post(
+            self.url,
+            {
+                "acao": "alternar_status",
+                "unidade_id": unidade.pk,
+                "ativa": "0",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        unidade.refresh_from_db()
+        self.assertFalse(unidade.ativa)
+
+
 class CategoriasProdutoTests(TestCase):
     def setUp(self):
         self.url = reverse("estoque:categorias_produto")
