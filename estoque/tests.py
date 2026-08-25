@@ -6611,6 +6611,146 @@ class FornecedorProdutosFormTests(TestCase):
         )
 
 
+class CategoriasProdutoTests(TestCase):
+    def setUp(self):
+        self.url = reverse("estoque:categorias_produto")
+
+    def _produto(self, nome="Produto Teste", categoria="Bebidas"):
+        return Produto.objects.create(
+            nome=nome,
+            categoria=categoria,
+            preco_compra=Decimal("1.00"),
+            preco_vista=Decimal("2.00"),
+            preco_prazo=Decimal("3.00"),
+            quantidade=Decimal("1.000"),
+        )
+
+    def _dados_categoria(self, categoria, nome=None, descricao=None):
+        return {
+            "categoria_id": categoria.pk,
+            "nome": nome if nome is not None else categoria.nome,
+            "descricao": descricao if descricao is not None else (categoria.descricao or ""),
+            "ativa": "on",
+        }
+
+    def test_tela_exibe_acoes_editar_excluir_e_modo_edicao(self):
+        categoria = Categoria.objects.create(
+            nome="categoria crud tela",
+            descricao="Original",
+            ativa=True,
+        )
+
+        resposta = self.client.get(self.url, {"categoria": categoria.pk}, secure=True)
+
+        self.assertContains(resposta, "Editar")
+        self.assertContains(resposta, "Excluir")
+        self.assertContains(resposta, "Editar categoria")
+        self.assertContains(resposta, "Salvar alterações")
+        self.assertContains(resposta, "Novo / Limpar")
+
+    def test_editar_nome_categoria_nao_cria_duplicada_e_preserva_produtos(self):
+        categoria = Categoria.objects.create(
+            nome="categoria crud cigarro",
+            descricao="Original",
+            ativa=True,
+        )
+        produto = self._produto(categoria="categoria crud cigarro")
+        total_antes = Categoria.objects.count()
+
+        resposta = self.client.post(
+            self.url,
+            self._dados_categoria(categoria, nome="Categoria Crud Cigarro"),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(Categoria.objects.count(), total_antes)
+        categoria.refresh_from_db()
+        produto.refresh_from_db()
+        self.assertEqual(categoria.nome, "Categoria Crud Cigarro")
+        self.assertEqual(produto.categoria, "Categoria Crud Cigarro")
+
+    def test_editar_descricao_categoria(self):
+        categoria = Categoria.objects.create(
+            nome="Categoria Crud Descricao",
+            descricao="Antiga",
+            ativa=True,
+        )
+
+        self.client.post(
+            self.url,
+            self._dados_categoria(categoria, descricao="Nova descricao"),
+            secure=True,
+        )
+
+        categoria.refresh_from_db()
+        self.assertEqual(categoria.descricao, "Nova descricao")
+
+    def test_impede_nome_duplicado_sem_diferenciar_maiusculas(self):
+        Categoria.objects.create(nome="Categoria Crud Existente", ativa=True)
+        categoria = Categoria.objects.create(nome="Categoria Crud Livre", ativa=True)
+        total_antes = Categoria.objects.count()
+
+        resposta = self.client.post(
+            self.url,
+            self._dados_categoria(categoria, nome="categoria crud existente"),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Já existe uma categoria com esse nome.")
+        categoria.refresh_from_db()
+        self.assertEqual(categoria.nome, "Categoria Crud Livre")
+        self.assertEqual(Categoria.objects.count(), total_antes)
+
+    def test_excluir_categoria_sem_produtos(self):
+        categoria = Categoria.objects.create(nome="Categoria Crud Sem Produtos", ativa=True)
+
+        resposta = self.client.post(
+            self.url,
+            {"acao": "excluir", "categoria_id": categoria.pk},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertFalse(Categoria.objects.filter(pk=categoria.pk).exists())
+
+    def test_bloqueia_exclusao_categoria_com_produtos(self):
+        categoria = Categoria.objects.create(nome="Categoria Crud Com Produtos", ativa=True)
+        self._produto(categoria="Categoria Crud Com Produtos")
+
+        resposta = self.client.post(
+            self.url,
+            {"acao": "excluir", "categoria_id": categoria.pk},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(Categoria.objects.filter(pk=categoria.pk).exists())
+        mensagens = [str(message) for message in get_messages(resposta.wsgi_request)]
+        self.assertTrue(
+            any("Esta categoria possui 1 produto vinculado" in mensagem for mensagem in mensagens)
+        )
+
+    def test_desativar_continua_funcionando(self):
+        categoria = Categoria.objects.create(nome="Categoria Crud Ativa", ativa=True)
+
+        resposta = self.client.post(
+            self.url,
+            {
+                "acao": "alternar_status",
+                "categoria_id": categoria.pk,
+                "ativa": "0",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        categoria.refresh_from_db()
+        self.assertFalse(categoria.ativa)
+
+
 class ProdutosIncompletosTests(TestCase):
     def setUp(self):
         Categoria.objects.get_or_create(nome="Bebidas", defaults={"ativa": True})

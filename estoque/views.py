@@ -3863,6 +3863,29 @@ def categorias_produto(request):
             destino = f"{reverse('estoque:categorias_produto')}?{urlencode(params)}"
             return redirect(destino)
 
+        if acao == "excluir" and categoria_id:
+            categoria = get_object_or_404(Categoria, pk=categoria_id)
+            produtos_vinculados = Produto.objects.filter(
+                excluido=False,
+                categoria__iexact=categoria.nome,
+            ).count()
+            if produtos_vinculados:
+                messages.error(
+                    request,
+                    f"Esta categoria possui {produtos_vinculados} produto"
+                    f"{'s' if produtos_vinculados != 1 else ''} vinculado"
+                    f"{'s' if produtos_vinculados != 1 else ''}. "
+                    "Reclassifique ou remova esses produtos antes de excluir.",
+                )
+                return redirect(
+                    f"{reverse('estoque:categorias_produto')}?categoria={categoria.id}"
+                )
+
+            nome_categoria = categoria.nome
+            categoria.delete()
+            messages.success(request, f'Categoria "{nome_categoria}" excluída com sucesso.')
+            return redirect(reverse("estoque:categorias_produto"))
+
         nome_anterior = None
         if categoria_id:
             categoria_selecionada = get_object_or_404(Categoria, pk=categoria_id)
@@ -3873,11 +3896,14 @@ def categorias_produto(request):
 
         if form.is_valid():
             categoria = form.save()
-            if nome_anterior and nome_anterior.casefold() != categoria.nome.casefold():
+            if nome_anterior and nome_anterior != categoria.nome:
                 Produto.objects.filter(categoria__iexact=nome_anterior).update(
                     categoria=categoria.nome
                 )
-            messages.success(request, f'Categoria "{categoria.nome}" salva com sucesso.')
+            if categoria_id:
+                messages.success(request, f'Categoria "{categoria.nome}" atualizada com sucesso.')
+            else:
+                messages.success(request, f'Categoria "{categoria.nome}" cadastrada com sucesso.')
             return redirect(f"{reverse('estoque:categorias_produto')}?categoria={categoria.id}")
         messages.error(request, "Revise os campos destacados para salvar a categoria.")
     else:

@@ -223,6 +223,13 @@
     margin: 0;
   }
 
+  .categoria-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
   .status-action-btn {
     border: 1px solid #cbd5e1;
     border-radius: 8px;
@@ -237,6 +244,17 @@
 
   .status-action-btn:hover {
     transform: translateY(-1px);
+  }
+
+  .status-action-btn.editar {
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+    background: #eff6ff;
+    text-decoration: none;
+  }
+
+  .status-action-btn.editar:hover {
+    background: #dbeafe;
   }
 
   .status-action-btn.ativar {
@@ -257,6 +275,16 @@
 
   .status-action-btn.desativar:hover {
     background: #fee2e2;
+  }
+
+  .status-action-btn.excluir {
+    border-color: #fecaca;
+    color: #b91c1c;
+    background: #fff;
+  }
+
+  .status-action-btn.excluir:hover {
+    background: #fef2f2;
   }
 
   .uso-info {
@@ -469,15 +497,31 @@
                     {% endif %}
                   </td>
                   <td>
-                    <form method="post" class="status-action-form" onclick="event.stopPropagation();">
-                      {% csrf_token %}
-                      <input type="hidden" name="acao" value="alternar_status">
-                      <input type="hidden" name="categoria_id" value="{{ categoria.id }}">
-                      <input type="hidden" name="ativa" value="{% if categoria.ativa %}0{% else %}1{% endif %}">
-                      <button type="submit" class="status-action-btn {% if categoria.ativa %}desativar{% else %}ativar{% endif %}">
-                        {% if categoria.ativa %}Desativar{% else %}Ativar{% endif %}
-                      </button>
-                    </form>
+                    <div class="categoria-actions" onclick="event.stopPropagation();">
+                      <a
+                        href="{% url 'estoque:categorias_produto' %}?{% if termo %}q={{ termo|urlencode }}&{% endif %}categoria={{ categoria.id }}"
+                        class="status-action-btn editar"
+                      >Editar</a>
+                      <form method="post" class="status-action-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="acao" value="alternar_status">
+                        <input type="hidden" name="categoria_id" value="{{ categoria.id }}">
+                        <input type="hidden" name="ativa" value="{% if categoria.ativa %}0{% else %}1{% endif %}">
+                        <button type="submit" class="status-action-btn {% if categoria.ativa %}desativar{% else %}ativar{% endif %}">
+                          {% if categoria.ativa %}Desativar{% else %}Ativar{% endif %}
+                        </button>
+                      </form>
+                      <form
+                        method="post"
+                        class="status-action-form"
+                        onsubmit="return confirm('Excluir esta categoria?');"
+                      >
+                        {% csrf_token %}
+                        <input type="hidden" name="acao" value="excluir">
+                        <input type="hidden" name="categoria_id" value="{{ categoria.id }}">
+                        <button type="submit" class="status-action-btn excluir">Excluir</button>
+                      </form>
+                    </div>
                   </td>
                 </tr>
               {% endfor %}
@@ -557,7 +601,9 @@
 
           <div class="categorias-form-actions">
             <a href="{% url 'estoque:categorias_produto' %}" class="categorias-btn categorias-btn-secondary">Novo / Limpar</a>
-            <button type="submit" class="categorias-btn categorias-btn-primary">Salvar categoria</button>
+            <button type="submit" class="categorias-btn categorias-btn-primary">
+              {% if categoria_selecionada %}Salvar alterações{% else %}Salvar categoria{% endif %}
+            </button>
           </div>
         </form>
 
