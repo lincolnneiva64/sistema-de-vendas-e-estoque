@@ -15617,11 +15617,43 @@ def gravar_venda(request):
             )
 
         valor_total = (quantidade * preco_unitario).quantize(Decimal("0.01"))
+        item_id = str(item.get("item_id") or "").strip()
+
         produto = None
-        if produto_id.isdigit():
-            produto = Produto.objects.filter(pk=int(produto_id), excluido=False, ativo=True).first()
+
+        # Na edicao, um item antigo pode continuar usando um produto que
+        # foi desativado depois da venda. Se o produto estiver sendo trocado
+        # ou se for um item novo, continua obrigatorio usar produto ativo.
+        item_existente_edicao = None
+        if venda_em_edicao and item_id.isdigit():
+            item_existente_edicao = (
+                ItemVenda.objects
+                .select_related("produto")
+                .filter(pk=int(item_id), venda=venda_em_edicao)
+                .first()
+            )
+
+        if (
+            item_existente_edicao
+            and produto_id.isdigit()
+            and item_existente_edicao.produto_id == int(produto_id)
+        ):
+            produto = item_existente_edicao.produto
+
+        if not produto and produto_id.isdigit():
+            produto = Produto.objects.filter(
+                pk=int(produto_id),
+                excluido=False,
+                ativo=True,
+            ).first()
+
         if not produto:
-            produto = Produto.objects.filter(nome__iexact=produto_nome, excluido=False, ativo=True).first()
+            produto = Produto.objects.filter(
+                nome__iexact=produto_nome,
+                excluido=False,
+                ativo=True,
+            ).first()
+
         if not produto:
             return JsonResponse(
                 {"sucesso": False, "mensagem": f'Produto "{produto_nome}" nao foi encontrado no estoque.'},
@@ -15638,7 +15670,6 @@ def gravar_venda(request):
             f"estoque_cadastro={produto.quantidade}",
         )
         total_calculado += valor_total
-        item_id = str(item.get("item_id") or "").strip()
 
         itens_validados.append({
             "item_id": int(item_id) if item_id.isdigit() else None,
@@ -15663,6 +15694,364 @@ def gravar_venda(request):
             )
         except ValueError as exc:
             return JsonResponse({"sucesso": False, "mensagem": str(exc)}, status=400)
+
+    # ============================================================
+    # EDICAO UNIFICADA DE VENDA EXISTENTE
+    # ============================================================
+    if venda_em_edicao:
+        contexto_quitada = _contexto_venda_quitada(venda_em_edicao)
+        if contexto_quitada.get("quitada"):
+            return JsonResponse(
+                {
+                    "sucesso": False,
+                    "mensagem": (
+                        "Esta venda ja possui pagamento/baixa financeira e nao pode ser "
+                        "alterada por esta edicao simplificada."
+                    ),
+                },
+                status=409,
+            )
+
+        pagamento_antigo_imediato = _venda_pagamento_imediato(venda_em_edicao.tipo_pagamento)
+        pagamento_novo_imediato = _venda_pagamento_imediato(tipo_pagamento_venda)
+
+        if pagamento_antigo_imediato != pagamento_novo_imediato:
+            return JsonResponse(
+                {
+                    "sucesso": False,
+                    "mensagem": (
+                        "Por seguranca, ainda nao e permitido transformar uma venda "
+                        "de A prazo em A vista ou de A vista em A prazo nesta tela."
+                    ),
+                },
+                status=409,
+            )
+
+        try:
+            with transaction.atomic():
+                venda = (
+                    Venda.objects
+                    .select_for_update()
+                    .get(pk=venda_em_edicao.pk, cancelada=False)
+                )
+
+                itens_atuais = list(
+                    ItemVenda.objects
+                    .select_for_update()
+                    .filter(venda=venda)
+                    .order_by("id")
+                )
+                itens_atuais_por_id = {item.id: item for item in itens_atuais}
+                ids_recebidos = set()
+
+                # Impede item_id de outra venda e IDs duplicados no payload.
+                for item_novo in itens_validados:
+                    item_id = item_novo.get("item_id")
+                    if not item_id:
+                        continue
+
+                    if item_id in ids_recebidos:
+                        raise ValueError(
+                            f"Item #{item_id} foi enviado mais de uma vez na edicao."
+                        )
+
+                    if item_id not in itens_atuais_por_id:
+                        raise ValueError(
+                            f"Item #{item_id} nao pertence a esta venda."
+                        )
+
+                    ids_recebidos.add(item_id)
+
+                total_anterior = (venda.total or Decimal("0.00")).quantize(Decimal("0.01"))
+                cliente_anterior_id = venda.cliente_id
+                data_anterior = venda.data_venda
+                vencimento_anterior = venda.data_vencimento
+                pagamento_anterior = venda.tipo_pagamento or ""
+                operador_anterior = venda.operador or ""
+
+                # ------------------------------------------------------------
+                # Itens existentes: atualizar quantidade/preco/produto/unidade.
+                # ------------------------------------------------------------
+                for item_novo in itens_validados:
+                    item_id = item_novo.get("item_id")
+                    if not item_id:
+                        continue
+
+                    item_antigo = itens_atuais_por_id[item_id]
+                    produto_antigo = item_antigo.produto
+                    produto_novo = item_novo["produto"]
+
+                    quantidade_antiga = Decimal(item_antigo.quantidade or "0").quantize(Decimal("0.001"))
+                    quantidade_nova = Decimal(item_novo["quantidade"] or "0").quantize(Decimal("0.001"))
+
+                    unidade_antiga = item_antigo.unidade or ""
+                    unidade_nova = item_novo["unidade"] or ""
+
+                    preco_antigo = Decimal(item_antigo.preco_unitario or "0").quantize(Decimal("0.01"))
+                    preco_novo = Decimal(item_novo["preco_unitario"] or "0").quantize(Decimal("0.01"))
+
+                    produto_nome_antigo = (
+                        produto_antigo.nome if produto_antigo else "Produto nao identificado"
+                    )
+                    produto_nome_novo = produto_novo.nome
+
+                    produto_ou_unidade_mudou = (
+                        item_antigo.produto_id != produto_novo.id
+                        or _normalizar_unidade_estoque(unidade_antiga)
+                           != _normalizar_unidade_estoque(unidade_nova)
+                    )
+
+                    if produto_ou_unidade_mudou:
+                        if item_antigo.produto_id:
+                            _devolver_estoque_produto(
+                                item_antigo.produto_id,
+                                quantidade_antiga,
+                                produto_nome_antigo,
+                                unidade_antiga,
+                            )
+
+                        _baixar_estoque_produto(
+                            produto_novo.id,
+                            quantidade_nova,
+                            produto_nome_novo,
+                            unidade_nova,
+                        )
+
+                        _registrar_evento_venda(
+                            venda,
+                            "item_removido_da_nota",
+                            (
+                                f"Item removido da nota: {produto_nome_antigo}, "
+                                f"quantidade {quantidade_antiga} {unidade_antiga}."
+                            ),
+                            canal="sistema",
+                            usuario=str(dados.get("operador") or "").strip() or venda.operador,
+                        )
+                        _registrar_evento_venda(
+                            venda,
+                            "item_adicionado_na_nota",
+                            (
+                                f"Item adicionado na nota: {produto_nome_novo}, "
+                                f"quantidade {quantidade_nova} {unidade_nova}, "
+                                f"preco unitario R$ {preco_novo}."
+                            ),
+                            canal="sistema",
+                            usuario=str(dados.get("operador") or "").strip() or venda.operador,
+                        )
+
+                    elif quantidade_nova != quantidade_antiga:
+                        diferenca = (quantidade_nova - quantidade_antiga).quantize(Decimal("0.001"))
+
+                        if diferenca > 0:
+                            _baixar_estoque_produto(
+                                produto_novo.id,
+                                diferenca,
+                                produto_nome_novo,
+                                unidade_nova,
+                            )
+                        else:
+                            _devolver_estoque_produto(
+                                produto_novo.id,
+                                abs(diferenca),
+                                produto_nome_novo,
+                                unidade_nova,
+                            )
+
+                        _registrar_evento_venda(
+                            venda,
+                            "quantidade_item_alterada",
+                            (
+                                f"Quantidade alterada na nota: {produto_nome_novo}. "
+                                f"De {quantidade_antiga} {unidade_antiga} "
+                                f"para {quantidade_nova} {unidade_nova}. "
+                                f"Total sera recalculado ao final da edicao."
+                            ),
+                            canal="sistema",
+                            usuario=str(dados.get("operador") or "").strip() or venda.operador,
+                        )
+
+                    if preco_novo != preco_antigo:
+                        _registrar_evento_venda(
+                            venda,
+                            "cabecalho_nota_alterado",
+                            (
+                                f"Preco alterado na nota para {produto_nome_novo}: "
+                                f"R$ {preco_antigo} -> R$ {preco_novo}."
+                            ),
+                            canal="sistema",
+                            usuario=str(dados.get("operador") or "").strip() or venda.operador,
+                        )
+
+                    item_antigo.produto = produto_novo
+                    item_antigo.quantidade = quantidade_nova
+                    item_antigo.unidade = unidade_nova
+                    item_antigo.preco_unitario = preco_novo
+                    item_antigo.valor_total = (
+                        quantidade_nova * preco_novo
+                    ).quantize(Decimal("0.01"))
+                    item_antigo.save(update_fields=[
+                        "produto",
+                        "quantidade",
+                        "unidade",
+                        "preco_unitario",
+                        "valor_total",
+                    ])
+
+                # ------------------------------------------------------------
+                # Itens removidos da tela: devolver estoque e excluir.
+                # ------------------------------------------------------------
+                for item_antigo in itens_atuais:
+                    if item_antigo.id in ids_recebidos:
+                        continue
+
+                    produto_nome = (
+                        item_antigo.produto.nome
+                        if item_antigo.produto
+                        else "Produto nao identificado"
+                    )
+
+                    item_removido = ItemVendaRemovido.objects.create(
+                        venda=venda,
+                        produto=item_antigo.produto,
+                        produto_nome_snapshot=produto_nome,
+                        quantidade_snapshot=item_antigo.quantidade,
+                        unidade_snapshot=item_antigo.unidade or "",
+                        preco_unitario_snapshot=item_antigo.preco_unitario,
+                        valor_total_snapshot=item_antigo.valor_total,
+                        item_venda_original_id=item_antigo.id,
+                        operador=str(dados.get("operador") or "").strip() or venda.operador,
+                        observacao="Item removido pela edicao unificada da venda.",
+                    )
+
+                    _devolver_estoque_item_removido(item_removido)
+
+                    _registrar_evento_venda(
+                        venda,
+                        "item_removido_da_nota",
+                        (
+                            f"Item removido da nota: {produto_nome}, "
+                            f"quantidade {item_antigo.quantidade} {item_antigo.unidade or ''}, "
+                            f"valor abatido R$ {item_antigo.valor_total}."
+                        ),
+                        canal="sistema",
+                        usuario=str(dados.get("operador") or "").strip() or venda.operador,
+                    )
+
+                    item_antigo.delete()
+
+                # ------------------------------------------------------------
+                # Itens novos: baixar estoque e criar.
+                # ------------------------------------------------------------
+                produtos_ja_presentes = set(
+                    ItemVenda.objects
+                    .filter(venda=venda)
+                    .values_list("produto_id", flat=True)
+                )
+
+                for item_novo in itens_validados:
+                    if item_novo.get("item_id"):
+                        continue
+
+                    produto_novo = item_novo["produto"]
+
+                    if produto_novo.id in produtos_ja_presentes:
+                        raise ValueError(
+                            f'O produto "{produto_novo.nome}" ja existe nesta venda.'
+                        )
+
+                    _baixar_estoque_produto(
+                        produto_novo.id,
+                        item_novo["quantidade"],
+                        produto_novo.nome,
+                        item_novo["unidade"],
+                    )
+
+                    item_criado = ItemVenda.objects.create(
+                        venda=venda,
+                        produto=produto_novo,
+                        quantidade=item_novo["quantidade"],
+                        unidade=item_novo["unidade"],
+                        preco_unitario=item_novo["preco_unitario"],
+                        valor_total=item_novo["valor_total"],
+                    )
+                    produtos_ja_presentes.add(produto_novo.id)
+
+                    _registrar_evento_venda(
+                        venda,
+                        "item_adicionado_na_nota",
+                        (
+                            f"Item adicionado na nota: {produto_novo.nome}, "
+                            f"quantidade {item_novo['quantidade']} {item_novo['unidade'] or ''}, "
+                            f"preco unitario R$ {item_novo['preco_unitario']}, "
+                            f"valor acrescentado R$ {item_novo['valor_total']}."
+                        ),
+                        canal="sistema",
+                        usuario=str(dados.get("operador") or "").strip() or venda.operador,
+                    )
+
+                if not ItemVenda.objects.filter(venda=venda).exists():
+                    raise ValueError("A venda precisa permanecer com pelo menos um item.")
+
+                # ------------------------------------------------------------
+                # Cabecalho e total.
+                # ------------------------------------------------------------
+                venda.cliente = cliente
+                venda.data_venda = data_venda
+                venda.data_vencimento = data_vencimento
+                venda.tipo_pagamento = tipo_pagamento_venda
+                venda.operador = str(dados.get("operador") or "").strip()
+                venda.total = _recalcular_total_venda_pelos_itens(venda)
+
+                venda.save(update_fields=[
+                    "cliente",
+                    "data_venda",
+                    "data_vencimento",
+                    "tipo_pagamento",
+                    "operador",
+                    "total",
+                    "atualizado_em",
+                ])
+
+                cabecalho_mudou = (
+                    cliente_anterior_id != venda.cliente_id
+                    or data_anterior != venda.data_venda
+                    or vencimento_anterior != venda.data_vencimento
+                    or pagamento_anterior != (venda.tipo_pagamento or "")
+                    or operador_anterior != (venda.operador or "")
+                )
+
+                if cabecalho_mudou:
+                    _registrar_evento_venda(
+                        venda,
+                        "cabecalho_nota_alterado",
+                        (
+                            "Cabecalho da nota alterado pela edicao unificada. "
+                            f"Total anterior R$ {total_anterior}; novo total R$ {venda.total}."
+                        ),
+                        canal="sistema",
+                        usuario=venda.operador,
+                    )
+
+                _sincronizar_conta_receber(
+                    venda,
+                    "edicao unificada da venda",
+                )
+
+        except ValueError as exc:
+            return JsonResponse(
+                {"sucesso": False, "mensagem": str(exc)},
+                status=400,
+            )
+
+        return JsonResponse({
+            "sucesso": True,
+            "mensagem": f"Venda #{venda.id} atualizada com sucesso.",
+            "venda_id": venda.id,
+            "visualizar_url": (
+                reverse("estoque:venda_detalhe", args=[venda.id])
+                + "?nota_atualizada=1"
+            ),
+        })
 
     pedido_pendencias_estoque = []
     try:

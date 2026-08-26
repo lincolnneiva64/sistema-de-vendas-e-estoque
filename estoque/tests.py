@@ -23885,3 +23885,349 @@ class CartoesAReceberFinanceiroTests(TestCase):
         self.assertEqual(MovimentoFinanceiro.objects.filter(origem="liquidacao_cartao").count(), 0)
         self.assertEqual(views._saldo_conta_financeira(self.conta_cartoes), Decimal("100.00"))
         self.assertEqual(views._saldo_conta_financeira(self.conta_banco), Decimal("0.00"))
+
+
+
+class VendaEdicaoUnificadaTests(TestCase):
+    def criar_produto(self, nome, estoque):
+        return Produto.objects.create(
+            nome=nome,
+            quantidade=Decimal(str(estoque)),
+            preco_venda=Decimal("10.00"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_venda_1="UN",
+            ativo=True,
+            excluido=False,
+        )
+
+    def criar_venda_base(self, quantidade="2.000", preco="10.00", estoque="10.000"):
+        cliente = Cliente.objects.create(
+            nome="Cliente Edicao Unificada",
+            ativo=True,
+        )
+        produto = self.criar_produto(
+            "Produto Edicao Unificada",
+            estoque,
+        )
+        quantidade_decimal = Decimal(quantidade)
+        preco_decimal = Decimal(preco)
+        total = (quantidade_decimal * preco_decimal).quantize(Decimal("0.01"))
+
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            data_vencimento=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            operador="Teste",
+            total=total,
+        )
+
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=quantidade_decimal,
+            unidade="UN",
+            preco_unitario=preco_decimal,
+            valor_total=total,
+        )
+
+        ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=venda.data_venda,
+            data_vencimento=venda.data_vencimento,
+            valor_original=total,
+            valor_em_aberto=total,
+            status=ContaReceber.STATUS_ABERTA,
+        )
+
+        return cliente, produto, venda, item
+
+    def payload_edicao(self, venda, item, quantidade, preco):
+        return {
+            "venda_id": venda.id,
+            "cliente_id": venda.cliente_id,
+            "data_venda": venda.data_venda.isoformat(),
+            "data_vencimento": (
+                venda.data_vencimento.isoformat()
+                if venda.data_vencimento
+                else ""
+            ),
+            "tipo_pagamento": venda.tipo_pagamento,
+            "operador": venda.operador,
+            "itens": [
+                {
+                    "item_id": item.id,
+                    "produto_id": item.produto_id,
+                    "produto_nome": item.produto.nome,
+                    "quantidade": str(quantidade),
+                    "unidade": item.unidade,
+                    "preco_unitario": str(preco),
+                    "valor_total": "0",
+                }
+            ],
+        }
+
+    def test_edicao_unificada_aumenta_quantidade_baixando_apenas_diferenca(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="10.00",
+            estoque="10.000",
+        )
+
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="3.000",
+            preco="10.00",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        produto.refresh_from_db()
+        venda.refresh_from_db()
+        item.refresh_from_db()
+        conta = ContaReceber.objects.get(venda=venda)
+
+        self.assertEqual(produto.quantidade, Decimal("9.000"))
+        self.assertEqual(item.quantidade, Decimal("3.000"))
+        self.assertEqual(venda.total, Decimal("30.00"))
+        self.assertEqual(conta.valor_original, Decimal("30.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("30.00"))
+        self.assertTrue(
+            EventoVenda.objects.filter(
+                venda=venda,
+                tipo_evento="quantidade_item_alterada",
+            ).exists()
+        )
+
+    def test_edicao_unificada_reduz_quantidade_devolvendo_apenas_diferenca(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="3.000",
+            preco="10.00",
+            estoque="7.000",
+        )
+
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="2.000",
+            preco="10.00",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        produto.refresh_from_db()
+        venda.refresh_from_db()
+        item.refresh_from_db()
+        conta = ContaReceber.objects.get(venda=venda)
+
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
+        self.assertEqual(item.quantidade, Decimal("2.000"))
+        self.assertEqual(venda.total, Decimal("20.00"))
+        self.assertEqual(conta.valor_original, Decimal("20.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("20.00"))
+
+
+    def test_edicao_unificada_inclui_item_baixa_estoque_e_atualiza_conta(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="10.00",
+            estoque="8.000",
+        )
+
+        produto_novo = self.criar_produto(
+            "Produto Novo Edicao Unificada",
+            "5.000",
+        )
+
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="2.000",
+            preco="10.00",
+        )
+        payload["itens"].append({
+            "item_id": "",
+            "produto_id": produto_novo.id,
+            "produto_nome": produto_novo.nome,
+            "quantidade": "2.000",
+            "unidade": "UN",
+            "preco_unitario": "10.00",
+            "valor_total": "20.00",
+        })
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        produto_novo.refresh_from_db()
+        conta = ContaReceber.objects.get(venda=venda)
+
+        self.assertEqual(venda.itens.count(), 2)
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
+        self.assertEqual(produto_novo.quantidade, Decimal("3.000"))
+        self.assertEqual(venda.total, Decimal("40.00"))
+        self.assertEqual(conta.valor_original, Decimal("40.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("40.00"))
+
+    def test_edicao_unificada_remove_item_devolve_estoque_e_atualiza_conta(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="10.00",
+            estoque="8.000",
+        )
+
+        produto_removido = self.criar_produto(
+            "Produto Removido Edicao Unificada",
+            "7.000",
+        )
+        item_removido = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_removido,
+            quantidade=Decimal("3.000"),
+            unidade="UN",
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("30.00"),
+        )
+
+        venda.total = Decimal("50.00")
+        venda.save(update_fields=["total"])
+
+        conta = ContaReceber.objects.get(venda=venda)
+        conta.valor_original = Decimal("50.00")
+        conta.valor_em_aberto = Decimal("50.00")
+        conta.save(update_fields=["valor_original", "valor_em_aberto"])
+
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="2.000",
+            preco="10.00",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        produto_removido.refresh_from_db()
+        conta.refresh_from_db()
+
+        self.assertFalse(ItemVenda.objects.filter(pk=item_removido.id).exists())
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
+        self.assertEqual(produto_removido.quantidade, Decimal("10.000"))
+        self.assertEqual(venda.total, Decimal("20.00"))
+        self.assertEqual(conta.valor_original, Decimal("20.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("20.00"))
+        self.assertTrue(
+            ItemVendaRemovido.objects.filter(
+                venda=venda,
+                produto=produto_removido,
+            ).exists()
+        )
+
+    def test_edicao_unificada_preserva_valor_ja_recebido_na_conta_parcial(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="10.000",
+            preco="10.00",
+            estoque="20.000",
+        )
+
+        conta = ContaReceber.objects.get(venda=venda)
+        conta.valor_original = Decimal("100.00")
+        conta.valor_em_aberto = Decimal("60.00")
+        conta.status = ContaReceber.STATUS_PARCIAL
+        conta.save(update_fields=[
+            "valor_original",
+            "valor_em_aberto",
+            "status",
+        ])
+
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="8.000",
+            preco="10.00",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+
+        self.assertEqual(venda.total, Decimal("80.00"))
+        self.assertEqual(conta.valor_original, Decimal("80.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("40.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_PARCIAL)
+
+    def test_edicao_unificada_altera_preco_sem_mexer_no_estoque(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="10.00",
+            estoque="8.000",
+        )
+
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="2.000",
+            preco="12.50",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        produto.refresh_from_db()
+        venda.refresh_from_db()
+        item.refresh_from_db()
+        conta = ContaReceber.objects.get(venda=venda)
+
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
+        self.assertEqual(item.preco_unitario, Decimal("12.50"))
+        self.assertEqual(item.valor_total, Decimal("25.00"))
+        self.assertEqual(venda.total, Decimal("25.00"))
+        self.assertEqual(conta.valor_original, Decimal("25.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("25.00"))
