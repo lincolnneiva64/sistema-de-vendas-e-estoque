@@ -4171,6 +4171,11 @@ function limparVendaAposGravacao() {
 
 function criarLinhaItemVenda(item) {
     const linha = document.createElement("tr");
+
+    if (item.item_id) {
+        linha.dataset.itemId = String(item.item_id);
+    }
+
     if (item.produto_id) {
         linha.dataset.produtoId = String(item.produto_id);
     }
@@ -4398,6 +4403,7 @@ function validarEstoqueItemVendaAtual(mostrarAvisoErro = false) {
 
 function coletarItensVenda() {
     return Array.from(tabelaBody.querySelectorAll("tr")).map((tr) => ({
+        item_id: tr.dataset.itemId || "",
         produto_id: tr.dataset.produtoId || "",
         produto_nome: tr.children[0].textContent.trim(),
         quantidade: normalizarNumeroVenda(tr.children[1].textContent),
@@ -4409,6 +4415,7 @@ function coletarItensVenda() {
 
 function coletarDadosVenda() {
     return {
+        venda_id: vendaEdicaoVenda?.id || null,
         pedido_id: pedidoImportadoVenda?.id || null,
         cliente_id: clienteId.value || null,
         data_venda: dataVenda.value,

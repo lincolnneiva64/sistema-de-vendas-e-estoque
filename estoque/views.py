@@ -10789,6 +10789,7 @@ def vendas(request):
                 "operador": venda_para_editar.operador or "",
                 "itens": [
                     {
+                        "item_id": item.id,
                         "produto_id": item.produto_id,
                         "produto_nome": item.produto.nome if item.produto else "",
                         "quantidade": str(item.quantidade),
@@ -15535,6 +15536,28 @@ def gravar_venda(request):
         )
 
     itens = dados.get("itens") or []
+
+    venda_edicao_id = str(dados.get("venda_id") or "").strip()
+    venda_em_edicao = None
+
+    if venda_edicao_id:
+        if not venda_edicao_id.isdigit():
+            return JsonResponse(
+                {"sucesso": False, "mensagem": "Venda informada para edicao e invalida."},
+                status=400,
+            )
+
+        venda_em_edicao = Venda.objects.filter(
+            pk=int(venda_edicao_id),
+            cancelada=False,
+        ).first()
+
+        if not venda_em_edicao:
+            return JsonResponse(
+                {"sucesso": False, "mensagem": "Venda informada para edicao nao foi encontrada."},
+                status=404,
+            )
+
     if not itens:
         return JsonResponse(
             {"sucesso": False, "mensagem": "Inclua pelo menos 1 item antes de gravar a venda."},
@@ -15615,7 +15638,10 @@ def gravar_venda(request):
             f"estoque_cadastro={produto.quantidade}",
         )
         total_calculado += valor_total
+        item_id = str(item.get("item_id") or "").strip()
+
         itens_validados.append({
+            "item_id": int(item_id) if item_id.isdigit() else None,
             "produto": produto,
             "quantidade": quantidade,
             "unidade": unidade,
