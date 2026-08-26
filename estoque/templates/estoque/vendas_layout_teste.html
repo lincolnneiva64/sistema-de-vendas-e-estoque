@@ -2855,6 +2855,10 @@ function limparProdutoVendaNormalZerado() {
 }
 
 function bloquearProdutoEstoqueZeradoVendaNormal(event) {
+    // Ao editar um item j? existente, o estoque atual pode estar zerado
+    // justamente porque a quantidade dessa venda j? foi baixada.
+    if (linhaSelecionada) return false;
+
     if (!produtoVendaNormalEstoqueZerado()) return false;
 
     if (event) {
@@ -4266,12 +4270,12 @@ function prepararVendaEmEdicao() {
     atualizarTotalGeral();
 
     if (btnGravarVenda) {
-        btnGravarVenda.disabled = true;
-        btnGravarVenda.textContent = "Edicao em teste";
-        btnGravarVenda.title = "Nesta etapa a venda foi apenas carregada para conferencia. O salvamento ainda nao esta habilitado.";
+        btnGravarVenda.disabled = false;
+        btnGravarVenda.textContent = "Salvar Alteracoes";
+        btnGravarVenda.title = "Salvar as alteracoes realizadas nesta venda.";
     }
 
-    mostrarToastVenda("Venda #" + vendaEdicaoVenda.id + " carregada para edicao. Salvamento ainda bloqueado.");
+    mostrarToastVenda("Venda #" + vendaEdicaoVenda.id + " carregada para edicao.");
 
     window.requestAnimationFrame(() => {
         const primeiraLinha = tabelaBody.querySelector("tr");
@@ -4788,7 +4792,7 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
         mostrarToastVenda("Falha de comunicacao ao gravar a venda.");
     } finally {
         btnGravarVenda.disabled = false;
-        btnGravarVenda.textContent = "Gravar Venda";
+        btnGravarVenda.textContent = vendaEdicaoVenda ? "Salvar Alteracoes" : "Gravar Venda";
     }
 }
 
