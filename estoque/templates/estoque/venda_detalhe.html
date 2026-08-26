@@ -1837,7 +1837,7 @@
                                 Status: {{ item_removido.get_status_display }}.
                                 {% if item_removido.contexto_desfazer.permitido %}
                                     <br>
-                                    <a href="{% url 'estoque:venda_desfazer_remocao_item' venda.id item_removido.id %}">Desfazer remoÃ§Ã£o</a>
+                                    <a href="{% url 'estoque:venda_desfazer_remocao_item' venda.id item_removido.id %}">Desfazer remo&ccedil;&atilde;o</a>
                                 {% elif item_removido.contexto_desfazer.motivo %}
                                     <br>
                                     {{ item_removido.contexto_desfazer.motivo }}
@@ -2524,7 +2524,3 @@
     </script>
 </body>
 </html>
-
-
-
-

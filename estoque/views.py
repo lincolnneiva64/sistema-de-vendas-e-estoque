@@ -16926,29 +16926,84 @@ def _status_whatsapp_consulta_venda(venda, eventos=None):
     return selos
 
 
+def _nome_produto_evento_remocao(evento):
+    descricao = (evento.descricao or "").strip()
+
+    if evento.tipo_evento == "item_removido_da_nota":
+        prefixo = "Item removido da nota: "
+        if descricao.startswith(prefixo):
+            return descricao[len(prefixo):].split(", quantidade ", 1)[0].strip()
+
+    if evento.tipo_evento == "remocao_item_desfeita":
+        prefixo = "Remocao de item desfeita: "
+        if descricao.startswith(prefixo):
+            return descricao[len(prefixo):].split(", quantidade ", 1)[0].strip()
+
+    return ""
+
+
+def _filtrar_eventos_edicao_nota_ativos(eventos):
+    pendentes = []
+
+    for evento in eventos:
+        if evento.canal == "whatsapp" and evento.tipo_evento == "whatsapp_confirmado":
+            pendentes = []
+            continue
+
+        if evento.tipo_evento == "remocao_item_desfeita":
+            produto_desfeito = _nome_produto_evento_remocao(evento).casefold()
+
+            if produto_desfeito:
+                for indice in range(len(pendentes) - 1, -1, -1):
+                    evento_pendente = pendentes[indice]
+
+                    if evento_pendente.tipo_evento != "item_removido_da_nota":
+                        continue
+
+                    produto_removido = _nome_produto_evento_remocao(
+                        evento_pendente
+                    ).casefold()
+
+                    if produto_removido == produto_desfeito:
+                        pendentes.pop(indice)
+                        break
+
+            continue
+
+        if evento.tipo_evento in TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP:
+            pendentes.append(evento)
+
+    return pendentes
+
+
 def _eventos_edicao_nota_para_whatsapp(venda):
     eventos = list(
         EventoVenda.objects.filter(
             venda=venda,
         )
-        .filter(Q(tipo_evento__in=TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP) | Q(canal="whatsapp", tipo_evento="whatsapp_confirmado"))
+        .filter(
+            Q(tipo_evento__in=TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP)
+            | Q(tipo_evento="remocao_item_desfeita")
+            | Q(canal="whatsapp", tipo_evento="whatsapp_confirmado")
+        )
         .order_by("criado_em", "id")
     )
-    if not any(evento.canal == "whatsapp" and evento.tipo_evento == "whatsapp_confirmado" for evento in eventos):
+
+    if not any(
+        evento.canal == "whatsapp"
+        and evento.tipo_evento == "whatsapp_confirmado"
+        for evento in eventos
+    ):
         return EventoVenda.objects.none()
 
-    pendentes_ids = []
-    for evento in eventos:
-        if evento.canal == "whatsapp" and evento.tipo_evento == "whatsapp_confirmado":
-            pendentes_ids = []
-            continue
-        if evento.tipo_evento in TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP:
-            pendentes_ids.append(evento.id)
+    pendentes = _filtrar_eventos_edicao_nota_ativos(eventos)
 
-    if not pendentes_ids:
+    if not pendentes:
         return EventoVenda.objects.none()
 
-    return EventoVenda.objects.filter(pk__in=pendentes_ids).order_by("criado_em", "id")
+    return EventoVenda.objects.filter(
+        pk__in=[evento.id for evento in pendentes]
+    ).order_by("criado_em", "id")
 
 
 def _produto_evento_por_nome(itens_nota, nome_produto):
@@ -16986,12 +17041,17 @@ def _linha_resumo_visual_alteracao_item(evento):
 def _resumo_alteracoes_pendentes_whatsapp(venda, itens_nota, incluir_edicoes_registradas=False):
     eventos = list(_eventos_edicao_nota_para_whatsapp(venda))
     if incluir_edicoes_registradas and not eventos:
-        eventos = list(
+        eventos_registrados = list(
             EventoVenda.objects.filter(
                 venda=venda,
-                tipo_evento__in=TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP,
-            ).order_by("criado_em", "id")
+            )
+            .filter(
+                Q(tipo_evento__in=TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP)
+                | Q(tipo_evento="remocao_item_desfeita")
+            )
+            .order_by("criado_em", "id")
         )
+        eventos = _filtrar_eventos_edicao_nota_ativos(eventos_registrados)
     resumo = {
         "itens_adicionados_ids": set(),
         "itens_quantidade_ids": set(),
