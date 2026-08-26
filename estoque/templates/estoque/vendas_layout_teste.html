@@ -2673,6 +2673,7 @@ td:first-child {
 
 {{ cliente_inicial|json_script:"clienteInicialVenda" }}
 {{ pedido_importado|json_script:"pedidoImportadoVenda" }}
+{{ venda_edicao|json_script:"vendaEdicaoVenda" }}
 <script>
     function mostrarMsgEdicao() {
     const msg = document.getElementById("msgEdicao");
@@ -2891,6 +2892,7 @@ document.addEventListener("click", function(event) {
 // ===== FIM BLOQUEIO PRODUTO ESTOQUE ZERADO NA VENDA NORMAL =====
 const clienteInicialVenda = JSON.parse(document.getElementById("clienteInicialVenda").textContent || "null");
 let pedidoImportadoVenda = JSON.parse(document.getElementById("pedidoImportadoVenda").textContent || "null");
+const vendaEdicaoVenda = JSON.parse(document.getElementById("vendaEdicaoVenda").textContent || "null");
 const clienteResumoStorageKey = "vendas.clienteSelecionado";
 let clientesSugestoes = [];
 let clienteIndexAtivo = -1;
@@ -4222,6 +4224,59 @@ function prepararVendaComPedidoImportado() {
 }
 
 prepararVendaComPedidoImportado();
+
+function prepararVendaEmEdicao() {
+    if (!vendaEdicaoVenda || !vendaEdicaoVenda.id) return;
+
+    pedidoImportadoVenda = null;
+
+    tabelaBody.innerHTML = "";
+    linhaSelecionada = null;
+    ultimoItemRemovido = null;
+
+    (vendaEdicaoVenda.itens || []).forEach((item) => {
+        if (!item || !item.produto_nome) return;
+        tabelaBody.appendChild(criarLinhaItemVenda(item));
+    });
+
+    dataVenda.value = vendaEdicaoVenda.data_venda || "";
+    vencimentoVenda.value = vendaEdicaoVenda.data_vencimento || "";
+    tipoVenda.value = vendaEdicaoVenda.tipo_pagamento || "";
+    operadorVenda.value = vendaEdicaoVenda.operador || "";
+
+    // A rotina global de inatividade do operador roda depois deste bloco
+    // e pode limpar o campo. Em modo edi??o, restauramos o operador
+    // originalmente registrado na venda ap?s a inicializa??o completa.
+    window.setTimeout(() => {
+        if (vendaEdicaoVenda?.operador && operadorVenda) {
+            operadorVenda.value = vendaEdicaoVenda.operador;
+            operadorVenda.dispatchEvent(new Event("change", { bubbles: true }));
+
+            if (window.atualizarSelectsBonitosVenda) {
+                window.atualizarSelectsBonitosVenda();
+            }
+        }
+    }, 0);
+
+    atualizarTotalGeral();
+
+    if (btnGravarVenda) {
+        btnGravarVenda.disabled = true;
+        btnGravarVenda.textContent = "Edicao em teste";
+        btnGravarVenda.title = "Nesta etapa a venda foi apenas carregada para conferencia. O salvamento ainda nao esta habilitado.";
+    }
+
+    mostrarToastVenda("Venda #" + vendaEdicaoVenda.id + " carregada para edicao. Salvamento ainda bloqueado.");
+
+    window.requestAnimationFrame(() => {
+        const primeiraLinha = tabelaBody.querySelector("tr");
+        if (primeiraLinha) {
+            scrollLinhaDentroDaLista(primeiraLinha, "auto");
+        }
+    });
+}
+
+prepararVendaEmEdicao();
 
 function quantidadeInformadaValida() {
     const valor = parseFloat(String(quantidade.value || "").replace(",", "."));
@@ -6174,12 +6229,14 @@ atualizarTotalGeral();
         });
     }
 
-    function avisarOperadorObrigatorio() {
-    mostrarModalOperadorObrigatorio("Operador obrigatório. Selecione o operador para continuar.");
-}, 1800);
+    function avisarOperadorObrigatorio(operador) {
+        if (operador) {
+            operador.focus();
         }
 
-        mostrarModalOperadorObrigatorio("Operador obrigatório. Selecione o operador para continuar.");
+        mostrarModalOperadorObrigatorio(
+            "Operador obrigat?rio. Selecione o operador para continuar."
+        );
     }
 
     function operadorEstaVazio() {

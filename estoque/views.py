@@ -10768,6 +10768,39 @@ def vendas(request):
     cliente_id = request.GET.get("cliente_id")
     pedido_importado = None
     pedido_importado_aviso = ""
+    venda_edicao = None
+
+    venda_edicao_id = request.GET.get("editar")
+    if venda_edicao_id:
+        venda_para_editar = (
+            Venda.objects
+            .filter(pk=venda_edicao_id)
+            .select_related("cliente")
+            .prefetch_related("itens__produto")
+            .first()
+        )
+        if venda_para_editar:
+            venda_edicao = {
+                "id": venda_para_editar.id,
+                "cliente_id": venda_para_editar.cliente_id,
+                "data_venda": venda_para_editar.data_venda.isoformat() if venda_para_editar.data_venda else "",
+                "data_vencimento": venda_para_editar.data_vencimento.isoformat() if venda_para_editar.data_vencimento else "",
+                "tipo_pagamento": venda_para_editar.tipo_pagamento or "",
+                "operador": venda_para_editar.operador or "",
+                "itens": [
+                    {
+                        "produto_id": item.produto_id,
+                        "produto_nome": item.produto.nome if item.produto else "",
+                        "quantidade": str(item.quantidade),
+                        "unidade": item.unidade or "",
+                        "preco_unitario": str(item.preco_unitario),
+                        "valor_total": str(item.valor_total),
+                    }
+                    for item in venda_para_editar.itens.all()
+                ],
+            }
+            if venda_para_editar.cliente:
+                cliente_inicial = _resumo_cliente_venda(venda_para_editar.cliente)
     if cliente_id:
         cliente = Cliente.objects.filter(pk=cliente_id, ativo=True).first()
         if cliente:
@@ -10864,6 +10897,7 @@ def vendas(request):
         'cliente_inicial': cliente_inicial,
         'pedido_importado': pedido_importado,
         'pedido_importado_aviso': pedido_importado_aviso,
+        'venda_edicao': venda_edicao,
         'tem_pix_em_atencao': _tem_pix_em_atencao(),
         'cobrancas_acionaveis_hoje_qtd': len(cobrancas_acionaveis_vendas),
         'cobrancas_acionaveis_vendas': cobrancas_acionaveis_vendas,
