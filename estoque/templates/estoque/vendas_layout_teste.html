@@ -3054,6 +3054,8 @@ function atualizarPrazoEVencimentoCliente() {
     clienteResumoPrazo.textContent = prazo ? prazo + " dias" : "Sem prazo definido";
     vencimentoVenda.value = calcularVencimentoCliente();
 
+    if (vendaEdicaoVenda?.id) return;
+
     if (prazo > 0) {
         tipoVenda.value = "A prazo";
     } else if (!tipoVenda.value) {

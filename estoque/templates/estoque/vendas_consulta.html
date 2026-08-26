@@ -134,8 +134,22 @@
     color: #334155; padding: 5px 9px; font-size: 0.76rem;
     font-weight: 800; text-decoration: none; display: inline-flex;
     align-items: center; justify-content: center; min-width: 66px;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+  }
+  .vendas-consulta-action-link:active,
+  .vendas-consulta-action-btn:active,
+  .vendas-consulta-action-link.is-clicking,
+  .vendas-consulta-action-btn.is-clicking {
+    transform: translateY(1px);
+    box-shadow: inset 0 1px 4px rgba(15, 23, 42, 0.18);
+  }
+  .vendas-consulta-action-link.is-clicking,
+  .vendas-consulta-action-btn.is-clicking {
+    opacity: 0.72;
+    pointer-events: none;
   }
   .vendas-consulta-action-link.primary { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+  .vendas-consulta-action-link.edit,
   .vendas-consulta-action-btn.edit { border-color: #fde68a; background: #fffbeb; color: #92400e; }
   .vendas-consulta-action-link.print { border-color: #cbd5e1; background: #f8fafc; color: #334155; }
   .vendas-consulta-action-link.whatsapp,
@@ -767,16 +781,18 @@
                   <td class="venda-total">R$ {{ venda.total|floatformat:2 }}</td>
                   <td>
                     <div class="vendas-consulta-actions">
-                      <a class="vendas-consulta-action-link primary" href="{% url 'estoque:venda_detalhe' venda.id %}">Abrir nota</a>
                       {% if not venda.cancelada %}
-                      <button type="button" class="vendas-consulta-action-btn edit js-editar-venda">Editar</button>
-                      {% if venda.cliente_id %}
-                      <a class="vendas-consulta-action-link whatsapp" href="{% url 'estoque:receber_cliente' venda.cliente_id %}?next={{ request.get_full_path|urlencode }}">Receber contas do cliente</a>
+                      <a class="vendas-consulta-action-link edit" href="{% url 'estoque:vendas' %}?editar={{ venda.id }}" data-click-feedback="Editando...">Editar</a>
                       {% endif %}
-                      <a class="vendas-consulta-action-link whatsapp" href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}">PDF para WhatsApp</a>
+                      <a class="vendas-consulta-action-link primary" href="{% url 'estoque:venda_detalhe' venda.id %}" data-click-feedback="Abrindo...">Abrir nota</a>
+                      {% if not venda.cancelada %}
+                      {% if venda.cliente_id %}
+                      <a class="vendas-consulta-action-link whatsapp" href="{% url 'estoque:receber_cliente' venda.cliente_id %}?next={{ request.get_full_path|urlencode }}" data-click-feedback="Abrindo...">Receber contas do cliente</a>
+                      {% endif %}
+                      <a class="vendas-consulta-action-link whatsapp" href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}" data-click-feedback="Abrindo...">PDF para WhatsApp</a>
                       <button type="button" class="vendas-consulta-action-btn whatsapp-pendente js-whatsapp-pendente {% if venda.whatsapp_status == 'aberto' %}visivel{% endif %}" data-venda-id="{{ venda.id }}" data-whatsapp-status="{{ venda.whatsapp_status }}" data-confirmar-url="{% url 'estoque:confirmar_whatsapp' venda.id %}">Confirmar WhatsApp</button>
                       {% endif %}
-                      <a class="vendas-consulta-action-link print" href="{% url 'estoque:venda_detalhe' venda.id %}" target="_blank" rel="noopener">Imprimir</a>
+                      <a class="vendas-consulta-action-link print" href="{% url 'estoque:venda_detalhe' venda.id %}" target="_blank" rel="noopener" data-click-feedback="Abrindo...">Imprimir</a>
                     </div>
                   </td>
                 </tr>
@@ -860,10 +876,33 @@
       campo?.addEventListener("change", agendarConsultaAutomatica);
     });
 
-    document.querySelectorAll(".js-editar-venda").forEach(function (botao) {
-      botao.addEventListener("click", function () {
-        mostrarMensagem("Edicao de venda sera implementada na proxima etapa.");
+    document.querySelectorAll(".vendas-consulta-action-link[data-click-feedback]").forEach(function (acao) {
+      function restaurarAcao() {
+        acao.dataset.clicking = "0";
+        acao.textContent = acao.dataset.originalText || acao.textContent;
+        acao.classList.remove("is-clicking");
+        acao.removeAttribute("aria-disabled");
+      }
+
+      acao.addEventListener("click", function (event) {
+        if (event.defaultPrevented || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+          return;
+        }
+        if (acao.dataset.clicking === "1") {
+          event.preventDefault();
+          return;
+        }
+        acao.dataset.clicking = "1";
+        acao.dataset.originalText = acao.textContent;
+        acao.textContent = acao.dataset.clickFeedback;
+        acao.classList.add("is-clicking");
+        acao.setAttribute("aria-disabled", "true");
+        if (acao.target === "_blank") {
+          setTimeout(restaurarAcao, 2500);
+        }
       });
+
+      window.addEventListener("pageshow", restaurarAcao);
     });
 
     document.querySelectorAll(".js-whatsapp-pendente").forEach(function (botao) {

@@ -2199,6 +2199,16 @@ def _venda_pagamento_imediato(tipo_pagamento):
     } or forma_compacta in {"avista"}
 
 
+def _tipo_pagamento_venda_formulario(tipo_pagamento):
+    if _venda_pagamento_imediato(tipo_pagamento):
+        return "À vista"
+    forma = normalizar_texto_cliente(tipo_pagamento)
+    forma_compacta = re.sub(r"\s+", "", forma)
+    if forma in {"a prazo", "carteira", "fiado"} or forma_compacta == "aprazo":
+        return "A prazo"
+    return tipo_pagamento or ""
+
+
 def _conta_financeira_venda_a_vista(tipo_pagamento):
     forma = normalizar_texto_cliente(tipo_pagamento)
     forma_compacta = re.sub(r"\s+", "", forma)
@@ -2323,6 +2333,59 @@ def _registrar_movimentos_venda_a_vista(venda, valores_origem=None):
 def _registrar_movimento_venda_a_vista(venda):
     movimentos = _registrar_movimentos_venda_a_vista(venda)
     return movimentos[0] if movimentos else None
+
+
+def _regularizar_conta_receber_conversao_venda_a_vista(venda):
+    conta = (
+        ContaReceber.objects
+        .select_for_update()
+        .filter(venda=venda)
+        .first()
+    )
+    if not conta:
+        return None
+
+    if conta.recebimentos.exists() or conta.status in {
+        ContaReceber.STATUS_PARCIAL,
+        ContaReceber.STATUS_PAGA,
+    }:
+        raise ValueError(
+            "Esta venda ja possui pagamento/baixa financeira e nao pode ser convertida para a vista por esta tela."
+        )
+
+    if conta.status == ContaReceber.STATUS_CANCELADA:
+        return conta
+
+    valor = (venda.total or Decimal("0.00")).quantize(Decimal("0.01"))
+    conta.cliente = venda.cliente
+    conta.data_emissao = venda.data_venda
+    conta.data_vencimento = venda.data_vencimento
+    conta.valor_original = valor
+    conta.valor_em_aberto = valor
+    conta.status = ContaReceber.STATUS_ABERTA
+    conta.observacao = (
+        "Preparada para baixa automatica pela conversao da venda de A prazo para A vista."
+    )
+    conta.save(update_fields=[
+        "cliente",
+        "data_emissao",
+        "data_vencimento",
+        "valor_original",
+        "valor_em_aberto",
+        "status",
+        "observacao",
+        "atualizado_em",
+    ])
+
+    _aplicar_recebimento_conta(
+        conta,
+        venda.data_venda or timezone.localdate(),
+        valor,
+        "A vista",
+        "Baixa automatica pela conversao da venda de A prazo para A vista.",
+        "troco",
+    )
+    return conta
 
 
 def _registrar_movimento_conta_pagar_fornecedor(conta, valor_pago, data_pagamento, forma_pagamento):
@@ -10785,7 +10848,7 @@ def vendas(request):
                 "cliente_id": venda_para_editar.cliente_id,
                 "data_venda": venda_para_editar.data_venda.isoformat() if venda_para_editar.data_venda else "",
                 "data_vencimento": venda_para_editar.data_vencimento.isoformat() if venda_para_editar.data_vencimento else "",
-                "tipo_pagamento": venda_para_editar.tipo_pagamento or "",
+                "tipo_pagamento": _tipo_pagamento_venda_formulario(venda_para_editar.tipo_pagamento),
                 "operador": venda_para_editar.operador or "",
                 "itens": [
                     {
@@ -15712,21 +15775,6 @@ def gravar_venda(request):
                 status=409,
             )
 
-        pagamento_antigo_imediato = _venda_pagamento_imediato(venda_em_edicao.tipo_pagamento)
-        pagamento_novo_imediato = _venda_pagamento_imediato(tipo_pagamento_venda)
-
-        if pagamento_antigo_imediato != pagamento_novo_imediato:
-            return JsonResponse(
-                {
-                    "sucesso": False,
-                    "mensagem": (
-                        "Por seguranca, ainda nao e permitido transformar uma venda "
-                        "de A prazo em A vista ou de A vista em A prazo nesta tela."
-                    ),
-                },
-                status=409,
-            )
-
         try:
             with transaction.atomic():
                 venda = (
@@ -15734,6 +15782,28 @@ def gravar_venda(request):
                     .select_for_update()
                     .get(pk=venda_em_edicao.pk, cancelada=False)
                 )
+                contexto_quitada_atual = _contexto_venda_quitada(venda)
+                if contexto_quitada_atual.get("quitada"):
+                    raise ValueError(
+                        "Esta venda ja possui pagamento/baixa financeira e nao pode ser alterada por esta edicao simplificada."
+                    )
+
+                pagamento_antigo_imediato = _venda_pagamento_imediato(venda.tipo_pagamento)
+                pagamento_novo_imediato = _venda_pagamento_imediato(tipo_pagamento_venda)
+                conversao_prazo_para_vista = (
+                    not pagamento_antigo_imediato
+                    and pagamento_novo_imediato
+                )
+
+                if pagamento_antigo_imediato and not pagamento_novo_imediato:
+                    raise ValueError(
+                        "Por seguranca, ainda nao e permitido transformar uma venda de A vista em A prazo nesta tela."
+                    )
+
+                if conversao_prazo_para_vista and valores_origem_venda is None:
+                    raise ValueError(
+                        "Informe a origem do recebimento para converter a venda para A vista."
+                    )
 
                 itens_atuais = list(
                     ItemVenda.objects
@@ -16032,10 +16102,15 @@ def gravar_venda(request):
                         usuario=venda.operador,
                     )
 
-                _sincronizar_conta_receber(
-                    venda,
-                    "edicao unificada da venda",
-                )
+                if conversao_prazo_para_vista:
+                    _regularizar_conta_receber_conversao_venda_a_vista(venda)
+                    _validar_origem_venda_a_vista(valores_origem_venda, venda.total)
+                    _registrar_movimentos_venda_a_vista(venda, valores_origem_venda)
+                else:
+                    _sincronizar_conta_receber(
+                        venda,
+                        "edicao unificada da venda",
+                    )
 
         except ValueError as exc:
             return JsonResponse(

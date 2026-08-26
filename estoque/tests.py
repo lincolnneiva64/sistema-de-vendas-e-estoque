@@ -24231,3 +24231,102 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertEqual(venda.total, Decimal("25.00"))
         self.assertEqual(conta.valor_original, Decimal("25.00"))
         self.assertEqual(conta.valor_em_aberto, Decimal("25.00"))
+
+    def test_edicao_unificada_converte_a_prazo_para_a_vista_quitando_conta_vinculada(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="19.90",
+            estoque="8.000",
+        )
+        outra_venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            data_vencimento=timezone.localdate() + timedelta(days=5),
+            tipo_pagamento="A prazo",
+            operador="Teste",
+            total=Decimal("12.34"),
+        )
+        outra_conta = ContaReceber.objects.create(
+            venda=outra_venda,
+            cliente=cliente,
+            data_emissao=outra_venda.data_venda,
+            data_vencimento=outra_venda.data_vencimento,
+            valor_original=Decimal("12.34"),
+            valor_em_aberto=Decimal("12.34"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="2.000",
+            preco="19.90",
+        )
+        payload["tipo_pagamento"] = "A vista"
+        payload["origem_recebimento"] = {
+            "caixa": "39,80",
+            "banco": "0,00",
+        }
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+        resposta_duplicada = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta_duplicada.status_code, 409)
+
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        conta = ContaReceber.objects.get(venda=venda)
+        outra_conta.refresh_from_db()
+        movimento = MovimentoFinanceiro.objects.get(origem="venda")
+
+        self.assertEqual(venda.tipo_pagamento, "A vista")
+        self.assertEqual(venda.total, Decimal("39.80"))
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_PAGA)
+        self.assertEqual(conta.valor_original, Decimal("39.80"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(conta.recebimentos.count(), 1)
+        self.assertEqual(conta.recebimentos.get().valor, Decimal("39.80"))
+        self.assertEqual(outra_conta.status, ContaReceber.STATUS_ABERTA)
+        self.assertEqual(outra_conta.valor_em_aberto, Decimal("12.34"))
+        self.assertEqual(movimento.tipo, MovimentoFinanceiro.TIPO_ENTRADA)
+        self.assertEqual(movimento.valor, Decimal("39.80"))
+        self.assertEqual(movimento.conta.tipo, ContaFinanceira.TIPO_CAIXA)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda").count(), 1)
+        self.assertEqual(RecebimentoContaReceber.objects.filter(conta=conta).count(), 1)
+
+    def test_edicao_unificada_carrega_tipo_pagamento_a_vista_no_select(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="19.90",
+            estoque="8.000",
+        )
+        cliente.prazo_padrao_dias = 10
+        cliente.save(update_fields=["prazo_padrao_dias"])
+        venda.tipo_pagamento = "A vista"
+        venda.save(update_fields=["tipo_pagamento", "atualizado_em"])
+        ContaReceber.objects.filter(venda=venda).update(
+            status=ContaReceber.STATUS_PAGA,
+            valor_em_aberto=Decimal("0.00"),
+        )
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(venda.tipo_pagamento, "A vista")
+        self.assertEqual(resposta.context["venda_edicao"]["tipo_pagamento"], "À vista")
+        self.assertContains(resposta, "<option>À vista</option>", html=True)
+        self.assertContains(resposta, "if (vendaEdicaoVenda?.id) return;")
