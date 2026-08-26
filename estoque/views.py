@@ -16970,6 +16970,64 @@ def _filtrar_eventos_edicao_nota_ativos(eventos):
 
             continue
 
+        if evento.tipo_evento == "item_removido_da_nota":
+            produto_removido = _nome_produto_evento_remocao(evento).casefold()
+
+            if produto_removido:
+                for indice in range(len(pendentes) - 1, -1, -1):
+                    evento_pendente = pendentes[indice]
+
+                    if evento_pendente.tipo_evento not in (
+                        "produto_adicionado_na_nota",
+                        "item_adicionado_na_nota",
+                    ):
+                        continue
+
+                    descricao_adicao = (evento_pendente.descricao or "").strip()
+                    prefixo_adicao = "Item adicionado na nota: "
+                    produto_adicionado = ""
+
+                    if descricao_adicao.startswith(prefixo_adicao):
+                        produto_adicionado = (
+                            descricao_adicao[len(prefixo_adicao):]
+                            .split(", quantidade ", 1)[0]
+                            .strip()
+                            .casefold()
+                        )
+
+                    if produto_adicionado == produto_removido:
+                        pendentes.pop(indice)
+                        break
+                else:
+                    pendentes.append(evento)
+
+                if any(
+                    evento_pendente.tipo_evento in (
+                        "produto_adicionado_na_nota",
+                        "item_adicionado_na_nota",
+                    )
+                    and (
+                        (evento_pendente.descricao or "")
+                        .strip()
+                        .startswith("Item adicionado na nota: ")
+                    )
+                    and (
+                        (evento_pendente.descricao or "")
+                        .strip()[len("Item adicionado na nota: "):]
+                        .split(", quantidade ", 1)[0]
+                        .strip()
+                        .casefold()
+                        == produto_removido
+                    )
+                    for evento_pendente in pendentes
+                ):
+                    continue
+
+            if evento not in pendentes:
+                pendentes.append(evento)
+
+            continue
+
         if evento.tipo_evento in TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP:
             pendentes.append(evento)
 
