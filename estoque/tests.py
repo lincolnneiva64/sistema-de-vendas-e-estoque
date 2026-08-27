@@ -23970,6 +23970,63 @@ class VendaEdicaoUnificadaTests(TestCase):
             ],
         }
 
+    def preparar_venda_a_vista_com_movimentos(self, caixa="0.00", banco="0.00", criar_movimentos=True):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="19.90",
+            estoque="8.000",
+        )
+        venda.tipo_pagamento = "A vista"
+        venda.data_vencimento = None
+        venda.save(update_fields=["tipo_pagamento", "data_vencimento", "atualizado_em"])
+
+        conta = ContaReceber.objects.get(venda=venda)
+        conta.status = ContaReceber.STATUS_PAGA
+        conta.valor_em_aberto = Decimal("0.00")
+        conta.save(update_fields=["status", "valor_em_aberto", "atualizado_em"])
+        RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=venda.data_venda,
+            valor=venda.total,
+            forma_pagamento="A vista",
+            observacao="Baixa automatica pela conversao da venda de A prazo para A vista.",
+        )
+
+        if criar_movimentos:
+            valores = {
+                "caixa": Decimal(caixa).quantize(Decimal("0.01")),
+                "banco": Decimal(banco).quantize(Decimal("0.01")),
+            }
+            contas = {
+                "caixa": views._conta_financeira_padrao("caixa"),
+                "banco": views._conta_financeira_padrao("banco"),
+            }
+            for chave, valor in valores.items():
+                if valor <= Decimal("0.00"):
+                    continue
+                MovimentoFinanceiro.objects.create(
+                    conta=contas[chave],
+                    tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+                    valor=valor,
+                    data=venda.data_venda,
+                    descricao=views._descricao_venda_a_vista(venda, contas[chave]),
+                    operador=venda.operador,
+                    origem="venda",
+                )
+
+        return cliente, produto, venda, item, conta
+
+    def payload_conversao_a_prazo(self, venda, item, vencimento=None):
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade=str(item.quantidade),
+            preco=str(item.preco_unitario),
+        )
+        payload["tipo_pagamento"] = "A prazo"
+        payload["data_vencimento"] = (vencimento or (timezone.localdate() + timedelta(days=7))).isoformat()
+        return payload
+
     def test_edicao_unificada_aumenta_quantidade_baixando_apenas_diferenca(self):
         cliente, produto, venda, item = self.criar_venda_base(
             quantidade="2.000",
@@ -24330,3 +24387,160 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertEqual(resposta.context["venda_edicao"]["tipo_pagamento"], "À vista")
         self.assertContains(resposta, "<option>À vista</option>", html=True)
         self.assertContains(resposta, "if (vendaEdicaoVenda?.id) return;")
+
+    def test_edicao_unificada_converte_a_vista_para_a_prazo_estornando_caixa(self):
+        cliente, produto, venda, item, conta = self.preparar_venda_a_vista_com_movimentos(
+            caixa="39.80",
+            banco="0.00",
+        )
+        vencimento = timezone.localdate() + timedelta(days=10)
+        payload = self.payload_conversao_a_prazo(venda, item, vencimento)
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        conta.refresh_from_db()
+        estorno = MovimentoFinanceiro.objects.get(origem="venda_estorno")
+
+        self.assertEqual(venda.tipo_pagamento, "A prazo")
+        self.assertEqual(venda.data_vencimento, vencimento)
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
+        self.assertEqual(ContaReceber.objects.filter(venda=venda).count(), 1)
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+        self.assertEqual(conta.valor_original, Decimal("39.80"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("39.80"))
+        self.assertEqual(conta.data_vencimento, vencimento)
+        self.assertEqual(conta.cliente_id, cliente.id)
+        self.assertEqual(estorno.tipo, MovimentoFinanceiro.TIPO_SAIDA)
+        self.assertEqual(estorno.valor, Decimal("39.80"))
+        self.assertEqual(estorno.conta.tipo, ContaFinanceira.TIPO_CAIXA)
+
+    def test_edicao_unificada_converte_a_vista_para_a_prazo_estornando_caixa_e_banco(self):
+        cliente, produto, venda, item, conta = self.preparar_venda_a_vista_com_movimentos(
+            caixa="20.00",
+            banco="19.80",
+        )
+        payload = self.payload_conversao_a_prazo(venda, item)
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        estornos = MovimentoFinanceiro.objects.filter(origem="venda_estorno").order_by("conta__tipo", "valor")
+        valores_por_tipo = {
+            estorno.conta.tipo: estorno.valor
+            for estorno in estornos
+        }
+        conta.refresh_from_db()
+
+        self.assertEqual(estornos.count(), 2)
+        self.assertEqual(valores_por_tipo[ContaFinanceira.TIPO_CAIXA], Decimal("20.00"))
+        self.assertEqual(valores_por_tipo[ContaFinanceira.TIPO_BANCO], Decimal("19.80"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+        self.assertEqual(conta.valor_em_aberto, Decimal("39.80"))
+
+    def test_edicao_unificada_conversao_a_vista_para_a_prazo_duplicada_nao_duplica_estorno_nem_conta(self):
+        cliente, produto, venda, item, conta = self.preparar_venda_a_vista_com_movimentos(
+            caixa="39.80",
+            banco="0.00",
+        )
+        payload = self.payload_conversao_a_prazo(venda, item)
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+        resposta_duplicada = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta_duplicada.status_code, 409)
+        self.assertEqual(ContaReceber.objects.filter(venda=venda).count(), 1)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda_estorno").count(), 1)
+
+    def test_edicao_unificada_conversao_a_vista_para_a_prazo_preserva_outra_conta_do_cliente(self):
+        cliente, produto, venda, item, conta = self.preparar_venda_a_vista_com_movimentos(
+            caixa="39.80",
+            banco="0.00",
+        )
+        outra_venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            data_vencimento=timezone.localdate() + timedelta(days=3),
+            tipo_pagamento="A prazo",
+            operador="Teste",
+            total=Decimal("18.50"),
+        )
+        outra_conta = ContaReceber.objects.create(
+            venda=outra_venda,
+            cliente=cliente,
+            data_emissao=outra_venda.data_venda,
+            data_vencimento=outra_venda.data_vencimento,
+            valor_original=Decimal("18.50"),
+            valor_em_aberto=Decimal("18.50"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+        payload = self.payload_conversao_a_prazo(venda, item)
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        outra_conta.refresh_from_db()
+        self.assertEqual(outra_conta.status, ContaReceber.STATUS_ABERTA)
+        self.assertEqual(outra_conta.valor_original, Decimal("18.50"))
+        self.assertEqual(outra_conta.valor_em_aberto, Decimal("18.50"))
+        self.assertEqual(outra_conta.data_vencimento, outra_venda.data_vencimento)
+
+    def test_edicao_unificada_conversao_a_vista_para_a_prazo_sem_movimento_seguro_bloqueia_sem_parcial(self):
+        cliente, produto, venda, item, conta = self.preparar_venda_a_vista_com_movimentos(
+            caixa="0.00",
+            banco="0.00",
+            criar_movimentos=False,
+        )
+        payload = self.payload_conversao_a_prazo(venda, item)
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn(
+            "movimento financeiro original da venda nao foi identificado",
+            resposta.json()["mensagem"],
+        )
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertEqual(venda.tipo_pagamento, "A vista")
+        self.assertIsNone(venda.data_vencimento)
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_PAGA)
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda_estorno").count(), 0)

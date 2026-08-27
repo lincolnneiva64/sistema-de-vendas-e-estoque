@@ -2209,6 +2209,12 @@ def _tipo_pagamento_venda_formulario(tipo_pagamento):
     return tipo_pagamento or ""
 
 
+def _tipo_pagamento_a_prazo_texto(tipo_pagamento):
+    forma = normalizar_texto_cliente(tipo_pagamento)
+    forma_compacta = re.sub(r"\s+", "", forma)
+    return forma in {"a prazo", "carteira", "fiado"} or forma_compacta == "aprazo"
+
+
 def _conta_financeira_venda_a_vista(tipo_pagamento):
     forma = normalizar_texto_cliente(tipo_pagamento)
     forma_compacta = re.sub(r"\s+", "", forma)
@@ -2238,6 +2244,19 @@ def _movimentos_financeiros_venda(venda):
             tipo=MovimentoFinanceiro.TIPO_ENTRADA,
             origem="venda",
             descricao__startswith=f"Venda a vista #{venda.id}",
+        )
+        .order_by("id")
+    )
+
+
+def _movimentos_estorno_venda_a_vista(venda):
+    return (
+        MovimentoFinanceiro.objects
+        .select_related("conta", "conta_destino")
+        .filter(
+            tipo=MovimentoFinanceiro.TIPO_SAIDA,
+            origem="venda_estorno",
+            descricao__startswith=f"Estorno venda a vista #{venda.id}",
         )
         .order_by("id")
     )
@@ -2333,6 +2352,134 @@ def _registrar_movimentos_venda_a_vista(venda, valores_origem=None):
 def _registrar_movimento_venda_a_vista(venda):
     movimentos = _registrar_movimentos_venda_a_vista(venda)
     return movimentos[0] if movimentos else None
+
+
+def _validar_itens_edicao_inalterados(venda, itens_validados):
+    itens_atuais = list(
+        ItemVenda.objects
+        .select_for_update()
+        .filter(venda=venda)
+        .order_by("id")
+    )
+    if len(itens_atuais) != len(itens_validados):
+        raise ValueError("Para mudar uma venda de A vista para A prazo, nao altere os itens nesta operacao.")
+
+    atuais_por_id = {item.id: item for item in itens_atuais}
+    for item_novo in itens_validados:
+        item_id = item_novo.get("item_id")
+        item_atual = atuais_por_id.get(item_id)
+        if not item_atual:
+            raise ValueError("Para mudar uma venda de A vista para A prazo, nao altere os itens nesta operacao.")
+
+        quantidade_atual = Decimal(item_atual.quantidade or "0").quantize(Decimal("0.001"))
+        quantidade_nova = Decimal(item_novo["quantidade"] or "0").quantize(Decimal("0.001"))
+        preco_atual = Decimal(item_atual.preco_unitario or "0").quantize(Decimal("0.01"))
+        preco_novo = Decimal(item_novo["preco_unitario"] or "0").quantize(Decimal("0.01"))
+        if (
+            item_atual.produto_id != item_novo["produto"].id
+            or quantidade_atual != quantidade_nova
+            or _normalizar_unidade_estoque(item_atual.unidade or "") != _normalizar_unidade_estoque(item_novo["unidade"] or "")
+            or preco_atual != preco_novo
+        ):
+            raise ValueError("Para mudar uma venda de A vista para A prazo, nao altere os itens nesta operacao.")
+
+
+def _estornar_movimentos_venda_a_vista_para_prazo(venda):
+    movimentos = list(
+        MovimentoFinanceiro.objects
+        .select_for_update()
+        .filter(
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            origem="venda",
+            descricao__startswith=f"Venda a vista #{venda.id}",
+        )
+        .order_by("id")
+    )
+    estornos_existentes = list(
+        MovimentoFinanceiro.objects
+        .select_for_update()
+        .filter(
+            tipo=MovimentoFinanceiro.TIPO_SAIDA,
+            origem="venda_estorno",
+            descricao__startswith=f"Estorno venda a vista #{venda.id}",
+        )
+        .order_by("id")
+    )
+    if estornos_existentes:
+        raise ValueError("Esta venda ja possui estorno financeiro registrado para mudanca de A vista para A prazo.")
+    if not movimentos:
+        raise ValueError(
+            "Nao foi possivel converter para A prazo automaticamente porque o movimento financeiro original da venda nao foi identificado."
+        )
+
+    total_movimentos = Decimal("0.00")
+    for movimento in movimentos:
+        valor_movimento = _financeiro_dinheiro(movimento.valor).quantize(Decimal("0.01"))
+        if movimento.tipo != MovimentoFinanceiro.TIPO_ENTRADA or valor_movimento <= Decimal("0.00"):
+            raise ValueError(
+                "Nao foi possivel converter para A prazo automaticamente porque o movimento financeiro original da venda nao esta seguro para estorno."
+            )
+        total_movimentos = (total_movimentos + valor_movimento).quantize(Decimal("0.01"))
+
+    total_venda = _financeiro_dinheiro(venda.total).quantize(Decimal("0.01"))
+    if total_movimentos != total_venda:
+        raise ValueError(
+            "Nao foi possivel converter para A prazo automaticamente porque o total dos movimentos financeiros da venda nao bate com o total atual."
+        )
+
+    estornos = []
+    for movimento in movimentos:
+        valor_estorno = _financeiro_dinheiro(movimento.valor).quantize(Decimal("0.01"))
+        estornos.append(MovimentoFinanceiro.objects.create(
+            conta=movimento.conta,
+            tipo=MovimentoFinanceiro.TIPO_SAIDA,
+            valor=valor_estorno,
+            data=timezone.localdate(),
+            descricao=(f"Estorno venda a vista #{venda.id} - movimento #{movimento.id}")[:255],
+            operador=venda.operador or "",
+            origem="venda_estorno",
+        ))
+    return estornos
+
+
+def _abrir_conta_receber_conversao_venda_a_prazo(venda):
+    valor = _financeiro_dinheiro(venda.total).quantize(Decimal("0.01"))
+    conta = (
+        ContaReceber.objects
+        .select_for_update()
+        .filter(venda=venda)
+        .first()
+    )
+    if conta is None:
+        return ContaReceber.objects.create(
+            venda=venda,
+            cliente=venda.cliente,
+            data_emissao=venda.data_venda,
+            data_vencimento=venda.data_vencimento,
+            valor_original=valor,
+            valor_em_aberto=valor,
+            status=ContaReceber.STATUS_ABERTA,
+            observacao="Aberta automaticamente pela conversao da venda de A vista para A prazo.",
+        )
+
+    conta.cliente = venda.cliente
+    conta.data_emissao = venda.data_venda
+    conta.data_vencimento = venda.data_vencimento
+    conta.valor_original = valor
+    conta.valor_em_aberto = valor
+    conta.status = ContaReceber.STATUS_ABERTA
+    conta.observacao = "Reaberta automaticamente pela conversao da venda de A vista para A prazo."
+    conta.save(update_fields=[
+        "cliente",
+        "data_emissao",
+        "data_vencimento",
+        "valor_original",
+        "valor_em_aberto",
+        "status",
+        "observacao",
+        "atualizado_em",
+    ])
+    return conta
 
 
 def _regularizar_conta_receber_conversao_venda_a_vista(venda):
@@ -15762,8 +15909,15 @@ def gravar_venda(request):
     # EDICAO UNIFICADA DE VENDA EXISTENTE
     # ============================================================
     if venda_em_edicao:
+        pagamento_antigo_imediato_pre = _venda_pagamento_imediato(venda_em_edicao.tipo_pagamento)
+        pagamento_novo_imediato_pre = _venda_pagamento_imediato(tipo_pagamento_venda)
+        conversao_vista_para_prazo_pre = (
+            pagamento_antigo_imediato_pre
+            and not pagamento_novo_imediato_pre
+            and _tipo_pagamento_a_prazo_texto(tipo_pagamento_venda)
+        )
         contexto_quitada = _contexto_venda_quitada(venda_em_edicao)
-        if contexto_quitada.get("quitada"):
+        if contexto_quitada.get("quitada") and not conversao_vista_para_prazo_pre:
             return JsonResponse(
                 {
                     "sucesso": False,
@@ -15782,28 +15936,31 @@ def gravar_venda(request):
                     .select_for_update()
                     .get(pk=venda_em_edicao.pk, cancelada=False)
                 )
-                contexto_quitada_atual = _contexto_venda_quitada(venda)
-                if contexto_quitada_atual.get("quitada"):
-                    raise ValueError(
-                        "Esta venda ja possui pagamento/baixa financeira e nao pode ser alterada por esta edicao simplificada."
-                    )
-
                 pagamento_antigo_imediato = _venda_pagamento_imediato(venda.tipo_pagamento)
                 pagamento_novo_imediato = _venda_pagamento_imediato(tipo_pagamento_venda)
                 conversao_prazo_para_vista = (
                     not pagamento_antigo_imediato
                     and pagamento_novo_imediato
                 )
-
-                if pagamento_antigo_imediato and not pagamento_novo_imediato:
+                conversao_vista_para_prazo = (
+                    pagamento_antigo_imediato
+                    and not pagamento_novo_imediato
+                    and _tipo_pagamento_a_prazo_texto(tipo_pagamento_venda)
+                )
+                contexto_quitada_atual = _contexto_venda_quitada(venda)
+                if contexto_quitada_atual.get("quitada") and not conversao_vista_para_prazo:
                     raise ValueError(
-                        "Por seguranca, ainda nao e permitido transformar uma venda de A vista em A prazo nesta tela."
+                        "Esta venda ja possui pagamento/baixa financeira e nao pode ser alterada por esta edicao simplificada."
                     )
 
                 if conversao_prazo_para_vista and valores_origem_venda is None:
                     raise ValueError(
                         "Informe a origem do recebimento para converter a venda para A vista."
                     )
+                if conversao_vista_para_prazo:
+                    if not data_vencimento:
+                        raise ValueError("Informe o vencimento para converter a venda para A prazo.")
+                    _validar_itens_edicao_inalterados(venda, itens_validados)
 
                 itens_atuais = list(
                     ItemVenda.objects
@@ -16106,6 +16263,9 @@ def gravar_venda(request):
                     _regularizar_conta_receber_conversao_venda_a_vista(venda)
                     _validar_origem_venda_a_vista(valores_origem_venda, venda.total)
                     _registrar_movimentos_venda_a_vista(venda, valores_origem_venda)
+                elif conversao_vista_para_prazo:
+                    _estornar_movimentos_venda_a_vista_para_prazo(venda)
+                    _abrir_conta_receber_conversao_venda_a_prazo(venda)
                 else:
                     _sincronizar_conta_receber(
                         venda,
