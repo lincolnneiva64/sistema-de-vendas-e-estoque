@@ -173,6 +173,139 @@
             box-shadow: 0 12px 26px rgba(22, 163, 74, 0.14);
         }
 
+        .desfazer-remocao-form {
+            display: inline;
+        }
+
+        .desfazer-remocao-acao {
+            border: 0;
+            background: transparent;
+            color: #2563eb;
+            padding: 0;
+            font: inherit;
+            font-weight: 800;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+
+        .desfazer-remocao-acao:disabled {
+            color: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .desfazer-remocao-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 80;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            background: rgba(15, 23, 42, 0.56);
+        }
+
+        .desfazer-remocao-modal.visivel {
+            display: flex;
+        }
+
+        .desfazer-remocao-dialog {
+            width: min(440px, 100%);
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            background: #ffffff;
+            box-shadow: 0 20px 45px rgba(15, 23, 42, 0.24);
+            overflow: hidden;
+        }
+
+        .desfazer-remocao-head {
+            padding: 14px 16px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #f8fafc;
+        }
+
+        .desfazer-remocao-head h2 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 950;
+            color: #0f172a;
+        }
+
+        .desfazer-remocao-body {
+            padding: 14px 16px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .desfazer-remocao-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .desfazer-remocao-campo {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 8px 9px;
+            background: #fbfdff;
+        }
+
+        .desfazer-remocao-label {
+            display: block;
+            color: #64748b;
+            font-size: 10px;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .desfazer-remocao-valor {
+            display: block;
+            margin-top: 2px;
+            color: #111827;
+            font-size: 13px;
+            font-weight: 900;
+        }
+
+        .desfazer-remocao-aviso {
+            margin: 0;
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            background: #fffbeb;
+            color: #92400e;
+            padding: 9px 10px;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .desfazer-remocao-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            padding: 12px 16px 16px;
+        }
+
+        .desfazer-remocao-btn {
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: #ffffff;
+            color: #0f172a;
+            padding: 8px 12px;
+            font: inherit;
+            font-size: 13px;
+            font-weight: 900;
+            cursor: pointer;
+        }
+
+        .desfazer-remocao-btn.confirmar {
+            border-color: #dc2626;
+            background: #dc2626;
+            color: #ffffff;
+        }
+
+        .desfazer-remocao-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
         .venda-cancelada-banner {
             margin-bottom: 10px;
             padding: 10px 12px;
@@ -1837,7 +1970,19 @@
                                 Status: {{ item_removido.get_status_display }}.
                                 {% if item_removido.contexto_desfazer.permitido %}
                                     <br>
-                                    <a href="{% url 'estoque:venda_desfazer_remocao_item' venda.id item_removido.id %}">Desfazer remo&ccedil;&atilde;o</a>
+                                    <form method="post" action="{% url 'estoque:venda_desfazer_remocao_item' venda.id item_removido.id %}" class="desfazer-remocao-form" data-desfazer-remocao-form>
+                                        {% csrf_token %}
+                                        <input type="hidden" name="confirmacao_desfazer" value="DESFAZER">
+                                        <button
+                                            type="button"
+                                            class="desfazer-remocao-acao"
+                                            data-desfazer-remocao-abrir
+                                            data-produto="{{ item_removido.produto_nome_snapshot }}"
+                                            data-quantidade="{{ item_removido.quantidade_snapshot }}"
+                                            data-unidade="{{ item_removido.unidade_snapshot|default:'' }}"
+                                            data-valor="R$ {{ item_removido.valor_total_snapshot|floatformat:2 }}"
+                                        >Desfazer remo&ccedil;&atilde;o</button>
+                                    </form>
                                 {% elif item_removido.contexto_desfazer.motivo %}
                                     <br>
                                     {{ item_removido.contexto_desfazer.motivo }}
@@ -1986,7 +2131,19 @@
                                         <span class="item-ajustado-label">Revers&atilde;o</span>
                                         <span class="item-ajustado-valor">
                                             {% if ajuste.remocao_reversao and ajuste.contexto_desfazer.permitido %}
-                                                <a href="{% url 'estoque:venda_desfazer_remocao_item' venda.id ajuste.remocao_reversao.id %}">Desfazer remo&ccedil;&atilde;o</a>
+                                                <form method="post" action="{% url 'estoque:venda_desfazer_remocao_item' venda.id ajuste.remocao_reversao.id %}" class="desfazer-remocao-form" data-desfazer-remocao-form>
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="confirmacao_desfazer" value="DESFAZER">
+                                                    <button
+                                                        type="button"
+                                                        class="desfazer-remocao-acao"
+                                                        data-desfazer-remocao-abrir
+                                                        data-produto="{{ ajuste.remocao_reversao.produto_nome_snapshot }}"
+                                                        data-quantidade="{{ ajuste.remocao_reversao.quantidade_snapshot }}"
+                                                        data-unidade="{{ ajuste.remocao_reversao.unidade_snapshot|default:'' }}"
+                                                        data-valor="R$ {{ ajuste.remocao_reversao.valor_total_snapshot|floatformat:2 }}"
+                                                    >Desfazer remo&ccedil;&atilde;o</button>
+                                                </form>
                                             {% elif ajuste.contexto_desfazer.motivo %}
                                                 {{ ajuste.contexto_desfazer.motivo }}
                                             {% endif %}
@@ -2174,6 +2331,39 @@
         </div>
     </main>
 
+    <div class="desfazer-remocao-modal" id="desfazerRemocaoModal" aria-hidden="true">
+        <div class="desfazer-remocao-dialog" role="dialog" aria-modal="true" aria-labelledby="desfazerRemocaoTitulo">
+            <div class="desfazer-remocao-head">
+                <h2 id="desfazerRemocaoTitulo">Desfazer remo&ccedil;&atilde;o</h2>
+            </div>
+            <div class="desfazer-remocao-body">
+                <div class="desfazer-remocao-grid">
+                    <div class="desfazer-remocao-campo">
+                        <span class="desfazer-remocao-label">Produto</span>
+                        <span class="desfazer-remocao-valor" id="desfazerRemocaoProduto">-</span>
+                    </div>
+                    <div class="desfazer-remocao-campo">
+                        <span class="desfazer-remocao-label">Quantidade</span>
+                        <span class="desfazer-remocao-valor" id="desfazerRemocaoQuantidade">-</span>
+                    </div>
+                    <div class="desfazer-remocao-campo">
+                        <span class="desfazer-remocao-label">Unidade</span>
+                        <span class="desfazer-remocao-valor" id="desfazerRemocaoUnidade">-</span>
+                    </div>
+                    <div class="desfazer-remocao-campo">
+                        <span class="desfazer-remocao-label">Valor</span>
+                        <span class="desfazer-remocao-valor" id="desfazerRemocaoValor">-</span>
+                    </div>
+                </div>
+                <p class="desfazer-remocao-aviso">O item voltar&aacute; para a venda e os valores ser&atilde;o recalculados.</p>
+            </div>
+            <div class="desfazer-remocao-actions">
+                <button type="button" class="desfazer-remocao-btn" id="desfazerRemocaoCancelar">Cancelar</button>
+                <button type="button" class="desfazer-remocao-btn confirmar" id="desfazerRemocaoConfirmar">Desfazer remo&ccedil;&atilde;o</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         function obterCookie(nome) {
             const cookies = document.cookie ? document.cookie.split(";") : [];
@@ -2317,6 +2507,61 @@
         const whatsappPendenteValor = "conversa_aberta";
         const whatsappStatusInicial = "{{ venda.whatsapp_status }}";
         const whatsappAtualizacaoPendente = {% if whatsapp_atualizacao %}true{% else %}false{% endif %};
+        const desfazerRemocaoModal = document.getElementById("desfazerRemocaoModal");
+        const desfazerRemocaoProduto = document.getElementById("desfazerRemocaoProduto");
+        const desfazerRemocaoQuantidade = document.getElementById("desfazerRemocaoQuantidade");
+        const desfazerRemocaoUnidade = document.getElementById("desfazerRemocaoUnidade");
+        const desfazerRemocaoValor = document.getElementById("desfazerRemocaoValor");
+        const desfazerRemocaoCancelar = document.getElementById("desfazerRemocaoCancelar");
+        const desfazerRemocaoConfirmar = document.getElementById("desfazerRemocaoConfirmar");
+        let desfazerRemocaoFormAtual = null;
+        let desfazerRemocaoEnviando = false;
+
+        function abrirModalDesfazerRemocao(botao) {
+            if (!desfazerRemocaoModal) return;
+            desfazerRemocaoFormAtual = botao.closest("[data-desfazer-remocao-form]");
+            if (!desfazerRemocaoFormAtual) return;
+            desfazerRemocaoProduto.textContent = botao.dataset.produto || "-";
+            desfazerRemocaoQuantidade.textContent = botao.dataset.quantidade || "-";
+            desfazerRemocaoUnidade.textContent = botao.dataset.unidade || "-";
+            desfazerRemocaoValor.textContent = botao.dataset.valor || "-";
+            desfazerRemocaoModal.classList.add("visivel");
+            desfazerRemocaoModal.setAttribute("aria-hidden", "false");
+            desfazerRemocaoCancelar?.focus();
+        }
+
+        function fecharModalDesfazerRemocao() {
+            if (!desfazerRemocaoModal || desfazerRemocaoEnviando) return;
+            desfazerRemocaoModal.classList.remove("visivel");
+            desfazerRemocaoModal.setAttribute("aria-hidden", "true");
+            desfazerRemocaoFormAtual = null;
+        }
+
+        document.querySelectorAll("[data-desfazer-remocao-abrir]").forEach((botao) => {
+            botao.addEventListener("click", () => abrirModalDesfazerRemocao(botao));
+        });
+
+        desfazerRemocaoCancelar?.addEventListener("click", fecharModalDesfazerRemocao);
+        desfazerRemocaoModal?.addEventListener("click", (event) => {
+            if (event.target === desfazerRemocaoModal) {
+                fecharModalDesfazerRemocao();
+            }
+        });
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && desfazerRemocaoModal?.classList.contains("visivel")) {
+                fecharModalDesfazerRemocao();
+            }
+        });
+        desfazerRemocaoConfirmar?.addEventListener("click", () => {
+            if (!desfazerRemocaoFormAtual || desfazerRemocaoEnviando) return;
+            desfazerRemocaoEnviando = true;
+            desfazerRemocaoConfirmar.disabled = true;
+            desfazerRemocaoCancelar.disabled = true;
+            document.querySelectorAll("[data-desfazer-remocao-abrir]").forEach((botao) => {
+                botao.disabled = true;
+            });
+            desfazerRemocaoFormAtual.submit();
+        });
 
         function atualizarStatusWhatsapp(status, texto) {
             if (!whatsappStatusNota) {

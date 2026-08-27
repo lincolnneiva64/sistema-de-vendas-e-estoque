@@ -12493,6 +12493,69 @@ class PixRecebidoTests(TestCase):
         self.assertFalse(remocao.estoque_devolvido)
         self.assertTrue(ItemVenda.objects.filter(venda=venda, produto=produto, quantidade=Decimal("2.000")).exists())
 
+    def test_nota_usa_modal_para_desfazer_remocao_e_backend_nao_duplica_item(self):
+        cliente = Cliente.objects.create(nome="Cliente Modal Desfaz", ativo=True)
+        produto = self._produto_teste("Produto Modal Desfaz", quantidade=3)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("4.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("2.00"),
+            valor_total=Decimal("4.00"),
+        )
+        self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item.id}),
+            secure=True,
+            follow=True,
+        )
+        remocao = ItemVendaRemovido.objects.get(venda=venda)
+        desfazer_url = reverse("estoque:venda_desfazer_remocao_item", kwargs={"pk": venda.id, "remocao_id": remocao.id})
+
+        detalhe = self.client.get(
+            reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}),
+            secure=True,
+        )
+
+        self.assertEqual(detalhe.status_code, 200)
+        self.assertContains(detalhe, 'id="desfazerRemocaoModal"')
+        self.assertContains(detalhe, f'action="{desfazer_url}"')
+        self.assertContains(detalhe, 'name="confirmacao_desfazer" value="DESFAZER"')
+        self.assertContains(detalhe, 'data-desfazer-remocao-abrir')
+        self.assertContains(detalhe, 'data-produto="Produto Modal Desfaz"')
+        self.assertNotContains(detalhe, f'<a href="{desfazer_url}">Desfazer remo&ccedil;&atilde;o</a>', html=True)
+
+        primeira_resposta = self.client.post(
+            desfazer_url,
+            data={"confirmacao_desfazer": "DESFAZER"},
+            secure=True,
+            follow=True,
+        )
+        segunda_resposta = self.client.post(
+            desfazer_url,
+            data={"confirmacao_desfazer": "DESFAZER"},
+            secure=True,
+        )
+
+        self.assertEqual(primeira_resposta.status_code, 200)
+        mensagens_primeira = [str(mensagem) for mensagem in get_messages(primeira_resposta.wsgi_request)]
+        self.assertIn("Remocao do item desfeita com sucesso.", mensagens_primeira)
+        self.assertEqual(segunda_resposta.status_code, 302)
+        remocao.refresh_from_db()
+        produto.refresh_from_db()
+        self.assertEqual(remocao.status, ItemVendaRemovido.STATUS_REVERTIDO)
+        self.assertEqual(
+            ItemVenda.objects.filter(venda=venda, produto=produto, quantidade=Decimal("2.000")).count(),
+            1,
+        )
+        self.assertEqual(produto.quantidade, 3)
+
     def test_desfazer_remocao_bloqueia_estoque_insuficiente_sem_alterar_nota(self):
         cliente = Cliente.objects.create(nome="Cliente Desfaz Sem Estoque", ativo=True)
         produto = self._produto_teste("Produto Desfaz Sem Estoque", quantidade=0)
