@@ -2262,6 +2262,61 @@ def _movimentos_estorno_venda_a_vista(venda):
     )
 
 
+RECEBIMENTO_OBS_CONVERSAO_PRAZO_PARA_VISTA = (
+    "Baixa automatica pela conversao da venda de A prazo para A vista."
+)
+
+
+def _total_movimentos_por_conta(movimentos):
+    totais = {}
+    for movimento in movimentos:
+        valor = _financeiro_dinheiro(movimento.valor).quantize(Decimal("0.01"))
+        if valor <= Decimal("0.00"):
+            continue
+        totais[movimento.conta_id] = (
+            totais.get(movimento.conta_id, Decimal("0.00")) + valor
+        ).quantize(Decimal("0.01"))
+    return totais
+
+
+def _movimentos_venda_a_vista_integralmente_estornados(venda):
+    entradas_por_conta = _total_movimentos_por_conta(_movimentos_financeiros_venda(venda))
+    if not entradas_por_conta:
+        return False
+    estornos_por_conta = _total_movimentos_por_conta(_movimentos_estorno_venda_a_vista(venda))
+    return entradas_por_conta == estornos_por_conta
+
+
+def _recebimento_conversao_prazo_para_vista(recebimento):
+    return (
+        (recebimento.forma_pagamento or "").strip() == "A vista"
+        and (recebimento.observacao or "").strip()
+        == RECEBIMENTO_OBS_CONVERSAO_PRAZO_PARA_VISTA
+    )
+
+
+def _recebimentos_ativos_conta_venda(conta, venda):
+    recebimentos = list(conta.recebimentos.all()) if conta else []
+    if not recebimentos:
+        return []
+
+    if conta.status != ContaReceber.STATUS_ABERTA:
+        return recebimentos
+
+    valor_original = _financeiro_dinheiro(conta.valor_original).quantize(Decimal("0.01"))
+    valor_aberto = _financeiro_dinheiro(conta.valor_em_aberto).quantize(Decimal("0.01"))
+    if valor_original != valor_aberto:
+        return recebimentos
+
+    if not all(_recebimento_conversao_prazo_para_vista(recebimento) for recebimento in recebimentos):
+        return recebimentos
+
+    if not _movimentos_venda_a_vista_integralmente_estornados(venda):
+        return recebimentos
+
+    return []
+
+
 def _alocacao_financeira_venda(venda):
     contas = {
         "caixa": _conta_financeira_padrao("caixa"),
@@ -2529,7 +2584,7 @@ def _regularizar_conta_receber_conversao_venda_a_vista(venda):
         venda.data_venda or timezone.localdate(),
         valor,
         "A vista",
-        "Baixa automatica pela conversao da venda de A prazo para A vista.",
+        RECEBIMENTO_OBS_CONVERSAO_PRAZO_PARA_VISTA,
         "troco",
     )
     return conta
@@ -10992,6 +11047,7 @@ def vendas(request):
         if venda_para_editar:
             venda_edicao = {
                 "id": venda_para_editar.id,
+                "visualizar_url": reverse("estoque:venda_detalhe", args=[venda_para_editar.id]),
                 "cliente_id": venda_para_editar.cliente_id,
                 "data_venda": venda_para_editar.data_venda.isoformat() if venda_para_editar.data_venda else "",
                 "data_vencimento": venda_para_editar.data_vencimento.isoformat() if venda_para_editar.data_vencimento else "",
@@ -16732,7 +16788,8 @@ def _contexto_desfazer_item_removido(item_removido):
 
 def _contexto_venda_quitada(venda, conta_receber=None):
     conta = conta_receber if conta_receber is not None else _conta_receber_da_venda(venda)
-    recebimentos_count = conta.recebimentos.count() if conta else 0
+    recebimentos_ativos = _recebimentos_ativos_conta_venda(conta, venda) if conta else []
+    recebimentos_count = len(recebimentos_ativos)
     conta_paga = bool(conta and conta.status == ContaReceber.STATUS_PAGA)
     venda_a_vista = normalizar_texto_cliente(venda.tipo_pagamento) in {"a vista", "avista"}
     motivos = []
@@ -17042,9 +17099,12 @@ def _sincronizar_conta_receber(venda, observacao_origem="", permitir_reabrir_can
             (valor_original_anterior - valor_aberto_anterior).quantize(Decimal("0.01")),
             Decimal("0.00"),
         )
-        valor_recebido_registrado = (
-            conta.recebimentos.aggregate(total=Sum("valor")).get("total")
-            or Decimal("0.00")
+        valor_recebido_registrado = sum(
+            (
+                _financeiro_dinheiro(recebimento.valor).quantize(Decimal("0.01"))
+                for recebimento in _recebimentos_ativos_conta_venda(conta, venda)
+            ),
+            Decimal("0.00"),
         ).quantize(Decimal("0.01"))
         valor_ja_recebido = max(valor_ja_recebido, valor_recebido_registrado)
         novo_valor_aberto = max((valor - valor_ja_recebido).quantize(Decimal("0.01")), Decimal("0.00"))

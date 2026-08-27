@@ -24388,6 +24388,114 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertContains(resposta, "<option>À vista</option>", html=True)
         self.assertContains(resposta, "if (vendaEdicaoVenda?.id) return;")
 
+    def test_edicao_unificada_visualizar_preserva_id_da_venda_apos_salvar_sem_alterar(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="10.00",
+            estoque="8.000",
+        )
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade=str(item.quantidade),
+            preco=str(item.preco_unitario),
+        )
+        vendas_antes = Venda.objects.count()
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["sucesso"])
+        self.assertEqual(dados["venda_id"], venda.id)
+        self.assertEqual(
+            dados["visualizar_url"],
+            reverse("estoque:venda_detalhe", args=[venda.id]) + "?nota_atualizada=1",
+        )
+        self.assertEqual(Venda.objects.count(), vendas_antes)
+
+        resposta_edicao = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta_edicao.status_code, 200)
+        self.assertEqual(resposta_edicao.context["venda_edicao"]["id"], venda.id)
+        self.assertEqual(
+            resposta_edicao.context["venda_edicao"]["visualizar_url"],
+            reverse("estoque:venda_detalhe", args=[venda.id]),
+        )
+        self.assertContains(resposta_edicao, "vendaGravadaId = vendaEdicaoVenda.id;")
+        self.assertContains(
+            resposta_edicao,
+            "vendaGravadaUrl = vendaEdicaoVenda.visualizar_url || \"\";",
+        )
+
+    def test_edicao_unificada_reabre_com_vencimento_atual_apos_alterar_apenas_vencimento(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="19.90",
+            estoque="8.000",
+        )
+        cliente.prazo_padrao_dias = 7
+        cliente.save(update_fields=["prazo_padrao_dias"])
+        vencimento_antigo = date(2026, 8, 17)
+        vencimento_novo = date(2026, 8, 20)
+        venda.data_venda = date(2026, 8, 10)
+        venda.data_vencimento = vencimento_antigo
+        venda.save(update_fields=["data_venda", "data_vencimento", "atualizado_em"])
+        conta = ContaReceber.objects.get(venda=venda)
+        conta.data_emissao = venda.data_venda
+        conta.data_vencimento = vencimento_antigo
+        conta.save(update_fields=["data_emissao", "data_vencimento", "atualizado_em"])
+        estoque_antes = produto.quantidade
+
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade=str(item.quantidade),
+            preco=str(item.preco_unitario),
+        )
+        payload["data_vencimento"] = vencimento_novo.isoformat()
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertEqual(venda.data_vencimento, vencimento_novo)
+        self.assertEqual(conta.data_vencimento, vencimento_novo)
+        self.assertEqual(produto.quantidade, estoque_antes)
+
+        resposta_edicao = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta_edicao.status_code, 200)
+        self.assertEqual(
+            resposta_edicao.context["venda_edicao"]["data_vencimento"],
+            vencimento_novo.isoformat(),
+        )
+        conteudo = resposta_edicao.content.decode()
+        self.assertIn(vencimento_novo.isoformat(), conteudo)
+        self.assertNotIn(vencimento_antigo.isoformat(), conteudo)
+        self.assertLess(
+            conteudo.index("if (vendaEdicaoVenda?.id) return;"),
+            conteudo.index("vencimentoVenda.value = calcularVencimentoCliente();"),
+        )
+
     def test_edicao_unificada_converte_a_vista_para_a_prazo_estornando_caixa(self):
         cliente, produto, venda, item, conta = self.preparar_venda_a_vista_com_movimentos(
             caixa="39.80",
@@ -24473,9 +24581,177 @@ class VendaEdicaoUnificadaTests(TestCase):
         )
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertEqual(resposta_duplicada.status_code, 409)
+        self.assertEqual(resposta_duplicada.status_code, 200)
         self.assertEqual(ContaReceber.objects.filter(venda=venda).count(), 1)
         self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda_estorno").count(), 1)
+
+    def test_edicao_unificada_apos_ciclo_prazo_vista_prazo_permite_salvar_sem_alterar(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="19.90",
+            estoque="8.000",
+        )
+        cliente.prazo_padrao_dias = 7
+        cliente.save(update_fields=["prazo_padrao_dias"])
+        vencimento_antigo = date(2026, 8, 17)
+        vencimento_novo = date(2026, 8, 20)
+        venda.data_venda = date(2026, 8, 10)
+        venda.data_vencimento = vencimento_antigo
+        venda.save(update_fields=["data_venda", "data_vencimento", "atualizado_em"])
+        conta_inicial = ContaReceber.objects.get(venda=venda)
+        conta_inicial.data_emissao = venda.data_venda
+        conta_inicial.data_vencimento = vencimento_antigo
+        conta_inicial.save(update_fields=["data_emissao", "data_vencimento", "atualizado_em"])
+        estoque_antes = produto.quantidade
+        total_antes = venda.total
+        vendas_antes = Venda.objects.count()
+        payload_vista = self.payload_edicao(
+            venda,
+            item,
+            quantidade="2.000",
+            preco="19.90",
+        )
+        payload_vista["tipo_pagamento"] = "A vista"
+        payload_vista["origem_recebimento"] = {
+            "caixa": "20,00",
+            "banco": "19,80",
+        }
+
+        resposta_vista = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload_vista),
+            content_type="application/json",
+            secure=True,
+        )
+        self.assertEqual(resposta_vista.status_code, 200)
+
+        venda.refresh_from_db()
+        item.refresh_from_db()
+        payload_prazo = self.payload_conversao_a_prazo(venda, item, vencimento_antigo)
+        resposta_prazo = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload_prazo),
+            content_type="application/json",
+            secure=True,
+        )
+        self.assertEqual(resposta_prazo.status_code, 200)
+
+        resposta_edicao = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+        self.assertEqual(resposta_edicao.status_code, 200)
+        self.assertEqual(resposta_edicao.context["venda_edicao"]["id"], venda.id)
+
+        venda.refresh_from_db()
+        item.refresh_from_db()
+        conta = ContaReceber.objects.get(venda=venda)
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+        payload_neutro = self.payload_edicao(
+            venda,
+            item,
+            quantidade=str(item.quantidade),
+            preco=str(item.preco_unitario),
+        )
+
+        resposta_neutra = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload_neutro),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta_neutra.status_code, 200)
+        self.assertEqual(resposta_neutra.json()["venda_id"], venda.id)
+        self.assertEqual(Venda.objects.count(), vendas_antes)
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertEqual(venda.tipo_pagamento, "A prazo")
+        self.assertEqual(venda.total, total_antes)
+        self.assertEqual(produto.quantidade, estoque_antes)
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+        self.assertEqual(conta.valor_original, Decimal("39.80"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("39.80"))
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda").count(), 2)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda_estorno").count(), 2)
+
+        item.refresh_from_db()
+        payload_vencimento = self.payload_edicao(
+            venda,
+            item,
+            quantidade=str(item.quantidade),
+            preco=str(item.preco_unitario),
+        )
+        payload_vencimento["data_vencimento"] = vencimento_novo.isoformat()
+        movimentos_antes_vencimento = MovimentoFinanceiro.objects.count()
+        resposta_vencimento = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload_vencimento),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta_vencimento.status_code, 200)
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        produto.refresh_from_db()
+        self.assertEqual(venda.data_vencimento, vencimento_novo)
+        self.assertEqual(conta.data_vencimento, vencimento_novo)
+        self.assertEqual(produto.quantidade, estoque_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes_vencimento)
+
+        resposta_edicao_atualizada = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta_edicao_atualizada.status_code, 200)
+        self.assertEqual(
+            resposta_edicao_atualizada.context["venda_edicao"]["data_vencimento"],
+            vencimento_novo.isoformat(),
+        )
+        conteudo = resposta_edicao_atualizada.content.decode()
+        self.assertIn(vencimento_novo.isoformat(), conteudo)
+        self.assertNotIn(vencimento_antigo.isoformat(), conteudo)
+
+    def test_edicao_unificada_com_baixa_financeira_ativa_continua_bloqueada(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="10.00",
+            estoque="8.000",
+        )
+        conta = ContaReceber.objects.get(venda=venda)
+        conta.valor_em_aberto = Decimal("10.00")
+        conta.status = ContaReceber.STATUS_PARCIAL
+        conta.save(update_fields=["valor_em_aberto", "status", "atualizado_em"])
+        RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=venda.data_venda,
+            valor=Decimal("10.00"),
+            forma_pagamento="Pix",
+            observacao="Baixa manual parcial.",
+        )
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade=str(item.quantidade),
+            preco=str(item.preco_unitario),
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 409)
+        self.assertIn("pagamento/baixa financeira", resposta.json()["mensagem"])
+        self.assertEqual(Venda.objects.count(), 1)
+        produto.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
 
     def test_edicao_unificada_conversao_a_vista_para_a_prazo_preserva_outra_conta_do_cliente(self):
         cliente, produto, venda, item, conta = self.preparar_venda_a_vista_com_movimentos(

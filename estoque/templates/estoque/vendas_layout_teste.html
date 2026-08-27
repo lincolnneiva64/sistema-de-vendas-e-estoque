@@ -3052,9 +3052,10 @@ function atualizarPrazoEVencimentoCliente() {
 
     const prazo = parseInt(clienteSelecionado.prazo || "0", 10);
     clienteResumoPrazo.textContent = prazo ? prazo + " dias" : "Sem prazo definido";
-    vencimentoVenda.value = calcularVencimentoCliente();
 
     if (vendaEdicaoVenda?.id) return;
+
+    vencimentoVenda.value = calcularVencimentoCliente();
 
     if (prazo > 0) {
         tipoVenda.value = "A prazo";
@@ -4240,6 +4241,8 @@ function prepararVendaEmEdicao() {
     if (!vendaEdicaoVenda || !vendaEdicaoVenda.id) return;
 
     pedidoImportadoVenda = null;
+    vendaGravadaId = vendaEdicaoVenda.id;
+    vendaGravadaUrl = vendaEdicaoVenda.visualizar_url || "";
 
     tabelaBody.innerHTML = "";
     linhaSelecionada = null;
