@@ -295,7 +295,7 @@ class ProdutoForm(forms.ModelForm):
         if not nome:
             raise forms.ValidationError("Informe o nome do produto.")
 
-        produtos = Produto.objects.exclude(
+        produtos = Produto.objects.filter(excluido=False).exclude(
             pk=getattr(self.instance, "pk", None)
         ).only("nome")
         nome_key = nome.casefold()
