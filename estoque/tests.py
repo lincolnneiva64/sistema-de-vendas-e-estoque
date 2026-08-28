@@ -24409,7 +24409,7 @@ class VendaEdicaoUnificadaTests(TestCase):
         outra_conta.refresh_from_db()
         movimento = MovimentoFinanceiro.objects.get(origem="venda")
 
-        self.assertEqual(venda.tipo_pagamento, "A vista")
+        self.assertEqual(venda.tipo_pagamento, "\u00c0 vista")
         self.assertEqual(venda.total, Decimal("39.80"))
         self.assertEqual(produto.quantidade, Decimal("8.000"))
         self.assertEqual(conta.status, ContaReceber.STATUS_PAGA)
@@ -24424,6 +24424,214 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertEqual(movimento.conta.tipo, ContaFinanceira.TIPO_CAIXA)
         self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda").count(), 1)
         self.assertEqual(RecebimentoContaReceber.objects.filter(conta=conta).count(), 1)
+
+    def test_edicao_unificada_converte_a_prazo_para_a_vista_persistindo_contextos_e_movimentos(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="19.90",
+            estoque="8.000",
+        )
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="2.000",
+            preco="19.90",
+        )
+        payload["tipo_pagamento"] = "\u00c0 vista"
+        payload["data_vencimento"] = ""
+        payload["origem_recebimento"] = {
+            "caixa": "20,00",
+            "banco": "19,80",
+        }
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        item.refresh_from_db()
+        conta = ContaReceber.objects.get(venda=venda)
+        movimentos = MovimentoFinanceiro.objects.filter(origem="venda").order_by("conta__tipo", "valor")
+        valores_por_tipo = {
+            movimento.conta.tipo: movimento.valor
+            for movimento in movimentos
+        }
+
+        self.assertEqual(venda.tipo_pagamento, "\u00c0 vista")
+        self.assertIsNone(venda.data_vencimento)
+        self.assertEqual(venda.total, Decimal("39.80"))
+        self.assertFalse(
+            ContaReceber.objects.filter(
+                venda=venda,
+                status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+                valor_em_aberto__gt=Decimal("0.00"),
+            ).exists()
+        )
+        self.assertEqual(conta.status, ContaReceber.STATUS_PAGA)
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(conta.recebimentos.count(), 1)
+        self.assertEqual(movimentos.count(), 2)
+        self.assertEqual(valores_por_tipo[ContaFinanceira.TIPO_CAIXA], Decimal("20.00"))
+        self.assertEqual(valores_por_tipo[ContaFinanceira.TIPO_BANCO], Decimal("19.80"))
+
+        resposta_consulta = self.client.get(
+            f"{reverse('estoque:consultar_vendas')}?numero={venda.id}",
+            secure=True,
+        )
+        resposta_nota = self.client.get(
+            reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}),
+            secure=True,
+        )
+        resposta_edicao = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta_consulta.status_code, 200)
+        self.assertEqual(resposta_nota.status_code, 200)
+        self.assertEqual(resposta_edicao.status_code, 200)
+        self.assertEqual(resposta_consulta.context["vendas"][0].tipo_pagamento, "\u00c0 vista")
+        self.assertEqual(resposta_nota.context["venda"].tipo_pagamento, "\u00c0 vista")
+        self.assertTrue(resposta_nota.context["venda_a_vista"])
+        self.assertEqual(len(resposta_nota.context["movimentos_financeiros_venda"]), 2)
+        self.assertEqual(resposta_nota.context["alocacao_financeira_venda"]["caixa"], Decimal("20.00"))
+        self.assertEqual(resposta_nota.context["alocacao_financeira_venda"]["banco"], Decimal("19.80"))
+        conteudo_nota = resposta_nota.content.decode()
+        self.assertRegex(conteudo_nota, r"Caixa:\s*R\$\s*20[,.]00")
+        self.assertRegex(conteudo_nota, r"Banco/Pix:\s*R\$\s*19[,.]80")
+        self.assertRegex(conteudo_nota, r"Movimentos:\s*2")
+        self.assertEqual(resposta_edicao.context["venda_edicao"]["tipo_pagamento"], "\u00c0 vista")
+
+    def test_edicao_unificada_converte_a_prazo_para_a_vista_com_recebimento_tecnico_estornado(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="1.000",
+            preco="96.30",
+            estoque="8.000",
+        )
+        conta = ContaReceber.objects.get(venda=venda)
+        conta.valor_original = Decimal("96.30")
+        conta.valor_em_aberto = Decimal("96.30")
+        conta.status = ContaReceber.STATUS_ABERTA
+        conta.save(update_fields=["valor_original", "valor_em_aberto", "status", "atualizado_em"])
+        RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=venda.data_venda,
+            valor=Decimal("39.80"),
+            forma_pagamento="A vista",
+            observacao=views.RECEBIMENTO_OBS_CONVERSAO_PRAZO_PARA_VISTA,
+        )
+        movimento_antigo = MovimentoFinanceiro.objects.create(
+            conta=views._conta_financeira_padrao("caixa"),
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            valor=Decimal("39.80"),
+            data=venda.data_venda,
+            descricao=views._descricao_venda_a_vista(venda, views._conta_financeira_padrao("caixa")),
+            operador=venda.operador,
+            origem="venda",
+        )
+        MovimentoFinanceiro.objects.create(
+            conta=movimento_antigo.conta,
+            tipo=MovimentoFinanceiro.TIPO_SAIDA,
+            valor=Decimal("39.80"),
+            data=venda.data_venda,
+            descricao=f"Estorno venda a vista #{venda.id} - movimento #{movimento_antigo.id}",
+            operador=venda.operador,
+            origem="venda_estorno",
+        )
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="1.000",
+            preco="96.30",
+        )
+        payload["tipo_pagamento"] = "\u00c0 vista"
+        payload["data_vencimento"] = ""
+        payload["origem_recebimento"] = {
+            "caixa": "0,00",
+            "banco": "96,30",
+        }
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        movimentos_banco = MovimentoFinanceiro.objects.filter(
+            origem="venda",
+            descricao__startswith=f"Venda a vista #{venda.id}",
+            conta__tipo=ContaFinanceira.TIPO_BANCO,
+        )
+
+        self.assertEqual(venda.tipo_pagamento, "\u00c0 vista")
+        self.assertEqual(conta.status, ContaReceber.STATUS_PAGA)
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(conta.recebimentos.count(), 2)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(descricao__icontains=f"#{venda.id}").count(), 3)
+        self.assertEqual(movimentos_banco.count(), 1)
+        self.assertEqual(movimentos_banco.get().valor, Decimal("96.30"))
+
+        resposta_nota = self.client.get(
+            reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta_nota.status_code, 200)
+        self.assertEqual(len(resposta_nota.context["movimentos_financeiros_venda"]), 1)
+        self.assertEqual(resposta_nota.context["alocacao_financeira_venda"]["caixa"], Decimal("0.00"))
+        self.assertEqual(resposta_nota.context["alocacao_financeira_venda"]["banco"], Decimal("96.30"))
+        conteudo_nota = resposta_nota.content.decode()
+        self.assertRegex(conteudo_nota, r"Caixa:\s*R\$\s*0[,.]00")
+        self.assertRegex(conteudo_nota, r"Banco/Pix:\s*R\$\s*96[,.]30")
+        self.assertRegex(conteudo_nota, r"Movimentos:\s*1")
+
+    def test_edicao_unificada_conversao_a_prazo_para_a_vista_falha_movimento_faz_rollback(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="19.90",
+            estoque="8.000",
+        )
+        conta = ContaReceber.objects.get(venda=venda)
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="2.000",
+            preco="19.90",
+        )
+        payload["tipo_pagamento"] = "\u00c0 vista"
+        payload["data_vencimento"] = ""
+        payload["origem_recebimento"] = {
+            "caixa": "39,80",
+            "banco": "0,00",
+        }
+
+        with self.assertRaises(RuntimeError):
+            with patch("estoque.views.MovimentoFinanceiro.objects.create", side_effect=RuntimeError("falha simulada")):
+                self.client.post(
+                    reverse("estoque:gravar_venda"),
+                    data=json.dumps(payload),
+                    content_type="application/json",
+                    secure=True,
+                )
+
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        produto.refresh_from_db()
+        self.assertEqual(venda.tipo_pagamento, "A prazo")
+        self.assertEqual(venda.data_vencimento, timezone.localdate())
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+        self.assertEqual(conta.valor_em_aberto, Decimal("39.80"))
+        self.assertEqual(RecebimentoContaReceber.objects.filter(conta=conta).count(), 0)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda").count(), 0)
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
 
     def test_edicao_unificada_carrega_tipo_pagamento_a_vista_no_select(self):
         cliente, produto, venda, item = self.criar_venda_base(

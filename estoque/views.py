@@ -2201,12 +2201,20 @@ def _venda_pagamento_imediato(tipo_pagamento):
 
 def _tipo_pagamento_venda_formulario(tipo_pagamento):
     if _venda_pagamento_imediato(tipo_pagamento):
-        return "À vista"
+        return "\u00c0 vista"
     forma = normalizar_texto_cliente(tipo_pagamento)
     forma_compacta = re.sub(r"\s+", "", forma)
     if forma in {"a prazo", "carteira", "fiado"} or forma_compacta == "aprazo":
         return "A prazo"
     return tipo_pagamento or ""
+
+
+def _normalizar_tipo_pagamento_venda(tipo_pagamento):
+    if _venda_pagamento_imediato(tipo_pagamento):
+        return "\u00c0 vista"
+    if _tipo_pagamento_a_prazo_texto(tipo_pagamento):
+        return "A prazo"
+    return str(tipo_pagamento or "").strip()
 
 
 def _tipo_pagamento_a_prazo_texto(tipo_pagamento):
@@ -2260,6 +2268,28 @@ def _movimentos_estorno_venda_a_vista(venda):
         )
         .order_by("id")
     )
+
+
+def _movimentos_financeiros_venda_ativos(venda):
+    estornos = list(_movimentos_estorno_venda_a_vista(venda))
+    movimentos_ativos = []
+
+    for movimento in _movimentos_financeiros_venda(venda):
+        valor_movimento = _financeiro_dinheiro(movimento.valor).quantize(Decimal("0.01"))
+        valor_estornado = sum(
+            (
+                _financeiro_dinheiro(estorno.valor).quantize(Decimal("0.01"))
+                for estorno in estornos
+                if estorno.conta_id == movimento.conta_id
+                and f"movimento #{movimento.id}" in (estorno.descricao or "")
+            ),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+        if valor_estornado >= valor_movimento:
+            continue
+        movimentos_ativos.append(movimento)
+
+    return movimentos_ativos
 
 
 RECEBIMENTO_OBS_CONVERSAO_PRAZO_PARA_VISTA = (
@@ -2326,7 +2356,7 @@ def _alocacao_financeira_venda(venda):
     alocacao = {chave: Decimal("0.00") for chave in contas}
     conta_para_chave = {conta.pk: chave for chave, conta in contas.items() if conta}
 
-    for movimento in _movimentos_financeiros_venda(venda):
+    for movimento in _movimentos_financeiros_venda_ativos(venda):
         chave = conta_para_chave.get(movimento.conta_id)
         if not chave:
             continue
@@ -2367,7 +2397,8 @@ def _registrar_movimentos_venda_a_vista(venda, valores_origem=None):
 
     movimentos_existentes = list(_movimentos_financeiros_venda(venda))
     if movimentos_existentes:
-        return movimentos_existentes
+        if not _movimentos_venda_a_vista_integralmente_estornados(venda):
+            return movimentos_existentes
 
     contas = {
         "caixa": _conta_financeira_padrao("caixa"),
@@ -2391,7 +2422,9 @@ def _registrar_movimentos_venda_a_vista(venda, valores_origem=None):
             continue
         conta_financeira = contas.get(chave)
         if not conta_financeira:
-            continue
+            raise ValueError(
+                "Conta financeira nao encontrada para registrar o recebimento da venda."
+            )
         movimentos.append(MovimentoFinanceiro.objects.create(
             conta=conta_financeira,
             tipo=MovimentoFinanceiro.TIPO_ENTRADA,
@@ -2547,7 +2580,8 @@ def _regularizar_conta_receber_conversao_venda_a_vista(venda):
     if not conta:
         return None
 
-    if conta.recebimentos.exists() or conta.status in {
+    recebimentos_ativos = _recebimentos_ativos_conta_venda(conta, venda)
+    if recebimentos_ativos or conta.status in {
         ContaReceber.STATUS_PARCIAL,
         ContaReceber.STATUS_PAGA,
     }:
@@ -15796,6 +15830,7 @@ def gravar_venda(request):
     try:
         dados = json.loads(request.body.decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError):
+        logger.warning("gravar_venda retorno 400 | motivo=%s", "Nao foi possivel ler os dados da venda.")
         return JsonResponse(
             {"sucesso": False, "mensagem": "Nao foi possivel ler os dados da venda."},
             status=400,
@@ -15803,15 +15838,30 @@ def gravar_venda(request):
 
     itens = dados.get("itens") or []
 
+    def erro_gravar_venda(mensagem, status=400):
+        origem = dados.get("origem_recebimento") or {}
+        logger.warning(
+            "gravar_venda retorno %s | motivo=%s | venda_id=%r | tipo_pagamento=%r | "
+            "total=%r | origem_recebimento=%r | valor_caixa=%r | valor_banco=%r | itens_qtd=%s | itens=%r",
+            status,
+            mensagem,
+            dados.get("venda_id"),
+            dados.get("tipo_pagamento"),
+            dados.get("total"),
+            origem,
+            origem.get("caixa"),
+            origem.get("banco"),
+            len(itens),
+            itens,
+        )
+        return JsonResponse({"sucesso": False, "mensagem": mensagem}, status=status)
+
     venda_edicao_id = str(dados.get("venda_id") or "").strip()
     venda_em_edicao = None
 
     if venda_edicao_id:
         if not venda_edicao_id.isdigit():
-            return JsonResponse(
-                {"sucesso": False, "mensagem": "Venda informada para edicao e invalida."},
-                status=400,
-            )
+            return erro_gravar_venda("Venda informada para edicao e invalida.")
 
         venda_em_edicao = Venda.objects.filter(
             pk=int(venda_edicao_id),
@@ -15819,23 +15869,14 @@ def gravar_venda(request):
         ).first()
 
         if not venda_em_edicao:
-            return JsonResponse(
-                {"sucesso": False, "mensagem": "Venda informada para edicao nao foi encontrada."},
-                status=404,
-            )
+            return erro_gravar_venda("Venda informada para edicao nao foi encontrada.", status=404)
 
     if not itens:
-        return JsonResponse(
-            {"sucesso": False, "mensagem": "Inclua pelo menos 1 item antes de gravar a venda."},
-            status=400,
-        )
+        return erro_gravar_venda("Inclua pelo menos 1 item antes de gravar a venda.")
 
     data_venda = parse_date(dados.get("data_venda") or "")
     if not data_venda:
-        return JsonResponse(
-            {"sucesso": False, "mensagem": "Informe uma data valida para a venda."},
-            status=400,
-        )
+        return erro_gravar_venda("Informe uma data valida para a venda.")
 
     data_vencimento = (
         parse_date(dados.get("data_vencimento") or "")
@@ -15848,10 +15889,7 @@ def gravar_venda(request):
     if cliente_id:
         cliente = Cliente.objects.filter(pk=cliente_id, ativo=True).first()
         if not cliente:
-            return JsonResponse(
-                {"sucesso": False, "mensagem": "Cliente selecionado nao foi encontrado."},
-                status=400,
-            )
+            return erro_gravar_venda("Cliente selecionado nao foi encontrado.")
 
     itens_validados = []
     total_calculado = Decimal("0.00")
@@ -15862,25 +15900,16 @@ def gravar_venda(request):
         unidade = str(item.get("unidade") or "").strip()
 
         if not produto_nome:
-            return JsonResponse(
-                {"sucesso": False, "mensagem": "Existe item sem produto informado."},
-                status=400,
-            )
+            return erro_gravar_venda("Existe item sem produto informado.")
 
         try:
             quantidade = _decimal_do_front(item.get("quantidade"), "0.001")
             preco_unitario = _decimal_do_front(item.get("preco_unitario"), "0.01")
         except ValueError:
-            return JsonResponse(
-                {"sucesso": False, "mensagem": f"Revise quantidade e preco do item {produto_nome}."},
-                status=400,
-            )
+            return erro_gravar_venda(f"Revise quantidade e preco do item {produto_nome}.")
 
         if quantidade <= 0 or preco_unitario <= 0:
-            return JsonResponse(
-                {"sucesso": False, "mensagem": f"Quantidade e preco precisam ser maiores que zero em {produto_nome}."},
-                status=400,
-            )
+            return erro_gravar_venda(f"Quantidade e preco precisam ser maiores que zero em {produto_nome}.")
 
         valor_total = (quantidade * preco_unitario).quantize(Decimal("0.01"))
         item_id = str(item.get("item_id") or "").strip()
@@ -15921,10 +15950,7 @@ def gravar_venda(request):
             ).first()
 
         if not produto:
-            return JsonResponse(
-                {"sucesso": False, "mensagem": f'Produto "{produto_nome}" nao foi encontrado no estoque.'},
-                status=400,
-            )
+            return erro_gravar_venda(f'Produto "{produto_nome}" nao foi encontrado no estoque.')
         print(
             "[venda item recebido]",
             f"produto_nome={produto_nome}",
@@ -15946,7 +15972,7 @@ def gravar_venda(request):
             "valor_total": valor_total,
         })
 
-    tipo_pagamento_venda = str(dados.get("tipo_pagamento") or "").strip()
+    tipo_pagamento_venda = _normalizar_tipo_pagamento_venda(dados.get("tipo_pagamento"))
     valores_origem_venda = None
     if (
         _venda_pagamento_imediato(tipo_pagamento_venda)
@@ -15959,7 +15985,7 @@ def gravar_venda(request):
                 total_calculado.quantize(Decimal("0.01")),
             )
         except ValueError as exc:
-            return JsonResponse({"sucesso": False, "mensagem": str(exc)}, status=400)
+            return erro_gravar_venda(str(exc))
 
     # ============================================================
     # EDICAO UNIFICADA DE VENDA EXISTENTE
@@ -15974,14 +16000,11 @@ def gravar_venda(request):
         )
         contexto_quitada = _contexto_venda_quitada(venda_em_edicao)
         if contexto_quitada.get("quitada") and not conversao_vista_para_prazo_pre:
-            return JsonResponse(
-                {
-                    "sucesso": False,
-                    "mensagem": (
-                        "Esta venda ja possui pagamento/baixa financeira e nao pode ser "
-                        "alterada por esta edicao simplificada."
-                    ),
-                },
+            return erro_gravar_venda(
+                (
+                    "Esta venda ja possui pagamento/baixa financeira e nao pode ser "
+                    "alterada por esta edicao simplificada."
+                ),
                 status=409,
             )
 
@@ -16329,10 +16352,7 @@ def gravar_venda(request):
                     )
 
         except ValueError as exc:
-            return JsonResponse(
-                {"sucesso": False, "mensagem": str(exc)},
-                status=400,
-            )
+            return erro_gravar_venda(str(exc))
 
         return JsonResponse({
             "sucesso": True,
@@ -16354,15 +16374,9 @@ def gravar_venda(request):
 
                 pedido_origem = Pedido.objects.select_for_update().filter(pk=pedido_id).first()
                 if not pedido_origem:
-                    return JsonResponse(
-                        {"sucesso": False, "mensagem": "Pedido de origem nao foi encontrado."},
-                        status=400,
-                    )
+                    return erro_gravar_venda("Pedido de origem nao foi encontrado.")
                 if pedido_origem.status not in [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL]:
-                    return JsonResponse(
-                        {"sucesso": False, "mensagem": "Pedido de origem nao esta aberto nem parcial."},
-                        status=400,
-                    )
+                    return erro_gravar_venda("Pedido de origem nao esta aberto nem parcial.")
 
             itens_para_venda = itens_validados
             total_venda = total_calculado
@@ -16443,17 +16457,14 @@ def gravar_venda(request):
                         pedido_pendencias_estoque.append(pendencia)
 
                 if not itens_para_venda:
-                    return JsonResponse(
-                        {
-                            "sucesso": False,
-                            "mensagem": (
-                                f"Nenhum item do Pedido #{pedido_origem.id} possui estoque disponivel "
-                                "para gerar venda. Os itens continuam pendentes no pedido."
-                            ),
-                            "toast_duracao_ms": 12000,
-                        },
-                        status=400,
+                    mensagem = (
+                        f"Nenhum item do Pedido #{pedido_origem.id} possui estoque disponivel "
+                        "para gerar venda. Os itens continuam pendentes no pedido."
                     )
+                    resposta = erro_gravar_venda(mensagem)
+                    resposta_data = json.loads(resposta.content.decode("utf-8"))
+                    resposta_data["toast_duracao_ms"] = 12000
+                    return JsonResponse(resposta_data, status=400)
             else:
                 _baixar_estoque_movimentos(
                     (item["produto"], item["quantidade"], item["unidade"])
@@ -16514,7 +16525,7 @@ def gravar_venda(request):
                         usuario=venda.operador,
                     )
     except ValueError as exc:
-        return JsonResponse({"sucesso": False, "mensagem": str(exc)}, status=400)
+        return erro_gravar_venda(str(exc))
 
     mensagem = f"Venda #{venda.id} gravada com sucesso."
     if pedido_pendencias_estoque:
@@ -16689,7 +16700,7 @@ def venda_detalhe(request, pk):
             "venda_a_prazo": _venda_a_prazo(venda),
             "venda_a_vista": _venda_pagamento_imediato(venda.tipo_pagamento),
             "alocacao_financeira_venda": _alocacao_financeira_venda(venda),
-            "movimentos_financeiros_venda": _movimentos_financeiros_venda(venda),
+            "movimentos_financeiros_venda": _movimentos_financeiros_venda_ativos(venda),
             "retorno_url": retorno_url,
             "retorno_querystring": _querystring_retorno(retorno_url),
             "modo_pendencia_resolvida": modo_pendencia_resolvida,
@@ -17627,7 +17638,8 @@ def venda_editar_cabecalho(request, pk):
         }
         nova_data_venda = parse_date(valores["data_venda"])
         novo_vencimento = parse_date(valores["data_vencimento"]) if valores["data_vencimento"] else None
-        novo_pagamento = valores["tipo_pagamento"]
+        novo_pagamento = _normalizar_tipo_pagamento_venda(valores["tipo_pagamento"])
+        valores["tipo_pagamento"] = novo_pagamento
 
         if not nova_data_venda:
             messages.warning(request, "Informe uma data da venda valida.")
