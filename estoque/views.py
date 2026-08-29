@@ -10340,7 +10340,7 @@ def clientes_autocomplete(request):
     limite = 12 if contexto == "pix_detalhe" else 12
 
     clientes = []
-    calcular_financeiro_completo = contexto in {"venda", "venda_detalhe"}
+    calcular_financeiro_completo = contexto == "venda_detalhe"
 
     for cliente in clientes_qs[:limite]:
         if calcular_financeiro_completo:
@@ -11096,6 +11096,10 @@ def vendas(request):
                         "unidade": item.unidade or "",
                         "preco_unitario": str(item.preco_unitario),
                         "valor_total": str(item.valor_total),
+                        "estoque_antes": str(item.estoque_antes) if item.estoque_antes is not None else "",
+                        "estoque_movimentado": str(item.estoque_movimentado) if item.estoque_movimentado is not None else "",
+                        "estoque_depois": str(item.estoque_depois) if item.estoque_depois is not None else "",
+                        "estoque_unidade_snapshot": item.estoque_unidade_snapshot or "",
                     }
                     for item in venda_para_editar.itens.all()
                 ],
@@ -15712,7 +15716,12 @@ def _baixar_estoque_produto(produto_id, quantidade, produto_nome=None, unidade=N
         f"baixado={quantidade_movimento}",
         f"depois={produto.quantidade}",
     )
-    return estoque_atual, produto.quantidade
+    return {
+        "estoque_antes": estoque_atual,
+        "estoque_movimentado": quantidade_movimento,
+        "estoque_depois": produto.quantidade,
+        "estoque_unidade_snapshot": unidade_base or "",
+    }
 
 
 def _devolver_estoque_produto(produto_id, quantidade, produto_nome=None, unidade=None):
@@ -15735,7 +15744,7 @@ def _devolver_estoque_produto(produto_id, quantidade, produto_nome=None, unidade
 
 def _baixar_estoque_movimentos(movimentos):
     movimentos_normalizados = []
-    for movimento in movimentos:
+    for indice, movimento in enumerate(movimentos):
         if len(movimento) == 2:
             produto, quantidade = movimento
             unidade = None
@@ -15743,13 +15752,32 @@ def _baixar_estoque_movimentos(movimentos):
             produto, quantidade, unidade = movimento
         if not produto:
             raise ValueError("Produto informado nao foi encontrado no estoque.")
-        movimentos_normalizados.append((produto.pk, produto.nome, quantidade, unidade))
+        movimentos_normalizados.append((indice, produto.pk, produto.nome, quantidade, unidade))
 
-    for produto_id, produto_nome, quantidade, unidade in sorted(
+    snapshots = [None] * len(movimentos_normalizados)
+    for indice, produto_id, produto_nome, quantidade, unidade in sorted(
         movimentos_normalizados,
-        key=lambda movimento: (movimento[0], movimento[1]),
+        key=lambda movimento: (movimento[1], movimento[2]),
     ):
-        _baixar_estoque_produto(produto_id, quantidade, produto_nome, unidade)
+        snapshots[indice] = _baixar_estoque_produto(produto_id, quantidade, produto_nome, unidade)
+
+    return snapshots
+
+
+def _snapshot_item_venda_quantidade_atual(produto, quantidade, unidade):
+    quantidade_base, unidade_base = _quantidade_estoque_para_unidade_base(produto, quantidade, unidade)
+    quantidade_movimentada = (
+        quantidade_base
+        if produto.vende_fracionado
+        else _quantidade_estoque_inteira(quantidade_base, produto.nome, unidade_base)
+    )
+    estoque_depois = _quantidade_decimal_estoque(produto.quantidade)
+    return {
+        "estoque_antes": (estoque_depois + quantidade_movimentada).quantize(Decimal("0.001")),
+        "estoque_movimentado": quantidade_movimentada,
+        "estoque_depois": estoque_depois,
+        "estoque_unidade_snapshot": unidade_base or "",
+    }
 
 
 def _atualizar_saldo_pendente_pedido(pedido, itens_vendidos):
@@ -16106,6 +16134,7 @@ def gravar_venda(request):
                         or _normalizar_unidade_estoque(unidade_antiga)
                            != _normalizar_unidade_estoque(unidade_nova)
                     )
+                    snapshot_estoque = None
 
                     if produto_ou_unidade_mudou:
                         if item_antigo.produto_id:
@@ -16116,7 +16145,7 @@ def gravar_venda(request):
                                 unidade_antiga,
                             )
 
-                        _baixar_estoque_produto(
+                        snapshot_estoque = _baixar_estoque_produto(
                             produto_novo.id,
                             quantidade_nova,
                             produto_nome_novo,
@@ -16163,6 +16192,13 @@ def gravar_venda(request):
                                 unidade_nova,
                             )
 
+                        produto_novo.refresh_from_db(fields=["quantidade"])
+                        snapshot_estoque = _snapshot_item_venda_quantidade_atual(
+                            produto_novo,
+                            quantidade_nova,
+                            unidade_nova,
+                        )
+
                         _registrar_evento_venda(
                             venda,
                             "quantidade_item_alterada",
@@ -16195,13 +16231,25 @@ def gravar_venda(request):
                     item_antigo.valor_total = (
                         quantidade_nova * preco_novo
                     ).quantize(Decimal("0.01"))
-                    item_antigo.save(update_fields=[
+                    campos_item_alterados = [
                         "produto",
                         "quantidade",
                         "unidade",
                         "preco_unitario",
                         "valor_total",
-                    ])
+                    ]
+                    if snapshot_estoque is not None:
+                        item_antigo.estoque_antes = snapshot_estoque["estoque_antes"]
+                        item_antigo.estoque_movimentado = snapshot_estoque["estoque_movimentado"]
+                        item_antigo.estoque_depois = snapshot_estoque["estoque_depois"]
+                        item_antigo.estoque_unidade_snapshot = snapshot_estoque["estoque_unidade_snapshot"]
+                        campos_item_alterados.extend([
+                            "estoque_antes",
+                            "estoque_movimentado",
+                            "estoque_depois",
+                            "estoque_unidade_snapshot",
+                        ])
+                    item_antigo.save(update_fields=campos_item_alterados)
 
                 # ------------------------------------------------------------
                 # Itens removidos da tela: devolver estoque e excluir.
@@ -16224,6 +16272,10 @@ def gravar_venda(request):
                         unidade_snapshot=item_antigo.unidade or "",
                         preco_unitario_snapshot=item_antigo.preco_unitario,
                         valor_total_snapshot=item_antigo.valor_total,
+                        estoque_antes=item_antigo.estoque_antes,
+                        estoque_movimentado=item_antigo.estoque_movimentado,
+                        estoque_depois=item_antigo.estoque_depois,
+                        estoque_unidade_snapshot=item_antigo.estoque_unidade_snapshot or "",
                         item_venda_original_id=item_antigo.id,
                         operador=str(dados.get("operador") or "").strip() or venda.operador,
                         observacao="Item removido pela edicao unificada da venda.",
@@ -16265,7 +16317,7 @@ def gravar_venda(request):
                             f'O produto "{produto_novo.nome}" ja existe nesta venda.'
                         )
 
-                    _baixar_estoque_produto(
+                    snapshot_estoque = _baixar_estoque_produto(
                         produto_novo.id,
                         item_novo["quantidade"],
                         produto_novo.nome,
@@ -16279,6 +16331,7 @@ def gravar_venda(request):
                         unidade=item_novo["unidade"],
                         preco_unitario=item_novo["preco_unitario"],
                         valor_total=item_novo["valor_total"],
+                        **snapshot_estoque,
                     )
                     produtos_ja_presentes.add(produto_novo.id)
 
@@ -16427,6 +16480,12 @@ def gravar_venda(request):
                             "unidade": item["unidade"],
                             "preco_unitario": item["preco_unitario"],
                             "valor_total": valor_total_vendido,
+                            "estoque_antes": estoque_disponivel,
+                            "estoque_movimentado": quantidade_vendida_base.quantize(Decimal("0.001")),
+                            "estoque_depois": (
+                                estoque_disponivel - quantidade_vendida_base
+                            ).quantize(Decimal("0.001")),
+                            "estoque_unidade_snapshot": _unidade_base or "",
                         })
                         total_venda += valor_total_vendido
                         produto_bloqueado.quantidade = (
@@ -16466,10 +16525,12 @@ def gravar_venda(request):
                     resposta_data["toast_duracao_ms"] = 12000
                     return JsonResponse(resposta_data, status=400)
             else:
-                _baixar_estoque_movimentos(
+                snapshots_estoque = _baixar_estoque_movimentos(
                     (item["produto"], item["quantidade"], item["unidade"])
                     for item in itens_para_venda
                 )
+                for item, snapshot_estoque in zip(itens_para_venda, snapshots_estoque):
+                    item.update(snapshot_estoque)
 
             venda = Venda.objects.create(
                 cliente=cliente,
@@ -16481,7 +16542,18 @@ def gravar_venda(request):
             )
 
             ItemVenda.objects.bulk_create([
-                ItemVenda(venda=venda, **item)
+                ItemVenda(
+                    venda=venda,
+                    produto=item["produto"],
+                    quantidade=item["quantidade"],
+                    unidade=item["unidade"],
+                    preco_unitario=item["preco_unitario"],
+                    valor_total=item["valor_total"],
+                    estoque_antes=item.get("estoque_antes"),
+                    estoque_movimentado=item.get("estoque_movimentado"),
+                    estoque_depois=item.get("estoque_depois"),
+                    estoque_unidade_snapshot=item.get("estoque_unidade_snapshot", ""),
+                )
                 for item in itens_para_venda
             ])
 
@@ -17926,10 +17998,11 @@ def venda_adicionar_produto_item(request, pk):
             try:
                 with transaction.atomic():
                     validar_produto_novo_na_venda(produto_selecionado)
-                    _baixar_estoque_produto(
+                    snapshot_estoque = _baixar_estoque_produto(
                         produto_selecionado.pk,
                         quantidade_preview,
                         produto_nome,
+                        unidade,
                     )
                     item_criado = ItemVenda.objects.create(
                         venda=venda,
@@ -17938,6 +18011,7 @@ def venda_adicionar_produto_item(request, pk):
                         unidade=unidade,
                         preco_unitario=preco_unitario,
                         valor_total=valor_novo_item,
+                        **snapshot_estoque,
                     )
                     total_recalculado = _recalcular_total_venda_pelos_itens(venda)
                     venda.total = total_recalculado
@@ -18096,6 +18170,10 @@ def venda_revisar_remocao_item(request, pk, item_id):
                 unidade_snapshot=unidade_removida or "",
                 preco_unitario_snapshot=item_venda.preco_unitario,
                 valor_total_snapshot=valor_abatido,
+                estoque_antes=item_venda.estoque_antes,
+                estoque_movimentado=item_venda.estoque_movimentado,
+                estoque_depois=item_venda.estoque_depois,
+                estoque_unidade_snapshot=item_venda.estoque_unidade_snapshot or "",
                 item_venda_original_id=item_venda.id,
                 operador=venda.operador or "",
                 observacao="Item removido da nota por edicao.",
@@ -18234,11 +18312,13 @@ def venda_desfazer_remocao_item(request, pk, remocao_id):
                     total_anterior = (venda.total or Decimal("0.00")).quantize(Decimal("0.01"))
                     ajuste_cancelado = item_removido_locked.ajuste_origem
                     estoque_baixado = False
+                    snapshot_estoque = {}
                     if not ajuste_cancelado and item_removido_locked.produto_id:
-                        _baixar_estoque_produto(
+                        snapshot_estoque = _baixar_estoque_produto(
                             item_removido_locked.produto_id,
                             item_removido_locked.quantidade_snapshot,
                             item_removido_locked.produto_nome_snapshot,
+                            item_removido_locked.unidade_snapshot,
                         )
                         estoque_baixado = True
 
@@ -18281,6 +18361,7 @@ def venda_desfazer_remocao_item(request, pk, remocao_id):
                             unidade=item_removido_locked.unidade_snapshot,
                             preco_unitario=item_removido_locked.preco_unitario_snapshot,
                             valor_total=item_removido_locked.valor_total_snapshot,
+                            **snapshot_estoque,
                         )
                     total_recalculado = _recalcular_total_venda_pelos_itens(venda)
                     venda.total = total_recalculado

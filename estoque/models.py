@@ -436,6 +436,25 @@ class ItemVenda(models.Model):
     unidade = models.CharField(max_length=20, blank=True)
     preco_unitario = models.DecimalField(max_digits=12, decimal_places=2)
     valor_total = models.DecimalField(max_digits=12, decimal_places=2)
+    estoque_antes = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        null=True,
+        blank=True,
+    )
+    estoque_movimentado = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        null=True,
+        blank=True,
+    )
+    estoque_depois = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        null=True,
+        blank=True,
+    )
+    estoque_unidade_snapshot = models.CharField(max_length=20, blank=True)
 
     class Meta:
         ordering = ["id"]
@@ -470,6 +489,25 @@ class ItemVendaRemovido(models.Model):
     unidade_snapshot = models.CharField(max_length=20, blank=True)
     preco_unitario_snapshot = models.DecimalField(max_digits=12, decimal_places=2)
     valor_total_snapshot = models.DecimalField(max_digits=12, decimal_places=2)
+    estoque_antes = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        null=True,
+        blank=True,
+    )
+    estoque_movimentado = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        null=True,
+        blank=True,
+    )
+    estoque_depois = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        null=True,
+        blank=True,
+    )
+    estoque_unidade_snapshot = models.CharField(max_length=20, blank=True)
     item_venda_original_id = models.PositiveIntegerField(blank=True, null=True)
     credito_gerado = models.ForeignKey(
         "CreditoCliente",

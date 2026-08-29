@@ -205,7 +205,6 @@
     background: #f8fbff;
 }
 
-
 .tabela-cabecalho-fixa th {
     text-align: left;
     padding: 16px 14px;
@@ -334,7 +333,8 @@ select {
     white-space: nowrap;
 }
 
-.estoque-item-sugestao {
+.estoque-item-sugestao,
+.item-venda-estoque-badge {
     font-size: 11px;
     font-weight: 700;
     color: #8a5a00;
@@ -343,6 +343,13 @@ select {
     border-radius: 999px;
     padding: 2px 6px;
     white-space: nowrap;
+}
+
+.item-venda-estoque-badge {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 8px;
+    vertical-align: middle;
 }
 
 .produto-sugestao-item.ativo .estoque-item-sugestao {
@@ -1502,12 +1509,59 @@ td:first-child {
     white-space: nowrap;
 }
 
+.venda-edicao-alerta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    max-width: 100%;
+    margin: 4px 0 6px;
+    padding: 4px 6px 4px 8px;
+    border: 1px solid #fdba74;
+    border-radius: 8px;
+    background: #fff7ed;
+    color: #7c2d12;
+    box-shadow: none;
+}
+
+.venda-edicao-alerta strong {
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0;
+    line-height: 1.15;
+    white-space: nowrap;
+}
+
+.venda-edicao-alerta .acao-venda-btn {
+    width: auto;
+    min-width: 0;
+    min-height: 26px;
+    height: 26px;
+    padding: 0 9px;
+    border-radius: 7px;
+    background: #ffffff;
+    color: #7c2d12;
+    border-color: #f97316;
+    font-size: 11px;
+    line-height: 1;
+    box-shadow: none;
+}
+
 @media (max-width: 980px) {
     .resumo-vendas-hoje-na-barra {
         justify-content: flex-start;
         flex-wrap: wrap;
         gap: 6px 10px;
         font-size: 11px;
+    }
+
+    .venda-edicao-alerta {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .venda-edicao-alerta .acao-venda-btn {
+        flex: 0 0 auto;
     }
 }
 </style>
@@ -1561,6 +1615,13 @@ td:first-child {
                 {% if pedido_importado %}
                     <a href="/receber-cliente/" class="pedido-importado-aviso-link">Voltar ao Pedido #{{ pedido_importado.id }}</a>
                 {% endif %}
+            </div>
+        {% endif %}
+
+        {% if venda_edicao %}
+            <div class="venda-edicao-alerta" id="vendaEdicaoAlerta">
+                <strong>Editando venda #{{ venda_edicao.id }}</strong>
+                <button type="button" id="btnNovaVendaEdicao" class="acao-venda-btn">Nova venda</button>
             </div>
         {% endif %}
 
@@ -2729,6 +2790,7 @@ const tabelaBody = document.getElementById("tabelaProdutos");
 const btnGravarVenda = document.getElementById("btnGravarVenda");
 const btnVisualizarVenda = document.getElementById("btnVisualizarVenda");
 const btnNovaVenda = document.getElementById("btnNovaVenda");
+const btnNovaVendaEdicao = document.getElementById("btnNovaVendaEdicao");
 const btnLimparItens = document.getElementById("btnLimparItens");
 const btnConsultarVendas = document.getElementById("btnConsultarVendas");
 const btnContasReceberVenda = document.getElementById("btnContasReceberVenda");
@@ -3557,20 +3619,6 @@ function renderizarSugestoesClientes() {
 
     clienteSugestoesBox.style.display = "block";
 
-    const clientePreviewFinanceiro = clientesSugestoes[
-        clienteIndexAtivo >= 0 ? clienteIndexAtivo : 0
-    ];
-    const mobileClienteBusca = window.matchMedia && window.matchMedia("(max-width: 980px)").matches;
-
-    if (!mobileClienteBusca && clientePreviewFinanceiro?.id) {
-        clienteSelecionado = clientePreviewFinanceiro;
-        clienteResumoSuspenso = false;
-        clienteId.value = clientePreviewFinanceiro.id || "";
-        guardarClienteSelecionado(clientePreviewFinanceiro);
-        atualizarCabecalhoCliente(clientePreviewFinanceiro);
-        atualizarPrazoEVencimentoCliente();
-    }
-
     const itemAtivoCliente = clienteSugestoesBox.querySelector(".cliente-sugestao-item.ativo");
     if (itemAtivoCliente) {
         itemAtivoCliente.scrollIntoView({ block: "nearest", behavior: "auto" });
@@ -3806,7 +3854,7 @@ clienteBusca.addEventListener("keydown", (e) => {
         e.preventDefault();
         const listaAberta = clienteSugestoesBox.style.display === "block";
         if (listaAberta && clienteIndexAtivo >= 0 && clientesSugestoes[clienteIndexAtivo]) {
-            preencherResumoCliente(clientesSugestoes[clienteIndexAtivo]);
+            preencherResumoCliente(clientesSugestoes[clienteIndexAtivo], true);
             focarProximoCampo(tipoVenda);
             return;
         }
@@ -3854,6 +3902,44 @@ function limparEstadoEdicaoItemVenda() {
     atualizarBotaoEdicaoItemVenda();
 }
 
+function renderizarCelulaProdutoVenda(celula, item) {
+    if (!celula || !item) return;
+
+    celula.innerHTML = "";
+
+    const nomeProduto = document.createElement("span");
+    nomeProduto.className = "item-venda-produto-nome";
+    nomeProduto.textContent = item.produto_nome || "";
+    celula.appendChild(nomeProduto);
+
+    const textoEstoque = criarTextoEstoqueSnapshotVenda(item);
+    if (textoEstoque) {
+        const badgeEstoque = document.createElement("span");
+        badgeEstoque.className = "item-venda-estoque-badge";
+        badgeEstoque.textContent = textoEstoque;
+        celula.appendChild(badgeEstoque);
+    }
+}
+
+function obterNomeProdutoLinhaVenda(linha) {
+    if (!linha) return "";
+
+    const nomeElemento = linha.querySelector(".item-venda-produto-nome");
+    if (nomeElemento) {
+        return nomeElemento.textContent.trim();
+    }
+
+    if (linha.dataset.produtoNome) {
+        return linha.dataset.produtoNome;
+    }
+
+    const celulaProduto = linha.children[0];
+    if (!celulaProduto) return "";
+    const clone = celulaProduto.cloneNode(true);
+    clone.querySelectorAll(".item-venda-estoque-badge").forEach((badge) => badge.remove());
+    return clone.textContent.trim();
+}
+
 function atualizarLinhaItemVenda(linha, item) {
     if (!linha || !item) return;
 
@@ -3862,8 +3948,9 @@ function atualizarLinhaItemVenda(linha, item) {
     } else {
         delete linha.dataset.produtoId;
     }
+    linha.dataset.produtoNome = item.produto_nome || "";
 
-    linha.children[0].textContent = item.produto_nome || "";
+    renderizarCelulaProdutoVenda(linha.children[0], item);
     linha.children[1].textContent = normalizarNumeroVenda(item.quantidade);
     linha.children[2].textContent = item.unidade || "";
     linha.children[3].textContent = normalizarNumeroVenda(item.preco_unitario);
@@ -3890,7 +3977,7 @@ function linhaTemProdutoVenda(linha, produtoId, produtoNome) {
         return idLinha === idProduto;
     }
 
-    const nomeLinha = normalizarTextoVendaEstoque(linha.children[0]?.textContent || "");
+    const nomeLinha = normalizarTextoVendaEstoque(obterNomeProdutoLinhaVenda(linha));
     const nomeProduto = normalizarTextoVendaEstoque(produtoNome || "");
     return !!nomeLinha && nomeLinha === nomeProduto;
 }
@@ -3953,7 +4040,7 @@ linha.style.background = "#e8f1ff";
 mostrarMsgEdicao();
 atualizarBotaoEdicaoItemVenda();
 // pega dados
-const nome = linha.children[0].textContent.trim();
+const nome = obterNomeProdutoLinhaVenda(linha);
 const qtd = linha.children[1].textContent.trim();
 const un = linha.children[2].textContent.trim();
 const valor = linha.children[3].textContent.trim();
@@ -4176,6 +4263,31 @@ function limparVendaAposGravacao() {
     atualizarTotalGeral();
 }
 
+function sairModoEdicaoParaNovaVenda() {
+    window.location.href = vendasUrl;
+}
+
+function formatarQuantidadeSnapshotVenda(valor) {
+    const texto = String(valor ?? "").trim();
+    if (!texto) return "";
+    const numero = Number(texto.replace(",", "."));
+    if (!Number.isFinite(numero)) return texto;
+    return numero.toLocaleString("pt-BR", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 3,
+    });
+}
+
+function criarTextoEstoqueSnapshotVenda(item) {
+    if (!item || !item.estoque_antes) {
+        return "";
+    }
+
+    const unidade = String(item.estoque_unidade_snapshot || item.unidade || "").trim();
+    const sufixoUnidade = unidade ? ` ${unidade}` : "";
+    return `Est: ${formatarQuantidadeSnapshotVenda(item.estoque_antes)}${sufixoUnidade}`;
+}
+
 function criarLinhaItemVenda(item) {
     const linha = document.createElement("tr");
 
@@ -4186,6 +4298,7 @@ function criarLinhaItemVenda(item) {
     if (item.produto_id) {
         linha.dataset.produtoId = String(item.produto_id);
     }
+    linha.dataset.produtoNome = item.produto_nome || "";
     const quantidadeItem = normalizarNumeroVenda(item.quantidade);
     const precoItem = normalizarNumeroVenda(item.preco_unitario);
     const totalInformado = normalizarNumeroVenda(item.valor_total);
@@ -4203,9 +4316,13 @@ function criarLinhaItemVenda(item) {
         isNaN(totalCalculado) ? "" : totalCalculado.toFixed(2),
     ];
 
-    valores.forEach((valor) => {
+    valores.forEach((valor, indice) => {
         const celula = document.createElement("td");
-        celula.textContent = valor;
+        if (indice === 0) {
+            renderizarCelulaProdutoVenda(celula, item);
+        } else {
+            celula.textContent = valor;
+        }
         linha.appendChild(celula);
     });
 
@@ -4279,8 +4396,6 @@ function prepararVendaEmEdicao() {
         btnGravarVenda.textContent = "Salvar Alteracoes";
         btnGravarVenda.title = "Salvar as alteracoes realizadas nesta venda.";
     }
-
-    mostrarToastVenda("Venda #" + vendaEdicaoVenda.id + " carregada para edicao.");
 
     window.requestAnimationFrame(() => {
         const primeiraLinha = tabelaBody.querySelector("tr");
@@ -4414,7 +4529,7 @@ function coletarItensVenda() {
     return Array.from(tabelaBody.querySelectorAll("tr")).map((tr) => ({
         item_id: tr.dataset.itemId || "",
         produto_id: tr.dataset.produtoId || "",
-        produto_nome: tr.children[0].textContent.trim(),
+        produto_nome: obterNomeProdutoLinhaVenda(tr),
         quantidade: normalizarNumeroVenda(tr.children[1].textContent),
         unidade: tr.children[2].textContent.trim(),
         preco_unitario: normalizarNumeroVenda(tr.children[3].textContent),
@@ -4792,7 +4907,11 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
         vendaGravadaUrl = retorno.visualizar_url || "";
         mostrarToastVenda(retorno.mensagem || ("Venda #" + vendaGravadaId + " gravada com sucesso."));
         mostrarBlocoVendaGravada(vendaGravadaId, vendaGravadaUrl, retorno.mensagem);
-        limparVendaAposGravacao();
+        if (vendaEdicaoVenda?.id) {
+            limparFechamentoVenda();
+        } else {
+            limparVendaAposGravacao();
+        }
     } catch (erro) {
         mostrarToastVenda("Falha de comunicacao ao gravar a venda.");
     } finally {
@@ -5021,8 +5140,16 @@ btnLimparItens.addEventListener("click", async () => {
 });
 
 btnNovaVenda.addEventListener("click", async () => {
-    const confirmou = await confirmarAcaoVenda("Deseja limpar toda a venda atual?", { focoInicial: "confirmar" });
+    const mensagem = vendaEdicaoVenda?.id
+        ? "Sair da edicao da venda #" + vendaEdicaoVenda.id + " e iniciar uma nova venda?"
+        : "Deseja limpar toda a venda atual?";
+    const confirmou = await confirmarAcaoVenda(mensagem, { focoInicial: "confirmar" });
     if (!confirmou) return;
+
+    if (vendaEdicaoVenda?.id) {
+        sairModoEdicaoParaNovaVenda();
+        return;
+    }
 
     limparItensVenda();
     limparCabecalhoVenda(true);
@@ -5030,6 +5157,15 @@ btnNovaVenda.addEventListener("click", async () => {
     vendaGravadaUrl = "";
     ocultarBlocoVendaGravada();
     mostrarToastVenda("Venda atual limpa.");
+});
+
+btnNovaVendaEdicao?.addEventListener("click", async () => {
+    const confirmou = await confirmarAcaoVenda(
+        "Sair da edicao da venda #" + vendaEdicaoVenda.id + " e iniciar uma nova venda?",
+        { focoInicial: "confirmar" }
+    );
+    if (!confirmou) return;
+    sairModoEdicaoParaNovaVenda();
 });
 
 btnNovaVendaGravada?.addEventListener("click", () => {
@@ -5289,7 +5425,7 @@ quantidade.addEventListener("keydown", (e) => {
 if (e.key === "Delete") {
 
     if (linhaSelecionada) {
-const nomeProduto = linhaSelecionada.children[0]?.innerText?.trim() || "este item";
+const nomeProduto = obterNomeProdutoLinhaVenda(linhaSelecionada) || "este item";
 const confirmar = await confirmarExclusaoPersonalizada(nomeProduto);
 if (!confirmar) return;
 
@@ -5427,17 +5563,15 @@ if (bloquearProdutoDuplicadoVenda(produtoIdEnter, nomeProduto, linhaSelecionada)
 
         if (linhaSelecionada) {
             // EDITAR LINHA EXISTENTE
-            if (produtoIdEnter) {
-                linhaSelecionada.dataset.produtoId = String(produtoIdEnter);
-            } else {
-                delete linhaSelecionada.dataset.produtoId;
-            }
-            linhaSelecionada.children[0].textContent = nomeProduto;
-            linhaSelecionada.children[1].textContent = qtd;
-            linhaSelecionada.children[2].textContent = un;
-            linhaSelecionada.children[3].textContent = valor;
             const totalEdit = parseFloat(qtd) * parseFloat(valor);
-linhaSelecionada.children[4].textContent = isNaN(totalEdit) ? "" : totalEdit.toFixed(2);
+atualizarLinhaItemVenda(linhaSelecionada, {
+    produto_id: produtoIdEnter,
+    produto_nome: nomeProduto,
+    quantidade: qtd,
+    unidade: un,
+    preco_unitario: valor,
+    valor_total: isNaN(totalEdit) ? "" : totalEdit.toFixed(2),
+});
 atualizarTotalGeral();
 scrollLinhaDentroDaLista(linhaSelecionada);
 limparEstadoEdicaoItemVenda();
