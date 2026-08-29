@@ -2837,6 +2837,24 @@ const clienteResumoStatusCard = document.getElementById("clienteResumoStatusCard
 const clienteResumoWhatsapp = document.getElementById("clienteResumoWhatsapp");
 const clienteResumoFinanceiro = document.getElementById("clienteResumoFinanceiro");
 const vencimentoVenda = document.getElementById("vencimentoVenda");
+[clienteBusca, tipoVenda, dataVenda, operadorVenda, vencimentoVenda].forEach((campo) => {
+    if (!campo) return;
+    campo.addEventListener("input", marcarVendaEdicaoComoAlterada);
+    campo.addEventListener("change", marcarVendaEdicaoComoAlterada);
+});
+
+if (tabelaBody) {
+    const observadorAlteracoesItensVenda = new MutationObserver(() => {
+        marcarVendaEdicaoComoAlterada();
+    });
+
+    observadorAlteracoesItensVenda.observe(tabelaBody, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+    });
+}
+
 const clientesAutocompleteUrl = "{% url 'estoque:clientes_autocomplete' %}";
 const contasReceberUrl = "{% url 'estoque:contas_receber' %}";
 const receberClienteUrlBase = "{% url 'estoque:receber_cliente' 0 %}";
@@ -2959,6 +2977,26 @@ document.addEventListener("click", function(event) {
 const clienteInicialVenda = JSON.parse(document.getElementById("clienteInicialVenda").textContent || "null");
 let pedidoImportadoVenda = JSON.parse(document.getElementById("pedidoImportadoVenda").textContent || "null");
 const vendaEdicaoVenda = JSON.parse(document.getElementById("vendaEdicaoVenda").textContent || "null");
+
+let vendaEdicaoSemAlteracoesPendentes = false;
+
+function marcarVendaEdicaoComoSalva() {
+    if (!vendaEdicaoVenda?.id || !btnGravarVenda) return;
+
+    vendaEdicaoSemAlteracoesPendentes = true;
+    btnGravarVenda.disabled = true;
+    btnGravarVenda.textContent = "Alterações salvas";
+    btnGravarVenda.title = "Todas as alterações desta venda já foram salvas.";
+}
+
+function marcarVendaEdicaoComoAlterada() {
+    if (!vendaEdicaoVenda?.id || !vendaEdicaoSemAlteracoesPendentes || !btnGravarVenda) return;
+
+    vendaEdicaoSemAlteracoesPendentes = false;
+    btnGravarVenda.disabled = false;
+    btnGravarVenda.textContent = "Salvar Alterações";
+    btnGravarVenda.title = "Salvar as alterações realizadas nesta venda.";
+}
 const clienteResumoStorageKey = "vendas.clienteSelecionado";
 let clientesSugestoes = [];
 let clienteIndexAtivo = -1;
@@ -4954,8 +4992,12 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
     } catch (erro) {
         mostrarToastVenda("Falha de comunicacao ao gravar a venda.");
     } finally {
-        btnGravarVenda.disabled = false;
-        btnGravarVenda.textContent = vendaEdicaoVenda ? "Salvar Alteracoes" : "Gravar Venda";
+        if (vendaEdicaoVenda?.id && vendaGravadaId) {
+            marcarVendaEdicaoComoSalva();
+        } else {
+            btnGravarVenda.disabled = false;
+            btnGravarVenda.textContent = vendaEdicaoVenda ? "Salvar Alterações" : "Gravar Venda";
+        }
     }
 }
 
