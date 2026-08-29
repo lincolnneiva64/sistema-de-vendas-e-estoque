@@ -3943,12 +3943,43 @@ function obterNomeProdutoLinhaVenda(linha) {
 function atualizarLinhaItemVenda(linha, item) {
     if (!linha || !item) return;
 
+    const produtoIdAnterior = String(linha.dataset.produtoId || "").trim();
+    const produtoNomeAnterior = String(linha.dataset.produtoNome || "").trim();
+    const produtoIdNovo = String(item.produto_id || "").trim();
+    const produtoNomeNovo = String(item.produto_nome || "").trim();
+
+    const mesmoProduto = produtoIdAnterior && produtoIdNovo
+        ? produtoIdAnterior === produtoIdNovo
+        : normalizarTextoVendaEstoque(produtoNomeAnterior) === normalizarTextoVendaEstoque(produtoNomeNovo);
+
+    if (mesmoProduto && !item.estoque_antes && linha.dataset.estoqueAntes) {
+        item = {
+            ...item,
+            estoque_antes: linha.dataset.estoqueAntes,
+            estoque_movimentado: linha.dataset.estoqueMovimentado || "",
+            estoque_depois: linha.dataset.estoqueDepois || "",
+            estoque_unidade_snapshot: linha.dataset.estoqueUnidadeSnapshot || "",
+        };
+    }
+
     if (item.produto_id) {
         linha.dataset.produtoId = String(item.produto_id);
     } else {
         delete linha.dataset.produtoId;
     }
     linha.dataset.produtoNome = item.produto_nome || "";
+
+    if (item.estoque_antes) {
+        linha.dataset.estoqueAntes = String(item.estoque_antes);
+        linha.dataset.estoqueMovimentado = String(item.estoque_movimentado || "");
+        linha.dataset.estoqueDepois = String(item.estoque_depois || "");
+        linha.dataset.estoqueUnidadeSnapshot = String(item.estoque_unidade_snapshot || "");
+    } else if (!mesmoProduto) {
+        delete linha.dataset.estoqueAntes;
+        delete linha.dataset.estoqueMovimentado;
+        delete linha.dataset.estoqueDepois;
+        delete linha.dataset.estoqueUnidadeSnapshot;
+    }
 
     renderizarCelulaProdutoVenda(linha.children[0], item);
     linha.children[1].textContent = normalizarNumeroVenda(item.quantidade);
@@ -4299,6 +4330,14 @@ function criarLinhaItemVenda(item) {
         linha.dataset.produtoId = String(item.produto_id);
     }
     linha.dataset.produtoNome = item.produto_nome || "";
+
+    if (item.estoque_antes) {
+        linha.dataset.estoqueAntes = String(item.estoque_antes);
+        linha.dataset.estoqueMovimentado = String(item.estoque_movimentado || "");
+        linha.dataset.estoqueDepois = String(item.estoque_depois || "");
+        linha.dataset.estoqueUnidadeSnapshot = String(item.estoque_unidade_snapshot || "");
+    }
+
     const quantidadeItem = normalizarNumeroVenda(item.quantidade);
     const precoItem = normalizarNumeroVenda(item.preco_unitario);
     const totalInformado = normalizarNumeroVenda(item.valor_total);
