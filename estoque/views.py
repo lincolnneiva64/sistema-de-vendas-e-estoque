@@ -17571,6 +17571,55 @@ def _linhas_evento_edicao_nota(evento):
     return [descricao] if descricao else []
 
 
+def _consolidar_linhas_whatsapp_edicao(eventos):
+    linhas = []
+    quantidades = {}
+    ordem = []
+
+    for evento in eventos:
+        if evento.tipo_evento == "quantidade_item_alterada":
+            descricao = (evento.descricao or "").strip()
+            prefixo = "Quantidade alterada na nota: "
+
+            if (
+                descricao.startswith(prefixo)
+                and ". De " in descricao
+                and ". Total" in descricao
+            ):
+                produto, resto = descricao[len(prefixo):].split(". De ", 1)
+                quantidades_texto = resto.split(". Total", 1)[0]
+
+                if " para " in quantidades_texto:
+                    anterior, nova = quantidades_texto.split(" para ", 1)
+                    produto = produto.strip()
+
+                    if produto not in quantidades:
+                        quantidades[produto] = {
+                            "anterior": anterior.strip(),
+                            "nova": nova.strip(),
+                        }
+                        ordem.append(("quantidade", produto))
+                    else:
+                        quantidades[produto]["nova"] = nova.strip()
+
+                    continue
+
+        ordem.append(("evento", evento))
+
+    for tipo, valor in ordem:
+        if tipo == "quantidade":
+            dados = quantidades[valor]
+            linhas.append([
+                f'O item "{valor}" teve a quantidade alterada:',
+                f'Quantidade anterior: {dados["anterior"]}',
+                f'Nova quantidade: {dados["nova"]}',
+            ])
+        else:
+            linhas.append(_linhas_evento_edicao_nota(valor))
+
+    return linhas
+
+
 def _montar_whatsapp_atualizacao_nota(request, venda):
     eventos = list(_eventos_edicao_nota_para_whatsapp(venda))
     if not eventos:
@@ -17594,10 +17643,12 @@ def _montar_whatsapp_atualizacao_nota(request, venda):
         "Sua nota foi atualizada.",
         "",
     ]
-    for indice, evento in enumerate(eventos):
+    grupos_mensagem = _consolidar_linhas_whatsapp_edicao(eventos)
+
+    for indice, linhas_evento in enumerate(grupos_mensagem):
         if indice:
             linhas_mensagem.append("")
-        linhas_mensagem.extend(_linhas_evento_edicao_nota(evento))
+        linhas_mensagem.extend(linhas_evento)
 
     linhas_mensagem.extend([
         "",
@@ -17607,7 +17658,7 @@ def _montar_whatsapp_atualizacao_nota(request, venda):
         nota_url,
     ])
     mensagem_whatsapp = "\n".join(linhas_mensagem)
-    quantidade_eventos = len(eventos)
+    quantidade_eventos = len(grupos_mensagem)
     texto_resumo = (
         "Nota atualizada com 1 alteracao desde o ultimo WhatsApp."
         if quantidade_eventos == 1

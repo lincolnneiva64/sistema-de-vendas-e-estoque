@@ -78,6 +78,10 @@
             cursor: not-allowed;
         }
 
+        [hidden] {
+            display: none !important;
+        }
+
         .whatsapp-acao {
             background: #dcfce7;
             border-color: #22c55e;
@@ -1773,7 +1777,7 @@
                         {% endif %}
                         <a href="{% url 'estoque:venda_whatsapp_pdf' venda.id %}" target="_blank" rel="noopener">PDF</a>
                         {% if whatsapp_atualizacao %}
-                            <button type="button" id="btnConfirmarWhatsapp" class="whatsapp-acao whatsapp-confirmacao-pendente" data-whatsapp-confirmar-envio {% if not whatsapp_atualizacao.whatsapp_aberto %}hidden{% endif %}>Confirmar reenvio pelo WhatsApp</button>
+                            <button type="button" id="btnConfirmarWhatsapp" class="whatsapp-acao{% if whatsapp_atualizacao.whatsapp_aberto %} whatsapp-confirmacao-pendente{% endif %}" data-whatsapp-confirmar-envio {% if not whatsapp_atualizacao.whatsapp_aberto %}hidden{% endif %}>Confirmar reenvio pelo WhatsApp</button>
                         {% else %}
                             <button type="button" id="btnConfirmarWhatsapp" class="whatsapp-acao" data-whatsapp-confirmar-envio {% if venda.whatsapp_status == "enviado_confirmado" %}disabled{% endif %}>
                                 {% if venda.whatsapp_status == "enviado_confirmado" %}Nota ja marcada como enviada{% else %}Marcar como enviada pelo WhatsApp{% endif %}
@@ -1848,7 +1852,7 @@
                                 {% else %}
                                     <span class="edit-review-whatsapp-text">Cliente sem WhatsApp cadastrado para envio automatico.</span>
                                 {% endif %}
-                                <button type="button" class="whatsapp-acao whatsapp-confirmacao-pendente" data-whatsapp-confirmar-envio {% if not whatsapp_atualizacao.whatsapp_aberto %}hidden{% endif %}>Confirmar reenvio pelo WhatsApp</button>
+                                <button type="button" class="whatsapp-acao{% if whatsapp_atualizacao.whatsapp_aberto %} whatsapp-confirmacao-pendente{% endif %}" data-whatsapp-confirmar-envio {% if not whatsapp_atualizacao.whatsapp_aberto %}hidden{% endif %}>Confirmar reenvio pelo WhatsApp</button>
                                 <span class="edit-review-whatsapp-step" data-whatsapp-confirmado-feedback>Reenvio confirmado.</span>
                             </div>
                         </div>
@@ -2507,6 +2511,7 @@
         const whatsappPendenteValor = "conversa_aberta";
         const whatsappStatusInicial = "{{ venda.whatsapp_status }}";
         const whatsappAtualizacaoPendente = {% if whatsapp_atualizacao %}true{% else %}false{% endif %};
+        const whatsappAtualizacaoAberta = {% if whatsapp_atualizacao and whatsapp_atualizacao.whatsapp_aberto %}true{% else %}false{% endif %};
         const desfazerRemocaoModal = document.getElementById("desfazerRemocaoModal");
         const desfazerRemocaoProduto = document.getElementById("desfazerRemocaoProduto");
         const desfazerRemocaoQuantidade = document.getElementById("desfazerRemocaoQuantidade");
@@ -2619,8 +2624,10 @@
         }
 
         try {
-            if (whatsappAtualizacaoPendente) {
+            if (whatsappAtualizacaoPendente && whatsappAtualizacaoAberta) {
                 aplicarLembreteWhatsapp();
+            } else if (whatsappAtualizacaoPendente) {
+                removerLembreteWhatsapp();
             } else if (whatsappStatusInicial === "enviado_confirmado") {
                 localStorage.removeItem(whatsappPendenteKey);
                 removerLembreteWhatsapp();
