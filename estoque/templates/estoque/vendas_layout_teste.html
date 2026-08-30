@@ -2980,6 +2980,21 @@ const vendaEdicaoVenda = JSON.parse(document.getElementById("vendaEdicaoVenda").
 
 let vendaEdicaoSemAlteracoesPendentes = false;
 
+function consolidarReferenciaPersistidaItensVenda() {
+    if (!vendaEdicaoVenda?.id || !tabelaBody) return;
+
+    tabelaBody.querySelectorAll("tr").forEach((linha) => {
+        linha.dataset.produtoIdOriginal = String(linha.dataset.produtoId || "");
+        linha.dataset.produtoNomeOriginal = String(linha.dataset.produtoNome || "");
+        linha.dataset.quantidadeOriginal = normalizarNumeroVenda(
+            linha.children[1]?.textContent || "0"
+        );
+        linha.dataset.unidadeOriginal = String(
+            linha.children[2]?.textContent || ""
+        ).trim();
+    });
+}
+
 function marcarVendaEdicaoComoSalva() {
     if (!vendaEdicaoVenda?.id || !btnGravarVenda) return;
 
@@ -2987,6 +3002,7 @@ function marcarVendaEdicaoComoSalva() {
     btnGravarVenda.disabled = true;
     btnGravarVenda.textContent = "Alterações salvas";
     btnGravarVenda.title = "Todas as alterações desta venda já foram salvas.";
+    consolidarReferenciaPersistidaItensVenda();
 }
 
 function marcarVendaEdicaoComoAlterada() {
@@ -4007,6 +4023,23 @@ function atualizarLinhaItemVenda(linha, item) {
     }
     linha.dataset.produtoNome = item.produto_nome || "";
 
+    // A referencia persistida nao pode acompanhar alteracoes locais.
+    // Ela so muda depois que a venda for efetivamente salva.
+    if (linha.dataset.quantidadeOriginal === undefined) {
+        if (item.item_id) {
+            linha.dataset.produtoIdOriginal = String(item.produto_id || "");
+            linha.dataset.produtoNomeOriginal = item.produto_nome || "";
+            linha.dataset.quantidadeOriginal = normalizarNumeroVenda(item.quantidade);
+            linha.dataset.unidadeOriginal = item.unidade || "";
+        } else {
+            // Item ainda nao persistido: para o estoque, parte de zero.
+            linha.dataset.produtoIdOriginal = "";
+            linha.dataset.produtoNomeOriginal = "";
+            linha.dataset.quantidadeOriginal = "0";
+            linha.dataset.unidadeOriginal = "";
+        }
+    }
+
     if (item.estoque_antes) {
         linha.dataset.estoqueAntes = String(item.estoque_antes);
         linha.dataset.estoqueMovimentado = String(item.estoque_movimentado || "");
@@ -4447,6 +4480,11 @@ function prepararVendaEmEdicao() {
         tabelaBody.appendChild(criarLinhaItemVenda(item));
     });
 
+    // Registra a referencia persistida original dos itens carregados.
+    // Ela permanece imutavel durante alteracoes locais e so e
+    // consolidada novamente depois que a venda for salva.
+    consolidarReferenciaPersistidaItensVenda();
+
     dataVenda.value = vendaEdicaoVenda.data_venda || "";
     vencimentoVenda.value = vendaEdicaoVenda.data_vencimento || "";
     tipoVenda.value = vendaEdicaoVenda.tipo_pagamento || "";
@@ -4587,13 +4625,53 @@ function validarEstoqueItemVendaAtual(mostrarAvisoErro = false) {
     }
 
     const disponivel = estoqueDisponivelNaUnidadeVenda(produtoOption, unidadeTexto);
-    if (disponivel === null || qtdNumero <= disponivel + 0.0001) {
+
+    let quantidadeNecessariaEstoque = qtdNumero;
+
+    if (linhaSelecionada) {
+        const produtoIdAtual = String(produtoOption?.dataset?.produtoId || "");
+        const produtoIdOriginal = String(
+            linhaSelecionada.dataset.produtoIdOriginal || ""
+        );
+        const unidadeOriginal = normalizarUnidadeEstoqueVenda(
+            linhaSelecionada.dataset.unidadeOriginal || ""
+        );
+        const unidadeAtual = normalizarUnidadeEstoqueVenda(unidadeTexto);
+        const quantidadeOriginal = parseFloat(
+            normalizarNumeroVenda(
+                linhaSelecionada.dataset.quantidadeOriginal || "0"
+            )
+        );
+
+        if (
+            produtoIdAtual &&
+            produtoIdOriginal &&
+            produtoIdAtual === produtoIdOriginal &&
+            unidadeAtual === unidadeOriginal &&
+            Number.isFinite(quantidadeOriginal)
+        ) {
+            quantidadeNecessariaEstoque = Math.max(
+                0,
+                qtdNumero - quantidadeOriginal
+            );
+        }
+    }
+
+    if (
+        disponivel === null ||
+        quantidadeNecessariaEstoque <= disponivel + 0.0001
+    ) {
         return true;
     }
 
     if (mostrarAvisoErro) {
         mostrarAviso(
-            mensagemEstoqueInsuficienteVenda(produtoOption, qtdNumero, unidadeTexto, disponivel),
+            mensagemEstoqueInsuficienteVenda(
+                produtoOption,
+                quantidadeNecessariaEstoque,
+                unidadeTexto,
+                disponivel
+            ),
             quantidade,
             true
         );
