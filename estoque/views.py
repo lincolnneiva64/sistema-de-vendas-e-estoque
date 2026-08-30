@@ -18665,13 +18665,19 @@ def preparar_whatsapp_venda(request, pk):
     bloqueio = _bloquear_venda_cancelada(request, venda)
     if bloqueio:
         return bloqueio
-    whatsapp_url = montar_link_whatsapp_venda(venda)
+    whatsapp_atualizacao = _montar_whatsapp_atualizacao_nota(request, venda)
+    whatsapp_url = (
+        whatsapp_atualizacao["url"]
+        if whatsapp_atualizacao and whatsapp_atualizacao.get("tem_whatsapp")
+        else montar_link_whatsapp_venda(venda)
+    )
     return render(
         request,
         "estoque/preparar_whatsapp.html",
         {
             "venda": venda,
             "whatsapp_url": whatsapp_url,
+            "whatsapp_atualizacao": whatsapp_atualizacao,
         },
     )
 

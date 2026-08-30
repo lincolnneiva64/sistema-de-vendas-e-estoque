@@ -1767,7 +1767,7 @@
                         <button type="button" id="btnImprimir">Imprimir</button>
                         {% if not venda.cancelada %}
                         {% if whatsapp_atualizacao and whatsapp_atualizacao.tem_whatsapp %}
-                            <a href="{{ whatsapp_atualizacao.url }}" target="_blank" rel="noopener" class="whatsapp-acao whatsapp-confirmacao-pendente" data-whatsapp-atualizacao-pendente data-whatsapp-atualizado-link id="btnEnviarWhatsappAtualizado" data-registrar-url="{% url 'estoque:registrar_whatsapp_aberto' venda.id %}">Enviar nota atualizada pelo WhatsApp</a>
+                            <a href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}" class="whatsapp-acao whatsapp-confirmacao-pendente" data-whatsapp-atualizacao-pendente data-whatsapp-atualizado-link id="btnEnviarWhatsappAtualizado" data-registrar-url="{% url 'estoque:registrar_whatsapp_aberto' venda.id %}">Enviar nota atualizada pelo WhatsApp</a>
                         {% else %}
                             <a href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}" class="whatsapp-acao">Imagem / WhatsApp</a>
                         {% endif %}
@@ -1844,7 +1844,7 @@
                             <span class="edit-review-whatsapp-text">{{ whatsapp_atualizacao.texto_resumo }} Envie a nota atualizada pelo WhatsApp e confirme o reenvio.</span>
                             <div class="edit-review-whatsapp-flow">
                                 {% if whatsapp_atualizacao.tem_whatsapp %}
-                                    <a href="{{ whatsapp_atualizacao.url }}" target="_blank" rel="noopener" class="whatsapp-acao whatsapp-confirmacao-pendente" data-whatsapp-atualizado-link data-registrar-url="{% url 'estoque:registrar_whatsapp_aberto' venda.id %}">Enviar nota atualizada pelo WhatsApp</a>
+                                    <a href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}" class="whatsapp-acao whatsapp-confirmacao-pendente" data-whatsapp-atualizado-link data-registrar-url="{% url 'estoque:registrar_whatsapp_aberto' venda.id %}">Enviar nota atualizada pelo WhatsApp</a>
                                 {% else %}
                                     <span class="edit-review-whatsapp-text">Cliente sem WhatsApp cadastrado para envio automatico.</span>
                                 {% endif %}
