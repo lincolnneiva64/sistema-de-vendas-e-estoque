@@ -1,4 +1,4 @@
-﻿{% extends "estoque/base.html" %}
+{% extends "estoque/base.html" %}
 
 {% block title %}Imagem para WhatsApp{% endblock %}
 
@@ -384,10 +384,10 @@
 
         
         <div class="whatsapp-mensagem-cliente">
-          <h2 class="whatsapp-mensagem-cliente-titulo">Mensagem curta para o cliente</h2>
-          <textarea id="mensagemClienteWhatsapp" class="whatsapp-mensagem-cliente-texto" readonly style="width:100%; min-height:120px; padding:12px; border:1px solid #86efac; border-radius:12px; font-size:18px; line-height:1.35; font-weight:800; box-sizing:border-box;">Olá, segue sua nota de venda.
+          <h2 class="whatsapp-mensagem-cliente-titulo">{% if whatsapp_atualizacao %}Mensagem da atualização{% else %}Mensagem curta para o cliente{% endif %}</h2>
+          <textarea id="mensagemClienteWhatsapp" class="whatsapp-mensagem-cliente-texto" readonly style="width:100%; min-height:120px; padding:12px; border:1px solid #86efac; border-radius:12px; font-size:18px; line-height:1.35; font-weight:800; box-sizing:border-box;">{% if whatsapp_atualizacao %}{{ whatsapp_atualizacao.texto_resumo }}{% else %}Olá, segue sua nota de venda.
 Total: R$ {{ venda.total|floatformat:2 }}
-Vencimento: {{ venda.data_vencimento|date:"d/m/Y"|default:"-" }}.</textarea>
+Vencimento: {{ venda.data_vencimento|date:"d/m/Y"|default:"-" }}.{% endif %}</textarea>
           <div id="mensagemClienteCopiada" class="whatsapp-mensagem-cliente-feedback">Segure no texto acima, selecione, copie e cole no WhatsApp depois de enviar a imagem.</div>
         </div>
 
@@ -411,7 +411,7 @@ Vencimento: {{ venda.data_vencimento|date:"d/m/Y"|default:"-" }}.</textarea>
           {% else %}
             <button type="button" id="btnAbrirModalWhatsapp" class="whatsapp-preparo-btn whatsapp">Abrir conversa no WhatsApp</button>
           {% endif %}
-          <button type="button" id="btnConfirmarWhatsapp" class="whatsapp-preparo-btn whatsapp whatsapp-pendente" data-confirmar-url="{% url 'estoque:confirmar_whatsapp' venda.id %}">Confirmar WhatsApp</button>
+          <button type="button" id="btnConfirmarWhatsapp" class="whatsapp-preparo-btn whatsapp whatsapp-pendente" data-confirmar-url="{% url 'estoque:confirmar_whatsapp' venda.id %}">{% if whatsapp_atualizacao %}Confirmar reenvio pelo WhatsApp{% else %}Confirmar WhatsApp{% endif %}</button>
         </div>
 
         <div class="whatsapp-preparo-acoes">
