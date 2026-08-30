@@ -2080,6 +2080,7 @@ align-items: center;
             {% csrf_token %}
             <input type="hidden" name="acao" value="{% if produto.ativo %}desativar{% else %}reativar{% endif %}">
             <input type="hidden" name="next" value="{{ request.get_full_path }}#produtos-lista">
+            <input type="hidden" name="foco_produto" value="{{ produto.id }}">
             {% if produto.ativo %}
               <button type="submit" class="btn btn-outline-danger btn-sm btn-status-produto btn-desativar-produto">Desativar</button>
             {% else %}
@@ -2144,6 +2145,40 @@ linhas.forEach(function(linha) {
 document.querySelectorAll(".btn-editar-produto").forEach(function(botaoEditar) {
     botaoEditar.addEventListener("click", function(e) {
         e.stopPropagation();
+    });
+});
+
+// Ao desativar, focar um produto vizinho que permanecera na lista.
+// Ao reativar, manter o foco no proprio produto reativado.
+document.querySelectorAll(".produto-status-form").forEach(function(formStatus) {
+    formStatus.addEventListener("submit", function() {
+        const acao = formStatus.querySelector('input[name="acao"]')?.value;
+        if (acao !== "desativar") return;
+
+        const linhaAtual = formStatus.closest("tr.linha-produto");
+        const inputFoco = formStatus.querySelector('input[name="foco_produto"]');
+        if (!linhaAtual || !inputFoco) return;
+
+        const linhasVisiveis = Array.from(document.querySelectorAll("tr.linha-produto"))
+            .filter(function(linha) {
+                return linha !== linhaAtual && linha.offsetParent !== null;
+            });
+
+        const indiceAtual = Array.from(document.querySelectorAll("tr.linha-produto")).indexOf(linhaAtual);
+
+        let linhaFoco = linhasVisiveis.find(function(linha) {
+            return Array.from(document.querySelectorAll("tr.linha-produto")).indexOf(linha) > indiceAtual;
+        });
+
+        if (!linhaFoco) {
+            linhaFoco = [...linhasVisiveis].reverse().find(function(linha) {
+                return Array.from(document.querySelectorAll("tr.linha-produto")).indexOf(linha) < indiceAtual;
+            });
+        }
+
+        if (linhaFoco?.dataset.produtoId) {
+            inputFoco.value = linhaFoco.dataset.produtoId;
+        }
     });
 });
   // --- Seleção em massa para exclusão lógica ---
