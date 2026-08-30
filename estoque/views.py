@@ -10835,6 +10835,7 @@ def produto_alternar_ativo(request, pk):
     elif acao == "reativar":
         Produto.objects.filter(pk=produto.pk).update(ativo=True)
         messages.success(request, f'Produto "{produto.nome}" reativado com sucesso.')
+        retorno_url = _url_adicionar_query_params(retorno_url, {"ativos": None})
 
     return redirect(_url_produtos_com_foco(retorno_url, request.POST.get("foco_produto")))
 
