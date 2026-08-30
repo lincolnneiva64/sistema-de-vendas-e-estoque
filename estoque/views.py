@@ -1596,7 +1596,8 @@ def home(request):
                 except Exception:
                     # Não propagar exceção para o usuário final nesta operação simples
                     logger.exception("Erro ao excluir produtos selecionados: %s", produto_ids)
-            return redirect(f"{reverse('estoque:home')}#produtos-lista")
+            retorno_url = _url_next_segura_request(request) or reverse("estoque:home")
+            return redirect(_url_produtos_com_foco(retorno_url, request.POST.get("foco_produto")))
         # CRIAR / EDITAR
         produto_id = request.POST.get("produto_id")
         if produto_id:
